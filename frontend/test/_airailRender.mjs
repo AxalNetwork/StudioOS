@@ -100,7 +100,8 @@ export function renderStatus(drawn) {
     // than classifying an intentional removal as unfinished work.
     if (d.expectedRails === 0) {
       if (keys.length) why.push(`${d.state}: ${keys.length} rails on a page that should have none`);
-      else pass = true;
+      else if (d.escaped?.length) why.push(`${d.state}: the rail-free page threw while rendering`);
+      else if (d.pageRendered) pass = true;
       continue;
     }
     if (keys.length > 1) why.push(`${d.state}: ${keys.length} rails`);
@@ -109,7 +110,7 @@ export function renderStatus(drawn) {
     if (keys.length === 1 && !wrong.length) pass = true;
   }
   if (why.length) return { pass: false, why };
-  return pass ? { pass: true, why: [] } : { pass: false, why: drawn.map((d) => `${d.state}: no rail at ${d.landed}`) };
+  return pass ? { pass: true, why: [] } : { pass: false, why: drawn.map((d) => d.expectedRails === 0 ? `${d.state}: no page content at ${d.landed}` : `${d.state}: no rail at ${d.landed}`) };
 }
 
 /**
@@ -405,6 +406,9 @@ export async function railRenderer() {
       await act(wait);
       const rails = select(dom.document, 'aside.fwr');
       const landed = `${at?.pathname ?? ''}${at?.search ?? ''}${at?.hash ?? ''}`;
+      const path = (at?.pathname ?? '').replace(/\/$/, '');
+      const noRail = NO_RAIL_ROUTES.find((n) => (n.route === path || (n.prefix && path.startsWith(`${n.route}/`)))
+        && n.roles.includes(MEMBERS[profile]?.role));
       return {
         state: nextState,
         escaped,
@@ -412,11 +416,8 @@ export async function railRenderer() {
         keys: rails.map((a) => a.getAttribute('data-page-key')),
         landed,
         expected: pageKeyFor(at?.pathname ?? '', profile, { search: at?.search ?? '', hash: at?.hash ?? '' }),
-        expectedRails: NO_RAIL_ROUTES.find((n) => {
-          const path = (at?.pathname ?? '').replace(/\/$/, '');
-          return (n.route === path || (n.prefix && path.startsWith(`${n.route}/`)))
-            && n.roles.includes(MEMBERS[profile]?.role);
-        })?.railCount ?? 1,
+        expectedRails: noRail?.railCount ?? 1,
+        pageRendered: noRail?.pageTestIds?.some((id) => select(dom.document, `[data-testid="${id}"]`).length > 0) ?? false,
       };
     } finally {
       await act(async () => root.unmount());

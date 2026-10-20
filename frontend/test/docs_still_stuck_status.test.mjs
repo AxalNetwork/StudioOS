@@ -81,7 +81,7 @@ test('the status page can now reach its own unknown pill', () => {
 
 test('the contact routes the block offers still exist', () => {
   const s = read('frontend/src/pages/docs/DocsLayout.jsx');
-  assert.match(s, /mailto:support@axal\.vc/);
+  assert.doesNotMatch(s, /mailto:support@axal\.vc/);
   assert.match(s, /<Link to="\/status"/);
   // The route must actually be mounted, or the link is a dead end.
   assert.match(read('frontend/src/App.jsx'), /path="\/status"/);

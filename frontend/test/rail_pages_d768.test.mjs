@@ -62,7 +62,7 @@ test('every route that draws a rail has a page key for each role its guard admit
   const missing = [];
   for (const r of routes) {
     const roles = r.roles.filter((x) => SHELLS[x]);
-    const none = NO_RAIL_ROUTES.find((n) => n.route === r.path);
+    const none = NO_RAIL_ROUTES.find((n) => n.route === r.path || (n.prefix && r.path.startsWith(`${n.route}/`)));
     if (!roles.length) { if (!none) missing.push(`${r.path} (no member role)`); continue; }
     for (const role of roles) {
       if (none && none.roles.includes(role)) continue;
