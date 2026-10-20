@@ -41,6 +41,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Card, RailFrame, WorkerRail, Unrecorded, Unreadable } from '../../ui';
 import useRecordCrumb from '../admin/useRecordCrumb';
+import { escalationKindLabel, filterByKind, kindFilters } from '../../lib/escalationKinds';
 
 const UNAVAILABLE = Symbol('unavailable');
 
@@ -216,18 +217,42 @@ export function QueueCard({
 }
 
 /**
+ * D801 — the escalation queue's kind filter: All, then each kind on the board
+ * with its count, D799's four request kinds always offered. Drawn only when the
+ * board was read; an unreadable board has nothing to filter.
+ */
+export function EscalationKindFilter({ escalations, value, onChange }) {
+  if (!escalations?.available) return null;
+  return (
+    <div className="mt-4 flex flex-wrap gap-1.5" role="group" aria-label="Filter escalations by kind" data-testid="hq-support-kind-filter">
+      {kindFilters(escalations.items).map((f) => (
+        <button key={f.kind || 'all'} type="button" onClick={() => onChange(f.kind)} aria-pressed={value === f.kind}
+          data-kind={f.kind || 'all'}
+          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${value === f.kind
+            ? 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
+            : 'border-axal-hairline bg-white text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:hover:text-gray-100'}`}>
+          {f.label} <span className="tabular-nums">{f.count}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
  * The escalation queue's props, from the payload. `decide`, when the page
  * passes it, makes each row open its decision panel —
  * `{ openUid, onToggle(uid), panelFor(item) }`. Without it the rows are plain
  * text, which is how the queue renders on its own.
  */
 /** An escalation as its card and the rail's record name it: branch · subject, or its kind. */
-export const escalationTitle = (x) => `${x.branch_code} · ${x.subject || String(x.kind || '').replace(/_/g, ' ')}`;
+export const escalationTitle = (x) => `${x.branch_code} · ${x.subject || escalationKindLabel(x.kind)}`;
 
 export function escalationCardProps(data, failed, decide) {
+  // D801 — the kind filter rides on `decide`, the page's own handle on the queue.
+  const kind = decide?.kind || '';
   const base = {
     queue: 'escalations',
-    who: 'What a branch pushes up to HQ: moderation, content for brand approval, a seat increase, or other.',
+    who: 'What a branch pushes up to HQ: moderation, content for brand approval, a seat increase, or other; and a licence Administrator\'s requests: renewal, a change of terms, a delegate, or notice of non-renewal.',
     testId: 'hq-support-queue-escalations',
   };
   if (failed) return { ...base, state: 'unreadable', reason: 'The Support read failed, so this queue is unknown — not empty.' };
@@ -237,14 +262,15 @@ export function escalationCardProps(data, failed, decide) {
   return {
     ...base,
     state: 'ready',
-    count: e.count,
+    // D801 — a kind filter counts what it shows; with none, the board's own count.
+    count: kind ? filterByKind(e.items, kind).length : e.count,
     bands: e.bands,
-    items: (e.items || []).map((x) => {
+    items: filterByKind(e.items, kind).map((x) => {
       const open = Boolean(decide) && decide.openUid === x.uid;
       return {
         key: x.uid,
         title: escalationTitle(x),
-        meta: `${String(x.kind || '').replace(/_/g, ' ')}${x.raised_by_name ? ` · raised by ${x.raised_by_name}` : ''}`,
+        meta: `${escalationKindLabel(x.kind)}${x.raised_by_name ? ` · raised by ${x.raised_by_name}` : ''}`,
         age_hours: x.age_hours,
         band: x.sla,
         ...(decide ? {
@@ -328,7 +354,7 @@ export function EscalationDecisionView({
   const code = item.branch_code;
   const age = fmtAge(item.age_hours);
   const facts = [
-    item.kind ? String(item.kind).replace(/_/g, ' ') : null,
+    item.kind ? escalationKindLabel(item.kind) : null,
     item.raised_by_name ? `raised by ${item.raised_by_name}` : null,
     age ? `${age} old` : null,
     item.sla ? SLA_WORD[item.sla] : null,
@@ -998,7 +1024,7 @@ export function SlaPolicyPanel({ slaPolicy, taxonomy, failed, onRetry, onSaved }
               <ul className="mt-2 grid gap-1.5" data-testid="hq-support-sla-escalations">
                 {kinds.map((k) => (
                   <li key={k.kind} className="flex items-center justify-between gap-3 text-[11px] text-axal-muted">
-                    <span className="capitalize">{String(k.kind).replace(/_/g, ' ')}</span>
+                    <span className="capitalize">{escalationKindLabel(k.kind)}</span>
                     <span className="tabular-nums">{k.hours}h · due soon last {k.due_soon_hours}h</span>
                   </li>
                 ))}
@@ -1061,6 +1087,8 @@ export default function HqSupportPage() {
   const [data, setData] = useState(null); // null = loading, UNAVAILABLE = failed
   const [openUid, setOpenUid] = useState(null);
   const [recorded, setRecorded] = useState([]);
+  // D801 — the escalation queue's kind filter; '' is every kind.
+  const [kindFilter, setKindFilter] = useState('');
   // `clear` shows the loading state first: a retry after a failed read. After a
   // decision the reload is quiet — the queue stays on screen and the answered
   // item leaves when the new read lands, rather than the page blanking.
@@ -1081,6 +1109,7 @@ export default function HqSupportPage() {
   }, [fetchSupport]);
   const decide = {
     openUid,
+    kind: kindFilter,
     onToggle: (uid) => setOpenUid((cur) => (cur === uid ? null : uid)),
     panelFor: (x) => (
       <EscalationDecision
@@ -1153,6 +1182,7 @@ export default function HqSupportPage() {
           </p>
         </header>
 
+        <EscalationKindFilter escalations={ready?.escalations} value={kindFilter} onChange={setKindFilter} />
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           <QueueCard {...escalationCardProps(ready, failed, decide)} onRetry={load} />
           <QueueCard {...ticketCardProps(ready, failed, 'hq_held')} onRetry={load} />

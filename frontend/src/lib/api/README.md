@@ -238,6 +238,10 @@ D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
 notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
 one: accept, edit or discard. Deciding writes no record; the page's own Save does.
 
+D797 (#2230): `licenceTerms.js` reads and saves a licence's terms schedule
+(`GET`/`PUT /api/admin/licences/:uid/terms`, Super Admin; the save takes a
+reason and a recent step-up). The Administrator reads the same terms on
+`/api/licence/mine`. D800 and D801 draw them.
 D798 (#2231): `licenceAccount.js` is the territory licence Administrator's own
 `/api/licence/mine/*`. It covers the contract (in force, pending, earlier, and
 the caller's own signing link), the statements (with each period's usage

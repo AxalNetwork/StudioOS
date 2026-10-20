@@ -64,6 +64,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `records/` | D690's scoped cycle record contract, registry and ownership checks. |
 | `signals/` | Signal ingestion and evidence. |
 | `wellbeing/` | Wellbeing check-ins. |
+| `licenceTerms.ts` | D797: a licence's terms schedule, the one list of its 31 fields (`LICENCE_TERM_FIELDS`: key, group, label, type and range) and the canvas's section numbers (`DEFAULT_TERM_SECTIONS`), `validateTermsBody` (an unknown key or a bad value is refused, naming the field; `null` clears), `termsFromRow`, `readLicenceTerms`, `termsDiff` and the `TERMS_REASON` sentences. Migration 512's CHECKs hold the same ranges; HQ's write, `/licence/mine`, the branch copy and D800/D801 import it. |
 
 ## Rules
 

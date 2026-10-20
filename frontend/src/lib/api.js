@@ -44,6 +44,7 @@ export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/licenceAccount.js';
 export * from './api/licenceRequests.js';
+export * from './api/licenceTerms.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryPersonal.js';
