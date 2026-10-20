@@ -193,7 +193,9 @@ test('the frozen banner is above the page, not instead of it, and cannot be dism
   const banner = MINE.indexOf('<NoticeBanner notices={notices} />');
   assert.ok(banner > 0, 'the banner is not rendered');
   const none = MINE.indexOf('if (data.none)');
-  const firstPanel = MINE.indexOf('<Panel icon={Map}');
+  // D800 (#2233): the licence's first statement is now the Licences header
+  // (board L1), which took over the Territories panel's place.
+  const firstPanel = MINE.indexOf('<LicenceHeader');
   assert.ok(none > 0 && firstPanel > 0, 'the page\'s shape moved — re-point this guard');
   assert.ok(banner > none,
     'the banner sits inside or above an early return, so it renders where the licence does not');

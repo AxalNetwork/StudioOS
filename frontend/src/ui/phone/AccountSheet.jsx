@@ -7,7 +7,7 @@ import { PhoneSheet, SheetRow } from './PhoneSheet.jsx';
 const ACCOUNT_ROWS = [
   ['Your profile', '/profile'], ['Account', '/account'], ['Usage', '/account/usage'],
   ['Connectors', '/account/connectors'], ['Trust Center', '/trust'], ['Perks', '/perks'],
-  ['Calendar', '/calendar'], ['Events', '/my/events'], ['Learning', '/learning'],
+  ['Calendar', '/calendar'], ['Events', '/my/events'], ['Product testing', '/product-testing'], ['Learning', '/learning'],
   ['Help Center', '/help'], ['Pricing', '/pricing'],
 ];
 

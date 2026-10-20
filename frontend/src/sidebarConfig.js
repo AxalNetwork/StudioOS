@@ -180,7 +180,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/branch/insights', icon: TrendingUp, label: 'Insights', match: ['/branch/insights'] },
       // D796 (#2229): "Settings" became "Licences", the branch's licence copy on
       // My Licence; it stays lit on Branch settings, which that page links.
-      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences', match: ['/admin/my-licence', '/branch/settings'] },
+      // D800 (#2233): `count` draws the number of "Needs you" items on the row.
+      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences', match: ['/admin/my-licence', '/branch/settings'], count: 'licence_needs' },
     ]},
   ],
 
@@ -237,7 +238,9 @@ export const SIDEBAR_GROUPS = {
       // (/admin/licences) is super-admin-only server-side and lives in the HQ
       // group above; a row for it here was a door that opened onto 403s.
       // D796 (#2229): the row was "Settings" and is "Licences", as the owner named it.
-      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences' },
+      // D800 (#2233): the row stays lit on every tab (`/admin/my-licence/*`), and
+      // `count` draws the number of "Needs you" items on it.
+      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences', match: ['/admin/my-licence'], count: 'licence_needs' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },

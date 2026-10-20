@@ -395,10 +395,18 @@ async function changed(env: Env, stmts: any[]): Promise<boolean> {
   return Number(res?.[0]?.meta?.changes ?? 0) === 1;
 }
 
+/**
+ * D814 (#2260): a member's notification opens My applications. The two that go
+ * to a programme's creator name no page yet (D815 draws the partner's).
+ */
+export const MY_APPLICATIONS_LINK = '/product-testing?tab=applications';
+const MEMBER_NOTICES = new Set(['testing_applied', 'testing_picked', 'testing_not_picked']);
+
 async function tell(env: Env, userId: number | null | undefined, type: string, title: string, body: string, payload: Record<string, unknown>) {
   if (!userId) return;
+  const link = MEMBER_NOTICES.has(type) ? MY_APPLICATIONS_LINK : null;
   try {
-    await notify(env, { userId: Number(userId), type, title, body, payload, channels: ['in_app'], category: 'product_testing' });
+    await notify(env, { userId: Number(userId), type, title, body, payload, link, channels: ['in_app'], category: 'product_testing' });
   } catch (e) { console.warn('[testing] notify failed', (e as Error)?.message); }
 }
 

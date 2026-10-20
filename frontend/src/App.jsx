@@ -235,8 +235,6 @@ const SendForSignaturePage = lazy(() => import('./pages/legal/SendForSignaturePa
 // The subsidiary administrator's read of their own territory licence.
 // Migration 190 made "which licence is this admin's?" answerable at all.
 const MyLicencePage = lazy(() => import('./pages/subsidiary/MyLicencePage'));
-// D804 (#2241): the Licences page's Contract, Statements and Requests tabs, until D800 (#2233) builds their frame.
-const LicenceTabRoute = lazy(() => import('./pages/subsidiary/licence/LicenceTabRoute'));
 const BranchSettings = lazy(() => import('./pages/branch/BranchSettings'));
 const BranchApprovals = lazy(() => import('./pages/branch/BranchApprovals'));
 // The frame every /branch/* route below renders in, and the branch tier's one
@@ -358,6 +356,8 @@ const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const HelpCenterPage = lazy(() => import('./pages/HelpCenterPage'));
+// D814 (#2260) — "Apply for Product Testing": the programmes, the application sheet and My applications.
+const ProductTestingPage = lazy(() => import('./pages/productTesting/ProductTestingPage'));
 // D144 — `/inbox`, the address `services/notify.ts` has been putting in mail
 // since before any route answered it.
 const InboxPage = lazy(() => import('./pages/InboxPage'));
@@ -808,6 +808,11 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Events
           </Link>
+          {/* D814 (#2260) — the programmes and My applications, beside the Studio card's link. */}
+          <Link to="/product-testing" onClick={() => setOpen(false)}
+            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Product testing
+          </Link>
           {/* D562 — "Learning" replaces "Articles" (the owner, epic #1157).
               Articles live inside Learning now: its Articles tab lists them,
               each opens at `/articles/:slug`, and "Write an article" there
@@ -1097,6 +1102,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
           <StripLink to="/admin?tab=payments">Payments</StripLink>
           <StripLink to="/admin?tab=bank-accounts">Bank accounts</StripLink>
+          <StripLink to="/admin?tab=product-testing">Product testing</StripLink>
           <StripLink to="/admin?tab=promos">Promo codes</StripLink>
           <StripLink to="/monitoring">Monitoring</StripLink>
           <StripLink to="/admin/telegram">Telegram</StripLink>
@@ -2488,6 +2494,10 @@ function AppInner() {
       {/* D753 — a connector's own page, inside the Account center. */}
       <Route path="/account/connectors/:key" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/account/:section" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      {/* D789, D807 — Usage's own pages, /account/usage/cost and /usage/limits.
+          `:section` above matches one segment only, so without this every
+          Usage sub-page answered 404; SettingsPage reads the page from the path. */}
+      <Route path="/account/usage/:page" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
       {/* Phase 0.1 — investor role added to every guard a partner currently
@@ -2705,9 +2715,12 @@ function AppInner() {
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
-      <Route path="/admin/my-licence/contract" element={guard(['admin'], <LicenceTabRoute tab="contract" />)} />
-      <Route path="/admin/my-licence/statements" element={guard(['admin'], <LicenceTabRoute tab="statements" />)} />
-      <Route path="/admin/my-licence/requests" element={guard(['admin'], <LicenceTabRoute tab="requests" />)} />
+      {/* D800 (#2233): the Licences page's tabs, each a sub-path of the page, behind the same guard. */}
+      <Route path="/admin/my-licence/terms" element={guard(['admin'], <MyLicencePage />)} />
+      <Route path="/admin/my-licence/contract" element={guard(['admin'], <MyLicencePage />)} />
+      <Route path="/admin/my-licence/statements" element={guard(['admin'], <MyLicencePage />)} />
+      <Route path="/admin/my-licence/requests" element={guard(['admin'], <MyLicencePage />)} />
+      <Route path="/admin/my-licence/history" element={guard(['admin'], <MyLicencePage />)} />
       {/* D286 — S20's five landings. `guard(['admin'])` and never `hqOnly`:
           this is the plain admin's own shell. Each carries its consoles as
           literal links, which is how the reachability walk reaches them. */}
@@ -3005,6 +3018,9 @@ function AppInner() {
       {/* Every role, `exploring` included: an application decision is a
           notification, and the person waiting on one holds no other role. */}
       <Route path="/inbox" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <InboxPage />)} />
+      {/* D814 (#2260): every signed-in role. D812's programmes name the roles
+          that may apply; the page holds Apply, with the reason, for the rest. */}
+      <Route path="/product-testing" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductTestingPage user={user} />)} />
       {/* D336 — `/notifications` has never been this page's address (D144
           put the panel at `/inbox`), but the bell's own settings link reads
           `/account/notifications` and the Settings tab is `#notifications`;
@@ -3354,6 +3370,7 @@ function AppInner() {
       <Route path="/offers/visibility" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/offers/proof" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/offers/audience-fit" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/testing" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/delivery" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/offers" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       {/* Partner canvas P3 — the partner Pipeline root is the bucket overview,
