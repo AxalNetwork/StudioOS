@@ -107,7 +107,7 @@ test('the CTA and gate note are the canvas’s, and a paid engagement is request
   assert.match(card, /p\.claimed\s*\? 'Claimed'/);
   assert.ok(!/'Buy'/.test(page), 'nothing is charged here, so nothing says Buy');
   assert.ok(CANVAS.includes("'Available on ' + p.tier + ' and above'"));
-  assert.match(card, /Available on \{tierName\(p\.required_tier\)\} and above/);
+  assert.match(card, /`Available on \$\{tierName\(p\.required_tier\)\} and above`/);
 });
 
 test('the claim modal draws the canvas’s review and done steps', () => {
@@ -122,7 +122,7 @@ test('the claim modal draws the canvas’s review and done steps', () => {
   }
   // Its labels follow the canvas's claimBtnLabel, with Request for money.
   assert.match(CLAIM, /`Request · \$\{money\(d\.price_cents\) \|\| 'quoted'\}`/);
-  assert.match(CLAIM, /`Claim · included in \$\{tierName\(d\.required_tier\)\}`/);
+  assert.match(CLAIM, /`Claim · included in \$\{tierName\(d\.required_tier\) \|\| 'your plan'\}`/);
   assert.match(CLAIM, /`Claim · \$\{n0\(cost\)\} credits`/);
   assert.match(CLAIM, /`Upgrade to \$\{tierName\(d\.required_tier\)\}`/);
   // An upgrade goes to plan pricing, which D413 does not retire.
