@@ -153,6 +153,10 @@ card. When a settled run takes their token balance below the threshold, the
 - **The limits count it**: five orders a day, the $1,000 ceiling, the dispute
   and shortfall holds. A reload refused by one is recorded in the member's
   `member_ai_auto_reload.last_outcome`, and nothing is charged.
+- **The member's D788 spend limit** stops a reload when this month's charge
+  plus the pack's tokens would pass it (`last_outcome = spend_limit`). Auto-reload
+  stays on and the member is told once; it resumes next month or when they
+  raise the limit. With no limit, reloads continue.
 - **A card that fails turns auto-reload off** (`disabled_reason`:
   `card_declined`, `authentication_required`, `card_unusable`, or
   `pack_unavailable` for an archived pack) and tells the member once, in the

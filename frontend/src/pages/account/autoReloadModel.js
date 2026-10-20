@@ -22,6 +22,7 @@ const SKIPPED_WORDS = Object.freeze({
   token_packs_on_hold: 'The last reload was not made: token packs are on hold for this account.',
   pack_not_on_sale: 'The last reload was not made: the pack is not on sale right now.',
   error: 'The last reload was not made: the payment service did not answer. It is tried again after your next run.',
+  spend_limit: 'The last reload was not made: it would pass your monthly AI spend limit. Raise it on Usage › Limits, or it resumes next month.',
 });
 
 const usd = (n) => (Number.isFinite(n) ? `$${n.toFixed(2)}` : null);

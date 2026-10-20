@@ -1,5 +1,5 @@
 // D794 (#2219) — opt-in auto-reload of AI tokens. Real SQLite with migrations
-// 419, 430, 486, 505 and 511; runs are reserved and settled through the real
+// 419, 430, 486, 505, 508 and 511; runs are reserved and settled through the real
 // budget code. Stripe is stubbed: no live call. Each case names the mutations
 // it was checked against.
 //
@@ -267,6 +267,30 @@ test('the five orders a day stop a reload; a pack no longer sold turns it off', 
     assert.deepEqual([settings(f).enabled, settings(f).disabled_reason], [0, 'pack_unavailable']);
     assert.equal(notices(f).length, 1);
     assert.equal(s.calls.length, 0);
+  } finally { s.restore(); f.db.close(); }
+});
+
+// 6b ──────────────────────────────────────────────────────────────────────────
+test('D788: the spend limit stops a reload that would pass it, tells the member once, and a limit it fits charges', async () => {
+  // Mutations checked: the limit stop removed; the notice sent on every stopped run; the stop placed after the crossing claim.
+  const f = await world(); const s = stripeStub();
+  const limitNotices = () => f.db.prepare("SELECT title, body FROM notifications_inbox WHERE user_id=2 AND type='ai_auto_reload_limit'").all().map((r: any) => ({ ...r }));
+  try {
+    enable(f, 20);
+    await spend(f, 10 * M); // $10 charged this month; the pack adds $27.50 of tokens
+    f.db.prepare('INSERT INTO member_ai_spend_limits(user_id,monthly_limit_microusd) VALUES(2,?)').run(37.49 * M);
+    assert.equal(await runAutoReload(f.env, 2), 'spend_limit');
+    assert.equal(s.calls.length, 0, 'nothing sent to Stripe');
+    assert.deepEqual(settings(f), { enabled: 1, disabled_reason: null, last_outcome: 'spend_limit', last_crossing: null }, 'on, and the crossing unclaimed');
+    const [notice] = limitNotices();
+    assert.equal(notice.title, 'Auto-reload paused by your spend limit');
+    assert.match(notice.body, /^Auto-reload was not made: it would pass your monthly AI spend limit of \$37\.49\. It resumes on \d{1,2} \w+ \d{4}, or raise the limit on Usage › Limits\.$/);
+    assert.equal(await runAutoReload(f.env, 2), 'spend_limit');
+    assert.equal(limitNotices().length, 1, 'told once');
+    f.db.prepare('UPDATE member_ai_spend_limits SET monthly_limit_microusd=? WHERE user_id=2').run(37.5 * M);
+    assert.equal(await runAutoReload(f.env, 2), 'charged', 'a reload that keeps the month within the limit is made');
+    assert.equal(s.creates().length, 1);
+    assert.equal(notices(f).length, 0, 'the limit never turns auto-reload off');
   } finally { s.restore(); f.db.close(); }
 });
 

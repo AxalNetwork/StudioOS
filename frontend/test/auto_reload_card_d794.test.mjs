@@ -23,7 +23,7 @@ const ON = { ...OFF, enabled: true, pack_uid: 'pack25', threshold_usd: 20, card:
 
 // 1 ───────────────────────────────────────────────────────────────────────────
 test('the words: the state, the card, the packs, the threshold, and why a reload was skipped', () => {
-  // Mutations checked: the threshold cap removed; a pack with no id offered; the off reason not drawn; a 3-digit last4 accepted.
+  // Mutations checked: the threshold cap removed; a pack with no id offered; the off reason not drawn; a 3-digit last4 accepted; the limit's words dropped.
   assert.equal(stateLine(OFF).text, 'Off. Nothing is charged automatically.');
   assert.equal(stateLine(ON, PACKS).text, 'On: when your token balance drops below $20.00, Visa ending 4242 is charged for $25 of tokens.');
   assert.deepEqual(stateLine({ ...OFF, disabled_reason: 'card_declined' }), { tone: 'warn', text: 'Auto-reload is off: your card was declined. Update it on Billing.' });
@@ -36,6 +36,7 @@ test('the words: the state, the card, the packs, the threshold, and why a reload
   assert.equal(parseThreshold('$19.99'), 19.99);
   for (const bad of ['500.01', '-1', '1.234', 'abc', '']) assert.equal(parseThreshold(bad), null, bad);
   assert.equal(lastSkipped({ ...ON, last_outcome: 'token_pack_daily_limit' }), 'The last reload was not made: five token packs were ordered in the last 24 hours.');
+  assert.equal(lastSkipped({ ...ON, last_outcome: 'spend_limit' }), 'The last reload was not made: it would pass your monthly AI spend limit. Raise it on Usage › Limits, or it resumes next month.', 'D788');
   assert.equal(lastSkipped({ ...ON, last_outcome: 'charged' }), null);
   assert.equal(lastSkipped({ ...OFF, last_outcome: 'error' }), null, 'only while it is on');
 });

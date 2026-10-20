@@ -86,12 +86,40 @@ export async function disableAutoReload(env: Env, userId: number, reason: Reload
 }
 
 /**
- * The platform's stops before a charge. D788 (#2213) adds the member's monthly
- * spend limit and D791 (#2216) adds HQ's Pause AI here, each once it merges;
- * `tokenPackQuote` already applies the five orders a day.
+ * The platform's stops before a charge. D791 (#2216) adds HQ's Pause AI here
+ * once it merges; `tokenPackQuote` already applies the five orders a day, and
+ * `limitStop` applies the member's D788 spend limit once the pack is priced.
  */
 export async function reloadBlocked(_env: Env, _userId: number): Promise<string | null> {
   return null;
+}
+
+/**
+ * D788's monthly spend limit, the member's one limit. A reload is made only
+ * while this month's charge plus the pack's tokens stays within it — D788's own
+ * rule for a hold (`limitRefusal`), with the pack as the estimate. A reload it
+ * stops charges nothing and keeps the crossing unclaimed; the member is told
+ * once, by the write that first records `spend_limit`, and again only after a
+ * reload has been made or refused for another reason since.
+ */
+async function limitStop(env: Env, userId: number, packMicrousd: number, now: Date): Promise<boolean> {
+  const { limitRefusal, usdText, dateText } = await import('./aiSpendLimit');
+  const refused = await limitRefusal(env, userId, packMicrousd, now);
+  if (!refused) return false;
+  const r = await env.DB.prepare(`UPDATE member_ai_auto_reload SET last_outcome = 'spend_limit', last_attempt_at = datetime('now')
+      WHERE user_id = ? AND last_outcome IS NOT 'spend_limit'`).bind(userId).run();
+  if (Number(r.meta?.changes ?? 0) === 1) {
+    try {
+      const { notify } = await import('./notify');
+      await notify(env, {
+        userId, type: 'ai_auto_reload_limit', category: 'billing', title: 'Auto-reload paused by your spend limit',
+        body: `Auto-reload was not made: it would pass your monthly AI spend limit of ${usdText(refused.limit_microusd)}. `
+          + `It resumes on ${dateText(refused.resets_on)}, or raise the limit on Usage › Limits.`,
+        link: '/account/billing#auto-reload', payload: { reason: 'spend_limit' }, channels: ['in_app', 'email'],
+      });
+    } catch { /* best-effort: nothing was charged */ }
+  }
+  return true;
 }
 
 /** A Stripe failure that may pass on a retry: 5xx, 429, or no answer at all. */
@@ -155,6 +183,7 @@ async function reload(env: Env, userId: number): Promise<ReloadOutcome> {
     await noteOutcome(env, userId, outcome);
     return outcome;
   }
+  if (await limitStop(env, userId, quote.creditMicrousd + quote.bonusMicrousd, new Date())) return 'spend_limit';
 
   const user = await env.DB.prepare('SELECT id, uid, stripe_customer_id FROM users WHERE id = ?')
     .bind(userId).first<{ id: number; uid: string; stripe_customer_id: string | null }>();
