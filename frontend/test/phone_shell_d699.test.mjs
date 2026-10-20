@@ -117,7 +117,7 @@ test('D699 one switch writer and account sheet member routes', () => {
   assert.doesNotMatch(sheet, /\/companies\/new|\/switch\//);
   assert.match(sheet, /Unreadable —/);
   const account = read('frontend/src/ui/phone/AccountSheet.jsx');
-  for (const route of ['/profile', '/account/usage', '/account/connectors', '/trust', '/my/events', '/plans-and-pricing', '/wellbeing', '/referrals']) assert.ok(account.includes(`'${route}'`) || account.includes(`"${route}"`), route);
+  for (const route of ['/profile', '/account/usage', '/account/connectors', '/trust', '/my/events', '/pricing', '/wellbeing', '/referrals']) assert.ok(account.includes(`'${route}'`) || account.includes(`"${route}"`), route);
   assert.match(account, /onLogout\?\.\(\)/);
   const companyHtml = render(h(ActiveCompanyContext.Provider, { value: { company: { id: 1, company_name: 'Juniper Labs' }, companies: [], setCompany() {}, setCompanies() {} } },
     h(CompanySheet, { onClose() {} })));
@@ -133,7 +133,8 @@ test('D699 one switch writer and account sheet member routes', () => {
   assert.match(accountHtml, /Refer &amp; Earn/);
   assert.match(accountHtml, /Log Out/);
   assert.match(accountHtml, /href="\/my\/events"/);
-  assert.doesNotMatch(accountHtml, /href="\/(?:your-profile|usage|connectors|trust-center|help-center|plans-pricing|events|pricing|logout)"/);
+  // D786 (#2211): /pricing is the real Plans & Pricing page now, not a canvas slug.
+  assert.doesNotMatch(accountHtml, /href="\/(?:your-profile|usage|connectors|trust-center|help-center|plans-pricing|events|logout)"/);
 });
 
 test('D699 company sheet switches a member to their last opened cycle', async () => {

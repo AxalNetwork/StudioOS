@@ -54,7 +54,8 @@ import { SEAT_ROLES, applyLicenceCopy } from '../rpc/branchOps';
 import { TERMS_REASON, readLicenceTerms, termsFromRow, type LicenceTerms } from '../services/licenceTerms';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
 import {
-  BRANCH_UNAVAILABLE, licenseeContracts, licenseeStatements, parseDispute, raiseStatementDispute,
+  BRANCH_UNAVAILABLE, USAGE_REASON, licenseeContractPdf, licenseeContracts, licenseeNeeds, licenseeStatements,
+  noticesWaiting, parseDispute, raiseStatementDispute, seatsNearCap,
 } from '../services/licenceAccount';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -1157,15 +1158,82 @@ r.get('/mine/contract', async (c) => {
   return c.json(await licenseeContracts(c.env, own.licence, own.user.id));
 });
 
-// GET /api/licence/mine/statements — issued, paid and void statements, the
-// usage reports by period, and the masked payment instructions. D797's
-// `licence_terms.licensor_entity` is not on main yet; once it is, it is read
-// here and passed as the third argument (`licensorRefusal`).
+// GET /api/licence/mine/contract/:uid/pdf — one of the contracts above, printed
+// from its stored body. A draft, another licence's or an unknown uid is 404.
+r.get('/mine/contract/:uid/pdf', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if ('branch' in own) return c.json({ error: 'contract_hq_only', message: BRANCH_UNAVAILABLE.reason }, 501);
+  const pdf = await licenseeContractPdf(c.env, own.licence, c.req.param('uid'));
+  if (!pdf.ok) {
+    return pdf.status === 404
+      ? c.json({ error: 'not_found', message: 'No such contract on your licence.' }, 404)
+      : c.json({ error: 'contract_unrenderable', message: 'The contract could not be printed. Try again.' }, 503);
+  }
+  return new Response(pdf.bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${pdf.filename}"`,
+      'Cache-Control': 'no-store',
+      'X-Axal-Renderer': pdf.renderer,
+    },
+  });
+});
+
+// GET /api/licence/mine/statements — issued, paid and void statements, each
+// period's usage report, and the masked payment instructions. D797's
+// `licence_terms` (`licensor_ip_entity`, `usage_report_day`) is not on main
+// yet; once it is, it is read here and passed as the third argument.
 r.get('/mine/statements', async (c) => {
   const own = await ownLicenceForAccount(c);
   if ('refusal' in own) return own.refusal;
-  if ('branch' in own) return c.json(BRANCH_UNAVAILABLE);
+  if ('branch' in own) return c.json({ ...BRANCH_UNAVAILABLE, usage: { send_now: true, send_now_reason: null } });
   return c.json(await licenseeStatements(c.env, own.licence));
+});
+
+// POST /api/licence/mine/usage/send — "Send now": the branch's own usage push
+// (D266), run on demand. Only a branch reports, so HQ answers 501 with why.
+// D808 (#2250): at most once per five minutes per branch (`sendUsageReportNow`,
+// through RATE_LIMITS): 429 with `retry_after` inside the window, 503 when the
+// throttle store is missing or unreadable, and HQ is not called either time. A
+// branch that cannot report at all (no RPC_SECRET, no HQ binding) answers 502
+// with why, as before, and spends no window.
+r.post('/mine/usage/send', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if (!('branch' in own)) return c.json({ error: 'usage_branch_only', message: USAGE_REASON.hq_send }, 501);
+  const { sendUsageReportNow } = await import('../services/usageReport');
+  const result = await sendUsageReportNow(c.env, new Date());
+  if (result.limited) return c.json({ error: 'send_now_refused', ...result }, 429);
+  if (result.store_unavailable) return c.json({ error: 'send_now_refused', ...result }, 503);
+  return c.json(result, result.sent ? 200 : 502);
+});
+
+// GET /api/licence/mine/needs — the Summary's "Needs you" list and the sidebar
+// count: one read, in a fixed order, each item with its link. On a branch the
+// contract and statements live on HQ, so the branch adds its own notices and
+// the seat types at 90% or more of their seats licensed, which only a branch
+// counts.
+r.get('/mine/needs', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if (!('branch' in own)) return c.json(await licenseeNeeds(c.env, own.licence, own.user.id));
+  const items: Array<{ kind: string; title: string; link: string; ref: string | null; due: string | null }> = [];
+  const reasons: Record<string, string> = { contract: BRANCH_UNAVAILABLE.reason, statements: BRANCH_UNAVAILABLE.reason };
+  const notices = await noticesWaiting(c.env, own.user.id);
+  if (notices) items.push(...notices); else reasons.notices = 'HQ\'s notices could not be read on this branch.';
+  const payload = await branchLicencePayload(c.env, branchOf(c.env)!);
+  if ('error' in payload) reasons.seats = 'This branch holds no copy of its licence yet, so seats are not counted.';
+  else {
+    for (const s of seatsNearCap(payload.licence.seats, payload.licence.seats_used_by_type)) {
+      items.push({
+        kind: 'seats', title: `${s.seat_type} seats ${s.used} of ${s.licensed} used`,
+        link: '/admin/my-licence/requests', ref: s.seat_type, due: null,
+      });
+    }
+  }
+  return c.json({ available: true, count: items.length, items, reasons });
 });
 
 // POST /api/licence/mine/statements/:uid/dispute { cents, reason } — a request

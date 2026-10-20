@@ -242,3 +242,10 @@ D797 (#2230): `licenceTerms.js` reads and saves a licence's terms schedule
 (`GET`/`PUT /api/admin/licences/:uid/terms`, Super Admin; the save takes a
 reason and a recent step-up). The Administrator reads the same terms on
 `/api/licence/mine`. D800 and D801 draw them.
+D798 (#2231): `licenceAccount.js` is the territory licence Administrator's own
+`/api/licence/mine/*`. It covers the contract (in force, pending, earlier, and
+the caller's own signing link), the statements (with each period's usage
+report and the masked payment instructions), the "Needs you" list, a branch's
+"Send now" usage push, and a statement dispute. `contractPdfBlob` reads
+`GET /api/licence/mine/contract/:uid/pdf` as a Blob, outside the typed drift
+surface. Nothing here returns a full account number.

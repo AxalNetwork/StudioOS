@@ -14,7 +14,7 @@
 import type { Env } from '../../types';
 import type { DeckMethodSpec, DeckSlideField } from './methods';
 import { formatUseOfFundsText } from '../../util/useOfFunds';
-import { run as aiRun } from '../aiRouter';
+import { run as aiRun, type RailContext } from '../aiRouter';
 import { AI_SURFACE } from '../aiSurfaces';
 
 export type FilledFieldValue =
@@ -182,8 +182,12 @@ export function parseJsonLoose<T>(raw: string | undefined): T | null {
   }
   return null;
 }
-/** Who asked for a fill, for the router's hold and its usage row (D767). */
-export interface DeckFillRun { userId: number; railOption: 'deck_draft' | 'fill_from_project'; projectId: number }
+/**
+ * Who asked for a fill, for the router's hold and its usage row (D767). D778
+ * part 5: a route that read the press's own context passes it as `rail`
+ * (`railFor`), which wins over the surface page and `railOption`.
+ */
+export interface DeckFillRun { userId: number; projectId: number; railOption?: string; rail?: RailContext }
 
 async function aiBatchFill(
   env: Env, project: any, hints: string[], aiHint: string, who: DeckFillRun | null,
@@ -220,7 +224,7 @@ Hints: ${JSON.stringify(hints)}`;
       userId: who.userId,
       surface: AI_SURFACE.raisePitch,
       // D765: the member's rail context; run() records it as D767's page, option and record.
-      rail: { page: AI_SURFACE.raisePitch, option: who.railOption, record: `project:${who.projectId}` },
+      rail: who.rail ?? { page: AI_SURFACE.raisePitch, option: who.railOption ?? null, record: `project:${who.projectId}` },
       systemPrompt: 'You are a senior VC associate. Always return valid JSON.',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.5,

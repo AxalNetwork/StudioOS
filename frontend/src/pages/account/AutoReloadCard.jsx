@@ -6,11 +6,13 @@ import { BTN, INPUT, Outcome, PanelCard, useAccountRead } from './AccountCenter'
 // Stripe's element loads only when a card is being added.
 const AutoReloadCardSetup = lazy(() => import('./AutoReloadCardSetup'));
 import { refusalText } from './accountCenterModel';
-import { cardText, lastSkipped, packOptions, parseThreshold, stateLine } from './autoReloadModel';
+import { cardText, lastSkipped, limitLine, packOptions, parseThreshold, pausedLine, stateLine } from './autoReloadModel';
+import { Link } from 'react-router-dom';
 
 /**
- * D794 (#2219) — Billing's "Auto-reload" card (`#auto-reload`), beside the
- * orders until D792's Billing page lands.
+ * D794 (#2219) — Billing's "Auto-reload" card (`#auto-reload`), on D792's
+ * Billing page beside the plan and Payment details. D792 adds the spend-limit
+ * line (D788) and the Paused state when this month's limit is reached.
  *
  * OFF UNTIL THE MEMBER TURNS IT ON. They choose a pack (what is charged each
  * time) and a threshold ("when my token balance drops below $X"), and save a
@@ -25,19 +27,21 @@ import { cardText, lastSkipped, packOptions, parseThreshold, stateLine } from '.
 export default function AutoReloadCard({ api = aiBudgetApi }) {
   const read = useAccountRead(() => api.autoReload());
   const topUp = useAccountRead(() => api.topUp());
+  // D792: the member's own spend limit (D788) also stops reloads; a failed read just leaves its line out.
+  const limit = useAccountRead(() => api.spendLimit());
   const packs = packOptions(topUp.status === 'ready' ? topUp.data : null);
   return (
     <div id="auto-reload" className="scroll-mt-4">
       <PanelCard title="Auto-reload" data-testid="card-auto-reload">
         {read.status === 'loading' ? <p className="px-4 py-3 text-[12.5px] text-axal-muted">Reading auto-reload…</p>
           : read.status !== 'ready' ? <div className="px-4 py-3"><Unreadable what="Auto-reload" claim="This is not a claim that it is off." onRetry={read.reload} /></div>
-            : <AutoReloadForm key={JSON.stringify(read.data)} settings={read.data} packs={packs} api={api} onSaved={read.reload} />}
+            : <AutoReloadForm key={JSON.stringify(read.data)} settings={read.data} packs={packs} limit={limit.status === 'ready' ? limit.data : null} api={api} onSaved={read.reload} />}
       </PanelCard>
     </div>
   );
 }
 
-export function AutoReloadForm({ settings, packs, api = aiBudgetApi, onSaved }) {
+export function AutoReloadForm({ settings, packs, limit = null, api = aiBudgetApi, onSaved }) {
   const [enabled, setEnabled] = useState(Boolean(settings.enabled));
   const [packUid, setPackUid] = useState(settings.pack_uid ?? packs[0]?.uid ?? '');
   const [threshold, setThreshold] = useState(settings.threshold_usd == null ? '5' : String(settings.threshold_usd));
@@ -46,7 +50,9 @@ export function AutoReloadForm({ settings, packs, api = aiBudgetApi, onSaved }) 
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState(null);
   const state = stateLine(settings, packs);
-  const skipped = lastSkipped(settings);
+  const paused = pausedLine(settings, limit);
+  const skipped = paused ? null : lastSkipped(settings);
+  const limitAt = limitLine(limit);
   const card = cardText(settings.card);
   const parsed = parseThreshold(threshold);
   const hasCard = Boolean(card || setupIntentId);
@@ -67,7 +73,9 @@ export function AutoReloadForm({ settings, packs, api = aiBudgetApi, onSaved }) 
 
   return (
     <form onSubmit={save} className="flex flex-col gap-3 px-4 py-3.5" data-testid="auto-reload-form">
-      {state && <p className="m-0 text-[12.5px]" data-testid="auto-reload-state"><Pill tone={state.tone}>{enabled && settings.enabled ? 'On' : 'Off'}</Pill> <span className="ml-1">{state.text}</span></p>}
+      {paused
+        ? <p className="m-0 text-[12.5px]" data-testid="auto-reload-state"><Pill tone="warn">Paused</Pill> <span className="ml-1">{paused}</span></p>
+        : state && <p className="m-0 text-[12.5px]" data-testid="auto-reload-state"><Pill tone={state.tone}>{enabled && settings.enabled ? 'On' : 'Off'}</Pill> <span className="ml-1">{state.text}</span></p>}
       {skipped && <p className="m-0 text-[12px] text-amber-800 dark:text-amber-300" data-testid="auto-reload-skipped">{skipped}</p>}
       <label className="flex items-center gap-2 text-[13px] font-semibold text-axal-ink dark:text-gray-100">
         <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} data-testid="auto-reload-enabled" />
@@ -100,6 +108,11 @@ export function AutoReloadForm({ settings, packs, api = aiBudgetApi, onSaved }) 
         </Suspense>
       )}
       {enabled && !hasCard && <p className="m-0 text-[12px] text-axal-muted" data-testid="auto-reload-card-needed">Add a card to turn auto-reload on.</p>}
+      {limitAt && (
+        <p className="m-0 text-[12.5px] text-axal-ink dark:text-gray-200" data-testid="auto-reload-limit">
+          {limitAt.text}{limitAt.link && <> <Link to="/account/usage/limits" className={BTN.link} data-testid="link-open-limits">Open limits</Link></>}
+        </p>
+      )}
       <p className="m-0 text-[11.5px] leading-relaxed text-axal-muted dark:text-gray-400">
         Each reload is an ordinary token-pack order with its invoice under Orders, at most five a day. A declined card turns auto-reload off and we tell you.
       </p>

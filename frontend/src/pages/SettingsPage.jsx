@@ -14,20 +14,24 @@ import { useAuth } from '../hooks/useAuthSync';
 import { startRegistration, browserSupportsWebAuthn } from '@simplewebauthn/browser';
 import TrustScoreBadge, { computeTrustScore } from '../components/TrustScoreBadge';
 import { verdictFor, outstandingCounts, scoreLine } from '../lib/trustCenter';
-import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, WorkerRail, usePhoneWidth } from '../ui';
+import { RailFrame, SectionLabel, Skeleton, Unreadable, Unrecorded, usePhoneWidth } from '../ui';
 import { NOTIFICATION_EVENTS, PARTNER_NOTIFICATION_EVENTS } from '../lib/notificationTypes';
 // D568 — the Account center canvas (`ac-*`): its section list, the five
 // profile cards, the push devices and sessions cards, the plan line and
 // orders, and the two sections the page did not have (Following, Developer).
-import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switch, accountRailCoverage, useAccountRead } from './account/AccountCenter';
+import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switch, useAccountRead } from './account/AccountCenter';
 // D700 — the phone's `/account`: A1m's bar copy and the address rules.
 import { accountPathFor, accountViewFor, connectorKeyFor } from './account/accountPhone';
 import ProfileIdentityCanvas from './account/AccountProfile';
 import { PushDevices, SessionsCard } from './account/AccountDevices';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import AutoReloadCard from './account/AutoReloadCard';
+import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard, useBillingReads } from './account/BillingCards';
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/AccountUsage';
+// D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
+import LimitsPage from './account/LimitsPage';
+import { USAGE_PAGES, usagePageFor } from './account/limitsModel';
 import ConnectorsSection from './account/AccountConnectors';
 import ConnectorPage from './account/ConnectorPage';
 import DeveloperSection from './account/AccountDeveloper';
@@ -258,6 +262,8 @@ export default function SettingsPage() {
   const active = accountViewFor({ pathname: location.pathname, hash: location.hash, phone });
   // D753 — `/account/connectors/<key>` is that connector's page.
   const connectorKey = active === 'connectors' ? connectorKeyFor(location.pathname) : null;
+  // D807 — which Usage page the address opens: the overview, or Limits.
+  const usagePage = active === 'usage' ? usagePageFor(location.pathname) : null;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -266,7 +272,7 @@ export default function SettingsPage() {
   // section through its address. On a phone each section is a page of its own,
   // so it is pushed and Back returns to the index; on desktop it replaces, as
   // the column always has.
-  const setActive = (id) => navigate({ pathname: accountPathFor({ section: id, phone }) }, { replace: !phone });
+  const setActive = (id, page = null) => navigate({ pathname: accountPathFor({ section: id, phone, usagePage: page }) }, { replace: !phone });
 
   // Keep the URL in lockstep with the open section so deep links work both
   // ways (bell → /account/notifications, sidebar click → URL update).
@@ -287,7 +293,7 @@ export default function SettingsPage() {
   // account recovery. A canonicalising hop must not eat the part of the link
   // that said why it was sent.
   useEffect(() => {
-    const want = accountPathFor({ section: active, phone, key: connectorKey });
+    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
       navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true });
     }
@@ -394,9 +400,8 @@ export default function SettingsPage() {
   // before role was known. Mirror the nav filter on the content side.
   const allowedIds = new Set(sections.map(s => s.id));
   const safeActive = allowedIds.has(active) ? active : 'account';
-  const activeLabel = active === 'index' ? null : sections.find((s) => s.id === safeActive)?.label;
   const reloadAccount = () => api.getSettings().then(setData);
-  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey };
+  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey, usagePage };
 
   const toastNote = toast && (
     <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -415,27 +420,10 @@ export default function SettingsPage() {
     </>
   );
 
-  // D568 — the page sits beside the Worker AI rail, in the one frame every
-  // rail host uses (D556's `RailFrame`). D700 — on a phone the frame and its
-  // rail stay mounted, and the phone view replaces the heading and the body
-  // inside it.
+  // The owner requested no AI rail on Account or its sections. The shared
+  // frame renders the body alone, without a rail column or phone trigger.
   return (
-    <RailFrame
-      rail={(
-        <WorkerRail
-          workspace="Account"
-          // A literal, as on Send for signature: the Account canvas draws this
-          // page in violet for every role, which is the founder accent.
-          role="founder"
-          stance="Your settings, changed by you"
-          note="Eadwyn reads the account lines below and changes nothing on this page. Every setting here is saved by the button beside it."
-          coverage={accountRailCoverage(data, activeLabel)}
-          unavailable={[
-            ['Bio draft', 'The canvas offers a two-line bio drafted from your role, company and sectors. Nothing drafts one yet, so no proposal is made here.'],
-          ]}
-        />
-      )}
-    >
+    <RailFrame>
     {phone ? (
       <AccountPhoneFrame
         view={active} sections={sections} top={top} toast={toastNote}
@@ -455,7 +443,8 @@ export default function SettingsPage() {
       {top}
 
       <div className="grid lg:grid-cols-[200px_1fr] gap-6">
-        <AccountSectionNav sections={sections} active={safeActive} onSelect={setActive} />
+        <AccountSectionNav sections={sections} active={safeActive} onSelect={setActive}
+          subpages={{ usage: USAGE_PAGES }} activeSubpage={safeActive === 'usage' ? usagePage : null} />
         <AccountPanes safeActive={safeActive} {...paneProps} />
       </div>
     </div>
@@ -465,7 +454,7 @@ export default function SettingsPage() {
 }
 
 /** One section's pane: the same cards at every width. */
-function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null }) {
+function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null, usagePage = null }) {
   return (
     <div className="min-w-0 space-y-6">
       {safeActive === 'account' && (
@@ -508,7 +497,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
         </>
       )}
       {safeActive === 'following' && <FollowingSection />}
-      {safeActive === 'usage' && <UsageSection role={role} />}
+      {safeActive === 'usage' && (usagePage === 'limits' ? <LimitsPage /> : <UsageSection role={role} />)}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
       {safeActive === 'onboarding' && <OnboardingSettingsTab />}
       {safeActive === 'connectors' && <ConnectorsTab connectorKey={connectorKey} />}
@@ -4598,12 +4587,34 @@ function BillingTab({ data, flash }) {
   }
   return (
     <>
-      <PlanHeader role={role} billing={billing} />
-      <Orders />
-      {/* D794: opt-in auto-reload of AI tokens, beside the orders until D792's Billing page. */}
-      <AutoReloadCard />
+      <BillingConsole key={role} role={role} billing={billing} />
       {panel}
     </>
+  );
+}
+
+// D792 (#2217) — Billing, B3 of the "Usage & Billing console" canvas, in its
+// order: Token balance and Included with your plan; Buy tokens; the plan and
+// Payment details beside Auto-reload (D794); then the orders, each with its
+// invoice. The role's panel follows as before.
+function BillingConsole({ role, billing }) {
+  const reads = useBillingReads({ role });
+  return (
+    <div className="flex flex-col gap-3" data-testid="billing-console">
+      <div className="grid gap-3 md:grid-cols-2">
+        <TokenBalanceCard me={reads.me} />
+        <PlanAllowanceCard me={reads.me} />
+      </div>
+      <BuyTokensCard topUp={reads.topUp} />
+      <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+        <div className="flex min-w-0 flex-col gap-3">
+          <PlanHeader role={role} billing={billing} />
+          <PaymentDetailsCard role={role} overview={reads.overview} />
+        </div>
+        <AutoReloadCard />
+      </div>
+      <Orders />
+    </div>
   );
 }
 
@@ -5167,7 +5178,7 @@ function InvestorBillingPanel({ flash, billing }) {
         <Card title="Manage subscription" description="Change plan, cancel, and review invoices without leaving Axal VC.">
           <BillingDashboard scope="investor" flash={flash} onChanged={refresh} />
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing/investor">investor pricing page</a>.
+            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing?for=investor">investor pricing page</a>.
           </div>
         </Card>
       ) : (
@@ -5211,7 +5222,7 @@ function InvestorBillingPanel({ flash, billing }) {
             })}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing/investor">investor pricing page</a>.
+            See full feature comparison on the <a className="text-violet-700 hover:underline" href="/pricing?for=investor">investor pricing page</a>.
           </div>
         </Card>
       )}
@@ -5226,7 +5237,7 @@ function InvestorBillingPanel({ flash, billing }) {
 }
 
 // Task #7 (W-2) — ROI comparison table reused by Settings > Billing.
-// Mirrors the matrix on /pricing/investor so investors see the same
+// Mirrors the matrix on /pricing?for=investor so investors see the same
 // feature breakdown without leaving the settings page.
 const INVESTOR_ROI_ROWS = [
   { feature: 'Pipeline browse + AI scoring',     free: '✓', pro: '✓',  inst: '✓' },

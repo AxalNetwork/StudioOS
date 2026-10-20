@@ -79,7 +79,9 @@ export const interviewSessionsApi = {
     const host = loc ? loc.host : '';
     return `${proto}//${host}/api${P}/sessions/${enc(id)}/live`;
   },
-  transcribe: (id, model) => request(`${P}/sessions/${enc(id)}/transcribe`, {
+  // D778 part 6: `headers` is the press's own rail context (`railPressHeaders`).
+  transcribe: (id, model, headers) => request(`${P}/sessions/${enc(id)}/transcribe`, {
+    ...(headers ? { headers } : {}),
     method: 'POST', body: JSON.stringify(model ? { model } : {}),
   }),
   // D770 (#2095): `auto` is true only when the Stop sheet's choice is on.

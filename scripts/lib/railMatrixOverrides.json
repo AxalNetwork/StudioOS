@@ -1,5 +1,5 @@
 {
-  "_about": "D764 (#2089): what scripts/build-rail-matrix.mjs adds to the owner's canvas tables (design/incoming/airail-every-page-data/canvas.json). The canvas names models by display name; `models` maps each to its Workers AI id and what it can do. `kinds` says which capabilities a kind's models may have and which its default must have. `searchIndexKinds` are the kinds whose embedding writes or reads axal-search, a 768-dimension bge-base index (wrangler.toml), so their embedding is `searchIndexModel`. `pages` adds the page rows the canvas has no board for. Every id is checked against the pricing file (cloudflare-pricing-2026-10-15.md) until D760's catalogue lands.",
+  "_about": "D764 (#2089): what scripts/build-rail-matrix.mjs adds to the owner's canvas tables (design/incoming/airail-every-page-data/canvas.json). The canvas names models by display name; `models` maps each to its Workers AI id and what it can do. `kinds` says which capabilities a kind's models may have and which its default must have. `searchIndexKinds` are the kinds whose embedding writes or reads axal-search, a 768-dimension bge-base index (wrangler.toml), so their embedding is `searchIndexModel`. `pages` adds the page rows the canvas has no board for, and, with `keepKind`, keeps a renamed board on the kind it had (D796). Every id is checked against the pricing file (cloudflare-pricing-2026-10-15.md) until D760's catalogue lands.",
   "models": {
     "Aura-2 EN": { "id": "@cf/deepgram/aura-2-en", "caps": ["voice"] },
     "Aura-2 ES": { "id": "@cf/deepgram/aura-2-es", "caps": ["voice"] },
@@ -68,6 +68,7 @@
   "searchIndexKinds": ["research", "search"],
   "searchIndexModel": "@cf/baai/bge-base-en-v1.5",
   "pages": {
-    "Admin · Home": { "kind": "chat", "why": "Admin has no Home on the canvas. D720 §5 gives it the models every other Home row takes (the canvas's Home kind), for /admin/commissions, /branch/* and /admin/fund-admin." }
+    "Admin · Home": { "kind": "chat", "why": "Admin has no Home on the canvas. D720 §5 gives it the models every other Home row takes (the canvas's Home kind), for /admin/commissions, /branch/* and /admin/fund-admin." },
+    "Admin · Licences": { "kind": "plan", "keepKind": true, "why": "D796 (#2229): the Admin's \"Settings\" board was renamed \"Licences\" (/admin/my-licence, the administrator's own licence). It keeps the plan models it had as Settings; the canvas's \"Licences\" kind (legal) is the Super Admin's ledger of every licence." }
   }
 }

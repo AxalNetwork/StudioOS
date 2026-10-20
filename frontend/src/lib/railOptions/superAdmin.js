@@ -74,7 +74,7 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H34', section: 'Platform', module: 'Telegram channels', route: '/admin/telegram', files: ['pages/admin/AdminTelegram.jsx'], rail: 'pages/admin/AdminTelegram.jsx' },
   { id: 'H35', section: 'Support', module: null, route: '/admin/hq-support', files: ['pages/hq/HqSupportPage.jsx'], rail: 'pages/hq/HqSupportPage.jsx' },
   { id: 'H36', section: 'Security', module: null, route: '/admin/security', files: ['pages/hq/SecurityPage.jsx'], rail: 'pages/hq/SecurityPage.jsx' },
-  { id: 'H37', section: 'Settings', module: null, route: '/account', files: ['pages/SettingsPage.jsx'], rail: 'pages/SettingsPage.jsx' },
+  { id: 'H37', section: 'Settings', module: null, route: '/account', files: ['pages/SettingsPage.jsx'], railAbsent: 'Owner request: Account and its settings sections deliberately have no AI rail on desktop or phone.' },
 ];
 
 /** The canvas board name a row's `page` carries. */

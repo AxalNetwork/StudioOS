@@ -52,7 +52,7 @@ const MYPERKS = between(page, 'const CLAIM_STATE = {', 'const INPUT = ');
 const PERF = between(page, 'function ListingPerformance(', 'function PartnerConsole(');
 const CONSOLE = between(page, 'function PartnerConsole(', 'function ReviewQueue(');
 const REVIEW = between(page, 'function ReviewQueue(', 'export default function PerksPage(');
-const MARKET_PAGE = between(page, 'function PerksMarket(', '<WorkerRail');
+const MARKET_PAGE = between(page, 'function PerksMarket(', '</main>');
 
 /* ---------------------------------------------------------------- *
  * 1 · The page draws the canvas                                     *
@@ -126,7 +126,7 @@ test('the claim modal draws the canvas’s review and done steps', () => {
   assert.match(CLAIM, /`Claim · \$\{n0\(cost\)\} credits`/);
   assert.match(CLAIM, /`Upgrade to \$\{tierName\(d\.required_tier\)\}`/);
   // An upgrade goes to plan pricing, which D413 does not retire.
-  assert.match(CLAIM, /<Link to="\/plans-and-pricing"/);
+  assert.match(CLAIM, /<Link to="\/pricing"/);
   // A refusal prints the Worker's sentence and re-reads on the codes that mean the listing moved.
   assert.match(CLAIM, /setErr\(e\?\.message \|\| 'Could not claim this perk\.'\)/);
   assert.match(CLAIM, /\['cap_reached', 'perk_ended', 'insufficient_credits', 'tier_required'\]\.includes\(e\?\.code\)/);
@@ -281,22 +281,17 @@ test('a partner on /perks is sent to /offers/perk-deals; the rest use the standa
   assert.match(app, /<Route path="\/offers\/perk-deals" element=\{guard\(\['admin', 'partner'\], <PartnerBucketRoutes \/>\)\} \/>/);
 });
 
-test('the standalone page fills the column, and the rail is the canvas’s right edge', () => {
+test('the standalone page fills the column without a reserved rail column', () => {
   const sidebar = raw('frontend/src/sidebarConfig.js');
   assert.match(sidebar, /export const SHARED_FULL_BLEED = \[[\s\S]*?'\/perks'/);
   assert.match(page, /className="perks-canvas"/);
-  assert.match(page, /className="perks-rail"/);
+  assert.doesNotMatch(page, /className="perks-rail"/);
   assert.ok(!page.includes('max-w-6xl'), 'the listings sit in a centred column beside a detached rail');
 });
 
-test('the page mounts one Worker rail, on /perks only, in the canvas’s violet', () => {
-  assert.equal((page.match(/<WorkerRail\b/g) || []).length, 1);
-  const guard = page.indexOf('if (embedded) {');
-  assert.ok(guard > 0 && page.indexOf('<WorkerRail') > guard, 'the zone would get a second rail beside the shell’s');
-  const rail = between(page, '<WorkerRail', '/>');
-  assert.match(rail, /role="founder"/);
-  assert.match(rail, /coverage=\{coverage\}/);
-  assert.match(rail, /\['Expiry reminders', mine\.absent\.expiry_reminder\]/);
+test('the standalone page mounts no Worker rail, as requested by the owner', () => {
+  assert.equal((page.match(/<WorkerRail\b/g) || []).length, 0);
+  assert.match(page, /if \(embedded\) \{\s*return <PartnerConsole/);
 });
 
 test('every perk api method the page calls is defined and mounted', () => {

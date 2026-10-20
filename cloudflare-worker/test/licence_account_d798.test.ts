@@ -24,7 +24,7 @@ import { SignJWT } from 'jose';
 import licence from '../src/routes/licence.ts';
 import { encryptColumn } from '../src/services/columnCipher.ts';
 import { PAY_WARNING } from '../src/services/payInstructions.ts';
-import { licenceFeeReference, licenseeStatements, licensorRefusal, parseDispute } from '../src/services/licenceAccount.ts';
+import { USAGE_REASON, licenceFeeReference, licenseeStatements, licensorRefusal, parseDispute, periodEnds, seatsNearCap, usageReportStatus } from '../src/services/licenceAccount.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
@@ -42,9 +42,19 @@ const MIGRATIONS = [
   'cloudflare-worker/sql/migrations/259_hq_escalations.sql',
   'cloudflare-worker/sql/migrations/260_subsidiary_statements.sql',
   'cloudflare-worker/sql/migrations/472_entity_bank_accounts.sql',
+  'cloudflare-worker/sql/migrations/256_branch_local_copies.sql',
+  'cloudflare-worker/sql/migrations/257_branch_licence_ref.sql',
+  'cloudflare-worker/sql/migrations/265_branch_licence_entity.sql',
+  'cloudflare-worker/sql/migrations/284_branch_licence_kind.sql',
+  'cloudflare-worker/sql/migrations/264_admin_notices.sql',
 ].map(read);
 
 /** A ten-digit number drawn per run: never a literal in this file. */
+/** As HQ stored them, a fourth stream (D802) and a field no reader here knows included. */
+const STREAMS_09 = JSON.stringify([
+  { stream: 'subscriptions', gross_cents: 100000, currency: 'EUR', available: true, is_estimate: true },
+  { stream: 'platform_licence_royalties', gross_cents: 6000, currency: 'EUR', available: true, is_estimate: false, royalty_bps: 500 },
+]);
 const accountNumber = () => String(randomInt(1_000_000_000, 9_999_999_999));
 
 function fixture(o: { account?: boolean; branch?: string } = {}) {
@@ -70,11 +80,15 @@ function fixture(o: { account?: boolean; branch?: string } = {}) {
   a.run(2, OTHER_PRINCIPAL, 'principal');
 
   const c = db.prepare(`INSERT INTO licence_contracts
-      (uid, licence_uid, template_slug, template_version, template_title, body_md, unfilled_fields, status, envelope_uid, superseded_at, sent_at, created_at)
-    VALUES (?, ?, 'licence_agreement', ?, 'Territory licence agreement', ?, ?, ?, ?, ?, ?, ?)`);
-  c.run('ctr_a_old', 'lic_a', 3, 'BODY-A-V3', '[]', 'draft', null, '2026-09-01 00:00:00', null, '2026-08-01 00:00:00');
-  c.run('ctr_a', 'lic_a', 4, 'BODY-A-V4', '["territory"]', 'sent', 'env-a', null, '2026-09-02 00:00:00', '2026-09-01 00:00:00');
-  c.run('ctr_b', 'lic_b', 4, 'BODY-B-V4', '[]', 'sent', 'env-b', null, '2026-09-02 00:00:00', '2026-09-01 00:00:00');
+      (uid, licence_uid, template_slug, template_version, template_title, body_md, unfilled_fields, status, envelope_uid,
+       superseded_at, sent_at, signed_at, created_at)
+    VALUES (?, ?, 'licence_agreement', ?, 'Territory licence agreement', ?, ?, ?, ?, ?, ?, ?, ?)`);
+  // lic_a: v2 signed and replaced by v3, v3 signed and still in force, a v3 redraft HQ never sent, v4 sent and waiting.
+  c.run('ctr_a_v2', 'lic_a', 2, 'BODY-A-V2', '[]', 'signed', null, '2026-07-01 00:00:00', '2026-06-02 00:00:00', '2026-06-03 00:00:00', '2026-06-01 00:00:00');
+  c.run('ctr_a_v3', 'lic_a', 3, 'BODY-A-V3', '[]', 'signed', null, '2026-09-01 00:00:00', '2026-08-02 00:00:00', '2026-08-03 00:00:00', '2026-08-01 00:00:00');
+  c.run('ctr_a_redraft', 'lic_a', 3, 'BODY-A-REDRAFT', '[]', 'draft', null, '2026-09-01 00:00:00', null, null, '2026-08-15 00:00:00');
+  c.run('ctr_a', 'lic_a', 4, 'BODY-A-V4', '["territory"]', 'sent', 'env-a', null, '2026-09-02 00:00:00', null, '2026-09-01 00:00:00');
+  c.run('ctr_b', 'lic_b', 4, 'BODY-B-V4', '[]', 'sent', 'env-b', null, '2026-09-02 00:00:00', null, '2026-09-01 00:00:00');
   const e = db.prepare(`INSERT INTO esign_envelopes (id, envelope_uuid, document_type, document_title, document_body, body_sha256, status, created_by)
     VALUES (?, ?, 'licence_agreement', 'Territory licence agreement', 'x', 'x', 'sent', ?)`);
   e.run(1, 'env-a', SUPER);
@@ -89,7 +103,7 @@ function fixture(o: { account?: boolean; branch?: string } = {}) {
        unreported_streams, paid_cents, paid_note, paid_by_user_id, disputed_cents, dispute_note, status, drawn_by_user_id)
     VALUES (?, ?, ?, 100000, 3500, 35000, 'EUR', ?, 1, 0, ?, 'HQ-NOTE', ?, 0, 'HQ-DISPUTE-NOTE', ?, ?)`);
   const streams = JSON.stringify([{ stream: 'subscriptions', gross_cents: 100000, currency: 'EUR', available: true, is_estimate: true }]);
-  s.run('st_a_09', 'lic_a', '2026-09', streams, 0, null, 'issued', SUPER);
+  s.run('st_a_09', 'lic_a', '2026-09', STREAMS_09, 0, null, 'issued', SUPER);
   s.run('st_a_08', 'lic_a', '2026-08', streams, 35000, SUPER, 'paid', SUPER);
   s.run('st_a_07', 'lic_a', '2026-07', streams, 0, null, 'void', SUPER);
   s.run('st_a_10', 'lic_a', '2026-10', streams, 0, null, 'draft', SUPER);
@@ -98,6 +112,12 @@ function fixture(o: { account?: boolean; branch?: string } = {}) {
     VALUES (?, ?, ?, 'subscriptions', 100000, 1, '2026-10-01')`).run('lic_a', 'a', '2026-09');
   db.prepare(`INSERT INTO subsidiary_usage_reports (licence_uid, branch_code, period, stream, gross_cents, is_estimate, reported_at)
     VALUES (?, ?, ?, 'subscriptions', 200000, 0, '2026-10-01')`).run('lic_b', 'b', '2026-09');
+
+  const n = db.prepare(`INSERT INTO admin_notices (uid, user_id, licence_id, kind, subject, body, respond_by, status)
+    VALUES (?, ?, ?, 'other', ?, 'Body', ?, ?)`);
+  n.run('ntc_a', PRINCIPAL, 1, 'Late usage report', '2026-10-24T00:00:00Z', 'issued');
+  n.run('ntc_a_done', PRINCIPAL, 1, 'Answered already', '2026-09-24T00:00:00Z', 'responded');
+  n.run('ntc_b', OTHER_PRINCIPAL, 2, 'Another licence', '2026-10-24T00:00:00Z', 'issued');
 
   const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', APP_URL: 'https://app.example.test/' };
   if (o.branch) env.BRANCH_CODE = o.branch;
@@ -149,25 +169,70 @@ test('a principal and a delegate read their own licence\'s contract, never anoth
     const r = await call(env, who, 'GET', '/mine/contract');
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(r.body.available, true);
-    assert.equal(r.body.contract.uid, 'ctr_a');
-    assert.equal(r.body.contract.body_md, 'BODY-A-V4');
-    assert.deepEqual(r.body.contract.unfilled_fields, ['territory']);
+    assert.equal(r.body.pending.uid, 'ctr_a');
+    assert.equal(r.body.pending.body_md, 'BODY-A-V4');
+    assert.deepEqual(r.body.pending.unfilled_fields, ['territory']);
+    assert.equal(r.body.in_force.uid, 'ctr_a_v3');
     assert.ok(!JSON.stringify(r.body).includes('BODY-B'), 'another licence\'s contract leaked');
   }
   const b = await call(env, OTHER_PRINCIPAL, 'GET', '/mine/contract');
-  assert.equal(b.body.contract.uid, 'ctr_b');
+  assert.equal(b.body.pending.uid, 'ctr_b');
+  assert.equal(b.body.in_force, null);
   assert.ok(!JSON.stringify(b.body).includes('BODY-A'));
 });
 
 test('a signed-in member who administers no licence gets no_licence on every route', async () => {
   const { env } = fixture();
-  for (const [m, p] of [['GET', '/mine/contract'], ['GET', '/mine/statements'], ['POST', '/mine/statements/st_a_09/dispute']] as const) {
+  for (const [m, p] of [
+    ['GET', '/mine/contract'], ['GET', '/mine/contract/ctr_a/pdf'], ['GET', '/mine/statements'], ['GET', '/mine/needs'],
+    ['POST', '/mine/statements/st_a_09/dispute'], ['POST', '/mine/usage/send'],
+  ] as const) {
     const r = await call(env, MEMBER, m, p, m === 'POST' ? { cents: 100, reason: 'A reason long enough' } : undefined);
     assert.equal(r.status, 404, p);
     assert.equal(r.body.error, 'no_licence', p);
   }
   const anon = await app.request('/licence/mine/contract', {}, env);
   assert.equal(anon.status, 401);
+});
+
+test('in force is the latest signed contract, pending the one sent and waiting, and a draft is never shown', async () => {
+  const { env, db } = fixture();
+  const r = await call(env, PRINCIPAL, 'GET', '/mine/contract');
+  assert.equal(r.body.in_force.uid, 'ctr_a_v3', 'v3 stays in force while v4 waits, though drawing v4 superseded it');
+  assert.equal(r.body.in_force.signed_at, '2026-08-03 00:00:00');
+  assert.equal(r.body.pending.uid, 'ctr_a');
+  assert.ok(!JSON.stringify(r.body).includes('BODY-A-REDRAFT'), 'a contract HQ never sent was shown');
+
+  // HQ redraws while v4 is sent: v4 is no longer waiting, and the new draft is not shown.
+  db.exec('SAVEPOINT redraw');
+  db.prepare("UPDATE licence_contracts SET superseded_at = '2026-09-10 00:00:00' WHERE uid = 'ctr_a'").run();
+  db.prepare(`INSERT INTO licence_contracts (uid, licence_uid, template_slug, template_version, template_title, body_md, status, created_at)
+    VALUES ('ctr_a_v5d', 'lic_a', 'licence_agreement', 5, 'Territory licence agreement', 'BODY-A-V5D', 'draft', '2026-09-10 00:00:00')`).run();
+  const redrawnSent = await call(env, PRINCIPAL, 'GET', '/mine/contract');
+  assert.equal(redrawnSent.body.pending, null, 'a superseded contract is not waiting for a signature');
+  assert.equal(redrawnSent.body.sign_url, null);
+  assert.equal(redrawnSent.body.sign_reason, 'Not sent yet');
+  assert.deepEqual(redrawnSent.body.earlier.map((x: any) => x.uid), ['ctr_a', 'ctr_a_v2']);
+  db.exec('ROLLBACK TO redraw'); db.exec('RELEASE redraw');
+
+  // v4 signed: it is in force, nothing is pending, and v3 joins the earlier ones.
+  db.prepare("UPDATE esign_envelopes SET status = 'completed', completed_at = '2026-09-03 00:00:00' WHERE envelope_uuid = 'env-a'").run();
+  const signed = await call(env, PRINCIPAL, 'GET', '/mine/contract');
+  assert.equal(signed.body.in_force.uid, 'ctr_a', 'the status follows the envelope');
+  assert.equal(signed.body.pending, null);
+  assert.deepEqual(signed.body.earlier.map((x: any) => x.uid), ['ctr_a_v3', 'ctr_a_v2']);
+  assert.equal(signed.body.sign_url, null);
+  assert.equal(signed.body.sign_reason, 'Signed');
+
+  // HQ redrafts: the new draft is not shown and the reason says so.
+  db.prepare("UPDATE licence_contracts SET superseded_at = '2026-10-01 00:00:00' WHERE licence_uid = 'lic_a' AND superseded_at IS NULL").run();
+  db.prepare(`INSERT INTO licence_contracts (uid, licence_uid, template_slug, template_version, template_title, body_md, status, created_at)
+    VALUES ('ctr_a_v5', 'lic_a', 'licence_agreement', 5, 'Territory licence agreement', 'BODY-A-V5', 'draft', '2026-10-01 00:00:00')`).run();
+  const redrawn = await call(env, PRINCIPAL, 'GET', '/mine/contract');
+  assert.equal(redrawn.body.in_force.uid, 'ctr_a');
+  assert.equal(redrawn.body.pending, null);
+  assert.equal(redrawn.body.sign_reason, 'Not sent yet');
+  assert.ok(!JSON.stringify(redrawn.body).includes('BODY-A-V5'));
 });
 
 test('sign_url is the caller\'s own link, only while the contract is sent to them', async () => {
@@ -186,34 +251,51 @@ test('sign_url is the caller\'s own link, only while the contract is sent to the
   assert.equal(expired.body.sign_url, null);
   assert.match(expired.body.sign_reason, /expired/);
 
-  db.prepare("UPDATE esign_envelopes SET status = 'completed', completed_at = '2026-09-03 00:00:00' WHERE envelope_uuid = 'env-a'").run();
-  const signed = await call(env, PRINCIPAL, 'GET', '/mine/contract');
-  assert.equal(signed.body.contract.status, 'signed', 'the status follows the envelope');
-  assert.equal(signed.body.sign_url, null);
+  db.prepare("UPDATE licence_contracts SET envelope_uid = NULL WHERE uid = 'ctr_a'").run();
+  const noEnvelope = await call(env, PRINCIPAL, 'GET', '/mine/contract');
+  assert.equal(noEnvelope.body.pending.uid, 'ctr_a');
+  assert.equal(noEnvelope.body.sign_url, null);
+  assert.equal(noEnvelope.body.sign_reason, 'HQ has sent no signing link for it. Ask HQ.');
+  db.prepare("UPDATE licence_contracts SET envelope_uid = 'env-a' WHERE uid = 'ctr_a'").run();
 
-  // An envelope not yet sent reads as a draft, and its recipient's token is not offered.
-  db.prepare("UPDATE esign_envelopes SET status = 'created', completed_at = NULL WHERE envelope_uuid = 'env-a'").run();
+  // An envelope not yet sent reads as a draft: not shown, and its recipient's token is not offered.
+  db.prepare("UPDATE esign_envelopes SET status = 'created' WHERE envelope_uuid = 'env-a'").run();
   db.prepare("UPDATE esign_recipients SET token_expires_at = '2099-01-01T00:00:00Z'").run();
   const unsent = await call(env, PRINCIPAL, 'GET', '/mine/contract');
-  assert.equal(unsent.body.contract.status, 'draft');
+  assert.equal(unsent.body.pending, null);
   assert.equal(unsent.body.sign_url, null);
   assert.equal(unsent.body.sign_reason, 'Not sent yet');
-
-  db.prepare("UPDATE esign_envelopes SET status = 'sent' WHERE envelope_uuid = 'env-a'").run();
-  db.prepare("UPDATE licence_contracts SET status = 'draft', envelope_uid = NULL WHERE uid = 'ctr_a'").run();
-  const draft = await call(env, PRINCIPAL, 'GET', '/mine/contract');
-  assert.equal(draft.body.sign_url, null);
-  assert.equal(draft.body.sign_reason, 'Not sent yet');
+  assert.ok(!JSON.stringify(unsent.body).includes('tok-a'));
 });
 
 test('a superseded contract is in earlier with its own stored body', async () => {
   const { env } = fixture();
   const r = await call(env, PRINCIPAL, 'GET', '/mine/contract');
-  assert.equal(r.body.earlier.length, 1);
-  assert.equal(r.body.earlier[0].uid, 'ctr_a_old');
-  assert.equal(r.body.earlier[0].body_md, 'BODY-A-V3');
-  assert.equal(r.body.earlier[0].template_version, 3);
-  assert.equal(r.body.earlier[0].superseded_at, '2026-09-01 00:00:00');
+  assert.deepEqual(r.body.earlier.map((x: any) => x.uid), ['ctr_a_v2']);
+  assert.equal(r.body.earlier[0].body_md, 'BODY-A-V2');
+  assert.equal(r.body.earlier[0].template_version, 2);
+  assert.equal(r.body.earlier[0].superseded_at, '2026-07-01 00:00:00');
+});
+
+test('the contract PDF prints a visible contract of the caller\'s own licence, and nothing else', async () => {
+  const { env } = fixture();
+  const pdfOf = async (who: number, uid: string) => {
+    const jwt = await new SignJWT({ user_id: who }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    return quietly(() => app.request(`/licence/mine/contract/${uid}/pdf`, { headers: { Authorization: `Bearer ${jwt}` } }, env));
+  };
+  for (const uid of ['ctr_a', 'ctr_a_v3', 'ctr_a_v2']) {
+    const res = await pdfOf(DELEGATE, uid);
+    assert.equal(res.status, 200, uid);
+    assert.equal(res.headers.get('content-type'), 'application/pdf');
+    assert.match(res.headers.get('content-disposition') || '', /^inline; filename="LIC-A-contract-v\d\.pdf"$/);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), '%PDF-');
+  }
+  for (const [who, uid] of [[PRINCIPAL, 'ctr_b'], [PRINCIPAL, 'ctr_a_redraft'], [PRINCIPAL, 'nope'], [OTHER_PRINCIPAL, 'ctr_a']] as const) {
+    const res = await pdfOf(who, uid);
+    assert.equal(res.status, 404, `${who} ${uid}`);
+  }
 });
 
 // ───────────────────────────────────────────────────────────── statements
@@ -233,6 +315,7 @@ test('statements: the licence\'s own, a draft hidden, HQ-only fields never sent'
     assert.equal(sept.owed_cents, 35000);
     assert.equal(sept.revenue_share_bps, 3500);
     assert.equal(sept.streams[0].is_estimate, true);
+    assert.deepEqual(sept.streams, JSON.parse(STREAMS_09), 'streams_json passes through as stored');
     assert.equal(sept.payment_reference, 'AXAL-LIC-LIC-A-2026-09');
     assert.deepEqual(r.body.usage_reports.map((u: any) => [u.period, u.streams.length, u.streams[0].gross_cents]), [['2026-09', 1, 100000]]);
   }
@@ -267,12 +350,14 @@ test('a licence whose terms name another licensor is refused rather than paid to
   const { env, db } = fixture();
   const number = await holdingsAccount(env, db);
   const lic = db.prepare("SELECT * FROM territory_licences WHERE uid = 'lic_a'").get() as any;
-  const refused = await licenseeStatements(env, lic, 'management');
+  const refused = await licenseeStatements(env, lic, { licensorIpEntity: 'management' });
   assert.equal((refused.payment as any).refusal_code, 'licensor_not_payee');
   assert.equal((refused.payment as any).lines, undefined);
   assert.ok(!JSON.stringify(refused).includes(number.slice(-4)), 'Holdings\' account was shown');
   assert.equal(refused.statements.length, 3, 'the statements are still read');
-  const holdings = await licenseeStatements(env, lic, 'holdings');
+  const holdings = await licenseeStatements(env, lic, { licensorIpEntity: 'holdings' });
+  assert.equal((holdings.payment as any).payee_name, 'Axal VC Holdings LLC');
+  assert.equal((holdings.payment as any).method, 'Bank transfer');
   assert.equal((holdings.payment as any).account_last4, number.slice(-4));
 
   assert.equal(licensorRefusal(null), null);
@@ -345,15 +430,117 @@ test('a dispute is refused for another licence\'s statement, a draft, a void one
 test('on a branch an admin reads the reason and no figure; a non-admin is refused first', async () => {
   const { env, db } = fixture({ branch: 'fr' });
   await holdingsAccount(env, db);
-  for (const p of ['/mine/contract', '/mine/statements']) {
-    const r = await call(env, PRINCIPAL, 'GET', p);
-    assert.equal(r.status, 200);
-    assert.deepEqual(r.body, { available: false, reason: 'Read on HQ; this branch has no copy yet' }, p);
-    const m = await call(env, MEMBER, 'GET', p);
-    assert.equal(m.status, 403, p);
+  const contract = await call(env, PRINCIPAL, 'GET', '/mine/contract');
+  assert.equal(contract.status, 200);
+  assert.deepEqual(contract.body, { available: false, reason: 'Read on HQ; this branch has no copy yet' });
+  const statements = await call(env, PRINCIPAL, 'GET', '/mine/statements');
+  assert.deepEqual(statements.body, {
+    available: false, reason: 'Read on HQ; this branch has no copy yet', usage: { send_now: true, send_now_reason: null },
+  });
+  for (const [m, p] of [['GET', '/mine/contract'], ['GET', '/mine/statements'], ['GET', '/mine/needs'], ['POST', '/mine/usage/send']] as const) {
+    const r = await call(env, MEMBER, m, p);
+    assert.equal(r.status, 403, p);
   }
+  const pdf = await call(env, PRINCIPAL, 'GET', '/mine/contract/ctr_a/pdf');
+  assert.equal(pdf.status, 501);
   const d = await call(env, PRINCIPAL, 'POST', '/mine/statements/st_a_09/dispute', { cents: 100, reason: 'A reason long enough to read.' });
   assert.equal(d.status, 501);
   assert.equal(d.body.error, 'statement_hq_only');
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM hq_escalations').get() as any).n, 0);
+});
+
+// ───────────────────────────────────────────────────────────── usage reports
+
+test('each period\'s usage report: sent with its date, late only after the report day, never guessed without one', async () => {
+  const now = new Date('2026-10-20T12:00:00Z');
+  assert.deepEqual(usageReportStatus('2026-09', '2026-10-04 08:00:00', 5, now),
+    { period: '2026-09', status: 'sent', sent_at: '2026-10-04 08:00:00', due_on: null, late: false });
+  assert.deepEqual(usageReportStatus('2026-08', null, null, now),
+    { period: '2026-08', status: 'not_sent', sent_at: null, due_on: null, late: null });
+  assert.equal(usageReportStatus('2026-09', null, 5, now).status, 'late');
+  assert.equal(usageReportStatus('2026-09', null, 20, now).status, 'due', 'due through the report day itself');
+  assert.equal(usageReportStatus('2026-09', null, 19, now).status, 'late');
+  assert.equal(usageReportStatus('2026-09', null, 19, now).due_on, '2026-10-19');
+  assert.equal(usageReportStatus('2026-Q3', null, 5, now).due_on, '2026-10-05', 'a quarter is due the month after it ends');
+  assert.equal(usageReportStatus('2026-Q4', null, 5, now).status, 'due');
+  assert.equal(periodEnds('2026-12')?.toISOString(), '2027-01-01T00:00:00.000Z');
+  assert.equal(periodEnds('2026-Q5'), null);
+
+  const { env, db } = fixture();
+  const lic = db.prepare("SELECT * FROM territory_licences WHERE uid = 'lic_a'").get() as any;
+  const none = await licenseeStatements(env, lic, {}, now);
+  assert.equal(none.usage.report_day, null);
+  assert.equal(none.usage.report_day_reason, USAGE_REASON.no_report_day);
+  assert.deepEqual(none.usage.periods.map((u: any) => [u.period, u.status]),
+    [['2026-09', 'sent'], ['2026-08', 'not_sent'], ['2026-07', 'not_sent']]);
+  assert.equal(none.usage.periods[0].sent_at, '2026-10-01');
+  assert.equal(none.usage.send_now, false);
+  assert.equal(none.usage.send_now_reason, USAGE_REASON.hq_send);
+  const day = await licenseeStatements(env, lic, { usageReportDay: 5 }, now);
+  assert.deepEqual(day.usage.periods.map((u: any) => u.status), ['sent', 'late', 'late']);
+  assert.ok(!none.usage.periods.some((u: any) => u.period === '2026-10'), 'a draft statement\'s period is not listed');
+
+  const route = await call(env, PRINCIPAL, 'GET', '/mine/statements');
+  assert.equal(route.body.usage.send_now, false);
+  const send = await call(env, PRINCIPAL, 'POST', '/mine/usage/send');
+  assert.equal(send.status, 501);
+  assert.equal(send.body.error, 'usage_branch_only');
+});
+
+test('Send now on a branch runs the branch\'s own usage push and says why when it cannot', async () => {
+  const { env } = fixture({ branch: 'fr' });
+  const r = await call(env, PRINCIPAL, 'POST', '/mine/usage/send');
+  assert.equal(r.status, 502, 'no RPC secret: the push refuses before calling HQ');
+  assert.equal(r.body.sent, false);
+  assert.ok(r.body.reason);
+});
+
+// ───────────────────────────────────────────────────────────── needs you
+
+test('needs: the caller\'s contract to sign, then notices, then unpaid statements, each with its link', async () => {
+  const { env, db } = fixture();
+  const p = await call(env, PRINCIPAL, 'GET', '/mine/needs');
+  assert.equal(p.status, 200, JSON.stringify(p.body));
+  assert.deepEqual(p.body.items.map((i: any) => [i.kind, i.ref, i.link]), [
+    ['contract', 'ctr_a', '/admin/my-licence/contract'],
+    ['notice', 'ntc_a', '/admin/my-licence/requests'],
+    ['statement', 'st_a_09', '/admin/my-licence/statements'],
+  ]);
+  assert.equal(p.body.count, 3);
+  assert.equal(p.body.items[0].title, 'Contract v4 is waiting for your signature');
+  assert.equal(p.body.reasons.seats, 'Seats used is not counted on HQ yet, so no seat type is flagged here.');
+
+  // The delegate is not the recipient and is sent no notice: only the licence's unpaid statement.
+  const d = await call(env, DELEGATE, 'GET', '/mine/needs');
+  assert.deepEqual(d.body.items.map((i: any) => i.ref), ['st_a_09']);
+  const b = await call(env, OTHER_PRINCIPAL, 'GET', '/mine/needs');
+  assert.deepEqual(b.body.items.map((i: any) => i.ref), ['ctr_b', 'ntc_b', 'st_b_09']);
+
+  db.prepare("UPDATE subsidiary_statements SET paid_cents = owed_cents WHERE uid = 'st_a_09'").run();
+  db.prepare("UPDATE admin_notices SET status = 'overdue' WHERE uid = 'ntc_a'").run();
+  db.prepare("UPDATE esign_envelopes SET status = 'completed' WHERE envelope_uuid = 'env-a'").run();
+  const after = await call(env, PRINCIPAL, 'GET', '/mine/needs');
+  assert.deepEqual(after.body.items.map((i: any) => i.ref), ['ntc_a'], 'an overdue notice still waits; a paid statement and a signed contract do not');
+
+  db.exec('DROP TABLE admin_notices');
+  const unreadable = await quietly(() => call(env, PRINCIPAL, 'GET', '/mine/needs'));
+  assert.equal(unreadable.status, 200);
+  assert.match(unreadable.body.reasons.notices, /could not be read/);
+});
+
+test('needs on a branch: its notices and the seat types at 90% of their seats licensed', async () => {
+  const { env, db } = fixture({ branch: 'fr' });
+  db.prepare(`INSERT INTO branch_licence (id, licence_uid, brand_name, seats_json, pushed_at)
+    VALUES (1, 'lic_a', 'Brand A', ?, '2026-10-01')`).run(JSON.stringify({ founder: 10, investor: 10 }));
+  const u = db.prepare("INSERT INTO users (id, role, name, email) VALUES (?, 'founder', 'Member', ?)");
+  for (let i = 0; i < 8; i++) u.run(100 + i, `m${i}@example.test`);
+  const r = await call(env, PRINCIPAL, 'GET', '/mine/needs');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.items.map((i: any) => [i.kind, i.ref]), [['notice', 'ntc_a'], ['seats', 'founder']]);
+  assert.equal(r.body.items[1].title, 'founder seats 9 of 10 used');
+  assert.equal(r.body.reasons.contract, 'Read on HQ; this branch has no copy yet');
+
+  assert.deepEqual(seatsNearCap({ founder: 10, investor: 10, advisor: 0 }, { founder: 8, investor: 10, advisor: 3 }),
+    [{ seat_type: 'investor', used: 10, licensed: 10 }]);
+  assert.deepEqual(seatsNearCap({ founder: 10 }, null), []);
 });
