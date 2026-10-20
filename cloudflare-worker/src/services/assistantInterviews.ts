@@ -413,7 +413,7 @@ export async function proposePlacements(env: Env, grant: AssistantGrant, args: P
 // ---------------------------------------------------------------------------
 
 const MODEL_RE = /^@cf\/[a-z0-9._/-]{3,100}$/i;
-const BUDGET_REFUSALS = new Set(['budget_user_day', 'budget_user_month', 'budget_org_month', 'budget_review', 'kill_switch']);
+const BUDGET_REFUSALS = new Set(['budget_user_day', 'budget_user_month', 'budget_org_month', 'budget_review', 'kill_switch', 'spend_limit']);
 
 /**
  * `structure_with_studioos`: D658's own structuring on the same transcript,

@@ -133,7 +133,7 @@ export async function transcribeChunk(env: Env, opts: {
     language: opts.session.language,
   });
   if (!r.ok) {
-    const budget = String(r.refusal || '').startsWith('budget');
+    const budget = String(r.refusal || '').startsWith('budget') || r.refusal === 'spend_limit';
     return {
       ok: false, refusal: r.refusal || 'all_models_failed', budget,
       // D791: a paused member reads the pause's sentence.
