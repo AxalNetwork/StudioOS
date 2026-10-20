@@ -5,7 +5,7 @@ The corpus the first integration pass worked from. Sorted by one question:
 
 | Folder | Count | Meaning |
 | --- | --- | --- |
-| `integrated/` | 98 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
+| `integrated/` | 100 | A route is running on main. Graded `CURRENT`, `UPGRADE` or `RESKIN` — the surface exists, and for `UPGRADE`/`RESKIN` the canvas is a *diff against* something already live. |
 | `backlog/` | 28 | Graded `NEW` or `DEFERRED`. No route yet. |
 | `out-of-scope/` | 26 | Deliberately not being built. The `ROUTE_MAP.md` row says why. |
 | `shared/` | 6 | The dc-runtime bundle every canvas loads, plus two standalone pitch-deck exports. Generated — both code scanners ignore this tree. Every canvas asks for it as `src="./support.js"`, which resolves next to the canvas and **not** to this folder, so opening one straight from `integrated/` in a browser gets a blank page: copy `shared/support.js` beside it first. Nothing runs these at runtime, so the reference is nominal — it is a convention marking "the shared runtime, not an inlined 69KB copy", and `scripts/read-canvas.mjs` reproduces it when it decodes a new export. |
@@ -431,3 +431,12 @@ unedited, replacing D698's export under the name `Cycle Overview`'s two
 price, the page's models from the Worker's matrix, All models in ten groups,
 the Llama Guard sentence and Add tokens. **`integrated/` stays 98.** The
 departures are in `documentation/architecture/decisions/D769.md`.
+
+**2026-10-20 (D800, #2233), two graduated.** `Licences · Boards` and
+`Licences Page` (D795, #2228) moved from `design/incoming/` to `integrated/`,
+unedited, with the Licences page's part 1: the frame and six tabs, Summary,
+Terms from the ledger, History, the states, phone and the row's count, at
+`/admin/my-licence`. Part 2 (Contract, Statements and Requests, D804, #2241),
+D797's terms rows (#2242) and HQ's editor (board L9, D801) build to the same
+two files here. **`integrated/` went 98 → 100.** The departures are in
+`documentation/architecture/decisions/D800.md`.

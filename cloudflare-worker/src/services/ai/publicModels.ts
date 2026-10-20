@@ -13,7 +13,7 @@
  * multiplier, no status, no partner flag and no route: a test holds the exact
  * key set. No D1 and no binding, so the edge and the isolate cache it.
  */
-import { CATALOGUE, isOffered, type CatalogueSwitches, type PriceUnit } from './catalogue';
+import { CATALOGUE, isOffered, type CatalogueModel, type CatalogueSwitches, type PriceUnit } from './catalogue';
 import { AI_MARKUP, billedUnitPrice, unitPrice } from './pricing';
 import { railOptionRows, railRows } from './railMatrix';
 
@@ -48,10 +48,51 @@ export const NEW_MODEL_IDS: ReadonlySet<string> = new Set([
   '@cf/leonardo/lucid-origin', '@cf/leonardo/phoenix-1.0',
 ]);
 
+/**
+ * D786 part 2: the Models tab's groups, in the canvas's order. "What it does",
+ * where Cloudflare's task name says what it is.
+ */
+export const MODEL_GROUPS = Object.freeze([
+  'Conversation and writing', 'Reasoning', 'Code', 'Reading images and files', 'Search and ranking',
+  'Languages', 'Speech to text', 'Voice', 'Images', 'Safety',
+] as const);
+export type ModelGroup = typeof MODEL_GROUPS[number];
+
+const GROUP_OF_KIND: Readonly<Record<string, ModelGroup>> = Object.freeze({
+  'Image-to-Text': 'Reading images and files',
+  'Image Classification': 'Reading images and files',
+  'Object Detection': 'Reading images and files',
+  'Text Embeddings': 'Search and ranking',
+  'Text Classification': 'Search and ranking',
+  Translation: 'Languages',
+  'Automatic Speech Recognition': 'Speech to text',
+  'Voice Activity Detection': 'Speech to text',
+  'Text-to-Speech': 'Voice',
+  'Text-to-Image': 'Images',
+});
+
+/**
+ * A model's group: Llama Guard is the safety check on every outbound draft; a
+ * text model splits by the badges Cloudflare's models page gives it (Reasoning,
+ * Vision) and by its own name for a coder; every other kind by its task.
+ */
+export function modelGroup(m: Pick<CatalogueModel, 'id' | 'kind' | 'capabilities'>): ModelGroup {
+  if (/llama-guard/.test(m.id)) return 'Safety';
+  if (m.kind === 'Text Generation') {
+    if (/coder/.test(m.id)) return 'Code';
+    if (m.capabilities.includes('Reasoning')) return 'Reasoning';
+    if (m.capabilities.includes('Vision')) return 'Reading images and files';
+    return 'Conversation and writing';
+  }
+  return GROUP_OF_KIND[m.kind] ?? 'Conversation and writing';
+}
+
 export interface PublicModel {
   id: string;
   name: string;
   kind: string;
+  /** The Models tab's group (`MODEL_GROUPS`). */
+  group: ModelGroup;
   /** USD per unit, as a member pays it. */
   billed: Record<string, number>;
   unit_words: Record<string, string>;
@@ -81,7 +122,7 @@ export function publicModels(env: CatalogueSwitches): PublicModel[] {
       words[unit] = UNIT_WORDS[unit] ?? unit;
     }
     return {
-      id: m.id, name: m.name, kind: m.kind, billed, unit_words: words,
+      id: m.id, name: m.name, kind: m.kind, group: modelGroup(m), billed, unit_words: words,
       pages: pages.get(m.id) ?? [], is_new: NEW_MODEL_IDS.has(m.id), paid_only: m.paid_only,
     };
   });

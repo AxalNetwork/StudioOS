@@ -78,6 +78,8 @@ import { investorProfile } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
 import aiBudgetRoutes from './routes/ai_budget';
+// D791 (#2216): HQ › AI usage, Super Admin with step-up.
+import adminAiUsageRoutes from './routes/admin_ai_usage';
 import aiRailProposalsRoutes from './routes/ai_rail_proposals';
 import { runTotpRemediation } from './services/totpRemediation';
 import { writeDailySnapshot } from './services/analyticsReports';
@@ -872,6 +874,7 @@ app.route('/api/assistant', assistantRoutes);
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
+app.route('/api/admin/ai-usage', adminAiUsageRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
 // Task #33 — Cloudflare Access perimeter on /api/admin, /api/monitoring and

@@ -496,7 +496,8 @@ test('D758 each type\'s specimen prints what its builder prints, in brackets, an
     platform_licence_fee_invoice: { type: 'platform_licence_fee_invoice', inputs: { licensee: 'gp', period_start: '2026-10-01', period_end: '2026-12-31', amount_cents: 100000, due_date: FUTURE } },
     payment_instructions_letter: { type: 'payment_instructions_letter', inputs: { purpose: 'capital_contribution', to: 'Lena LP' } },
   };
-  assert.deepEqual(Object.keys(REAL).sort(), NOTICE_TYPES.map((t) => t.type).sort(), 'every type is held to a real build');
+  // D802's territory licence fee invoice is issued only from its licence, never through this preview; licence_fee_invoices_d802.test.ts holds its specimen to a real invoice.
+  assert.deepEqual(Object.keys(REAL).sort(), NOTICE_TYPES.map((t) => t.type).filter((t) => t !== 'territory_licence_fee_invoice').sort(), 'every type is held to a real build');
   const bracket = /^\[[^\]\d]+\]$/;
   for (const [type, req] of Object.entries(REAL)) {
     const real = await preview(f, req);

@@ -60,12 +60,14 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { hashEmail } from '../util/hashEmail';
 import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
 import { mergeValues, renderContract } from '../services/licenceContract';
+import { COUNSEL_REVIEW_SLUGS } from '../services/templateFormat';
 import { createAndSendEnvelope, templateBodyRefusal, TemplateBodyError } from './esign';
 import { refuse } from '../util/refusal';
 // D137 — every transition below now reaches the branch that runs under the
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
 import { pushLicenceToBranch } from '../services/licencePush';
+import { DEFAULT_TERM_SECTIONS, readLicenceTerms, termsDiff, validateTermsBody, type LicenceTerms, type LicenceTermsRecord } from '../services/licenceTerms';
 // D262 — termination reaches the branch's own administrators too.
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
@@ -584,6 +586,105 @@ r.patch('/:uid/terms', async (c) => {
     // every status transition; a push that does not land is retried.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     return c.json({ ok: true, ...terms, pushed });
+  } catch (e) { return mapError(c, e); }
+});
+
+// D797 (#2230) — the licence's terms schedule: deal terms, renewal and notice,
+// money and reporting, beyond Step 4's fee and shares. The field list is
+// `services/licenceTerms.ts`; migration 512's CHECKs hold the same ranges.
+r.get('/:uid/terms', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const rec = await readLicenceTerms(c.env, licence.uid);
+    return c.json({ licence_uid: licence.uid, terms: rec?.terms ?? null, sections: rec?.sections ?? {} });
+  } catch (e) { return mapError(c, e); }
+});
+
+// A MONEY WRITE, SO IT TAKES THE MONEY BAR: a TOTP-minted session, a recent
+// step-up, then the elevation (`requireSuperAdminWriteBar`). Only the keys the
+// body names change, and `null` clears one. A reason is required, and every
+// save appends exactly one `terms_changed` event naming the changed keys with
+// their before and after.
+r.put('/:uid/terms', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json().catch(() => ({} as any));
+    const reason = typeof b?.reason === 'string' ? b.reason.trim().slice(0, 500) : '';
+    if (!reason) return c.json({ error: 'reason_required', message: 'Say why the terms change.' }, 400);
+    const v = validateTermsBody(b?.terms, b?.sections);
+    if (!v.ok) {
+      return c.json({ error: 'invalid_terms', message: `${v.errors[0].field} ${v.errors[0].message}.`, errors: v.errors }, 400);
+    }
+    const before = await readLicenceTerms(c.env, licence.uid);
+    const after: LicenceTermsRecord = {
+      terms: { ...(before?.terms ?? {}), ...v.terms },
+      sections: { ...(before?.sections ?? {}) },
+    };
+    for (const [k, sec] of Object.entries(v.sections ?? {})) {
+      // A cleared section reads the canvas's default again (none for a term
+      // the canvas does not cite).
+      if (sec !== null) after.sections[k] = sec;
+      else if (DEFAULT_TERM_SECTIONS[k]) after.sections[k] = DEFAULT_TERM_SECTIONS[k];
+      else delete after.sections[k];
+    }
+    // Only HQ's overrides of the canvas's section numbers are stored; a
+    // cleared section reads the default again.
+    const overrides = Object.fromEntries(Object.entries(after.sections)
+      .filter(([k, sec]) => sec !== DEFAULT_TERM_SECTIONS[k]));
+    const t = (k: string) => after.terms[k] ?? null;
+    await c.env.DB.prepare(
+      `INSERT INTO licence_terms
+         (licence_uid, licensor_ip_entity, licensor_brand_entity, governing_law,
+          exclusive, non_compete_months, referrals_note,
+          renewal_mode, non_renewal_notice_days, cure_days, termination_note,
+          share_subscriptions_bps, share_licence_fees_bps, share_token_margin_bps, royalty_platform_licence_bps,
+          payment_terms_days, late_interest_bps, minimum_guarantee_cents, fee_invoiced,
+          first_look_business_days, co_invest_max_bps, carry_share_bps, referral_fee_bps,
+          hq_approval_above_cents, conflicts_note, seat_includes, brand_kit,
+          usage_report_day, statement_period, data_role, audit_right, audit_notice_days,
+          sections_json, updated_by_user_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(licence_uid) DO UPDATE SET
+         licensor_ip_entity = excluded.licensor_ip_entity, licensor_brand_entity = excluded.licensor_brand_entity,
+         governing_law = excluded.governing_law,
+         exclusive = excluded.exclusive, non_compete_months = excluded.non_compete_months,
+         referrals_note = excluded.referrals_note,
+         renewal_mode = excluded.renewal_mode, non_renewal_notice_days = excluded.non_renewal_notice_days,
+         cure_days = excluded.cure_days, termination_note = excluded.termination_note,
+         share_subscriptions_bps = excluded.share_subscriptions_bps, share_licence_fees_bps = excluded.share_licence_fees_bps,
+         share_token_margin_bps = excluded.share_token_margin_bps, royalty_platform_licence_bps = excluded.royalty_platform_licence_bps,
+         payment_terms_days = excluded.payment_terms_days, late_interest_bps = excluded.late_interest_bps,
+         minimum_guarantee_cents = excluded.minimum_guarantee_cents, fee_invoiced = excluded.fee_invoiced,
+         first_look_business_days = excluded.first_look_business_days, co_invest_max_bps = excluded.co_invest_max_bps,
+         carry_share_bps = excluded.carry_share_bps, referral_fee_bps = excluded.referral_fee_bps,
+         hq_approval_above_cents = excluded.hq_approval_above_cents, conflicts_note = excluded.conflicts_note,
+         seat_includes = excluded.seat_includes, brand_kit = excluded.brand_kit,
+         usage_report_day = excluded.usage_report_day, statement_period = excluded.statement_period,
+         data_role = excluded.data_role, audit_right = excluded.audit_right, audit_notice_days = excluded.audit_notice_days,
+         sections_json = excluded.sections_json, updated_by_user_id = excluded.updated_by_user_id,
+         updated_at = excluded.updated_at`,
+    ).bind(
+      licence.uid, t('licensor_ip_entity'), t('licensor_brand_entity'), t('governing_law'),
+      t('exclusive'), t('non_compete_months'), t('referrals_note'),
+      t('renewal_mode'), t('non_renewal_notice_days'), t('cure_days'), t('termination_note'),
+      t('share_subscriptions_bps'), t('share_licence_fees_bps'), t('share_token_margin_bps'), t('royalty_platform_licence_bps'),
+      t('payment_terms_days'), t('late_interest_bps'), t('minimum_guarantee_cents'), t('fee_invoiced'),
+      t('first_look_business_days'), t('co_invest_max_bps'), t('carry_share_bps'), t('referral_fee_bps'),
+      t('hq_approval_above_cents'), t('conflicts_note'), t('seat_includes'), t('brand_kit'),
+      t('usage_report_day'), t('statement_period'), t('data_role'), t('audit_right'), t('audit_notice_days'),
+      JSON.stringify(overrides), admin.id, nowIso(),
+    ).run();
+    const changed = termsDiff(before, after);
+    await logEvent(c.env, licence.id, 'terms_changed', admin.id, { schedule: 'licence_terms', reason, changed }, reason);
+    // The branch's copy carries the terms (`branch_licence.terms_json`), so a
+    // save pushes like Step 4's; a push that does not land is retried (D272).
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    const saved = await readLicenceTerms(c.env, licence.uid);
+    return c.json({ ok: true, licence_uid: licence.uid, terms: saved?.terms ?? null, sections: saved?.sections ?? {}, changed, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -1888,6 +1989,8 @@ r.get('/:uid/contract', async (c) => {
       // picker over a library that is not empty.
       templates: templates.map((t) => ({
         slug: t.slug, title: t.title, category: t.category, version: t.version,
+        // D803: a body counsel has not reviewed, said where HQ picks it.
+        counsel_review: COUNSEL_REVIEW_SLUGS.has(t.slug),
       })),
       ...(templates.length ? {} : {
         templates_reason:
@@ -1933,9 +2036,13 @@ r.post('/:uid/contract', async (c) => {
       ).bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
     ]);
 
+    // D803 (#2240): D797's terms fill `{{terms.<key>}}`. With none recorded, or a store
+    // that cannot be read, every such field stays visible and is named in `unfilled_fields`.
+    let terms: LicenceTerms | null = null;
+    try { terms = (await readLicenceTerms(c.env, licence.uid))?.terms ?? null; } catch { terms = null; }
     const { body, unfilled } = renderContract(
       tpl.body_md,
-      mergeValues(licence, (terr.results || []).map((t) => t.country_code), seats.results || []),
+      mergeValues(licence, (terr.results || []).map((t) => t.country_code), seats.results || [], terms),
     );
 
     // The prior contract is SUPERSEDED, never deleted or edited — the same
@@ -2089,6 +2196,111 @@ r.post('/:uid/contract/:contractUid/send', async (c) => {
       already_pending: sent.already_pending ?? false,
       status: 'sent',
       countersignature: { recorded: false, reason: COUNTERSIGN_NOT_RECORDED },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// D802 (#2238) — annual licence-fee invoices (migration 513,
+// `services/licenceFeeInvoices.ts`). HQ issues one per licence year and
+// records what it received, as it does on a statement (D.8). Issuing and
+// recording are money writes, so both take the write bar; reading and the PDF
+// take the plain Super Admin elevation. No branch copy changes, so nothing is
+// pushed.
+// ---------------------------------------------------------------------------
+const feeInvoices = () => import('../services/licenceFeeInvoices');
+
+async function feeRefusal(c: any, e: unknown) {
+  const { FeeInvoiceRefusal } = await feeInvoices();
+  if (!(e instanceof FeeInvoiceRefusal)) return null;
+  // A FeeInvoiceRefusal carries a sentence the service wrote, never an exception's text.
+  const refused = e;
+  return c.json({ error: refused.code, message: refused.message, ...refused.extra }, refused.status);
+}
+
+// GET /api/admin/licences/:uid/fee-invoices — the licence's invoices, newest year first.
+r.get('/:uid/fee-invoices', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const { listFeeInvoices, hqInvoiceView } = await feeInvoices();
+    const rows = await listFeeInvoices(c.env, licence.uid);
+    return c.json({ invoices: rows.map((row) => hqInvoiceView(row, licence.uid)), annual_fee_cents: licence.annual_fee_cents, currency: licence.currency, starts_on: licence.starts_on });
+  } catch (e) { return mapError(c, e); }
+});
+
+// POST /api/admin/licences/:uid/fee-invoices — issue the invoice for the
+// licence year that holds today. 409 while that year is already invoiced.
+r.post('/:uid/fee-invoices', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const { issueFeeInvoice, hqInvoiceView } = await feeInvoices();
+    // D797's schedule: the platform IP's licensor and the payment terms. No row,
+    // or a database before migration 512, leaves the defaults (Holdings, 30
+    // days); terms that cannot be read refuse rather than invoice on a guess.
+    let terms: Record<string, unknown> | null = null;
+    try {
+      const { readLicenceTerms } = await import('../services/licenceTerms');
+      terms = (await readLicenceTerms(c.env, licence.uid))?.terms ?? null;
+    } catch (e) {
+      if (!/no such table/i.test(String((e as Error)?.message ?? e))) {
+        return c.json({ error: 'terms_unreadable', message: 'This licence\'s terms could not be read, so its licensor and payment terms are unknown. Nothing was issued; try again.' }, 503);
+      }
+    }
+    const inv = await issueFeeInvoice(c.env, licence, admin.id, nowIso().slice(0, 10), {
+      licensorIpEntity: typeof terms?.licensor_ip_entity === 'string' ? terms.licensor_ip_entity : null,
+      paymentTermsDays: typeof terms?.payment_terms_days === 'number' ? terms.payment_terms_days : null,
+    });
+    await logAdminAction(c.env, admin.id, admin.email, 'licence_fee_invoice_issued', {
+      licence_uid: licence.uid, licence_ref: licence.licence_ref, invoice_uid: inv.uid, period: inv.period_label,
+      amount_cents: inv.amount_cents, currency: inv.currency, due_at: inv.due_at,
+    });
+    return c.json({ invoice: hqInvoiceView(inv, licence.uid) }, 201);
+  } catch (e) {
+    return (await feeRefusal(c, e)) ?? mapError(c, e);
+  }
+});
+
+// PATCH /api/admin/licences/:uid/fee-invoices/:invoiceUid
+//   { paid_cents, paid_note? } — the running total received; or
+//   { status: 'void', void_note } — void an invoice with nothing paid on it.
+r.patch('/:uid/fee-invoices/:invoiceUid', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const { feeInvoiceOf, parseFeeInvoiceUpdate, recordFeeInvoiceUpdate, hqInvoiceView } = await feeInvoices();
+    const inv = await feeInvoiceOf(c.env, licence.uid, c.req.param('invoiceUid'));
+    if (!inv) return c.json({ error: 'not_found' }, 404);
+    const parsed = parseFeeInvoiceUpdate(await c.req.json().catch(() => null), inv);
+    if (!parsed.ok) return c.json({ error: parsed.code, field: parsed.field, message: parsed.message }, parsed.status);
+    const after = await recordFeeInvoiceUpdate(c.env, inv, parsed, admin.id, nowIso());
+    await logAdminAction(c.env, admin.id, admin.email, parsed.kind === 'void' ? 'licence_fee_invoice_void' : 'licence_fee_invoice_payment', {
+      licence_uid: licence.uid, invoice_uid: inv.uid, period: inv.period_label, currency: inv.currency,
+      from_status: inv.status, to_status: after.status, paid_cents_before: inv.paid_cents, paid_cents: after.paid_cents,
+      ...(parsed.kind === 'void' ? { note: parsed.void_note } : {}),
+    });
+    return c.json({ invoice: hqInvoiceView(after, licence.uid) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// GET /api/admin/licences/:uid/fee-invoices/:invoiceUid/pdf — the invoice as issued.
+r.get('/:uid/fee-invoices/:invoiceUid/pdf', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const { feeInvoiceOf, feeInvoicePdf } = await feeInvoices();
+    const inv = await feeInvoiceOf(c.env, licence.uid, c.req.param('invoiceUid'));
+    if (!inv) return c.json({ error: 'not_found' }, 404);
+    const pdf = await feeInvoicePdf(c.env, inv);
+    if (!pdf.ok) return c.json({ error: pdf.code, message: pdf.message }, pdf.status);
+    return new Response(pdf.bytes, {
+      status: 200,
+      headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${pdf.filename}"`, 'Cache-Control': 'private, no-store' },
     });
   } catch (e) { return mapError(c, e); }
 });

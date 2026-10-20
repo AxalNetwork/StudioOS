@@ -27,6 +27,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
+import { LICENCE_TERM_FIELDS } from '../src/services/licenceTerms.ts';
 
 /**
  * `licence_events` WITH ITS REAL CHECK, read off the migrations rather than
@@ -423,4 +424,53 @@ test('both contract routes are super-admin only', async () => {
   assert.equal((await call('/lic_fr/contract', post('licence_agreement'), PLAIN)).status, 403);
   assert.equal((await call('/lic_fr/contract', {}, null)).status, 401);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM licence_contracts').get()!.n, 0);
+});
+
+/* ── D803 (#2240): the Subsidiary licence agreement, through the route ── */
+
+const migration = (f: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${f}`), 'utf8');
+/** Migration 512's `licence_terms`, read off the file (its branch column needs a table this fixture has not). */
+function licenceTermsDdl(): string {
+  const sql = migration('512_licence_terms.sql');
+  const at = sql.indexOf('CREATE TABLE IF NOT EXISTS licence_terms');
+  return sql.slice(at, sql.indexOf(');', at) + 2);
+}
+function withSubsidiaryTemplate(db: InstanceType<typeof DatabaseSync>) {
+  db.exec("ALTER TABLE legal_templates ADD COLUMN doc_kind TEXT; ALTER TABLE legal_templates ADD COLUMN axal_party TEXT;");
+  db.exec(migration('514_subsidiary_licence_agreement.sql'));
+  return db;
+}
+
+test('D803: the seeded template instantiates with the licence\'s terms; a term not recorded stays "{{terms.<key>}}" and is listed', async () => {
+  // Mutation checked: leave `terms` out of the route's mergeValues → carry share and governing law are unfilled too.
+  const db = withSubsidiaryTemplate(seededDb());
+  db.exec(licenceTermsDdl());
+  db.prepare(`INSERT INTO licence_terms (licence_uid, governing_law, carry_share_bps, cure_days, renewal_mode)
+              VALUES ('lic_fr', 'Delaware', 2000, 30, 'auto')`).run();
+  const r = await app(db)('/lic_fr/contract', post('subsidiary_licence_agreement'));
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.match(r.body.body_md, /governed by the law of Delaware\./);
+  assert.match(r.body.body_md, /receives 20% of the carried interest/);
+  assert.match(r.body.body_md, /within 30 days of written notice/);
+  assert.match(r.body.body_md, /this Agreement renews automatically,/);
+  assert.match(r.body.body_md, /annual licence fee of EUR 90,000\.00/);
+  assert.match(r.body.body_md, /\{\{terms\.referral_fee_bps\}\}/, 'a term not recorded stays visible');
+  assert.ok(r.body.unfilled_fields.includes('terms.referral_fee_bps'));
+  for (const f of ['terms.governing_law', 'terms.carry_share_bps', 'terms.cure_days', 'terms.renewal_mode', 'licence.annual_fee']) {
+    assert.ok(!r.body.unfilled_fields.includes(f), f);
+  }
+  const row = db.prepare("SELECT unfilled_fields FROM licence_contracts WHERE template_slug = 'subsidiary_licence_agreement'").get() as any;
+  assert.deepEqual(JSON.parse(row.unfilled_fields), r.body.unfilled_fields, 'stored as returned');
+});
+
+test('D803: with no terms store, every term is unfilled and visible, and the ledger still fills', async () => {
+  const db = withSubsidiaryTemplate(seededDb());
+  const r = await app(db)('/lic_fr/contract', post('subsidiary_licence_agreement'));
+  assert.equal(r.status, 201);
+  assert.equal(r.body.unfilled_fields.filter((f: string) => f.startsWith('terms.')).length, LICENCE_TERM_FIELDS.length, 'every D797 term is unfilled');
+  assert.match(r.body.body_md, /\{\{terms\.governing_law\}\}/);
+  assert.match(r.body.body_md, /Axal VC France SAS/);
+  const picker = await app(db)('/lic_fr/contract');
+  assert.equal(picker.body.templates.find((t: any) => t.slug === 'subsidiary_licence_agreement')?.counsel_review, true,
+    'HQ sees it is a draft subject to counsel where it picks it');
 });

@@ -170,15 +170,17 @@ publicRoutes.get('/ai/models', (c) => {
 });
 
 // ---------- /plans-and-packs (D755 §11, §13; #1919) ---------------
-// What /plans-and-pricing shows a visitor: every plan with its price and AI
-// allowance, and the token packs on sale. D1 only, never Stripe, and no person
-// in it: the allowance is a projection with no recorded_by and no name. Cached
-// at the edge for 60 seconds; the `public_plans` rate-limit bucket bounds it.
+// What /pricing shows a visitor: every plan with its price and AI allowance,
+// and the token packs on sale. D1 only, never Stripe, and no person in it: the
+// allowance is a projection with no recorded_by and no name. D816 (#2262): each
+// plan also carries its monthly and yearly price and the computed yearly
+// saving, and the read is cached at the edge for five minutes; the
+// `public_plans` rate-limit bucket bounds it per IP.
 publicRoutes.get('/plans-and-packs', async (c) => {
   try {
     const { plansAndPacks } = await import('../services/aiCredits');
     const body = await plansAndPacks(c.env);
-    c.header('Cache-Control', 'public, max-age=60');
+    c.header('Cache-Control', `public, max-age=${STATS_KV_TTL_SEC}, s-maxage=${STATS_KV_TTL_SEC}`);
     return c.json(body);
   } catch (e) {
     return refuse(c, 503, { code: 'plans_unreadable', message: 'Unreadable: the plans and token packs could not be read.', raw: e, audience: 'member' });

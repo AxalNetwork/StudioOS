@@ -51,8 +51,12 @@ export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$
 // under /api/decks. Exported so the test executes the pattern itself.
 export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 
-// D810 — the four public newsletter routes, and nothing else under the word.
-export const NEWSLETTER_PUBLIC = /^\/api\/newsletter\/(subscribe|confirm|preferences|unsubscribe)$/;
+// D810 — three of the four public newsletter routes, and nothing else under
+// the word. Unsubscribe is left out on purpose (S1's review): RFC 8058
+// one-click POSTs arrive from the mailbox provider's servers, many people's
+// from a few addresses, so a per-IP cap would drop real unsubscribes. Its
+// HMAC-signed token cannot be guessed, so the cap bought nothing there.
+export const NEWSLETTER_PUBLIC = /^\/api\/newsletter\/(subscribe|confirm|preferences)$/;
 
 /**
  * The founder's advisory-session charge — `POST /bookings/:id/pay`, D81.
@@ -323,8 +327,9 @@ const BUCKETS: Bucket[] = [
     failClosed: true,
   },
   // D810 — the newsletter's public routes: a signup mails whatever address it
-  // is given, and the confirm, preferences and unsubscribe routes take a
-  // token a script could try to guess. 10/min/IP across all four: room for a
+  // is given, and the confirm and preferences routes take a token a script
+  // could try to guess. Unsubscribe is outside it (see NEWSLETTER_PUBLIC).
+  // 10/min/IP across the three: room for a
   // person and a typo, nothing for a script. Each address is also paced to one
   // signup email per ten minutes in the route itself. failClosed: if KV is
   // down a public mail-sending write waits rather than running uncapped.

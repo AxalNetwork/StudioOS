@@ -46,7 +46,8 @@ const FUND_PARTY_SLUGS_D716 = new Set([
   'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement', 'subscription_booklet',
 ]);
 const GP_PARTY_SLUGS_D716 = new Set(['management_fee_invoice']);
-const HOLDINGS_PARTY_SLUGS_D716 = new Set(['platform_licence_fee_invoice']);
+// D802 (#2238): HQ's annual fee invoice to a territory licensee, sent by Holdings.
+const HOLDINGS_PARTY_SLUGS_D716 = new Set(['platform_licence_fee_invoice', 'territory_licence_fee_invoice']);
 
 // D707 — the two platform IP licences (migration 471), Holdings as licensor,
 // and the operating-partner agreements, Management's, routed by name.
@@ -80,6 +81,8 @@ export function axalEntityKeyForDoc(slugOrType, category) {
 const NOTICE_SLUGS = new Set([
   'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement',
   'management_fee_invoice', 'platform_licence_fee_invoice', 'payment_instructions_letter',
+  // D802 (#2238)
+  'territory_licence_fee_invoice',
 ]);
 const BOOKLET_SLUGS = new Set(['subscription_booklet']);
 

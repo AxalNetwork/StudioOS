@@ -255,7 +255,8 @@ test('every stream appears on the statement, reported or not', async () => {
   assert.equal(r.status, 201);
   assert.deepEqual(
     r.body.streams.map((s: any) => s.stream),
-    ['subscriptions', 'licence_fees', 'token_margin', 'other'],
+    // D802 (#2238): the platform-licence royalty follows, Not recorded here (no terms), and is never "unreported".
+    ['subscriptions', 'licence_fees', 'token_margin', 'other', 'platform_licence_royalties'],
     'a statement listed only the streams that arrived',
   );
   // With nothing reported at all, the owed figure is zero AND says why — which

@@ -55,7 +55,14 @@ export function normalizeEmail(input: unknown): string | null {
   if (typeof input !== 'string') return null;
   const s = input.trim().toLowerCase();
   if (s.length < 5 || s.length > 254) return null;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) ? s : null;
+  // One `@`, something before it, a dot inside the part after it, no spaces.
+  // Checked by hand, not by a pattern that can backtrack.
+  const at = s.indexOf('@');
+  if (at < 1 || at !== s.lastIndexOf('@')) return null;
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) <= 32) return null;
+  const domain = s.slice(at + 1);
+  const dot = domain.lastIndexOf('.');
+  return dot > 0 && dot < domain.length - 1 ? s : null;
 }
 
 /** The topics asked for, kept to the known public ones (and the investor ones when allowed), deduplicated. */
@@ -140,12 +147,24 @@ export function reasonBlocks(reason: string, mailClass: MailClass): boolean {
 }
 
 /**
+ * The address in `Name <addr>`, or the whole string when it has no brackets.
+ * Index arithmetic rather than a regular expression, so a long run of `<` in a
+ * caller's `to` cannot make it slow.
+ */
+export function addressOf(to: string): string {
+  const open = to.lastIndexOf('<');
+  if (open < 0) return to;
+  const close = to.indexOf('>', open + 1);
+  return close < 0 ? to : to.slice(open + 1, close);
+}
+
+/**
  * True when the suppression list blocks this class of mail to this address.
  * Every sender asks before it sends. An unreadable store blocks newsletter
  * mail only; anything else goes, as the marketing opt-out fails open (D189).
  */
 export async function isSuppressed(env: Env, to: string, mailClass: MailClass): Promise<boolean> {
-  const email = normalizeEmail(String(to || '').replace(/^.*<([^>]+)>.*$/, '$1'));
+  const email = normalizeEmail(addressOf(String(to || '')));
   if (!email) return false;
   try {
     const rows = await env.DB.prepare('SELECT reason FROM email_suppressions WHERE email = ?').bind(email).all<{ reason: string }>();

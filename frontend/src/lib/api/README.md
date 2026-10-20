@@ -178,6 +178,10 @@ is shown to its owner only and never stored. `partnerSettlements.js` calls
 and `/api/admin/partner-settlements` (an Admin's list, draft, edit and delete;
 the Super Admin's issue and void). Nothing here moves money.
 
+D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
+(`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
+Stripe plan invoices in one list, newest first. No UI reads it yet.
+
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
@@ -238,6 +242,10 @@ D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
 notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
 one: accept, edit or discard. Deciding writes no record; the page's own Save does.
 
+D797 (#2230): `licenceTerms.js` reads and saves a licence's terms schedule
+(`GET`/`PUT /api/admin/licences/:uid/terms`, Super Admin; the save takes a
+reason and a recent step-up). The Administrator reads the same terms on
+`/api/licence/mine`. D800 and D801 draw them.
 D798 (#2231): `licenceAccount.js` is the territory licence Administrator's own
 `/api/licence/mine/*`. It covers the contract (in force, pending, earlier, and
 the caller's own signing link), the statements (with each period's usage
@@ -245,3 +253,10 @@ report and the masked payment instructions), the "Needs you" list, a branch's
 "Send now" usage push, and a statement dispute. `contractPdfBlob` reads
 `GET /api/licence/mine/contract/:uid/pdf` as a Blob, outside the typed drift
 surface. Nothing here returns a full account number.
+
+D802 (#2238): `licenceFeeInvoices.js` is HQ's annual licence-fee invoices on
+`/api/admin/licences/:uid/fee-invoices`: list, issue this licence year's,
+record the total received or void, and the PDF (`pdfBlob`, and the
+Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
+drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
+as `fee_invoices`.

@@ -209,8 +209,9 @@ test('every licence transition reports the push beside its own outcome', () => {
   // D272 — ten: the five status transitions, plus the five changes that alter
   // the copy without a status change (territories, seats, terms, a new
   // contract, and a notice review that reinstates). Still exact, so a push
-  // added or dropped moves this figure on purpose.
-  assert.equal(calls.length, 10, `expected ten licence changes to push, found ${calls.length}`);
+  // added or dropped moves this figure on purpose. D797 — eleven: the terms
+  // schedule (`PUT /:uid/terms`) rides the copy too (`terms_json`).
+  assert.equal(calls.length, 11, `expected eleven licence changes to push, found ${calls.length}`);
   for (const status of ['active', 'suspended', 'terminated']) {
     assert.ok(
       new RegExp(`status: '${status}'[^}]*pushed`).test(src) || src.includes(`status: '${status}', pushed }`),

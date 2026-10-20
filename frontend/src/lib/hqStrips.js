@@ -32,6 +32,7 @@ export const HQ_STRIPS = {
     ['GitHub Sync', '/admin?tab=github'],
     ['Payments', '/admin?tab=payments'],
     ['Bank accounts', '/admin?tab=bank-accounts'],
+    ['Product testing', '/admin?tab=product-testing'],
     ['Promo codes', '/admin?tab=promos'],
     ['Monitoring', '/monitoring'],
     ['Telegram', '/admin/telegram'],

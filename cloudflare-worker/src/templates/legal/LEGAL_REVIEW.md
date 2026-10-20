@@ -72,6 +72,21 @@ agency agreement, finder's-fee intro agreement, strategic scale
 partnership, technology-integration JV, M&A advisory mandate, MSA
 equity-for-services — **all existing**.
 
+**Needed (D803):** the **Subsidiary Licence Agreement**
+(`subsidiary_licence_agreement_v1.md`, slug `subsidiary_licence_agreement`,
+migration 514), **NEW DRAFT, SUBJECT TO COUNSEL**. Engineering wrote it from
+the Licences canvas; HQ instantiates it per territory licence, with the
+ledger's values and D797's terms merged in. Counsel must confirm:
+- the **two-licensor structure**: Axal VC Holdings LLC licenses the platform IP
+  and Axal VC Management LLC the trademark and brand (§1.1, §7.3);
+- the **royalty** on platform licences the licensee sells (§4.7), and the
+  revenue share per stream (§4.2);
+- whether the **non-compete** after the term (§2.4) is enforceable in each
+  territory;
+- the **governing law** and forum (§22), recorded per licence;
+- the **data-processing roles** of the licensors and the licensee (§7.4, §8.4),
+  per territory.
+
 ## E. Platform ↔ advisors / mentors
 
 Mentor NDAs ×2, mentor disclaimers ×2 — **existing**. Newly added:

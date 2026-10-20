@@ -17,6 +17,7 @@ export * from './api/adminMercury.js';
 export * from './api/aiBudget.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
+export * from './api/billingInvoices.js';
 export * from './api/channels.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
@@ -43,7 +44,9 @@ export * from './api/interviewSessions.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/licenceAccount.js';
+export * from './api/licenceFeeInvoices.js';
 export * from './api/licenceRequests.js';
+export * from './api/licenceTerms.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryPersonal.js';
@@ -3788,8 +3791,9 @@ export const api = {
   // dispatches `studioos:tier_required` so PaywallModal opens). These helpers
   // are for explicit triggers from Settings → Billing and the modal itself.
   tierStatus: () => request('/billing/tier/status'),
-  tierCheckout: (tier) =>
-    request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify({ tier }) }),
+  // D816 (#2262): `interval` is 'month' | 'year'; omitted, the Worker sells monthly as before.
+  tierCheckout: (tier, interval) =>
+    request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify(interval ? { tier, interval } : { tier }) }),
   tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
 
   // ---------- Persona (account-plan) billing — partner, advisor, … ----------
@@ -3914,8 +3918,9 @@ export const api = {
   // the worker is auto-fanned into `studioos:tier_required` by the request
   // helper above, so PaywallModal opens automatically on quota exhaustion.
   investorBillingStatus: () => request('/billing/investor/status'),
-  investorCheckout: (plan) =>
-    request('/billing/investor/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
+  // D816 (#2262): `interval` ('month' | 'year') overrides the plan key's own; omitted, the key's stands.
+  investorCheckout: (plan, interval) =>
+    request('/billing/investor/checkout', { method: 'POST', body: JSON.stringify(interval ? { plan, interval } : { plan }) }),
   investorPortal: () => request('/billing/investor/portal', { method: 'POST' }),
   listInvestorSeats: () => request('/investor-seats/'),
   inviteInvestorSeat: (email) =>
@@ -5100,11 +5105,12 @@ export const api = {
   deckReviewer: {
     // FormData upload: request() detects FormData and omits the JSON Content-Type.
     upload: (formData) => request('/deck-reviewer/upload', { method: 'POST', body: formData }),
-    paste: (data) => request('/deck-reviewer/paste', { method: 'POST', body: JSON.stringify(data || {}) }),
+    // D778 part 7: `headers` is the press's own rail context (`railPressHeaders`).
+    paste: (data, headers) => request('/deck-reviewer/paste', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
     list: () => request('/deck-reviewer'),
     get: (id) => request(`/deck-reviewer/${id}`),
     save: (id, patch) => request(`/deck-reviewer/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
-    regenerate: (id) => request(`/deck-reviewer/${id}/regenerate`, { method: 'POST', body: JSON.stringify({}) }),
+    regenerate: (id, headers) => request(`/deck-reviewer/${id}/regenerate`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
     purgeRaw: (id) => request(`/deck-reviewer/${id}/raw`, { method: 'DELETE' }),
     remove: (id) => request(`/deck-reviewer/${id}`, { method: 'DELETE' }),
     exportUrl: (id, format) => `/api/deck-reviewer/${id}/export?format=${encodeURIComponent(format || 'json')}`,

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import InvestorQuotaBars from '../../components/InvestorQuotaBars';
+import ProductTestingCard from '../productTesting/ProductTestingCard';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Unreadable, Unrecorded } from '../../ui';
@@ -122,6 +123,8 @@ export default function InvestorStudioHome({
           {previewing ? <Status>Investor-scoped events are withheld in administrator preview.</Status> : records.events === undefined ? <Loading /> : failures.events ? <Unreadable what="Upcoming events" claim="This is not a claim that nothing is scheduled." onRetry={retrySources} /> : events.length ? <div className="is-event-list">{events.map((event, index) => <Link to="/calendar" key={event.id || index} data-testid={`link-investor-event-${event.id || index}`}><b>{event.title || event.name || 'Event title not recorded'}</b><span>{formatDate(event.start_at || event.starts_at || event.date)}</span></Link>)}</div> : <Status>No upcoming events recorded.</Status>}
         </article>
       </div>
+      {/* D814 (#2260): "Apply for Product Testing". */}
+      <ProductTestingCard previewing={previewing} className="mt-4" />
     </section>
   );
 }
