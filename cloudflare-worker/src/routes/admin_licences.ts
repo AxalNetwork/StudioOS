@@ -66,6 +66,7 @@ import { refuse } from '../util/refusal';
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
 import { pushLicenceToBranch } from '../services/licencePush';
+import { readLicenceTerms, termsDiff, validateTermsBody, type LicenceTermsRecord } from '../services/licenceTerms';
 // D262 — termination reaches the branch's own administrators too.
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
@@ -584,6 +585,88 @@ r.patch('/:uid/terms', async (c) => {
     // every status transition; a push that does not land is retried.
     const pushed = await pushLicenceToBranch(c.env, licence.id);
     return c.json({ ok: true, ...terms, pushed });
+  } catch (e) { return mapError(c, e); }
+});
+
+// D797 (#2230) — the licence's terms schedule: deal terms, renewal and notice,
+// money and reporting, beyond Step 4's fee and shares. The field list is
+// `services/licenceTerms.ts`; migration 512's CHECKs hold the same ranges.
+r.get('/:uid/terms', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const rec = await readLicenceTerms(c.env, licence.uid);
+    return c.json({ licence_uid: licence.uid, terms: rec?.terms ?? null, sections: rec?.sections ?? {} });
+  } catch (e) { return mapError(c, e); }
+});
+
+// A MONEY WRITE, SO IT TAKES THE MONEY BAR: a TOTP-minted session, a recent
+// step-up, then the elevation (`requireSuperAdminWriteBar`). Only the keys the
+// body names change, and `null` clears one. A reason is required, and every
+// save appends exactly one `terms_changed` event naming the changed keys with
+// their before and after.
+r.put('/:uid/terms', async (c) => {
+  try {
+    const admin = await requireSuperAdminWriteBar(c);
+    const licence = await byUid(c.env, c.req.param('uid'));
+    if (!licence) return c.json({ error: 'not_found' }, 404);
+    const b = await c.req.json().catch(() => ({} as any));
+    const reason = typeof b?.reason === 'string' ? b.reason.trim().slice(0, 500) : '';
+    if (!reason) return c.json({ error: 'reason_required', message: 'Say why the terms change.' }, 400);
+    const v = validateTermsBody(b?.terms, b?.sections);
+    if (!v.ok) {
+      return c.json({ error: 'invalid_terms', message: `${v.errors[0].field} ${v.errors[0].message}.`, errors: v.errors }, 400);
+    }
+    const before = await readLicenceTerms(c.env, licence.uid);
+    const after: LicenceTermsRecord = {
+      terms: { ...(before?.terms ?? {}), ...v.terms },
+      sections: { ...(before?.sections ?? {}) },
+    };
+    for (const [k, sec] of Object.entries(v.sections ?? {})) {
+      if (sec === null) delete after.sections[k]; else after.sections[k] = sec;
+    }
+    const t = (k: string) => after.terms[k] ?? null;
+    await c.env.DB.prepare(
+      `INSERT INTO licence_terms
+         (licence_uid, licensor_entity, governing_law, exclusive, non_compete_months,
+          renewal_mode, non_renewal_notice_days, cure_days, termination_note,
+          payment_terms_days, late_interest_bps, minimum_guarantee_cents, fee_invoiced,
+          first_look_business_days, co_invest_max_bps, carry_share_bps, referral_fee_bps,
+          hq_approval_above_cents, conflicts_note,
+          usage_report_day, statement_period, data_role, audit_right,
+          sections_json, updated_by_user_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(licence_uid) DO UPDATE SET
+         licensor_entity = excluded.licensor_entity, governing_law = excluded.governing_law,
+         exclusive = excluded.exclusive, non_compete_months = excluded.non_compete_months,
+         renewal_mode = excluded.renewal_mode, non_renewal_notice_days = excluded.non_renewal_notice_days,
+         cure_days = excluded.cure_days, termination_note = excluded.termination_note,
+         payment_terms_days = excluded.payment_terms_days, late_interest_bps = excluded.late_interest_bps,
+         minimum_guarantee_cents = excluded.minimum_guarantee_cents, fee_invoiced = excluded.fee_invoiced,
+         first_look_business_days = excluded.first_look_business_days, co_invest_max_bps = excluded.co_invest_max_bps,
+         carry_share_bps = excluded.carry_share_bps, referral_fee_bps = excluded.referral_fee_bps,
+         hq_approval_above_cents = excluded.hq_approval_above_cents, conflicts_note = excluded.conflicts_note,
+         usage_report_day = excluded.usage_report_day, statement_period = excluded.statement_period,
+         data_role = excluded.data_role, audit_right = excluded.audit_right,
+         sections_json = excluded.sections_json, updated_by_user_id = excluded.updated_by_user_id,
+         updated_at = excluded.updated_at`,
+    ).bind(
+      licence.uid, t('licensor_entity'), t('governing_law'), t('exclusive'), t('non_compete_months'),
+      t('renewal_mode'), t('non_renewal_notice_days'), t('cure_days'), t('termination_note'),
+      t('payment_terms_days'), t('late_interest_bps'), t('minimum_guarantee_cents'), t('fee_invoiced'),
+      t('first_look_business_days'), t('co_invest_max_bps'), t('carry_share_bps'), t('referral_fee_bps'),
+      t('hq_approval_above_cents'), t('conflicts_note'),
+      t('usage_report_day'), t('statement_period'), t('data_role'), t('audit_right'),
+      JSON.stringify(after.sections), admin.id, nowIso(),
+    ).run();
+    const changed = termsDiff(before, after);
+    await logEvent(c.env, licence.id, 'terms_changed', admin.id, { schedule: 'licence_terms', reason, changed }, reason);
+    // The branch's copy carries the terms (`branch_licence.terms_json`), so a
+    // save pushes like Step 4's; a push that does not land is retried (D272).
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    const saved = await readLicenceTerms(c.env, licence.uid);
+    return c.json({ ok: true, licence_uid: licence.uid, terms: saved?.terms ?? null, sections: saved?.sections ?? {}, changed, pushed });
   } catch (e) { return mapError(c, e); }
 });
 

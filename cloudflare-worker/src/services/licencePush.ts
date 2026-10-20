@@ -24,6 +24,7 @@
  * now made for `likeNeedle`, the absence helpers, one `GROUP BY role`, one
  * definition of open, and one zone formatter.
  */
+import { readLicenceTerms } from './licenceTerms';
 import type { Env } from '../types';
 import { branchByCode } from './branches';
 import { mirrorBranchAction } from './auditMirror';
@@ -136,7 +137,18 @@ export async function assembleLicenceRecord(
     'SELECT template_version FROM licence_contracts WHERE licence_uid = ? ORDER BY id DESC LIMIT 1',
   ).bind(String(licence.uid)).first<{ template_version: number }>();
   const templateVersion = ct ? Number(ct.template_version) : null;
-  return licenceRecord(licence, territories, seats, templateVersion, pushedAt);
+  const record = licenceRecord(licence, territories, seats, templateVersion, pushedAt);
+  // D797 — the terms schedule (migration 512), as a row-shaped JSON string; the
+  // JSON `null` says HQ has recorded none. Read in its own try: a ledger whose
+  // terms cannot be read omits the key, so the branch keeps the terms it has
+  // rather than losing the rest of the copy.
+  try {
+    const rec = await readLicenceTerms(env, String(licence.uid));
+    record.terms_json = JSON.stringify(rec ? { ...rec.terms, sections_json: JSON.stringify(rec.sections) } : null);
+  } catch (e) {
+    console.warn('[licencePush] licence_terms unreadable; the copy goes without them', (e as Error).message);
+  }
+  return record;
 }
 
 /**
