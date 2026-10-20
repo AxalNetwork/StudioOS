@@ -199,6 +199,7 @@ const kpi = {
 const ROLE_TEAM = opts([['Engineering', 'Engineering'], ['Product', 'Product'], ['Go-to-market', 'Go-to-market'], ['Operations', 'Operations']]);
 const ROLE_TYPE = opts([['full_time', 'Full-time'], ['part_time', 'Part-time'], ['contract', 'Contract'], ['fractional', 'Fractional']]);
 const POST_AXAL = 'axal';
+const SHOW_BAND = 'show';
 const roleFields = [
   { kind: 'T', name: 'title', k: 'Role', ph: 'Title', required: true, max: 200 },
   { kind: 'CH', name: 'team', k: 'Team', opts: ROLE_TEAM, def: 0, optionsFrom: 'teams' },
@@ -208,6 +209,9 @@ const roleFields = [
     { kind: 'T', name: 'band', k: 'Band', ph: '$90k–$120k' },
     { kind: 'T', name: 'equity', k: 'Equity', ph: 'equity 0.5%' },
   ] },
+  // #2181: the band stays on the record unless its founder shows it, and there is a band to show.
+  { kind: 'CK', name: 'comp_public', k: 'Jobs board', opts: [{ value: SHOW_BAND, label: 'Show the band on the jobs board' }],
+    when: (v) => String(v.band ?? '').trim() !== '' },
 ];
 const roleCheck = (v) => {
   const { min, max } = bandCents(v.band);
@@ -221,7 +225,8 @@ const roleBody = (v) => {
   const { min, max } = bandCents(v.band);
   return {
     title: str(v.title), team: str(v.team), type: v.type || null, target_start: str(v.target_start),
-    comp_min_cents: min, comp_max_cents: max, ...(min ?? max) == null ? {} : { comp_currency: 'usd' }, equity_pct: toNumber(v.equity),
+    comp_min_cents: min, comp_max_cents: max, ...(min ?? max) == null ? {} : { comp_currency: 'usd', comp_public: checkedOf(v.comp_public, SHOW_BAND) ? 1 : 0 },
+    equity_pct: toNumber(v.equity),
   };
 };
 const role = {
@@ -895,11 +900,11 @@ const editRole = {
   key: 'edit-role',
   title: 'Edit role',
   sub: role.sub,
-  fields: [{ ...roleFields[0], required: false }, bare(roleFields[1]), bare(roleFields[2]), roleFields[3], roleFields[4]],
+  fields: [{ ...roleFields[0], required: false }, bare(roleFields[1]), bare(roleFields[2]), roleFields[3], roleFields[4], roleFields[5]],
   check: roleCheck,
   idOf: (row) => { const n = Number(row?.recordId ?? row?.edit?.id ?? row?.id); return Number.isSafeInteger(n) && n > 0 ? n : null; },
   valuesOf: () => ({}),
-  toBody: (v) => sentOnly(v, roleBody(v), [], { comp_min_cents: 'band', comp_max_cents: 'band', comp_currency: 'band', equity_pct: 'equity' }),
+  toBody: (v) => sentOnly(v, roleBody(v), [], { comp_min_cents: 'band', comp_max_cents: 'band', comp_currency: 'band', comp_public: 'band', equity_pct: 'equity' }),
   submit: (w, projectId, id, v) => w.grow.roleUpdate(projectId, id, editRole.toBody(v)),
 };
 

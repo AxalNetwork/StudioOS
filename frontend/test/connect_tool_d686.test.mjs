@@ -144,8 +144,8 @@ test('each row: failing by its reason, connected, locked by its real tier, comin
   assert.deepEqual(row('stripe').pill, ['Connected', 'ok']);
   assert.deepEqual([row('stripe').action, row('stripe').actionLabel], ['disconnect', 'Disconnect']);
   assert.match(row('stripe').detail, /^Feeds Revenue and traction · synced 1 h ago$/);
-  assert.deepEqual([row('github').pill[0], row('github').actionLabel], ['Growth', 'Upgrade to Growth']);
-  assert.deepEqual([row('carta').pill[0], row('carta').actionLabel], ['Studio', 'Upgrade to Studio']);
+  assert.deepEqual([row('github').pill[0], row('github').actionLabel], ['Validate + Build', 'Upgrade to Validate + Build']);
+  assert.deepEqual([row('carta').pill[0], row('carta').actionLabel], ['Raise + Grow', 'Upgrade to Raise + Grow']);
   assert.equal(toolRow({ key: 'x', display_name: 'X', locked: true, available: true, tier: 'pro' }).actionLabel, 'See plans', 'a tier the Worker does not name is never printed');
   assert.equal(toolRow({ key: 'x', display_name: 'X', locked: true, available: true, tier: 'pro' }).pill[0], 'Paid plan');
   assert.deepEqual([row('figma').pill[0], row('figma').detail, row('figma').action], ['Coming soon', 'Will feed Prototype / MVP', null]);
@@ -548,7 +548,7 @@ test('Free keeps what is connected: the locked banner and the paid-plan panel sa
   assert.equal(FREE_KEEPS_TOOLS, 'Free keeps every tool you have already connected.');
   assert.equal(FREE_KEEPS_CONNECTORS, 'Free keeps every connector you already have.');
   const locked = toolBanner(ROWS.filter((p) => p.key === 'carta'));
-  assert.equal(locked.text, `Cap table connections are part of the Studio plan. ${FREE_KEEPS_TOOLS}`);
+  assert.equal(locked.text, `Cap table connections are part of the Raise + Grow plan. ${FREE_KEEPS_TOOLS}`);
 });
 
 test('the first-party sign-ins and the registry\'s come back to Build when started there', async () => {

@@ -385,6 +385,7 @@ async function growFixture() {
   db.exec(migDdl('125')); db.exec(migFile('437'));
   db.exec(migFile('443'));
   db.exec(migFile('462'));
+  db.exec(migFile('507'));
   db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)').run(FOUNDER, 'founder', 1001, 'Fay', 'fay@example.test');
   db.prepare(`INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (?, 'p7', 'Venture', 1001, 70)`).run(GP);
   const env = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any;

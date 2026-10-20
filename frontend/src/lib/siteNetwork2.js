@@ -152,13 +152,42 @@ export function postedLabel(createdAt) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(d);
 }
 
+/** Whole units of a currency from cents: "$90,000", "€90,000"; an unknown code reads "90,000 XYZ". */
+function bandEnd(cents, currency) {
+  const code = String(currency || 'usd').toUpperCase();
+  const units = Number(cents) / 100;
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: code, maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(units);
+  } catch {
+    return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(units)} ${code}`;
+  }
+}
+
+/**
+ * #2181 — the Compensation fact, from the public read's `compensation` only
+ * (sent when the role's founder showed the band): "$90,000–$120,000", one end
+ * alone as that end, then " · 0.5% equity" when equity is set. Null when the
+ * read sent no band, so nothing is drawn.
+ */
+export function compensationText(comp) {
+  if (!comp || typeof comp !== 'object') return null;
+  const ends = [comp.min_cents, comp.max_cents].filter((c) => c != null && Number.isFinite(Number(c)));
+  if (!ends.length) return null;
+  const [lo, hi = lo] = ends.map((c) => bandEnd(c, comp.currency));
+  const band = lo === hi ? lo : `${lo}–${hi}`;
+  const equity = comp.equity_pct != null && Number.isFinite(Number(comp.equity_pct)) ? ` · ${Number(comp.equity_pct)}% equity` : '';
+  return band + equity;
+}
+
 /**
  * The facts grid. The canvas draws six (compensation, level, commitment,
- * location, reports to, start); a posting stores three of them, so three is
- * what is drawn, and each only when the row has it.
+ * location, reports to, start); a posting stores four of them, so four is
+ * what is drawn, and each only when the row has it. Compensation is drawn
+ * only when the public read sends it (#2181).
  */
 export function jobFacts(job) {
   return [
+    { k: 'Compensation', v: compensationText(job?.compensation) },
     { k: 'Level', v: SENIORITY_LABELS[job?.seniority] || null },
     { k: 'Commitment', v: EMPLOYMENT_LABELS[job?.employment_type] || null },
     { k: 'Location', v: jobGeo(job) },

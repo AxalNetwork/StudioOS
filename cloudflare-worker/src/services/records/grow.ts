@@ -602,6 +602,7 @@ const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team
     return { rows: [
       band ? { a: 'Band', b: band } : notRecorded('Band', 'No band on this role'),
       p.equity_pct != null ? { a: 'Equity', b: `${Number(p.equity_pct)}%` } : notRecorded('Equity', 'No equity on this role'),
+      ...(band ? [{ a: 'Jobs board', b: Number(p.comp_public) === 1 ? 'Band shown' : 'Band not shown' }] : []),
     ] };
   }, { side: true }),
   section('posted-on', 'Posted on', async (rc, _id, record) => {
@@ -619,6 +620,7 @@ const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team
       execute: (c) => refusing(async () => ({ ok: true, record: await closeRole(c.env, c.projectId, userOf(c), Number(id)) })) });
   }
   const canPublish = manages && (p.status === 'draft' || p.status === 'rejected');
+  const hasBand = p.comp_min_cents != null || p.comp_max_cents != null;
   actions.push({
     key: 'edit', label: 'Edit', kind: 'form', tone: 'primary',
     form: { title: 'Edit role', cta: 'Save', fields: [
@@ -630,12 +632,16 @@ const teamExpansion = spec('job_postings', 'team-expansion', GROW_OLD_ROWS['team
       { key: 'comp_max_cents', label: 'Band to', kind: 'T', input: 'money', value: p.comp_max_cents ?? '' },
       { key: 'comp_currency', label: 'Currency', kind: 'T', value: p.comp_currency ?? '' },
       { key: 'equity_pct', label: 'Equity (%)', kind: 'T', value: p.equity_pct ?? '' },
+      // #2181: drawn only once the role has a band; off unless its founder turned it on.
+      ...(hasBand ? [{ key: 'comp_public', label: 'Jobs board', kind: 'CK', value: Number(p.comp_public) === 1 ? ['1'] : [],
+        options: [{ value: '1', label: 'Show the band on the jobs board' }] } as RecordField] : []),
       // Only the posting's host or an admin can send it for review (decision 6).
       ...(canPublish ? [{ key: 'publish', label: 'Send for review', kind: 'CK', value: [], options: [{ value: '1', label: 'Publish on the jobs board' }],
         note: 'An admin publishes it after review.' } as RecordField] : []),
     ] },
     execute: (c, _id, body) => refusing(async () => {
       const b = pick(body, ROLE_EDIT);
+      if (hasBand) b.comp_public = checked(field(body, 'comp_public')) ? 1 : 0;
       // Passed on whoever sends it: `updateRole` refuses a non-host's publish with 403 and writes nothing.
       if (checked(field(body, 'publish'))) b.publish = true;
       return { ok: true, record: await updateRole(c.env, c.projectId, userOf(c), Number(id), b) };

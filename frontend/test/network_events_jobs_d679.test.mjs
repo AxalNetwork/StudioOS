@@ -96,8 +96,9 @@ test('no sample event, circle, job, company, person or program fact from the can
     'NovaCraft', 'Halyard Security', 'LoopSense', 'Verity Health', 'Kelp Bio', 'Arcline',
     'Founding Engineer', 'Head of Go-to-Market', 'Senior ML Engineer', 'Clinical Operations Lead',
     'Platform Engineer', 'Cohort Operations Associate', 'Materials Scientist', 'Enterprise Account Executive',
+    // 'Compensation' is a live fact since #2181, drawn from the public read's band.
     'Engineering', 'Go-to-market', 'Readiness score', 'Interviews logged', 'Revenue to date', 'Reports to',
-    'Compensation', 'Pre-seed · Cohort',
+    'Pre-seed · Cohort',
     // people
     'Lin Zhang', 'Hana Kaur', 'Guillaume Lauzier', 'Elena Voss',
     // promises the code does not keep

@@ -173,7 +173,7 @@ test('Discover: the categories, the sections, and each card’s corner and pill'
   assert.equal(cardAction(byKey('affinity')), 'joined');
   assert.equal(cardAction(byKey('microsoft')), 'unavailable');
   assert.deepEqual(cardPill(byKey('salesforce')), { label: 'Coming soon', tone: 'neutral' });
-  assert.deepEqual(cardPill(byKey('carta')), { label: 'Studio', tone: 'info' });
+  assert.deepEqual(cardPill(byKey('carta')), { label: 'Raise + Grow', tone: 'info' });
   assert.deepEqual(cardPill(byKey('crunchbase')), { label: 'Beta', tone: 'info' });
   assert.equal(cardPill(byKey('stripe')), null);
 });
@@ -289,7 +289,7 @@ test('Build’s tools: grouped by category, filtered, with the failing banner be
   assert.equal(failed.view, 'failed');
   assert.match(failed.text, /^HubSpot: sign-in expired\. The last good sync was \d+ days? ago; what it feeds keeps the last good data\.$/);
   const noFail = CAT.filter((p) => p.key !== 'hubspot');
-  assert.deepEqual(toolBanner(noFail), { tone: 'neutral', view: 'locked', text: 'Cap table connections are part of the Studio plan. Free keeps every tool you have already connected.' });
+  assert.deepEqual(toolBanner(noFail), { tone: 'neutral', view: 'locked', text: 'Cap table connections are part of the Raise + Grow plan. Free keeps every tool you have already connected.' });
   assert.equal(toolBanner(noFail.filter((p) => p.key !== 'carta')), null);
 });
 
@@ -420,9 +420,9 @@ test('the connect flow’s views: pre, signin, key, connected, and each state', 
   assert.match(panel('crunchbase', 'badkey'), /That key is not valid\. Check it at Crunchbase and paste it again\./);
   assert.match(panel('stripe', 'overreach'), /asked for more than StudioOS uses\. .*Report Try again/);
   const pro = panel('carta', 'pro');
-  assert.match(pro, /Carta by Carta · Beta Carta is part of the Studio plan\./);
+  assert.match(pro, /Carta by Carta · Beta Carta is part of the Raise \+ Grow plan\./);
   assert.match(pro, /Close See plans/);
-  assert.match(pro, /Studio plan\. Free keeps every connector you already have\./, 'since #1611 sync has no tier gate, so the canvas’s promise is true and printed');
+  assert.match(pro, /Raise \+ Grow plan\. Free keeps every connector you already have\./, 'since #1611 sync has no tier gate, so the canvas’s promise is true and printed');
 });
 
 test('Build’s "Connect a tool": list, failed, locked and loading', () => {
@@ -438,11 +438,11 @@ test('Build’s "Connect a tool": list, failed, locked and loading', () => {
   assert.match(t, /Salesforce What it will feed is not recorded Coming soon/, 'D686 §5.4: a coming-soon row says what it will feed, or that it is not recorded');
   assert.match(t, /Sorted by category · 1–\d+ of \d+ CRM /, 'the failing tool\'s group first while the failed banner shows');
   assert.match(t, /Payments Stripe Stripe cap one, Stripe cap two · synced \d+ (min|h|days?) ago Connected Disconnect/, 'D686 §3.1 item 2: a connected row offers Disconnect');
-  assert.match(t, /Cap table C Carta Carta cap one, Carta cap two Studio Upgrade to Studio/, 'the real tier, never "Pro"');
+  assert.match(t, /Cap table C Carta Carta cap one, Carta cap two Raise \+ Grow Upgrade to Raise \+ Grow/, 'the real tier, never "Pro"');
   assert.match(t, /Calendar Calendly .* Not connected Connect/);
   assert.match(t, /Google Calendar Calendar, Gmail invites · last sync not recorded Connected Disconnect/);
   const locked = html(h(ConnectToolView, { data: ready(CAT.filter((p) => p.key !== 'hubspot')), onClose() {} }));
-  assert.match(locked, /data-testid="connect-tool-locked"[^>]*>Cap table connections are part of the Studio plan\. Free keeps every tool you have already connected\./);
+  assert.match(locked, /data-testid="connect-tool-locked"[^>]*>Cap table connections are part of the Raise \+ Grow plan\. Free keeps every tool you have already connected\./);
   assert.match(text(html(h(ConnectToolView, { data: { status: 'loading', catalogue: [], reload() {} }, onClose() {} }))), /Loading tools…/);
 });
 
