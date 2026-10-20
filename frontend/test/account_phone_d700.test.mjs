@@ -40,7 +40,6 @@ import { PhoneRows } from '../src/ui/phone/PhoneRows.jsx';
 import { existsSync } from 'node:fs';
 import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
-import { escapeRe } from './_escapeRe.mjs';
 import { __resetEadwynPanelForTest, useEadwynPanel, useEadwynRailServes } from '../src/ui/eadwynPanel.js';
 import TrustCenterPage, { TrustPhoneView } from '../src/pages/TrustCenterPage.jsx';
 import PerksPage, { PerksPhoneView } from '../src/pages/PerksPage.jsx';
