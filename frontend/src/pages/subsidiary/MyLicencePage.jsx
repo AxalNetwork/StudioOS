@@ -87,6 +87,28 @@ export function seatFigure(value) {
  * /branch/approvals answers. Off a branch that page refuses, and no page on
  * HQ records a licence appeal from the holder, so the absence is named.
  */
+/**
+ * D796 (#2229): the shell's "Settings" row became "Licences" and opens this
+ * page on both tiers, so on a branch this card is the way on to the branch's
+ * own settings (`/branch/settings`), which the row stays lit on. Off a branch
+ * there is no such page, and nothing is drawn.
+ */
+export function BranchSettingsLink({ onBranch }) {
+  if (!onBranch) return null;
+  return (
+    <Link
+      to="/branch/settings"
+      data-testid="my-licence-branch-settings"
+      className="block rounded-xl border border-gray-200 bg-white p-4 hover:border-violet-300 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-violet-700"
+    >
+      <span className="text-sm font-semibold text-gray-900 dark:text-white">Branch settings →</span>
+      <span className="mt-0.5 block text-xs text-gray-600 dark:text-gray-400">
+        Who decides each setting on this branch, and its domain.
+      </span>
+    </Link>
+  );
+}
+
 export function LicenceAppeal({ onBranch }) {
   if (onBranch) {
     return (
@@ -533,6 +555,8 @@ function MyLicencePageBody() {
         )}
       </header>
 
+      <BranchSettingsLink onBranch={onBranch} />
+
       {/* D142 / S7 — WHAT A SUSPENSION ACTUALLY DOES, on the page that holds
           the licence it was done to. The shell bar announces a refusal at the
           moment it happens; this is the state, and the split is the one
@@ -741,7 +765,7 @@ function MyLicencePageBody() {
 // D774 (#2100): S39 drew no rail. The board's page, in the Admin boards' frame.
 export default function MyLicencePage() {
   return (
-    <AdminBoardFrame workspace="Settings" note="Eadwyn reads your licence on this page. It changes nothing." data-testid="admin-board-settings">
+    <AdminBoardFrame workspace="Licences" note="Eadwyn reads your licence on this page. It changes nothing." data-testid="admin-board-settings">
       <MyLicencePageBody />
     </AdminBoardFrame>
   );

@@ -153,7 +153,7 @@ test('the strip stores nothing and cannot be dismissed', () => {
 
 test('the strip carries S21\'s copy: the sentence, the link, the steps, the sub-line and the rules', () => {
   assert.match(BAR, /· its branch has not been deployed\. You are working on axal\.vc until it is\./);
-  assert.match(BAR_CODE, /<Link\s+to="\/admin\/my-licence"[^>]*>\s*Licence summary in Settings →\s*<\/Link>/);
+  assert.match(BAR_CODE, /<Link\s+to="\/admin\/my-licence"[^>]*>\s*Your licence →\s*<\/Link>/);
   assert.match(BAR_CODE, /data-testid="branch-not-deployed-steps"/);
   assert.match(BAR_CODE, /NOT_DEPLOYED_SUBLINE/);
   assert.match(BAR_CODE, /NOT_DEPLOYED_RULES\.map/);

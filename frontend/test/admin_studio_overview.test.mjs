@@ -58,7 +58,7 @@ test('an admin render returns Admin Studio before the founder fit block', () => 
 });
 
 test('the seven cards are the other Admin pages, in sidebar order, with no invented counts', () => {
-  const order = ['Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Insights', 'Settings'];
+  const order = ['Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Insights', 'Licences'];
   let at = 0;
   for (const label of order) {
     const next = OVERVIEW.indexOf(`title="${label}"`, at);
@@ -300,7 +300,7 @@ const STUDIO_CARDS = [
   ['admin-studio-community', 'Community'],
   ['admin-studio-contracts', 'Contracts'],
   ['admin-studio-insights', 'Insights'],
-  ['admin-studio-settings', 'Settings'],
+  ['admin-studio-settings', 'Licences'],
 ];
 
 function markup(props) {
