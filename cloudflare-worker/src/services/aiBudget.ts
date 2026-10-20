@@ -3,6 +3,7 @@ import type { Env } from '../types';
 import { userMeetsTier } from '../middleware/requireTier';
 import { effectiveInvestorTier } from '../middleware/requireInvestorTier';
 import { planAllowanceFor, type PlanAllowance } from './planAllowance';
+import { limitRefusal, noteSpendThresholds } from './aiSpendLimit';
 
 export const AI_USD_SCALE = 1_000_000;
 export const AI_CAP_DEFAULTS = { day: 5, month: 50, orgMonth: 5000 } as const;
@@ -171,7 +172,13 @@ export async function settleAiReservation(env:Env, reservation:AiReservation, co
     if (result.success !== true) throw new Error('AI budget unreadable');
     throw new Error('AI usage exceeds reservation');
   }
-  await commitSettlement(env,row,costMicrousd,refund,'pending');
+  const changed=await commitSettlement(env,row,costMicrousd,refund,'pending');
+  if (changed && costMicrousd>0) await noteThresholds(env,row.user_id,row.month_key);
+}
+/** D788: a settled charge may pass a threshold of the member's spend limit. A notice never fails a settlement. */
+async function noteThresholds(env:Env,userId:number,month:string) {
+  try { await noteSpendThresholds(env,userId,month); }
+  catch(error) { console.warn('[aiBudget] spend-limit notice failed',(error as Error).message); }
 }
 export async function listAiBudgetReviews(env:Env) {
   const rows=await env.DB.prepare(`SELECT r.uid,r.user_id,u.name AS member_name,r.created_at AS at,
@@ -203,6 +210,7 @@ export async function settleAiBudgetReview(env:Env,uid:string,action:'charge'|'r
   const charged=action==='charge'?held:0;
   const changed=await commitSettlement(env,row,charged,action==='refund','review',
     {actorId,reason:reason.trim(),recordedCost,action});
+  if (changed && charged>0) await noteThresholds(env,row.user_id,row.month_key);
   if (!changed) {
     const latest=await env.DB.prepare(`SELECT status,recorded_cost_microusd,actual_included_microusd,actual_topup_microusd
       FROM ai_budget_reservations WHERE uid=?`).bind(uid).first<any>();
@@ -260,6 +268,8 @@ export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number
   if (report.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
   const uid=crypto.randomUUID(), t=clock(now),expires=clock(new Date(now.getTime()+300000)).at;
   // Compute the split from current counters inside the write transaction, never from a stale read.
+  // D788: the member's own monthly limit is the insert's last clause (`aiSpendLimit.ts`), so two holds
+  // racing cannot both pass a limit that only one fits: the second insert counts the first hold.
   const results=await batch(env,[
     env.DB.prepare(`INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at)
       SELECT ?,a.user_id,?,?,MIN(?,MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))),
@@ -267,10 +277,15 @@ export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number
       FROM ai_topup_accounts a JOIN ai_included_spend d ON d.user_id=a.user_id AND d.period_kind='day' AND d.period_key=?
         JOIN ai_included_spend m ON m.user_id=a.user_id AND m.period_kind='month' AND m.period_key=?
       WHERE a.user_id=? AND ?<=MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))+a.balance_microusd
-        AND NOT EXISTS(SELECT 1 FROM ai_budget_reservations WHERE user_id=a.user_id AND status='review')`)
+        AND NOT EXISTS(SELECT 1 FROM ai_budget_reservations WHERE user_id=a.user_id AND status='review')
+        AND (NOT EXISTS(SELECT 1 FROM member_ai_spend_limits WHERE user_id=a.user_id)
+          OR ?+(SELECT COALESCE(SUM(CASE WHEN status IN ('pending','review') THEN included_microusd+topup_microusd
+                ELSE COALESCE(actual_included_microusd,0)+COALESCE(actual_topup_microusd,0) END),0)
+              FROM ai_budget_reservations WHERE user_id=a.user_id AND month_key=?)
+            <=(SELECT monthly_limit_microusd FROM member_ai_spend_limits WHERE user_id=a.user_id))`)
       .bind(uid,t.day,t.month,quoteMicrousd,report.daily_microusd,report.monthly_microusd,
         quoteMicrousd,quoteMicrousd,report.daily_microusd,report.monthly_microusd,expires,t.day,t.month,userId,
-        quoteMicrousd,report.daily_microusd,report.monthly_microusd),
+        quoteMicrousd,report.daily_microusd,report.monthly_microusd,quoteMicrousd,t.month),
     env.DB.prepare(`UPDATE ai_included_spend SET spend_microusd=spend_microusd+(SELECT included_microusd FROM ai_budget_reservations WHERE uid=?),updated_at=datetime('now')
       WHERE user_id=? AND ((period_kind='day' AND period_key=?) OR (period_kind='month' AND period_key=?)) AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=?)`)
       .bind(uid,userId,t.day,t.month,uid),
@@ -280,6 +295,9 @@ export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number
   if (!results[0].meta.changes) {
     const current=await loadAiBudget(env,userId,now);
     if (current.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
+    // D788: the member's own limit refused it, whatever the allowance and tokens could cover.
+    const limited=await limitRefusal(env,userId,quoteMicrousd,now);
+    if (limited) return {ok:false as const,refusal:'spend_limit' as const,...limited};
     const dayRemaining=Math.max(0,current.daily_microusd-current.day_spend_microusd-current.day_reserved_microusd);
     const monthRemaining=Math.max(0,current.monthly_microusd-current.month_spend_microusd-current.month_reserved_microusd);
     // D783: a member has no daily cap, so a member's refusal is always the month's.
