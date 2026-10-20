@@ -14,6 +14,8 @@ import './perksDesk.css';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../workspaces/canvasKit';
+import { useRailPage } from '../ui/railCrumbs';
+import { railOptionFor } from '../lib/railOptions';
 
 /**
  * Perks & Products — built from `design/canvases/backlog/Perks & Products.dc.html`
@@ -1068,6 +1070,8 @@ function ListingPerformance({ rows, onChanged }) {
 }
 
 function PartnerConsole({ zoneActions, zoneFilters, role }) {
+  // D779: the band's key on this profile's board (D772's lookup), where the inventory names one.
+  const railPage = useRailPage()?.page ?? null;
   const [items, setItems] = useState(null);
   const [loadErr, setLoadErr] = useState('');
   const [view, setView] = useState('all');
@@ -1274,6 +1278,7 @@ function PartnerConsole({ zoneActions, zoneFilters, role }) {
       {items && items.length > 0 && (
         <ZoneDraft
           surface="offers/perk-deals"
+          railOption={railOptionFor(railPage, { file: 'pages/PerksPage.jsx', control: 'offers/perk-deals' })?.key}
           label="Draft · expiry consequences"
           accept="Accept draft"
           run="Read the expiries"

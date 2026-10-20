@@ -10,6 +10,8 @@ import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument } from '../workspaces/canvasKit';
 import { Pill } from '../ui';
+import { useRailPage } from '../ui/railCrumbs';
+import { railOptionFor } from '../lib/railOptions';
 
 // Introductions tab body for the unified Network page. Curated warm-intro
 // propositions for every user type: the platform proposes matches (shared
@@ -287,6 +289,8 @@ const feePct = (bps) => bpsPercent(bps) ?? 'no rate recorded';
  * onto one state is how the two came to disagree.
  */
 export default function IntroductionsPanel({ zoneActions, zoneFilters = null, role = 'partner' }) {
+  // D779: the band's key on this profile's board (D772's lookup), where the inventory names one.
+  const railPage = useRailPage()?.page ?? null;
   const [params] = useSearchParams();
   const highlightUid = params.get('intro') || '';
 
@@ -659,7 +663,7 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
 
       <ZoneDraft
         surface="network/introductions"
-        railOption="draft:network/introductions"
+        railOption={railOptionFor(railPage, { file: 'pages/IntroductionsPanel.jsx', control: 'network/introductions' })?.key}
         label="Suggested match · possible paths"
         accept="Accept as drafts"
         run="Suggest paths"

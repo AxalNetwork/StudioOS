@@ -260,6 +260,7 @@ export default function PartnerDeliveryBoardZone() {
 
           <ZoneDraft
             surface="delivery/board"
+            railOption="draft:board-read"
             label="Draft · board read"
             accept="Accept draft"
             run="Read the board"

@@ -230,6 +230,7 @@ export function PartnerHomeP2View({ state, onRetry }) {
 
         <ZoneDraft
           surface="home/brief"
+          railOption="draft:operating-brief"
           label="Proposal · operating brief"
           accept="Accept as today's brief"
           run="Compose today's brief"

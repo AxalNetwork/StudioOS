@@ -732,6 +732,7 @@ export default function PartnerHealthZone() {
 
         <ZoneDraft
           surface="delivery/health"
+          railOption="draft:renewal-risk"
           label="Draft · renewal risk read"
           accept="Accept read"
           run="Read the book"

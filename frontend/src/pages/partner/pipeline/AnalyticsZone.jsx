@@ -425,6 +425,7 @@ export default function PartnerPipelineAnalyticsZone() {
 
               <ZoneDraft
                 surface="pipeline/analytics"
+                railOption="draft:quarter-narrative"
                 label="Proposal · the quarter, narrated"
                 accept="Accept read"
                 run="Narrate the quarter"

@@ -366,6 +366,7 @@ export default function PartnerLeadsZone() {
 
           <ZoneDraft
             surface="pipeline/leads"
+            railOption="draft:proposal"
             label="Proposal · drafted on accept"
             accept="Open the draft"
             run="Draft the proposal"

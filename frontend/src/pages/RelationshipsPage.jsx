@@ -4,6 +4,8 @@ import { api } from '../lib/api';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Instrument, NotRecorded, SourceLegend } from '../workspaces/canvasKit';
+import { useRailPage } from '../ui/railCrumbs';
+import { railOptionFor } from '../lib/railOptions';
 
 /**
  * Network · Relationships — the firm's book, and who at the firm owns each row.
@@ -76,6 +78,8 @@ const NARROW = {
  * `workspaces/zoneActionsByRole.js`.
  */
 export function RelationshipsPanel({ zoneActions, zoneFilters = null, role = 'partner' }) {
+  // D779: the band's key on this profile's board (D772's lookup), where the inventory names one.
+  const railPage = useRailPage()?.page ?? null;
   const [state, setState] = useState({ loading: true, error: '', items: [], owners: [] });
   const [filter, setFilter] = useState('unassigned');
   const [busy, setBusy] = useState(false);
@@ -344,7 +348,7 @@ export function RelationshipsPanel({ zoneActions, zoneFilters = null, role = 'pa
 
       <ZoneDraft
         surface="network/relationships"
-        railOption="draft:network/relationships"
+        railOption={railOptionFor(railPage, { file: 'pages/RelationshipsPage.jsx', control: 'network/relationships' })?.key}
         label="Draft · orphan reassignment"
         accept="Accept draft"
         run="Draft the reassignment"

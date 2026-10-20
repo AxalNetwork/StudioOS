@@ -285,6 +285,7 @@ export default function OpportunitiesZone() {
           does not send them — see the limits below. */}
       <ZoneDraft
         surface="practice/opportunities"
+        railOption="draft:terms"
         label="Proposal · engagement"
         accept="Accept draft"
         run="Draft the terms"

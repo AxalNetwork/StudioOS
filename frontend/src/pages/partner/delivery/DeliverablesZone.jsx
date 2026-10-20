@@ -423,6 +423,7 @@ export default function PartnerDeliverablesZone() {
 
         <ZoneDraft
           surface="delivery/deliverables"
+          railOption="draft:chases"
           label="Draft · unopened chase"
           accept="Accept drafts"
           run="Draft the chases"
