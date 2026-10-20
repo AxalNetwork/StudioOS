@@ -163,7 +163,7 @@ test('every founder page has an option or a reason it has none, never both', () 
  * each: the founder's options there are on the rail. A section joins this
  * list in the PR that wires it.
  */
-const WIRED = ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Research'];
+const WIRED = ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Research', 'Network'];
 const sectionOf = (page) => page.split(' · ')[1];
 const routeOf = (route) => {
   const [path, query] = route.split('?');
@@ -202,6 +202,8 @@ test('every option names the address it is pressed on', () => {
 
 test('on a wired section, each option is on its page and names itself to the rail', () => {
   assert.ok(WIRED.every((w) => Object.keys(CANVAS.profiles.Founder).includes(w)), 'a wired section is not the canvas\'s');
+  // D771's last PR (Network) wires the last section: every founder section is on the rail.
+  assert.deepEqual([...WIRED].sort(), Object.keys(CANVAS.profiles.Founder).sort(), 'a founder section is not wired');
   for (const o of FOUNDER_OPTIONS.filter((x) => WIRED.includes(sectionOf(x.page)))) {
     const { path, search } = routeOf(o.route);
     assert.equal(pageKeyFor(path, 'founder', { search }), o.page,

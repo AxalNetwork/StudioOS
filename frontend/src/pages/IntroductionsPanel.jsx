@@ -659,6 +659,7 @@ export default function IntroductionsPanel({ zoneActions, zoneFilters = null, ro
 
       <ZoneDraft
         surface="network/introductions"
+        railOption="draft:network/introductions"
         label="Suggested match · possible paths"
         accept="Accept as drafts"
         run="Suggest paths"
