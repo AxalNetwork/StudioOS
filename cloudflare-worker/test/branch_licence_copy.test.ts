@@ -285,8 +285,18 @@ test('the copy uses HQ\'s field names, because the page that reads it is HQ\'s p
   // Deriving the list means the next field added to the page fails here rather
   // than rendering blank on a tier nobody has run yet — which is how all eight
   // of these survived.
-  const page = readFileSync(new URL('../../frontend/src/pages/subsidiary/MyLicencePage.jsx', import.meta.url), 'utf8');
-  const readKeys = [...new Set([...page.matchAll(/\bl\.([a-z_][a-z0-9_]*)/g)].map((m) => m[1]))];
+  //
+  // D800 (#2233) — THE PAGE IS FIVE FILES NOW, and reads `l?.x` and
+  // `licence?.x` as often as `l.x`. The Licences page's tabs moved the
+  // licence's fields into its frame, its Summary and `lib/licencePage.js`; a
+  // scan of the one file and the one spelling found 11 keys and would have
+  // missed every field those files render.
+  const PAGE_FILES = [
+    'pages/subsidiary/MyLicencePage.jsx', 'pages/subsidiary/LicenceFrame.jsx',
+    'pages/subsidiary/LicenceSummary.jsx', 'pages/subsidiary/LicenceTerms.jsx', 'lib/licencePage.js',
+  ];
+  const page = PAGE_FILES.map((f) => readFileSync(new URL(`../../frontend/src/${f}`, import.meta.url), 'utf8')).join('\n');
+  const readKeys = [...new Set([...page.matchAll(/\b(?:l|licence)\??\.([a-z_][a-z0-9_]*)/g)].map((m) => m[1]))];
   assert.ok(readKeys.length >= 12, `only ${readKeys.length} keys parsed out of the page — the scan is broken, not the payload`);
   for (const key of readKeys) {
     assert.ok(key in body.licence, `the page renders l.${key} and the branch payload does not supply it`);
