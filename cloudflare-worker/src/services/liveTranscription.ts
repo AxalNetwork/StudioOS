@@ -65,7 +65,7 @@ export type HoldResult = { ok: true; reservation: aiBudget.AiReservation } | { o
 /** Hold one block. A refusal carries the budget's own message. */
 export async function holdBlock(env: Env, userId: number, model: string): Promise<HoldResult> {
   const held = await aiBudget.reserveAiBudget(env, userId, blockQuoteMicro(model, await aiBudget.memberChargeMultiplier(env, userId)));
-  if (!held.ok) return { ok: false, refusal: held.refusal, message: budgetRefusalMessage(held.refusal) };
+  if (!held.ok) return { ok: false, refusal: held.refusal, message: budgetRefusalMessage(held.refusal, held.refusal === 'spend_limit' ? held : null) };
   return { ok: true, reservation: held.reservation };
 }
 

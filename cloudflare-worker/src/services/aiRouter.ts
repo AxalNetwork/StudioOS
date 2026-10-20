@@ -31,6 +31,7 @@
 import type { Env } from '../types';
 import { branchOf } from '../util/branch';
 import * as aiBudget from './aiBudget';
+import { spendLimitMessage } from './aiSpendLimit';
 import { audioInputFor, parseAudioOutput, type SttTranscript } from './sttFormats';
 import * as shapes from './ai/shapes';
 import * as catalogue from './ai/catalogue';
@@ -99,6 +100,8 @@ export type RefusalReason =
   | 'budget_user_day'
   | 'budget_user_month'
   | 'budget_review'
+  // D788: the member's own monthly spend limit would be passed.
+  | 'spend_limit'
   | 'budget_org_month'
   | 'kill_switch'
   | 'safety_block'
@@ -1592,7 +1595,8 @@ function guardReport(
  * here, a live stream refused mid-way and a session's transcription refused up
  * front all say the same thing (D657).
  */
-export function budgetRefusalMessage(refusal: string): string {
+export function budgetRefusalMessage(refusal: string, detail?: { limit_microusd?: number; resets_on?: string } | null): string {
+  if (refusal === 'spend_limit') return spendLimitMessage(detail);
   return refusal === 'budget_review'
     ? 'An AI run is held for review. New runs can start after it is settled.'
     : 'The included AI allowance and top-up balance cannot cover this run. Add tokens to continue.';
@@ -1866,7 +1870,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
       if (!held.ok) {
         const usage:UsageMeta={task:opts.task,model:primaryModel,latency_ms:0,prompt_tokens:0,completion_tokens:0,est_cost_usd:0,fallback_used:false,cached:false,safety_score:null};
         await recordUsage(env, opts, usage, held.refusal);
-        return {ok:false,refusal:held.refusal,error:budgetRefusalMessage(held.refusal),usage};
+        return {ok:false,refusal:held.refusal,error:budgetRefusalMessage(held.refusal,held.refusal==='spend_limit'?held:null),usage};
       }
       reservation = held.reservation;
     } catch {

@@ -5476,9 +5476,15 @@ export const adminX = {
       method: 'POST',
       body: JSON.stringify(alt_text ? { data_uri, alt_text } : { data_uri }),
     }),
+  // D780 part 2: generating proposes (`proposal`), and writes nothing to the post.
   generateAltText: (id, index = 0) =>
     request(`/admin/x/posts/${id}/alt-text`, {
       method: 'POST', body: JSON.stringify({ index }),
+    }),
+  // D780 part 2: the Super Admin's Save of one image's alt text; `proposal_uid` names the proposal it began as.
+  saveAltText: (id, index, alt_text, proposal_uid) =>
+    request(`/admin/x/posts/${id}/alt-text`, {
+      method: 'PUT', body: JSON.stringify(proposal_uid ? { index, alt_text, proposal_uid } : { index, alt_text }),
     }),
   lintPost: (id) => request(`/admin/x/posts/${id}/lint`, { method: 'POST', body: '{}' }),
   approvePost: (id) => request(`/admin/x/posts/${id}/approve`, { method: 'POST', body: '{}' }),
