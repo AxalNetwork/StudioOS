@@ -6,8 +6,9 @@
 -- connector reads (S1 on #1939, 2026-10-19 11:50Z).
 --
 --   integration_id  the member's `whatsapp_link` row. One choice per link.
---   project_id      the chosen venture; NULL never stored (no row means no
---                   choice). A deleted venture clears it.
+--   project_id      the chosen venture. Clearing the choice deletes the row;
+--                   NULL appears only when the venture itself is deleted, and
+--                   reads as no choice.
 --
 -- With no row, a recording opens in the member's most recently updated venture
 -- (migration 497). A capture copies the venture when it opens, so a later change
