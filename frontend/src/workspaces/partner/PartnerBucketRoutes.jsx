@@ -56,6 +56,7 @@ const PartnerRetainers = lazy(() => import('../../pages/partner/pipeline/Retaine
 const PartnerVisibility = lazy(() => import('../../pages/partner/offers/VisibilityZone'));
 const PartnerProof = lazy(() => import('../../pages/partner/offers/ProofZone'));
 const PartnerAudienceFit = lazy(() => import('../../pages/partner/offers/AudienceFitZone'));
+const PartnerTesting = lazy(() => import('../../pages/partner/offers/TestingZone'));
 // #45 — the last four. Health is the one that reads across the others: it
 // derives a rating over milestones, blockers, deliverables and the retainer
 // record, and returns null rather than "on track" when none of them carries
@@ -259,6 +260,7 @@ const LIVE = {
     visibility: () => <PartnerVisibility />,
     proof: () => <PartnerProof />,
     'audience-fit': () => <PartnerAudienceFit />,
+    testing: () => <PartnerTesting />,
   },
 };
 
@@ -367,6 +369,7 @@ const ZONE_LINES = {
     visibility: 'Where the firm appears and what each surface produced, ranked by engagements rather than by reach.',
     proof: 'Case studies and outcomes, each showing whether the client agreed to publish it — or that nobody has.',
     'audience-fit': 'Who the firm is for and who it is not, with the sentence a pass quotes instead of going silent.',
+    testing: 'Programmes that recruit Axal members to test a product, opened once HQ approves them, with the testers the firm picks.',
   },
 };
 
