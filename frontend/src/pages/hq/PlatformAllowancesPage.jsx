@@ -234,7 +234,7 @@ export function CatalogueCard({ caps }) {
               </div>
             ))}
       <div className="border-t border-axal-hairline px-4 py-2.5 text-xs text-axal-muted dark:border-gray-800 dark:text-gray-400">
-        A yearly price gives its share ÷ 12 each month. A member is credited on what they pay; one subscribed before D783 reads today's price here until their next billing event. No plan, no allowance.
+        A yearly price gives its share ÷ 12 each month. A member's allowance follows what they pay; one subscribed before D783 reads today's price here until their next billing event. No plan, no allowance.
       </div>
     </Card>
   );
@@ -286,7 +286,7 @@ export default function PlatformAllowancesPage() {
           workspace="AI allowances"
           role="super_admin"
           stance="Sets each plan's AI allowance"
-          note="This rail reads back the plans' allowances and the runs held for a check. It changes nothing; Edit, Charge, Refund, the pack controls and Adjust balance on the page do, and the Worker records who and why. Nothing here credits a purchase."
+          note="This rail reads back the plans' allowances and the runs held for a check. It changes nothing; Edit, Charge, Refund, the pack controls and Adjust balance on the page do, and the Worker records who and why. Nothing here adds a purchase's tokens."
           coverage={coverage}
           coverageNote={coverage.length ? undefined : 'The allowances could not be read, so there is nothing to read back.'}
           data-testid="hq-allowances-rail"
