@@ -3,7 +3,7 @@
  * cards: how members are charged, the models offered, and one member's month.
  * Pure, so `frontend/test/hq_ai_allowances_d776.test.mjs` holds each rule.
  */
-import { ALL_MODEL_IDS, NEW_MODELS } from '../../ui/railModels';
+import { ALL_MODELS, NEW_MODELS } from '../../ui/railModels';
 import { chargedPages, microUsd, whenLabel } from '../account/usageModel';
 
 /** How a run is settled, in the canvas's words; null for a mode the Worker did not send. */
@@ -42,10 +42,11 @@ export function unitUsd(n) {
 
 /**
  * The New badge's model ids: the canvas's new models (`NEW_MODELS`) that the
- * rail's model list (`ALL_MODEL_IDS`) maps to a catalogue id. A new model the
- * list does not map yet gets no badge here rather than one matched by a guess.
+ * rail's model list (`ALL_MODELS`, `[name, id]` rows by group) maps to a
+ * router id. A new model the list does not map yet gets no badge here rather
+ * than one matched by a guess.
  */
-export const NEW_MODEL_IDS = new Set(Object.entries(ALL_MODEL_IDS).filter(([name, id]) => id && NEW_MODELS.has(name)).map(([, id]) => id));
+export const NEW_MODEL_IDS = new Set(ALL_MODELS.flatMap(([, rows]) => rows).filter(([name, id]) => id && NEW_MODELS.has(name)).map(([, id]) => id));
 
 /** Each offered model: its name, kind, price lines (cost and billed per unit), Paid only, New, and the pages naming it. */
 export function modelsView(read, newIds = NEW_MODEL_IDS) {
