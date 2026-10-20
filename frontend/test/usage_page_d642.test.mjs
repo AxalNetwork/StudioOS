@@ -233,7 +233,7 @@ test('U1 renders loading, Unreadable (the others still load), ready, and each st
   assert.match(ok, /\$6\.10 <span[^>]*>of \$40\.00/);
   assert.match(ok, /Resets on the 1st at 00:00 UTC/);
   assert.match(ok, /data-testid="usage-held"[\s\S]*\$0\.05[\s\S]*Returned if a run does not finish within 5 minutes/);
-  assert.match(ok, /href="\/plans-and-pricing#token-packs"[^>]*>Add tokens</);
+  assert.match(ok, /href="\/pricing\/products#token-packs"[^>]*>Add tokens</);
   assert.match(ok, /Runs use your included allowance first, then your top-up balance\./);
   const noDaily = html(h(AllowanceCard, { budget: ready({ ...BUDGET, daily_microusd: 0 }), product: ready(PRODUCT) }));
   assert.match(noDaily, /data-testid="usage-today"[\s\S]*Not recorded[\s\S]*The plan sets no daily allowance\. Runs use your top-up balance\./);

@@ -69,4 +69,4 @@ reads on navigation. Missing balance data says Unreadable; nothing is credited
 from the browser. Stripe and the existing billing-country/VAT calculation stay
 on the existing checkout surface.
 
-`ProductsPage.jsx` mounts the public Token packs read after the plans on both desktop and phone; pack products are excluded from Add-ons, product details and the shared cart. The owner authorized this CR7 dependency under #1985; CR5 retains the plan-allowance and visitor-routing work.
+`ProductsPage.jsx` (at `/pricing/products` since D786, #2211; `/plans-and-pricing` redirects to `/pricing` and `pricingRedirects.jsx` holds that redirect and `/pricing/investor`'s) mounts the public Token packs read after the plans on both desktop and phone; pack products are excluded from Add-ons, product details and the shared cart. The owner authorized this CR7 dependency under #1985; CR5 retains the plan-allowance and visitor-routing work.

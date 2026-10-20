@@ -79,7 +79,7 @@ export default function InvestorQuotaBars({ user, compact = false }) {
         <div className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400">
           Investor plan · <span className="font-semibold capitalize text-gray-700 dark:text-gray-200">{tier}</span>
         </div>
-        <Link to="/pricing/investor" className="text-xs text-violet-700 dark:text-violet-300 hover:underline">
+        <Link to="/pricing?for=investor" className="text-xs text-violet-700 dark:text-violet-300 hover:underline">
           Compare plans
         </Link>
       </div>

@@ -27,7 +27,7 @@ test('the draw-order sentence is D762\'s: the allowance first, then tokens', () 
 
 test('/plans-and-pricing draws it under "How AI is priced", above the token packs', async () => {
   const ProductsPage = (await import('../src/pages/ProductsPage.jsx')).default;
-  const html = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: ['/plans-and-pricing'] }, React.createElement(ProductsPage)));
+  const html = renderToStaticMarkup(React.createElement(MemoryRouter, { initialEntries: ['/pricing/products'] }, React.createElement(ProductsPage)));
   const section = /<section id="ai-pricing"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? '';
   assert.match(section, />How AI is priced</);
   assert.equal(/data-testid="text-ai-draw-line">([^<]*)</.exec(section)?.[1], AI_DRAW_LINE);
