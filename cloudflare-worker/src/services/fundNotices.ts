@@ -523,11 +523,13 @@ const CURRENCY_SIGN: Readonly<Record<string, string>> = Object.freeze({ USD: '$'
 
 /** "€12,000.00" in the row's own currency; a currency with no sign here is written "CHF 12,000.00". */
 export function formatMoney(cents: number, currency: string): string {
-  const usd = formatCents(cents);
+  if (!Number.isSafeInteger(cents)) throw new TypeError('cents must be a whole number');
   const code = String(currency || '').toUpperCase();
-  if (code === 'USD') return usd;
+  const abs = Math.abs(cents);
+  const whole = Math.floor(abs / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const amount = `${whole}.${String(abs % 100).padStart(2, '0')}`;
   const sign = CURRENCY_SIGN[code];
-  return sign ? usd.replace('$', sign) : usd.replace('$', `${code} `);
+  return `${cents < 0 ? '-' : ''}${sign ?? `${code} `}${amount}`;
 }
 
 /** What a territory licence fee invoice prints (D802). The caller has checked every figure. */
