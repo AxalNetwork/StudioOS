@@ -332,16 +332,16 @@ const usage = (product, productError = false) => renderToStaticMarkup(h(RailUsag
 
 test('Add tokens is drawn in all three top-up states, enabled only when a pack is on sale', () => {
   const ready = usage(TOPUP);
-  assert.match(ready, /<a href="\/plans-and-pricing#token-packs" class="fwr-add-tokens"[^>]*>Add tokens<\/a>/);
+  assert.match(ready, /<a href="\/pricing\/products#token-packs" class="fwr-add-tokens"[^>]*>Add tokens<\/a>/);
   assert.doesNotMatch(ready, /disabled/);
   const none = usage({ configured: true, state: 'not_ready' });
   assert.match(none, /<button type="button" class="fwr-add-tokens" disabled=""[^>]*>Add tokens<\/button>/);
   assert.match(none, /Top-up isn&#x27;t available yet\./);
-  assert.doesNotMatch(none, /href="\/plans-and-pricing/);
+  assert.doesNotMatch(none, /href="\/pricing\/products/);
   const bad = usage(null, true);
   assert.match(bad, /<button type="button" class="fwr-add-tokens" disabled=""[^>]*>Add tokens<\/button>/);
   assert.match(bad, /Retry<\/button>/);
-  assert.doesNotMatch(bad, /href="\/plans-and-pricing/);
+  assert.doesNotMatch(bad, /href="\/pricing\/products/);
 });
 
 // ── the guard sentence ───────────────────────────────────────────────────

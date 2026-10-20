@@ -404,7 +404,7 @@ const SUBSCRIBED = new Set(['active', 'trialing', 'past_due']);
 export function billingSourceFor(role) {
   const r = String(role || '').toLowerCase();
   if (r === 'founder') return { status: 'tierStatus', portal: 'tierPortal', pricing: '/pricing' };
-  if (r === 'investor') return { status: 'investorBillingStatus', portal: 'investorPortal', pricing: '/pricing/investor' };
+  if (r === 'investor') return { status: 'investorBillingStatus', portal: 'investorPortal', pricing: '/pricing?for=investor' };
   // Every other role's plan lives on the general Stripe customer, which is
   // the customer `POST /billing/tier/portal` opens (routes/billing.ts).
   return { status: 'planStatus', portal: 'tierPortal', pricing: '/pricing' };

@@ -224,7 +224,7 @@ export const DOORS = {
     h1: 'Better deals, less noise. From first look to portfolio.',
     who: 'For angels, syndicates, emerging managers, funds, and LPs.',
     primary: { t: 'Create an investor account', to: '/register?lane=lp' },
-    secondary: { t: 'Compare investor plans', to: '/pricing/investor' },
+    secondary: { t: 'Compare investor plans', to: '/pricing?for=investor' },
     problem: 'Most deal flow is cold inbound: decks without evidence, numbers without verification, and notes scattered across tools.',
     facts: [
       'A curated pipeline instead of cold inbound',

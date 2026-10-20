@@ -52,6 +52,7 @@ import {
   Mic, MicOff, Ticket,
 } from 'lucide-react';
 import { api, getActiveCompanyId, spinoutLab as spinoutLabApi } from '../../lib/api';
+import { railPressHeaders } from '../../lib/railPage.js';
 import { orientationMessage, shouldOrient } from '../../lib/eadwynOrientation';
 import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { reportError } from '../../lib/log';
@@ -1664,7 +1665,8 @@ function useMicRecorder(onText) {
       setState(MIC.TRANSCRIBING);
       try {
         const b64 = await blobToBase64(blob);
-        const res = await api.advisor.transcribe(b64, mime);
+        // D778 part 6: the run names its option itself, keeping the mounted rail's page.
+        const res = await api.advisor.transcribe(b64, mime, railPressHeaders('transcribe:voice-answer'));
         const text = String(res?.text || '').trim();
         if (text) onTextRef.current?.(text);
       } catch (e) {

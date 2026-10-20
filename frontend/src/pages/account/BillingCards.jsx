@@ -109,11 +109,11 @@ export function BuyTokensCard({ topUp }) {
  * customer portal (the same portal as "Manage billing"). The billing address
  * joins it with D806 (#2245).
  */
-export function PaymentDetailsCard({ role, overview, openPortal, navigate = goTo }) {
+export function PaymentDetailsCard({ role, overview, openPortal, navigate = goTo, billingApi = api }) {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState(null);
   const source = billingSourceFor(role);
-  const portal = openPortal || (() => api[source.portal]());
+  const portal = openPortal || (() => billingApi[source.portal]());
   const card = overview.status === 'ready' ? paymentCard(overview.data) : null;
   const hasCustomer = overview.status === 'ready' && overview.data?.has_customer === true;
   const manage = async () => {
@@ -148,10 +148,20 @@ export function PaymentDetailsCard({ role, overview, openPortal, navigate = goTo
   );
 }
 
-/** The reads the cards share: the AI budget (balance and allowance), the packs, and the billing overview. */
-export function useBillingReads({ budget = aiBudgetApi, billingApi = api } = {}) {
+/**
+ * The Stripe customer a role's billing lives on, as `routes/billing.ts` scopes
+ * it: an investor's own customer, else the general one (no scope). D792 part 2
+ * (#2270): Payment details reads the same customer its portal opens
+ * (`billingSourceFor`), so the card shown is the card managed.
+ */
+export function overviewScopeFor(role) {
+  return billingSourceFor(role).portal === 'investorPortal' ? 'investor' : undefined;
+}
+
+/** The reads the cards share: the AI budget (balance and allowance), the packs, and the role's billing overview. */
+export function useBillingReads({ role, budget = aiBudgetApi, billingApi = api } = {}) {
   const me = useAccountRead(() => budget.mine());
   const topUp = useAccountRead(() => budget.topUp());
-  const overview = useAccountRead(() => billingApi.billingOverview());
+  const overview = useAccountRead(() => billingApi.billingOverview(overviewScopeFor(role)));
   return { me, topUp, overview };
 }

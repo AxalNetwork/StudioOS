@@ -43,6 +43,7 @@ export * from './api/interviewSessions.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/licenceAccount.js';
+export * from './api/licenceRequests.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryPersonal.js';
@@ -230,10 +231,11 @@ export function isPublicPath(pathname) {
     // /articles/edit/:id) are intentionally NOT listed so a genuine
     // session expiry there still bounces to /login.
     || currentPath === '/articles'
-    || currentPath.startsWith('/pricing/')
-    // D755 §13 (#1915) — /plans-and-pricing opens to visitors. Exact: a
-    // product's page (/plans-and-pricing/:id) and /checkout still need sign-in.
-    || currentPath === '/plans-and-pricing'
+    // D786 (#2211): the catalogue at /pricing/products opens to visitors as
+    // /plans-and-pricing did (D755 §13). A product's page (/pricing/products/:id)
+    // and /checkout still need sign-in.
+    || currentPath === '/pricing'
+    || (currentPath.startsWith('/pricing/') && !currentPath.startsWith('/pricing/products/'))
     || currentPath.startsWith('/partner-onboarding/')
     || currentPath.startsWith('/partners/onboard')
     // The attester's side of an advisor proof claim. Reached by a link an
@@ -1343,8 +1345,10 @@ export const api = {
     // Voice-to-text for the composer mic. Posts a base64-encoded audio clip
     // + its mime type to the Workers AI Whisper endpoint; returns { text }.
     // The UI mic button that calls this is a separate task.
-    transcribe: (audio, mime) =>
+    // D778 part 6: `headers` is the press's own rail context (`railPressHeaders`).
+    transcribe: (audio, mime, headers) =>
       request('/advisor/transcribe', {
+        ...(headers ? { headers } : {}),
         method: 'POST',
         body: JSON.stringify({ audio, mime }),
       }),
@@ -1657,8 +1661,9 @@ export const api = {
     // it by hand produces a body the worker's formData() cannot parse.
     return request(`/founder/validate/interviews/${id}/recording`, { method: 'POST', body, timeoutMs: 120_000 });
   },
-  transcribeInterview: (id) => request(`/founder/validate/interviews/${id}/transcribe`, {
+  transcribeInterview: (id, headers) => request(`/founder/validate/interviews/${id}/transcribe`, {
     // A model call is not a read, and an hour of audio is not a fast one.
+    ...(headers ? { headers } : {}),
     method: 'POST', timeoutMs: 180_000,
   }),
   // Task #5 — customer-audience waitlist signups + lightweight CRM layer inside

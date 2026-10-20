@@ -94,7 +94,7 @@ test('packLabel and the moved constants: the same strings, one home, re-exported
   assert.equal(card.usageMoney, usageMoney);
   assert.equal(microMoney(29536), '$0.029536');
   assert.equal(usageMoney(29536), '$0.03');
-  assert.equal(ADD_TOKENS_PATH, '/plans-and-pricing#token-packs');
+  assert.equal(ADD_TOKENS_PATH, '/pricing/products#token-packs');
 });
 
 test('one sentence: no file in frontend/src still says "Top-ups are not available yet" or types the sentence by hand', () => {
@@ -114,7 +114,7 @@ test('one path: every Add tokens link reads ADD_TOKENS_PATH, and no file but lib
     const rel = relative(SRC, file);
     if (rel === 'lib/aiTokens.js') continue;
     const text = readFileSync(file, 'utf8');
-    if (/\/plans-and-pricing#token-packs|\/checkout\?ai_topup=1/.test(text)) offenders.push(rel);
+    if (/\/pricing\/products#token-packs|\/checkout\?ai_topup=1/.test(text)) offenders.push(rel);
   }
   assert.deepEqual(offenders, []);
   const sites = { 'ui/WorkerRail.jsx': 1, 'ui/AiBudgetUsage.jsx': 1, 'pages/account/AccountUsage.jsx': 3, 'pages/account/PricingPhone.jsx': 1 };
@@ -179,7 +179,7 @@ test('CR7 shared-model mutations: current packs and the central purchase destina
   let n = 0;
   const load = async source => import('data:text/javascript;base64,' + Buffer.from(source + '\n// instance ' + n++).toString('base64'));
   const check = model => {
-    assert.equal(model.ADD_TOKENS_PATH, '/plans-and-pricing#token-packs');
+    assert.equal(model.ADD_TOKENS_PATH, '/pricing/products#token-packs');
     assert.equal(model.aiTokenState({data:{...CR2_READY,configured:false,product:null}}),'ready');
     assert.equal(model.topUpLine({...CR2_READY,product:PRICE}).price_id,CR2_READY.packs[0].price_id);
     assert.equal(model.topUpLine({...CR2_READY,packs:[],product:PRICE}),null);

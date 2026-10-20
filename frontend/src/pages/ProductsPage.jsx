@@ -343,17 +343,17 @@ export default function ProductsPage() {
 
   const handleOpenProduct = useCallback((product) => {
     setModalIntent(null);
-    navigate(`/plans-and-pricing/${encodeURIComponent(product.id)}`);
+    navigate(`/pricing/products/${encodeURIComponent(product.id)}`);
   }, [navigate]);
 
   const handlePreviewBundle = useCallback((product, { qty } = {}) => {
     setModalIntent({ qty: qty || 1, checkout: false });
-    navigate(`/plans-and-pricing/${encodeURIComponent(product.id)}`);
+    navigate(`/pricing/products/${encodeURIComponent(product.id)}`);
   }, [navigate]);
 
   const handleSubscribeBundle = useCallback((product, { qty } = {}) => {
     setModalIntent({ qty: qty || 1, checkout: true });
-    navigate(`/plans-and-pricing/${encodeURIComponent(product.id)}`);
+    navigate(`/pricing/products/${encodeURIComponent(product.id)}`);
   }, [navigate]);
 
   // A visitor's Subscribe and Preview: sign in, then back to the plans (§13).
@@ -361,7 +361,7 @@ export default function ProductsPage() {
 
   const handleCloseProduct = useCallback(() => {
     setModalIntent(null);
-    navigate('/plans-and-pricing');
+    navigate('/pricing/products');
   }, [navigate]);
 
   // Add a one-time item to the cart.
@@ -389,7 +389,7 @@ export default function ProductsPage() {
       when: new Date().toISOString(),
       free: !!result?.free,
     });
-    navigate('/plans-and-pricing');
+    navigate('/pricing/products');
     refreshUnlocks();
   }, [navigate, refreshUnlocks]);
 

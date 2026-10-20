@@ -261,7 +261,7 @@ export const PRODUCT_PAGES = {
     problem:
       'Deal flow is either a firehose of cold inbound or a black box you can only reach through relationships. Screening and diligence live in spreadsheets. Axal VC gives you a curated pipeline, AI screening and a CRM that already knows the founders.',
     primaryCta: { label: 'Create an investor account', to: '/register?lane=investor' },
-    secondaryCta: { label: 'Compare investor plans', to: '/pricing/investor' },
+    secondaryCta: { label: 'Compare investor plans', to: '/pricing?for=investor' },
     benefits: [
       {
         icon: 'Search',
