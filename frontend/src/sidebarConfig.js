@@ -747,6 +747,10 @@ export const SHARED_FULL_BLEED = [
   // `/trust` — the Trust Center fills the main column for every role, with its
   // own `p-6` as the gutter (#2060); its blocks keep their own caps where needed.
   '/trust',
+  // The Help home's search banner owns the whole content column; the guide
+  // grid below supplies its own capped width and gutters.
+  '/help',
+  '/help/',
   ...ONBOARDING_CANVAS_PATHS,
 ];
 

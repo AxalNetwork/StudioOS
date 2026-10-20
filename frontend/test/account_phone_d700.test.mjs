@@ -49,7 +49,7 @@ import MyEventsPage, { EventsPhoneView } from '../src/pages/events/MyEventsPage.
 import LearningHome, { LearningPhoneView } from '../src/pages/learning/LearningHome.jsx';
 import { COMING_SOON_LINE } from '../src/pages/learning/learningAccess.js';
 import { TAB_NOT_LIVE } from '../src/pages/learning/learningModel.js';
-import { HelpPhoneView, EMAIL_SUPPORT_LINE } from '../src/pages/docs/DocsLayout.jsx';
+import { HelpPhoneView } from '../src/pages/docs/DocsLayout.jsx';
 import { helpAreas } from '../src/pages/docs/guidePlacement.js';
 import { SECTIONS as HELP_SECTIONS, filterSectionsForRole } from '../src/pages/docs/sections/index.js';
 import { PricingPhoneView, TOKENS_LINE } from '../src/pages/account/PricingPhone.jsx';
@@ -697,12 +697,12 @@ test('8. Trust lists only what /trust/me returns: no 83(b) row, and the pill is 
   assert.match(read('frontend/src/pages/TrustCenterPage.jsx'), /setMatrix\(\{ obligations: \[\], role, failed: true \}\)/);
 });
 
-test('8. Help: Popular this week first, no For you now, and Email support says what the link does', () => {
+test('8. Help: Popular this week first, no For you now, and contact stays in tickets', () => {
   const markup = html(PHONE_VIEWS.help());
   assert.equal(sectionTitles(markup)[0], 'Popular this week');
   assert.doesNotMatch(markup, /For you now/);
-  assert.equal(EMAIL_SUPPORT_LINE, 'Opens your mail app. Write from the address on your account.');
-  assert.match(markup, new RegExp(`<a href="mailto:support@axal\\.vc"[^>]*>[\\s\\S]*?Email support[\\s\\S]*?${escapeRe(EMAIL_SUPPORT_LINE)}`));
+  assert.doesNotMatch(markup, /mailto:support@axal\.vc|Email support/);
+  assert.match(markup, /Open a ticket/);
   assert.doesNotMatch(markup, /From the address on your account/);
   assert.ok(CANVAS_PAGES.help.chunk.includes("'From the address on your account'"));
   // A failed popular read says so; a row opens its area in place.

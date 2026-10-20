@@ -149,7 +149,9 @@ const SUGGESTED_SEARCHES = ['capital call', 'cap table', 'data room'];
 
 function HelpHero({ query, setQuery, searchInputRef, guideCount, areaCount }) {
   return (
-    <header className="border-b border-violet-200 bg-violet-50 px-4 pb-8 pt-10 text-center md:px-8 dark:border-violet-900/60 dark:bg-violet-950/30">
+    <header className="relative isolate overflow-hidden border-b border-violet-200 bg-violet-50 px-4 pb-8 pt-10 text-center md:px-8 dark:border-violet-900/60 dark:bg-violet-950">
+      <img src="/site/home-hero.webp" alt="" className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_45%]" />
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-violet-50/90 via-white/80 to-violet-50/70 dark:from-gray-950/90 dark:via-gray-950/80 dark:to-violet-950/80" />
       <h1 className="text-[28px] font-extrabold leading-tight tracking-tight text-balance text-gray-900 dark:text-gray-100">How can we help?</h1>
       <p className="mt-2 text-[13.5px] leading-relaxed text-gray-600 dark:text-gray-300">
         {guideCount} guide{guideCount === 1 ? '' : 's'} across {areaCount} area{areaCount === 1 ? '' : 's'}, grouped by what you are doing.
@@ -443,7 +445,6 @@ function StillStuck({ user, onOpenChat }) {
           {chatAvailable && (
             <button type="button" onClick={onOpenChat} className={SECONDARY_ACTION}>Message the team</button>
           )}
-          <a href="mailto:support@axal.vc" className={SECONDARY_ACTION}>Email support</a>
           <span className="flex flex-col items-center gap-1">
             <Link to="/trust" className={SECONDARY_ACTION}>What we can see</Link>
             <span className="font-mono text-[9.5px] text-gray-400">Trust Center</span>
@@ -709,12 +710,10 @@ function HelpHome({ visibleSections, role, user, query, setQuery, searchInputRef
 // D700 (#1662) — A9m, the Help home on a phone. A guide page is unchanged.
 // ---------------------------------------------------------------------------
 
-export const EMAIL_SUPPORT_LINE = 'Opens your mail app. Write from the address on your account.';
-
 /**
  * A9m's three sections. The first is "Popular this week" (D621) where the
- * canvas draws "For you now", which has no store; and Email support's line
- * says what the link does (decision 10). `popular` is `usePopularGuides`'
+ * canvas draws "For you now", which has no store. Contact opens a ticket,
+ * where the team can reply in its thread. `popular` is `usePopularGuides`'
  * read; `areas` is `helpAreas`, each row opening its guide list in place,
  * because no area has a route of its own.
  */
@@ -745,7 +744,6 @@ export function helpPhoneGroups({ popular, onRetry, areas, openArea = null, onAr
     testid: 'help-phone-contact',
     rows: [
       { title: 'Open a ticket', description: 'Replies appear in My tickets', to: '/help/tickets?new=1', testid: 'help-phone-ticket' },
-      { title: 'Email support', description: EMAIL_SUPPORT_LINE, href: 'mailto:support@axal.vc', testid: 'help-phone-email' },
     ],
   };
   return [top, guides, contact];
@@ -872,7 +870,7 @@ export default function DocsLayout() {
   }, [route?.area, route?.guide]);
 
   return (
-    <div className="-mx-4 -my-4 min-h-[calc(100vh-64px)] bg-gray-50 md:-mx-6 md:-my-6 dark:bg-gray-950">
+    <div className={`${route ? '-mx-4 -my-4 md:-mx-6 md:-my-6 ' : ''}min-h-[calc(100vh-64px)] bg-gray-50 dark:bg-gray-950`}>
       {route ? (
         <HelpArticle sections={visibleSections} area={route.area} guide={route.guide} user={user} />
       ) : phone ? (
