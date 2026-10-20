@@ -9,11 +9,15 @@
  *
  * Deciding keeps or throws away the proposal. It writes no record: the page's
  * own Save does, through the record's own route.
+ *
+ * ONE AT A TIME (D777 part 3). A placement is decided by its own uid; there is
+ * no bulk decision. Keeping one for a field Eadwyn never fills is refused 422
+ * `{ refusal: 'never_fill' }` with the registry's sentence, and nothing is kept.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { decideRail, listRail, type RailDecision, type RailProposalStatus } from '../services/railProposals';
+import { NeverFillRefusal, decideRail, listRail, type RailDecision, type RailProposalStatus } from '../services/railProposals';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -39,7 +43,15 @@ r.post('/:uid/decide', async (c) => {
   if (!DECISIONS.includes(decision)) return c.json({ error: 'invalid_decision' }, 400);
   const payload = body?.payload && typeof body.payload === 'object' && !Array.isArray(body.payload) ? body.payload : null;
   if (decision === 'edit' && !payload) return c.json({ error: 'payload_required' }, 400);
-  const decided = await decideRail(c.env, user.id, c.req.param('uid'), decision, payload);
+  let decided;
+  try {
+    decided = await decideRail(c.env, user.id, c.req.param('uid'), decision, payload);
+  } catch (e) {
+    if (e instanceof NeverFillRefusal) {
+      return c.json({ error: 'never_fill', refusal: 'never_fill', message: e.message, field: e.field, discarded: e.discarded }, 422);
+    }
+    throw e;
+  }
   if (!decided) return c.json({ error: 'not_open', message: 'That proposal is not yours, or it has already been decided.' }, 409);
   return c.json({ proposal: decided });
 });
