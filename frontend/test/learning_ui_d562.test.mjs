@@ -521,18 +521,18 @@ test('an admin and the Super Admin see the full page: no card, All first, the st
   assert.match(flat(program), /Read-only Assigned to you by a Super Admin\. Content and enrolment are managed at HQ\./);
 });
 
-test('the Worker AI rail sits on every Learning page, with a literal accent, in Eadwyn’s own voice', () => {
+test('Learning home has no AI rail; subpage rails keep their accent and voice', () => {
   const home = flat(page('/learning', '/learning', { view: 'home', user: FOUNDER, activeRole: 'founder' }));
-  assert.match(home, /Eadwyn AI .{0,24}?Learning/);
+  assert.doesNotMatch(home, /Eadwyn AI/);
   assert.match(flat(page('/learning/studio', '/learning/studio', { view: 'studio', user: SUPER, activeRole: 'admin' })), /Eadwyn AI .{0,24}?Learning studio/);
   assert.match(flat(page('/learning/programs/p1', '/learning/programs/:program', { view: 'program', user: ADMIN, activeRole: 'admin' })), /Eadwyn AI .{0,24}?Learning programs/);
   const dir = resolve(ROOT, 'frontend/src/pages/learning');
   const rails = readdirSync(dir).filter((f) => f.endsWith('.jsx')).map((f) => readFileSync(resolve(dir, f), 'utf8')).join('\n');
   const mounts = [...codeOnly(rails).matchAll(/<WorkerRail[\s\S]*?\/>/g)].map((m) => m[0]);
-  // The home, the three tiers of a page that waits on its store, the learner pages that read, the studio,
+  // The three tiers of a page that waits on its store, the learner pages that read, the studio,
   // and, in stage 3, the assigned admin's program pages and the studio's program pages (D558),
   // the exercise and exam pages (D559) and the webinar page (D560).
-  assert.equal(mounts.length, 10);
+  assert.equal(mounts.length, 9);
   for (const tier of ['founder', 'admin', 'super_admin']) assert.ok(mounts.some((m) => m.includes(`role="${tier}"`)), `no ${tier} rail`);
   for (const mount of mounts) {
     assert.match(mount, /workspace="Learning[^"]*"/);

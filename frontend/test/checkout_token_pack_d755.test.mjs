@@ -149,7 +149,7 @@ async function withWorld(check, options = {}) {
     if (path === RECEIPT) { globalThis.setTimeout = schedule; globalThis.clearTimeout = cancel; }
     const Probe = () => { const location = useLocation(); w.path = location.pathname + location.search + location.hash; return null; };
     container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
-    await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(React.Fragment, null, h(Routes, null, h(Route, { path: path === CHECKOUT ? '/checkout' : path === PACKS ? '/plans-and-pricing' : '/checkout/confirmation', element: h(page.default) }), h(Route, { path: '*', element: null })), h(Probe)))));
+    await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(React.Fragment, null, h(Routes, null, h(Route, { path: path === CHECKOUT ? '/checkout' : path === PACKS ? '/pricing/products' : '/checkout/confirmation', element: h(page.default) }), h(Route, { path: '*', element: null })), h(Probe)))));
     await settle();
     return page;
   };
@@ -201,7 +201,7 @@ async function unavailable() {
     await withWorld(async w => {
       await w.mount(CHECKOUT, '/checkout?token_pack=pack25');
       assert.match(w.text(), /Top-up isn't available yet\./);
-      assert.equal(props(w.nodes().find(n => n.tagName === 'A')).href, '/plans-and-pricing');
+      assert.equal(props(w.nodes().find(n => n.tagName === 'A')).href, '/pricing/products');
       assert.deepEqual(w.requests, []); assert.equal(w.cartMounts,0);
     }, { reading });
   }
@@ -246,7 +246,7 @@ async function paymentSuccess() {
 async function retiredPath() {
   await withWorld(async w => {
     await w.mount(CHECKOUT, '/checkout?ai_topup=1');
-    assert.equal(w.path, '/plans-and-pricing#token-packs');
+    assert.equal(w.path, '/pricing/products#token-packs');
     assert.equal(w.cartMounts, 0); assert.deepEqual(w.requests, []); assert.deepEqual(w.cartCalls, []);
   });
   assert.equal(existsSync(new URL('../src/hooks/useAiTopupCart.js', import.meta.url)), false, 'obsolete hook is removed');
@@ -312,7 +312,7 @@ async function ordinaryReceipt() {
   for (const load of [async () => ({order:null}), async () => { throw Object.assign(new Error('Not found'),{status:404}); }]) {
     await withWorld(async w => {
       await w.mount(RECEIPT, '/checkout/confirmation?order=missing');
-      assert.equal(w.path, '/plans-and-pricing'); assert.equal(w.timers.length,0); assert.deepEqual(w.writes,[]);
+      assert.equal(w.path, '/pricing/products'); assert.equal(w.timers.length,0); assert.deepEqual(w.writes,[]);
     }, {load});
   }
   await withWorld(async w => {
@@ -345,7 +345,7 @@ async function incompleteProjection() {
 }
 async function pricingPacks() {
   await withWorld(async w => {
-    const page = await w.mount(PACKS, '/plans-and-pricing#token-packs');
+    const page = await w.mount(PACKS, '/pricing/products#token-packs');
     assert.ok(w.nodes().some(n => props(n).id === 'token-packs'));
     const links = w.nodes().filter(n => n.tagName === 'A');
     assert.deepEqual(links.map(n => [textOf(n),props(n).href]),
@@ -366,31 +366,31 @@ async function pricingPacks() {
 }
 async function pricingReadStates() {
   await withWorld(async w => {
-    await w.mount(PACKS, '/plans-and-pricing');
+    await w.mount(PACKS, '/pricing/products');
     assert.match(w.text(), /Top-up isn't available yet\./);
     assert.ok(!w.nodes().some(n => n.tagName==='A'));
   },{publicPacks:async()=>({packs:[]})});
   let n=0;
   await withWorld(async w => {
-    await w.mount(PACKS, '/plans-and-pricing');
+    await w.mount(PACKS, '/pricing/products');
     assert.match(w.text(), /Unreadable/); assert.ok(!w.nodes().some(n=>n.tagName==='A'));
     await w.click('Retry');
     assert.match(w.text(), /\$25 of tokens/);
     assert.ok(w.nodes().some(n=>n.tagName==='A' && props(n).href==='/checkout?token_pack=pack25'));
   },{publicPacks:async()=>{if(n++===0)throw new Error('unavailable');return {packs:[PACK]};}});
   await withWorld(async w => {
-    await w.mount(PACKS, '/plans-and-pricing');
+    await w.mount(PACKS, '/pricing/products');
     assert.match(w.text(), /Unreadable/); assert.ok(!w.nodes().some(n=>n.tagName==='A'));
   },{publicPacks:async()=>({packs:[{...PACK,currency:'eur'}]})});
 }
 async function pricingVisitor() {
   await withWorld(async w => {
-    await w.mount(PACKS, '/plans-and-pricing');
+    await w.mount(PACKS, '/pricing/products');
     const links=w.nodes().filter(n=>n.tagName==='A');
     assert.equal(links.length,2);
     for(const link of links){
       assert.equal(textOf(link),'Sign in to buy');
-      assert.equal(new URL(props(link).href,'https://example.test').searchParams.get('next'),'/plans-and-pricing#token-packs');
+      assert.equal(new URL(props(link).href,'https://example.test').searchParams.get('next'),'/pricing/products#token-packs');
     }
     assert.equal(w.cartMounts,0);
   },{visitor:true});

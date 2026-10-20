@@ -356,7 +356,6 @@ const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
 const PortfolioWorkspace = lazy(() => import('./pages/PortfolioWorkspace'));
 const PipelineWorkspace = lazy(() => import('./pages/PipelineWorkspace'));
 const FundModelingWorkspace = lazy(() => import('./pages/FundModelingWorkspace'));
-const InvestorPricingPage = lazy(() => import('./pages/InvestorPricingPage'));
 const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
@@ -477,6 +476,7 @@ import { shellRoleFor, branchOfUser, isSuperAdminUser, readHqView, writeHqView, 
 import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
 import { connectorsRedirect } from './pages/account/connectorsModel';
 import { signInPath as assistantSignInPath } from './pages/connect/assistantConsentModel';
+import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
@@ -543,11 +543,13 @@ export { ParamRedirect };
 export { ValidateZoneRedirect };
 
 // D755 §13 (#1915): /products keeps its query and its hash, so an old
-// /products#token-packs link still lands on the Token packs.
+// /products#token-packs link still lands on the Token packs. D786 (#2211):
+// the catalogue is at /pricing/products now.
 function ProductsRedirect() {
   const loc = useLocation();
-  return <Navigate to={{ pathname: '/plans-and-pricing', search: loc.search, hash: loc.hash }} replace />;
+  return <Navigate to={{ pathname: '/pricing/products', search: loc.search, hash: loc.hash }} replace />;
 }
+
 
 function DashboardRedirect() {
   const loc = useLocation();
@@ -824,9 +826,9 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Help Center
           </Link>
-          <Link to="/plans-and-pricing" onClick={() => setOpen(false)}
+          <Link to="/pricing" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Plans &amp; Pricing
+            Pricing
           </Link>
           <div className="my-1 border-t border-gray-100 dark:border-gray-800" role="separator" />
           <button type="button" onClick={() => { setOpen(false); onLogout(); }}
@@ -2449,7 +2451,8 @@ function AppInner() {
       <Route path="/for-service-partners" element={<DoorPage door="partners" />} />
       <Route path="/for-mentors" element={<Navigate to="/for-advisors" replace />} />
       <Route path="/for-advisors" element={<DoorPage door="advisors" />} />
-      <Route path="/pricing/investor" element={<InvestorPricingPage />} />
+      {/* D786 (#2211): the Investor tab of the one /pricing page. */}
+      <Route path="/pricing/investor" element={<InvestorPricingRedirect />} />
       <Route path="/register" element={<AuthScreen user={user} clearSession={clearSession}><RegisterPage /></AuthScreen>} />
       <Route path="/login" element={<AuthScreen user={user} clearSession={clearSession}><LoginPage /></AuthScreen>} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
@@ -3042,12 +3045,16 @@ function AppInner() {
           still reads it through `guard`, so inside the app's header, sidebar
           and footer; a visitor reads it in the public site's frame
           (ProductsPage draws `SitePage` for them). */}
-      <Route path="/plans-and-pricing" element={user ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />) : <ProductsPage />} />
+      {/* D786 (#2211): the catalogue, add-ons, licences and cart moved to
+          /pricing/products, unchanged; /plans-and-pricing redirects to /pricing. */}
+      <Route path="/pricing/products" element={user ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />) : <ProductsPage />} />
       {/* Product slide-over deep link — same page, pre-opens the detail panel. */}
-      <Route path="/plans-and-pricing/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      <Route path="/pricing/products/:productId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ProductsPage />)} />
+      <Route path="/plans-and-pricing" element={<PlansAndPricingRedirect />} />
+      <Route path="/plans-and-pricing/:productId" element={<ParamRedirect to="/pricing/products/:productId" />} />
       {/* Legacy /products redirects — keep for any saved links or external references. */}
       <Route path="/products" element={<ProductsRedirect />} />
-      <Route path="/products/:productId" element={<Navigate to="/plans-and-pricing" replace />} />
+      <Route path="/products/:productId" element={<ParamRedirect to="/pricing/products/:productId" />} />
       {/* One-time cart checkout + post-checkout confirmation (auth-protected). */}
       <Route path="/checkout" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutPage />)} />
       <Route path="/checkout/confirmation" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <CheckoutConfirmationPage />)} />

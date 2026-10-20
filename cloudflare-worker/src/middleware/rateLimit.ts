@@ -232,6 +232,16 @@ const BUCKETS: Bucket[] = [
     test: (p, m) => m === 'GET' && p === '/api/public/plans-and-packs',
     scope: 'ip',
   },
+  // D786 (#2211) — the Pricing page's public models read: per IP and
+  // fail-open, as the other public reads. Its origin is the bundle, so the
+  // bucket only bounds scraping.
+  {
+    name: 'public_ai_models',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && p === '/api/public/ai/models',
+    scope: 'ip',
+  },
   // 60 requests/min per user — default
   {
     name: 'user',

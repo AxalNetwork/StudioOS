@@ -61,26 +61,28 @@ test('a signed-out render of a plan card shows its price, its allowance and the 
 });
 
 test('Sign in round-trips: Subscribe returns to the plans, Buy returns to the Token packs', () => {
-  assert.equal(VISITOR_SIGN_IN, '/login?next=%2Fplans-and-pricing');
+  assert.equal(VISITOR_SIGN_IN, '/login?next=%2Fpricing%2Fproducts');
   const back = (href) => sameOriginNextPath(new URLSearchParams(href.split('?')[1]).get('next'), 'https://axal.vc');
-  assert.equal(back(VISITOR_SIGN_IN), '/plans-and-pricing');
+  assert.equal(back(VISITOR_SIGN_IN), '/pricing/products');
   const buy = `/login?next=${encodeURIComponent(TOKEN_PACKS_PATH)}`;
-  assert.equal(buy, '/login?next=%2Fplans-and-pricing%23token-packs');
-  assert.equal(back(buy), '/plans-and-pricing#token-packs', 'the hash survives the sign-in');
+  assert.equal(buy, '/login?next=%2Fpricing%2Fproducts%23token-packs');
+  assert.equal(back(buy), '/pricing/products#token-packs', 'the hash survives the sign-in');
   assert.ok(read('frontend/src/components/products/TokenPacksSection.jsx').includes("'/login?next=' + encodeURIComponent(TOKEN_PACKS_PATH)"), 'CR7\'s Sign in to buy is that link');
   assert.ok(read('frontend/src/pages/LoginPage.jsx').includes("sameOriginNextPath(new URLSearchParams(window.location.search).get('next'), window.location.origin)"));
 });
 
 test('the page opens without sign-in; a product\'s page and the checkout still need it', async () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/plans-and-pricing" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
-  for (const path of ['/plans-and-pricing/:productId', '/checkout', '/checkout/confirmation']) {
+  assert.match(app, /<Route path="\/pricing\/products" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
+  for (const path of ['/pricing/products/:productId', '/checkout', '/checkout/confirmation']) {
     assert.match(app, new RegExp(`<Route path="${path.replace(/[/:]/g, (c) => `\\${c}`)}" element=\\{guard\\(\\[`), `${path} stays guarded`);
   }
   const { isPublicPath } = await import('../src/lib/api.js');
-  assert.equal(isPublicPath('/plans-and-pricing'), true, 'a background 401 does not bounce a visitor');
-  assert.equal(isPublicPath('/plans-and-pricing/'), true);
-  assert.equal(isPublicPath('/plans-and-pricing/prod_1'), false);
+  // D786: the catalogue is /pricing/products, under the one /pricing page.
+  assert.equal(isPublicPath('/pricing/products'), true, 'a background 401 does not bounce a visitor');
+  assert.equal(isPublicPath('/pricing/products/'), true);
+  assert.equal(isPublicPath('/pricing'), true);
+  assert.equal(isPublicPath('/pricing/products/prod_1'), false);
   assert.equal(isPublicPath('/checkout'), false);
 });
 
@@ -88,7 +90,7 @@ test('each reader keeps a frame: a member the app\'s header, sidebar and footer,
   const app = read('frontend/src/App.jsx');
   // `guard` wraps RequireAuth, which draws ProtectedLayout: the member's branch must go through it.
   assert.match(app, /const guard = \(roles, component\) => \(\s*<RequireAuth /);
-  assert.match(app, /path="\/plans-and-pricing" element=\{user \? guard\(/, 'a signed-in reader gets the app frame');
+  assert.match(app, /path="\/pricing\/products" element=\{user \? guard\(/, 'a signed-in reader gets the app frame');
   const page = read('frontend/src/pages/ProductsPage.jsx');
   assert.match(page, /import SitePage from '\.\.\/components\/site\/SitePage';/);
   assert.match(page, /if \(!member\) return <SitePage title="Plans and pricing">\{page\}<\/SitePage>;/, 'a visitor gets the site nav and footer');
@@ -98,7 +100,7 @@ test('each reader keeps a frame: a member the app\'s header, sidebar and footer,
 test('/products keeps its query and its hash when it redirects', () => {
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/products" element=\{<ProductsRedirect \/>\} \/>/);
-  assert.match(app, /function ProductsRedirect\(\) \{\s*const loc = useLocation\(\);\s*return <Navigate to=\{\{ pathname: '\/plans-and-pricing', search: loc\.search, hash: loc\.hash \}\} replace \/>;/);
+  assert.match(app, /function ProductsRedirect\(\) \{\s*const loc = useLocation\(\);\s*return <Navigate to=\{\{ pathname: '\/pricing\/products', search: loc\.search, hash: loc\.hash \}\} replace \/>;/);
 });
 
 test('a visitor gets none of the member-only parts, and none of their reads', () => {

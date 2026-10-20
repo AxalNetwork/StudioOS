@@ -276,7 +276,7 @@ export default function PaywallModal({ user }) {
           <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
             {isInvestorMode && (
               <Link
-                to="/pricing/investor"
+                to="/pricing?for=investor"
                 onClick={() => setOpen(false)}
                 className="text-violet-700 dark:text-violet-300 hover:underline mr-2"
               >

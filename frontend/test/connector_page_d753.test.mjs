@@ -134,7 +134,7 @@ test('the key: a lowercased code word of 1 to 40 characters, kept by the canonic
   assert.equal(accountPathFor({ section: 'connectors', key: 'a-b' }), '/account/connectors');
   const settings = read('frontend/src/pages/SettingsPage.jsx');
   assert.match(settings, /const connectorKey = active === 'connectors' \? connectorKeyFor\(location\.pathname\) : null;/);
-  assert.match(settings, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey \}\);/);
+  assert.match(settings, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage \}\);/);
   assert.equal(connectorPagePath('Stripe'), '/account/connectors/stripe');
   assert.equal(connectorPagePath('../x'), '/account/connectors');
 });

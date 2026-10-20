@@ -1,4 +1,4 @@
-// D755 (#1915, CR5 PR 2) — every plan's AI allowance on /plans-and-pricing,
+// D755 (#1915, CR5 PR 2) — every plan's AI allowance on /pricing/products (D786; /plans-and-pricing until then),
 // from `GET /api/public/plans-and-packs` (CR2, #1919). Pure, so the desktop
 // cards, the phone rows and the tests read the same words. The Token packs
 // section is CR7's (components/products/TokenPacksSection.jsx, #1985).
@@ -147,7 +147,7 @@ export function visitorPlanProducts(reading) {
 }
 
 /** Where a visitor's Subscribe goes: sign in, then back to the plans. */
-export const VISITOR_SIGN_IN = `/login?next=${encodeURIComponent('/plans-and-pricing')}`;
+export const VISITOR_SIGN_IN = `/login?next=${encodeURIComponent('/pricing/products')}`;
 
 /**
  * D755 §13 (#1915): a tier of the public /pricing page with its prices from

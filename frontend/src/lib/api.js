@@ -47,6 +47,7 @@ export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryPersonal.js';
 export * from './api/partnerSettlements.js';
+export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
@@ -228,10 +229,11 @@ export function isPublicPath(pathname) {
     // /articles/edit/:id) are intentionally NOT listed so a genuine
     // session expiry there still bounces to /login.
     || currentPath === '/articles'
-    || currentPath.startsWith('/pricing/')
-    // D755 §13 (#1915) — /plans-and-pricing opens to visitors. Exact: a
-    // product's page (/plans-and-pricing/:id) and /checkout still need sign-in.
-    || currentPath === '/plans-and-pricing'
+    // D786 (#2211): the catalogue at /pricing/products opens to visitors as
+    // /plans-and-pricing did (D755 §13). A product's page (/pricing/products/:id)
+    // and /checkout still need sign-in.
+    || currentPath === '/pricing'
+    || (currentPath.startsWith('/pricing/') && !currentPath.startsWith('/pricing/products/'))
     || currentPath.startsWith('/partner-onboarding/')
     || currentPath.startsWith('/partners/onboard')
     // The attester's side of an advisor proof claim. Reached by a link an
@@ -1629,7 +1631,9 @@ export const api = {
   // call is not a read, and the 30s default would abort a run still being
   // paid for.
   // D768: every run the rail starts carries `rail: { page, option, record }` (D765).
-  proposeValidate: (projectId, data) => request(`/founder/validate/propose/${projectId}`, {
+  // D778 part 4: `headers` are the press's own rail context, taken on the click (FillProposals).
+  proposeValidate: (projectId, data, headers) => request(`/founder/validate/propose/${projectId}`, {
+    ...(headers ? { headers } : {}),
     method: 'POST', timeoutMs: 60_000, body: JSON.stringify({ ...data, ...railBody() }),
   }),
   // `body` carries `{ value }` for an accept-with-edit and is omitted otherwise.
@@ -2723,14 +2727,17 @@ export const api = {
   // Task #16 (DE) — Pitch Deck Builder rewrite.
   deckMethods: () => request('/decks/methods'),
   deckRecommend: (projectId) => request(`/decks/recommend?project_id=${projectId}`),
-  deckApplyMethod: (projectId, methodId) =>
-    request('/decks/apply-method', { method: 'POST', body: JSON.stringify({ project_id: projectId, method_id: methodId }) }),
+  // D778 part 5: a template the model fills answers `{ proposal }` (kept or
+  // discarded like a fill); the Spin-Out demo day still answers `{ deck }`.
+  // `headers` is the press's own rail context (`railPressHeaders`).
+  deckApplyMethod: (projectId, methodId, headers) =>
+    request('/decks/apply-method', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({ project_id: projectId, method_id: methodId }) }),
   // Task #14 — re-runs autofill against the deck's existing method_id.
   // D767 (#2096): it PROPOSES the result and changes no version: the answer
   // is `{ proposal }` plus a per-slide `slide_confidence[]`. 409
   // `no_method_id` means the deck was created before the fielded editor;
   // the client directs the user to /apply-method first.
-  deckAutofill: (id) => request(`/decks/${id}/autofill`, { method: 'POST', body: '{}' }),
+  deckAutofill: (id, headers) => request(`/decks/${id}/autofill`, { ...(headers ? { headers } : {}), method: 'POST', body: '{}' }),
   // D767 — keep the proposal as the new current version, or discard it (only it).
   deckKeepProposal: (proposalId) => request(`/decks/proposals/${proposalId}/keep`, { method: 'POST', body: '{}' }),
   deckDiscardProposal: (proposalId) => request(`/decks/proposals/${proposalId}`, { method: 'DELETE' }),
@@ -5490,7 +5497,10 @@ export const adminX = {
       method: 'PUT', body: JSON.stringify(proposal_uid ? { index, alt_text, proposal_uid } : { index, alt_text }),
     }),
   lintPost: (id) => request(`/admin/x/posts/${id}/lint`, { method: 'POST', body: '{}' }),
-  approvePost: (id) => request(`/admin/x/posts/${id}/approve`, { method: 'POST', body: '{}' }),
+  // D780: Approve keeps the captions Eadwyn proposed that the composer still offers.
+  approvePost: (id, altTextProposalUids = []) => request(`/admin/x/posts/${id}/approve`, {
+    method: 'POST', body: JSON.stringify(altTextProposalUids.length ? { alt_text_proposal_uids: altTextProposalUids } : {}),
+  }),
   sendPost: (id, { override_reason } = {}) =>
     request(`/admin/x/posts/${id}/send`, {
       method: 'POST',
