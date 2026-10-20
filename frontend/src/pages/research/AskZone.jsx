@@ -9,7 +9,8 @@ import {
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, MeteredNote } from '../../workspaces/canvasKit';
-import { useRailOption } from '../../ui/railCrumbs';
+import { useRailOption, useRailPage } from '../../ui/railCrumbs';
+import { railOptionFor } from '../../lib/railOptions';
 
 /**
  * Research · Ask — answers drawn only from your own library, or no answer.
@@ -122,11 +123,17 @@ const NARROW = {
  */
 const scopeFor = (view) => (view === 'discarded' ? 'all' : SCOPES.has(view) ? view : 'session');
 
+/** This zone, as the profiles' option inventories name it (`lib/railOptions`). */
+const ZONE_FILE = 'pages/research/AskZone.jsx';
+
 export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) {
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   // D771 (#2097): `busy` is the question at the model, so the rail names that option while it runs.
-  useRailOption(busy ? 'ask:library' : null, 'Ask');
+  // D772 (#2098): under the key the member's profile gives it on this page.
+  const railPage = useRailPage()?.page ?? null;
+  const askOption = railOptionFor(railPage, { file: ZONE_FILE, control: 'ask' });
+  useRailOption(busy ? askOption?.key : null, askOption?.label);
   const [error, setError] = useState('');
   const [lib, setLib] = useState({ loading: true, error: '', payload: null });
   const [view, setView] = useState('session');
@@ -452,7 +459,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
 
         <ZoneDraft
           surface="research/ask"
-          railOption="draft:research/ask"
+          railOption={railOptionFor(railPage, { file: ZONE_FILE, control: 'research/ask' })?.key}
           scopeKey={sessionUid}
           label="Draft · session brief"
           accept="Accept brief"

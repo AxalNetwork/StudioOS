@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import sessionsRoutes from '../src/routes/founder_validate_sessions.ts';
@@ -538,9 +538,7 @@ test('a conversation too long for one run is refused with the engine\'s sentence
 
 test('a spent budget is refused with the router\'s sentence, and the transcript is kept', async () => {
   const f = world();
-  for (const key of ['founder:free', 'other']) {
-    f.db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, 0, 0, 1)').run(key);
-  }
+  setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
   const id = await importedCall(f);
   const out: any = await digestSession(f.env, { sessionId: id, userId: ME, trigger: 'call_imported' });
   assert.equal(out.status, 'refused');

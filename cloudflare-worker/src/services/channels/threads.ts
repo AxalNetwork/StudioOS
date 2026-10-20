@@ -1091,6 +1091,10 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
     ).bind(unused),
     ...expireCapturesStatements(env, now),
   ]);
+  // #1939 part 3: a lapsed (or otherwise ended) link keeps no venture choice, so relinking starts clean.
+  await env.DB.prepare(`DELETE FROM whatsapp_link_settings WHERE integration_id NOT IN
+      (SELECT id FROM integrations WHERE provider_key = 'whatsapp_link' AND status = 'active')`).run()
+    .catch((e: unknown) => { if (!/no such table: whatsapp_link_settings/.test(String((e as Error)?.message ?? e))) throw e; });
   const drafts = await dropEmptyDrafts(env, { before: cutoff });
   return {
     drafts,

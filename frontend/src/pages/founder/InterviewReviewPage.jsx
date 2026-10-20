@@ -13,6 +13,7 @@ import FormLightbox from '../cycles/FormLightbox';
 import { InterviewEvidenceFields, PainSeverity } from './validatePieces';
 import InterviewRecording from '../../workspaces/founder/InterviewRecording';
 import useAssistMode from '../../hooks/useAssistMode';
+import { useSessionPlayer } from './sessionPlayer.js';
 
 /**
  * Validate › Customer research › an interview (D697, #1659): Customer
@@ -47,12 +48,9 @@ import useAssistMode from '../../hooks/useAssistMode';
  * audio. Every dialog goes through `openDialog`, which `CycleRoute` draws
  * after its size container (decision 21).
  *
- * THE PLAYER. #1692's audio route answers one signed URL per chunk, valid 120
- * seconds, single-use, served as an attachment. So each part is fetched once,
- * as a blob, and the parts play in `seq` order in one `<audio>` from object
- * URLs; an expired or refused URL asks the route again and goes on from that
- * part; a replay plays the blobs already held; the object URLs are revoked
- * when the session changes or the page leaves.
+ * THE PLAYER is `useSessionPlayer` (`sessionPlayer.js`): #1692's audio route,
+ * one blob per part, played in `seq` order; the session page plays a chat's
+ * voice notes with the same hook (D754, #1980).
  */
 
 // While the job runs, it writes the summary itself: Summarise is not offered then.
@@ -71,7 +69,6 @@ const PILL = {
 };
 const PILL_DEFAULT = 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400';
 const usd = (micro) => `$${(Number(micro || 0) / 1e6).toFixed(4)}`;
-const bySeq = (parts) => [...(Array.isArray(parts) ? parts : [])].sort((a, b) => Number(a.seq) - Number(b.seq));
 
 function useDarkTheme() {
   const read = () => typeof document !== 'undefined' && !!document.documentElement?.classList?.contains('dark');
@@ -198,26 +195,19 @@ export default function InterviewRecord({
   // D771 (#2097): while the summary is written, the rail is that option's.
   useRailOption(summarising.busy ? 'summarise:session' : null, 'Summarise');
   const [search, setSearch] = useState('');
-  const [audioError, setAudioError] = useState('');
-  const player = useRef(null);
-  const held = useRef({ session: null, urls: [] });
 
   // The session routes answer only the venture's own: read them only when the read sends Transcript.
   const loadList = useCallback(() => (parts.sessions ? sessions.list(id).then(setList).catch(() => setList(null)) : undefined), [parts.sessions, sessions, id]);
   useEffect(() => { void loadList(); }, [loadList]);
   const chosen = pickSession(list?.items, params.get('session'));
   const chosenId = chosen?.id ?? null;
+  const { player, held, audioError, setAudioError, open: openRecording } = useSessionPlayer(sessions, chosenId);
   const loadDetail = useCallback(() => (chosenId == null ? undefined : sessions.get(chosenId).then(setDetail).catch(() => setDetail(null))), [sessions, chosenId]);
   const loadReceipt = useCallback(() => (chosenId == null ? undefined : sessions.receipt(chosenId).then(setReceipt).catch(() => setReceipt(null))), [sessions, chosenId]);
   useEffect(() => {
     setDetail(undefined); setReceipt(undefined); setSummarising({ busy: false, error: null }); setAudioError('');
     void loadDetail(); void loadReceipt();
   }, [loadDetail, loadReceipt]);
-  // The blobs belong to one session: a new session, or leaving the page, frees them.
-  useEffect(() => () => {
-    for (const url of held.current.urls) URL.revokeObjectURL?.(url);
-    held.current = { session: null, urls: [] };
-  }, [chosenId]);
 
   const items = Array.isArray(list?.items) ? list.items : [];
   const session = detail?.session || chosen;
@@ -239,46 +229,6 @@ export default function InterviewRecord({
   const assign = async (segId, label) => {
     await sessions.setSpeaker(session.id, segId, label);
     setDetail((d) => ({ ...d, segments: d.segments.map((s) => (s.id === segId ? { ...s, speaker_label: label } : s)) }));
-  };
-
-  // ---- Open recording ----------------------------------------------------
-  const playFrom = (index) => {
-    const el = player.current;
-    const urls = held.current.urls;
-    if (!el || index >= urls.length) return;
-    el.src = urls[index];
-    el.onended = () => playFrom(index + 1);
-    void el.play?.()?.catch?.(() => {});
-  };
-  const fetchPart = async (part) => {
-    if (!part?.url || (part.expires_at && Date.parse(part.expires_at) <= Date.now())) throw new Error('expired');
-    const res = await fetch(part.url);
-    if (!res.ok) throw new Error('refused');
-    return URL.createObjectURL(await res.blob());
-  };
-  const openRecording = async () => {
-    setAudioError('');
-    if (chosenId == null) { setAudioError('No session is chosen.'); return; }
-    player.current?.scrollIntoView?.({ block: 'center' });
-    // A replay plays what is held and fetches nothing.
-    if (held.current.session === chosenId && held.current.urls.length) { playFrom(0); return; }
-    try {
-      let partsList = bySeq((await sessions.audio(chosenId))?.parts);
-      const urls = [];
-      for (let i = 0; i < partsList.length; i += 1) {
-        let url;
-        try { url = await fetchPart(partsList[i]); } catch {
-          // Expired or refused: fresh URLs, then go on from this part.
-          partsList = bySeq((await sessions.audio(chosenId))?.parts);
-          url = await fetchPart(partsList.find((p) => Number(p.seq) === Number(partsList[i]?.seq)) || partsList[i]);
-        }
-        urls.push(url);
-      }
-      held.current = { session: chosenId, urls };
-      playFrom(0);
-    } catch (e) {
-      setAudioError(e?.message && !['expired', 'refused'].includes(e.message) ? e.message : 'The recording could not be played.');
-    }
   };
 
   // ---- The record's own actions -------------------------------------------

@@ -22,6 +22,7 @@ import {
   FOUNDER_HANDLERS, FOUNDER_KINDS, FOUNDER_OPTIONS, FOUNDER_QUIET_PAGES,
 } from '../src/lib/railOptions/founder.js';
 import { pageKeyFor } from '../src/lib/railPages.js';
+import { railOptionFor } from '../src/lib/railOptions/index.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
@@ -163,7 +164,7 @@ test('every founder page has an option or a reason it has none, never both', () 
  * each: the founder's options there are on the rail. A section joins this
  * list in the PR that wires it.
  */
-const WIRED = ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Research'];
+const WIRED = ['Studio', 'Validate', 'Build', 'Raise', 'Grow', 'Research', 'Network'];
 const sectionOf = (page) => page.split(' · ')[1];
 const routeOf = (route) => {
   const [path, query] = route.split('?');
@@ -193,6 +194,14 @@ const railKeys = (src) => [
   ...[...src.matchAll(/useRailOption\(([^;]*?)\);/g)].flatMap((m) => [...m[1].matchAll(/'([a-z]+:[a-z0-9_/-]+)'/g)].map((k) => k[1])),
   ...[...src.matchAll(/railOption="([a-z]+:[a-z0-9_/-]+)"/g)].map((m) => m[1]),
 ];
+/**
+ * D772 (#2098): a zone several profiles share names its control instead, and
+ * `railOptionFor` reads the key from the member's inventory. These are the
+ * keys its controls resolve to on a founder's page.
+ */
+const sharedKeys = (src, file, page) => [...src.matchAll(/railOptionFor\([^)]*control: '([^']+)'/g)]
+  .map((m) => railOptionFor(page, { file: file.replace(/^frontend\/src\//, ''), control: m[1] })?.key)
+  .filter(Boolean);
 
 test('every option names the address it is pressed on', () => {
   for (const o of FOUNDER_OPTIONS) {
@@ -202,6 +211,8 @@ test('every option names the address it is pressed on', () => {
 
 test('on a wired section, each option is on its page and names itself to the rail', () => {
   assert.ok(WIRED.every((w) => Object.keys(CANVAS.profiles.Founder).includes(w)), 'a wired section is not the canvas\'s');
+  // D771's last PR (Network) wires the last section: every founder section is on the rail.
+  assert.deepEqual([...WIRED].sort(), Object.keys(CANVAS.profiles.Founder).sort(), 'a founder section is not wired');
   for (const o of FOUNDER_OPTIONS.filter((x) => WIRED.includes(sectionOf(x.page)))) {
     const { path, search } = routeOf(o.route);
     assert.equal(pageKeyFor(path, 'founder', { search }), o.page,
@@ -209,7 +220,10 @@ test('on a wired section, each option is on its page and names itself to the rai
     if (o.handler === 'none') continue;
     const named = o.key.startsWith('fill:') ? fillNamed(sectionOf(o.page))
       : cycleDraft(o) ? draftNamed()
-      : (o.rail || [...new Set(o.at.map(([file]) => file))]).every((file) => railKeys(codeOnly(read(file))).includes(o.key));
+      : (o.rail || [...new Set(o.at.map(([file]) => file))]).every((file) => {
+        const src = codeOnly(read(file));
+        return railKeys(src).includes(o.key) || sharedKeys(src, file, o.page).includes(o.key);
+      });
     assert.ok(named, `${o.page} / ${o.key}: no useRailOption('${o.key}', …) where it lives`);
   }
   // And the other way: every option a wired file names is listed there.

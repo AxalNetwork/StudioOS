@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Shield, Users, ChevronDown, Briefcase, Check, ShieldCheck, FileText, Sparkles, KeyRound, Heart, Ticket, CreditCard, Package, FlaskConical, Landmark } from 'lucide-react';
 import BrandIcon from '../ui/BrandIcon';
+import { useAuth } from '../hooks/useAuthSync';
+import { isSuperAdminUser } from '../lib/shellRole';
+import { crumbsOfKey, pageFor } from '../lib/railPages';
+import AdminBoardFrame from './admin/AdminBoardFrame';
 // D648 (#1448) — one component per console, each in its own file under
 // ./admin/consoles/ and each loading only its own data. This page is the
 // shell: the header, the section dropdown, and the one console it mounts.
@@ -151,6 +155,22 @@ function AdminSectionNav({ value, onChange, badges }) {
   );
 }
 
+/**
+ * D775 (#2101, the owner's answer A) — the board an open tab is, for the
+ * viewer's tier, or null. It is read from D768's page map, so the rail's name
+ * and its page key never disagree: `?tab=users` is "Users" for both tiers,
+ * `?tab=personas` is a Super Admin board and `?tab=kyc` an Admin one. A tab
+ * that is no board of the viewer's profile (the map answers the off-canvas
+ * Admin console) is null, as is every tab for a tier with no board here.
+ * So is Spin-Out applications, which D317 keeps rail-less
+ * (`workspace_frame_contract.test.mjs`).
+ */
+export function tabBoard(tab, role) {
+  if (tab === 'lab-applications') return null;
+  const page = pageFor('/admin', role, { search: `?tab=${tab}` });
+  return page && !page.offCanvas ? crumbsOfKey(page.key).module : null;
+}
+
 // `section` locks the console to one tab and drops its own header and section
 // nav, so a hosting page can compose one console under a header of its own.
 // Since D648 each console is its own component and reads only its own data;
@@ -188,7 +208,14 @@ export default function AdminPage({ onImpersonate, section = null }) {
   const [pendingProfiles, setPendingProfiles] = useState(0);
   const [pendingKyc, setPendingKyc] = useState(0);
 
-  return (
+  // D775 — the one rail on this page sits around the whole page, named for
+  // the open tab's board, in the viewer's tier (`AdminBoardFrame`). A host
+  // that locks the console to one `section` draws its own rail, so it gets
+  // the panel alone.
+  const user = useAuth()?.user ?? null;
+  const board = section ? null : tabBoard(tab, isSuperAdminUser(user) ? 'super_admin' : user?.role);
+
+  const page = (
     <div>
       {!section && (
         <>
@@ -232,5 +259,11 @@ export default function AdminPage({ onImpersonate, section = null }) {
       {tab === 'profiles' && <PartnerProfilesConsole onPendingCount={setPendingProfiles} />}
       {tab === 'kyc' && <KycConsole onPendingCount={setPendingKyc} />}
     </div>
+  );
+  if (!board) return page;
+  return (
+    <AdminBoardFrame workspace={board} note={`Eadwyn reads the ${board} panel on this page. Nothing here changes until you act on it.`} data-testid="admin-tab-frame">
+      {page}
+    </AdminBoardFrame>
   );
 }

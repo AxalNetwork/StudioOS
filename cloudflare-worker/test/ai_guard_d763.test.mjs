@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 import {
   GUARD_CATALOGUE, GUARD_CATEGORIES, GUARD_COPY, GUARD_SLICE_CHARS, WELLBEING_PATH, combine, decide, parseVerdict, refusalFor, sliceForGuard,
 } from '../src/services/ai/guard.ts';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { usdToMicro } from '../src/services/aiBudget.ts';
 import { run, __resetForTest, estimateCostUsd, guardQuoteMicro, loadGuardrailCounters } from '../src/services/aiRouter.ts';
 import { classifyInput } from '../src/services/advisor/guardrails.ts';
@@ -175,7 +175,7 @@ const modelMicro = usdToMicro(estimateCostUsd(MID, MODEL_USAGE.prompt_tokens, MO
 function world({ verdict = () => 'safe', answer = () => ({ response: 'An answer.', usage: MODEL_USAGE }), funded = true } = {}) {
   __resetForTest();
   const f = aiBudgetFixture();
-  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+  setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
   if (funded) f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,5000000) ON CONFLICT(user_id) DO UPDATE SET balance_microusd=excluded.balance_microusd').run();
   const calls = { guard: [], model: [] };
   const AI = {

@@ -9,7 +9,8 @@
  *                 last_message_at, last_inbound_at, interview_id,
  *                 interviewee_name, session_id, can_reply, reply_window_open }
  *   message     { uid, side: 'contact' | 'me', kind: 'text' | 'voice', text, sent_at,
- *                 transcription_failure: { reason, sentence, retry } | null }
+ *                 transcription_failure: { reason, sentence, retry } | null,
+ *                 voice_fetch_by: ISO | null }
  * and a meeting ref (`interview_channel_refs`):
  *   { uid, provider, join_url, starts_at, ends_at, status, last_error, session_id }
  *
@@ -76,6 +77,32 @@ export function threadEngineLine(t) {
 const NOTE_KIND = { voice: 'Voice note', audio: 'Audio file', video_note: 'Round video' };
 export const noteKind = (m) => NOTE_KIND[m?.media] || 'Voice note';
 
+/**
+ * D754 §5 (#1980): WhatsApp keeps a voice note's media for 7 days, so a
+ * waiting WhatsApp chat says "Add this chat to an interview by <date> to keep
+ * its voice notes", from the earliest `voice_fetch_by` the thread read gives
+ * its messages (`routes/channels.ts`, set only on a WhatsApp voice note still
+ * awaiting transcription). Null for any other provider, a chat already in an
+ * interview or ignored, or one with no such date. The date is a display
+ * deadline: the Worker never refuses a fetch by it.
+ */
+export function voiceKeepBy(thread, messages, fmt = keepByDay) {
+  if (thread?.provider !== 'whatsapp' || thread.status !== 'pending') return null;
+  const dates = (Array.isArray(messages) ? messages : [])
+    .map((m) => Date.parse(m?.voice_fetch_by))
+    .filter(Number.isFinite);
+  if (!dates.length) return null;
+  const day = fmt(new Date(Math.min(...dates)).toISOString());
+  return day ? `Add this chat to an interview by ${day} to keep its voice notes.` : null;
+}
+
+/** "25 Oct": the day, in the reader's own zone. */
+export function keepByDay(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 /** One message in the thread view: who wrote it, and a note said as the kind it is. */
 export function messageView(m, contact) {
   const failure = m?.kind === 'voice' ? voiceFailure(m) : null;
@@ -88,24 +115,6 @@ export function messageView(m, contact) {
     text: typeof m?.text === 'string' && m.text ? m.text : null,
     failure,
   };
-}
-
-/**
- * D754 §6: "Add this chat to an interview by <date> to keep its voice notes",
- * from the thread read's `voice_fetch_by` — WhatsApp's 7-day rule. The Worker
- * sends none for Telegram, whose files have no documented expiry (D756
- * §1.12), so no line is drawn there. Null when there is no date.
- */
-export function keepByLine(m, when = keepByDay) {
-  if (m?.kind !== 'voice' || m?.awaiting_transcription !== true || !m?.voice_fetch_by) return null;
-  const day = when(m.voice_fetch_by);
-  return day ? `Add this chat to an interview by ${day} to keep its voice notes` : null;
-}
-
-/** "26 Oct": the day, in the reader's own zone. */
-function keepByDay(iso) {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
 /** Where a spent AI allowance is read, until #1916 gives the top-up its own path. */

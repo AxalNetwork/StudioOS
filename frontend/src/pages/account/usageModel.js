@@ -12,6 +12,7 @@
  *     their companies, and nothing below takes a company.
  */
 import { aiTokenState, purchaseState } from '../../lib/aiTokens';
+import { dayCapped, noPlan } from '../../lib/planAllowance';
 
 export const NOT_COUNTED = 'Not counted';
 
@@ -118,7 +119,8 @@ const pct = (used, of) => (of > 0 ? Math.min(100, Math.round((used / of) * 100))
 export function allowanceView(b, now = new Date()) {
   if (!budgetReadable(b)) return null;
   const resetIn = untilUtcMidnight(now);
-  const noDaily = b.daily_microusd === 0;
+  // D783: a member has no daily limit (`daily_capped: false`), so there is no Today period.
+  const noDaily = !dayCapped(b) || b.daily_microusd === 0;
   const noMonthly = b.monthly_microusd === 0;
   const dayTaken = b.day_spend_microusd + b.day_reserved_microusd;
   const monthTaken = b.month_spend_microusd + b.month_reserved_microusd;
@@ -132,6 +134,8 @@ export function allowanceView(b, now = new Date()) {
   return {
     plan: planLabel(b.licence),
     noAllowance: noDaily && noMonthly,
+    noPlan: noPlan(b),
+    dayCapped: dayCapped(b),
     today: noDaily ? null : {
       used: microUsd(b.day_spend_microusd), of: microUsd(b.daily_microusd),
       pct: pct(dayTaken, b.daily_microusd), reset: `Resets at 00:00 UTC · ${resetIn}`,

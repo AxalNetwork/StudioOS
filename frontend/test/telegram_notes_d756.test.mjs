@@ -13,7 +13,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import { keepByLine, messageView, noteKind } from '../src/pages/founder/channelThreads.js';
+import { messageView, noteKind, voiceKeepBy } from '../src/pages/founder/channelThreads.js';
 import { MessageList } from '../src/pages/founder/ChannelsInbox.jsx';
 
 const h = React.createElement;
@@ -53,16 +53,17 @@ test('a note the Worker refused says the kind and the Worker\'s sentence, in its
   assert.deepEqual(v.failure, { sentence: "Round video messages can't be transcribed yet.", action: null });
 });
 
-test('no keep-by line for Telegram; WhatsApp\'s comes from the Worker\'s date, only while the note waits', () => {
+// WhatsApp's keep-by line is the thread's, once per waiting chat (`voiceKeepBy`, D754 §5, #1980,
+// held by record_consent_d754.test.mjs). Here: Telegram never gets one.
+test('no keep-by line for Telegram; WhatsApp\'s comes from the Worker\'s date, once per waiting chat', () => {
   const day = (iso) => `day(${iso.slice(0, 10)})`;
-  assert.equal(keepByLine(note({ voice_fetch_by: null }), day), null, 'Telegram: the Worker sends no date');
-  assert.equal(keepByLine(note({ voice_fetch_by: BY }), day), 'Add this chat to an interview by day(2026-10-26) to keep its voice notes');
-  assert.equal(keepByLine(note({ voice_fetch_by: BY, awaiting_transcription: false }), day), null, 'a transcribed note keeps nothing');
-  assert.equal(keepByLine(note({ voice_fetch_by: BY, kind: 'text' }), day), null);
-  assert.equal(keepByLine(note({ voice_fetch_by: 'not a date' })), null, 'an unreadable date draws no line');
+  const tg = { provider: 'telegram', status: 'pending' };
+  assert.equal(voiceKeepBy(tg, [note({ voice_fetch_by: null })], day), null, 'Telegram: the Worker sends no date');
+  assert.equal(voiceKeepBy(tg, [note({ voice_fetch_by: BY })], day), null, 'Telegram: no line even if a date arrived');
+  assert.equal(voiceKeepBy({ provider: 'whatsapp', status: 'pending' }, [note({ voice_fetch_by: BY })], day), 'Add this chat to an interview by day(2026-10-26) to keep its voice notes.');
 });
 
-test('the inbox draws each Telegram note by its kind, with no keep-by line; a WhatsApp note keeps its line', async () => {
+test('the inbox draws each Telegram note by its kind, and no note draws a keep-by line of its own', async () => {
   const messages = [
     note({ uid: 'v', media: 'voice' }),
     note({ uid: 'a', media: 'audio' }),
@@ -79,7 +80,6 @@ test('the inbox draws each Telegram note by its kind, with no keep-by line; a Wh
   } finally { await tg.unmount(); }
   const wa = await mount(h(MessageList, { messages: [note({ uid: 'w', voice_fetch_by: BY })], contact: 'Ada', threadUid: 't2', api: {} }));
   try {
-    assert.ok(wa.by('voice-keep-by-w'), 'WhatsApp\'s waiting note says by when');
-    assert.match(wa.text(), /Add this chat to an interview by .+ to keep its voice notes/);
+    assert.equal(wa.by('voice-keep-by-w'), undefined, 'WhatsApp\'s line is the thread\'s (voiceKeepBy), never one per note');
   } finally { await wa.unmount(); }
 });

@@ -218,9 +218,12 @@ export async function linkedWaId(env: Env, link: { uid: string; credentials_enc:
 
 /** Unlink: the row stays, disconnected, with nothing that names the number but its mask. */
 export async function unlinkMember(env: Env, userId: number): Promise<boolean> {
-  const [, r] = await env.DB.batch([
+  const [, , r] = await env.DB.batch([
     env.DB.prepare(`UPDATE channel_link_codes SET cancelled_at = datetime('now'), updated_at = datetime('now')
       WHERE user_id = ? AND provider = 'whatsapp_link' AND activated_at IS NULL AND cancelled_at IS NULL`).bind(userId),
+    // #1939: the venture choice goes with the link. The row stays (disconnected), so no cascade would clear it.
+    env.DB.prepare(`DELETE FROM whatsapp_link_settings
+      WHERE integration_id IN (SELECT id FROM integrations WHERE provider_key = 'whatsapp_link' AND user_id = ?)`).bind(userId),
     env.DB.prepare(`UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, external_account_id = NULL, updated_at = CURRENT_TIMESTAMP
       WHERE provider_key = 'whatsapp_link' AND status = 'active' AND user_id = ?`).bind(userId),
   ]);
@@ -228,9 +231,61 @@ export async function unlinkMember(env: Env, userId: number): Promise<boolean> {
 }
 
 export async function unlinkSender(env: Env, integrationId: number): Promise<boolean> {
-  const r = await env.DB.prepare(`UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, external_account_id = NULL, updated_at = CURRENT_TIMESTAMP
-    WHERE provider_key = 'whatsapp_link' AND status = 'active' AND id = ?`).bind(integrationId).run();
+  const [, r] = await env.DB.batch([
+    env.DB.prepare('DELETE FROM whatsapp_link_settings WHERE integration_id = ?').bind(integrationId),
+    env.DB.prepare(`UPDATE integrations SET status = 'disconnected', credentials_enc = NULL, external_account_id = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE provider_key = 'whatsapp_link' AND status = 'active' AND id = ?`).bind(integrationId),
+  ]);
   return Number(r.meta?.changes ?? 0) > 0;
+}
+
+// ---------------------------------------------------------------------------
+// #1939 part 3: where a linked member's recordings go
+// ---------------------------------------------------------------------------
+
+/**
+ * A venture the member may send recordings to: one their founder account owns,
+ * not deleted. The same rule picks the fallback venture when a capture opens
+ * (whatsappCapture.ts), so the picker never offers a venture the import refuses.
+ */
+export const WRITABLE_VENTURE_SQL = `SELECT p.id, p.name FROM projects p
+  JOIN users u ON u.id = ? AND u.founder_id IS NOT NULL AND p.founder_id = u.founder_id
+  WHERE p.id = ? AND p.deleted_at IS NULL`;
+
+/**
+ * The member's choice, while their link is active and they can still write the
+ * venture. A choice whose venture was deleted or given away reads as none.
+ */
+export async function ventureChoice(env: Env, userId: number): Promise<{ project_id: number; name: string | null } | null> {
+  const row = await env.DB.prepare(`SELECT p.id AS project_id, p.name AS name FROM whatsapp_link_settings s
+      JOIN integrations i ON i.id = s.integration_id AND i.provider_key = 'whatsapp_link' AND i.status = 'active' AND i.user_id = ?
+      JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
+      JOIN users u ON u.id = i.user_id AND u.founder_id IS NOT NULL AND p.founder_id = u.founder_id`)
+    .bind(userId).first<{ project_id: number; name: string | null }>();
+  return row ? { project_id: Number(row.project_id), name: row.name ?? null } : null;
+}
+
+export type VentureChoiceOutcome = { ok: true } | { ok: false; reason: 'not_linked' | 'forbidden' };
+
+/**
+ * Record (or, with null, clear) the venture the member's recordings go to.
+ * A venture they cannot write is `forbidden`, whether it is missing or another
+ * member's, so the answer never says which.
+ */
+export async function setVentureChoice(env: Env, userId: number, projectId: number | null): Promise<VentureChoiceOutcome> {
+  const link = await env.DB.prepare("SELECT id FROM integrations WHERE user_id = ? AND provider_key = 'whatsapp_link' AND status = 'active'")
+    .bind(userId).first<{ id: number }>();
+  if (!link) return { ok: false, reason: 'not_linked' };
+  if (projectId === null) {
+    await env.DB.prepare('DELETE FROM whatsapp_link_settings WHERE integration_id = ?').bind(link.id).run();
+    return { ok: true };
+  }
+  const venture = await env.DB.prepare(WRITABLE_VENTURE_SQL).bind(userId, projectId).first<{ id: number }>();
+  if (!venture) return { ok: false, reason: 'forbidden' };
+  await env.DB.prepare(`INSERT INTO whatsapp_link_settings (integration_id, project_id, updated_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT(integration_id) DO UPDATE SET project_id = excluded.project_id, updated_at = excluded.updated_at`)
+    .bind(link.id, projectId).run();
+  return { ok: true };
 }
 
 /** What the member sees: the newest claim and the current link. Masked numbers only. */
@@ -258,5 +313,7 @@ export async function whatsappLinkView(env: Env, userId: number) {
   return {
     claim,
     link: link ? { number_masked: link.external_account_name, linked_at: link.updated_at ?? link.created_at, last_used_at: link.last_synced_at } : null,
+    // #1939 part 3: where recordings go. Null with no choice: the member's most recently updated venture.
+    venture: link ? await ventureChoice(env, userId) : null,
   };
 }

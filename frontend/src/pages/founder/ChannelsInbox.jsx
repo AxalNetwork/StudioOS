@@ -8,8 +8,8 @@ import { CHANNELS_HREF, MESSAGING_PROVIDERS } from '../account/channelsModel';
 import { ProviderTag } from './InterviewChannels';
 import { CHAT_CONSENT_METHODS, canAttest, chatConsentOf, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
 import {
-  THREAD_TABS, assignedSentence, clientKeyFor, composerState, contactLabel, interviewOptions, keepByLine, keepKeyAfter, messageView,
-  replyFailureText, replyOutcome, sessionHref, threadEngineLine, threadItems, threadRow,
+  THREAD_TABS, assignedSentence, clientKeyFor, composerState, contactLabel, interviewOptions, keepKeyAfter, messageView,
+  replyFailureText, replyOutcome, sessionHref, threadEngineLine, threadItems, threadRow, voiceKeepBy,
 } from './channelThreads.js';
 
 /**
@@ -104,7 +104,6 @@ export function MessageList({ messages, contact, threadUid, api = channelsApi, o
     <ol className="space-y-2" data-testid="thread-messages">
       {messages.map((m) => {
         const v = messageView(m, contact);
-        const keepBy = keepByLine(m);
         const r = retries[v.uid];
         return (
           <li key={v.uid} className={`flex ${v.mine ? 'justify-end' : 'justify-start'}`} data-side={v.mine ? 'me' : 'contact'}>
@@ -122,7 +121,6 @@ export function MessageList({ messages, contact, threadUid, api = channelsApi, o
               {v.failure?.action?.kind === 'link' && (
                 <p className={`${NOTE} mt-1`}>{v.failure.action.text}{' '}<Link to={v.failure.action.href} className="font-semibold text-violet-800 underline dark:text-violet-200" data-testid={`link-voice-usage-${v.uid}`}>{v.failure.action.link}</Link></p>
               )}
-              {keepBy && <p className={`${NOTE} mt-1`} data-testid={`voice-keep-by-${v.uid}`}>{keepBy}</p>}
               {r?.state === 'sent' && <p role="status" className={`${NOTE} mt-1`} data-testid={`voice-retrying-${v.uid}`}>Trying again…</p>}
               {r?.state === 'error' && <p role="alert" className="mt-1 text-[12px] font-semibold text-red-700 dark:text-red-400">{r.text}</p>}
             </div>
@@ -325,6 +323,8 @@ export function ThreadPanel({ uid, api = channelsApi, venture, onChanged, makeKe
     finally { setBusy(false); }
   };
   const href = sessionHref(assigned?.session_id ?? thread.session_id);
+  // D754 §5: a waiting WhatsApp chat's voice notes are kept only if it reaches an interview in time.
+  const keepBy = assigned ? null : voiceKeepBy(thread, messages);
   return (
     <section className={`${TONE} space-y-3 p-4`} data-testid="thread-panel" data-status={thread.status}>
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -351,6 +351,7 @@ export function ThreadPanel({ uid, api = channelsApi, venture, onChanged, makeKe
       )}
       {thread.status !== 'ignored' && <ThreadConsent thread={thread} consent={data.consent} api={api} onChanged={load} />}
       {thread.status === 'pending' && !messages.length && <p className={NOTE}>No message is waiting in this conversation.</p>}
+      {keepBy && <p className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="thread-voice-keep-by">{keepBy}</p>}
       <MessageList messages={messages} contact={thread.contact_name} threadUid={thread.uid} api={api} onRetried={load} />
       {thread.status !== 'ignored' && venture && (
         <AssignControls key={thread.uid} thread={thread} venture={venture} api={api}

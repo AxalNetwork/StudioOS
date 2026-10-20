@@ -92,7 +92,7 @@ test('confirm: "Is •••• 1234 your number?" once WhatsApp sent the code; 
 
 test('linked: the masked number, when it was linked and last used; a link wins over an old claim', () => {
   assert.deepEqual(wayBState(ready({ claim: claim('linked'), link: LINK })), {
-    state: 'linked', number: '•••• 1234', linkedAt: LINK.linked_at, lastUsedAt: LINK.last_used_at,
+    state: 'linked', number: '•••• 1234', linkedAt: LINK.linked_at, lastUsedAt: LINK.last_used_at, venture: null,
   });
   assert.equal(wayBState(ready({ claim: claim('waiting_axal'), link: LINK })).state, 'linked');
 });
