@@ -31,11 +31,11 @@ export default {
       id: 'investors',
       title: 'Investors & Pipeline',
       overview:
-        "Pipeline is your fundraising CRM. Track every investor conversation from intro → meeting → diligence → committed → wired, with notes, next-step reminders, and decision-journal entries.",
+        "Pipeline is your fundraising CRM. Track every investor conversation from intro → meeting → diligence → committed → wired, with notes and next-step reminders.",
       howto: [
         'Add investors as you meet them; tag firm, lead partner, and stage.',
         'Move cards across columns as conversations progress.',
-        'Use the Decision Journal to capture why you said yes or no to each.',
+        'Write a note on each card saying why it moved.',
       ],
       tips: [
         'Pipeline coverage of 5x your raise target is healthy; below 3x means more outreach.',
@@ -75,47 +75,21 @@ export default {
     },
     {
       id: 'funds',
-      title: 'Funds, Reserves, Waterfall',
+      title: 'Funds and Waterfall',
       overview:
-        "Studio operators (and committed LPs with access) use Funds, Reserves, and Waterfall to manage fund-level economics: capital calls, follow-on reserves, and the order of distributions when a deal exits.",
+        "Studio operators (and committed LPs with access) use Funds and Waterfall to manage fund-level economics: capital calls and the order of distributions when a deal exits.",
       howto: [
         'Open Funds to view fund-level metrics: TVPI, DPI, called vs. uncalled.',
-        'Use Reserves to model follow-on allocations across the portfolio.',
         'Use Waterfall to simulate distribution priority for a hypothetical exit.',
       ],
       tips: [
-        'Reserve modeling matters more than initial check sizing — most fund returns come from doubling down on winners.',
         'Run the waterfall in advance of any exit so you can communicate proceeds clearly to LPs.',
       ],
       pitfalls: [
-        'Modelling reserves as a flat per-deal number ignores winner concentration; use a power-law assumption.',
         'Waterfall outputs depend on assumed exit value — always run a base/upside/downside set.',
       ],
       related: [
         { label: 'Investor Portfolio Health', href: '#portals/portfolio-health' },
-      ],
-    },
-    {
-      id: 'liquidity',
-      title: 'Liquidity events',
-      overview:
-        "Liquidity covers secondary share sales, tender offers, and full exits. Founders, employees, and early investors can list shares; admins manage approvals and AI-generated fair-value bands.",
-      howto: [
-        'Open Liquidity from the sidebar.',
-        'Create a listing (number of shares, price expectation, lock-up status).',
-        'Wait for buyer matching — listings get a fair-value band based on recent rounds.',
-        'Admins approve the trade and update the cap table on settlement.',
-      ],
-      tips: [
-        'Buyer matching is anonymized — no email or exact amount is shared with the matching engine.',
-        'Some shares are restricted by company bylaws — check the right-of-first-refusal clause first.',
-      ],
-      pitfalls: [
-        'Listing shares that are still inside a lock-up window will be auto-rejected — check the lock-up date first.',
-        'Pricing far above the fair-value band sits unmatched; price near the band for a faster trade.',
-      ],
-      related: [
-        { label: 'Cap Table', href: '#capital/cap-table' },
       ],
     },
     {

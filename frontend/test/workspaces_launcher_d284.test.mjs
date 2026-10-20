@@ -3,12 +3,13 @@
  * tasks 420 and 408), with the Workspaces launcher retired (D563).
  *
  * The 29 working pages (26 since AI Matches went, and Market Intelligence and
- * Signals with D670) left `SIDEBAR_GROUPS.admin`
+ * Signals with D670; 20 since the owner removed six on 2026-10-20) left
+ * `SIDEBAR_GROUPS.admin`
  * for a top-bar launcher (D284); D563 retired that launcher, and each page now
  * lights a profile sidebar row (`workspaces_retired_d563.test.mjs`). Messages
  * left the admin sidebar for a top-bar button on both admin shells; and ⌘K for
  * an admin shell indexes the shell's own rows, the consoles H35 places and the
- * 26 — never the old 50-row sidebar, never an `hqOnly` route for someone
+ * 20 — never the old 50-row sidebar, never an `hqOnly` route for someone
  * without the elevation, never the parked X. The list the palette reads is
  * `WORKSPACES` in `lib/adminPlacement.js`; the palette's index is
  * `lib/paletteIndex.js`, pure, so this file puts a holder, a plain admin and a
@@ -52,17 +53,19 @@ const CHROME = APP.slice(0, APP.indexOf('<Routes')) + APP.slice(APP.indexOf('</R
 // descriptions are checked for presence, not restated. One label differs from
 // the canvas: /advisory is "Advisory", its page's own heading (D563).
 const CANVAS = [
-  ['Studio', 'Pipeline Board', '/pipeline'], ['Studio', 'Scoring Engine', '/scoring'],
-  ['Studio', 'Risk Matrix', '/portfolio/risk-matrix'],
+  ['Studio', 'Pipeline Board', '/pipeline'],
+  // Scoring Engine (/scoring) and Risk Matrix (/portfolio/risk-matrix) stood
+  // here; the owner removed both pages on 2026-10-20.
   // ['Studio', 'Market Intelligence', '/market-intel'] and ['Studio', 'Signals',
   // '/signals'] stood here; D670 retired both pages.
   ['Studio', 'Advisory', '/advisory'],
   // ['Studio', 'AI Matches', '/matches'] stood here; that page was deleted.
   ['Studio', 'Deal Flow', '/deals'],
-  ['Capital & Legal', 'Capital & Investment', '/capital'], ['Capital & Legal', 'Liquidity & Exits', '/liquidity'],
+  // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
+  // & Journal stood in this group; the owner removed them on 2026-10-20.
   ['Capital & Legal', 'Portfolio Health', '/portfolio/health'], ['Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage'],
-  ['Capital & Legal', 'Reserve Allocation', '/portfolio/reserves'], ['Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall'],
-  ['Capital & Legal', 'Watchlist & Journal', '/watchlist'], ['Capital & Legal', 'Legal & Capital', '/legal-capital'],
+  ['Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall'],
+  ['Capital & Legal', 'Legal & Capital', '/legal-capital'],
   ['Capital & Legal', 'Incorporate', '/incorporate'], ['Capital & Legal', 'Compliance Calendar', '/compliance'],
   ['Network & Growth', 'Network', '/network'], ['Network & Growth', 'Network Effects', '/network-effects'],
   ['Network & Growth', 'Jobs', '/my/jobs'], ['Network & Growth', 'Service Catalogue', '/services'],
@@ -72,11 +75,11 @@ const CANVAS = [
   ['More', 'Perks', '/perks'],
 ];
 
-test('the palette list is the canvas list less AI Matches, Market Intelligence and Signals: 26 pages in four groups, every one a registered route', () => {
+test('the palette list is the canvas list less the retired and removed pages: 20 pages in four groups, every one a registered route', () => {
   assert.deepEqual(WORKSPACES.map((w) => [w.group, w.label, w.route]), CANVAS);
   assert.deepEqual(WORKSPACE_GROUP_ORDER, ['Studio', 'Capital & Legal', 'Network & Growth', 'More']);
   assert.deepEqual(WORKSPACE_GROUP_ORDER.map((g) => [g, WORKSPACES.filter((w) => w.group === g).length]),
-    [['Studio', 5], ['Capital & Legal', 10], ['Network & Growth', 8], ['More', 3]]);
+    [['Studio', 3], ['Capital & Legal', 6], ['Network & Growth', 8], ['More', 3]]);
   for (const w of WORKSPACES) {
     assert.ok(w.description && w.description.endsWith('.'), `${w.route} has no description`);
     assert.ok(registered(w.route), `palette route ${w.route} is not registered in App.jsx`);

@@ -214,7 +214,8 @@ export const SHELLS = {
           { slug: 'capital-match', label: 'Investor match', archetype: A.MATCH_ENGINE, legacy: '/grow/capital-match' },
           { slug: 'legal', label: 'Legal', archetype: A.COLLECTION, legacy: '/raise/legal-engine' },
           { slug: 'data-room', label: 'Data room', archetype: A.COLLECTION },
-          { slug: 'liquidity', label: 'Liquidity', archetype: A.LEDGER, legacy: '/liquidity' },
+          // Liquidity stood here (`legacy: '/liquidity'`); the owner removed
+          // Liquidity & Exits on 2026-10-20.
         ] },
       { kind: 'bucket', label: 'Grow', prefix: '/grow', tagline: 'Get customers, people, reach',
         zones: [
@@ -281,19 +282,17 @@ export const SHELLS = {
       // its Capital Calls tab, which D371 retired: `/funds/capital-calls` now
       // redirects to the `calls` zone, so that zone's `legacy` is a route
       // App.jsx really does send here, as `legacyRedirects` reports. The
-      // two are not rivals — InvestorFundAccounting says so itself: "IF3 does
-      // not reconcile, close periods, export a journal… Open the existing Fund
-      // Ops accounting workspace for authorized operations." So `accounting`
-      // is `ledger` here — the page's own section heading — leaving
-      // `/funds/accounting` to the tool it hands off to, which is what the
-      // zone's `legacy` names.
+      // two are not rivals. `accounting` is `ledger` here — the page's own
+      // section heading. Fund Ops' Accounting (`/funds/accounting`) and LP
+      // Reporting (`/lp-reports`) tabs were removed on the owner's instruction
+      // (2026-10-20), so neither zone names a legacy route any more.
       { kind: 'bucket', label: 'Fund', prefix: '/funds', tagline: 'Run my fund',
         requiredInvestorTier: 'institutional',
         zones: [
           { slug: 'lps', label: 'LPs', archetype: A.COLLECTION },
           { slug: 'calls', label: 'Calls', archetype: A.LEDGER, legacy: '/funds/capital-calls' },
-          { slug: 'ledger', label: 'Accounting', archetype: A.LEDGER, legacy: '/funds/accounting' },
-          { slug: 'reporting', label: 'Reporting', archetype: A.COLLECTION, legacy: '/lp-reports' },
+          { slug: 'ledger', label: 'Accounting', archetype: A.LEDGER },
+          { slug: 'reporting', label: 'Reporting', archetype: A.COLLECTION },
         ] },
       { kind: 'bucket', label: 'Network', prefix: '/network', tagline: 'Work my relationships',
         zones: NETWORK_ZONES },

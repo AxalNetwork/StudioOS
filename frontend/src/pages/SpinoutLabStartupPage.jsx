@@ -205,7 +205,7 @@ export default function SpinoutLabStartupPage() {
           : { chip: 'Not started', cls: CHIP.notStarted }),
       },
       {
-        label: 'Scoring / readiness', note: '9-dimension diligence', to: '/scoring', testid: 'readiness-scoring',
+        label: 'Scoring / readiness', note: '9-dimension diligence', to: '/spinout-lab/scoring', testid: 'readiness-scoring',
         ...(scoringDone ? { chip: 'Complete', cls: CHIP.complete }
           : wk(3) ? { chip: wk(3), cls: CHIP.locked, locked: true }
           : { chip: 'In progress', cls: CHIP.progress }),
