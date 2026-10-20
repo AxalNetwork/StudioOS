@@ -7,7 +7,6 @@
 //   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/job_comp_public_2181.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import FormLightbox from '../src/pages/cycles/FormLightbox.jsx';
