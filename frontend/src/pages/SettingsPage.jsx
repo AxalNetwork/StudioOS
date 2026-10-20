@@ -26,6 +26,7 @@ import ProfileIdentityCanvas from './account/AccountProfile';
 import { PushDevices, SessionsCard } from './account/AccountDevices';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import AutoReloadCard from './account/AutoReloadCard';
+import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard, useBillingReads } from './account/BillingCards';
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/AccountUsage';
 import ConnectorsSection from './account/AccountConnectors';
@@ -4598,12 +4599,34 @@ function BillingTab({ data, flash }) {
   }
   return (
     <>
-      <PlanHeader role={role} billing={billing} />
-      <Orders />
-      {/* D794: opt-in auto-reload of AI tokens, beside the orders until D792's Billing page. */}
-      <AutoReloadCard />
+      <BillingConsole role={role} billing={billing} />
       {panel}
     </>
+  );
+}
+
+// D792 (#2217) — Billing, B3 of the "Usage & Billing console" canvas, in its
+// order: Token balance and Included with your plan; Buy tokens; the plan and
+// Payment details beside Auto-reload (D794); then the orders, each with its
+// invoice. The role's panel follows as before.
+function BillingConsole({ role, billing }) {
+  const reads = useBillingReads();
+  return (
+    <div className="flex flex-col gap-3" data-testid="billing-console">
+      <div className="grid gap-3 md:grid-cols-2">
+        <TokenBalanceCard me={reads.me} />
+        <PlanAllowanceCard me={reads.me} />
+      </div>
+      <BuyTokensCard topUp={reads.topUp} />
+      <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+        <div className="flex min-w-0 flex-col gap-3">
+          <PlanHeader role={role} billing={billing} />
+          <PaymentDetailsCard role={role} overview={reads.overview} />
+        </div>
+        <AutoReloadCard />
+      </div>
+      <Orders />
+    </div>
   );
 }
 
