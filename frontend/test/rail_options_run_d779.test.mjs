@@ -112,7 +112,7 @@ test('each form option asks on the press, and its answer is stored unsaved until
 
   // Ask: the answer fills the thread; Save is its own press.
   const ask = spa('pages/research/AskZone.jsx');
-  assert.match(ask, /const r = await api\.research\.ask\(q, sessionUid\);/);
+  assert.match(ask, /const r = await api\.research\.ask\(q, sessionUid, railPressHeaders\(askOption\?\.key \?\? 'ask:library'\)\);/);
   assert.match(ask, /const toggleSaved = async \(item\) => \{[\s\S]*?api\.research\.askSaveAnswer\(item\.uid, !item\.saved\)/);
   assert.match(ask, /onClick=\{\(\) => toggleSaved\(t\)\}/, 'Save is not a press');
 
@@ -124,7 +124,7 @@ test('each form option asks on the press, and its answer is stored unsaved until
   assert.doesNotMatch(record.slice(record.indexOf('INSERT INTO research_ask_answers'), record.indexOf('VALUES')), /\bsaved\b/);
   assert.match(handler('patch', '/ask/answers/:uid'), /UPDATE research_ask_answers SET saved = \?/);
   // And the run carries rail context, so the page's switch applies (D765).
-  assert.match(handler('post', '/ask'), /rail: railFor\(c, \{ page: 'research', option: 'ask:library' \}\)/);
+  assert.match(handler('post', '/ask'), /rail: railFor\(c, \{ page: ASK_PAGE, option: ASK_OPTION \}, `research_ask_session:\$\{session\.uid\}`\)/); // D778 part 10: the inventory's page and option (`founder_research_ask_d778.test.ts`).
 });
 
 // ------------------------------------------------------------------ uploads

@@ -229,11 +229,11 @@ test('the voice answer fills the composer; the member sends it, and transcribing
 test('Ask answers on the press, and its answer is stored unsaved until Save', () => {
   for (const o of ROWS.filter((r) => r.key === 'ask:library')) assert.equal(o.source.marker, 'api.research.ask(');
   const ask = spa('pages/research/AskZone.jsx');
-  assert.match(ask, /const r = await api\.research\.ask\(q, sessionUid\);/);
+  assert.match(ask, /const r = await api\.research\.ask\(q, sessionUid, railPressHeaders\(askOption\?\.key \?\? 'ask:library'\)\);/);
   assert.match(ask, /onClick=\{\(\) => toggleSaved\(t\)\}/, 'Save is not a press');
   assert.match(read('cloudflare-worker/sql/migrations/221_research_ask_sessions.sql'), /saved\s+INTEGER NOT NULL DEFAULT 0/);
   assert.match(route(research, 'research', 'patch', '/ask/answers/:uid'), /UPDATE research_ask_answers SET saved = \?/);
-  assert.match(route(research, 'research', 'post', '/ask'), /rail: railFor\(c, \{ page: 'research', option: 'ask:library' \}\)/);
+  assert.match(route(research, 'research', 'post', '/ask'), /rail: railFor\(c, \{ page: ASK_PAGE, option: ASK_OPTION \}, `research_ask_session:\$\{session\.uid\}`\)/); // D778 part 10: the inventory's page and option (`founder_research_ask_d778.test.ts`).
 });
 
 test('the competitor analysis runs on the press and writes only its own analysis', () => {
