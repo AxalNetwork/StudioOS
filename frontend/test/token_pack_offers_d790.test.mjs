@@ -130,3 +130,13 @@ test('checkout: the pack summary draws the same offer lines under what it adds',
   const section = readFileSync(new URL('../src/components/products/TokenPacksSection.jsx', import.meta.url), 'utf8');
   assert.match(section, /\{packOfferLines\(pack\)\.map\(line => <p key=\{line\} className="text-sm">\{line\}<\/p>\)\}/, 'and the pack list');
 });
+
+// ------------------------------------------------------------------ D794's auto-reload
+
+test('auto-reload never offers a first-purchase pack, and says why when a reload of one is refused', async () => {
+  const { lastSkipped, packOptions } = await import('../src/pages/account/autoReloadModel.js');
+  const packs = [{ uid: 'pack25', label: '$25 of tokens', first_purchase_only: false }, { uid: 'first10', label: '$10 of tokens', first_purchase_only: true }];
+  assert.deepEqual(packOptions({ packs }), [{ uid: 'pack25', label: '$25 of tokens' }]);
+  assert.equal(lastSkipped({ enabled: true, last_outcome: 'token_pack_first_purchase_only' }),
+    'The last reload was not made: that pack is for a first token purchase only. Choose another pack on Billing.');
+});
