@@ -1,22 +1,28 @@
 /**
  * D762 (#2019) — each AI run records its charge beside its cost.
  *
- * What this part builds, before A1 (D760, #2017) lands its pricing module:
- * migration 493's columns on `ai_usage_logs`, every row's charge, hold, units
- * and rail fields, a streamed run settled on what it used when its stream
- * ends, `seedSpend` reading the charge, and "Held by runs in progress"
- * counting an earlier month's review hold. Billing stays on cost: the billed
- * quote waits for A1's `billedMicro` and `billingMode`.
+ * Part 1: migration 493's columns on `ai_usage_logs`, every row's charge, hold,
+ * units and rail fields, a streamed run settled on what it used when its stream
+ * ends, `seedSpend` reading the charge, and "Held by runs in progress" counting
+ * an earlier month's review hold.
+ *
+ * Part 2 (the end of this file): with `AI_BILLING = "charged"` every hold and
+ * settlement is cost × `AI_MARKUP`, once, except for the `admin` licence; cost
+ * stays cost for `est_cost_usd`, the KV buckets and the organisation cap.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/ai_charged_d762.test.mjs
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
-import { withGuard } from './_guard_stub.mjs';
-import { loadAiBudget, usdToMicro } from '../src/services/aiBudget.ts';
-import { run, __resetForTest, ROUTE, estimateCostUsd, meterStream } from '../src/services/aiRouter.ts';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
+import { withGuard, GUARD_MODEL } from './_guard_stub.mjs';
+import { loadAiBudget, usdToMicro, memberChargeMultiplier } from '../src/services/aiBudget.ts';
+import { run, __resetForTest, ROUTE, estimateCostUsd, meterStream, guardQuoteMicro } from '../src/services/aiRouter.ts';
+import { AI_MARKUP, billingMode, chargeMultiplier } from '../src/services/ai/pricing.ts';
+import { catalogueFor } from '../src/routes/ai.ts';
+import { blockQuoteMicro, holdBlock, settleStream } from '../src/services/liveTranscription.ts';
+import { PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET } from '../src/services/aiRouter.ts';
 
 const MODEL = ROUTE.advisor_turn.model;
 const caps = (db, day = 0, month = 0) => db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',?,?,1)").run(day, month);
@@ -316,4 +322,142 @@ test('migration 493 is additive: seven nullable columns and one index, no rebuil
   assert.equal((sql.match(/ALTER TABLE ai_usage_logs ADD COLUMN/g) || []).length, 7);
   assert.doesNotMatch(sql, /NOT NULL|DEFAULT|UPDATE |INSERT |DROP |CREATE TABLE|BEGIN|PRAGMA/i);
   assert.equal((sql.match(/CREATE INDEX IF NOT EXISTS/g) || []).length, 1);
+});
+
+// ================================================================ part 2: the billed price
+
+const CHARGED = { AI_BILLING: 'charged' };
+const billed = (usd) => usdToMicro(usd * AI_MARKUP);
+
+test('the switch: only "charged" bills, and the admin licence pays cost even then', () => {
+  // Mutation checked: billingMode reading any truthy AI_BILLING → 'on' bills.
+  assert.equal(billingMode(CHARGED), 'billed');
+  for (const v of [undefined, '', 'on', 'billed', 'Charged', ' charged']) assert.equal(billingMode({ AI_BILLING: v }), 'cost', String(v));
+  assert.equal(billingMode(undefined), 'cost');
+  assert.equal(chargeMultiplier(CHARGED, 'founder:free'), AI_MARKUP);
+  assert.equal(chargeMultiplier(CHARGED, 'admin'), 1, 'the admin licence was charged the markup');
+  assert.equal(chargeMultiplier({}, 'founder:free'), 1);
+  assert.equal(catalogueFor(CHARGED, 'founder:free').billing, 'billed', 'the price reads do not say the Worker is billing');
+  assert.equal(catalogueFor({}, 'founder:free').billing, 'cost');
+});
+
+test('charged: a member run is settled at cost × the markup, once, and the cost stays cost', async () => {
+  // Mutations checked: settle at cost (×1); apply the markup twice (×1.5625).
+  const f = fixture({ AI: answer(), ...CHARGED });
+  try {
+    fund(f.db);
+    assert.equal((await run(f.env, { task: 'advisor_turn', userId: 2, text: 'hello' })).ok, true);
+    const [row] = rows(f.db);
+    const [hold] = reservations(f.db);
+    const cost = estimateCostUsd(MODEL, 100, 20);
+    assert.equal(row.est_cost_usd, cost, 'the cost column moved off cost');
+    assert.equal(row.charged_microusd, billed(cost));
+    assert.notEqual(row.charged_microusd, usdToMicro(cost * AI_MARKUP * AI_MARKUP), 'the markup was applied twice');
+    assert.equal(hold.actual_included_microusd + hold.actual_topup_microusd, row.charged_microusd, 'the hold settled at something else');
+  } finally { f.db.close(); }
+});
+
+test('charged: the admin licence pays cost', async () => {
+  // Mutation checked: charge the admin licence the markup → its charge is 1.25 × cost.
+  const f = fixture({ AI: answer(), ...CHARGED });
+  try {
+    fund(f.db, 1);
+    assert.equal(await memberChargeMultiplier(f.env, 1), 1);
+    assert.equal((await run(f.env, { task: 'advisor_turn', userId: 1, text: 'hello' })).ok, true);
+    assert.equal(rows(f.db)[0].charged_microusd, usdToMicro(estimateCostUsd(MODEL, 100, 20)));
+  } finally { f.db.close(); }
+});
+
+test('charged: the hold is quoted at the billed price, guard included', async () => {
+  // Mutation checked: hold at the cost quote → the held amount equals the cost run's.
+  const held = async (extra) => {
+    // The model is never reached: the held amount is read before any call.
+    const f = fixture({ AI: { run: async () => { throw new Error('down'); } }, ...extra });
+    try {
+      fund(f.db, 2, 50_000_000);
+      await run(f.env, { task: 'advisor_turn', userId: 2, text: 'hello' });
+      const [r] = reservations(f.db);
+      return r.included_microusd + r.topup_microusd;
+    } finally { f.db.close(); }
+  };
+  const atCost = await held({});
+  const atBilled = await held(CHARGED);
+  assert.ok(Math.abs(atBilled - atCost * AI_MARKUP) <= 4, `held ${atBilled}, cost hold ${atCost}`);
+  const g = guardQuoteMicro('hello', 400), gb = guardQuoteMicro('hello', 400, AI_MARKUP);
+  assert.equal(guardQuoteMicro('hello', 400, 1), g, 'a multiplier of 1 moved the guard quote');
+  assert.ok(gb > g && Math.abs(gb - g * AI_MARKUP) <= 4, `the guard quote is not billed once: ${gb} for a cost quote of ${g}`);
+});
+
+test('charged: the KV spend buckets and the organisation cap stay on cost', async () => {
+  // Mutation checked: bump the buckets at the billed amount → the org bucket reads 1.25 × cost.
+  const puts = new Map();
+  const f = fixture({ AI: answer(), ...CHARGED, AI_SPEND: { get: async (k) => puts.get(k) ?? null, put: async (k, v) => { puts.set(k, v); } } });
+  try {
+    fund(f.db);
+    await run(f.env, { task: 'advisor_turn', userId: 2, text: 'hello' });
+    const org = [...puts].find(([k]) => k.startsWith('ai_spend:org:'));
+    assert.equal(Number(org[1]), estimateCostUsd(MODEL, 100, 20), 'the org cap counts the billed figure');
+  } finally { f.db.close(); }
+});
+
+test('charged: a live transcript block is held at the billed price', async () => {
+  // Mutation checked: holdBlock reserving the cost block → the hold is the cost's.
+  const model = '@cf/deepgram/nova-3';
+  assert.equal(blockQuoteMicro(model, AI_MARKUP), usdToMicro((blockQuoteMicro(model) / 1e6) * AI_MARKUP));
+  const f = fixture(CHARGED);
+  try {
+    fund(f.db, 2, 50_000_000);
+    const h = await holdBlock(f.env, 2, model);
+    assert.equal(h.ok, true);
+    const [r] = reservations(f.db);
+    assert.equal(r.included_microusd + r.topup_microusd, blockQuoteMicro(model, AI_MARKUP));
+  } finally { f.db.close(); }
+});
+
+test('D783 with charging on: a plan\'s allowance buys runs at the billed price', async () => {
+  // A $1-a-month allowance and no tokens: the run is drawn from the allowance at 1.25 × cost.
+  const f = fixture({ AI: answer(), ...CHARGED });
+  try {
+    setFixtureAllowance(f.db, 1_000_000);
+    assert.equal((await run(f.env, { task: 'advisor_turn', userId: 2, text: 'hello' })).ok, true);
+    const b = await loadAiBudget(f.env, 2);
+    const charge = billed(estimateCostUsd(MODEL, 100, 20));
+    assert.equal(b.month_spend_microusd, charge, 'the allowance was spent at something other than the billed price');
+    assert.equal(b.balance_microusd, 0);
+    assert.equal(rows(f.db)[0].charged_microusd, charge);
+  } finally { f.db.close(); }
+});
+
+test('charged: each guard call is charged at the billed price, on its own row and in the hold', async () => {
+  // Mutation checked: charge guard calls at cost → the guard rows read their cost.
+  const f = fixture({ ...CHARGED });
+  try {
+    fund(f.db);
+    f.env.AI = withGuard(answer(), 'safe', { prompt_tokens: 300, completion_tokens: 5 });
+    assert.equal((await run(f.env, { task: 'advisor_turn', userId: 2, text: 'hello' })).ok, true);
+    const guards = f.db.prepare("SELECT * FROM ai_usage_logs WHERE task = 'safety' ORDER BY id").all();
+    assert.ok(guards.length >= 2, 'the input and output checks were not logged');
+    for (const g of guards) assert.equal(g.charged_microusd, billed(estimateCostUsd(GUARD_MODEL, 300, 5)), 'a guard call was not billed');
+    const [hold] = reservations(f.db);
+    const total = rows(f.db)[0].charged_microusd + guards.reduce((n, g) => n + g.charged_microusd, 0);
+    assert.equal(hold.actual_included_microusd + hold.actual_topup_microusd, total, 'the hold and the rows disagree');
+  } finally { f.db.close(); }
+});
+
+test('charged: a live transcript is settled at the billed price its blocks were held at', async () => {
+  // Mutation checked: settle the stream at cost → the receipt reads the cost.
+  const model = '@cf/deepgram/nova-3';
+  const f = fixture(CHARGED);
+  try {
+    fund(f.db, 2, 50_000_000);
+    f.db.exec(`CREATE TABLE interview_session_receipts (id INTEGER PRIMARY KEY, session_id INTEGER, kind TEXT, model TEXT, requested_model TEXT,
+      fallback_used INTEGER, audio_minutes REAL, cost_microusd INTEGER, outcome TEXT, refusal TEXT)`);
+    const h = await holdBlock(f.env, 2, model);
+    const out = await settleStream(f.env, { id: 1 }, model, [h.reservation], 60_000);
+    const charge = usdToMicro(PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model] * AI_MARKUP);
+    assert.equal(out.cost_microusd, charge);
+    const [r] = reservations(f.db);
+    assert.equal(r.actual_included_microusd + r.actual_topup_microusd, charge);
+    assert.equal(f.db.prepare('SELECT cost_microusd FROM interview_session_receipts').get().cost_microusd, charge);
+  } finally { f.db.close(); }
 });
