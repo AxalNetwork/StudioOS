@@ -67,6 +67,8 @@ brings this file up to it.
 - **The allowance.** A member's monthly allowance is 25% of the price of their paid plans (D783, `services/planAllowance.ts`); no paid plan means none, so runs use tokens. Members have no daily cap (`daily_capped: false`). Only the admin licence keeps HQ-configured daily/monthly caps, with deployment defaults as fallback.
 - **The copy.** `/plans-and-pricing` says "Each run is paid from your AI allowance first, then from your tokens." under "How AI is priced". The owner's price sentence, "Model prices are Cloudflare's published rates plus 25%.", joins it once #2019 charges that price. D783's per-plan allowance lines are on the plan cards (#2124).
 
+- **Auto-reload (D794, #2219).** Opt-in, off by default. A member chooses a pack and a threshold on Billing and saves a card (an off-session SetupIntent). When a settled run takes their token balance below the threshold, the `ai_auto_reload` job charges the card off-session for that pack, as an ordinary pack order credited by the webhook. Five orders a day, the $1,000 ceiling and the holds apply. D788's monthly spend limit and D791's Pause AI join `reloadBlocked` when they merge. A declined card turns auto-reload off and tells the member. Runbook: `AI_TOKEN_PACKS.md` › Auto-reload.
+
 ## 4. Where a member's consumption is shown
 
 - **`/account/usage`** (D641, D642): the allowance and paid balance, the days, where it was spent, the models and the receipts. Its charged tab reads `GET /api/ai-budget/runs?group=option` (D776): the member's runs this month by page and by option, with what each was charged and how much of it came from the allowance and how much from tokens.

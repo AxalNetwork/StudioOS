@@ -29,6 +29,11 @@ export const aiBudgetApi = {
   memberRuns: (userId, { month } = {}) => request(`/ai-budget/members/${enc(userId)}/runs${month ? `?month=${enc(month)}` : ''}`),
   // D776 PR 2 — HQ: how members are charged, and the models offered with the pages that name them.
   models: () => request('/ai/catalogue/hq'),
+  // D794 — the member's own opt-in auto-reload: each call asks for a recent TOTP sign-in (the step-up prompt handles it).
+  autoReload: () => request('/ai-budget/auto-reload'),
+  // `{ enabled, pack_uid, threshold_usd, setup_intent_id? }`; the card is read back from the SetupIntent on the Worker.
+  saveAutoReload: (settings) => request('/ai-budget/auto-reload', { method: 'PUT', body: body(settings) }),
+  autoReloadSetup: (nonce) => request('/ai-budget/auto-reload/setup', { method: 'POST', body: body({ nonce }) }),
   // D750 — Super Admin: why the top-up is or is not offered.
   topUpStatus: () => request('/ai-budget/top-up/status'),
   // D641 — every model the router can price, read from its own tables.

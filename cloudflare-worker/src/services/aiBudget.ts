@@ -172,6 +172,12 @@ export async function settleAiReservation(env:Env, reservation:AiReservation, co
     throw new Error('AI usage exceeds reservation');
   }
   await commitSettlement(env,row,costMicrousd,refund,'pending');
+  // D794: a run that drew on the top-up balance may have taken it below the
+  // member's auto-reload threshold. This only queues the reload; it never waits on Stripe.
+  if (!refund && costMicrousd > amount(row.included_microusd)) {
+    const { queueAutoReloadIfDue } = await import('./aiAutoReloadDue');
+    await queueAutoReloadIfDue(env, reservation.userId);
+  }
 }
 export async function listAiBudgetReviews(env:Env) {
   const rows=await env.DB.prepare(`SELECT r.uid,r.user_id,u.name AS member_name,r.created_at AS at,
