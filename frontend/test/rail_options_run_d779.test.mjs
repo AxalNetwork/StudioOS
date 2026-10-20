@@ -22,18 +22,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import React, { act } from 'react';
-import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
-import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import { INVESTOR_RAIL_OPTIONS } from '../src/lib/railOptions/investor.js';
-import { RailPageProvider } from '../src/ui/railCrumbs.js';
-import { api } from '../src/lib/api.js';
-import ZoneDraft from '../src/workspaces/ZoneDraft.jsx';
-import { CHECKING } from '../src/workspaces/draftCheck.js';
+import { assertDraftBandRun } from './_zone_draft_run.mjs';
 
-const h = React.createElement;
 const read = (f) => readFileSync(f, 'utf8');
 const spa = (f) => codeOnly(read(`frontend/src/${f}`));
 const worker = codeOnly(read('cloudflare-worker/src/routes/research.ts'));
@@ -101,57 +93,8 @@ test('each draft option is a zone draft band whose Accept writes no other record
 });
 
 for (const o of DRAFTS) {
-  test(`${o.key} (${o.page}) drafts from a stubbed run, and only Accept writes again`, async () => {
-    const saved = { ...api.research };
-    const calls = [];
-    let stored = [];
-    let release;
-    api.research.zoneDrafts = async (...a) => { calls.push(['zoneDrafts', ...a]); return { items: stored }; };
-    api.research.zoneDraftRun = (...a) => {
-      calls.push(['zoneDraftRun', ...a]);
-      return new Promise((r) => { release = () => { stored = [{ uid: 'd1', body: `Draft for ${o.key}`, accepted: false }]; r({ item: stored[0] }); }; });
-    };
-    api.research.zoneDraftAccept = async (...a) => { calls.push(['zoneDraftAccept', ...a]); return { item: { ...stored[0], accepted: true } }; };
-    api.research.zoneDraftDiscard = async (...a) => { calls.push(['zoneDraftDiscard', ...a]); return {}; };
-    const restore = installDocument();
-    const container = document.createElement('div'); document.body.appendChild(container);
-    const root = createRoot(container);
-    const settle = () => act(async () => { for (let i = 0; i < 5; i += 1) await new Promise((r) => setTimeout(r, 0)); });
-    const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
-    const props = (n) => Object.entries(n).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
-    const button = (text) => walk(container).find((n) => n.tagName?.toLowerCase() === 'button' && (n.textContent || '').includes(text));
-    // The test DOM keeps text on the leaves (a text node's `nodeValue`, or an element React set whole).
-    const text = () => walk(container).map((n) => (n.nodeType === 3 ? (n.nodeValue ?? n.textContent ?? '') : (n.childNodes.length ? '' : n.textContent || ''))).join(' ');
-    const written = () => calls.filter(([name]) => name !== 'zoneDrafts').map(([name]) => name);
-    try {
-      await act(async () => {
-        root.render(h(MemoryRouter, null, h(RailPageProvider, { role: 'investor' },
-          h(ZoneDraft, { surface: o.surface, label: o.label, run: o.label, railOption: o.key }))));
-      });
-      await settle();
-      assert.deepEqual(written(), [], 'the band ran or wrote on mount');
-
-      await act(async () => { props(button(o.label)).onClick(); });
-      await settle();
-      assert.deepEqual(written(), ['zoneDraftRun'], 'the press runs once');
-      assert.ok(text().includes(CHECKING), 'no check is shown while the run is out');
-      assert.equal(button('Accept draft'), undefined, 'Accept is offered before the run is checked');
-
-      await act(async () => { release(); });
-      await settle();
-      assert.ok(text().includes(`Draft for ${o.key}`), 'the stubbed draft is not shown');
-      assert.deepEqual(written(), ['zoneDraftRun'], 'something was written beyond the draft before Accept');
-
-      await act(async () => { props(button('Accept draft')).onClick(); });
-      await settle();
-      assert.deepEqual(written(), ['zoneDraftRun', 'zoneDraftAccept']);
-      assert.deepEqual(calls.find(([name]) => name === 'zoneDraftAccept').slice(1), ['d1', undefined]);
-    } finally {
-      await act(async () => root.unmount());
-      restore();
-      Object.assign(api.research, saved);
-    }
-  });
+  test(`${o.key} (${o.page}) drafts from a stubbed run, and only Accept writes again`, () =>
+    assertDraftBandRun({ surface: o.surface, label: o.label, key: o.key, role: 'investor' }));
 }
 
 // ------------------------------------------------------------------ forms
