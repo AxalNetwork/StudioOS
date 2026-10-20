@@ -19,19 +19,19 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { requireAuth, requireHqAdmin } from '../auth';
 import { loadMyAiSpend, loadMyAiSpendForSurface } from '../services/aiSpend';
 import { AI_SURFACES } from '../services/aiSurfaces';
 import { refuse } from '../util/refusal';
 import { ROUTE, PRICE_USD_PER_1M_TOKENS, PRICE_USD_PER_AUDIO_MINUTE, PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET, IMAGE_PRICED_MODELS, run as aiRun, normaliseSurface } from '../services/aiRouter';
 import { MODEL_NAMES, RETIRED_MODELS } from '../services/aiCatalog';
 import { CATALOGUE, isOffered, modelById } from '../services/ai/catalogue';
-import { billingMode, billedUnitPrice, multiplierFor, unitPrice } from '../services/ai/pricing';
+import { AI_MARKUP, billingMode, billedUnitPrice, multiplierFor, unitPrice } from '../services/ai/pricing';
 import type { PriceUnit } from '../services/ai/catalogue';
 import { aiLicenceKey } from '../services/aiBudget';
 import { ensureAdminAuditLogTable } from './admin';
 import { BRANCH_CODE_RE } from '../util/branch';
-import { railCrumbs, railOptionsOn, railSectionOf, resolveRail, resolveRailOption, rowOffers, type RailRow } from '../services/ai/railMatrix';
+import { railCrumbs, railOptionRows, railOptionsOn, railRows, railSectionOf, resolveRail, resolveRailOption, rowOffers, type RailRow } from '../services/ai/railMatrix';
 import { railFor, refuseAssistOff } from '../util/railContext';
 
 const ai = new Hono<{ Bindings: Env }>();
@@ -252,6 +252,33 @@ export function catalogueFor(env: Env, licence: string) {
 ai.get('/catalogue', async (c) => {
   const user = await requireAuth(c);
   return c.json({ ok: true, ...catalogueFor(c.env, aiLicenceKey(user)) });
+});
+
+/**
+ * D776 PR 2 (#2093) — GET /api/ai/catalogue/hq: HQ › AI allowances' "How
+ * members are charged" and "Models offered". HQ's Admin and Super Admin
+ * only; a branch's administrator is refused.
+ *
+ * `billing` is the Worker's own mode (set by the owner through `AI_BILLING`,
+ * never by HQ's page), with `AI_MARKUP`. Each offered model is priced as a
+ * member pays (every licence but `admin` pays cost × AI_MARKUP, so 'member'
+ * stands for them all), with `paid_only` and `pages`: every D764 matrix row,
+ * page or option, whose models name it.
+ */
+ai.get('/catalogue/hq', async (c) => {
+  await requireHqAdmin(c);
+  const cat = catalogueFor(c.env, 'member');
+  const pages = new Map<string, Set<string>>();
+  for (const row of [...railRows(), ...railOptionRows()]) {
+    for (const m of row.models) {
+      if (!pages.has(m.id)) pages.set(m.id, new Set());
+      pages.get(m.id)!.add(row.pageKey);
+    }
+  }
+  return c.json({
+    ok: true, billing: cat.billing, markup: AI_MARKUP, set_by: 'AI_BILLING',
+    models: cat.models.map((m) => ({ ...m, pages: [...(pages.get(m.id) ?? [])] })),
+  });
 });
 
 /**

@@ -7,6 +7,7 @@ import { reportError } from '../../lib/log';
 import { Card, EmptyState, Pill, RailFrame, Unrecorded, Unreadable, WorkerRail } from '../../ui';
 import { useAccountRead } from '../account/AccountCenter';
 import { microUsd, planLabel, whenLabel } from '../account/usageModel';
+import { BillingCard, ModelsCard, useHqModels } from './HqAiCards';
 import { MemberAccountCard, ReconcileCard, TokenPacksCard } from './TokenPacks';
 import { REASON_MIN } from './tokenPacksModel';
 
@@ -30,6 +31,11 @@ import { REASON_MIN } from './tokenPacksModel';
  * line per pack, replacing D750's single top-up line, with New pack, Adopt,
  * On sale, Bonus and Archive), one member's AI account with Adjust balance,
  * and Reconcile. HQ never credits a purchase.
+ *
+ * D776 PR 2 (#2093) adds, read-only, from `HqAiCards.jsx`: How members are
+ * charged and Models offered (`GET /api/ai/catalogue/hq`), and inside One
+ * member's AI account, that member's month by page and option and each run
+ * (`GET /api/ai-budget/members/:id/runs`, audited).
  */
 
 export { REASON_MIN };
@@ -216,6 +222,7 @@ export default function PlatformAllowancesPage() {
   const reviews = useAccountRead(() => aiBudgetApi.reviews());
   const packs = useAccountRead(() => tokenPacksApi.status());
   const reconcile = useAccountRead(() => tokenPacksApi.reconcile());
+  const models = useHqModels();
   const [editing, setEditing] = useState(null);
   const [done, setDone] = useState(null);
   const plans = caps.status === 'ready' && Array.isArray(caps.data?.plans) ? caps.data.plans : [];
@@ -248,7 +255,7 @@ export default function PlatformAllowancesPage() {
             <ArrowLeft size={13} /> Platform
           </Link>
           <h1 className="mt-1 text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">AI allowances</h1>
-          <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">The daily and monthly AI allowance each plan includes, runs held for a check, the token packs members can buy, one member's AI account, and what needs reconciling.</p>
+          <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">The daily and monthly AI allowance each plan includes, runs held for a check, the token packs members can buy, one member's AI account and their month, what needs reconciling, how members are charged and the models offered.</p>
         </div>
         {done && <p role="status" className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12px] dark:border-gray-800 dark:bg-gray-800/40" data-testid="hq-allowances-done">{done}</p>}
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
@@ -265,6 +272,10 @@ export default function PlatformAllowancesPage() {
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
           <MemberAccountCard />
           <ReconcileCard reconcile={reconcile} />
+        </div>
+        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)]">
+          <BillingCard models={models} />
+          <ModelsCard models={models} />
         </div>
       </div>
     </RailFrame>

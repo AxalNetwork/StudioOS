@@ -188,6 +188,7 @@ The Usage page work in #1430 uses the mounted `ai_budget.ts` routes. `GET /api/a
 | `PUT /api/ai/rail-preferences/:section` | signed in | `{ mode: 'eadwyn' \| 'manual' \| null }`; anything else is 400 `invalid_mode`. `null` clears it. At most `RAIL_PREFERENCE_CAP` (200) rows per member. |
 | `PUT /api/ai/rail-preferences/:section/:task` | signed in | `{ model: string \| null }`: one of the task's `alternates`, else 400 `model_not_offered`; a task with no choice is refused. `null` clears the pick. |
 | `POST /api/ai/workspace/explain` | signed in | `{ workspace, zone?, coverage: string[], model?, page? }`: reads back one workspace zone from the coverage lines the rail already draws, never the rows behind them. `workspace` is required (400). The run goes through `run()`, which owns the model allow-list, the budget and Llama Guard (D763), and records `page` as its surface. |
+| `GET /api/ai/catalogue/hq` | HQ Admin or Super Admin | D776 PR 2 (#2093), the one route here that is not the caller's own: the billing mode (`billingMode`, set through `AI_BILLING`), `AI_MARKUP`, and each offered model priced at cost and billed per unit, with `paid_only` and the D764 matrix pages that name it. |
 
 ### AI credits and token packs Worker contract (D755, #1870)
 
@@ -201,6 +202,7 @@ D755 sells the AI top-up balance as token packs (`ai_token_packs`, migration 486
 | `GET /api/ai-budget/members/:userId` | Super Admin | One member's allowance, balance, held top-up, ledger (with reasons), purchases and shortfalls. Each read is logged. |
 | `POST /api/ai-budget/members/:userId/adjustments` | Super Admin | `{amount_usd, reason, idempotency_key}`: at most $100 either way, at most $250 added in 30 days, never below zero, a reason of 10–500 characters. In the D248 cool-off list. |
 | `GET /api/ai-budget/reconcile` | Super Admin | Balances that differ from their ledger, purchases paid over an hour ago and not credited, and open disputes. It credits nothing. |
+| `GET /api/ai-budget/members/:userId/runs?month=` | HQ Admin or Super Admin | D776 PR 2 (#2093): one member's month by option within a page, with totals, and each run (newest first, at most 100) with its model, page, option, cost and charge. Each read is logged (`ai_member_runs_read`, the member's id and the month). |
 | `POST /api/admin/catalog/token-packs` | Super Admin | `{amount_usd, idempotency_key}`: the Worker creates the product and its one-time USD price in Stripe with Idempotency-Keys, then the pack row, off sale. |
 | `POST /api/admin/catalog/token-packs/adopt` | Super Admin | `{price_id}`: records an existing one-time USD price of whole dollars from $5 to $500. |
 | `PATCH /api/admin/catalog/token-packs/:uid` | Super Admin | `on_sale`, `bonus_usd` (0–10% of face) and `sort`. The amount never changes. |
