@@ -174,7 +174,8 @@ GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
 # D655 follow-up (#1884): public GitHub App slug, not a secret. Empty means
 # no install link. Set BOTH default and production values in one PR.
-GITHUB_APP_SLUG = ""
+# The owner registered "Axal VC StudioOS" on 2026-10-20 (#2110, #2113).
+GITHUB_APP_SLUG = "axal-vc-studioos"
 # D542 — the GitHub logins whose bounty labels the webhook acts on. Comma
 # separated; empty means nobody's. Session 1 labels as the owner account.
 BOUNTY_GRANTERS = "guillaumelauzier"
@@ -552,7 +553,7 @@ PUBLIC_MARKETING_URL = "https://axal.vc"
 GITHUB_REPO_OWNER = "AxalNetwork"
 GITHUB_REPO_NAME  = "StudioOS"
 # D655 follow-up (#1884): mirrored from [vars]; environment vars do not inherit.
-GITHUB_APP_SLUG = ""
+GITHUB_APP_SLUG = "axal-vc-studioos"
 # D542 — redeclared here: an env table does not inherit the top-level vars.
 BOUNTY_GRANTERS = "guillaumelauzier"
 ENVIRONMENT       = "production"

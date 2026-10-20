@@ -54,7 +54,7 @@ const PROVIDER_HINTS = {
   calendly: 'Get Client ID + Client Secret from calendly.com → Integrations → OAuth applications.',
   stripe: 'Connect Client ID is the ca_… from Stripe Dashboard → Connect → Settings. Secret Key is the sk_live_… (or sk_test_…) from API keys.',
   carta: 'Get Client ID + Client Secret from your Carta Developer Portal app.',
-  github: 'From github.com → AxalNetwork → Settings → Developer settings → GitHub Apps → Axal StudioOS: copy the Client ID (it starts with Iv, and is not the numeric App ID), then press Generate a new client secret. The App needs exactly four repository permissions, all Read-only: Contents, Issues, Metadata and Pull requests. Any other permission makes every connect fail.',
+  github: 'From github.com → AxalNetwork → Settings → Developer settings → GitHub Apps → Axal VC StudioOS: copy the Client ID (it starts with Iv, and is not the numeric App ID), then press Generate a new client secret. The App needs exactly four repository permissions, all Read-only: Contents, Issues, Metadata and Pull requests. Any other permission makes every connect fail.',
   crunchbase: 'API key — paste a label (e.g. "default") into Client ID and the user_key into Secret. Provision the key at data.crunchbase.com.',
   affinity: 'API key — put your team subdomain (e.g. "acme") into Client ID and the Affinity API key into Secret. Generate at affinity.co → Settings → API.',
   telegram: 'Bot token — put the bot username (e.g. "axalvc_bot") into Client ID and the BotFather token into Secret. Get the token from @BotFather on Telegram.',

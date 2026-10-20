@@ -36,7 +36,7 @@ async function mount(el) {
   };
 }
 
-const URL_OK = 'https://github.com/apps/axal-studioos/installations/new';
+const URL_OK = 'https://github.com/apps/axal-vc-studioos/installations/new';
 const REPOS = [{ full_name: 'acme/app', private: true, updated_at: null }, { full_name: 'acme/site', private: false, updated_at: null }];
 function fake(reads) {
   const calls = [];

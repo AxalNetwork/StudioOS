@@ -92,10 +92,10 @@ async function call(env: any, method: string, path: string, body?: unknown, comp
 }
 
 test('no installation reports needs_install and only a configured install URL', async t => {
-  const { env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-studioos'; const calls = fakeGithub(t);
+  const { env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-vc-studioos'; const calls = fakeGithub(t);
   const response = await call(env, 'GET', '/api/connectors/gh1/repositories');
   assert.equal(response.status, 200); assert.deepEqual(response.body, { ok: true, available: [], needs_install: true,
-    install_url: 'https://github.com/apps/axal-studioos/installations/new', selected: [], project_id: null });
+    install_url: 'https://github.com/apps/axal-vc-studioos/installations/new', selected: [], project_id: null });
   assert.deepEqual(calls, ['/user/installations']); noSecrets(response.body);
 });
 test('unset and empty slugs do not guess an install link', async t => {
@@ -108,29 +108,29 @@ test('unset and empty slugs do not guess an install link', async t => {
   }
 });
 test('installed repositories keep a strict false flag, install link and stored selection', async t => {
-  const { db, env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-studioos';
+  const { db, env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-vc-studioos';
   db.prepare('UPDATE integrations SET config_json = ? WHERE uid = ?').run(JSON.stringify({ repositories: ['acme/app'], project_id: 100 }), 'gh1');
   const calls = fakeGithub(t, [7], { 7: ['acme/app', 'acme/site'] });
   const response = await call(env, 'GET', '/api/connectors/gh1/repositories');
   assert.equal(response.status, 200); assert.equal(response.body.needs_install, false);
-  assert.equal(response.body.install_url, 'https://github.com/apps/axal-studioos/installations/new');
+  assert.equal(response.body.install_url, 'https://github.com/apps/axal-vc-studioos/installations/new');
   assert.deepEqual(response.body.available.map((r: any) => r.full_name), ['acme/app', 'acme/site']);
   assert.deepEqual(response.body.selected, ['acme/app']); assert.equal(response.body.project_id, 100);
   assert.deepEqual(calls, ['/user/installations', '/user/installations/7/repositories']); noSecrets(response.body);
 });
 test('installed on no repositories is not reported as needing installation', async t => {
-  const { env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-studioos'; fakeGithub(t, [7]);
+  const { env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-vc-studioos'; fakeGithub(t, [7]);
   const response = await call(env, 'GET', '/api/connectors/gh1/repositories');
   assert.equal(response.status, 200); assert.equal(response.body.needs_install, false);
-  assert.deepEqual(response.body.available, []); assert.equal(response.body.install_url, 'https://github.com/apps/axal-studioos/installations/new');
+  assert.deepEqual(response.body.available, []); assert.equal(response.body.install_url, 'https://github.com/apps/axal-vc-studioos/installations/new');
   noSecrets(response.body);
 });
 test('slug builder trims configured values and rejects unsafe or unsupported shapes', () => {
-  const url = 'https://github.com/apps/axal-studioos/installations/new';
-  assert.equal(githubInstallUrl({ GITHUB_APP_SLUG: '  axal-studioos  ' } as any), url);
+  const url = 'https://github.com/apps/axal-vc-studioos/installations/new';
+  assert.equal(githubInstallUrl({ GITHUB_APP_SLUG: '  axal-vc-studioos  ' } as any), url);
   assert.equal(githubInstallUrl({ GITHUB_APP_SLUG: 'a' } as any), 'https://github.com/apps/a/installations/new');
   assert.equal(githubInstallUrl({ GITHUB_APP_SLUG: 'x'.repeat(100) } as any), `https://github.com/apps/${'x'.repeat(100)}/installations/new`);
-  for (const slug of ['Axal StudioOS', 'AXAL', 'axal/studioos', 'axal-studioos?x=1', '-axal', 'x'.repeat(101), 'axal-studioos/../x', 'axal.studioos', 'axal\nstudioos']) {
+  for (const slug of ['Axal StudioOS', 'AXAL', 'axal/studioos', 'axal-vc-studioos?x=1', '-axal', 'x'.repeat(101), 'axal-vc-studioos/../x', 'axal.studioos', 'axal\nstudioos']) {
     assert.equal(githubInstallUrl({ GITHUB_APP_SLUG: slug } as any), null, slug);
   }
   assert.equal(githubInstallUrl({} as any), null);
@@ -142,7 +142,7 @@ test('route rejects a malformed configured slug without changing installation st
   noSecrets(response.body);
 });
 test('ownership, company and provider refusals keep their original bodies and make no GitHub call', async t => {
-  const { db, env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-studioos'; const calls = fakeGithub(t);
+  const { db, env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-vc-studioos'; const calls = fakeGithub(t);
   for (const [company, user, status, body] of [[10, 2, 404, { error: 'not_found' }], [20, 1, 403, { error: 'company_not_enabled' }]] as const) {
     const response = await call(env, 'GET', '/api/connectors/gh1/repositories', undefined, company, user);
     assert.equal(response.status, status); assert.deepEqual(response.body, body); noSecrets(response.body);
@@ -153,7 +153,7 @@ test('ownership, company and provider refusals keep their original bodies and ma
   assert.deepEqual(calls, []); noSecrets(response.body);
 });
 test('GitHub read failure stays a 502 without successful-read install fields', async t => {
-  const { env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-studioos'; fakeGithub(t, [], {}, 500);
+  const { env } = await fixture(t); env.GITHUB_APP_SLUG = 'axal-vc-studioos'; fakeGithub(t, [], {}, 500);
   const response = await call(env, 'GET', '/api/connectors/gh1/repositories');
   assert.equal(response.status, 502); assert.equal(response.body.error, 'repositories_unreadable');
   assert.equal(Object.hasOwn(response.body, 'needs_install'), false); assert.equal(Object.hasOwn(response.body, 'install_url'), false);
@@ -175,6 +175,9 @@ test('S1 configuration mirrors one non-secret slug in default and production, wi
     assert.ok(values.at(-1) === '' || githubInstallUrl({ GITHUB_APP_SLUG: values.at(-1) } as any));
   }
   assert.equal(values[0], values[1]);
+  // #2113: the App the owner registered (#2110), so a repository read with no installation offers its install page.
+  assert.deepEqual(values, ['axal-vc-studioos', 'axal-vc-studioos']);
+  assert.equal(githubInstallUrl({ GITHUB_APP_SLUG: values[1] } as any), 'https://github.com/apps/axal-vc-studioos/installations/new');
   assert.doesNotMatch(block(toml, 'env.preview.vars'), /^GITHUB_APP_SLUG\s*=/m);
 });
 test('the Worker has exactly one installation URL builder', () => {
