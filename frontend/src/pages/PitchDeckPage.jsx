@@ -19,6 +19,7 @@ import SpinoutSlideEditor from '../components/SpinoutSlideEditor';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
 import { useRailOption } from '../ui/railCrumbs';
+import { railPressHeaders } from '../lib/railPage.js';
 import { spinoutPreviewMeta as computeSpinoutPreviewMeta } from './spinoutPreview';
 import DeckProposalPanel from '../components/DeckProposalPanel';
 import { PROPOSAL_COPY } from '../lib/deckProposal';
@@ -54,6 +55,13 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   const [running, setRunning] = useState(null);
   useRailOption(running === 'autofill' ? 'form:deck' : null, 'Fill from project');
   useRailOption(running === 'method' ? 'form:deck-template' : null, 'Use this template');
+  // D778 part 5 (#2103): a fill answers only the project it was pressed for.
+  // Changing project, or leaving the page, drops a run still at the model.
+  const runFor = useRef(0);
+  useEffect(() => {
+    setBusy(false); setRunning(null);
+    return () => { runFor.current += 1; };
+  }, [projectId]);
   const [savingState, setSavingState] = useState('idle'); // idle | saving | saved
 
   // Method-picker + recommendation state.
@@ -356,25 +364,39 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   };
 
   // ---------------- method picker actions ----------------
+  // D778 part 5: the press names its option on the request itself. A template
+  // the model fills comes back as a proposal, kept or discarded like a fill.
   const applyMethod = async (methodId) => {
     if (!projectId) { addToast('Pick a project first', 'error'); return; }
+    const run = runFor.current;
+    const stale = () => runFor.current !== run;
+    const headers = railPressHeaders('form:deck-template');
     setPickerOpen(false); setBusy(true); setRunning('method');
     try {
-      const r = await api.deckApplyMethod(projectId, methodId);
-      setDeck(r?.deck || r);
-      setActiveIdx(0);
+      const r = await api.deckApplyMethod(projectId, methodId, headers);
+      if (stale()) return;
+      const label = methods.find((m) => m.id === methodId)?.label || 'template';
       setSlideConfidence([]);
       setTemplateCoverage(Array.isArray(r?.coverage) ? r.coverage : null);
+      if (r?.proposal) {
+        setProposal(r.proposal);
+        addToast(`Filled ${label} (${r.coverage_pct || 0}% auto-filled). Keep it or discard it.`, 'success');
+        return;
+      }
+      setDeck(r?.deck || r);
+      setActiveIdx(0);
       const refreshed = await api.deckListVersions(projectId);
+      if (stale()) return;
       setVersions(Array.isArray(refreshed) ? refreshed : (refreshed?.versions || []));
-      addToast(`Applied ${methods.find((m) => m.id === methodId)?.label || 'template'} (${r.coverage_pct || 0}% auto-filled)`, 'success');
+      addToast(`Applied ${label} (${r.coverage_pct || 0}% auto-filled)`, 'success');
     } catch (e) {
+      if (stale()) return;
       if (e.status === 402) {
         addToast('That template is on the Growth plan — upgrade to unlock.', 'info');
       } else {
         setError(e.message || 'Failed to apply method'); reportError('PitchDeckPage:applyMethod', e);
       }
-    } finally { setBusy(false); setRunning(null); }
+    } finally { if (!stale()) { setBusy(false); setRunning(null); } }
   };
 
   // ---------------- Task #14 — Fill from project ----------------
@@ -386,14 +408,19 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   // the deck itself is not changed until the founder keeps it.
   const fillFromProject = async () => {
     if (!deck?.id) { addToast('No deck loaded', 'error'); return; }
+    const run = runFor.current;
+    const stale = () => runFor.current !== run;
+    const headers = railPressHeaders('form:deck');
     setBusy(true); setRunning('autofill');
     try {
-      const r = await api.deckAutofill(deck.id);
+      const r = await api.deckAutofill(deck.id, headers);
+      if (stale()) return;
       setProposal(r?.proposal || null);
       setSlideConfidence(Array.isArray(r?.slide_confidence) ? r.slide_confidence : []);
       setTemplateCoverage(Array.isArray(r?.coverage) ? r.coverage : null);
       addToast(`Filled from project (${r?.coverage_pct ?? 0}% covered). Keep it or discard it.`, 'success');
     } catch (e) {
+      if (stale()) return;
       // D258 — the refusal's code travels on `e.code`, compared whole. The
       // 409 disjunct stays: no_method_id is the route's only 409.
       if (e?.status === 409 || e?.code === 'no_method_id') {
@@ -404,7 +431,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
       } else {
         setError(e.message || 'Refill failed'); reportError('PitchDeckPage:refill', e);
       }
-    } finally { setBusy(false); setRunning(null); }
+    } finally { if (!stale()) { setBusy(false); setRunning(null); } }
   };
 
   const keepProposal = async (p) => {

@@ -1583,7 +1583,26 @@ decks.get('/recommend', async (c) => {
   return c.json(rec);
 });
 
-/** POST /api/decks/apply-method — autofill the picked template into a new version. */
+/**
+ * D778 part 5 (#2103): the page and option D771's inventory gives the two deck
+ * form fills (`railOptions/founder.js`). A press's own headers win (`railFor`);
+ * these stand for a client that sent none.
+ */
+export const DECK_FORM_RAIL = {
+  page: 'Founder · Raise · Pitch deck',
+  template: 'form:deck-template',
+  fill: 'form:deck',
+} as const;
+
+/**
+ * POST /api/decks/apply-method — autofill the picked template.
+ *
+ * D778 part 5: a template the model fills is PROPOSED (one
+ * `pitch_deck_proposals` row, as "Fill from project" proposes) and no deck
+ * version is written until the founder keeps it. The Spin-Out demo day
+ * template copies Lab records and runs no model, so it still writes its
+ * version, as before.
+ */
 decks.post('/apply-method', async (c) => {
   const user = await requireAuth(c);
   // Free-tier founders may apply any non-premium template. Premium
@@ -1649,7 +1668,8 @@ decks.post('/apply-method', async (c) => {
   // Run autofill, then convert to the editor slide JSON shape stored in
   // pitch_decks.slides. We also stash the method_id + spec_id on each
   // slide so the editor can re-render the right field controls.
-  const filled = await autofillDeck(c.env, method, pid, { userId: Number(user.id) || 0, railOption: 'deck_draft', projectId: pid });
+  const rail = railFor(c, { page: DECK_FORM_RAIL.page, option: DECK_FORM_RAIL.template }, `project:${pid}`);
+  const filled = await autofillDeck(c.env, method, pid, { userId: Number(user.id) || 0, projectId: pid, rail });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,
@@ -1673,10 +1693,12 @@ decks.post('/apply-method', async (c) => {
   const landingPage = await fetchLandingPageForProject(c.env, pid);
   const branded = applyBrandKitToSlides(safeWrapped, landingPage, method.brandTheme, proj.name);
   const title = `${proj.name} — ${method.label}`;
-  const id = await insertVersion(c.env, pid, branded, title, Number(user.id) || null);
-  const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+  // The proposal sits beside the current version; base 0 when the project has none yet.
+  const current = await c.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? AND is_current = 1 ORDER BY id DESC LIMIT 1')
+    .bind(pid).first<any>();
+  const proposal = await proposeFill(c.env, { id: Number(current?.id) || 0, project_id: pid, title }, branded, methodId, Number(user.id));
   return c.json({
-    deck: rowToDeck(row),
+    proposal,
     method_id: methodId,
     coverage_pct: filled.total_coverage_pct,
   });
@@ -1811,7 +1833,8 @@ decks.post('/:id/autofill', async (c) => {
     });
   }
 
-  const filled = await autofillDeck(c.env, method, Number(row.project_id), { userId: Number(user.id) || 0, railOption: 'fill_from_project', projectId: Number(row.project_id) });
+  const rail = railFor(c, { page: DECK_FORM_RAIL.page, option: DECK_FORM_RAIL.fill }, `project:${Number(row.project_id)}`);
+  const filled = await autofillDeck(c.env, method, Number(row.project_id), { userId: Number(user.id) || 0, projectId: Number(row.project_id), rail });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,

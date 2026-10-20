@@ -144,7 +144,7 @@ test('the deck draft is one router run with option deck_draft', async () => {
   } finally { restore(); f.db.close(); }
 });
 
-test('"Fill from project" through its route is one run with option fill_from_project, charged to who pressed', async () => {
+test('"Fill from project" through its route is one run with D771\'s page and option form:deck (D778 part 5), charged to who pressed', async () => {
   const f = fixture();
   f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(500,'admin.d767@example.test','Admin','admin','studio')").run();
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(500,5000000)').run();
@@ -165,7 +165,7 @@ test('"Fill from project" through its route is one run with option fill_from_pro
     const rows = f.rows();
     assert.equal(rows.length, 1, `one usage row: ${JSON.stringify(rows)}`);
     const { charged_microusd, ...who } = rows[0];
-    assert.deepEqual(who, { ...ROW('fill_from_project'), user_id: 500 });
+    assert.deepEqual(who, { ...ROW('form:deck'), rail_page: 'Founder · Raise · Pitch deck', user_id: 500 });
   } finally { restore(); f.db.close(); }
 });
 
