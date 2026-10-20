@@ -267,7 +267,9 @@ test('reached from the card, the account menus and the bell; every signed-in rol
     assert.match(read(`src/pages/${f}`), /<ProductTestingCard previewing=\{previewing\} className="m[tb]-4" \/>/, f);
   }
   // The page draws its rail in the shared frame; D781's render ratchet renders it in every profile.
-  assert.match(read('src/pages/productTesting/ProductTestingPage.jsx'), /<RailFrame rail=\{<WorkerRail workspace="Product testing"/);
+  const pageSrc = read('src/pages/productTesting/ProductTestingPage.jsx');
+  assert.match(pageSrc, /<RailFrame rail=\{railFor\(role\)\}/);
+  for (const r of ['investor', 'advisor', 'partner', 'admin', 'founder']) assert.match(pageSrc, new RegExp(`<WorkerRail workspace="Product testing" role="${r}"`), r);
   assert.ok(!Object.values(RENDER_NOT_YET).flat().some((n) => n.endsWith(' /product-testing')), 'no RENDER_NOT_YET line added');
   // The bell's member notifications link here (D812's notify call).
   assert.match(read('../cloudflare-worker/src/services/testing.ts'), /export const MY_APPLICATIONS_LINK = '\/product-testing\?tab=applications';/);

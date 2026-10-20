@@ -199,6 +199,23 @@ export function ApplicationRow({ application: a, onWithdrawn }) {
   );
 }
 
+const RAIL_NOTE = 'Applying, and every email to testers, is yours to decide. Eadwyn does not apply for you.';
+
+/**
+ * The rail, in the caller's accent. Each mount names its role literally
+ * (`branch_rail_mount.test.mjs` keeps computed roles to a ceiling); an
+ * exploring member, who has no accent of their own, takes the founder's.
+ */
+function railFor(role) {
+  switch (role) {
+    case 'investor': return <WorkerRail workspace="Product testing" role="investor" note={RAIL_NOTE} />;
+    case 'advisor': return <WorkerRail workspace="Product testing" role="advisor" note={RAIL_NOTE} />;
+    case 'partner': return <WorkerRail workspace="Product testing" role="partner" note={RAIL_NOTE} />;
+    case 'admin': return <WorkerRail workspace="Product testing" role="admin" note={RAIL_NOTE} />;
+    default: return <WorkerRail workspace="Product testing" role="founder" note={RAIL_NOTE} />;
+  }
+}
+
 export default function ProductTestingPage({ user }) {
   const { search, pathname } = useLocation();
   const navigate = useNavigate();
@@ -271,7 +288,7 @@ export default function ProductTestingPage({ user }) {
   );
 
   return (
-    <RailFrame rail={<WorkerRail workspace="Product testing" role={role || 'founder'}note="Applying, and every email to testers, is yours to decide. Eadwyn does not apply for you." />} data-testid="product-testing-frame">
+    <RailFrame rail={railFor(role)} data-testid="product-testing-frame">
       {body}
     </RailFrame>
   );
