@@ -808,9 +808,25 @@ interface StripeSubscription {
   canceled_at?: number | null;
   items?: { data: StripeSubItem[] };
 }
+interface StripeAddress {
+  line1?: string | null; line2?: string | null; city?: string | null; postal_code?: string | null; country?: string | null;
+}
 interface StripePaymentMethod {
   id: string;
   card?: { brand: string; last4: string; exp_month: number; exp_year: number };
+  billing_details?: { address?: StripeAddress | null } | null;
+}
+
+/**
+ * D806 (#2245): the card's billing address as Stripe holds it, or null when
+ * it holds none. Never filled in from anywhere else.
+ */
+export function billingAddressOf(pm: StripePaymentMethod) {
+  const a = pm.billing_details?.address;
+  if (!a) return null;
+  const field = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
+  const out = { line1: field(a.line1), line2: field(a.line2), city: field(a.city), postal_code: field(a.postal_code), country: field(a.country) };
+  return Object.values(out).some((v) => v !== null) ? out : null;
 }
 interface StripeCustomer {
   id: string;
@@ -1080,6 +1096,7 @@ billing.get('/overview', async (c) => {
       exp_month: pm.card?.exp_month ?? null,
       exp_year: pm.card?.exp_year ?? null,
       is_default: pm.id === defaultPm,
+      billing_address: billingAddressOf(pm),
     })),
     upcoming_invoice: upcoming
       ? {
@@ -1100,6 +1117,39 @@ billing.get('/overview', async (c) => {
       .filter((ch) => ch.paid && !ch.invoice)
       .map(normCharge),
   });
+});
+
+/**
+ * D806 (#2245): one invoice list, newest first, 25 to a page: the member's own
+ * paid orders from D1 and the plan invoices of each Stripe customer they have
+ * (founder, investor). When Stripe cannot be read, the orders still list, with
+ * `degraded: ['stripe']`; the list is never an error as a whole.
+ */
+billing.get('/invoices', async (c) => {
+  const user = (await requireAuth(c)) as TierUser & InvestorUser;
+  const { invoicePaging, orderInvoiceRows, pageInvoices, stripeInvoiceRow } = await import('../services/billingInvoices');
+  const { page, per } = invoicePaging(c.req.query('page'), c.req.query('per'));
+  const rows = await orderInvoiceRows(c.env, Number(user.id));
+  const customers = [...new Set([resolveScopeCustomer(user, 'founder'), resolveScopeCustomer(user, 'investor')].filter((v): v is string => !!v))];
+  let stripeDown = false;
+  if (customers.length && !c.env.STRIPE_SECRET_KEY) stripeDown = true;
+  else if (customers.length) {
+    const names = new Map<string, string>();
+    try {
+      for (const p of await getCatalog(c.env)) for (const pr of p.prices) names.set(pr.id, p.name);
+    } catch { /* no catalogue: Stripe's own line words are used */ }
+    const lists = await Promise.all(customers.map((customer) => section(stripeCall<StripeList<StripeInvoice>>(c.env, '/invoices', {
+      customer, limit: '100',
+    }, { method: 'GET' }))));
+    for (const r of lists) {
+      if (!r.ok) { stripeDown = true; continue; }
+      for (const inv of r.data.data ?? []) {
+        const row = stripeInvoiceRow(inv as any, (priceId) => names.get(priceId) ?? null);
+        if (row) rows.push(row);
+      }
+    }
+  }
+  return c.json({ ...pageInvoices(rows, page, per), ...(stripeDown ? { degraded: ['stripe'] } : {}) });
 });
 
 async function setCancelAtPeriodEnd(c: Context<{ Bindings: Env }>, value: boolean) {

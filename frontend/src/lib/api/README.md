@@ -178,6 +178,10 @@ is shown to its owner only and never stored. `partnerSettlements.js` calls
 and `/api/admin/partner-settlements` (an Admin's list, draft, edit and delete;
 the Super Admin's issue and void). Nothing here moves money.
 
+D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
+(`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
+Stripe plan invoices in one list, newest first. No UI reads it yet.
+
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
