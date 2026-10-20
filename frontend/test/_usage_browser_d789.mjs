@@ -10,6 +10,7 @@ const preview = spawn('npm', ['--prefix', 'frontend', 'run', 'dev', '--', '--hos
 let browser;
 try {
   for (let i = 0; i < 60; i++) {
+    // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request -- the Vite dev server this script spawned on loopback; nothing leaves the runner
     try { const r = await fetch('http://127.0.0.1:4173/'); if (r.ok) break; } catch {}
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
