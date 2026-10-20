@@ -109,7 +109,7 @@ export function RecentInvoices({ invoices }) {
     <UsageCardState read={invoices} what="Recent invoices">
         {!rows ? <Unrecorded reason="The invoice list was not returned.">Not recorded</Unrecorded>
           : <>{invoices.data.degraded?.includes('stripe') && <Unreadable what="Plan invoices" claim="The order invoices below still load." onRetry={invoices.reload} />}
-            {!rows.length ? <EmptyState size="sm" title="No invoices yet." /> : rows.map((row) => {
+            {!rows.length ? <EmptyState size="sm" title={invoices.data.degraded?.includes('stripe') ? 'No order invoices yet.' : 'No invoices yet.'} /> : rows.map((row) => {
               let amount = null;
               try { if (Number.isSafeInteger(row.amount_cents) && row.currency) amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: row.currency }).format(row.amount_cents / 100); } catch { /* invalid currency remains missing */ }
               const date = new Date(toUtcInstant(row.date) || NaN);

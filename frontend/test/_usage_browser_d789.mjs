@@ -15,6 +15,7 @@ try {
   }
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  await page.addInitScript(() => localStorage.setItem('token', 'fixture-token'));
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   let csvRead = '';
@@ -23,7 +24,7 @@ try {
   await page.clock.install({ time: new Date('2026-10-20T12:00:00Z') });
   await page.route('http://127.0.0.1:4173/api/**', async (route) => {
     const url = new URL(route.request().url());
-    if (/^\/api\/orders\/[^/]+\/invoice$/.test(url.pathname)) return route.fulfill({ status: 200, contentType: 'application/pdf', body: '%PDF-1.4 synthetic fixture' });
+    if (/^\/api\/orders\/[^/]+\/invoice$/.test(url.pathname)) { assert.equal(route.request().headers().authorization, 'Bearer fixture-token'); return route.fulfill({ status: 200, contentType: 'application/pdf', body: '%PDF-1.4 synthetic fixture' }); }
     if (url.pathname.endsWith('/cost.csv')) {
       csvRead = url.search;
       return route.fulfill({ status: 200, contentType: 'text/csv', body: 'day,model\n2026-10-01,synthetic\n' });

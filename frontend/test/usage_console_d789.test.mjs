@@ -70,6 +70,7 @@ async function killed(path, before, after, check) {
   check(normal);
   const changed = await mutant(path, before, after);
   assert.throws(() => check(changed), /./, 'the changed behaviour is detected');
+  check(normal); // The original still passes after the isolated mutant.
 }
 
 test('every overview card links to its own page; phone cards stack', async () => {
@@ -195,9 +196,14 @@ test('missing invoice payload is explicit, while failed reads never become an em
     assert.match(html(h(m.RecentInvoices, { invoices: ready({}) })), /Not recorded/);
     assert.match(html(h(m.RecentInvoices, { invoices: failed })), /Recent invoices could not be read/);
     assert.doesNotMatch(html(h(m.RecentInvoices, { invoices: failed })), /No invoices yet/);
+    const partial = html(h(m.RecentInvoices, { invoices: ready({ invoices: [], degraded: ['stripe'] }) }));
+    assert.match(partial, /Plan invoices could not be read/);
+    assert.match(partial, /No order invoices yet/);
+    assert.doesNotMatch(partial, /No invoices yet/);
   };
   check(overview);
   await killed('../src/pages/account/UsageOverview.jsx', '<Unrecorded reason="The invoice list was not returned.">Not recorded</Unrecorded>', '<span>No invoices yet.</span>', check);
+  await killed('../src/pages/account/UsageOverview.jsx', "'No order invoices yet.'", "'No invoices yet.'", check);
 });
 
 test('balance pills depend on their own successful reads and a missing limit is named', async () => {
@@ -305,7 +311,7 @@ test('the month empty state reuses a complete 30-day slice and does not infer ru
     assert.equal(m.monthIsEmpty({ ...readFor('2026-10-01', '2026-10-20'), truncated: true }, new Date('2026-10-20T12:00:00Z')), null);
   };
   check(model);
-  await killed('../src/pages/account/costModel.js', "read.range.from > first", 'false', check);
+  await killed('../src/pages/account/costModel.js', 'read.truncated', 'false', check);
   await killed('../src/pages/account/costModel.js', 'd.by_model.length === 0', 'true', check);
 });
 
