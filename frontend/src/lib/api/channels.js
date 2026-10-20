@@ -10,6 +10,7 @@
 //   whatsappLinkView GET    /channels/whatsapp/link        → { claim, link }: the newest claim and the member's own WhatsApp
 //   confirmWhatsAppLink POST /channels/whatsapp/link/:uid/confirm  Axal's half → { linked, claim, link }
 //   unlinkWhatsApp   DELETE /channels/whatsapp/link        → { unlinked }
+//   setWhatsAppVenture PUT  /channels/whatsapp/link/venture { project_id | null } (#1939 part 3) → { venture }
 //   whatsappCaptures GET    /channels/whatsapp/captures    D754 way B (#1938): → { items }: what the member forwarded to Axal
 //   agreeCapture     POST   /channels/whatsapp/captures/:uid/consent  "Agreed beforehand" for a capture still waiting (#1939)
 //   connectWhatsApp  POST   /channels/whatsapp/connect     { code, waba_id, phone_number_id } from Embedded Signup
@@ -112,6 +113,7 @@ export const channelsApi = {
   whatsappLinkView: () => request('/channels/whatsapp/link'),
   confirmWhatsAppLink: (uid) => request(`/channels/whatsapp/link/${enc(uid)}/confirm`, { method: 'POST', body: JSON.stringify({}) }),
   unlinkWhatsApp: () => request('/channels/whatsapp/link', { method: 'DELETE' }),
+  setWhatsAppVenture: (projectId) => request('/channels/whatsapp/link/venture', { method: 'PUT', body: JSON.stringify({ project_id: projectId }) }),
   whatsappCaptures: () => request('/channels/whatsapp/captures'),
   agreeCapture: (uid) => request(`/channels/whatsapp/captures/${enc(uid)}/consent`, { method: 'POST', body: JSON.stringify({ method: 'pre_agreed' }) }),
   connectWhatsApp: ({ code, waba_id, phone_number_id }) => request('/channels/whatsapp/connect', {
