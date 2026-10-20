@@ -448,6 +448,7 @@ export default function PartnerVisibilityZone() {
 
           <ZoneDraft
             surface="offers/visibility"
+            railOption="draft:attribution-read"
             label="Draft · attribution read"
             accept="Accept read"
             run="Read the attribution"

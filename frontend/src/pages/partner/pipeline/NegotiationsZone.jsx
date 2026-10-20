@@ -636,6 +636,7 @@ export default function PartnerNegotiationsZone() {
 
         <ZoneDraft
           surface="pipeline/negotiations"
+          railOption="draft:counter"
           label="Proposal · counter drafted"
           accept="Send counter"
           run="Draft the counter"

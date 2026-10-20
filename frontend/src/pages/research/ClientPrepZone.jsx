@@ -8,6 +8,8 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Instrument, NotRecorded, SourceLegend } from '../../workspaces/canvasKit';
 import { accentChipClass } from '../../workspaces/shellConfig';
+import { useRailPage } from '../../ui/railCrumbs';
+import { railOptionFor } from '../../lib/railOptions';
 
 /**
  * Research · Client prep — the brief, with both sides in it.
@@ -64,6 +66,8 @@ const NARROW = {
 };
 
 export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advisor' }) {
+  // D779: the band's key on this profile's board (D772's lookup), where the inventory names one.
+  const railPage = useRailPage()?.page ?? null;
   const [inbox, setInbox] = useState({ loading: true, error: null, items: [] });
   const [chosen, setChosen] = useState(null);
   const [brief, setBrief] = useState({ loading: false, error: null, data: null });
@@ -354,6 +358,7 @@ export default function ClientPrepZone({ zoneActions, zoneFilters, role = 'advis
 
             <ZoneDraft
               surface="research/client-prep"
+              railOption={railOptionFor(railPage, { file: 'pages/research/ClientPrepZone.jsx', control: 'research/client-prep' })?.key}
               scopeKey={chosen || ''}
               label="Draft · checkpoint brief"
               accept="Accept brief"

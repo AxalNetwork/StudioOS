@@ -658,6 +658,7 @@ export default function PartnerRetainersZone() {
 
         <ZoneDraft
           surface="pipeline/retainers"
+          railOption="draft:renewal-risk"
           label="Proposal · renewal risk"
           accept="Draft the conversation"
           run="Read the book"

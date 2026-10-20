@@ -550,6 +550,7 @@ export default function PartnerStatusReportsZone() {
 
         <ZoneDraft
           surface="delivery/status-reports"
+          railOption="draft:weekly-reports"
           label="Draft · weekly reports"
           accept="Review the batch"
           run="Draft the batch"

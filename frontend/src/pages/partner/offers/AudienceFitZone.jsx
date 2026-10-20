@@ -562,6 +562,7 @@ export default function PartnerAudienceFitZone() {
 
           <ZoneDraft
             surface="offers/audience-fit"
+            railOption="draft:pass-reasons"
             label="Draft · pass reasons"
             accept="Accept drafts"
             run="Draft the passes"

@@ -359,6 +359,7 @@ export default function PartnerCapacityZone() {
 
           <ZoneDraft
             surface="delivery/capacity"
+            railOption="draft:capacity-findings"
             label="Draft · capacity findings"
             accept="Accept findings"
             run="Read the roster"

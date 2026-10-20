@@ -597,6 +597,7 @@ export default function PartnerProofZone() {
 
           <ZoneDraft
             surface="offers/proof"
+            railOption="draft:consent-requests"
             label="Draft · consent requests"
             accept="Accept drafts"
             run="Draft the requests"

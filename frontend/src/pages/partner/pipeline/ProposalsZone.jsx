@@ -341,6 +341,7 @@ export default function PartnerProposalsZone() {
 
           <ZoneDraft
             surface="pipeline/proposals"
+            railOption="draft:win-loss-read"
             label="Draft · win/loss read"
             accept="Accept read"
             run="Read the book"

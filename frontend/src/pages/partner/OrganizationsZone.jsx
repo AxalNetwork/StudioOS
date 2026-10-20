@@ -292,6 +292,7 @@ export default function OrganizationsZone({ zoneActions, zoneFilters = null, rol
 
       <ZoneDraft
         surface="network/organizations"
+        railOption="draft:single-contact-exposure"
         label="Draft · single-contact exposure"
         accept="Accept draft"
         run="Draft the exposure"

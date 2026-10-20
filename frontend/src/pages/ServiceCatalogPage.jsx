@@ -12,6 +12,8 @@ import { api } from '../lib/api';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import ZoneDraft from '../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../workspaces/canvasKit';
+import { useRailPage } from '../ui/railCrumbs';
+import { railOptionFor } from '../lib/railOptions';
 
 const CATEGORIES = ['legal', 'accounting', 'design', 'recruiting', 'fractional_cfo', 'gtm', 'engineering', 'marketing'];
 const CAT_LABEL = {
@@ -352,6 +354,8 @@ export function catalogState(o) {
 }
 
 export function MineTab({ user, zoneActions, zoneFilters, role }) {
+  // D779: the band's key on this profile's board (D772's lookup), where the inventory names one.
+  const railPage = useRailPage()?.page ?? null;
   const [rows, setRows] = useState([]);
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
@@ -548,6 +552,7 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
 
       <ZoneDraft
         surface="offers/catalog"
+        railOption={railOptionFor(railPage, { file: 'pages/ServiceCatalogPage.jsx', control: 'offers/catalog' })?.key}
         label="Draft · catalog read"
         accept="Accept draft"
         run="Read the catalog"
