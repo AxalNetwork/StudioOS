@@ -109,10 +109,10 @@ export async function creditAiTopupFromPayment(env:Env,pi:any):Promise<boolean> 
   // is credited at the face value paid, without its bonus. The withheld bonus is moved off bonus_microusd
   // before anything is credited, so the credit, the balance and any later reversal share read the same row.
   // It runs first and only while this purchase is uncredited, so any purchase on the ledger is another one.
-  const OTHER_PURCHASE=`EXISTS(SELECT 1 FROM ai_credit_ledger l WHERE l.user_id=ai_topup_purchases.user_id AND l.kind='purchase')`;
   const results=await env.DB.batch([
     env.DB.prepare(`UPDATE ai_topup_purchases SET bonus_withheld_microusd=bonus_microusd,bonus_microusd=0,updated_at=datetime('now')
-      WHERE payment_intent_id=? AND credited_at IS NULL AND first_purchase_only=1 AND bonus_microusd>0 AND ${OTHER_PURCHASE}`).bind(pi.id),
+      WHERE payment_intent_id=? AND credited_at IS NULL AND first_purchase_only=1 AND bonus_microusd>0
+        AND EXISTS(SELECT 1 FROM ai_credit_ledger l WHERE l.user_id=ai_topup_purchases.user_id AND l.kind='purchase')`).bind(pi.id),
     env.DB.prepare('INSERT OR IGNORE INTO ai_topup_accounts(user_id) VALUES(?)').bind(row.user_id),
     env.DB.prepare(`INSERT OR IGNORE INTO ai_credit_ledger(uid,user_id,kind,delta_microusd,source_ref,payment_intent_id,pack_uid,actor)
       SELECT ?,user_id,'purchase',credit_microusd,'pi:'||payment_intent_id,payment_intent_id,pack_uid,'payment_webhook' FROM ai_topup_purchases
