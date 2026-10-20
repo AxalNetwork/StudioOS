@@ -305,6 +305,15 @@ const BUCKETS: Bucket[] = [
   // retry, nothing for a script. Anchored so no sibling share route
   // (view, nda, feedback, deal pack) is capped by it. failClosed: if KV is
   // down the account-creating write waits rather than running uncapped.
+  // D811 — Mail reads and feedback, a separate fail-closed service bucket.
+  {
+    name: 'mail_link',
+    limit: 120,
+    windowSec: 60,
+    test: (p) => p === '/api/mail-link' || p.startsWith('/api/mail-link/'),
+    scope: 'ip',
+    failClosed: true,
+  },
   // D810 — the newsletter's public routes: a signup mails whatever address it
   // is given, and the confirm, preferences and unsubscribe routes take a
   // token a script could try to guess. 10/min/IP across all four: room for a

@@ -26,6 +26,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752)
 /api/mercury/attestations → mercury_attestations.ts (an investor's proof of capital: dated statements from their own Mercury, consented and revocable; read-only, HQ only, D752)
 /api/admin/capital-attestations → admin_capital_attestations.ts (HQ admins read an investor's shared proof of funds; audited before it answers; reads capital_attestations only, never a connection; D752)
+/api/mail-link     → mail_link.ts (D811: Mail HMAC only, before session middleware; audiences, recipients, feedback and health)
 /api/auth          → auth.ts
 /api/scoring       → scoring.ts
 /api/projects      → projects.ts

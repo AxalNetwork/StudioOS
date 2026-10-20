@@ -260,3 +260,5 @@ alerts on every hand entry (`checkKpiAlerts`). `growDaily.ts` is Grow's daily
 step, run from `../index.ts` at 05:35 UTC: an obligation's reminders on the
 days its `remind_days_json` names, and every venture's KPI alerts, each sent
 once, in the app only.
+
+D811: `mailLinkAudiences.ts` reads consented, suppression-filtered Mail audiences and signed D810 links. `mailLinkEvents.ts` validates and atomically applies feedback with receipts and service-actor audit.
