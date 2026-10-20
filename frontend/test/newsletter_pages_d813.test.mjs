@@ -200,23 +200,60 @@ test('the confirm page: confirmed, expired, used, unconfigured and an unexplaine
   assert.match(draw(model.confirmView(null, refusal(503, 'newsletter_unconfigured'))), /not open yet/);
   const failed = draw(model.confirmView(null, refusal(500, 'internal')));
   assert.match(failed, /could not be confirmed.*has not been used.*Try again/);
-  assert.match(draw({ state: 'loading' }), /Confirming your subscription…/);
+  assert.match(draw({ state: 'loading' }), /Checking your link…/);
+  // The check's answer (GET, which changes nothing) waits for the button.
+  assert.deepEqual(model.checkView({ ok: true, status: 'pending' }, null), { state: 'ready' });
+  assert.equal(model.checkView(null, refusal(410, 'token_expired')).state, 'expired');
+  assert.match(draw({ state: 'ready' }), /Confirm your subscription\..*Nothing is sent until you do\. Confirm subscription/);
+  assert.match(draw({ state: 'confirming' }), /Confirming…/);
 });
 
-test('the confirm page reads its token once, and a missing token is a bad link', async (t) => {
-  let calls = 0;
-  stubApi(t, { confirm: async () => { calls += 1; return { ok: true, status: 'confirmed' }; } });
+test('opening the link only checks it; the button confirms, once', async (t) => {
+  const calls = [];
+  let release;
+  stubApi(t, {
+    checkConfirm: async (token) => { calls.push(['check', token]); return { ok: true, status: 'pending' }; },
+    confirm: (token) => { calls.push(['confirm', token]); return new Promise((r) => { release = r; }); },
+  });
   const { ConfirmFlow: Page } = await import('../src/pages/site/NewsletterConfirmPage.jsx');
   const v = await mountContracts(React.createElement(Page), '/newsletter/confirm?token=abcdefghijklmnopqrstuvwxyz');
+  t.after(() => v.unmount());
   await v.flush();
-  assert.equal(calls, 1, 'the single-use token is spent once');
+  assert.deepEqual(calls, [['check', 'abcdefghijklmnopqrstuvwxyz']], 'opening the page confirms nothing');
+  assert.match(v.text(), /Confirm your subscription\./);
+  await v.click('Confirm subscription');
+  const button = v.nodes().find((n) => n.tagName === 'BUTTON' && v.props(n)?.disabled);
+  assert.ok(button, 'the button is locked while the confirm is out');
+  await act(async () => { v.props(button).onClick(); });
+  assert.deepEqual(calls.filter(([k]) => k === 'confirm').length, 1, 'the single-use token is posted once');
+  await act(async () => { release({ ok: true, status: 'confirmed' }); });
+  await v.flush();
   assert.match(v.text(), /You're subscribed\./);
-  await v.unmount();
-  const none = await mountContracts(React.createElement(Page), '/newsletter/confirm');
-  await none.flush();
-  assert.equal(calls, 1);
-  assert.match(none.text(), /already been used or is not valid/);
-  await none.unmount();
+});
+
+test('a used link is found by the check, before any confirm', async (t) => {
+  let confirms = 0;
+  stubApi(t, {
+    checkConfirm: async () => { throw refusal(410, 'token_invalid'); },
+    confirm: async () => { confirms += 1; return {}; },
+  });
+  const { ConfirmFlow: Page } = await import('../src/pages/site/NewsletterConfirmPage.jsx');
+  const v = await mountContracts(React.createElement(Page), '/newsletter/confirm?token=abcdefghijklmnopqrstuvwxyz');
+  t.after(() => v.unmount());
+  await v.flush();
+  assert.match(v.text(), /already been used or is not valid/);
+  assert.equal(confirms, 0);
+});
+
+test('a link with no token is a bad link, and nothing is sent', async (t) => {
+  let calls = 0;
+  stubApi(t, { checkConfirm: async () => { calls += 1; return {}; }, confirm: async () => { calls += 1; return {}; } });
+  const { ConfirmFlow: Page } = await import('../src/pages/site/NewsletterConfirmPage.jsx');
+  const v = await mountContracts(React.createElement(Page), '/newsletter/confirm');
+  t.after(() => v.unmount());
+  await v.flush();
+  assert.equal(calls, 0);
+  assert.match(v.text(), /already been used or is not valid/);
 });
 
 // ---------------------------------------------------------------- W3

@@ -3,22 +3,34 @@ import { Link, useSearchParams } from 'react-router-dom';
 import SitePage from '../../components/site/SitePage';
 import { Eyebrow } from '../../components/site/SiteBlocks';
 import { newsletterApi } from '../../lib/api/newsletter';
-import { confirmView, confirmedTitle } from './newsletterModel';
+import { checkView, confirmView, confirmedTitle } from './newsletterModel';
 import '../../components/site/newsletter.css';
 
 /**
  * `/newsletter/confirm?token=` — D813 (#2259), board W2.
  *
- * It calls D810's `GET /api/newsletter/confirm` once. The token is single
- * use, so the read runs once per token even under React's double effect, and
- * Try again re-reads only after a failure the route did not explain.
+ * OPENING THE LINK CONFIRMS NOTHING. Mail scanners open every link in a
+ * message, so since S1's review of D810 only `POST /api/newsletter/confirm`
+ * confirms. The page checks the link with the `GET`, which changes nothing,
+ * and the person confirms with the button, which sends the `POST` once.
  *
  * "You're subscribed to [n] newsletters" needs the topics, and D810's JSON
  * answer carries none today: the page draws the count and the list when the
  * answer has them, and the plain sentence until then. No count is invented.
  */
-export function ConfirmView({ view, onRetry }) {
-  if (view.state === 'loading') return <p className="ax-nl-lede" role="status">Confirming your subscription…</p>;
+export function ConfirmView({ view, onConfirm, onRetry }) {
+  if (view.state === 'loading') return <p className="ax-nl-lede" role="status">Checking your link…</p>;
+  if (view.state === 'ready' || view.state === 'confirming') {
+    return (
+      <div data-testid="nl-confirm-ready">
+        <h1 className="ax-nl-h1">Confirm your subscription.</h1>
+        <p className="ax-nl-lede">Press the button to start receiving the newsletters you chose. Nothing is sent until you do.</p>
+        <button type="button" className="ax-btn ax-btn-md ax-btn-primary ax-nl-action" onClick={onConfirm} disabled={view.state === 'confirming'}>
+          {view.state === 'confirming' ? 'Confirming…' : 'Confirm subscription'}
+        </button>
+      </div>
+    );
+  }
   if (view.state === 'confirmed') {
     return (
       <div data-testid="nl-confirmed">
@@ -61,32 +73,43 @@ export function ConfirmView({ view, onRetry }) {
   return (
     <div data-testid="nl-confirm-error">
       <h1 className="ax-nl-h1">Your subscription could not be confirmed.</h1>
-      <p className="ax-nl-lede">The confirmation did not reach us. Your link has not been used.</p>
+      <p className="ax-nl-lede">We could not reach the server. If you had not confirmed yet, your link has not been used.</p>
       <button type="button" className="ax-btn ax-btn-md ax-btn-primary ax-nl-action" onClick={onRetry}>Try again</button>
     </div>
   );
 }
 
-/** The read and its state, without the site frame, so a test can mount it. */
+/** The check, the confirm and their state, without the site frame, so a test can mount it. */
 export function ConfirmFlow() {
   const [params] = useSearchParams();
   const token = params.get('token') || '';
   const [view, setView] = useState(() => (token ? { state: 'loading' } : { state: 'invalid' }));
   const [attempt, setAttempt] = useState(0);
-  const sent = useRef('');
 
   useEffect(() => {
-    if (!token) { setView({ state: 'invalid' }); return; }
-    const key = `${token}#${attempt}`;
-    if (sent.current === key) return;
-    sent.current = key;
+    if (!token) { setView({ state: 'invalid' }); return undefined; }
+    let live = true;
     setView({ state: 'loading' });
-    newsletterApi.confirm(token)
-      .then((r) => setView(confirmView(r, null)))
-      .catch((e) => setView(confirmView(null, e || {})));
+    newsletterApi.checkConfirm(token)
+      .then((r) => { if (live) setView(checkView(r, null)); })
+      .catch((e) => { if (live) setView(checkView(null, e || {})); });
+    return () => { live = false; };
   }, [token, attempt]);
 
-  return <ConfirmView view={view} onRetry={() => setAttempt((n) => n + 1)} />;
+  const sent = useRef(false);
+  async function confirm() {
+    // The token is single use: one POST per press, never two in flight.
+    if (sent.current) return;
+    sent.current = true;
+    setView({ state: 'confirming' });
+    try {
+      setView(confirmView(await newsletterApi.confirm(token), null));
+    } catch (e) {
+      setView(confirmView(null, e || {}));
+    } finally { sent.current = false; }
+  }
+
+  return <ConfirmView view={view} onConfirm={confirm} onRetry={() => setAttempt((n) => n + 1)} />;
 }
 
 export default function NewsletterConfirmPage() {

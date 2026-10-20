@@ -80,17 +80,29 @@ export function signupBody({ email, picked, turnstileToken = '', hp = '' }) {
 /** The phrase for a count: "1 newsletter", "3 newsletters". */
 export const newsletterCount = (n) => `${n} newsletter${n === 1 ? '' : 's'}`;
 
+/** W2: a refused confirm check or confirm, as a page state. A 410 is an expired or used link. */
+function confirmFailure(error) {
+  if (error.code === 'token_expired') return { state: 'expired' };
+  if (error.code === 'token_invalid') return { state: 'invalid' };
+  if (error.code === 'newsletter_unconfigured') return { state: 'unconfigured' };
+  return { state: 'error' };
+}
+
 /**
- * W2: the confirm read as a page state. D810 answers `{ ok, status }` and,
- * should it ever carry them, the topics; a 410 is an expired or used link.
+ * W2: the link check (`GET`, which changes nothing since S1's review of D810)
+ * as a page state: a usable link waits for the person to press Confirm.
+ */
+export function checkView(result, error) {
+  if (error) return confirmFailure(error);
+  return result?.status === 'confirmed' ? confirmView(result, null) : { state: 'ready' };
+}
+
+/**
+ * W2: the confirm (`POST`) as a page state. D810 answers `{ ok, status }` and,
+ * should it ever carry them, the topics.
  */
 export function confirmView(result, error) {
-  if (error) {
-    if (error.code === 'token_expired') return { state: 'expired' };
-    if (error.code === 'token_invalid') return { state: 'invalid' };
-    if (error.code === 'newsletter_unconfigured') return { state: 'unconfigured' };
-    return { state: 'error' };
-  }
+  if (error) return confirmFailure(error);
   const topics = Array.isArray(result?.topics) ? result.topics.map((t) => (typeof t === 'string' ? topicLabel(t) : t?.label)).filter(Boolean) : null;
   return { state: 'confirmed', topics };
 }
