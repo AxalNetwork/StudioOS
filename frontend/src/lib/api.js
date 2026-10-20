@@ -5151,8 +5151,10 @@ export const api = {
     // `page` is the app path the band sits on (D510). The worker records it as
     // the run's `surface`, as the rail's read-back does (D404), so a band's
     // runs count towards "This page this month"; it is a path, never content.
-    zoneDraftRun: (surface, scopeKey, page) => request('/research/drafts', {
+    // D778 part 3: `headers` are the press's own rail context, taken on the click (ZoneDraft).
+    zoneDraftRun: (surface, scopeKey, page, headers) => request('/research/drafts', {
       method: 'POST',
+      ...(headers ? { headers } : {}),
       body: JSON.stringify({ surface, ...(scopeKey ? { scope_key: scopeKey } : {}), ...(page ? { page } : {}), ...railBody() }),
     }),
     // Accept, having optionally edited first — one write, because editing then

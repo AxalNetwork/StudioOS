@@ -25,6 +25,7 @@ import { accountPathFor, accountViewFor, connectorKeyFor } from './account/accou
 import ProfileIdentityCanvas from './account/AccountProfile';
 import { PushDevices, SessionsCard } from './account/AccountDevices';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
+import AutoReloadCard from './account/AutoReloadCard';
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/AccountUsage';
 import ConnectorsSection from './account/AccountConnectors';
@@ -4599,6 +4600,8 @@ function BillingTab({ data, flash }) {
     <>
       <PlanHeader role={role} billing={billing} />
       <Orders />
+      {/* D794: opt-in auto-reload of AI tokens, beside the orders until D792's Billing page. */}
+      <AutoReloadCard />
       {panel}
     </>
   );

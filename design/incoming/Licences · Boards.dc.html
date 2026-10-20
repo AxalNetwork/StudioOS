@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eceef2;font-family:Inter,system-ui,sans-serif;color:#18181b}a{color:#334155}a:hover{color:#18181b}</style>
+</helmet>
+<div style="display:flex;flex-direction:column">
+  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="9">
+    <section style="padding:40px 48px 32px;border-bottom:1px solid rgba(24,24,27,.08);display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#18181b;color:#fff;border-radius:5px">{{ r.id }}</span><span style="font:800 19px/1.2 Inter;letter-spacing:-.015em">{{ r.title }}</span><span style="font:400 13px/1.5 Inter;color:rgba(24,24,27,.58)">{{ r.note }}</span></div>
+      <div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap">
+        <sc-for list="{{ r.boards }}" as="b" hint-placeholder-count="2">
+          <div style="display:flex;flex-direction:column;gap:10px;flex:none">
+            <div style="display:flex;gap:10px;align-items:baseline"><span style="font:700 13px Inter">{{ b.t }}</span><span style="font:400 11px ui-monospace,Menlo,monospace;color:rgba(24,24,27,.55)">{{ b.route }}</span></div>
+            <div style="{{ b.frame }}"><dc-import name="Licences Page" board="{{ b.board }}" state="{{ b.state }}" kind="{{ b.kind }}" renewal="{{ b.renewal }}" seats="{{ b.seats }}" contract="{{ b.contract }}" needs-empty="{{ b.needsEmpty }}" sheet="{{ b.sheet }}" hint-size="{{ b.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = 'width:1440px;border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden;background:#f7f8f9;box-shadow:0 2px 14px rgba(24,24,27,.08)';
+    const PH = 'width:390px;height:844px;box-sizing:border-box;border:10px solid #18181b;border-radius:40px;overflow:auto;background:#f7f8f9';
+    const SB = 'width:206px;height:720px;border:1px solid rgba(24,24,27,.12);border-radius:12px;overflow:hidden;background:#f7f8f9';
+    const B = (t, route, o) => Object.assign({ t, route, board: 'summary', state: 'ok', kind: 'Subsidiary', renewal: 'date', seats: 'counted', contract: 'sent', needsEmpty: false, sheet: false, frame: D, hint: '1440px,1500px' }, o || {});
+    const ph = { frame: PH, hint: '370px,844px' };
+    const M = '/admin/my-licence';
+    return { rows: [
+      { id: 'L1', title: 'Summary', note: 'Term, renewal, fee and share; what needs you; what you owe; seats; deal terms; the contract; administrators; AI allowance.', boards: [B('Summary', M), B('Variants · renewal requested, seats not counted, White-label', M, { renewal: 'requested', seats: 'notCounted', kind: 'White-label' }), B('Variants · auto-renews, nothing needs you', M, { renewal: 'auto', needsEmpty: true })] },
+      { id: 'L2', title: 'Terms', note: 'Eight sections. Each row: label, value, source (Ledger or Contract §), and Request a change on HQ-owned rows. No Edit anywhere.', boards: [B('Terms', M + '/terms', { board: 'terms', hint: '1440px,2600px' })] },
+      { id: 'L3', title: 'Contract', note: 'Drafted → Sent → Signed, the instrument with unfilled fields highlighted, Sign while Sent, and earlier versions.', boards: [B('Contract · sent, waiting for your signature', M + '/contract', { board: 'contract' }), B('Contract · waiting for HQ', M + '/contract', { board: 'contract', contract: 'waiting', hint: '1440px,700px' })] },
+      { id: 'L4', title: 'Statements', note: 'One row per period, the first expanded into its streams; how to pay HQ; licence fee invoices; usage reports; dispute a line.', boards: [B('Statements', M + '/statements', { board: 'statements' })] },
+      { id: 'L5', title: 'Requests', note: 'The five request buttons, the renewal timeline, your requests with HQ\u2019s answers, and the Request a change sheet.', boards: [B('Requests', M + '/requests', { board: 'requests' }), B('Request a change · sheet', M + '/requests', { board: 'requests', sheet: true })] },
+      { id: 'L6', title: 'History', note: 'Notices from HQ on the compliance ladder, and every licence event by HQ. The frozen variant says what works and what is frozen.', boards: [B('History', M + '/history', { board: 'history' }), B('History · suspended', M + '/history', { board: 'history', state: 'suspended' })] },
+      { id: 'L7', title: 'States', note: 'Summary at desktop width in each licence state.', boards: [B('Pending activation', M, { state: 'pending' }), B('Suspended', M, { state: 'suspended' }), B('Terminated', M, { state: 'terminated' }), B('No licence on record', M, { state: 'none', hint: '1440px,700px' })] },
+      { id: 'L8', title: 'Phone', note: 'Summary with the tabs as a scrolling pill row and the cards stacked; the Requests sheet full screen.', boards: [B('Summary · phone', M, ph), B('Request a change · phone', M + '/requests', Object.assign({ board: 'requests', sheet: true }, ph))] },
+      { id: 'L9', title: 'HQ › Licences › [Licence] › Terms', note: 'Super Admin edits the same eight sections, with a Contract § field per value, Save terms with a reason, and the licence\u2019s open requests.', boards: [B('HQ terms editor', '/admin/licences/[uid]', { board: 'hq', hint: '1440px,2600px' })] },
+    ] };
+  }
+}
+</script>
+</body></html>
