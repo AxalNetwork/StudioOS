@@ -13,14 +13,18 @@ export const COST_GROUPS = Object.freeze([
 ]);
 export const USAGE_SUBTITLE = "How your AI spend is tracking against your limits, and what you're billed.";
 export const COST_SUBTITLE = 'Cost of your AI usage over time. All dates are UTC.';
-export const INVOICES_PENDING = 'The combined invoice list is not available yet (D806). Open Billing for the existing orders.';
+export const INVOICES_PENDING = 'The combined invoice list is not available yet. Open Billing for the existing orders.';
 const count = (v) => Number.isSafeInteger(v) && v >= 0;
 const money = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
 export function costReadable(read) {
   return !!read && count(read.totals?.runs) && Array.isArray(read.models)
     && Array.isArray(read.days) && Array.isArray(read.groups)
-    && read.days.every((d) => typeof d.day === 'string' && Array.isArray(d.by_model));
+    && read.groups.every((g) => g && typeof g === 'object')
+    && (read.totals.runs === 0 || read.models.length > 0)
+    && read.models.every((m) => m && typeof m.model === 'string')
+    && read.days.every((d) => d && typeof d.day === 'string' && Array.isArray(d.by_model)
+      && d.by_model.every((m) => m && typeof m.model === 'string'));
 }
 
 /** Every segment is the read's own model and cost; empty days remain on the axis. */
@@ -63,6 +67,7 @@ export function totalUnits(read) {
 
 export function costTableRows(read, group = 'model', model = '') {
   if (!costReadable(read)) return null;
+  if (group !== 'model' && read.totals.runs > 0 && read.groups.length === 0) return null;
   if (group !== 'model') return read.groups.map((r) => ({
     key: JSON.stringify([r.page, r.key]), label: r.label || r.key || 'Not recorded',
     page: group === 'option' ? r.page : null, colour: null,

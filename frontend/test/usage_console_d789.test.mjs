@@ -110,9 +110,14 @@ test('a missing cost stays missing; zero is a real zero', async () => {
     assert.equal(m.dailySeries(data).days[0].cost, null);
     assert.equal(m.dailySeries(data).days[1].cost, 0);
     assert.equal(m.dailySeries(null), null);
+    assert.equal(m.costReadable({ ...sample(), models: [] }), false);
+    assert.equal(m.costReadable({ ...sample(), models: [null] }), false);
+    assert.equal(m.costReadable({ ...sample(), days: [null] }), false);
+    assert.equal(m.costReadable({ ...sample(), groups: [null] }), false);
   };
   check(model);
   await killed('../src/pages/account/costModel.js', 'cost: money(m.cost_usd) ? m.cost_usd : null', 'cost: money(m.cost_usd) ? m.cost_usd : 0', check);
+  await killed('../src/pages/account/costModel.js', '(read.totals.runs === 0 || read.models.length > 0)', 'true', check);
 });
 
 test('model colours are stable across ranges, filters and charts; canvas IDs keep their colours', async () => {
@@ -141,6 +146,7 @@ test('cost rows keep units, partial charges and missing grouped fields', async (
     assert.equal(m.totalUnits(sample()), '4 min');
     assert.equal(m.costTableRows(sample(), 'page')[0].cost, null);
     assert.equal(m.costTableRows(sample(), 'page')[0].charged, '$0.70');
+    assert.equal(m.costTableRows({ ...sample(), groups: [] }, 'page'), null);
     const data = sample(); data.models[0].charged_microusd = null;
     assert.equal(m.costTableRows(data)[0].charged, null);
     assert.deepEqual(m.costTotals(data).map((t) => t.value), ['$0.70', '$0.30', '$0.20', '$0.00']);
@@ -149,6 +155,7 @@ test('cost rows keep units, partial charges and missing grouped fields', async (
   await killed('../src/pages/account/costModel.js', 'charged: microUsd(r.charged_microusd)', 'charged: usd(r.charged_microusd)', check);
   await killed('../src/pages/account/costModel.js', "audio_minutes: 'min'", "audio_minutes: 'images'", check);
   await killed('../src/pages/account/costModel.js', 'units: null, cost: null', "units: null, cost: '$0.00'", check);
+  await killed('../src/pages/account/costModel.js', "if (group !== 'model' && read.totals.runs > 0 && read.groups.length === 0) return null;", '', check);
   const out = html(h(cost.CostTable, { data: sample(), group: 'page' }));
   assert.match(out, /Not recorded/);
   assert.match(out, /Page and option groups return charges and token counts/);
@@ -197,11 +204,16 @@ test('balance pills depend on their own successful reads and a missing limit is 
     assert.doesNotMatch(html(h(m.BalanceOverview, { ...p, overview: failed })), /No payment method/);
     assert.match(html(h(m.SpendOverview, { limit: ready({ ...limit, limit_microusd: null }) })), /No limit set/);
     assert.match(html(h(m.SpendOverview, { limit: failed })), /monthly spend could not be read/);
+    assert.match(html(h(m.BalanceOverview, { ...p, me: ready({ balance_microusd: 1 }) })), /Not recorded: this month/);
+    assert.match(html(h(m.SpendOverview, { limit: ready({ charged_microusd: 1 }) })), /Not recorded/);
+    assert.doesNotMatch(html(h(m.SpendOverview, { limit: ready({ charged_microusd: 1 }) })), /No limit set/);
     assert.match(html(h(m.LimitsOverview, p)), /Token-pack orders today/);
     assert.match(html(h(m.LimitsOverview, { ...p, limit: ready({ ...limit, pack_orders: null, pack_orders_reason: 'pack_orders_unreadable' }) })), /Token-pack orders could not be read/);
   };
   check(overview);
   await killed('../src/pages/account/UsageOverview.jsx', 'methods.length === 0', 'methods.length >= 0', check);
+  await killed('../src/pages/account/UsageOverview.jsx', "&& Object.hasOwn(me.data ?? {}, 'plan')", '', check);
+  await killed('../src/pages/account/UsageOverview.jsx', "&& Object.hasOwn(limit.data ?? {}, 'limit_microusd')", '', check);
 });
 
 test('empty, loading, unreadable and truncated cost remain distinct', async () => {
@@ -238,7 +250,12 @@ test('CSV uses the authenticated client with range and group; Cost retains all d
   }
 });
 
-test('the canonical address and navigation offer Overview, Cost, Limits without losing the legacy anchors', () => {
+test('the canonical address and navigation offer Overview, Cost, Limits without losing the legacy anchors', async () => {
+  const checkNav = (m) => {
+    assert.deepEqual(m.USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'limits']);
+    assert.equal(m.usagePageFor('/account/usage/cost'), 'cost');
+  };
+  await killed('../src/pages/account/limitsModel.js', "  { id: 'cost', label: 'Cost', path: '/account/usage/cost' },", '', checkNav);
   assert.deepEqual(USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'limits']);
   assert.equal(usagePageFor('/account/usage/cost'), 'cost');
   assert.equal(usagePageFor('/settings/usage/cost'), 'cost');

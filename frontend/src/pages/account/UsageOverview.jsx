@@ -31,7 +31,7 @@ export function UsageCardState({ read, what, children }) {
 function Open({ card, children }) { return <Link to={OVERVIEW_LINKS[card]} className={OPEN}>{children} →</Link>; }
 
 export function SpendOverview({ limit }) {
-  const v = limit.status === 'ready' ? limitView(limit.data) : null;
+  const v = limit.status === 'ready' && Object.hasOwn(limit.data ?? {}, 'limit_microusd') ? limitView(limit.data) : null;
   return <PanelCard title="Spend this month" action={<Open card="spend">Open cost</Open>} data-testid="overview-spend">
     <UsageCardState read={limit} what="Your monthly spend">
       {!v ? <Unrecorded reason="The spend read did not return this month's charge.">Not recorded</Unrecorded> : <>
@@ -44,7 +44,7 @@ export function SpendOverview({ limit }) {
 }
 export function BalanceOverview({ me, overview, autoReload }) {
   const balance = me.status === 'ready' ? balanceText(me.data) : null;
-  const allowance = me.status === 'ready' ? allowanceView(me.data) : null;
+  const allowance = me.status === 'ready' && Object.hasOwn(me.data ?? {}, 'plan') ? allowanceView(me.data) : null;
   const methods = overview.status === 'ready' && Array.isArray(overview.data?.payment_methods) ? overview.data.payment_methods : null;
   return <PanelCard title="Token balance" action={<Open card="balance">Open billing</Open>} data-testid="overview-balance">
     <UsageCardState read={me} what="Your token balance">
@@ -68,8 +68,8 @@ export function BalanceOverview({ me, overview, autoReload }) {
   </PanelCard>;
 }
 export function LimitsOverview({ me, limit }) {
-  const allowance = me.status === 'ready' ? allowanceView(me.data) : null;
-  const v = limit.status === 'ready' ? limitView(limit.data) : null;
+  const allowance = me.status === 'ready' && Object.hasOwn(me.data ?? {}, 'plan') ? allowanceView(me.data) : null;
+  const v = limit.status === 'ready' && Object.hasOwn(limit.data ?? {}, 'limit_microusd') ? limitView(limit.data) : null;
   const packs = limit.status === 'ready' ? packOrdersCard(limit.data) : null;
   return <PanelCard title="Billing and limits" action={<Open card="limits">Open limits</Open>} data-testid="overview-limits">
     <UsageCardState read={me} what="The plan allowance">
