@@ -22,7 +22,7 @@
  * D755 token packs (requireSuperAdmin, #1919):
  *   POST  /api/admin/catalog/token-packs                {amount_usd, idempotency_key}  create product + price + row
  *   POST  /api/admin/catalog/token-packs/adopt          {price_id}                      record an existing price
- *   PATCH /api/admin/catalog/token-packs/:uid           {on_sale?, bonus_usd?, sort?}
+ *   PATCH /api/admin/catalog/token-packs/:uid           {on_sale?, bonus_usd?, sort?, offer_starts_at?, offer_ends_at?, first_purchase_only?}
  *   POST  /api/admin/catalog/token-packs/:uid/archive   on_sale=0, archived_at, archive the Stripe price
  * The generic writes above refuse a pack, its product or its price with 409
  * `token_pack_managed_on_hq`.
@@ -364,7 +364,15 @@ async function packRowByUid(env: Env, uid: string) {
 }
 function packView(row: any) {
   return { uid: row.uid, label: packLabel(row.face_cents), price_id: row.price_id, product_id: row.product_id, face_cents: row.face_cents,
-    bonus_microusd: row.bonus_microusd, on_sale: row.on_sale === 1, sort: row.sort, origin: row.origin, archived_at: row.archived_at };
+    bonus_microusd: row.bonus_microusd, on_sale: row.on_sale === 1, sort: row.sort, origin: row.origin, archived_at: row.archived_at,
+    offer_starts_at: row.offer_starts_at ?? null, offer_ends_at: row.offer_ends_at ?? null, first_purchase_only: row.first_purchase_only === 1 };
+}
+/** D790: an offer window's end as stored (ISO 8601 UTC, `toISOString`), null for an open end, or undefined when unreadable. */
+function offerTime(v: unknown): string | null | undefined {
+  if (v === null) return null;
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) return undefined;
+  const t = Date.parse(v);
+  return Number.isNaN(t) ? undefined : new Date(t).toISOString();
 }
 const wholeDollarsInRange = (cents: number) =>
   Number.isSafeInteger(cents) && cents % 100 === 0 && cents >= TOKEN_PACK_LIMITS.minFaceCents && cents <= TOKEN_PACK_LIMITS.maxFaceCents;
@@ -428,7 +436,8 @@ adminCatalog.post('/token-packs/adopt', async (c) => {
   }
 });
 
-// PATCH /token-packs/:uid — on sale, bonus (0–10% of face) and sort. An amount never changes: a new amount is a new pack.
+// PATCH /token-packs/:uid — on sale, bonus (0–10% of face), sort, and D790's offer window and first purchase only.
+// An amount never changes: a new amount is a new pack.
 adminCatalog.patch('/token-packs/:uid', async (c) => {
   const admin = await requireSuperAdmin(c);
   const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
@@ -440,6 +449,7 @@ adminCatalog.patch('/token-packs/:uid', async (c) => {
     if (!row) return c.json({ error: 'token_pack_not_found' }, 404);
     if (row.archived_at) return c.json({ error: 'token_pack_archived', message: 'This pack is archived.' }, 409);
     let onSale = row.on_sale, bonus = row.bonus_microusd, sort = row.sort;
+    let starts: string | null = row.offer_starts_at ?? null, ends: string | null = row.offer_ends_at ?? null, first = row.first_purchase_only === 1 ? 1 : 0;
     if ('on_sale' in body) { if (typeof body.on_sale !== 'boolean') return c.json({ error: 'invalid_on_sale' }, 400); onSale = body.on_sale ? 1 : 0; }
     if ('bonus_usd' in body) {
       const b = body.bonus_usd;
@@ -449,11 +459,24 @@ adminCatalog.patch('/token-packs/:uid', async (c) => {
       bonus = micro;
     }
     if ('sort' in body) { if (typeof body.sort !== 'number' || !Number.isSafeInteger(body.sort)) return c.json({ error: 'invalid_sort' }, 400); sort = body.sort; }
-    await c.env.DB.prepare(`UPDATE ai_token_packs SET on_sale = ?, bonus_microusd = ?, sort = ?, updated_at = datetime('now')
-      WHERE uid = ? AND archived_at IS NULL`).bind(onSale, bonus, sort, row.uid).run();
+    // D790: the bonus's offer window, either end open (null), and first purchase only.
+    const OFFER_TIME = { error: 'token_pack_offer_invalid', message: 'An offer starts and ends at a date and time, or is left open.' } as const;
+    if ('offer_starts_at' in body) { const t = offerTime(body.offer_starts_at); if (t === undefined) return c.json(OFFER_TIME, 400); starts = t; }
+    if ('offer_ends_at' in body) { const t = offerTime(body.offer_ends_at); if (t === undefined) return c.json(OFFER_TIME, 400); ends = t; }
+    if (starts !== null && ends !== null && Date.parse(ends) <= Date.parse(starts))
+      return c.json({ error: 'token_pack_offer_window_invalid', message: 'An offer must end after it starts.' }, 400);
+    if ('first_purchase_only' in body) {
+      if (typeof body.first_purchase_only !== 'boolean') return c.json({ error: 'invalid_first_purchase_only' }, 400);
+      first = body.first_purchase_only ? 1 : 0;
+    }
+    await c.env.DB.prepare(`UPDATE ai_token_packs SET on_sale = ?, bonus_microusd = ?, sort = ?, offer_starts_at = ?, offer_ends_at = ?,
+      first_purchase_only = ?, updated_at = datetime('now') WHERE uid = ? AND archived_at IS NULL`)
+      .bind(onSale, bonus, sort, starts, ends, first, row.uid).run();
     const next = await packRowByUid(c.env, row.uid);
     await writeAdminAudit(c.env, admin.id, 'token_pack_update', { uid: row.uid, on_sale: onSale === 1, bonus_microusd: bonus, sort,
-      was: { on_sale: row.on_sale === 1, bonus_microusd: row.bonus_microusd, sort: row.sort } });
+      offer_starts_at: starts, offer_ends_at: ends, first_purchase_only: first === 1,
+      was: { on_sale: row.on_sale === 1, bonus_microusd: row.bonus_microusd, sort: row.sort,
+        offer_starts_at: row.offer_starts_at ?? null, offer_ends_at: row.offer_ends_at ?? null, first_purchase_only: row.first_purchase_only === 1 } });
     return c.json({ ok: true, pack: packView(next) });
   } catch (e) {
     return refuse(c, 503, { code: 'token_pack_update_failed', message: 'The token pack was not changed.', raw: e, audience: 'admin' });

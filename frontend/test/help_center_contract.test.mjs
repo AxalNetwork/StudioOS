@@ -449,7 +449,7 @@ test('the contact block points at the flow, not at a menu item', () => {
     !/in the sidebar/.test(body),
     'naming a sidebar item is how this went stale the first time',
   );
-  assert.match(body, /mailto:support@axal\.vc/);
+  assert.doesNotMatch(body, /mailto:support@axal\.vc/);
   assert.match(body, /to="\/status"/);
 });
 

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { reportError } from '../lib/log';
-import { Card, Pill, SectionLabel, Unrecorded, Unreadable, WorkerRail, usePhoneWidth } from '../ui';
+import { Card, Pill, SectionLabel, Unrecorded, Unreadable, usePhoneWidth } from '../ui';
 import { AccountPhonePage, phonePending } from './account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from './account/accountPhone';
 import { TIER_PLANS } from '../components/PaywallModal';
@@ -22,7 +22,7 @@ import { railOptionFor } from '../lib/railOptions';
  * (D413). Two audiences, two mounts.
  *
  *   /perks                the founder side: Marketplace and My perks, plus
- *                         the admin Review queue. Unembedded, one WorkerRail.
+ *                         the admin Review queue. Unembedded, without an AI rail.
  *   /offers/perk-deals    the partner side: the `po2` zone (strip, lifecycle,
  *                         Extend, draft) with the canvas's Submit a perk and
  *                         Performance under it. Embedded; the shell has the rail.
@@ -1704,18 +1704,13 @@ function PerksMarket({ user }) {
     setOpen(p);
   };
 
-  // D700 — a phone draws A5m inside the frame, so the rail stays mounted.
+  // The standalone Perks page has no AI rail on desktop or phone.
   const phone = usePhoneWidth();
   const readOf = (data, err, reload) => ({ status: err ? 'unreadable' : data ? 'ready' : 'loading', data, reload });
   const goMine = () => {
     setTab('mine');
     document.getElementById('perks-tabs')?.scrollIntoView?.({ block: 'start' });
   };
-
-  const coverage = [
-    catalog ? `${catalog.items.length} listing${catalog.items.length === 1 ? '' : 's'} live, each reviewed by Axal` : 'Marketplace loading',
-    mine ? `${mine.stats.claimed} claim${mine.stats.claimed === 1 ? '' : 's'} and ${mine.ledger.length} ledger line${mine.ledger.length === 1 ? '' : 's'} on this account` : 'Your claims loading',
-  ];
 
   const panels = (
     <>
@@ -1811,19 +1806,6 @@ function PerksMarket({ user }) {
           />
         )}
       </div>
-      <WorkerRail
-        workspace="Perks & Products"
-        // A literal: the canvas draws this page in violet (#7c3aed), the
-        // founder accent, for every role that reaches it.
-        role="founder"
-        className="perks-rail"
-        stance="You browse and claim"
-        note="Nothing here is claimed, rated or chosen for you. Every listing is a partner’s offer that an Axal reviewer approved, and your balance is the sum of your ledger lines."
-        coverage={coverage}
-        unavailable={mine?.absent ? [
-          ['Expiry reminders', mine.absent.expiry_reminder],
-        ].filter(([, why]) => why) : []}
-      />
       </section>
     </main>
   );

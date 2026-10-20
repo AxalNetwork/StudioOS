@@ -17,7 +17,7 @@ reuse the cart and the shared helpers.
 | `ProductCard.jsx` | An add-on's card: Add to Order for a one-time price, Subscribe for a recurring one. |
 | `ProductSlideOver.jsx` | The product modal (the file keeps its old name), opened by a card or by `/plans-and-pricing/:productId`. |
 | `CartDrawer.jsx` | The cart drawer: lines, quantities, the promo field, and the totals. |
-| `TokenPacksSection.jsx` | D755: the Token packs section at `#token-packs` (`TOKEN_PACKS_PATH` in `../../lib/aiTokens.js`), and `isPackProduct`. |
+| `TokenPacksSection.jsx` | D755: the Token packs section at `#token-packs` (`TOKEN_PACKS_PATH` in `../../lib/aiTokens.js`), and `isPackProduct`. Each pack's offer (D790: its bonus, when it ends, first purchase only) is `aiTokens.js`'s `packOfferLines`. |
 
 ## Rules
 

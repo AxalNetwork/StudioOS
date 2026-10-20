@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeecf1;font-family:'Public Sans',system-ui,sans-serif;color:#141118;-webkit-font-smoothing:antialiased}a{color:#6d28d9}a:hover{color:#7c3aed}</style>
+</helmet>
+<div style="display:flex;flex-direction:column">
+  <sc-for list="{{ rows }}" as="r" hint-placeholder-count="6">
+    <section style="padding:44px 48px 36px;border-bottom:1px solid rgba(20,17,24,.08);display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span style="font:800 20px/1.2 'Public Sans',sans-serif;letter-spacing:-.015em">{{ r.title }}</span><span style="font:400 13px/1.5 'Public Sans',sans-serif;color:rgba(20,17,24,.58)">{{ r.note }}</span></div>
+      <div style="display:flex;gap:48px;align-items:flex-start;flex-wrap:wrap">
+        <sc-for list="{{ r.boards }}" as="b" hint-placeholder-count="2">
+          <div id="{{ b.id }}" style="display:flex;flex-direction:column;gap:12px;flex:none">
+            <div style="display:flex;align-items:center;gap:10px"><span style="font:700 10px ui-monospace,Menlo,monospace;padding:4px 8px;background:#141118;color:#fff;border-radius:5px;letter-spacing:.05em">{{ b.id }}</span><span style="font:800 14px/1.2 'Public Sans',sans-serif">{{ b.title }}</span><span style="font:400 11px ui-monospace,Menlo,monospace;color:rgba(20,17,24,.58)">{{ b.route }}</span></div>
+            <sc-if value="{{ b.desk }}" hint-placeholder-val="{{ true }}">
+              <div style="width:1440px;border:1px solid rgba(20,17,24,.12);border-radius:12px;overflow:hidden;background:#fff;box-shadow:0 2px 14px rgba(20,17,24,.08)"><dc-import name="StudioOS Pricing" tab="{{ b.tab }}" billing="{{ b.billing }}" state="{{ b.state }}" member="{{ b.member }}" variant="{{ b.variant }}" offer="{{ b.offer }}" only="{{ b.only }}" hint-size="1440px,1200px"></dc-import></div>
+            </sc-if>
+            <sc-if value="{{ b.phone }}" hint-placeholder-val="{{ false }}">
+              <div style="width:390px;height:844px;box-sizing:border-box;border:10px solid #141118;border-radius:40px;overflow:auto;background:#fff"><dc-import name="StudioOS Pricing" phone="{{ true }}" tab="{{ b.tab }}" billing="{{ b.billing }}" state="{{ b.state }}" member="{{ b.member }}" variant="{{ b.variant }}" offer="{{ b.offer }}" only="{{ b.only }}" hint-size="370px,844px"></dc-import></div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const B = (id, title, route, o) => { const b = Object.assign({ id, title, route, tab: 'founder', billing: 'monthly', state: 'ok', member: -1, variant: 'none', offer: 'none', only: 'all', phone: false }, o || {}); b.desk = !b.phone; return b; };
+    const R = (k) => '/pricing?for=' + k;
+    return { rows: [
+      { title: 'Founder', note: 'Plan cards, the AI band, and the comparison grouped by Validate, Build, Raise and Grow. A visitor sees Get started.', boards: [B('PR-F1', 'Founder · monthly', R('founder')), B('PR-F2', 'Founder · phone', R('founder'), { phone: true })] },
+      { title: 'Investor', note: 'LP Access sits above the plans as its own band: free for investors in Axal VC funds, not a subscription. Below it, four plans, monthly only: Investor Basic (free), Investor Plus, Investor Pro and Institutional. The comparison is grouped by Browse, Research and Teams.', boards: [B('PR-I1', 'Investor · plans', R('investor'), { tab: 'investor' }), B('PR-I2', 'Investor · phone', R('investor'), { tab: 'investor', phone: true })] },
+      { title: 'Advisors', note: 'A free plan and a paid plan, monthly only: Advisor Basic (free), Advisor Pro, and Advisory Firm on custom pricing. The comparison is grouped by Profile and reach, Practice and Firm.', boards: [B('PR-A1', 'Advisors · plans', R('advisors'), { tab: 'advisors' }), B('PR-A2', 'Advisors · phone', R('advisors'), { tab: 'advisors', phone: true })] },
+      { title: 'Operating Partners', note: 'A free plan and a paid plan, monthly only: Partner Basic (free), Partner Pro, and Partner Firm on custom pricing. The comparison is grouped by Listing, Delivery and Firm.', boards: [B('PR-O1', 'Operating Partners · plans', R('partners'), { tab: 'partners' }), B('PR-O2', 'Operating Partners · phone', R('partners'), { tab: 'partners', phone: true })] },
+      { title: 'Models', note: 'Every model on StudioOS, grouped by what it does, with what members pay. On the phone, one card per model.', boards: [B('PR-M1', 'Models', R('models'), { tab: 'models' }), B('PR-M2', 'Models · phone', R('models'), { tab: 'models', phone: true })] },
+      { title: 'States', note: 'A signed-in member on Free, loading, prices unavailable, a plan not offered yet, and the two pack offers.', boards: [B('PR-S1', 'Signed in · current plan Free', R('founder'), { member: 0, only: 'plans' }), B('PR-S2', 'Loading', R('founder'), { state: 'loading', only: 'plans' }), B('PR-S3', 'Prices unavailable', R('founder'), { state: 'unavailable', only: 'plans' }), B('PR-S4', 'A plan not offered yet', R('investor'), { tab: 'investor', state: 'notOffered', only: 'plans' }), B('PR-S5', 'Packs · bonus offer', R('models'), { tab: 'models', offer: 'bonus', only: 'packs' }), B('PR-S6', 'Packs · first purchase only', R('models'), { tab: 'models', offer: 'first', only: 'packs' })] },
+    ] };
+  }
+}
+</script>
+</body></html>

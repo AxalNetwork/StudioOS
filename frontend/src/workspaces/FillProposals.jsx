@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
@@ -6,6 +6,7 @@ import RunEstimate from './RunEstimate';
 import { readRailModel, writeRailModel } from '../ui/railModelChoice';
 import { isNeverFill, neverFillMessage } from '../lib/neverFill';
 import { useRailOption } from '../ui/railCrumbs';
+import { railPressHeaders } from '../lib/railPage.js';
 import { CHECKING, guardRefusal } from './draftCheck';
 
 /**
@@ -156,18 +157,28 @@ export default function FillProposals({ projectId, kind, enabled, onApplied, ai,
 
   useEffect(() => { load(); }, [load]);
 
+  // D778 part 4 (#2103): a run answers only the venture it was pressed for. Another
+  // project, or leaving the page, makes it stale; the new project's list is read anew.
+  const runFor = useRef(0);
+  useEffect(() => () => { runFor.current += 1; }, [projectId, kind]);
+
   const propose = async () => {
     setBusy('run'); setNote(''); setReceipt(null); setGuardLink(null);
+    const mine = runFor.current;
+    const stale = () => mine !== runFor.current;
     try {
       const task = kinds?.[kind]?.task;
       const model = task ? readRailModel(workspace, task) : null;
-      const r = await api.proposeValidate(projectId, model ? { kind, model } : { kind });
+      // D778 part 4: the press names its option itself, keeping the mounted rail's page.
+      const r = await api.proposeValidate(projectId, model ? { kind, model } : { kind }, railPressHeaders(railOption || `fill:${kind}`));
+      if (stale()) return;
       setReceipt(r?.usage || null);
       if (!r?.proposals?.length) {
         setNote('Nothing new to propose from what is logged so far.');
       }
       await load();
     } catch (e) {
+      if (stale()) return;
       // The worker distinguishes "there is nothing here to work from" from "the
       // model could not be reached", and both are sentences worth showing —
       // one is about the venture's evidence, the other about the platform.

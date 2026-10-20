@@ -110,7 +110,15 @@ test('two models across three days: every day, the per-day split, the totals, th
   assert.deepEqual(r.days[1].by_model.map((m) => [m.model, m.runs, m.charged_microusd]), [[WHISPER, 1, 1250]]);
   assert.deepEqual(r.days[19].by_model.map((m) => [m.model, m.runs, m.input_tokens, m.charged_microusd]),
     [[LLAMA, 1, 300, 500], [WHISPER, 1, 0, 500]], 'two models on one day, in model order');
-  assert.deepEqual(r.totals, { runs: 5, input_tokens: 450, output_tokens: 170, cost_usd: 0.001974, charged_microusd: 2467, refused: 0, not_recorded: 0 });
+  assert.deepEqual(r.totals, {
+    runs: 5, input_tokens: 450, output_tokens: 170, cost_usd: 0.001974, charged_microusd: 2467, refused: 0, not_recorded: 0,
+    // D805: the same runs by kind; no image or other run, so those lines charge nothing recorded.
+    by_kind: {
+      tokens: { cost_usd: 0.000574, charged_microusd: 717 }, audio_speech: { cost_usd: 0.0014, charged_microusd: 1750 },
+      image: { cost_usd: 0, charged_microusd: null }, other: { cost_usd: 0, charged_microusd: null },
+    },
+    other_models: [], output_not_recorded: 0,
+  });
   const whisper = r.models.find((m) => m.model === WHISPER)!;
   assert.deepEqual(whisper.units, { audio_minutes: 3.5 }, 'units that are not tokens, summed; tokens_in left out');
   assert.equal(whisper.cost_usd, 0.0014);
@@ -195,13 +203,13 @@ test('the CSV is the JSON\'s days, one row per day and model, and the route serv
   twoModels(w);
   const r = await memberCost(w.env, ME, 'mtd', 'model', NOW);
   const lines = parseCsv(costCsv(r));
-  assert.equal(lines[0].join(','), 'day,model,name,runs,input_tokens,output_tokens,cost_usd,charged_microusd');
+  assert.equal(lines[0].join(','), 'day,model,name,kind,runs,input_tokens,output_tokens,cost_usd,charged_microusd');
   const fromJson = r.days.flatMap((d) => d.by_model.map((m) => [d.day, m.model, m.runs, m.input_tokens, m.output_tokens, m.cost_usd.toFixed(6), m.charged_microusd]));
   assert.equal(lines.length - 1, fromJson.length, 'a row per day and model with a run, no empty days');
   for (const [i, c] of lines.slice(1).entries()) {
-    assert.equal(c.length, 8, 'eight cells, a quoted name kept whole');
+    assert.equal(c.length, 9, 'nine cells, a quoted name kept whole');
     assert.equal(c[2], modelName(c[1]) ?? '');
-    assert.deepEqual([c[0], c[1], Number(c[3]), Number(c[4]), Number(c[5]), c[6], Number(c[7])], fromJson[i]);
+    assert.deepEqual([c[0], c[1], Number(c[4]), Number(c[5]), Number(c[6]), c[7], Number(c[8])], fromJson[i]);
   }
   // Through the route, on today's rows.
   const today = new Date().toISOString().slice(0, 10);
@@ -215,7 +223,7 @@ test('the CSV is the JSON\'s days, one row per day and model, and the route serv
   assert.match(String(csv.disposition), /^attachment; filename="ai-cost-\d{4}-\d{2}-\d{2}-to-\d{4}-\d{2}-\d{2}\.csv"$/);
   const rows = parseCsv(String(csv.body)).slice(1);
   const days = json.body.days.flatMap((d: any) => d.by_model.map((m: any) => [d.day, m.model, String(m.charged_microusd)]));
-  assert.deepEqual(rows.map((c) => [c[0], c[1], c[7]]), days);
+  assert.deepEqual(rows.map((c) => [c[0], c[1], c[8]]), days);
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────
