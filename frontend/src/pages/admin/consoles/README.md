@@ -16,6 +16,7 @@ console lives here, in its own file, and reads only its own data (D648):
 | `GithubSyncConsole.jsx` | GitHub Sync | the sync settings |
 | `PromoCodesConsole.jsx` | Promo codes | the codes, the catalog products |
 | `PaymentsConsole.jsx` | Payments (Stripe catalog, prices, webhooks) | the catalog, Stripe config, webhooks |
+| `ProductTestingConsole.jsx` | Product testing (D815): partners' programmes waiting for approval with Approve and Send back, every programme by status with Open and Close, and HQ's own programmes with the shared form and Pick screen (`pages/testing/`). Super Admin only | D812's `/api/admin/testing` reads, only for the Super Admin |
 | `BankAccountsConsole.jsx` | Bank accounts (D708, restyled to L11 by D717): one card per entity with its Mercury state, unmatched receipts, what a notice refuses, Add and Reveal dialogs. Super Admin only | the masked accounts and the resolver's coverage, the entity Mercury connections and each connected entity's unmatched-credit count, only for the Super Admin |
 | `BillingConsole.jsx` | Billing (refunds, disputes) | disputes, on Load |
 | `WellbeingConsole.jsx` | Wellbeing experts roster | the experts |

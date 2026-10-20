@@ -1100,6 +1100,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
           <StripLink to="/admin?tab=payments">Payments</StripLink>
           <StripLink to="/admin?tab=bank-accounts">Bank accounts</StripLink>
+          <StripLink to="/admin?tab=product-testing">Product testing</StripLink>
           <StripLink to="/admin?tab=promos">Promo codes</StripLink>
           <StripLink to="/monitoring">Monitoring</StripLink>
           <StripLink to="/admin/telegram">Telegram</StripLink>
@@ -3384,6 +3385,7 @@ function AppInner() {
       <Route path="/offers/visibility" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/offers/proof" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/offers/audience-fit" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
+      <Route path="/offers/testing" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/delivery" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       <Route path="/offers" element={guard(['admin', 'partner'], <PartnerBucketRoutes />)} />
       {/* Partner canvas P3 — the partner Pipeline root is the bucket overview,
