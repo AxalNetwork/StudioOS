@@ -75,7 +75,7 @@ const QUIET_AFTER_END_MS = 24 * 60 * 60 * 1000;
 
 // ───────────────────────────────────────────────────────────── OAuth
 
-/** The callback URL registered with Zoom; Admin → Integration keys shows the same (D751). */
+/** The callback URL registered with Zoom; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, PROVIDER_KEY);
 }

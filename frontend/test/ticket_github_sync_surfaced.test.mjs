@@ -70,7 +70,7 @@ test('a failed mirror points an admin at where to fix it, and only an admin', ()
   assert.ok(nextBranch > start, 'the not_configured branch moved or was renamed');
   const block = PANEL.slice(start, nextBranch);
 
-  assert.match(block, /Admin Console → GitHub Sync/,
+  assert.match(block, /HQ → Integration keys → GitHub Sync/,
     'a failed mirror gives no admin a pointer to where to fix it');
   assert.match(block, /Test issue creation/,
     'the pointer does not name the control that actually diagnoses the token');
@@ -81,7 +81,7 @@ test('a failed mirror points an admin at where to fix it, and only an admin', ()
   // makes for `not_configured` two tests down.
   const gateAt = block.indexOf("user?.role === 'admin'");
   assert.ok(gateAt > 0, 'the failed branch is not gated on role at all');
-  const pointerAt = block.indexOf('Admin Console → GitHub Sync');
+  const pointerAt = block.indexOf('HQ → Integration keys → GitHub Sync');
   assert.ok(pointerAt > gateAt,
     'the pointer sentence sits outside the admin gate, so every reader sees it');
 });

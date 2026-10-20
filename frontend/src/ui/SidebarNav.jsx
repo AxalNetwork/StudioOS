@@ -77,7 +77,7 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
 
   const q = query.trim().toLowerCase();
   // D285 / H36 — in the HQ shell a row can be lit by the QUERY, not only the
-  // path: /admin?tab=integration-keys is Platform's, /admin?tab=legal is
+  // path: /admin?tab=payments is Platform's, /admin?tab=legal is
   // Contracts'. The map says which; when it names a row, that row and no
   // other is active, and the path-only rules below decide nothing.
   // D286 — the same on the S20 Admin shell: an /admin tab lights the Admin

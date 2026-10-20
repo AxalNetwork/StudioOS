@@ -111,7 +111,7 @@ ignores the pair and reads the table (`providerOauthKeys.ts:150-160`).
 
 **(A) The console.**
 
-- Open `https://axal.vc/admin?tab=integration-keys` → the **GitHub** card →
+- Open `https://axal.vc/admin/integration-keys` (HQ → Integration keys, Super Admin only) → the **GitHub** card →
   **Configure**. Enter the Client ID and the Client Secret → **Save keys**.
 - The card shows the Callback URL to register, built by the same function the
   Worker sends (`admin_integration_keys.ts:119`, `:161`), with **Copy**. It

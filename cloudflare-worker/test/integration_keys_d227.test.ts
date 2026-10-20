@@ -136,7 +136,8 @@ async function call(env: any, method: string, path: string, body?: unknown, as =
   try { json = JSON.parse(text); } catch { /* not JSON */ }
   return { status: res.status, body: json, text };
 }
-const list = (env: any) => call(env, 'GET', '/', undefined, PLAIN_ADMIN, 'totp-plain');
+// The list is the Super Admin's since the owner's ruling (2026-10-20).
+const list = (env: any) => call(env, 'GET', '/', undefined, HOLDER, 'totp-holder');
 const byKey = (body: any, k: string) => body.providers.find((p: any) => p.provider_key === k);
 const auditRows = (db: any) => db.prepare('SELECT * FROM admin_audit_log ORDER BY id').all() as any[];
 

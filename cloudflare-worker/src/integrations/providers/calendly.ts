@@ -52,7 +52,7 @@ const PROVIDER_KEY = 'calendly';
 const CL_API = 'https://api.calendly.com';
 const CL_AUTH = 'https://auth.calendly.com';
 
-/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+/** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, PROVIDER_KEY);
 }
@@ -63,7 +63,7 @@ async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
   const { loadOauthCreds } = await import('../../services/providerOauthKeys');
   const c = await loadOauthCreds(env, 'calendly');
   if (!c) {
-    throw new Error('calendly_oauth_unconfigured: set CALENDLY_CLIENT_ID/CALENDLY_CLIENT_SECRET as secrets, or configure them in Admin → Integration Keys.');
+    throw new Error('calendly_oauth_unconfigured: set CALENDLY_CLIENT_ID/CALENDLY_CLIENT_SECRET as secrets, or configure them in HQ → Integration keys.');
   }
   return { id: c.id, secret: c.secret };
 }

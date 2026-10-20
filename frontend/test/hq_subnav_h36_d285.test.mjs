@@ -56,6 +56,9 @@ const PLATFORM = [
 PLATFORM.splice(3, 0, ['AI allowances', '/admin/platform/allowances']);
 // D708 (#1773) — the Bank accounts console joins the Platform row after Payments.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Payments') + 1, 0, ['Bank accounts', '/admin?tab=bank-accounts']);
+// The owner's ruling (2026-10-20) — Integration keys and GitHub Sync leave the
+// strip for an HQ row of their own, `/admin/integration-keys`.
+PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Integration keys'), 2);
 const CONTENT = [
   ['Overview', '/admin/content'], ['Content queue', '/admin/articles'], ['Publications', '/admin/publications'],
   ['Assessment Studio', '/admin/assessment'], ['Personas', '/admin?tab=personas'],
@@ -128,14 +131,18 @@ test('the strips are held to the H35 map: every sub-nav placement is in its stri
  * The row that stays lit
  * ------------------------------------------------------------------ */
 
-test('a ?tab= lights the HQ row the map places it on: Platform on integration-keys, not on users', () => {
-  assert.equal(hqRowFor('/admin', '?tab=integration-keys'), HQ_ROW_ROUTE.Platform);
+test('a ?tab= lights the HQ row the map places it on: Platform on payments, not on users', () => {
+  assert.equal(hqRowFor('/admin', '?tab=payments'), HQ_ROW_ROUTE.Platform);
   assert.notEqual(hqRowFor('/admin', '?tab=users'), HQ_ROW_ROUTE.Platform);
   assert.equal(hqRowFor('/admin', '?tab=users'), HQ_ROW_ROUTE.Team, 'Team lights on ?tab=users');
   assert.equal(hqRowFor('/admin', '?tab=legal'), HQ_ROW_ROUTE.Contracts, 'Contracts lights on ?tab=legal');
   assert.equal(hqRowFor('/admin', '?tab=billing'), HQ_ROW_ROUTE.Revenue, 'Revenue lights on ?tab=billing');
   assert.equal(hqRowFor('/admin', '?tab=personas'), HQ_ROW_ROUTE.Content);
-  assert.equal(hqRowFor('/admin', '?tab=github'), HQ_ROW_ROUTE.Platform);
+  // The keys left the console: the old tabs redirect before the shell mounts,
+  // and HQ's own row lights on its page by its path.
+  assert.equal(hqRowFor('/admin', '?tab=github'), null);
+  assert.equal(hqRowFor('/admin', '?tab=integration-keys'), null);
+  assert.equal(HQ_ROW_ROUTE['Integration keys'], '/admin/integration-keys');
   // The strip's own pages light its row too.
   assert.equal(hqRowFor('/admin/platform/switches', ''), HQ_ROW_ROUTE.Platform);
   assert.equal(hqRowFor('/monitoring', ''), HQ_ROW_ROUTE.Platform);
@@ -180,9 +187,10 @@ test('the Admin Console tab follows location.search, writes back with replace, a
   assert.match(ADMIN_PAGE, /onChange=\{pickTab\}/, 'the section nav does not go through the write-back');
   assert.match(ADMIN_PAGE, /if \(section && ADMIN_SECTION_VALUES\.has\(section\)\) return section;/, 'the section override no longer wins the first read');
   assert.doesNotMatch(adminConsoleSource(), /row of 12 tab buttons/, 'the comment still says twelve');
-  // D708 (#1773) added Bank accounts, the fifteenth.
-  assert.match(adminConsoleSource(), /fifteen sections today/);
-  assert.equal(TABS.length, 15);
+  // D708 (#1773) added Bank accounts, the fifteenth; the owner's ruling
+  // (2026-10-20) took Integration keys and GitHub Sync to HQ's own page.
+  assert.match(adminConsoleSource(), /thirteen sections today/);
+  assert.equal(TABS.length, 13);
 });
 
 /* ------------------------------------------------------------------ *

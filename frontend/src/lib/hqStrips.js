@@ -2,7 +2,8 @@
  * The H36 sub-navigation strips, and which HQ row a location lights (D285).
  *
  * Two rows of the HQ shell hold consoles the old Admin Console still renders:
- * Platform (ten items) and Content (seven). H36 draws each as a strip that
+ * Platform (nine items: Integration keys and GitHub Sync left it for an HQ
+ * row of their own, the owner's ruling of 2026-10-20) and Content (seven). H36 draws each as a strip that
  * stays visible after the item lands in the old console, with the row still
  * lit. The strips below are H36's order, verbatim; the H35 map (D283) is what
  * they are held to — every legacy console placed as a sub-navigation item on
@@ -28,8 +29,6 @@ export const HQ_STRIPS = {
     ['Switches', '/admin/platform/switches'],
     ['Topology', '/admin/platform/topology'],
     ['AI allowances', '/admin/platform/allowances'],
-    ['Integration keys', '/admin?tab=integration-keys'],
-    ['GitHub Sync', '/admin?tab=github'],
     ['Payments', '/admin?tab=payments'],
     ['Bank accounts', '/admin?tab=bank-accounts'],
     ['Promo codes', '/admin?tab=promos'],
@@ -99,8 +98,8 @@ export const NO_ROW = '';
 
 /**
  * The Admin row a location lights on the S20 shell (D286), by route; `NO_ROW`
- * for an `/admin` tab the map places on no Admin row (Integration keys,
- * GitHub, Payments, Promo codes and Billing are HQ's); `null` everywhere
+ * for an `/admin` tab the map places on no Admin row (Payments, Promo codes
+ * and Billing are HQ's); `null` everywhere
  * else, where the path — a row's own `to`, or its `match` list — decides.
  *
  * READ FROM THE H35 MAP, NOT TYPED: the `users` tab lights Accounts because
