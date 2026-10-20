@@ -15,6 +15,7 @@
 import { TIER_PLANS } from '../../components/PaywallModal';
 import { planSummary } from './accountCenterModel';
 import { codeWord } from './connectorsModel.js';
+import { usagePathFor } from './limitsModel.js';
 
 /**
  * Each board's title, sub and section titles, byte for byte from AMP's
@@ -163,9 +164,11 @@ export function connectorKeyFor(pathname = '') {
  * it has no segment of its own (`/account`, never `/account/account`). On a
  * phone bare `/account` is the index, so the profile pane is `/account/profile`.
  * D753 — Connectors with a valid `key` is that connector's page.
+ * D807 — Usage with `usagePage` is that Usage page (`/account/usage/limits`).
  */
-export function accountPathFor({ section, phone = false, key = null } = {}) {
+export function accountPathFor({ section, phone = false, key = null, usagePage = null } = {}) {
   if (section === 'connectors' && key && connectorKeyFor(`/account/connectors/${key}`) === key) return `/account/connectors/${key}`;
+  if (section === 'usage' && usagePage) return usagePathFor(usagePage);
   if (section === 'index') return '/account';
   if (section === 'account' || section === 'profile') return phone ? '/account/profile' : '/account';
   return `/account/${section}`;

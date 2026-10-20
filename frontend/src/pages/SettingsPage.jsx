@@ -29,6 +29,9 @@ import AutoReloadCard from './account/AutoReloadCard';
 import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard, useBillingReads } from './account/BillingCards';
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/AccountUsage';
+// D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
+import LimitsPage from './account/LimitsPage';
+import { USAGE_PAGES, usagePageFor } from './account/limitsModel';
 import ConnectorsSection from './account/AccountConnectors';
 import ConnectorPage from './account/ConnectorPage';
 import DeveloperSection from './account/AccountDeveloper';
@@ -259,6 +262,8 @@ export default function SettingsPage() {
   const active = accountViewFor({ pathname: location.pathname, hash: location.hash, phone });
   // D753 — `/account/connectors/<key>` is that connector's page.
   const connectorKey = active === 'connectors' ? connectorKeyFor(location.pathname) : null;
+  // D807 — which Usage page the address opens: the overview, or Limits.
+  const usagePage = active === 'usage' ? usagePageFor(location.pathname) : null;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -267,7 +272,7 @@ export default function SettingsPage() {
   // section through its address. On a phone each section is a page of its own,
   // so it is pushed and Back returns to the index; on desktop it replaces, as
   // the column always has.
-  const setActive = (id) => navigate({ pathname: accountPathFor({ section: id, phone }) }, { replace: !phone });
+  const setActive = (id, page = null) => navigate({ pathname: accountPathFor({ section: id, phone, usagePage: page }) }, { replace: !phone });
 
   // Keep the URL in lockstep with the open section so deep links work both
   // ways (bell → /account/notifications, sidebar click → URL update).
@@ -288,7 +293,7 @@ export default function SettingsPage() {
   // account recovery. A canonicalising hop must not eat the part of the link
   // that said why it was sent.
   useEffect(() => {
-    const want = accountPathFor({ section: active, phone, key: connectorKey });
+    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
       navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true });
     }
@@ -396,7 +401,7 @@ export default function SettingsPage() {
   const allowedIds = new Set(sections.map(s => s.id));
   const safeActive = allowedIds.has(active) ? active : 'account';
   const reloadAccount = () => api.getSettings().then(setData);
-  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey };
+  const paneProps = { data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect: setActive, role, allowedIds, connectorKey, usagePage };
 
   const toastNote = toast && (
     <div className={`mb-4 rounded-lg px-4 py-2.5 text-sm flex items-center gap-2 ${
@@ -438,7 +443,8 @@ export default function SettingsPage() {
       {top}
 
       <div className="grid lg:grid-cols-[200px_1fr] gap-6">
-        <AccountSectionNav sections={sections} active={safeActive} onSelect={setActive} />
+        <AccountSectionNav sections={sections} active={safeActive} onSelect={setActive}
+          subpages={{ usage: USAGE_PAGES }} activeSubpage={safeActive === 'usage' ? usagePage : null} />
         <AccountPanes safeActive={safeActive} {...paneProps} />
       </div>
     </div>
@@ -448,7 +454,7 @@ export default function SettingsPage() {
 }
 
 /** One section's pane: the same cards at every width. */
-function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null }) {
+function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, profileRev, setProfileRev, onSelect, role, allowedIds, connectorKey = null, usagePage = null }) {
   return (
     <div className="min-w-0 space-y-6">
       {safeActive === 'account' && (
@@ -491,7 +497,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
         </>
       )}
       {safeActive === 'following' && <FollowingSection />}
-      {safeActive === 'usage' && <UsageSection role={role} />}
+      {safeActive === 'usage' && (usagePage === 'limits' ? <LimitsPage /> : <UsageSection role={role} />)}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
       {safeActive === 'onboarding' && <OnboardingSettingsTab />}
       {safeActive === 'connectors' && <ConnectorsTab connectorKey={connectorKey} />}
