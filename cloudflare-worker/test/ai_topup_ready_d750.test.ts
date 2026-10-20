@@ -206,7 +206,7 @@ test('end to end: a price created after the last sync is fetched, bought through
     // D755: D750's fields fetch and mirror the price first, so the D1-only pack list then offers it as the fallback pack.
     const { packs, on_hold, latest, ...d750 } = await read.json() as any;
     assert.deepEqual(d750, READY); assert.deepEqual([on_hold, latest], [false, null]);
-    assert.deepEqual(packs, [{ uid: null, label: '$25 of tokens', price_id: ID, unit_amount: 2500, currency: 'usd', credit_microusd: 25000000, bonus_microusd: 0 }]);
+    assert.deepEqual(packs, [{ uid: null, label: '$25 of tokens', price_id: ID, unit_amount: 2500, currency: 'usd', credit_microusd: 25000000, bonus_microusd: 0, bonus_usd: 0, offer_ends_at: null, first_purchase_only: false }]);
     const order = await ordersRoute.request('/intent', { method: 'POST', headers, body: JSON.stringify({ items: [{ price_id: ID, quantity: 1 }], nonce: 'd750' }) }, f.env);
     assert.equal(order.status, 200, await order.clone().text());
     const placed = await order.json() as any;

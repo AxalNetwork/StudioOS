@@ -21,6 +21,8 @@ const SKIPPED_WORDS = Object.freeze({
   token_balance_ceiling: 'The last reload was not made: it would take your token balance above $1,000.',
   token_packs_on_hold: 'The last reload was not made: token packs are on hold for this account.',
   pack_not_on_sale: 'The last reload was not made: the pack is not on sale right now.',
+  // D790: a first-purchase pack is sold once; a reload is never a first purchase.
+  token_pack_first_purchase_only: 'The last reload was not made: that pack is for a first token purchase only. Choose another pack on Billing.',
   error: 'The last reload was not made: the payment service did not answer. It is tried again after your next run.',
   spend_limit: 'The last reload was not made: it would pass your monthly AI spend limit. Raise it on Usage › Limits, or it resumes next month.',
 });
@@ -34,10 +36,10 @@ export function cardText(card) {
   return `${brand} ending ${card.last4}`;
 }
 
-/** The packs auto-reload can charge: on sale and HQ's own (a pack row with an id). */
+/** The packs auto-reload can charge: on sale, HQ's own (a pack row with an id), and not for a first purchase only (D790). */
 export function packOptions(topUp) {
   const packs = Array.isArray(topUp?.packs) ? topUp.packs : [];
-  return packs.filter((p) => p && typeof p.uid === 'string' && p.uid && typeof p.label === 'string')
+  return packs.filter((p) => p && typeof p.uid === 'string' && p.uid && typeof p.label === 'string' && p.first_purchase_only !== true)
     .map((p) => ({ uid: p.uid, label: p.label }));
 }
 

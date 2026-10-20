@@ -138,6 +138,54 @@ export function faceCentsOf(label) {
 }
 export const BONUS_NOTE = 'A bonus is a cost while AI is billed at cost.';
 
+/**
+ * D790 (#2215): a pack's offer window as the editor's `datetime-local` field
+ * shows it, in the reader's own zone ('' for an open end). The Worker stores
+ * ISO 8601 UTC.
+ */
+export function offerInputOf(iso) {
+  if (typeof iso !== 'string' || !iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/**
+ * The window the PATCH sends, from the two fields: each end an ISO time or null
+ * (open). The end must follow the start, as the Worker checks again.
+ */
+export function parseOffer(startText, endText) {
+  const read = (t) => {
+    const v = String(t ?? '').trim();
+    if (!v) return { ok: true, iso: null };
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v) ? { ok: false } : { ok: true, iso: d.toISOString() };
+  };
+  const a = read(startText), b = read(endText);
+  if (!a.ok || !b.ok) return { ok: false, message: 'An offer starts and ends at a date and time, or is left open.' };
+  if (a.iso && b.iso && Date.parse(b.iso) <= Date.parse(a.iso)) return { ok: false, message: 'An offer must end after it starts.' };
+  return { ok: true, starts: a.iso, ends: b.iso };
+}
+
+/** "20 Oct, 10:00": a time in the reader's own zone. */
+export function offerTime(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+/** The pack row's offer line in HQ: when its bonus is offered, and first purchase only. Null for a pack with neither. */
+export function offerLine(pack, when = offerTime) {
+  const parts = [];
+  const starts = pack?.offer_starts_at ? when(pack.offer_starts_at) : null;
+  const ends = pack?.offer_ends_at ? when(pack.offer_ends_at) : null;
+  if (starts && ends) parts.push(`Bonus offered from ${starts} to ${ends}.`);
+  else if (starts) parts.push(`Bonus offered from ${starts}.`);
+  else if (ends) parts.push(`Bonus offered until ${ends}.`);
+  if (pack?.first_purchase_only === true) parts.push('First purchase only.');
+  return parts.length ? parts.join(' ') : null;
+}
+
 /** A fresh idempotency key, one per form (the Worker accepts 8 to 64 of A–Z, a–z, 0–9, - and _). */
 export function newKey() {
   const c = globalThis.crypto;
