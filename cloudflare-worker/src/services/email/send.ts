@@ -36,6 +36,14 @@ import { getTemplate } from '../../templates/email/registry';
 import type { EmailTemplate } from '../../templates/email/layout';
 import { wrap } from '../../templates/email/layout';
 import { stripTrailingSlashes } from '../../util/url';
+import { isSuppressed, type MailClass } from '../newsletter';
+
+/** D810 — what a template's mail is, for the suppression list. */
+export function mailClassOf(tmpl: Pick<EmailTemplate, 'category' | 'marketing'>): MailClass {
+  if (tmpl.marketing) return 'marketing';
+  if (tmpl.category === 'security') return 'security';
+  return 'transactional';
+}
 
 export interface SendOpts {
   /** Stamp `notifications_inbox` so the bell mirrors this email. */
@@ -199,6 +207,12 @@ export async function send(
     return { ok: false, log_id: null, notification_id: null, reason: 'suppressed_unsubscribed' };
   }
 
+  // D810 — the suppression list, by reason: an unsubscribe stops marketing,
+  // a bounce or complaint stops everything but account security.
+  if (await isSuppressed(env, to, mailClassOf(tmpl))) {
+    return { ok: false, log_id: null, notification_id: null, reason: 'suppressed' };
+  }
+
   const appUrl = String((env as any).APP_URL || 'https://axal.vc');
   const unsubscribeUrl = tmpl.marketing
     ? await buildUnsubscribeUrl(env, opts.userId, appUrl)
@@ -302,6 +316,7 @@ export async function deliverNow(
       html: payload.html,
       from: payload.from,
       replyTo: payload.reply_to,
+      mailClass: payload.category === 'security' ? 'security' : payload.list_unsubscribe ? 'marketing' : 'transactional',
       extraHeaders: payload.list_unsubscribe
         ? {
             'List-Unsubscribe': `<${payload.list_unsubscribe}>, <mailto:unsubscribe@axal.vc?subject=unsubscribe>`,

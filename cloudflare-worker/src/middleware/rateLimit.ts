@@ -51,6 +51,9 @@ export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$
 // under /api/decks. Exported so the test executes the pattern itself.
 export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 
+// D810 — the four public newsletter routes, and nothing else under the word.
+export const NEWSLETTER_PUBLIC = /^\/api\/newsletter\/(subscribe|confirm|preferences|unsubscribe)$/;
+
 /**
  * The founder's advisory-session charge — `POST /bookings/:id/pay`, D81.
  *
@@ -302,6 +305,20 @@ const BUCKETS: Bucket[] = [
   // retry, nothing for a script. Anchored so no sibling share route
   // (view, nda, feedback, deal pack) is capped by it. failClosed: if KV is
   // down the account-creating write waits rather than running uncapped.
+  // D810 — the newsletter's public routes: a signup mails whatever address it
+  // is given, and the confirm, preferences and unsubscribe routes take a
+  // token a script could try to guess. 10/min/IP across all four: room for a
+  // person and a typo, nothing for a script. Each address is also paced to one
+  // signup email per ten minutes in the route itself. failClosed: if KV is
+  // down a public mail-sending write waits rather than running uncapped.
+  {
+    name: 'newsletter_public',
+    limit: 10,
+    windowSec: 60,
+    test: (p) => NEWSLETTER_PUBLIC.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
   {
     name: 'deck_share_signup',
     limit: 6,
