@@ -1629,7 +1629,9 @@ export const api = {
   // call is not a read, and the 30s default would abort a run still being
   // paid for.
   // D768: every run the rail starts carries `rail: { page, option, record }` (D765).
-  proposeValidate: (projectId, data) => request(`/founder/validate/propose/${projectId}`, {
+  // D778 part 4: `headers` are the press's own rail context, taken on the click (FillProposals).
+  proposeValidate: (projectId, data, headers) => request(`/founder/validate/propose/${projectId}`, {
+    ...(headers ? { headers } : {}),
     method: 'POST', timeoutMs: 60_000, body: JSON.stringify({ ...data, ...railBody() }),
   }),
   // `body` carries `{ value }` for an accept-with-edit and is omitted otherwise.

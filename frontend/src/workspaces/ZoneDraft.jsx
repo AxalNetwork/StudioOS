@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
 import RunEstimate from './RunEstimate';
 import { useRailOption } from '../ui/railCrumbs';
-import { railPageHeaders } from '../lib/railPage.js';
+import { railPressHeaders } from '../lib/railPage.js';
 import { CHECKING, guardRefusal } from './draftCheck';
 
 /**
@@ -134,15 +134,8 @@ export function bandPage() {
   return path.replace(/\/+$/, '') || (path === '/' ? '/' : undefined);
 }
 
-/**
- * D778 part 3 (#2103): the press's own rail context, taken on the click. The
- * mounted rail's page stays (it holds the member's Manual switch); the option
- * is this band's, sent with the run itself rather than after the busy render
- * hands it to the rail (`useRailOption` below), which the request would beat.
- */
-export function pressHeaders(option) {
-  return { ...railPageHeaders(), 'X-Rail-Option': encodeURIComponent(option) };
-}
+/** D778 part 3 (#2103): the press's own rail context (`railPressHeaders`, lib/railPage.js). */
+export const pressHeaders = railPressHeaders;
 
 export default function ZoneDraft({
   surface,
