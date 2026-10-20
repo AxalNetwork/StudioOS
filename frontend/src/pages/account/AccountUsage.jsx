@@ -647,7 +647,7 @@ export function UsagePhoneView({ budget, product, topUps, spend, rates, storage,
 }
 
 /** The section: the five reads, and the six cards in the canvas's order. */
-export default function UsageSection({ role }) {
+export default function UsageSection({ role, details = false }) {
   const budget = useAccountRead(() => aiBudgetApi.mine());
   const product = useAccountRead(() => aiBudgetApi.topUp());
   const spend = useAccountRead(() => api.myAiSpend());
@@ -662,13 +662,13 @@ export default function UsageSection({ role }) {
     if (id) document.getElementById(id)?.scrollIntoView?.({ block: 'start' });
   }, [hash]);
   const phone = usePhoneWidth();
-  if (phone) return <UsagePhoneView budget={budget} product={product} topUps={topUps} spend={spend} rates={rates} storage={storage} />;
+  if (phone && !details) return <UsagePhoneView budget={budget} product={product} topUps={topUps} spend={spend} rates={rates} storage={storage} />;
   return (
     <div className="flex flex-col gap-3" data-testid="usage-section">
-      <div>
+      {!details && <div>
         <h2 className="text-lg font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">Usage</h2>
         <p className="text-[13px] text-axal-muted dark:text-gray-400">What you have used across all your companies.</p>
-      </div>
+      </div>}
       <AllowanceCard budget={budget} product={product} />
       <TopUpsCard {...topUps} />
       <DaysCard spend={spend} />
