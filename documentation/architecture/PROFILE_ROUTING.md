@@ -224,7 +224,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Account | `/account` · `/account/:section` · `/account/connectors/:key` · `/account/usage/limits` · `/settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Account | `/account` · `/account/:section` · `/account/connectors/:key` · `/account/usage/limits` · `/account/usage/cost` · `/settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\|investor\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Calendar | `/calendar` | — (no nav entry) | Full page | Deep link / in-page action | LIVE (built 2026-09-10) | Medium |
 | Eadwyn Tickets · Eadwyn chat panels (T2, T3, D606) | `/studio` | — (not routed) | Full page (proposed) | Not reachable yet | CURRENT | Low |

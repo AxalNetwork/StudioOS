@@ -403,3 +403,17 @@ test('D717 #1851 decision 8: #1852 has merged, so the tab has no library-wide Pu
     assert.ok(buttons(view).includes('New template') && buttons(view).includes('Push to branches'));
   } finally { await view.unmount(); restore(); }
 });
+
+test('D803 #2240 a template with a body that counsel has not reviewed says "Draft — subject to counsel", on both widths', async () => {
+  // Mutation checked: drop the pill → the desktop tile reads "Has a body" alone.
+  const items = [card('subsidiary_licence_agreement', 'gp', { counsel_review: true, title: 'Subsidiary Licence Agreement' }), card('syn_body_a', 'gp')];
+  const { view } = await open({ templates: async () => ({ items }) });
+  try {
+    assert.match(textOf(testid(view, 'template-tile-subsidiary_licence_agreement')), /Draft — subject to counsel/);
+    assert.doesNotMatch(textOf(testid(view, 'template-tile-syn_body_a')), /subject to counsel/);
+  } finally { await view.unmount(); restore(); }
+  const { phoneStateLabel } = await import('../src/pages/admin/contracts/TemplateCatalogPhone.jsx');
+  assert.equal(phoneStateLabel(items[0]), 'Draft — subject to counsel');
+  assert.equal(phoneStateLabel({ ...items[0], published_version: 2, has_unpublished_changes: false }), 'Published v2 · Draft — subject to counsel');
+  assert.equal(phoneStateLabel(items[1]), 'Has a body');
+});

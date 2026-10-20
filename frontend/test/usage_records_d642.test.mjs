@@ -45,13 +45,13 @@ test('ROUTE_MAP records the storage read with every area key', () => {
   const [prose, table = ''] = section.split('| Canvas |');
   assert.match(prose, /`GET \/api\/usage\/storage` \(`usage\.ts`/);
   for (const key of AREA_KEYS) assert.ok(prose.includes(`\`${key}\``), `ROUTE_MAP does not name ${key}`);
-  assert.match(table, /\| `\/account\/usage` [^\n]*`GET \/api\/usage\/storage`/);
+  assert.match(table, /\| `\/account\/usage\/cost` [^\n]*`GET \/api\/usage\/storage`/);
 });
 
 test('ROUTE_MAP marks both screens CURRENT, naming the component that draws each', () => {
   const section = d642Section();
   assert.ok(section, 'the D642 section is missing');
-  assert.match(section, /\| `\/account\/usage` \([^\n]*\| `pages\/account\/AccountUsage\.jsx`[^\n]*\| CURRENT \|/);
+  assert.match(section, /\| `\/account\/usage\/cost` \([^\n]*\| `pages\/account\/AccountUsage\.jsx`[^\n]*\| CURRENT \|/);
   assert.match(section, /\| `\/admin\/platform\/allowances` ·[^\n]*\| `pages\/hq\/PlatformAllowancesPage\.jsx`[^\n]*\| CURRENT \|/);
   assert.doesNotMatch(section, /\| NEW \|/, 'no screen is left recorded as unbuilt');
 });
