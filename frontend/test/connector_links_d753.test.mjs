@@ -1,6 +1,7 @@
 // D753 (#1992) step 2 — the last in-app links to Connectors open the
-// connector's own page, not the hub. Mercury's links stay on the hub until its
-// page lands (#1991): `connectorsRedirect` keeps Mercury off its page too.
+// connector's own page, not the hub. Mercury's followed in PR 2, once its page
+// landed (#1991). A sign-in return naming Mercury still goes to the hub
+// (`connectorsRedirect`, D715 decision 3): Mercury has no sign-in.
 //
 //   node --test frontend/test/connector_links_d753.test.mjs
 import test from 'node:test';
@@ -14,6 +15,9 @@ const LINKS = [
   ['pages/CapTablePage.jsx', 'carta', /Connect Carta/],
   ['pages/SettingsPage.jsx', 'slack', /Slack joins this table once it is connected in/],
   ['pages/admin/consoles/PartnerProfilesConsole.jsx', 'docusign', /connect DocuSign/],
+  ['components/MercuryMatch.jsx', 'mercury', /Open Connectors/],
+  ['components/spinout/MercuryCreditImport.jsx', 'mercury', /Open Connectors/],
+  ['components/spinout/MercurySpend.jsx', 'mercury', /Open Connectors/],
 ];
 
 test('each provider link opens that connector\'s page', () => {
@@ -25,6 +29,10 @@ test('each provider link opens that connector\'s page', () => {
   }
   // Carta has two: Connect and Manage.
   assert.equal(src('pages/CapTablePage.jsx').split('href="/account/connectors/carta"').length - 1, 2);
+});
+
+test('proof of funds\' "Connectors › Mercury" opens Mercury\'s page', () => {
+  assert.match(src('pages/investor/proofOfFundsModel.js'), /CONNECTORS_LINK = \{ text: 'Connectors › Mercury', href: '\/account\/connectors\/mercury' \}/);
 });
 
 test('Eadwyn\'s list: Browse opens Discover, and a blocked row\'s reason opens its page', () => {

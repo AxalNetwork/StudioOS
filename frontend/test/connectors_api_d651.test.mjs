@@ -312,18 +312,22 @@ test('companies are ticked from the sheet and the Worker’s answer is what the 
   } finally { await m.unmount(); f.restore(); }
 });
 
-test('Escape closes the dialog inside the sheet, not the sheet with it', async () => {
-  // D686 §5.4 (#1597): a tool's settings dialog is a nested Lightbox, which
-  // joins the one Escape stack. This stub DOM has no layout, so the Lightbox's
-  // own listener is not mounted here; the stack entry it pushes is simulated
-  // with `pushDialog`, and the sheet must yield to it.
-  const { pushDialog } = await import('../src/ui/lightboxFocus.js');
-  let closed = 0;
+test('a sheet with no frame is a Lightbox, and the dialog inside it is another layer on the one Escape stack', async () => {
+  // D686 §5.4 (#1597), D753 F8 (#1992): the right-hand side sheet is gone. A
+  // panel drawn with no frame opens a centred Lightbox, and a tool's settings
+  // dialog is a nested Lightbox: both join the one Escape stack
+  // (`ui/lightboxFocus.js`), so one key press closes one layer. The sheet keeps
+  // no Escape listener of its own; this stub DOM mounts no Lightbox listener.
   const f = mockFetch({});
   const hub = { ...P('hubspot', 'HubSpot', 'crm', 'live', 'growth', 'oauth2', { supports_pat: true }), by: 'HubSpot', category: 'CRM', connection: { uid: 'u-hub', provider_key: 'hubspot', status: 'active', config: {} } };
-  const m = await mount(h(ConnectorPanel, { p: hub, view: 'detail', setView() {}, onClose() { closed += 1; } }));
+  const m = await mount(h(ConnectorPanel, { p: hub, view: 'detail', setView() {}, onClose() {} }));
   try {
     await m.flush();
+    const frame = m.byTestId('sheet-dialog');
+    assert.ok(frame, 'the sheet opens a Lightbox around itself');
+    assert.equal(m.props(frame).role, 'dialog');
+    assert.equal(m.props(frame)['aria-modal'], 'true');
+    assert.equal(m.props(m.byTestId('connector-sheet-detail'))['data-layout'], 'lightbox');
     await m.click('Change');
     await m.flush();
     const modal = m.byTestId('hubspot-config-modal');
@@ -331,13 +335,7 @@ test('Escape closes the dialog inside the sheet, not the sheet with it', async (
     assert.equal(m.props(modal).role, 'dialog');
     assert.equal(m.props(modal)['aria-modal'], 'true');
     assert.equal(m.props(modal)['aria-label'], 'HubSpot pipeline');
-    assert.equal(m.listeners(), 1, 'the sheet keeps one listener; the dialog has its own place on the stack');
-    const pop = pushDialog('nested-hubspot');
-    await m.escape();
-    assert.equal(closed, 0, 'the sheet stays open while a dialog is above it');
-    pop();
-    await m.escape();
-    assert.equal(closed, 1, 'and closes on Escape once the dialog is gone');
+    assert.equal(m.listeners(), 0, 'the sheet adds no Escape listener beside the stack');
   } finally { await m.unmount(); f.restore(); }
 });
 

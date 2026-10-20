@@ -18,15 +18,16 @@ import { accentChipClass } from '../../workspaces/shellConfig';
  * section's card and never the page.
  */
 
+// D753 F8 (#1992): below `sm` every button and field is a 44px target; desktop is unchanged.
 export const BTN = {
-  primary: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-axal-sm bg-axal-violet px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-50',
-  ghost: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-axal-sm border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink transition-colors hover:border-axal-violet/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100',
-  danger: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-axal-sm border border-red-200 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/40',
-  dangerSolid: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-axal-sm bg-red-600 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50',
+  primary: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-axal-sm bg-axal-violet px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-axal-violet-deep disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-[44px]',
+  ghost: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-axal-sm border border-axal-hairline bg-white px-3 py-1.5 text-[12.5px] font-semibold text-axal-ink transition-colors hover:border-axal-violet/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 max-sm:min-h-[44px]',
+  danger: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-axal-sm border border-red-200 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950/40 max-sm:min-h-[44px]',
+  dangerSolid: 'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-axal-sm bg-red-600 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-[44px]',
   link: 'text-[12.5px] font-semibold text-axal-violet-deep underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50 dark:text-violet-300',
 };
 
-export const INPUT = 'w-full rounded-axal-sm border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink placeholder:text-axal-faint focus:outline-none focus:ring-2 focus:ring-axal-violet/40 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
+export const INPUT = 'w-full rounded-axal-sm border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink placeholder:text-axal-faint focus:outline-none focus:ring-2 focus:ring-axal-violet/40 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 max-sm:min-h-[44px]';
 
 /**
  * One read, in the three states a reader must be able to tell apart: still

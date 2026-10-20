@@ -136,7 +136,7 @@ export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = 
   let corner = null;
   if (act === 'add') corner = <span aria-hidden="true" className="grid h-[26px] w-[26px] place-items-center rounded-[8px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100"><Plus size={14} /></span>;
   if (act === 'connected') corner = <span aria-hidden="true" className="grid h-[26px] w-[26px] place-items-center rounded-[8px] bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"><Check size={14} /></span>;
-  if (act === 'notify') corner = <button type="button" disabled={busy} onClick={() => onNotify(p)} className={`${BTN.link} relative z-10`}>Notify me</button>;
+  if (act === 'notify') corner = <button type="button" disabled={busy} onClick={() => onNotify(p)} className={`${BTN.link} relative z-10 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center`}>Notify me</button>;
   if (act === 'joined') corner = <button type="button" disabled={busy} onClick={() => onUnnotify(p)} className={`${BTN.link} relative z-10`} title="Click to stop the notice">We&apos;ll tell you</button>;
   if (act === 'unavailable') corner = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</span>;
   // D715: the Axal entities' Mercury opens its page, whatever else the row says.

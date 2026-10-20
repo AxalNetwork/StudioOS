@@ -14,10 +14,9 @@ import { requirePreview } from './_helpers.js';
  * categories; every other route is the preview's own 404, which the pages
  * already read as "could not be read".
  *
- * The 390×844 check covers the routes the issue names. It asserts no
- * horizontal scroll. The 44px targets and the header button's full width are
- * asserted once the header action (#1908) and the side-sheet removal (#1992
- * step 1) land; the controls that miss 44px today are listed on #1992.
+ * The 390×844 check covers the routes the issue names: no horizontal scroll,
+ * every control in the hub or the page a 44px target, and on a page the
+ * header's one action at the band's full width (#1992, PR 2).
  *
  * Runs against the PR preview (`pr-preview.yml`, the `login-e2e` job); skips
  * locally when PLAYWRIGHT_BASE_URL is unset.
@@ -34,6 +33,7 @@ const PROVIDERS = [
   provider('github', 'GitHub', 'Engineering', 'oauth2'),
   provider('hubspot', 'HubSpot', 'CRM', 'oauth2'),
   provider('stripe', 'Stripe', 'Finance', 'api_key'),
+  provider('mercury', 'Mercury', 'Finance', 'api_key'),
   provider('notion', 'Notion', 'Docs', 'oauth2', { status: 'coming_soon', has_implementation: false }),
 ];
 
@@ -50,6 +50,10 @@ const ANSWERS = {
   '/api/connectors': { items: [] },
   '/api/connectors/waitlist': { items: [] },
   '/api/connectors/suggestions': { items: [] },
+  // The hub's Customer conversations read: no channel connected, none available.
+  '/api/channels': { providers: [], connections: {}, pending: {} },
+  // A member's own Mercury: what the profile allows it for, before it is connected.
+  '/api/mercury/personal/status': { uses: [] },
 };
 
 function answerFor(pathname) {
@@ -87,6 +91,30 @@ async function hasNoHorizontalScroll(page) {
   });
   expect(scrollW, `the page scrolls sideways: ${scrollW}px in a ${clientW}px viewport`).toBeLessThanOrEqual(clientW);
   expect(past, 'these run past the right edge').toEqual([]);
+}
+
+// Every control in `root` is at least 44px tall. A stretched link (the card's
+// name, whose ::after covers the card) is measured as its card, and a field
+// inside a label as the label it sits in. The page's Eadwyn button is left
+// out: the canvas sets it at 40px (CO:26), and it is the shell's, not Connectors'.
+async function hasPhoneTargets(page, root) {
+  const small = await page.evaluate((sel) => {
+    const scope = [...document.querySelectorAll(sel)];
+    const target = (e) => {
+      if (getComputedStyle(e, '::after').position === 'absolute') {
+        let p = e.parentElement;
+        while (p && getComputedStyle(p).position === 'static') p = p.parentElement;
+        return p || e;
+      }
+      return e.closest('label') || e;
+    };
+    return scope.flatMap((r) => [...r.querySelectorAll('a, button, input, select, textarea, [role="button"]')])
+      .filter((e) => !e.matches('.ead-open'))
+      .filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; })
+      .map((e) => ({ id: e.getAttribute('data-testid') || `${e.tagName.toLowerCase()}:${(e.textContent || e.getAttribute('aria-label') || '').trim().slice(0, 24)}`, h: Math.round(target(e).getBoundingClientRect().height) }))
+      .filter((x) => x.h < 44);
+  }, root);
+  expect(small, 'these controls are under 44px tall').toEqual([]);
 }
 
 test.describe('Connectors: the hub, the filter menu and a connector\'s page (D753)', () => {
@@ -146,6 +174,7 @@ test.describe('Connectors: the hub, the filter menu and a connector\'s page (D75
       // On a phone the filter is a sheet, not the desktop menu.
       await expect(page.getByTestId('connectors-filter-sheet')).toBeVisible();
       await hasNoHorizontalScroll(page);
+      await hasPhoneTargets(page, '[data-testid="connectors-section"], [data-testid="connectors-filter-sheet"]');
     });
 
     for (const key of ['github', 'mercury', 'hubspot']) {
@@ -153,6 +182,11 @@ test.describe('Connectors: the hub, the filter menu and a connector\'s page (D75
         await page.goto(`/account/connectors/${key}`);
         await expect(page.getByTestId('connector-page')).toBeVisible();
         await hasNoHorizontalScroll(page);
+        await hasPhoneTargets(page, '[data-testid="connector-page"]');
+        // The band's one action takes its full width (its padding aside).
+        const band = await page.getByTestId('connector-page-band').evaluate((e) => { const c = getComputedStyle(e); return e.clientWidth - parseFloat(c.paddingLeft) - parseFloat(c.paddingRight); });
+        const button = await page.getByTestId('connector-page-connect-button').evaluate((e) => e.getBoundingClientRect().width);
+        expect(Math.round(button), 'the header button is the band\'s full width').toBeGreaterThanOrEqual(Math.floor(band) - 1);
       });
     }
   });

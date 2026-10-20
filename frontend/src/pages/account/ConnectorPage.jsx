@@ -1,19 +1,19 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { connectorsApi } from '../../lib/api/connectors';
 import { ChevronDown, Info } from 'lucide-react';
 import { BrandIcon, PhoneBar, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
-  ActivityGroup, CompaniesGroup, ConnectorPanel, FedGroup, Group, KeyFields, PermissionsGroup, Row, SettingsGroup, SheetFrame, ToolModals,
-  UsesGroups, openingView, useConnectors,
+  ActivityGroup, CompaniesGroup, FedGroup, Group, KeyFields, PermissionsGroup, Row, SettingsGroup, ToolModals,
+  UsesGroups, useConnectors,
 } from './ConnectorSheet';
 import Lightbox from '../../ui/Lightbox';
 import { useConnectFlow } from './useConnectFlow';
 import { RequestSheet, useMovedNotice } from './AccountConnectors';
 import { connectionStatus, disconnectNote, isEntityRow, isPersonalMercury, keysHref, lastSyncLabel, moduleLabel, stripReturn } from './connectorsModel';
 import {
-  DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, interimPanel, keyHelpOf, keyPath, manageItems, modeLabel, pageAction,
+  DETAIL_MISSING, backHrefFor, bodyDetailsRows, detailsRows, headerTagline, keyHelpOf, keyPath, manageItems, modeLabel, pageAction,
   pageChoices, pageEntry, pageNotice, pageLanding, pageTitle, toolGroups,
 } from './connectorPageModel';
 import { isChannelKey } from './channelPageModel';
@@ -45,11 +45,10 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, zoomHowItWorks, zoomNotices } from
  * "Manage ▾" (`manageItems`): Sync now, Replace key or Reconnect, and
  * Disconnect, which asks first in a centred dialog.
  *
- * NOTHING IS LOST WHILE THE WORK MOVES (decision 7). F4 (#1957) took over
- * GitHub's repositories and F5 (#1991) a member's own Mercury, so today's
- * `ConnectorPanel` stays inline only on a sign-in's sync landing
- * (`interimPanel`), through `SheetFrame`'s `page` layout: in the
- * page's flow, no overlay, no dialog role, no × and no Escape of its own.
+ * NOTHING IS LOST WHILE THE WORK MOVED (decision 7). F1's interim panel, the
+ * side sheet's `ConnectorPanel` drawn inline, is gone (F8, #1992): F3 (#1956)
+ * drew Your connection, F4 (#1957) GitHub's repositories and F5 (#1991)
+ * Mercury, so nothing on the page mounts the sheet any more.
  *
  * A SIGN-IN COMES BACK HERE (decision 6). `connectorsRedirect` sends a return
  * naming this key to this page; the page reads it only when it names its own
@@ -145,7 +144,7 @@ export function ConnectorPageView({ data, connectorKey, phone = false, branchAdm
         <PhoneBar back={{ label: 'Connectors', to: '/account/connectors' }} title={name} eadwynLabel={name} />
       </div>
     )
-    : <Link to={backHrefFor(location.state)} className={`${BTN.link} self-start text-[13px]`} data-testid="connector-page-back">← Connectors</Link>;
+    : <Link to={backHrefFor(location.state)} className={`${BTN.link} self-start text-[13px] max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center`} data-testid="connector-page-back">← Connectors</Link>;
 
   if (!p) {
     return (
@@ -189,13 +188,11 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   const notice = pageNotice({ view, ret: flowRet, message: flow.message, name, moved });
   // Connect by key, Reconnect by key, or Manage's Replace key on a connected row.
   const keyOpen = (view === 'key' || view === 'badkey') && ['key', 'oauth', 'reconnect', 'status'].includes(action.kind);
-  // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself, never the interim panel.
+  // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself.
   const entity = isEntityRow(p);
-  // Every connection is "Your connection" since F4 (#1957) and F5 (#1991); F1's panel stays only on a sign-in's sync landing.
-  const panelShown = interimPanel(p, view);
   const role = auth?.user?.role ?? null;
   // A member's own Mercury says what it is for above the token form, as the sheet's first step did; the band connects.
-  const memberMercury = isPersonalMercury(p) && !p.connection && !panelShown;
+  const memberMercury = isPersonalMercury(p) && !p.connection;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
       {back}
@@ -205,7 +202,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           {!phone && <h1 className="text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{p.display_name}</h1>}
           {tagline && <p className="mt-0.5 min-w-0 break-words text-[13.5px] leading-snug text-axal-muted dark:text-gray-400" data-testid="connector-page-tagline">{tagline}</p>}
         </div>
-        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} manage={panelShown || entity ? [] : manageItems(p)} />
+        <BandAction p={p} action={action} flow={flow} phone={phone} superAdmin={superAdmin} onChanged={onChanged} manage={entity ? [] : manageItems(p)} />
       </header>
 
       {notice && (
@@ -219,8 +216,8 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
           <MercuryEntityPageBody p={p} />
         </section>
       )}
-      {(keyOpen || panelShown || memberMercury) && (
-        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={keyOpen ? 'key' : panelShown ? 'panel' : 'mercury'}>
+      {(keyOpen || memberMercury) && (
+        <section aria-label="Connect and manage" data-testid="connector-page-connect" data-mode={keyOpen ? 'key' : 'mercury'}>
           {memberMercury && (
             <div className="-mx-5">
               <MercuryUsesGroups role={role} />
@@ -229,10 +226,9 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
             </div>
           )}
           {keyOpen && <InlineKeyForm p={p} flow={flow} view={view} connector={connector} />}
-          {!keyOpen && panelShown && <InlinePanel key={`${p.key}:${p.connection ? 'c' : 'n'}`} p={p} ret={view === 'sync' ? { view: 'sync' } : null} onChanged={onChanged} />}
         </section>
       )}
-      {p.connection && !panelShown && !entity && <YourConnection p={p} flow={flow} role={role} onChanged={onChanged} repositories={repositories} />}
+      {p.connection && !entity && <YourConnection p={p} flow={flow} role={role} onChanged={onChanged} repositories={repositories} />}
       {flow.confirming && (
         <Lightbox label={`Disconnect ${name}?`} title={`Disconnect ${name}?`} onClose={() => flow.setConfirming(false)} width={440} testId="connector-page-disconnect-dialog"
           footer={(
@@ -431,12 +427,13 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
   }
   const starting = action.kind === 'starting';
   return (
-    <div className="flex min-w-0 flex-col items-start gap-2 sm:items-end" data-testid="connector-page-action" data-kind={action.kind}>
-      <div className="flex items-stretch">
+    <div className="flex min-w-0 flex-col items-start gap-2 max-sm:w-full sm:items-end" data-testid="connector-page-action" data-kind={action.kind}>
+      {/* D753 F8 (#1992): on a phone the one action takes the band's full width. */}
+      <div className="flex items-stretch max-sm:w-full">
         {action.kind === 'reconnect' && <span className="mr-2 self-center"><Pill tone={action.pill.tone}>{action.pill.label}</Pill></span>}
         <button
           type="button"
-          className={`${BTN.primary}${hasChoices && !phone ? ' rounded-r-none' : ''}`}
+          className={`${BTN.primary} max-sm:flex-1 ${hasChoices && !phone ? 'rounded-r-none' : ''}`}
           disabled={starting || flow.busy}
           aria-busy={starting ? 'true' : undefined}
           aria-label={action.aria}
@@ -599,26 +596,6 @@ function InlineKeyForm({ p, flow, view, connector }) {
         <button type="submit" className={BTN.primary} disabled={flow.busy} data-testid="connector-page-key-submit">{flow.busy ? 'Connecting…' : updating ? 'Replace' : 'Connect'}</button>
       </div>
     </form>
-  );
-}
-
-/** The connected half of today's panel, inline, until F3 to F5 (decision 7). */
-function InlinePanel({ p, ret, onChanged }) {
-  const [state, setState] = useState(() => ({ view: ret ? ret.view : openingView(p), ret: ret || {} }));
-  const reset = () => setState({ view: openingView(p), ret: {} });
-  const frame = useMemo(() => ({ layout: 'page', onDismiss: reset }), [p.key, p.connection]); // eslint-disable-line react-hooks/exhaustive-deps
-  return (
-    <SheetFrame.Provider value={frame}>
-      <ConnectorPanel
-        p={p}
-        view={state.view}
-        ret={state.ret}
-        setView={(view) => setState({ view, ret: {} })}
-        onChanged={onChanged}
-        onClose={reset}
-        eyebrow="Connect and manage"
-      />
-    </SheetFrame.Provider>
   );
 }
 

@@ -18,6 +18,7 @@ import {
 } from '../src/pages/account/connectorsModel.js';
 import { connectorsApi } from '../src/lib/api/connectors.js';
 import { ConnectToolView } from '../src/pages/account/ConnectToolSheet.jsx';
+import { ConnectorPanel } from '../src/pages/account/ConnectorSheet.jsx';
 
 const h = React.createElement;
 const DAY = 86400000;
@@ -620,6 +621,29 @@ test('Build\'s lightbox: a deep link opens its tool, Try again syncs for the pro
     Object.assign(connectorsApi, saved);
     if (kept === undefined) delete globalThis.sessionStorage; else globalThis.sessionStorage = kept;
   }
+});
+
+test('D753 F8 (#1992): Build\'s lightbox names "Open its page ↗", which opens the connector\'s page and closes the lightbox; nowhere else does', async () => {
+  const cat = buildCatalogue({
+    providers: [{ key: 'hubspot', display_name: 'HubSpot', category: 'CRM', status: 'live', auth_type: 'oauth2', has_implementation: true }],
+    items: [], firstParty: {},
+  });
+  const saved = { teammate: connectorsApi.teammate };
+  connectorsApi.teammate = async () => ({ teammate: null });
+  let closed = 0;
+  const data = { status: 'ready', catalogue: cat, companies: [{ id: 5, company_name: 'Acme' }], reload() {} };
+  const m = await mount(h(MemoryRouter, null, h(ConnectToolView, { data, project: { id: 7, company_id: 5 }, projectId: 7, onClose() { closed += 1; }, deepLink: '?tool=hubspot' })));
+  try {
+    const link = m.by('connector-sheet-open-page');
+    assert.ok(link, 'the tool\'s head carries the link');
+    assert.equal(m.pr(link).href, '/account/connectors/hubspot');
+    assert.match(m.text(link), /^Open its page ↗$/);
+    await m.click('connector-sheet-open-page');
+    assert.equal(closed, 1, 'going to the page closes the whole lightbox');
+  } finally { await m.unmount(); }
+  // The same panel anywhere but Build (its own dialog) has no such link.
+  const plain = await mount(h(MemoryRouter, null, h(ConnectorPanel, { p: cat[0], view: 'pre', setView() {}, onClose() {} })));
+  try { assert.equal(plain.by('connector-sheet-open-page'), undefined); } finally { await plain.unmount(); Object.assign(connectorsApi, saved); }
 });
 
 test('the success view: Use as your CRM writes the mapping, and Now fed by\'s Open links keep the venture and close the lightbox', async () => {

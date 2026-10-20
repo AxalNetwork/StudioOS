@@ -71,15 +71,6 @@ export function pageLanding(search, key) {
   };
 }
 
-/** What the Connect and manage region holds until F2 (D753 decision 8). */
-export function interimMode(p, ret = null) {
-  if (ret) return 'panel';
-  const act = cardAction(p);
-  if (act === 'notify' || act === 'joined') return 'waitlist';
-  if (act === 'unavailable') return 'unavailable';
-  return 'panel';
-}
-
 // ---------- Connect from the page (#1908, F2) ------------------------------
 
 /** Whether a connector connects with a key or token on its page: a key connector, HubSpot's Private App, or a token-only one (D751). */
@@ -142,18 +133,6 @@ export function manageItems(p) {
   }
   items.push({ id: 'disconnect', label: 'Disconnect' });
   return items;
-}
-
-/**
- * Whether F1's interim panel is still mounted on a connected page: only
- * where a sign-in lands on the sync view. GitHub's repositories are its
- * page's own section since F4 (#1957), and its sign-in lands there
- * (`pageLanding`), never on the sync view. Mercury never: F5 (#1991) draws
- * the Axal entities' rows and a member's own connection on the page itself.
- */
-export function interimPanel(p, view = 'idle') {
-  if (!p || isEntityRow(p)) return false;
-  return view === 'sync' && p.key !== 'github';
 }
 
 /**
