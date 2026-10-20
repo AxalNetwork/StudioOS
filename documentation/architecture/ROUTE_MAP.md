@@ -222,7 +222,14 @@ D755 sells the AI top-up balance as token packs (`ai_token_packs`, migration 486
 | `POST /api/admin/catalog/token-packs/adopt` | Super Admin | `{price_id}`: records an existing one-time USD price of whole dollars from $5 to $500. |
 | `PATCH /api/admin/catalog/token-packs/:uid` | Super Admin | `on_sale`, `bonus_usd` (0–10% of face) and `sort`. The amount never changes. |
 | `POST /api/admin/catalog/token-packs/:uid/archive` | Super Admin | Off sale for good, and the Stripe price archived. |
-| `GET /api/public/plans-and-packs` | anyone | Every plan with its price and AI allowance, the packs on sale, `covers` and `resets`. D1 only, cached 60 seconds, its own rate-limit bucket, no person named. |
+| `GET /api/public/plans-and-packs` | anyone | Every plan with its price and AI allowance, the packs on sale, `covers` and `resets`. D1 only, cached five minutes at the edge (D816), its own rate-limit bucket, no person named. D816 adds each plan's `monthly`, `yearly` and `yearly_saving_percent` (below). |
+
+D806 (#2245): Billing's invoices and the card's address (`routes/billing.ts`, `services/billingInvoices.ts`).
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/billing/invoices?page=1&per=25` | signed in | The member's own invoices in one list, newest first, then paged (`per` 1–100, default 25), with `page`, `per` and `total`. Each row is `{ kind: 'order'\|'stripe', id, date, description, amount_cents, currency, status, pdf_url }`; `status` is `paid`, `refunded`, `partly_refunded`, `open` or `void`. Orders are the paid ones in D1: "AI tokens, $25 pack", "AI tokens, auto-reload $25" (a line marked `origin: 'auto_reload'`), else the items' names; refunds are read for token packs only, from the ledger's refund rows; the PDF is `/api/orders/:ref/invoice`. Plan invoices are each Stripe customer the member has (founder, investor, read once if the same), at most 100 per customer: "[plan] · monthly", their credit notes, and Stripe's `invoice_pdf` passed through as an https URL. When Stripe cannot be read the orders still list, with `degraded: ['stripe']`. |
+| `GET /api/billing/overview?scope=` | signed in | Unchanged but for D806: each of `payment_methods` carries `billing_address` (`line1`, `line2`, `city`, `postal_code`, `country`) from Stripe's `billing_details.address`, or `null` when Stripe holds none. |
 
 A pack is bought only through `POST /api/orders/intent`, alone, at face value, with no promo code. `POST /api/payments/intent`, `/api/payments/alacarte/intent`, `/api/payments/promo/validate` and `/api/billing/subscription/swap/preview|confirm` answer 400 `token_pack_checkout_only` for a pack price, and the generic `/api/admin/catalog` writes answer 409 `token_pack_managed_on_hq`. `/api/admin/catalog` is in the cool-off prefixes.
 
@@ -238,6 +245,18 @@ Introduction packs retire with CR5 (#1915): `POST /api/payments/intro-credits/in
 - `/products` redirects with its query and hash, so `/products#token-packs` lands on the packs.
 
 The public `/pricing` page takes its paid tiers' prices from the same read; a tier the read does not price says "—" and carries no Schema.org price. The door pages' tokens block links to `/plans-and-pricing#token-packs`.
+
+### Plan intervals Worker contract (D816, #2262)
+
+Every paid plan sells monthly or yearly (the owner, 2026-10-20: the yearly price is 15% off; existing yearly subscribers keep theirs). The prices live in the Stripe catalogue, made from HQ's catalogue console; these routes sell and show them. No migration.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `POST /api/billing/tier/checkout` | signed in (founder) | `{ tier, interval? }`. `interval` is `month` or `year`; absent is `month`; anything else is 400 `invalid_interval`. The price is the catalogue's for that tier at that interval. None: 502 `catalog_price_missing` with `interval`. |
+| `POST /api/billing/investor/checkout` | investor, TOTP with a recent step-up | `{ plan, interval? }`. An `interval` chooses the price over the plan key's own; absent, the key's stands. The plan Stripe records (`subscription_data[metadata][plan]`) is the one sold. None: 502 `catalog_price_missing` with `interval`. |
+| `POST /api/billing/plan/checkout` | signed in (advisor, partner) | Unchanged, but for `interval` on its `catalog_price_missing`. |
+| `GET /api/billing/tier/status`, `/investor/status`, `/plan/status` | signed in | Each adds `interval`: how often the held plan is charged (`month` or `year`), from the charge the webhook recorded (`member_subscription_amounts`, migration 505); null when none is recorded or the subscription is canceled. |
+| `GET /api/public/plans-and-packs` | anyone | Each plan adds `monthly` and `yearly` (`{ unit_amount, currency, allowance_microusd }` or null) and `yearly_saving_percent`, computed from the two (1 − yearly ÷ 12 × monthly, a whole percent), null without both or without a saving. Active prices of active products only. |
 
 ### Bank accounts Worker contract (D708, #1773)
 
@@ -256,7 +275,7 @@ These are Worker routes in `routes/licence.ts`, backed by `services/licenceAccou
 
 | Route | Who | What it answers |
 | --- | --- | --- |
-| `GET /api/licence/mine/contract` | the licence's Administrator (principal or delegate) | `in_force` is the latest signed contract. `pending` is the latest one sent and not superseded. `earlier` lists every other contract HQ has sent, with `superseded_at`. Each has uid, template title and version, status (following the envelope), `sent_at`, `signed_at`, `unfilled_fields` and the stored `body_md`, never re-rendered. A contract HQ has not sent is never shown. `sign_url` is the caller's own `/esign/<token>` link for `pending`, given only while it is sent to them and the link has not expired. Otherwise it is null, with `sign_reason`. |
+| `GET /api/licence/mine/contract` | the licence's Administrator (principal or delegate) | `in_force` is the latest signed contract. `pending` is the latest one sent and not superseded. Each carries `drafted_at` (D804), the date the Contract tab's Drafted step shows. `earlier` lists every other contract HQ has sent, with `superseded_at`. Each has uid, template title and version, status (following the envelope), `sent_at`, `signed_at`, `unfilled_fields` and the stored `body_md`, never re-rendered. A contract HQ has not sent is never shown. `sign_url` is the caller's own `/esign/<token>` link for `pending`, given only while it is sent to them and the link has not expired. Otherwise it is null, with `sign_reason`. |
 | `GET /api/licence/mine/contract/:uid/pdf` | the licence's Administrator | One visible contract printed from its stored body (`paperModel` with `preserveBody`, then `renderLegalPdf`). A draft, another licence's contract or an unknown uid answers 404; a failed render answers 503; a branch answers 501 `contract_hq_only`. |
 | `GET /api/licence/mine/statements` | the licence's Administrator | `statements` lists the `issued`, `paid` and `void` statements; a draft is never sent. Each carries period, gross, share bps, owed, paid, disputed, status, currency, `streams` (as stored in `streams_json`) and `payment_reference` (`AXAL-LIC-<licence_ref>-<period>`). `drawn_by_user_id`, `paid_by_user_id` and HQ's notes are never sent. `usage_reports` gives this licence's reports by period. `usage` gives each period's status: `sent` with its date, `late` or `due` against D797's report day, or `not_sent` with `late: null` until that day is recorded. On HQ, `usage.send_now` is false with `send_now_reason`. `payment` is the `territory_licence_fee` account, masked as `paymentBlock` masks it (last four digits only), with `method`, `payee_entity`, `payee_name` and the warning. When no account carries the purpose, or the licence's IP licensor is not the payee, it is a refusal sentence instead. |
 | `GET /api/licence/mine/needs` | the licence's Administrator | The Summary's "Needs you" list and its count, in order: a contract waiting for the caller's own signature; HQ's notices waiting for the caller's answer; issued, unpaid statements; and, on a branch only, seat types at 90% or more of their seats licensed. Each item has `kind`, `title`, `link`, `ref` and `due`. `reasons` says what could not be listed, and why. |
@@ -287,6 +306,17 @@ An Administrator requests and HQ decides (D795, D-d). The requests are escalatio
 | `POST /api/branch/escalations` | a branch admin | `routes/branch_escalations.ts` | Now also takes `request`: required for the four new kinds, checked when sent for `seat_increase`, refused on any other kind; stored in `detail` and sent to HQ, which checks it again (`recordEscalation`). |
 | `GET /api/admin/escalations` | Super Admin | `routes/admin_escalations.ts` | Each row also carries `request` and `note`. |
 | `PATCH /api/admin/escalations/:uid`, `POST …/:uid/resend` | Super Admin | `routes/admin_escalations.ts` | On an `hq` row the decision is the raiser's bell notice, reported as `notified`, not pushed. A branch's raiser is told by the branch when the decision lands (`applyEscalationAnswer`). |
+
+### Licences page: Contract, Statements and Requests (D804, #2241)
+
+These are the canvas's boards L3, L4, L5 and L8's sheet (`design/incoming/Licences Page.dc.html`). Each tab is a component under `frontend/src/pages/subsidiary/licence/`, which reads only through D798's and D799's API modules. Until D800 (#2233) builds the tab frame, each tab has a route of its own behind `guard(['admin'])`. That route draws the Admin board's frame and rail (`LicenceTabRoute.jsx`), keyed `Admin · Licences` through the page map's aliases.
+
+| Canvas | Live route | Component and Worker | Status |
+| --- | --- | --- | --- |
+| L3 Contract | `/admin/my-licence/contract` | `ContractTab.jsx` · `GET /api/licence/mine/contract`, `…/contract/:uid/pdf` | LIVE |
+| L4 Statements | `/admin/my-licence/statements` | `StatementsTab.jsx` · `GET /api/licence/mine/statements`, `POST …/statements/:uid/dispute`, `POST …/usage/send` | LIVE (fee invoices wait for D802) |
+| L5 Requests | `/admin/my-licence/requests` | `RequestsTab.jsx` · `GET`/`POST /api/licence/mine/requests`, `GET /api/licence/mine` | LIVE (the notice deadline waits for D797) |
+| L5 and L8 "Request a change" sheet | `/admin/my-licence/requests?change=<term>` | `RequestChangeSheet.jsx` · `POST /api/licence/mine/requests` | LIVE |
 
 ### Product testing Worker contract (D812, #2258)
 
@@ -662,6 +692,16 @@ How Zoom and Google Meet transcripts are switched on, and what each refusal mean
 
 - `GET /api/admin/channels/telegram/webhook`: the interview bot's health, from `getMe` and `getWebhookInfo` (`readTelegramHealth`, `services/channels/telegram.ts`). With a secret unset: 503 `not_configured` with `{ configured: false, missing }`, the secret NAMES, and no Telegram call. Otherwise 200 `{ configured: true, ready, issues, bot, webhook, checked_at }`, even when Telegram does not answer (that half reads `reachable: false` with `token_rejected` or `telegram_unreachable`). `issues` are codes, in this order: `token_rejected`, `telegram_unreachable`, `business_mode_off`, `username_mismatch`, `same_bot_as_news`, `base_url_missing`, `webhook_unregistered`, `webhook_elsewhere`, `updates_stale`, `delivery_error` (a delivery error in the last 24 hours; an older one is shown but does not block `ready`). `pending_update_count` is shown and never blocks. Never the token, the secret, the URL Telegram reports, either bot id or the bot's username; Telegram's error text is scrubbed of all three secrets and clipped to 200 characters.
 - `POST /api/admin/channels/telegram/webhook`: `setWebhook` for `${PUBLIC_BASE_URL}/api/channels/telegram/webhook` with `secret_token`, `allowed_updates` = `TELEGRAM_ALLOWED_UPDATES` and `drop_pending_updates: false`. 200 `{ ok, url, allowed_updates }`; 503 `base_url_missing` without an https base, `secret_format`, or `not_configured` (a secret unset, or a token Telegram answers 401 or 404 to); otherwise 502 with the call's code (`rate_limited`, `provider_unavailable`, `forbidden`, `rejected`, `network`).
+
+### Licence terms schedule Worker contract (D797, #2230)
+
+A licence's terms beyond migration 187's fee and shares: the two licensors, territory, renewal and notice, money (with a share per stream and the platform-licence royalty), deal terms, seats, brand and reporting, one row per licence in `licence_terms` (migration 512). `sections` gives each term its contract section, the Licences canvas's number unless HQ recorded another. Every term is nullable, and null is "not recorded", never zero. The field list, its types, ranges and labels are `services/licenceTerms.ts`. No UI yet: D800 and D801 draw it through `frontend/src/lib/api/licenceTerms.js`.
+
+| Route | Who | What it answers |
+| --- | --- | --- |
+| `GET /api/admin/licences/:uid/terms` | Super Admin | `{ licence_uid, terms, sections }`. `terms` has every key, a missing one `null`, or is `null` when HQ has recorded none. `sections` maps a term key to its contract section (`"carry_share_bps": "§7.3"`). |
+| `PUT /api/admin/licences/:uid/terms` | Super Admin, a TOTP session and a recent step-up (`requireSuperAdminWriteBar`) | `{ terms?, sections?, reason }`. Only the keys named change, and `null` clears one. 400 `invalid_terms` names the first bad field (and lists them all in `errors`), 400 `reason_required`, 403 `step_up_required`. It appends one `licence_events` `terms_changed`, with `{ schedule, reason, changed: { <key>: { before, after } } }` and the reason as its note, then pushes the branch copy. It answers the saved `terms`, `sections`, `changed` and `pushed`. |
+| `GET /api/licence/mine` | the licence's principal or delegate (`licence_admins`) | Adds `terms` (or `null`), `terms_reason` ("HQ has not recorded this licence's terms yet.", "…could not be read just now.") and `sections`. On a branch it reads `branch_licence.terms_json`, which the push and the pull carry (`assembleLicenceRecord`, `applyLicenceCopy`). A copy pushed before migration 512 reads `terms: null` with "HQ has not pushed this licence's terms yet." |
 
 ### Studio on a phone (D701, #1663)
 

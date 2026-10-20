@@ -47,6 +47,8 @@ const MIGRATIONS = [
   'cloudflare-worker/sql/migrations/265_branch_licence_entity.sql',
   'cloudflare-worker/sql/migrations/284_branch_licence_kind.sql',
   'cloudflare-worker/sql/migrations/264_admin_notices.sql',
+  // D797's terms schedule: the route reads the IP licensor and the report day from it.
+  'cloudflare-worker/sql/migrations/512_licence_terms.sql',
 ].map(read);
 
 /** A ten-digit number drawn per run: never a literal in this file. */
@@ -200,6 +202,7 @@ test('in force is the latest signed contract, pending the one sent and waiting, 
   const r = await call(env, PRINCIPAL, 'GET', '/mine/contract');
   assert.equal(r.body.in_force.uid, 'ctr_a_v3', 'v3 stays in force while v4 waits, though drawing v4 superseded it');
   assert.equal(r.body.in_force.signed_at, '2026-08-03 00:00:00');
+  assert.equal(r.body.in_force.drafted_at, '2026-08-01 00:00:00', 'the Drafted step has its date');
   assert.equal(r.body.pending.uid, 'ctr_a');
   assert.ok(!JSON.stringify(r.body).includes('BODY-A-REDRAFT'), 'a contract HQ never sent was shown');
 
@@ -369,6 +372,28 @@ test('a licence whose terms name another licensor is refused rather than paid to
   assert.match(r!.refusal, /no payment instructions are given/);
   assert.equal(licenceFeeReference('LIC-A', '2026-09'), 'AXAL-LIC-LIC-A-2026-09');
   assert.throws(() => licenceFeeReference('', '2026-09'));
+});
+
+test('the route reads D797\'s licensor and report day; an unreadable schedule gives no payment instructions', async () => {
+  // Mutations checked: the route passing no terms; the licensor read from the brand key; an unreadable
+  // schedule falling back to Holdings' account.
+  const { env, db } = fixture();
+  const number = await holdingsAccount(env, db);
+  db.prepare("INSERT INTO licence_terms (licence_uid, licensor_ip_entity, licensor_brand_entity, usage_report_day) VALUES ('lic_a', 'management', 'holdings', 5)").run();
+  const named = await call(env, PRINCIPAL, 'GET', '/mine/statements');
+  assert.equal(named.status, 200);
+  assert.equal(named.body.payment.refusal_code, 'licensor_not_payee', 'the route did not read licensor_ip_entity');
+  assert.equal(named.body.usage.report_day, 5, 'the route did not read usage_report_day');
+  db.prepare("UPDATE licence_terms SET licensor_ip_entity = 'holdings', usage_report_day = NULL").run();
+  const holdings = await call(env, PRINCIPAL, 'GET', '/mine/statements');
+  assert.equal(holdings.body.payment.account_last4, number.slice(-4));
+  assert.equal(holdings.body.usage.report_day, null, 'an unrecorded day is given a default');
+  db.exec('DROP TABLE licence_terms');
+  const unread = await quietly(() => call(env, PRINCIPAL, 'GET', '/mine/statements'));
+  assert.equal(unread.status, 200);
+  assert.equal(unread.body.payment.refusal_code, 'terms_unreadable');
+  assert.ok(!JSON.stringify(unread.body).includes(number.slice(-4)), 'an account was shown without the licensor checked');
+  assert.equal(unread.body.statements.length, 3, 'the statements are still read');
 });
 
 // ───────────────────────────────────────────────────────────── disputes

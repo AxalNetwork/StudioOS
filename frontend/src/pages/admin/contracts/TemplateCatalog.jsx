@@ -71,6 +71,7 @@ function TemplateCard({ row, authoring, thumbs, onOpen, onOpenUsage }) {
         <span title={editedTitle(row)}><Pill tone="neutral">v{row.version}</Pill></span>
         <button type="button" onClick={() => onOpenUsage?.(row.slug, row)}>{uses}</button>
         {s.publishedVersion != null ? <Pill tone="ok">Published v{s.publishedVersion}</Pill> : <Pill tone="ok">Has a body</Pill>}
+        {row.counsel_review && <Pill tone="warn">Draft — subject to counsel</Pill>}
         {s.changesNotPublished && <Pill tone="warn">Changes not published</Pill>}
       </div>}
     </div>
