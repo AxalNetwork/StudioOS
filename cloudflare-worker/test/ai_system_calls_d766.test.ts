@@ -25,6 +25,8 @@ import { SEARCH_INDEX_MODEL } from '../src/services/ai/shapes.ts';
 import monitoring from '../src/routes/monitoring.ts';
 import x from '../src/routes/admin_x.ts';
 
+// D780 part 2 (#2105): the alt-text caption is stored as a rail proposal, so the X route needs the table.
+const PROPOSALS = readFileSync(new URL('../sql/migrations/506_ai_rail_proposals.sql', import.meta.url), 'utf8');
 const SCOUT = '@cf/meta/llama-4-scout-17b-16e-instruct';
 const SUPER = 1;
 // A real 1x1 PNG: the upload route sniffs the magic bytes.
@@ -41,6 +43,7 @@ function makeAI(handler: (model: string, payload: any) => any) {
 
 async function world(ai: any, extra: Record<string, unknown> = {}) {
   const f = aiBudgetFixture();
+  f.db.exec(PROPOSALS);
   f.db.exec(`CREATE TABLE system_metrics(id INTEGER PRIMARY KEY, metric_name TEXT, labels TEXT, value REAL, timestamp TEXT);
              CREATE TABLE rate_limit_logs(id INTEGER PRIMARY KEY, blocked INTEGER, created_at TEXT);
              CREATE TABLE error_logs(id INTEGER PRIMARY KEY, user_id INTEGER, created_at TEXT);
@@ -161,6 +164,8 @@ test('X alt text: image_alt_text on Scout, the stored image as a data URI, one r
   assert.equal(ai.calls[0].model, SCOUT);
   assert.equal(ai.calls[0].payload.messages.at(-1).content[1].image_url.url, dataUri);
   assert.deepEqual(rows(w).map((x: any) => [x.user_id, x.task, x.surface]), [[0, 'image_alt_text', '/admin/x']]);
+  // D780: the caption is the Super Admin's to keep, not the post's (rail_x_alt_text_d780.test.ts).
+  assert.equal(w.f.db.prepare('SELECT alt_texts FROM x_posts WHERE id = 7').get().alt_texts, null);
   // The stored content type wins over the key's extension.
   const typed = makeAI(() => reply('A logo.'));
   const t = await world(typed);

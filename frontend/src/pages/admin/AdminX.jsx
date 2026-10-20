@@ -13,6 +13,7 @@ import {
   ShieldAlert, Link2, Wifi, Undo2, Clock,
 } from 'lucide-react';
 import { adminX as api } from '../../lib/api';
+import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { toLocalInput, scheduledNote } from '../../lib/scheduledPost';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
@@ -28,6 +29,9 @@ const TABS = [
 ];
 
 const MAX_BODY = 280;
+// D780 (#2105): Eadwyn's caption for an image is a proposal under this option,
+// on `x_post:<id>`; Save or Approve keeps it (routes/admin_x.ts).
+export const X_ALT_TEXT_OPTION = 'draft:x/alt-text';
 const MAX_MEDIA = 4;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
@@ -416,7 +420,7 @@ function ComposeTab({ accounts, onSaved, notify }) {
             </div>
           )}
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Tip: save the draft first, then use "Auto alt-text" in the drafts list to caption images with Workers AI.
+            Tip: save the draft first, then press "Alt" in the drafts list. Eadwyn drafts a caption; Save or Approve keeps it.
           </p>
         </div>
         <div>
@@ -476,6 +480,33 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
   const [overrideFor, setOverrideFor] = useState(null);  // { id, findings }
   const [editId, setEditId] = useState(null);
   const [editBody, setEditBody] = useState('');
+  // D780: the captions Eadwyn proposed that wait for a Save, by post and image:
+  // { 'x_post:<id>': { <index>: { uid, text, draft } } }.
+  const [captions, setCaptions] = useState({});
+  const offered = (postId) => captions[`x_post:${postId}`] || {};
+  const offer = (postId, index, p) => setCaptions((all) => {
+    const rec = `x_post:${postId}`;
+    const mine = { ...(all[rec] || {}) };
+    if (p) mine[index] = p; else delete mine[index];
+    return { ...all, [rec]: mine };
+  });
+  useEffect(() => {
+    if (mode !== 'drafts') return;
+    let live = true;
+    railProposalsApi.list({ option: X_ALT_TEXT_OPTION, status: 'proposed' }).then((out) => {
+      if (!live) return;
+      const next = {};
+      // Newest first: the first caption for an image is the one offered.
+      for (const p of out?.proposals || []) {
+        const index = Number(p.payload?.index);
+        if (!p.record_ref || !Number.isInteger(index)) continue;
+        next[p.record_ref] = next[p.record_ref] || {};
+        if (!next[p.record_ref][index]) next[p.record_ref][index] = { uid: p.uid, text: String(p.payload?.text || ''), draft: String(p.payload?.text || '') };
+      }
+      setCaptions(next);
+    }).catch(() => {});
+    return () => { live = false; };
+  }, [mode, posts]);
 
   const send = async (id, override_reason) => {
     setBusyId(id);
@@ -504,7 +535,11 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
   };
 
   const approve = async (id) => {
-    try { await api.approvePost(id); notify('Approved', 'success'); onReload(); }
+    try {
+      await api.approvePost(id, Object.values(offered(id)).map((p) => p.uid));
+      notify('Approved', 'success');
+      onReload();
+    }
     catch (e) { notify(`Approve failed: ${e?.message || e}`, 'error'); }
   };
 
@@ -531,12 +566,29 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
     } catch (e) { notify(`Edit failed: ${e?.message || e}`, 'error'); }
   };
 
+  // Eadwyn drafts the caption; nothing is on the post until Save or Approve.
   const genAlt = async (id, idx) => {
     try {
       const out = await api.generateAltText(id, idx);
-      notify(`Alt-text: ${out.alt_text.slice(0, 60)}…`, 'success');
-      onReload();
+      const p = out?.proposal;
+      if (p) offer(id, idx, { uid: p.uid, text: p.text, draft: p.text });
+      notify('Eadwyn drafted a caption. Save or Approve keeps it.', 'success');
     } catch (e) { notify(`Alt-text failed: ${e?.message || e}`, 'error'); }
+  };
+  const saveAlt = async (id, idx) => {
+    const p = offered(id)[idx];
+    if (!p) return;
+    try {
+      await api.updatePost(id, { alt_text: { index: idx, text: p.draft, proposal_uid: p.uid } });
+      offer(id, idx, null);
+      onReload();
+    } catch (e) { notify(`Caption not saved: ${e?.message || e}`, 'error'); }
+  };
+  const discardAlt = async (id, idx) => {
+    const p = offered(id)[idx];
+    if (!p) return;
+    try { await railProposalsApi.decide(p.uid, 'discard'); } catch { /* already decided: drop it here too */ }
+    offer(id, idx, null);
   };
 
   return (
@@ -638,12 +690,22 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
                 <div key={i} className="border border-gray-200 dark:border-gray-700 rounded px-2 py-1 flex items-center gap-2">
                   <ImageIcon size={12} />
                   <span className="font-mono text-gray-500 truncate max-w-[200px]">{k.split('/').pop()}</span>
-                  {!p.alt_texts?.[i] && (
-                    <button onClick={() => genAlt(p.id, i)} className="text-purple-600 dark:text-purple-300 flex items-center gap-1" title="Generate alt-text via Workers AI">
+                  {!p.alt_texts?.[i] && !offered(p.id)[i] && mode === 'drafts' && (
+                    <button onClick={() => genAlt(p.id, i)} className="text-purple-600 dark:text-purple-300 flex items-center gap-1" title="Ask Eadwyn to draft a caption">
                       <Sparkles size={12} /> Alt
                     </button>
                   )}
-                  {p.alt_texts?.[i] && <span className="text-gray-500 italic truncate max-w-[280px]">"{p.alt_texts[i]}"</span>}
+                  {p.alt_texts?.[i] && !offered(p.id)[i] && <span className="text-gray-500 italic truncate max-w-[280px]">"{p.alt_texts[i]}"</span>}
+                  {offered(p.id)[i] && (
+                    <span className="flex items-center gap-1" data-testid="x-alt-proposal">
+                      <span className="text-purple-600 dark:text-purple-300">Eadwyn's caption:</span>
+                      <input value={offered(p.id)[i].draft} aria-label={`Caption for image ${i + 1}`}
+                        onChange={(e) => offer(p.id, i, { ...offered(p.id)[i], draft: e.target.value })}
+                        className="px-1 py-0.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white w-64" />
+                      <button onClick={() => saveAlt(p.id, i)} className="px-2 py-0.5 bg-blue-600 text-white rounded">Save</button>
+                      <button onClick={() => discardAlt(p.id, i)} className="px-2 py-0.5 border border-gray-300 dark:border-gray-600 rounded">Discard</button>
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

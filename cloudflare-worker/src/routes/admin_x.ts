@@ -19,12 +19,12 @@
  *   Posts
  *     GET    /posts?status=&account_id=&limit=&offset=
  *     POST   /posts                               — create draft (manual)
- *     PUT    /posts/:id                           — edit draft (forbidden when sent/sending)
+ *     PUT    /posts/:id                           — edit draft (forbidden when sent/sending); `alt_text` saves one image's caption
  *     DELETE /posts/:id                           — delete draft (forbidden when sent/sending)
  *     POST   /posts/:id/media                     — add a single R2-backed image (≤4 total)
- *     POST   /posts/:id/alt-text                  — auto-generate alt-text via Workers AI
+ *     POST   /posts/:id/alt-text                  — Eadwyn's caption for one image, as a proposal (D780)
  *     POST   /posts/:id/lint                      — preview PII linter findings
- *     POST   /posts/:id/approve                   — admin approve (status=approved)
+ *     POST   /posts/:id/approve                   — admin approve (status=approved), keeping the captions it names
  *     POST   /posts/:id/send                      — send (linter blocks unless override_reason)
  *     POST   /posts/:id/schedule                  — set scheduled_for
  *     POST   /posts/:id/retract                   — DELETE on the X API + flip status
@@ -59,6 +59,8 @@ import { refuse } from '../util/refusal';
 import { run as aiRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { refusalBody } from '../util/refusal';
+import { railFor } from '../util/railContext';
+import { decideRail, getRail, listRail, proposeRail, withdrawRailUid, type RailProposal } from '../services/railProposals';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -71,6 +73,34 @@ const X_IMAGE_MIME: Record<string, string> = {
 const X_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 // ---------------- helpers ----------------
+
+/**
+ * D780 part 2 (#2105, D720 §9): Eadwyn's caption for one image is a proposal on
+ * the post, never `x_posts.alt_texts`. The Super Admin's Save (PUT `alt_text`)
+ * or Approve (`alt_text_proposal_uids`) writes it, and keeps the proposal as
+ * written (accepted) or as they changed it (edited). The run is still the
+ * `image_alt_text` system call (D766: user 0, unbilled).
+ */
+export const X_ALT_TEXT_OPTION = 'draft:x/alt-text';
+const xPostRecord = (id: number) => `x_post:${id}`;
+
+/** The admin's own open caption proposal `uid` for this post, and the image it is for, or null. */
+async function openAltProposal(env: Env, adminId: number, postId: number, uid: unknown, imageCount: number): Promise<(RailProposal & { index: number }) | null> {
+  if (typeof uid !== 'string' || !uid) return null;
+  const p = await getRail(env, adminId, uid);
+  const index = Number(p?.payload.index);
+  if (!p || p.status !== 'proposed' || p.rail_option !== X_ALT_TEXT_OPTION || p.record_ref !== xPostRecord(postId)) return null;
+  if (!Number.isInteger(index) || index < 0 || index >= imageCount) return null;
+  return { ...p, index };
+}
+
+/** `alts` with `text` at `index`, padded to the post's images. */
+function withAlt(alts: string[], imageCount: number, index: number, text: string): string[] {
+  const out = alts.slice(0, imageCount);
+  while (out.length < imageCount) out.push('');
+  out[index] = text;
+  return out;
+}
 
 /** D766: an image's bytes as the data URI the router's vision shape sends (D761 PR 2). */
 function imageDataUri(mime: string, bytes: Uint8Array): string {
@@ -589,9 +619,30 @@ r.put('/posts/:id', async (c) => {
     // Date.parse accepted. It used to be stored verbatim.
     sets.push('scheduled_for = ?'); args.push(v ? new Date(Date.parse(v)).toISOString() : null);
   }
+  // D780: one image's caption, typed or Eadwyn's. A caption that began as
+  // Eadwyn's proposal names it, and the Save keeps the proposal.
+  let fromAlt: (RailProposal & { index: number }) | null = null;
+  let altText = '';
+  if (body.alt_text && typeof body.alt_text === 'object') {
+    const keys = safeJson<string[]>(post.media_r2_keys, []);
+    const idx = Number(body.alt_text.index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= keys.length) return c.json({ error: 'invalid_index' }, 400);
+    if (typeof body.alt_text.text !== 'string') return c.json({ error: 'alt_text_required' }, 400);
+    altText = body.alt_text.text.trim().slice(0, 1000);
+    if (body.alt_text.proposal_uid != null) {
+      fromAlt = await openAltProposal(c.env, admin.id, id, body.alt_text.proposal_uid, keys.length);
+      if (!fromAlt || fromAlt.index !== idx) return c.json({ error: 'proposal_not_open' }, 409);
+    }
+    sets.push('alt_texts = ?'); args.push(JSON.stringify(withAlt(safeJson<string[]>(post.alt_texts, []), keys.length, idx, altText)));
+  }
   if (sets.length === 0) return c.json({ error: 'no_fields' }, 400);
   sets.push("updated_at = datetime('now')");
   await c.env.DB.prepare(`UPDATE x_posts SET ${sets.join(', ')} WHERE id = ?`).bind(...args, id).run();
+  if (fromAlt) {
+    await (altText === String(fromAlt.payload.text || '').trim()
+      ? decideRail(c.env, admin.id, fromAlt.uid, 'accept')
+      : decideRail(c.env, admin.id, fromAlt.uid, 'edit', { index: fromAlt.index, text: altText }));
+  }
   const afterRow: any = await loadPost(c.env, id);
   const editedHash = await sha256Hex(String(afterRow?.body || ''));
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_edited', postId: id, accountId: post.account_id, bodyHash: editedHash, extra: { fields: Object.keys(body) } });
@@ -711,6 +762,7 @@ r.post('/posts/:id/alt-text', async (c) => {
   // Image to text, through the router as a system call (D766: `image_alt_text`,
   // userId 0; the vision model is Llama 4 Scout, llava-1.5-7b-hf being unpriced).
   let caption = '';
+  const run: { model: string | null; usageLogId: number | null } = { model: null, usageLogId: null };
   try {
     const stored = String(obj.httpMetadata?.contentType || '');
     const ext = keys[idx].split('.').pop() || '';
@@ -723,19 +775,26 @@ r.post('/posts/:id/alt-text', async (c) => {
     });
     if (!out.ok) throw new Error(out.refusal || out.error || 'ai_failed');
     caption = String(out.output ?? '').trim().slice(0, 1000);
+    run.model = out.usage?.model ?? null;
+    run.usageLogId = out.usageLogId ?? null;
   } catch (e) {
     return refuse(c, 502, { code: 'ai_failed', message: 'The draft could not be generated. Try again in a moment.', raw: e, audience: 'admin' });
   }
   if (!caption) return c.json({ error: 'ai_empty' }, 502);
 
-  const alts = safeJson<string[]>(post.alt_texts, []);
-  while (alts.length < keys.length) alts.push('');
-  alts[idx] = caption;
-  await c.env.DB.prepare(
-    `UPDATE x_posts SET alt_texts = ?, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(JSON.stringify(alts), id).run();
-  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_alt_generated', postId: id, accountId: post.account_id, extra: { index: idx } });
-  return c.json({ ok: true, index: idx, alt_text: caption });
+  // D780: the caption waits for the admin's Save or Approve. A newer caption
+  // for the same image withdraws the admin's older open one.
+  const record = xPostRecord(id);
+  for (const old of await listRail(c.env, admin.id, { option: X_ALT_TEXT_OPTION, record, status: 'proposed' })) {
+    if (Number(old.payload.index) === idx) await withdrawRailUid(c.env, admin.id, old.uid);
+  }
+  const rail = railFor(c, { page: 'admin/x', option: X_ALT_TEXT_OPTION });
+  const p = await proposeRail(c.env, {
+    userId: admin.id, page: rail.page, option: X_ALT_TEXT_OPTION, record,
+    kind: 'draft', payload: { index: idx, text: caption }, model: run.model, usageLogId: run.usageLogId,
+  });
+  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_alt_generated', postId: id, accountId: post.account_id, extra: { index: idx, proposal: p.uid } });
+  return c.json({ ok: true, index: idx, alt_text: caption, proposal: { uid: p.uid, index: idx, text: caption } });
 });
 
 r.post('/posts/:id/lint', async (c) => {
@@ -757,10 +816,25 @@ r.post('/posts/:id/approve', async (c) => {
   const post: any = await loadPost(c.env, id);
   if (!post) return c.json({ error: 'not_found' }, 404);
   if (post.status !== 'draft') return c.json({ error: 'not_draft', state: post.status }, 409);
+  // D780: Approve keeps the captions the admin approves with (the ones the
+  // composer still offers), each as Eadwyn wrote it. Any that is no longer open
+  // refuses the whole Approve, so nothing is kept by half.
+  const body: any = await c.req.json().catch(() => ({}));
+  const uids: unknown[] = Array.isArray(body.alt_text_proposal_uids) ? body.alt_text_proposal_uids.slice(0, X_MAX_MEDIA_PER_TWEET) : [];
+  const keys = safeJson<string[]>(post.media_r2_keys, []);
+  let alts: string[] | null = null;
+  const kept: string[] = [];
+  for (const uid of uids) {
+    const p = await openAltProposal(c.env, admin.id, id, uid, keys.length);
+    if (!p) return c.json({ error: 'proposal_not_open' }, 409);
+    alts = withAlt(alts ?? safeJson<string[]>(post.alt_texts, []), keys.length, p.index, String(p.payload.text || '').trim().slice(0, 1000));
+    kept.push(p.uid);
+  }
   await c.env.DB.prepare(
     `UPDATE x_posts SET status = 'approved', approved_by = ?, approved_at = datetime('now'),
-                         updated_at = datetime('now') WHERE id = ?`,
-  ).bind(admin.id, id).run();
+                         alt_texts = COALESCE(?, alt_texts), updated_at = datetime('now') WHERE id = ?`,
+  ).bind(admin.id, alts ? JSON.stringify(alts) : null, id).run();
+  for (const uid of kept) await decideRail(c.env, admin.id, uid, 'accept');
   const approvedHash = await sha256Hex(String(post.body || ''));
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_approved', postId: id, accountId: post.account_id, bodyHash: approvedHash });
   return c.json({ ok: true });
