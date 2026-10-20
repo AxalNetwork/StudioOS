@@ -1,7 +1,9 @@
 // D791 (#2216) part 1 — HQ › AI usage: the platform's AI use, the flags, Pause
-// AI and a member's own cap. Real SQLite with migrations 419, 430, 486, 493,
-// 505 and 510 (`_ai_budget_fixture.mjs`); Workers AI is a stub, and each case
-// says what it pins.
+// AI, a member's own cap, the member search and one member's detail. Real
+// SQLite with migrations 419, 430, 486, 493, 505, 508 and 510
+// (`_ai_budget_fixture.mjs`); Workers AI is a stub, and each case says what it
+// pins. A member is `{ id, name, email }` here: the owner's ruling of
+// 2026-10-20 (S1 on #2227).
 //
 //   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
 //     --test cloudflare-worker/test/ai_usage_admin_d791.test.ts
@@ -14,11 +16,12 @@ import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import route from '../src/routes/admin_ai_usage.ts';
-import { AI_USAGE_FLAGS, aiUsageFlags, platformAiUsage, rangeBounds } from '../src/services/aiUsageAdmin.ts';
+import { AI_USAGE_FLAGS, SEARCH_MAX, aiUsageFlags, emailPrefixPattern, platformAiUsage, rangeBounds } from '../src/services/aiUsageAdmin.ts';
 import { AI_PAUSED_MESSAGE, reserveAiBudget, resolveAiCaps } from '../src/services/aiBudget.ts';
 import { run, __resetForTest, budgetRefusalMessage } from '../src/services/aiRouter.ts';
 import { refuseRun } from '../src/util/railContext.ts';
 
+const M508 = readFileSync(new URL('../sql/migrations/508_member_ai_spend_limits.sql', import.meta.url), 'utf8');
 const M510 = readFileSync(new URL('../sql/migrations/510_member_ai_pauses.sql', import.meta.url), 'utf8');
 const SUPER = 1, MEMBER = 2, INVESTOR = 3, ADMIN = 101;
 const SECRET = 'd791-fixture-only-secret';
@@ -31,8 +34,10 @@ const H = 3_600_000, D = 24 * H;
 function world() {
   __resetForTest();
   const f = aiBudgetFixture();
+  f.db.exec(M508);
   f.db.exec(M510);
   f.db.exec(`ALTER TABLE users ADD COLUMN display_name TEXT; ALTER TABLE users ADD COLUMN created_at TEXT;
+    ALTER TABLE activity_logs ADD COLUMN created_at TEXT NOT NULL DEFAULT '2026-10-20 11:00:00';
     UPDATE users SET created_at = '2026-01-01 00:00:00';
     CREATE TABLE user_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, jti TEXT, factor TEXT, assurance_level TEXT,
       revoked_at TEXT, step_up_due_at TEXT, last_seen_at TEXT, last_step_up_at TEXT, created_at TEXT DEFAULT (datetime('now')));`);
@@ -71,6 +76,9 @@ async function call(w: any, user: number | null, path: string, init: { method?: 
   return { status: r.status, body: await r.json().catch(() => null) as any };
 }
 const REASON = 'Spending far past the plan in one afternoon.';
+const MIA = { id: MEMBER, name: 'Mia Member', email: 'member@example.test' };
+const INV = { id: INVESTOR, name: 'Investor', email: 'investor@example.test' };
+const OWNER = { id: SUPER, name: 'Owner', email: 'owner@example.test' };
 const logs = (db: any, action: string) => db.prepare('SELECT * FROM activity_logs WHERE action = ? ORDER BY id').all(action);
 
 // 1 ───────────────────────────────────────────────────────────────────────────
@@ -93,8 +101,10 @@ test('the totals: runs, cost, charged and margin by day, model, role and plan, g
       [[L70, 2, 2500], [L8, 2, 1250], ['@cf/meta/llama-guard-3-8b', 0, 125]]);
     assert.deepEqual(u.by_role.map((r: any) => [r.role, r.runs, r.charged_microusd]), [['founder', 2, 2625], ['investor', 1, 1250], ['system', 1, 0]]);
     assert.deepEqual(u.by_plan.map((p: any) => [p.plan, p.charged_microusd]), [['founder:free', 2625], ['investor:free', 1250], ['system', 0]]);
-    assert.deepEqual(u.top_charged.map((t: any) => [t.member, t.charged_microusd]),
-      [[{ id: MEMBER, name: 'Mia Member' }, 2625], [{ id: INVESTOR, name: 'Investor' }, 1250]]);
+    assert.deepEqual(u.top_charged, [
+      { member: MIA, runs: 2, refused: 1, cost_microusd: 6_100, charged_microusd: 2_625, margin_microusd: 2_625 - 2_100, not_recorded: 1, topups_microusd: 0 },
+      { member: INV, runs: 1, refused: 0, cost_microusd: 1_000, charged_microusd: 1_250, margin_microusd: 250, not_recorded: 0, topups_microusd: 0 },
+    ]);
     // The ranges.
     assert.deepEqual(rangeBounds('7d', NOW), { from: '2026-10-14 00:00:00', to: '2026-10-21 00:00:00' });
     assert.deepEqual(rangeBounds('mtd', NOW), { from: '2026-10-01 00:00:00', to: '2026-10-21 00:00:00' });
@@ -251,7 +261,7 @@ test('Pause AI: the hold refuses ai_paused (403) and charges nothing; the member
     await call(w, SUPER, `/api/admin/ai-usage/members/${INVESTOR}/pause`, { method: 'POST', body: { reason: REASON } });
     const read = await call(w, SUPER, '/api/admin/ai-usage?range=7d');
     assert.deepEqual(read.body.paused.map((x: any) => [x.member, x.reason, x.paused_by]),
-      [[{ id: INVESTOR, name: 'Investor' }, REASON, { id: SUPER, name: 'Owner' }]]);
+      [[INV, REASON, OWNER]]);
   } finally { w.f.db.close(); }
 });
 
@@ -296,11 +306,15 @@ test('a member\'s cap: the lower of it and the licence\'s wins, a higher one cha
 
 // 6 ───────────────────────────────────────────────────────────────────────────
 test('a non-Super Admin gets 403 on every route; a Super Admin without a recent step-up too; nothing changes', async () => {
-  // Mutations checked: the step-up dropped from the gate; requireSuperAdmin swapped for requireAdmin.
+  // Mutations checked: the step-up dropped from the gate; requireSuperAdmin swapped for requireAdmin;
+  // the gate dropped from the search, and from the member detail.
   const w = world();
   try {
     const routes: [string, string, unknown][] = [
       ['GET', '/api/admin/ai-usage?range=30d', undefined],
+      ['GET', '/api/admin/ai-usage/members?q=member&range=30d', undefined],
+      ['GET', `/api/admin/ai-usage/members?q=${MEMBER}`, undefined],
+      ['GET', `/api/admin/ai-usage/members/${MEMBER}?range=7d`, undefined],
       ['POST', `/api/admin/ai-usage/members/${MEMBER}/pause`, { reason: REASON }],
       ['DELETE', `/api/admin/ai-usage/members/${MEMBER}/pause`, { reason: REASON }],
       ['PUT', `/api/admin/ai-usage/members/${MEMBER}/cap`, { monthly_usd: 1, reason: REASON }],
@@ -322,8 +336,8 @@ test('a non-Super Admin gets 403 on every route; a Super Admin without a recent 
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────
-test('no email, prompt or output in any answer; bad input is refused', async () => {
-  // Mutation checked: u.email selected into a member.
+test('every member object names id, name and email; no prompt or output in any answer; bad input is refused', async () => {
+  // Mutations checked: u.email dropped from a member; a velocity, flag or caps member built without the email.
   const w = world();
   try {
     w.log({ charged: 6_000_000, at: at(H) });
@@ -332,12 +346,131 @@ test('no email, prompt or output in any answer; bad input is refused', async () 
     await call(w, SUPER, `/api/admin/ai-usage/members/${INVESTOR}/cap`, { method: 'PUT', body: { monthly_usd: 3, reason: REASON } });
     const r = await call(w, SUPER, '/api/admin/ai-usage?range=mtd');
     assert.equal(r.status, 200);
-    const text = JSON.stringify(r.body);
-    assert.doesNotMatch(text, /@example\.test|"email"|"prompt"|"output"|"messages"/);
-    assert.ok(r.body.flags.some((x: any) => x.flag === 'spike' && x.member.id === MEMBER));
+    const b = r.body;
+    assert.deepEqual(b.top_charged.map((t: any) => t.member), [MIA, INV]);
+    assert.deepEqual(b.top_velocity.map((t: any) => t.member), [MIA]);
+    assert.deepEqual(b.flags.find((x: any) => x.flag === 'spike').member, MIA);
+    assert.deepEqual(b.paused.map((x: any) => [x.member, x.paused_by]), [[MIA, OWNER]]);
+    assert.deepEqual(b.caps.map((x: any) => [x.member, x.set_by]), [[INV, OWNER]]);
+    assert.doesNotMatch(JSON.stringify(b), /"prompt"|"output"|"messages"|"response"/);
+    // The audit lines keep the user id, never the email.
+    assert.doesNotMatch(JSON.stringify(w.f.db.prepare("SELECT * FROM activity_logs WHERE action LIKE 'ai_member_%'").all()), /@example\.test/);
     assert.equal((await call(w, SUPER, '/api/admin/ai-usage?range=1y')).status, 400);
     assert.equal((await call(w, SUPER, '/api/admin/ai-usage/members/999999/pause', { method: 'POST', body: { reason: REASON } })).status, 404);
     assert.equal((await call(w, SUPER, '/api/admin/ai-usage/members/abc/pause', { method: 'POST', body: { reason: REASON } })).status, 404);
     assert.equal((await call(w, SUPER, `/api/admin/ai-usage/members/${INVESTOR}/pause`, { method: 'POST', body: {} })).status, 400);
+  } finally { w.f.db.close(); }
+});
+
+// 8 ───────────────────────────────────────────────────────────────────────────
+test('the member search: an exact id, or a case-insensitive email prefix, at most 50 rows, with the top members\' sums', async () => {
+  // Mutations checked: the id matched as a prefix; the email compared case-sensitively; `_` or `%` in the query
+  // left as wildcards; the 50 cap dropped; the topups summed outside the range; an empty query searched.
+  const w = world();
+  try {
+    w.log({ cost: 0.002, charged: 2500, at: at(H) });
+    w.log({ user: 20, cost: 0.001, charged: 900, at: at(H) });
+    w.log({ user: 20, cost: 0.001, charged: 700_000, at: at(40 * D) });  // outside 30d
+    const topup = (user: number, n: number, credit: number, when: string) => w.f.db.prepare(`INSERT INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,credited_at)
+      VALUES(?,?,?,'price_fixture',?,500,'usd',?)`).run(`pi_s${user}_${n}`, `os${user}_${n}`, user, credit, when);
+    topup(MEMBER, 1, 5_000_000, at(2 * D));
+    topup(MEMBER, 2, 9_000_000, at(40 * D));                               // outside 30d
+    const top = (await platformAiUsage(w.env, '30d', new Date())).top_charged.find((t: any) => t.member.id === MEMBER);
+
+    // By id: that member alone, never member 20 for "2".
+    const byId = await call(w, SUPER, `/api/admin/ai-usage/members?q=${MEMBER}&range=30d`);
+    assert.equal(byId.status, 200);
+    assert.deepEqual(byId.body.members, [top]);
+    assert.equal(byId.body.members[0].topups_microusd, 5_000_000);
+    // A member with no runs reads zeros, not nothing.
+    assert.deepEqual((await call(w, SUPER, '/api/admin/ai-usage/members?q=77')).body.members,
+      [{ member: { id: 77, name: 'Member 77', email: 'member77@example.test' }, runs: 0, refused: 0, cost_microusd: 0, charged_microusd: 0,
+        margin_microusd: 0, not_recorded: 0, topups_microusd: 0 }]);
+    assert.deepEqual((await call(w, SUPER, '/api/admin/ai-usage/members?q=999999')).body.members, []);
+
+    // By email prefix, any case.
+    const byEmail = await call(w, SUPER, '/api/admin/ai-usage/members?q=MEMBER2&range=30d');
+    assert.deepEqual(byEmail.body.members.map((m: any) => m.member.email),
+      ['member20@example.test', ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `member2${n}@example.test`)]);
+    assert.equal(byEmail.body.members[0].charged_microusd, 900);
+    assert.deepEqual((await call(w, SUPER, '/api/admin/ai-usage/members?q=Member@Example.TEST')).body.members.map((m: any) => m.member), [MIA]);
+    // A stored email in mixed case is found by its lower-case prefix.
+    w.f.db.prepare("UPDATE users SET email = 'Casey.Q@Example.TEST' WHERE id = 60").run();
+    assert.deepEqual((await call(w, SUPER, '/api/admin/ai-usage/members?q=casey.q@')).body.members.map((m: any) => m.member.id), [60]);
+    // `_` and `%` are themselves, not wildcards.
+    assert.deepEqual((await call(w, SUPER, '/api/admin/ai-usage/members?q=member_')).body.members, []);
+    assert.deepEqual((await call(w, SUPER, '/api/admin/ai-usage/members?q=%25')).body.members, []);
+    assert.equal(emailPrefixPattern(' A_b%c\\ '), 'a\\_b\\%c\\\\%');
+    // At most 50: "member" matches 98 accounts.
+    const many = await call(w, SUPER, '/api/admin/ai-usage/members?q=member');
+    assert.equal(SEARCH_MAX, 50);
+    assert.equal(many.body.members.length, 50);
+    const emails = many.body.members.map((m: any) => m.member.email);
+    assert.deepEqual(emails, [...emails].sort());
+    // Bad input.
+    for (const q of ['', '%20%20', 'x'.repeat(255)]) {
+      assert.equal((await call(w, SUPER, `/api/admin/ai-usage/members?q=${q}`)).status, 400, `q=${q.slice(0, 10)}`);
+    }
+    assert.equal((await call(w, SUPER, '/api/admin/ai-usage/members?range=30d')).status, 400);
+    assert.equal((await call(w, SUPER, '/api/admin/ai-usage/members?q=member&range=1y')).status, 400);
+  } finally { w.f.db.close(); }
+});
+
+// 9 ───────────────────────────────────────────────────────────────────────────
+test('one member: by model and by day, the same totals as their top-members row, balance, allowance, spend limit, pause and cap with history', async () => {
+  // Mutations checked: the detail summing outside the range, or another member's rows; the history missing an action
+  // or another member's line; the balance read as zero when unreadable; the cap or pause left out.
+  const w = world();
+  try {
+    w.log({ cost: 0.002, charged: 2500, at: at(H) });
+    w.log({ model: L8, cost: 0.001, charged: 1000, at: at(2 * D) });
+    w.log({ model: L8, cost: 0.004, charged: null, at: at(2 * D) });
+    w.log({ refusal: 'budget_user_month', at: at(2 * D) });
+    w.log({ cost: 9, charged: 9_000_000, at: at(10 * D) });                 // outside 7d
+    w.log({ user: INVESTOR, cost: 1, charged: 1_000_000, at: at(H) });      // another member
+    w.f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,4200000)').run(MEMBER);
+    w.f.db.prepare('INSERT INTO member_ai_spend_limits(user_id,monthly_limit_microusd) VALUES(?,30000000)').run(MEMBER);
+    await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}/cap`, { method: 'PUT', body: { monthly_usd: 10, reason: REASON } });
+    await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}/pause`, { method: 'POST', body: { reason: REASON } });
+    await call(w, SUPER, `/api/admin/ai-usage/members/${INVESTOR}/pause`, { method: 'POST', body: { reason: REASON } });
+
+    const r = await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}?range=7d`);
+    assert.equal(r.status, 200);
+    const d = r.body;
+    assert.deepEqual(d.member, MIA);
+    const top = (await call(w, SUPER, '/api/admin/ai-usage?range=7d')).body.top_charged.find((t: any) => t.member.id === MEMBER);
+    const { member: _m, ...topSums } = top;
+    assert.deepEqual(d.totals, topSums, 'the detail\'s totals are not the top-members row');
+    assert.deepEqual(d.totals, { runs: 3, refused: 1, cost_microusd: 7_000, charged_microusd: 3_500, margin_microusd: 500, not_recorded: 1, topups_microusd: 0 });
+    assert.deepEqual(d.by_model.map((m: any) => [m.model, m.runs, m.cost_microusd, m.charged_microusd, m.not_recorded]),
+      [[L70, 1, 2_000, 2_500, 0], [L8, 2, 5_000, 1_000, 1]]);
+    assert.deepEqual(d.by_day.map((x: any) => [x.day, x.runs, x.charged_microusd]), [['2026-10-18', 2, 1_000], [at(H).slice(0, 10), 1, 2_500]].sort());
+    assert.deepEqual(d.balance, { state: 'ok', balance_microusd: 4_200_000 });
+    assert.equal(d.allowance.state, 'ok');
+    assert.equal(d.allowance.monthly_microusd, 10_000_000);
+    assert.equal(d.allowance.member_cap_microusd, 10_000_000);
+    assert.equal(d.spend_limit.state, 'ok');
+    assert.equal(d.spend_limit.limit_microusd, 30_000_000);
+    assert.deepEqual([d.pause.reason, d.pause.paused_by], [REASON, OWNER]);
+    assert.deepEqual([d.cap.monthly_microusd, d.cap.set_by], [10_000_000, OWNER]);
+    assert.deepEqual(d.history.map((h: any) => [h.action, h.actor_id, h.details.reason]),
+      [['ai_member_paused', SUPER, REASON], ['ai_member_cap_set', SUPER, REASON]]);
+    assert.equal(d.history[0].at, '2026-10-20 11:00:00');
+    assert.doesNotMatch(JSON.stringify(d), /"prompt"|"output"|"messages"|"response"/);
+
+    // A store that cannot be read says so, never zero.
+    w.f.db.exec('DROP TABLE ai_topup_accounts');
+    assert.deepEqual((await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}?range=7d`)).body.balance, { state: 'unreadable' });
+    // Unpaused, uncapped: null, and the history keeps both.
+    await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}/pause`, { method: 'DELETE', body: { reason: REASON } });
+    await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}/cap`, { method: 'PUT', body: { monthly_usd: null, reason: REASON } });
+    const after = (await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}`)).body;
+    assert.equal(after.pause, null);
+    assert.equal(after.cap, null);
+    assert.deepEqual(after.history.map((h: any) => h.action), ['ai_member_cap_cleared', 'ai_member_unpaused', 'ai_member_paused', 'ai_member_cap_set']);
+    // Unknown, malformed, a bad range.
+    assert.equal((await call(w, SUPER, '/api/admin/ai-usage/members/999999')).status, 404);
+    assert.equal((await call(w, SUPER, '/api/admin/ai-usage/members/abc')).status, 404);
+    assert.equal((await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}?range=1y`)).status, 400);
   } finally { w.f.db.close(); }
 });

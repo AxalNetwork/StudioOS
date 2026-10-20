@@ -17,16 +17,23 @@
  * plan being the AI licence (`aiLicenceKey`). Rows with no member (a system
  * run, `user_id` NULL or 0) read `system`.
  *
- * WHAT NEVER LEAVES. A member is `{ id, name }`, the name HQ already shows. No
- * email, no prompt and no output: `ai_usage_logs` holds neither of the last
- * two, and no query here selects an email.
+ * WHO A MEMBER IS. `{ id, name, email }`. The issue first said "never an email
+ * in a list"; the owner reversed that for this page on 2026-10-20 (S1 on
+ * #2227): HQ › AI usage names each member by account email and user ID, beside
+ * their Cloudflare cost and what they were charged, so a Super Admin can find
+ * and reach the member behind a figure. Only here: every route is a Super
+ * Admin's with a step-up, no member-facing answer gains an email, and the
+ * pause and cap audit lines keep the user id. Each query reads `u.email` by
+ * name, never `u.*`. No prompt and no output appear anywhere: `ai_usage_logs`
+ * holds neither.
  *
  * THE FLAGS (`AI_USAGE_FLAGS`, one block so they are tested and tuned in one
  * place). Each says why and since when. They read their own windows from the
  * read's clock, not the range: a flag is about now.
  */
 import type { Env } from '../types';
-import { AI_PAUSED_MESSAGE, AI_USD_SCALE, aiLicenceKey } from './aiBudget';
+import { AI_PAUSED_MESSAGE, AI_USD_SCALE, aiLicenceKey, resolveAiCaps } from './aiBudget';
+import { readSpendLimit } from './aiSpendLimit';
 export { AI_PAUSED_MESSAGE, aiPaused, memberAiCap } from './aiBudget';
 
 export const AI_USAGE_RANGES = ['7d', '30d', 'mtd'] as const;
@@ -59,6 +66,8 @@ export const AI_USAGE_FLAGS = {
 } as const;
 
 export const TOP_MEMBERS = 20;
+/** The most rows a member search answers. */
+export const SEARCH_MAX = 50;
 /**
  * Velocity is today's charge over the member's 7-day daily average, the average
  * counted as at least this much: a member who spent a few cents (or nothing)
@@ -123,8 +132,8 @@ const BY_MODEL = `SELECT model,
        SUM(CASE WHEN charged_microusd IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS not_recorded
   FROM ai_usage_logs WHERE created_at >= ? AND created_at < ?
  GROUP BY model ORDER BY charged DESC, model`;
-// The member's licence columns only (`aiLicenceKey`), and the name HQ shows. Never `u.*`: no email is read.
-const BY_MEMBER = `SELECT a.user_id, COALESCE(u.display_name, u.name) AS name, u.role, u.subscription_tier, u.subscription_status,
+// The member's licence columns (`aiLicenceKey`), name and email, each by name. Never `u.*`.
+const BY_MEMBER = `SELECT a.user_id, COALESCE(u.display_name, u.name) AS name, u.email, u.role, u.subscription_tier, u.subscription_status,
        u.subscription_renews_at, u.investor_tier, u.investor_subscription_status, u.investor_subscription_renews_at,
        a.runs, a.refused, a.cost_usd, a.charged, a.recorded_cost_usd, a.not_recorded
   FROM (SELECT user_id,
@@ -136,27 +145,27 @@ const BY_MEMBER = `SELECT a.user_id, COALESCE(u.display_name, u.name) AS name, u
           SUM(CASE WHEN charged_microusd IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS not_recorded
         FROM ai_usage_logs WHERE created_at >= ? AND created_at < ? GROUP BY user_id) a
   LEFT JOIN users u ON u.id = a.user_id`;
-const VELOCITY = `SELECT v.user_id, COALESCE(u.display_name, u.name) AS name, v.today, v.prior
+const VELOCITY = `SELECT v.user_id, COALESCE(u.display_name, u.name) AS name, u.email, v.today, v.prior
   FROM (SELECT user_id,
           COALESCE(SUM(CASE WHEN created_at >= ? THEN charged_microusd END), 0) AS today,
           COALESCE(SUM(CASE WHEN created_at < ? THEN charged_microusd END), 0) AS prior
         FROM ai_usage_logs WHERE user_id > 0 AND created_at >= ? GROUP BY user_id) v
   LEFT JOIN users u ON u.id = v.user_id`;
-const REFUSALS = `SELECT l.user_id, COALESCE(u.display_name, u.name) AS name, COUNT(*) AS n, MIN(l.created_at) AS since
+const REFUSALS = `SELECT l.user_id, COALESCE(u.display_name, u.name) AS name, u.email, COUNT(*) AS n, MIN(l.created_at) AS since
   FROM ai_usage_logs l LEFT JOIN users u ON u.id = l.user_id
  WHERE l.user_id > 0 AND l.refusal IS NOT NULL AND l.created_at >= ?
  GROUP BY l.user_id HAVING COUNT(*) >= ?`;
-const HELD = `SELECT r.user_id, COALESCE(u.display_name, u.name) AS name, COUNT(*) AS n, MIN(r.created_at) AS since
+const HELD = `SELECT r.user_id, COALESCE(u.display_name, u.name) AS name, u.email, COUNT(*) AS n, MIN(r.created_at) AS since
   FROM ai_budget_reservations r LEFT JOIN users u ON u.id = r.user_id
  WHERE r.status = 'review' GROUP BY r.user_id HAVING COUNT(*) >= ?`;
 // A reversal's shortfall is the share of the refunded tokens the member had already used (D755 §8).
-const REFUNDS = `SELECT l.user_id, COALESCE(u.display_name, u.name) AS name, l.kind, l.created_at, l.delta_microusd, l.shortfall_microusd
+const REFUNDS = `SELECT l.user_id, COALESCE(u.display_name, u.name) AS name, u.email, l.kind, l.created_at, l.delta_microusd, l.shortfall_microusd
   FROM ai_credit_ledger l LEFT JOIN users u ON u.id = l.user_id
  WHERE l.kind IN ('refund', 'dispute') AND l.created_at >= ?
    AND l.shortfall_microusd * 100 > ? * (l.shortfall_microusd - l.delta_microusd)
  ORDER BY l.created_at, l.uid`;
-const NEW_HEAVY = `SELECT n.id AS user_id, n.name, n.created_at, n.first_topup, n.charged FROM (
-  SELECT u.id, COALESCE(u.display_name, u.name) AS name, u.created_at, p.first_topup,
+const NEW_HEAVY = `SELECT n.id AS user_id, n.name, n.email, n.created_at, n.first_topup, n.charged FROM (
+  SELECT u.id, COALESCE(u.display_name, u.name) AS name, u.email, u.created_at, p.first_topup,
          (SELECT COALESCE(SUM(l.charged_microusd), 0) FROM ai_usage_logs l
            WHERE l.user_id = u.id AND l.created_at >= p.first_topup AND l.created_at < datetime(p.first_topup, ?)) AS charged
     FROM users u
@@ -164,21 +173,94 @@ const NEW_HEAVY = `SELECT n.id AS user_id, n.name, n.created_at, n.first_topup, 
       ON p.user_id = u.id
    WHERE u.created_at >= ?) n
  WHERE n.charged > ? ORDER BY n.first_topup`;
-const PAUSED = `SELECT p.user_id, COALESCE(u.display_name, u.name) AS name, p.reason, p.paused_at, p.paused_by,
-       COALESCE(b.display_name, b.name) AS paused_by_name
+const PAUSED = `SELECT p.user_id, COALESCE(u.display_name, u.name) AS name, u.email, p.reason, p.paused_at, p.paused_by,
+       COALESCE(b.display_name, b.name) AS paused_by_name, b.email AS paused_by_email
   FROM member_ai_pauses p LEFT JOIN users u ON u.id = p.user_id LEFT JOIN users b ON b.id = p.paused_by
  ORDER BY p.paused_at, p.user_id`;
-const CAPS = `SELECT c.user_id, COALESCE(u.display_name, u.name) AS name, c.monthly_microusd, c.set_at, c.set_by,
-       COALESCE(b.display_name, b.name) AS set_by_name
+const CAPS = `SELECT c.user_id, COALESCE(u.display_name, u.name) AS name, u.email, c.monthly_microusd, c.set_at, c.set_by,
+       COALESCE(b.display_name, b.name) AS set_by_name, b.email AS set_by_email
   FROM member_ai_caps c LEFT JOIN users u ON u.id = c.user_id LEFT JOIN users b ON b.id = c.set_by
  ORDER BY c.set_at, c.user_id`;
+
+// The AI tokens each member bought in the range: their credited packs, by `credited_at`, bonus left out.
+const TOPUPS = `SELECT user_id, COALESCE(SUM(credit_microusd), 0) AS topups
+  FROM ai_topup_purchases WHERE credited_at IS NOT NULL AND credited_at >= ? AND credited_at < ? GROUP BY user_id`;
+// A member search: the exact id, or an email prefix, with the same sums as the top members. At most SEARCH_MAX rows.
+const SEARCH_BY_ID = `SELECT u.id AS user_id, COALESCE(u.display_name, u.name) AS name, u.email,
+       COALESCE(a.runs, 0) AS runs, COALESCE(a.refused, 0) AS refused, COALESCE(a.cost_usd, 0) AS cost_usd, COALESCE(a.charged, 0) AS charged,
+       COALESCE(a.recorded_cost_usd, 0) AS recorded_cost_usd, COALESCE(a.not_recorded, 0) AS not_recorded, COALESCE(t.topups, 0) AS topups
+  FROM users u
+  LEFT JOIN (SELECT user_id,
+          SUM(CASE WHEN guard_for IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS runs,
+          SUM(CASE WHEN refusal IS NOT NULL THEN 1 ELSE 0 END) AS refused,
+          COALESCE(SUM(est_cost_usd), 0) AS cost_usd,
+          COALESCE(SUM(charged_microusd), 0) AS charged,
+          COALESCE(SUM(CASE WHEN charged_microusd IS NOT NULL THEN est_cost_usd END), 0) AS recorded_cost_usd,
+          SUM(CASE WHEN charged_microusd IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS not_recorded
+        FROM ai_usage_logs WHERE created_at >= ? AND created_at < ? AND user_id = ? GROUP BY user_id) a ON a.user_id = u.id
+  LEFT JOIN (SELECT user_id, COALESCE(SUM(credit_microusd), 0) AS topups FROM ai_topup_purchases
+        WHERE credited_at IS NOT NULL AND credited_at >= ? AND credited_at < ? AND user_id = ? GROUP BY user_id) t ON t.user_id = u.id
+ WHERE u.id = ?`;
+const SEARCH_BY_EMAIL = `SELECT u.id AS user_id, COALESCE(u.display_name, u.name) AS name, u.email,
+       COALESCE(a.runs, 0) AS runs, COALESCE(a.refused, 0) AS refused, COALESCE(a.cost_usd, 0) AS cost_usd, COALESCE(a.charged, 0) AS charged,
+       COALESCE(a.recorded_cost_usd, 0) AS recorded_cost_usd, COALESCE(a.not_recorded, 0) AS not_recorded, COALESCE(t.topups, 0) AS topups
+  FROM users u
+  LEFT JOIN (SELECT user_id,
+          SUM(CASE WHEN guard_for IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS runs,
+          SUM(CASE WHEN refusal IS NOT NULL THEN 1 ELSE 0 END) AS refused,
+          COALESCE(SUM(est_cost_usd), 0) AS cost_usd,
+          COALESCE(SUM(charged_microusd), 0) AS charged,
+          COALESCE(SUM(CASE WHEN charged_microusd IS NOT NULL THEN est_cost_usd END), 0) AS recorded_cost_usd,
+          SUM(CASE WHEN charged_microusd IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS not_recorded
+        FROM ai_usage_logs WHERE created_at >= ? AND created_at < ? GROUP BY user_id) a ON a.user_id = u.id
+  LEFT JOIN (SELECT user_id, COALESCE(SUM(credit_microusd), 0) AS topups FROM ai_topup_purchases
+        WHERE credited_at IS NOT NULL AND credited_at >= ? AND credited_at < ? GROUP BY user_id) t ON t.user_id = u.id
+ WHERE lower(u.email) LIKE ? ESCAPE '\\'
+ ORDER BY lower(u.email), u.id LIMIT ?`;
+// One member's runs by model and by day, Cloudflare's cost beside what they were charged.
+const MEMBER_BY_MODEL = `SELECT model,
+       SUM(CASE WHEN guard_for IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS runs,
+       SUM(CASE WHEN refusal IS NOT NULL THEN 1 ELSE 0 END) AS refused,
+       COALESCE(SUM(est_cost_usd), 0) AS cost_usd,
+       COALESCE(SUM(charged_microusd), 0) AS charged,
+       COALESCE(SUM(CASE WHEN charged_microusd IS NOT NULL THEN est_cost_usd END), 0) AS recorded_cost_usd,
+       SUM(CASE WHEN charged_microusd IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS not_recorded
+  FROM ai_usage_logs WHERE user_id = ? AND created_at >= ? AND created_at < ?
+ GROUP BY model ORDER BY charged DESC, model`;
+const MEMBER_BY_DAY = `SELECT substr(created_at, 1, 10) AS day,
+       SUM(CASE WHEN guard_for IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS runs,
+       SUM(CASE WHEN refusal IS NOT NULL THEN 1 ELSE 0 END) AS refused,
+       COALESCE(SUM(est_cost_usd), 0) AS cost_usd,
+       COALESCE(SUM(charged_microusd), 0) AS charged,
+       COALESCE(SUM(CASE WHEN charged_microusd IS NOT NULL THEN est_cost_usd END), 0) AS recorded_cost_usd,
+       SUM(CASE WHEN charged_microusd IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS not_recorded
+  FROM ai_usage_logs WHERE user_id = ? AND created_at >= ? AND created_at < ?
+ GROUP BY substr(created_at, 1, 10) ORDER BY day`;
+const MEMBER_PAUSE = `SELECT p.reason, p.paused_at, p.paused_by, COALESCE(b.display_name, b.name) AS paused_by_name, b.email AS paused_by_email
+  FROM member_ai_pauses p LEFT JOIN users b ON b.id = p.paused_by WHERE p.user_id = ?`;
+const MEMBER_CAP = `SELECT c.monthly_microusd, c.set_at, c.set_by, COALESCE(b.display_name, b.name) AS set_by_name, b.email AS set_by_email
+  FROM member_ai_caps c LEFT JOIN users b ON b.id = c.set_by WHERE c.user_id = ?`;
+// The member's pause and cap history: the audit lines this file writes, newest first.
+const MEMBER_HISTORY = `SELECT l.action, l.details, l.created_at, l.actor
+  FROM activity_logs l
+ WHERE l.user_id = ? AND l.action IN ('ai_member_paused', 'ai_member_unpaused', 'ai_member_cap_set', 'ai_member_cap_cleared')
+ ORDER BY l.id DESC LIMIT 100`;
+const MEMBER_BALANCE = 'SELECT balance_microusd FROM ai_topup_accounts WHERE user_id = ?';
 
 async function all<T = any>(env: Env, sql: string, ...binds: unknown[]): Promise<T[]> {
   const r = await env.DB.prepare(sql).bind(...binds).all<T>();
   if (r.success !== true) throw new Error('AI usage unreadable');
   return r.results ?? [];
 }
-const member = (id: unknown, name: unknown) => ({ id: int(id), name: typeof name === 'string' && name ? name : null });
+const text = (v: unknown) => (typeof v === 'string' && v ? v : null);
+/** A member as this Super Admin page names one: id, name and account email (the owner's ruling, 2026-10-20). */
+const member = (id: unknown, name: unknown, email: unknown) => ({ id: int(id), name: text(name), email: text(email) });
+type Member = ReturnType<typeof member>;
+/** A member's row: their sums over the range and the tokens they bought in it. Top members and the search share it. */
+function memberRow(r: any, topups: number) {
+  const { runs, refused, cost_microusd, charged_microusd, margin_microusd, not_recorded } = sums(r);
+  return { member: member(r.user_id, r.name, r.email), runs, refused, cost_microusd, charged_microusd, margin_microusd, not_recorded, topups_microusd: topups };
+}
 
 /** The flag sentences, from the figures that raised them. */
 export function flagWhy(flag: AiUsageFlag, f: Record<string, number>): string {
@@ -202,37 +284,37 @@ export function flagWhy(flag: AiUsageFlag, f: Record<string, number>): string {
 export async function aiUsageFlags(env: Env, now: Date) {
   const F = AI_USAGE_FLAGS;
   const today = dayStart(now);
-  const flags: { member: { id: number; name: string | null }; flag: AiUsageFlag; why: string; since: string }[] = [];
+  const flags: { member: Member; flag: AiUsageFlag; why: string; since: string }[] = [];
 
   for (const r of await all(env, VELOCITY, today, today, dayStart(daysBefore(now, F.spikeAverageDays)))) {
     const t = int(r.today), prior = int(r.prior);
     // today > multiple × (prior ÷ days), in integers.
     if (t >= F.spikeMinMicrousd && t * F.spikeAverageDays > F.spikeMultiple * prior) {
-      flags.push({ member: member(r.user_id, r.name), flag: 'spike', since: today,
+      flags.push({ member: member(r.user_id, r.name, r.email), flag: 'spike', since: today,
         why: flagWhy('spike', { today: t, average: prior / F.spikeAverageDays }) });
     }
   }
   for (const r of await all(env, REFUSALS, sqlTime(new Date(now.getTime() - F.refusalsHours * 3_600_000)), F.refusalsMin)) {
-    flags.push({ member: member(r.user_id, r.name), flag: 'refusals', since: r.since, why: flagWhy('refusals', { count: int(r.n) }) });
+    flags.push({ member: member(r.user_id, r.name, r.email), flag: 'refusals', since: r.since, why: flagWhy('refusals', { count: int(r.n) }) });
   }
   for (const r of await all(env, HELD, F.heldMin)) {
-    flags.push({ member: member(r.user_id, r.name), flag: 'held', since: r.since, why: flagWhy('held', { count: int(r.n) }) });
+    flags.push({ member: member(r.user_id, r.name, r.email), flag: 'held', since: r.since, why: flagWhy('held', { count: int(r.n) }) });
   }
-  const refunds = new Map<number, { name: unknown; since: string; count: number; spent: number }>();
+  const refunds = new Map<number, { name: unknown; email: unknown; since: string; count: number; spent: number }>();
   for (const r of await all(env, REFUNDS, sqlTime(daysBefore(now, F.refundWindowDays)), F.refundSpentPercent)) {
     const target = int(r.shortfall_microusd) - int(r.delta_microusd);
     const spent = target > 0 ? Math.floor((100 * int(r.shortfall_microusd)) / target) : 0;
     const seen = refunds.get(int(r.user_id));
     if (seen) { seen.count += 1; seen.spent = Math.max(seen.spent, spent); }
-    else refunds.set(int(r.user_id), { name: r.name, since: r.created_at, count: 1, spent });
+    else refunds.set(int(r.user_id), { name: r.name, email: r.email, since: r.created_at, count: 1, spent });
   }
   for (const [id, r] of refunds) {
-    flags.push({ member: member(id, r.name), flag: 'refund_after_spend', since: r.since, why: flagWhy('refund_after_spend', { count: r.count, spent: r.spent }) });
+    flags.push({ member: member(id, r.name, r.email), flag: 'refund_after_spend', since: r.since, why: flagWhy('refund_after_spend', { count: r.count, spent: r.spent }) });
   }
   for (const r of await all(env, NEW_HEAVY, `+${F.newHeavyHours} hours`, sqlTime(daysBefore(now, F.newAccountDays)), F.newHeavyMicrousd)) {
     const created = Date.parse(`${String(r.created_at).replace(' ', 'T')}Z`);
     const ageDays = Number.isFinite(created) ? Math.max(0, Math.floor((now.getTime() - created) / 86_400_000)) : 0;
-    flags.push({ member: member(r.user_id, r.name), flag: 'new_heavy', since: r.first_topup,
+    flags.push({ member: member(r.user_id, r.name, r.email), flag: 'new_heavy', since: r.first_topup,
       why: flagWhy('new_heavy', { ageDays, charged: int(r.charged) }) });
   }
   return flags;
@@ -244,8 +326,9 @@ export async function platformAiUsage(env: Env, range: AiUsageRange, now = new D
   const byDay = (await all(env, BY_DAY, bounds.from, bounds.to)).map((r) => ({ day: r.day, ...sums(r) }));
   const byModel = (await all(env, BY_MODEL, bounds.from, bounds.to)).map((r) => ({ model: r.model, ...sums(r) }));
   const members = await all(env, BY_MEMBER, bounds.from, bounds.to);
+  const topups = new Map((await all(env, TOPUPS, bounds.from, bounds.to)).map((r) => [int(r.user_id), int(r.topups)]));
   const byRole = new Map<string, Sums>(), byPlan = new Map<string, Sums>();
-  const top: { member: { id: number; name: string | null }; s: Sums }[] = [];
+  const top: ReturnType<typeof memberRow>[] = [];
   for (const r of members) {
     const s = sums(r);
     const isMember = int(r.user_id) > 0 && r.role != null;
@@ -253,7 +336,7 @@ export async function platformAiUsage(env: Env, range: AiUsageRange, now = new D
     const plan = isMember ? aiLicenceKey(r) : 'system';
     byRole.set(role, add(byRole.get(role) ?? ZERO, s));
     byPlan.set(plan, add(byPlan.get(plan) ?? ZERO, s));
-    if (int(r.user_id) > 0) top.push({ member: member(r.user_id, r.name), s });
+    if (int(r.user_id) > 0) top.push(memberRow(r, topups.get(int(r.user_id)) ?? 0));
   }
   const totals = byDay.reduce((t, d) => add(t, d), ZERO);
   const split = (m: Map<string, Sums>, key: string) => [...m].map(([k, s]) => ({ [key]: k, ...s }))
@@ -264,7 +347,7 @@ export async function platformAiUsage(env: Env, range: AiUsageRange, now = new D
   const velocity = (await all(env, VELOCITY, today, today, dayStart(daysBefore(now, F.spikeAverageDays))))
     .map((r) => {
       const t = int(r.today), prior = int(r.prior), average = Math.round(prior / F.spikeAverageDays);
-      return { member: member(r.user_id, r.name), today_microusd: t, daily_average_microusd: average,
+      return { member: member(r.user_id, r.name, r.email), today_microusd: t, daily_average_microusd: average,
         ratio: Math.round((t * 100) / Math.max(prior / F.spikeAverageDays, VELOCITY_FLOOR_MICROUSD)) / 100 };
     })
     .filter((v) => v.today_microusd > 0)
@@ -274,15 +357,83 @@ export async function platformAiUsage(env: Env, range: AiUsageRange, now = new D
   return {
     range, from: bounds.from, to: bounds.to, generated_at: sqlTime(now),
     totals, by_day: byDay, by_model: byModel, by_role: split(byRole, 'role'), by_plan: split(byPlan, 'plan'),
-    top_charged: top.sort((a, b) => b.s.charged_microusd - a.s.charged_microusd || a.member.id - b.member.id).slice(0, TOP_MEMBERS)
-      .map(({ member: m, s }) => ({ member: m, runs: s.runs, charged_microusd: s.charged_microusd, cost_microusd: s.cost_microusd, not_recorded: s.not_recorded })),
+    top_charged: top.sort((a, b) => b.charged_microusd - a.charged_microusd || a.member.id - b.member.id).slice(0, TOP_MEMBERS),
     top_velocity: velocity,
     flags: await aiUsageFlags(env, now),
     thresholds: AI_USAGE_FLAGS,
-    paused: (await all(env, PAUSED)).map((r) => ({ member: member(r.user_id, r.name), reason: r.reason, paused_at: r.paused_at,
-      paused_by: member(r.paused_by, r.paused_by_name) })),
-    caps: (await all(env, CAPS)).map((r) => ({ member: member(r.user_id, r.name), monthly_microusd: int(r.monthly_microusd), set_at: r.set_at,
-      set_by: member(r.set_by, r.set_by_name) })),
+    paused: (await all(env, PAUSED)).map((r) => ({ member: member(r.user_id, r.name, r.email), reason: r.reason, paused_at: r.paused_at,
+      paused_by: member(r.paused_by, r.paused_by_name, r.paused_by_email) })),
+    caps: (await all(env, CAPS)).map((r) => ({ member: member(r.user_id, r.name, r.email), monthly_microusd: int(r.monthly_microusd), set_at: r.set_at,
+      set_by: member(r.set_by, r.set_by_name, r.set_by_email) })),
+  };
+}
+
+/** A LIKE pattern for an email prefix: `%`, `_` and `\` are matched as themselves. */
+export function emailPrefixPattern(q: string): string {
+  return `${q.trim().toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+/**
+ * `GET /api/admin/ai-usage/members?q=`: an exact user id (digits), else a
+ * case-insensitive email prefix, at most SEARCH_MAX rows, each with the same
+ * sums as a top member over the range. A member with no runs reads zeros.
+ */
+export async function searchAiMembers(env: Env, q: string, range: AiUsageRange, now = new Date()) {
+  const bounds = rangeBounds(range, now)!;
+  const query = q.trim();
+  const rows = /^[1-9][0-9]{0,15}$/.test(query)
+    ? await all(env, SEARCH_BY_ID, bounds.from, bounds.to, Number(query), bounds.from, bounds.to, Number(query), Number(query))
+    : await all(env, SEARCH_BY_EMAIL, bounds.from, bounds.to, bounds.from, bounds.to, emailPrefixPattern(query), SEARCH_MAX);
+  return { range, from: bounds.from, to: bounds.to, q: query, members: rows.slice(0, SEARCH_MAX).map((r) => memberRow(r, int(r.topups))) };
+}
+
+/** A read that failed is said, never a zero (the honesty rule): `{ state: 'unreadable' }`. */
+async function readable<T>(read: () => Promise<T>): Promise<({ state: 'ok' } & T) | { state: 'unreadable' }> {
+  try { return { state: 'ok', ...(await read()) }; } catch { return { state: 'unreadable' }; }
+}
+
+/**
+ * `GET /api/admin/ai-usage/members/:id`: one member over the range, by model and
+ * by day (Cloudflare's cost beside what they were charged), with the same totals
+ * as their top-members row; their top-up balance, allowance (`resolveAiCaps`)
+ * and own spend limit (D788); and whether they are paused or capped, with the
+ * history of both. Null when no account has the id.
+ */
+export async function aiMemberDetail(env: Env, userId: number, range: AiUsageRange, now = new Date()) {
+  const bounds = rangeBounds(range, now)!;
+  const [row] = await all(env, SEARCH_BY_ID, bounds.from, bounds.to, userId, bounds.from, bounds.to, userId, userId);
+  if (!row) return null;
+  const totals = memberRow(row, int(row.topups));
+  const [pause] = await all(env, MEMBER_PAUSE, userId);
+  const [cap] = await all(env, MEMBER_CAP, userId);
+  const history = (await all(env, MEMBER_HISTORY, userId)).map((h) => {
+    let details: unknown = null;
+    try { details = JSON.parse(String(h.details)); } catch { details = null; }
+    return { action: h.action, at: h.created_at, actor_id: int(h.actor), details };
+  });
+  return {
+    range, from: bounds.from, to: bounds.to,
+    member: totals.member,
+    totals: { runs: totals.runs, refused: totals.refused, cost_microusd: totals.cost_microusd, charged_microusd: totals.charged_microusd,
+      margin_microusd: totals.margin_microusd, not_recorded: totals.not_recorded, topups_microusd: totals.topups_microusd },
+    by_model: (await all(env, MEMBER_BY_MODEL, userId, bounds.from, bounds.to)).map((r) => ({ model: r.model, ...sums(r) })),
+    by_day: (await all(env, MEMBER_BY_DAY, userId, bounds.from, bounds.to)).map((r) => ({ day: r.day, ...sums(r) })),
+    balance: await readable(async () => {
+      const b = await env.DB.prepare(MEMBER_BALANCE).bind(userId).first<{ balance_microusd: number }>();
+      return { balance_microusd: b ? int(b.balance_microusd) : 0 };
+    }),
+    allowance: await readable(async () => {
+      const c = await resolveAiCaps(env, userId);
+      return { licence: c.licence, source: c.source, daily_capped: c.daily_capped, daily_microusd: c.daily_microusd, monthly_microusd: c.monthly_microusd,
+        member_cap_microusd: (c as { member_cap_microusd?: number }).member_cap_microusd ?? null };
+    }),
+    spend_limit: await readable(async () => {
+      const l = await readSpendLimit(env, userId, now);
+      return { limit_microusd: l.limit_microusd, charged_microusd: l.charged_microusd, month: l.month, resets_on: l.resets_on };
+    }),
+    pause: pause ? { reason: pause.reason, paused_at: pause.paused_at, paused_by: member(pause.paused_by, pause.paused_by_name, pause.paused_by_email) } : null,
+    cap: cap ? { monthly_microusd: int(cap.monthly_microusd), set_at: cap.set_at, set_by: member(cap.set_by, cap.set_by_name, cap.set_by_email) } : null,
+    history,
   };
 }
 

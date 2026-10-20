@@ -2,6 +2,8 @@
  * D791 (#2216) — HQ › AI usage, mounted at `/api/admin/ai-usage`.
  *
  *   GET    /?range=7d|30d|mtd            the platform's AI use, the top members, the flags, who is paused or capped
+ *   GET    /members?q=&range=            find members by exact user ID or email prefix (at most 50), with the same sums
+ *   GET    /members/:id?range=           one member: by model and by day, balance, allowance, spend limit, pause and cap with history
  *   POST   /members/:id/pause   { reason }               pause the member's AI
  *   DELETE /members/:id/pause   { reason }               restore it
  *   PUT    /members/:id/cap     { monthly_usd, reason }  a lower monthly cap for the member; null clears it
@@ -10,15 +12,21 @@
  * `requireSuperAdmin`): the read names members and what they were charged, and
  * the writes stop or narrow a member's AI. Each write is audited in
  * `activity_logs` with its reason, in the same batch as the change
- * (`services/aiUsageAdmin.ts`). No answer carries an email, a prompt or an
- * output.
+ * (`services/aiUsageAdmin.ts`).
+ *
+ * A member is `{ id, name, email }` on these routes. The owner ruled on
+ * 2026-10-20 (S1 on #2227) that HQ › AI usage names each member by account
+ * email and user ID beside their cost and charge, so a Super Admin can find and
+ * reach the member behind a figure. That holds here only: every read keeps the
+ * step-up and the Super Admin gate, no member-facing answer gains an email, and
+ * the audit lines keep the user id. No answer carries a prompt or an output.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireStepUp, requireSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
-import { AI_USAGE_RANGES, MEMBER_CAP_MAX_USD, platformAiUsage, pauseMemberAi, setMemberAiCap, unpauseMemberAi,
-  type AiUsageRange } from '../services/aiUsageAdmin';
+import { AI_USAGE_RANGES, MEMBER_CAP_MAX_USD, aiMemberDetail, platformAiUsage, pauseMemberAi, searchAiMembers, setMemberAiCap,
+  unpauseMemberAi, type AiUsageRange } from '../services/aiUsageAdmin';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -47,16 +55,53 @@ async function memberOf(c: any): Promise<number | null> {
 }
 const refuseMember = (c: any) => refuse(c, 404, { code: 'ai_member_not_found', message: 'No member has that ID.' });
 
+/** The range the query names (30d by default), or null when it names none of them. */
+function rangeOf(c: any): AiUsageRange | null {
+  const range = c.req.query('range') ?? '30d';
+  return (AI_USAGE_RANGES as readonly string[]).includes(range) ? range as AiUsageRange : null;
+}
+const refuseRange = (c: any) => refuse(c, 400, { code: 'invalid_range', message: 'The range is 7d, 30d or mtd.' });
+const unreadable = (c: any, error: unknown) => refuse(c, 503, { code: 'ai_usage_unreadable', message: 'Unreadable: AI usage could not be read.', raw: error });
+
 r.get('/', async (c) => {
   await gate(c);
-  const range = c.req.query('range') ?? '30d';
-  if (!(AI_USAGE_RANGES as readonly string[]).includes(range)) {
-    return refuse(c, 400, { code: 'invalid_range', message: 'The range is 7d, 30d or mtd.' });
+  const range = rangeOf(c);
+  if (!range) return refuseRange(c);
+  try {
+    return c.json({ ok: true, ...(await platformAiUsage(c.env, range)) });
+  } catch (error) {
+    return unreadable(c, error);
+  }
+});
+
+const Q_MAX = 254;
+r.get('/members', async (c) => {
+  await gate(c);
+  const range = rangeOf(c);
+  if (!range) return refuseRange(c);
+  const q = (c.req.query('q') ?? '').trim();
+  if (!q || q.length > Q_MAX) {
+    return refuse(c, 400, { code: 'invalid_query', message: `Search by a user ID or the start of an email, up to ${Q_MAX} characters.` });
   }
   try {
-    return c.json({ ok: true, ...(await platformAiUsage(c.env, range as AiUsageRange)) });
+    return c.json({ ok: true, ...(await searchAiMembers(c.env, q, range)) });
   } catch (error) {
-    return refuse(c, 503, { code: 'ai_usage_unreadable', message: 'Unreadable: AI usage could not be read.', raw: error });
+    return unreadable(c, error);
+  }
+});
+
+r.get('/members/:id', async (c) => {
+  await gate(c);
+  const range = rangeOf(c);
+  if (!range) return refuseRange(c);
+  const raw = c.req.param('id');
+  const id = /^[1-9][0-9]{0,15}$/.test(raw) ? Number(raw) : NaN;
+  if (!Number.isSafeInteger(id)) return refuseMember(c);
+  try {
+    const detail = await aiMemberDetail(c.env, id, range);
+    return detail ? c.json({ ok: true, ...detail }) : refuseMember(c);
+  } catch (error) {
+    return unreadable(c, error);
   }
 });
 
