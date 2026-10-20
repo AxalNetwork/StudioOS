@@ -166,7 +166,6 @@ export const RENDER_NOT_YET = {
     'Founder /founder/post-need',
     'Founder /services',
     'Founder /more',
-    'Founder /research/gtm',
   ],
   2098: [
     'Investor /studio',
@@ -176,19 +175,8 @@ export const RENDER_NOT_YET = {
     'Investor /watchlist',
     'Investor /lp-reports',
     'Investor /funds/performance',
-    'Investor /research/gtm',
   ],
   2099: [
-    'Advisor /advisor/advisory',
-    'Advisor /research/gtm',
-    'Operating Partner /needs',
-    'Operating Partner /partner/needs',
-    'Operating Partner /partner/insights',
-    'Operating Partner /portfolio',
-    'Operating Partner /services',
-    'Operating Partner /partner/office-hours',
-    'Operating Partner /comarketing',
-    'Operating Partner /research/gtm',
   ],
   2100: [
     'Admin /branch',

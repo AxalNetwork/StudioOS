@@ -77,8 +77,20 @@ export default function PortfolioWorkspace({ activeRole }) {
   );
   // D772 (#2098): an investor reaches this branch only on Performance (I8),
   // the one Portfolio board whose page draws no rail of its own. It gets the
-  // investor's rail in the shared frame; every other viewer's page is unchanged.
-  if ((activeRole || role) !== 'investor') return body;
+  // investor's rail in the shared frame.
+  // D773 (#2099): an operating partner reaches /portfolio from Delivery's "Also
+  // in" list (PAGE_HOMES), and the page map gives it Delivery's key, so it
+  // draws the partner's rail the same way. Any other viewer's page is unchanged.
+  const viewer = activeRole || role;
+  if (viewer === 'partner') {
+    return (
+      <RailFrame data-testid="portfolio-partner-frame" rail={(
+        <WorkerRail workspace="Delivery" role="partner"
+          note="Eadwyn reads the portfolio companies on this page. Nothing is sent to a founder until you send it." />
+      )}>{body}</RailFrame>
+    );
+  }
+  if (viewer !== 'investor') return body;
   return (
     <RailFrame data-testid="portfolio-performance-frame" rail={(
       <WorkerRail workspace="Portfolio" role="investor"
