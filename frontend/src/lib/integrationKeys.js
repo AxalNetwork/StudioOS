@@ -118,6 +118,24 @@ export function membersSeeLine({ connector, unset } = {}) {
 /** The command that sets one Worker secret, from the repository root (DEPLOY.md, PRODUCTION.md). */
 export const wranglerPutLine = (name) => `npx wrangler secret put ${name} --config wrangler.toml --env production`;
 
+/**
+ * #2199 — why a Save or Rotate was refused, as the dialog says it: the Worker's
+ * own sentence, or the dialog's fallback when the refusal carries none. When
+ * the Worker has no Cloudflare API token of its own it cannot write Worker
+ * secrets, so the dialog adds the command line that can: one command per
+ * Worker secret the save would have written (`names`). Names only, never a
+ * value.
+ */
+export const TOKEN_MISSING_CODE = 'cloudflare_api_token_missing';
+export const TOKEN_MISSING_LEAD = 'Set it from the command line instead:';
+export function keySaveRefusal(err, { names = [], fallback = 'Failed to save' } = {}) {
+  const message = typeof err?.message === 'string' && err.message.trim() ? err.message.trim() : fallback;
+  const commands = err?.code === TOKEN_MISSING_CODE
+    ? names.filter((n) => typeof n === 'string' && /^[A-Z][A-Z0-9_]*$/.test(n)).map(wranglerPutLine)
+    : [];
+  return { message, commands };
+}
+
 /** A setup guide is linked only when it is a document in this repository. */
 export const GUIDE_PREFIX = 'https://github.com/AxalNetwork/StudioOS/blob/main/documentation/';
 export function safeGuideHref(href) {
