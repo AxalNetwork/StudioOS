@@ -66,7 +66,8 @@ r.get('/top-up/status',async c=>{
     const lines=await packLines(c.env);
     return c.json({...await aiTopupStatus(c.env),mode:stripeMode(c.env),packs:lines.map(l=>({uid:l.uid,origin:l.origin,
       label:l.face_cents===null?null:packLabel(l.face_cents),state:l.state,reason:l.reason,price_id_suffix:l.price_id?l.price_id.slice(-6):null,
-      on_sale:l.on_sale,bonus_microusd:l.bonus_microusd,sort:l.origin==='environment'?null:l.sort,adoptable:l.adoptable}))});
+      on_sale:l.on_sale,bonus_microusd:l.bonus_microusd,sort:l.origin==='environment'?null:l.sort,adoptable:l.adoptable,
+      offer_starts_at:l.offer_starts_at,offer_ends_at:l.offer_ends_at,first_purchase_only:l.first_purchase_only}))});
   }
   catch(error) { return refuse(c,503,{code:'ai_topup_unreadable',message:'Unreadable: the AI top-up could not be read.',raw:error}); }
 });
