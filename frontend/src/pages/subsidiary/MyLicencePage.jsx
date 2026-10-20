@@ -68,14 +68,6 @@ const fmtMoney = (cents, currency) => {
 const fmtBps = (bps) => bpsPercent(bps) ?? 'Not recorded';
 const fmtDate = (v) => (v ? String(v).slice(0, 10) : 'Not recorded');
 
-const STATUS_TONE = {
-  active: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-  suspended: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  terminated: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
-  pending_activation: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
-  draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-};
-
 const SEAT_LABEL = {
   founder: 'Founder', investor: 'Investor / LP', advisor: 'Advisor', partner: 'Service Partner',
 };
