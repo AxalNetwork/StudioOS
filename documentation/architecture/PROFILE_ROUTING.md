@@ -255,7 +255,7 @@ it, where in their nav, and how do they get there.*
 | Eadwyn Intelligence Page | `/intelligence` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Events | `/events` · `/events/:slug` · `/my/events` · `/events/new` · `/events/:id/edit` · `/events/:id/manage` · `/invite/:token` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | — (not routed) | Full page (proposed) | Not reachable yet | CURRENT | Low |
-| Pricing | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Pricing | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | DONE | Medium |
 | Spin-Out Lab · Intro | `/spinout-lab` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Spin-Out Lab · Programme Brief | `/spinout-lab/brief` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Spin-Out Lab-print | `/spinout-lab/brief` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
