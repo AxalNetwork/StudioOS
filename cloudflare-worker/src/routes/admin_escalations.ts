@@ -23,8 +23,10 @@ import { requireSuperAdmin } from '../auth';
 import { mapError } from './_t13t14t15_helpers';
 import {
   answerEscalation, listEscalations, licenceKindsByCode, escalationKindsFor,
-  ESCALATION_KINDS, ESCALATION_STATUSES,
+  ESCALATION_KINDS, ESCALATION_STATUSES, HQ_TIER_CODE,
 } from '../rpc/hqOps';
+import { withRequestView } from '../services/escalationRequests';
+import { notifyRequestAnswer, type AnswerNotice } from '../services/escalationAnswerNotice';
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
 
@@ -78,6 +80,22 @@ async function deliverAnswer(
   return pushed;
 }
 
+/**
+ * D799 — an HQ-tier request has no branch to push to: its raiser is an HQ
+ * user, told in the bell. The row's raiser id is read here rather than taken
+ * from the caller, so the notice reaches whoever raised it and nobody else.
+ */
+async function noticeHqTier(env: Env, uid: string): Promise<AnswerNotice> {
+  const row = await env.DB.prepare(
+    `SELECT uid, kind, subject, status, answer, raised_by_branch_user_id AS raised_by_user_id
+       FROM hq_escalations WHERE uid = ? AND branch_code = ?`,
+  ).bind(uid, HQ_TIER_CODE).first<{
+    uid: string; kind: string; subject: string; status: string; answer: string | null; raised_by_user_id: number | null;
+  }>();
+  if (!row) return { ok: false, reason: 'The request is not on HQ\'s tier.' };
+  return notifyRequestAnswer(env, row);
+}
+
 // GET /api/admin/escalations?status=&kind=
 r.get('/escalations', async (c) => {
   try {
@@ -97,7 +115,8 @@ r.get('/escalations', async (c) => {
     let available = true;
     try {
       const listed = await listEscalations(c.env, { status, kind, limit: 100 });
-      items = listed.items;
+      // D799 — a request's fields read out of `detail`, beside it.
+      items = listed.items.map(withRequestView);
       complete = listed.complete;
     } catch { available = false; }
 
@@ -193,9 +212,17 @@ r.patch('/escalations/:uid', async (c) => {
     // a person can send the stored decision again; nothing sends it on its own.
     // The branch answers `{ok:false, reason}` when it holds no row for this
     // uid — a real state, not an exception.
+    //
+    // D799 — AN HQ-TIER REQUEST IS TOLD IN THE BELL, NOT PUSHED. Its raiser is
+    // an HQ user on this database, so there is no branch Worker to call, and
+    // `notified` says whether the notice was written.
+    if (decided.row.branch_code === HQ_TIER_CODE) {
+      const notified = await noticeHqTier(c.env, decided.row.uid);
+      return c.json({ ...withRequestView(decided.row), notified });
+    }
     const pushed = await deliverAnswer(c.env, decided.row.branch_code, decided.answer);
 
-    return c.json({ ...decided.row, pushed });
+    return c.json({ ...withRequestView(decided.row), pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -219,6 +246,10 @@ r.post('/escalations/:uid/resend', async (c) => {
         error: 'no_decision',
         message: 'There is no stored decision to send again. Record one first.',
       }, 400);
+    }
+    // D799 — on HQ's tier, "send again" is the bell notice again.
+    if (row.branch_code === HQ_TIER_CODE) {
+      return c.json({ ...row, notified: await noticeHqTier(c.env, row.uid) });
     }
     const pushed = await deliverAnswer(c.env, row.branch_code, {
       hq_uid: row.uid,
