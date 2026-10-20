@@ -100,7 +100,24 @@ jobs:
       # it first — the same root build the deploy runs.
       - name: Build the SPA
         run: npm run build
-      - run: npm run test:drift
+      - name: Run npm run test:drift
+        run: |
+          set +e
+          npm run test:drift > drift.log 2>&1
+          drift_exit=$?
+          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+          lines = Path('drift.log').read_text(errors='replace').splitlines()
+          selected = set(range(max(0, len(lines) - 100), len(lines)))
+          for i, line in enumerate(lines):
+              if 'not ok ' in line or 'error:' in line.lower() or 'ERR_ASSERTION' in line:
+                  selected.update(range(max(0, i - 3), min(len(lines), i + 40)))
+          for i in sorted(selected):
+              print(lines[i])
+          PY
+          echo "test:drift exit=$drift_exit (complete output retained in drift.log)"
+          exit "$drift_exit"
 
   # -------------------------------------------------------------------------
   # API ↔ Worker drift smoke test (T1). Static analysis: every /api/* path
