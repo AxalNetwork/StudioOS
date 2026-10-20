@@ -1,48 +1,32 @@
 /**
- * What to SAY about a model, and how to print the price the Worker gives.
+ * What to SAY about a model, and which models All models lists.
  *
- * The split this file exists to keep is the one `DECISIONS` D13 and D16 are
- * both about: which models exist, which one a task runs by default and which
- * ones a caller may pick are **facts**, and come from `GET /api/ai/pricing`,
- * which reads the router's own tables; a model's **name and the sentence under
- * it are editorial**, and are written here. Nothing in this file is derivable,
- * and nothing derivable is in this file.
+ * WHICH MODELS A PAGE RUNS IS THE WORKER'S (D769 PR 2, #2088; D764, #2089).
+ * "Suggested for this page" and "On this page" come from
+ * `GET /api/ai/rail?page=<key>[&option=<key>]`, the Worker's matrix
+ * (`cloudflare-worker/src/services/ai/railMatrix.json`, generated from the
+ * owner's canvas): each model's name, role word, line and price, the member's
+ * pick, and the page's options. `railView` below shapes that answer for the
+ * rail. The tables that used to decide it here (the canvas's kinds and
+ * suggestions, the lines that held, each page's jobs) are retired: the matrix
+ * holds the same canvas, read once, by the Worker that runs it.
  *
- * PRICES ARE NOT HERE (D769, #2088). D720 puts a price on every card and
- * every All models row, and `ui/railPrices.js` prints them from the Worker's
- * own rate card. This file stays the copy table: no figure, no rate field.
+ * PRICES ARE NOT TYPED HERE. Each model's price comes with the Worker's answer
+ * (D760's `cost` and `billed`), and `ui/railPrices.js` prints it.
  *
- * THE CANVAS'S TABLES, AND WHY EVERY LINE IS CHECKED (D698, D-s). The AIRail
- * canvas (`design/canvases/integrated/AIRail.dc.html`) maps every page to one
- * of fourteen task kinds (`TASK_KIND`) and every kind to two to four models
- * with a role word and a line (`SUGGESTED`). It names 29 models; the router
- * carries six of them (`CANVAS_MODEL_IDS`). A canvas model the router does not
- * carry is never drawn (D-q). A carried one is drawn only where one of the
- * page's jobs runs it, and its line only where that job does the work the line
- * describes (`CANVAS_LINE_HOLDS`); elsewhere the card says what the job does.
- * An earlier version of this file refused the canvas's copy for the same
- * reason: its Validate line for the 70B, "Paired with Whisper — reads across
- * all interviews at once and writes the synthesis", described work the page
- * did not run.
- *
- * WHICH MODEL IS THE DEFAULT IS NOT DECIDED HERE (D400). The rail draws
- * "Default" only on the router's primary for the card's job, from the `model`
- * field of `/api/ai/pricing`, so a canvas "Default" on any other model is
- * dropped. The voice rule forbids "recommendation" about what Eadwyn produces,
- * which is why the badge was never RECOMMENDED again.
- *
- * ADDING A MODEL IS A ROUTER CHANGE FIRST (D698 decision 14, #1008). An id
- * with a name here and no place in `ROUTE` (`cloudflare-worker/src/services/
- * aiRouter.ts`) renders nothing. An id in `ROUTE` with no name here renders
- * nowhere either, and `airail_d698.test.mjs` fails until it has one, so the
- * catalogue never shows a bare id.
+ * WHAT STAYS: each router model's name (`MODEL_COPY`), for a model the answer
+ * does not name, and All models, the canvas's ten groups (`ALL_MODELS`, D720
+ * §1) with each name's router id, or null where the router cannot run it yet.
+ * ADDING A MODEL IS A ROUTER CHANGE FIRST (D698 decision 14, #1008): an id
+ * with no place in `ROUTE` (`cloudflare-worker/src/services/aiRouter.ts`) is
+ * null here, and `airail_d698.test.mjs` fails a router id with no name.
  */
 
 /**
- * Per router model id: the name the rail draws. Every model `ROUTE` can send
- * work to has one, the guard included, although the guard is never drawn
- * (`NOT_IN_CATALOGUE`). Where the canvas names the model, the name is the
- * canvas's, so "Using Llama 3.1 8B on this page." reads as the canvas does.
+ * Per router model id: the name the rail draws where the Worker's answer
+ * names none. Every model `ROUTE` can send work to has one, the guard and the
+ * retired 8B included. Where the canvas names the model, the name is the
+ * canvas's.
  */
 export const MODEL_COPY = {
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast': { name: 'Llama 3.3 70B Fast' },
@@ -72,151 +56,43 @@ export const MODEL_COPY = {
   '@cf/ibm-granite/granite-4.0-h-micro': { name: 'Granite 4.0 Micro' },
 };
 
-const L70 = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+/** The guard: listed under Safety, never picked. */
+export const GUARD_MODEL = '@cf/meta/llama-guard-3-8b';
 
 /**
- * Router models the catalogue never draws: a retired model
- * (`services/aiCatalog.ts` `RETIRED_MODELS`) is priced only so past runs keep
- * their cost. The guard is drawn since D720: the canvas lists it under Safety,
- * as a row no one picks.
+ * D720 §1: All models, as the "AIRail · every page" canvas groups it
+ * (`canvas.json`, `all_models`), in its order, ten groups with Safety last.
+ * Each name carries its router id, or null where `ROUTE` cannot send it work
+ * yet (D761, #2018, adds them as they land); `airail_d698.test.mjs` holds the
+ * two lists equal, the retired 8B aside. The last two Conversation and
+ * writing rows are router models the canvas does not name.
  */
-export const NOT_IN_CATALOGUE = new Set([
-  '@cf/meta/llama-3.1-8b-instruct',
-]);
-
-/**
- * Every canvas model name, to the router id it is, or null where the router
- * does not carry it. 29 names; six carried. Deepgram Flux is priced for the
- * recording sheet's live captions (`services/sttModels.ts`) but is outside
- * `ROUTE`, so it is null here too and never drawn. D698.md lists all 29.
- */
-export const CANVAS_MODEL_IDS = {
-  'GLM-4.7 Flash': null,
-  'Llama 3.3 70B Fast': L70,
-  'GPT-OSS 120B': null,
-  'GPT-OSS 20B': null,
-  'Whisper Large v3 Turbo': '@cf/openai/whisper-large-v3-turbo',
-  'Deepgram Nova-3': '@cf/deepgram/nova-3',
-  'Deepgram Flux': null,
-  'Kimi K2.6': null,
-  'Kimi K2.7 Code': null,
-  'BGE-M3': null,
-  'BGE Reranker Base': null,
-  'Qwen3 Embedding 0.6B': null,
-  'DeepSeek V4 Pro': null,
-  'DeepSeek V4 Flash': '@cf/deepseek-ai/deepseek-v4-flash-0731',
-  'QwQ 32B': null,
-  'Gemma 4 26B': null,
-  'Llama 4 Scout': null,
-  'Moondream 3.1': null,
-  'Llama 3.2 11B Vision': null,
-  'Qwen2.5 Coder 32B': '@cf/qwen/qwen2.5-coder-32b-instruct',
-  'Granite 4.0 Micro': null,
-  'Mistral Small 3.1 24B': null,
-  'Llama 3.1 8B': '@cf/meta/llama-3.1-8b-instruct-fp8',
-  'M2M100': null,
-  'EuroLLM 9B': null,
-  'Aura-2 EN': null,
-  'MeloTTS': null,
-  'FLUX.2 Klein 4B': null,
-  'FLUX.2 Dev': null,
-};
-
-/**
- * The canvas's `TASK`: each section and module to one of fourteen kinds.
- * Transcribed whole, every licence's pages included, and matched without
- * regard to case because one host passes `workspace="network"`.
- */
-export const TASK_KIND = {
-  Studio: 'chat', Home: 'chat', 'Axal VC Fund': 'research', Validate: 'synth', 'Problem discovery': 'synth', 'Customer research': 'speech', 'Ideal customer profile': 'synth', 'Market intelligence': 'research', 'Demand and urgency signals': 'numbers', 'Experiments and evidence': 'reason', Verdict: 'reason',
-  Build: 'plan', 'Solution design': 'plan', 'Prototype / MVP': 'code', 'Product roadmap': 'plan', 'Founding team': 'plan', 'Company creation': 'legal', 'Operating systems': 'plan',
-  Raise: 'reason', 'Fundraising readiness': 'reason', 'Investor narrative': 'write', 'Pitch deck': 'vision', 'Data room': 'vision', 'Cap table': 'numbers', 'Use of funds': 'numbers', 'Capital relationships': 'match',
-  Grow: 'plan', 'Product improvement': 'synth', Distribution: 'write', 'Revenue and traction': 'numbers', 'Team expansion': 'plan', 'Partner network': 'match', 'Market expansion': 'multi', 'Durable company-building': 'legal',
-  Network: 'match', Relationships: 'match', Introductions: 'match', Organizations: 'match', Research: 'research', Ask: 'research', Markets: 'research', Market: 'research', Geographies: 'multi', Companies: 'research', Funds: 'research', Library: 'search', 'Client prep': 'research', Diligence: 'vision', Benchmarking: 'numbers',
-  Deals: 'reason', Pipeline: 'match', Screening: 'reason', Commit: 'reason', Closing: 'legal', Portfolio: 'numbers', Positions: 'numbers', Performance: 'numbers', Updates: 'synth', 'Value-add': 'match',
-  Fund: 'numbers', Overview: 'numbers', LPs: 'match', 'Capital calls': 'numbers', Distributions: 'numbers', Reporting: 'write',
-  Practice: 'plan', Opportunities: 'match', Engagements: 'plan', Delivery: 'plan', Sessions: 'speech', Earnings: 'numbers', Cohorts: 'synth', Founders: 'match', Guidance: 'write', 'This week': 'plan', Calendar: 'plan', Outcomes: 'synth',
-  Expertise: 'write', Profile: 'write', Services: 'write', Proof: 'synth', Thinking: 'write', Visibility: 'match',
-  Leads: 'match', Proposals: 'write', Negotiations: 'legal', Retainers: 'numbers', Analytics: 'numbers', Deliverables: 'write', Capacity: 'plan', Health: 'synth', Offers: 'write', Catalog: 'write', 'Perk deals': 'write', 'Audience fit': 'match',
-};
-
-const M = (name, role, line) => ({ name, role, line });
-
-/** The canvas's `SUG`: each kind's models, role words and lines, in order. */
-export const SUGGESTED = {
-  chat: [M('GLM-4.7 Flash', 'Default', 'Fast replies that can use your workspace'), M('Llama 3.3 70B Fast', 'Longer', 'Fuller answers and drafts'), M('GPT-OSS 120B', 'Deeper', 'Hard questions that need reasoning')],
-  synth: [M('Llama 3.3 70B Fast', 'Default', 'Groups notes and quotes into themes'), M('GLM-4.7 Flash', 'Faster', 'Quick tagging at a lower cost'), M('GPT-OSS 120B', 'Deeper', 'Checks a theme against all the evidence')],
-  speech: [M('Whisper Large v3 Turbo', 'Transcribe', 'Turns each recording into a transcript'), M('Deepgram Nova-3', 'Speakers', 'Labels who said what'), M('Deepgram Flux', 'Live', 'Captions while you talk'), M('Llama 3.3 70B Fast', 'Structure', 'Places quotes on themes and hypotheses')],
-  research: [M('Kimi K2.6', 'Default', 'Long sources, cited answers'), M('GPT-OSS 120B', 'Deeper', 'Weighs conflicting sources'), M('BGE-M3', 'Search', 'Finds the right records first'), M('BGE Reranker Base', 'Rank', 'Puts the most relevant on top')],
-  reason: [M('GPT-OSS 120B', 'Default', 'Tests a claim against its evidence'), M('DeepSeek V4 Pro', 'Second view', 'Reviews the first answer'), M('QwQ 32B', 'Challenge', 'Argues the other side')],
-  vision: [M('Gemma 4 26B', 'Default', 'Reads slides, charts and scans'), M('Llama 4 Scout', 'Alternative', 'Mixed text and images'), M('Moondream 3.1', 'Extract', 'Pulls figures out of images')],
-  code: [M('Kimi K2.7 Code', 'Default', 'Reads your repository and its changes'), M('Qwen2.5 Coder 32B', 'Alternative', 'Reviews and writes code')],
-  numbers: [M('DeepSeek V4 Pro', 'Default', 'Shows its working on every figure'), M('GPT-OSS 120B', 'Alternative', 'Explains what moved and why'), M('Granite 4.0 Micro', 'Faster', 'Reads figures out of documents')],
-  write: [M('Llama 3.3 70B Fast', 'Default', 'Drafts in your voice, cited'), M('Mistral Small 3.1 24B', 'Polished', 'Tighter, more formal drafts'), M('GLM-4.7 Flash', 'Faster', 'Short drafts and replies')],
-  match: [M('BGE-M3', 'Match', 'Finds people and firms that fit'), M('BGE Reranker Base', 'Rank', 'Orders them by fit'), M('Llama 3.3 70B Fast', 'Draft', 'Writes the introduction, for you to send')],
-  plan: [M('GLM-4.7 Flash', 'Default', 'Plans, lists and next steps'), M('GPT-OSS 20B', 'Alternative', 'Steady structured output'), M('GPT-OSS 120B', 'Deeper', 'Trade-offs and dependencies')],
-  legal: [M('DeepSeek V4 Pro', 'Default', 'Reads terms and filings closely'), M('GPT-OSS 120B', 'Second view', 'Checks the first reading')],
-  multi: [M('BGE-M3', 'Search', 'Finds sources in any language'), M('M2M100', 'Translate', 'Translates, keeping the original'), M('EuroLLM 9B', 'European', 'Reads European-language sources')],
-  search: [M('BGE-M3', 'Index', 'Makes every document searchable'), M('Qwen3 Embedding 0.6B', 'Alternative', 'A second index to compare'), M('Kimi K2.6', 'Answer', 'Answers from the documents, cited')],
-};
-
-/**
- * THE CANVAS LINES THAT HOLD, per kind and model: the router tasks whose run
- * does what the line says (D-s). A carried model drawn for any other job is
- * drawn as that job's card: "Default" when it is the job's router primary, no
- * role word otherwise, and the job's own sentence. Every carried line not
- * listed here is untrue wherever it would be drawn; D698.md gives each
- * verdict.
- */
-export const CANVAS_LINE_HOLDS = {
-  'synth|Llama 3.3 70B Fast': ['validate_tag_pains'],
-  'speech|Whisper Large v3 Turbo': ['transcribe'],
-  'speech|Deepgram Nova-3': ['transcribe'],
-  'speech|Llama 3.3 70B Fast': ['structure_interview'],
-};
-
-/**
- * D720 §1 (D769, #2088): the All models groups, as the "AIRail · every page"
- * canvas draws them (`design/incoming/airail-every-page-data/canvas.json`,
- * `all_models`), in its order. Ten groups, Safety last.
- */
-export const CATALOGUE_GROUPS = [
-  ['Conversation and writing', ['GLM-4.7 Flash', 'GLM-5.3 Flash', 'Llama 3.3 70B Fast', 'Mistral Small 3.1 24B', 'GPT-OSS 20B', 'Qwen3 30B A3B', 'Llama 3.1 8B', 'Granite 4.0 Micro']],
-  ['Reasoning', ['GPT-OSS 120B', 'DeepSeek V4 Pro', 'DeepSeek V4 Flash', 'GLM-5.3', 'Nemotron 3 120B', 'Qwen3.8 27B', 'QwQ 32B', 'Kimi K2.6']],
-  ['Code', ['Kimi K2.7 Code', 'Qwen2.5 Coder 32B']],
-  ['Reading images and files', ['Llama 4 Scout', 'Gemma 4 26B', 'Llama 3.2 11B Vision', 'Moondream 3.1']],
-  ['Search and ranking', ['BGE-M3', 'Qwen3 Embedding 0.6B', 'BGE Base EN v1.5', 'BGE Reranker Base']],
-  ['Languages', ['M2M100', 'IndicTrans2', 'SEA-LION v4 27B']],
-  ['Speech to text', ['Whisper Large v3 Turbo', 'Whisper', 'Deepgram Nova-3', 'Deepgram Flux', 'Smart Turn v2']],
-  ['Voice', ['Aura-2 EN', 'Aura-2 ES', 'MeloTTS']],
-  ['Images', ['FLUX.2 Klein 9B', 'FLUX.2 Klein 4B', 'FLUX.2 Dev', 'FLUX.1 Schnell', 'Lucid Origin', 'Phoenix 1.0']],
-  ['Safety', ['Llama Guard 3 8B']],
+const R = (name, id = null) => [name, id];
+export const ALL_MODELS = [
+  ['Conversation and writing', [
+    R('GLM-4.7 Flash', '@cf/zai-org/glm-4.7-flash'), R('GLM-5.3 Flash'), R('Llama 3.3 70B Fast', '@cf/meta/llama-3.3-70b-instruct-fp8-fast'),
+    R('Mistral Small 3.1 24B', '@cf/mistralai/mistral-small-3.1-24b-instruct'), R('GPT-OSS 20B', '@cf/openai/gpt-oss-20b'), R('Qwen3 30B A3B'), R('Llama 3.1 8B', '@cf/meta/llama-3.1-8b-instruct-fp8'),
+    R('Granite 4.0 Micro', '@cf/ibm-granite/granite-4.0-h-micro'), R('Llama 3.2 3B', '@cf/meta/llama-3.2-3b-instruct'), R('Llama 3.1 8B Fast', '@cf/meta/llama-3.1-8b-instruct-fp8-fast'),
+  ]],
+  ['Reasoning', [
+    R('GPT-OSS 120B', '@cf/openai/gpt-oss-120b'), R('DeepSeek V4 Pro', '@cf/deepseek-ai/deepseek-v4-pro-0813'), R('DeepSeek V4 Flash', '@cf/deepseek-ai/deepseek-v4-flash-0731'), R('GLM-5.3'),
+    R('Nemotron 3 120B'), R('Qwen3.8 27B'), R('QwQ 32B', '@cf/qwen/qwq-32b'), R('Kimi K2.6', '@cf/moonshotai/kimi-k2.6'),
+  ]],
+  ['Code', [R('Kimi K2.7 Code', '@cf/moonshotai/kimi-k2.7-code'), R('Qwen2.5 Coder 32B', '@cf/qwen/qwen2.5-coder-32b-instruct')]],
+  ['Reading images and files', [R('Llama 4 Scout', '@cf/meta/llama-4-scout-17b-16e-instruct'), R('Gemma 4 26B', '@cf/google/gemma-4-26b-a4b-it'), R('Llama 3.2 11B Vision'), R('Moondream 3.1')]],
+  ['Search and ranking', [R('BGE-M3'), R('Qwen3 Embedding 0.6B'), R('BGE Base EN v1.5', '@cf/baai/bge-base-en-v1.5'), R('BGE Reranker Base')]],
+  ['Languages', [R('M2M100'), R('IndicTrans2'), R('SEA-LION v4 27B')]],
+  ['Speech to text', [
+    R('Whisper Large v3 Turbo', '@cf/openai/whisper-large-v3-turbo'), R('Whisper', '@cf/openai/whisper'),
+    R('Deepgram Nova-3', '@cf/deepgram/nova-3'), R('Deepgram Flux'), R('Smart Turn v2'),
+  ]],
+  ['Voice', [R('Aura-2 EN'), R('Aura-2 ES'), R('MeloTTS')]],
+  ['Images', [R('FLUX.2 Klein 9B'), R('FLUX.2 Klein 4B'), R('FLUX.2 Dev'), R('FLUX.1 Schnell', '@cf/black-forest-labs/flux-1-schnell'), R('Lucid Origin'), R('Phoenix 1.0')]],
+  ['Safety', [R('Llama Guard 3 8B', GUARD_MODEL)]],
 ];
 
-/**
- * Every All models name, to the router id it is, or null where the router
- * cannot run it yet. Only a carried model is listed (D769 PR 1); D761 (#2018)
- * adds the rest as their shapes land.
- */
-export const ALL_MODEL_IDS = {
-  ...CANVAS_MODEL_IDS,
-  'GLM-5.3 Flash': null,
-  'Qwen3 30B A3B': null,
-  'GLM-5.3': null,
-  'Nemotron 3 120B': null,
-  'Qwen3.8 27B': null,
-  'BGE Base EN v1.5': '@cf/baai/bge-base-en-v1.5',
-  'IndicTrans2': null,
-  'SEA-LION v4 27B': null,
-  Whisper: '@cf/openai/whisper',
-  'Smart Turn v2': null,
-  'Aura-2 ES': null,
-  'FLUX.2 Klein 9B': null,
-  'FLUX.1 Schnell': null,
-  'Lucid Origin': null,
-  'Phoenix 1.0': null,
-  'Llama Guard 3 8B': '@cf/meta/llama-guard-3-8b',
-};
+// HQ's model badges use the same name-to-id mapping as All models (D776/D769).
+export const ALL_MODEL_IDS = Object.fromEntries(ALL_MODELS.flatMap(([, rows]) => rows));
 
 /**
  * The New badge: the canvas's `new_models`, less BGE Base EN v1.5 and FLUX.1
@@ -227,211 +103,70 @@ export const NEW_MODELS = new Set([
   'SEA-LION v4 27B', 'Smart Turn v2', 'Aura-2 ES', 'FLUX.2 Klein 4B', 'Lucid Origin', 'Phoenix 1.0',
 ]);
 
-/** The guard: listed under Safety, never picked. */
-export const GUARD_MODEL = '@cf/meta/llama-guard-3-8b';
-
-/** Router models the canvas does not name, each in its kind's group. */
-export const CATALOGUE_EXTRAS = {
-  '@cf/meta/llama-3.2-3b-instruct': 'Conversation and writing',
-  '@cf/meta/llama-3.1-8b-instruct-fp8-fast': 'Conversation and writing',
-};
-
-/**
- * WHAT EACH PAGE'S AI WORK IS, and which router task does it. Editorial, like
- * the tables above: the task names are the router's, and which model each
- * runs is read from `GET /api/ai/pricing`. A job that response does not list
- * is skipped, so a card never names a task the router does not carry.
- *
- * `pick` is whether the rail's choice reaches the run. It does for the fill
- * bands, which send it (`FillProposals.jsx`, which reads `readRailModel` for
- * every fill kind). It does not for the zone drafts (`/api/research/drafts`
- * takes no model), for Ask, or for transcription and structuring, whose models
- * are chosen on the recording sheet and in the review. Those draw the router's
- * model as a plain row: a choice there would change nothing (D17).
- */
-export const SECTION_JOBS = {
-  Validate: [
-    {
-      task: 'transcribe',
-      pick: false,
-      why: 'Turns every recorded interview into text you can search and quote. You pick the model when you record.',
-    },
-    {
-      task: 'validate_tag_pains',
-      pick: true,
-      why: 'Tags the phrases you logged to the pain themes you named, as proposals you accept or discard.',
-    },
-    {
-      task: 'validate_draft_hypotheses',
-      pick: true,
-      why: 'Reads your pain map and drafts hypothesis cards, as proposals you accept or discard.',
-    },
-  ],
-  Research: [
-    {
-      task: 'research_ask',
-      pick: false,
-      why: 'Answers a question you ask from your own library, with its sources.',
-    },
-    {
-      task: 'workspace_explain',
-      pick: false,
-      why: 'Drafts the reading on a zone band when you press its button.',
-    },
-  ],
-};
-
-/**
- * A module that runs work of its own (D698 decision 5). Validate's other
- * modules keep the section's three jobs, as every Validate page always has.
- * Product improvement's task is D691's; until `/api/ai/pricing` lists it the
- * page keeps `DEFAULT_JOBS`.
- */
-export const MODULE_JOBS = {
-  'Problem discovery': [SECTION_JOBS.Validate[1]],
-  'Experiments and evidence': [SECTION_JOBS.Validate[2]],
-  'Customer research': [
-    SECTION_JOBS.Validate[0],
-    {
-      task: 'structure_interview',
-      pick: false,
-      why: 'Places an interview\'s quotes on your themes and hypotheses, for you to review. You pick the model on the review.',
-    },
-  ],
-  'Product improvement': [
-    {
-      task: 'grow_theme_feedback',
-      pick: true,
-      why: 'Groups the feedback you logged into themes, as proposals you accept or discard.',
-    },
-  ],
-};
-
-/** Every other page, on every licence: the zone drafts. */
-export const DEFAULT_JOBS = [
-  {
-    task: 'workspace_explain',
-    pick: false,
-    why: 'Drafts the reading on a zone band when you press its button. It is given the figures beside it and nothing else.',
-  },
-];
-
-/** A table keyed by name, read without regard to case. */
-function lookup(table, name) {
-  const want = String(name || '').trim().toLowerCase();
-  if (!want) return undefined;
-  for (const [k, v] of Object.entries(table)) if (k.toLowerCase() === want) return v;
-  return undefined;
-}
-
-/** The page's jobs: the module's own, else the section's, else the zone drafts. */
-export const jobsFor = (section, module) =>
-  lookup(MODULE_JOBS, module) || lookup(SECTION_JOBS, section) || DEFAULT_JOBS;
-
-/** The canvas's kind for a page: by module, then by section, else `chat`. */
-export const kindFor = (section, module) =>
-  lookup(TASK_KIND, module) || lookup(TASK_KIND, section) || 'chat';
-
 export const modelName = (id) => MODEL_COPY[id]?.name || null;
-
-const listedBy = (route) => [route.model, ...(route.fallback_chain || []), ...(route.alternates || [])].filter(Boolean);
+const tail = (id) => String(id).split('/').pop();
 
 /**
- * The rail's "Suggested for this page" and "All models", from the page's
- * section and module, `/api/ai/pricing` and the stored picks (D698 decisions
- * 5 to 7). Pure, so every page's answer is tested without a renderer.
+ * The rail's model blocks, from one read of `GET /api/ai/rail` (D769 PR 2).
+ * Pure, so every answer is tested without a renderer.
  *
- * `picks` is task → stored id, read by the rail from `readRailModel(workspace,
- * task)`, the store `FillProposals.jsx` sends, so the card and the run agree.
+ * `reading` is `{ loading, error, status, data }`. `page` is the page key the
+ * shell resolved (`useRailPage().page`), null where the rail is off the
+ * canvas's pages. `option` is the open option's key (`useRailOption`).
+ * `pick` is a pick made since the read, shown at once.
+ * `price(model)` prints a model's price (`ui/railPrices.js`).
  *
  * Returns:
- *   unreadable  the price list was not read; the rail draws Unreadable.
- *   cards       { id, name, role, line, tasks, pickable, checked }. `tasks`
- *               are the page's pickable jobs that offer the model: choosing
- *               the card writes the pick for each.
- *   fallback    no canvas model is run here, so the one card is the router's
- *               primary for the page's first pickable job (else its first).
- *   offList     a stored pick that no card draws, { id, name }, or null.
- *   groups      [{ title, chips: [{ id, name, tasks, pickable, selected, isNew }] }],
- *               the router's catalogue in the canvas's groups, empty ones out.
- *   pickable    whether any job on this page takes the rail's pick.
+ *   state    'loading'; 'unreadable' (the read failed: never an empty list);
+ *            'none' (no page key, or the matrix has no row for it: the rail
+ *            says "Not recorded" and why); or 'ready'.
+ *   cards    { id, name, role, line, price, checked }, the row's models,
+ *            default first, as the Worker orders them.
+ *   current  the model the next run takes: the member's pick, else the
+ *            row's first, its default.
+ *   pickable whether the row offers a choice (more than one model).
+ *   options  "On this page": { key, label, model, open } per option the page
+ *            registers, `model` the name of its pick or default.
+ *   groups   All models: [{ title, chips: [{ id, name, isNew, pickable,
+ *            selected }] }], the router's models only. A chip is pickable
+ *            where the row offers it, the guard never.
  */
-export function railSuggestions({ section, module, pricing, picks = {} } = {}) {
-  const routes = pricing?.routes;
-  if (!routes || typeof routes !== 'object') {
-    return { unreadable: true, cards: [], fallback: false, offList: null, groups: [], pickable: false };
-  }
-  const listed = (job) => !!routes[job.task]?.model;
-  let jobs = jobsFor(section, module).filter(listed);
-  if (!jobs.length) jobs = DEFAULT_JOBS.filter(listed);
+export function railView({ reading, page, option = null, pick = null, price = () => null } = {}) {
+  const empty = { cards: [], current: null, pickable: false, options: [], groups: [] };
+  if (!page) return { ...empty, state: 'none', reason: 'This page has no row in the rail\'s model list.' };
+  if (!reading || reading.loading) return { ...empty, state: 'loading' };
+  if (reading.status === 404) return { ...empty, state: 'none', reason: 'The rail\'s model list has no row for this page yet.' };
+  const data = reading.data;
+  if (reading.error || !data || !Array.isArray(data.models)) return { ...empty, state: 'unreadable' };
 
-  const offers = (job) => (job.pick && Array.isArray(routes[job.task].alternates) ? routes[job.task].alternates : []);
-  const pickJobs = jobs.filter((j) => offers(j).length > 0);
-  const tasksFor = (id) => pickJobs.filter((j) => offers(j).includes(id)).map((j) => j.task);
-  const running = (job) => {
-    const p = picks?.[job.task];
-    return typeof p === 'string' && offers(job).includes(p) ? p : routes[job.task].model;
-  };
-  const current = pickJobs.length ? running(pickJobs[0]) : null;
-  const card = (id, role, line) => {
-    const tasks = tasksFor(id);
+  const models = data.models.filter((m) => m && typeof m.id === 'string');
+  const offered = (id) => models.some((m) => m.id === id);
+  const chosen = [pick, data.pick].find((id) => typeof id === 'string' && offered(id));
+  const current = chosen ?? models[0]?.id ?? null;
+  const cards = models.map((m) => ({
+    id: m.id,
+    name: m.name || modelName(m.id) || tail(m.id),
+    role: m.role || null,
+    line: m.line || null,
+    price: price(m),
+    checked: m.id === current,
+  }));
+  const options = (Array.isArray(data.options) ? data.options : []).filter((o) => o && o.key).map((o) => {
+    const list = Array.isArray(o.models) ? o.models : [];
+    const runs = list.find((m) => m.id === o.pick) || list[0];
     return {
-      id, name: modelName(id) || id.split('/').pop(), role, line, tasks, pickable: tasks.length > 0, checked: id === current,
+      key: o.key,
+      label: o.label || o.key,
+      model: runs ? runs.name || modelName(runs.id) || tail(runs.id) : null,
+      open: !!option && o.key === option,
     };
-  };
-
-  const kind = kindFor(section, module);
-  const cards = [];
-  for (const s of SUGGESTED[kind] || []) {
-    const id = CANVAS_MODEL_IDS[s.name];
-    if (!id || cards.some((c) => c.id === id)) continue;
-    const job = jobs.find((j) => listedBy(routes[j.task]).includes(id));
-    if (!job) continue;
-    const primary = routes[job.task].model === id;
-    const holds = (CANVAS_LINE_HOLDS[`${kind}|${s.name}`] || []).includes(job.task);
-    const role = holds ? (s.role === 'Default' && !primary ? null : s.role) : (primary ? 'Default' : null);
-    cards.push(card(id, role, holds ? s.line : job.why));
-  }
-  let fallback = false;
-  if (!cards.length && jobs.length) {
-    const job = pickJobs[0] || jobs[0];
-    cards.push(card(routes[job.task].model, 'Default', job.why));
-    fallback = true;
-  }
-
-  let offList = null;
-  for (const job of pickJobs) {
-    const p = picks?.[job.task];
-    if (typeof p === 'string' && offers(job).includes(p) && !cards.some((c) => c.id === p)) {
-      offList = { id: p, name: modelName(p) || p.split('/').pop() };
-      break;
-    }
-  }
-
-  const carried = new Set();
-  for (const route of Object.values(routes)) for (const id of listedBy(route || {})) carried.add(id);
-  for (const id of NOT_IN_CATALOGUE) carried.delete(id);
-  const canvasName = new Map(Object.entries(ALL_MODEL_IDS).filter(([, id]) => id).map(([n, id]) => [id, n]));
-  const chip = (id) => {
-    const tasks = tasksFor(id);
-    return {
-      id, name: modelName(id), tasks, pickable: tasks.length > 0 && id !== GUARD_MODEL, selected: id === (offList?.id || current),
-      isNew: NEW_MODELS.has(canvasName.get(id)),
-    };
-  };
+  });
   const groups = [];
-  for (const [title, names] of CATALOGUE_GROUPS) {
-    const ids = [];
-    for (const n of names) {
-      const id = ALL_MODEL_IDS[n];
-      if (id && carried.has(id) && !ids.includes(id)) ids.push(id);
-    }
-    for (const [id, group] of Object.entries(CATALOGUE_EXTRAS)) {
-      if (group === title && carried.has(id) && !ids.includes(id)) ids.push(id);
-    }
-    const chips = ids.filter((id) => modelName(id)).map(chip);
+  for (const [title, rows] of ALL_MODELS) {
+    const chips = rows.filter(([, id]) => id).map(([name, id]) => ({
+      id, name, isNew: NEW_MODELS.has(name), pickable: id !== GUARD_MODEL && offered(id), selected: id === current,
+    }));
     if (chips.length) groups.push({ title, chips });
   }
-
-  return { unreadable: false, cards, fallback, offList, groups, pickable: pickJobs.length > 0 };
+  return { state: 'ready', cards, current, pickable: models.length > 1, options, groups };
 }

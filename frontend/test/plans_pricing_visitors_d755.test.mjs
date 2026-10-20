@@ -24,16 +24,17 @@ const text = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/
 const read = (f) => readFileSync(resolve(process.cwd(), f), 'utf8');
 const ready = (data) => ({ status: 'ready', data });
 
-const A = (d, m) => ({ daily_microusd: d, monthly_microusd: m, source: 'recorded' });
+// D783 (#2124): a plan includes 25% of its price each month; no plan, none.
+const A = (m) => ({ share: 0.25, monthly_microusd: m, source: m ? 'plan' : 'none' });
 const month = (cents, id) => ({ price_id: id, unit_amount: cents, currency: 'usd', interval: 'month', interval_count: 1 });
 const year = (cents, id) => ({ price_id: id, unit_amount: cents, currency: 'usd', interval: 'year', interval_count: 1 });
 const READ = {
   plans: [
-    { family: 'founder', licence_key: 'founder:free', product_id: null, plan_name: null, free: true, prices: [], allowance: A(0, 0) },
-    { family: 'founder', licence_key: 'founder:growth', product_id: 'prod_g', plan_name: 'Validate + Build', free: false, prices: [month(2500, 'price_gm'), year(24000, 'price_gy')], allowance: A(1_000_000, 5_000_000) },
-    { family: 'investor', licence_key: 'investor:professional', product_id: 'prod_ip', plan_name: 'Investor — Professional', free: false, prices: [month(14900, 'price_ip')], allowance: A(0, 8_000_000) },
-    { family: 'partner', licence_key: 'partner', product_id: 'prod_p', plan_name: 'Operating Partner', free: false, prices: [month(9900, 'price_p')], allowance: A(0, 3_000_000) },
-    { family: 'market_intelligence', licence_key: null, product_id: 'prod_mi', plan_name: 'Market Intelligence Pro', free: false, prices: [month(1500, 'price_mi')], allowance: null },
+    { family: 'founder', licence_key: 'founder:free', product_id: null, plan_name: null, free: true, prices: [], allowance: A(0) },
+    { family: 'founder', licence_key: 'founder:growth', product_id: 'prod_g', plan_name: 'Validate + Build', free: false, prices: [month(2500, 'price_gm'), year(24000, 'price_gy')], allowance: A(6_250_000) },
+    { family: 'investor', licence_key: 'investor:professional', product_id: 'prod_ip', plan_name: 'Investor — Professional', free: false, prices: [month(14900, 'price_ip')], allowance: A(37_250_000) },
+    { family: 'partner', licence_key: 'partner', product_id: 'prod_p', plan_name: 'Operating Partner', free: false, prices: [month(9900, 'price_p')], allowance: A(24_750_000) },
+    { family: 'market_intelligence', licence_key: null, product_id: 'prod_mi', plan_name: 'Market Intelligence Pro', free: false, prices: [month(1500, 'price_mi')], allowance: A(3_750_000) },
   ],
   packs: [], covers: 'Covers Eadwyn.', resets: 'Resets daily.',
 };
@@ -55,7 +56,7 @@ test('a signed-out render of a plan card shows its price, its allowance and the 
   const plan = planForProduct(growth, ready(READ));
   const t = text(html(h(BundleCard, { product: growth, globalCycle: 'monthly', onPreview() {}, onSubscribe() {}, ai: planAi(plan, ready(READ), { licence: null }), family: plan.family })));
   assert.match(t, /^Founder Validate \+ Build \$25\.00 \/mo/);
-  assert.ok(t.includes('AI allowance $1.00 a day · $5.00 a month'));
+  assert.ok(t.includes('AI allowance Includes $6.25 of AI each month: 25% of the price. Past it, runs use your tokens.'), t);
   assert.ok(!t.includes('Your plan'), 'a visitor has no plan');
 });
 

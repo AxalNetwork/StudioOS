@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import SectorSelect from '../components/SectorSelect';
 import { Link } from 'react-router-dom';
 import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2, X, Monitor, Smartphone } from 'lucide-react';
 import { api } from '../lib/api';
+import { railPageHeaders } from '../lib/railPage.js';
 import { useAuth } from '../hooks/useAuthSync';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { FONT_PAIRING_OPTIONS } from '../decks/templates/axal_spinout_demoday_app';
@@ -41,6 +42,12 @@ const GOAL_LABELS = {
 // components all read one definition of a template's sections.
 const defaultsForKey = (key) => defaultsForTemplate(key);
 
+// D778: context is captured on the press, before the busy render updates the rail.
+const fillHeaders = option => {
+  const current = railPageHeaders();
+  return { ...current, 'X-Rail-Page': current['X-Rail-Page'] || encodeURIComponent('Founder · Grow · Distribution'), 'X-Rail-Option': option };
+};
+
 export default function BrandBuilderPage() {
   const { user } = useAuth();
   const [projects, setProjects] = useState([]);
@@ -70,6 +77,11 @@ export default function BrandBuilderPage() {
     // Task #3 — per-template editable content { [templateKey]: { field: string | item[] } }
     content_json: {},
   });
+  // A switched project or template is a different open form, even after switching back.
+  const activeForm = useRef({ projectId, template: draft.template });
+  if (activeForm.current.projectId !== projectId || activeForm.current.template !== draft.template) {
+    activeForm.current = { projectId, template: draft.template };
+  }
   const [signups, setSignups] = useState([]);
   const [waitlistAudienceFilter, setWaitlistAudienceFilter] = useState('');
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -280,6 +292,7 @@ export default function BrandBuilderPage() {
     if (!projectId) return;
     if (description.trim().length < 4) { setError('Add a short description in step 1 first.'); return; }
     setAutofillBusy(true); setError('');
+    const form = activeForm.current;
     try {
       const key = draft.template;
       const r = await api.brandAutofillLanding({
@@ -287,7 +300,8 @@ export default function BrandBuilderPage() {
         sector: sector || null,
         description: description.trim(),
         template: key,
-      });
+      }, fillHeaders('form:landing'));
+      if (activeForm.current !== form) return;
       const merged = { ...defaultsForKey(key), ...((r && r.content) || {}) };
       setDraft((d) => ({
         ...d,
@@ -354,12 +368,14 @@ export default function BrandBuilderPage() {
   const suggestPalette = async () => {
     if (!projectId) return;
     setPaletteBusy(true); setError(''); setPaletteWarnings([]);
+    const form = activeForm.current;
     try {
       const r = await api.brandSuggestPalette({
         description: description.trim(),
         sector: sector || null,
         seed_color: draft.theme_color,
-      });
+      }, fillHeaders('form:palette'));
+      if (activeForm.current !== form) return;
       const p = r?.palette;
       if (p) {
         setDraft((d) => ({
@@ -379,6 +395,7 @@ export default function BrandBuilderPage() {
   const suggestTaglines = async () => {
     if (!draft.name.trim()) { setError('Set a name first.'); return; }
     setTaglineBusy(true); setError('');
+    const form = activeForm.current;
     try {
       const r = await api.brandSuggestTaglines({
         name: draft.name.trim(),
@@ -386,7 +403,8 @@ export default function BrandBuilderPage() {
         audience: taglineInputs.audience,
         tone: taglineInputs.tone,
         market_angle: taglineInputs.marketAngle,
-      });
+      }, fillHeaders('draft:taglines'));
+      if (activeForm.current !== form) return;
       setTaglineCandidates(r?.taglines || []);
     } catch (e) { setError(e?.message || 'Taglines failed'); }
     finally { setTaglineBusy(false); }

@@ -44,7 +44,7 @@ export const INTEL_CLAIMS = [
 
   // 02 · Models
   { id: 'model-pick', kept: false, text: 'Pick the model behind each feature page.',
-    instead: 'The rail lets a member pick a model only for Validate’s two fill bands (`pick: true` in ui/railModels.js); every other page shows the router’s model with no choice.' },
+    instead: 'The rail lets a member pick a model only on a page with a row in the Worker’s model list (`GET /api/ai/rail`, D764), and the rail is mounted by the workspace pages, not by every feature page (see "rail-everywhere").' },
   { id: 'rail-everywhere', kept: false, text: 'Every feature page has a side rail.',
     instead: 'The Worker AI rail is mounted by the workspace pages, not by every feature page.' },
   { id: 'rail-switch', kept: false, text: 'lets you switch to another for that page',

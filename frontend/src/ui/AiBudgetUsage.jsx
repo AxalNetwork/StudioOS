@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import useAiBudget from '../hooks/useAiBudget';
 import { Unreadable } from './Honesty';
 import { ADD_TOKENS_PATH, TOPUP_UNAVAILABLE, aiTokenState, microMoney, usageMoney } from '../lib/aiTokens';
+import { NO_PLAN_LINE, dayCapped, noPlan } from '../lib/planAllowance';
 
 // D755 (#1916): the formatters, the top-up state and its sentence live in
 // lib/aiTokens.js; re-exported here so no importer changes.
@@ -25,8 +26,11 @@ export function AiBudgetUsage({reading}) {
     <p className="font-semibold">Included allowance · {b.licence.replace(':',' / ')}</p>
     {/* D642 (#1435) — the compact card opens the full Usage page. */}
     <a href="/account/usage" className="inline-block underline text-violet-700 dark:text-violet-300" data-testid="ai-budget-usage-link">See usage</a>
-    <p>Today · <span title={money(b.day_spend_microusd)}>{usageMoney(b.day_spend_microusd)}</span> of {money(b.daily_microusd)}</p>
-    <p>This month · <span title={money(b.month_spend_microusd)}>{usageMoney(b.month_spend_microusd)}</span> of {money(b.monthly_microusd)}</p>
+    {/* D783: a member has no daily limit, and with no plan nothing is included. */}
+    {dayCapped(b) && <p>Today · <span title={money(b.day_spend_microusd)}>{usageMoney(b.day_spend_microusd)}</span> of {money(b.daily_microusd)}</p>}
+    {noPlan(b)
+      ? <p data-testid="ai-budget-no-plan">{NO_PLAN_LINE}</p>
+      : <p>This month · <span title={money(b.month_spend_microusd)}>{usageMoney(b.month_spend_microusd)}</span> of {money(b.monthly_microusd)}</p>}
     {b.monthly_microusd>0 && <div className="h-1 rounded-full bg-gray-200 dark:bg-gray-700" role="presentation">
       <div className="h-1 rounded-full bg-violet-600 dark:bg-violet-400" style={{width:`${Math.min(100,b.month_spend_microusd/b.monthly_microusd*100)}%`}} />
     </div>}

@@ -171,6 +171,7 @@ test('every request in the module is written as a literal path the drift check c
     // #1588: attach by link posts to the same route as scheduling (D685 §5.3.2).
     'POST /founder/validate/interviews/:p/meetings',
     'POST /founder/validate/interviews/:p/meetings/:p/import',
+    'PUT /channels/whatsapp/link/venture',
   ], 'one per route of D684 §9, as the drift check will read them');
 });
 

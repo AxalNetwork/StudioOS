@@ -423,3 +423,11 @@ wire details and fee statement (#1859) are built to it. The LP screens #1858,
 #1860 and #1866 and D758's library work keep their own issues.
 **`integrated/` went 97 → 98.** The departures are in
 `documentation/architecture/decisions/D717.md`.
+
+**2026-10-19 (D769, #2088), one replaced in place.** `AIRail · every page`
+(D720) moved from `design/incoming/` to `integrated/` as `AIRail.dc.html`,
+unedited, replacing D698's export under the name `Cycle Overview`'s two
+`dc-import`s load. Every rail draws it: the per-page switch, each model's
+price, the page's models from the Worker's matrix, All models in ten groups,
+the Llama Guard sentence and Add tokens. **`integrated/` stays 98.** The
+departures are in `documentation/architecture/decisions/D769.md`.

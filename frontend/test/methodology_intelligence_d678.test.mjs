@@ -227,17 +227,15 @@ test('intelligence: the reasons two claims were dropped still hold in the code',
   for (const f of ['cloudflare-worker/src/routes/founder_validate.ts', 'cloudflare-worker/src/routes/research.ts', 'cloudflare-worker/src/routes/founder_validate_structure.ts']) {
     assert.doesNotMatch(read(f), /classifyInput\(/, `${f} now screens its runs: revisit the dropped "safety-screen" claim`);
   }
-  // The model pick: only fill bands carry `pick: true` — Validate's two, and
-  // since D698 Grow's Product improvement, whose fill band (D691) sends the
-  // rail's pick once its task is in the router. "Pick the model behind each
-  // feature page" stays false: any other pick means revisiting the claim.
-  const rail = read('frontend/src/ui/railModels.js');
-  const validate = rail.slice(rail.indexOf('Validate: ['), rail.indexOf('Research: ['));
-  const grow = rail.slice(rail.indexOf("'Product improvement': ["), rail.indexOf('];', rail.indexOf("'Product improvement': [")));
-  const elsewhere = rail.slice(rail.indexOf('Research: [')).replace(grow, '');
-  assert.match(validate, /pick: true/);
-  assert.match(grow, /task: 'grow_theme_feedback',\s*pick: true/);
-  assert.doesNotMatch(elsewhere, /pick: true/, 'a pick on another section: revisit the dropped "model-pick" claim');
+  // The model pick. Since D769 PR 2 (#2088) the rail offers a pick on every
+  // page with a row in the Worker's model list, stored per page; the rail is
+  // still mounted by the workspace pages only. "Pick the model behind each
+  // feature page" stays false while those two hold.
+  const rail = read('frontend/src/ui/WorkerRail.jsx');
+  assert.match(rail, /railPrefsApi\.setPagePick\(pageKey, id, optionKey\)/, 'the pick is no longer per page: revisit the dropped "model-pick" claim');
+  assert.match(rail, /railPrefsApi\.page\(page, option\)/, 'the rail no longer reads its page\'s row: revisit the dropped "model-pick" claim');
+  assert.match(read('cloudflare-worker/src/routes/ai.ts'), /if \(!row\) return refuseRailPage\(c, page\);/, 'a page with no row now has a pick: revisit the dropped "model-pick" claim');
+  assert.match(read('frontend/src/lib/siteIntelligence.js'), /id: 'rail-everywhere', kept: false/, 'every feature page has a rail now: revisit the dropped "model-pick" claim');
 });
 
 test('intelligence: images keep the canvas\'s alt text, and the canvas\'s sample rows do not ship', () => {

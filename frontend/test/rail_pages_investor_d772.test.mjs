@@ -15,6 +15,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { pageKeyFor } from '../src/lib/railPages.js';
 import { INVESTOR_RAIL_OPTIONS } from '../src/lib/railOptions/investor.js';
+import { controlOf, railOptionFor } from '../src/lib/railOptions/index.js';
 import { RailPageProvider, useRailPage } from '../src/ui/railCrumbs.js';
 import { api } from '../src/lib/api.js';
 import ZoneDraft from '../src/workspaces/ZoneDraft.jsx';
@@ -107,6 +108,88 @@ test('Fund: every option of the section names itself on its band', () => {
   const rows = rowsOf('Fund');
   assert.deepEqual(rows.map((o) => o.key), ['draft:lp-reminder']);
   assertBandsNamed(rows);
+});
+
+// ------------------------------------------------------------------ Research (I22–I27)
+
+const RESEARCH = [['/research', 'Investor · Research'], ['/research/ask', 'Investor · Research · Ask'], ['/research/diligence', 'Investor · Research · Diligence'],
+  ['/research/diligence/g1', 'Investor · Research · Diligence'], ['/research/diligence/g1/files/f1', 'Investor · Research · Diligence'],
+  ['/research/benchmarking', 'Investor · Research · Benchmarking'], ['/research/benchmarking/b1', 'Investor · Research · Benchmarking'],
+  ['/research/markets', 'Investor · Research · Markets'], ['/research/geographies', 'Investor · Research · Markets'],
+  ['/research/library', 'Investor · Research · Library']];
+/** The zones three profiles' Research boards share; each names its options through `railOptionFor`. */
+const SHARED = ['pages/research/AskZone.jsx', 'pages/research/LibraryZone.jsx', 'pages/research/DiligenceRoom.jsx'];
+const code = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+test('Research: each board\'s route and record view answers its page key for an investor', () => {
+  for (const [route, key] of RESEARCH) assert.equal(pageKeyFor(route, 'investor'), key, route);
+  for (const o of rowsOf('Research')) assert.ok(RESEARCH.some(([, k]) => k === o.page), `${o.page} is a Research board`);
+});
+
+test('Research: the landing and the zones\' shell draw one rail each, the zones none, and each record view its own', () => {
+  for (const f of ['pages/investor/InvestorResearchWorkspace.jsx', 'workspaces/ResearchWorkspace.jsx',
+    'pages/research/DiligenceRoom.jsx', 'pages/research/DiligenceFile.jsx', 'pages/research/BenchmarkDetail.jsx', 'pages/research/MarketReading.jsx']) {
+    assert.equal((read(f).match(/<WorkerRail\b/g) || []).length, 1, f);
+  }
+  for (const f of ['AskZone', 'DiligenceZone', 'BenchmarkingZone', 'MarketDirectoryZone', 'LibraryZone']) {
+    assert.doesNotMatch(read(`pages/research/${f}.jsx`), /<WorkerRail\b|<RailFrame\b/, `${f} draws a second rail`);
+  }
+});
+
+test('Research: every option is named where it lives, a shared zone\'s through railOptionFor', () => {
+  const rows = rowsOf('Research');
+  assert.deepEqual(rows.map((o) => o.key), ['ask:evidence', 'ask:question', 'draft:session-brief', 'draft:thin-evidence', 'upload:document', 'reindex:document', 'draft:index-gaps']);
+  for (const o of rows) {
+    const src = code(o.source.file);
+    if (!SHARED.includes(o.source.file)) {
+      assert.ok(src.includes(`useRailOption(`) && src.includes(`'${o.key}'`), `${o.page}: ${o.key} is not named`);
+      continue;
+    }
+    const control = controlOf(o.source.match);
+    assert.deepEqual(railOptionFor(o.page, { file: o.source.file, control }), { key: o.key, label: o.label }, `${o.page}: ${o.key}`);
+    // A band passes the lookup as its `railOption`; any other control names the looked-up row while it runs.
+    const lookup = `railOptionFor(railPage, { file: ZONE_FILE, control: '${control}' })`;
+    if (control.includes('/')) {
+      assert.ok(src.includes(`railOption={${lookup}?.key}`), `${o.source.file}: the ${control} band does not name its row`);
+    } else {
+      const name = src.split(`= ${lookup};`)[0].match(/const (\w+) $/)?.[1];
+      assert.ok(name, `${o.source.file} does not look up ${control}`);
+      assert.match(src, new RegExp(`useRailOption\\([^;]*\\? ${name}\\?\\.key : null, ${name}\\?\\.label\\);`), `${o.source.file}: ${control} is never named`);
+    }
+  }
+  // Each shared zone names itself by its own path, which is what the inventories list.
+  for (const f of SHARED) {
+    const src = code(f);
+    assert.ok(src.includes(`const ZONE_FILE = '${f}';`), `${f} does not pass its own path`);
+    assert.doesNotMatch(src, /railOption="|useRailOption\(\s*[^,]*\?\s*'[a-z]+:/, `${f} still names a literal key`);
+  }
+});
+
+test('Research: a shared zone\'s control resolves to each profile\'s own key, and to nothing it does not list', () => {
+  const at = (profile, module, file, control) => railOptionFor(`${profile} · Research · ${module}`, { file: `pages/research/${file}.jsx`, control })?.key ?? null;
+  const table = [
+    ['ask', 'Ask', 'AskZone', ['ask:library', 'ask:question', 'ask:library', 'ask:library']],
+    ['research/ask', 'Ask', 'AskZone', ['draft:research/ask', 'draft:session-brief', 'draft:session-brief', 'draft:session-brief']],
+    ['upload', 'Library', 'LibraryZone', ['upload:document', 'upload:document', 'upload:document', 'upload:document']],
+    ['reindex', 'Library', 'LibraryZone', ['upload:reindex', 'reindex:document', 'reindex:document', 'reindex:document']],
+    ['research/library', 'Library', 'LibraryZone', ['draft:research/library', 'draft:index-gaps', 'draft:index-gaps', 'draft:index-gaps']],
+    ['research/diligence', 'Diligence', 'DiligenceRoom', [null, 'draft:thin-evidence', null, null]],
+  ];
+  for (const [control, module, file, keys] of table) {
+    assert.deepEqual(['Founder', 'Investor', 'Advisor', 'Operating Partner'].map((p) => at(p, module, file, control)), keys, control);
+  }
+  // Another page, another file or no page: nothing, so a band keeps D770's `draft:<surface>`.
+  assert.equal(at('Investor', 'Library', 'AskZone', 'ask'), null);
+  assert.equal(railOptionFor('Investor · Research', { file: 'pages/research/AskZone.jsx', control: 'ask' }), null);
+  assert.equal(railOptionFor(null, { file: 'pages/research/AskZone.jsx', control: 'ask' }), null);
+});
+
+test('Research: each record view names its record as the rail\'s last crumb', () => {
+  const views = { 'pages/research/DiligenceRoom.jsx': 'diligence-room', 'pages/research/DiligenceFile.jsx': 'diligence-file',
+    'pages/research/BenchmarkDetail.jsx': 'benchmark', 'pages/research/MarketReading.jsx': 'market-reading' };
+  for (const [f, type] of Object.entries(views)) {
+    assert.match(code(f), new RegExp(`useRecordCrumb\\([^;]*'${type}'`), `${f} names no ${type}`);
+  }
 });
 
 // ------------------------------------------------------------------ the band names its inventory key while it is open

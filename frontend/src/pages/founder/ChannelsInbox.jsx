@@ -9,7 +9,7 @@ import { ProviderTag } from './InterviewChannels';
 import { CHAT_CONSENT_METHODS, canAttest, chatConsentOf, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
 import {
   THREAD_TABS, assignedSentence, clientKeyFor, composerState, contactLabel, interviewOptions, keepKeyAfter, messageView,
-  replyFailureText, replyOutcome, sessionHref, threadEngineLine, threadItems, threadRow,
+  replyFailureText, replyOutcome, sessionHref, threadEngineLine, threadItems, threadRow, voiceKeepBy,
 } from './channelThreads.js';
 
 /**
@@ -323,6 +323,8 @@ export function ThreadPanel({ uid, api = channelsApi, venture, onChanged, makeKe
     finally { setBusy(false); }
   };
   const href = sessionHref(assigned?.session_id ?? thread.session_id);
+  // D754 §5: a waiting WhatsApp chat's voice notes are kept only if it reaches an interview in time.
+  const keepBy = assigned ? null : voiceKeepBy(thread, messages);
   return (
     <section className={`${TONE} space-y-3 p-4`} data-testid="thread-panel" data-status={thread.status}>
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -349,6 +351,7 @@ export function ThreadPanel({ uid, api = channelsApi, venture, onChanged, makeKe
       )}
       {thread.status !== 'ignored' && <ThreadConsent thread={thread} consent={data.consent} api={api} onChanged={load} />}
       {thread.status === 'pending' && !messages.length && <p className={NOTE}>No message is waiting in this conversation.</p>}
+      {keepBy && <p className="text-[12.5px] font-semibold text-amber-800 dark:text-amber-300" data-testid="thread-voice-keep-by">{keepBy}</p>}
       <MessageList messages={messages} contact={thread.contact_name} threadUid={thread.uid} api={api} onRetried={load} />
       {thread.status !== 'ignored' && venture && (
         <AssignControls key={thread.uid} thread={thread} venture={venture} api={api}

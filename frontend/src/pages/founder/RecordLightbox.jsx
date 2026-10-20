@@ -517,7 +517,7 @@ export default function RecordLightbox({
           </div>
           {planning.error && <p role="alert" className="m-0 text-[12px] font-semibold text-red-700 dark:text-red-400" data-testid="record-schedule-error">{planning.error}</p>}
           {assistant && <div id="record-assistant" className="-mx-1"><AssistantEntry companyName={active?.company_name || ''} /></div>}
-          {fromWhatsApp && <div id="record-whatsapp" className="-mx-1"><WhatsAppEntry read={whatsappLink.read} /></div>}
+          {fromWhatsApp && <div id="record-whatsapp" className="-mx-1"><WhatsAppEntry read={whatsappLink.read} projectId={projectId} api={channelsSource} onChanged={whatsappLink.reload} /></div>}
           {who && scheduleLater && <div id="record-schedule" className="-mx-1"><SchedulePanel interview={who} /></div>}
         </Section>
 

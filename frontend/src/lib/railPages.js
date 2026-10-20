@@ -58,6 +58,10 @@ const NETWORK = (P) => [
   own('/network/relationships', key(P, 'Network', 'Relationships')),
   own('/network/introductions', key(P, 'Network', 'Introductions')),
   own('/network/organizations', key(P, 'Network', 'Organizations')),
+  // D771 (#2097): the workspace (`/network?mode=workspace`) picks its tab from `?tab=`, and its
+  // Relationships and Introductions tabs carry those boards' bands, so each tab is its board's.
+  alias('/network?tab=relationships', key(P, 'Network', 'Relationships'), 'The workspace’s Relationships tab is that board’s working tool.'),
+  alias('/network?tab=introductions', key(P, 'Network', 'Introductions'), 'The workspace’s Introductions tab is that board’s working tool.'),
 ];
 
 /**
