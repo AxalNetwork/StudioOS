@@ -27,6 +27,8 @@ import {
 } from '../services/publications';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refusalBody } from '../util/refusal';
+import { railFor } from '../util/railContext';
+import { getRail, listRail, proposeRail, decideRail } from '../services/railProposals';
 
 type AppCtx = Context<{ Bindings: Env }>;
 const r = new Hono<{ Bindings: Env }>();
@@ -144,6 +146,15 @@ function bucketFor(env: Env): R2Bucket | null {
   return env.PUBLICATIONS || env.FILES || null;
 }
 
+/** D780: the Super Admin's H20 option (`railOptions/superAdmin.js`), Eadwyn's draft of a publication's summary. */
+export const PUBLICATION_SUMMARY_OPTION = 'draft:publication-summary';
+
+/** The admin's own open summary proposal on this publication, newest first, or null. */
+async function openSummaryProposal(env: Env, adminId: number, id: number): Promise<{ uid: string; text: string } | null> {
+  const [p] = await listRail(env, adminId, { option: PUBLICATION_SUMMARY_OPTION, record: `publication:${id}`, status: 'proposed' });
+  return p ? { uid: p.uid, text: String(p.payload.text || '') } : null;
+}
+
 // ---------- POST /draft ----------
 r.post('/draft', async (c: AppCtx) => {
   const admin = await requireAdmin(c);
@@ -163,9 +174,15 @@ r.post('/draft', async (c: AppCtx) => {
     return c.json({ error: `audience must be one of ${ALLOWED_AUDIENCES.join(', ')}` }, 400);
 
   const aggregates = await loadSectionAggregates(c.env, section, filters);
+  const rail = railFor(c, { page: 'publications', option: PUBLICATION_SUMMARY_OPTION });
   const ai = await draftSummary(c.env, admin.id, {
-    title, section, audience, filters, aggregates,
+    title, section, audience, filters, aggregates, rail,
   });
+  // D780 (D720 §9): Eadwyn's summary is a proposal, never the publication's
+  // text. The row starts empty and the admin's Save puts the summary in. The
+  // fallback, built from the aggregates with no model, is not Eadwyn's, so it
+  // fills the blank as before.
+  const summaryText = ai.ok ? '' : ai.summary_text;
   // Per spec the public slug is finalized at PUBLISH time so a draft's
   // title can still be edited without burning a stale public URL. We
   // only need a column-satisfying placeholder here (the `slug` column
@@ -180,14 +197,23 @@ r.post('/draft', async (c: AppCtx) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'draft', ?)`,
   ).bind(
     draftSlug, title.slice(0, 200), subtitle, audience, section,
-    JSON.stringify(filters), ai.summary_text, admin.id,
+    JSON.stringify(filters), summaryText, admin.id,
   ).run();
 
   const id = Number((ins.meta as { last_row_id?: number })?.last_row_id || 0);
   const pub = await loadPub(c.env, id);
   if (!pub) return c.json({ error: 'create_failed' }, 500);
+  let proposal: { uid: string; text: string } | null = null;
+  if (ai.ok) {
+    const p = await proposeRail(c.env, {
+      userId: admin.id, page: rail.page, option: PUBLICATION_SUMMARY_OPTION, record: `publication:${id}`,
+      kind: 'draft', payload: { text: ai.summary_text.slice(0, 4000) }, model: ai.model ?? null, usageLogId: ai.usageLogId ?? null,
+    });
+    proposal = { uid: p.uid, text: String(p.payload.text || '') };
+  }
   return c.json({
     publication: shapePub(pub),
+    summary_proposal: proposal,
     aggregate_count: aggregates.length,
     ai_ok: ai.ok,
     ai_error: ai.error || null,
@@ -212,7 +238,7 @@ r.get('/', async (c: AppCtx) => {
 
 // ---------- GET /:id ----------
 r.get('/:id{[0-9]+}', async (c: AppCtx) => {
-  await requireAdmin(c);
+  const admin = await requireAdmin(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id') ?? '', 10);
   const pub = await loadPub(c.env, id);
@@ -240,6 +266,7 @@ r.get('/:id{[0-9]+}', async (c: AppCtx) => {
   }
   return c.json({
     publication: shapePub(pub),
+    summary_proposal: await openSummaryProposal(c.env, admin.id, pub.id),
     aggregates,
     period_label: periodLabel(aggregates),
     k_min: K_MIN,
@@ -270,9 +297,21 @@ r.put('/:id{[0-9]+}', async (c: AppCtx) => {
   if (typeof body.audience === 'string' && ALLOWED_AUDIENCES.includes(body.audience as never)) {
     set.push('audience = ?'); params.push(body.audience);
   }
+  // D780: a summary Save that began as Eadwyn's proposal names it. The Save is
+  // the write; the proposal is then kept as written (accepted) or as the admin
+  // changed it (edited), and only an edit marks the summary human-edited.
+  const fromUid = typeof body.summary_proposal_uid === 'string' ? body.summary_proposal_uid : '';
+  const from = fromUid ? await getRail(c.env, admin.id, fromUid) : null;
+  const usable = from && from.status === 'proposed' && from.rail_option === PUBLICATION_SUMMARY_OPTION
+    && from.record_ref === `publication:${id}` ? from : null;
+  if (fromUid && !usable) return c.json({ error: 'proposal_not_open' }, 409);
   if (typeof body.summary_text === 'string') {
-    set.push('summary_text = ?'); params.push(body.summary_text.slice(0, 4000));
-    if (body.summary_text !== pub.summary_text) set.push('summary_human_edited = 1');
+    const text = body.summary_text.slice(0, 4000);
+    set.push('summary_text = ?'); params.push(text);
+    const asProposed = usable && text.trim() === String(usable.payload.text || '').trim();
+    if (body.summary_text !== pub.summary_text && !asProposed) set.push('summary_human_edited = 1');
+  } else if (usable) {
+    return c.json({ error: 'summary_text_required' }, 400);
   }
   if (set.length === 0) return c.json({ publication: shapePub(pub) });
   set.push("updated_at = datetime('now')");
@@ -280,6 +319,12 @@ r.put('/:id{[0-9]+}', async (c: AppCtx) => {
   await c.env.DB.prepare(
     `UPDATE admin_publications SET ${set.join(', ')} WHERE id = ?`,
   ).bind(...params).run();
+  if (usable) {
+    const text = String(body.summary_text).slice(0, 4000);
+    await (text.trim() === String(usable.payload.text || '').trim()
+      ? decideRail(c.env, admin.id, usable.uid, 'accept')
+      : decideRail(c.env, admin.id, usable.uid, 'edit', { text }));
+  }
   const updated = await loadPub(c.env, id);
   // Lightweight audit on edit so we know who tweaked the summary.
   if (updated) {

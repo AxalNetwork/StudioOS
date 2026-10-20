@@ -6,9 +6,13 @@
  * against the code, both ways:
  *   · the boards are the canvas's S1–S39, in its order and under its names;
  *   · every board's files exist, and its rail file mounts a `<WorkerRail>`;
- *     a board with no rail yet says why, and really has none;
- *   · the boards this PR frames sit in `AdminBoardFrame` under their name,
- *     and that frame is a `RailFrame` with the viewer's tier;
+ *     a board with no rail says why, is in `NO_RAIL_ROUTES`, and really has
+ *     none;
+ *   · the boards with a page of their own sit in `AdminBoardFrame` under
+ *     their name, and that frame is a `RailFrame` with the viewer's tier;
+ *   · `/admin` draws that frame once around its tabs, each tab named for the
+ *     board D768's map gives it, for the Admin's boards and the Super Admin's
+ *     alike, and its Spin-Out Lab tab draws none (D317);
  *   · every option exists where it says, in the shape #2097 gives, and a
  *     control that runs no model is a quiet control with its reason;
  *   · every upload, draft or report control in a board's files is in one
@@ -20,8 +24,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import React from 'react';
 import { codeOnly } from './_codeOnly.mjs';
+import { mountContracts } from './_contracts_dom.mjs';
+import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { ADMIN_BOARDS, ADMIN_OPTIONS, ADMIN_PROFILE, ADMIN_QUIET_CONTROLS, railOptionsFor } from '../src/lib/railOptions/admin.js';
+import { SUPER_ADMIN_BOARDS } from '../src/lib/railOptions/superAdmin.js';
+import { NO_RAIL_ROUTES } from '../src/lib/railPages.js';
+import AdminPage, { tabBoard } from '../src/pages/AdminPage.jsx';
 
 const ROOT = process.cwd();
 const src = (p) => resolve(ROOT, 'frontend/src', p);
@@ -30,6 +40,7 @@ const CANVAS = JSON.parse(readFileSync(resolve(ROOT, 'design/incoming/airail-eve
 const KINDS = new Set(Object.values(CANVAS.task_kind));
 const HANDLERS = new Set(['form', 'upload', 'draft', 'transcribe']);
 const FRAME = 'pages/admin/AdminBoardFrame.jsx';
+const ADMIN_PAGE = 'pages/AdminPage.jsx';
 
 /** The `<WorkerRail …/>` tags in a file's code. */
 const railMounts = (file) => [...codeOnly(read(file)).matchAll(/<WorkerRail\b[^>]*?\/>/gs)].map((m) => m[0]);
@@ -68,10 +79,11 @@ test('every board\'s files exist, and its rail file mounts the rail', () => {
       assert.ok(existsSync(src(b.rail)), `${b.id}: ${b.rail} does not exist`);
       assert.ok(railMounts(b.rail).length > 0, `${b.id}: ${b.rail} mounts no <WorkerRail>`);
     } else {
-      assert.ok(typeof b.railPending === 'string' && b.railPending.length > 20, `${b.id} has no rail and says not why`);
+      assert.ok(typeof b.noRail === 'string' && b.noRail.length > 20, `${b.id} has no rail and says not why`);
+      assert.ok(NO_RAIL_ROUTES.some((n) => n.route === b.route && n.roles.includes('admin')), `${b.id}: ${b.route} is not in NO_RAIL_ROUTES`);
       for (const f of b.files) {
-        assert.equal(railMounts(f).length, 0, `${b.id} is listed as pending but ${f} mounts a rail`);
-        assert.equal(frames(f).length, 0, `${b.id} is listed as pending but ${f} draws the Admin frame`);
+        assert.equal(railMounts(f).length, 0, `${b.id} has no rail but ${f} mounts one`);
+        assert.equal(frames(f).length, 0, `${b.id} has no rail but ${f} draws the Admin frame`);
       }
     }
   }
@@ -89,8 +101,8 @@ test('a board on a shared route names the board that owns it, which the canvas l
   }
 });
 
-test('the boards this PR frames sit in AdminBoardFrame under their own name', () => {
-  const framed = ADMIN_BOARDS.filter((b) => b.rail === FRAME && !b.alias);
+test('the boards with a page of their own sit in AdminBoardFrame under their own name', () => {
+  const framed = ADMIN_BOARDS.filter((b) => b.rail === FRAME && !b.alias && !b.host);
   assert.deepEqual(framed.map((b) => b.id), ['S3', 'S4', 'S8', 'S9', 'S10', 'S11', 'S15', 'S16', 'S17', 'S18', 'S22', 'S23', 'S31', 'S39']);
   for (const b of framed) {
     for (const f of b.files) {
@@ -99,6 +111,59 @@ test('the boards this PR frames sit in AdminBoardFrame under their own name', ()
       assert.match(codeOnly(read(f)), /export default function \w+\(\) \{\s*return \(\s*<AdminBoardFrame\b/, `${f}: the frame is not the page's outermost element`);
     }
   }
+});
+
+test('/admin draws the frame once around its tabs, each named for its board in D768\'s map', () => {
+  // Every board on an /admin tab, of either profile, is hosted by AdminPage.
+  const tabbed = [...ADMIN_BOARDS.map((b) => ['admin', b]), ...SUPER_ADMIN_BOARDS.map((b) => ['super_admin', b])]
+    .filter(([, b]) => b.route.startsWith('/admin?tab='));
+  assert.deepEqual(tabbed.map(([, b]) => b.id), ['S2', 'S6', 'S7', 'S28', 'S29', 'S30', 'H11', 'H22', 'H23', 'H24', 'H27', 'H28', 'H29', 'H30']);
+  const code = codeOnly(read(ADMIN_PAGE));
+  for (const [role, b] of tabbed) {
+    assert.equal(b.host, ADMIN_PAGE, `${b.id} is not hosted by AdminPage`);
+    assert.equal(b.rail, FRAME, `${b.id} does not draw the Admin frame`);
+    const tab = new URLSearchParams(b.route.split('?')[1]).get('tab');
+    assert.match(code, new RegExp(`\\{ value: '${tab}',`), `${b.id}: ${tab} is not one of AdminPage's sections`);
+    assert.equal(tabBoard(tab, role), b.module || b.section, `${b.id}: /admin?tab=${tab} is not named for its board`);
+  }
+  // One frame, named from the tab, around the whole page unless a host locked it to one section.
+  assert.equal([...code.matchAll(/<AdminBoardFrame\b/g)].length, 1, 'AdminPage draws the frame more than once');
+  assert.match(code, /const board = section \? null : tabBoard\(tab, isSuperAdminUser\(user\) \? 'super_admin' : user\?\.role\);/,
+    'the board is not the open tab\'s, in the viewer\'s tier');
+  assert.match(code, /if \(!board\) return page;\s*return \(\s*<AdminBoardFrame workspace=\{board\} [^>]*data-testid="admin-tab-frame">\s*\{page\}\s*<\/AdminBoardFrame>/,
+    'the frame is not the outermost element around the whole page');
+  // Off-canvas tabs and the Lab retain D775's page-alone contract.
+  for (const role of ['admin', 'super_admin']) {
+    assert.equal(tabBoard('billing', role), null);
+    assert.equal(tabBoard('bank-accounts', role), null);
+    assert.equal(tabBoard('lab-applications', role), null);
+  }
+});
+
+test('on /admin a plain admin and a Super Admin each get the rail of their tier, named for the tab\'s board; the Lab tab gets none', async () => {
+  const fetchWas = globalThis.fetch;
+  globalThis.fetch = () => new Promise(() => {});
+  const CASES = [
+    [{ id: 902, role: 'admin', is_super_admin: 0 }, '/admin?tab=kyc', 'admin-board-rail', 'Identity checks'],
+    [{ id: 902, role: 'admin', is_super_admin: 0 }, '/admin', 'admin-board-rail', 'Users'],
+    [{ id: 901, role: 'admin', is_super_admin: 1 }, '/admin?tab=personas', 'hq-board-rail', 'Personas'],
+    [{ id: 902, role: 'admin', is_super_admin: 0 }, '/admin?tab=lab-applications', null, null],
+  ];
+  try {
+    for (const [user, url, rail, name] of CASES) {
+      const v = await mountContracts(React.createElement(AuthProvider, null, React.createElement(AdminPage)), url, user);
+      try {
+        await v.flush();
+        const tagged = (id) => v.nodes().filter((n) => v.props(n)?.['data-testid'] === id);
+        assert.equal(tagged('admin-tab-frame').length, rail ? 1 : 0, `${url}: wrong frame count`);
+        const rails = v.nodes().filter((n) => /^(admin|hq)-board-rail$/.test(v.props(n)?.['data-testid'] || ''));
+        if (!rail) { assert.equal(rails.length, 0, `${url}: the Spin-Out Lab tab draws a rail`); continue; }
+        assert.equal(rails.length, 1, `${url}: ${rails.length} rails`);
+        assert.equal(v.props(rails[0])['data-testid'], rail, `${url}: the rail is not the viewer's tier`);
+        assert.equal(v.props(rails[0])['aria-label'], `Eadwyn AI · ${name}`, `${url}: the rail is not named for its board`);
+      } finally { await v.unmount(); }
+    }
+  } finally { globalThis.fetch = fetchWas; }
 });
 
 test('the frame is a RailFrame whose rail takes the viewer\'s tier, and none outside it', () => {

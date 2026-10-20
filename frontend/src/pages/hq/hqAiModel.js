@@ -6,9 +6,6 @@
 import { ALL_MODELS, NEW_MODELS } from '../../ui/railModels';
 import { chargedPages, microUsd, whenLabel } from '../account/usageModel';
 
-// D769 PR 2 (#2192) retired `ALL_MODEL_IDS`; `ALL_MODELS` carries the same name → router id pairs, grouped.
-const ALL_MODEL_IDS = Object.fromEntries(ALL_MODELS.flatMap(([, rows]) => rows));
-
 /** How a run is settled, in the canvas's words; null for a mode the Worker did not send. */
 export function billingText(read) {
   if (!read || typeof read !== 'object') return null;
@@ -45,10 +42,11 @@ export function unitUsd(n) {
 
 /**
  * The New badge's model ids: the canvas's new models (`NEW_MODELS`) that the
- * rail's model list (`ALL_MODEL_IDS`) maps to a catalogue id. A new model the
- * list does not map yet gets no badge here rather than one matched by a guess.
+ * rail's model list (`ALL_MODELS`, `[name, id]` rows by group) maps to a
+ * router id. A new model the list does not map yet gets no badge here rather
+ * than one matched by a guess.
  */
-export const NEW_MODEL_IDS = new Set(Object.entries(ALL_MODEL_IDS).filter(([name, id]) => id && NEW_MODELS.has(name)).map(([, id]) => id));
+export const NEW_MODEL_IDS = new Set(ALL_MODELS.flatMap(([, rows]) => rows).filter(([name, id]) => id && NEW_MODELS.has(name)).map(([, id]) => id));
 
 /** Each offered model: its name, kind, price lines (cost and billed per unit), Paid only, New, and the pages naming it. */
 export function modelsView(read, newIds = NEW_MODEL_IDS) {

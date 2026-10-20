@@ -182,6 +182,37 @@ test('the copy path: the member\'s own pasted notice records the request, withou
   assert.equal(row(db, uid).status, 'given');
 });
 
+test('the notice to paste: the thread read carries it only while Axal cannot send it (no reply right, outside the window)', async () => {
+  const noticeOf = async (env: any, uid: string) => (await call(env, ME, 'GET', `/threads/${uid}`)).body.consent.notice_text;
+  const paste = TELEGRAM_COPY.consentNotice('Sam', null, URL_V1);
+  for (const [why, setup, expected] of [
+    ['Axal may send it', () => {}, null],
+    ['no reply right', (db: any) => db.exec(`UPDATE telegram_business_connections SET can_reply = 0`), paste],
+    ['the bot switched off', (db: any) => db.exec(`UPDATE telegram_business_connections SET is_enabled = 0`), paste],
+    ['outside the window', (db: any) => db.exec(`UPDATE channel_threads SET last_inbound_at = datetime('now', '-25 hours')`), paste],
+    ['an ignored chat', (db: any) => { db.exec(`UPDATE telegram_business_connections SET can_reply = 0`); db.exec(`UPDATE channel_threads SET status = 'ignored'`); }, null],
+  ] as const) {
+    const { env, db } = await seeded();
+    const uid = await chat(env);
+    (setup as (db: any) => void)(db);
+    assert.equal(await noticeOf(env, uid), expected, why);
+  }
+  // The refusal to send carries it too, so the member can paste at once; once YES is given there is none.
+  const { env, db } = await seeded();
+  const uid = await chat(env);
+  db.exec(`UPDATE telegram_business_connections SET can_reply = 0`);
+  const f = telegram();
+  try {
+    const r = await call(env, ME, 'POST', `/threads/${uid}/consent-request`);
+    assert.deepEqual([r.status, r.body.code, r.body.consent?.notice_text], [409, 'no_reply_right', paste]);
+  } finally { f.restore(); }
+  await hook(env, msg({ from: OWNER, text: paste, id: 5100 }));
+  assert.equal(await noticeOf(env, uid), paste, 'asked, still waiting: the notice may be pasted again');
+  await hook(env, msg({ text: 'YES', replyTo: 5100 }));
+  assert.equal(row(db, uid).status, 'given');
+  assert.equal(await noticeOf(env, uid), null);
+});
+
 // ---------------------------------------------------------------------------
 // The answer
 // ---------------------------------------------------------------------------

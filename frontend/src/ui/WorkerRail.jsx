@@ -789,6 +789,7 @@ export default function WorkerRail({
       className={`fwr ${className}`.trim()}
       aria-label={`Eadwyn AI · ${workspace}`}
       data-collapsed={collapsed ? 'true' : 'false'}
+      {...(railPage?.page ? { 'data-page-key': railPage.page } : {})}
       data-testid={testId}
       style={accentStyle}
     >

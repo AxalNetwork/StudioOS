@@ -31,6 +31,7 @@ import {
   Package, Ticket, CheckCircle2, AlertTriangle, Loader2, X, BadgeCheck, Receipt, Plus,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { AI_DRAW_LINE } from '../lib/aiTokens';
 import { useAuth } from '../hooks/useAuthSync';
 import { usePhoneWidth } from '../ui';
 import PricingPhone, { usePricingReads } from './account/PricingPhone';
@@ -541,6 +542,12 @@ export default function ProductsPage() {
           </div>
         </section>
       )}
+
+      {/* D781 (#2106): how AI is priced, above the packs that pay for it. */}
+      <section id="ai-pricing" className="space-y-1" data-testid="section-ai-pricing">
+        <h2 className="text-[19px] font-bold tracking-[-.01em] text-gray-900 dark:text-gray-100">How AI is priced</h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="text-ai-draw-line">{AI_DRAW_LINE}</p>
+      </section>
 
       <TokenPacksSection onPacksRead={setTokenPacks} />
 

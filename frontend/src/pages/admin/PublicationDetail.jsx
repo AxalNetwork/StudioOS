@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Save, FileDown, Image as ImageIcon, Table2, Send, ExternalLink, Loader2 } from 'lucide-react';
 import { publications } from '../../lib/api';
+import { railProposalsApi } from '../../lib/api/railProposals.js';
 import { useToast } from '../../components/useToast';
 import ToastMessage from '../../components/ToastMessage';
 import PublicationsFrame from './PublicationsFrame';
@@ -21,6 +22,12 @@ export default function PublicationDetail() {
   const [rendering, setRendering] = useState(null);
   const [publishing, setPublishing] = useState(false);
   const [lastRender, setLastRender] = useState(null);
+  // D780 (D720 §9): Eadwyn's draft of the summary is a proposal, not the
+  // summary. "Put it in the summary" fills the open editor only; the admin's
+  // Save writes it and names the proposal, so the Worker keeps it as accepted
+  // or edited. Discard throws it away and writes nothing else.
+  const [proposal, setProposal] = useState(null);
+  const [fromProposal, setFromProposal] = useState(null);
   // Persisted last-render (from admin_audit_log) — survives reloads.
   const persistedLast = data?.last_render || null;
   // D775 (#2101): this publication is the rail's record.
@@ -32,6 +39,8 @@ export default function PublicationDetail() {
       const res = await publications.get(id);
       setData(res);
       setSummary(res.publication.summary_text || '');
+      setProposal(res.summary_proposal || null);
+      setFromProposal(null);
       setTitle(res.publication.title || '');
       setSubtitle(res.publication.subtitle || '');
     } catch (e) {
@@ -44,12 +53,33 @@ export default function PublicationDetail() {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await publications.update(id, { title, subtitle, summary_text: summary });
+      const res = await publications.update(id, {
+        title, subtitle, summary_text: summary,
+        ...(fromProposal ? { summary_proposal_uid: fromProposal } : {}),
+      });
       setData((d) => ({ ...d, publication: res.publication }));
+      if (fromProposal) { setProposal(null); setFromProposal(null); }
       toast('Saved', 'success');
     } catch (e) {
       toast(e.message || 'Save failed', 'error');
     } finally { setSaving(false); }
+  };
+
+  const useProposal = () => {
+    if (!proposal) return;
+    setSummary(proposal.text);
+    setFromProposal(proposal.uid);
+  };
+
+  const discardProposal = async () => {
+    if (!proposal) return;
+    try {
+      await railProposalsApi.decide(proposal.uid, 'discard');
+      if (fromProposal === proposal.uid) setFromProposal(null);
+      setProposal(null);
+    } catch (e) {
+      toast(e.message || 'Could not discard the draft', 'error');
+    }
   };
 
   const render = async (format) => {
@@ -129,6 +159,28 @@ export default function PublicationDetail() {
         <h2 className="text-sm font-semibold mb-3">Headline summary {p.summary_human_edited && (
           <span className="ml-2 text-xs text-emerald-600">(human-edited)</span>
         )}</h2>
+        {!published && proposal && (
+          <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-900 dark:bg-violet-950/25" data-testid="publication-summary-proposal">
+            <p className="text-xs font-semibold text-violet-800 dark:text-violet-300">Eadwyn&rsquo;s draft · not saved</p>
+            <pre className="mt-2 whitespace-pre-wrap text-sm text-gray-800 dark:text-gray-200">{proposal.text}</pre>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button" onClick={useProposal} disabled={fromProposal === proposal.uid}
+                className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-60"
+                data-testid="action-use-summary-proposal"
+              >
+                {fromProposal === proposal.uid ? 'In the summary · Save to keep it' : 'Put it in the summary'}
+              </button>
+              <button
+                type="button" onClick={discardProposal}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"
+                data-testid="action-discard-summary-proposal"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
         {!published && (
           <>
             <input

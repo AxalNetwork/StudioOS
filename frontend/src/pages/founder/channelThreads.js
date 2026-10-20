@@ -73,6 +73,10 @@ export function threadEngineLine(t) {
   return `Summary drafted · ${n} ${n === 1 ? 'suggestion' : 'suggestions'}`;
 }
 
+/** D756 §1.12: a note's kind from the thread read's `media`, in words. Anything else is a voice note. */
+const NOTE_KIND = { voice: 'Voice note', audio: 'Audio file', video_note: 'Round video' };
+export const noteKind = (m) => NOTE_KIND[m?.media] || 'Voice note';
+
 /**
  * D754 §5 (#1980): WhatsApp keeps a voice note's media for 7 days, so a
  * waiting WhatsApp chat says "Add this chat to an interview by <date> to keep
@@ -99,14 +103,15 @@ export function keepByDay(iso) {
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
-/** One message in the thread view: who wrote it, and a voice note said as one. */
+/** One message in the thread view: who wrote it, and a note said as the kind it is. */
 export function messageView(m, contact) {
   const failure = m?.kind === 'voice' ? voiceFailure(m) : null;
+  const note = noteKind(m);
   return {
     uid: m?.uid,
     mine: m?.side === 'me',
     who: m?.side === 'me' ? 'You' : (str(contact) || 'Contact'),
-    label: m?.kind !== 'voice' ? '' : failure ? 'Voice note' : m?.awaiting_transcription === true ? 'Voice note, transcribed when you add this chat to an interview' : 'Voice note (transcribed)',
+    label: m?.kind !== 'voice' ? '' : failure ? note : m?.awaiting_transcription === true ? `${note}, transcribed when you add this chat to an interview` : `${note} (transcribed)`,
     text: typeof m?.text === 'string' && m.text ? m.text : null,
     failure,
   };

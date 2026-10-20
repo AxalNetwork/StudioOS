@@ -423,6 +423,15 @@ export interface VoiceJobNote {
 
 const VOICE_MEDIA: ReadonlySet<string> = new Set<VoiceMedia>(['voice', 'audio', 'video_note']);
 
+/** A waiting note's file ref, decrypted; null when it cannot be read. It never leaves the Worker. */
+async function voiceRef(env: Env, uid: string, enc: string): Promise<{ file?: unknown; mime?: unknown; media?: unknown; size?: unknown } | null> {
+  try { return JSON.parse((await decryptColumn(env, MSG_TABLE, 'voice_ref_enc', uid, enc)) ?? 'null'); } catch { return null; }
+}
+
+/** The note's kind; a note stored before #1896 recorded one reads as a voice note. */
+const mediaOf = (ref: { media?: unknown } | null): VoiceMedia =>
+  typeof ref?.media === 'string' && VOICE_MEDIA.has(ref.media) ? ref.media as VoiceMedia : 'voice';
+
 /**
  * The note a voice job was queued for, while that job still holds it — or
  * null: transcribed already, deleted at the source, ignored, purged, or held
@@ -436,13 +445,12 @@ export async function voiceNoteForJob(env: Env, messageUid: string, job: string)
   ).bind(messageUid, job).first<{ id: number; uid: string; direction: 'in' | 'out'; voice_ref_enc: string; duration_sec: number | null; sent_at: string; thread_id: number }>();
   if (!row) return null;
   const thread = await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(row.thread_id).first<ThreadRow>();
-  let ref: { file?: unknown; mime?: unknown; media?: unknown; size?: unknown } | null = null;
-  try { ref = JSON.parse((await decryptColumn(env, MSG_TABLE, 'voice_ref_enc', row.uid, row.voice_ref_enc)) ?? 'null'); } catch { ref = null; }
+  const ref = await voiceRef(env, row.uid, row.voice_ref_enc);
   if (!thread || typeof ref?.file !== 'string' || !ref.file) return null;
   return {
     id: Number(row.id), uid: row.uid, side: row.direction === 'out' ? 'me' : 'contact', file: ref.file,
     mime: typeof ref.mime === 'string' ? ref.mime : null,
-    media: typeof ref.media === 'string' && VOICE_MEDIA.has(ref.media) ? ref.media as VoiceMedia : 'voice',
+    media: mediaOf(ref),
     size: Number.isSafeInteger(ref.size) && Number(ref.size) >= 0 ? Number(ref.size) : null,
     durationSec: row.duration_sec, sentAt: row.sent_at, thread,
   };
@@ -941,6 +949,8 @@ export interface MessageView {
    */
   awaiting_transcription: boolean;
   duration_sec: number | null;
+  /** D756 §1.12: a waiting note's kind (a voice note, an audio file, a round video); null on text. Only the kind leaves the ref. */
+  media: VoiceMedia | null;
 }
 
 /** One conversation and, while it is pending, its messages (decrypted for the member only). */
@@ -970,6 +980,7 @@ export async function readThread(env: Env, userId: number, threadUid: string): P
       sent_at: r.sent_at,
       awaiting_transcription: waiting,
       duration_sec: r.duration_sec == null ? null : Number(r.duration_sec),
+      media: r.kind !== 'voice' ? null : waiting ? mediaOf(await voiceRef(env, r.uid, r.voice_ref_enc!)) : 'voice',
     };
   }));
   return { thread: await view(env, { ...t, ...digest, interviewee_name: interview?.interviewee_name ?? null }, rights[t.provider]), messages };

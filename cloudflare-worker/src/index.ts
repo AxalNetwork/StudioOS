@@ -75,6 +75,7 @@ import { investorProfile } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
 import aiBudgetRoutes from './routes/ai_budget';
+import aiRailProposalsRoutes from './routes/ai_rail_proposals';
 import { runTotpRemediation } from './services/totpRemediation';
 import { writeDailySnapshot } from './services/analyticsReports';
 // Task #5 (IE) — Backup + DR. Daily KV snapshot to R2.
@@ -856,6 +857,7 @@ app.route('/api/assistant', assistantRoutes);
 // Mounted OUTSIDE the /api/assistant/* gate above: that middleware guards a
 // dev-only Anthropic path, and this endpoint reports on the production
 // Workers AI router, which is a different thing that happens to sit nearby.
+app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
 app.route('/api/advisory', advisory);

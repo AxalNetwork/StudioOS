@@ -285,4 +285,7 @@ test('the shell mounts the provider with its shell role, and Validate\'s options
   const rail = readFileSync('frontend/src/ui/WorkerRail.jsx', 'utf8');
   assert.doesNotMatch(rail, /railPages/);
   assert.match(rail, /const railPage = useRailPage\(\);/);
+  // D781 reads the same provider value; it does not add another hook or resolve the map.
+  assert.deepEqual(rail.match(/useRailPage\(\)[^;]*;/g), ['useRailPage();']);
+  assert.match(rail, /\{\.\.\.\(railPage\?\.page \? \{ 'data-page-key': railPage\.page \} : \{\}\)\}/);
 });

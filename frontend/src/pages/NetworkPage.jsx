@@ -7,6 +7,8 @@ import { RelationshipsPanel } from './RelationshipsPage';
 import IntroductionsPanel from './IntroductionsPanel';
 import { AdvisorWorkspaceShell } from './advisor/AdvisorWorkspaceShell';
 import PartnerWorkspaceShell from './partner/PartnerWorkspaceShell';
+import RailFrame from '../ui/RailFrame';
+import { WorkerRail } from '../ui';
 
 // Task #1 — unified Network page. Merges the former Contacts inbox and the
 // Network/Relationships surface into one page with tabs selected via the
@@ -189,6 +191,11 @@ export default function NetworkPage({ embedded = false, zoneActions = null, zone
         {content}
       </AdvisorWorkspaceShell>
     );
+  }
+  // Query-tab and notification links mount this tool directly. Canonical
+  // workspace routes embed it inside a shell that already owns the rail.
+  if (role === 'founder' && !embedded) {
+    return <RailFrame rail={<WorkerRail workspace="Network" role="founder" />}>{content}</RailFrame>;
   }
   return content;
 }
