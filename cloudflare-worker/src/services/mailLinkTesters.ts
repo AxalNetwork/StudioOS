@@ -41,18 +41,6 @@ export async function testerDeliveryBlocked(env: Env, email: string): Promise<bo
   return !!await env.DB.prepare("SELECT id FROM newsletter_subscribers WHERE email = ? AND status = 'unsubscribed'").bind(email).first();
 }
 
-export async function testerCount(env: Env, programme: string): Promise<number> {
-  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM testing_applications a
-    JOIN testing_programmes p ON p.id = a.programme_id JOIN users u ON u.id = a.user_id
-    WHERE p.uid = ? AND p.status IN ('open', 'testing', 'closed')
-      AND a.status = 'picked' AND a.consent_email_at IS NOT NULL AND a.mail_enabled = 1 AND u.is_active = 1
-      AND u.email IS NOT NULL AND trim(u.email) <> ''
-      AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email = lower(trim(u.email)))
-      AND NOT EXISTS (SELECT 1 FROM newsletter_subscribers s WHERE s.email = lower(trim(u.email)) AND s.status = 'unsubscribed')
-  `).bind(programme).first<{ n: number }>();
-  if (!row) throw new Error('tester count unreadable');
-  return row.n;
-}
 export async function testerRecipients(env: Env, programme: string, after: number) {
   const { results } = await env.DB.prepare(`SELECT a.id, a.uid, a.programme_id, p.uid AS programme_uid, p.product_name,
       a.user_id, lower(trim(u.email)) AS email, u.name, x.organization AS company, a.status,

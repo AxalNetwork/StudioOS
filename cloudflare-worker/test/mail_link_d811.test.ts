@@ -451,7 +451,7 @@ test('D811 tester paging is 500 rows and programme-bound; names are escaped in e
   h.db.prepare('UPDATE testing_programmes SET product_name=? WHERE id=1').run('<script>unsafe</script>');
   const html = await h.raw(local(one.recipients[0].preferences_url),{headers:{Accept:'text/html'}});
   assert.equal(html.status,200); assert.equal(html.headers.get('Cache-Control'),'no-store');
-  const markup = await html.text(); assert.doesNotMatch(markup, /<script>/); assert.match(markup,/&lt;script&gt;/);
+  const markup = await html.text(); assert.doesNotMatch(markup, /<script\b/i); assert.match(markup,/&lt;script&gt;/);
   assert.match(markup, /name="enabled" value="false"/);
   const form = await h.raw(local(one.recipients[0].preferences_url),{ method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'text/html'},body:'enabled=false' });
   assert.equal(form.status,200); assert.match(await form.text(), /Unsubscribed/);
@@ -558,5 +558,43 @@ test('D811 event guests without a separate registration email match their own ac
   assert.deepEqual(changed.recipients.map((r:any)=>r.email),['person1@example.test']);
   const changedList=await (await h.signed(`${prefix}/audiences`)).json() as any;
   assert.equal(changedList.items.find((a:any)=>a.key==='event:1').count,1);
+  h.db.close();
+});
+
+test('D811 review: one-click opt-outs survive mailbox bursts and KV outages; preferences keep their limit', async t => {
+  const clock=Date.now();t.mock.method(Date,'now',()=>clock);
+  const h=harness();seedTesters(h);
+  const r=(await (await h.signed(testerPath)).json() as any).recipients[0];
+  const window=Math.floor(clock/60000);
+  for (const name of ['testing_mail_public','ip','writes']) h.kv.set(`rl:i:unknown:${name}:${window}`,'999999');
+  assert.equal((await h.raw(local(r.one_click_url),{method:'POST'})).status,200);
+  assert.equal((await h.raw(local(r.preferences_url))).status,429);
+  h.env.RATE_LIMITS.get=async()=>{throw new Error('KV unavailable');};
+  assert.equal((await h.raw(local(r.one_click_url),{method:'PUT'})).status,200);
+  assert.equal((await h.raw('/api/testing/mail/unsubscribe?token=forged',{method:'POST'})).status,403);
+  assert.equal((await h.raw(local(r.unsubscribe_url))).status,503);
+  assert.equal(h.db.prepare('SELECT mail_enabled FROM testing_applications').get()!.mail_enabled,0);
+  h.db.close();
+});
+
+test('D811 review: listing a large catalogue uses a bounded query count and batches read logs', async () => {
+  const h=harness();seedTesters(h);
+  for(let i=1;i<=1100;i++) h.db.prepare('INSERT INTO events(id,slug,title,starts_at) VALUES(?,?,?,?)').run(i,`event-${i}`,`Event ${i}`,'2026-10-20');
+  let queries=0;const real=h.env.DB.prepare.bind(h.env.DB);
+  h.env.DB.prepare=(sql:string)=>{queries++;return real(sql);};
+  const response=await h.signed(`${prefix}/audiences`);
+  assert.equal(response.status,200);
+  const body=await response.json() as any;
+  assert.ok(body.items.length>1100,'the fix preserves the full catalogue');
+  assert.equal(body.items.find((a:any)=>a.key===`testers:${P1}`).count,1);
+  assert.ok(queries<=12,`catalogue query budget exceeded: ${queries}`);
+  assert.equal(h.db.prepare('SELECT COUNT(*) n FROM mail_link_reads').get()!.n,body.items.length);
+  h.db.close();
+});
+
+test('D811 review: feedback batch audit lookup uses its claim index', () => {
+  const h=harness();
+  const plan=h.db.prepare('EXPLAIN QUERY PLAN SELECT uid FROM mail_link_events WHERE claim_uid=?').all('batch');
+  assert.ok(plan.some(r=>/USING (?:COVERING )?INDEX idx_mail_link_events_claim/.test(String(r.detail))));
   h.db.close();
 });

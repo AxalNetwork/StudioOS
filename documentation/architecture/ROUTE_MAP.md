@@ -1433,7 +1433,7 @@ failures are 503. Bodies are bounded at 256 KiB.
 
 D811 public programme links use `/api/testing/mail`, a separate signed-token
 surface before browser/session/CSRF handling, with `testing_mail_public`
-(30/minute/IP, fails closed). Production needs `NEWSLETTER_TOKEN_KEY`; missing
+(30/minute/IP, fails closed). Token-authorized POST/PUT unsubscribe writes bypass IP limits so mailbox bursts and KV outages cannot prevent opt-out. Production needs `NEWSLETTER_TOKEN_KEY`; missing
 key is 503. Invalid/retired/forged token is 403. Token authority is bound to the
 application, programme, version and current account email, with a separate HMAC
 domain from newsletter tokens. Responses are no-store/no-referrer; no email

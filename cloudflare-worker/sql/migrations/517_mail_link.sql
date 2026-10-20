@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS mail_link_events (
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE INDEX IF NOT EXISTS idx_mail_link_events_claim ON mail_link_events(claim_uid);
+
 -- Owner's option A: programme consent is independent of newsletters.
 -- An opted-out programme keeps its consent history; fresh opt-in retires links.
 ALTER TABLE testing_applications ADD COLUMN mail_enabled INTEGER NOT NULL DEFAULT 1 CHECK (mail_enabled IN (0, 1));

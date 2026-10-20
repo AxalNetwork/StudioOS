@@ -1,6 +1,6 @@
 /** D811. Registration is not newsletter consent: every export starts with D810 opt-in. */
 import type { Env } from '../types';
-import { testerCount, testerRecipients } from './mailLinkTesters';
+import { testerRecipients } from './mailLinkTesters';
 import { NEWSLETTER_TOPICS, preferencesToken, tokenKey } from './newsletter';
 
 export type Audience = { key: string; label: string; topic: string | null; programme?: string; role: string | null; event: number | null };
@@ -27,23 +27,6 @@ export function parseAudience(key: string): Audience | null {
 
 type RecipientRow = { id: number; uid: string; token_version: number; email: string; name: string | null; company: string | null };
 
-/** The count and page predicates intentionally match. No missing store is converted to zero. */
-export async function audienceCount(env: Env, a: Audience): Promise<number> {
-  if (a.programme) return testerCount(env, a.programme);
-  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM newsletter_subscribers s
-    JOIN newsletter_subscriber_topics t ON t.subscriber_id = s.id AND t.topic = ? AND t.enabled = 1
-    LEFT JOIN users u ON u.id = s.user_id AND lower(trim(u.email)) = s.email AND u.is_active = 1
-    WHERE s.status = 'confirmed' AND s.consented_at IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email = s.email)
-      AND (s.user_id IS NULL OR u.id IS NOT NULL)
-      AND (? IS NULL OR u.role = ? OR (? = 'investors_lps' AND u.role IN ('investor', 'lp')))
-      AND (? IS NULL OR EXISTS (SELECT 1 FROM event_registrations r LEFT JOIN users guest ON guest.id = r.user_id WHERE r.event_id = ?
-        AND r.status IN ('registered', 'confirmed', 'attended') AND lower(trim(COALESCE(r.email, guest.email))) = s.email))
-  `).bind(a.topic, a.role, a.role, a.role, a.event, a.event).first<{ n: number }>();
-  if (!row) throw new Error('count unreadable');
-  return row.n;
-}
-
 export async function audienceList(env: Env) {
   const topics = await env.DB.prepare('SELECT key, label FROM newsletter_topics ORDER BY sort_order, key').all<{ key: string; label: string }>();
   const events = await env.DB.prepare('SELECT id, title FROM events ORDER BY id').all<{ id: number; title: string }>();
@@ -64,9 +47,49 @@ export async function audienceList(env: Env) {
     const audience = parseAudience(`testers:${programme.uid}`);
     if (audience) audiences.push({ ...audience, label: programme.product_name });
   }
-  const out = [];
-  for (const a of audiences) out.push({ key: a.key, label: a.label, count: await audienceCount(env, a) });
-  return out;
+  // Four grouped counts regardless of catalogue size. Keep these eligibility
+  // predicates aligned with recipient pages; failed reads propagate as unreadable.
+  const [topicCounts, memberCounts, eventCounts, testerCounts] = await Promise.all([
+    env.DB.prepare(`SELECT t.topic, COUNT(*) AS n FROM newsletter_subscribers s
+    JOIN newsletter_subscriber_topics t ON t.subscriber_id = s.id AND t.enabled = 1
+    LEFT JOIN users u ON u.id = s.user_id AND lower(trim(u.email)) = s.email AND u.is_active = 1
+    WHERE s.status = 'confirmed' AND s.consented_at IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email = s.email)
+      AND (s.user_id IS NULL OR u.id IS NOT NULL)
+      AND (t.topic <> 'partner_letter' OR u.role IN ('investor', 'lp')) GROUP BY t.topic`).all<{ topic: string; n: number }>(),
+    env.DB.prepare(`SELECT t.topic, u.role, COUNT(*) AS n FROM newsletter_subscribers s
+    JOIN newsletter_subscriber_topics t ON t.subscriber_id = s.id AND t.enabled = 1
+    LEFT JOIN users u ON u.id = s.user_id AND lower(trim(u.email)) = s.email AND u.is_active = 1
+    WHERE s.status = 'confirmed' AND s.consented_at IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email = s.email)
+      AND (s.user_id IS NULL OR u.id IS NOT NULL)
+      AND (t.topic <> 'partner_letter' OR u.role IN ('investor', 'lp'))
+      AND u.id IS NOT NULL GROUP BY t.topic, u.role`).all<{ topic: string; role: string; n: number }>(),
+    env.DB.prepare(`SELECT r.event_id, COUNT(DISTINCT s.id) AS n
+      FROM event_registrations r LEFT JOIN users guest ON guest.id = r.user_id
+      JOIN newsletter_subscribers s ON lower(trim(COALESCE(r.email, guest.email))) = s.email
+      JOIN newsletter_subscriber_topics t ON t.subscriber_id = s.id AND t.topic = 'events' AND t.enabled = 1
+      LEFT JOIN users u ON u.id = s.user_id AND lower(trim(u.email)) = s.email AND u.is_active = 1
+      WHERE r.status IN ('registered', 'confirmed', 'attended') AND s.status = 'confirmed'
+        AND s.consented_at IS NOT NULL AND (s.user_id IS NULL OR u.id IS NOT NULL)
+        AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email = s.email)
+      GROUP BY r.event_id`).all<{ event_id: number; n: number }>(),
+    env.DB.prepare(`SELECT p.uid, COUNT(*) AS n FROM testing_applications a
+      JOIN testing_programmes p ON p.id = a.programme_id JOIN users u ON u.id = a.user_id
+      WHERE p.status IN ('open', 'testing', 'closed')
+        AND a.status = 'picked' AND a.consent_email_at IS NOT NULL AND a.mail_enabled = 1 AND u.is_active = 1
+        AND u.email IS NOT NULL AND trim(u.email) <> ''
+        AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email = lower(trim(u.email)))
+        AND NOT EXISTS (SELECT 1 FROM newsletter_subscribers s WHERE s.email = lower(trim(u.email)) AND s.status = 'unsubscribed')
+      GROUP BY p.uid`).all<{ uid: string; n: number }>(),
+  ]);
+  const counts = new Map<string, number>();
+  for (const row of topicCounts.results || []) counts.set(`topic:${row.topic}`, row.n);
+  for (const row of memberCounts.results || []) counts.set(`members:${row.role}:${row.topic}`, row.n);
+  for (const row of eventCounts.results || []) counts.set(`event:${row.event_id}`, row.n);
+  for (const row of testerCounts.results || []) counts.set(`testers:${row.uid}`, row.n);
+  counts.set('investors_lps', counts.get('topic:partner_letter') ?? 0);
+  return audiences.map(a => ({ key: a.key, label: a.label, count: counts.get(a.key) ?? 0 }));
 }
 
 /** An opaque, audience-bound keyset cursor. A signature on the request binds its use. */

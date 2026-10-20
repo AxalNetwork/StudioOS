@@ -21,9 +21,9 @@ app.onError((_error, c) => c.json({ error: 'mail_link_unreadable', detail: 'The 
 app.get('/health', c => c.json({ ok: true, version: '1' }));
 app.get('/audiences', async c => {
   const items = await audienceList(c.env);
-  if (items.length) await c.env.DB.batch(items.map(a => c.env.DB.prepare(
-    'INSERT INTO mail_link_reads (audience, count) VALUES (?, ?)',
-  ).bind(a.key, a.count)));
+  if (items.length) await c.env.DB.prepare(`INSERT INTO mail_link_reads (audience, count)
+    SELECT json_extract(value, '$.key'), json_extract(value, '$.count') FROM json_each(?)`
+  ).bind(JSON.stringify(items.map(({ key, count }) => ({ key, count })))).run();
   return c.json({ items });
 });
 app.get('/audiences/:key/recipients', async c => {

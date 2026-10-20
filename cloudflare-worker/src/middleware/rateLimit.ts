@@ -498,6 +498,9 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
     if (RATE_LIMIT_EXEMPT.some(p => path === p || path.startsWith(p + '/'))) return next();
 
     const method = c.req.method;
+    // RFC 8058 mailbox bursts and KV outages must not prevent signed opt-outs.
+    // The route still verifies the programme-scoped token before any write.
+    if (path === '/api/testing/mail/unsubscribe' && (method === 'POST' || method === 'PUT')) return next();
     const env = c.env;
     const ctx = c.executionCtx as any;
 
