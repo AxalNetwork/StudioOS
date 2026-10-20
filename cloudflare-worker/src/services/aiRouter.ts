@@ -369,6 +369,10 @@ export interface RunResult {
   attempts?: AttemptRecord[];
   // D763: what the guard decided. Absent on a run the guard skips.
   guard?: GuardReport;
+  // D777 (#2102): the ai_usage_logs row this answer was recorded under, so what
+  // it produced can name its run. Set on an answered run; null when the row
+  // could not be written; absent on a refusal and on a stream, which records later.
+  usageLogId?: number | null;
 }
 
 /**
@@ -1765,13 +1769,14 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     const hit = await cacheHit();
     if (hit) {
       const usage = cachedUsage();
-      await recordUsage(env, opts, usage, null);
+      const usageLogId = await recordUsage(env, opts, usage, null);
       return {
         ok: true,
         output: hit.output ?? '',
         embedding: hit.embedding,
         ...(hit.ranking ? { ranking: hit.ranking } : {}),
         usage,
+        usageLogId,
       };
     }
   }
@@ -1943,7 +1948,7 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
       await writeGuardRows(id);
       const report = guardReport(inputAction, 'none', guardDecisions, guardCalls.length);
       if (!settled) return { ok: false, refusal: 'misconfigured', error: 'Unreadable: the AI allowance and top-up draw could not be recorded.', usage, guard: report };
-      return { ok: true, output: hit.output ?? '', embedding: hit.embedding, ...(hit.ranking ? { ranking: hit.ranking } : {}), usage, guard: report };
+      return { ok: true, output: hit.output ?? '', embedding: hit.embedding, ...(hit.ranking ? { ranking: hit.ranking } : {}), usage, guard: report, usageLogId: id };
     }
   }
 
@@ -2194,10 +2199,12 @@ export async function run(env: Env, input: RunOptions): Promise<RunResult> {
     }
   }
 
-  await writeGuardRows(await recordUsage(env, opts, usage, null, charge));
+  const usageLogId = await recordUsage(env, opts, usage, null, charge);
+  await writeGuardRows(usageLogId);
 
   return {
     ok: true,
+    usageLogId,
     output: attempt.output,
     embedding: attempt.embedding,
     ...(attempt.ranking ? { ranking: attempt.ranking } : {}),
