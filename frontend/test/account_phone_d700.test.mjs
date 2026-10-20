@@ -460,7 +460,8 @@ test('10 (part). every phone bar this PR draws passes PhoneBar an eadwynLabel eq
   }
   // The owner requested no rail on Perks or Learning home.
   const page = read('frontend/src/pages/SettingsPage.jsx');
-  assert.match(page, /<RailFrame\s+rail=\{safeActive !== 'connectors' && \(\s*<WorkerRail\s+workspace="Account"/);
+  assert.match(page, /<RailFrame>/);
+  assert.doesNotMatch(page, /<WorkerRail\b/);
 });
 
 // --- 11. No read gains a scope -----------------------------------------------

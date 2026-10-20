@@ -412,8 +412,11 @@ export async function railRenderer() {
         keys: rails.map((a) => a.getAttribute('data-page-key')),
         landed,
         expected: pageKeyFor(at?.pathname ?? '', profile, { search: at?.search ?? '', hash: at?.hash ?? '' }),
-        expectedRails: NO_RAIL_ROUTES.find((n) => n.route === (at?.pathname ?? '').replace(/\/$/, '')
-          && n.roles.includes(MEMBERS[profile]?.role))?.railCount ?? 1,
+        expectedRails: NO_RAIL_ROUTES.find((n) => {
+          const path = (at?.pathname ?? '').replace(/\/$/, '');
+          return (n.route === path || (n.prefix && path.startsWith(`${n.route}/`)))
+            && n.roles.includes(MEMBERS[profile]?.role);
+        })?.railCount ?? 1,
       };
     } finally {
       await act(async () => root.unmount());
