@@ -166,6 +166,24 @@ export async function markSubscriptionAmountCanceled(env: Env, subscriptionId: s
 // The allowance
 // ---------------------------------------------------------------------------
 
+/**
+ * D816 (#2262): how often the member's plan in `family` is charged, from the
+ * charge the webhook recorded (`month` or `year`), or null when no live row
+ * is recorded (a free member, one who subscribed before migration 505, or a
+ * missing table). A canceled subscription answers nothing.
+ */
+export async function heldInterval(env: Env, userId: number, family: string): Promise<string | null> {
+  try {
+    const row = await env.DB.prepare(`SELECT interval FROM member_subscription_amounts
+        WHERE user_id = ? AND plan_family = ? AND status <> 'canceled' ORDER BY updated_at DESC, id DESC LIMIT 1`)
+      .bind(userId, family).first<{ interval: string | null }>();
+    return row?.interval ?? null;
+  } catch (e) {
+    if (missingTable(e, 'member_subscription_amounts')) return null;
+    throw e;
+  }
+}
+
 /** The plan families the mirrors say this member pays for, with what the catalogue fallback needs. */
 async function mirroredPlans(env: Env, user: any): Promise<Array<{ family: PlanFamily; match: Record<string, string>; interval: string }>> {
   const out: Array<{ family: PlanFamily; match: Record<string, string>; interval: string }> = [];

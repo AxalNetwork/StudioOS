@@ -3787,8 +3787,9 @@ export const api = {
   // dispatches `studioos:tier_required` so PaywallModal opens). These helpers
   // are for explicit triggers from Settings → Billing and the modal itself.
   tierStatus: () => request('/billing/tier/status'),
-  tierCheckout: (tier) =>
-    request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify({ tier }) }),
+  // D816 (#2262): `interval` is 'month' | 'year'; omitted, the Worker sells monthly as before.
+  tierCheckout: (tier, interval) =>
+    request('/billing/tier/checkout', { method: 'POST', body: JSON.stringify(interval ? { tier, interval } : { tier }) }),
   tierPortal: () => request('/billing/tier/portal', { method: 'POST' }),
 
   // ---------- Persona (account-plan) billing — partner, advisor, … ----------
@@ -3913,8 +3914,9 @@ export const api = {
   // the worker is auto-fanned into `studioos:tier_required` by the request
   // helper above, so PaywallModal opens automatically on quota exhaustion.
   investorBillingStatus: () => request('/billing/investor/status'),
-  investorCheckout: (plan) =>
-    request('/billing/investor/checkout', { method: 'POST', body: JSON.stringify({ plan }) }),
+  // D816 (#2262): `interval` ('month' | 'year') overrides the plan key's own; omitted, the key's stands.
+  investorCheckout: (plan, interval) =>
+    request('/billing/investor/checkout', { method: 'POST', body: JSON.stringify(interval ? { plan, interval } : { plan }) }),
   investorPortal: () => request('/billing/investor/portal', { method: 'POST' }),
   listInvestorSeats: () => request('/investor-seats/'),
   inviteInvestorSeat: (email) =>
