@@ -78,39 +78,39 @@ type HqReport = {
   ) => Promise<unknown>;
 };
 
+/**
+ * Why this deployment cannot report its usage at all, or null when it can: not
+ * a branch, no `RPC_SECRET`, or no HQ binding. `pushUsageReport` refuses on it,
+ * and Send now checks it before its throttle, as `pullLicenceCopy` does, so a
+ * branch that cannot report never spends a window.
+ */
+export function usagePushRefusal(env: Env): string | null {
+  if (!branchOf(env)) return 'HQ keeps the statements ledger itself; only a branch reports its usage to it.';
+  if (!String(env.RPC_SECRET ?? '').trim()) {
+    return 'No report was sent: this branch has no RPC_SECRET, and HQ accepts a usage report only '
+      + 'when it carries it. branch-provision.yml sets it — re-run it for this code, or set the '
+      + 'secret the provisioning run generated.';
+  }
+  const hq = (env as { HQ?: HqReport }).HQ;
+  if (!hq || typeof hq.reportUsage !== 'function') {
+    return 'No report was sent: this deployment has no HQ service binding, so it cannot report its '
+      + 'usage. HQ\'s statements go on saying this branch has not reported.';
+  }
+  return null;
+}
+
 export async function pushUsageReport(
   env: Env, now: Date = new Date(), deadlineMs: number = USAGE_REPORT_DEADLINE_MS,
 ): Promise<UsagePushResult> {
-  const code = branchOf(env);
-  if (!code) {
-    return {
-      sent: false, periods: [],
-      reason: 'HQ keeps the statements ledger itself; only a branch reports its usage to it.',
-    };
-  }
+  const refused = usagePushRefusal(env);
+  if (refused) return { sent: false, periods: [], reason: refused };
+  const code = branchOf(env)!;
   const secret = String(env.RPC_SECRET ?? '').trim();
-  if (!secret) {
-    return {
-      sent: false, periods: [],
-      reason:
-        'No report was sent: this branch has no RPC_SECRET, and HQ accepts a usage report only '
-        + 'when it carries it. branch-provision.yml sets it — re-run it for this code, or set the '
-        + 'secret the provisioning run generated.',
-    };
-  }
   // A LOCAL ALIAS, NOT `env.HQ.reportUsage(…)` INLINE. The call harvest in
   // scripts/lib/rpcSurface.mjs recognises this form, which is how the RPC
   // surface table (services/topology.ts) and its guard know `reportUsage` has
   // a caller at all.
-  const hq = (env as { HQ?: HqReport }).HQ;
-  if (!hq || typeof hq.reportUsage !== 'function') {
-    return {
-      sent: false, periods: [],
-      reason:
-        'No report was sent: this deployment has no HQ service binding, so it cannot report its '
-        + 'usage. HQ\'s statements go on saying this branch has not reported.',
-    };
-  }
+  const hq = (env as { HQ?: HqReport }).HQ as Required<HqReport>;
 
   const periods: UsagePeriodOutcome[] = [];
   for (const period of reportPeriods(now)) {
@@ -156,4 +156,69 @@ export async function pushUsageReport(
 
   const sent = periods.length > 0 && periods.every((p) => p.sent);
   return sent ? { sent, periods } : { sent, periods, reason: periods.find((p) => !p.sent)?.reason };
+}
+
+/** D808 — how often an Administrator's Send now may call HQ: once per five minutes, as a licence pull. */
+export const SEND_NOW_WINDOW_SECONDS = 300;
+const SEND_NOW_KV_DEADLINE_MS = 2_000;
+const sendNowKey = (code: string) => `usage_send_now:${code}`;
+
+/**
+ * `called` when HQ was asked; `limited` when a press inside the window was
+ * refused; `store_unavailable` when the throttle store is missing or failed.
+ */
+export type SendNowResult = UsagePushResult & { called: boolean; limited?: boolean; store_unavailable?: boolean; retry_after?: string };
+
+/**
+ * D808 — the Administrator's Send now: the same push the 05:10 run makes
+ * (`pushUsageReport`), on demand, at most once per `SEND_NOW_WINDOW_SECONDS`
+ * per branch through `RATE_LIMITS`, as the licence pull is limited
+ * (`pullLicenceCopy`, routes/licence.ts). A missing or unreadable throttle
+ * store refuses: an unlimited button is two calls to HQ per press. The window
+ * is written before HQ is called, so a slow push cannot be pressed twice.
+ */
+export async function sendUsageReportNow(env: Env, now: Date = new Date()): Promise<SendNowResult> {
+  const refused = usagePushRefusal(env);
+  if (refused) return { called: false, sent: false, periods: [], reason: refused };
+  const code = branchOf(env)!;
+  const kv = env.RATE_LIMITS;
+  if (!kv) {
+    return {
+      called: false, store_unavailable: true, sent: false, periods: [],
+      reason: 'No report was sent: the store that limits how often this branch may call HQ (RATE_LIMITS) is not bound here.',
+    };
+  }
+  let prior: string | null;
+  try {
+    prior = await withDeadline(kv.get(sendNowKey(code)), SEND_NOW_KV_DEADLINE_MS, 'usage-send-now-get');
+  } catch (e) {
+    console.warn('[usage] send-now throttle unreadable', (e as Error).message);
+    return {
+      called: false, store_unavailable: true, sent: false, periods: [],
+      reason: 'No report was sent: the record of the last Send now could not be read, so the presses cannot be limited. Try again in a moment.',
+    };
+  }
+  if (prior) {
+    let until: string | undefined;
+    try { const v = JSON.parse(prior); if (typeof v?.until === 'string') until = v.until; } catch { /* still "wait" */ }
+    return {
+      called: false, limited: true, sent: false, periods: [],
+      reason: `A report was sent in the last ${SEND_NOW_WINDOW_SECONDS / 60} minutes. This branch sends one at most every ${SEND_NOW_WINDOW_SECONDS / 60} minutes; the daily report also runs at 05:10 UTC.`,
+      ...(until ? { retry_after: until } : {}),
+    };
+  }
+  const until = new Date(now.getTime() + SEND_NOW_WINDOW_SECONDS * 1000).toISOString();
+  try {
+    await withDeadline(
+      kv.put(sendNowKey(code), JSON.stringify({ at: now.toISOString(), until }), { expirationTtl: SEND_NOW_WINDOW_SECONDS }),
+      SEND_NOW_KV_DEADLINE_MS, 'usage-send-now-put',
+    );
+  } catch (e) {
+    console.warn('[usage] send-now throttle unwritable', (e as Error).message);
+    return {
+      called: false, store_unavailable: true, sent: false, periods: [],
+      reason: 'No report was sent: the press could not be recorded, so it cannot be limited. Try again in a moment.',
+    };
+  }
+  return { ...await pushUsageReport(env, now), called: true };
 }
