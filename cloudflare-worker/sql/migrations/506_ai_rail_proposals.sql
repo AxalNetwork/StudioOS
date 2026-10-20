@@ -1,4 +1,4 @@
--- 503 — ai_rail_proposals: every draft, proposal or note a rail option's run
+-- 506 — ai_rail_proposals: every draft, proposal or note a rail option's run
 -- leaves for the member to decide (D780, #2105; D720 §7 and §9).
 --
 -- One new table, no change to an existing one. D720 §7 reserved migration 482

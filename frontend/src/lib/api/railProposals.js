@@ -1,6 +1,6 @@
 // D780 (#2105) — the member's own drafts, proposals and notes from a rail
 // option's run, and their press on each (D720 §9: "Eadwyn drafts; you send").
-// Worker: routes/ai_rail_proposals.ts, migration 503's `ai_rail_proposals`. Caller only.
+// Worker: routes/ai_rail_proposals.ts, migration 506's `ai_rail_proposals`. Caller only.
 //   GET  /api/ai/rail/proposals?option=<key>[&record=<type:id>][&status=<status>]
 //                                              → { proposals: [{ uid, rail_option, record_ref, kind,
 //                                                  payload, model, usage_log_id, status, … }] }

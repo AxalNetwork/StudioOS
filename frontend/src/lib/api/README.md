@@ -235,5 +235,5 @@ D651 (#1463): `connectors.js` calls `/api/connectors`, the Connectors page's, it
 D755 (#1919, read by #1915): `publicPricing.js` reads `GET /api/public/plans-and-packs`, which needs no session: every plan with its price from the catalog mirror and its AI allowance, and the token packs on sale. `/plans-and-pricing` renders it through `../plansPricing.js`.
 
 D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
-notes from a rail option's run (`ai_rail_proposals`, migration 503) and decides
+notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
 one: accept, edit or discard. Deciding writes no record; the page's own Save does.

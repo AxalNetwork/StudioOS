@@ -27,7 +27,7 @@ import pipeline from '../src/routes/pipeline.ts';
 import networkfx from '../src/routes/networkfx.ts';
 
 const RAIL_PREFS = readFileSync(new URL('../sql/migrations/465_ai_rail_preferences.sql', import.meta.url), 'utf8');
-const RAIL_PROPOSALS = readFileSync(new URL('../sql/migrations/503_ai_rail_proposals.sql', import.meta.url), 'utf8');
+const RAIL_PROPOSALS = readFileSync(new URL('../sql/migrations/506_ai_rail_proposals.sql', import.meta.url), 'utf8');
 const MEMBER = 2;
 
 function makeAI(handler: (model: string, payload: any) => any) {

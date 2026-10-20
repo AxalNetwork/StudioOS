@@ -1,5 +1,5 @@
 /**
- * `ai_rail_proposals` (migration 503): what a rail option's run leaves for the
+ * `ai_rail_proposals` (migration 506): what a rail option's run leaves for the
  * member to decide, and the member's decision (D780, #2105; D720 §7 and §9).
  *
  * "EADWYN DRAFTS; YOU SEND." A run never writes its output into a record. It

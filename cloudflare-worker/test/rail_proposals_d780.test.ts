@@ -1,4 +1,4 @@
-// D780 (#2105) — `ai_rail_proposals` (migration 503): what a rail option's run
+// D780 (#2105) — `ai_rail_proposals` (migration 506): what a rail option's run
 // leaves for the member to decide, and part 1's two options.
 //
 //   · The store: a run proposes, the member's press accepts, edits or discards,
@@ -29,7 +29,7 @@ import { decideRail, getRail, listRail, proposeRail, proposeRefusal, withdrawRai
 import railProposals from '../src/routes/ai_rail_proposals.ts';
 import adminPublications from '../src/routes/admin_publications.ts';
 
-const MIGRATION = readFileSync(new URL('../sql/migrations/503_ai_rail_proposals.sql', import.meta.url), 'utf8');
+const MIGRATION = readFileSync(new URL('../sql/migrations/506_ai_rail_proposals.sql', import.meta.url), 'utf8');
 const RAIL_PREFS = readFileSync(new URL('../sql/migrations/465_ai_rail_preferences.sql', import.meta.url), 'utf8');
 const ADMIN = 1;
 const MEMBER = 2;
