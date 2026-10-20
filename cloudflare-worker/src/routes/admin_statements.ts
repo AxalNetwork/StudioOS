@@ -234,7 +234,32 @@ r.post('/statements/draw', async (c) => {
       };
     });
 
-    const drawn = drawStatement(figures, licence.revenue_share_bps, licence.currency || 'EUR');
+    // D802 (#2238): each stream at its own share from D797's terms, the ledger's
+    // revenue share where none is recorded, and the platform-licence royalty
+    // (Not recorded when unset). Terms that cannot be read refuse the draw rather
+    // than draw at the wrong shares.
+    let terms: Record<string, unknown> | null = null;
+    try {
+      const { readLicenceTerms } = await import('../services/licenceTerms');
+      terms = (await readLicenceTerms(c.env, licenceUid))?.terms ?? null;
+    } catch (e) {
+      // A database before migration 512 has no terms table: every stream is drawn at the ledger's share.
+      if (!/no such table/i.test(String((e as Error)?.message ?? e))) {
+        console.warn('[statements] licence_terms unreadable for draw', (e as Error).message);
+        return c.json({
+        error: 'terms_unreadable',
+          message: `The terms schedule for ${licence.licence_ref} could not be read, so its per-stream shares are unknown. Nothing was drawn; try again.`,
+        }, 503);
+      }
+    }
+    const share = (k: string) => (typeof terms?.[k] === 'number' ? (terms[k] as number) : null);
+    const drawn = drawStatement(figures, {
+      fallback_bps: licence.revenue_share_bps,
+      subscriptions: share('share_subscriptions_bps'),
+      licence_fees: share('share_licence_fees_bps'),
+      token_margin: share('share_token_margin_bps'),
+      royalty_bps: share('royalty_platform_licence_bps'),
+    }, licence.currency || 'EUR');
 
     // D514 — A RE-DRAW KEEPS WHAT WAS PAID AND DISPUTED (the upsert below leaves
     // both alone), so a re-draw to a smaller owed figure would leave more paid

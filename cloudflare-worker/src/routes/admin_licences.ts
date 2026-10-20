@@ -2238,8 +2238,22 @@ r.post('/:uid/fee-invoices', async (c) => {
     const licence = await byUid(c.env, c.req.param('uid'));
     if (!licence) return c.json({ error: 'not_found' }, 404);
     const { issueFeeInvoice, hqInvoiceView } = await feeInvoices();
-    // D797's schedule (licensor, payment terms) is not on main; the defaults apply until it is.
-    const inv = await issueFeeInvoice(c.env, licence, admin.id, nowIso().slice(0, 10));
+    // D797's schedule: the platform IP's licensor and the payment terms. No row,
+    // or a database before migration 512, leaves the defaults (Holdings, 30
+    // days); terms that cannot be read refuse rather than invoice on a guess.
+    let terms: Record<string, unknown> | null = null;
+    try {
+      const { readLicenceTerms } = await import('../services/licenceTerms');
+      terms = (await readLicenceTerms(c.env, licence.uid))?.terms ?? null;
+    } catch (e) {
+      if (!/no such table/i.test(String((e as Error)?.message ?? e))) {
+        return c.json({ error: 'terms_unreadable', message: 'This licence\'s terms could not be read, so its licensor and payment terms are unknown. Nothing was issued; try again.' }, 503);
+      }
+    }
+    const inv = await issueFeeInvoice(c.env, licence, admin.id, nowIso().slice(0, 10), {
+      licensorIpEntity: typeof terms?.licensor_ip_entity === 'string' ? terms.licensor_ip_entity : null,
+      paymentTermsDays: typeof terms?.payment_terms_days === 'number' ? terms.payment_terms_days : null,
+    });
     await logAdminAction(c.env, admin.id, admin.email, 'licence_fee_invoice_issued', {
       licence_uid: licence.uid, licence_ref: licence.licence_ref, invoice_uid: inv.uid, period: inv.period_label,
       amount_cents: inv.amount_cents, currency: inv.currency, due_at: inv.due_at,

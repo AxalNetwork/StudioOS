@@ -23,6 +23,8 @@ import { PDFDocument } from 'pdf-lib';
 import { makeD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import adminLicences from '../src/routes/admin_licences.ts';
+import adminStatements from '../src/routes/admin_statements.ts';
+import { drawStatement, shareOf } from '../src/services/statements.ts';
 import licence from '../src/routes/licence.ts';
 import { encryptColumn } from '../src/services/columnCipher.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -34,7 +36,9 @@ const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.
 const mig = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 const SCHEMA = ['users', 'super_admins', 'user_sessions', 'activity_logs', 'territory_licences', 'licence_admins']
   .map((t) => stripForeignKeys(tableFromBaseline(baseline, t))).join('\n')
-  + '\n' + ['260_subsidiary_statements.sql', '472_entity_bank_accounts.sql', '513_licence_fee_invoices.sql'].map(mig).join('\n');
+  + '\n' + ['260_subsidiary_statements.sql', '472_entity_bank_accounts.sql', '513_licence_fee_invoices.sql'].map(mig).join('\n')
+  // D797's terms table; its branch-copy column is a branch table this test does not use.
+  + '\n' + mig('512_licence_terms.sql').replace(/ALTER TABLE branch_licence[^;]*;/, '');
 const SECRET = ['d802', 'invoices', 'fixture', 'signing', 'secret'].join('-');
 
 const SUPER = 1, SUPER_PW = 2, ADMIN = 3, PRINCIPAL = 4, DELEGATE = 5, OTHER_PRINCIPAL = 6, MEMBER = 7;
@@ -55,6 +59,7 @@ async function fixture(o: { account?: boolean } = {}) {
   const l = db.prepare(`INSERT INTO territory_licences (id, uid, licence_ref, legal_entity_name, brand_name, status, currency, annual_fee_cents, starts_on)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   l.run(1, 'lic_a', 'LIC-A', 'Licensee A', 'Brand A', 'active', 'EUR', 1200000, '2020-03-15');
+  db.prepare('UPDATE territory_licences SET revenue_share_bps = 3000 WHERE uid = ?').run('lic_a');
   l.run(2, 'lic_b', 'LIC-B', 'Licensee B', 'Brand B', 'active', 'USD', 500000, '2021-01-01');
   l.run(3, 'lic_nofee', 'LIC-C', 'Licensee C', 'Brand C', 'active', 'EUR', null, '2021-01-01');
   l.run(4, 'lic_nostart', 'LIC-D', 'Licensee D', 'Brand D', 'active', 'EUR', 100000, null);
@@ -85,6 +90,7 @@ async function fixture(o: { account?: boolean } = {}) {
   const app = new Hono<any>();
   app.route('/api/admin/licences', adminLicences);
   app.route('/api/licence', licence);
+  app.route('/api/admin', adminStatements);
   app.onError((err: any, c) => {
     const status = ({ Unauthorized: 401, 'Admin required': 403 } as Record<string, 401 | 403>)[String(err?.message || '')];
     if (status) return c.json({ detail: err.message }, status);
@@ -293,4 +299,81 @@ test('the generated-document type: registered, drawn as a specimen, and never is
   assert.equal(spec.addressee[0], real.addressee[0], 'the sender line');
   assert.equal(spec.reference, '[Reference]');
   assert.doesNotMatch(JSON.stringify(spec), /\u20ac\d|\$\d|LIC-A/, 'no figure');
+});
+
+// 9 ───────────────────────────────────────────────────────────────────────────
+test('part 1 and 2: each stream is owed at its own share, a missing share falls back and says so, and the royalty is drawn on the licence fees', () => {
+  // Mutations checked: every stream at the fallback; the fallback not named; the royalty on the gross total; an unrecorded royalty owed at 0% as if recorded; the royalty added to the gross; one rounding over the total.
+  const F = (stream: string, gross: number | null) => ({ stream, gross_cents: gross, currency: 'EUR', available: gross !== null });
+  const streams = [F('subscriptions', 1000001), F('licence_fees', 400000), F('token_margin', 250003), F('other', 50000)];
+  const d = drawStatement(streams, { fallback_bps: 3000, subscriptions: 2500, licence_fees: 1000, token_margin: 4000, royalty_bps: 500 }, 'EUR');
+  const by = Object.fromEntries(d.streams.map((s) => [s.stream, s]));
+  assert.deepEqual([by.subscriptions.share_bps, by.subscriptions.owed_cents, by.subscriptions.share_source], [2500, 250000, 'terms']);
+  assert.deepEqual([by.licence_fees.share_bps, by.licence_fees.owed_cents], [1000, 40000]);
+  assert.deepEqual([by.token_margin.share_bps, by.token_margin.owed_cents], [4000, 100001]);
+  assert.deepEqual([by.other.share_bps, by.other.owed_cents, by.other.share_source], [3000, 15000, 'ledger']);
+  assert.match(by.other.share_note!, /licence's revenue share is used/);
+  assert.equal(by.subscriptions.share_note, undefined);
+  const royalty = by.platform_licence_royalties;
+  assert.deepEqual([royalty.gross_cents, royalty.royalty_bps, royalty.owed_cents, royalty.not_recorded, royalty.available], [400000, 500, 20000, false, true]);
+  assert.equal(d.gross_cents, 1000001 + 400000 + 250003 + 50000, 'the royalty adds nothing to the gross');
+  assert.equal(d.owed_cents, 250000 + 40000 + 100001 + 15000 + 20000, 'the total owed is each stream\'s owed, summed');
+  assert.equal(d.revenue_share_bps, 3000);
+  assert.equal(d.per_stream, true);
+
+  const noRoyalty = drawStatement(streams, { fallback_bps: 3000 }, 'EUR');
+  const r2 = noRoyalty.streams.find((s) => s.stream === 'platform_licence_royalties')!;
+  assert.deepEqual([r2.not_recorded, r2.owed_cents, r2.royalty_bps, r2.available], [true, 0, null, false]);
+  assert.match(r2.reason!, /^Not recorded/);
+  assert.equal(noRoyalty.unreported, 0, 'an unset royalty is not an unreported stream');
+  assert.equal(noRoyalty.complete, true);
+  assert.ok(noRoyalty.streams.filter((s) => s.stream !== 'platform_licence_royalties').every((s) => s.share_source === 'ledger' && s.share_bps === 3000));
+  // The single-share draw is unchanged: one rounding over the total.
+  const legacy = drawStatement(streams, 3000, 'EUR');
+  assert.equal(legacy.owed_cents, shareOf(1700004, 3000));
+  assert.equal(legacy.streams.length, 4);
+});
+
+// 10 ──────────────────────────────────────────────────────────────────────────
+test('the draw reads D797\'s shares and royalty from the terms, falls back without them, and a re-draw below what was recorded is refused', async () => {
+  // Mutations checked: the draw ignoring the terms; the royalty not read; the recorded-above-owed refusal removed.
+  const f = await fixture();
+  const report = f.db.prepare(`INSERT INTO subsidiary_usage_reports (licence_uid, branch_code, period, stream, gross_cents, currency, is_estimate, reported_at)
+    VALUES ('lic_a', 'a', '2026-Q3', ?, ?, 'EUR', 0, '2026-10-01')`);
+  report.run('subscriptions', 1000000); report.run('licence_fees', 400000); report.run('token_margin', 200000); report.run('other', 0);
+  f.db.prepare(`INSERT INTO licence_terms (licence_uid, share_subscriptions_bps, share_licence_fees_bps, royalty_platform_licence_bps) VALUES ('lic_a', 2500, 1000, 500)`).run();
+  const d = await f.call(SUPER, 'POST', '/admin/statements/draw', { licence_uid: 'lic_a', period: '2026-Q3' });
+  assert.equal(d.status, 201, d.text);
+  const by = Object.fromEntries(d.body.streams.map((s: any) => [s.stream, s]));
+  assert.deepEqual([by.subscriptions.share_bps, by.licence_fees.share_bps, by.token_margin.share_bps, by.token_margin.share_source], [2500, 1000, 3000, 'ledger']);
+  assert.equal(by.platform_licence_royalties.owed_cents, 20000);
+  assert.equal(d.body.owed_cents, 250000 + 40000 + 60000 + 0 + 20000);
+  const stored = JSON.parse(f.rows("SELECT streams_json FROM subsidiary_statements WHERE licence_uid = 'lic_a'")[0].streams_json);
+  assert.equal(stored.find((s: any) => s.stream === 'token_margin').share_source, 'ledger', 'the row says it was drawn on the fallback');
+
+  f.db.prepare("UPDATE subsidiary_statements SET paid_cents = ? WHERE licence_uid = 'lic_a'").run(d.body.owed_cents);
+  f.db.prepare("UPDATE licence_terms SET share_subscriptions_bps = 100 WHERE licence_uid = 'lic_a'").run();
+  const lower = await f.call(SUPER, 'POST', '/admin/statements/draw', { licence_uid: 'lic_a', period: '2026-Q3' });
+  assert.deepEqual([lower.status, lower.body.error], [409, 'recorded_above_owed']);
+
+  f.db.prepare("DELETE FROM licence_terms").run();
+  f.db.prepare("DELETE FROM subsidiary_statements").run();
+  const none = await f.call(SUPER, 'POST', '/admin/statements/draw', { licence_uid: 'lic_a', period: '2026-Q3' });
+  assert.equal(none.status, 201, none.text);
+  assert.equal(none.body.streams.find((s: any) => s.stream === 'platform_licence_royalties').not_recorded, true);
+  assert.equal(none.body.owed_cents, shareOf(1000000, 3000) + shareOf(400000, 3000) + shareOf(200000, 3000));
+});
+
+// 11 ──────────────────────────────────────────────────────────────────────────
+test('an invoice is due after D797\'s payment terms, and a licence whose terms name another licensor is not invoiced', async () => {
+  // Mutations checked: the payment terms not read; the licensor not checked.
+  const f = await fixture();
+  f.db.prepare("INSERT INTO licence_terms (licence_uid, payment_terms_days) VALUES ('lic_a', 45)").run();
+  const r = await f.call(SUPER, 'POST', '/admin/licences/lic_a/fee-invoices');
+  assert.equal(r.status, 201, r.text);
+  assert.equal(r.body.invoice.due_at, addDays(TODAY(), 45));
+  f.db.prepare("INSERT INTO licence_terms (licence_uid, licensor_ip_entity) VALUES ('lic_b', 'management')").run();
+  const other = await f.call(SUPER, 'POST', '/admin/licences/lic_b/fee-invoices');
+  assert.deepEqual([other.status, other.body.error], [409, 'licensor_not_payee']);
+  assert.equal(f.rows("SELECT uid FROM licence_fee_invoices WHERE licence_uid = 'lic_b'").length, 0);
 });
