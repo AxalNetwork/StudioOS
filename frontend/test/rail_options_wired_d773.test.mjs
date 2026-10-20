@@ -86,7 +86,7 @@ test('D773: the boards that drew no rail draw one in the shared frame, for their
   const frames = [
     ['pages/partner/PartnerWorkspaceTabs.jsx', /<RailFrame rail=\{rail\}>/, /<WorkerRail workspace=\{railMeta\.workspace\} role="partner"/],
     ['pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx', /<RailFrame rail=\{<WorkerRail workspace="Practice" role="advisor"/, null],
-    ['pages/research/GtmIntelligence.jsx', /<RailFrame rail=\{rail\}>/, /<WorkerRail\s+workspace="Research"\s+role=\{railRole\}/],
+    ['pages/research/GtmIntelligence.jsx', /<RailFrame rail=\{rail\}>/, /const rail = <GtmRail role=\{role\} \/>;/],
     ['pages/PortfolioWorkspace.jsx', /<RailFrame data-testid="portfolio-partner-frame" rail=\{\(\s*<WorkerRail workspace="Delivery" role="partner"/, null],
   ];
   for (const [file, frame, rail] of frames) {
@@ -94,6 +94,9 @@ test('D773: the boards that drew no rail draw one in the shared frame, for their
     assert.match(src, frame, `${file}: the rail is not in the shared frame`);
     if (rail) assert.match(src, rail, `${file}: the rail is not the profile's`);
   }
+  // GTM gives each of its four profiles a literal mount of its own tier.
+  const gtm = read('pages/research/GtmIntelligence.jsx');
+  for (const r of ['founder', 'investor', 'advisor', 'partner']) assert.match(gtm, new RegExp(`<WorkerRail workspace="Research" role="${r}"`), r);
   // The shells' static "AI assist" cards stand down where the real rail docks.
   assert.match(read('pages/partner/PartnerWorkspaceTabs.jsx'), /tabs=\{visibleTabs\}\s+rail=\{false\}/);
   assert.match(read('pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx'), /embedded=\{embedded\}\s+rail=\{false\}/);
