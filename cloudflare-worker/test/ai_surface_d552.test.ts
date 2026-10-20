@@ -194,7 +194,8 @@ const EXPECTED: Record<string, string[]> = {
   'services/competitorAnalysis.ts': ['AI_SURFACE.researchCompanies'],
   'services/deckExtract.ts': ['AI_SURFACE.raisePitchReview', 'AI_SURFACE.raisePitchReview'],
   // D767 (#2096): the deck draft and the slide fill.
-  'routes/decks.ts': ['AI_SURFACE.raisePitch'],
+  // D778 part 2: positioning joins the deck draft on the same surface.
+  'routes/decks.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'],
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   // D766 (#2094) — system calls moved into the router.
