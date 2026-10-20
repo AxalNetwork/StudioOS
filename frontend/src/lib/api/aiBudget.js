@@ -1,7 +1,7 @@
 // D629 / D640 / D641 / D642 (#1435) — the AI allowance, as the member reads it
 // and as HQ sets it. Worker: routes/ai_budget.ts (/api/ai-budget) and the rate
 // card in routes/ai.ts (/api/ai/rates).
-import { request } from '../api.js';
+import { api, request } from '../api.js';
 
 const enc = encodeURIComponent;
 const body = (b) => JSON.stringify(b ?? {});
@@ -40,6 +40,10 @@ export const aiBudgetApi = {
   // `{ enabled, pack_uid, threshold_usd, setup_intent_id? }`; the card is read back from the SetupIntent on the Worker.
   saveAutoReload: (settings) => request('/ai-budget/auto-reload', { method: 'PUT', body: body(settings) }),
   autoReloadSetup: (nonce) => request('/ai-budget/auto-reload/setup', { method: 'POST', body: body({ nonce }) }),
+  // D787 — the member's own cost per day and per model (`range`: mtd, 30d or prev_month; `group`: model, page or option).
+  cost: ({ range = 'mtd', group = 'model' } = {}) => request(`/ai-budget/cost?${new URLSearchParams({ range, group })}`),
+  // D787 — the same read as a CSV download, one row per day and model.
+  costCsv: ({ range = 'mtd', group = 'model' } = {}) => api._downloadCsv(`/ai-budget/cost.csv?${new URLSearchParams({ range, group })}`, `ai-cost-${range}.csv`),
   // D750 — Super Admin: why the top-up is or is not offered.
   topUpStatus: () => request('/ai-budget/top-up/status'),
   // D641 — every model the router can price, read from its own tables.
