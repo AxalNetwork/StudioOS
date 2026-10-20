@@ -143,7 +143,13 @@ export function buildMatrix(canvas, overrides, pricing, registered = []) {
     }
   }
   for (const [pageKey, o] of Object.entries(overrides.pages)) {
-    if (rows.some((r) => r.pageKey === pageKey)) problems.push(`${pageKey} is on the canvas; drop its override`);
+    const onCanvas = rows.find((r) => r.pageKey === pageKey);
+    // D796 (#2229): a board renamed on the canvas can keep the kind it had (`keepKind`, with its `why`).
+    if (onCanvas && o.keepKind) {
+      const models = kindModels[o.kind];
+      if (!models) problems.push(`${pageKey}: kind ${o.kind} has no models`);
+      else Object.assign(onCanvas, { kind: o.kind, routeTask: `rail_${o.kind}`, models: models.map((m) => ({ ...m })) });
+    } else if (onCanvas) problems.push(`${pageKey} is on the canvas; drop its override`);
     else add(pageKey, o.kind);
   }
 

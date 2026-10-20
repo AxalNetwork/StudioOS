@@ -20,7 +20,7 @@ import {
   UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
   TrendingUp, MessageSquare, Package, Calendar,
   Inbox, Radar, Wallet, Landmark, Mail,
-  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote,
+  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -178,7 +178,9 @@ export const SIDEBAR_GROUPS = {
       // D210 — S15 (/branch/insights/analytics) lights this row, per its
       // artboard; `match` covers the row's subtree, which `end` alone does not.
       { to: '/branch/insights', icon: TrendingUp, label: 'Insights', match: ['/branch/insights'] },
-      { to: '/branch/settings', icon: UserCog, label: 'Settings' },
+      // D796 (#2229): "Settings" became "Licences", the branch's licence copy on
+      // My Licence; it stays lit on Branch settings, which that page links.
+      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences', match: ['/admin/my-licence', '/branch/settings'] },
     ]},
   ],
 
@@ -234,7 +236,8 @@ export const SIDEBAR_GROUPS = {
       // licence (S20's wall rule 4). HQ's ledger of every licence
       // (/admin/licences) is super-admin-only server-side and lives in the HQ
       // group above; a row for it here was a door that opened onto 403s.
-      { to: '/admin/my-licence', icon: UserCog, label: 'Settings' },
+      // D796 (#2229): the row was "Settings" and is "Licences", as the owner named it.
+      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },

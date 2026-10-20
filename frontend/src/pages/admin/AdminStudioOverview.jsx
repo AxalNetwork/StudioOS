@@ -312,7 +312,7 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
         </Card>
 
         <Card data-testid="admin-studio-settings" className="lg:col-span-2">
-          <CardHead title="Settings" to={open('Settings')} />
+          <CardHead title="Licences" to={open('Licences')} />
           {/* D197 — THE TYPED COUNT IS GONE, and that is the whole correction
               here. This card said "4 of 5 rows owned by HQ." in a second
               spelling of a number `BranchSettings` states in a third; the
@@ -320,9 +320,10 @@ export function AdminStudioOverview({ user, home, licence, templates, insights, 
               cannot derive anything — it has no read of them. A number it
               cannot compute is a number that goes stale the next time a row
               lands, which is exactly what happened.
-              D440 — Open is the shell's Settings row, which off a branch is
-              My Licence, not the page that derives the count. The sentence
-              names the branch Settings page, so it stays true on both tiers. */}
+              D440 — Open is the shell's row: since D796 (#2229) "Licences",
+              My Licence on both tiers, not the page that derives the count. The
+              sentence names the branch Settings page, which My Licence links on
+              a branch, so it stays true on both tiers. */}
           <p className="mt-2 text-[13px] leading-relaxed text-axal-ink">
             Every row on the branch Settings page names who decides it, and the count of HQ-owned
             rows is derived there rather than stated here.

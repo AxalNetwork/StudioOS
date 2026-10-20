@@ -3684,7 +3684,7 @@
    ]
   },
   {
-   "pageKey": "Admin · Settings",
+   "pageKey": "Admin · Licences",
    "kind": "plan",
    "routeTask": "rail_plan",
    "models": [
