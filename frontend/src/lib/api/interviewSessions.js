@@ -89,7 +89,9 @@ export const interviewSessionsApi = {
     method: 'POST', body: JSON.stringify({ last_seq: lastSeq, auto: auto === true }),
   }),
   process: (id) => request(`${P}/sessions/${enc(id)}/process`, { method: 'POST', body: JSON.stringify({}) }),
-  summarise: (id, model) => request(`${P}/sessions/${enc(id)}/summarise`, {
+  // D778 part 8: `headers` on summarise, structure and ask is the press's own rail context.
+  summarise: (id, model, headers) => request(`${P}/sessions/${enc(id)}/summarise`, {
+    ...(headers ? { headers } : {}),
     method: 'POST', body: JSON.stringify(model ? { model } : {}),
   }),
   keepDigest: (id) => request(`${P}/sessions/${enc(id)}/digest/keep`, { method: 'POST', body: JSON.stringify({}) }),
@@ -102,10 +104,12 @@ export const interviewSessionsApi = {
   audio: (id) => request(`${P}/sessions/${enc(id)}/audio`),
   remove: (id) => request(`${P}/sessions/${enc(id)}`, { method: 'DELETE' }),
   placements: (id) => request(`${P}/sessions/${enc(id)}/placements`),
-  structure: (id, model) => request(`${P}/sessions/${enc(id)}/structure`, {
+  structure: (id, model, headers) => request(`${P}/sessions/${enc(id)}/structure`, {
+    ...(headers ? { headers } : {}),
     method: 'POST', body: JSON.stringify(model ? { model } : {}),
   }),
-  ask: (id, question) => request(`${P}/sessions/${enc(id)}/ask`, {
+  ask: (id, question, headers) => request(`${P}/sessions/${enc(id)}/ask`, {
+    ...(headers ? { headers } : {}),
     method: 'POST', body: JSON.stringify({ question }),
   }),
   accept: (placementId, payload) => request(`${P}/placements/${enc(placementId)}/accept`, {

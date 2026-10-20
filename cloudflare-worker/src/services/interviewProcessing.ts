@@ -115,6 +115,21 @@ function expectedChunks(chunks: ChunkRow[], lastSeq: number): ChunkRow[] {
  */
 export const CUSTOMER_RESEARCH_PAGE = 'Founder · Validate · Customer research';
 export const TRANSCRIBE_OPTIONS = { recording: 'transcribe:recording', session: 'transcribe:session' } as const;
+/**
+ * D778 part 8: the session digest's three presses (Summarise, Structure the
+ * transcript, Ask). Each run names its own option and the session it read
+ * (`session:<id>`); a press's headers win where the run has a request.
+ *
+ * Their page stays `validate`, not the inventory's label. Unlike a
+ * transcription, a digest run obeys the page's AI switch (`assistOff`) and
+ * the member's model picks, and both are stored under the section the
+ * Validate rail writes (`VALIDATE_SECTION`, validateEngine.ts). The mounted
+ * rail on Customer research sends that page too (`workspace="Validate"`); the
+ * session page mounts none, so a fallback named anything else would run a
+ * press the founder had switched off.
+ */
+export const DIGEST_PAGE = 'validate';
+export const DIGEST_OPTIONS = { summarise: 'summarise:session', structure: 'structure:transcript', ask: 'ask:transcript' } as const;
 
 export type ChunkTranscript =
   | { ok: true; segments: StoredSegment[]; language: string | null; model: string; fallback: boolean; costMicro: number }
@@ -295,7 +310,7 @@ export type SummaryResult =
  * so `summaryOf` and the session page read as before. A new run clears
  * `digest_kept_at` and `digest_kept_by`: a new draft must be kept again.
  */
-export async function summariseSession(env: Env, session: SessionRow, userId: number, model?: string): Promise<SummaryResult> {
+export async function summariseSession(env: Env, session: SessionRow, userId: number, model?: string, rail?: RailContext): Promise<SummaryResult> {
   const rows = await env.DB.prepare(
     `SELECT id, start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
       WHERE session_id = ? AND source = 'final' ORDER BY COALESCE(start_ms, 0), id`,
@@ -305,6 +320,7 @@ export async function summariseSession(env: Env, session: SessionRow, userId: nu
   const out = await summariseTranscript(env, {
     userId, model, segments, step: session.summary ? 're_summarised' : 'summarised',
     mode: session.channel === 'text' ? 'thread' : 'call',
+    rail: rail ?? { page: DIGEST_PAGE, option: DIGEST_OPTIONS.summarise, record: `session:${session.id}` },
   });
   for (let i = 0; i < out.receipt.length; i += 1) {
     const refusedHere = !out.ok && out.reason === 'refused' && i === out.receipt.length - 1;

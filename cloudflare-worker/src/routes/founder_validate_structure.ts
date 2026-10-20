@@ -68,6 +68,7 @@ import { ASSIST_OFF_MESSAGE, budgetRefusalMessage } from '../services/aiRouter';
 import { MODULES } from '../services/cycleValidate';
 import { consentBlocks, loadSession, sessionHasAudio, sessionDigestConsentBlocks, type SessionRow } from '../services/interviewSessions';
 import { railFor } from '../util/railContext';
+import { DIGEST_OPTIONS, DIGEST_PAGE } from '../services/interviewProcessing';
 import {
   PLACEMENT_KINDS,
   alignRuns,
@@ -613,6 +614,8 @@ structure.post('/sessions/:id/structure', async (c) => {
   const { digestSession } = await import('../services/validateEngine');
   const out = await digestSession(c.env, {
     sessionId: s.session.id, userId: s.user.id, trigger: 'manual', stages: ['structure'], force: true, model: picked.model,
+    // D778 part 8: Structure the transcript's option on the session it reads; the press's headers win.
+    rails: { structure: railFor(c, { page: DIGEST_PAGE, option: DIGEST_OPTIONS.structure }, `session:${s.session.id}`) },
   });
   if (out.status === 'not_writable') return json({ detail: 'Forbidden' }, 403);
   if (out.status === 'skipped') {
@@ -721,7 +724,7 @@ structure.post('/sessions/:id/ask', async (c) => {
   if (!segments.length) {
     return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to ask about yet.' }, 409);
   }
-  const out = await askTranscript(c.env, { userId: s.user.id, model: picked.model, segments, question, rail: railFor(c, { page: 'validate', option: 'ask:transcript' }) });
+  const out = await askTranscript(c.env, { userId: s.user.id, model: picked.model, segments, question, rail: railFor(c, { page: DIGEST_PAGE, option: DIGEST_OPTIONS.ask }, `session:${s.session.id}`) });
   for (let i = 0; i < out.receipt.length; i += 1) {
     const refusedHere = !out.ok && out.reason === 'refused' && i === out.receipt.length - 1;
     await recordStructureReceipt(c.env, s.session.id, null, out.receipt[i], refusedHere ? 'refused' : 'ok', refusedHere ? out.refusal : null);

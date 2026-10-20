@@ -51,7 +51,7 @@ import {
 } from '../services/sessionSetup';
 import { setInterviewStage } from '../services/validateWriters';
 import {
-  CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS, afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
+  CUSTOMER_RESEARCH_PAGE, DIGEST_OPTIONS, DIGEST_PAGE, TRANSCRIBE_OPTIONS, afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
 } from '../services/interviewProcessing';
 import { consentRefusal, digestConsentRefusal, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
 import { digestSession, withdrawDigest } from '../services/validateEngine';
@@ -809,6 +809,8 @@ sessions.post('/sessions/:id/summarise', async (c) => {
   // D757: the engine's run, forced (a button always runs).
   const out = await digestSession(c.env, {
     sessionId: s.session.id, userId: s.user.id, trigger: 'manual', stages: ['summarise'], force: true, model: picked.model,
+    // D778 part 8: Summarise's option on the session it summarises; the press's headers win.
+    rails: { summarise: railFor(c, { page: DIGEST_PAGE, option: DIGEST_OPTIONS.summarise }, `session:${s.session.id}`) },
   });
   if (out.status === 'not_writable') return json({ detail: 'Forbidden' }, 403);
   if (out.status === 'skipped') return json({ error: 'no_final_transcript', detail: 'This session has no final transcript to summarise yet.' }, 409);
