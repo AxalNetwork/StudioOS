@@ -30,7 +30,7 @@ import { rateLimitMiddleware, NEWSLETTER_PUBLIC } from '../src/middleware/rateLi
 import { csrfMiddleware } from '../src/middleware/csrf.ts';
 import { isSuppressed, preferencesToken, reasonBlocks, tokenKey } from '../src/services/newsletter.ts';
 import { sendNotificationEmail, sendVerificationEmail } from '../src/services/email.ts';
-import { mailClassOf } from '../src/services/email/send.ts';
+import { mailClassOf, send } from '../src/services/email/send.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 
@@ -297,7 +297,11 @@ test('one-click unsubscribe works with a POST and no sign-in, and unsubscribing 
 test('the raw IP is never stored', async () => {
   const h = harness();
   try {
-    await subscribeAndConfirm(h, 'ip@example.test', ['brief']);
+    await h.json('POST', '/api/newsletter/subscribe', { email: 'ip@example.test', topics: ['brief'] });
+    const pending = JSON.stringify(h.db.prepare(`SELECT * FROM newsletter_subscribers WHERE email = 'ip@example.test'`).all());
+    assert.equal(pending.includes(IP), false, 'the signup stored the raw IP');
+    const confirm = linkIn(h.mails.at(-1)!.text, '/api/newsletter/confirm');
+    assert.equal((await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(confirm)}`, { headers: { Accept: 'application/json' } })).status, 200);
     for (const table of ['newsletter_subscribers', 'newsletter_subscriber_topics', 'email_suppressions']) {
       const dump = JSON.stringify(h.db.prepare(`SELECT * FROM ${table}`).all());
       assert.equal(dump.includes(IP), false, `${table} holds the raw IP`);
@@ -434,11 +438,17 @@ test('suppression goes by reason: an unsubscribe stops marketing, a bounce stops
     assert.equal(await sendVerificationEmail(env, 'bounced@example.test', 'B', `${BASE}/verify?t=x`), true, 'account security still goes');
     assert.equal(h.mails.length, 2);
 
+    // The template pipeline asks too, by the template's class.
+    assert.equal((await send(env, 'compliance_notice_issued', 'bounced@example.test', {})).reason, 'suppressed');
+    assert.equal((await send(env, 'daily_digest', 'left@example.test', {})).reason, 'suppressed', 'an unsubscribe stops marketing');
+
     // A bounced address that signs up gets the same answer, and nothing.
     const before = h.mails.length;
     const res = await h.json('POST', '/api/newsletter/subscribe', { email: 'bounced@example.test', topics: ['brief'] });
     assert.equal(res.status, 200);
     assert.equal(h.mails.length, before);
+    assert.equal(h.db.prepare(`SELECT count(*) AS n FROM newsletter_subscribers WHERE email = 'bounced@example.test'`).get()!.n, 0,
+      'a bounced address is not stored as a subscriber');
 
     // An unreadable store blocks newsletter mail only.
     const broken: any = { ...env, DB: { prepare: () => { throw new Error('no table'); } } };
