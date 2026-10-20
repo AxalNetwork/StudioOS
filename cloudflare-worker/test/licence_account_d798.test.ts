@@ -267,12 +267,12 @@ test('a licence whose terms name another licensor is refused rather than paid to
   const { env, db } = fixture();
   const number = await holdingsAccount(env, db);
   const lic = db.prepare("SELECT * FROM territory_licences WHERE uid = 'lic_a'").get() as any;
-  const refused = await licenseeStatements(env, lic, 'management');
+  const refused = await licenseeStatements(env, lic, { licensor_ip_entity: 'management', usage_report_day: null });
   assert.equal((refused.payment as any).refusal_code, 'licensor_not_payee');
   assert.equal((refused.payment as any).lines, undefined);
   assert.ok(!JSON.stringify(refused).includes(number.slice(-4)), 'Holdings\' account was shown');
   assert.equal(refused.statements.length, 3, 'the statements are still read');
-  const holdings = await licenseeStatements(env, lic, 'holdings');
+  const holdings = await licenseeStatements(env, lic, { licensor_ip_entity: 'holdings', usage_report_day: null });
   assert.equal((holdings.payment as any).account_last4, number.slice(-4));
 
   assert.equal(licensorRefusal(null), null);
@@ -348,7 +348,9 @@ test('on a branch an admin reads the reason and no figure; a non-admin is refuse
   for (const p of ['/mine/contract', '/mine/statements']) {
     const r = await call(env, PRINCIPAL, 'GET', p);
     assert.equal(r.status, 200);
-    assert.deepEqual(r.body, { available: false, reason: 'Read on HQ; this branch has no copy yet' }, p);
+    // D808: the statements read adds what a branch can do, Send now, and still no figure.
+    const extra = p === '/mine/statements' ? { send_now: true, send_now_reason: null } : {};
+    assert.deepEqual(r.body, { available: false, reason: 'Read on HQ; this branch has no copy yet', ...extra }, p);
     const m = await call(env, MEMBER, 'GET', p);
     assert.equal(m.status, 403, p);
   }

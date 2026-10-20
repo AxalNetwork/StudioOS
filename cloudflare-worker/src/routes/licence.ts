@@ -54,7 +54,8 @@ import { SEAT_ROLES, applyLicenceCopy } from '../rpc/branchOps';
 import { TERMS_REASON, readLicenceTerms, termsFromRow, type LicenceTerms } from '../services/licenceTerms';
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
 import {
-  BRANCH_UNAVAILABLE, licenseeContracts, licenseeStatements, parseDispute, raiseStatementDispute,
+  BRANCH_UNAVAILABLE, accountTerms, branchNeeds, licenseeContractPdf, licenseeContracts, licenseeNeeds,
+  licenseeStatements, parseDispute, raiseStatementDispute, SEND_NOW_HQ_REASON,
 } from '../services/licenceAccount';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -1157,15 +1158,63 @@ r.get('/mine/contract', async (c) => {
   return c.json(await licenseeContracts(c.env, own.licence, own.user.id));
 });
 
+// GET /api/licence/mine/contract/:uid/pdf — D808: one of the caller's own
+// contracts as a PDF, the stored body on the legal paper. The row is looked up
+// WITHIN the caller's licence, so another licence's uid answers 404 as an
+// unknown one does. Binary endpoint — kept OUT of the typed API drift surface.
+r.get('/mine/contract/:uid/pdf', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if ('branch' in own) return c.json({ error: 'contract_hq_only', message: BRANCH_UNAVAILABLE.reason }, 501);
+  const pdf = await licenseeContractPdf(c.env, own.licence, c.req.param('uid'));
+  if (!pdf.ok && pdf.code === 'not_found') return c.json({ error: 'not_found', message: 'No such contract on your licence.' }, 404);
+  if (!pdf.ok) return c.json({ error: 'contract_unrenderable', message: 'The contract PDF could not be drawn just now. Try again in a moment.' }, 503);
+  return new Response(pdf.bytes, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${pdf.filename}"`,
+      'Cache-Control': 'no-store',
+      'X-Axal-Renderer': pdf.renderer,
+    },
+  });
+});
+
 // GET /api/licence/mine/statements — issued, paid and void statements, the
-// usage reports by period, and the masked payment instructions. D797's
-// `licence_terms.licensor_entity` is not on main yet; once it is, it is read
-// here and passed as the third argument (`licensorRefusal`).
+// usage reports by period and by month, and the masked payment instructions.
+// D808: the payee check reads D797's `licensor_ip_entity`, and the months are
+// measured against its `usage_report_day`. A failed terms read leaves both
+// unknown (no refusal, the default day) rather than failing the page. On a
+// branch the statements are HQ's; what the branch can do is send its report.
 r.get('/mine/statements', async (c) => {
   const own = await ownLicenceForAccount(c);
   if ('refusal' in own) return own.refusal;
-  if ('branch' in own) return c.json(BRANCH_UNAVAILABLE);
-  return c.json(await licenseeStatements(c.env, own.licence));
+  if ('branch' in own) return c.json({ ...BRANCH_UNAVAILABLE, send_now: true, send_now_reason: null });
+  const t = await accountTerms(c.env, own.licence.uid);
+  return c.json(await licenseeStatements(c.env, own.licence, t.readable ? t : null));
+});
+
+// GET /api/licence/mine/needs — D808: what is waiting on the caller, in order,
+// with each item's link and the count the Licences row's pill draws. One cheap
+// read: it never pulls the branch's licence copy.
+r.get('/mine/needs', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if ('branch' in own) return c.json(await branchNeeds(c.env));
+  return c.json(await licenseeNeeds(c.env, own.licence, own.user.id));
+});
+
+// POST /api/licence/mine/usage-reports/send — D808: Send now. A branch
+// Administrator sends the report the 05:10 run sends (`pushUsageReport`), at
+// most once per five minutes. HQ keeps the ledger and has nothing to send.
+r.post('/mine/usage-reports/send', async (c) => {
+  const own = await ownLicenceForAccount(c);
+  if ('refusal' in own) return own.refusal;
+  if (!('branch' in own)) return c.json({ error: 'send_now_branch_only', message: SEND_NOW_HQ_REASON }, 409);
+  const { sendUsageReportNow } = await import('../services/usageReport');
+  const result = await sendUsageReportNow(c.env);
+  if (!result.called) return c.json({ error: 'send_now_refused', ...result }, result.retry_after ? 429 : 503);
+  return c.json(result, result.sent ? 200 : 502);
 });
 
 // POST /api/licence/mine/statements/:uid/dispute { cents, reason } — a request

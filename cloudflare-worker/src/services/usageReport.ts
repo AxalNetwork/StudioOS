@@ -157,3 +157,64 @@ export async function pushUsageReport(
   const sent = periods.length > 0 && periods.every((p) => p.sent);
   return sent ? { sent, periods } : { sent, periods, reason: periods.find((p) => !p.sent)?.reason };
 }
+
+/** D808 — how often an Administrator's Send now may call HQ: once per five minutes, as a licence pull. */
+export const SEND_NOW_WINDOW_SECONDS = 300;
+const SEND_NOW_KV_DEADLINE_MS = 2_000;
+const sendNowKey = (code: string) => `usage_send_now:${code}`;
+
+export type SendNowResult = UsagePushResult & { called: boolean; retry_after?: string };
+
+/**
+ * D808 — the Administrator's Send now: the same push the 05:10 run makes
+ * (`pushUsageReport`), on demand, at most once per `SEND_NOW_WINDOW_SECONDS`
+ * per branch through `RATE_LIMITS`. A missing or unreadable throttle store
+ * refuses, as the licence pull does: an unlimited button is two calls to HQ
+ * per press. The window is recorded before HQ is called, so a slow push cannot
+ * be pressed twice.
+ */
+export async function sendUsageReportNow(env: Env, now: Date = new Date()): Promise<SendNowResult> {
+  const code = branchOf(env);
+  if (!code) return { called: false, sent: false, periods: [], reason: 'HQ keeps the statements ledger itself; only a branch sends its usage report.' };
+  const kv = env.RATE_LIMITS;
+  if (!kv) {
+    return {
+      called: false, sent: false, periods: [],
+      reason: 'No report was sent: the store that limits how often this branch may call HQ (RATE_LIMITS) is not bound here.',
+    };
+  }
+  let prior: string | null;
+  try {
+    prior = await withDeadline(kv.get(sendNowKey(code)), SEND_NOW_KV_DEADLINE_MS, 'usage-send-now-get');
+  } catch (e) {
+    console.warn('[usage] send-now throttle unreadable', (e as Error).message);
+    return {
+      called: false, sent: false, periods: [],
+      reason: 'No report was sent: the record of the last Send now could not be read, so the presses cannot be limited. Try again in a moment.',
+    };
+  }
+  if (prior) {
+    let until: string | undefined;
+    try { const v = JSON.parse(prior); if (typeof v?.until === 'string') until = v.until; } catch { /* still "wait" */ }
+    return {
+      called: false, sent: false, periods: [],
+      reason: `A report was sent in the last ${SEND_NOW_WINDOW_SECONDS / 60} minutes. This branch sends one at most every ${SEND_NOW_WINDOW_SECONDS / 60} minutes; the daily report also runs at 05:10 UTC.`,
+      ...(until ? { retry_after: until } : {}),
+    };
+  }
+  const until = new Date(now.getTime() + SEND_NOW_WINDOW_SECONDS * 1000).toISOString();
+  try {
+    await withDeadline(
+      kv.put(sendNowKey(code), JSON.stringify({ at: now.toISOString(), until }), { expirationTtl: SEND_NOW_WINDOW_SECONDS }),
+      SEND_NOW_KV_DEADLINE_MS, 'usage-send-now-put',
+    );
+  } catch (e) {
+    console.warn('[usage] send-now throttle unwritable', (e as Error).message);
+    return {
+      called: false, sent: false, periods: [],
+      reason: 'No report was sent: the press could not be recorded, so it cannot be limited. Try again in a moment.',
+    };
+  }
+  const r = await pushUsageReport(env, now);
+  return { ...r, called: true };
+}

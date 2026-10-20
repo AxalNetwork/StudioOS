@@ -242,3 +242,9 @@ D797 (#2230): `licenceTerms.js` reads and saves a licence's terms schedule
 (`GET`/`PUT /api/admin/licences/:uid/terms`, Super Admin; the save takes a
 reason and a recent step-up). The Administrator reads the same terms on
 `/api/licence/mine`. D800 and D801 draw them.
+
+D798 (#2231) and D808 (#2250): `licenceAccount.js` is the licence
+Administrator's own account under `/api/licence/mine/*`: the contract (in
+force and pending) and its PDF, the statements with the usage reports by
+month, a dispute, "Needs you" (`needs`), and Send now on a branch. D800 draws
+them.
