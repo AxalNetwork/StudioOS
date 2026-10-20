@@ -325,6 +325,10 @@ const ADMIN = [
   alias('/branch/insights', key(AD, 'Insights'), 'The branch’s Insights page and its analytics.'),
   // D796 (#2229): the Admin's "Settings" board is "Licences"; runs logged before keep `Admin · Settings`.
   own('/admin/my-licence', key(AD, 'Licences')),
+  // D804 (#2241): the board's Contract, Statements and Requests tabs are the Licences board's own.
+  alias('/admin/my-licence/contract', key(AD, 'Licences'), 'The Licences board’s Contract tab.'),
+  alias('/admin/my-licence/statements', key(AD, 'Licences'), 'The Licences board’s Statements tab.'),
+  alias('/admin/my-licence/requests', key(AD, 'Licences'), 'The Licences board’s Requests tab.'),
   alias('/branch/settings', key(AD, 'Licences'), 'The branch’s settings, which the Licences row stays lit on.'),
   off('/admin/accounts/credits', key(AD, 'Member credits')),
   exact(off('/admin', key(AD, 'Admin console'))),

@@ -762,10 +762,31 @@ function MyLicencePageBody() {
   );
 }
 
+/**
+ * D804 (#2241) — the Licences page's tabs as links, the door to the Contract,
+ * Statements and Requests tabs until D800 (#2233) builds the tab frame that
+ * replaces this row. `current` is the tab being shown.
+ */
+export function LicenceTabsNav({ current = 'Summary' }) {
+  return (
+    <nav className="mb-4 flex flex-wrap gap-1.5" aria-label="Licence" data-testid="licence-tabs">
+      <Link to="/admin/my-licence" aria-current={current === 'Summary' ? 'page' : undefined}
+        className={`rounded-full border px-3 py-1 text-xs font-semibold ${current === 'Summary' ? 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100' : 'border-gray-200 bg-white text-gray-600 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}`}>Summary</Link>
+      <Link to="/admin/my-licence/contract" aria-current={current === 'Contract' ? 'page' : undefined}
+        className={`rounded-full border px-3 py-1 text-xs font-semibold ${current === 'Contract' ? 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100' : 'border-gray-200 bg-white text-gray-600 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}`}>Contract</Link>
+      <Link to="/admin/my-licence/statements" aria-current={current === 'Statements' ? 'page' : undefined}
+        className={`rounded-full border px-3 py-1 text-xs font-semibold ${current === 'Statements' ? 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100' : 'border-gray-200 bg-white text-gray-600 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}`}>Statements</Link>
+      <Link to="/admin/my-licence/requests" aria-current={current === 'Requests' ? 'page' : undefined}
+        className={`rounded-full border px-3 py-1 text-xs font-semibold ${current === 'Requests' ? 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100' : 'border-gray-200 bg-white text-gray-600 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}`}>Requests</Link>
+    </nav>
+  );
+}
+
 // D774 (#2100): S39 drew no rail. The board's page, in the Admin boards' frame.
 export default function MyLicencePage() {
   return (
     <AdminBoardFrame workspace="Licences" note="Eadwyn reads your licence on this page. It changes nothing." data-testid="admin-board-settings">
+      <LicenceTabsNav current="Summary" />
       <MyLicencePageBody />
     </AdminBoardFrame>
   );
