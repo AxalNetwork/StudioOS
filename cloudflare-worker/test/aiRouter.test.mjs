@@ -3,7 +3,7 @@
  *
  * Three acceptance scenarios per spec:
  *   1. primary 5xx triggers smaller-model fallback
- *   2. budget exhaustion returns refusal
+ *   2. budget exhaustion returns refusal (the month's allowance, D783)
  *   3. embedding cache hit on second identical input
  *
  * Imports `cloudflare-worker/src/services/aiRouter.ts` through `_ts-loader`, so
@@ -221,8 +221,9 @@ test('advisor_turn uses the gateway and does NOT double-call when it is healthy'
 
 // --------------------------------------------------------------------------
 // Scenario 2 — budget exhaustion returns refusal.
-// Pre-seed the user's daily KV bucket above the configured cap and assert
-// run() refuses without invoking the model.
+// D783: a member has no daily cap, only the month's allowance (25% of their
+// plan, $50 in the fixture). Pre-seed the user's monthly KV bucket above it and
+// assert run() refuses without invoking the model.
 // --------------------------------------------------------------------------
 test('budget exhaustion returns refusal without calling model', async () => {
   const { run, __resetForTest } = await loadRouter();
@@ -232,17 +233,18 @@ test('budget exhaustion returns refusal without calling model', async () => {
   const db = makeDB();
 
   const env = baseEnv({ ai, kv, db, budgets: { day: '0.01' } });
-  const today = new Date().toISOString().slice(0, 10);
-  // Seed daily spend over the cap.
-  kv.store.set(`ai_spend:user:7:${today}`, '999');
+  const now = new Date().toISOString();
+  // A day bucket over the old env day cap no longer refuses a member.
+  kv.store.set(`ai_spend:user:7:${now.slice(0, 10)}`, '999');
+  kv.store.set(`ai_spend:user:7:${now.slice(0, 7)}`, '999');
 
   const result = await run(env, { task: 'advisor_turn', userId: 7, text: 'hi' });
   assert.equal(result.ok, false);
-  assert.equal(result.refusal, 'budget_user_day');
+  assert.equal(result.refusal, 'budget_user_month');
   assert.equal(ai.calls.length, 0, 'model must not be invoked when over budget');
   // refusal is logged
   assert.equal(runRows(db).length, 1);
-  assert.equal(runRows(db)[0].refusal, 'budget_user_day');
+  assert.equal(runRows(db)[0].refusal, 'budget_user_month');
 });
 
 // --------------------------------------------------------------------------

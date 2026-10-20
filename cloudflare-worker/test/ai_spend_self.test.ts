@@ -184,23 +184,31 @@ test('the task breakdown covers the month and sums to the month total', async ()
 
 // ---------- caps ----------
 
-test('the caps come from the env vars the router enforces, with its defaults', async () => {
+test('the admin licence\'s caps come from the env vars the router enforces, with its defaults', async () => {
   const { env: e } = env();
-  const d = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  const d = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
   assert.equal(d.month.cap_usd, SPEND_CAP_DEFAULTS.month);
   assert.equal(d.today.cap_usd, SPEND_CAP_DEFAULTS.day);
 
   const { env: e2 } = env({ [SPEND_CAP_VARS.month]: '250', [SPEND_CAP_VARS.day]: '12' });
-  const o = await loadMyAiSpend(e2, { id: 7, role: 'investor' }, AT);
+  const o = await loadMyAiSpend(e2, { id: 1, role: 'admin' }, AT);
   assert.equal(o.month.cap_usd, 250);
   assert.equal(o.today.cap_usd, 12);
+});
+
+test('D783: a member\'s cap is their plan\'s share each month, with no day cap and no env var', async () => {
+  // The fixture's member pays $200 a month, so 25% is $50.
+  const { env: e } = env({ [SPEND_CAP_VARS.month]: '250', [SPEND_CAP_VARS.day]: '12' });
+  const m = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+  assert.equal(m.month.cap_usd, 50);
+  assert.equal(m.today.cap_usd, null, 'a member has no daily limit');
 });
 
 test('a nonsense cap falls back to the default rather than to zero', async () => {
   // A zero cap would make the meter read "over plan" for every user at once.
   for (const bad of ['', 'abc', '0', '-5', 'NaN']) {
     const { env: e } = env({ [SPEND_CAP_VARS.month]: bad });
-    const r = await loadMyAiSpend(e, { id: 7, role: 'investor' }, AT);
+    const r = await loadMyAiSpend(e, { id: 1, role: 'admin' }, AT);
     assert.equal(r.month.cap_usd, SPEND_CAP_DEFAULTS.month, `cap ${JSON.stringify(bad)}`);
   }
 });

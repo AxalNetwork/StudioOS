@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireHqAdmin, requireSuperAdmin } from '../auth';
 import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
-  listAiLicenceCaps, loadAiBudget, settleAiBudgetReview, usdToMicro } from '../services/aiBudget';
+  listAiLicenceCaps, loadAiBudget, settleAiBudgetReview, TYPED_CAP_LICENCES, usdToMicro } from '../services/aiBudget';
+import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
 import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
@@ -71,7 +72,12 @@ r.get('/top-up/status',async c=>{
 });
 r.get('/caps',async c=>{
   await requireSuperAdmin(c);
-  try { return c.json({plans:await listAiLicenceCaps(c.env)}); }
+  // D783: the typed caps (the admin licence only), and each catalogue plan's computed allowance, read-only.
+  try {
+    const {plansAndPacks}=await import('../services/aiCredits');
+    const catalogue=(await plansAndPacks(c.env)).plans;
+    return c.json({plans:await listAiLicenceCaps(c.env),share:PLAN_AI_SHARE,catalogue});
+  }
   catch(error) { return refuse(c,503,{code:'ai_caps_unreadable',message:'Unreadable: the AI plan allowances could not be read.',raw:error}); }
 });
 r.get('/reviews',async c=>{
@@ -96,6 +102,8 @@ r.put('/caps/:licence',async c=>{
   const actor=await requireSuperAdmin(c);
   const key=c.req.param('licence');
   if (!AI_LICENCE_KEYS.includes(key as any)) return c.json({error:'invalid_licence',message:'Choose a recorded licence key.'},400);
+  if (!TYPED_CAP_LICENCES.has(key as any)) return refuse(c,409,{code:'ai_allowance_computed',
+    message:"This plan's AI allowance is 25% of what each member pays for it, so it cannot be typed."});
   const body=await c.req.json().catch(()=>null);
   if (!body || typeof body.daily_usd!=='number' || typeof body.monthly_usd!=='number'
     || !Number.isFinite(body.daily_usd) || !Number.isFinite(body.monthly_usd) || body.daily_usd<0 || body.monthly_usd<0

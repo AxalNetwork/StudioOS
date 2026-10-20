@@ -180,12 +180,14 @@ const str = (v) => (typeof v === 'string' && v ? v : null);
 // Each section is read on its own: a section whose part is missing or not the
 // shape this page knows is Unreadable, and the others still draw.
 
-export const ALLOWANCE_SOURCE = { recorded: 'Set by HQ', environment: 'Platform default' };
+// D783: a member's allowance is computed from the plans they pay; "catalogue" means a plan with no recorded amount yet.
+export const ALLOWANCE_SOURCE = { recorded: 'Set by HQ', environment: 'Platform default', plan: 'From the plans they pay',
+  catalogue: 'Catalogue price, not yet recorded', none: 'No plan' };
 export function allowanceView(a) {
   const x = a?.allowance;
   if (!x || !isInt(x.daily_microusd) || !isInt(x.monthly_microusd)) return null;
   return { licence: str(x.licence_key), source: ALLOWANCE_SOURCE[x.source] || (str(x.source) ? x.source : 'Not recorded'),
-    daily: microUsd(x.daily_microusd), monthly: microUsd(x.monthly_microusd) };
+    daily: x.daily_capped === false ? 'None' : microUsd(x.daily_microusd), monthly: microUsd(x.monthly_microusd) };
 }
 export function balanceView(a) {
   if (!a || !isInt(a.balance_microusd) || !isInt(a.topup_held_microusd) || !isInt(a.ledger_balance_microusd)) return null;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { aiLicenceKey, environmentAiCaps, resolveAiCaps, loadAiBudget, reserveAiBudget, settleAiReservation, usdToMicro } from '../src/services/aiBudget.ts';
 import { aiTopupPriceId, recordAiTopupPurchase, creditAiTopupFromPayment } from '../src/services/aiTopups.ts';
 import { run, __resetForTest, ROUTE, estimateCostUsd } from '../src/services/aiRouter.ts';
@@ -16,7 +16,9 @@ import { ensureCatalogSchema } from '../src/services/catalog.ts';
 import { guardSafe } from './_guard_stub.mjs';
 const now=new Date('2026-10-07T12:00:00Z');
 const fixture=()=>{const f=aiBudgetFixture();return {...f,env:{DB:f.DB,JWT_SECRET:'d629-fixture-only-signing-secret',STRIPE_WEBHOOK_SECRET:'d629-fixture-only-webhook-secret',ENVIRONMENT:'development'} as any};};
-const caps=(db:any,day=1000000,month=3000000)=>db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',?,?,1)").run(day,month);
+// D783: only the admin licence's caps are typed. A member's allowance is 25% of their plans (`setFixtureAllowance`), with no daily cap.
+const caps=(db:any,day=1000000,month=3000000,licence='admin')=>db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES(?,?,?,1)").run(licence,day,month);
+const pick=(c:any)=>({licence:c.licence,source:c.source,daily_capped:c.daily_capped,daily_microusd:c.daily_microusd,monthly_microusd:c.monthly_microusd});
 const count=(db:any,table:string)=>db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n;
 // D755: a webhook credit is one ai_credit_ledger purchase row; ai_topup_ledger is no longer written.
 const purchases=(db:any)=>db.prepare("SELECT COUNT(*) n FROM ai_credit_ledger WHERE kind='purchase'").get().n;
@@ -35,10 +37,16 @@ test('D629 caps use canonical effective tiers and an explicit zero override; env
   assert.equal(aiLicenceKey({role:'investor',investor_tier:'institutional',investor_subscription_status:'active'}),'investor:institutional');
   assert.equal(aiLicenceKey({role:'investor',investor_tier:'professional',investor_subscription_status:'unpaid'}),'investor:free');
   assert.equal(aiLicenceKey({role:'advisor'}),'advisor'); assert.equal(aiLicenceKey({role:'unknown'}),'other');
-  assert.deepEqual(await resolveAiCaps(f.env,2),{licence:'founder:free',source:'environment',daily_microusd:5000000,monthly_microusd:50000000});
+  // D783: a member's month is their plan's share and they have no daily cap; a row typed for their licence is not read.
+  const member={licence:'founder:free',source:'plan',daily_capped:false,daily_microusd:50000000,monthly_microusd:50000000};
+  assert.deepEqual(pick(await resolveAiCaps(f.env,2)),member);
+  caps(f.db,0,2000000,'founder:free');
+  assert.deepEqual(pick(await resolveAiCaps(f.env,2)),member);
+  // The admin licence keeps the typed caps: the deployment's vars, then an explicit zero override.
+  f.db.prepare("UPDATE users SET role='admin' WHERE id=4").run();
+  assert.deepEqual(pick(await resolveAiCaps(f.env,4)),{licence:'admin',source:'environment',daily_capped:true,daily_microusd:5000000,monthly_microusd:50000000});
   caps(f.db,0,2000000);
-  assert.deepEqual(await resolveAiCaps(f.env,2),{licence:'founder:free',source:'recorded',daily_microusd:0,monthly_microusd:2000000});
-  assert.equal((await resolveAiCaps(f.env,3)).source,'environment');
+  assert.deepEqual(pick(await resolveAiCaps(f.env,4)),{licence:'admin',source:'recorded',daily_capped:true,daily_microusd:0,monthly_microusd:2000000});
   await assert.rejects(()=>resolveAiCaps(f.env,999),/unreadable/);
   assert.equal(usdToMicro(.0000001),1); assert.equal(usdToMicro(1.234567),1234567);
   for(const value of [-1,NaN,Infinity,Number.MAX_SAFE_INTEGER]) assert.throws(()=>usdToMicro(value),/unreadable/);
@@ -46,7 +54,7 @@ test('D629 caps use canonical effective tiers and an explicit zero override; env
 });
 test('included daily/monthly allowance draws first, paid balance follows, settlement refunds unused quote and cannot replay',async()=>{
  const f=fixture();try {
-  caps(f.db);const pi=await buy(f);await creditAiTopupFromPayment(f.env,pi);
+  setFixtureAllowance(f.db,1000000);const pi=await buy(f);await creditAiTopupFromPayment(f.env,pi);
   const one=await reserveAiBudget(f.env,2,800000,now);if(!one.ok)throw Error('reserve');
   await settleAiReservation(f.env,one.reservation,500000);
   const two=await reserveAiBudget(f.env,2,1000000,now);if(!two.ok)throw Error('reserve');
@@ -64,20 +72,26 @@ test('included daily/monthly allowance draws first, paid balance follows, settle
 });
 test('daily and monthly exhausted refusals; simultaneous calls cannot overspend a paid balance',async()=>{
  const f=fixture();try{
-  caps(f.db,0,0);const pi=await buy(f,1000000);await creditAiTopupFromPayment(f.env,pi);
+  setFixtureAllowance(f.db,0);const pi=await buy(f,1000000);await creditAiTopupFromPayment(f.env,pi);
   const reservations=await Promise.all([reserveAiBudget(f.env,2,700000,now),reserveAiBudget(f.env,2,700000,now)]);
   assert.equal(reservations.filter(x=>x.ok).length,1);
-  assert.equal(reservations.filter(x=>!x.ok)[0]?.refusal,'budget_user_day');
+  // D783: a member has no daily cap, so their refusal is the month's.
+  assert.equal(reservations.filter(x=>!x.ok)[0]?.refusal,'budget_user_month');
   assert.equal((await loadAiBudget(f.env,2,now)).balance_microusd,300000);
   for(const r of reservations) if(r.ok)await settleAiReservation(f.env,r.reservation,700000);
-  f.db.prepare("UPDATE ai_licence_caps SET daily_microusd=1000000,monthly_microusd=0").run();
   assert.deepEqual(await reserveAiBudget(f.env,2,400000,now),{ok:false,refusal:'budget_user_month'});
+  // The admin licence still has a day: an exhausted day refuses as the day's, an exhausted month as the month's.
+  f.db.prepare("UPDATE users SET role='admin' WHERE id=4").run();
+  caps(f.db,0,1000000);
+  assert.deepEqual(await reserveAiBudget(f.env,4,400000,now),{ok:false,refusal:'budget_user_day'});
+  f.db.prepare("UPDATE ai_licence_caps SET daily_microusd=1000000,monthly_microusd=0").run();
+  assert.deepEqual(await reserveAiBudget(f.env,4,400000,now),{ok:false,refusal:'budget_user_month'});
   assert.equal(count(f.db,'ai_budget_reservations'),1);
  }finally{f.db.close();}
 });
 test('failed model and expired holds return allowance and paid balance, including across UTC periods',async()=>{
  const f=fixture();try{
-  caps(f.db,0,0);await creditAiTopupFromPayment(f.env,await buy(f,1000000));
+  setFixtureAllowance(f.db,0);await creditAiTopupFromPayment(f.env,await buy(f,1000000));
   const r=await reserveAiBudget(f.env,2,400000,now);if(!r.ok)throw Error('reserve');
   await settleAiReservation(f.env,r.reservation,0,true);
   assert.equal((await loadAiBudget(f.env,2,now)).balance_microusd,1000000);
@@ -93,7 +107,7 @@ test('existing spend seeds allowance once, then paid usage cannot consume the in
   f.db.prepare("INSERT INTO ai_usage_logs(user_id,task,model,est_cost_usd,created_at) VALUES(2,'explain','model',.8,'2026-10-07 10:00:00')").run();
   assert.equal((await loadAiBudget(f.env,2,now)).day_spend_microusd,800000);
   f.db.exec('DELETE FROM ai_included_spend');
-  f.env.AI_SPEND={get:async()=>'.9'};caps(f.db);
+  f.env.AI_SPEND={get:async()=>'.9'};setFixtureAllowance(f.db,3000000);
   assert.equal((await loadAiBudget(f.env,2,now)).day_spend_microusd,900000);
   f.env.AI_SPEND.get=async()=>'8';
   assert.equal((await loadAiBudget(f.env,2,now)).day_spend_microusd,900000);
@@ -186,21 +200,25 @@ test('cap writes are Super Admin only, audited atomically, and self reads ignore
     const jwt=await new SignJWT({user_id:user}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(f.env.JWT_SECRET));
     return budgetRoute.request(path,{method,headers:{Authorization:`Bearer ${jwt}`,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})},f.env);
   }
-  assert.equal((await request('/caps/founder:free',2,'PUT',{daily_usd:1,monthly_usd:2})).status,403);
+  assert.equal((await request('/caps/admin',2,'PUT',{daily_usd:1,monthly_usd:2})).status,403);
   f.db.prepare("UPDATE users SET role='admin' WHERE id=4").run();
-  assert.equal((await request('/caps/founder:free',4,'PUT',{daily_usd:1,monthly_usd:2})).status,403);
+  assert.equal((await request('/caps/admin',4,'PUT',{daily_usd:1,monthly_usd:2})).status,403);
   assert.equal((await request('/caps/unrecognised',1,'PUT',{daily_usd:1,monthly_usd:2})).status,400);
-  assert.equal((await request('/caps/founder:free',1,'PUT',{daily_usd:-1,monthly_usd:2})).status,400);
-  assert.equal((await request('/caps/founder:free',1,'PUT',{daily_usd:0,monthly_usd:2})).status,200);
-  assert.equal((await resolveAiCaps(f.env,2)).daily_microusd,0);
+  // D783: a member licence's allowance is computed from its plans, so it cannot be typed.
+  const computed=await request('/caps/founder:free',1,'PUT',{daily_usd:0,monthly_usd:2});
+  assert.equal(computed.status,409);assert.equal(((await computed.json()) as any).error,'ai_allowance_computed');
+  assert.equal(count(f.db,'ai_licence_caps'),0);
+  assert.equal((await request('/caps/admin',1,'PUT',{daily_usd:-1,monthly_usd:2})).status,400);
+  assert.equal((await request('/caps/admin',1,'PUT',{daily_usd:0,monthly_usd:2})).status,200);
+  assert.equal((await resolveAiCaps(f.env,4)).daily_microusd,0);
   const audit=f.db.prepare('SELECT actor,details FROM activity_logs').get();
-  assert.equal(audit.actor,'1');assert.deepEqual(JSON.parse(audit.details),{licence_key:'founder:free',daily_microusd:0,monthly_microusd:2000000});
+  assert.equal(audit.actor,'1');assert.deepEqual(JSON.parse(audit.details),{licence_key:'admin',daily_microusd:0,monthly_microusd:2000000});
   await creditAiTopupFromPayment(f.env,await buy(f));
   const self=await (await request('/me?user_id=3',2)).json() as any;assert.equal(self.balance_microusd,10000000);
   assert.equal((await (await request('/me?user_id=2',3)).json() as any).balance_microusd,0);
   f.db.exec("DROP TABLE activity_logs; CREATE TABLE activity_logs(action TEXT CHECK(action!='ai_licence_caps_recorded'),details TEXT,actor TEXT,user_id INTEGER)");
-  assert.equal((await request('/caps/founder:free',1,'PUT',{daily_usd:3,monthly_usd:4})).status,503);
-  assert.equal((await resolveAiCaps(f.env,2)).monthly_microusd,2000000);
+  assert.equal((await request('/caps/admin',1,'PUT',{daily_usd:3,monthly_usd:4})).status,503);
+  assert.equal((await resolveAiCaps(f.env,4)).monthly_microusd,2000000);
  }finally{f.db.close();}
 });
 test('checkout confirmation never credits AI balance even when a paid top-up purchase exists',async()=>{
@@ -263,7 +281,7 @@ test('the owner price variable is read strictly',()=>{
 });
 test('router charges its real estimated cost, releases failed models, preserves cache and org kill',async()=>{
  __resetForTest();const f=fixture();try{
-  caps(f.db,0,0);await creditAiTopupFromPayment(f.env,await buy(f,1000000));
+  setFixtureAllowance(f.db,0);await creditAiTopupFromPayment(f.env,await buy(f,1000000));
   // D763: the guard answers free, so the balance moves by the model's cost alone.
   let calls=0;f.env.AI={run:guardSafe(async()=>{calls++;return{response:'answer',usage:{prompt_tokens:100,completion_tokens:20}};})};
   const good=await run(f.env,{task:'advisor_turn',userId:2,text:'hello'});
