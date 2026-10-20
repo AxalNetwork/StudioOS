@@ -60,13 +60,14 @@ import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { hashEmail } from '../util/hashEmail';
 import { ensureLegalTemplatesSchema, getTemplate, listTemplates } from '../services/legalTemplateStore';
 import { mergeValues, renderContract } from '../services/licenceContract';
+import { COUNSEL_REVIEW_SLUGS } from '../services/templateFormat';
 import { createAndSendEnvelope, templateBodyRefusal, TemplateBodyError } from './esign';
 import { refuse } from '../util/refusal';
 // D137 — every transition below now reaches the branch that runs under the
 // licence. `applyLicence` had no caller at all, so HQ's suspend changed four
 // columns here and nothing on the subsidiary.
 import { pushLicenceToBranch } from '../services/licencePush';
-import { readLicenceTerms, termsDiff, validateTermsBody, type LicenceTermsRecord } from '../services/licenceTerms';
+import { readLicenceTerms, termsDiff, validateTermsBody, type LicenceTerms, type LicenceTermsRecord } from '../services/licenceTerms';
 // D262 — termination reaches the branch's own administrators too.
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
@@ -1971,6 +1972,8 @@ r.get('/:uid/contract', async (c) => {
       // picker over a library that is not empty.
       templates: templates.map((t) => ({
         slug: t.slug, title: t.title, category: t.category, version: t.version,
+        // D803: a body counsel has not reviewed, said where HQ picks it.
+        counsel_review: COUNSEL_REVIEW_SLUGS.has(t.slug),
       })),
       ...(templates.length ? {} : {
         templates_reason:
@@ -2016,9 +2019,13 @@ r.post('/:uid/contract', async (c) => {
       ).bind(licence.id).all<{ seat_type: string; seats_licensed: number }>(),
     ]);
 
+    // D803 (#2240): D797's terms fill `{{terms.<key>}}`. With none recorded, or a store
+    // that cannot be read, every such field stays visible and is named in `unfilled_fields`.
+    let terms: LicenceTerms | null = null;
+    try { terms = (await readLicenceTerms(c.env, licence.uid))?.terms ?? null; } catch { terms = null; }
     const { body, unfilled } = renderContract(
       tpl.body_md,
-      mergeValues(licence, (terr.results || []).map((t) => t.country_code), seats.results || []),
+      mergeValues(licence, (terr.results || []).map((t) => t.country_code), seats.results || [], terms),
     );
 
     // The prior contract is SUPERSEDED, never deleted or edited — the same
