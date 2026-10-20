@@ -838,7 +838,7 @@ r.post('/posts/:id/approve', async (c) => {
   // composer still offers), each as Eadwyn wrote it. Any that is no longer open
   // refuses the whole Approve, so nothing is kept by half.
   const body: any = await c.req.json().catch(() => ({}));
-  const uids: unknown[] = Array.isArray(body.alt_text_proposal_uids) ? body.alt_text_proposal_uids.slice(0, X_MAX_MEDIA_PER_TWEET) : [];
+  const uids: unknown[] = Array.isArray(body.alt_text_proposal_uids) ? [...new Set(body.alt_text_proposal_uids)].slice(0, X_MAX_MEDIA_PER_TWEET) : [];
   const keys = safeJson<string[]>(post.media_r2_keys, []);
   let alts: string[] | null = null;
   const kept: string[] = [];
@@ -848,11 +848,29 @@ r.post('/posts/:id/approve', async (c) => {
     alts = withAlt(alts ?? safeJson<string[]>(post.alt_texts, []), keys.length, p.index, String(p.payload.text || '').trim().slice(0, 1000));
     kept.push(p.uid);
   }
-  await c.env.DB.prepare(
-    `UPDATE x_posts SET status = 'approved', approved_by = ?, approved_at = datetime('now'),
-                         alt_texts = COALESCE(?, alt_texts), updated_at = datetime('now') WHERE id = ?`,
-  ).bind(admin.id, alts ? JSON.stringify(alts) : null, id).run();
-  for (const uid of kept) await decideRail(c.env, admin.id, uid, 'accept');
+  // D1 batches are transactional. Recheck every proposal's open status in the
+  // post write, then accept the same set only if that write changed one row.
+  // A Discard or replacement between the reads above and this batch keeps both
+  // the post and the remaining proposals untouched.
+  const encodedUids = JSON.stringify(kept);
+  const result = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE x_posts SET status = 'approved', approved_by = ?, approved_at = datetime('now'),
+                           alt_texts = COALESCE(?, alt_texts), updated_at = datetime('now')
+        WHERE id = ? AND status = 'draft'
+          AND (SELECT COUNT(*) FROM ai_rail_proposals
+                WHERE user_id = ? AND rail_option = ? AND status = 'proposed'
+                  AND uid IN (SELECT value FROM json_each(?))) = ?`,
+    ).bind(admin.id, alts ? JSON.stringify(alts) : null, id, admin.id, X_ALT_TEXT_OPTION, encodedUids, kept.length),
+    c.env.DB.prepare(
+      `UPDATE ai_rail_proposals
+          SET status = 'accepted', decided_payload_json = NULL,
+              decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE changes() = 1 AND user_id = ? AND status = 'proposed'
+          AND uid IN (SELECT value FROM json_each(?))`,
+    ).bind(admin.id, encodedUids),
+  ]);
+  if (!result[0].meta?.changes) return c.json({ error: 'proposal_not_open' }, 409);
   const approvedHash = await sha256Hex(String(post.body || ''));
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_approved', postId: id, accountId: post.account_id, bodyHash: approvedHash });
   return c.json({ ok: true });

@@ -86,3 +86,31 @@ test('an Approve that names no caption leaves the captions as they were', async 
   assert.deepEqual(JSON.parse(alts(w)), ['Kept.', '']);
 });
 
+
+// A proposal can be withdrawn after the request's reads but before its writes.
+test('a caption withdrawn just before the approval batch refuses without any partial write', async () => {
+  const w = await world(['Caption A.', 'Caption B.']);
+  const a = (await call(w, SUPER, 'POST', '/api/admin/x/posts/7/alt-text', { index: 0 })).body.proposal.uid;
+  const b = (await call(w, SUPER, 'POST', '/api/admin/x/posts/7/alt-text', { index: 1 })).body.proposal.uid;
+  const batch = w.env.DB.batch.bind(w.env.DB);
+  w.env.DB.batch = async (statements: any[]) => {
+    w.f.db.prepare("UPDATE ai_rail_proposals SET status = 'withdrawn' WHERE uid = ?").run(b);
+    return batch(statements);
+  };
+  const r = await call(w, SUPER, 'POST', '/api/admin/x/posts/7/approve', { alt_text_proposal_uids: [a, b] });
+  assert.equal(r.status, 409);
+  assert.equal(w.f.db.prepare('SELECT status FROM x_posts WHERE id = 7').get().status, 'draft');
+  assert.equal(alts(w), null);
+  assert.equal(proposal(w, a).status, 'proposed');
+  assert.equal(proposal(w, b).status, 'withdrawn');
+});
+
+test('duplicate caption uids are accepted once with the post', async () => {
+  const w = await world();
+  const uid = (await call(w, SUPER, 'POST', '/api/admin/x/posts/7/alt-text', { index: 1 })).body.proposal.uid;
+  const r = await call(w, SUPER, 'POST', '/api/admin/x/posts/7/approve', { alt_text_proposal_uids: [uid, uid] });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(w.f.db.prepare('SELECT status FROM x_posts WHERE id = 7').get().status, 'approved');
+  assert.deepEqual(JSON.parse(alts(w)), ['', 'A team at a whiteboard.']);
+  assert.equal(proposal(w, uid).status, 'accepted');
+});

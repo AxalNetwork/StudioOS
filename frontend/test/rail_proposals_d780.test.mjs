@@ -74,7 +74,11 @@ test('part 2, /admin/x alt text: generating proposes, "Use it" is the Save, Disc
 
 test('part 3, Approve sends only the alt-text captions still offered by the composer', () => {
   const page = read('pages/admin/AdminX.jsx');
-  const approve = page.slice(page.indexOf('const approve = async'), page.indexOf('const remove = async'));
+  const composer = page.slice(page.indexOf('function PostsTab'));
+  assert.doesNotMatch(page.slice(0, page.indexOf('function PostsTab')), /const approve = async/, 'Approve is outside the composer');
+  assert.equal(composer.split('const approve = async').length - 1, 1, 'more than one composer Approve handler');
+  const approveAt = composer.indexOf('const approve = async');
+  const approve = composer.slice(approveAt, composer.indexOf('const remove = async', approveAt));
   assert.match(approve, /const post = posts\.find\(\(p\) => p\.id === id\);/);
   assert.match(approve, /Object\.entries\(post\?\.alt_proposals \|\| \{\}\)/);
   assert.match(approve, /\.filter\(\(\[index\]\) => !post\.alt_texts\?\.\[index\]\)/);

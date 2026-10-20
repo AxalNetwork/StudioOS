@@ -1,16 +1,3 @@
-  const approve = async (id) => {
-    // D780 part 3: keep only the captions the composer still offers beside an image.
-    const post = posts.find((p) => p.id === id);
-    const uids = Object.entries(post?.alt_proposals || {})
-      .filter(([index]) => !post.alt_texts?.[index])
-      .map(([, proposal]) => proposal.uid);
-    try {
-      await api.approvePost(id, uids);
-      notify('Approved', 'success');
-      onReload();
-    } catch (e) { notify(`Approve failed: ${e?.message || e}`, 'error'); }
-  };
-
 /**
  * Task #4 — Admin X (Twitter) composer + accounts + aggregator.
  *
@@ -518,8 +505,16 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
   };
 
   const approve = async (id) => {
-    try { await api.approvePost(id); notify('Approved', 'success'); onReload(); }
-    catch (e) { notify(`Approve failed: ${e?.message || e}`, 'error'); }
+    // D780 part 3: keep only the captions the composer still offers beside an image.
+    const post = posts.find((p) => p.id === id);
+    const uids = Object.entries(post?.alt_proposals || {})
+      .filter(([index]) => !post.alt_texts?.[index])
+      .map(([, proposal]) => proposal.uid);
+    try {
+      await api.approvePost(id, uids);
+      notify('Approved', 'success');
+      onReload();
+    } catch (e) { notify(`Approve failed: ${e?.message || e}`, 'error'); }
   };
 
   const remove = async (id) => {
