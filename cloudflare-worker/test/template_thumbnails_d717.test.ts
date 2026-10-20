@@ -245,7 +245,7 @@ import { RECEIVING_BRACKET } from '../src/services/fundStructure.ts';
 
 const GENERATED_KEYS = [
   'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement', 'management_fee_invoice',
-  'platform_licence_fee_invoice', 'payment_instructions_letter', 'subscription_booklet', 'structure_of_the_fund', 'certificate_of_completion',
+  'platform_licence_fee_invoice', 'payment_instructions_letter', 'territory_licence_fee_invoice', 'subscription_booklet', 'structure_of_the_fund', 'certificate_of_completion',
 ];
 /** 468's Fund I catalog and 478's securities_legend stub, over the D717 fixture. */
 function generatedFixture() {
@@ -282,6 +282,7 @@ test('D758 /templates/generated lists the ten, with their kinds, party lines, li
     ['Management Fee Invoice', 'notice', 'Axal VC GP LLC, to the Fund'],
     ['Platform Licence Fee Invoice', 'notice', 'Axal VC Holdings LLC, to its licensee'],
     ['Payment Instructions', 'notice', 'Issued per entity'],
+    ['Territory Licence Fee Invoice', 'notice', 'Axal VC Holdings LLC, to a territory licensee'],
     ['Subscription Booklet', 'booklet', 'Axal VC GP LLC (for the Fund)'],
     ['Structure of the Fund', 'page', 'carried by the PPM, the Subscription Booklet and the Compliance Manual'],
     ['Certificate of completion', 'page', 'appended to every signed copy'],
@@ -291,7 +292,7 @@ test('D758 /templates/generated lists the ten, with their kinds, party lines, li
   assert.deepEqual(call0.prose.map((p: any) => [p.slug, p.has_body, p.counsel_draft, p.missing]), [['capital_call_notice', false, true, false]]);
   assert.deepEqual(call0.refusal, { code: 'notice_body_missing', message: 'Counsel has not written this notice yet, so it cannot issue.' });
   for (const k of ['management_fee_statement', 'management_fee_invoice', 'platform_licence_fee_invoice', 'payment_instructions_letter',
-    'structure_of_the_fund', 'certificate_of_completion']) {
+    'territory_licence_fee_invoice', 'structure_of_the_fund', 'certificate_of_completion']) {
     assert.deepEqual([by[k].prose, by[k].refusal], [[], null], k);
   }
   const booklet = by.subscription_booklet;

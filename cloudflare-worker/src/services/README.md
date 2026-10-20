@@ -65,6 +65,7 @@ runs these directly against an in-process SQLite, with no request at all.
 | `signals/` | Signal ingestion and evidence. |
 | `wellbeing/` | Wellbeing check-ins. |
 | `licenceTerms.ts` | D797: a licence's terms schedule, the one list of its 31 fields (`LICENCE_TERM_FIELDS`: key, group, label, type and range) and the canvas's section numbers (`DEFAULT_TERM_SECTIONS`), `validateTermsBody` (an unknown key or a bad value is refused, naming the field; `null` clears), `termsFromRow`, `readLicenceTerms`, `termsDiff` and the `TERMS_REASON` sentences. Migration 512's CHECKs hold the same ranges; HQ's write, `/licence/mine`, the branch copy and D800/D801 import it. |
+| `licenceFeeInvoice.ts` | D802: HQ's annual licence-fee invoice to a territory licensee. `feePeriod` (the fee year from an anniversary of `starts_on`, labelled "2026–27"), `feeInvoiceReference` (`AXAL-LIC-<licence_ref>-<period>`, ASCII), the paper (`territoryInvoicePaper`: the IP licensor as sender, D798's masked `territory_licence_fee` block or its refusal) and its specimen, the store reads (`listFeeInvoices`, `feeInvoiceOf`) and `feeInvoicePdf` (Browser Run, no fallback; a void invoice is not printed). |
 
 ## Rules
 
