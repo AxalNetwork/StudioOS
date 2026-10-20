@@ -337,24 +337,11 @@ test('the Worker AI rail is one component, and every founder workspace has it', 
     assert.ok(!rail.includes(gone), `the rail draws ${gone} again, which the AIRail canvas does not`);
   }
   assert.match(rail, /useAiSpend/, 'the usage card must read the live spend endpoint');
-  // THE MODEL CARDS NAME ONLY WHAT RUNS. Each page's jobs are router tasks
-  // (`railModels.js`), every one a real ROUTE entry, and the cards are built
-  // by `railSuggestions` from `/api/ai/pricing`, never typed. D698 adds one
-  // job before its task: Grow's Product improvement runs D691's
-  // `grow_theme_feedback`, which `railSuggestions` skips until the pricing
-  // read lists it (`airail_d698.test.mjs`, test 13), so no card can name it
-  // first. That one task is the only exception, and it is named.
-  const router = read('cloudflare-worker/src/services/aiRouter.ts');
-  const jobs = codeOnly(read('frontend/src/ui/railModels.js'));
-  const tasks = [...new Set([...jobs.matchAll(/task: '([a-z_]+)'/g)].map((m) => m[1]))];
-  assert.ok(tasks.length >= 4, `the section jobs did not parse — got ${tasks.join(', ')}`);
-  for (const task of tasks) {
-    if (task === 'grow_theme_feedback' && !/^\s*grow_theme_feedback:\s*\{/m.test(router)) continue;
-    assert.ok(new RegExp(`^\\s*${task}:\\s*\\{`, 'm').test(router),
-      `${task} must be a real entry in the router's ROUTE table, or the card names a model nothing runs`);
-  }
-  assert.match(rail, /railSuggestions\(\{ section, module, pricing, picks \}\)/,
-    'the models come from the router\'s own tables');
+  // THE MODEL CARDS NAME ONLY WHAT RUNS. Since D769 PR 2 (#2088) they are the
+  // page's row in the Worker's matrix (`GET /api/ai/rail`, D764), the same row
+  // a rail run resolves its models from, shaped by `railView`; never typed.
+  assert.match(rail, /railPrefsApi\.page\(page, option\)/, 'the models come from the Worker\'s matrix');
+  assert.match(rail, /const rail = railView\(\{/, 'the cards are built from the Worker\'s answer');
   assert.doesNotMatch(rail, /\$0\.293|\$2\.253|Llama 3\.3 70B Fast/,
     'the canvas figures are not the router figures');
 });

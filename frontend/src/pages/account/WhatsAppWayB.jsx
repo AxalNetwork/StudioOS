@@ -5,7 +5,7 @@ import { Pill } from '../../ui';
 import { BTN } from './AccountCenter';
 import {
   WAY_B, WHATSAPP_ENTRY_CONSENT, WHATSAPP_ENTRY_LIMIT, WHATSAPP_ENTRY_STEPS, WHATSAPP_PAGE_HREF,
-  axalContact, captureLine, lastUsedLine, waitingCaptures, wayBRefusal, wayBState,
+  axalContact, captureLine, lastUsedLine, offersVenture, ventureLine, waitingCaptures, wayBRefusal, wayBState,
 } from './whatsappWayB';
 
 /**
@@ -119,6 +119,7 @@ export function WhatsAppWayBSection({ read, user = null, api = channelsApi, onCh
       {view.state === 'linked' && (
         <>
           <p className={NOTE} data-testid="way-b-last">{lastUsedLine(view.lastUsedAt)}</p>
+          <p className={NOTE} data-testid="way-b-venture">{`${ventureLine(view.venture)} ${WAY_B.ventureHow}`}</p>
           <p className={NOTE} data-testid="way-b-sends">{WAY_B.sends}</p>
           <WaitingCaptures api={api} />
           <button type="button" className={`${SMALL} self-start`} disabled={busy === 'unlink'} onClick={unlink} data-testid="button-way-b-unlink">{busy === 'unlink' ? 'Unlinking…' : WAY_B.unlink}</button>
@@ -181,9 +182,22 @@ export function WhatsAppWayB({ user = null, api = channelsApi }) {
  * three steps, the 5 MB limit, the consent line, and Axal's number with
  * **Open WhatsApp** (#1939: `axal_number` and `axal_link`). `read` is the same
  * link read; while Axal's number is not set up the entry says so and offers nothing.
+ *
+ * #1939 part 3: a linked member sees where recordings go and, when it is not
+ * `projectId` (the venture Record a Session is open in), **Send WhatsApp
+ * recordings to this venture**. The venture is the page's scope, never a
+ * picker of the entry's own (scripts/check-inline-project-pickers.mjs).
  */
-export function WhatsAppEntry({ read }) {
+export function WhatsAppEntry({ read, projectId = null, api = channelsApi, onChanged }) {
   const view = wayBState(read);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const sendHere = async () => {
+    setBusy(true); setError('');
+    try { await api.setWhatsAppVenture(Number(projectId)); await onChanged?.(); }
+    catch (e) { setError(wayBRefusal(e, 'Axal could not change where your WhatsApp recordings go. Try again.')); }
+    finally { setBusy(false); }
+  };
   const contact = read?.status === 'ready' ? axalContact(read.view) : null;
   if (view.state === 'loading') return <section className="border-b border-axal-hairline px-5 py-4 dark:border-gray-800" data-testid="whatsapp-entry" data-state="loading"><p className="m-0 text-[12px] text-axal-faint">Reading your WhatsApp link…</p></section>;
   return (
@@ -209,6 +223,15 @@ export function WhatsAppEntry({ read }) {
                 ? <span className="text-[12px] text-gray-700 dark:text-gray-300" data-testid="whatsapp-entry-linked">{view.number ? `Linked: ${view.number}` : 'Your WhatsApp is linked.'}</span>
                 : <Link to={WHATSAPP_PAGE_HREF} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white hover:bg-violet-800" data-testid="link-whatsapp-page">{WAY_B.link}</Link>}
             </div>
+            {view.state === 'linked' && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <p className="m-0 text-[12px] text-gray-700 dark:text-gray-300" data-testid="whatsapp-entry-venture">{ventureLine(view.venture)}</p>
+                {offersVenture(view, projectId) && (
+                  <button type="button" disabled={busy} onClick={sendHere} className={SMALL} data-testid="button-whatsapp-entry-venture">{busy ? 'Saving…' : WAY_B.sendHere}</button>
+                )}
+              </div>
+            )}
+            {error && <p role="alert" className={`mt-2 ${ALERT}`} data-testid="whatsapp-entry-venture-error">{error}</p>}
           </>
         )}
     </section>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { NO_PLAN_LINE } from '../../lib/planAllowance';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
@@ -65,7 +66,8 @@ function Period({ title, period, nrReason, testid }) {
 
 const STATE_COPY = {
   // D755 (#1916): with nothing on sale, runs wait for the reset (pastAllowanceLine).
-  no_allowance: { t: 'No allowance on this plan', d: (v, none) => pastAllowanceLine(none), tone: 'plain', topUp: true },
+  // D783: with no paid plan, every run uses tokens.
+  no_allowance: { t: 'No allowance on this plan', d: (v, none) => (v.noPlan ? NO_PLAN_LINE : pastAllowanceLine(none)), tone: 'plain', topUp: true },
   day_used_up: { t: 'Today’s allowance is used up', d: (v, none) => `It resets at 00:00 UTC, ${v.resetIn}. ${pastAllowanceLine(none, { untilThen: true })}`, tone: 'warn', topUp: true },
   month_used_up: { t: 'This month’s allowance is used up', d: (v, none) => `It resets on the 1st at 00:00 UTC. ${pastAllowanceLine(none, { untilThen: true })}`, tone: 'warn', topUp: true },
   paused: { t: 'Runs paused', d: () => 'A run cost more than it held. New runs wait while HQ checks the charge.', tone: 'danger', topUp: false },
@@ -124,7 +126,7 @@ export function AllowanceCard({ budget, product, now = new Date() }) {
             })}
             {!v.noAllowance && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <Period title="Today" period={v.today} testid="usage-today" nrReason={`The plan sets no daily allowance. ${pastAllowanceLine(topUp === 'unavailable')}`} />
+                {v.dayCapped && <Period title="Today" period={v.today} testid="usage-today" nrReason={`The plan sets no daily allowance. ${pastAllowanceLine(topUp === 'unavailable')}`} />}
                 <Period title="This month" period={v.month} testid="usage-month" nrReason={`The plan sets no monthly allowance. ${pastAllowanceLine(topUp === 'unavailable')}`} />
               </div>
             )}

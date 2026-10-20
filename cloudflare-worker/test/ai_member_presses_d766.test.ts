@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { ROUTE, ASSIST_OFF_MESSAGE, budgetRefusalMessage, __resetForTest } from '../src/services/aiRouter.ts';
@@ -41,7 +41,7 @@ function world(ai: any, { balance = 5_000_000 } = {}) {
   f.db.exec(`CREATE TABLE projects(id INTEGER PRIMARY KEY, name TEXT, sector TEXT, stage TEXT, problem_statement TEXT, solution TEXT, score REAL, founder_id INTEGER, company_id INTEGER);
              INSERT INTO projects(id,name,sector,stage) VALUES(7,'Harbour','logistics','mvp');`);
   f.db.prepare("UPDATE users SET role = 'partner' WHERE id = ?").run(MEMBER);
-  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('partner',0,0,1)").run();
+  setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?)').run(MEMBER, balance);
   // What the guard was asked to check, as the guard stub hands it its input.
   const guarded: string[] = [];

@@ -4,7 +4,7 @@
 // every member's ledger sum equals their top-up balance.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { recordAiTopupPurchase, creditAiTopupFromPayment } from '../src/services/aiTopups.ts';
 import { reserveAiBudget, settleAiReservation } from '../src/services/aiBudget.ts';
 import { ledgerBalance, tokenPackQuote } from '../src/services/aiCredits.ts';
@@ -56,7 +56,7 @@ async function invariant(f: any) {
 }
 /** Spend part of the top-up balance through the real reserve and settle code. */
 async function spend(f: any, micro: number) {
-  f.db.prepare("INSERT OR REPLACE INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+  setFixtureAllowance(f.db, 0); // D783: no plan, so runs draw tokens
   const r = await reserveAiBudget(f.env, 2, micro, now); if (!r.ok) throw Error('reserve');
   await settleAiReservation(f.env, r.reservation, micro);
 }

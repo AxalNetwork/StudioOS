@@ -24,8 +24,8 @@ brings this file up to it.
 | The model matrix (`railMatrix.json`, `GET /api/ai/rail`) | D764 (#2089) | yes |
 | The run path records each run's page, option and record | D765 (#2090), D770 (#2095) | yes |
 | The page map (`frontend/src/lib/railPages.js`) | D768 (#2092) | yes |
-| The switch on every rail | D769 (#2088), PR 1 | yes |
-| A member's consumption by page and option | D776 (#2093), PR 1 | yes |
+| The switch on every rail, and model cards from the Worker's page and option rows | D769 (#2088) | yes |
+| A member's consumption by page and option, and HQ's catalogue and member-run reads | D776 (#2093) | yes |
 | The every-page guard: three parts per canvas page, and the render check | D781 (#2106) | yes |
 
 ## 1. How a page gets its models
@@ -33,7 +33,7 @@ brings this file up to it.
 - **The page map.** `frontend/src/lib/railPages.js` (D768) gives every route its page key, `<Profile> · <Section>` or `<Profile> · <Section> · <Module>`, in the canvas's names. A second route that answers the same key has an alias row that says why. A canvas board with no route of its own is in `RAIL_BOARD_ALIASES`. `RailPageProvider` (`ui/railCrumbs.js`), at the app shell, reads the key from the route and gives it to every rail below it, and the rail's `<aside>` carries it as `data-page-key`.
 - **The matrix.** `scripts/build-rail-matrix.mjs` writes `cloudflare-worker/src/services/ai/railMatrix.json` from the canvas data and `scripts/lib/railMatrixOverrides.json`. `cloudflare-worker/test/rail_matrix_d764.test.ts` holds the committed file equal to the script's output. Each page key has one row, its options have their own rows, and `models[0]` is the default.
 - **The Worker's read.** `GET /api/ai/rail?page=<key>[&option=<key>]` answers a page's models with their prices, the member's pick and mode, and the billing mode. `PUT /api/ai/rail/pick` and `PUT /api/ai/rail/mode` store the pick and the switch. The contract is in `documentation/architecture/ROUTE_MAP.md`, "Eadwyn AI rail Worker contract".
-- **What the rail draws today.** `WorkerRail.jsx` still draws its model cards from `frontend/src/ui/railModels.js` (`jobsFor`, `railSuggestions`), and stores picks and the mode through `/api/ai/rail-preferences`, keyed by its `workspace`. Moving the cards to `GET /api/ai/rail` is D769's (#2088).
+- **What the rail draws today.** `WorkerRail.jsx` reads the page's or open option's models from `GET /api/ai/rail`, shaped by `railView` in `frontend/src/ui/railModels.js`. Picks are stored through `PUT /api/ai/rail/pick`; a missing page key or matrix row is shown as Not recorded, with its reason (D769, #2088).
 - **The switch.** "Turn off AI assistance on this page" is drawn on every rail. A run on a page the member turned off is refused 403 `assist_off`, "AI assistance is off on this page." Saving is never refused.
 - **The guards.**
   - `frontend/test/airail_every_page_d781.test.mjs` fails on any canvas page with no page-map key, no matrix row or no switch.
@@ -50,12 +50,15 @@ brings this file up to it.
    A model is offered only when it is GA or partner and has a price. `cloudflare-worker/test/ai_catalogue_d760.test.mjs` pins every price to what was read.
 2. **The router.** If a task runs it, name it in `ROUTE` (`cloudflare-worker/src/services/aiRouter.ts`) as a primary, a fallback or an alternate.
 3. **The matrix.** Name it in `scripts/lib/railMatrixOverrides.json` for the pages and options it fits, run `node scripts/build-rail-matrix.mjs`, and commit `railMatrix.json`. The matrix test refuses a model the catalogue does not offer, or one that cannot do the option's work.
-4. **The rail's card.** Until D769 moves the cards to the Worker's read, a model drawn on the rail also needs its name and line in `MODEL_COPY` (`frontend/src/ui/railModels.js`).
+4. **The rail's card.** The page's cards come from the Worker's matrix read. Keep the model's display copy in `MODEL_COPY` and its All models group in `frontend/src/ui/railModels.js`; prices come from the Worker's reads, never the copy table.
 5. **Gated models.**
    - A partner model new to the platform (Deepgram, Leonardo, Black Forest Labs) is offered only while `AI_PARTNER_MODELS = "on"`.
    - A paid-only model is demoted below the row's first non-paid model of the same shape until `AI_PAID_MODELS = "on"`.
 
    The owner sets both after accepting the terms and confirming Workers Paid.
+6. **The deploy check.** `scripts/check-ai-catalogue-live.mjs` runs before the D1 migrations in the deploy workflow.
+   - It fails the deploy only when a model is confirmed missing from the account's live list and the push changed `catalogue.ts` or `railMatrix.json`.
+   - Everything else is a warning.
 
 ## 3. Billing
 
@@ -75,12 +78,12 @@ brings this file up to it.
   - **One member's ledger:** `GET /api/ai-budget/members/:userId`.
   - **Revenue's token line:** the quarter's token spend, its share of Cloudflare's cost, and the margin (D762 §6).
 
+**D776 (#2093).** Each account's consumption is shown by page and by option. The new run rows are `GET /api/ai-budget/runs`. On HQ › AI allowances, HQ reads how members are charged and the models offered (`GET /api/ai/catalogue/hq`), and one member's month and each run (`GET /api/ai-budget/members/:userId/runs`, logged on every read).
+
 ## Still open
 
 | Part | Task |
 | --- | --- |
 | Routes that do not yet draw one rail with their page key (`RENDER_NOT_YET`) | #2097–#2101, and the off-canvas pages |
-| The rail draws its cards from `GET /api/ai/rail` | D769 (#2088) |
 | `billingMode` reads `AI_BILLING`; the price sentence on `/plans-and-pricing` | D762 (#2019) |
-| HQ › AI allowances: how members are charged, the models offered, one member's month | D776 (#2093), PR 2 |
 | A plan's allowance is 25% of its price, and there is no daily cap | D783 (#2124) |

@@ -5,6 +5,10 @@
  *
  * The routes are D655's (`routes/integrations.ts`): `GET` and `PUT
  * /:uid/repositories`, `POST /:uid/sync`, `GET /:uid/sync-status`.
+ *
+ * D655 follow-up (#1884): the install link and its words, from the GET's
+ * `needs_install` and `install_url`. The page keeps a link only in the exact
+ * shape the Worker builds; anything else draws none.
  */
 
 /**
@@ -75,4 +79,39 @@ export function successBanner(providerKey, result) {
     return lines.join(' ');
   }
   return typeof result.summary === 'string' && result.summary ? result.summary : null;
+}
+
+// ───────────────────────────────────────────── the install link (#1884)
+
+/** The App's install page, exactly as the Worker builds it from GITHUB_APP_SLUG (D651's crafted-link rule). */
+export const GITHUB_INSTALL_URL = /^https:\/\/github\.com\/apps\/[a-z0-9][a-z0-9-]{0,99}\/installations\/new$/;
+
+/** The install URL when it is that exact shape, else null: no other link is ever drawn. */
+export function installHref(v) {
+  return typeof v === 'string' && GITHUB_INSTALL_URL.test(v) ? v : null;
+}
+
+/**
+ * One link to the App's install page, for both states: "Install …" when the
+ * Worker found no installation, "Add or remove …" otherwise (GitHub's page
+ * offers Configure for an account it is already installed on). Null with no URL.
+ */
+export function githubLink(read) {
+  const href = installHref(read?.installUrl);
+  if (!href) return null;
+  return { href, label: read?.needsInstall === true ? 'Install the StudioOS app on GitHub' : 'Add or remove repositories on GitHub' };
+}
+
+export const EMPTY_REPOS = 'GitHub lists none this installation can read. Add repositories to the StudioOS app in GitHub, then come back.';
+
+/**
+ * The "No repository" row's words. Not installed: say so, with the link or
+ * without one. Installed with nothing listed, or an older Worker that sends
+ * neither field: today's sentence.
+ */
+export function emptyRepoSentence(read) {
+  if (read?.needsInstall !== true) return EMPTY_REPOS;
+  return installHref(read?.installUrl)
+    ? 'The StudioOS app isn’t installed on your GitHub account or organization yet. Install it on GitHub and choose its repositories there, then press Refresh.'
+    : 'The StudioOS app isn’t installed on your GitHub account or organization yet, and its install link isn’t set up on Axal yet.';
 }

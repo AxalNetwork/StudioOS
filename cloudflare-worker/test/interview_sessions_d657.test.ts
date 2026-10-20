@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import sessions, { markCeiling } from '../src/routes/founder_validate_sessions.ts';
 import { sweepInterviewSessions, missingLine } from '../src/services/sessionSweeper.ts';
@@ -74,10 +74,9 @@ function fixture({ dayMicro = 50_000_000, monthMicro = 500_000_000 } = {}) {
            INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (1, 10, 'Dana'), (2, 20, 'Sam');`);
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
-  for (const key of ['founder:free', 'other']) {
-    db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)')
-      .run(key, dayMicro, monthMicro);
-  }
+  // D783: the members' allowance is what their plans give, with no daily cap; `dayMicro` is kept for the callers' readability.
+  void dayMicro;
+  setFixtureAllowance(db, monthMicro);
 
   const objects = new Map<string, Uint8Array>();
   const r2Calls = { put: 0, del: [] as string[] };
@@ -372,8 +371,8 @@ test('the receipt lists each job and the budget left today and this month', asyn
   assert.equal(r.body.items.length, 1);
   assert.equal(r.body.items[0].model, '@cf/openai/whisper-large-v3-turbo');
   assert.ok(r.body.total_cost_microusd > 0);
-  assert.ok(r.body.budget.day_left_microusd < 50_000_000, 'the spend did not reach the budget');
-  assert.ok(r.body.budget.month_left_microusd < 500_000_000);
+  assert.equal(r.body.budget.day_left_microusd, null, 'D783: a member has no daily cap');
+  assert.ok(r.body.budget.month_left_microusd < 500_000_000, 'the spend did not reach the budget');
 });
 
 test('the model list carries the router’s prices, tags, and what can be chosen', async () => {
@@ -918,7 +917,7 @@ test('D685 §5.9: a failed chunk fails the run with a sentence; a retry resumes 
 });
 
 test('D685 §5.9: a spent budget is recorded and shown in the budget\'s words', async () => {
-  const f = fixture({ dayMicro: 1 });
+  const f = fixture({ monthMicro: 1 }); // D783: a member has no daily cap, so the month is spent
   llmAi(f);
   const { sid } = await recordedForProcessing(f, 1);
   await call(f.env, FOUNDER, 'POST', `/sessions/${sid}/finish`, { last_seq: 0 });
@@ -1035,7 +1034,7 @@ test('D685 §5.10: summary sentences keep only citations inside the transcript; 
   assert.equal(s1.status, 201, JSON.stringify(s1.body));
   assert.equal(s1.body.summary.sentences.length, 1);
   assert.equal((await call(f.env, FOUNDER, 'POST', `/sessions/${tid}/summarise`, { model: 'not a model' })).status, 400);
-  const g = fixture({ dayMicro: 1 });
+  const g = fixture({ monthMicro: 1 }); // D783: a member has no daily cap, so the month is spent
   llmAi(g);
   const t2 = await setup(g, { channel: 'text', interviewee: { name: 'Chat' }, messages: [{ author: 'Chat', text: 'x', at_ms: 0 }] });
   const spent = await call(g.env, FOUNDER, 'POST', `/sessions/${t2.body.session.id}/summarise`);

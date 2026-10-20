@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useContext, useEffect, useId, useReducer, useRef, useState } from 'react';
+import { NO_PLAN_LINE, dayCapped, noPlan } from '../lib/planAllowance';
 import { createPortal } from 'react-dom';
 import { PanelRightClose, PanelRightOpen, X } from 'lucide-react';
 import { UNSAFE_LocationContext } from 'react-router-dom';
@@ -9,11 +10,11 @@ import useAssistMode from '../hooks/useAssistMode';
 import { safeReadJSON, safeWriteJSON } from '../lib/storage';
 import { formatSpend, spendMeter } from './assistCost';
 import { useEscapeClose } from '../components/useEscapeClose';
-import { ASSIST_SURFACES } from './eadwynConfig';
-import { DEFAULT_JOBS, jobsFor, railSuggestions } from './railModels';
-import { PRICE_NOTE, SAFETY_SENTENCE, guardSentence, priceSuggestions, railRates } from './railPrices';
+import { railView } from './railModels';
+import { PRICE_NOTE, SAFETY_SENTENCE, guardSentence, priceGroups, railModelPrice, railRates } from './railPrices';
 import { aiBudgetApi } from '../lib/api/aiBudget';
-import { readRailModel, syncRailPrefs, writeRailModel } from './railModelChoice';
+import { railPrefsApi } from '../lib/api/railPrefs.js';
+import { syncRailPrefs } from './railModelChoice';
 import { useRailCrumbs, useRailPage } from './railCrumbs.js';
 import { openEadwynPanel, useEadwynPanel, useEadwynRailServes, eadwynPanelEvent } from './eadwynPanel.js';
 import { EadwynPanel } from './EadwynPanel.jsx';
@@ -38,22 +39,26 @@ import { clearRailPage, setRailPage } from '../lib/railPage.js';
  * in the details, and the pages that never grew one simply had no rail.
  *
  * WHAT IT DRAWS IS THE AIRAIL CANVAS, `design/canvases/integrated/AIRail.dc.html`
- * (D698, #1660), block by block, on real data:
+ * (D698, #1660; the "AIRail · every page" export since D769, #2088), block by
+ * block, on real data:
  *
  *   1. HEADER — the Eadwyn mark and "Eadwyn AI".
  *   2. WHO AND WHERE — a pill naming the viewer's licence, in the app's own
  *      colours (`ACCENT`), and the crumbs "section › module › record" from
  *      `RailCrumbsProvider` (`ui/railCrumbs.js`), or the `workspace` alone.
  *   3. THE SWITCH — "Turn off AI assistance on this page", on every page
- *      (D769, #2088; D720 §6). It is the assist mode (`useAssistMode`): a page
- *      with `fills` defaults to off (Manual), because its runs spend; every
- *      other page defaults to on. With AI off the rail says so and draws no
- *      suggestions.
- *   4. SUGGESTED FOR THIS PAGE — the canvas's models for the page's kind of
- *      work that the router carries and the page's jobs run
- *      (`railSuggestions`), a radio only where the pick reaches a run, each
- *      with its price; then "All models", the router's models in the
- *      canvas's ten groups, each row with its short price and the New badge.
+ *      (D769, #2088; D720 §6). It is the assist mode (`useAssistMode`), on by
+ *      default everywhere since D769 PR 2: the Worker refuses a run on a page
+ *      switched off (D765) and a recording's Stop asks first (D770). With AI
+ *      off the rail says so and draws no suggestions.
+ *   4. SUGGESTED FOR THIS PAGE — the page's models from the Worker's matrix
+ *      (`GET /api/ai/rail?page=<key>`, D764), or the open option's while
+ *      `useRailOption` names one, default first, each with its role, line and
+ *      price, a radio where the row offers a choice; the member's pick is
+ *      stored per page (`PUT /api/ai/rail/pick`). Then "On this page", the
+ *      page's options, and "All models", the router's models in the canvas's
+ *      ten groups, each row with its short price and the New badge. A page
+ *      with no page key, or no row, says "Not recorded" and why.
  *   5. SAFETY — "Llama Guard 3 8B checks every run (… in · … out per 1M
  *      tokens). Eadwyn drafts; you send." while the Worker reports the guard
  *      on (D763 part 2 made it true); else "Eadwyn drafts; you send."
@@ -61,9 +66,10 @@ import { clearRailPage, setRailPage } from '../lib/railPage.js';
  *      balance and Add tokens, always drawn, from `/api/ai-budget/me` and
  *      `/top-up`.
  *
- * PRICES ARE THE WORKER'S (D720 §1, reversing D698 decision 10): read from
- * `GET /api/ai/rates`, the router's own rate card, printed in the canvas's
- * units (`ui/railModels.js` `priceText`), never multiplied here. No model id,
+ * PRICES ARE THE WORKER'S (D720 §1, reversing D698 decision 10): a card's from
+ * `GET /api/ai/rail`, a row's and the guard's from `GET /api/ai/rates`, at the
+ * price a run is settled at (`billing`), printed in the canvas's units
+ * (`ui/railPrices.js`), never multiplied here. No model id,
  * estimate, average or receipt: those are `/account/usage`'s. The accent is the
  * `role` prop's, because some hosts are violet for every viewer on purpose;
  * the pill is the viewer's.
@@ -100,12 +106,6 @@ function useRailPathname() {
   if (ctx?.location?.pathname != null) return ctx.location.pathname;
   return typeof window !== 'undefined' ? window.location?.pathname || '' : '';
 }
-
-/**
- * The one ASSIST_SURFACES key every workspace zone shares, on all four
- * licences: its desk sentences are what the switch says it turns on.
- */
-const WORKSPACE_SURFACE = 'workspace';
 
 /**
  * D405 — THE RAIL ON A PHONE, for everyone the Eadwyn panel does not serve.
@@ -333,6 +333,30 @@ function useRailRates() {
   return { ...reading, reload: load };
 }
 
+/**
+ * D769 PR 2: the page's row from the Worker's matrix, or the open option's
+ * (`GET /api/ai/rail`). Nothing is read without a page key. A 404 is the
+ * matrix having no row for the page, which the rail says, not a failure.
+ */
+function useRailRow(page, option) {
+  const [reading, setReading] = useState({ loading: !!page, data: null, error: false, status: null });
+  const load = useCallback(() => {
+    if (!page) {
+      setReading({ loading: false, data: null, error: false, status: null });
+      return undefined;
+    }
+    let live = true;
+    setReading((r) => ({ ...r, loading: true }));
+    Promise.resolve()
+      .then(() => railPrefsApi.page(page, option))
+      .then((data) => { if (live) setReading({ loading: false, data, error: false, status: 200 }); },
+        (e) => { if (live) setReading({ loading: false, data: null, error: true, status: e?.status ?? null }); });
+    return () => { live = false; };
+  }, [page, option]);
+  useEffect(() => load(), [load]);
+  return { ...reading, reload: load };
+}
+
 /** The top-up read as Add tokens draws it: `lib/aiTokens.js`'s one model (D755, #1916). */
 export const topUpState = (product, productError) => aiTokenState({ error: productError, data: product });
 
@@ -357,9 +381,10 @@ export function RailUsage({ reading }) {
       </div>
     );
   }
+  // D783: a member has no daily limit, so the box shows the month only; with no plan, the no-plan line.
   const rows = [
-    { t: 'Today', spent: b.day_spend_microusd, cap: b.daily_microusd, reset: 'Resets at 00:00 UTC', id: 'today' },
-    { t: 'This month', spent: b.month_spend_microusd, cap: b.monthly_microusd, reset: 'Resets on the 1st', id: 'month' },
+    ...(dayCapped(b) ? [{ t: 'Today', spent: b.day_spend_microusd, cap: b.daily_microusd, reset: 'Resets at 00:00 UTC', id: 'today' }] : []),
+    ...(noPlan(b) ? [] : [{ t: 'This month', spent: b.month_spend_microusd, cap: b.monthly_microusd, reset: 'Resets on the 1st', id: 'month' }]),
   ];
   const topUp = topUpState(reading.product, reading.productError);
   return (
@@ -370,6 +395,7 @@ export function RailUsage({ reading }) {
           <span>A run cost more than it held. New runs wait while HQ checks the charge.</span>
         </div>
       )}
+      {noPlan(b) && <p className="fwr-usage-note" data-testid="text-worker-rail-no-plan">{NO_PLAN_LINE}</p>}
       {rows.map((r) => {
         const meter = r.cap > 0 ? spendMeter(r.spent, r.cap) : null;
         return (
@@ -416,7 +442,7 @@ export function RailUsage({ reading }) {
  * these, and nothing in the rail reads one. Taking them off the mounts is
  * cleanup, not behaviour.
  */
-export const RETIRED_RAIL_PROPS = ['stance', 'coverage', 'coverageNote', 'scope', 'scopeBranch', 'unavailable', 'action', 'footer'];
+export const RETIRED_RAIL_PROPS = ['stance', 'coverage', 'coverageNote', 'scope', 'scopeBranch', 'unavailable', 'action', 'footer', 'fills'];
 
 export default function WorkerRail({
   workspace,
@@ -427,26 +453,17 @@ export default function WorkerRail({
    * switch while AI is on.
    */
   note,
-  // Does THIS workspace have fill-the-blanks work? The surface declares the
-  // capability; the host declares whether this page has any. Since D769 the
-  // switch is drawn on every page (D720 §6), and `fills` decides only its
-  // default: off on a page whose runs spend (Manual, as D698 had it), on
-  // everywhere else, until D769 PR 2 makes it on everywhere.
-  fills = false,
   'data-testid': testId = 'worker-rail',
 }) {
   const pathname = useRailPathname();
-  // `/api/ai/me/spend` (the spine) and `/api/ai/pricing` (the suggestions).
-  // No page read: this page's month and last run left the rail (D698).
-  const { spend, pricing, spendError, pricingError, loading, reload } = useAiSpend();
+  // `/api/ai/me/spend` (the spine). This page's month and last run left the
+  // rail (D698).
+  const { spend, spendError, loading } = useAiSpend();
   const budgetReading = useAiBudget();
   const bodyId = `${useId()}-worker-rail-body`;
   const view = useViewMode();
   const viewer = view?.shellRole ?? role;
   const crumbs = useRailCrumbs();
-  // D781: the page key the shell's provider gave this rail, on its element, so
-  // a render can tell which page it is on (null outside the provider).
-  const railPage = useRailPage()?.page ?? null;
 
   // One preference for the whole product, not one per page.
   const [collapsed, setCollapsed] = useState(() => safeReadJSON(RAIL_COLLAPSED_KEY, false) === true);
@@ -471,48 +488,51 @@ export default function WorkerRail({
     });
   }, []);
 
-  const surface = ASSIST_SURFACES[WORKSPACE_SURFACE];
-
   // WHERE: the provider's section and module, or this rail's workspace.
   const section = crumbs?.section || workspace;
   const module = crumbs?.section ? crumbs.module : null;
   const trail = [section, module, crumbs?.section ? crumbs.record : null].filter(Boolean);
 
-  // THE SUGGESTIONS, over the page's jobs and the stored picks. A pick is
-  // read from `readRailModel(workspace, task)`, the store `FillProposals.jsx`
-  // sends, so the card and the run agree. Re-read on every render, so a pick
-  // made here shows at once and one cleared by a refusal shows next render.
-  const [, setPicks] = useState(0);
-  const picks = {};
-  for (const job of [...jobsFor(section, module), ...DEFAULT_JOBS]) picks[job.task] = readRailModel(workspace, job.task);
-  // D769: each card's and row's price, from the Worker's rate card.
+  // THE PAGE'S MODELS (D769 PR 2): the shell's page key (D768) and the open
+  // option, read from the Worker's matrix. A pick made here shows at once and
+  // is stored per page, or per option while one is open; the re-read after it
+  // is the Worker's answer.
+  const railPage = useRailPage();
+  const pageKey = railPage?.offCanvas ? null : railPage?.page ?? null;
+  const optionKey = railPage?.option?.key ?? null;
+  const row = useRailRow(pageKey, optionKey);
+  const [picked, setPicked] = useState(null);
+  useEffect(() => { setPicked(null); }, [pageKey, optionKey]);
+  const billing = row.data?.billing;
+  const rail = railView({
+    reading: row, page: pageKey, option: optionKey, pick: picked, price: (m) => railModelPrice(m, billing, true),
+  });
+  // D769: each All models row's price, from the Worker's rate card.
   const rates = railRates(useRailRates());
-  const sug = priceSuggestions(railSuggestions({ section, module, pricing, picks }), rates);
-  const pick = useCallback((id, tasks) => {
-    for (const task of tasks) writeRailModel(workspace, task, id);
-    setPicks((n) => n + 1);
-  }, [workspace]);
-  // The Worker's copy of the pick and the mode, read once per page load
-  // (D698). The mode seeds its own store; a pick needs this re-render.
-  useEffect(() => {
-    let live = true;
-    syncRailPrefs().then(() => { if (live) setPicks((n) => n + 1); });
-    return () => { live = false; };
-  }, []);
+  const groups = priceGroups(rail.groups, rates);
+  const pick = useCallback((id) => {
+    if (!pageKey) return;
+    setPicked(id);
+    Promise.resolve()
+      .then(() => railPrefsApi.setPagePick(pageKey, id, optionKey))
+      .then(() => row.reload(), () => { setPicked(null); row.reload(); });
+  }, [pageKey, optionKey, row.reload]);
+  // The Worker's copy of each page's switch, read once per page load (D698).
+  useEffect(() => { syncRailPrefs(); }, []);
   const [allPref, setAllPref] = useState(null);
-  const showAll = allPref ?? !!sug.offList;
+  const showAll = allPref ?? false;
 
-  // D765: the page every request names as the rail's, until D768's page map.
+  // D765: the page every request names as the rail's, the key its switch is
+  // stored and checked under (lib/railPage.js).
   useEffect(() => {
     const token = setRailPage(workspace);
     return () => clearRailPage(token);
   }, [workspace]);
 
   // Shared with the page, which decides whether to offer proposals, through a
-  // module store rather than a provider — see hooks/useAssistMode.js. A page
-  // whose fills spend defaults to off; every other page to on (D769 PR 1).
-  const modeChoice = surface.mode?.kind === 'choice' && fills ? surface.mode : null;
-  const [aiOn, setAiOn] = useAssistMode(workspace, { defaultOn: !modeChoice });
+  // module store rather than a provider — see hooks/useAssistMode.js. On by
+  // default on every page (D720 §6).
+  const [aiOn, setAiOn] = useAssistMode(workspace);
   const live = aiOn;
 
   // The accent is the HOST's `role`, from `ACCENT`, the same table ZoneNav
@@ -626,28 +646,31 @@ export default function WorkerRail({
         {aiOn && (
         <>
         <span className="fwr-eyebrow">Suggested for this page</span>
-        {sug.unreadable ? (
-          pricingError ? (
-            <div data-testid="worker-rail-model-unreadable">
-              <Unreadable
-                what="The router's model list"
-                claim="Which model runs here is unknown, not none."
-                onRetry={reload}
-              />
-            </div>
-          ) : <p className="fwr-absent">Loading…</p>
-        ) : (
+        {rail.state === 'loading' && <p className="fwr-absent">Loading…</p>}
+        {rail.state === 'none' && (
+          <p className="fwr-absent" data-testid="text-worker-rail-model-none">{`Not recorded. ${rail.reason}`}</p>
+        )}
+        {rail.state === 'unreadable' && (
+          <div data-testid="worker-rail-model-unreadable">
+            <Unreadable
+              what="This page's models"
+              claim="Which model runs here is unknown, not none."
+              onRetry={row.reload}
+            />
+          </div>
+        )}
+        {rail.state === 'ready' && (
           <div
             className="fwr-cards"
-            {...(sug.cards.some((c) => c.pickable) ? { role: 'radiogroup', 'aria-label': `Model for ${workspace}` } : {})}
+            {...(rail.pickable ? { role: 'radiogroup', 'aria-label': `Model for ${trail[trail.length - 1] || workspace}` } : {})}
           >
-            {sug.cards.map((card) => {
-              const radio = card.pickable;
+            {rail.cards.map((card) => {
+              const radio = rail.pickable;
               const Tag = radio && live ? 'button' : 'div';
               return (
                 <Tag
                   key={card.id}
-                  {...(Tag === 'button' ? { type: 'button', onClick: () => pick(card.id, card.tasks) } : {})}
+                  {...(Tag === 'button' ? { type: 'button', onClick: () => pick(card.id) } : {})}
                   {...(radio ? { role: 'radio', 'aria-checked': card.checked, ...(live ? {} : { 'aria-disabled': 'true' }) } : {})}
                   className="fwr-card"
                   data-radio={radio ? 'true' : 'false'}
@@ -660,7 +683,7 @@ export default function WorkerRail({
                       <b>{card.name}</b>
                       {card.role && <i className="fwr-role" data-default={card.role === 'Default' ? 'true' : 'false'}>{card.role}</i>}
                     </span>
-                    <span className="fwr-card-line">{card.line}</span>
+                    {card.line && <span className="fwr-card-line">{card.line}</span>}
                     <span className="fwr-card-price" data-testid={`text-worker-rail-price-${card.id.split('/').pop()}`}>{card.price}</span>
                   </span>
                 </Tag>
@@ -668,17 +691,27 @@ export default function WorkerRail({
             })}
           </div>
         )}
-        {!sug.unreadable && (
+        {rail.state === 'ready' && (
           <p className="fwr-models-note" data-testid="text-worker-rail-model-note">
-            {sug.pickable
-              ? `Remembered for ${workspace}. Switching changes nothing already accepted.`
-              : 'The router\'s model for this work. It is not chosen here.'}
+            {rail.pickable
+              ? `Remembered for ${optionKey ? 'this option' : 'this page'}. Switching changes nothing already accepted.`
+              : 'The model for this work. It is not chosen here.'}
           </p>
         )}
-        {sug.offList && (
-          <p className="fwr-using" data-testid="text-worker-rail-using">{`Using ${sug.offList.name} on this page.`}</p>
+        {rail.options.length > 0 && (
+          <div className="fwr-options" data-testid="worker-rail-options">
+            <span className="fwr-eyebrow">On this page</span>
+            <ul className="fwr-option-list">
+              {rail.options.map((o) => (
+                <li key={o.key} className="fwr-option" data-open={o.open ? 'true' : 'false'} data-testid={`row-worker-rail-option-${o.key}`}>
+                  <span className="fwr-option-label">{o.label}</span>
+                  {o.model && <span className="fwr-option-model">{o.model}</span>}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
-        {!sug.unreadable && sug.groups.length > 0 && (
+        {rail.state === 'ready' && groups.length > 0 && (
           <>
             <button
               type="button"
@@ -693,7 +726,7 @@ export default function WorkerRail({
             {showAll && (
               <div className="fwr-groups" data-testid="worker-rail-all-models">
                 <p className="fwr-price-note" data-testid="text-worker-rail-price-note">{PRICE_NOTE}</p>
-                {sug.groups.map((g) => (
+                {groups.map((g) => (
                   <div key={g.title} className="fwr-group">
                     <div className="fwr-group-title">{g.title}</div>
                     <div className="fwr-rows">
@@ -714,7 +747,7 @@ export default function WorkerRail({
                             className="fwr-chip"
                             aria-pressed={c.selected}
                             data-selected={c.selected ? 'true' : 'false'}
-                            onClick={() => pick(c.id, c.tasks)}
+                            onClick={() => pick(c.id)}
                             data-testid={`chip-worker-rail-model-${c.id.split('/').pop()}`}
                           >
                             {inner}
@@ -756,7 +789,7 @@ export default function WorkerRail({
       className={`fwr ${className}`.trim()}
       aria-label={`Eadwyn AI · ${workspace}`}
       data-collapsed={collapsed ? 'true' : 'false'}
-      {...(railPage ? { 'data-page-key': railPage } : {})}
+      {...(railPage?.page ? { 'data-page-key': railPage.page } : {})}
       data-testid={testId}
       style={accentStyle}
     >

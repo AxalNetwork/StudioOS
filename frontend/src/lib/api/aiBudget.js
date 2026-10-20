@@ -25,6 +25,10 @@ export const aiBudgetApi = {
     if (month) q.set('month', month);
     return request(`/ai-budget/runs?${q}`);
   },
+  // D776 PR 2 — HQ (Admin or Super Admin): one member's month by option within a page, and each run. Audited.
+  memberRuns: (userId, { month } = {}) => request(`/ai-budget/members/${enc(userId)}/runs${month ? `?month=${enc(month)}` : ''}`),
+  // D776 PR 2 — HQ: how members are charged, and the models offered with the pages that name them.
+  models: () => request('/ai/catalogue/hq'),
   // D750 — Super Admin: why the top-up is or is not offered.
   topUpStatus: () => request('/ai-budget/top-up/status'),
   // D641 — every model the router can price, read from its own tables.

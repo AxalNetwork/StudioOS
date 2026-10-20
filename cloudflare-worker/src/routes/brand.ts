@@ -1203,7 +1203,7 @@ brand.post('/landing/autofill', async (c) => {
   const sector = body?.sector ? String(body.sector) : null;
   const requested = String(body?.template || '').trim();
   const key = (TEMPLATE_KEYS as readonly string[]).includes(requested) ? (requested as TemplateKey) : 'minimal';
-  const ai = await aiTemplateContent(c.env, user.id, key, name, sector, description, railFor(c, { page: 'build', option: 'fill:brand/landing' }));
+  const ai = await aiTemplateContent(c.env, user.id, key, name, sector, description, railFor(c, { page: 'Founder · Grow · Distribution', option: 'form:landing' }));
   if (ai) return c.json({ ...ai, ai_generated: true });
   const hero = heuristicHeroCopy(name, sector, description);
   return c.json({
@@ -1289,7 +1289,7 @@ brand.post('/palette/suggest', async (c) => {
   if (description.length < 4) return c.json({ error: 'description too short' }, 400);
   const sector = body?.sector ? String(body.sector) : null;
   const seed = cleanHex(body?.seed_color);
-  const ai = await aiPalette(c.env, user.id, description, sector, seed, railFor(c, { page: 'build', option: 'draft:brand/palette' }));
+  const ai = await aiPalette(c.env, user.id, description, sector, seed, railFor(c, { page: 'Founder · Grow · Distribution', option: 'form:palette' }));
   const palette = ai || heuristicPalette(description, seed);
   const warnings: string[] = [];
   if (contrastRatio(palette.ink, palette.background) < 4.5) {
@@ -1324,7 +1324,7 @@ brand.post('/tagline/suggest', async (c) => {
   const tone = String(body?.tone || '').trim();
   const marketAngle = String(body?.market_angle || '').trim();
   if (!audience || !tone || !marketAngle) return c.json({ error: 'audience, tone, and market_angle required' }, 400);
-  const ai = await aiTaglines(c.env, user.id, name, description, audience, tone, marketAngle, railFor(c, { page: 'build', option: 'draft:brand/taglines' }));
+  const ai = await aiTaglines(c.env, user.id, name, description, audience, tone, marketAngle, railFor(c, { page: 'Founder · Grow · Distribution', option: 'draft:taglines' }));
   const taglines = ai || heuristicTaglines(name, description, audience, tone, marketAngle);
   return c.json({ taglines: taglines.slice(0, 6), ai_generated: !!ai });
 });

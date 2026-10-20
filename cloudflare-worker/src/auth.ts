@@ -697,6 +697,17 @@ export async function requireSuperAdmin(c: Context<{ Bindings: Env }>): Promise<
 }
 
 /**
+ * D776 PR 2 (#2093): an HQ administrator, Admin or Super Admin. A branch's
+ * administrator is refused, because HQ › AI allowances reads HQ's own
+ * deployment. Unlike `requireSuperAdmin`, a plain HQ admin passes.
+ */
+export async function requireHqAdmin(c: Context<{ Bindings: Env }>): Promise<User> {
+  const user = await requireAdmin(c);
+  if (branchOf(c.env)) throw new Error(HQ_ONLY);
+  return user;
+}
+
+/**
  * The gate for authoring what HQ owns and every branch reads: the master
  * contract templates and the assessment questions (D.9, D106).
  *

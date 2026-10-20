@@ -4,6 +4,7 @@ import { tokenPacksApi } from '../../lib/api/tokenPacks';
 import { reportError } from '../../lib/log';
 import { Card, Pill, Unrecorded, Unreadable } from '../../ui';
 import { whenLabel } from '../account/usageModel';
+import { MemberSpend } from './HqAiCards';
 import {
   ADJUST_BOUNDS, ADJUST_NOTICE, BONUS_NOTE, PACK_LIMITS, REASON_MIN, RESEND,
   allowanceView, balanceView, bonusPercentOf, bonusUsd, exactEmailMatch, faceCentsOf, ledgerView, memberQuery,
@@ -386,6 +387,7 @@ export function MemberAccountCard({ api: packs = tokenPacksApi, users = api }) {
       <div className="px-4"><Refusal text={error} testId="hq-member-error" /></div>
       {done && <p role="status" className="px-4 pb-2 text-[12px] text-emerald-700 dark:text-emerald-300" data-testid="hq-member-done">{done}</p>}
       {found && <MemberAccount key={found.id} account={found.account} memberId={found.id} api={packs} onAdjusted={adjusted} />}
+      {found && <MemberSpend key={`spend-${found.id}`} memberId={found.id} />}
     </Card>
   );
 }

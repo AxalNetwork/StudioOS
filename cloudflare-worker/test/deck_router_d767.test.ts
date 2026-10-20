@@ -29,7 +29,7 @@ import { autofillDeck } from '../src/services/decks/autofill.ts';
 import { getMethod } from '../src/services/decks/methods.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 import decks from '../src/routes/decks.ts';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { withGuard } from './_guard_stub.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -50,7 +50,7 @@ function fixture({ funded = true } = {}) {
     CREATE TABLE landing_pages (id INTEGER PRIMARY KEY, project_id INTEGER);`);
   f.db.prepare('INSERT INTO projects (id, name, sector, stage, description, problem_statement, solution) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(PROJECT.id, PROJECT.name, PROJECT.sector, PROJECT.stage, PROJECT.description, PROJECT.problem_statement, PROJECT.solution);
-  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+  setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
   if (funded) f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(2,5000000)').run();
   const calls: Array<{ model: string; prompt: string }> = [];
   const AI = withGuard({

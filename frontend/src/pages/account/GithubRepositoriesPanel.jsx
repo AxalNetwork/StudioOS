@@ -1,10 +1,11 @@
 import { useContext, useEffect, useRef, useState } from 'react';
+import { ExternalLink } from 'lucide-react';
 import { Pill, Unreadable } from '../../ui';
 import { api as mainApi } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { Banner, FedGroup, Group, Row, SheetFrame } from './ConnectorSheet';
-import { repoLine, successBanner, syncFinished, syncProgress, syncRefusal } from './githubSync';
+import { emptyRepoSentence, githubLink, installHref, repoLine, successBanner, syncFinished, syncProgress, syncRefusal } from './githubSync';
 
 /**
  * D753 F4 (#1957) — GitHub's repositories, moved out of `GithubSyncSheet.jsx`
@@ -23,7 +24,15 @@ import { repoLine, successBanner, syncFinished, syncProgress, syncRefusal } from
  * percentage is drawn only when the Worker reports one.
  *
  * `emptySlot` is drawn after the "No repository" row's words when GitHub lists
- * none: D751 T6 (#1884) puts its install link there. Nothing else fills it.
+ * none. Nothing fills it today.
+ *
+ * THE INSTALL LINK (D655 follow-up, #1884). The read keeps the GET's
+ * `needs_install` and `install_url`; the "No repository" row says when the App
+ * is not installed (`emptyRepoSentence`). With `installLinks` (GitHub's page),
+ * a line under the list holds one link to the App's install page, in a new tab
+ * (its two labels are `githubLink`'s), only when the URL is the exact shape
+ * the Worker builds, and Refresh, which reads the list again. A re-read keeps the unsaved
+ * choices GitHub still lists and drops the rest.
  *
  * `frame({ done, name, busy, body, footer })` lays the parts out; without one
  * they are drawn in a plain block, with the footer below the body.
@@ -41,12 +50,14 @@ function plainFrame({ body, footer }) {
   );
 }
 
-export default function GithubRepositoriesPanel({ p, conn, projectId = null, companyId = null, onClose, onChanged, api = connectorsApi, projectsApi = mainApi, wait = sleep, emptySlot = null, frame = plainFrame }) {
+export default function GithubRepositoriesPanel({ p, conn, projectId = null, companyId = null, onClose, onChanged, api = connectorsApi, projectsApi = mainApi, wait = sleep, emptySlot = null, installLinks = false, frame = plainFrame }) {
   const uid = conn?.uid;
   // In Build's lightbox Done and Open close it all (D686 §5.4); elsewhere they close the sheet.
   const dismiss = useContext(SheetFrame)?.onDismiss || onClose;
   const opts = companyId ? { companyId } : undefined;
-  const [read, setRead] = useState({ status: 'loading', available: [], message: '' });
+  const [read, setRead] = useState({ status: 'loading', available: [], message: '', installUrl: null, needsInstall: false });
+  // Each Refresh is one more read; the first takes the Worker's `selected`, later ones keep the member's choices.
+  const [reads, setReads] = useState(0);
   const [chosen, setChosen] = useState(new Set());
   const [project, setProject] = useState(projectId);
   const [projects, setProjects] = useState(null);
@@ -62,14 +73,21 @@ export default function GithubRepositoriesPanel({ p, conn, projectId = null, com
     let live = true;
     api.repositories(uid, opts).then((r) => {
       if (!live) return;
-      setRead({ status: 'ready', available: Array.isArray(r?.available) ? r.available : [], message: '' });
-      setChosen(new Set((Array.isArray(r?.selected) ? r.selected : []).map(String)));
-      if (projectId == null && r?.project_id != null) setProject(Number(r.project_id));
-    }, (e) => { if (live) setRead({ status: 'refused', available: [], message: syncRefusal(e) }); });
+      const available = Array.isArray(r?.available) ? r.available : [];
+      setRead({ status: 'ready', available, message: '', installUrl: installHref(r?.install_url), needsInstall: r?.needs_install === true });
+      if (reads === 0) setChosen(new Set((Array.isArray(r?.selected) ? r.selected : []).map(String)));
+      else {
+        const listed = new Set(available.map((x) => String(x?.full_name)));
+        setChosen((prev) => new Set([...prev].filter((n) => listed.has(n))));
+      }
+      if (projectId == null && r?.project_id != null) setProject((cur) => (cur == null ? Number(r.project_id) : cur));
+    }, (e) => { if (live) setRead({ status: 'refused', available: [], message: syncRefusal(e), installUrl: null, needsInstall: false }); });
     return () => { live = false; };
     // `opts` is derived from companyId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [api, uid, companyId, projectId]);
+  }, [api, uid, companyId, projectId, reads]);
+
+  const refresh = () => { setRead((r) => ({ ...r, status: 'loading' })); setReads((n) => n + 1); };
 
   // The Connectors page has no project of its own: with none chosen yet, the member picks one.
   const needsPicker = projectId == null && project == null && read.status === 'ready';
@@ -138,6 +156,7 @@ export default function GithubRepositoriesPanel({ p, conn, projectId = null, com
   }
 
   const busy = phase === 'saving' || phase === 'syncing';
+  const link = githubLink(read);
   const footer = (
     <>
       <span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400">Reads issues, pull requests and releases only.</span>
@@ -183,7 +202,7 @@ export default function GithubRepositoriesPanel({ p, conn, projectId = null, com
           {read.available.length === 0
             ? (
               <>
-                <Row a="No repository" b="GitHub lists none this installation can read. Add repositories to the StudioOS app in GitHub, then come back." />
+                <Row a="No repository" b={emptyRepoSentence(read)} />
                 {emptySlot && <div className="px-4 pb-3" data-testid="github-repositories-empty-slot">{emptySlot}</div>}
               </>
             )
@@ -200,6 +219,16 @@ export default function GithubRepositoriesPanel({ p, conn, projectId = null, com
               );
             })}
         </Group>
+      )}
+      {installLinks && (read.status === 'ready' || read.status === 'refused') && (
+        <div className="mx-5 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1" data-testid="sync-github-links">
+          {link && (
+            <a className={BTN.link} href={link.href} target="_blank" rel="noreferrer" data-testid="github-install-link">
+              {link.label} <ExternalLink size={11} className="inline" aria-hidden="true" />
+            </a>
+          )}
+          <button type="button" className={BTN.link} onClick={refresh} disabled={busy} data-testid="button-repos-refresh">Refresh</button>
+        </div>
       )}
       {read.status === 'ready' && <p className="mx-5 mt-2 text-[11.5px] text-axal-muted dark:text-gray-400"><Pill tone="neutral">{chosen.size} selected</Pill></p>}
     </>
