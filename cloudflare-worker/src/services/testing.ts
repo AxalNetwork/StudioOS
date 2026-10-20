@@ -311,6 +311,73 @@ export async function testersAudience(env: Env, programmeUid: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Mail's Product testing page (D812 part 2a, #2258)
+//
+// Two reads for AxalNetwork/mail, through D811's signed link (#2257) and nothing
+// else: nothing in this Worker mounts them yet, so neither is reachable until
+// part 2b puts them behind that signature check. `testersAudience` above stays
+// the only list Mail sends to.
+// ---------------------------------------------------------------------------
+
+/** The first line of the first answer, at most 140 characters: what Mail's list shows. */
+export function firstAnswerLine(answersJson: unknown): string | null {
+  const first = parse<unknown[]>(answersJson, [])[0];
+  const line = String(first ?? '').split(/\r?\n/)[0].trim();
+  if (!line) return null;
+  return line.length > 140 ? `${line.slice(0, 139)}…` : line;
+}
+
+/** Every programme, with its owner (Axal VC, or the partner firm), status, places, applicants and dates. */
+export async function mailProgrammes(env: Env) {
+  return (await allProgrammes(env, null)).map((p) => ({
+    uid: p.uid, owner_kind: p.owner_kind, owner_name: p.owner_name, product_name: p.product_name,
+    status: p.status, places: p.places, places_left: p.places_left, picked_count: p.picked_count,
+    applicant_count: p.applicant_count,
+    opens_at: p.opens_at, closes_at: p.closes_at, testing_starts: p.testing_starts, testing_ends: p.testing_ends,
+  }));
+}
+
+/**
+ * One programme's applicants for Mail: name, role, the first line of their
+ * answers, when they applied, and their status. A withdrawn application is
+ * left out, as the owner's list leaves it out.
+ *
+ * THE EMAIL IS IN THE SELECT ONLY FOR A PICKED TESTER WHO CONSENTED, on an
+ * active account: the rule `testersAudience` reads, written in the query so no
+ * other address leaves the database. Everyone else's `email` is null. An
+ * unknown uid is null, never another programme's list.
+ */
+export async function mailApplicants(env: Env, programmeUid: string) {
+  const p = await env.DB.prepare(
+    `SELECT p.id, p.uid, p.product_name, p.status, p.places,
+            CASE WHEN p.owner_kind = 'hq' THEN 'Axal VC' ELSE COALESCE(pt.company, pt.name) END AS owner_name
+       FROM testing_programmes p LEFT JOIN partners pt ON pt.id = p.owner_partner_id
+      WHERE p.uid = ?`,
+  ).bind(String(programmeUid ?? '')).first<any>();
+  if (!p) return null;
+  const { results } = await env.DB.prepare(
+    `SELECT a.uid, a.answers, a.status, a.created_at, a.consent_email_at,
+            COALESCE(u.display_name, u.name) AS name, u.role,
+            CASE WHEN a.status = 'picked' AND a.consent_email_at IS NOT NULL AND u.is_active = 1
+                 THEN u.email ELSE NULL END AS email
+       FROM testing_applications a JOIN users u ON u.id = a.user_id
+      WHERE a.programme_id = ? AND a.status <> 'withdrawn'
+      ORDER BY a.id`,
+  ).bind(p.id).all();
+  return {
+    programme: { uid: p.uid, product_name: p.product_name, owner_name: p.owner_name, status: p.status, places: Number(p.places) },
+    items: (results || []).map((r: any) => ({
+      uid: r.uid, name: r.name, role: r.role,
+      first_answer: firstAnswerLine(r.answers),
+      applied_on: String(r.created_at || '').slice(0, 10) || null,
+      status: r.status,
+      consented: !!r.consent_email_at,
+      email: r.email ?? null,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Writes
 // ---------------------------------------------------------------------------
 
