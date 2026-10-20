@@ -90,7 +90,7 @@ async function register(env: any, name = 'Claude') {
 }
 
 async function authorize(env: any, clientId: string, { pkce = true } = {}) {
-  const q = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, state: 'st8', resource: `${ORIGIN}/api/mcp`, scope: 'validate:read validate:write' });
+  const q = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, state: 'st8', resource: `${ORIGIN}/mcp`, scope: 'validate:read validate:write' });
   if (pkce) { q.set('code_challenge', await challenge()); q.set('code_challenge_method', 'S256'); }
   return hit(env, `/api/oauth/authorize?${q}`);
 }
@@ -105,14 +105,14 @@ async function connect(env: any, companies = [P]) {
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
   const code = new URL(ok.body.redirectTo).searchParams.get('code')!;
   const t = await hit(env, '/api/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER, resource: `${ORIGIN}/api/mcp` }) });
+    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: REDIRECT, client_id: clientId, code_verifier: VERIFIER, resource: `${ORIGIN}/mcp` }) });
   assert.equal(t.status, 200, await t.clone().text());
   return { token: (await t.json() as any).access_token as string, clientId };
 }
 
 let rpcId = 0;
 async function mcp(env: any, token: string | null, method: string, params: unknown = {}) {
-  const r = await hit(env, '/api/mcp', { method: 'POST', headers: {
+  const r = await hit(env, '/mcp', { method: 'POST', headers: {
     'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-06-18',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }, body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params }) });
@@ -125,8 +125,8 @@ const toolJson = (r: any) => JSON.parse(r.body.result.content[0].text);
 
 test('with the flag off, every MCP and OAuth path answers 404, and nothing else changes', async () => {
   for (const env of [fixture({ enabled: false }).env, fixture({ kv: false }).env]) {
-    for (const path of ['/api/mcp', '/api/oauth/authorize', '/api/oauth/token', '/api/oauth/register',
-      '/.well-known/oauth-authorization-server', '/.well-known/oauth-protected-resource/api/mcp']) {
+    for (const path of ['/mcp', '/api/mcp', '/api/oauth/authorize', '/api/oauth/token', '/api/oauth/register',
+      '/.well-known/oauth-authorization-server', '/.well-known/oauth-protected-resource/mcp']) {
       for (const method of ['GET', 'POST']) assert.equal((await hit(env, path, { method })).status, 404, `${method} ${path}`);
     }
     assert.equal((await asUser(env, FOUNDER, 'GET', '/api/mcp/consent/' + 'a'.repeat(32))).status, 404);
@@ -138,19 +138,39 @@ test('with the flag off, every MCP and OAuth path answers 404, and nothing else 
 
 // ── Discovery and the resource ─────────────────────────────────────────────
 
-test('discovery names https://axal.vc/api/mcp and S256 only; an unauthenticated call gets 401 naming the metadata', async () => {
+test('discovery names https://axal.vc/mcp and S256 only; an unauthenticated call gets 401 naming the metadata', async () => {
   const { env } = fixture();
   const as = await (await hit(env, '/.well-known/oauth-authorization-server')).json() as any;
   assert.deepEqual(as.code_challenge_methods_supported, ['S256']);
   assert.equal(as.token_endpoint, `${ORIGIN}/api/oauth/token`);
   assert.equal(as.registration_endpoint, `${ORIGIN}/api/oauth/register`);
   assert.equal(as.authorization_endpoint, `${ORIGIN}/api/oauth/authorize`);
-  const pr = await (await hit(env, '/.well-known/oauth-protected-resource/api/mcp')).json() as any;
-  assert.equal(pr.resource, `${ORIGIN}/api/mcp`);
+  const pr = await (await hit(env, '/.well-known/oauth-protected-resource/mcp')).json() as any;
+  assert.equal(pr.resource, `${ORIGIN}/mcp`);
   assert.deepEqual(pr.authorization_servers, [ORIGIN]);
   const r = await mcp(env, null, 'tools/list');
   assert.equal(r.status, 401);
-  assert.match(r.headers.get('www-authenticate') || '', /resource_metadata="https:\/\/axal\.vc\/\.well-known\/oauth-protected-resource\/api\/mcp"/);
+  assert.match(r.headers.get('www-authenticate') || '', /resource_metadata="https:\/\/axal\.vc\/\.well-known\/oauth-protected-resource\/mcp"/);
+});
+
+test('D784: /api/mcp answers 308 to /mcp, keeping the method, path and query; the SPA\'s consent API is not redirected', async () => {
+  const { env } = fixture();
+  for (const method of ['GET', 'POST', 'DELETE']) {
+    const r = await hit(env, '/api/mcp', { method });
+    assert.equal(r.status, 308, method);
+    assert.equal(r.headers.get('location'), `${ORIGIN}/mcp`);
+  }
+  const deep = await hit(env, '/api/mcp/sse?x=1');
+  assert.equal(deep.status, 308);
+  assert.equal(deep.headers.get('location'), `${ORIGIN}/mcp/sse?x=1`);
+  assert.equal(isMcpPath('/mcp'), true);
+  assert.equal(isMcpPath('/mcp/anything'), true);
+  assert.equal(isMcpPath('/mcpx'), false, 'only /mcp and paths under it');
+  assert.equal(isMcpPath('/api/mcp/consent/abc'), false, 'consent stays the SPA\'s, through the app');
+  const consent = await asUser(env, FOUNDER, 'GET', `/api/mcp/consent/${'c'.repeat(32)}`);
+  assert.equal(consent.status, 410, 'an unknown consent request, answered by the app, never redirected');
+  // The server itself answers at /mcp: an unauthenticated call is the provider's 401, not a redirect.
+  assert.equal((await mcp(env, null, 'tools/list')).status, 401);
 });
 
 test('authorize requires S256 PKCE, parks the request and sends the founder to the SPA; nothing is auto-approved', async () => {
@@ -627,7 +647,7 @@ test('D681 every scope wrangler resolves: none declares `unsafe`, and an environ
   checkMcpDeployment(toml);
 });
 
-test('wrangler.toml: both discovery paths run the Worker first, no MCP route was added and the Worker entry stays the same', () => {
+test('wrangler.toml: /mcp and both discovery paths run the Worker first, no MCP route was added and the Worker entry stays the same', () => {
   const toml = readFileSync(resolve(ROOT, 'wrangler.toml'), 'utf8');
   const rwf = [...toml.matchAll(/^run_worker_first = (\[.*\])$/gm)].map((m) => JSON.parse(m[1]));
   assert.equal(rwf.length, 2, 'the top-level and production [assets] blocks ([env.preview] has none)');
@@ -635,8 +655,11 @@ test('wrangler.toml: both discovery paths run the Worker first, no MCP route was
     assert.ok(list.includes('/.well-known/oauth-authorization-server*'));
     assert.ok(list.includes('/.well-known/oauth-protected-resource*'));
     assert.ok(list.includes('/api/*'));
+    // D784: the MCP server is not under /api, so the SPA's fallback must not answer it.
+    assert.ok(list.includes('/mcp'), '/mcp runs the Worker first');
+    assert.ok(list.includes('/mcp/*'), '/mcp/* runs the Worker first');
   }
-  assert.doesNotMatch(toml, /pattern\s*=\s*"[^"]*(\/api\/mcp|well-known|oauth)/, 'no route for the MCP paths');
+  assert.doesNotMatch(toml, /pattern\s*=\s*"[^"]*(\/mcp|well-known|oauth)/, 'no route for the MCP paths');
   assert.match(toml, /^main = "cloudflare-worker\/src\/index\.ts"$/m);
 });
 

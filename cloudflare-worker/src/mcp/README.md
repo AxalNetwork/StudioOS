@@ -1,7 +1,9 @@
 # mcp — StudioOS as a remote MCP server (D665, D666)
 
 AI assistants (ChatGPT, Claude, Gemini, Grok, any MCP client) add StudioOS by
-URL, `https://axal.vc/api/mcp`, and sign in with OAuth 2.1. Everything here
+URL, `https://axal.vc/mcp`, and sign in with OAuth 2.1 (D784, #2204: the
+server is its own protocol, not under `/api`; `/api/mcp` answers 308 to it).
+Everything here
 is behind `MCP_SERVER_ENABLED` and the `OAUTH_KV` binding: with either
 missing, every path answers 404.
 
