@@ -27,6 +27,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
+import { LICENCE_TERM_FIELDS } from '../src/services/licenceTerms.ts';
 
 /**
  * `licence_events` WITH ITS REAL CHECK, read off the migrations rather than
@@ -466,7 +467,7 @@ test('D803: with no terms store, every term is unfilled and visible, and the led
   const db = withSubsidiaryTemplate(seededDb());
   const r = await app(db)('/lic_fr/contract', post('subsidiary_licence_agreement'));
   assert.equal(r.status, 201);
-  assert.ok(r.body.unfilled_fields.filter((f: string) => f.startsWith('terms.')).length === 22);
+  assert.equal(r.body.unfilled_fields.filter((f: string) => f.startsWith('terms.')).length, LICENCE_TERM_FIELDS.length, 'every D797 term is unfilled');
   assert.match(r.body.body_md, /\{\{terms\.governing_law\}\}/);
   assert.match(r.body.body_md, /Axal VC France SAS/);
   const picker = await app(db)('/lic_fr/contract');
