@@ -10,6 +10,7 @@ const app = new Hono<MailLinkEnv>();
 // This router mounts before browser/session middleware. Even a failing rate
 // store or an ambient browser cookie must not change the unconfigured 404.
 app.use('*', async (c, next) => {
+  c.header('Cache-Control', 'no-store');
   if (!c.env.MAIL_LINK_SECRET) return c.notFound();
   c.set('currentUser', null);
   await next();
@@ -23,11 +24,10 @@ app.get('/audiences', async c => {
   if (items.length) await c.env.DB.batch(items.map(a => c.env.DB.prepare(
     'INSERT INTO mail_link_reads (audience, count) VALUES (?, ?)',
   ).bind(a.key, a.count)));
-  return c.json({ items, unavailable: [{ key: 'testers', reason: 'Programme-scoped unsubscribe links await the D811 consent decision.' }] });
+  return c.json({ items });
 });
 app.get('/audiences/:key/recipients', async c => {
   const key = c.req.param('key');
-  if (key.startsWith('testers:')) return c.json({ error: 'tester_links_pending', detail: 'Programme-scoped unsubscribe links await the D811 consent decision.' }, 503);
   const audience = parseAudience(key);
   if (!audience) return c.json({ error: 'invalid_audience', detail: 'Choose an audience returned by /audiences.' }, 400);
   const after = readCursor(key, c.req.query('cursor'));

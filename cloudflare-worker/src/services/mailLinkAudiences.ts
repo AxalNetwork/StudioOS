@@ -1,13 +1,17 @@
 /** D811. Registration is not newsletter consent: every export starts with D810 opt-in. */
 import type { Env } from '../types';
+import { testerCount, testerRecipients } from './mailLinkTesters';
 import { NEWSLETTER_TOPICS, preferencesToken, tokenKey } from './newsletter';
 
-export type Audience = { key: string; label: string; topic: string; role: string | null; event: number | null };
+export type Audience = { key: string; label: string; topic: string | null; programme?: string; role: string | null; event: number | null };
 export const MEMBER_ROLES = ['admin', 'founder', 'partner', 'exploring', 'advisor', 'investor', 'lp'];
 
 export function parseAudience(key: string): Audience | null {
   if (key === 'investors_lps') return { key, label: 'Investors and LPs · Partner Letter', topic: 'partner_letter', role: 'investors_lps', event: null };
   const parts = key.split(':');
+  if (parts[0] === 'testers' && parts.length === 2 && /^[0-9a-f-]{8,64}$/i.test(parts[1])) {
+    return { key, label: 'Programme testers', topic: null, role: null, event: null, programme: parts[1] };
+  }
   if (parts[0] === 'topic' && parts.length === 2 && (NEWSLETTER_TOPICS as readonly string[]).includes(parts[1])) {
     return { key, label: parts[1], topic: parts[1], role: parts[1] === 'partner_letter' ? 'investors_lps' : null, event: null };
   }
@@ -25,6 +29,7 @@ type RecipientRow = { id: number; uid: string; token_version: number; email: str
 
 /** The count and page predicates intentionally match. No missing store is converted to zero. */
 export async function audienceCount(env: Env, a: Audience): Promise<number> {
+  if (a.programme) return testerCount(env, a.programme);
   const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM newsletter_subscribers s
     JOIN newsletter_subscriber_topics t ON t.subscriber_id = s.id AND t.topic = ? AND t.enabled = 1
     LEFT JOIN users u ON u.id = s.user_id AND lower(trim(u.email)) = s.email AND u.is_active = 1
@@ -32,8 +37,8 @@ export async function audienceCount(env: Env, a: Audience): Promise<number> {
       AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email = s.email)
       AND (s.user_id IS NULL OR u.id IS NOT NULL)
       AND (? IS NULL OR u.role = ? OR (? = 'investors_lps' AND u.role IN ('investor', 'lp')))
-      AND (? IS NULL OR EXISTS (SELECT 1 FROM event_registrations r WHERE r.event_id = ?
-        AND r.status IN ('registered', 'confirmed', 'attended') AND lower(trim(COALESCE(r.email, u.email))) = s.email))
+      AND (? IS NULL OR EXISTS (SELECT 1 FROM event_registrations r LEFT JOIN users guest ON guest.id = r.user_id WHERE r.event_id = ?
+        AND r.status IN ('registered', 'confirmed', 'attended') AND lower(trim(COALESCE(r.email, guest.email))) = s.email))
   `).bind(a.topic, a.role, a.role, a.role, a.event, a.event).first<{ n: number }>();
   if (!row) throw new Error('count unreadable');
   return row.n;
@@ -54,6 +59,11 @@ export async function audienceList(env: Env) {
   }
   audiences.push(parseAudience('investors_lps')!);
   for (const event of events.results || []) audiences.push({ ...parseAudience(`event:${event.id}`)!, label: event.title });
+  const programmes = await env.DB.prepare('SELECT uid, product_name FROM testing_programmes ORDER BY id').all<{ uid: string; product_name: string }>();
+  for (const programme of programmes.results || []) {
+    const audience = parseAudience(`testers:${programme.uid}`);
+    if (audience) audiences.push({ ...audience, label: programme.product_name });
+  }
   const out = [];
   for (const a of audiences) out.push({ key: a.key, label: a.label, count: await audienceCount(env, a) });
   return out;
@@ -73,6 +83,10 @@ export function readCursor(key: string, cursor: string | undefined): number | nu
 }
 
 export async function audienceRecipients(env: Env, a: Audience, after: number) {
+  if (a.programme) {
+    const page = await testerRecipients(env, a.programme, after);
+    return { recipients: page.recipients, next_cursor: page.next_after ? pageCursor(a.key, page.next_after) : null };
+  }
   const key = tokenKey(env);
   if (!key) throw new Error('newsletter links unavailable');
   const result = await env.DB.prepare(`SELECT s.id, s.uid, s.token_version, s.email, u.name, p.organization AS company
@@ -84,8 +98,8 @@ export async function audienceRecipients(env: Env, a: Audience, after: number) {
       AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email = s.email)
       AND (s.user_id IS NULL OR u.id IS NOT NULL)
       AND (? IS NULL OR u.role = ? OR (? = 'investors_lps' AND u.role IN ('investor', 'lp')))
-      AND (? IS NULL OR EXISTS (SELECT 1 FROM event_registrations r WHERE r.event_id = ?
-        AND r.status IN ('registered', 'confirmed', 'attended') AND lower(trim(COALESCE(r.email, u.email))) = s.email))
+      AND (? IS NULL OR EXISTS (SELECT 1 FROM event_registrations r LEFT JOIN users guest ON guest.id = r.user_id WHERE r.event_id = ?
+        AND r.status IN ('registered', 'confirmed', 'attended') AND lower(trim(COALESCE(r.email, guest.email))) = s.email))
       AND s.id > ? ORDER BY s.id LIMIT 501
   `).bind(a.topic, a.role, a.role, a.role, a.event, a.event, after).all<RecipientRow>();
   const rows = result.results || [];
@@ -95,7 +109,7 @@ export async function audienceRecipients(env: Env, a: Audience, after: number) {
   const recipients = await Promise.all(page.map(async row => {
     const token = encodeURIComponent(await preferencesToken(key, row.uid, row.token_version));
     const names = (row.name || '').trim().split(/\s+/).filter(Boolean);
-    const unsubscribe = `${base}/api/newsletter/unsubscribe?token=${token}&topic=${encodeURIComponent(a.topic)}`;
+    const unsubscribe = `${base}/api/newsletter/unsubscribe?token=${token}&topic=${encodeURIComponent(a.topic!)}`;
     return { email: row.email, first_name: names[0] || null, last_name: names.slice(1).join(' ') || null,
       company: row.company || null, unsubscribe_url: unsubscribe,
       preferences_url: `${base}/newsletter/preferences?token=${token}`, one_click_url: unsubscribe };

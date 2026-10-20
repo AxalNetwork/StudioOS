@@ -7,6 +7,7 @@ import { createHash, createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import mailLink from '../src/routes/mail_link.ts';
 import newsletter from '../src/routes/newsletter.ts';
+import testingMail from '../src/routes/testing_mail.ts';
 import { mailLinkSignature } from '../src/middleware/mailLink.ts';
 import { readPreferencesToken } from '../src/services/newsletter.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -25,6 +26,7 @@ function harness() {
     db.exec(stripForeignKeys(tableFromBaseline(baseline, name)));
   }
   db.exec(read('cloudflare-worker/sql/migrations/515_newsletter_lists.sql'));
+  db.exec(stripForeignKeys(read('cloudflare-worker/sql/migrations/516_product_testing.sql')));
   db.exec(read('cloudflare-worker/sql/migrations/517_mail_link.sql'));
   const kv = new Map<string, string>();
   const puts: { key: string; ttl: number }[] = [];
@@ -36,6 +38,7 @@ function harness() {
   const app = new Hono<any>();
   app.route(prefix, mailLink);
   app.route('/api', newsletter);
+  app.route('/api/testing/mail', testingMail);
   let tick = 0;
   const startTimestamp = Math.floor(Date.now() / 1000);
   const context = { waitUntil: (_p: Promise<unknown>) => {}, passThroughOnException() {} };
@@ -141,6 +144,7 @@ test('D811 live counts and recipients exclude pending, unsubscribed, off, uncons
   const page = await (await h.signed(recipients)).json() as any;
   assert.deepEqual(page.recipients.map((r: any) => r.email), ['person1@example.test']);
   assert.equal(page.next_cursor, null);
+  assert.equal((await h.signed(recipients)).headers.get('Cache-Control'), 'no-store');
   assert.equal(page.recipients[0].first_name, null);
   assert.equal(page.recipients[0].company, null);
   const prefs = new URL(page.recipients[0].preferences_url);
@@ -270,15 +274,6 @@ test('D811 privacy: reads and actor logs never record addresses or signed URLs; 
   h.db.close();
 });
 
-test('D811 incomplete tester consent contract is explicit, never a zero count', async () => {
-  const h = harness();
-  assert.equal((await h.signed(`${prefix}/audiences/testers:programme/recipients`)).status, 503);
-  const list = await (await h.signed(`${prefix}/audiences`)).json() as any;
-  assert.match(list.unavailable[0].reason, /Programme-scoped unsubscribe/);
-  h.db.close();
-});
-
-
 test('D811 bounded raw bodies reject large and invalid UTF-8 requests', async () => {
   const h = harness();
   assert.equal((await h.signed(`${prefix}/events`, 'POST', 'x'.repeat(262145))).status, 413);
@@ -294,7 +289,7 @@ test('D811 service mount precedes browser CORS and carries security headers', ()
   assert.ok(mount < source.indexOf('  cors({'));
   assert.ok(source.indexOf("app.use('/api/mail-link/*', securityHeadersMiddleware())") < mount);
   const fetchSource = source.slice(source.indexOf('fetch: async (request: Request'));
-  const ownEntry = fetchSource.indexOf("if (pathname === '/api/mail-link' || pathname.startsWith('/api/mail-link/'))");
+  const ownEntry = fetchSource.indexOf("if (pathname === '/api/mail-link' || pathname.startsWith('/api/mail-link/')");
   assert.ok(ownEntry > 0);
   assert.ok(ownEntry < fetchSource.indexOf('assertJwtSecretStrength(env)'));
   assert.ok(ownEntry < fetchSource.indexOf('requiresBlockingRoleSchemaBootstrap(pathname, request.method)'));
@@ -345,5 +340,223 @@ test('D811 replay remains refused at the inclusive future-timestamp/nonce-expiry
   assert.equal((await h.signed(`${prefix}/health`, 'GET', undefined, { timestamp })).status, 401);
   assert.equal((await h.signed(`${prefix}/health`, 'GET', undefined, { timestamp: String(Math.floor(clock/1000)) })).status, 200);
   assert.equal(h.db.prepare('SELECT COUNT(*) n FROM mail_link_nonces').get()!.n, 1, 'expired claims are eventually removed');
+  h.db.close();
+});
+
+const P1 = 'a'.repeat(32), P2 = 'b'.repeat(32);
+function seedTesters(h: ReturnType<typeof harness>, total = 1) {
+  h.db.exec(`INSERT INTO users(id,email,name,role) VALUES(10000,'host@example.test','Host','admin')`);
+  h.db.prepare(`INSERT INTO testing_programmes(id,uid,owner_kind,created_by,product_name,places,status)
+    VALUES(1,?,'hq',10000,'Example product',1000,'testing'),(2,?,'hq',10000,'Another product',1000,'closed')`).run(P1,P2);
+  for (let i = 1; i <= total; i++) {
+    h.db.prepare('INSERT INTO users(id,email,name) VALUES(?,?,?)').run(i,`tester${i}@example.test`,`Tester ${i}`);
+    h.db.prepare(`INSERT INTO testing_applications(id,uid,programme_id,user_id,status,consent_email_at,consent_version)
+      VALUES(?,?,1,?,'picked','2026-10-20','d812-1')`).run(i,(i+100).toString(16).padStart(32,'0'),i);
+  }
+}
+const testerPath = `${prefix}/audiences/testers:${P1}/recipients`;
+const local = (url: string) => new URL(url).pathname + new URL(url).search;
+
+test('D811 programme consent exports picked testers without newsletter subscription and omits every ineligible case', async () => {
+  const h = harness(); seedTesters(h,8);
+  h.db.exec(`UPDATE testing_applications SET status='applied' WHERE id=2;
+    UPDATE testing_applications SET consent_email_at=NULL,consent_version=NULL WHERE id=3;
+    UPDATE testing_applications SET status='withdrawn' WHERE id=4;
+    UPDATE users SET is_active=0 WHERE id=5;
+    UPDATE testing_applications SET mail_enabled=0 WHERE id=6;
+    INSERT INTO email_suppressions(email,reason) VALUES('tester7@example.test','bounce');
+    INSERT INTO newsletter_subscribers(uid,email,status,source) VALUES('unsubscribed','tester8@example.test','unsubscribed','website');`);
+  const list = await (await h.signed(`${prefix}/audiences`)).json() as any;
+  assert.equal(list.items.find((x: any) => x.key === `testers:${P1}`).count,1);
+  const page = await (await h.signed(testerPath)).json() as any;
+  assert.deepEqual(page.recipients.map((x: any) => x.email),['tester1@example.test']);
+  assert.equal(h.db.prepare("SELECT COUNT(*) n FROM newsletter_subscribers WHERE email='tester1@example.test'").get()!.n,0);
+  assert.deepEqual(Object.keys(page.recipients[0]).sort(), ['email','first_name','last_name','company','unsubscribe_url','preferences_url','one_click_url'].sort());
+  assert.equal(page.recipients[0].first_name,'Tester'); assert.equal(page.recipients[0].last_name,'1');
+  h.db.exec("UPDATE testing_programmes SET status='submitted' WHERE id=1");
+  assert.equal((await (await h.signed(testerPath)).json() as any).recipients.length,0);
+  h.db.close();
+});
+
+test('D811 tester one-click and preferences are programme-only; GET never unsubscribes; tokens are scoped and retired on re-opt-in', async () => {
+  const h = harness(); seedTesters(h);
+  h.subscriber(1,{ user:1 });
+  h.db.exec(`UPDATE newsletter_subscribers SET email='tester1@example.test';
+    INSERT INTO testing_applications(uid,programme_id,user_id,status,consent_email_at,consent_version)
+    VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',2,1,'picked','2026-10-20','d812-1');`);
+  const recipient = (await (await h.signed(testerPath)).json() as any).recipients[0];
+  const prefs = await (await h.raw(local(recipient.preferences_url))).json() as any;
+  assert.equal(prefs.email_enabled,true); assert.equal(prefs.delivery_blocked,false);
+  assert.equal(prefs.programme.uid,P1);
+  const token = new URL(recipient.preferences_url).searchParams.get('token')!;
+  assert.equal(await readPreferencesToken(newsletterKey,token),null, 'newsletter and programme tokens have separate domains');
+  assert.equal((await h.raw(`/api/newsletter/unsubscribe?token=${encodeURIComponent(token)}`,{ method:'POST' })).status,403);
+  assert.equal((await h.raw('/api/testing/mail/preferences?token=forged')).status,403);
+  assert.equal((await h.raw(local(recipient.unsubscribe_url))).status,200);
+  assert.equal(h.db.prepare('SELECT mail_enabled FROM testing_applications WHERE id=1').get()!.mail_enabled,1);
+  const response = await h.raw(local(recipient.one_click_url),{ method:'POST',headers:{Cookie:'studioos_auth=ambient','Content-Type':'application/x-www-form-urlencoded'},body:'List-Unsubscribe=One-Click' });
+  assert.equal(response.status,200);
+  assert.deepEqual(h.db.prepare('SELECT mail_enabled FROM testing_applications ORDER BY id').all().map(x=>x.mail_enabled),[0,1]);
+  assert.equal(h.db.prepare('SELECT enabled FROM newsletter_subscriber_topics').get()!.enabled,1);
+  assert.equal(h.db.prepare('SELECT COUNT(*) n FROM email_suppressions').get()!.n,0);
+  assert.equal((await h.raw(local(recipient.one_click_url),{method:'POST'})).status,200);
+  assert.equal(h.db.prepare('SELECT COUNT(*) n FROM testing_events').get()!.n,1, 'an unchanged preference creates no fictitious audit');
+  assert.equal((await (await h.signed(testerPath)).json() as any).recipients.length,0);
+  const saved = await h.raw(local(recipient.preferences_url),{ method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:true}) });
+  assert.equal(saved.status,200);
+  const fresh = await saved.json() as any;
+  assert.equal(fresh.email_enabled,true); assert.notEqual(fresh.preferences_url,recipient.preferences_url);
+  assert.equal((await h.raw(local(recipient.one_click_url),{method:'POST'})).status,403);
+  assert.equal((await h.raw(local(fresh.preferences_url))).status,200);
+  assert.equal(h.db.prepare('SELECT consent_version FROM testing_applications WHERE id=1').get()!.consent_version,'d812-1');
+  assert.equal(h.db.prepare('SELECT COUNT(*) n FROM testing_events').get()!.n,2);
+  assert.equal(h.db.prepare("SELECT actor FROM activity_logs ORDER BY id DESC LIMIT 1").get()!.actor,'signed:testing-mail');
+  assert.doesNotMatch(JSON.stringify({ activity:h.db.prepare('SELECT * FROM activity_logs').all(),testing:h.db.prepare('SELECT * FROM testing_events').all() }), /tester1@example\.test|token=/);
+  h.db.exec("UPDATE users SET email='changed@example.test' WHERE id=1");
+  assert.equal((await h.raw(local(fresh.preferences_url))).status,403);
+  h.db.close();
+});
+
+test('D811 tester event unsubscribe is scoped and idempotent; global opt-out and complaints exclude testers', async () => {
+  const h = harness(); seedTesters(h);
+  h.subscriber(1,{user:1});
+  h.db.exec(`UPDATE newsletter_subscribers SET email='tester1@example.test';
+    INSERT INTO testing_applications(uid,programme_id,user_id,status,consent_email_at,consent_version)
+    VALUES('eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',2,1,'picked','2026-10-20','d812-1');`);
+  const payload=[{...h.event('unsubscribe',`testers:${P1}`),email:'tester1@example.test'}];
+  assert.equal((await (await h.events(payload)).json() as any).accepted,1);
+  assert.deepEqual(h.db.prepare('SELECT mail_enabled FROM testing_applications ORDER BY id').all().map(x=>x.mail_enabled),[0,1]);
+  assert.equal(h.db.prepare('SELECT enabled FROM newsletter_subscriber_topics').get()!.enabled,1);
+  assert.equal(h.db.prepare('SELECT status FROM newsletter_subscribers').get()!.status,'confirmed');
+  assert.equal(h.db.prepare('SELECT COUNT(*) n FROM email_suppressions').get()!.n,0);
+  assert.equal(h.db.prepare('SELECT COUNT(*) n FROM testing_events').get()!.n,1);
+  h.db.exec('UPDATE testing_applications SET mail_enabled=1 WHERE id=1');
+  assert.equal((await (await h.events(payload)).json() as any).accepted,0);
+  assert.equal(h.db.prepare('SELECT mail_enabled FROM testing_applications WHERE id=1').get()!.mail_enabled,1);
+  assert.equal((await h.events([{...h.event('complaint',`testers:${P1}`),email:'tester1@example.test'}])).status,200);
+  assert.equal((await (await h.signed(testerPath)).json() as any).recipients.length,0);
+  assert.equal((await h.events([{...h.event('unsubscribe',undefined,'global'),email:'tester1@example.test'}])).status,200);
+  assert.deepEqual(h.db.prepare('SELECT mail_enabled FROM testing_applications ORDER BY id').all().map(x=>x.mail_enabled),[0,0]);
+  h.db.close();
+});
+
+test('D811 tester paging is 500 rows and programme-bound; names are escaped in existing signed-link form pattern', async () => {
+  const h = harness(); seedTesters(h,501);
+  const one = await (await h.signed(testerPath)).json() as any;
+  assert.equal(one.recipients.length,500); assert.ok(one.next_cursor);
+  const two = await (await h.signed(`${testerPath}?cursor=${encodeURIComponent(one.next_cursor)}`)).json() as any;
+  assert.equal(two.recipients.length,1); assert.equal(two.next_cursor,null);
+  assert.equal(new Set([...one.recipients,...two.recipients].map(x=>x.email)).size,501);
+  assert.equal((await h.signed(`${prefix}/audiences/testers:${P2}/recipients?cursor=${encodeURIComponent(one.next_cursor)}`)).status,400);
+  h.db.prepare('UPDATE testing_programmes SET product_name=? WHERE id=1').run('<script>unsafe</script>');
+  const html = await h.raw(local(one.recipients[0].preferences_url),{headers:{Accept:'text/html'}});
+  assert.equal(html.status,200); assert.equal(html.headers.get('Cache-Control'),'no-store');
+  const markup = await html.text(); assert.doesNotMatch(markup, /<script>/); assert.match(markup,/&lt;script&gt;/);
+  assert.match(markup, /name="enabled" value="false"/);
+  const form = await h.raw(local(one.recipients[0].preferences_url),{ method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'text/html'},body:'enabled=false' });
+  assert.equal(form.status,200); assert.match(await form.text(), /Unsubscribed/);
+  h.db.close();
+});
+
+test('D811 programme public guards: key, forged scope, revoked eligibility, rate bucket and unreadable suppression', async t => {
+  const clock=Date.now(); t.mock.method(Date,'now',()=>clock);
+  const h=harness();seedTesters(h);
+  const recipient=(await (await h.signed(testerPath)).json() as any).recipients[0];
+  const path=local(recipient.preferences_url);
+  delete h.env.NEWSLETTER_TOKEN_KEY;
+  assert.equal((await h.raw(path)).status,503);
+  h.env.NEWSLETTER_TOKEN_KEY=newsletterKey;
+  const token=new URL(recipient.preferences_url).searchParams.get('token')!;
+  assert.equal((await h.raw(`/api/testing/mail/preferences?token=${encodeURIComponent(token.replace(/.$/,'z'))}`)).status,403);
+  assert.equal((await h.raw(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:'{}'})).status,400);
+  h.db.exec("UPDATE testing_applications SET mail_enabled=0,status='withdrawn'");
+  assert.equal((await h.raw(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:'{"enabled":true}'})).status,403);
+  h.db.exec("UPDATE testing_applications SET status='picked',programme_id=2");
+  assert.equal((await h.raw(path)).status,403, 'token is bound to its programme');
+  h.db.exec("UPDATE testing_applications SET programme_id=1; UPDATE users SET is_active=0 WHERE id=1");
+  assert.equal((await h.raw(path)).status,403);
+  h.db.exec('UPDATE users SET is_active=1 WHERE id=1');
+  const window=Math.floor(clock/60000);
+  h.kv.set(`rl:i:unknown:testing_mail_public:${window}`,'30');
+  assert.equal((await h.raw(path)).status,429);
+  h.kv.clear();
+  h.db.exec('DROP TABLE email_suppressions');
+  assert.equal((await h.raw(path)).status,503);
+  h.db.close();
+});
+
+test('D811 public programme writes roll back on missing audit and never resurrect retired links during a race', async () => {
+  const h=harness();seedTesters(h);
+  const recipient=(await (await h.signed(testerPath)).json() as any).recipients[0];
+  h.db.exec('DROP TABLE activity_logs');
+  assert.equal((await h.raw(local(recipient.one_click_url),{method:'POST'})).status,503);
+  assert.equal(h.db.prepare('SELECT mail_enabled FROM testing_applications').get()!.mail_enabled,1);
+  assert.equal(h.db.prepare('SELECT COUNT(*) n FROM testing_events').get()!.n,0);
+  h.db.exec(stripForeignKeys(tableFromBaseline(baseline,'activity_logs')));
+  // A concurrent opt-in retires the request's token after its initial read.
+  const realBatch=h.env.DB.batch.bind(h.env.DB);
+  h.env.DB.batch=async (statements: any[])=>{
+    h.db.exec('UPDATE testing_applications SET mail_token_version=mail_token_version+1');
+    return realBatch(statements);
+  };
+  assert.equal((await h.raw(local(recipient.one_click_url),{method:'POST'})).status,409);
+  assert.equal(h.db.prepare('SELECT mail_enabled FROM testing_applications').get()!.mail_enabled,1);
+  assert.equal(h.db.prepare('SELECT COUNT(*) n FROM activity_logs').get()!.n,0);
+  h.db.close();
+});
+
+test('D811 real Worker programme links ignore session cookies, require their own token, and preserve other testing gates', async () => {
+  const {default:worker}=await import('../src/index.ts');
+  const h=harness();seedTesters(h);
+  const recipient=(await (await h.signed(testerPath)).json() as any).recipients[0];
+  delete h.env.MAIL_LINK_SECRET;
+  const ctx:any={waitUntil(){},passThroughOnException(){}};
+  const response=await worker.fetch(new Request(recipient.preferences_url,{headers:{Cookie:'studioos_auth=ambient'}}),h.env,ctx);
+  assert.equal(response.status,200);
+  assert.equal(response.headers.get('Referrer-Policy'),'no-referrer');
+  const unsubscribe=await worker.fetch(new Request(recipient.one_click_url,{method:'POST',headers:{Cookie:'studioos_auth=ambient'}}),h.env,ctx);
+  assert.equal(unsubscribe.status,200);
+  assert.equal(h.db.prepare('SELECT mail_enabled FROM testing_applications').get()!.mail_enabled,0);
+  const ordinary=await worker.fetch(new Request('https://example.test/api/testing/programmes'),{ENVIRONMENT:'production'} as any,ctx);
+  assert.equal(ordinary.status,503,'ordinary testing routes keep the global secret/bootstrap preconditions');
+  h.db.close();
+});
+
+
+test('D811 opt-in races cannot refresh a retired token or bypass current eligibility', async () => {
+  for (const race of ['version','eligibility','email']) {
+    const h=harness();seedTesters(h);
+    const recipient=(await (await h.signed(testerPath)).json() as any).recipients[0];
+    if (race!=='version') h.db.exec('UPDATE testing_applications SET mail_enabled=0');
+    const real=h.env.DB.batch.bind(h.env.DB);
+    h.env.DB.batch=async (statements:any[])=>{
+      if (race==='version') h.db.exec('UPDATE testing_applications SET mail_token_version=mail_token_version+1');
+      if (race==='eligibility') h.db.exec("UPDATE testing_applications SET status='withdrawn'");
+      if (race==='email') h.db.exec("UPDATE users SET email='changed@example.test' WHERE id=1");
+      return real(statements);
+    };
+    const response=await h.raw(local(recipient.preferences_url),{method:'PUT',headers:{'Content-Type':'application/json'},body:'{"enabled":true}'});
+    assert.equal(response.status,409,race);
+    assert.equal(h.db.prepare('SELECT COUNT(*) n FROM activity_logs').get()!.n,0);
+    assert.equal(h.db.prepare('SELECT mail_enabled FROM testing_applications').get()!.mail_enabled,race==='version'?1:0);
+    h.db.close();
+  }
+});
+
+test('D811 event guests without a separate registration email match their own account, never every member', async () => {
+  const h=harness();
+  h.db.exec(`INSERT INTO users(id,email,name) VALUES(1,'person1@example.test','One'),(2,'person2@example.test','Two'),(3,'person3@example.test','Three');
+    INSERT INTO events(id,slug,title,starts_at) VALUES(1,'demo','Demo','2026-10-20');
+    INSERT INTO event_registrations(event_id,user_id,email) VALUES(1,1,NULL),(1,2,NULL);`);
+  h.subscriber(1,{user:1,topic:'events'});h.subscriber(2,{topic:'events'});h.subscriber(3,{user:3,topic:'events'});
+  const page=await (await h.signed(`${prefix}/audiences/event:1/recipients`)).json() as any;
+  assert.deepEqual(page.recipients.map((r:any)=>r.email),['person1@example.test','person2@example.test']);
+  const list=await (await h.signed(`${prefix}/audiences`)).json() as any;
+  assert.equal(list.items.find((a:any)=>a.key==='event:1').count,2);
+  h.db.exec("UPDATE users SET email='new@example.test' WHERE id=2");
+  const changed=await (await h.signed(`${prefix}/audiences/event:1/recipients`)).json() as any;
+  assert.deepEqual(changed.recipients.map((r:any)=>r.email),['person1@example.test']);
+  const changedList=await (await h.signed(`${prefix}/audiences`)).json() as any;
+  assert.equal(changedList.items.find((a:any)=>a.key==='event:1').count,1);
   h.db.close();
 });

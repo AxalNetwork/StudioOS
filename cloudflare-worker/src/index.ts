@@ -62,6 +62,7 @@ import teamPublic from './routes/team_public';
 import contactRoutes from './routes/contact';
 import newsletterRoutes from './routes/newsletter';
 import mailLinkRoutes from './routes/mail_link';
+import testingMailRoutes from './routes/testing_mail';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
 // Task #10 (AC-1) — Personal advisor backend + write-router.
@@ -378,6 +379,8 @@ const app = new Hono<{ Bindings: Env }>();
 // D811: service HMAC only, before browser CORS/session/CSRF middleware.
 app.use('/api/mail-link/*', securityHeadersMiddleware());
 app.route('/api/mail-link', mailLinkRoutes);
+app.use('/api/testing/mail/*', securityHeadersMiddleware());
+app.route('/api/testing/mail', testingMailRoutes);
 
 // CORS — Epic 11: env-aware allowlist. Production locks the API to the two
 // canonical apex hosts only; preview/dev additionally allow the
@@ -1674,7 +1677,8 @@ export default {
     const { pathname } = new URL(request.url);
     // D811: Mail authenticates through its own HMAC, with no role-schema
     // bootstrap or unrelated JWT/scoring secret precondition.
-    if (pathname === '/api/mail-link' || pathname.startsWith('/api/mail-link/')) {
+    if (pathname === '/api/mail-link' || pathname.startsWith('/api/mail-link/')
+      || pathname === '/api/testing/mail' || pathname.startsWith('/api/testing/mail/')) {
       return withThrownResponses(() => app.fetch(request, env, ctx));
     }
     // D666 (#1496): the MCP server and its OAuth endpoints, before anything

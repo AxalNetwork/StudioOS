@@ -4,7 +4,7 @@ import { sha256Hex } from '../rpc/secret';
 import { normalizeEmail } from './newsletter';
 import { parseAudience } from './mailLinkAudiences';
 
-type Event = { uid: string; type: string; email: string; audience: string | null; topic: string | null; at: string };
+type Event = { uid: string; type: string; email: string; audience: string | null; topic: string | null; programme: string | null; at: string };
 export async function parseMailEvents(body: string): Promise<Event[] | null> {
   let input: unknown;
   try { input = JSON.parse(body); } catch { return null; }
@@ -23,7 +23,7 @@ export async function parseMailEvents(body: string): Promise<Event[] | null> {
     if (seen.has(uid)) continue;
     seen.add(uid);
     events.push({ uid, type: e.type,
-      email, audience: audience?.key || null, topic: audience?.topic || null, at: new Date(e.at).toISOString() });
+      email, audience: audience?.key || null, topic: audience?.topic || null, programme: audience?.programme || null, at: new Date(e.at).toISOString() });
   }
   return events;
 }
@@ -39,22 +39,36 @@ export async function applyMailEvents(env: Env, events: Event[]): Promise<number
       WHERE EXISTS (SELECT 1 FROM json_each(?) j
         JOIN mail_link_events e ON e.uid = json_extract(j.value, '$.uid') AND e.claim_uid = ?
         JOIN newsletter_subscribers s ON s.email = json_extract(j.value, '$.email')
-        WHERE s.id = newsletter_subscriber_topics.subscriber_id AND e.type = 'unsubscribe'
+        WHERE s.id = newsletter_subscriber_topics.subscriber_id AND e.type = 'unsubscribe' AND json_extract(j.value, '$.programme') IS NULL
           AND (json_extract(j.value, '$.topic') IS NULL OR json_extract(j.value, '$.topic') = newsletter_subscriber_topics.topic))`).bind(body, claim),
     env.DB.prepare(`UPDATE newsletter_subscribers SET status = 'unsubscribed', unsubscribed_at = datetime('now')
       WHERE EXISTS (SELECT 1 FROM json_each(?) j
         JOIN mail_link_events e ON e.uid = json_extract(j.value, '$.uid') AND e.claim_uid = ?
-        WHERE json_extract(j.value, '$.email') = newsletter_subscribers.email AND e.type = 'unsubscribe'
+        WHERE json_extract(j.value, '$.email') = newsletter_subscribers.email AND e.type = 'unsubscribe' AND json_extract(j.value, '$.programme') IS NULL
           AND json_extract(j.value, '$.topic') IS NULL)`).bind(body, claim),
     env.DB.prepare(`UPDATE insight_subscriptions SET is_subscribed = 0, updated_at = datetime('now')
       WHERE user_id IN (SELECT s.user_id FROM json_each(?) j
         JOIN mail_link_events e ON e.uid = json_extract(j.value, '$.uid') AND e.claim_uid = ?
         JOIN newsletter_subscribers s ON s.email = json_extract(j.value, '$.email')
-        WHERE e.type = 'unsubscribe' AND (json_extract(j.value, '$.topic') IS NULL OR json_extract(j.value, '$.topic') = 'insights'))`).bind(body, claim),
+        WHERE e.type = 'unsubscribe' AND json_extract(j.value, '$.programme') IS NULL AND (json_extract(j.value, '$.topic') IS NULL OR json_extract(j.value, '$.topic') = 'insights'))`).bind(body, claim),
     env.DB.prepare(`INSERT OR IGNORE INTO email_suppressions (email, reason, source)
       SELECT json_extract(j.value, '$.email'), e.type, 'mail-link'
       FROM json_each(?) j JOIN mail_link_events e ON e.uid = json_extract(j.value, '$.uid') AND e.claim_uid = ?
-      WHERE e.type IN ('bounce', 'complaint') OR (e.type = 'unsubscribe' AND json_extract(j.value, '$.topic') IS NULL)`).bind(body, claim),
+      WHERE e.type IN ('bounce', 'complaint') OR (e.type = 'unsubscribe' AND e.audience IS NULL)`).bind(body, claim),
+    env.DB.prepare(`INSERT INTO testing_events (programme_id, application_id, action, detail)
+      SELECT a.programme_id, a.id, 'mail_unsubscribed', json_object('source', 'mail_link')
+      FROM testing_applications a JOIN users u ON u.id = a.user_id JOIN testing_programmes p ON p.id = a.programme_id
+      WHERE a.mail_enabled = 1 AND EXISTS (SELECT 1 FROM json_each(?) j
+        JOIN mail_link_events e ON e.uid = json_extract(j.value, '$.uid') AND e.claim_uid = ?
+        WHERE lower(trim(u.email)) = json_extract(j.value, '$.email') AND e.type = 'unsubscribe'
+          AND (e.audience IS NULL OR json_extract(j.value, '$.programme') = p.uid))`).bind(body, claim),
+    env.DB.prepare(`UPDATE testing_applications SET mail_enabled = 0, updated_at = datetime('now')
+      WHERE EXISTS (SELECT 1 FROM json_each(?) j
+        JOIN mail_link_events e ON e.uid = json_extract(j.value, '$.uid') AND e.claim_uid = ?
+        JOIN users u ON lower(trim(u.email)) = json_extract(j.value, '$.email')
+        JOIN testing_programmes p ON p.id = testing_applications.programme_id
+        WHERE u.id = testing_applications.user_id AND testing_applications.mail_enabled = 1 AND e.type = 'unsubscribe'
+          AND (e.audience IS NULL OR json_extract(j.value, '$.programme') = p.uid))`).bind(body, claim),
     env.DB.prepare(`INSERT INTO activity_logs (action, actor, details)
       SELECT 'mail_link_event', 'service:axal-mail', json_object('type', type, 'audience', audience)
       FROM mail_link_events WHERE claim_uid = ?`).bind(claim),

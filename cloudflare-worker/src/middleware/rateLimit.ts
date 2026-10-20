@@ -307,6 +307,14 @@ const BUCKETS: Bucket[] = [
   // down the account-creating write waits rather than running uncapped.
   // D811 — Mail reads and feedback, a separate fail-closed service bucket.
   {
+    name: 'testing_mail_public',
+    limit: 30,
+    windowSec: 60,
+    test: (p) => p === '/api/testing/mail' || p.startsWith('/api/testing/mail/'),
+    scope: 'ip',
+    failClosed: true,
+  },
+  {
     name: 'mail_link',
     limit: 120,
     windowSec: 60,
