@@ -52,6 +52,8 @@ import { DEPLOY_TIMELINE, deployProgress } from '../../lib/deployTimeline';
 import { reportError } from '../../lib/log';
 import { RailFrame, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import useRecordCrumb from './useRecordCrumb';
+// D802 (#2238) — the annual fee invoices tab.
+import LicenceFeeInvoices from './LicenceFeeInvoices';
 
 const UNAVAILABLE = Symbol('unavailable');
 import {
@@ -99,6 +101,9 @@ const NOTICES_STEP = STEPS.length + 3;
 // H26's "Step 6" is its own seven-step strip — which begins with Kind, and
 // Kind is not one of this page's STEPS either.
 const BRAND_STEP = STEPS.length + 4;
+// D802 (#2238) — the fifth unnumbered tab: invoicing the annual fee happens
+// every year a licence runs, not once in the issue flow.
+const FEE_INVOICES_STEP = STEPS.length + 5;
 
 // The ladder's own statuses, which are NOT licence statuses. `STATUS_TONE` above
 // covers `active`/`suspended`/`terminated`/`draft`/`pending_activation` and none
@@ -1806,6 +1811,15 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
           Notices
         </button>
         <button
+          type="button" onClick={() => setStep(FEE_INVOICES_STEP)}
+          data-testid="licence-fee-invoices-tab"
+          className={`-mb-px border-b-2 px-3 py-2 text-xs ${
+            step === FEE_INVOICES_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Annual fee invoices
+        </button>
+        <button
           type="button" onClick={() => setStep(HISTORY_STEP)}
           className={`-mb-px border-b-2 px-3 py-2 text-xs ${
             step === HISTORY_STEP ? 'border-indigo-600 font-medium text-indigo-700' : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -1847,6 +1861,7 @@ function Detail({ uid, held, onChanged, onOpenLicence }) {
         {step === 6 && <DeployStep licence={d} />}
         {step === ADMINS_STEP && <AdminsEditor licence={d} onSaved={refresh} />}
         {step === NOTICES_STEP && <NoticesEditor licence={d} onSaved={refresh} />}
+        {step === FEE_INVOICES_STEP && <LicenceFeeInvoices licence={d} />}
         {/* The kind is re-checked here as well as on the tab: the tab is what an
             operator clicks, and this is what decides what renders. A licence
             whose kind changed while the tab was open falls back to nothing

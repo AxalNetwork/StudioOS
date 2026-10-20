@@ -113,7 +113,8 @@ const FUND_PARTY_SLUGS_D716 = new Set([
   'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement', 'subscription_booklet',
 ]);
 const GP_PARTY_SLUGS_D716 = new Set(['management_fee_invoice']);
-const HOLDINGS_PARTY_SLUGS_D716 = new Set(['platform_licence_fee_invoice']);
+// D802 (#2238): HQ's annual fee invoice to a territory licensee, sent by Holdings.
+const HOLDINGS_PARTY_SLUGS_D716 = new Set(['platform_licence_fee_invoice', 'territory_licence_fee_invoice']);
 
 // D705 — the LP's subscription, its side letter, and the instruments the Fund
 // invests through. Counsel confirms this before any of them goes to an LP.
@@ -180,6 +181,8 @@ export type DocumentKind = 'agreement' | 'corporate' | 'resolution' | 'unilatera
 const NOTICE_SLUGS = new Set([
   'capital_call_notice', 'distribution_notice', 'default_notice', 'management_fee_statement',
   'management_fee_invoice', 'platform_licence_fee_invoice', 'payment_instructions_letter',
+  // D802 (#2238)
+  'territory_licence_fee_invoice',
 ]);
 const BOOKLET_SLUGS = new Set(['subscription_booklet']);
 
