@@ -42,7 +42,7 @@ export default {
       howto: [
         'Free — browse Marketplace, submit your idea, view basic dashboards.',
         'Growth — full Build, Validate & Grow, and Capital tooling for founders running an active venture.',
-        'Studio — full investor and operator tooling: funds, reserves, waterfall, portfolio health.',
+        'Studio — full investor and operator tooling: funds, waterfall, portfolio health.',
       ],
       tips: [
         'Tier upgrades take effect immediately; downgrades preserve your data but lock the gated features.',

@@ -57,7 +57,7 @@ test('founder Raise zones match Pages · Founder Raise (FR1–FR6)', () => {
     ['capital-match', 'MATCH ENGINE'],
     ['legal', 'COLLECTION'],
     ['data-room', 'COLLECTION'],
-    ['liquidity', 'LEDGER'],
+    // FR's Liquidity zone was removed by the owner on 2026-10-20.
   ]);
 });
 

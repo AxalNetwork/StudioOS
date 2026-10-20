@@ -110,10 +110,9 @@ export default function ICDecisionPage() {
               ))}
             </div>
             {/* Task #83 — each vote auto-drafts a private journal entry (yes→invest,
-                no→pass, abstain→defer) you can refine later on your Watchlist. */}
-            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-              Voting drafts a private journal entry (your rationale becomes the thesis) you can refine on your Watchlist.
-            </p>
+                no→pass, abstain→defer). The Watchlist page that showed those
+                entries was removed (owner, 2026-10-20), so the note that sent
+                the voter there is gone too. */}
           </div>
         )}
         <ul className="divide-y divide-gray-100 dark:divide-gray-800">

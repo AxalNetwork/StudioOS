@@ -65,7 +65,6 @@ const FROM_URL = [
   'pages/founder/FounderRaiseCapital.jsx',
   'pages/founder/FounderRaiseDataRoom.jsx',
   'pages/founder/FounderRaiseLegal.jsx',
-  'pages/founder/FounderRaiseLiquidity.jsx',
   'pages/founder/FounderRaisePitch.jsx',
   'pages/founder/FounderRaiseStatus.jsx',
   'pages/raise/DataRoomPage.jsx',
@@ -140,26 +139,15 @@ test('/build?new=1 opens the form even when the page is already mounted', () => 
     'the page must not reintroduce its own create button');
 });
 
-test('neither zone body deflects to a workspace with a control of its own', () => {
+test('the zone body does not deflect to a workspace with a control of its own', () => {
   // #179: "Open workspace has nothing to do there", about Grow · Brand. #177
-  // flagged the identical link on Raise · Liquidity. Both destinations are still
-  // reachable — Brand's from the zone header's `New page` action, Liquidity's
-  // from the sidebar and the Raise tab row — so what went is the duplicate
+  // flagged the identical link on Raise · Liquidity, which the owner removed
+  // with Liquidity & Exits (2026-10-20). Brand's destination is still reachable
+  // from the zone header's `New page` action, so what went is the duplicate
   // handle, not the surface.
   const brand = code('frontend/src/pages/founder/FounderGrowBrand.jsx');
   assert.doesNotMatch(brand, /link-open-grow-brand-workspace/);
   assert.doesNotMatch(brand, /Open workspace/,
     'Grow · Brand must not carry a body-level "Open workspace" control');
 
-  const liquidity = code('frontend/src/pages/founder/FounderRaiseLiquidity.jsx');
-  assert.doesNotMatch(liquidity, /link-open-liquidity-workspace/);
-  assert.doesNotMatch(liquidity, /Open workspace/,
-    'Raise · Liquidity must not carry one either');
-  // AND THE COPY HAD TO MOVE WITH THE LINK. The page said "Use the workspace for
-  // supported actions" — a sentence that pointed at a control this page no
-  // longer has. A dangling instruction is worse than the duplicate link was.
-  assert.doesNotMatch(liquidity, /Use the workspace for supported actions/,
-    'the copy must not send a reader to a control that is no longer on the page');
-  assert.match(liquidity, /Model an exit/,
-    'it should name where modelling an exit actually is — the zone header action');
 });

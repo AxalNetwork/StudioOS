@@ -246,10 +246,6 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Revoke', to: '/raise/data-room?mode=workspace' },
     { label: 'Export log', kind: 'export' },
   ],
-  'raise/liquidity': [
-    { label: 'Model an exit', to: '/raise/capital/model' },
-    { label: 'Export', kind: 'export' },
-  ],
 
   // ── Research ─────────────────────────────────────────────────────────────
   // `New brief` STARTS A THREAD, and the label is the artboard's own. A brief

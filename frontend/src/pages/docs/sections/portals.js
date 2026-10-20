@@ -15,7 +15,6 @@ export default {
       ],
       tips: [
         'Status is computed from metric trend lines — yellow means a metric slipped this month, not the whole company.',
-        'Use the Watchlist to flag companies you want to add to in the next round.',
       ],
       pitfalls: [
         'Reading the green light as “all clear” can miss a slow burn — open the deep view monthly.',
