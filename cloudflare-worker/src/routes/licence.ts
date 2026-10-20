@@ -707,10 +707,10 @@ r.get('/mine', async (c) => {
     licence: { ...licence, admin_role: row.admin_role },
     events: events.results || [],
     deployment,
+    ...DERIVED_UNAVAILABLE,
     // D797 — the licence's terms schedule, the same for a principal and a
     // delegate: `licenceForUser` already scoped this to the caller's licence.
     ...(await hqTermsField(c.env, row.uid)),
-    ...DERIVED_UNAVAILABLE,
   });
 });
 
