@@ -844,7 +844,7 @@ r.post('/posts/:id/approve', async (c) => {
   const kept: string[] = [];
   for (const uid of uids) {
     const p = await openAltProposal(c.env, admin.id, id, uid, keys.length);
-    if (!p) return c.json({ error: 'proposal_not_open' }, 409);
+    if (!p || safeJson<string[]>(post.alt_texts, [])[p.index]) return c.json({ error: 'proposal_not_open' }, 409);
     alts = withAlt(alts ?? safeJson<string[]>(post.alt_texts, []), keys.length, p.index, String(p.payload.text || '').trim().slice(0, 1000));
     kept.push(p.uid);
   }
@@ -858,10 +858,11 @@ r.post('/posts/:id/approve', async (c) => {
       `UPDATE x_posts SET status = 'approved', approved_by = ?, approved_at = datetime('now'),
                            alt_texts = COALESCE(?, alt_texts), updated_at = datetime('now')
         WHERE id = ? AND status = 'draft'
+          AND alt_texts IS ? AND media_r2_keys IS ?
           AND (SELECT COUNT(*) FROM ai_rail_proposals
                 WHERE user_id = ? AND rail_option = ? AND status = 'proposed'
                   AND uid IN (SELECT value FROM json_each(?))) = ?`,
-    ).bind(admin.id, alts ? JSON.stringify(alts) : null, id, admin.id, X_ALT_TEXT_OPTION, encodedUids, kept.length),
+    ).bind(admin.id, alts ? JSON.stringify(alts) : null, id, post.alt_texts ?? null, post.media_r2_keys ?? null, admin.id, X_ALT_TEXT_OPTION, encodedUids, kept.length),
     c.env.DB.prepare(
       `UPDATE ai_rail_proposals
           SET status = 'accepted', decided_payload_json = NULL,

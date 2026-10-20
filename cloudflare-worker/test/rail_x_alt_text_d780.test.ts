@@ -114,3 +114,37 @@ test('duplicate caption uids are accepted once with the post', async () => {
   assert.deepEqual(JSON.parse(alts(w)), ['', 'A team at a whiteboard.']);
   assert.equal(proposal(w, uid).status, 'accepted');
 });
+
+// Save and media requests can land after validation and before the approval batch.
+test('concurrent manual captions or media changes are preserved and refuse stale approval', async () => {
+  const cases = [
+    { alts: JSON.stringify(['', 'Human caption.']), keys: JSON.stringify(['x/1/7/a.png', 'x/1/7/b.png']) },
+    { alts: JSON.stringify(['Human caption.', '']), keys: JSON.stringify(['x/1/7/a.png', 'x/1/7/b.png']) },
+    { alts: null, keys: JSON.stringify(['x/1/7/a.png', 'x/1/7/b.png', 'x/1/7/c.png']) },
+  ];
+  for (const changed of cases) {
+    const w = await world();
+    const uid = (await call(w, SUPER, 'POST', '/api/admin/x/posts/7/alt-text', { index: 0 })).body.proposal.uid;
+    const batch = w.env.DB.batch.bind(w.env.DB);
+    w.env.DB.batch = async (statements: any[]) => {
+      w.f.db.prepare('UPDATE x_posts SET alt_texts = ?, media_r2_keys = ? WHERE id = 7').run(changed.alts, changed.keys);
+      return batch(statements);
+    };
+    const r = await call(w, SUPER, 'POST', '/api/admin/x/posts/7/approve', { alt_text_proposal_uids: [uid] });
+    assert.equal(r.status, 409, JSON.stringify(changed));
+    assert.equal(w.f.db.prepare('SELECT status FROM x_posts WHERE id = 7').get().status, 'draft');
+    assert.equal(alts(w), changed.alts);
+    assert.equal(w.f.db.prepare('SELECT media_r2_keys FROM x_posts WHERE id = 7').get().media_r2_keys, changed.keys);
+    assert.equal(proposal(w, uid).status, 'proposed');
+  }
+});
+
+test('Approve does not replace a caption already saved for the proposed image', async () => {
+  const w = await world();
+  const uid = (await call(w, SUPER, 'POST', '/api/admin/x/posts/7/alt-text', { index: 0 })).body.proposal.uid;
+  w.f.db.prepare(`UPDATE x_posts SET alt_texts = '["Human caption.",""]' WHERE id = 7`).run();
+  const r = await call(w, SUPER, 'POST', '/api/admin/x/posts/7/approve', { alt_text_proposal_uids: [uid] });
+  assert.equal(r.status, 409);
+  assert.deepEqual(JSON.parse(alts(w)), ['Human caption.', '']);
+  assert.equal(proposal(w, uid).status, 'proposed');
+});
