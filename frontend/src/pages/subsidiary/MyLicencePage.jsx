@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   AlertTriangle, Bell, Loader2, History, Lock, Globe,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { bpsPercent } from '../../lib/bps';
 import { FROZEN, STILL_READABLE, FREEZE_RULE } from '../../lib/branchFreeze';
@@ -10,7 +10,7 @@ import { reportError } from '../../lib/log';
 import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
 import { branchOfUser } from '../../lib/shellRole';
 import {
-  kindLabel, longDate, pageState, seatRows, stateBanner, tabPath,
+  kindLabel, longDate, pageState, seatRows, stateBanner, tabFor, tabPath,
 } from '../../lib/licencePage';
 import { useAuth } from '../../hooks/useAuthSync';
 import { refreshLicenceNeeds } from '../../hooks/useLicenceNeeds';
@@ -432,8 +432,10 @@ export function ledgerSections(l) {
   ];
 }
 
-function MyLicencePageBody({ tab = 'summary' }) {
+function MyLicencePageBody() {
   const { user } = useAuth();
+  // D800 — the tab is the sub-path App.jsx routed here (`/admin/my-licence/<tab>`).
+  const tab = tabFor(useLocation().pathname);
   const onBranch = Boolean(branchOfUser(user));
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
@@ -805,11 +807,11 @@ export function eventLabel(event) {
 }
 
 // D774 (#2100): S39 drew no rail. The board's page, in the Admin boards' frame.
-// D800 (#2233): one page for the six tabs; `tab` is the sub-path App.jsx routed.
-export default function MyLicencePage({ tab = 'summary' }) {
+// D800 (#2233): one page for the six tabs; the body reads its tab from the path.
+export default function MyLicencePage() {
   return (
     <AdminBoardFrame workspace="Licences" note="Eadwyn reads your licence on this page. It changes nothing." data-testid="admin-board-settings">
-      <MyLicencePageBody tab={tab} />
+      <MyLicencePageBody />
     </AdminBoardFrame>
   );
 }

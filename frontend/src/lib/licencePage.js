@@ -34,6 +34,12 @@ export const PART_TWO_TABS = new Set(['contract', 'statements', 'requests']);
 
 export const tabPath = (key) => LICENCE_TABS.find((t) => t.key === key)?.path ?? LICENCE_PATH;
 
+/** The tab a path opens: `/admin/my-licence/terms` → `terms`; the page itself, or any other path, is Summary. */
+export function tabFor(pathname) {
+  const path = String(pathname || '').replace(/\/+$/, '');
+  return LICENCE_TABS.find((t) => t.path === path)?.key ?? 'summary';
+}
+
 /** "Request a change" on a term: the Requests tab, with the term D799's `terms_change` sheet opens on. */
 export const changeHref = (term) => `${tabPath('requests')}?change=${encodeURIComponent(term)}`;
 

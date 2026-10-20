@@ -15,7 +15,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
   LICENCE_TABS, PART_TWO_TABS, NOT_RECORDED, allowanceCard, changeHref, contractCard, feeCard, longDate,
-  needRow, needsCount, oweCard, pageState, renewalCard, seatRows, shareCard, stateBanner, tabPath, termCard,
+  needRow, needsCount, oweCard, pageState, renewalCard, seatRows, shareCard, stateBanner, tabFor, tabPath, termCard,
 } from '../src/lib/licencePage.js';
 import {
   Administrators, DealGlance, NeedsYou, OweHq, SummaryCards, YourContract,
@@ -46,8 +46,12 @@ test('the six tabs are sub-paths of /admin/my-licence, routed behind the admin g
   assert.equal(tabPath('summary'), '/admin/my-licence');
   const app = read('frontend/src/App.jsx');
   for (const t of LICENCE_TABS.slice(1)) {
-    assert.ok(app.includes(`<Route path="${t.path}" element={guard(['admin'], <MyLicencePage tab="${t.key}" />)} />`), `${t.path} is not routed`);
+    assert.ok(app.includes(`<Route path="${t.path}" element={guard(['admin'], <MyLicencePage />)} />`), `${t.path} is not routed`);
   }
+  // The page reads its tab from the path; anything else is Summary.
+  for (const t of LICENCE_TABS) assert.equal(tabFor(t.path), t.key);
+  assert.equal(tabFor('/admin/my-licence/terms/'), 'terms');
+  assert.equal(tabFor('/admin/my-licence/unknown'), 'summary');
   // The tab row's literal doors are exactly the six paths (the reachability walk counts literals).
   const frame = codeOnly(read('frontend/src/pages/subsidiary/LicenceFrame.jsx'));
   const doors = [...frame.matchAll(/<Tab to="([^"]+)" tab="([a-z]+)">/g)].map((m) => [m[2], m[1]]);
