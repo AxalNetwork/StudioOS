@@ -105,8 +105,10 @@ export async function draftSummary(
   env: Env, userId: number, opts: {
     title: string; section: string; audience: string;
     filters: Record<string, unknown>; aggregates: AggregateRow[];
+    // D780: the press's rail context, from the route (`railFor`).
+    rail?: { page: string; option?: string | null; record?: string | null };
   },
-): Promise<{ summary_text: string; ok: boolean; error?: string }> {
+): Promise<{ summary_text: string; ok: boolean; error?: string; model?: string | null; usageLogId?: number | null }> {
   // Task #31 — headline synthesis runs entirely on Workers AI in
   // production. ROUTE['publication'] is `provider: 'workers-ai'` with
   // a llama-3.3-70b primary and llama-3.1-8b fallback. The >1024-token
@@ -118,8 +120,8 @@ export async function draftSummary(
     task: 'publication',
     userId,
     surface: AI_SURFACE.adminPublications,
-    // D765: the admin's press on Publications.
-    rail: { page: 'publications', option: 'draft:publication' },
+    // D765: the admin's press on Publications; D780: under its inventory key.
+    rail: opts.rail ?? { page: 'publications', option: 'draft:publication-summary' },
     systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
     maxTokens: 600,
@@ -132,7 +134,7 @@ export async function draftSummary(
       summary_text: fallbackSummary(opts.aggregates),
     };
   }
-  return { ok: true, summary_text: r.output.trim() };
+  return { ok: true, summary_text: r.output.trim(), model: r.usage.model, usageLogId: r.usageLogId ?? null };
 }
 
 // >1024 tokens of stable scaffolding. Matches the MI publication voice

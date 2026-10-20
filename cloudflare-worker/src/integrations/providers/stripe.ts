@@ -375,17 +375,23 @@ async function projectMetricsToProject(
   // `(project_id, snapshot_date, source)` makes one statement enough, and two
   // syncs in the same minute cannot leave two rows.
   //
-  // `excluded.*` IS EXPLICIT RATHER THAN A BLANKET REPLACE. Only the four figures
+  // `excluded.*` IS EXPLICIT RATHER THAN A BLANKET REPLACE. Only the figures
   // Stripe actually knows are overwritten; anything a founder recorded against the
   // same day in another column is left alone, because Stripe has no opinion about
   // their headcount.
+  //
+  // THE PAYING-CUSTOMER COUNT GOES TO TWO COLUMNS (D691, #2180). Grow's Customers
+  // figure, the Revenue funnel's Paying stage and Enter a KPI's Customers chip read
+  // `paying_accounts`; the founder's desk (`routes/progress.ts`) still reads
+  // `active_users`. Writing only the latter left Customers "Not recorded".
   await env.DB.prepare(
-    'INSERT INTO project_metrics (project_id, snapshot_date, mrr, arr, monthly_churn_pct, active_users, source) '
-    + "VALUES (?, ?, ?, ?, ?, ?, 'stripe') "
+    'INSERT INTO project_metrics (project_id, snapshot_date, mrr, arr, monthly_churn_pct, active_users, paying_accounts, source) '
+    + "VALUES (?, ?, ?, ?, ?, ?, ?, 'stripe') "
     + 'ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET '
     + 'mrr = excluded.mrr, arr = excluded.arr, '
-    + 'monthly_churn_pct = excluded.monthly_churn_pct, active_users = excluded.active_users',
-  ).bind(projectId, date, m.mrr, m.arr, m.monthly_churn_pct, m.paying_customers).run();
+    + 'monthly_churn_pct = excluded.monthly_churn_pct, active_users = excluded.active_users, '
+    + 'paying_accounts = excluded.paying_accounts',
+  ).bind(projectId, date, m.mrr, m.arr, m.monthly_churn_pct, m.paying_customers, m.paying_customers).run();
 
   // Upsert into financial_models.assumptions_json — keep existing keys but
   // overwrite the live-source ones. Best-effort; the financials route's

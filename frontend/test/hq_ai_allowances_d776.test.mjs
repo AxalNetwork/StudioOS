@@ -62,9 +62,7 @@ test('the words: the billing mode as the canvas says it, unit prices, New and Pa
   assert.equal(glm.paidOnly, false);
   assert.equal(qwen.paidOnly, true);
   assert.equal(qwen.isNew, true, 'a model in the New set');
-  // D769 PR 2 (#2192): the name → id pairs live in `ALL_MODELS` now, grouped.
-  const pairs = ALL_MODELS.flatMap(([, rows]) => rows);
-  for (const id of NEW_MODEL_IDS) assert.ok(pairs.some(([n, x]) => x === id && NEW_MODELS.has(n)), 'New is only a canvas new model the list maps');
+  for (const id of NEW_MODEL_IDS) assert.ok(ALL_MODELS.flatMap(([, rows]) => rows).some(([n, x]) => x === id && NEW_MODELS.has(n)), 'New is only a canvas new model the list maps');
   assert.equal(modelsView(MODELS)[1].isNew, NEW_MODEL_IDS.has('@cf/qwen/qwen3-30b-a3b-fp8'), 'by default the badge follows the mapped list, never a guess');
   assert.equal(glm.isNew, false);
   assert.equal(modelsView({}), null);
