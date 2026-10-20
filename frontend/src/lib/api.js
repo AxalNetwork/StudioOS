@@ -50,6 +50,7 @@ export * from './api/licenceTerms.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryPersonal.js';
+export * from './api/newsletter.js';
 export * from './api/partnerSettlements.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';

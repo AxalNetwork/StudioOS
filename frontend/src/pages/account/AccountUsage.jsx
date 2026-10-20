@@ -627,12 +627,12 @@ export function storageGroup({ storage }) {
  * sections come first; the cards it does not draw follow as they stack today
  * (D700 decision 9). No read takes a company.
  */
-export function UsagePhoneView({ budget, product, topUps, spend, rates, storage, now = new Date() }) {
+export function UsagePhoneView({ budget, product, topUps, spend, rates, storage, now = new Date(), details = false }) {
   const page = ACCOUNT_PHONE_PAGES.usage;
   return (
     <div className="flex flex-col gap-3" data-testid="usage-section" data-phone="true">
       <div className="-mx-[22px]">
-        <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />
+        {!details && <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />}
         <div className="pt-[18px]">
           <PhoneRows groups={[allowanceGroup({ budget, product, now }), modelsGroup({ spend, rates }), storageGroup({ storage })]} />
         </div>
@@ -662,7 +662,7 @@ export default function UsageSection({ role, details = false }) {
     if (id) document.getElementById(id)?.scrollIntoView?.({ block: 'start' });
   }, [hash]);
   const phone = usePhoneWidth();
-  if (phone && !details) return <UsagePhoneView budget={budget} product={product} topUps={topUps} spend={spend} rates={rates} storage={storage} />;
+  if (phone) return <UsagePhoneView budget={budget} product={product} topUps={topUps} spend={spend} rates={rates} storage={storage} details={details} />;
   return (
     <div className="flex flex-col gap-3" data-testid="usage-section">
       {!details && <div>
