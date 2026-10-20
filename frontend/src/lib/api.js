@@ -2725,14 +2725,17 @@ export const api = {
   // Task #16 (DE) — Pitch Deck Builder rewrite.
   deckMethods: () => request('/decks/methods'),
   deckRecommend: (projectId) => request(`/decks/recommend?project_id=${projectId}`),
-  deckApplyMethod: (projectId, methodId) =>
-    request('/decks/apply-method', { method: 'POST', body: JSON.stringify({ project_id: projectId, method_id: methodId }) }),
+  // D778 part 5: a template the model fills answers `{ proposal }` (kept or
+  // discarded like a fill); the Spin-Out demo day still answers `{ deck }`.
+  // `headers` is the press's own rail context (`railPressHeaders`).
+  deckApplyMethod: (projectId, methodId, headers) =>
+    request('/decks/apply-method', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({ project_id: projectId, method_id: methodId }) }),
   // Task #14 — re-runs autofill against the deck's existing method_id.
   // D767 (#2096): it PROPOSES the result and changes no version: the answer
   // is `{ proposal }` plus a per-slide `slide_confidence[]`. 409
   // `no_method_id` means the deck was created before the fielded editor;
   // the client directs the user to /apply-method first.
-  deckAutofill: (id) => request(`/decks/${id}/autofill`, { method: 'POST', body: '{}' }),
+  deckAutofill: (id, headers) => request(`/decks/${id}/autofill`, { ...(headers ? { headers } : {}), method: 'POST', body: '{}' }),
   // D767 — keep the proposal as the new current version, or discard it (only it).
   deckKeepProposal: (proposalId) => request(`/decks/proposals/${proposalId}/keep`, { method: 'POST', body: '{}' }),
   deckDiscardProposal: (proposalId) => request(`/decks/proposals/${proposalId}`, { method: 'DELETE' }),
