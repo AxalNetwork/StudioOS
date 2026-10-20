@@ -24,6 +24,10 @@ export const WAY_B = Object.freeze({
   agreed: 'Agreed beforehand',
   waiting: 'Waiting for consent',
   unreadable: 'Your WhatsApp link could not be read. This is not a claim that you have none.',
+  // #1939 part 3: where recordings go. Chosen from a venture's own Record a Session, never a picker here.
+  sendHere: 'Send WhatsApp recordings to this venture',
+  ventureDefault: 'Recordings go to your most recently updated venture.',
+  ventureHow: 'To change it, open Record a Session in the venture you want.',
 });
 
 /** fb's three steps for the "From WhatsApp" entry, in order. */
@@ -123,6 +127,7 @@ export function wayBState(read, { user = null, code = null, now = Date.now() } =
       number: maskedNumber(link.number_masked),
       linkedAt: str(link.linked_at),
       lastUsedAt: str(link.last_used_at),
+      venture: ventureOf(view.venture),
     };
   }
   if (claim?.status === 'waiting_axal' && maskedNumber(claim.number_masked)) {
@@ -138,6 +143,23 @@ export function wayBState(read, { user = null, code = null, now = Date.now() } =
   const why = lapsed ? 'That code has expired. Make a new one.'
     : claim && ['expired', 'cancelled', 'unreadable'].includes(claim.status) ? str(claim.message) : '';
   return { state: 'not_linked', why };
+}
+
+/** The venture a linked member's recordings go to (#1939 part 3), or null for none chosen. */
+export function ventureOf(v) {
+  const id = Number(v?.project_id);
+  return v && Number.isSafeInteger(id) && id > 0 ? { projectId: id, name: str(v.name) } : null;
+}
+
+/** "Recordings go to Payroll pilot." or, with no choice, the most recently updated venture. */
+export function ventureLine(venture) {
+  return venture ? (venture.name ? `Recordings go to ${venture.name}.` : 'Recordings go to the venture you chose.') : WAY_B.ventureDefault;
+}
+
+/** Whether Record a Session, open in `projectId`, offers to send WhatsApp recordings there: only when they go elsewhere. */
+export function offersVenture(view, projectId) {
+  const id = Number(projectId);
+  return view?.state === 'linked' && Number.isSafeInteger(id) && id > 0 && view.venture?.projectId !== id;
 }
 
 /** "Expires in 10 minutes": whole minutes, rounded up, never "0 minutes". */
