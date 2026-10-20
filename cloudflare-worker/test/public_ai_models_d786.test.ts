@@ -9,14 +9,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import publicRoutes from '../src/routes/public.ts';
-import { publicModels, NEW_MODEL_IDS, UNIT_WORDS } from '../src/services/ai/publicModels.ts';
+import { publicModels, modelGroup, MODEL_GROUPS, NEW_MODEL_IDS, UNIT_WORDS } from '../src/services/ai/publicModels.ts';
 import { catalogueFor } from '../src/routes/ai.ts';
 import { CATALOGUE, modelById } from '../src/services/ai/catalogue.ts';
 import { AI_MARKUP, billedUnitPrice, unitPrice } from '../src/services/ai/pricing.ts';
 import { railOptionRows, railRows } from '../src/services/ai/railMatrix.ts';
 
 const read = (p: string) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
-const FIELDS = ['billed', 'id', 'is_new', 'kind', 'name', 'paid_only', 'pages', 'unit_words'];
+const FIELDS = ['billed', 'group', 'id', 'is_new', 'kind', 'name', 'paid_only', 'pages', 'unit_words'];
 
 async function get(env: Record<string, unknown> = {}) {
   // No DB: the read must not touch D1.
@@ -99,4 +99,24 @@ test('cached at the edge for five minutes, rate limited per IP, and served witho
   assert.match(read('src/index.ts'), /'\/api\/public\/ai\/models',/);
   // The service's model list equals the route's.
   assert.deepEqual(publicModels({}).map((m) => m.id), (await get()).body.models.map((m: any) => m.id));
+});
+
+test('part 2: each model carries the Models tab\'s group, from its task and Cloudflare\'s badges', async () => {
+  const { body } = await get();
+  for (const m of body.models) assert.ok((MODEL_GROUPS as readonly string[]).includes(m.group), `${m.id}: ${m.group}`);
+  const groupOf = (id: string) => body.models.find((m: any) => m.id === id)?.group;
+  assert.equal(groupOf('@cf/meta/llama-guard-3-8b'), 'Safety', 'Llama Guard checks every outbound draft');
+  assert.equal(groupOf('@cf/qwen/qwen2.5-coder-32b-instruct'), 'Code');
+  assert.equal(groupOf('@cf/deepseek-ai/deepseek-r1-distill-qwen-32b'), 'Reasoning', 'the Reasoning badge');
+  assert.equal(groupOf('@cf/baai/bge-m3'), 'Search and ranking');
+  assert.equal(groupOf('@cf/baai/bge-reranker-base'), 'Search and ranking');
+  assert.equal(groupOf('@cf/meta/llama-3.3-70b-instruct-fp8-fast'), 'Conversation and writing');
+  // Every kind the router offers has its own group, so nothing falls through to the default unseen.
+  const kinds = new Set(body.models.map((m: any) => m.kind));
+  for (const k of kinds) {
+    if (k === 'Text Generation') continue;
+    assert.notEqual(modelGroup({ id: '@cf/x/y', kind: String(k), capabilities: [] }), 'Conversation and writing', `${k} has no group`);
+  }
+  // A vision text model reads images and files.
+  assert.equal(modelGroup({ id: '@cf/x/y', kind: 'Text Generation', capabilities: ['Vision'] }), 'Reading images and files');
 });

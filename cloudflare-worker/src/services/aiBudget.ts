@@ -46,6 +46,32 @@ export function aiLicenceKey(user: any): AiLicenceKey {
   if (user.role === 'investor') return `investor:${effectiveInvestorTier(user)}`;
   return ['advisor','partner','admin'].includes(user.role) ? user.role : 'other';
 }
+/** D791 (#2216): what a paused member reads, wherever a run is refused. */
+export const AI_PAUSED_MESSAGE = 'AI is paused on this account. Contact support.';
+const missingTable = (e: unknown) => /no such table/i.test(String((e as Error)?.message ?? e));
+/**
+ * D791: whether a Super Admin paused the member's AI (migration 510). A
+ * database before 510 has no pauses, so none is; any other failure throws,
+ * and the hold refuses rather than guess, as `assistOff` does.
+ */
+export async function aiPaused(env: Env, userId: number): Promise<boolean> {
+  try {
+    return !!(await env.DB.prepare('SELECT 1 AS paused FROM member_ai_pauses WHERE user_id = ? LIMIT 1').bind(userId).first());
+  } catch (e) {
+    if (missingTable(e)) return false;
+    throw e;
+  }
+}
+/** D791: the member's own monthly cap in micro-USD (migration 510), or null. Before 510 there is none. */
+export async function memberAiCap(env: Env, userId: number): Promise<number | null> {
+  try {
+    const row = await env.DB.prepare('SELECT monthly_microusd FROM member_ai_caps WHERE user_id = ?').bind(userId).first<{ monthly_microusd: number }>();
+    return row ? amount(row.monthly_microusd) : null;
+  } catch (e) {
+    if (missingTable(e)) return null;
+    throw e;
+  }
+}
 /** D783: the one licence whose caps are still typed on HQ. It is staff, not revenue. */
 export const TYPED_CAP_LICENCES: ReadonlySet<AiLicenceKey> = new Set<AiLicenceKey>(['admin']);
 /**
@@ -60,16 +86,21 @@ export async function resolveAiCaps(env: Env, userId:number) {
   const user = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first<any>();
   if (!user || !Number.isSafeInteger(userId) || userId <= 0 || user.is_active === 0) throw new Error('AI account unreadable');
   const licence = aiLicenceKey(user);
+  // D791: a Super Admin's lower monthly cap for this member, read after the licence's; the lower one wins.
+  const own = await memberAiCap(env, userId);
+  const capped = (monthly: number) => (own !== null && own < monthly ? own : monthly);
+  const ownCap = own !== null ? { member_cap_microusd: own } : {};
   if (!TYPED_CAP_LICENCES.has(licence)) {
     const plan = await planAllowanceFor(env, user);
+    const monthly = capped(amount(plan.monthly_microusd));
     return { licence, source: plan.source, daily_capped: false,
-      daily_microusd: amount(plan.monthly_microusd), monthly_microusd: amount(plan.monthly_microusd), plan };
+      daily_microusd: monthly, monthly_microusd: monthly, plan, ...ownCap };
   }
   const recorded = await env.DB.prepare('SELECT daily_microusd, monthly_microusd FROM ai_licence_caps WHERE licence_key = ?').bind(licence).first<any>();
   const fallback = environmentAiCaps(env);
   return { licence, source:recorded ? 'recorded' : 'environment', daily_capped: true,
     daily_microusd:recorded ? amount(recorded.daily_microusd) : usdToMicro(fallback.day),
-    monthly_microusd:recorded ? amount(recorded.monthly_microusd) : usdToMicro(fallback.month), plan: null };
+    monthly_microusd:capped(recorded ? amount(recorded.monthly_microusd) : usdToMicro(fallback.month)), plan: null, ...ownCap };
 }
 /**
  * D783: a member's plan allowance as any read shows it: what each plan gives and
@@ -283,6 +314,8 @@ export async function loadAiBudget(env:Env,userId:number,now=new Date()) {
 }
 export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number,now=new Date()) {
   amount(quoteMicrousd);
+  // D791: a paused member's run is refused at the hold, before anything is held or charged.
+  if (await aiPaused(env,userId)) return {ok:false as const,refusal:'ai_paused' as const};
   const report=await loadAiBudget(env,userId,now);
   if (report.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
   const uid=crypto.randomUUID(), t=clock(now),expires=clock(new Date(now.getTime()+300000)).at;

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Shield, Users, ChevronDown, Briefcase, Check, ShieldCheck, FileText, Sparkles, KeyRound, Heart, Ticket, CreditCard, Package, FlaskConical, Landmark } from 'lucide-react';
+import { Shield, Users, ChevronDown, Briefcase, Check, ShieldCheck, FileText, Sparkles, KeyRound, Heart, Ticket, CreditCard, Package, FlaskConical, Landmark, TestTubeDiagonal } from 'lucide-react';
 import BrandIcon from '../ui/BrandIcon';
 import { useAuth } from '../hooks/useAuthSync';
 import { isSuperAdminUser } from '../lib/shellRole';
@@ -20,6 +20,7 @@ import { GithubSyncPanel } from './admin/consoles/GithubSyncConsole';
 import { PromoCodesPanel } from './admin/consoles/PromoCodesConsole';
 import { PaymentsPanel } from './admin/consoles/PaymentsConsole';
 import { BankAccountsPanel } from './admin/consoles/BankAccountsConsole';
+import { ProductTestingPanel } from './admin/consoles/ProductTestingConsole';
 import { BillingPanel } from './admin/consoles/BillingConsole';
 import { WellbeingExpertsPanel } from './admin/consoles/WellbeingConsole';
 // Task #1 — embedded as a tab inside Admin Console so admins land on
@@ -45,7 +46,7 @@ function GithubMark({ size = 16, className = '' }) {
 
 // Task #15 — single ordered source for the Admin Console section nav. The
 // dropdown trigger and menu both render from this list instead of a hardcoded
-// row of tab buttons — fifteen sections today, one per entry below (the
+// row of tab buttons — sixteen sections today, one per entry below (the
 // comment said twelve until D285; the list had grown twice; D708 added Bank
 // accounts). Pending counts
 // are computed per-render in the page and passed in via `badges` keyed by
@@ -64,6 +65,8 @@ const ADMIN_SECTIONS = [
   { value: 'payments', label: 'Payments', Icon: Package },
   // D708 (#1773) — the Super Admin's registry of each entity's bank accounts.
   { value: 'bank-accounts', label: 'Bank accounts', Icon: Landmark },
+  // D815 (#2261) — HQ › Product testing: approve partners' programmes, run HQ's own.
+  { value: 'product-testing', label: 'Product testing', Icon: TestTubeDiagonal },
   { value: 'billing', label: 'Billing', Icon: CreditCard },
   { value: 'wellbeing', label: 'Wellbeing', Icon: Heart },
   { value: 'network-profiles', label: 'Advisors & Partners', Icon: Users },
@@ -253,6 +256,7 @@ export default function AdminPage({ onImpersonate, section = null }) {
       {tab === 'promos' && <div data-testid="admin-promos-panel"><PromoCodesPanel /></div>}
       {tab === 'payments' && <div data-testid="admin-payments-panel"><PaymentsPanel /></div>}
       {tab === 'bank-accounts' && <div data-testid="admin-bank-accounts-panel"><BankAccountsPanel /></div>}
+      {tab === 'product-testing' && <div data-testid="admin-product-testing-panel"><ProductTestingPanel /></div>}
       {tab === 'billing' && <div data-testid="admin-billing-panel"><BillingPanel /></div>}
       {tab === 'wellbeing' && <div data-testid="admin-wellbeing-panel"><WellbeingExpertsPanel /></div>}
       {tab === 'users' && <UsersConsole onImpersonate={onImpersonate} />}

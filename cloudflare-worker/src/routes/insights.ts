@@ -11,6 +11,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { isAdmin, isPartner, isInvestor, mapError, nowIso } from './_t13t14t15_helpers';
+import { memberSubscriber, saveMemberTopics, topicsOf } from '../services/newsletter';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -198,15 +199,29 @@ r.get('/newsletter', async (c) => {
     const sub = await c.env.DB.prepare(
       'SELECT is_subscribed, cadence, last_sent_at FROM insight_subscriptions WHERE user_id = ?'
     ).bind(user.id).first<any>();
+    // D810 — the `insights` newsletter topic is the truth once the member has
+    // a subscriber row; the old table answers until then.
+    const row = await memberSubscriber(c.env, user).catch(() => null);
+    const isOn = row
+      ? row.status === 'confirmed' && !!(await topicsOf(c.env, row.id)).insights
+      : !!sub?.is_subscribed;
     return c.json({
-      is_subscribed: !!sub?.is_subscribed,
+      is_subscribed: isOn,
       cadence: sub?.cadence || 'weekly',
       last_sent_at: sub?.last_sent_at || null,
     });
   } catch (e) { return mapError(c, e); }
 });
 
-async function setSub(env: Env, userId: number, on: boolean) {
+async function setSub(env: Env, user: User, on: boolean) {
+  const userId = user.id;
+  // D810 — the toggle is the `insights` newsletter topic; the old table is
+  // written too until the UI moves (D813).
+  try {
+    await saveMemberTopics(env, user, { insights: on });
+  } catch (e) {
+    console.warn('insights: could not mirror the toggle into the insights topic', (e as Error)?.message || 'unknown');
+  }
   await env.DB.prepare(
     `INSERT INTO insight_subscriptions (user_id, is_subscribed, cadence, created_at, updated_at)
      VALUES (?, ?, 'weekly', ?, ?)
@@ -217,7 +232,7 @@ async function setSub(env: Env, userId: number, on: boolean) {
 r.post('/newsletter/subscribe', async (c) => {
   try {
     const user = await requireAuth(c); gate(user);
-    await setSub(c.env, user.id, true);
+    await setSub(c.env, user, true);
     return c.json({ ok: true, is_subscribed: true });
   } catch (e) { return mapError(c, e); }
 });
@@ -225,7 +240,7 @@ r.post('/newsletter/subscribe', async (c) => {
 r.post('/newsletter/unsubscribe', async (c) => {
   try {
     const user = await requireAuth(c); gate(user);
-    await setSub(c.env, user.id, false);
+    await setSub(c.env, user, false);
     return c.json({ ok: true, is_subscribed: false });
   } catch (e) { return mapError(c, e); }
 });

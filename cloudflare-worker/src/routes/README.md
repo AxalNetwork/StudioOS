@@ -52,6 +52,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/private-data  → private-data.ts
 /api/monitoring    → monitoring.ts
 /api/ai-budget     → ai_budget.ts       (member allowance/held reads; Super Admin reviews and plan caps, D640; D755: GET /top-up packs and latest purchase, GET /history, and the Super Admin's /members/:userId, /members/:userId/adjustments and /reconcile; D776: GET /runs, the member's own runs grouped by page, option or record)
+/api/admin/ai-usage → admin_ai_usage.ts (D791: HQ › AI usage; the platform's AI use, the top members and the abuse flags; Pause AI and a member's own monthly cap; the member search by ID or email prefix, and one member's detail. Super Admin with step-up; a member is named by id, name and email on this route only; every write audited with its reason)
 /api/admin/catalog/token-packs → catalog.ts (D755: the Super Admin creates, adopts, changes and archives token packs; the generic catalog writes refuse a pack)
 /api/public/plans-and-packs → public.ts (D755: every plan's price and AI allowance and the packs on sale; D1 only, no session)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)

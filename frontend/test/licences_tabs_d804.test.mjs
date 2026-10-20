@@ -301,13 +301,18 @@ test('the sheet is the whole screen on a phone and a 460px panel from sm up', ()
 // ───────────────────────────────────────────────────────────── routes and the rail
 
 test('the three tabs are routes behind the admin guard, each in the Admin board\'s frame keyed Admin · Licences', () => {
+  // D800 (#2233) merged second and resolved the routes, as D804 said it would:
+  // each tab's path mounts the one Licences page, whose frame draws the rail
+  // and mounts the tab (`LicenceTabRoute` is gone).
   const APP = codeOnly(read('frontend/src/App.jsx'));
+  const PAGE = codeOnly(read('frontend/src/pages/subsidiary/MyLicencePage.jsx'));
+  const C = { contract: 'ContractTab', statements: 'StatementsTab', requests: 'RequestsTab' };
   for (const tab of ['contract', 'statements', 'requests']) {
-    assert.ok(APP.includes(`<Route path="/admin/my-licence/${tab}" element={guard(['admin'], <LicenceTabRoute tab="${tab}" />)} />`), tab);
+    assert.ok(APP.includes(`<Route path="/admin/my-licence/${tab}" element={guard(['admin'], <MyLicencePage />)} />`), tab);
     assert.equal(pageKeyFor(`/admin/my-licence/${tab}`, 'admin'), 'Admin · Licences');
+    assert.ok(PAGE.includes(`{tab === '${tab}' && <${C[tab]} />}`), `${C[tab]} is not mounted`);
   }
-  const ROUTE = codeOnly(read('frontend/src/pages/subsidiary/licence/LicenceTabRoute.jsx'));
-  assert.ok(ROUTE.includes('<AdminBoardFrame workspace="Licences"'));
+  assert.ok(PAGE.includes('<AdminBoardFrame workspace="Licences"'));
   for (const f of ['ContractTab', 'StatementsTab', 'RequestsTab', 'RequestChangeSheet']) {
     assert.ok(!codeOnly(read(`frontend/src/pages/subsidiary/licence/${f}.jsx`)).includes('AdminBoardFrame'), `${f} draws a rail of its own`);
   }

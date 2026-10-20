@@ -180,7 +180,7 @@ the Super Admin's issue and void). Nothing here moves money.
 
 D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
 (`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
-Stripe plan invoices in one list, newest first. No UI reads it yet.
+Stripe plan invoices in one list, newest first. D789's Usage overview reads the newest three rows.
 
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
@@ -253,8 +253,10 @@ report and the masked payment instructions), the "Needs you" list, a branch's
 "Send now" usage push, and a statement dispute. `contractPdfBlob` reads
 `GET /api/licence/mine/contract/:uid/pdf` as a Blob, outside the typed drift
 surface. Nothing here returns a full account number.
-D802 (#2238): `licenceFeeInvoices.js` is HQ's annual licence-fee invoices to a
-licensee (`/api/admin/licences/:uid/fee-invoices`, Super Admin; issuing and
-recording take a recent step-up): list, issue, record a payment, void. `pdfBlob`
-reads the invoice's PDF as a Blob, outside the typed drift surface. The
-Administrator reads their own invoices on `/api/licence/mine/statements`.
+
+D802 (#2238): `licenceFeeInvoices.js` is HQ's annual licence-fee invoices on
+`/api/admin/licences/:uid/fee-invoices`: list, issue this licence year's,
+record the total received or void, and the PDF (`pdfBlob`, and the
+Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
+drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
+as `fee_invoices`.

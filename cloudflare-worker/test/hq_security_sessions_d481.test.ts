@@ -131,13 +131,16 @@ async function call(db: any, actor: [number, string, string], method: string, pa
 const AS_SUPER: [number, string, string] = [SUPER, 'admin', 'jti-super'];
 const AS_PLAIN: [number, string, string] = [PLAIN, 'admin', 'jti-plain'];
 
-/** Whether a token still opens a door — `requireAuth`, the gate every route uses. */
-async function tokenWorks(db: any, userId: number, jti: string): Promise<boolean> {
+/**
+ * Whether a token still opens a door — `requireAuth`, the gate every route uses.
+ * Pass `token` to present one minted earlier; without it a fresh one is minted.
+ */
+async function tokenWorks(db: any, userId: number, jti: string, token?: string): Promise<boolean> {
   const a = new Hono();
   a.get('/me', async (c) => { await requireAuth(c as any); return c.json({ ok: true }); });
   a.onError((_e, c) => c.json({ detail: 'refused' }, 401));
   const res = await a.fetch(
-    new Request('http://x/me', { headers: { Authorization: `Bearer ${await jwtFor(userId, 'founder', jti)}` } }),
+    new Request('http://x/me', { headers: { Authorization: `Bearer ${token ?? await jwtFor(userId, 'founder', jti)}` } }),
     env(db),
   );
   return res.status === 200;
@@ -187,11 +190,18 @@ test('"active" is a token that could still open a door: a signed-out account and
   assert.equal(before.total, 5, 'the count holds an expired token');
   assert.equal(before.body.token_hours, JWT_EXPIRY_HOURS);
 
+  // The session's token is minted BEFORE the sign-out, as a live one would be.
+  // A token minted after it is a new sign-in: the floor is the next whole
+  // second (jwtMinIatFloor), so one minted once the clock reaches that second
+  // passes it. Minting after the sign-out failed this assertion whenever the
+  // run crossed a second boundary between the two calls.
+  const t1Token = await jwtFor(TARGET, 'founder', 'jti-t1');
+
   // HQ's "Sign out account" — it writes users.jwt_min_iat and nothing else.
   const f = await call(db, AS_SUPER, 'POST', `/force-reauth/${TARGET}`, { reason: REASON });
   assert.equal(f.status, 200, JSON.stringify(f.body));
   assert.equal(revokedAt(db, 'jti-t1'), null, 'fixture: force-reauth is expected to leave revoked_at alone');
-  assert.equal(await tokenWorks(db, TARGET, 'jti-t1'), false, 'fixture: the signed-out token still works');
+  assert.equal(await tokenWorks(db, TARGET, 'jti-t1', t1Token), false, 'fixture: the signed-out token still works');
 
   const after = await ids();
   assert.ok(!after.ids.includes(idOf(db, 'jti-t1')) && !after.ids.includes(idOf(db, 'jti-t2')),

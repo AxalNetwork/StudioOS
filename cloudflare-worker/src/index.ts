@@ -60,6 +60,7 @@ import articlesRoutes from './routes/articles';
 import adminArticles from './routes/admin_articles';
 import teamPublic from './routes/team_public';
 import contactRoutes from './routes/contact';
+import newsletterRoutes from './routes/newsletter';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
 // Task #10 (AC-1) — Personal advisor backend + write-router.
@@ -75,6 +76,8 @@ import { investorProfile } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
 import aiBudgetRoutes from './routes/ai_budget';
+// D791 (#2216): HQ › AI usage, Super Admin with step-up.
+import adminAiUsageRoutes from './routes/admin_ai_usage';
 import aiRailProposalsRoutes from './routes/ai_rail_proposals';
 import { runTotpRemediation } from './services/totpRemediation';
 import { writeDailySnapshot } from './services/analyticsReports';
@@ -198,7 +201,6 @@ import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
-import adminLicenceFeeInvoices from './routes/admin_licence_fee_invoices';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
@@ -864,6 +866,7 @@ app.route('/api/assistant', assistantRoutes);
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
+app.route('/api/admin/ai-usage', adminAiUsageRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
 // Task #33 — Cloudflare Access perimeter on /api/admin, /api/monitoring and
@@ -1035,9 +1038,6 @@ app.route('/api/branch', branchInvitationRoutes);
 // D446 — S13's audit line. The branch reads the support sessions its own
 // database recorded. Same prefix as the other branch reads.
 app.route('/api/branch', branchSupportSessionRoutes);
-// D802 — a licence's annual fee invoices. Before the ledger, so its paths
-// reach their own handlers.
-app.route('/api/admin/licences', adminLicenceFeeInvoices);
 app.route('/api/admin/licences', adminLicences);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
@@ -1336,6 +1336,9 @@ app.route('/api/public', networkPublic);
 // never GitHub, whose repo is public). No auth; Turnstile + honeypot +
 // validation + global per-IP rate cap.
 app.route('/api', contactRoutes);
+// D810 — newsletter lists: the public signup, confirm, preferences and
+// unsubscribe routes, and a member's /api/me/newsletters.
+app.route('/api', newsletterRoutes);
 // Task #2 — Public + author-facing /api/news. Public GETs are CORS-open
 // to axal.vc and edge-cached 60d; author writes self-gate on trust>=70.
 app.route('/api/news', newsRoutes);

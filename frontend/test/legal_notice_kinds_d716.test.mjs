@@ -32,7 +32,7 @@ test('D716 the worker and the mirror list the same slugs in the notice, booklet 
   for (const name of SETS) assert.deepEqual(setMembers(js, name), setMembers(ts, name), name);
   assert.deepEqual(setMembers(js, 'NOTICE_SLUGS'), [
     'capital_call_notice', 'default_notice', 'distribution_notice', 'management_fee_invoice',
-    'management_fee_statement', 'payment_instructions_letter', 'platform_licence_fee_invoice',
+    'management_fee_statement', 'payment_instructions_letter', 'platform_licence_fee_invoice', 'territory_licence_fee_invoice',
   ]);
   for (const moved of ['capital_call_notice', 'distribution_notice', 'default_notice']) {
     assert.equal(setMembers(js, 'RESOLUTION_SLUGS').includes(moved), false, `${moved} left RESOLUTION_SLUGS`);
@@ -44,6 +44,7 @@ test('D716 the mirror classifies the notices, the booklet and the legend, and ro
   for (const [slug, party] of [
     ['capital_call_notice', 'fund'], ['distribution_notice', 'fund'], ['default_notice', 'fund'],
     ['management_fee_statement', 'fund'], ['management_fee_invoice', 'gp'], ['platform_licence_fee_invoice', 'holdings'],
+    ['territory_licence_fee_invoice', 'holdings'],
   ]) {
     assert.equal(classifyDocument(slug), 'notice', slug);
     assert.equal(axalEntityKeyForDoc(slug), party, slug);

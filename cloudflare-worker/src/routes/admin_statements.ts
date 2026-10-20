@@ -31,9 +31,8 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import {
-  drawStatement, quarterKey, PERIOD_RE, STATEMENT_STREAMS, type ShareTerms, type StreamFigure,
+  drawStatement, quarterKey, PERIOD_RE, STATEMENT_STREAMS, type StreamFigure,
 } from '../services/statements';
-import { readLicenceTerms, TERMS_REASON } from '../services/licenceTerms';
 import { branchByCode } from '../services/branches';
 import { mirrorBranchAction } from '../services/auditMirror';
 import { logAdminAction } from '../services/adminAudit';
@@ -235,29 +234,32 @@ r.post('/statements/draw', async (c) => {
       };
     });
 
-    // D802 — THE SHARE PER STREAM, AND THE ROYALTY, come from D797's terms
-    // schedule. A licence with no schedule draws every stream at the ledger's
-    // share and records no royalty; a schedule that cannot be READ refuses,
-    // because drawing at the fallback then would bill a rate the terms may
-    // have replaced, and say nothing about it.
-    let rec;
+    // D802 (#2238): each stream at its own share from D797's terms, the ledger's
+    // revenue share where none is recorded, and the platform-licence royalty
+    // (Not recorded when unset). Terms that cannot be read refuse the draw rather
+    // than draw at the wrong shares.
+    let terms: Record<string, unknown> | null = null;
     try {
-      rec = await readLicenceTerms(c.env, licenceUid);
-    } catch {
-      return c.json({
+      const { readLicenceTerms } = await import('../services/licenceTerms');
+      terms = (await readLicenceTerms(c.env, licenceUid))?.terms ?? null;
+    } catch (e) {
+      // A database before migration 512 has no terms table: every stream is drawn at the ledger's share.
+      if (!/no such table/i.test(String((e as Error)?.message ?? e))) {
+        console.warn('[statements] licence_terms unreadable for draw', (e as Error).message);
+        return c.json({
         error: 'terms_unreadable',
-        message: `${TERMS_REASON.unreadable} No statement is drawn until the per-stream shares can be read.`,
-      }, 503);
+          message: `The terms schedule for ${licence.licence_ref} could not be read, so its per-stream shares are unknown. Nothing was drawn; try again.`,
+        }, 503);
+      }
     }
-    const t = rec?.terms ?? {};
-    const shares: ShareTerms = {
+    const share = (k: string) => (typeof terms?.[k] === 'number' ? (terms[k] as number) : null);
+    const drawn = drawStatement(figures, {
       fallback_bps: licence.revenue_share_bps,
-      subscriptions_bps: t.share_subscriptions_bps as number | null ?? null,
-      licence_fees_bps: t.share_licence_fees_bps as number | null ?? null,
-      token_margin_bps: t.share_token_margin_bps as number | null ?? null,
-      royalty_bps: t.royalty_platform_licence_bps as number | null ?? null,
-    };
-    const drawn = drawStatement(figures, shares, licence.currency || 'EUR');
+      subscriptions: share('share_subscriptions_bps'),
+      licence_fees: share('share_licence_fees_bps'),
+      token_margin: share('share_token_margin_bps'),
+      royalty_bps: share('royalty_platform_licence_bps'),
+    }, licence.currency || 'EUR');
 
     // D514 — A RE-DRAW KEEPS WHAT WAS PAID AND DISPUTED (the upsert below leaves
     // both alone), so a re-draw to a smaller owed figure would leave more paid

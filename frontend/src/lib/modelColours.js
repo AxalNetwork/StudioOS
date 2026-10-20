@@ -1,7 +1,7 @@
 /**
  * D789 (#2214): one model colour across Usage, Cost and HQ AI usage.
- * The seven canvas models keep their canvas colours. Other IDs hash into the
- * same categorical palette, independently of order, range or active filters.
+ * The seven canvas models keep their canvas colours. Other IDs hash into a wider
+ * categorical hue space, independently of order, range or active filters.
  * Labels always accompany colour; colour alone never identifies a series.
  */
 export const MODEL_COLOURS = Object.freeze({
@@ -19,5 +19,5 @@ export function modelColour(id) {
   if (Object.hasOwn(MODEL_COLOURS, key)) return MODEL_COLOURS[key];
   let hash = 0;
   for (let i = 0; i < key.length; i += 1) hash = (Math.imul(hash, 31) + key.charCodeAt(i)) >>> 0;
-  return MODEL_PALETTE[hash % MODEL_PALETTE.length];
+  return `hsl(${(hash % 360_000) / 1000} 64% 44%)`;
 }

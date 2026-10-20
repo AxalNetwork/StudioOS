@@ -268,7 +268,7 @@ function recordingCall(db: DatabaseSync, seen: string[]) {
   };
 }
 
-test('D758 /templates/generated lists the ten, with their kinds, party lines, library rows, refusals and versions', async () => {
+test('D758 /templates/generated lists the ten and D802\'s eleventh, with their kinds, party lines, library rows, refusals and versions', async () => {
   const db = generatedFixture();
   const r = await get(db, '/templates/generated');
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -291,8 +291,8 @@ test('D758 /templates/generated lists the ten, with their kinds, party lines, li
   const call0 = by.capital_call_notice;
   assert.deepEqual(call0.prose.map((p: any) => [p.slug, p.has_body, p.counsel_draft, p.missing]), [['capital_call_notice', false, true, false]]);
   assert.deepEqual(call0.refusal, { code: 'notice_body_missing', message: 'Counsel has not written this notice yet, so it cannot issue.' });
-  for (const k of ['management_fee_statement', 'management_fee_invoice', 'platform_licence_fee_invoice', 'payment_instructions_letter',
-    'territory_licence_fee_invoice', 'structure_of_the_fund', 'certificate_of_completion']) {
+  for (const k of ['management_fee_statement', 'management_fee_invoice', 'platform_licence_fee_invoice', 'payment_instructions_letter', 'territory_licence_fee_invoice',
+    'structure_of_the_fund', 'certificate_of_completion']) {
     assert.deepEqual([by[k].prose, by[k].refusal], [[], null], k);
   }
   const booklet = by.subscription_booklet;
