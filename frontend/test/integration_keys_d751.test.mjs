@@ -42,6 +42,8 @@ test('GitHub joins the page\'s maps, as the Worker already lists it', () => {
   const hints = [...src.matchAll(hint)].map((m) => m[1]).filter((t) => t.includes('Read-only'));
   assert.equal(hints.length, 1, 'one GitHub hint');
   assert.match(hints[0], /\bIv\b/);
+  // #2113: the App the owner registered is named "Axal VC StudioOS" (#2110). Mutation checked: the old guessed name fails this.
+  assert.match(hints[0], /GitHub Apps → Axal VC StudioOS: copy the Client ID/);
   assert.ok(!/\/api\/integrations\/oauth/.test(hints[0]), 'the hint names no callback: the Worker sends it');
   const worker = readFileSync(resolve(root, 'cloudflare-worker/src/services/providerOauthKeys.ts'), 'utf8');
   assert.match(worker, /github:\s*\{\s*id:\s*'GITHUB_APP_CLIENT_ID'/);

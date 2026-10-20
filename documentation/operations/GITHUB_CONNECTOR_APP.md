@@ -28,9 +28,10 @@ file.
   reads no private key, no App ID and no webhook secret.
 - **One optional var:** `GITHUB_APP_SLUG`, the `<slug>` in
   `github.com/apps/<slug>`. It is a wrangler **var**, not a secret, in both
-  `[vars]` and `[env.production.vars]` (`wrangler.toml:177`, `:546`), and it
-  ships empty. With a slug set, the repository read offers the App's install
-  page (`github.ts:72-75`, `cloudflare-worker/src/routes/integrations.ts:880-881`).
+  `[vars]` and `[env.production.vars]` (`wrangler.toml:178`, `:556`). It is
+  `axal-vc-studioos` since #2113, the App the owner registered on 2026-10-20
+  (#2110). With a slug set, the repository read offers the App's install page
+  (`github.ts:81-84`, `cloudflare-worker/src/routes/integrations.ts:899-900`).
 - **The lookup order.** The Worker secret pair comes first, and both halves
   must be set. Otherwise the console's encrypted `provider_oauth_keys` row is
   read. Every answer, "none" included, is cached for 60 s per isolate
@@ -47,13 +48,13 @@ against GitHub's "Registering a GitHub App" page.
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| GitHub App name | `Axal StudioOS` | Members read it on GitHub's consent page, and the page says "allow Axal StudioOS" (`frontend/src/pages/account/connectorsModel.js:701`). If GitHub says the name is taken, pick another and tell S1, because the page names it. |
+| GitHub App name | `Axal VC StudioOS` (registered 2026-10-20) | Members read it on GitHub's consent page. `Axal StudioOS` was the name planned here; the App was registered as `Axal VC StudioOS`. The refusal sentence, which serves every connector, still says "allow Axal StudioOS" (`frontend/src/pages/account/connectorsModel.js:701`). If the App is ever renamed, update this row, the Integration keys hint (`frontend/src/pages/admin/consoles/IntegrationKeysConsole.jsx:57`) and tell S1. |
 | Homepage URL | `https://axal.vc` | GitHub requires one. |
 | Callback URL | exactly `https://app.axal.vc/api/integrations/oauth/github/callback`, with no trailing slash | `redirectUri` is `oauthCallbackUrl(env, 'github')` (`github.ts:49`, `:59-61`), which is `callbackBase` + `/api/integrations/oauth/github/callback` (`cloudflare-worker/src/util/url.ts:44-46`). `callbackBase` is `OAUTH_CALLBACK_BASE_URL`, then `APP_URL`, then `https://app.axal.vc` (`cloudflare-worker/src/util/url.ts:34-36`), and `OAUTH_CALLBACK_BASE_URL` is `https://app.axal.vc` in both blocks (`wrangler.toml:171`, `:541`). The same URI is sent at sign-in (`github.ts:487`) and at the token exchange (`:439`). Optionally add `https://axal.vc/api/integrations/oauth/github/callback` as a second callback, ready for the planned move to the apex (`wrangler.toml:162-168`). It does nothing until `OAUTH_CALLBACK_BASE_URL` changes. |
 | Expire user authorization tokens | ticked | Tokens renew 60 s before they expire, under a lease (#1883, `github.ts:111`). A renewal GitHub refuses sets the connection to `github_sign_in_expired`, which shows Reconnect. |
 | Request user authorization (OAuth) during installation | off | The callback needs both `code` and StudioOS's signed `state`. With either missing it answers a bare 400 `missing_code_or_state` (`integrations.ts:1514-1516`). Installing and signing in stay two separate steps. |
 | Enable Device Flow | off | Nothing uses it. |
-| Setup URL | `https://app.axal.vc/account/connectors/github`, with **Redirect on update** ticked | Brings an installer back to GitHub's page on Connectors (`frontend/src/App.jsx:2489`). Until #1884's page half lands, that only opens the page: the member presses **Choose** (`frontend/src/pages/account/ConnectorSheet.jsx:615`) to see the new repositories, which are read live on every open (`integrations.ts:870-881`). |
+| Setup URL | `https://app.axal.vc/account/connectors/github`, with **Redirect on update** ticked | Brings an installer back to GitHub's page on Connectors (`frontend/src/App.jsx:2489`), where the repositories are read live on every open (`integrations.ts:899-900`). |
 | Webhook | **Active** unticked, no events | The connector reads at sync time and has no webhook route. |
 | Repository permissions | the four below, nothing else | See "Why exactly four". |
 | Organization and Account permissions | none | Any entry here is overreach too. |
@@ -80,12 +81,16 @@ Read-only mandatory once any repository permission is chosen. Never add a
 permission on GitHub without first changing `oauth_scopes` in `registry.ts:416`
 in a reviewed PR.
 
-**Note the slug.** GitHub gives the App a public page, `github.com/apps/<slug>`,
-probably `axal-studioos`. Members install the App from there. Post the slug on
-#1008. A follow-up PR sets `GITHUB_APP_SLUG` to it in both `wrangler.toml`
-blocks in one change, and the repository read then answers the App's install
-page as `install_url` (`github.ts:72-75`). Until #1884's page half lands, the
-page does not draw that link.
+**The slug.** GitHub gives the App a public page, `github.com/apps/<slug>`.
+The registered App's is `axal-vc-studioos`, so its page is
+`https://github.com/apps/axal-vc-studioos`, and members install it from
+`https://github.com/apps/axal-vc-studioos/installations/new`. `GITHUB_APP_SLUG`
+holds it in both `wrangler.toml` blocks (#2113, pinned by
+`cloudflare-worker/test/github_install_link_d655.test.ts`). The repository read
+answers that page as `install_url` (`github.ts:81-84`), and GitHub's page on
+Connectors draws it when the read says `needs_install`
+(`frontend/src/pages/account/GithubRepositoriesPanel.jsx`). A new App, with a
+new slug, changes both blocks in one PR.
 
 ## 3. Client ID versus App ID
 
@@ -215,7 +220,7 @@ Setting a secret changes no code and runs no migration. CLAUDE.md's "do not run
 | "GitHub refused access. (github_token_exchange_failed) …" | `github_token_exchange_failed` (`github.ts:442`) | GitHub refused the code exchange. GitHub's own code is kept only in the `activity_logs` row `integration_oauth_failed` (`integrations.ts:1622`): `incorrect_client_credentials` (wrong ID or secret), `redirect_uri_mismatch` (the App's Callback URL is not §2's) or `bad_verification_code` (the code expired or was used twice). | Press Test. If it fails, see §3 and §4. If it passes, check the Callback URL. Otherwise connect again. |
 | A bare `{"error":"missing_code_or_state"}` page at the callback address | `missing_code_or_state` (400, `integrations.ts:1514-1516`) | "Request user authorization (OAuth) during installation" is on, so GitHub sent an installer to the callback without StudioOS's state. | Turn it off (§2). |
 | A bare `{"error":"invalid_or_expired_state"}` page | `invalid_or_expired_state` (400, `integrations.ts:1517-1519`; TTL `cloudflare-worker/src/integrations/oauth.ts:18`) | The sign-in took more than 10 minutes, or the same return was opened twice. | Connect again. |
-| "No repository · GitHub lists none this installation can read." (`frontend/src/pages/account/GithubRepositoriesPanel.jsx:186`) | `needs_install: true` on the repository read (`integrations.ts:880`) | The member authorized but never installed the App, or the App is installable "Only on this account". | Install from `github.com/apps/<slug>`, then **Choose** again. Set "Any account" (§2). |
+| "No repository · GitHub lists none this installation can read." (`frontend/src/pages/account/GithubRepositoriesPanel.jsx:186`) | `needs_install: true` on the repository read (`integrations.ts:899`) | The member authorized but never installed the App, or the App is installable "Only on this account". | Install from `github.com/apps/<slug>`, then **Choose** again. Set "Any account" (§2). |
 | "Sign-in expired" | `github_sign_in_expired` (`github.ts:111`); `github_api_failed: 401` (`github.ts:90`) | GitHub refused to renew the sign-in, or the member revoked the App on GitHub. | The member presses **Reconnect**. |
 | "Sign-in expired" on every GitHub card at once | `oauth_keys_revoked_by_admin` (`providerOauthKeys.ts:279`) | The pair was removed on Integration keys (§7). | Set the pair. Members press **Reconnect**. |
 | Test: "GitHub rejected credentials (incorrect_client_credentials)." | `incorrect_client_credentials` (`providerOauthTest.ts:257`) | The App ID was used instead of the Client ID, or the secret is wrong or was deleted on GitHub. | §3, then set both halves again. |
