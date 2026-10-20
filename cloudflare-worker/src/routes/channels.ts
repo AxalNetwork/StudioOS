@@ -131,7 +131,7 @@ import {
 } from '../services/channels/threads';
 import {
   CONSENT_BUTTONS, CONSENT_KEY_PREFIX, MEMBER_METHODS, attest, consentForThread, markDelivered, markRequested, noticeRefusal,
-  noticeState, noticeText, oneLine, openRequest, recordReply, type ConsentRow, type MemberMethod,
+  noticeState, noticeText, oneLine, openRequest, recordReply, type ConsentRow, type ConsentView, type MemberMethod,
 } from '../services/channels/consent';
 import { CONSENT_NOTICE_VERSION, consentNoticeUrl } from '../services/channels/consentNotice';
 import { enqueueChannelJob, registerChannelJob, type ChannelJobPayload } from '../services/channels/jobs';
@@ -528,7 +528,7 @@ channels.get('/threads/:uid', member(async (c, user) => {
   // words, with no message or provider text (services/channels/voiceFailures.ts).
   const failures = await transcriptionFailures(c.env, user.id, uid);
   // D754: the chat's consent, for the member. No hash and no provider id.
-  const consent = await consentForThread(c.env, await threadForReply(c.env, user.id, uid));
+  const consent = await memberConsent(c.env, user.id, await threadForReply(c.env, user.id, uid));
   return c.json({ ...read, consent, messages: read.messages.map((m) => ({ ...m, transcription_failure: failures.get(m.uid) ?? null, voice_fetch_by: voiceFetchBy(read.thread.provider, m) })) });
 }));
 
@@ -595,7 +595,7 @@ channels.post('/threads/:uid/assign', member(async (c, user) => {
     } else out.consent_request = { ok: false, code: a.code };
   }
   thread = await threadForReply(c.env, user.id, uid);
-  return c.json({ ...out, consent: await consentForThread(c.env, thread) });
+  return c.json({ ...out, consent: await memberConsent(c.env, user.id, thread) });
 }));
 
 /** Why the member's word may not be taken on this chat now, before any link changes: the interviewee's answer wins. */
@@ -639,10 +639,8 @@ async function askForConsent(env: Env, userId: number, thread: ThreadRow): Promi
       WHERE u.id = ?`,
   ).bind(thread.interview_id, userId).first<{ member_name: string | null; venture: string | null }>();
   const firstName = oneLine(who?.member_name, 200).split(' ')[0] || null;
-  const venture = oneLine(who?.venture, 80) || null;
-  // Telegram's notice is in the founder's voice, addressed to the interviewee by first name (D756 §1.7).
   const body = thread.provider === 'telegram'
-    ? telegram.TELEGRAM_COPY.consentNotice(oneLine(await intervieweeLabel(env, thread), 200).split(' ')[0].slice(0, 40) || null, venture, url)
+    ? await telegramNotice(env, thread, url)
     : noticeText(CONSENT_NOTICE_VERSION, { firstName, venture: who?.venture ?? null, url });
   if (!body) throw new Error('consent_notice_missing');
   const row: ConsentRow = await openRequest(env, thread, { interviewId: thread.interview_id, sessionId: thread.session_id });
@@ -691,6 +689,36 @@ async function askForConsent(env: Env, userId: number, thread: ThreadRow): Promi
   return { ok: false, status, code, extra: { retryable: !!result.retryable } };
 }
 
+/**
+ * D756 §1.7 — Telegram's notice, in the founder's voice, addressed to the
+ * interviewee by first name. The same words whether Axal sends it or the
+ * member pastes it (§1.5 (b)).
+ */
+async function telegramNotice(env: Env, thread: ThreadRow, url: string): Promise<string> {
+  const venture = thread.interview_id
+    ? (await env.DB.prepare('SELECT p.name FROM discovery_interviews di JOIN projects p ON p.id = di.project_id WHERE di.id = ?')
+      .bind(thread.interview_id).first<{ name: string | null }>())?.name ?? null
+    : null;
+  const name = oneLine(await intervieweeLabel(env, thread), 200).split(' ')[0].slice(0, 40) || null;
+  return telegram.TELEGRAM_COPY.consentNotice(name, oneLine(venture, 80) || null, url);
+}
+
+/**
+ * The chat's consent for the member (`consentForThread`), and on a Telegram
+ * chat that waits for a YES where Axal cannot send the notice now (no reply
+ * right, or outside the 24-hour window), the notice to paste, `notice_text`
+ * (D756 §1.5 (b)). Null otherwise, and while the notice page has no link.
+ */
+async function memberConsent(env: Env, userId: number, thread: ThreadRow): Promise<ConsentView & { notice_text?: string | null }> {
+  const view = await consentForThread(env, thread);
+  if (thread.provider !== 'telegram' || !view.required) return view;
+  const waits = view.status === 'not_asked' || view.status === 'requested';
+  const url = consentNoticeUrl(env);
+  if (!waits || thread.status === 'ignored' || !url) return { ...view, notice_text: null };
+  const canReply = view.window_open && !!(await telegram.activeBusinessConnection(env, userId))?.canReply;
+  return { ...view, notice_text: canReply ? null : await telegramNotice(env, thread, url) };
+}
+
 /** The checks both consent routes make first, in D754's order. Null when the chat may go on. */
 async function consentPreconditions(c: C, thread: ThreadRow, opts: { asking: boolean }): Promise<Response | null> {
   if (!consentAsked(thread.provider)) return no(c, 409, 'consent_not_offered');
@@ -711,7 +739,7 @@ channels.post('/threads/:uid/consent-request', member(async (c, user) => {
   const pre = await consentPreconditions(c, thread, { asking: true });
   if (pre) return pre;
   const sent = await askForConsent(c.env, user.id, thread);
-  const consent = await consentForThread(c.env, await threadForReply(c.env, user.id, thread.uid));
+  const consent = await memberConsent(c.env, user.id, await threadForReply(c.env, user.id, thread.uid));
   if (sent.ok === true) return c.json({ ok: true, consent });
   if (sent.ok === null) return c.json({ ok: null, pending: true, code: sent.code, message: sentence(sent.code), consent });
   if (sent.code === 'base_url_missing') return no(c, 503, 'notice_link_missing', { code: 'base_url_missing' });
@@ -729,7 +757,7 @@ channels.post('/threads/:uid/consent', member(async (c, user) => {
   if (!a.ok) return noConsent(c, 409, a.code, thread);
   // Given already: nothing changes. Otherwise what waited moves now, as an assignment does.
   const admitted = a.changed ? await admitConsentedThread(c.env, user.id, thread.id) : { moved: 0, queued: 0 };
-  const consent = await consentForThread(c.env, await threadForReply(c.env, user.id, thread.uid));
+  const consent = await memberConsent(c.env, user.id, await threadForReply(c.env, user.id, thread.uid));
   return c.json({ ok: true, consent, moved: admitted.moved, voice_queued: admitted.queued });
 }));
 
