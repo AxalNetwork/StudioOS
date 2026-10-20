@@ -253,7 +253,7 @@ async function assertFields(m) {
     await ro.choose('type', 'fractional');
     await ro.submit();
     assert.deepEqual(ro.calls[0][2], { title: 'Founding engineer', team: 'Engineering', type: 'fractional', target_start: null,
-      comp_min_cents: 9000000, comp_max_cents: 12000000, comp_currency: 'usd', equity_pct: 0.5, publish: true });
+      comp_min_cents: 9000000, comp_max_cents: 12000000, comp_currency: 'usd', comp_public: 0, equity_pct: 0.5, publish: true });
     await ro.input('band', '120k-90k');
     await ro.submit();
     assert.equal(ro.calls.length, 1, 'a band that ends below its start is not sent');

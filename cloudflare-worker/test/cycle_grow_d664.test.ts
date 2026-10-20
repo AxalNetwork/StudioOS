@@ -2,7 +2,7 @@
  * D664 (#1477) — the Grow stores (migration 443) and /api/cycles/grow, on real
  * SQLite over the production baseline (compliance_events) and migrations
  * 119, 127 + 166 (contacts), 132 (job board), 311 (revenue ledger), 326 (team
- * roster), 437 (Share an update), 443 and 462 (D691, #1697).
+ * roster), 437 (Share an update), 443 and 462 (D691, #1697), 507 (#2181).
  *
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/cycle_grow_d664.test.ts
@@ -144,6 +144,7 @@ async function fixture() {
   db.exec(ddl('125')); db.exec(file('437'));
   db.exec(file('443'));
   db.exec(file('462'));
+  db.exec(file('507'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
   u.run(FOUNDER, 'founder', 10, 'Fay', 'fay@co.example');
   u.run(ADVISOR, 'founder', 20, 'Ada', 'ada@co.example');

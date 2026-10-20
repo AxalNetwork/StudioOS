@@ -66,6 +66,13 @@ function pct(v: unknown, field: string): number | null {
   return n;
 }
 
+/** A yes/no switch: 1, 0, true or false; anything else is refused. */
+function switchOf(v: unknown, field: string): 0 | 1 {
+  if (v === 1 || v === true || v === '1') return 1;
+  if (v === 0 || v === false || v === '0') return 0;
+  throw new Refused(400, `${field} is 1 or 0`, field);
+}
+
 function day(v: unknown, field: string): string | null {
   if (v == null || v === '') return null;
   const d = calendarDay(v);
@@ -263,7 +270,12 @@ function roleFields(b: Body, prev: Row = {}) {
   const currency = has(b, 'comp_currency') || has(b, 'comp_min_cents') || has(b, 'comp_max_cents')
     ? currencyFor(amount, has(b, 'comp_currency') ? b.comp_currency : prev.comp_currency, 'comp_currency')
     : (prev.comp_currency ?? null);
+  // #2181: the band on the public board is the founder's switch, off by default. A
+  // switch sent on with no band is refused; a band cleared later turns it off.
+  const shown = has(b, 'comp_public') ? switchOf(b.comp_public, 'comp_public') : (Number(prev.comp_public) === 1 ? 1 : 0);
+  if (shown === 1 && min == null && max == null && has(b, 'comp_public')) throw new Refused(400, 'Fill the band before showing it on the jobs board', 'comp_public');
   return {
+    comp_public: (min == null && max == null ? 0 : shown) as 0 | 1,
     team: pick('team', () => str(b.team, 80), prev.team ?? null) as string | null,
     target_start: target,
     employment_type: pick('type', () => oneOf(b.type, ROLE_TYPES, 'type', true), prev.employment_type ?? 'full_time') as string,
@@ -301,8 +313,8 @@ export async function updateRole(env: Env, pid: number, user: User, id: number, 
   const f = roleFields(b, row);
   await env.DB.prepare(
     `UPDATE job_postings SET title = ?, team = ?, target_start = ?, employment_type = ?, comp_min_cents = ?, comp_max_cents = ?,
-       comp_currency = ?, equity_pct = ?, updated_at = ? WHERE id = ?`,
-  ).bind(title, f.team, f.target_start, f.employment_type, f.comp_min_cents, f.comp_max_cents, f.comp_currency, f.equity_pct, nowIso(), row.id).run();
+       comp_currency = ?, equity_pct = ?, comp_public = ?, updated_at = ? WHERE id = ?`,
+  ).bind(title, f.team, f.target_start, f.employment_type, f.comp_min_cents, f.comp_max_cents, f.comp_currency, f.equity_pct, f.comp_public, nowIso(), row.id).run();
   let status = row.status;
   if (publish) {
     const out = await submitForReview(env, { ...row, title }, user);

@@ -1,0 +1,14 @@
+-- 507 — a role's compensation band on the public jobs board, when its founder
+-- chooses (D691 follow-up, #2181).
+--
+-- Migration 462 stored the band (`comp_min_cents`, `comp_max_cents`,
+-- `comp_currency`, `equity_pct`) on the record only, never on the public jobs
+-- board, and every band was saved under that promise. So showing one is the
+-- founder's choice, per posting, and off by default: every existing posting
+-- reads 0 and shows what it showed before. `GET /api/public/jobs/:slug`
+-- returns `compensation` only for a published posting with this set to 1.
+-- Open a role and Edit set it; the Worker refuses 1 on a posting with no band.
+--
+-- Grep first (D689 D-t): `comp_public` exists in no earlier migration and not
+-- in schema_baseline.sql.
+ALTER TABLE job_postings ADD COLUMN comp_public INTEGER NOT NULL DEFAULT 0 CHECK (comp_public IN (0, 1));

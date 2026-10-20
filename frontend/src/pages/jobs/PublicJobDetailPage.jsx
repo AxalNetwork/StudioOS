@@ -5,9 +5,12 @@
  *
  * THE PAGE draws only what `GET /api/public/jobs/:slug` returns: the title,
  * the company, the type, the level, the place, the date it was posted, the
- * summary and the description. The canvas's compensation, reporting line,
- * start date, stage, "About" paragraph and company figures (a readiness score,
- * revenue) have no column on a posting, so they are not drawn.
+ * summary and the description, and the compensation band when the read
+ * sends one: a band is stored on every posting that has one, but the read
+ * sends it only when the role's founder switched it on (#2181), so the
+ * Compensation fact is drawn from that object alone. The canvas's reporting
+ * line, start date, stage, "About" paragraph and company figures (a readiness
+ * score, revenue) have no column on a posting, so they are not drawn.
  *
  * THE SHEET is the canvas's two steps, carrying the flow this page already
  * ran. The canvas registers first and applies second. The signup cannot be run
