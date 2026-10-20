@@ -8,8 +8,8 @@
  * the feature to some plans, accounts or countries, the card says so.
  */
 
-/** The one server URL every assistant is given (D665). */
-export const MCP_SERVER_URL = 'https://axal.vc/api/mcp';
+/** The one server URL every assistant is given (D665; D784 moved it off `/api`). */
+export const MCP_SERVER_URL = 'https://axal.vc/mcp';
 
 export const ASSISTANTS = [
   {

@@ -35,7 +35,7 @@ async function park(env:any,scope=['validate:read','validate:write']) {
   const helper=oauth.oauthHelpers(env);
   const client=await helper.createClient({redirectUris:['https://client.example/callback'],clientName:'Claude',tokenEndpointAuthMethod:'none'});
   const id=crypto.randomUUID().replaceAll('-','');
-  await env.OAUTH_KV.put(oauth.consentKey(id),JSON.stringify({createdAt:Date.now(),authRequest:{clientId:client.clientId,redirectUri:'https://client.example/callback',responseType:'code',scope,state:'test',codeChallenge:'v'.repeat(43),codeChallengeMethod:'S256',resource:'https://axal.vc/api/mcp'}}));
+  await env.OAUTH_KV.put(oauth.consentKey(id),JSON.stringify({createdAt:Date.now(),authRequest:{clientId:client.clientId,redirectUri:'https://client.example/callback',responseType:'code',scope,state:'test',codeChallenge:'v'.repeat(43),codeChallengeMethod:'S256',resource:'https://axal.vc/mcp'}}));
   return {id,clientId:client.clientId};
 }
 const count=(db:any,t:string)=>Number(sql(db,'SELECT COUNT(*) n FROM '+t).n);
@@ -49,7 +49,7 @@ const checks:any = {
     const {token,clientId}=await connect(env,[7]);
     const provider=new OAuthProvider({...oauth.providerOptions(env),apiHandler:m.server.mcpApiHandler});
     async function invoke(name:string,args:any) {
-      const response=await provider.fetch(new Request('https://axal.vc/api/mcp',{method:'POST',headers:{
+      const response=await provider.fetch(new Request('https://axal.vc/mcp',{method:'POST',headers:{
         'Content-Type':'application/json',Accept:'application/json, text/event-stream','MCP-Protocol-Version':'2025-06-18',Authorization:'Bearer '+token},
         body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}})}),env,{waitUntil(){},passThroughOnException(){}} as any);
       const body:any=await response.json();

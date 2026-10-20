@@ -87,7 +87,7 @@ test('the setup cards hold the one server URL, link the vendor\'s page and say i
   const urls = [...h.matchAll(/data-testid="assistant-server-url">([^<]*)</g)].map((m) => m[1]);
   assert.equal(urls.length, ASSISTANTS.length);
   assert.deepEqual([...new Set(urls)], [MCP_SERVER_URL]);
-  assert.equal(MCP_SERVER_URL, 'https://axal.vc/api/mcp');
+  assert.equal(MCP_SERVER_URL, 'https://axal.vc/mcp', 'D784: the MCP server is not under /api');
   for (const a of ASSISTANTS) {
     assert.match(a.doc, /^https:\/\//);
     assert.ok(h.includes(`href="${a.doc}"`), `${a.name} links its doc`);

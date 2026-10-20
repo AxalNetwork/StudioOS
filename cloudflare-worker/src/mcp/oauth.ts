@@ -4,12 +4,16 @@
  * (RFC 7591), PKCE (S256 only), authorization-server metadata (RFC 8414) and
  * protected-resource metadata (RFC 9728).
  *
- * THE PATHS. `/api/mcp` is the protected resource. The authorization server's
- * own endpoints sit at `/api/oauth/*`, OUTSIDE `/api/mcp`, because the
- * provider treats everything under its `apiRoute` as a resource that needs a
- * token, and a founder reaching the authorize endpoint has none yet. The two
- * discovery documents are at `/.well-known/oauth-*`, which wrangler.toml's
- * `run_worker_first` sends to this Worker instead of the SPA's fallback.
+ * THE PATHS. `/mcp` is the protected resource (D784, #2204): the MCP server
+ * is its own protocol, answered before the Hono `/api` app, so its address is
+ * not under `/api`. `/api/mcp`, where it answered until 2026-10-20, answers
+ * 308 to the same path under `/mcp`. The authorization server's own endpoints
+ * sit at `/api/oauth/*`, OUTSIDE `/mcp`, because the provider treats
+ * everything under its `apiRoute` as a resource that needs a token, and a
+ * founder reaching the authorize endpoint has none yet. The discovery
+ * documents are at `/.well-known/oauth-*`. wrangler.toml's `run_worker_first`
+ * sends `/mcp`, `/mcp/*` and both discovery paths to this Worker instead of
+ * the SPA's fallback.
  *
  * THE FLAG. With `MCP_SERVER_ENABLED` anything but "true", `routeMcp` answers
  * 404 for every one of those paths and the provider is never built.
@@ -25,7 +29,9 @@ import { OAuthProvider, getOAuthApi, type OAuthProviderOptions, type AuthRequest
 import type { Env } from '../types';
 import { mcpApiHandler } from './server';
 
-export const MCP_PATH = '/api/mcp';
+export const MCP_PATH = '/mcp';
+/** D784: where the server answered until 2026-10-20; every path under it answers 308 to `MCP_PATH`. */
+export const LEGACY_MCP_PATH = '/api/mcp';
 export const OAUTH_PATHS = { authorize: '/api/oauth/authorize', token: '/api/oauth/token', register: '/api/oauth/register' } as const;
 export const SCOPES = ['validate:read', 'validate:write'] as const;
 export const CONSENT_TTL_SECONDS = 600;
@@ -46,9 +52,11 @@ export function publicOrigin(env: Env): string {
 
 /** Every path this module answers; the Worker's fetch sends these here before `app.fetch`. */
 export function isMcpPath(pathname: string): boolean {
-  if (pathname.startsWith(`${MCP_PATH}/consent/`)) return false; // the SPA's consent API, in routes/mcp_consent.ts
+  if (pathname.startsWith(`${LEGACY_MCP_PATH}/consent/`)) return false; // the SPA's consent API, in routes/mcp_consent.ts
   return pathname === MCP_PATH
     || pathname.startsWith(`${MCP_PATH}/`)
+    || pathname === LEGACY_MCP_PATH
+    || pathname.startsWith(`${LEGACY_MCP_PATH}/`)
     || Object.values(OAUTH_PATHS).includes(pathname as any)
     || pathname.startsWith('/.well-known/oauth-authorization-server')
     || pathname.startsWith('/.well-known/oauth-protected-resource');
@@ -113,7 +121,14 @@ export const oauthHelpers = (env: Env) => getOAuthApi(providerOptions(env), env)
 /** Answer an MCP or OAuth path, or 404 with the flag off. */
 export async function routeMcp(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (!mcpEnabled(env)) return new Response(JSON.stringify({ detail: 'Not found' }), { status: 404, headers: { 'content-type': 'application/json' } });
-  const path = new URL(request.url).pathname;
+  const url = new URL(request.url);
+  const path = url.pathname;
+  // D784: the old address keeps working. 308 keeps the method and the body,
+  // so an MCP client's POST arrives at `/mcp` as it was sent.
+  if (path === LEGACY_MCP_PATH || path.startsWith(`${LEGACY_MCP_PATH}/`)) {
+    url.pathname = MCP_PATH + path.slice(LEGACY_MCP_PATH.length);
+    return new Response(null, { status: 308, headers: { location: url.toString() } });
+  }
   const bucket = path === OAUTH_PATHS.register ? 'register' : path === OAUTH_PATHS.authorize ? 'authorize' : null;
   if (bucket && !(await withinPublicOAuthLimit(env, request, bucket))) {
     return Response.json({ error: 'rate_limited', detail: 'Too many requests. Wait a minute.' }, { status: 429, headers: { 'Retry-After': '60' } });
