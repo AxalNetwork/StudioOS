@@ -4,6 +4,9 @@ import { Card, Pill, Unreadable, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
 import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import ZoneDraft from '../../workspaces/ZoneDraft';
+import { useRailPage } from '../../ui/railCrumbs';
+import { railOptionFor } from '../../lib/railOptions';
+import useRecordCrumb from '../admin/useRecordCrumb';
 import { StatedLimit } from '../advisor/expertise/kit';
 import { activityLine, day, fileSize, roomFileState, when } from './diligenceRead';
 
@@ -48,6 +51,9 @@ function Tile({ k, v, sub, warn }) {
   );
 }
 
+/** This room, as the profiles' option inventories name it (`lib/railOptions`). */
+const ZONE_FILE = 'pages/research/DiligenceRoom.jsx';
+
 export default function DiligenceRoom({ role = 'investor' }) {
   const { grantUid } = useParams();
   const [room, setRoom] = useState(null);
@@ -66,6 +72,9 @@ export default function DiligenceRoom({ role = 'investor' }) {
     }
   }, [grantUid]);
   useEffect(() => { load(); }, [load]);
+  // D772 (#2098): the room is the rail's record, and its band names the profile's key for it.
+  useRecordCrumb(room?.project?.name || null, 'diligence-room', grantUid);
+  const railPage = useRailPage()?.page ?? null;
 
   const fileState = roomFileState(room);
   // Read only inside the ready branch, where the worker always sends the count.
@@ -301,6 +310,7 @@ export default function DiligenceRoom({ role = 'investor' }) {
 
             <ZoneDraft
               surface="research/diligence"
+              railOption={railOptionFor(railPage, { file: ZONE_FILE, control: 'research/diligence' })?.key}
               scopeKey={room.grant.uid}
               scoped
               accent="indigo"

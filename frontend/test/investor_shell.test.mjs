@@ -400,10 +400,10 @@ test('the Worker AI rail is one component, and every investor workspace has it',
     `${task} must be a real entry in the router's ROUTE table`);
   assert.match(read('cloudflare-worker/src/routes/ai.ts'), new RegExp(`task: '${task}'`),
     `a worker route must actually run ${task}, or the card names a model nothing calls`);
-  // Derived from the router, never typed here: the cards are built by
-  // `railSuggestions` from `/api/ai/pricing` (owner, 2026-10-10; D698).
-  assert.match(rail, /railSuggestions\(\{ section, module, pricing, picks \}\)/,
-    'the model comes from the router\'s own table');
+  // Derived, never typed here: since D769 PR 2 (#2088) the cards are the
+  // page's row in the Worker's matrix (`GET /api/ai/rail`), shaped by `railView`.
+  assert.match(rail, /railPrefsApi\.page\(page, option\)/, 'the model comes from the Worker\'s matrix');
+  assert.match(rail, /const rail = railView\(\{/, 'the cards are built from the Worker\'s answer');
   assert.doesNotMatch(rail, /\$0\.293|\$2\.253|Llama 3\.3 70B Fast/,
     'the canvas figures are not the router figures');
 });

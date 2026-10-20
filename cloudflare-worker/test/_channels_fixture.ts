@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { createHash, createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { memKV } from './_mem_kv.mjs';
@@ -95,14 +95,11 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store and channel_threads.consent_state.
-    '488_channel_consents.sql', '492_whatsapp_sender_links.sql']) db.exec(mig(m));
+    '488_channel_consents.sql', '492_whatsapp_sender_links.sql', '504_whatsapp_link_settings.sql']) db.exec(mig(m));
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
-  if (opts.budget != null) {
-    for (const key of ['founder:free', 'other']) {
-      db.prepare('INSERT INTO ai_licence_caps(licence_key, daily_microusd, monthly_microusd, recorded_by) VALUES (?, ?, ?, 1)').run(key, opts.budget, opts.budget);
-    }
-  }
+  // D783: a member's allowance is what their plans give; `budget` sets every fixture member's monthly figure.
+  if (opts.budget != null) setFixtureAllowance(db, opts.budget);
   const queued: any[] = [];
   /** Each JOB_QUEUE.send's options (delaySeconds), in order (D756). */
   const queuedOpts: any[] = [];

@@ -46,6 +46,10 @@ export interface RecordFillInput {
   model?: string | null;
   task?: string | null;
   decidedBy?: number | null;
+  /** D777 part 2: the target row as text, where `rowId` cannot name it (the proposal's `target_ref`). */
+  targetRowRef?: string | null;
+  /** D777 part 2: the `ai_usage_logs` row of the run that produced the value. */
+  usageLogId?: number | null;
 }
 
 /**
@@ -85,9 +89,34 @@ export async function ensureFillProvenanceSchema(env: Env): Promise<void> {
     await env.DB.exec(
       'CREATE INDEX IF NOT EXISTS idx_fill_provenance_proposal ON fill_provenance (proposal_id)',
     );
+    // Migration 503's columns, on a table made before it (D235: 503 declares them).
+    const cols = await env.DB.prepare('PRAGMA table_info(fill_provenance)').all<{ name: string }>();
+    const have = new Set((cols.results ?? []).map((c) => c.name));
+    if (!have.has('target_row_ref')) await env.DB.exec('ALTER TABLE fill_provenance ADD COLUMN target_row_ref TEXT');
+    if (!have.has('ai_usage_log_id')) await env.DB.exec('ALTER TABLE fill_provenance ADD COLUMN ai_usage_log_id INTEGER');
+    await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_fill_provenance_usage ON fill_provenance (ai_usage_log_id)');
     READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[fills] ensureFillProvenanceSchema:', (e as Error).message);
+  }
+}
+
+/**
+ * Migration 503's `validate_proposals.ai_usage_log_id`, on a table made before
+ * it. The propose route calls this before it stores a proposal with its run.
+ */
+const PROPOSALS_READY = new WeakMap<object, boolean>();
+export async function ensureProposalRunColumn(env: Env): Promise<void> {
+  if (PROPOSALS_READY.get(bindingKey(env))) return;
+  try {
+    const cols = await env.DB.prepare('PRAGMA table_info(validate_proposals)').all<{ name: string }>();
+    const have = new Set((cols.results ?? []).map((c) => c.name));
+    if (have.size && !have.has('ai_usage_log_id')) {
+      await env.DB.exec('ALTER TABLE validate_proposals ADD COLUMN ai_usage_log_id INTEGER');
+    }
+    PROPOSALS_READY.set(bindingKey(env), true);
+  } catch (e) {
+    console.error('[fills] ensureProposalRunColumn:', (e as Error).message);
   }
 }
 
@@ -115,8 +144,9 @@ export async function recordFill(env: Env, input: RecordFillInput): Promise<numb
   const r = await env.DB.prepare(
     `INSERT INTO fill_provenance
        (target_table, target_row_id, target_column, proposal_id, fill_class,
-        proposed_value, written_value, edited, citation_json, model, task, decided_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        proposed_value, written_value, edited, citation_json, model, task, decided_by,
+        target_row_ref, ai_usage_log_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     input.target.table,
     input.target.rowId,
@@ -130,6 +160,8 @@ export async function recordFill(env: Env, input: RecordFillInput): Promise<numb
     input.model ?? null,
     input.task ?? null,
     input.decidedBy ?? null,
+    input.targetRowRef ? String(input.targetRowRef).slice(0, 300) : null,
+    Number.isSafeInteger(input.usageLogId) && Number(input.usageLogId) > 0 ? input.usageLogId : null,
   ).run();
   return Number(r.meta?.last_row_id) || 0;
 }
@@ -222,6 +254,48 @@ export interface FilledValue {
   citation: Citation | null;
   model: string | null;
   created_at: string;
+  /**
+   * D777 part 2: the run that produced the value — its rail page and option and
+   * what it cost (D762). `null` when the fill names no run, or its row cannot be
+   * read: "Not recorded", never a zero cost.
+   */
+  run: FillRun | null;
+}
+
+export interface FillRun {
+  usage_log_id: number;
+  rail_page: string | null;
+  rail_option: string | null;
+  /** What the member was charged, in micro-USD; null while unsettled or before migration 493. */
+  charged_microusd: number | null;
+  est_cost_usd: number | null;
+}
+
+/** The runs behind some fills, by usage row id. Best-effort: an unreadable log reads as no run. */
+async function runsByLogId(env: Env, ids: number[]): Promise<Map<number, FillRun>> {
+  const out = new Map<number, FillRun>();
+  if (!ids.length) return out;
+  try {
+    const r = await env.DB.prepare(
+      `SELECT id, rail_page, rail_option, charged_microusd, est_cost_usd
+         FROM ai_usage_logs WHERE id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify([...new Set(ids)])).all<{
+      id: number; rail_page: string | null; rail_option: string | null;
+      charged_microusd: number | null; est_cost_usd: number | null;
+    }>();
+    for (const row of r.results || []) {
+      out.set(Number(row.id), {
+        usage_log_id: Number(row.id),
+        rail_page: row.rail_page ?? null,
+        rail_option: row.rail_option ?? null,
+        charged_microusd: row.charged_microusd ?? null,
+        est_cost_usd: row.est_cost_usd ?? null,
+      });
+    }
+  } catch (e) {
+    console.error('[fills] runsByLogId:', (e as Error).message);
+  }
+  return out;
 }
 
 /**
@@ -246,20 +320,24 @@ export async function fillsForRow(
   await ensureFillProvenanceSchema(env);
   const r = await env.DB.prepare(
     `SELECT target_column, fill_class, proposed_value, written_value, edited,
-            citation_json, model, created_at
+            citation_json, model, created_at, ai_usage_log_id
        FROM fill_provenance
       WHERE target_table = ? AND target_row_id = ?
       ORDER BY id DESC`,
   ).bind(table, rowId).all<{
     target_column: string; fill_class: string; proposed_value: string | null;
     written_value: string | null; edited: number; citation_json: string | null;
-    model: string | null; created_at: string;
+    model: string | null; created_at: string; ai_usage_log_id: number | null;
   }>();
   const seen = new Set<string>();
-  const out: FilledValue[] = [];
-  for (const row of r.results || []) {
-    if (seen.has(row.target_column)) continue;
+  const newest = (r.results || []).filter((row) => {
+    if (seen.has(row.target_column)) return false;
     seen.add(row.target_column);
+    return true;
+  });
+  const runs = await runsByLogId(env, newest.map((row) => Number(row.ai_usage_log_id)).filter((n) => Number.isSafeInteger(n) && n > 0));
+  const out: FilledValue[] = [];
+  for (const row of newest) {
     let citation: Citation | null = null;
     try { citation = row.citation_json ? JSON.parse(row.citation_json) as Citation : null; } catch { citation = null; }
     out.push({
@@ -271,6 +349,7 @@ export async function fillsForRow(
       citation,
       model: row.model,
       created_at: row.created_at,
+      run: runs.get(Number(row.ai_usage_log_id)) ?? null,
     });
   }
   return out;

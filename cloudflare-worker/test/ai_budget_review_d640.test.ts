@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SignJWT } from 'jose';
-import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
+import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { loadAiBudget, reserveAiBudget, settleAiReservation } from '../src/services/aiBudget.ts';
 import { run, __resetForTest } from '../src/services/aiRouter.ts';
 import budgetRoute from '../src/routes/ai_budget.ts';
@@ -47,7 +47,7 @@ test('D640: a real router overage reaches the hold and the next run never calls 
 
 test('D640: held overage remains visible to its member, blocks new runs, and charges at most the hold once',async()=>{
   const f=fixture();try {
-    f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',500000,1000000,1)").run();
+    setFixtureAllowance(f.db,500000); // D783: a member's month is their plan's share; there is no day cap.
     await loadAiBudget(f.env,2,now);
     f.db.prepare('UPDATE ai_topup_accounts SET balance_microusd=1000000 WHERE user_id=2').run();
     const uid=await hold(f,2,800000);
@@ -109,7 +109,7 @@ test('D640: held overage remains visible to its member, blocks new runs, and cha
 
 test('D640: refund releases both kinds of hold once, and invalid states never write',async()=>{
   const f=fixture();try {
-    f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('investor:free',50000,50000,1)").run();
+    setFixtureAllowance(f.db,50000);
     await loadAiBudget(f.env,3,now);
     f.db.prepare('UPDATE ai_topup_accounts SET balance_microusd=200000 WHERE user_id=3').run();
     const pending=await reserveAiBudget(f.env,2,100,now);if(!pending.ok)throw Error('pending reserve failed');
@@ -149,7 +149,7 @@ test('D640: audit write failure rolls back the charge and allows retry',async()=
   }finally{f.db.close();}
 });
 
-test('D640: Super Admin lists all ten plans in licence order with recorded attribution or environment source',async()=>{
+test('D640: Super Admin lists all ten plans in licence order; D783: members are computed, the admin keeps recorded attribution or environment source',async()=>{
   const f=fixture();try {
     f.env.WORKERS_AI_BUDGET_USD_DAY='7';f.env.WORKERS_AI_BUDGET_USD_MONTH='70';
     assert.equal((await request(f,'/caps',2)).status,403);
@@ -159,20 +159,28 @@ test('D640: Super Admin lists all ten plans in licence order with recorded attri
     const plans=(await before.json() as any).plans;
     assert.deepEqual(plans.map((r:any)=>r.licence_key),
       ['founder:free','founder:growth','founder:studio','investor:free','investor:professional','investor:institutional','advisor','partner','admin','other']);
-    assert.ok(plans.every((r:any)=>r.source==='environment' && r.daily_microusd===7000000 && r.monthly_microusd===70000000));
-    assert.equal((await request(f,'/caps/founder:free',1,'PUT',{daily_usd:0,monthly_usd:12})).status,200);
+    const admin=plans.length-2;
+    // D783: a member licence's allowance is 25% of each member's plans, never typed, so HQ shows no figure to edit.
+    assert.ok(plans.every((r:any,i:number)=>i===admin
+      ? r.source==='environment' && r.editable===true && r.daily_microusd===7000000 && r.monthly_microusd===70000000
+      : r.source==='computed' && r.editable===false && r.daily_microusd===null && r.monthly_microusd===null && r.ignored_recorded===false));
+    assert.equal((await request(f,'/caps/founder:free',1,'PUT',{daily_usd:0,monthly_usd:12})).status,409);
+    f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,12000000,1)").run();
+    assert.equal((await request(f,'/caps/admin',1,'PUT',{daily_usd:0,monthly_usd:12})).status,200);
     const after=await request(f,'/caps',1);assert.equal(after.status,200);
     const current=(await after.json() as any).plans;
-    assert.deepEqual({source:current[0].source,day:current[0].daily_microusd,month:current[0].monthly_microusd,
-      actor:current[0].recorded_by,name:current[0].recorded_by_name},
+    assert.deepEqual({source:current[admin].source,day:current[admin].daily_microusd,month:current[admin].monthly_microusd,
+      actor:current[admin].recorded_by,name:current[admin].recorded_by_name},
       {source:'recorded',day:0,month:12000000,actor:1,name:'Owner'});
-    assert.ok(current[0].recorded_at);assert.equal(current[1].source,'environment');
-    f.db.prepare("UPDATE ai_licence_caps SET daily_microusd=1 WHERE licence_key='founder:free'").run();
+    assert.ok(current[admin].recorded_at);
+    // A row typed for a member licence before D783 stays in the table, is not read, and says so.
+    assert.deepEqual([current[0].source,current[0].monthly_microusd,current[0].ignored_recorded,current[1].ignored_recorded],['computed',null,true,false]);
+    f.db.prepare("UPDATE ai_licence_caps SET daily_microusd=1 WHERE licence_key='admin'").run();
     const mutated=(await (await request(f,'/caps',1)).json() as any).plans;
-    assert.notEqual(mutated[0].daily_microusd,current[0].daily_microusd);
-    f.db.prepare("UPDATE ai_licence_caps SET daily_microusd=0 WHERE licence_key='founder:free'").run();
+    assert.notEqual(mutated[admin].daily_microusd,current[admin].daily_microusd);
+    f.db.prepare("UPDATE ai_licence_caps SET daily_microusd=0 WHERE licence_key='admin'").run();
     const restored=(await (await request(f,'/caps',1)).json() as any).plans;
-    assert.equal(restored[0].daily_microusd,current[0].daily_microusd);
+    assert.equal(restored[admin].daily_microusd,current[admin].daily_microusd);
     f.db.exec('DROP TABLE ai_licence_caps');
     assert.equal((await request(f,'/caps',1)).status,503);
     f.db.exec('DROP TABLE ai_budget_reservations');

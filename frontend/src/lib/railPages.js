@@ -58,6 +58,10 @@ const NETWORK = (P) => [
   own('/network/relationships', key(P, 'Network', 'Relationships')),
   own('/network/introductions', key(P, 'Network', 'Introductions')),
   own('/network/organizations', key(P, 'Network', 'Organizations')),
+  // D771 (#2097): the workspace (`/network?mode=workspace`) picks its tab from `?tab=`, and its
+  // Relationships and Introductions tabs carry those boards' bands, so each tab is its board's.
+  alias('/network?tab=relationships', key(P, 'Network', 'Relationships'), 'The workspace’s Relationships tab is that board’s working tool.'),
+  alias('/network?tab=introductions', key(P, 'Network', 'Introductions'), 'The workspace’s Introductions tab is that board’s working tool.'),
 ];
 
 /**
@@ -465,9 +469,9 @@ export const NO_RAIL_ROUTES = [
   { route: '/admin/due-diligence/:uid', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/due-diligence', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/due-diligence/:uid', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
-  { route: '/admin/spinout-lab', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws its frame with no rail too.' },
-  { route: '/admin/spinout-lab/preview', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws its frame with no rail too.' },
-  { route: '/admin/spinout-moderation', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws its frame with no rail too.' },
+  { route: '/admin/spinout-lab', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
+  { route: '/admin/spinout-lab/preview', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
+  { route: '/admin/spinout-moderation', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
 ];
 
 /** The order an admin's preview of a member page reads the member profiles in. */

@@ -9,7 +9,8 @@ import {
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Instrument, PairNote, SourceLegend } from '../../workspaces/canvasKit';
-import { useRailOption } from '../../ui/railCrumbs';
+import { useRailOption, useRailPage } from '../../ui/railCrumbs';
+import { railOptionFor } from '../../lib/railOptions';
 
 /**
  * Research · Library — the documents you hold, and how far Ask can see into them.
@@ -133,6 +134,9 @@ const LIBRARY_STRIP = {
 LIBRARY_STRIP.partner = LIBRARY_STRIP.advisor;
 LIBRARY_STRIP.investor = LIBRARY_STRIP.founder;
 
+/** This zone, as the profiles' option inventories name it (`lib/railOptions`). */
+const ZONE_FILE = 'pages/research/LibraryZone.jsx';
+
 /**
  * `zoneActions` is the same render prop `AskZone` takes, for the same reason:
  * one route, four licences, four different sets of zone actions. Called with
@@ -147,8 +151,12 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
   const [busy, setBusy] = useState(false);
   // D771 (#2097): `busy` also covers Remove, so an upload or a re-index names itself to the rail on its own.
   const [running, setRunning] = useState(null);
-  useRailOption(running === 'upload' ? 'upload:document' : null, 'Add to library');
-  useRailOption(running === 'reindex' ? 'upload:reindex' : null, 'Re-index');
+  // D772 (#2098): each under the key the member's profile gives it on this page.
+  const railPage = useRailPage()?.page ?? null;
+  const uploadOption = railOptionFor(railPage, { file: ZONE_FILE, control: 'upload' });
+  const reindexOption = railOptionFor(railPage, { file: ZONE_FILE, control: 'reindex' });
+  useRailOption(running === 'upload' ? uploadOption?.key : null, uploadOption?.label);
+  useRailOption(running === 'reindex' ? reindexOption?.key : null, reindexOption?.label);
   const [note, setNote] = useState(null);
   const [kind, setKind] = useState('document');
   const [title, setTitle] = useState('');
@@ -496,7 +504,7 @@ export default function LibraryZone({ zoneActions, zoneFilters, role = 'founder'
 
         <ZoneDraft
           surface="research/library"
-          railOption="draft:research/library"
+          railOption={railOptionFor(railPage, { file: ZONE_FILE, control: 'research/library' })?.key}
           label="Draft · index gaps"
           accept="Accept draft"
           run="Draft the gaps"

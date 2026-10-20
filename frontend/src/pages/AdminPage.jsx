@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Shield, Users, ChevronDown, Briefcase, Check, ShieldCheck, FileText, Sparkles, KeyRound, Heart, Ticket, CreditCard, Package, FlaskConical, Landmark } from 'lucide-react';
 import BrandIcon from '../ui/BrandIcon';
+import { useAuth } from '../hooks/useAuthSync';
+import { isSuperAdminUser } from '../lib/shellRole';
+import { crumbsOfKey, pageFor } from '../lib/railPages';
+import AdminBoardFrame from './admin/AdminBoardFrame';
 // D648 (#1448) — one component per console, each in its own file under
 // ./admin/consoles/ and each loading only its own data. This page is the
 // shell: the header, the section dropdown, and the one console it mounts.
@@ -23,10 +27,6 @@ import { WellbeingExpertsPanel } from './admin/consoles/WellbeingConsole';
 // /admin/network-profiles route stays wired for direct deep-links.
 import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
 import AdminSpinoutLab from './admin/AdminSpinoutLab';
-import AdminBoardFrame from './admin/AdminBoardFrame';
-import { useAuth } from '../hooks/useAuthSync';
-import { isSuperAdminUser } from '../lib/shellRole';
-import { crumbsOfKey, pageKeyFor } from '../lib/railPages';
 
 // The Legal console's panel. Contracts (`pages/hq/ContractsPage.jsx`, D647)
 // renders its own desk, `pages/admin/contracts/ContractsDesk.jsx`, not this,
@@ -156,33 +156,19 @@ function AdminSectionNav({ value, onChange, badges }) {
 }
 
 /**
- * D774 (#2100) — the one rail on `/admin`. Every tab of this shell is a board
- * of the Admin profile (Users, Identity checks, Entity profiles, Wellbeing
- * experts, Advisors and partners, Directory) or of the Super Admin's (Users,
- * Personas, Advisors and partners, Directory, Integration keys, GitHub sync,
- * Payments catalogue, Promo codes), so the frame is drawn here, once, around
- * the whole page, and the tab names the board. The name is the page key
- * D768's map (`lib/railPages.js`) gives `/admin?tab=<tab>` for the viewer's
- * profile, its module or its section; a tab no canvas board names (Billing,
- * Bank accounts) takes the map's `Admin console`.
- *
- * The Spin-Out Lab tab draws no rail: D317 keeps Eadwyn out of the Lab
- * (`workspace_frame_contract.test.mjs`), so the frame is drawn there with
- * `rail={false}`, which keeps the page's tree, and the open dropdown, as it is.
+ * D775 (#2101, the owner's answer A) — the board an open tab is, for the
+ * viewer's tier, or null. It is read from D768's page map, so the rail's name
+ * and its page key never disagree: `?tab=users` is "Users" for both tiers,
+ * `?tab=personas` is a Super Admin board and `?tab=kyc` an Admin one. A tab
+ * that is no board of the viewer's profile (the map answers the off-canvas
+ * Admin console) is null, as is every tab for a tier with no board here.
+ * So is Spin-Out applications, which D317 keeps rail-less
+ * (`workspace_frame_contract.test.mjs`).
  */
-export function adminTabBoard(tab, role) {
-  const { section, module } = crumbsOfKey(pageKeyFor('/admin', role, { search: `?tab=${tab}` }));
-  return module || section;
-}
-
-function AdminConsoleFrame({ tab, children }) {
-  const user = useAuth()?.user ?? null;
-  const workspace = adminTabBoard(tab, isSuperAdminUser(user) ? 'super_admin' : 'admin');
-  return (
-    <AdminBoardFrame workspace={workspace} rail={tab !== 'lab-applications'} data-testid="admin-console-frame">
-      {children}
-    </AdminBoardFrame>
-  );
+export function tabBoard(tab, role) {
+  if (tab === 'lab-applications') return null;
+  const page = pageFor('/admin', role, { search: `?tab=${tab}` });
+  return page && !page.offCanvas ? crumbsOfKey(page.key).module : null;
 }
 
 // `section` locks the console to one tab and drops its own header and section
@@ -222,7 +208,14 @@ export default function AdminPage({ onImpersonate, section = null }) {
   const [pendingProfiles, setPendingProfiles] = useState(0);
   const [pendingKyc, setPendingKyc] = useState(0);
 
-  const panel = (
+  // D775 — the one rail on this page sits around the whole page, named for
+  // the open tab's board, in the viewer's tier (`AdminBoardFrame`). A host
+  // that locks the console to one `section` draws its own rail, so it gets
+  // the panel alone.
+  const user = useAuth()?.user ?? null;
+  const board = section ? null : tabBoard(tab, isSuperAdminUser(user) ? 'super_admin' : user?.role);
+
+  const page = (
     <div>
       {!section && (
         <>
@@ -267,8 +260,10 @@ export default function AdminPage({ onImpersonate, section = null }) {
       {tab === 'kyc' && <KycConsole onPendingCount={setPendingKyc} />}
     </div>
   );
-  // A host that locks the console to one section composes it under a page,
-  // and a rail, of its own.
-  if (section) return panel;
-  return <AdminConsoleFrame tab={tab}>{panel}</AdminConsoleFrame>;
+  if (!board) return page;
+  return (
+    <AdminBoardFrame workspace={board} note={`Eadwyn reads the ${board} panel on this page. Nothing here changes until you act on it.`} data-testid="admin-tab-frame">
+      {page}
+    </AdminBoardFrame>
+  );
 }

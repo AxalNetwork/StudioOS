@@ -87,6 +87,7 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   db.exec(mig('492_whatsapp_sender_links.sql'));
+  db.exec(mig('504_whatsapp_link_settings.sql')); // #1939 part 3: unlink clears the venture choice
   db.exec("UPDATE users SET role = 'admin', is_super_admin = 1 WHERE id = 5");
   if (opts.budget != null) {
     for (const key of ['founder:free', 'other']) {

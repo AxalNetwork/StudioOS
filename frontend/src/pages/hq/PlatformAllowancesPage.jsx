@@ -7,6 +7,7 @@ import { reportError } from '../../lib/log';
 import { Card, EmptyState, Pill, RailFrame, Unrecorded, Unreadable, WorkerRail } from '../../ui';
 import { useAccountRead } from '../account/AccountCenter';
 import { microUsd, planLabel, whenLabel } from '../account/usageModel';
+import { BillingCard, ModelsCard, useHqModels } from './HqAiCards';
 import { MemberAccountCard, ReconcileCard, TokenPacksCard } from './TokenPacks';
 import { REASON_MIN } from './tokenPacksModel';
 
@@ -30,6 +31,11 @@ import { REASON_MIN } from './tokenPacksModel';
  * line per pack, replacing D750's single top-up line, with New pack, Adopt,
  * On sale, Bonus and Archive), one member's AI account with Adjust balance,
  * and Reconcile. HQ never credits a purchase.
+ *
+ * D776 PR 2 (#2093) adds, read-only, from `HqAiCards.jsx`: How members are
+ * charged and Models offered (`GET /api/ai/catalogue/hq`), and inside One
+ * member's AI account, that member's month by page and option and each run
+ * (`GET /api/ai-budget/members/:id/runs`, audited).
  */
 
 export { REASON_MIN };
@@ -44,6 +50,8 @@ export function parseUsd(text) {
 
 /** The plan row's source, as the canvas words it. */
 export function sourceView(p) {
+  // D783: a member licence's allowance is 25% of what each member pays, computed, never typed.
+  if (p.source === 'computed') return { text: 'Computed: 25% of each member’s plans', tone: 'neutral', nr: false };
   if (p.source !== 'recorded') return { text: 'Platform default', tone: 'neutral', nr: true };
   const who = p.recorded_by_name || null;
   const when = p.recorded_at ? whenLabel(p.recorded_at) : null;
@@ -174,18 +182,60 @@ export function PlansCard({ caps, editing, onEdit }) {
               <div key={p.licence_key} data-testid="hq-allowance-row"
                 className={`grid grid-cols-[minmax(0,1.4fr)_90px_100px_minmax(0,1.6fr)_60px] items-center gap-3 border-b border-axal-ground px-4 py-2.5 text-[13px] last:border-0 dark:border-gray-800 ${editing === p.licence_key ? 'bg-rose-50/50 dark:bg-rose-950/20' : ''}`}>
                 <span className="font-semibold">{planLabel(p.licence_key)}</span>
-                <span className="text-right font-mono text-[12.5px]">{microUsd(p.daily_microusd)}</span>
-                <span className="text-right font-mono text-[12.5px]">{microUsd(p.monthly_microusd)}</span>
+                <span className="text-right font-mono text-[12.5px]">{p.source === 'computed' ? 'None' : microUsd(p.daily_microusd)}</span>
+                <span className="text-right font-mono text-[12.5px]">{p.source === 'computed' ? '25%' : microUsd(p.monthly_microusd)}</span>
                 <span className="min-w-0"><Pill tone={src.tone} data-testid="hq-allowance-source">{src.text}</Pill></span>
-                <button type="button" className="text-right text-[12px] font-semibold text-axal-muted hover:text-rose-900 dark:text-gray-400" onClick={() => onEdit(p)} data-testid="hq-allowance-edit-open">Edit</button>
+                {p.editable === false ? <span />
+                  : <button type="button" className="text-right text-[12px] font-semibold text-axal-muted hover:text-rose-900 dark:text-gray-400" onClick={() => onEdit(p)} data-testid="hq-allowance-edit-open">Edit</button>}
               </div>
             );
           })}
+      {plans && plans.some((p) => p.ignored_recorded) && (
+        <div className="border-t border-axal-hairline px-4 py-2.5 text-xs text-axal-muted dark:border-gray-800 dark:text-gray-400" data-testid="hq-allowances-ignored-note">
+          A cap typed for a member plan before D783 is kept but no longer read: those plans give 25% of what each member pays.
+        </div>
+      )}
       {plans && plans.some((p) => sourceView(p).nr) && (
         <div className="border-t border-axal-hairline px-4 py-2.5 text-xs text-axal-muted dark:border-gray-800 dark:text-gray-400" data-testid="hq-allowances-default-note">
           Set by: a plan on the platform default records no editor. The default comes from the deployment.
         </div>
       )}
+    </Card>
+  );
+}
+
+/** D783: what each catalogue plan includes, read-only: its price, the share and the monthly allowance. */
+export function catalogueRows(caps) {
+  const plans = caps?.status === 'ready' && Array.isArray(caps.data?.catalogue) ? caps.data.catalogue : null;
+  if (!plans) return null;
+  const share = typeof caps.data.share === 'number' ? `${Math.round(caps.data.share * 100)}%` : null;
+  return plans.filter((p) => p && p.free === false && Array.isArray(p.prices)).flatMap((p) => p.prices
+    .filter((pr) => pr && Number.isSafeInteger(pr.unit_amount) && Number.isSafeInteger(pr.allowance_microusd))
+    .map((pr) => ({ key: `${p.product_id}:${pr.price_id}`, plan: p.plan_name || planLabel(p.licence_key),
+      price: `${microUsd(pr.unit_amount * 10_000)}${pr.interval === 'year' ? ' / year' : pr.interval === 'month' ? ' / month' : ''}`,
+      share, allowance: `${microUsd(pr.allowance_microusd)} / month` })));
+}
+export function CatalogueCard({ caps }) {
+  const rows = catalogueRows(caps);
+  return (
+    <Card padding="none" className="overflow-hidden" data-testid="hq-allowances-catalogue">
+      <div className={`grid grid-cols-[minmax(0,1.6fr)_120px_60px_120px] gap-3 px-4 py-2 ${HEAD}`}>
+        <span>Plan</span><span className="text-right">Price</span><span className="text-right">Share</span><span className="text-right">Allowance</span>
+      </div>
+      {caps.status === 'loading' ? <p className="px-4 py-3 text-[12.5px] text-axal-muted">Reading the plans…</p>
+        : !rows ? <div className="px-4 py-3"><Unreadable what="The plans' allowances" claim="No allowance has changed." onRetry={caps.reload} /></div>
+          : rows.length === 0 ? <p className="px-4 py-3 text-[12.5px] text-axal-muted" data-testid="hq-allowances-catalogue-none">No paid plan is in the catalogue.</p>
+            : rows.map((r) => (
+              <div key={r.key} data-testid="hq-allowance-catalogue-row" className="grid grid-cols-[minmax(0,1.6fr)_120px_60px_120px] items-center gap-3 border-b border-axal-ground px-4 py-2.5 text-[13px] last:border-0 dark:border-gray-800">
+                <span className="font-semibold">{r.plan}</span>
+                <span className="text-right font-mono text-[12.5px]">{r.price}</span>
+                <span className="text-right font-mono text-[12.5px]">{r.share}</span>
+                <span className="text-right font-mono text-[12.5px]">{r.allowance}</span>
+              </div>
+            ))}
+      <div className="border-t border-axal-hairline px-4 py-2.5 text-xs text-axal-muted dark:border-gray-800 dark:text-gray-400">
+        A yearly price gives its share ÷ 12 each month. A member is credited on what they pay; one subscribed before D783 reads today's price here until their next billing event. No plan, no allowance.
+      </div>
     </Card>
   );
 }
@@ -216,6 +266,7 @@ export default function PlatformAllowancesPage() {
   const reviews = useAccountRead(() => aiBudgetApi.reviews());
   const packs = useAccountRead(() => tokenPacksApi.status());
   const reconcile = useAccountRead(() => tokenPacksApi.reconcile());
+  const models = useHqModels();
   const [editing, setEditing] = useState(null);
   const [done, setDone] = useState(null);
   const plans = caps.status === 'ready' && Array.isArray(caps.data?.plans) ? caps.data.plans : [];
@@ -248,11 +299,12 @@ export default function PlatformAllowancesPage() {
             <ArrowLeft size={13} /> Platform
           </Link>
           <h1 className="mt-1 text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">AI allowances</h1>
-          <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">The daily and monthly AI allowance each plan includes, runs held for a check, the token packs members can buy, one member's AI account, and what needs reconciling.</p>
+          <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">The daily and monthly AI allowance each plan includes, runs held for a check, the token packs members can buy, one member's AI account and their month, what needs reconciling, how members are charged and the models offered.</p>
         </div>
         {done && <p role="status" className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12px] dark:border-gray-800 dark:bg-gray-800/40" data-testid="hq-allowances-done">{done}</p>}
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
           <PlansCard caps={caps} editing={editing} onEdit={(p) => { setEditing(p.licence_key); setDone(null); }} />
+          <CatalogueCard caps={caps} />
           <div className="flex flex-col gap-3">
             {editPlan && (
               <EditPlanForm key={editPlan.licence_key} plan={editPlan} onCancel={() => setEditing(null)}
@@ -265,6 +317,10 @@ export default function PlatformAllowancesPage() {
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">
           <MemberAccountCard />
           <ReconcileCard reconcile={reconcile} />
+        </div>
+        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)]">
+          <BillingCard models={models} />
+          <ModelsCard models={models} />
         </div>
       </div>
     </RailFrame>

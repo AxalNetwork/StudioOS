@@ -580,20 +580,21 @@ test('every surface eadwynConfig defines is rendered by something', () => {
   for (const f of walkJs('frontend/src/pages')) {
     for (const m of scan(read(f)).matchAll(/<AssistLayout\s+surface="([^"]+)"/g)) mounted.add(m[1]);
   }
-  // The workspace rail names its surface as a constant rather than a prop —
-  // it is the same one on every zone — so it is read from the constant.
-  const wsSurface = /const WORKSPACE_SURFACE = '([^']+)'/
-    .exec(read('frontend/src/ui/WorkerRail.jsx'))?.[1];
-  if (wsSurface) mounted.add(wsSurface);
+  // The workspace rail's surface is the same on every zone, so a host hands
+  // the rail its desk sentence (`note={ASSIST_SURFACES.workspace.desks…}`)
+  // rather than a surface name. Since D769 PR 2 (#2088) the rail itself reads
+  // no surface, so the hosts' reads are what mount it.
+  for (const f of walkJs('frontend/src/pages')) {
+    for (const m of scan(read(f)).matchAll(/note=\{ASSIST_SURFACES\.(\w+)\./g)) mounted.add(m[1]);
+  }
 
   assert.deepEqual([...surfaces].filter((s) => !mounted.has(s)), [],
     'these surfaces are configured but nothing renders them');
-  // …and the workspace one is genuinely rendered, not just named: a constant
-  // nothing reads would satisfy the line above while drawing no card at all.
-  assert.ok(wsSurface, 'WorkerRail must name the surface it renders');
+  // …and the workspace one is genuinely rendered, not just named: the rail
+  // prints the `note` its hosts hand it.
   assert.match(read('frontend/src/ui/WorkerRail.jsx'),
-    /ASSIST_SURFACES\[WORKSPACE_SURFACE\]/,
-    'the constant has to be the one the rail actually looks up');
+    /\{aiOn && note && <p className="fwr-mode-line" data-testid="text-worker-rail-mode">\{note\}<\/p>\}/,
+    'the rail no longer prints the desk sentence its hosts read from the workspace surface');
 });
 
 test('each mount wraps its own page, once, inside the exported component', () => {

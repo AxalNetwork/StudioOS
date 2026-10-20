@@ -2634,9 +2634,9 @@ export const api = {
   // Task #24 — Brand & landing page generator.
   brandLogo: (payload) => request('/brand/logo', { method: 'POST', body: JSON.stringify(payload) }),
   brandUploadLogo: (formData) => request('/brand/logo/upload', { method: 'POST', body: formData }),
-  brandSuggestPalette: (payload) => request('/brand/palette/suggest', { method: 'POST', body: JSON.stringify(payload) }),
-  brandSuggestTaglines: (payload) => request('/brand/tagline/suggest', { method: 'POST', body: JSON.stringify(payload) }),
-  brandAutofillLanding: (payload) => request('/brand/landing/autofill', { method: 'POST', body: JSON.stringify(payload) }),
+  brandSuggestPalette: (payload, headers) => request('/brand/palette/suggest', { method: 'POST', headers, body: JSON.stringify(payload) }),
+  brandSuggestTaglines: (payload, headers) => request('/brand/tagline/suggest', { method: 'POST', headers, body: JSON.stringify(payload) }),
+  brandAutofillLanding: (payload, headers) => request('/brand/landing/autofill', { method: 'POST', headers, body: JSON.stringify(payload) }),
   brandGetLanding: (projectId) => request(`/brand/landing/by-project/${projectId}`),
   brandSaveLanding: (projectId, payload) => request(`/brand/landing/by-project/${projectId}`, { method: 'PUT', body: JSON.stringify(payload) }),
   brandPublishLanding: (projectId, published) => request(`/brand/landing/by-project/${projectId}/publish`, { method: 'POST', body: JSON.stringify({ published }) }),

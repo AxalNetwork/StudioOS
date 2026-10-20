@@ -158,3 +158,59 @@ export async function memberConsumption(env: Env, userId: number, group: Consump
     totals: total ? sums(total) : { runs: 0, charged_microusd: null, allowance_microusd: 0, tokens_microusd: 0, not_recorded: 0 },
   };
 }
+
+/** At most this many runs come back in HQ's run list, newest first; `truncated` says when there were more. */
+export const MAX_RUN_LINES = 100;
+
+// HQ's list of one member's runs in the month: the run's rows and their guard checks, newest first.
+const RUN_LINES = `SELECT l.id, l.created_at, l.task, l.model, l.rail_page, l.rail_option, l.record_ref, l.guard_for,
+       l.est_cost_usd, l.charged_microusd
+  FROM ai_usage_logs l
+ WHERE l.user_id = ? AND l.created_at >= ? AND l.created_at < ?
+ ORDER BY l.created_at DESC, l.id DESC LIMIT ?`;
+
+export interface RunLine {
+  id: number;
+  at: string;
+  task: string;
+  model: string;
+  page: string | null;
+  option: string | null;
+  record: string | null;
+  /** The Llama Guard check run for this run's id (D763), drawn under it; null for a run. */
+  guard_for: number | null;
+  /** Cloudflare's cost as the router estimated it, in micro-USD. */
+  cost_microusd: number;
+  /** What the member paid for this row (D762); null where it was not recorded. */
+  charged_microusd: number | null;
+}
+
+/**
+ * D776 PR 2 (#2093) — HQ's read of one member's month: the grouped read by
+ * option within a page, which is `memberConsumption`'s own, and each run with
+ * its cost, charge and model. Scoped by `user_id` exactly as the member's own
+ * read is; the route that calls it is HQ's, and audits each read.
+ */
+export async function memberMonth(env: Env, userId: number, month: string) {
+  const bounds = monthBounds(month);
+  if (!bounds) throw new RangeError('month');
+  const [grouped, lines] = await Promise.all([
+    memberConsumption(env, userId, 'option', month),
+    env.DB.prepare(RUN_LINES).bind(userId, bounds.from, bounds.to, MAX_RUN_LINES + 1).all<any>(),
+  ]);
+  const all = lines.results ?? [];
+  const runs: RunLine[] = all.slice(0, MAX_RUN_LINES).map((r) => ({
+    id: Number(r.id),
+    at: r.created_at,
+    task: r.task,
+    model: r.model,
+    page: r.rail_page ?? null,
+    option: r.rail_option ?? null,
+    record: r.record_ref ?? null,
+    guard_for: r.guard_for == null ? null : Number(r.guard_for),
+    cost_microusd: Math.round(n(r.est_cost_usd) * 1_000_000),
+    charged_microusd: typeof r.charged_microusd === 'number' ? r.charged_microusd : null,
+  }));
+  return { member_id: userId, month, by_option: grouped.rows, totals: grouped.totals, truncated: grouped.truncated,
+    runs, runs_truncated: all.length > MAX_RUN_LINES };
+}

@@ -13,10 +13,16 @@ import { Hono } from 'hono';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import budgetRoute from '../src/routes/ai_budget.ts';
-import { MAX_CONSUMPTION_ROWS, monthBounds } from '../src/services/aiConsumption.ts';
+import aiRoute from '../src/routes/ai.ts';
+import { MAX_CONSUMPTION_ROWS, MAX_RUN_LINES, monthBounds } from '../src/services/aiConsumption.ts';
+import { AI_MARKUP } from '../src/services/ai/pricing.ts';
+import { railOptionRows, railRows } from '../src/services/ai/railMatrix.ts';
 
 const ME = 2;
 const OTHER = 3;
+// PR 2: HQ's readers. 1 is the fixture's Super Admin; ADMIN is a plain HQ administrator, added by `world()`.
+const SUPER = 1;
+const ADMIN = 101;
 
 function app() {
   const a = new Hono();
@@ -25,6 +31,7 @@ function app() {
     return status ? c.json({ detail: e.message }, status) : c.json({ detail: 'Internal server error' }, 500);
   });
   a.route('/api/ai-budget', budgetRoute);
+  a.route('/api/ai', aiRoute);
   return a;
 }
 
@@ -52,6 +59,7 @@ function world() {
         o.option ?? null, o.record ?? null, o.guardFor ?? null);
     return Number(r.lastInsertRowid);
   };
+  f.db.prepare('INSERT INTO users(id,email,name,role) VALUES(?,?,?,?)').run(ADMIN, 'admin@example.test', 'Admin', 'admin');
   return { f, env, hold, run };
 }
 
@@ -185,4 +193,99 @@ test('at most 200 groups, the largest first, and truncated says there were more'
   assert.equal(r.body.truncated, true);
   assert.equal(r.body.rows[0].charged_microusd, MAX_CONSUMPTION_ROWS + 3);
   assert.equal(r.body.totals.runs, MAX_CONSUMPTION_ROWS + 3, 'the totals count every run');
+});
+
+// ═════════════════════════════════════════════════════════════ PR 2: HQ's reads
+
+const audits = (w: any, actor: number) =>
+  w.f.db.prepare("SELECT details FROM activity_logs WHERE action='ai_member_runs_read' AND user_id=?").all(actor) as any[];
+
+// 8 ───────────────────────────────────────────────────────────────────────────
+test('HQ reads one member\'s month: by option within a page and each run, that member\'s rows only, audited', async () => {
+  // Mutations checked: the user_id scope dropped from the run list; the audit line dropped; a run's charge read from another column.
+  const w = world();
+  const a = w.run({ page: VR, option: 'fill:pain_tag', charged: 3000, reservation: w.hold(ME, 2000, 1000), at: '2026-10-12 10:00:00' });
+  w.run({ page: VR, option: 'fill:pain_tag', charged: 500, guardFor: a, at: '2026-10-12 10:00:01' });
+  w.run({ page: 'founder.build', charged: null, at: '2026-10-14 09:00:00' });
+  w.run({ user: OTHER, page: VR, option: 'fill:pain_tag', charged: 7_000_000, at: '2026-10-13 10:00:00' });
+  w.f.db.prepare('UPDATE ai_usage_logs SET est_cost_usd = 0.0024 WHERE id = ?').run(a);
+  for (const reader of [SUPER, ADMIN]) {
+    const r = await call(w, `/api/ai-budget/members/${ME}/runs?month=2026-10`, reader);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.equal(r.body.member_id, ME);
+    assert.deepEqual(r.body.by_option.map((g: any) => [g.page, g.option, g.runs, g.charged_microusd]),
+      [[VR, 'fill:pain_tag', 1, 3500], ['founder.build', null, 1, null]]);
+    assert.equal(r.body.totals.charged_microusd, 3500);
+    assert.deepEqual(r.body.runs.map((x: any) => [x.page, x.guard_for, x.charged_microusd]),
+      [['founder.build', null, null], [VR, a, 500], [VR, null, 3000]], 'newest first, the guard check under its run');
+    const first = r.body.runs.find((x: any) => x.id === a);
+    assert.equal(first.cost_microusd, 2400);
+    assert.equal(first.model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+    assert.ok(!JSON.stringify(r.body).includes('7000000'), 'another member\'s run never appears');
+    assert.deepEqual(audits(w, reader).map((x) => JSON.parse(x.details)), [{ member_id: ME, month: '2026-10' }], 'each read is audited, with no figure');
+  }
+});
+
+// 9 ───────────────────────────────────────────────────────────────────────────
+test('HQ\'s reads need an HQ Admin or Super Admin: a member 403, signed out 401, a branch 403; bad input 400, no member 404', async () => {
+  // Mutations checked: requireAdmin dropped from either read; the branch refusal dropped; the month check dropped.
+  const w = world();
+  for (const path of [`/api/ai-budget/members/${ME}/runs`, '/api/ai/catalogue/hq']) {
+    assert.equal((await call(w, path, null)).status, 401, path);
+    assert.equal((await call(w, path, ME)).status, 403, path);
+    assert.equal((await call(w, path, OTHER)).status, 403, path);
+  }
+  assert.equal((await call(w, `/api/ai-budget/members/${OTHER}/runs`, ME)).status, 403, 'a member never reads another member\'s month');
+  assert.equal(audits(w, ME).length, 0);
+  w.env.BRANCH_CODE = 'eu';
+  assert.equal((await call(w, `/api/ai-budget/members/${ME}/runs`, ADMIN)).status, 403, 'a branch administrator is refused');
+  assert.equal((await call(w, '/api/ai/catalogue/hq', ADMIN)).status, 403);
+  delete w.env.BRANCH_CODE;
+  assert.equal((await call(w, `/api/ai-budget/members/${ME}/runs?month=2026-13`, ADMIN)).status, 400);
+  assert.equal((await call(w, '/api/ai-budget/members/9999/runs', ADMIN)).status, 404);
+  assert.equal((await call(w, '/api/ai-budget/members/x/runs', ADMIN)).status, 404);
+  w.f.db.exec('DROP TABLE ai_budget_reservations');
+  const r = await call(w, `/api/ai-budget/members/${ME}/runs?month=2026-10`, ADMIN);
+  assert.equal(r.status, 503);
+  assert.ok(!/no such table|SQLITE/i.test(JSON.stringify(r.body)));
+});
+
+// 10 ──────────────────────────────────────────────────────────────────────────
+test('the run list stops at 100, newest first, and says when there were more', async () => {
+  // Mutation checked: the LIMIT's extra row not sliced off.
+  const w = world();
+  for (let i = 0; i < MAX_RUN_LINES + 2; i++) w.run({ page: 'p', charged: i, at: `2026-10-${String(1 + (i % 28)).padStart(2, '0')} 10:00:${String(i % 60).padStart(2, '0')}` });
+  const r = await call(w, `/api/ai-budget/members/${ME}/runs?month=2026-10`, SUPER);
+  assert.equal(r.body.runs.length, MAX_RUN_LINES);
+  assert.equal(r.body.runs_truncated, true);
+  assert.equal(r.body.totals.runs, MAX_RUN_LINES + 2);
+});
+
+// 11 ──────────────────────────────────────────────────────────────────────────
+test('models offered: the billing mode and who sets it, cost and billed per unit, paid-only, and the pages naming each model', async () => {
+  // Mutations checked: billed at cost; the option rows left out of the pages; a model with no matrix row given a page.
+  const w = world();
+  const r = await call(w, '/api/ai/catalogue/hq', ADMIN);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.billing, 'cost');
+  assert.equal(r.body.set_by, 'AI_BILLING');
+  assert.equal(r.body.markup, AI_MARKUP);
+  assert.ok(r.body.models.length > 10);
+  const llama = r.body.models.find((m: any) => m.id === '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
+  for (const [unit, cost] of Object.entries(llama.cost) as [string, number][]) {
+    assert.ok(Math.abs(llama.billed[unit] - cost * AI_MARKUP) < 1e-6, `${unit} is billed at cost × ${AI_MARKUP}`);
+  }
+  assert.equal(typeof llama.paid_only, 'boolean');
+  const expected = new Set([...railRows(), ...railOptionRows()].filter((row) => row.models.some((m) => m.id === llama.id)).map((row) => row.pageKey));
+  assert.deepEqual(new Set(llama.pages), expected);
+  assert.ok(llama.pages.length > 0);
+  const optionOnly = railOptionRows().find((o) => !railRows().some((p) => p.pageKey === o.pageKey));
+  if (optionOnly) {
+    const m = r.body.models.find((x: any) => x.id === optionOnly.models[0]?.id);
+    if (m) assert.ok(m.pages.includes(optionOnly.pageKey), 'an option row\'s page counts');
+  }
+  const named = new Set([...railRows(), ...railOptionRows()].flatMap((row) => row.models.map((m) => m.id)));
+  const unnamed = r.body.models.find((m: any) => !named.has(m.id));
+  assert.ok(unnamed, 'some offered model is on no row');
+  assert.deepEqual(unnamed.pages, []);
 });

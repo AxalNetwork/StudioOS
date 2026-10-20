@@ -16,6 +16,7 @@ the canvas's fourteen task `kind`s, its `handler` (`form`, `upload`, `draft`,
 | `partner.js` | Operating partner (D773, #2099). Its parity test is `frontend/test/rail_options_d773.test.mjs`. |
 | `superAdmin.js` | Super Admin, the 37 boards H1–H37 (D775, #2101), with `SUPER_ADMIN_BOARDS`: each board's route, files and rail file, and the page that hosts it when it is an `/admin` tab. Its parity test is `frontend/test/rail_options_super_admin_d775.test.mjs`. |
 | `admin.js` | Admin, the 39 boards S1–S39 with their routes and rails (D774, #2100); the three Spin-Out Lab boards have none (D317), and say so in `noRail`. No control on them runs a model, so it has no option row; `ADMIN_QUIET_CONTROLS` names the uploads and the report and why. Its parity test is `frontend/test/rail_options_admin_d774.test.mjs`. |
+| `index.js` | `railOptionFor(pageKey, { file, control })` (D772, #2098): the key and label a zone several profiles share names on the member's page, read from the four member inventories above. Its tests are in `frontend/test/rail_pages_investor_d772.test.mjs`. |
 
 ## Rules
 
@@ -29,3 +30,6 @@ the canvas's fourteen task `kind`s, its `handler` (`form`, `upload`, `draft`,
   `ZoneDraft`'s `railOption` prop, set to the row's key. Each profile's
   rollout adds those calls one section at a time; its test is
   `frontend/test/rail_pages_investor_d772.test.mjs` for the investor.
+- **A shared zone passes no literal key.** `AskZone`, `LibraryZone` and
+  `DiligenceRoom` pass their own path and control to `railOptionFor`, so
+  each profile keeps its own keys.

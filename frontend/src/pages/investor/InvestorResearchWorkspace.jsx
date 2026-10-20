@@ -3,6 +3,7 @@ import { AlertCircle, RefreshCw, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { Unreadable, WorkerRail } from '../../ui';
+import { useRailOption } from '../../ui/railCrumbs';
 import ZoneNav from '../../workspaces/ZoneNav';
 import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
 import { bucketForPath } from '../../workspaces/shellConfig';
@@ -29,6 +30,8 @@ export default function InvestorResearchWorkspace() {
   // route answers (see AskAnswer). Nothing runs until the button is pressed —
   // a visit spends nothing.
   const [asking, setAsking] = useState(false);
+  // D772 (#2098): the question at the model is the rail's option while it runs.
+  useRailOption(asking ? 'ask:evidence' : null, 'Find evidence');
   const [asked, setAsked] = useState(null);
   const [askError, setAskError] = useState('');
   const [data, setData] = useState(null);

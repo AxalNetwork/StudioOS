@@ -31,7 +31,7 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { ADMIN_BOARDS, ADMIN_OPTIONS, ADMIN_PROFILE, ADMIN_QUIET_CONTROLS, railOptionsFor } from '../src/lib/railOptions/admin.js';
 import { SUPER_ADMIN_BOARDS } from '../src/lib/railOptions/superAdmin.js';
 import { NO_RAIL_ROUTES } from '../src/lib/railPages.js';
-import AdminPage, { adminTabBoard } from '../src/pages/AdminPage.jsx';
+import AdminPage, { tabBoard } from '../src/pages/AdminPage.jsx';
 
 const ROOT = process.cwd();
 const src = (p) => resolve(ROOT, 'frontend/src', p);
@@ -124,17 +124,20 @@ test('/admin draws the frame once around its tabs, each named for its board in D
     assert.equal(b.rail, FRAME, `${b.id} does not draw the Admin frame`);
     const tab = new URLSearchParams(b.route.split('?')[1]).get('tab');
     assert.match(code, new RegExp(`\\{ value: '${tab}',`), `${b.id}: ${tab} is not one of AdminPage's sections`);
-    assert.equal(adminTabBoard(tab, role), b.module || b.section, `${b.id}: /admin?tab=${tab} is not named for its board`);
+    assert.equal(tabBoard(tab, role), b.module || b.section, `${b.id}: /admin?tab=${tab} is not named for its board`);
   }
   // One frame, named from the tab, around the whole page unless a host locked it to one section.
   assert.equal([...code.matchAll(/<AdminBoardFrame\b/g)].length, 1, 'AdminPage draws the frame more than once');
-  assert.match(code, /<AdminBoardFrame workspace=\{workspace\} rail=\{tab !== 'lab-applications'\}/, 'the frame is not named from the tab, or the Spin-Out Lab tab draws a rail');
-  assert.match(code, /const workspace = adminTabBoard\(tab, isSuperAdminUser\(user\) \? 'super_admin' : 'admin'\);/, 'the board name is not the viewer\'s profile\'s');
-  assert.match(code, /if \(section\) return panel;\s*return <AdminConsoleFrame tab=\{tab\}>\{panel\}<\/AdminConsoleFrame>;/, 'the frame is not the page\'s outermost element');
-  // A tab no canvas board names takes the map's Admin console.
-  assert.equal(adminTabBoard('billing', 'admin'), 'Admin console');
-  // The frame's rail switch: off draws the page alone.
-  assert.match(codeOnly(read(FRAME)), /if \(!drawRail\) \{[^}]*\} else if \(isSuperAdminUser\(user\)\)/, 'rail={false} still draws a rail');
+  assert.match(code, /const board = section \? null : tabBoard\(tab, isSuperAdminUser\(user\) \? 'super_admin' : user\?\.role\);/,
+    'the board is not the open tab\'s, in the viewer\'s tier');
+  assert.match(code, /if \(!board\) return page;\s*return \(\s*<AdminBoardFrame workspace=\{board\} [^>]*data-testid="admin-tab-frame">\s*\{page\}\s*<\/AdminBoardFrame>/,
+    'the frame is not the outermost element around the whole page');
+  // Off-canvas tabs and the Lab retain D775's page-alone contract.
+  for (const role of ['admin', 'super_admin']) {
+    assert.equal(tabBoard('billing', role), null);
+    assert.equal(tabBoard('bank-accounts', role), null);
+    assert.equal(tabBoard('lab-applications', role), null);
+  }
 });
 
 test('on /admin a plain admin and a Super Admin each get the rail of their tier, named for the tab\'s board; the Lab tab gets none', async () => {
@@ -152,7 +155,7 @@ test('on /admin a plain admin and a Super Admin each get the rail of their tier,
       try {
         await v.flush();
         const tagged = (id) => v.nodes().filter((n) => v.props(n)?.['data-testid'] === id);
-        assert.equal(tagged('admin-console-frame').length, 1, `${url}: no frame`);
+        assert.equal(tagged('admin-tab-frame').length, rail ? 1 : 0, `${url}: wrong frame count`);
         const rails = v.nodes().filter((n) => /^(admin|hq)-board-rail$/.test(v.props(n)?.['data-testid'] || ''));
         if (!rail) { assert.equal(rails.length, 0, `${url}: the Spin-Out Lab tab draws a rail`); continue; }
         assert.equal(rails.length, 1, `${url}: ${rails.length} rails`);

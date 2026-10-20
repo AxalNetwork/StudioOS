@@ -161,6 +161,7 @@ function NetworkSections({ data, loading, state, fillsOn = false, ai = null }) {
         {fillsOn && coldScope ? <ZoneDraft
           surface="network/re-engagement"
           scopeKey={coldScope}
+          railOption="draft:network/re-engagement"
           ai={ai}
           accent="violet"
           label="Proposal · re-engagement"
@@ -176,6 +177,7 @@ function NetworkSections({ data, loading, state, fillsOn = false, ai = null }) {
       {loading ? <Skeleton rows={2} /> : <Propositions rows={data.propositions} empty="No introduction propositions are recorded." />}
       {fillsOn ? <ZoneDraft
         surface="network/intro-email"
+        railOption="draft:network/intro-email"
         ai={ai}
         accent="violet"
         label="Proposal · intro email"

@@ -3,8 +3,8 @@
  *
  * The rail draws the AIRail canvas (`design/canvases/integrated/AIRail.dc.html`):
  * "Eadwyn AI", the viewer's licence pill and the crumbs, the "Eadwyn | Manual"
- * switch, "Suggested for this page" and "All models" over the router's own
- * tables, the line "Eadwyn drafts; you send.", and the Usage box over the
+ * switch, "Suggested for this page" and "All models" (since D769 PR 2, #2088,
+ * the page's row of the Worker's matrix), the line "Eadwyn drafts; you send.", and the Usage box over the
  * allowance ledger. A founder on a founder page opens it on a phone as a
  * right panel; every other viewer keeps D405's sheet. The pick and the mode
  * live on the Worker (migration 465) with this browser as the cache.
@@ -25,12 +25,13 @@ import { resolve } from 'node:path';
 import React, { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import { renderedText } from './_renderedText.mjs';
 import { installDocument } from './_contracts_dom.mjs';
 import WorkerRail, { MANUAL_LINE, SAFETY_LINE, RailUsage } from '../src/ui/WorkerRail.jsx';
-import { railSuggestions, CANVAS_MODEL_IDS, CATALOGUE_EXTRAS, CATALOGUE_GROUPS, NOT_IN_CATALOGUE, SUGGESTED, TASK_KIND } from '../src/ui/railModels.js';
-import { RailCrumbsProvider, useRailCrumbs, useSetRailCrumbs } from '../src/ui/railCrumbs.js';
+import { ALL_MODELS, modelName, railView } from '../src/ui/railModels.js';
+import { RailCrumbsProvider, RailPageProvider, useRailCrumbs, useRailOption, useSetRailCrumbs } from '../src/ui/railCrumbs.js';
 import {
   __resetEadwynPanelForTest, eadwynPanelEvent, openEadwynPanel, useEadwynPanel,
 } from '../src/ui/eadwynPanel.js';
@@ -84,10 +85,36 @@ function routerPricing() {
   return { ok: true, prices: {}, audio_prices: {}, routes };
 }
 const PRICING = routerPricing();
-const withGrow = () => ({
-  ...PRICING,
-  routes: { ...PRICING.routes, grow_theme_feedback: { model: L70, fallback_chain: [L8], alternates: [L70, L8] } },
-});
+
+/**
+ * D769 PR 2 (#2088): `GET /api/ai/rail` as the Worker answers it, built from
+ * the Worker's own matrix (`railMatrix.json`), so the rail is tested against
+ * the rows a run resolves from. Each model is priced at a stub rate.
+ */
+const MATRIX = JSON.parse(read('cloudflare-worker/src/services/ai/railMatrix.json'));
+const STUB_PRICE = { cost: { tokens_in: 0.293, tokens_out: 2.253 }, billed: { tokens_in: 0.36625, tokens_out: 2.81625 } };
+function railAnswer(page, option, { pick = null, mode = null, picks = {} } = {}) {
+  const row = MATRIX.rows.find((r) => r.pageKey.toLowerCase() === String(page).toLowerCase());
+  if (!row) return Object.assign(new Error('The rail has no models for that page.'), { status: 404, code: 'unknown_page' });
+  const view = (r) => r.models.map((m) => ({ ...m, name: modelName(m.id), price: STUB_PRICE }));
+  const opts = MATRIX.options.filter((o) => o.pageKey === row.pageKey);
+  const open = option ? opts.find((o) => o.optionKey === option) : null;
+  return {
+    ok: true,
+    page: row.pageKey,
+    crumbs: [...row.pageKey.split(' · '), ...(option ? [open?.optionLabel ?? option] : [])],
+    kind: (open ?? row).kind,
+    models: view(open ?? row),
+    options: opts.map((o) => ({ key: o.optionKey, label: o.optionLabel, kind: o.kind, handler: o.handler, models: view(o), pick: picks[o.optionKey] ?? null })),
+    pick,
+    mode,
+    billing: 'cost',
+    guard: { model: GUARD, every_run: true },
+  };
+}
+/** The rail on a route, under the shell's page provider (D768), as App.jsx mounts it. */
+const onPage = (path, child, role = 'founder') => h(MemoryRouter, { initialEntries: [path] }, h(RailPageProvider, { role }, child));
+const cardIds = (m) => m.nodes().map((n) => String(m.pr(n)['data-testid'] || '')).filter((id) => id.startsWith('card-worker-rail-model-'));
 
 const BUDGET = {
   licence: 'founder:growth', daily_microusd: 1000000, monthly_microusd: 5000000,
@@ -114,11 +141,12 @@ const RATES = {
  * value to answer with or an Error to reject with. Returns the PUTs seen.
  */
 function stubReads(over = {}) {
-  const calls = { setMode: [], setModel: [], read: 0 };
+  const calls = { setMode: [], setModel: [], read: 0, page: [], setPagePick: [] };
   const answer = (v) => () => (v instanceof Error ? Promise.reject(v) : Promise.resolve(v));
   const real = {
     myAiSpend: api.myAiSpend, aiPricing: api.aiPricing, mine: aiBudgetApi.mine, topUp: aiBudgetApi.topUp, rates: aiBudgetApi.rates,
     read: railPrefsApi.read, setMode: railPrefsApi.setMode, setModel: railPrefsApi.setModel,
+    page: railPrefsApi.page, setPagePick: railPrefsApi.setPagePick,
   };
   api.myAiSpend = answer('spend' in over ? over.spend : SPEND);
   api.aiPricing = answer('pricing' in over ? over.pricing : PRICING);
@@ -132,10 +160,20 @@ function stubReads(over = {}) {
     calls.setModel.push([section, task, model]);
     return over.setModel ? over.setModel(section, task, model) : Promise.resolve({ ok: true });
   };
+  // D769 PR 2: the page's row. `over.rail(page, option)` answers instead of the matrix.
+  railPrefsApi.page = (page, option) => {
+    calls.page.push([page, option ?? null]);
+    const v = over.rail ? over.rail(page, option) : railAnswer(page, option);
+    return v instanceof Error ? Promise.reject(v) : Promise.resolve(v);
+  };
+  railPrefsApi.setPagePick = (page, model, option) => {
+    calls.setPagePick.push([page, model, option ?? null]);
+    return Promise.resolve({ ok: true });
+  };
   calls.restore = () => {
     Object.assign(api, { myAiSpend: real.myAiSpend, aiPricing: real.aiPricing });
     Object.assign(aiBudgetApi, { mine: real.mine, topUp: real.topUp, rates: real.rates });
-    Object.assign(railPrefsApi, { read: real.read, setMode: real.setMode, setModel: real.setModel });
+    Object.assign(railPrefsApi, { read: real.read, setMode: real.setMode, setModel: real.setModel, page: real.page, setPagePick: real.setPagePick });
   };
   return calls;
 }
@@ -186,8 +224,6 @@ async function mount(el, { reads, storage = {} } = {}) {
   };
 }
 
-/** D769: where a test needs AI on for a page with fills, it stores the choice, as the switch would. */
-const ASSIST_KEY_VALIDATE = 'assist_mode:validate';
 const viewing = (shellRole, child) => h(ViewModeContext.Provider, { value: { shellRole } }, child);
 const ssr = (el) => renderToStaticMarkup(el);
 const deskNote = (name) => ASSIST_SURFACES.workspace.desks[name]?.fills;
@@ -209,10 +245,8 @@ test('16 · removed (PR 2): no rail draws an id, an estimate, a receipt or the o
   // An id, an estimate, a receipt and the retired blocks still are.
   const banned = /@cf\/|≈|Last run|This page this month|Model · this page|INHERITED|Drafts only/;
   // A server render, and a mounted rail with every read answered.
-  assert.doesNotMatch(ssr(h(WorkerRail, { workspace: 'Validate', fills: true })), banned);
-  const m = await mount(h(RailCrumbsProvider, { section: 'Validate', module: 'Problem discovery' },
-    h(WorkerRail, { workspace: 'Validate', fills: true, note: deskNote('Validate') })),
-  { storage: { [railModelKey('Validate', 'validate_tag_pains')]: L8, [ASSIST_KEY_VALIDATE]: true } });
+  assert.doesNotMatch(ssr(h(WorkerRail, { workspace: 'Validate' })), banned);
+  const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate', note: deskNote('Validate') })));
   try {
     const all = m.text();
     assert.match(all, /Suggested for this page/);
@@ -299,33 +333,37 @@ test('10 · without a provider the crumbs are the workspace alone, and the sette
 
 // D769 (#2088; D720 §6) replaces D698's "Eadwyn | Manual" radiogroup, drawn
 // only with `fills`, with "Turn off AI assistance on this page" on every page.
-// A page with fills still starts off (Manual); every other page starts on.
+// PR 1 kept a page with fills off (Manual); PR 2 makes AI on by default on
+// every page, and `fills` is a retired prop the rail no longer reads.
 
-test('11 · with fills: the switch, AI off by default, its sentence shown and no suggestions', () => {
+test('11 · with fills: the switch, AI on by default, the desk\'s sentence and the suggestions block', () => {
   resetStores();
   const html = ssr(h(WorkerRail, { workspace: 'Validate', fills: true, note: deskNote('Validate') }));
-  assert.match(html, /role="switch" aria-checked="true"[^>]*data-testid="switch-worker-rail-ai-off"><span class="fwr-ai-switch-label">Turn off AI assistance on this page<\/span>/);
-  assert.ok(html.includes(MANUAL_LINE));
+  assert.match(html, /role="switch" aria-checked="false"[^>]*data-testid="switch-worker-rail-ai-off"><span class="fwr-ai-switch-label">Turn off AI assistance on this page<\/span>/);
+  assert.ok(!html.includes(MANUAL_LINE));
   assert.equal(MANUAL_LINE, 'Eadwyn won\u2019t suggest or draft on this page. Your work saves as usual.');
-  assert.match(html, /data-ai="off" data-testid="worker-rail-suggestions"/);
-  assert.doesNotMatch(html, /Suggested for this page|card-worker-rail-model/);
-  // The checks `validate_fills_the_blanks` reads stay in the rail.
+  assert.match(html, /data-ai="on" data-testid="worker-rail-suggestions"/);
+  assert.match(html, /Suggested for this page/);
+  assert.ok(html.includes(deskNote('Validate')));
+  // `fills` decides nothing now (validate_fills_the_blanks holds the rest).
   const src = codeOnly(read(RAIL));
-  assert.match(src, /fills = false,/);
-  assert.match(src, /surface\.mode\?\.kind === 'choice' && fills/);
+  assert.doesNotMatch(src, /fills = false,|modeChoice/);
 });
 
-test('11 · turning AI on shows the desk\'s sentence and the suggestions, and writes the mode to the Worker', async () => {
-  const m = await mount(h(WorkerRail, { workspace: 'Validate', fills: true, note: deskNote('Validate') }));
+test('11 · turning AI off hides the suggestions and writes the mode to the Worker; on again shows them', async () => {
+  const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate', fills: true, note: deskNote('Validate') })));
   try {
-    await m.click('switch-worker-rail-ai-off');
     assert.equal(m.text(m.by('text-worker-rail-mode')), deskNote('Validate'));
-    assert.equal(m.pr(m.by('worker-rail-suggestions'))['data-ai'], 'on');
-    assert.equal(m.pr(m.by('switch-worker-rail-ai-off'))['aria-checked'], false);
-    assert.deepEqual(m.stub.setMode, [['validate', 'eadwyn']]);
     await m.click('switch-worker-rail-ai-off');
-    assert.deepEqual(m.stub.setMode.at(-1), ['validate', 'manual']);
+    assert.equal(m.pr(m.by('worker-rail-suggestions'))['data-ai'], 'off');
+    assert.equal(m.pr(m.by('switch-worker-rail-ai-off'))['aria-checked'], true);
     assert.equal(m.text(m.by('text-worker-rail-mode')), MANUAL_LINE);
+    assert.deepEqual(cardIds(m), [], 'a card is drawn with AI off');
+    assert.deepEqual(m.stub.setMode, [['validate', 'manual']]);
+    await m.click('switch-worker-rail-ai-off');
+    assert.deepEqual(m.stub.setMode.at(-1), ['validate', 'eadwyn']);
+    assert.equal(m.text(m.by('text-worker-rail-mode')), deskNote('Validate'));
+    assert.ok(cardIds(m).length > 0);
   } finally { await m.unmount(); }
 });
 
@@ -341,180 +379,178 @@ test('11 · without fills: the switch is drawn, AI is on, and no "no switch" lin
   assert.match(research, /data-testid="switch-worker-rail-ai-off"/);
 });
 
-// ── 12 to 15 · Suggestions, fallback, off the list, all models ────────
+// ── 12 to 15 · Suggestions, options, picks, all models ────────────────
+// D769 PR 2 (#2088): D698's tables (`TASK_KIND`, `SUGGESTED`, the lines that
+// held, each page's jobs) are retired. The models are the page's row of the
+// Worker's matrix (`GET /api/ai/rail`, D764), generated from the same canvas.
 
-const sug = (section, module, { pricing = PRICING, picks = {} } = {}) => railSuggestions({ section, module, pricing, picks });
-const cardsOf = (v) => v.cards.map((c) => [c.name, c.role, c.pickable]);
-
-test('the canvas tables are transcribed whole: 29 models, 14 kinds; All models is the new canvas\'s ten groups', () => {
-  assert.equal(Object.keys(CANVAS_MODEL_IDS).length, 29);
-  assert.equal(Object.values(CANVAS_MODEL_IDS).filter(Boolean).length, 6, 'the router carries six canvas models');
-  assert.equal(CANVAS_MODEL_IDS['Deepgram Flux'], null);
-  assert.equal(Object.keys(SUGGESTED).length, 14);
-  assert.deepEqual([...new Set(Object.values(TASK_KIND))].sort(), Object.keys(SUGGESTED).sort());
-  const canvas = read('design/canvases/integrated/AIRail.dc.html');
-  for (const name of Object.keys(CANVAS_MODEL_IDS)) assert.ok(canvas.includes(`'${name}'`), `${name} is not on the canvas`);
-  // D769 (D720 §1): the groups are the "AIRail · every page" canvas's ten, as
-  // `canvas.json` records them, not the old canvas's eight.
-  const everyPage = read('design/incoming/AIRail · every page.dc.html');
+test('All models is the new canvas\'s ten groups, and its ids are the router\'s', () => {
   const data = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
-  assert.deepEqual(CATALOGUE_GROUPS, data.all_models.map((g) => [g.group, g.models]));
-  for (const [title] of CATALOGUE_GROUPS) assert.ok(everyPage.includes(`['${title}'`), `${title} is not a canvas group`);
-  for (const [kind, list] of Object.entries(SUGGESTED)) {
-    for (const s of list) assert.ok(canvas.includes(`M('${s.name}', '${s.role}', '${s.line}')`), `${kind}: ${s.name} differs from the canvas`);
-  }
+  // The canvas's names in its order; two router models it does not name close Conversation and writing.
+  const EXTRAS = ['Llama 3.2 3B', 'Llama 3.1 8B Fast'];
+  assert.deepEqual(ALL_MODELS.map(([g, rows]) => [g, rows.map(([n]) => n).filter((n) => !EXTRAS.includes(n))]),
+    data.all_models.map((g) => [g.group, g.models]));
+  assert.deepEqual(ALL_MODELS[0][1].slice(-2).map(([n]) => n), EXTRAS);
+  // Every id ROUTE can send work to is a row, the retired 8B aside, and no row names a model ROUTE does not run.
+  const src = read('cloudflare-worker/src/services/aiRouter.ts');
+  const consts = new Map([...src.matchAll(/const ([A-Z_]+)\s*=\s*'(@cf\/[^']+)'/g)].map((m) => [m[1], m[2]]));
+  const body = src.slice(src.indexOf('export const ROUTE'));
+  const table = body.slice(0, body.indexOf('\n};\n'));
+  const route = new Set([...table.matchAll(/'(@cf\/[^']+)'/g)].map((m) => m[1]));
+  for (const [n, v] of consts) if (new RegExp(`\\b${n}\\b`).test(table)) route.add(v);
+  route.delete(RETIRED);
+  const listed = ALL_MODELS.flatMap(([, rows]) => rows.map(([, id]) => id)).filter(Boolean);
+  assert.deepEqual([...listed].sort(), [...route].sort());
+  assert.ok(listed.every((id) => modelName(id)), 'a row has no name');
 });
 
-test('12 · Customer research draws Whisper, Nova-3 and the 70B, in that order, no Flux, none a radio', () => {
-  const v = sug('Validate', 'Customer research');
-  assert.deepEqual(cardsOf(v), [
-    ['Whisper Large v3 Turbo', 'Transcribe', false],
-    ['Deepgram Nova-3', 'Speakers', false],
-    ['Llama 3.3 70B Fast', 'Structure', false],
-  ]);
-  assert.deepEqual(v.cards.map((c) => c.id), [WHISPER, NOVA, L70]);
-  assert.equal(v.pickable, false);
-  assert.equal(v.fallback, false);
-  assert.ok(!v.cards.some((c) => /Flux/.test(c.name)));
+test('12 · Customer research draws its row: Whisper, Nova-3, Flux and the 70B, in the matrix\'s order, with role and line', async () => {
+  const m = await mount(onPage('/validate/customer-research', h(WorkerRail, { workspace: 'Validate' })));
+  try {
+    assert.deepEqual(m.stub.page, [['Founder · Validate · Customer research', null]]);
+    assert.deepEqual(cardIds(m), [WHISPER, NOVA, '@cf/deepgram/flux', L70].map((id) => `card-worker-rail-model-${id.split('/').pop()}`));
+    const whisper = m.by('card-worker-rail-model-whisper-large-v3-turbo');
+    assert.equal(m.text(whisper), 'Whisper Large v3 Turbo Default Turns each recording into a transcript $0.293 in · $2.253 out per 1M tokens');
+    // Four models: a choice, so each card is a radio, the default checked.
+    assert.equal(m.pr(whisper).role, 'radio');
+    assert.equal(m.pr(whisper)['aria-checked'], true);
+    assert.equal(m.pr(m.by('card-worker-rail-model-nova-3'))['aria-checked'], false);
+    assert.equal(m.text(m.by('text-worker-rail-model-note')), 'Remembered for this page. Switching changes nothing already accepted.');
+  } finally { await m.unmount(); }
 });
 
-test('12 · Problem discovery draws one radio card, Llama 3.3 70B Fast, marked Default', () => {
-  const v = sug('Validate', 'Problem discovery');
-  assert.deepEqual(cardsOf(v), [['Llama 3.3 70B Fast', 'Default', true]]);
-  assert.deepEqual(v.cards[0].tasks, ['validate_tag_pains']);
-  assert.equal(v.cards[0].checked, true);
-  assert.equal(v.cards[0].line, 'Groups notes and quotes into themes');
-});
-
-test('12 · a model dropped from the pricing read is not drawn, and a failed read is Unreadable', async () => {
-  const routes = { ...PRICING.routes, transcribe: { ...PRICING.routes.transcribe, alternates: [WHISPER] } };
-  assert.deepEqual(cardsOf(sug('Validate', 'Customer research', { pricing: { ...PRICING, routes } })).map((c) => c[0]),
-    ['Whisper Large v3 Turbo', 'Llama 3.3 70B Fast']);
-  assert.equal(sug('Validate', 'Customer research', { pricing: null }).unreadable, true);
-  const m = await mount(h(WorkerRail, { workspace: 'Validate' }), { reads: { pricing: new Error('down') } });
+test('12 · a failed read is Unreadable with a retry; no page key, or no row, says "Not recorded" and why', async () => {
+  const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate' })), { reads: { rail: () => new Error('down') } });
   try {
     const block = m.by('worker-rail-suggestions');
     assert.match(m.text(block), /could not be read/);
     assert.match(m.text(block), /Retry/);
     assert.ok(m.by('worker-rail-model-unreadable'));
-    assert.equal(m.nodes().filter((n) => String(m.pr(n)['data-testid'] || '').startsWith('card-worker-rail-model-')).length, 0);
+    assert.deepEqual(cardIds(m), []);
   } finally { await m.unmount(); }
+  const none = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate' })),
+    { reads: { rail: () => Object.assign(new Error('no row'), { status: 404 }) } });
+  try {
+    assert.equal(none.text(none.by('text-worker-rail-model-none')), 'Not recorded. The rail\'s model list has no row for this page yet.');
+    assert.equal(none.by('worker-rail-model-unreadable'), undefined, 'a page with no row reads as a failure');
+  } finally { await none.unmount(); }
+  // Off the canvas (D768's `offCanvas`), and outside the shell, nothing is read.
+  const off = await mount(onPage('/account', h(WorkerRail, { workspace: 'Account' })));
+  try {
+    assert.deepEqual(off.stub.page, []);
+    assert.equal(off.text(off.by('text-worker-rail-model-none')), 'Not recorded. This page has no row in the rail\'s model list.');
+  } finally { await off.unmount(); }
+  assert.match(ssr(h(WorkerRail, { workspace: 'Build' })), /data-testid="text-worker-rail-model-none">Not recorded\. This page has no row in the rail&#x27;s model list\.</);
 });
 
-test('12 · "Default" is drawn only on the router\'s primary for the card\'s job (D400)', () => {
-  // A router whose tagging primary is the 8B, with the 70B an alternate: the
-  // canvas's "Default" on the 70B is dropped, and its line still holds.
-  const routes = { ...PRICING.routes, validate_tag_pains: { model: L8, fallback_chain: [], alternates: [L8, L70] } };
-  const v = sug('Validate', 'Problem discovery', { pricing: { ...PRICING, routes } });
-  assert.deepEqual(cardsOf(v), [['Llama 3.3 70B Fast', null, true]]);
+test('12 · "Default" is the matrix\'s role word; the checked card is the member\'s pick, else the row\'s first', () => {
+  const answer = railAnswer('Founder · Validate · Problem discovery');
+  const ready = (over) => railView({ reading: { loading: false, data: { ...answer, ...over } }, page: answer.page });
+  const v = ready({});
+  assert.deepEqual(v.cards.map((c) => [c.name, c.role, c.checked]), [
+    ['Llama 3.3 70B Fast', 'Default', true], ['GLM-4.7 Flash', 'Faster', false], ['GPT-OSS 120B', 'Deeper', false],
+  ]);
   assert.equal(v.cards[0].line, 'Groups notes and quotes into themes');
-  assert.equal(v.cards[0].checked, false, 'the router runs the 8B here, so the 70B card is not the selection');
+  assert.deepEqual(ready({ pick: '@cf/openai/gpt-oss-120b' }).cards.map((c) => c.checked), [false, false, true]);
+  // A pick the row does not offer is no pick; a pick made since the read wins.
+  assert.equal(ready({ pick: 'm/gone' }).current, L70);
+  assert.equal(railView({ reading: { loading: false, data: answer }, page: answer.page, pick: '@cf/zai-org/glm-4.7-flash' }).current, '@cf/zai-org/glm-4.7-flash');
+  // A row of one offers no choice.
+  const one = ready({ models: [answer.models[0]] });
+  assert.equal(one.pickable, false);
 });
 
-test('13 · the fallback: one card, the router\'s primary, "Default", with the job\'s own sentence', () => {
-  const exp = sug('Validate', 'Experiments and evidence');
-  assert.equal(exp.fallback, true);
-  assert.deepEqual(cardsOf(exp), [['Llama 3.3 70B Fast', 'Default', true]]);
-  assert.match(exp.cards[0].line, /drafts hypothesis cards/);
-  assert.deepEqual(exp.cards[0].tasks, ['validate_draft_hypotheses']);
-  const verdict = sug('Validate', 'Verdict');
-  assert.deepEqual(cardsOf(verdict), [['Llama 3.3 70B Fast', 'Default', true]]);
-  assert.match(verdict.cards[0].line, /^Tags the phrases you logged/);
-  const build = sug('Build', 'Solution design');
-  assert.deepEqual(cardsOf(build), [['Llama 3.3 70B Fast', 'Default', false]]);
-  assert.match(build.cards[0].line, /^Drafts the reading on a zone band/);
-  // Product improvement, against today's pricing: the router carries its
-  // band's task since D691 (#1698), so it draws that task's card, not the
-  // zone drafts' plain row.
-  const today = sug('Grow', 'Product improvement');
-  assert.deepEqual(cardsOf(today), [['Llama 3.3 70B Fast', 'Default', true]]);
-  assert.deepEqual(today.cards[0].tasks, ['grow_theme_feedback']);
-  assert.notDeepEqual(today.cards, build.cards);
-  const grow = sug('Grow', 'Product improvement', { pricing: withGrow() });
-  assert.deepEqual(cardsOf(grow), [['Llama 3.3 70B Fast', 'Default', true]]);
-  assert.deepEqual(grow.cards[0].tasks, ['grow_theme_feedback']);
-});
-
-test('13 · on Product improvement, choosing an alternate writes Grow\'s pick for its task, here and on the Worker', async () => {
-  const m = await mount(h(RailCrumbsProvider, { section: 'Grow', module: 'Product improvement' },
-    h(WorkerRail, { workspace: 'Grow' })), { reads: { pricing: withGrow() } });
+test('13 · choosing a card stores the page\'s pick on the Worker and checks it at once', async () => {
+  const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate' })));
   try {
-    await m.click('button-worker-rail-all-models');
-    await m.click('chip-worker-rail-model-llama-3.1-8b-instruct-fp8');
-    assert.equal(readRailModel('Grow', 'grow_theme_feedback'), L8);
-    assert.deepEqual(m.stub.setModel.at(-1), ['grow', 'grow_theme_feedback', L8]);
-    assert.match(m.text(m.by('text-worker-rail-using')), /^Using Llama 3\.1 8B on this page\.$/);
+    await m.click('card-worker-rail-model-gpt-oss-120b');
+    assert.deepEqual(m.stub.setPagePick, [['Founder · Validate · Problem discovery', '@cf/openai/gpt-oss-120b', null]]);
+    assert.equal(m.pr(m.by('card-worker-rail-model-gpt-oss-120b'))['aria-checked'], true);
+    assert.equal(m.pr(m.by('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast'))['aria-checked'], false);
+    assert.equal(m.stub.page.length, 2, 'the rail did not read the Worker\'s answer after the pick');
+    assert.equal(readRailModel('Validate', 'validate_tag_pains'), null, 'the rail wrote the old per-task store');
   } finally { await m.unmount(); }
 });
 
-test('14 · off the list: a stored 8B pick on Problem discovery says so and opens the catalogue', async () => {
-  const v = sug('Validate', 'Problem discovery', { picks: { validate_tag_pains: L8 } });
-  assert.deepEqual(v.offList, { id: L8, name: 'Llama 3.1 8B' });
-  assert.equal(v.cards[0].checked, false);
-  const m = await mount(h(RailCrumbsProvider, { section: 'Validate', module: 'Problem discovery' },
-    h(WorkerRail, { workspace: 'Validate', fills: true })), { storage: { [railModelKey('Validate', 'validate_tag_pains')]: L8, [ASSIST_KEY_VALIDATE]: true } });
+function OpenOption({ k, label }) { useRailOption(k, label); return null; }
+
+test('14 · "On this page" lists the page\'s options; an open option moves the rail to its row, its label the last crumb', async () => {
+  const path = '/validate/customer-research';
+  const m = await mount(onPage(path, h(WorkerRail, { workspace: 'Validate' })));
   try {
-    assert.equal(m.text(m.by('text-worker-rail-using')), 'Using Llama 3.1 8B on this page.');
-    assert.equal(m.text(m.by('button-worker-rail-all-models')), 'Hide all models');
-    assert.ok(m.by('worker-rail-all-models'), 'the catalogue did not open');
+    const rows = m.nodes().map((n) => String(m.pr(n)['data-testid'] || '')).filter((id) => id.startsWith('row-worker-rail-option-'));
+    assert.deepEqual(rows, ['transcribe:interview', 'transcribe:session', 'transcribe:recording', 'summarise:session', 'structure:transcript', 'ask:transcript']
+      .map((k) => `row-worker-rail-option-${k}`));
+    assert.equal(m.text(m.by('row-worker-rail-option-ask:transcript')), 'Ask Kimi K2.6');
+    assert.equal(m.pr(m.by('row-worker-rail-option-ask:transcript'))['data-open'], 'false');
   } finally { await m.unmount(); }
-  // A stale pick the router no longer offers is not "in use".
-  assert.equal(sug('Validate', 'Problem discovery', { picks: { validate_tag_pains: 'm/gone' } }).offList, null);
+  const o = await mount(onPage(path, h(React.Fragment, null,
+    h(RailCrumbsProvider, { section: 'Validate', module: 'Customer research' }, h(WorkerRail, { workspace: 'Validate' })),
+    h(OpenOption, { k: 'ask:transcript', label: 'Ask' }))));
+  try {
+    assert.deepEqual(o.stub.page.at(-1), ['Founder · Validate · Customer research', 'ask:transcript']);
+    assert.equal(o.text(o.by('text-worker-rail-crumbs')), 'Validate › Customer research › Ask');
+    assert.equal(cardIds(o)[0], 'card-worker-rail-model-kimi-k2.6');
+    assert.equal(o.pr(o.by('row-worker-rail-option-ask:transcript'))['data-open'], 'true');
+    assert.equal(o.text(o.by('text-worker-rail-model-note')), 'Remembered for this option. Switching changes nothing already accepted.');
+    await o.click('card-worker-rail-model-gpt-oss-120b');
+    assert.deepEqual(o.stub.setPagePick.at(-1), ['Founder · Validate · Customer research', '@cf/openai/gpt-oss-120b', 'ask:transcript']);
+  } finally { await o.unmount(); }
 });
 
-test('15 · all models: the canvas\'s groups in order, only the non-empty ones, the guard under Safety, no retired model', () => {
-  const v = sug('Validate', 'Problem discovery');
+test('15 · all models: the canvas\'s groups in order, only the non-empty ones, the guard under Safety, no retired model', async () => {
+  const answer = railAnswer('Founder · Validate · Problem discovery');
+  const v = railView({ reading: { loading: false, data: answer }, page: answer.page });
   const titles = v.groups.map((g) => g.title);
-  const order = CATALOGUE_GROUPS.map(([t]) => t);
-  assert.deepEqual(titles, order.filter((t) => titles.includes(t)), 'the groups are out of the canvas\'s order');
-  // D769 (D720 §1): the new canvas's titles, and Safety, where it lists the guard.
-  assert.deepEqual(titles, ['Conversation and writing', 'Reasoning', 'Code', 'Search and ranking', 'Speech to text', 'Safety']);
+  assert.deepEqual(titles, ['Conversation and writing', 'Reasoning', 'Code', 'Reading images and files', 'Search and ranking', 'Speech to text', 'Images', 'Safety']);
   const chips = v.groups.flatMap((g) => g.chips);
   const guard = chips.filter((c) => c.id === GUARD);
   assert.equal(guard.length, 1, 'Llama Guard is not listed once, under Safety');
   assert.equal(guard[0].pickable, false, 'the guard can be picked');
   assert.deepEqual(v.groups.at(-1).chips.map((c) => c.id), [GUARD]);
   assert.ok(!chips.some((c) => c.id === RETIRED), 'the retired 8B is a row');
-  // The retired 8B is kept out twice: by name, and by having no group.
-  assert.ok(NOT_IN_CATALOGUE.has(RETIRED) && !NOT_IN_CATALOGUE.has(GUARD));
-  const grouped = [...Object.values(CANVAS_MODEL_IDS), ...Object.keys(CATALOGUE_EXTRAS)];
-  assert.ok(!grouped.includes(RETIRED), 'the retired 8B has a group');
   assert.ok(chips.every((c) => c.name && !c.name.includes('@cf/')), 'a row shows an id');
-  assert.deepEqual(v.groups[0].chips.map((c) => c.name), ['Llama 3.3 70B Fast', 'Llama 3.1 8B', 'Llama 3.2 3B', 'Llama 3.1 8B Fast']);
   assert.deepEqual(v.groups.find((g) => g.title === 'Speech to text').chips.map((c) => c.name), ['Whisper Large v3 Turbo', 'Whisper', 'Deepgram Nova-3']);
-  // On Problem discovery the 70B, 8B and 3B are buttons; on Customer research none is.
-  assert.deepEqual(chips.filter((c) => c.pickable).map((c) => c.id), [L70, L8, L3]);
-  assert.deepEqual(sug('Validate', 'Customer research').groups.flatMap((g) => g.chips).filter((c) => c.pickable), []);
-  // A mounted rail draws a chip as a button only where it is pickable.
-  const html = ssr(h(WorkerRail, { workspace: 'Build' }));
-  assert.doesNotMatch(html, /<button[^>]*chip-worker-rail-model/);
+  // A row is pickable only where the page's row offers it.
+  assert.deepEqual(chips.filter((c) => c.pickable).map((c) => c.id), [L70, '@cf/openai/gpt-oss-120b', '@cf/zai-org/glm-4.7-flash'].sort((x, y) => chips.findIndex((c) => c.id === x) - chips.findIndex((c) => c.id === y)));
+  assert.deepEqual(chips.filter((c) => c.selected).map((c) => c.id), [L70]);
+  // The guard is never a pick, even on a row that lists it.
+  const withGuard = railView({ reading: { loading: false, data: { ...answer, models: [...answer.models, { id: GUARD, role: null, line: null }] } }, page: answer.page });
+  assert.equal(withGuard.groups.at(-1).chips[0].pickable, false, 'a row that lists the guard makes it pickable');
+  // Mounted: a pickable row is a button and picks for the page; others are not.
+  const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate' })));
+  try {
+    await m.click('button-worker-rail-all-models');
+    assert.equal(m.by('chip-worker-rail-model-glm-4.7-flash').tagName, 'BUTTON');
+    assert.notEqual(m.by('chip-worker-rail-model-whisper').tagName, 'BUTTON');
+    await m.click('chip-worker-rail-model-glm-4.7-flash');
+    assert.deepEqual(m.stub.setPagePick.at(-1), ['Founder · Validate · Problem discovery', '@cf/zai-org/glm-4.7-flash', null]);
+  } finally { await m.unmount(); }
 });
 
-test('11 · a pick and a mode set on another device are in place after a load: the rail reads the Worker once', async () => {
-  const prefs = { ok: true, modes: { validate: 'eadwyn' }, models: { validate: { validate_tag_pains: L8 } } };
-  const m = await mount(h(RailCrumbsProvider, { section: 'Validate', module: 'Problem discovery' },
-    h(WorkerRail, { workspace: 'Validate', fills: true, note: deskNote('Validate') })), { reads: { prefs } });
+test('11 · a pick and a mode set on another device are in place after a load', async () => {
+  const prefs = { ok: true, modes: { validate: 'manual' }, models: {} };
+  const rail = (page, option) => railAnswer(page, option, { pick: '@cf/zai-org/glm-4.7-flash' });
+  const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate', note: deskNote('Validate') })), { reads: { prefs, rail } });
   try {
     assert.equal(m.stub.read, 1, 'the rail did not read the Worker\'s preferences');
-    assert.equal(m.text(m.by('text-worker-rail-using')), 'Using Llama 3.1 8B on this page.');
-    assert.equal(m.pr(m.by('switch-worker-rail-ai-off'))['aria-checked'], false, 'the stored mode did not reach the switch');
-    assert.equal(m.text(m.by('text-worker-rail-mode')), deskNote('Validate'));
+    assert.equal(m.pr(m.by('switch-worker-rail-ai-off'))['aria-checked'], true, 'the stored mode did not reach the switch');
+    assert.equal(m.text(m.by('text-worker-rail-mode')), MANUAL_LINE);
+    await m.click('switch-worker-rail-ai-off');
+    assert.equal(m.pr(m.by('card-worker-rail-model-glm-4.7-flash'))['aria-checked'], true, 'the stored pick is not the checked card');
   } finally { await m.unmount(); }
 });
 
 test('AI off: no card or row is drawn to pick; turning AI on makes them buttons', async () => {
   // D769 (D720 §6): D698 dimmed the list in Manual; with AI off the rail now
   // draws no suggestions at all.
-  const m = await mount(h(RailCrumbsProvider, { section: 'Validate', module: 'Problem discovery' },
-    h(WorkerRail, { workspace: 'Validate', fills: true })), { storage: { [railModelKey('Validate', 'validate_tag_pains')]: L8 } });
+  const m = await mount(onPage('/validate/problem-discovery', h(WorkerRail, { workspace: 'Validate' })), { storage: { 'assist_mode:validate': false } });
   try {
     assert.equal(m.by('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast'), undefined, 'a card is drawn with AI off');
     assert.ok(!m.nodes().some((n) => String(m.pr(n)['data-testid']).startsWith('chip-')));
+    assert.equal(m.by('worker-rail-options'), undefined, 'the options are drawn with AI off');
     await m.click('switch-worker-rail-ai-off');
     assert.equal(m.by('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast').tagName, 'BUTTON');
-    await m.click('card-worker-rail-model-llama-3.3-70b-instruct-fp8-fast');
-    assert.equal(readRailModel('Validate', 'validate_tag_pains'), L70);
-    assert.equal(m.by('text-worker-rail-using'), undefined);
   } finally { await m.unmount(); }
 });
 
@@ -698,7 +734,7 @@ test('21 · syncRailPrefs reads once per load, seeds both caches, and the server
   resetStores();
   const restore = installDocument();
   fullStorage();
-  const stub = stubReads({ prefs: { ok: true, modes: { validate: 'eadwyn' }, models: { validate: { validate_tag_pains: L3 } } } });
+  const stub = stubReads({ prefs: { ok: true, modes: { validate: 'manual' }, models: { validate: { validate_tag_pains: L3 } } } });
   try {
     localStorage.setItem(railModelKey('Validate', 'validate_tag_pains'), JSON.stringify(L8));
     localStorage.setItem(railModelKey('Grow', 'grow_theme_feedback'), JSON.stringify(L8));
@@ -708,12 +744,12 @@ test('21 · syncRailPrefs reads once per load, seeds both caches, and the server
     const container = document.createElement('div');
     const root = createRoot(container);
     await act(async () => { root.render(h(ModeProbe)); });
-    assert.equal(mode, false);
+    assert.equal(mode, true, 'a page with no stored choice is not on (D720 §6)');
     await act(async () => { await syncRailPrefs(); });
     await act(async () => { await syncRailPrefs(); });
     assert.equal(stub.read, 1, 'the Worker was read twice in one load');
     assert.equal(readRailModel('Validate', 'validate_tag_pains'), L3, 'the local pick beat the server row');
-    assert.equal(mode, true, 'the server mode did not reach the switch');
+    assert.equal(mode, false, 'the server mode did not reach the switch');
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
     // A local value with no server row is written up, once.
     assert.deepEqual(stub.setModel, [['grow', 'grow_theme_feedback', L8]]);
@@ -824,6 +860,11 @@ test('22 · check-regulated-wording passes, the panel is a listed surface, and t
 test('the canvas moved to integrated/, unedited, and the old path is gone', () => {
   assert.equal(existsSync(resolve(process.cwd(), 'design/incoming/AIRail.dc.html')), false);
   assert.ok(existsSync(resolve(process.cwd(), 'design/canvases/integrated/AIRail.dc.html')));
+  // D769 PR 2: the "AIRail · every page" export replaced D698's in place, under the name Cycle Overview imports.
+  assert.equal(existsSync(resolve(process.cwd(), 'design/incoming/AIRail · every page.dc.html')), false);
+  const canvas = read('design/canvases/integrated/AIRail.dc.html');
+  for (const said of ['Turn off AI assistance on this page', 'Add tokens', 'Llama Guard 3 8B checks every run']) assert.ok(canvas.includes(said), `the integrated canvas is not the every-page export: no "${said}"`);
+  assert.match(read('design/canvases/integrated/Cycle Overview.dc.html'), /dc-import name="AIRail"/);
   assert.ok(existsSync(resolve(process.cwd(), 'design/canvases/backlog/AIRail.dc.html')), 'the backlog copy the Founder Workspaces Canvas imports went too');
 });
 
