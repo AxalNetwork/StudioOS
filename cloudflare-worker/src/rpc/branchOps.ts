@@ -398,6 +398,18 @@ export async function applyLicenceCopy(
     s('registered_address'), s('signatory_name'), s('signatory_title'),
     n('term_years'), s('terminated_at'), s('kind'), pushedAt,
   ).run();
+  // D797 — the terms schedule (migration 512) rides in its own write, so a
+  // branch that has not applied 512 still takes the rest of its copy. Written
+  // only when HQ sent the key, and only onto the copy this push wrote (its
+  // `pushed_at`), so an older push arriving late never overwrites newer terms.
+  if (Object.prototype.hasOwnProperty.call(record, 'terms_json')) {
+    try {
+      await env.DB.prepare('UPDATE branch_licence SET terms_json = ? WHERE id = 1 AND pushed_at = ?')
+        .bind(s('terms_json'), pushedAt).run();
+    } catch (e) {
+      console.warn('[branchOps] branch_licence.terms_json not written', (e as Error).message);
+    }
+  }
   return { applied: true, branch, as_of: pushedAt };
 }
 

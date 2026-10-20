@@ -20,16 +20,15 @@ export const LIMITS_PAGE = Object.freeze({ title: 'Limits', sub: 'What stops spe
 
 /**
  * Usage's pages under the account navigation, in the canvas's order. The
- * canvas draws three children — Overview, Cost and Limits. Cost is D789's
- * (#2214) and has no page yet, so it joins this list when that page lands
- * rather than leading to a page that is not there.
+ * canvas draws three children — Overview, Cost and Limits (D789, D807).
  */
 export const USAGE_PAGES = Object.freeze([
   { id: 'overview', label: 'Overview', path: '/account/usage' },
+  { id: 'cost', label: 'Cost', path: '/account/usage/cost' },
   { id: 'limits', label: 'Limits', path: '/account/usage/limits' },
 ]);
 
-/** Which Usage page an address opens: `'limits'`, or `'overview'` for anything else under `/account/usage`. */
+/** Which Usage page an address opens: `'cost'` or `'limits'`, or `'overview'` for anything else under `/account/usage`. */
 export function usagePageFor(pathname = '') {
   const m = String(pathname).match(/^\/(?:account|settings)\/usage\/([^/?#]+)\/?$/);
   const hit = m && USAGE_PAGES.find((p) => p.id === m[1].toLowerCase() && p.id !== 'overview');

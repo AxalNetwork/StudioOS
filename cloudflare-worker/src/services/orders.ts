@@ -56,6 +56,8 @@ export interface OrderLine {
   quantity: number;
   unit_amount: number;
   line_total: number;
+  /** D806: set on the lines of an order D794's auto-reload placed. */
+  origin?: 'auto_reload';
 }
 
 export type OrderStatus = 'pending' | 'paid' | 'failed';

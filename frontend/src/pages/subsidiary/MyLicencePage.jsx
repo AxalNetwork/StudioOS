@@ -18,10 +18,13 @@ import { Unrecorded } from '../../ui';
 import DomainWizard from '../../components/licence/DomainWizard';
 import AdminBoardFrame from '../admin/AdminBoardFrame';
 import {
-  CopyStamp, LicenceHeader, LicenceStateBanner, LicenceTabs, PartTwoPlaceholder,
+  CopyStamp, LicenceHeader, LicenceStateBanner, LicenceTabs,
 } from './LicenceFrame';
 import LicenceSummary from './LicenceSummary';
 import LicenceTerms from './LicenceTerms';
+import ContractTab from './licence/ContractTab';
+import StatementsTab from './licence/StatementsTab';
+import RequestsTab from './licence/RequestsTab';
 
 /**
  * Licences — /admin/my-licence and its five tabs (D800, #2233: Summary, Terms,
@@ -720,7 +723,11 @@ function MyLicencePageBody() {
         <LicenceTerms sections={ledgerSections(l)} reason={data.terms_reason} canRequest={l.status !== 'terminated'} />
       )}
 
-      <PartTwoPlaceholder tab={tab} />
+      {/* D804 (#2241): Contract, Statements and Requests, mounted in this frame.
+          Each reads through D798's and D799's modules and draws no rail. */}
+      {tab === 'contract' && <ContractTab />}
+      {tab === 'statements' && <StatementsTab />}
+      {tab === 'requests' && <RequestsTab />}
 
       {tab === 'history' && (
         <div className="space-y-4" data-testid="licence-history">

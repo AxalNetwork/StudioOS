@@ -22,6 +22,10 @@ const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
 /** Where a person reads AI tokens: usage, the rail's Usage box, the cart and checkout for packs, HQ's packs and allowances, the Worker's pack sentences. */
 export const TOKEN_SURFACES = [
+  'frontend/src/pages/account/UsageOverview.jsx',
+  'frontend/src/pages/account/CostPage.jsx',
+  'frontend/src/pages/account/UsageCharts.jsx',
+  'frontend/src/pages/account/costModel.js',
   'frontend/src/pages/account/AccountUsage.jsx',
   'frontend/src/pages/account/usageModel.js',
   'frontend/src/lib/aiTokens.js',

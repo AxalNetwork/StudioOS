@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import {
-  LICENCE_TABS, PART_TWO_TABS, kindLabel, longDate, statusLabel, territoryLine,
+  kindLabel, longDate, statusLabel, territoryLine,
 } from '../../lib/licencePage';
 
 /**
@@ -109,18 +109,6 @@ export function LicenceStateBanner({ banner, children }) {
           : <Link to={a.to} className="rounded-md bg-slate-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800" data-testid="licence-state-action">{a.label}</Link>)}
       </div>
       {children}
-    </div>
-  );
-}
-
-/** Contract, Statements and Requests until D804 (#2241) builds them. */
-export function PartTwoPlaceholder({ tab }) {
-  if (!PART_TWO_TABS.has(tab)) return null;
-  const label = LICENCE_TABS.find((t) => t.key === tab)?.label;
-  return (
-    <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center dark:border-gray-700" data-testid="licence-part-two">
-      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{label}</p>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Built by D804. This tab is not on the page yet.</p>
     </div>
   );
 }

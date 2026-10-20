@@ -29,9 +29,6 @@ export const LICENCE_TABS = [
   { key: 'history', label: 'History', path: `${LICENCE_PATH}/history` },
 ];
 
-/** The tabs D804 (#2241) builds; until it lands each draws a placeholder. */
-export const PART_TWO_TABS = new Set(['contract', 'statements', 'requests']);
-
 export const tabPath = (key) => LICENCE_TABS.find((t) => t.key === key)?.path ?? LICENCE_PATH;
 
 /** The tab a path opens: `/admin/my-licence/terms` → `terms`; the page itself, or any other path, is Summary. */

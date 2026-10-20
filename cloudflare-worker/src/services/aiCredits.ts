@@ -578,6 +578,24 @@ export function planOf(metadata: Record<string, string>): { family: PlanFamily; 
   return null;
 }
 /**
+ * D816 (#2262): a plan's monthly and yearly price, each with the allowance it
+ * gives, and the yearly saving computed from the two. A price counts when it
+ * is charged every one month or every one year; the yearly one counts only in
+ * the monthly one's currency. The saving is never stored or hard-coded:
+ * 1 − yearly ÷ (12 × monthly), as a whole percent, rounded to the nearest. It
+ * is null without both prices, or when the yearly price saves nothing.
+ */
+export function intervalPrices(priced: Array<{ unit_amount: number; currency: string | null; interval: string | null; interval_count: number | null; allowance_microusd: number }>) {
+  const pick = (interval: string, currency?: string | null) => priced.find((p) => p.interval === interval && (p.interval_count ?? 1) === 1
+    && (currency === undefined || String(p.currency ?? '').toLowerCase() === String(currency ?? '').toLowerCase()));
+  const m = pick('month');
+  const y = pick('year', m ? m.currency : undefined);
+  const view = (p: typeof m) => (p ? { unit_amount: p.unit_amount, currency: p.currency, allowance_microusd: p.allowance_microusd } : null);
+  const saving = m && y && m.unit_amount > 0 ? Math.round((1 - y.unit_amount / (12 * m.unit_amount)) * 100) : null;
+  return { monthly: view(m), yearly: view(y), yearly_saving_percent: saving !== null && saving > 0 ? saving : null };
+}
+
+/**
  * `GET /api/public/plans-and-packs` (§11, §13): every plan with its price from
  * the D1 mirror and its AI allowance from the allowance store, and the packs on
  * sale. D1 only, never Stripe. The allowance is a projection: no recorded_by,
@@ -600,7 +618,8 @@ export async function plansAndPacks(env: Env) {
   }
   const plans: Record<string, unknown>[] = [];
   for (const [family, key] of [['founder', 'founder:free'], ['investor', 'investor:free'], ['other', 'other']] as const)
-    plans.push({ family, licence_key: key, product_id: null, plan_name: null, free: true, prices: [], allowance: none });
+    plans.push({ family, licence_key: key, product_id: null, plan_name: null, free: true, prices: [], allowance: none,
+      monthly: null, yearly: null, yearly_saving_percent: null });
   for (const row of rows) {
     let metadata: Record<string, string>, prices: any[];
     try { metadata = JSON.parse(row.metadata_json); prices = JSON.parse(row.prices_json); } catch { continue; }
@@ -611,7 +630,9 @@ export async function plansAndPacks(env: Env) {
       allowance_microusd: p.currency == null || String(p.currency).toLowerCase() === 'usd' ? allowanceFromCharge(p.unit_amount, p.interval, p.interval_count) : 0 }));
     const top = headline(priced);
     plans.push({ family: plan.family, licence_key: plan.licence_key, product_id: row.id, plan_name: row.name, free: false,
-      prices: priced, allowance: top ? { share: PLAN_AI_SHARE, monthly_microusd: top.allowance_microusd, source: 'plan' } : null });
+      prices: priced, allowance: top ? { share: PLAN_AI_SHARE, monthly_microusd: top.allowance_microusd, source: 'plan' } : null,
+      // D816 (#2262): the two prices /pricing's interval switch shows, and the saving computed from them.
+      ...intervalPrices(priced) });
   }
   return { plans, packs: (await packsOnSale(env)).packs, covers: PLAN_COVERS, resets: PLAN_RESETS };
 }

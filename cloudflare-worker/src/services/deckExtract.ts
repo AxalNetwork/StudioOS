@@ -11,7 +11,7 @@
  * always usable.
  */
 import type { Env } from '../types';
-import { run as aiRun } from './aiRouter';
+import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 
 export const DECK_SECTIONS: Array<{ key: string; label: string; keywords: string[] }> = [
@@ -164,7 +164,10 @@ export function mapSectionsHeuristic(chunks: DeckChunk[]): DeckSection[] {
   return DECK_SECTIONS.map((s) => ({ key: s.key, label: s.label, content: (buckets[s.key] || []).join('\n\n').trim() }));
 }
 
-export async function mapSections(env: Env, userId: number, markdown: string, chunks: DeckChunk[]): Promise<DeckSection[]> {
+/** D765's page and option for a review run whose route names none (D778 part 7: the routes name their own). */
+const REVIEW_RAIL: RailContext = { page: 'raise', option: 'review:pitch-deck' };
+
+export async function mapSections(env: Env, userId: number, markdown: string, chunks: DeckChunk[], rail: RailContext = REVIEW_RAIL): Promise<DeckSection[]> {
   const heuristic = mapSectionsHeuristic(chunks);
   const system =
     'You organize raw pitch-deck text into standard sections. Respond ONLY with JSON: {"sections": [{"key": string, "content": string}]}. ' +
@@ -178,7 +181,7 @@ export async function mapSections(env: Env, userId: number, markdown: string, ch
       userId,
       surface: AI_SURFACE.raisePitchReview,
       // D765: the deck review's page; off there, the heuristic sections stand.
-      rail: { page: 'raise', option: 'review:pitch-deck' },
+      rail,
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 1800,
@@ -233,7 +236,7 @@ function normalizeReview(ai: Partial<DeckReview> | null, sections: DeckSection[]
  * Generate an honest, investor-grade review from the mapped sections.
  * Deterministic fallback when the model refuses/times out.
  */
-export async function generateReview(env: Env, userId: number, sections: DeckSection[], context?: { startup?: string }): Promise<DeckReview> {
+export async function generateReview(env: Env, userId: number, sections: DeckSection[], context?: { startup?: string }, rail: RailContext = REVIEW_RAIL): Promise<DeckReview> {
   const filled = sections.filter((s) => s.content.trim());
   const deckText = filled.map((s) => `## ${s.label}\n${s.content}`).join('\n\n').slice(0, 16_000);
   const system =
@@ -249,7 +252,7 @@ export async function generateReview(env: Env, userId: number, sections: DeckSec
       userId,
       surface: AI_SURFACE.raisePitchReview,
       // D765: the deck review's page; off there, the heuristic sections stand.
-      rail: { page: 'raise', option: 'review:pitch-deck' },
+      rail,
       systemPrompt: system,
       messages: [{ role: 'user', content: user }],
       maxTokens: 1800,

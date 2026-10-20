@@ -14,14 +14,14 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  LICENCE_TABS, PART_TWO_TABS, NOT_RECORDED, allowanceCard, changeHref, contractCard, feeCard, longDate,
+  LICENCE_TABS, NOT_RECORDED, allowanceCard, changeHref, contractCard, feeCard, longDate,
   needRow, needsCount, oweCard, pageState, renewalCard, seatRows, shareCard, stateBanner, tabFor, tabPath, termCard,
 } from '../src/lib/licencePage.js';
 import {
   Administrators, DealGlance, NeedsYou, OweHq, SummaryCards, YourContract,
 } from '../src/pages/subsidiary/LicenceSummary.jsx';
 import LicenceTerms from '../src/pages/subsidiary/LicenceTerms.jsx';
-import { LicenceHeader, LicenceStateBanner, PartTwoPlaceholder } from '../src/pages/subsidiary/LicenceFrame.jsx';
+import { LicenceHeader, LicenceStateBanner } from '../src/pages/subsidiary/LicenceFrame.jsx';
 import { eventLabel, ledgerSections } from '../src/pages/subsidiary/MyLicencePage.jsx';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { pageKeyFor } from '../src/lib/railPages.js';
@@ -56,10 +56,13 @@ test('the six tabs are sub-paths of /admin/my-licence, routed behind the admin g
   const frame = codeOnly(read('frontend/src/pages/subsidiary/LicenceFrame.jsx'));
   const doors = [...frame.matchAll(/<Tab to="([^"]+)" tab="([a-z]+)">/g)].map((m) => [m[2], m[1]]);
   assert.deepEqual(doors, LICENCE_TABS.map((t) => [t.key, t.path]));
-  // Contract, Statements and Requests draw D804's placeholder until #2241.
-  assert.deepEqual([...PART_TWO_TABS].sort(), ['contract', 'requests', 'statements']);
-  assert.match(text(h(PartTwoPlaceholder, { tab: 'statements' })), /Built by D804/);
-  assert.equal(html(h(PartTwoPlaceholder, { tab: 'terms' })), '');
+  // Contract, Statements and Requests are D804's tabs (#2279), mounted in this frame.
+  const page = codeOnly(read('frontend/src/pages/subsidiary/MyLicencePage.jsx'));
+  for (const [tab, C] of [['contract', 'ContractTab'], ['statements', 'StatementsTab'], ['requests', 'RequestsTab']]) {
+    assert.ok(page.includes(`import ${C} from './licence/${C}';`), C);
+    assert.ok(page.includes(`{tab === '${tab}' && <${C} />}`), tab);
+  }
+  assert.doesNotMatch(frame, /Built by D804/, 'a placeholder is left in the frame');
 });
 
 test('the Licences row stays lit on every tab, on both Admin shells, and carries the count', () => {

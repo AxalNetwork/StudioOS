@@ -224,7 +224,8 @@ async function reload(env: Env, userId: number): Promise<ReloadOutcome> {
     }, { idempotencyKey: attempt, moneyKind: 'marketplace' });
     await orders.upsertPendingOrder(env, {
       id: orderId, orderRef, userId, currency: cart.currency, subtotal: cart.subtotal, discountCents: 0, vatCents, total,
-      promoCode: null, billingCountry, paymentIntentId: intent.id, items: cart.lines,
+      // D806: the order's lines say it is a reload, so Billing's invoice list names it as one.
+      promoCode: null, billingCountry, paymentIntentId: intent.id, items: cart.lines.map((l) => ({ ...l, origin: 'auto_reload' as const })),
     });
     const { recordAiTopupPurchase } = await import('./aiTopups');
     await recordAiTopupPurchase(env, { paymentIntentId: intent.id, orderRef, userId, totalCents: total, currency: cart.currency, quote });
