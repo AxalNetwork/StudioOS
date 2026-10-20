@@ -55,7 +55,7 @@ import { TERMS_REASON, readLicenceTerms, termsFromRow, type LicenceTerms } from 
 import { withDeadline, DeadlineExceeded } from '../util/deadline';
 import {
   BRANCH_UNAVAILABLE, USAGE_REASON, licenseeContractPdf, licenseeContracts, licenseeNeeds, licenseeStatements,
-  noticesWaiting, parseDispute, raiseStatementDispute, seatsNearCap,
+  noticesWaiting, parseDispute, raiseStatementDispute, seatsNearCap, type LicenseeTermsInput,
 } from '../services/licenceAccount';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -1183,13 +1183,37 @@ r.get('/mine/contract/:uid/pdf', async (c) => {
 
 // GET /api/licence/mine/statements — issued, paid and void statements, each
 // period's usage report, and the masked payment instructions. D797's
-// `licence_terms` (`licensor_ip_entity`, `usage_report_day`) is not on main
-// yet; once it is, it is read here and passed as the third argument.
+// `licence_terms` gives the IP licensor (the payee check) and the usage report
+// day; an unrecorded day stays null, with no default (S1's ruling on #2250).
+// A terms read that fails gives no payment instructions at all: an account
+// shown without knowing who the licensor is could be the wrong entity's.
 r.get('/mine/statements', async (c) => {
   const own = await ownLicenceForAccount(c);
   if ('refusal' in own) return own.refusal;
   if ('branch' in own) return c.json({ ...BRANCH_UNAVAILABLE, usage: { send_now: true, send_now_reason: null } });
-  return c.json(await licenseeStatements(c.env, own.licence));
+  let terms: LicenseeTermsInput = {};
+  let unreadable = false;
+  try {
+    const rec = await readLicenceTerms(c.env, String(own.licence.uid));
+    if (rec) {
+      const day = rec.terms.usage_report_day;
+      terms = {
+        licensorIpEntity: typeof rec.terms.licensor_ip_entity === 'string' ? rec.terms.licensor_ip_entity : null,
+        usageReportDay: typeof day === 'number' ? day : null,
+      };
+    }
+  } catch (e) {
+    console.warn('[licence] licence_terms unreadable for statements', (e as Error).message);
+    unreadable = true;
+  }
+  const body = await licenseeStatements(c.env, own.licence, terms);
+  if (unreadable) {
+    body.payment = {
+      refusal_code: 'terms_unreadable',
+      refusal: `${TERMS_REASON.unreadable} No payment instructions are given until the licensor can be checked.`,
+    };
+  }
+  return c.json(body);
 });
 
 // POST /api/licence/mine/usage/send — "Send now": the branch's own usage push

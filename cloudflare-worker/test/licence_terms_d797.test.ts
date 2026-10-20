@@ -36,7 +36,7 @@ import licences from '../src/routes/admin_licences.ts';
 import licence from '../src/routes/licence.ts';
 import { assembleLicenceRecord } from '../src/services/licencePush.ts';
 import { applyLicenceCopy } from '../src/rpc/branchOps.ts';
-import { LICENCE_TERM_FIELDS, LICENCE_TERM_KEYS, TERMS_REASON, validateTermsBody } from '../src/services/licenceTerms.ts';
+import { DEFAULT_TERM_SECTIONS, LICENCE_TERM_FIELDS, LICENCE_TERM_KEYS, TERMS_REASON, validateTermsBody } from '../src/services/licenceTerms.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const SUPER = 1;
@@ -170,7 +170,7 @@ const save = (e: any, body: unknown, actor = SUPER, uid = LIC) => call(hq, e, ac
 const events = (db: any) => db.prepare("SELECT event, detail_json, note, actor_user_id FROM licence_events WHERE event = 'terms_changed' ORDER BY id").all();
 
 const TERMS = {
-  licensor_entity: 'holdings', governing_law: 'Delaware', exclusive: true, renewal_mode: 'auto',
+  licensor_ip_entity: 'holdings', licensor_brand_entity: 'management', share_subscriptions_bps: 2000, royalty_platform_licence_bps: 500, governing_law: 'Delaware', exclusive: true, renewal_mode: 'auto',
   non_renewal_notice_days: 90, cure_days: 30, carry_share_bps: 2000, minimum_guarantee_cents: 2_500_000,
   usage_report_day: 5, statement_period: 'quarter', data_role: 'licensee_controller', audit_right: false,
 };
@@ -186,7 +186,7 @@ test('a Super Admin saves the terms and reads them back; every other key reads n
   const want = Object.fromEntries(LICENCE_TERM_KEYS.map((k) => [k, null]));
   Object.assign(want, { ...TERMS, exclusive: 1, audit_right: 0 });
   assert.deepEqual(back.body.terms, want);
-  assert.deepEqual(back.body.sections, { carry_share_bps: '§7.3' });
+  assert.deepEqual(back.body.sections, { ...DEFAULT_TERM_SECTIONS, carry_share_bps: '§7.3' }, 'HQ\'s section overrides the canvas\'s, and every other term keeps its default');
 });
 
 // 2 ───────────────────────────────────────────────────────────────────────────
@@ -245,7 +245,7 @@ test('null clears a term, a key left out keeps its value, and each save appends 
   const last = JSON.parse(ev[1].detail_json);
   assert.equal(ev[1].note, 'Cure struck in amendment 1');
   assert.equal(last.reason, 'Cure struck in amendment 1');
-  assert.deepEqual(last.changed, { cure_days: { before: 30, after: null }, 'sections.cure_days': { before: '§9.1', after: null } });
+  assert.deepEqual(last.changed, { cure_days: { before: 30, after: null }, 'sections.cure_days': { before: '§9.1', after: '§19.2' } }, 'a cleared section reads the canvas\'s default again');
   assert.equal(ev[1].actor_user_id, SUPER);
 });
 
@@ -259,7 +259,7 @@ test('/mine returns the caller\'s own licence\'s terms, the same for a delegate,
   assert.equal(principal.status, 200, JSON.stringify(principal.body));
   assert.equal(principal.body.terms.carry_share_bps, 2000);
   assert.equal(principal.body.terms.governing_law, 'Delaware');
-  assert.deepEqual(principal.body.sections, { carry_share_bps: '§7.3' });
+  assert.deepEqual(principal.body.sections, { ...DEFAULT_TERM_SECTIONS, carry_share_bps: '§7.3' });
   assert.equal(principal.body.terms_reason, null);
   const delegate = await call(mineApp, env(db), DELEGATE, '/licence/mine');
   assert.deepEqual(delegate.body.terms, principal.body.terms, 'a delegate reads what the principal reads');
@@ -296,7 +296,7 @@ test('the push carries the terms, the branch writes them, and a copy without the
   assert.equal(read.body.source, 'hq_copy');
   assert.equal(read.body.terms.carry_share_bps, 2000);
   assert.equal(read.body.terms.exclusive, 1);
-  assert.deepEqual(read.body.sections, { carry_share_bps: '§7.3' });
+  assert.deepEqual(read.body.sections, { ...DEFAULT_TERM_SECTIONS, carry_share_bps: '§7.3' });
 
   // A copy pushed before D797: the row is there, its terms column is not filled.
   branchDb.prepare('UPDATE branch_licence SET terms_json = NULL').run();
@@ -318,7 +318,7 @@ test('the store refuses what the route refuses: migration 512\'s CHECKs hold eve
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(TERMS_DDL);
   const bad: Array<[string, unknown]> = [
-    ['licensor_entity', 'subsidiary'], ['renewal_mode', 'sometimes'], ['fee_invoiced', 'monthly'],
+    ['licensor_ip_entity', 'subsidiary'], ['licensor_brand_entity', 'fund_ii'], ['share_token_margin_bps', 10001], ['royalty_platform_licence_bps', -1], ['audit_notice_days', -1], ['renewal_mode', 'sometimes'], ['fee_invoiced', 'monthly'],
     ['statement_period', 'week'], ['data_role', 'nobody'], ['exclusive', 2], ['audit_right', -1],
     ['carry_share_bps', 10001], ['late_interest_bps', -1], ['cure_days', -1], ['payment_terms_days', 3651],
     ['usage_report_day', 0], ['usage_report_day', 29], ['minimum_guarantee_cents', -1], ['non_compete_months', 121],
@@ -328,6 +328,6 @@ test('the store refuses what the route refuses: migration 512\'s CHECKs hold eve
     // And the service refuses the same value.
     assert.equal(validateTermsBody({ [col]: v }, undefined).ok, false, `${col} = ${String(v)} passed the service`);
   }
-  assert.equal(LICENCE_TERM_FIELDS.length, 22, "the schedule is the issue's 22 terms");
+  assert.equal(LICENCE_TERM_FIELDS.length, 31, "the issue's 22 terms, the licensor split in two, and the Licences canvas's eight more");
   for (const k of LICENCE_TERM_KEYS) assert.match(TERMS_DDL, new RegExp(`\\n  ${k} (TEXT|INTEGER)`), `${k} has no column`);
 });

@@ -110,7 +110,7 @@ export function termValues(terms: LicenceTerms | null, currency: string | null):
     const words = TERM_WORDS[f.key];
     switch (f.type) {
       case 'enum':
-        out[f.key] = f.key === 'licensor_entity'
+        out[f.key] = f.key === 'licensor_ip_entity' || f.key === 'licensor_brand_entity'
           ? (AXAL_ENTITIES[v as AxalEntityKey]?.name ?? null)
           : (words?.[String(v)] ?? null);
         break;

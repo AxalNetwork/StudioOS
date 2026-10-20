@@ -646,7 +646,7 @@ How Zoom and Google Meet transcripts are switched on, and what each refusal mean
 
 ### Licence terms schedule Worker contract (D797, #2230)
 
-A licence's terms beyond migration 187's fee and shares: parties, territory, renewal and notice, money, deal terms and reporting, one row per licence in `licence_terms` (migration 512). Every term is nullable, and null is "not recorded", never zero. The field list, its types, ranges and labels are `services/licenceTerms.ts`. No UI yet: D800 and D801 draw it through `frontend/src/lib/api/licenceTerms.js`.
+A licence's terms beyond migration 187's fee and shares: the two licensors, territory, renewal and notice, money (with a share per stream and the platform-licence royalty), deal terms, seats, brand and reporting, one row per licence in `licence_terms` (migration 512). `sections` gives each term its contract section, the Licences canvas's number unless HQ recorded another. Every term is nullable, and null is "not recorded", never zero. The field list, its types, ranges and labels are `services/licenceTerms.ts`. No UI yet: D800 and D801 draw it through `frontend/src/lib/api/licenceTerms.js`.
 
 | Route | Who | What it answers |
 | --- | --- | --- |

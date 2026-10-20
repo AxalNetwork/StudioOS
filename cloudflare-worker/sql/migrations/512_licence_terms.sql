@@ -5,7 +5,7 @@
 --
 --   licence_terms  one row per licence (`licence_uid`), HQ's structured record
 --       of what the signed contract says beyond migration 187's fee, shares and
---       term: the licensor entity and governing law, exclusivity, renewal and
+--       term: the licensors and governing law, exclusivity, renewal and
 --       notice, payment terms, the deal terms (first look, co-invest, carry,
 --       referral, HQ approval) and reporting. Until now only the contract's
 --       text (`licence_contracts.body_md`, 259) held these.
@@ -32,18 +32,24 @@
 
 CREATE TABLE IF NOT EXISTS licence_terms (
   licence_uid TEXT PRIMARY KEY,
-  -- Parties
-  licensor_entity TEXT CHECK (licensor_entity IS NULL OR licensor_entity IN ('management', 'holdings', 'gp', 'fund')),
+  -- Parties: two licensors, platform IP (the payee) and trademark and brand.
+  licensor_ip_entity TEXT CHECK (licensor_ip_entity IS NULL OR licensor_ip_entity IN ('management', 'holdings', 'gp', 'fund')),
+  licensor_brand_entity TEXT CHECK (licensor_brand_entity IS NULL OR licensor_brand_entity IN ('management', 'holdings', 'gp', 'fund')),
   governing_law TEXT,
   -- Territory
   exclusive INTEGER CHECK (exclusive IS NULL OR exclusive IN (0, 1)),
   non_compete_months INTEGER CHECK (non_compete_months IS NULL OR non_compete_months BETWEEN 0 AND 120),
+  referrals_note TEXT,
   -- Term and renewal
   renewal_mode TEXT CHECK (renewal_mode IS NULL OR renewal_mode IN ('auto', 'on_request')),
   non_renewal_notice_days INTEGER CHECK (non_renewal_notice_days IS NULL OR non_renewal_notice_days BETWEEN 0 AND 3650),
   cure_days INTEGER CHECK (cure_days IS NULL OR cure_days BETWEEN 0 AND 3650),
   termination_note TEXT,
-  -- Money
+  -- Money. A null stream share falls back to territory_licences.revenue_share_bps.
+  share_subscriptions_bps INTEGER CHECK (share_subscriptions_bps IS NULL OR share_subscriptions_bps BETWEEN 0 AND 10000),
+  share_licence_fees_bps INTEGER CHECK (share_licence_fees_bps IS NULL OR share_licence_fees_bps BETWEEN 0 AND 10000),
+  share_token_margin_bps INTEGER CHECK (share_token_margin_bps IS NULL OR share_token_margin_bps BETWEEN 0 AND 10000),
+  royalty_platform_licence_bps INTEGER CHECK (royalty_platform_licence_bps IS NULL OR royalty_platform_licence_bps BETWEEN 0 AND 10000),
   payment_terms_days INTEGER CHECK (payment_terms_days IS NULL OR payment_terms_days BETWEEN 0 AND 3650),
   late_interest_bps INTEGER CHECK (late_interest_bps IS NULL OR late_interest_bps BETWEEN 0 AND 10000),
   minimum_guarantee_cents INTEGER CHECK (minimum_guarantee_cents IS NULL OR minimum_guarantee_cents >= 0),
@@ -55,12 +61,17 @@ CREATE TABLE IF NOT EXISTS licence_terms (
   referral_fee_bps INTEGER CHECK (referral_fee_bps IS NULL OR referral_fee_bps BETWEEN 0 AND 10000),
   hq_approval_above_cents INTEGER CHECK (hq_approval_above_cents IS NULL OR hq_approval_above_cents >= 0),
   conflicts_note TEXT,
+  -- Seats and brand
+  seat_includes TEXT,
+  brand_kit TEXT,
   -- Reporting
   usage_report_day INTEGER CHECK (usage_report_day IS NULL OR usage_report_day BETWEEN 1 AND 28),
   statement_period TEXT CHECK (statement_period IS NULL OR statement_period IN ('quarter', 'month')),
   data_role TEXT CHECK (data_role IS NULL OR data_role IN ('licensee_controller', 'hq_controller')),
   audit_right INTEGER CHECK (audit_right IS NULL OR audit_right IN (0, 1)),
-  -- Contract sections, by term key
+  audit_notice_days INTEGER CHECK (audit_notice_days IS NULL OR audit_notice_days BETWEEN 0 AND 3650),
+  -- Contract sections, by term key: HQ's overrides of the canvas's numbers
+  -- (`DEFAULT_TERM_SECTIONS` in services/licenceTerms.ts).
   sections_json TEXT,
   -- Bookkeeping
   updated_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,

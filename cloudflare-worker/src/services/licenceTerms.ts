@@ -13,7 +13,7 @@
 import type { Env } from '../types';
 import type { AxalEntityKey } from './legalDocFormat';
 
-export type LicenceTermGroup = 'parties' | 'territory' | 'renewal' | 'money' | 'deal' | 'reporting';
+export type LicenceTermGroup = 'parties' | 'territory' | 'renewal' | 'money' | 'deal' | 'seats' | 'brand' | 'reporting';
 
 export type LicenceTermField =
   | { key: string; group: LicenceTermGroup; label: string; type: 'enum'; values: readonly string[] }
@@ -30,18 +30,26 @@ export const LICENSOR_ENTITIES: readonly AxalEntityKey[] = ['management', 'holdi
 export const MAX_TERM_DAYS = 3650;
 
 export const LICENCE_TERM_FIELDS: readonly LicenceTermField[] = [
-  // Parties
-  { key: 'licensor_entity', group: 'parties', label: 'Licensor entity', type: 'enum', values: LICENSOR_ENTITIES },
+  // Parties. Two licensors (the Licences canvas, §1.1): platform IP, which is
+  // the payee for the licence fee and statements (D798, D802), and the brand.
+  { key: 'licensor_ip_entity', group: 'parties', label: 'Licensor, platform IP', type: 'enum', values: LICENSOR_ENTITIES },
+  { key: 'licensor_brand_entity', group: 'parties', label: 'Licensor, trademark and brand', type: 'enum', values: LICENSOR_ENTITIES },
   { key: 'governing_law', group: 'parties', label: 'Governing law', type: 'text', max: 200 },
   // Territory
   { key: 'exclusive', group: 'territory', label: 'Exclusive territory', type: 'bool' },
   { key: 'non_compete_months', group: 'territory', label: 'Non-compete after the term', type: 'int', min: 0, max: 120, unit: 'months' },
+  { key: 'referrals_note', group: 'territory', label: 'Referrals from outside the territory', type: 'text', max: 500 },
   // Term and renewal
   { key: 'renewal_mode', group: 'renewal', label: 'Renewal', type: 'enum', values: ['auto', 'on_request'] },
   { key: 'non_renewal_notice_days', group: 'renewal', label: 'Non-renewal notice', type: 'int', min: 0, max: MAX_TERM_DAYS, unit: 'days' },
   { key: 'cure_days', group: 'renewal', label: 'Cure period', type: 'int', min: 0, max: MAX_TERM_DAYS, unit: 'days' },
   { key: 'termination_note', group: 'renewal', label: 'At the end of the term', type: 'text', max: 2000 },
-  // Money
+  // Money. A stream share left null falls back to the ledger's
+  // `territory_licences.revenue_share_bps` when a statement is drawn (D802).
+  { key: 'share_subscriptions_bps', group: 'money', label: 'Revenue share, subscriptions', type: 'bps' },
+  { key: 'share_licence_fees_bps', group: 'money', label: 'Revenue share, licence fees', type: 'bps' },
+  { key: 'share_token_margin_bps', group: 'money', label: 'Revenue share, token margin', type: 'bps' },
+  { key: 'royalty_platform_licence_bps', group: 'money', label: 'Royalty on platform licences sold', type: 'bps' },
   { key: 'payment_terms_days', group: 'money', label: 'Payment terms', type: 'int', min: 0, max: MAX_TERM_DAYS, unit: 'days' },
   { key: 'late_interest_bps', group: 'money', label: 'Late interest, per month', type: 'bps' },
   { key: 'minimum_guarantee_cents', group: 'money', label: 'Minimum guarantee', type: 'cents' },
@@ -53,12 +61,35 @@ export const LICENCE_TERM_FIELDS: readonly LicenceTermField[] = [
   { key: 'referral_fee_bps', group: 'deal', label: 'Referral fee', type: 'bps' },
   { key: 'hq_approval_above_cents', group: 'deal', label: 'HQ approval above', type: 'cents' },
   { key: 'conflicts_note', group: 'deal', label: 'Conflicts', type: 'text', max: 2000 },
+  // Seats
+  { key: 'seat_includes', group: 'seats', label: 'What a seat includes', type: 'text', max: 500 },
+  // Brand: "Axal VC brand kit", or the licensee's own for a white-label.
+  { key: 'brand_kit', group: 'brand', label: 'Brand kit', type: 'text', max: 200 },
   // Reporting
   { key: 'usage_report_day', group: 'reporting', label: 'Usage report due, day of month', type: 'int', min: 1, max: 28, unit: 'day_of_month' },
   { key: 'statement_period', group: 'reporting', label: 'Statement period', type: 'enum', values: ['quarter', 'month'] },
   { key: 'data_role', group: 'reporting', label: 'Data controller', type: 'enum', values: ['licensee_controller', 'hq_controller'] },
   { key: 'audit_right', group: 'reporting', label: 'HQ audit right', type: 'bool' },
+  { key: 'audit_notice_days', group: 'reporting', label: 'Audit notice', type: 'int', min: 0, max: MAX_TERM_DAYS, unit: 'days' },
 ];
+
+/**
+ * The contract section that states each term, as the Licences canvas cites
+ * them (board L2, the Subsidiary Licence Agreement, D803). A read gives these
+ * unless HQ recorded another section for the licence (`sections_json`).
+ */
+export const DEFAULT_TERM_SECTIONS: Readonly<Record<string, string>> = Object.freeze({
+  licensor_ip_entity: '§1.1', licensor_brand_entity: '§1.1', governing_law: '§22',
+  exclusive: '§2.1', non_compete_months: '§2.4', referrals_note: '§2.5',
+  renewal_mode: '§3.2', non_renewal_notice_days: '§3.3', cure_days: '§19.2', termination_note: '§19.5',
+  share_subscriptions_bps: '§4.2', share_licence_fees_bps: '§4.2', share_token_margin_bps: '§4.2',
+  minimum_guarantee_cents: '§4.4', payment_terms_days: '§4.6', late_interest_bps: '§4.6',
+  royalty_platform_licence_bps: '§4.7',
+  first_look_business_days: '§5.1', co_invest_max_bps: '§5.2', carry_share_bps: '§5.3',
+  referral_fee_bps: '§5.4', hq_approval_above_cents: '§5.5', conflicts_note: '§5.6',
+  seat_includes: '§6.2', brand_kit: '§7.2', data_role: '§7.4',
+  usage_report_day: '§8.1', statement_period: '§8.2', audit_right: '§8.5', audit_notice_days: '§8.5',
+});
 
 export const LICENCE_TERM_KEYS: readonly string[] = LICENCE_TERM_FIELDS.map((f) => f.key);
 const BY_KEY = new Map(LICENCE_TERM_FIELDS.map((f) => [f.key, f]));
@@ -158,7 +189,7 @@ export function termsFromRow(row: Row | null | undefined): LicenceTermsRecord | 
     const v = row[key];
     terms[key] = v === undefined || v === null ? null : (typeof v === 'number' ? v : String(v));
   }
-  let sections: Record<string, string> = {};
+  let sections: Record<string, string> = { ...DEFAULT_TERM_SECTIONS };
   try {
     const parsed = row.sections_json ? JSON.parse(String(row.sections_json)) : {};
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {

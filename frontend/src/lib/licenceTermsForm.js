@@ -17,8 +17,9 @@ export { LICENCE_TERM_FIELDS };
 
 /**
  * The canvas's section titles (board L9), by D797 group. A group D797 adds later
- * and this map does not name still renders, under its key. The canvas's "Seats"
- * and "Brand and platform" hold no D797 term: they are the Seats and Brand steps.
+ * and this map does not name still renders, under its key. "Seats" and "Brand
+ * and platform" hold one D797 term each (what a seat includes, the brand kit);
+ * the seat counts and the brand itself stay the Seats and Brand steps.
  */
 export const TERM_GROUP_TITLES = {
   parties: 'Parties',
@@ -26,6 +27,8 @@ export const TERM_GROUP_TITLES = {
   renewal: 'Term and renewal',
   money: 'Fees and money',
   deal: 'Deal terms',
+  seats: 'Seats',
+  brand: 'Brand and platform',
   reporting: 'Compliance and reporting',
 };
 

@@ -46,7 +46,7 @@ test('the editor\'s fields are D797\'s own list, every key once, under the canva
   assert.deepEqual(keys.slice().sort(), WORKER_FIELDS.map((f) => f.key).sort());
   assert.equal(new Set(keys).size, keys.length);
   assert.deepEqual(termSections().map((s) => s.title),
-    ['Parties', 'Territory and exclusivity', 'Term and renewal', 'Fees and money', 'Deal terms', 'Compliance and reporting']);
+    ['Parties', 'Territory and exclusivity', 'Term and renewal', 'Fees and money', 'Deal terms', 'Seats', 'Brand and platform', 'Compliance and reporting']);
   // A group D797 adds later still renders, under its own key.
   const later = termSections([...WORKER_FIELDS, { key: 'brand_x', group: 'brand_platform', label: 'X', type: 'bool' }]);
   assert.equal(later.at(-1).title, 'Brand platform');

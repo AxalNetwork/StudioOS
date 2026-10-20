@@ -76,13 +76,14 @@ test('every merge field the template uses is a ledger value or a D797 term, and 
 test('D797\'s terms read as the contract states them; one not recorded is unfilled', () => {
   // Mutation checked: bps through pctFromBps → 25 reads "0.3%"; days without the unit → "30".
   const t = termValues({
-    licensor_entity: 'management', exclusive: 1, non_compete_months: 12, renewal_mode: 'on_request',
+    licensor_ip_entity: 'holdings', licensor_brand_entity: 'management', exclusive: 1, non_compete_months: 12, renewal_mode: 'on_request',
     non_renewal_notice_days: 90, cure_days: 1, payment_terms_days: 30, late_interest_bps: 100,
     minimum_guarantee_cents: 0, fee_invoiced: 'annually', first_look_business_days: 10, co_invest_max_bps: 2500,
     carry_share_bps: 25, referral_fee_bps: 150, hq_approval_above_cents: 200000000, usage_report_day: 22,
     statement_period: 'quarter', data_role: 'licensee_controller', audit_right: 0, governing_law: 'Delaware',
   } as any, 'EUR');
-  assert.equal(t.licensor_entity, 'Axal VC Management LLC');
+  assert.equal(t.licensor_ip_entity, 'Axal VC Holdings LLC');
+  assert.equal(t.licensor_brand_entity, 'Axal VC Management LLC');
   assert.equal(t.exclusive, 'exclusive');
   assert.equal(t.non_compete_months, '12 months');
   assert.equal(t.non_renewal_notice_days, '90 days');
