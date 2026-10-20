@@ -26,6 +26,7 @@ export const aiBudgetApi = {
     return request(`/ai-budget/runs?${q}`);
   },
   // D788 — the member's own monthly spend limit: the limit, this UTC month's charge, the share used, the notices, the allowance.
+  // D805 — also `pack_orders: { today, per_day, window_hours, resets_at }`, counted as the purchase check counts. Read by #2246's Limits.
   spendLimit: () => request('/ai-budget/limit'),
   // D788 — set the limit in dollars (null removes it) and its 50/80/100% notices. Needs a recent sign-in (403 step_up_required).
   setSpendLimit: (monthlyLimitUsd, notify) => request('/ai-budget/limit', {
@@ -41,6 +42,8 @@ export const aiBudgetApi = {
   saveAutoReload: (settings) => request('/ai-budget/auto-reload', { method: 'PUT', body: body(settings) }),
   autoReloadSetup: (nonce) => request('/ai-budget/auto-reload/setup', { method: 'POST', body: body({ nonce }) }),
   // D787 — the member's own cost per day and per model (`range`: mtd, 30d or prev_month; `group`: model, page or option).
+  // D805 — `totals.by_kind` ({ tokens, audio_speech, image, other }, each cost_usd and charged_microusd), `totals.other_models`
+  // and `totals.output_not_recorded`; the CSV gains a `kind` column. Read by #2214's Usage and Cost.
   cost: ({ range = 'mtd', group = 'model' } = {}) => request(`/ai-budget/cost?${new URLSearchParams({ range, group })}`),
   // D787 — the same read as a CSV download, one row per day and model.
   costCsv: ({ range = 'mtd', group = 'model' } = {}) => api._downloadCsv(`/ai-budget/cost.csv?${new URLSearchParams({ range, group })}`, `ai-cost-${range}.csv`),
