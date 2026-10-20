@@ -24,7 +24,7 @@
  *     POST   /posts/:id/media                     — add a single R2-backed image (≤4 total)
  *     POST   /posts/:id/alt-text                  — auto-generate alt-text via Workers AI
  *     POST   /posts/:id/lint                      — preview PII linter findings
- *     POST   /posts/:id/approve                   — admin approve (status=approved)
+ *     POST   /posts/:id/approve                   — admin approve (status=approved), keeping the offered captions
  *     POST   /posts/:id/send                      — send (linter blocks unless override_reason)
  *     POST   /posts/:id/schedule                  — set scheduled_for
  *     POST   /posts/:id/retract                   — DELETE on the X API + flip status
@@ -59,7 +59,7 @@ import { refuse } from '../util/refusal';
 import { run as aiRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { refusalBody } from '../util/refusal';
-import { decideRail, getRail, listRail, proposeRail, withdrawRail } from '../services/railProposals';
+import { decideRail, getRail, listRail, proposeRail, withdrawRail, type RailProposal } from '../services/railProposals';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -72,6 +72,24 @@ const X_IMAGE_MIME: Record<string, string> = {
 const X_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 // ---------------- helpers ----------------
+
+/** The admin's own open caption proposal `uid` for this post, and the image it is for, or null. */
+async function openAltProposal(env: Env, adminId: number, postId: number, uid: unknown, imageCount: number): Promise<(RailProposal & { index: number }) | null> {
+  if (typeof uid !== 'string' || !uid) return null;
+  const p = await getRail(env, adminId, uid);
+  const index = Number(p?.payload.index);
+  if (!p || p.status !== 'proposed' || p.rail_option !== X_ALT_TEXT_OPTION || p.record_ref !== `x_post:${postId}:${index}`) return null;
+  if (!Number.isInteger(index) || index < 0 || index >= imageCount) return null;
+  return { ...p, index };
+}
+
+/** `alts` with `text` at `index`, padded to the post's images. */
+function withAlt(alts: string[], imageCount: number, index: number, text: string): string[] {
+  const out = alts.slice(0, imageCount);
+  while (out.length < imageCount) out.push('');
+  out[index] = text;
+  return out;
+}
 
 /** D766: an image's bytes as the data URI the router's vision shape sends (D761 PR 2). */
 function imageDataUri(mime: string, bytes: Uint8Array): string {
@@ -816,12 +834,49 @@ r.post('/posts/:id/approve', async (c) => {
   const post: any = await loadPost(c.env, id);
   if (!post) return c.json({ error: 'not_found' }, 404);
   if (post.status !== 'draft') return c.json({ error: 'not_draft', state: post.status }, 409);
-  await c.env.DB.prepare(
-    `UPDATE x_posts SET status = 'approved', approved_by = ?, approved_at = datetime('now'),
-                         updated_at = datetime('now') WHERE id = ?`,
-  ).bind(admin.id, id).run();
+  // D780: Approve keeps the captions the admin approves with (the ones the
+  // composer still offers), each as Eadwyn wrote it. Any that is no longer open
+  // refuses the whole Approve, so nothing is kept by half.
+  const body: any = await c.req.json().catch(() => ({}));
+  const uids: unknown[] = Array.isArray(body.alt_text_proposal_uids) ? [...new Set(body.alt_text_proposal_uids)].slice(0, X_MAX_MEDIA_PER_TWEET) : [];
+  const keys = safeJson<string[]>(post.media_r2_keys, []);
+  let alts: string[] | null = null;
+  const kept: string[] = [];
+  const keptCaptions: { index: number; proposal_uid: string }[] = [];
+  for (const uid of uids) {
+    const p = await openAltProposal(c.env, admin.id, id, uid, keys.length);
+    if (!p || safeJson<string[]>(post.alt_texts, [])[p.index]) return c.json({ error: 'proposal_not_open' }, 409);
+    alts = withAlt(alts ?? safeJson<string[]>(post.alt_texts, []), keys.length, p.index, String(p.payload.text || '').trim().slice(0, 1000));
+    kept.push(p.uid);
+    keptCaptions.push({ index: p.index, proposal_uid: p.uid });
+  }
+  // D1 batches are transactional. Recheck every proposal's open status in the
+  // post write, then accept the same set only if that write changed one row.
+  // A Discard or replacement between the reads above and this batch keeps both
+  // the post and the remaining proposals untouched.
+  const encodedUids = JSON.stringify(kept);
+  const result = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `UPDATE x_posts SET status = 'approved', approved_by = ?, approved_at = datetime('now'),
+                           alt_texts = COALESCE(?, alt_texts), updated_at = datetime('now')
+        WHERE id = ? AND status = 'draft'
+          AND alt_texts IS ? AND media_r2_keys IS ?
+          AND (SELECT COUNT(*) FROM ai_rail_proposals
+                WHERE user_id = ? AND rail_option = ? AND status = 'proposed'
+                  AND uid IN (SELECT value FROM json_each(?))) = ?`,
+    ).bind(admin.id, alts ? JSON.stringify(alts) : null, id, post.alt_texts ?? null, post.media_r2_keys ?? null, admin.id, X_ALT_TEXT_OPTION, encodedUids, kept.length),
+    c.env.DB.prepare(
+      `UPDATE ai_rail_proposals
+          SET status = 'accepted', decided_payload_json = NULL,
+              decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE changes() = 1 AND user_id = ? AND status = 'proposed'
+          AND uid IN (SELECT value FROM json_each(?))`,
+    ).bind(admin.id, encodedUids),
+  ]);
+  if (!result[0].meta?.changes) return c.json({ error: 'proposal_not_open' }, 409);
   const approvedHash = await sha256Hex(String(post.body || ''));
-  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_approved', postId: id, accountId: post.account_id, bodyHash: approvedHash });
+  await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_approved', postId: id, accountId: post.account_id, bodyHash: approvedHash,
+    extra: kept.length ? { alt_text_proposals: keptCaptions } : undefined });
   return c.json({ ok: true });
 });
 

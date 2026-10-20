@@ -44,7 +44,7 @@ import { register } from 'node:module';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { RAIL_PAGES, pageKeyFor } from '../src/lib/railPages.js';
+import { NO_RAIL_ROUTES, RAIL_PAGES, pageKeyFor } from '../src/lib/railPages.js';
 
 /** The task that finishes each profile's boards (part 1's `BOARD_TASK`). */
 export const RENDER_TASK = {
@@ -96,13 +96,21 @@ export function renderStatus(drawn) {
   let pass = false;
   for (const d of drawn) {
     const keys = d.keys || [];
+    // Owner-requested rail-free pages are rendered too: assert absence rather
+    // than classifying an intentional removal as unfinished work.
+    if (d.expectedRails === 0) {
+      if (keys.length) why.push(`${d.state}: ${keys.length} rails on a page that should have none`);
+      else if (d.escaped?.length) why.push(`${d.state}: the rail-free page threw while rendering`);
+      else if (d.pageRendered) pass = true;
+      continue;
+    }
     if (keys.length > 1) why.push(`${d.state}: ${keys.length} rails`);
     const wrong = keys.filter((k) => k !== d.expected);
     if (wrong.length) why.push(`${d.state}: a rail keyed ${wrong.map((k) => JSON.stringify(k)).join(', ')} at ${d.landed}, which is ${JSON.stringify(d.expected)}`);
     if (keys.length === 1 && !wrong.length) pass = true;
   }
   if (why.length) return { pass: false, why };
-  return pass ? { pass: true, why: [] } : { pass: false, why: drawn.map((d) => `${d.state}: no rail at ${d.landed}`) };
+  return pass ? { pass: true, why: [] } : { pass: false, why: drawn.map((d) => d.expectedRails === 0 ? `${d.state}: no page content at ${d.landed}` : `${d.state}: no rail at ${d.landed}`) };
 }
 
 /**
@@ -202,7 +210,7 @@ export const RENDER_NOT_YET = {
     'Founder /pipeline',
     'Founder /messages',
     'Founder /help',
-    'Founder /plans-and-pricing',
+    'Founder /pricing',
     'Founder /trust',
     'Founder /calendar',
     'Founder /my/events',
@@ -217,7 +225,7 @@ export const RENDER_NOT_YET = {
     'Investor /services',
     'Investor /messages',
     'Investor /help',
-    'Investor /plans-and-pricing',
+    'Investor /pricing',
     'Investor /trust',
     'Investor /calendar',
     'Investor /my/events',
@@ -229,7 +237,7 @@ export const RENDER_NOT_YET = {
     'Investor /projects',
     'Advisor /messages',
     'Advisor /help',
-    'Advisor /plans-and-pricing',
+    'Advisor /pricing',
     'Advisor /trust',
     'Advisor /calendar',
     'Advisor /my/events',
@@ -245,7 +253,7 @@ export const RENDER_NOT_YET = {
     'Operating Partner /deals',
     'Operating Partner /messages',
     'Operating Partner /help',
-    'Operating Partner /plans-and-pricing',
+    'Operating Partner /pricing',
     'Operating Partner /trust',
     'Operating Partner /calendar',
     'Operating Partner /my/events',
@@ -258,7 +266,7 @@ export const RENDER_NOT_YET = {
     'Admin /exploring',
     'Admin /messages',
     'Admin /help',
-    'Admin /plans-and-pricing',
+    'Admin /pricing',
     'Admin /trust',
     'Admin /calendar',
     'Admin /my/events',
@@ -270,7 +278,7 @@ export const RENDER_NOT_YET = {
     'Super Admin /exploring',
     'Super Admin /messages',
     'Super Admin /help',
-    'Super Admin /plans-and-pricing',
+    'Super Admin /pricing',
     'Super Admin /trust',
     'Super Admin /calendar',
     'Super Admin /my/events',
@@ -398,6 +406,9 @@ export async function railRenderer() {
       await act(wait);
       const rails = select(dom.document, 'aside.fwr');
       const landed = `${at?.pathname ?? ''}${at?.search ?? ''}${at?.hash ?? ''}`;
+      const path = (at?.pathname ?? '').replace(/\/$/, '');
+      const noRail = NO_RAIL_ROUTES.find((n) => (n.route === path || (n.prefix && path.startsWith(`${n.route}/`)))
+        && n.roles.includes(MEMBERS[profile]?.role));
       return {
         state: nextState,
         escaped,
@@ -405,6 +416,8 @@ export async function railRenderer() {
         keys: rails.map((a) => a.getAttribute('data-page-key')),
         landed,
         expected: pageKeyFor(at?.pathname ?? '', profile, { search: at?.search ?? '', hash: at?.hash ?? '' }),
+        expectedRails: noRail?.railCount ?? 1,
+        pageRendered: noRail?.pageTestIds?.some((id) => select(dom.document, `[data-testid="${id}"]`).length > 0) ?? false,
       };
     } finally {
       await act(async () => root.unmount());
@@ -437,7 +450,7 @@ export async function railRenderer() {
  * every finding at once.
  */
 export function renderProfile(profile) {
-  test(`every ${profile} route in the page map draws exactly one rail, with its page key in the DOM`, async () => {
+  test(`every ${profile} route draws its expected rail count and page key`, async () => {
     const cases = renderCases().filter((c) => c.profile === profile);
     assert.ok(cases.length > 0, `the page map has ${profile} routes`);
     const renderer = await railRenderer();

@@ -44,6 +44,9 @@ export const TOKEN_SURFACES = [
   'frontend/src/pages/account/AutoReloadCardSetup.jsx',
   'frontend/src/pages/account/autoReloadModel.js',
   'cloudflare-worker/src/services/aiAutoReload.ts',
+  // D807 (#2246): Usage's Limits page.
+  'frontend/src/pages/account/LimitsPage.jsx',
+  'frontend/src/pages/account/limitsModel.js',
 ];
 
 /** Where a person reads Perks credits: Perks, and HQ's member credits and credit rules. */

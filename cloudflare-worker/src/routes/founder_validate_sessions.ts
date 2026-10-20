@@ -44,13 +44,14 @@ import {
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, isChoosable, listSttModels } from '../services/sttModels';
 import { WHISPER_TURBO } from '../services/sttFormats';
 import { holdBlock, openLiveRelay } from '../services/liveTranscription';
+import { railFor } from '../util/railContext';
 import {
   SETUP_CHANNELS, activeSessionOf, callRefusal, interviewCard, languageFor, listPoints, markInterviewHeld,
   pointStatements, sessionExtras,
 } from '../services/sessionSetup';
 import { setInterviewStage } from '../services/validateWriters';
 import {
-  afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
+  CUSTOMER_RESEARCH_PAGE, TRANSCRIBE_OPTIONS, afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
 } from '../services/interviewProcessing';
 import { consentRefusal, digestConsentRefusal, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
 import { digestSession, withdrawDigest } from '../services/validateEngine';
@@ -853,7 +854,8 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
   const quote = Math.max(estimateCostUsd(model, 0, 0, totalMinutes), estimateCostUsd(WHISPER_TURBO, 0, 0, totalMinutes));
   if (s.user.id > 0) {
     let held: Awaited<ReturnType<typeof aiBudget.reserveAiBudget>>;
-    try { held = await aiBudget.reserveAiBudget(c.env, s.user.id, aiBudget.usdToMicro(quote)); }
+    // D762: held at the billed price, as each chunk is then charged through the router.
+    try { held = await aiBudget.reserveAiBudget(c.env, s.user.id, aiBudget.billedUsdToMicro(quote, await aiBudget.memberChargeMultiplier(c.env, s.user.id))); }
     catch { return json({ ok: false, refusal: 'misconfigured', message: 'Unreadable: your AI allowance and top-up balance could not be checked.' }, 503); }
     if (!held.ok) {
       await recordReceipt(c.env, s.session.id, {
@@ -889,6 +891,8 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
     // The same per-chunk call the processing job makes (D685 §5.9).
     const r = await transcribeChunk(c.env, {
       session: s.session, userId: s.user.id, chunk: ch, model, intervieweeName: s.interview.interviewee_name, offsetMs: offset,
+      // D778 part 6: the press's page and option win; the inventory's stand for a client that sent none.
+      rail: railFor(c, { page: CUSTOMER_RESEARCH_PAGE, option: TRANSCRIBE_OPTIONS.recording }, `session:${s.session.id}`),
     });
     if (!r.ok) return fail(r.refusal, r.message, r.refusal === 'chunk_missing' ? 502 : r.budget ? 402 : 503);
     costMicro += r.costMicro;

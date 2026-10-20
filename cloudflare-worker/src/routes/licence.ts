@@ -1143,12 +1143,19 @@ r.get('/mine/statements', async (c) => {
 
 // POST /api/licence/mine/usage/send — "Send now": the branch's own usage push
 // (D266), run on demand. Only a branch reports, so HQ answers 501 with why.
+// D808 (#2250): at most once per five minutes per branch (`sendUsageReportNow`,
+// through RATE_LIMITS): 429 with `retry_after` inside the window, 503 when the
+// throttle store is missing or unreadable, and HQ is not called either time. A
+// branch that cannot report at all (no RPC_SECRET, no HQ binding) answers 502
+// with why, as before, and spends no window.
 r.post('/mine/usage/send', async (c) => {
   const own = await ownLicenceForAccount(c);
   if ('refusal' in own) return own.refusal;
   if (!('branch' in own)) return c.json({ error: 'usage_branch_only', message: USAGE_REASON.hq_send }, 501);
-  const { pushUsageReport } = await import('../services/usageReport');
-  const result = await pushUsageReport(c.env, new Date());
+  const { sendUsageReportNow } = await import('../services/usageReport');
+  const result = await sendUsageReportNow(c.env, new Date());
+  if (result.limited) return c.json({ error: 'send_now_refused', ...result }, 429);
+  if (result.store_unavailable) return c.json({ error: 'send_now_refused', ...result }, 503);
   return c.json(result, result.sent ? 200 : 502);
 });
 

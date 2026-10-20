@@ -21,6 +21,7 @@ import { likeNeedleLower } from '../util/likeSearch';
 import { refuse } from '../util/refusal';
 import { ROUTE, type TaskClass } from '../services/aiRouter';
 import { TASK_LABELS, MODEL_NAMES } from '../services/aiCatalog';
+import { publicModels, type PublicModel } from '../services/ai/publicModels';
 import { sendNotificationEmail } from '../services/email';
 import { CONTACT_MAILBOX, DEFAULT_CONTACT_MAILBOX } from './contact';
 
@@ -149,6 +150,23 @@ publicRoutes.get('/ai-models', (c) => {
   if (!aiModelsL1) aiModelsL1 = publicAiModels();
   c.header('Cache-Control', `public, max-age=${STATS_KV_TTL_SEC}, s-maxage=${STATS_KV_TTL_SEC}`);
   return c.json({ ok: true, models: aiModelsL1 });
+});
+
+// ---------- /ai/models (D786, #2211) -------------------------------
+// The Pricing page's Models tab, for anyone: every model the router offers,
+// priced as a member pays (cost × AI_MARKUP), with its pages and flags. Only
+// public fields (`services/ai/publicModels.ts`). Its origin is the bundle and
+// the owner's two catalogue switches, so like /ai-models it is cached per
+// isolate and at the edge for five minutes; the `public_ai_models` bucket
+// bounds it per IP.
+let publicModelsL1: { key: string; models: PublicModel[] } | null = null;
+
+publicRoutes.get('/ai/models', (c) => {
+  const env = { AI_PARTNER_MODELS: c.env.AI_PARTNER_MODELS, AI_PAID_MODELS: c.env.AI_PAID_MODELS };
+  const key = `${env.AI_PARTNER_MODELS ?? ''}|${env.AI_PAID_MODELS ?? ''}`;
+  if (!publicModelsL1 || publicModelsL1.key !== key) publicModelsL1 = { key, models: publicModels(env) };
+  c.header('Cache-Control', `public, max-age=${STATS_KV_TTL_SEC}, s-maxage=${STATS_KV_TTL_SEC}`);
+  return c.json({ ok: true, models: publicModelsL1.models });
 });
 
 // ---------- /plans-and-packs (D755 §11, §13; #1919) ---------------

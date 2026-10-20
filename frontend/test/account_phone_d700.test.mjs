@@ -40,7 +40,6 @@ import { PhoneRows } from '../src/ui/phone/PhoneRows.jsx';
 import { existsSync } from 'node:fs';
 import React, { act } from 'react';
 import { mountContracts } from './_contracts_dom.mjs';
-import { escapeRe } from './_escapeRe.mjs';
 import { __resetEadwynPanelForTest, useEadwynPanel, useEadwynRailServes } from '../src/ui/eadwynPanel.js';
 import TrustCenterPage, { TrustPhoneView } from '../src/pages/TrustCenterPage.jsx';
 import PerksPage, { PerksPhoneView } from '../src/pages/PerksPage.jsx';
@@ -49,7 +48,7 @@ import MyEventsPage, { EventsPhoneView } from '../src/pages/events/MyEventsPage.
 import LearningHome, { LearningPhoneView } from '../src/pages/learning/LearningHome.jsx';
 import { COMING_SOON_LINE } from '../src/pages/learning/learningAccess.js';
 import { TAB_NOT_LIVE } from '../src/pages/learning/learningModel.js';
-import { HelpPhoneView, EMAIL_SUPPORT_LINE } from '../src/pages/docs/DocsLayout.jsx';
+import { HelpPhoneView } from '../src/pages/docs/DocsLayout.jsx';
 import { helpAreas } from '../src/pages/docs/guidePlacement.js';
 import { SECTIONS as HELP_SECTIONS, filterSectionsForRole } from '../src/pages/docs/sections/index.js';
 import { PricingPhoneView, TOKENS_LINE } from '../src/pages/account/PricingPhone.jsx';
@@ -95,7 +94,7 @@ test('ACCOUNT_PHONE_PAGES is the canvas, byte for byte: title, sub and section t
   }
   // Decision 3: the member routes, not the public pages AM:24 names.
   assert.equal(ACCOUNT_PHONE_PAGES.events.route, '/my/events');
-  assert.equal(ACCOUNT_PHONE_PAGES.pricing.route, '/plans-and-pricing');
+  assert.equal(ACCOUNT_PHONE_PAGES.pricing.route, '/pricing');
 });
 
 // --- 1. The index -------------------------------------------------------------
@@ -234,11 +233,12 @@ test('4. SettingsPage reads its section from the address on every change, and wr
   assert.match(page, /\n  const active = accountViewFor\(\{ pathname: location\.pathname, hash: location\.hash, phone \}\);/);
   assert.doesNotMatch(page, /initialSection|useState\(initial/);
   // D753 — the canonicalising call keeps a connector's key.
-  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey \}\);/);
+  assert.match(page, /const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage \}\);/);
   assert.match(page, /\}, \[active, phone, location\.pathname\]\);/, 'the URL effect re-runs when the path moves');
   assert.doesNotMatch(src, /const PATH_TO_SECTION/, 'the map moved to accountPhone.js');
   // On a phone a section is pushed, so Back returns to the index; desktop replaces, as before.
-  assert.match(page, /navigate\(\{ pathname: accountPathFor\(\{ section: id, phone \}\) \}, \{ replace: !phone \}\)/);
+  // D807 — a click may name a Usage page.
+  assert.match(page, /navigate\(\{ pathname: accountPathFor\(\{ section: id, phone, usagePage: page \}\) \}, \{ replace: !phone \}\)/);
   assert.match(page, /<ProfileCompletionBanner onJump=\{\(\) => setActive\('account'\)\} \/>/);
   // The phone view is drawn inside the rail frame, and the desktop keeps its heading.
   assert.ok(page.indexOf('<RailFrame') < page.indexOf('<AccountPhoneFrame'));
@@ -317,7 +317,7 @@ test('5. A2m: Usage on a phone draws the canvas bar and its three sections, then
   assert.match(t, /This month Resets on the 1st at 00:00 UTC \$3\.10 of \$5\.00/);
   assert.match(t, /Held by runs in progress Returned if a run does not finish in 5 minutes \$0\.05/);
   assert.match(t, /Top-up balance Runs use your allowance first, then your top-up \$10\.00/);
-  assert.match(markup, /<a href="\/plans-and-pricing#token-packs"[^>]*data-testid="usage-add-tokens">Add tokens<\/a>/);
+  assert.match(markup, /<a href="\/pricing\/products#token-packs"[^>]*data-testid="usage-add-tokens">Add tokens<\/a>/);
   assert.match(markup, /style="width:42%"/, 'Today\'s 7px bar');
   // Kept below, in today's form: the four cards the board does not draw.
   for (const card of ['usage-card-days', 'usage-card-where', 'usage-card-rates', 'usage-card-last-run']) assert.match(markup, new RegExp(`data-testid="${card}"`), card);
@@ -458,9 +458,10 @@ test('10 (part). every phone bar this PR draws passes PhoneBar an eadwynLabel eq
     }
     assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws no Eadwyn button of its own`);
   }
-  // The rail stays mounted on a phone: the phone view is inside the frame, beside it.
+  // The owner requested no rail on Perks or Learning home.
   const page = read('frontend/src/pages/SettingsPage.jsx');
-  assert.match(page, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Account"/);
+  assert.match(page, /<RailFrame>/);
+  assert.doesNotMatch(page, /<WorkerRail\b/);
 });
 
 // --- 11. No read gains a scope -----------------------------------------------
@@ -644,7 +645,7 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
   assert.match(html(PHONE_VIEWS.pricing()), /href="\/account\/billing"[^>]*>Manage plan</);
   assert.ok(pricing.includes(`Tokens Past your allowance ${TOKENS_LINE} Add tokens`));
   assert.ok(CANVAS_PAGES.pricing.chunk.includes(TOKENS_LINE), 'the Tokens line is AMP\'s');
-  assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/plans-and-pricing#token-packs"[^>]*>[\s\S]*?Past your allowance/);
+  assert.match(html(PHONE_VIEWS.pricing()), /<a href="\/pricing\/products#token-packs"[^>]*>[\s\S]*?Past your allowance/);
   // D755 §11: every account type sees the Plans, the phone included.
   assert.deepEqual(sectionTitles(html(h(PricingPhoneView, { pricing: ready(PLANS), budget: ready({ ...BUDGET, licence: 'advisor' }), product: ready(PRODUCT) }))), ['Plans', 'Tokens']);
   assert.match(text(html(h(PricingPhoneView, { pricing: ready(PLANS), budget: ready(BUDGET), product: ready({ configured: false }) }))), /Top-up isn't available yet\. Runs use your included allowance only\./);
@@ -655,9 +656,9 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
 test('6. the member routes mount the pages that draw A7m and A10m; the public pages draw no account bar', () => {
   const app = read('frontend/src/App.jsx');
   assert.match(app, /<Route path="\/my\/events" element=\{guard\(\[[^\]]+\], <MyEventsPage \/>\)\} \/>/);
-  // D755 §13: /plans-and-pricing opens to visitors; a product's page still needs sign-in.
-  assert.match(app, /<Route path="\/plans-and-pricing" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
-  assert.match(app, /<Route path="\/plans-and-pricing\/:productId" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
+  // D755 §13, D786: the catalogue (/pricing/products) opens to visitors; a product's page still needs sign-in.
+  assert.match(app, /<Route path="\/pricing\/products" element=\{user \? guard\(\[[^\]]+\], <ProductsPage \/>\) : <ProductsPage \/>\} \/>/);
+  assert.match(app, /<Route path="\/pricing\/products\/:productId" element=\{guard\(\[[^\]]+\], <ProductsPage \/>\)\} \/>/);
   assert.match(read('frontend/src/pages/events/MyEventsPage.jsx'), /<EventsPhoneView /);
   assert.match(read('frontend/src/pages/account/PricingPhone.jsx'), /<AccountPhonePage pageKey="pricing"/);
   for (const f of ['frontend/src/pages/events/PublicEventsPage.jsx', 'frontend/src/pages/PricingPage.jsx']) {
@@ -697,12 +698,12 @@ test('8. Trust lists only what /trust/me returns: no 83(b) row, and the pill is 
   assert.match(read('frontend/src/pages/TrustCenterPage.jsx'), /setMatrix\(\{ obligations: \[\], role, failed: true \}\)/);
 });
 
-test('8. Help: Popular this week first, no For you now, and Email support says what the link does', () => {
+test('8. Help: Popular this week first, no For you now, and contact stays in tickets', () => {
   const markup = html(PHONE_VIEWS.help());
   assert.equal(sectionTitles(markup)[0], 'Popular this week');
   assert.doesNotMatch(markup, /For you now/);
-  assert.equal(EMAIL_SUPPORT_LINE, 'Opens your mail app. Write from the address on your account.');
-  assert.match(markup, new RegExp(`<a href="mailto:support@axal\\.vc"[^>]*>[\\s\\S]*?Email support[\\s\\S]*?${escapeRe(EMAIL_SUPPORT_LINE)}`));
+  assert.doesNotMatch(markup, /mailto:support@axal\.vc|Email support/);
+  assert.match(markup, /Open a ticket/);
   assert.doesNotMatch(markup, /From the address on your account/);
   assert.ok(CANVAS_PAGES.help.chunk.includes("'From the address on your account'"));
   // A failed popular read says so; a row opens its area in place.
@@ -769,11 +770,12 @@ test('10. A4m–A10m share one bar, which names itself to Eadwyn by its title; n
     assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws an Eadwyn button of its own`);
     for (const bar of src.matchAll(/<PhoneBar [^>]*\/>/g)) assert.match(bar[0], /eadwynLabel=\{page\.title\}/, `${f}: ${bar[0]}`);
   }
-  // The rail stays mounted on a phone: the phone view is inside the frame, beside it.
+  // The owner requested no rail on Perks or Learning home.
   const perks = read('frontend/src/pages/PerksPage.jsx');
-  assert.match(perks, /\{phone \? \(\s*<PerksPhoneView[\s\S]*?\n      <\/div>\n      <WorkerRail\s+workspace="Perks & Products"/);
+  assert.doesNotMatch(perks, /<WorkerRail\b/);
   const learning = read('frontend/src/pages/learning/LearningHome.jsx');
-  assert.match(learning, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Learning"[\s\S]*?>\s*\{phone \? \(\s*<LearningPhoneView/);
+  assert.match(learning, /<RailFrame data-testid="learning-home">\s*\{phone \? \(\s*<LearningPhoneView/);
+  assert.doesNotMatch(learning, /<WorkerRail\b/);
   // The five pages that mount no rail still mount none (decision 12).
   for (const f of ['TrustCenterPage.jsx', 'CalendarPage.jsx', 'events/MyEventsPage.jsx', 'docs/DocsLayout.jsx', 'ProductsPage.jsx']) {
     assert.doesNotMatch(read(`frontend/src/pages/${f}`), /<WorkerRail\b/, `${f} gained a rail`);

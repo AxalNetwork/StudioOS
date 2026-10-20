@@ -234,6 +234,8 @@ import adminStudioGlance from './routes/admin_studio_glance';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
+// D799 — the Administrator's requests to HQ, under the same prefix.
+import licenceRequests from './routes/licence_requests';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -264,6 +266,7 @@ import needsRoutes, { quotesRouter, engagementsRouter } from './routes/needs';
 // below belongs to deal voting rather than to a partner's deal pipeline.
 import partnerPipeline from './routes/partner_pipeline';
 import partnerOffers from './routes/partner_offers';
+import { testing, partnerTesting, adminTesting } from './routes/testing';
 import partnerDelivery from './routes/partner_delivery';
 import founderValidate from './routes/founder_validate';
 import cycleValidate from './routes/cycle_validate';
@@ -1060,6 +1063,7 @@ app.route('/api/admin/security', adminSecurity);
 app.route('/api/admin/hq-support', adminHqSupport);
 // Studio glance — both tiers, before the /api/admin catch-all (D443).
 app.route('/api/admin/studio', adminStudioGlance);
+app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
@@ -1355,6 +1359,10 @@ app.route('/api/partner/pipeline', partnerPipeline);
 // the proof it can show (gated on a consent only the client can give), and the
 // fit rules a pass quotes instead of going silent.
 app.route('/api/partner/offers', partnerOffers);
+// D812 (#2258): product testing — members, a partner's own programmes, and HQ's review.
+app.route('/api/testing', testing);
+app.route('/api/partner/testing', partnerTesting);
+app.route('/api/admin/testing', adminTesting);
 // #45 — what the firm records about work in flight: milestones, blockers,
 // what was shipped, who holds a seat inside a client's systems, and the
 // recurring update. Health is derived over five of those tables at read time
@@ -1602,6 +1610,8 @@ const ROLE_SCHEMA_SAFE_ANONYMOUS_READS: readonly (string | RegExp)[] = [
   '/api/public/stats',
   // D678: the model registry the Intelligence page reads; no D1 at all.
   '/api/public/ai-models',
+  // D786: the Pricing page's models, priced; no D1 either.
+  '/api/public/ai/models',
   // D722: whether /login may open Google's window — env only, no D1. Held up
   // by a cold isolate's users-table repair, it would only ever mean the
   // redirect instead of the window.

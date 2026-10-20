@@ -201,7 +201,7 @@ test('/account/connectors/telegram-business lands on telegram, with replace', ()
   for (const phone of [true, false]) assert.equal(accountPathFor({ section: 'connectors', phone, key: 'telegram' }), '/account/connectors/telegram');
   // The canonicalising effect rewrites the address with replace.
   assert.match(read('frontend/src/pages/SettingsPage.jsx'),
-    /const want = accountPathFor\(\{ section: active, phone, key: connectorKey \}\);\s*if \(location\.pathname !== want[^\n]*\n\s*navigate\(\{ pathname: want, search: location\.search, hash: location\.hash \}, \{ replace: true \}\);/);
+    /const want = accountPathFor\(\{ section: active, phone, key: connectorKey, usagePage \}\);\s*if \(location\.pathname !== want[^\n]*\n\s*navigate\(\{ pathname: want, search: location\.search, hash: location\.hash \}, \{ replace: true \}\);/);
   for (const p of ['/account/connectors/a-b', '/account/connectors/telegram-businesses']) assert.equal(connectorKeyFor(p), null, p);
 });
 

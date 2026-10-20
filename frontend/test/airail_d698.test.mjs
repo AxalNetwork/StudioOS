@@ -281,9 +281,9 @@ test('9 · the pill names the viewer\'s licence, in the app\'s colours; explorin
   assert.match(pill('partner').style, new RegExp(`--fwr-pill-bg-light:${ACCENT.partner.tint}`));
 });
 
-test('9 · /account\'s rail keeps the founder accent for an investor viewer, and shows "Investor"', () => {
-  // `/account` (SettingsPage) mounts the rail with role="founder" for every viewer.
-  assert.match(codeOnly(read('frontend/src/pages/SettingsPage.jsx')), /<WorkerRail\s+workspace="Account"[\s\S]*?role="founder"/);
+test('9 · Account has no rail; a rail keeps its host accent and viewer label', () => {
+  // Account is rail-free by the owner request; shared rail styling still works elsewhere.
+  assert.doesNotMatch(codeOnly(read('frontend/src/pages/SettingsPage.jsx')), /<WorkerRail\b/);
   const html = ssr(viewing('investor', h(WorkerRail, { workspace: 'Account', role: 'founder' })));
   assert.match(html, new RegExp(`<aside class="fwr"[^>]*style="--fwr-accent-light:${ACCENT.founder.deep}`));
   assert.match(html, />Investor<\/span>/);
@@ -581,7 +581,7 @@ test('18 · Usage: today and this month, what runs hold, the balance, the senten
   assert.match(text, /Held by runs in progress\s*\$0\.05/);
   assert.match(text, /Top-up balance\s*\$10\.00/);
   assert.match(text, /Runs use your plan's allowance first, then your top-up balance\./);
-  assert.match(usage(), /<a href="\/plans-and-pricing#token-packs"[^>]*>Add tokens<\/a>/);
+  assert.match(usage(), /<a href="\/pricing\/products#token-packs"[^>]*>Add tokens<\/a>/);
   assert.match(usage(), /<div class="fwr-meter" role="presentation"><i style="width:42%"/);
   // A cap of 0 draws no bar.
   assert.doesNotMatch(usage({ budget: { ...BUDGET, daily_microusd: 0, day_spend_microusd: 0 } }), /width:0%|width:NaN/);
@@ -595,7 +595,7 @@ test('18 · Usage: the top-up\'s three states, and every failed read is Unreadab
   for (const product of [{ configured: false }, { configured: true, state: 'not_ready' }]) {
     assert.match(renderedText(usage({ product })), /Top-up isn't available yet\./);
     assert.match(usage({ product }), /<button type="button" class="fwr-add-tokens" disabled=""[^>]*>Add tokens<\/button>/);
-    assert.doesNotMatch(usage({ product }), /href="\/plans-and-pricing|Retry|could not be read/);
+    assert.doesNotMatch(usage({ product }), /href="\/pricing\/products|Retry|could not be read/);
   }
   assert.match(renderedText(usage({ productError: true })), /The AI top-up could not be read/);
   for (const bad of [{ budgetError: true }, { budget: null }, { budget: { ...BUDGET, held_for_review: undefined } }]) {

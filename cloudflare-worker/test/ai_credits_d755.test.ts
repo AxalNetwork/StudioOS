@@ -479,7 +479,7 @@ test('every direct payment route refuses a pack price and the fallback, before a
 test('with only STRIPE_PRICE_AI_TOPUP set, a member buys it alone, at face value, with no bonus', async () => {
   const f = await shop({ pack: false, env: { STRIPE_PRICE_AI_TOPUP: FALLBACK } }); const s = stripeStub();
   try {
-    assert.deepEqual(await tokenPackForPrice(f.env, FALLBACK), { origin: 'environment', packUid: null, priceId: FALLBACK, productId: null, faceCents: null, bonusMicrousd: 0, onSale: true });
+    assert.deepEqual(await tokenPackForPrice(f.env, FALLBACK), { origin: 'environment', packUid: null, priceId: FALLBACK, productId: null, faceCents: null, bonusMicrousd: 0, onSale: true, offerStartsAt: null, offerEndsAt: null, firstPurchaseOnly: false });
     assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 2 }]).then((r) => r.body), { error: 'token_pack_alone' });
     assert.deepEqual(await intent(f, [{ price_id: FALLBACK, quantity: 1 }], { promo_code: 'FREE100' }).then((r) => r.body), { error: 'promo_not_for_token_packs' });
     const r = await intent(f, [{ price_id: FALLBACK, quantity: 1 }]);

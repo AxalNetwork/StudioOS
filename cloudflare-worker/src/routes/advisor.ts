@@ -2908,7 +2908,8 @@ advisor.post('/transcribe', async (c) => {
     userId: user.id,
     surface: AI_SURFACE.studio,
     // D765: recorded with its page; a transcription is saving, so the switch never refuses it.
-    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'transcribe:voice' }),
+    // D778 part 6: the option D771's inventories name (founder, advisor and partner alike); the page stays the shared workspace.
+    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'transcribe:voice-answer' }),
     audio: bytes,
     audioMinutes: audioMinutesFromBytes(bytes.byteLength),
   });

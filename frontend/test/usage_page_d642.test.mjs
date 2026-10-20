@@ -233,7 +233,7 @@ test('U1 renders loading, Unreadable (the others still load), ready, and each st
   assert.match(ok, /\$6\.10 <span[^>]*>of \$40\.00/);
   assert.match(ok, /Resets on the 1st at 00:00 UTC/);
   assert.match(ok, /data-testid="usage-held"[\s\S]*\$0\.05[\s\S]*Returned if a run does not finish within 5 minutes/);
-  assert.match(ok, /href="\/plans-and-pricing#token-packs"[^>]*>Add tokens</);
+  assert.match(ok, /href="\/pricing\/products#token-packs"[^>]*>Add tokens</);
   assert.match(ok, /Runs use your included allowance first, then your top-up balance\./);
   const noDaily = html(h(AllowanceCard, { budget: ready({ ...BUDGET, daily_microusd: 0 }), product: ready(PRODUCT) }));
   assert.match(noDaily, /data-testid="usage-today"[\s\S]*Not recorded[\s\S]*The plan sets no daily allowance\. Runs use your top-up balance\./);
@@ -466,7 +466,8 @@ test('the doors: the Account section, the user menu, the rail card, the HQ route
   assert.match(settings, /\{ id: 'billing', label: 'Billing and orders' \},\n[^\n]*\n  \{ id: 'usage', label: 'Usage' \},/, 'Usage, after Billing and orders');
   // D700 — the deep-link map moved to account/accountPhone.js, unchanged.
   assert.match(read('frontend/src/pages/account/accountPhone.js'), /\n  usage: 'usage',/, '/account/usage opens the section');
-  assert.match(settings, /\{safeActive === 'usage' && <UsageSection role=\{role\} \/>\}/);
+  // D807 — /account/usage/limits is Usage's Limits page; every other Usage address is this section.
+  assert.match(settings, /\{safeActive === 'usage' && \(usagePage === 'limits' \? <LimitsPage \/> : <UsageSection role=\{role\} \/>\)\}/);
   const app = read('frontend/src/App.jsx');
   const menu = app.slice(app.indexOf('function UserDropdown('), app.indexOf('Log Out', app.indexOf('function UserDropdown(')));
   assert.match(menu, /<Link to="\/account" [\s\S]*?Account\s*<\/Link>\s*\{\/\*[^*]*\*\/\}\s*<Link to="\/account\/usage"[\s\S]*?Usage\s*<\/Link>/, 'Usage, right under Account');

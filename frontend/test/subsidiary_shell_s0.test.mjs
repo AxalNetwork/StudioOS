@@ -61,7 +61,7 @@ test('the eight rows, Studio first, then the canvas order', () => {
   // a revert to Home `/branch` is the old console coming back.
   assert.deepEqual(
     rows.map((r) => r.label),
-    ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Insights', 'Settings'],
+    ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Insights', 'Licences'],
   );
   assert.equal(rows[0].to, '/studio');
   assert.ok(!rows.some((r) => r.to === '/branch'), 'the digest is not a sidebar row');

@@ -116,7 +116,13 @@ orders.post('/intent', async (c) => {
   // D755 §5: a token pack is bought alone, at face value, with no promo and
   // within the limits. Judged before the promo, so it never takes the free path.
   const aiQuote = await tokenPackQuote(c.env, user.id, cart, promoCode, { excludeOrderRef: priorById?.order_ref ?? null });
-  if (aiQuote && 'error' in aiQuote) return c.json({ error: aiQuote.error }, 400);
+  if (aiQuote && 'error' in aiQuote) {
+    // D790: a first-purchase pack is refused to a member who has bought one, with a sentence.
+    if (aiQuote.error === 'token_pack_first_purchase_only') {
+      return c.json({ error: aiQuote.error, message: 'This pack is for your first token purchase, and you have bought tokens before. Choose another pack.' }, 409);
+    }
+    return c.json({ error: aiQuote.error }, 400);
+  }
 
   // 3. Promo discount (percent on subtotal; amount_off capped at subtotal).
   let discountCents = 0;
