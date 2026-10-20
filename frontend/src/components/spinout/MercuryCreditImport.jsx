@@ -37,7 +37,7 @@ export function MercuryCreditImportView({ state, on }) {
       return (
         <div className="space-y-2 text-[12px]" data-testid="mercury-import-not-recorded">
           <Unrecorded reason={out.reason}>Not recorded</Unrecorded>
-          <p className="text-gray-500 dark:text-gray-400">{out.reason} <Link to="/account/connectors" className="font-semibold text-teal-700 dark:text-teal-300">Open Connectors</Link></p>
+          <p className="text-gray-500 dark:text-gray-400">{out.reason} <Link to="/account/connectors/mercury" className="font-semibold text-teal-700 dark:text-teal-300">Open Connectors</Link></p>
         </div>
       );
     }

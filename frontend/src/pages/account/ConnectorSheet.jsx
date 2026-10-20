@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ExternalLink, X } from 'lucide-react';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
-import { useEscapeClose } from '../../components/useEscapeClose';
+import Lightbox from '../../ui/Lightbox';
 import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
@@ -17,7 +17,7 @@ import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
   coreSystemOffer, isEntityRow, isPersonalMercury,
-  FREE_KEEPS_CONNECTORS, patOnly,
+  FREE_KEEPS_CONNECTORS, connectorPagePath, patOnly,
 } from './connectorsModel';
 import { cyclesWrite } from '../../lib/api/cycles';
 
@@ -108,7 +108,8 @@ export function useConnectors({ companyId = null } = {}) {
  * `Sheet` is only its header, body and footer: no overlay, no dialog role, no
  * Escape of its own (the lightbox's), and its × is `onDismiss`, which closes
  * the whole lightbox, while the panel's own `onClose` steps back to the list.
- * With no frame, a `Sheet` is the Connectors page's side sheet, as before.
+ * With no frame, a `Sheet` opens that same frame around itself: a centred
+ * dialog (D753 F8, #1992). The right-hand side sheet is gone.
  *
  * D753 — `layout: 'page'` is a connector's own page (`ConnectorPage.jsx`): the
  * sheet sits in the page's flow, with no overlay, no dialog role, no × and no
@@ -116,12 +117,22 @@ export function useConnectors({ companyId = null } = {}) {
  */
 export const SheetFrame = createContext(null);
 
-/** A side sheet, 480px from the right and the full width on a phone; inside a `SheetFrame`, the frame's content. */
-export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider = null, providerName = '', 'data-testid': testId }) {
+/** A centred dialog of its own; inside a `SheetFrame`, the frame's content. `action` sits in the head, before its ×. */
+export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider = null, providerName = '', action = null, 'data-testid': testId }) {
   const frame = useContext(SheetFrame);
-  // A dialog opened inside the sheet (a tool's settings) is a nested Lightbox
-  // on the same Escape stack: one key press closes one layer.
-  useEscapeClose(frame ? null : onClose);
+  // With no frame (the Bank accounts console's entity sheet), open Build's one:
+  // a centred Lightbox, whose Escape stack a nested dialog shares.
+  if (!frame) {
+    return (
+      <Lightbox label={title} size="tall" width={520} onClose={onClose} testId="sheet-dialog">
+        <SheetFrame.Provider value={{ onDismiss: onClose }}>
+          <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} provider={provider} providerName={providerName} action={action} data-testid={testId}>
+            {children}
+          </Sheet>
+        </SheetFrame.Provider>
+      </Lightbox>
+    );
+  }
   const head = (
     <div className="flex items-start justify-between gap-3 border-b border-axal-hairline px-5 py-4 dark:border-gray-800">
       <div className="min-w-0">
@@ -130,7 +141,8 @@ export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider
         <h2 className="flex items-center gap-2 text-lg font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">{provider && <BrandIcon provider={provider} name={providerName} size={24} />}{title}</h2>
         {sub && <p className="mt-0.5 text-[12.5px] leading-snug text-axal-muted dark:text-gray-400">{sub}</p>}
       </div>
-      {frame?.layout !== 'page' && <button type="button" onClick={frame ? frame.onDismiss : onClose} aria-label="Close" data-testid="sheet-close" className="rounded p-1 text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"><X size={18} /></button>}
+      {action && <div className="ml-auto shrink-0 self-center">{action}</div>}
+      {frame.layout !== 'page' && <button type="button" onClick={frame.onDismiss} aria-label="Close" data-testid="sheet-close" className="rounded p-1 text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100"><X size={18} /></button>}
     </div>
   );
   const foot = footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-axal-hairline px-5 py-3 dark:border-gray-800">{footer}</div>;
@@ -143,23 +155,11 @@ export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider
       </div>
     );
   }
-  if (frame) {
-    return (
-      <div className="flex h-full min-h-0 flex-col" data-testid={testId} data-layout="lightbox">
-        {head}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">{children}</div>
-        {foot}
-      </div>
-    );
-  }
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title} data-testid={testId}>
-      <button type="button" aria-label="Close" className="absolute inset-0 h-full w-full cursor-default bg-black/30" onClick={onClose} />
-      <div className="absolute inset-y-0 right-0 flex w-full flex-col border-l border-axal-hairline bg-white shadow-2xl sm:w-[480px] dark:border-gray-800 dark:bg-gray-900">
-        {head}
-        <div className="min-h-0 flex-1 overflow-y-auto pb-4">{children}</div>
-        {foot}
-      </div>
+    <div className="flex h-full min-h-0 flex-col" data-testid={testId} data-layout="lightbox">
+      {head}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">{children}</div>
+      {foot}
     </div>
   );
 }
@@ -738,9 +738,13 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     footer = <>{backBtn}<button type="button" className={BTN.ghost} onClick={onClose} data-testid="button-blocked-close">Close</button></>;
   }
   const note = companyNote ? <Banner tone="warn" data-testid={`connect-tool-company-${companyState || 'note'}`}>{companyNote}</Banner> : null;
+  // D753 F8 (#1992): Build's lightbox points at the connector's own page, where everything about it lives; going there closes the lightbox.
+  const pageLink = returnTo === 'build' && p.key
+    ? <Link to={connectorPagePath(p.key)} onClick={dismiss} className={BTN.link} data-testid="connector-sheet-open-page">Open its page ↗</Link>
+    : null;
 
   return (
-    <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} provider={p.key} providerName={p.display_name} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
+    <Sheet eyebrow={eyebrow} title={title} sub={sub} onClose={onClose} footer={footer} provider={p.key} providerName={p.display_name} action={pageLink} data-testid={`connector-sheet-${view === 'pre' && teammate && !ownChosen ? 'teammate' : view}`}>
       {note}
       {banner}
       {body}

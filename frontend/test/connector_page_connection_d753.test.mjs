@@ -16,7 +16,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 
 import { buildCatalogue, disconnectNote } from '../src/pages/account/connectorsModel.js';
-import { interimPanel, manageItems, pageAction } from '../src/pages/account/connectorPageModel.js';
+import { manageItems, pageAction } from '../src/pages/account/connectorPageModel.js';
 import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
 import { RequestSheet } from '../src/pages/account/AccountConnectors.jsx';
 
@@ -66,17 +66,6 @@ test('manageItems: Sync now, Replace key or Reconnect, Disconnect; Reconnect lea
   assert.deepEqual(manageItems(row('slack')).map((i) => i.label), ['Sync now', 'Disconnect'], 'needing attention, Reconnect is the band\'s');
   assert.equal(pageAction(row('slack')).kind, 'reconnect');
   assert.deepEqual(manageItems({ ...row('stripe'), connection: null }), []);
-});
-
-test('interimPanel: only a sync landing keeps F1\'s panel; GitHub is F4\'s section (#1957) and Mercury F5\'s (#1991); never the entity row', () => {
-  for (const key of ['stripe', 'hubspot', 'crunchbase', 'slack', 'google']) assert.equal(interimPanel(row(key)), false, key);
-  assert.equal(interimPanel(row('github')), false, 'F4 (#1957): GitHub\'s repositories are its own section');
-  assert.equal(interimPanel(row('github'), 'sync'), false, 'and GitHub\'s sign-in lands there, never on the sync view');
-  assert.equal(interimPanel(row('mercury')), false, 'F5 draws a member\'s Mercury in Your connection');
-  assert.equal(interimPanel({ ...row('stripe'), connection: null }, 'sync'), true);
-  assert.equal(interimPanel({ ...row('github'), connection: null }), false);
-  assert.equal(interimPanel({ ...row('mercury'), connection_source: 'mercury_entity_connections' }), false, 'F5 draws the entities\' Mercury itself');
-  assert.equal(interimPanel({ ...row('mercury'), connection_source: 'mercury_entity_connections' }, 'sync'), false);
 });
 
 // ---------------------------------------------------------------- the page

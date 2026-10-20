@@ -97,7 +97,7 @@ test('the states: loading, empty, Not recorded, a refusal, Unreadable, capped', 
   const none = view({ status: 'failed', outcome: { kind: 'not_recorded', reason: 'Connect your own Mercury account first, with a Read Only token.' } });
   assert.match(none, /data-testid="mercury-import-not-recorded"/);
   assert.match(none, /Not recorded/);
-  assert.match(none, /href="\/account\/connectors"/);
+  assert.match(none, /href="\/account\/connectors\/mercury"/, 'D753 F8 (#1992): Mercury\'s own page');
   assert.match(view({ status: 'failed', outcome: { kind: 'refused', reason: 'Reconnect it.' } }), /role="alert" data-testid="mercury-import-refused">Reconnect it\.</);
   const bad = view({ status: 'failed', outcome: { kind: 'unreadable' } });
   assert.match(bad, /data-testid="mercury-import-unreadable"/);

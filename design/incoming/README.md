@@ -780,6 +780,8 @@ The owner shared two artifacts on 2026-10-09:
 
 Both were decoded with `scripts/read-canvas.mjs`. Both import the same third canvas, `Cycle Action`, which is committed as decoded from the bundle. Connectors replace Integrations, and appear in the user menu.
 
+**Superseded in presentation by D753 (2026-10-20, F8 #1992).** The three Connectors canvases (`Connectors Page`, `Cycle Action`, `Connectors · Boards`) draw the connector sheet as a right-hand side sheet. That sheet is gone: every connector is managed on its own page, `/account/connectors/<key>`, and Build's "Connect a tool" keeps its lightbox. The canvases still hold for the hub, the cards and the copy.
+
 | Canvas | Screens | Routes | Grade | Issues |
 | --- | --- | --- | --- | --- |
 | `Connectors Page.dc.html` | 26 screens: Yours, Discover, the user menu, the Add menu, the redirect, the connector sheet, the connect flow and its states, the forms, the rail, and the page states | `/account/connectors` (replacing `/account/integrations`) | UPGRADE | #1462, #1463, #1464 |

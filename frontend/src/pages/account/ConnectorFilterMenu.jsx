@@ -104,7 +104,7 @@ export function ConnectorFilterMenu({ facets, value, onChange, phone = false, in
   };
 
   const triggerBtn = (
-    <button type="button" ref={trigger} className={BTN.ghost} aria-label="Filter connectors" aria-haspopup={phone ? 'dialog' : 'menu'}
+    <button type="button" ref={trigger} className={`${BTN.ghost} max-sm:min-w-[44px]`} aria-label="Filter connectors" aria-haspopup={phone ? 'dialog' : 'menu'}
       aria-expanded={open} onClick={() => (open ? close(false) : (setOpen(true), setNav({ open: true, index: checked, sub: null, subIndex: 0 })))}
       onKeyDown={onTriggerKey} data-testid="button-connectors-filter">
       <SlidersHorizontal size={14} aria-hidden="true" />

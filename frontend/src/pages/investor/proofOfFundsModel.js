@@ -42,7 +42,7 @@ export const SHARE_BUTTON = 'Show Axal you can fund this';
 export const SHEET_TITLE = 'Proof of funds from Mercury';
 export const SHEET_SUB = 'Axal\'s admins read one dated sentence. Never your balance.';
 export const CONNECT_FIRST = 'Connect your own Mercury account first, with a Read Only token from your own organization.';
-export const CONNECTORS_LINK = { text: 'Connectors › Mercury', href: '/account/connectors' };
+export const CONNECTORS_LINK = { text: 'Connectors › Mercury', href: '/account/connectors/mercury' };
 export const ONLY_CHECKING_SAVINGS = 'Only checking and savings accounts count. Treasury and other accounts are not read.';
 export const HOLDER_MISSING = 'Mercury did not give your organization\'s name, so no statement can name its holder.';
 export const REPLACES_ACTIVE = (asOf) => `You shared one on ${asOf}. Sharing again replaces it.`;

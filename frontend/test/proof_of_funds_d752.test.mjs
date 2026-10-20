@@ -150,7 +150,7 @@ test('sheet: not connected says so with the Connectors link and never reads acco
   try {
     await m.render(sheet(s));
     assert.ok(m.text().includes(CONNECT_FIRST));
-    assert.ok(m.stringProps().includes('href=/account/connectors'));
+    assert.ok(m.stringProps().includes('href=/account/connectors/mercury'), 'D753 F8 (#1992): Mercury\'s own page');
     assert.equal(s.count('accounts'), 0);
   } finally { await m.unmount(); }
   s = stubs({ status: async () => { throw new TypeError('network'); } });

@@ -21,7 +21,7 @@ import { readRoutesSource } from './_routesSource.mjs';
 import { buildCatalogue, connectorPagePath, connectorsRedirect } from '../src/pages/account/connectorsModel.js';
 import { accountPathFor, connectorKeyFor } from '../src/pages/account/accountPhone.js';
 import {
-  DETAIL_MISSING, PAGE_ALIAS, backHrefFor, detailsRows, hubSearchFor, hubTabFor, interimMode, pageEntry, pageReturn, pageTitle,
+  DETAIL_MISSING, PAGE_ALIAS, backHrefFor, detailsRows, hubSearchFor, hubTabFor, pageEntry, pageReturn, pageTitle,
 } from '../src/pages/account/connectorPageModel.js';
 import { ConnectorsView } from '../src/pages/account/AccountConnectors.jsx';
 import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
@@ -372,6 +372,4 @@ test('the title while mounted, restored after; Details from today\'s fields, a m
   assert.equal(cb['Sign-in'].value, 'API key');
   const out = flat(renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/account/connectors/crunchbase'] }, page('crunchbase'))));
   assert.match(out, /Documentation Not recorded/);
-  assert.equal(interimMode(CAT.find((p) => p.key === 'salesforce')), 'waitlist');
-  assert.equal(interimMode(CAT.find((p) => p.key === 'stripe')), 'panel');
 });
