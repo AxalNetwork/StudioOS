@@ -13,7 +13,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { licenceTermsApi } from '../../lib/api';
+import { licenceTermsApi } from '../../lib/api/licenceTerms';
 import { reportError } from '../../lib/log';
 import {
   NOT_RECORDED, buildSave, displayValue, enumLabel, initialForm, termRowId, termSections, unitOf,

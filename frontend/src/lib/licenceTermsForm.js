@@ -42,7 +42,9 @@ export function termSections(fields = LICENCE_TERM_FIELDS) {
   return out;
 }
 
-export const NOT_RECORDED = 'Not recorded';
+import { NOT_RECORDED } from './absence';
+
+export { NOT_RECORDED };
 
 const UNIT_WORDS = { months: 'months', days: 'days', business_days: 'business days', day_of_month: '' };
 

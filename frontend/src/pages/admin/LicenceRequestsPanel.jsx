@@ -12,7 +12,8 @@
  * against the notice period the terms record.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { api, licenceTermsApi } from '../../lib/api';
+import { api } from '../../lib/api';
+import { licenceTermsApi } from '../../lib/api/licenceTerms';
 import { reportError } from '../../lib/log';
 import {
   LICENCE_PANEL_KINDS, licenceRequests, nonRenewalCheck, requestSummary, termAsItStands, termTarget,

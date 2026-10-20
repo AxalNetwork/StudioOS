@@ -230,7 +230,7 @@ export function EscalationKindFilter({ escalations, value, onChange }) {
           data-kind={f.kind || 'all'}
           className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${value === f.kind
             ? 'border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
-            : 'border-axal-hairline bg-white text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900'}`}>
+            : 'border-axal-hairline bg-white text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:hover:text-gray-100'}`}>
           {f.label} <span className="tabular-nums">{f.count}</span>
         </button>
       ))}
