@@ -239,9 +239,14 @@ test('the page: the header and four cards on desktop; on a phone its own bar bac
 });
 
 // 8 ───────────────────────────────────────────────────────────────────────────
-test('no new /api method: the page calls only D788\'s, D640\'s, D794\'s and D755\'s', () => {
-  // Mutations checked: a fetch of its own.
+test('no new /api method: the page calls only D788\'s, D640\'s, D794\'s and D755\'s, and D805\'s pack_orders is on the limit read', () => {
+  // Mutations checked: a fetch of its own; pack_orders dropped from the limit read.
   const src = readFileSync(new URL('../src/pages/account/LimitsPage.jsx', import.meta.url), 'utf8');
   assert.deepEqual([...src.matchAll(/aiBudgetApi\.(\w+)\(/g)].map((m) => m[1]).sort(), ['autoReload', 'mine', 'spendLimit', 'topUp']);
   assert.doesNotMatch(src, /fetch\(|request\(/);
+  // D805 (#2253): the limit read carries `pack_orders` with the two figures the card reads.
+  const route = readFileSync(new URL('../../cloudflare-worker/src/routes/ai_budget.ts', import.meta.url), 'utf8');
+  assert.match(route, /pack_orders:await packOrdersToday\(c\.env,user\.id\)/);
+  const credits = readFileSync(new URL('../../cloudflare-worker/src/services/aiCredits.ts', import.meta.url), 'utf8');
+  assert.match(credits, /export async function packOrdersToday[^\n]*Promise<\{ today: number; per_day: number;/);
 });

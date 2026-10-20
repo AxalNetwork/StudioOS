@@ -5,8 +5,7 @@
  *
  * Four reads, none of them new (no `/api/*` method is added):
  *   - D788's `GET /api/ai-budget/limit`: the limit, this UTC month's charge,
- *     the notices and the reset day; and, once D805 (#2243) lands,
- *     `pack_orders`;
+ *     the notices and the reset day; and D805's (#2243) `pack_orders`;
  *   - D640's `GET /api/ai-budget/me`: the plan allowance and what it has used;
  *   - D794's `GET /api/ai-budget/auto-reload` and D755's `GET
  *     /api/ai-budget/top-up` (the pack's label).
@@ -132,7 +131,7 @@ export function autoReloadCard(read, topUp) {
 /** D794's sentence: the one limit is also auto-reload's. */
 export const AUTO_RELOAD_LIMIT_NOTE = 'The spend limit above is also auto-reload’s limit.';
 
-/** Why today's pack orders read Not recorded until D805 (#2243) adds `pack_orders` to the limit read. */
+/** Why today's pack orders read Not recorded when the limit read carries no `pack_orders` (D805, #2243). */
 export const PACK_ORDERS_NOT_READ = 'Today’s count is not read yet.';
 
 /**
