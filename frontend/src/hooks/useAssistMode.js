@@ -11,17 +11,14 @@ import { railPrefsApi } from '../lib/api/railPrefs.js';
  * page branched on a mode, so persisting one would have made a dead control
  * look deliberate. Founder Validate branches now.
  *
- * THE DEFAULT IS THE HOST'S (D769, #2088). Since D720 the rail draws "Turn
- * off AI assistance on this page" on every page, and a page that never stored
- * a choice reads `defaultOn`:
- *   - a page with fills keeps OFF (Manual), the D698 default: a fill run spends
- *     a founder's own budget, and a mode on before they chose it spends money
- *     they did not agree to spend;
- *   - every other page is ON: its suggestions are shown, and nothing runs
- *     without a press.
- * D720 §6 makes on the default everywhere once the Worker refuses `assist_off`
- * (D765) and a recording's Stop asks first (D770); that is D769's second PR.
- * A stored choice, here or on the Worker, always wins over the default.
+ * ON BY DEFAULT, EVERYWHERE (D720 §6; D769 PR 2, #2088). The rail draws
+ * "Turn off AI assistance on this page" on every page, and a page that never
+ * stored a choice is on: its suggestions are shown, and nothing runs without
+ * a press. A page with fills defaulted off until the Worker refused a run on
+ * a page switched off (`assist_off`, D765) and a recording's Stop asked first
+ * (D770); the Worker reads no row as on too. A stored choice, here or on the
+ * Worker, always wins over the default. `defaultOn` stays for a host that
+ * must start off.
  *
  * PER WORKSPACE, not per zone and not global. Same rule as the model choice
  * beside it, and for the same reason the Validate canvas gives: "Mode and
@@ -102,13 +99,12 @@ function subscribe(listener) {
 
 /**
  * Returns `[on, setOn]`. `defaultOn` is what a page that stored nothing reads
- * (false unless the host passes it; see above).
+ * (true unless the host passes false; see above).
  *
  * The server snapshot is the default, so a prerendered page never asserts a
- * mode the browser has not read: a page with fills prerenders off, as before,
- * and a page that is on by default prerenders on.
+ * mode the browser has not read.
  */
-export default function useAssistMode(workspace, { defaultOn = false } = {}) {
+export default function useAssistMode(workspace, { defaultOn = true } = {}) {
   const key = keyFor(workspace);
   const on = useSyncExternalStore(
     subscribe,

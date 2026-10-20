@@ -165,11 +165,13 @@ test('the badge says Default, and the rail never says "recommend" (D400)', () =>
   const src = codeOnly(read(RAIL));
   assert.deepEqual([...new Set([...src.matchAll(/\brecommend\w*\b/gi)].map((m) => m[0]))], [],
     'a form of "recommend" is back in the rail');
+  // D769 PR 2 (#2088): the role word is the Worker's matrix row's, default
+  // first (D764), and the run without a pick takes that first model.
   const copy = codeOnly(read(COPY));
-  assert.match(copy, /const primary = routes\[job\.task\]\.model === id;/,
-    'Default is no longer derived from the router\'s own model');
-  assert.match(copy, /s\.role === 'Default' && !primary \? null : s\.role/,
-    'a canvas "Default" on a model that is not the router\'s primary is drawn');
+  assert.match(copy, /role: m\.role \|\| null,/, 'the role word is no longer the Worker\'s');
+  assert.match(copy, /const current = chosen \?\? models\[0\]\?\.id \?\? null;/,
+    'the checked card is no longer the pick, else the row\'s default');
+  assert.doesNotMatch(copy, /'Default'/, 'railModels.js decides which model is the default again');
 });
 
 test('the rail draws no estimate and no average (D16, D698)', () => {
@@ -184,28 +186,19 @@ test('a pick is stored per section and per task, the way every other rail prefer
   const src = codeOnly(read(RAIL));
   assert.doesNotMatch(src, /localStorage\./,
     'localStorage throws outright in some embedded contexts; use safeReadJSON/safeWriteJSON');
-  assert.match(src, /for \(const task of tasks\) writeRailModel\(workspace, task, id\);/);
+  // D769 PR 2 (#2088): the rail's pick is the page's (and the open option's),
+  // on the Worker. The per-section, per-task store stays for the fill bands.
+  assert.match(src, /railPrefsApi\.setPagePick\(pageKey, id, optionKey\)/);
+  assert.doesNotMatch(src, /writeRailModel|readRailModel/, 'the rail writes the old per-task store again');
   const store = codeOnly(read('frontend/src/ui/railModelChoice.js'));
   assert.match(store, /safeReadJSON\(railModelKey\(workspace, task\), null\)/);
   assert.match(store, /safeWriteJSON\(railModelKey\(workspace, task\), id \|\| null\)/);
 });
 
-test('each section names only work its pages run, on router tasks', () => {
+test('the copy table names no page\'s work: that is the Worker\'s matrix (D769 PR 2)', () => {
   const copy = codeOnly(read(COPY));
-  const alts = alternatesByTask();
-  for (const task of [...copy.matchAll(/task: '([a-z_]+)'/g)].map((m) => m[1])) {
-    // D698: Grow's Product improvement names D691's task before the router
-    // carries it; `railSuggestions` skips a job the pricing read does not list
-    // (airail_d698.test.mjs, test 13). No other task may be ahead of the router.
-    if (task === 'grow_theme_feedback' && !alts.has(task)) continue;
-    assert.ok(alts.has(task), `railModels.js names ${task}, which is not a ROUTE entry`);
-  }
-  // A job that takes a pick must offer one; a pick with nowhere to go is the
-  // dead control D17 refused.
-  for (const m of copy.matchAll(/task: '([a-z_]+)',\s*pick: true/g)) {
-    if (m[1] === 'grow_theme_feedback' && !alts.has(m[1])) continue;
-    assert.ok((alts.get(m[1]) || []).length > 1, `${m[1]} takes a pick and the router offers none`);
-  }
+  assert.doesNotMatch(copy, /task: '[a-z_]+'|pick: true|SECTION_JOBS|MODULE_JOBS|DEFAULT_JOBS/,
+    'railModels.js decides a page\'s jobs again');
 });
 
 test('formatRate prints the published figure, not a rounding of it', async () => {
