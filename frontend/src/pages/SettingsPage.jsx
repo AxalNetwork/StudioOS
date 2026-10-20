@@ -28,7 +28,8 @@ import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import AutoReloadCard from './account/AutoReloadCard';
 import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard, useBillingReads } from './account/BillingCards';
 import FollowingSection from './account/AccountFollowing';
-import UsageSection from './account/AccountUsage';
+import UsageSection from './account/UsageOverview';
+import CostPage from './account/CostPage';
 // D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
 import LimitsPage from './account/LimitsPage';
 import { USAGE_PAGES, usagePageFor } from './account/limitsModel';
@@ -497,7 +498,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
         </>
       )}
       {safeActive === 'following' && <FollowingSection />}
-      {safeActive === 'usage' && (usagePage === 'limits' ? <LimitsPage /> : <UsageSection role={role} />)}
+      {safeActive === 'usage' && (usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
       {safeActive === 'onboarding' && <OnboardingSettingsTab />}
       {safeActive === 'connectors' && <ConnectorsTab connectorKey={connectorKey} />}

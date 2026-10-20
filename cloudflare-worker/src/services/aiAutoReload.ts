@@ -86,12 +86,17 @@ export async function disableAutoReload(env: Env, userId: number, reason: Reload
 }
 
 /**
- * The platform's stops before a charge. D791 (#2216) adds HQ's Pause AI here
- * once it merges; `tokenPackQuote` already applies the five orders a day, and
- * `limitStop` applies the member's D788 spend limit once the pack is priced.
+ * The platform's stops before a charge. D791 (#2216): a member HQ has paused
+ * (`member_ai_pauses`) is never charged — the pause stops reloads as well as
+ * runs — so this answers `'paused'` before the crossing is claimed or Stripe
+ * is called, and leaves auto-reload on for when the pause is lifted. A pause
+ * that cannot be read throws, so the job fails and charges nothing.
+ * `tokenPackQuote` already applies the five orders a day, and `limitStop`
+ * applies the member's D788 spend limit once the pack is priced.
  */
-export async function reloadBlocked(_env: Env, _userId: number): Promise<string | null> {
-  return null;
+export async function reloadBlocked(env: Env, userId: number): Promise<string | null> {
+  const { aiPaused } = await import('./aiBudget');
+  return (await aiPaused(env, userId)) ? 'paused' : null;
 }
 
 /**
@@ -224,7 +229,8 @@ async function reload(env: Env, userId: number): Promise<ReloadOutcome> {
     }, { idempotencyKey: attempt, moneyKind: 'marketplace' });
     await orders.upsertPendingOrder(env, {
       id: orderId, orderRef, userId, currency: cart.currency, subtotal: cart.subtotal, discountCents: 0, vatCents, total,
-      promoCode: null, billingCountry, paymentIntentId: intent.id, items: cart.lines,
+      // D806: the order's lines say it is a reload, so Billing's invoice list names it as one.
+      promoCode: null, billingCountry, paymentIntentId: intent.id, items: cart.lines.map((l) => ({ ...l, origin: 'auto_reload' as const })),
     });
     const { recordAiTopupPurchase } = await import('./aiTopups');
     await recordAiTopupPurchase(env, { paymentIntentId: intent.id, orderRef, userId, totalCents: total, currency: cart.currency, quote });

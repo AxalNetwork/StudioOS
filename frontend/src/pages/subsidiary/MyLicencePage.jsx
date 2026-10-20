@@ -1,21 +1,35 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Map, Users, Calendar, Percent, Building2, AlertTriangle, Bell, Loader2, History, Lock, Globe,
+  AlertTriangle, Bell, Loader2, History, Lock, Globe,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { bpsPercent } from '../../lib/bps';
 import { FROZEN, STILL_READABLE, FREEZE_RULE } from '../../lib/branchFreeze';
 import { reportError } from '../../lib/log';
 import { FREEZING_STATUSES, noticeKindLabel } from '../../lib/notices';
 import { branchOfUser } from '../../lib/shellRole';
+import {
+  changeHref, kindLabel, longDate, pageState, scheduleSections, seatRows, stateBanner, tabFor,
+} from '../../lib/licencePage';
 import { useAuth } from '../../hooks/useAuthSync';
+import { refreshLicenceNeeds } from '../../hooks/useLicenceNeeds';
 import { Unrecorded } from '../../ui';
 import DomainWizard from '../../components/licence/DomainWizard';
 import AdminBoardFrame from '../admin/AdminBoardFrame';
+import {
+  CopyStamp, LicenceHeader, LicenceStateBanner, LicenceTabs,
+} from './LicenceFrame';
+import LicenceSummary from './LicenceSummary';
+import LicenceTerms from './LicenceTerms';
+import ContractTab from './licence/ContractTab';
+import RequestsTab from './licence/RequestsTab';
+import StatementsTab from './licence/StatementsTab';
 
 /**
- * My Licence — /admin/my-licence. The subsidiary administrator's own view.
+ * Licences — /admin/my-licence and its five tabs (D800, #2233: Summary, Terms,
+ * Contract, Statements, Requests, History; the canvas `Licences Page.dc.html`).
+ * The subsidiary administrator's own view.
  *
  * A subsidiary admin is not a super admin: they run one territory under a
  * licence HQ issued them, and the design gives them their own dashboard rather
@@ -56,14 +70,6 @@ const fmtMoney = (cents, currency) => {
 // flattened that choice; the split is D117's, one layer down.
 const fmtBps = (bps) => bpsPercent(bps) ?? 'Not recorded';
 const fmtDate = (v) => (v ? String(v).slice(0, 10) : 'Not recorded');
-
-const STATUS_TONE = {
-  active: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
-  suspended: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  terminated: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-300',
-  pending_activation: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
-  draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-};
 
 const SEAT_LABEL = {
   founder: 'Founder', investor: 'Investor / LP', advisor: 'Advisor', partner: 'Service Partner',
@@ -140,18 +146,6 @@ function Panel({ icon: Icon, title, children }) {
       </h2>
       {children}
     </section>
-  );
-}
-
-function Row({ label, value }) {
-  const missing = value === 'Not recorded';
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5 text-sm">
-      <span className="text-gray-500 dark:text-gray-400">{label}</span>
-      <span className={missing
-        ? 'italic text-gray-400 dark:text-gray-500'
-        : 'font-medium text-gray-900 tabular-nums dark:text-gray-100'}>{value}</span>
-    </div>
   );
 }
 
@@ -389,8 +383,54 @@ export function LicencePullNote({ pull }) {
   );
 }
 
+/**
+ * D800 — the Terms tab's rows the licence row itself carries, chipped
+ * "Ledger" (board L2). Built here, with this page's own formatters, so a term
+ * the ledger lacks reads "Not recorded" exactly as it always has on this page.
+ * `term` names the D799 `REQUESTABLE_TERMS` key a row's "Request a change"
+ * opens on; a row without one offers none. `schedule` marks the sections D797's
+ * schedule fills (#2242), which say why they are empty until HQ records it.
+ */
+export function ledgerSections(l) {
+  const seats = l?.seats || {};
+  const r = (label, value, term) => ({ label, value, source: 'Ledger', ...(term ? { term } : {}) });
+  const territories = Array.isArray(l?.territories) && l.territories.length ? l.territories.join(', ') : 'Not recorded';
+  const host = l?.domain?.hostname
+    ? `${l.domain.hostname} · ${String(l.domain.state || 'Not recorded').replace(/_/g, ' ')}`
+    : (l?.domain_available === false ? 'Not recorded' : 'None bound');
+  return [
+    { title: 'Parties', schedule: true, rows: [
+      r('Licensee', [l?.legal_entity_name, l?.registered_address].filter(Boolean).join(', ') || 'Not recorded'),
+      r('Signatory', [l?.signatory_name, l?.signatory_title].filter(Boolean).join(', ') || 'Not recorded'),
+    ] },
+    { title: 'Territory and exclusivity', schedule: true, rows: [r('Countries', territories, 'territory')] },
+    { title: 'Term and renewal', schedule: true, rows: [
+      r('Start', l?.starts_on ? longDate(l.starts_on) : 'Not recorded', 'term'),
+      r('Length', l?.term_years ? `${l.term_years} years` : 'Not recorded', 'term'),
+      r('Renewal date', l?.renews_on ? longDate(l.renews_on) : 'Not recorded', 'term'),
+    ] },
+    { title: 'Fees and money', schedule: true, rows: [
+      r('Annual licence fee', fmtMoney(l?.annual_fee_cents, l?.currency), 'fee'),
+      r('Revenue share', fmtBps(l?.revenue_share_bps)),
+      r('AI token split', fmtBps(l?.token_split_bps)),
+    ] },
+    { title: 'Deal terms', schedule: true, rows: [] },
+    { title: 'Seats', rows: ['founder', 'investor', 'advisor', 'partner'].map((k) => r(
+      SEAT_LABEL[k], seats[k] === null || seats[k] === undefined ? 'Not recorded' : String(seats[k]), 'seats',
+    )) },
+    { title: 'Brand and platform', rows: [
+      r('Brand name', l?.brand_name || 'Not recorded'),
+      r('Kind', kindLabel(l?.kind)),
+      r('Custom host', host),
+    ] },
+    { title: 'Compliance and reporting', schedule: true, ladder: true, rows: [] },
+  ];
+}
+
 function MyLicencePageBody() {
   const { user } = useAuth();
+  // D800 — the tab is the sub-path App.jsx routed here (`/admin/my-licence/<tab>`).
+  const tab = tabFor(useLocation().pathname);
   const onBranch = Boolean(branchOfUser(user));
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
@@ -422,6 +462,9 @@ function MyLicencePageBody() {
       });
   }, []);
   useEffect(loadNotices, [loadNotices]);
+  // D800 — an answer changes what waits on the Administrator, so the Licences
+  // row's count and "Needs you" read again with the notices.
+  const onAnswered = useCallback(() => { loadNotices(); refreshLicenceNeeds(); }, [loadNotices]);
 
   // D197 — EXTRACTED SO THE DOMAIN WIZARD CAN RE-READ IT. The wizard's three
   // writes change a field on this very payload (`licence.domain`), so it hands
@@ -477,7 +520,7 @@ function MyLicencePageBody() {
   if (data.notPushed) {
     return (
       <div className="mx-auto max-w-4xl p-6" data-testid="licence-not-pushed">
-        <h1 className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">My licence</h1>
+        <h1 className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">Licences</h1>
         <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
             HQ has not pushed this branch its licence yet.
@@ -493,18 +536,22 @@ function MyLicencePageBody() {
     );
   }
 
+  // D800 — board L7's "No licence on record". HQ links a licence to an
+  // account; the Administrator cannot, so the one action is to ask HQ.
   if (data.none) {
     return (
-      <div className="mx-auto max-w-4xl p-6">
-        <h1 className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">My licence</h1>
-        <div className="rounded-xl border border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            You do not administer a territory licence.
+      <div className="mx-auto mt-10 max-w-xl p-6" data-testid="licence-none">
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-900">
+          <p className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+            Your account is not linked to a licence. Ask HQ.
           </p>
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            HQ assigns licence administrators. If that should be you, ask them to add your
-            account to the licence.
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Licences are issued and linked by Axal VC HQ. Once yours is linked, its terms, contract
+            and statements appear here.
           </p>
+          <Link to="/help" className="rounded-md bg-slate-700 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800">
+            Contact HQ
+          </Link>
         </div>
       </div>
     );
@@ -512,257 +559,253 @@ function MyLicencePageBody() {
 
   const l = data.licence || {};
   const seats = l.seats || {};
+  const state = pageState(data);
+  // D797's schedule rides `/mine` as `terms` once HQ records it; until then it
+  // is absent, and every term reads "Not recorded" with the reason.
+  const terms = data.terms && typeof data.terms === 'object' ? data.terms : null;
+  const seatView = seatRows(l);
 
-  return (
-    <div className="mx-auto max-w-4xl space-y-5 p-6">
-      {/* ABOVE THE BRAND NAME, DELIBERATELY. A frozen administrator's first
-          question is not which territory this is. The banner is the page's
-          first statement and the panels below it still render — a freeze stops
-          writes, not reading, and a page that replaced itself would be enforcing
-          something the server does not. */}
-      {Array.isArray(notices) && <NoticeBanner notices={notices} />}
-      <header>
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{l.brand_name}</h1>
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_TONE[l.status] || STATUS_TONE.draft}`}>
-            {String(l.status || '').replace(/_/g, ' ')}
-          </span>
-          <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-            {l.admin_role}
-          </span>
-        </div>
-        <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          {l.legal_entity_name} · licence {l.licence_ref || 'Not recorded'}
-        </p>
-        {/* D107 — a copy shows its age. On HQ `source` is absent and nothing
-            renders here: HQ's read IS the ledger, and stamping it would claim
-            a staleness it does not have. On a branch every HQ-owned figure on
-            the screen below came from this one push, so the stamp belongs at
-            the top of the page rather than repeated on each panel. */}
-        {data.source === 'hq_copy' && (
-          <p
-            data-testid="licence-as-of"
-            className="mt-1 text-xs text-gray-500 dark:text-gray-400"
-          >
-            Copy pushed by HQ · as of {fmtDate(data.as_of)}. HQ holds the licence itself;
-            a change there reaches this page on the next push.
+  const seatsCard = (
+    <section className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900" data-testid="licence-seats">
+      <div className="flex items-center justify-between gap-2.5 px-4 py-3 text-sm font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
+        <span>Seats</span>
+        <Link to={changeHref('seats')} className="text-[11.5px] font-bold text-slate-700 dark:text-slate-300">Request seats</Link>
+      </div>
+      <div className="space-y-2.5 border-t border-gray-100 px-4 pb-3.5 pt-2.5 dark:border-gray-800">
+        {/* D127 / D129 — A BRANCH COUNTS ITS OWN SEATS; HQ COUNTS NONE. The
+            used figure is read per type off `seats_used_by_type` and never
+            summed or derived here; on HQ that map is absent, so no bar is
+            filled and the sentence says why rather than drawing a zero. */}
+        {!seatView.counted && (
+          <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-400" data-testid="licence-seats-not-counted">
+            Seats used is not counted on HQ yet
           </p>
         )}
-        {l.status_note && (
-          <p className="mt-2 rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            {l.status_note}
-          </p>
-        )}
-      </header>
-
-      <BranchSettingsLink onBranch={onBranch} />
-
-      {/* D142 / S7 — WHAT A SUSPENSION ACTUALLY DOES, on the page that holds
-          the licence it was done to. The shell bar announces a refusal at the
-          moment it happens; this is the state, and the split is the one
-          `AdminFrozenBar` already draws between a bar and this page.
-
-          THE TWO LISTS COME FROM `lib/branchFreeze.js`, NOT FROM COPY TYPED
-          HERE. The Locked column is a claim about what the SERVER refuses, and
-          a hand-written version of it is a second copy of a rule that lives in
-          `requireBranchNotSuspended`'s call sites. `branch_shell_s7_s13` asserts
-          the files named there are exactly the files that call the gate, so a
-          sixth gate with no row — or a row naming a file with no gate — fails
-          the build rather than quietly mis-describing the product. */}
-      {l.status === 'suspended' && (
-        <section
-          data-testid="branch-suspended-detail"
-          className="rounded-xl border border-rose-200 bg-rose-50/60 p-4 dark:border-rose-900 dark:bg-rose-950/30"
-        >
-          <h2 className="text-sm font-bold text-rose-900 dark:text-rose-200">
-            Queues frozen by HQ{l.suspended_at ? ` since ${fmtDate(l.suspended_at)}` : ''}.
-          </h2>
-          <p className="mt-1 text-[13px] text-rose-900/90 dark:text-rose-200/90">
-            Your database is intact and nothing here is deleted. {FREEZE_RULE}
-          </p>
-          <div className="mt-3 grid gap-4 md:grid-cols-2">
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Still readable · your database, untouched
-              </div>
-              <ul className="mt-1.5 space-y-1.5">
-                {STILL_READABLE.map((r) => (
-                  <li key={r.row} className="text-[12.5px] text-gray-700 dark:text-gray-300">
-                    <span className="font-semibold">{r.row}</span> — {r.note}
-                  </li>
-                ))}
-              </ul>
+        {seatView.rows.map(({ key: k, ...r }) => (
+          <div key={k} className="space-y-1">
+            <div className="flex justify-between text-[12.5px]">
+              <span className="font-semibold text-gray-900 dark:text-gray-100">{SEAT_LABEL[k]}</span>
+              <span className="font-mono text-xs text-gray-600 dark:text-gray-400">
+                {r.used === null ? 'Not recorded' : r.used} / {seatFigure(seats[k])}
+              </span>
             </div>
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wide text-rose-700 dark:text-rose-300">
-                Locked · frozen by HQ
-              </div>
-              <ul className="mt-1.5 space-y-1.5" data-testid="branch-locked-rows">
-                {FROZEN.map((r) => (
-                  <li key={r.row} className="text-[12.5px] text-gray-700 dark:text-gray-300">
-                    <span className="font-semibold">{r.row}</span> — {r.note}
-                  </li>
-                ))}
-              </ul>
+            <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className={`h-1.5 rounded-full ${r.near ? 'bg-amber-700' : 'bg-slate-700 dark:bg-slate-300'}`} style={{ width: `${r.pct}%` }} />
             </div>
           </div>
-          {/* THE ONE DOOR OUT, and it is deliberately not gated by the freeze:
-              `routes/branch_escalations.ts` says so in its own header, because
-              gating the appeal would freeze the way out of the freeze. Off a
-              branch that door refuses, so the absence is named instead. */}
-          <LicenceAppeal onBranch={onBranch} />
-        </section>
-      )}
-
-      <div className="grid gap-5 md:grid-cols-2">
-        <Panel icon={Map} title="Territories held">
-          {(l.territories || []).length === 0 ? (
-            <p className="text-sm italic text-gray-400 dark:text-gray-500">No territory is held.</p>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {l.territories.map((cc) => (
-                <span key={cc} className="rounded-md border border-gray-200 px-2 py-1 font-mono text-xs text-gray-800 dark:border-gray-700 dark:text-gray-200">
-                  {cc}
-                </span>
-              ))}
-            </div>
-          )}
-          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            A country belongs to one licence at a time. Suspension does not release it;
-            only termination does.
-          </p>
-        </Panel>
-
-        <Panel icon={Percent} title="Commercial terms">
-          <Row label="Annual fee" value={fmtMoney(l.annual_fee_cents, l.currency)} />
-          <Row label="Revenue share" value={fmtBps(l.revenue_share_bps)} />
-          <Row label="Token split" value={fmtBps(l.token_split_bps)} />
-          <Row label="Term" value={l.term_years ? `${l.term_years} years` : 'Not recorded'} />
-        </Panel>
-
-        <Panel icon={Calendar} title="Dates">
-          <Row label="Starts" value={fmtDate(l.starts_on)} />
-          <Row label="Renews" value={fmtDate(l.renews_on)} />
-          {l.suspended_at && <Row label="Suspended" value={fmtDate(l.suspended_at)} />}
-          {l.terminated_at && <Row label="Terminated" value={fmtDate(l.terminated_at)} />}
-        </Panel>
-
-        <Panel icon={Building2} title="Entity">
-          <Row label="Legal entity" value={l.legal_entity_name || 'Not recorded'} />
-          <Row label="Registered address" value={l.registered_address || 'Not recorded'} />
-          <Row label="Signatory" value={l.signatory_name || 'Not recorded'} />
-          <Row label="Title" value={l.signatory_title || 'Not recorded'} />
-        </Panel>
+        ))}
+        {data.derived_metrics_available === false && data.derived_metrics_reason && (
+          <p className="text-[11px] text-gray-500 dark:text-gray-400">{data.derived_metrics_reason}</p>
+        )}
       </div>
+    </section>
+  );
 
-      <Panel icon={Users} title="Seats licensed">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {['founder', 'investor', 'advisor', 'partner'].map((k) => (
-            <div key={k} className="rounded-lg border border-gray-200 p-3 dark:border-gray-800">
-              <div className="text-xs text-gray-500 dark:text-gray-400">{SEAT_LABEL[k]}</div>
-              <div className="mt-0.5 text-2xl font-bold tabular-nums text-gray-900 dark:text-gray-100">
-                {seatFigure(seats[k])}
-              </div>
-            </div>
-          ))}
-        </div>
-        {data.derived_metrics_available === false && (
-          <p className="mt-4 rounded-lg bg-gray-50 p-3 text-xs text-gray-600 dark:bg-gray-800/60 dark:text-gray-400">
-            <strong className="font-semibold">Seats used is not shown.</strong>{' '}
-            {data.derived_metrics_reason}
-          </p>
-        )}
-      </Panel>
-
-      {/* S17–S19 — D197. THE WIZARD IS MOUNTED HERE BECAUSE THIS IS ALREADY
-          THE HOLDER'S OWN VIEW: `/admin/my-licence` resolves through
-          `licence_admins`, which is the same membership the three domain
-          writes are gated on, so the screen and the route agree about who is
-          asking without a second identity check.
-          The panel renders on every tier; what changes is the payload. On a
-          branch the server answers `domain_available: false` with its reason,
-          because the host register is HQ's — so the wizard states that instead
-          of offering a form whose every write would answer 501. */}
-      <Panel icon={Globe} title="Custom host">
-        <DomainWizard
-          domain={l.domain || null}
-          available={l.domain_available}
-          reason={l.domain_reason}
-          onChanged={loadLicence}
-        />
-      </Panel>
-
-      <Panel icon={Bell} title="Notices from HQ">
-        {notices === undefined && (
-          <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
-        )}
-        {/* An unreadable store is not an empty inbox — the same distinction the
-            two panels above already draw, on the surface where it matters most:
-            telling somebody whose account is frozen that they have no notices
-            would leave them with no route out of the freeze. */}
-        {notices === null && (
-          <p data-testid="licence-notices-unavailable" className="text-sm text-gray-500 dark:text-gray-400">
-            {noticesReason} This is not the same as having none — nothing was read.
-          </p>
-        )}
-        {Array.isArray(notices) && notices.length === 0 && (
-          <p className="text-sm italic text-gray-400 dark:text-gray-500">
-            HQ has sent you no notices.
-          </p>
-        )}
-        {Array.isArray(notices) && notices.length > 0 && (
-          <ul className="space-y-3">
-            {notices.map((n) => (
-              <NoticeCard key={n.uid} notice={n} onAnswered={loadNotices} />
-            ))}
-          </ul>
-        )}
-        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          HQ issues these; the deadline is theirs. What is yours is the answer — and answering is
-          what lifts a freeze, including after the deadline has passed.
-        </p>
-      </Panel>
-
-      <Panel icon={History} title="History">
-        {/* D107 — an empty array and an UNAVAILABLE trail are different claims
-            and must not share a sentence. `licence_events` is HQ's append-only
-            record and is not pushed to a branch, so the server sends
-            `events_available: false` with its reason; rendering that as
-            "Nothing recorded yet" would tell a branch admin that nothing has
-            happened to their licence, which is a statement about HQ's data
-            that this deployment cannot make. Checked BEFORE the length test,
-            since the array is empty in both cases. */}
-        {data.events_available === false ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400" data-testid="licence-events-unavailable">
-            {data.events_reason}
-          </p>
-        ) : (data.events || []).length === 0 ? (
-          <p className="text-sm italic text-gray-400 dark:text-gray-500">Nothing recorded yet.</p>
-        ) : (
-          <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-            {data.events.map((e, i) => (
-              <li key={`${e.created_at}-${i}`} className="flex items-baseline justify-between gap-4 py-2 text-sm">
-                <span className="text-gray-900 dark:text-gray-100">
-                  {String(e.event).replace(/_/g, ' ')}
-                  {e.note && <span className="ml-2 text-gray-500 dark:text-gray-400">{e.note}</span>}
-                </span>
-                <span className="shrink-0 tabular-nums text-xs text-gray-500 dark:text-gray-400">
-                  {fmtDate(e.created_at)}
-                </span>
+  // D142 / S7 — WHAT A SUSPENSION ACTUALLY DOES, on the page that holds
+  // the licence it was done to. The shell bar announces a refusal at the
+  // moment it happens; this is the state, and the split is the one
+  // `AdminFrozenBar` already draws between a bar and this page.
+  //
+  // THE TWO LISTS COME FROM `lib/branchFreeze.js`, NOT FROM COPY TYPED
+  // HERE. The Locked column is a claim about what the SERVER refuses, and
+  // a hand-written version of it is a second copy of a rule that lives in
+  // `requireBranchNotSuspended`'s call sites. `branch_shell_s7_s13` asserts
+  // the files named there are exactly the files that call the gate, so a
+  // sixth gate with no row — or a row naming a file with no gate — fails
+  // the build rather than quietly mis-describing the product. D800 draws it
+  // inside board L7's Suspended banner, which is where "what still works and
+  // what is frozen" sits on the canvas.
+  const suspendedDetail = l.status === 'suspended' && (
+    <section
+      data-testid="branch-suspended-detail"
+      className="mt-3 rounded-lg border border-rose-200 bg-white/70 p-3.5 dark:border-rose-900 dark:bg-rose-950/30"
+    >
+      <h2 className="text-sm font-bold text-rose-900 dark:text-rose-200">
+        Queues frozen by HQ{l.suspended_at ? ` since ${fmtDate(l.suspended_at)}` : ''}.
+      </h2>
+      <p className="mt-1 text-[13px] text-rose-900/90 dark:text-rose-200/90">
+        Your database is intact and nothing here is deleted. {FREEZE_RULE}
+      </p>
+      <div className="mt-3 grid gap-4 md:grid-cols-2">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            Still readable · your database, untouched
+          </div>
+          <ul className="mt-1.5 space-y-1.5">
+            {STILL_READABLE.map((r) => (
+              <li key={r.row} className="text-[12.5px] text-gray-700 dark:text-gray-300">
+                <span className="font-semibold">{r.row}</span> — {r.note}
               </li>
             ))}
           </ul>
+        </div>
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-rose-700 dark:text-rose-300">
+            Locked · frozen by HQ
+          </div>
+          <ul className="mt-1.5 space-y-1.5" data-testid="branch-locked-rows">
+            {FROZEN.map((r) => (
+              <li key={r.row} className="text-[12.5px] text-gray-700 dark:text-gray-300">
+                <span className="font-semibold">{r.row}</span> — {r.note}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      {/* THE ONE DOOR OUT, and it is deliberately not gated by the freeze:
+          `routes/branch_escalations.ts` says so in its own header, because
+          gating the appeal would freeze the way out of the freeze. Off a
+          branch that door refuses, so the absence is named instead. */}
+      <LicenceAppeal onBranch={onBranch} />
+    </section>
+  );
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
+      {/* ABOVE THE BRAND NAME, DELIBERATELY. A frozen administrator's first
+          question is not which territory this is. The banner is the page's
+          first statement on every tab and the tab below it still renders — a
+          freeze stops writes, not reading, and a page that replaced itself
+          would be enforcing something the server does not. */}
+      {Array.isArray(notices) && <NoticeBanner notices={notices} />}
+      <div className="space-y-2">
+        <LicenceHeader licence={l} terms={terms} />
+        {/* D107 — a copy shows its age. On HQ `source` is absent and nothing
+            renders here: HQ's read IS the ledger, and stamping it would claim
+            a staleness it does not have. */}
+        <CopyStamp data={data} />
+        {l.status_note && l.status !== 'suspended' && (
+          <p className="rounded-lg bg-amber-50 p-2.5 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            {l.status_note}
+          </p>
         )}
-        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          Append-only. Nothing here is ever edited or removed — a contract dispute is exactly
-          the case where an overwritten status is useless.
-        </p>
-      </Panel>
+        <LicenceTabs />
+      </div>
+
+      {tab === 'summary' && (
+        <LicenceSummary
+          licence={l}
+          terms={terms}
+          termsReason={data.terms_reason}
+          user={user}
+          state={state}
+          seats={seatsCard}
+          suspended={suspendedDetail}
+          after={(
+            <div className="grid gap-3 lg:grid-cols-2">
+              <BranchSettingsLink onBranch={onBranch} />
+              {/* S17–S19 — D197. THE WIZARD IS MOUNTED HERE BECAUSE THIS IS
+                  ALREADY THE HOLDER'S OWN VIEW: `/admin/my-licence` resolves
+                  through `licence_admins`, which is the same membership the
+                  three domain writes are gated on, so the screen and the route
+                  agree about who is asking without a second identity check.
+                  On a branch the server answers `domain_available: false` with
+                  its reason, because the host register is HQ's — so the wizard
+                  states that instead of offering a form whose every write would
+                  answer 501. The canvas draws the host as a Terms row; this is
+                  where it is bound. */}
+              <Panel icon={Globe} title="Custom host">
+                <DomainWizard
+                  domain={l.domain || null}
+                  available={l.domain_available}
+                  reason={l.domain_reason}
+                  onChanged={loadLicence}
+                />
+              </Panel>
+            </div>
+          )}
+        />
+      )}
+
+      {/* A frozen licence keeps its request lane open (D142 locks the queues, not
+          the way to HQ); a terminated one has nothing left to change. */}
+      {tab === 'terms' && (
+        <LicenceTerms sections={scheduleSections(ledgerSections(l), { terms, sections: data.sections, currency: l.currency })} reason={data.terms_reason} canRequest={l.status !== 'terminated'} />
+      )}
+
+      {/* D804 (#2241): its three tabs, each its own reads; none draws a rail of its own. */}
+      {tab === 'contract' && <ContractTab />}
+      {tab === 'statements' && <StatementsTab />}
+      {tab === 'requests' && <RequestsTab />}
+
+      {tab === 'history' && (
+        <div className="space-y-4" data-testid="licence-history">
+          {state === 'suspended' && <LicenceStateBanner banner={stateBanner(state, l)} />}
+          <Panel icon={Bell} title="Notices from HQ">
+            {notices === undefined && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
+            )}
+            {/* An unreadable store is not an empty inbox — telling somebody
+                whose account is frozen that they have no notices would leave
+                them with no route out of the freeze. */}
+            {notices === null && (
+              <p data-testid="licence-notices-unavailable" className="text-sm text-gray-500 dark:text-gray-400">
+                {noticesReason} This is not the same as having none — nothing was read.
+              </p>
+            )}
+            {Array.isArray(notices) && notices.length === 0 && (
+              <p className="text-sm italic text-gray-400 dark:text-gray-500">
+                HQ has sent you no notices.
+              </p>
+            )}
+            {Array.isArray(notices) && notices.length > 0 && (
+              <ul className="space-y-3">
+                {notices.map((n) => (
+                  <NoticeCard key={n.uid} notice={n} onAnswered={onAnswered} />
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              HQ issues these; the deadline is theirs. What is yours is the answer — and answering is
+              what lifts a freeze, including after the deadline has passed.
+            </p>
+          </Panel>
+
+          <Panel icon={History} title="Licence history">
+            {/* D107 — an empty array and an UNAVAILABLE trail are different claims
+                and must not share a sentence. `licence_events` is HQ's append-only
+                record and is not pushed to a branch, so the server sends
+                `events_available: false` with its reason; rendering that as
+                "Nothing recorded yet" would tell a branch admin that nothing has
+                happened to their licence, which is a statement about HQ's data
+                that this deployment cannot make. Checked BEFORE the length test,
+                since the array is empty in both cases. */}
+            {data.events_available === false ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400" data-testid="licence-events-unavailable">
+                {data.events_reason}
+              </p>
+            ) : (data.events || []).length === 0 ? (
+              <p className="text-sm italic text-gray-400 dark:text-gray-500">Nothing recorded yet.</p>
+            ) : (
+              <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+                {data.events.map((e, i) => (
+                  <li key={`${e.created_at}-${i}`} className="grid grid-cols-1 gap-x-4 gap-y-0.5 py-2 text-sm sm:grid-cols-[150px_110px_minmax(0,1fr)]" data-testid="licence-event">
+                    <span className="font-semibold text-gray-900 dark:text-gray-100">{eventLabel(e.event)}</span>
+                    <span className="font-mono text-xs text-gray-500 dark:text-gray-400">{longDate(e.created_at)}</span>
+                    <span className="text-gray-600 dark:text-gray-400">{e.note || 'by HQ'}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              Append-only. Nothing here is ever edited or removed — a contract dispute is exactly
+              the case where an overwritten status is useless.
+            </p>
+          </Panel>
+        </div>
+      )}
     </div>
   );
 }
 
+/** An event's machine word as board L6 names it: `terms_changed` → "Terms changed". */
+export function eventLabel(event) {
+  const s = String(event || '').replace(/_/g, ' ').trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Not recorded';
+}
+
 // D774 (#2100): S39 drew no rail. The board's page, in the Admin boards' frame.
+// D800 (#2233): one page for the six tabs; the body reads its tab from the path.
 export default function MyLicencePage() {
   return (
     <AdminBoardFrame workspace="Licences" note="Eadwyn reads your licence on this page. It changes nothing." data-testid="admin-board-settings">

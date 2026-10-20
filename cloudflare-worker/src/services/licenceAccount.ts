@@ -79,7 +79,7 @@ export function licensorRefusal(licensor: string | null | undefined): { refusal:
 
 type ContractView = {
   uid: string; template_title: string; template_version: number; status: string;
-  sent_at: string | null; signed_at: string | null; unfilled_fields: string[]; body_md: string;
+  drafted_at: string | null; sent_at: string | null; signed_at: string | null; unfilled_fields: string[]; body_md: string;
 };
 
 /** The caller's own signing link for a contract that is sent, or why there is none. */
@@ -127,7 +127,7 @@ function contractView(row: any): ContractView {
   try { const v = JSON.parse(String(row.unfilled_fields || '[]')); if (Array.isArray(v)) unfilled = v.map(String); } catch { /* left empty */ }
   return {
     uid: row.uid, template_title: row.template_title, template_version: Number(row.template_version),
-    status: String(row.status), sent_at: row.sent_at ?? null, signed_at: row.signed_at ?? null,
+    status: String(row.status), drafted_at: row.created_at ?? null, sent_at: row.sent_at ?? null, signed_at: row.signed_at ?? null,
     unfilled_fields: unfilled, body_md: String(row.body_md ?? ''),
   };
 }

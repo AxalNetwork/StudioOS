@@ -15,6 +15,7 @@ import { getSQL } from '../db';
 import { requireAuth } from '../auth';
 import { canAccessProject } from '../services/projectAccess';
 import { ensureDeckReviewSchema } from '../services/deckReviewSchema';
+import { railFor } from '../util/railContext';
 import {
   extractDeck,
   mapSections,
@@ -116,6 +117,15 @@ async function projectContext(
   }
 }
 
+/**
+ * D778 part 7 (#2103): the page and options D771's inventory gives the
+ * reviewer's three presses (`railOptions/founder.js`). A press's own headers
+ * win (`railFor`); these stand for a client that sent none. The record is the
+ * review the run writes to, never the browser's label.
+ */
+export const DECK_REVIEW_PAGE = 'Founder · Raise · Pitch deck';
+export const DECK_REVIEW_OPTIONS = { file: 'review:deck-file', text: 'review:deck-text', again: 'review:deck-again' } as const;
+
 // ---------------------------------------------------------------------------
 // POST /api/deck-reviewer/upload — multipart file upload → full pipeline.
 // ---------------------------------------------------------------------------
@@ -176,9 +186,10 @@ deckReviewer.post('/upload', async (c) => {
     return c.json({ ...full, extraction_error: extraction.error || null, fallback: 'paste' });
   }
 
-  const sections = await mapSections(c.env, user.id, extraction.markdown, extraction.chunks);
+  const rail = railFor(c, { page: DECK_REVIEW_PAGE, option: DECK_REVIEW_OPTIONS.file }, `deck_review:${id}`);
+  const sections = await mapSections(c.env, user.id, extraction.markdown, extraction.chunks, rail);
   const ctx = await projectContext(c.env, user, projectId);
-  const review = await generateReview(c.env, user.id, sections, { startup: ctx });
+  const review = await generateReview(c.env, user.id, sections, { startup: ctx }, rail);
 
   await sql`UPDATE deck_reviews SET extraction_status = 'ok', status = 'complete', chunks_json = ${JSON.stringify(extraction.chunks)}, sections_json = ${JSON.stringify(sections)}, review_json = ${JSON.stringify(review)}, updated_at = ${nowIso()} WHERE id = ${id}`;
   await sql`INSERT INTO deck_review_history (id, review_id, review_json, created_at) VALUES (${crypto.randomUUID()}, ${id}, ${JSON.stringify(review)}, ${nowIso()})`;
@@ -205,9 +216,10 @@ deckReviewer.post('/paste', async (c) => {
   await sql`INSERT INTO deck_reviews (id, user_id, project_id, source, filename, mime, size, r2_key, raw_retained, extraction_status, status, title, created_at, updated_at)
     VALUES (${id}, ${user.id}, ${projectId}, 'paste', ${typeof body.filename === 'string' ? body.filename.slice(0, 200) : 'Pasted deck'}, 'text/plain', ${text.length}, NULL, 0, 'ok', 'processing', ${typeof body.filename === 'string' ? body.filename.slice(0, 200) : 'Pasted deck'}, ${nowIso()}, ${nowIso()})`;
 
-  const sections = await mapSections(c.env, user.id, text, chunks);
+  const rail = railFor(c, { page: DECK_REVIEW_PAGE, option: DECK_REVIEW_OPTIONS.text }, `deck_review:${id}`);
+  const sections = await mapSections(c.env, user.id, text, chunks, rail);
   const ctx = await projectContext(c.env, user, projectId);
-  const review = await generateReview(c.env, user.id, sections, { startup: ctx });
+  const review = await generateReview(c.env, user.id, sections, { startup: ctx }, rail);
 
   await sql`UPDATE deck_reviews SET status = 'complete', chunks_json = ${JSON.stringify(chunks)}, sections_json = ${JSON.stringify(sections)}, review_json = ${JSON.stringify(review)}, updated_at = ${nowIso()} WHERE id = ${id}`;
   await sql`INSERT INTO deck_review_history (id, review_id, review_json, created_at) VALUES (${crypto.randomUUID()}, ${id}, ${JSON.stringify(review)}, ${nowIso()})`;
@@ -276,7 +288,8 @@ deckReviewer.post('/:id/regenerate', async (c) => {
   let sections = safeParse<DeckSection[]>(row.sections_json, []);
   if (!sections.length) sections = mapSectionsHeuristic(safeParse<DeckChunk[]>(row.chunks_json, []));
   const ctx = await projectContext(c.env, user, row.project_id ? Number(row.project_id) : null);
-  const review = await generateReview(c.env, user.id, sections, { startup: ctx });
+  const rail = railFor(c, { page: DECK_REVIEW_PAGE, option: DECK_REVIEW_OPTIONS.again }, `deck_review:${id}`);
+  const review = await generateReview(c.env, user.id, sections, { startup: ctx }, rail);
   await sql`UPDATE deck_reviews SET review_json = ${JSON.stringify(review)}, status = 'complete', updated_at = ${nowIso()} WHERE id = ${id}`;
   await sql`INSERT INTO deck_review_history (id, review_id, review_json, created_at) VALUES (${crypto.randomUUID()}, ${id}, ${JSON.stringify(review)}, ${nowIso()})`;
   const full = await loadReview(c.env, user.id, id);

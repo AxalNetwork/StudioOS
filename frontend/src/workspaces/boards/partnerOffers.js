@@ -1,4 +1,6 @@
 import { count, summary, title, top, usd, usdCents, total } from './format.js';
+import { partnerTestingApi } from '../../lib/api/productTesting.js';
+import { placesLine, statusLabel } from '../../pages/testing/programmeModel.js';
 
 /*
  * `/offers` — Partner Operator Canvas P5, "Package what we sell".
@@ -30,6 +32,7 @@ export default function partnerOffersBoard(role, api) {
       visibility: () => api.getPartnerVisibility(),
       proof: () => api.listPartnerProof(),
       fit: () => api.listPartnerFitRules(),
+      testing: () => partnerTestingApi.programmes(),
     },
     sections: [
       {
@@ -131,6 +134,24 @@ export default function partnerOffersBoard(role, api) {
             ? 'A rule with no statement produces exactly the silence this zone exists to replace.'
             : null,
         ),
+      },
+      {
+        // D815 (#2261): the firm's product testing programmes (D812).
+        slug: 'testing',
+        anchor: 'of-testing',
+        title: 'Product testing',
+        span: 'half',
+        source: 'testing',
+        cols: '1.6fr 1fr 1.2fr',
+        columns: ['Product', 'Status', 'Places'],
+        empty: 'This firm runs no testing programme yet.',
+        summary: (d) => summary(
+          count((Array.isArray(d?.items) ? d.items : []).filter((p) => p.status === 'open').length, 'open', 'open'),
+        ),
+        rows: (d) => top(d?.items).map((p) => [p.product_name, statusLabel(p.status), placesLine(p)]),
+        footnote: () =>
+          'A programme opens once HQ approves it. Testers hear from the firm through Axal VC Mail, '
+          + 'never from an address shown here.',
       },
     ],
   };

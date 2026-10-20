@@ -49,9 +49,11 @@ const NOTICE_PARTY: Record<NoticeType, { party: AxalEntityKey | 'per_entity'; li
   management_fee_invoice: { party: 'gp', line: `${AXAL_ENTITIES.gp.name}, to the Fund` },
   platform_licence_fee_invoice: { party: 'holdings', line: `${AXAL_ENTITIES.holdings.name}, to its licensee` },
   payment_instructions_letter: { party: 'per_entity', line: 'Issued per entity' },
+  // D802 (#2238): HQ's annual fee invoice to a territory licensee.
+  territory_licence_fee_invoice: { party: 'holdings', line: `${AXAL_ENTITIES.holdings.name}, to a territory licensee` },
 };
 
-/** Decision 1's ten, in order, built from the code. */
+/** Decision 1's ten, and D802's territory licence fee invoice, in order, built from the code. */
 export const GENERATED_DOCUMENTS: readonly GeneratedDocument[] = Object.freeze([
   ...NOTICE_TYPES.map((t): GeneratedDocument => ({
     key: t.type, title: t.title, kind: 'notice', party: NOTICE_PARTY[t.type].party, party_line: NOTICE_PARTY[t.type].line,
