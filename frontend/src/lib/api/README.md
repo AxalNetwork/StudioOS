@@ -180,7 +180,7 @@ the Super Admin's issue and void). Nothing here moves money.
 
 D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
 (`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
-Stripe plan invoices in one list, newest first. No UI reads it yet.
+Stripe plan invoices in one list, newest first. D789's Usage overview reads the newest three rows.
 
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one

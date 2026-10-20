@@ -10,6 +10,7 @@
  * while giving the new send() pipeline the headers it needs.
  */
 import type { Env } from '../../types';
+import { isSuppressed, type MailClass } from '../newsletter';
 
 // A DEADLINE ON EVERY OUTBOUND CALL IN THE MAIL PATH. `/magic/start` awaits the
 // send inline, so a Google endpoint that never answers holds a person's sign-in
@@ -94,6 +95,9 @@ export interface RawEmailOpts {
   attachments?: EmailAttachment[];
   /** Optional calendar meeting invite — see {@link CalendarInvite}. */
   calendarInvite?: CalendarInvite;
+  /** D810 — what this mail is, for the suppression list. Defaults to
+   *  `transactional`; account-security mail must say `security`. */
+  mailClass?: MailClass;
 }
 
 /** Scrub a value destined for a quoted MIME parameter (filename="…"). */
@@ -233,6 +237,7 @@ export function buildRawMimeMessage(opts: RawEmailOpts): string {
 }
 
 export async function sendRawEmail(env: Env, opts: RawEmailOpts): Promise<boolean> {
+  if (await isSuppressed(env, opts.to, opts.mailClass || 'transactional')) return false;
   try {
     const accessToken = await getGmailAccessToken(env);
     const rawEmail = buildRawMimeMessage(opts);

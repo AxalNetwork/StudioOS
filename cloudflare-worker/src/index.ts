@@ -60,6 +60,7 @@ import articlesRoutes from './routes/articles';
 import adminArticles from './routes/admin_articles';
 import teamPublic from './routes/team_public';
 import contactRoutes from './routes/contact';
+import newsletterRoutes from './routes/newsletter';
 import partnerOnboarding from './routes/partner_onboarding';
 import partnerPortal from './routes/partner_portal';
 // Task #10 (AC-1) — Personal advisor backend + write-router.
@@ -1335,6 +1336,9 @@ app.route('/api/public', networkPublic);
 // never GitHub, whose repo is public). No auth; Turnstile + honeypot +
 // validation + global per-IP rate cap.
 app.route('/api', contactRoutes);
+// D810 — newsletter lists: the public signup, confirm, preferences and
+// unsubscribe routes, and a member's /api/me/newsletters.
+app.route('/api', newsletterRoutes);
 // Task #2 — Public + author-facing /api/news. Public GETs are CORS-open
 // to axal.vc and edge-cached 60d; author writes self-gate on trust>=70.
 app.route('/api/news', newsRoutes);
