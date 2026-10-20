@@ -3,12 +3,25 @@ import type { Env } from '../types';
 import { userMeetsTier } from '../middleware/requireTier';
 import { effectiveInvestorTier } from '../middleware/requireInvestorTier';
 import { planAllowanceFor, type PlanAllowance } from './planAllowance';
+import { chargeMultiplier } from './ai/pricing';
 
 export const AI_USD_SCALE = 1_000_000;
 export const AI_CAP_DEFAULTS = { day: 5, month: 50, orgMonth: 5000 } as const;
 export const AI_CAP_VARS = { day: 'WORKERS_AI_BUDGET_USD_DAY', month: 'WORKERS_AI_BUDGET_USD_MONTH' } as const;
 export const AI_LICENCE_KEYS = ['founder:free','founder:growth','founder:studio','investor:free','investor:professional','investor:institutional','advisor','partner','admin','other'] as const;
 export type AiLicenceKey = typeof AI_LICENCE_KEYS[number];
+/**
+ * D762: the multiplier a member's runs are settled at (`chargeMultiplier`), from
+ * their licence. 1 while billing is on cost, and for a system run (no member).
+ */
+export async function memberChargeMultiplier(env: Env, userId: number): Promise<number> {
+  if (!(Number.isSafeInteger(userId) && userId > 0) || chargeMultiplier(env, 'other') === 1) return 1;
+  const user = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(userId).first<any>();
+  if (!user) throw new Error('AI account unreadable');
+  return chargeMultiplier(env, aiLicenceKey(user));
+}
+/** `usd` at `multiplier`, in micro-USD, rounded up once (never rounded, then multiplied). */
+export const billedUsdToMicro = (usd: number, multiplier: number): number => usdToMicro(usd * multiplier);
 export function usdToMicro(value: number): number {
   const n = Math.ceil(value * AI_USD_SCALE);
   if (!Number.isFinite(value) || value < 0 || !Number.isSafeInteger(n)) throw new Error('AI amount unreadable');

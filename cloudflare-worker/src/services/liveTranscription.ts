@@ -28,11 +28,11 @@ import { labelSegments, recordReceipt, storeLiveSegment, type SessionRow } from 
 /** Under the reservation's five-minute expiry, so a held block never lapses mid-stream. */
 export const LIVE_BLOCK_MINUTES = 4;
 
-/** The cost of one block of streaming on this model, in micro-USD. */
-export function blockQuoteMicro(model: string): number {
+/** One block of streaming on this model, in micro-USD, at `multiplier` over cost (D762: 1 while billing is on cost). */
+export function blockQuoteMicro(model: string, multiplier = 1): number {
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model];
   if (typeof perMinute !== 'number') throw new Error(`no websocket price for ${model}`);
-  return aiBudget.usdToMicro(perMinute * LIVE_BLOCK_MINUTES);
+  return aiBudget.billedUsdToMicro(perMinute * LIVE_BLOCK_MINUTES, multiplier);
 }
 
 /** Blocks needed to cover `elapsedMs` of streaming (at least one). */
@@ -64,7 +64,7 @@ export type HoldResult = { ok: true; reservation: aiBudget.AiReservation } | { o
 
 /** Hold one block. A refusal carries the budget's own message. */
 export async function holdBlock(env: Env, userId: number, model: string): Promise<HoldResult> {
-  const held = await aiBudget.reserveAiBudget(env, userId, blockQuoteMicro(model));
+  const held = await aiBudget.reserveAiBudget(env, userId, blockQuoteMicro(model, await aiBudget.memberChargeMultiplier(env, userId)));
   if (!held.ok) return { ok: false, refusal: held.refusal, message: budgetRefusalMessage(held.refusal) };
   return { ok: true, reservation: held.reservation };
 }
@@ -75,8 +75,10 @@ export async function settleStream(
 ): Promise<{ minutes: number; cost_microusd: number; units: Units }> {
   const minutes = billedMinutes(elapsedMs);
   const perMinute = PRICE_USD_PER_AUDIO_MINUTE_WEBSOCKET[model] ?? 0;
-  const total = aiBudget.usdToMicro(minutes * perMinute);
-  const parts = splitCost(total, blockQuoteMicro(model), holds.length);
+  // D762: the stream is settled at the billed price its blocks were held at.
+  const multiplier = holds.length ? await aiBudget.memberChargeMultiplier(env, holds[0].userId) : 1;
+  const total = aiBudget.billedUsdToMicro(minutes * perMinute, multiplier);
+  const parts = splitCost(total, blockQuoteMicro(model, multiplier), holds.length);
   let charged = 0;
   for (let i = 0; i < holds.length; i++) {
     try {
