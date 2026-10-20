@@ -72,7 +72,8 @@ test('every route that draws a rail has a page key for each role its guard admit
   assert.deepEqual(missing, []);
   for (const n of NO_RAIL_ROUTES) {
     assert.ok(n.why && n.why.length > 10, n.route);
-    assert.ok(routes.some((r) => r.path === n.route), `${n.route} is a rail route of the app`);
+    const candidates = n.railCount === 0 ? railRoutes() : routes;
+    assert.ok(candidates.some((r) => r.path === n.route), `${n.route} is a route of the app`);
   }
 });
 

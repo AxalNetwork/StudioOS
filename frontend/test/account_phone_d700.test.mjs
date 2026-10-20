@@ -458,7 +458,7 @@ test('10 (part). every phone bar this PR draws passes PhoneBar an eadwynLabel eq
     }
     assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws no Eadwyn button of its own`);
   }
-  // Perks keeps its phone rail; Learning home deliberately has none.
+  // The owner requested no rail on Perks or Learning home.
   const page = read('frontend/src/pages/SettingsPage.jsx');
   assert.match(page, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Account"/);
 });
@@ -769,9 +769,9 @@ test('10. A4m–A10m share one bar, which names itself to Eadwyn by its title; n
     assert.doesNotMatch(src, /Open Eadwyn for this page/, `${f} draws an Eadwyn button of its own`);
     for (const bar of src.matchAll(/<PhoneBar [^>]*\/>/g)) assert.match(bar[0], /eadwynLabel=\{page\.title\}/, `${f}: ${bar[0]}`);
   }
-  // Perks keeps its phone rail; Learning home deliberately has none.
+  // The owner requested no rail on Perks or Learning home.
   const perks = read('frontend/src/pages/PerksPage.jsx');
-  assert.match(perks, /\{phone \? \(\s*<PerksPhoneView[\s\S]*?\n      <\/div>\n      <WorkerRail\s+workspace="Perks & Products"/);
+  assert.doesNotMatch(perks, /<WorkerRail\b/);
   const learning = read('frontend/src/pages/learning/LearningHome.jsx');
   assert.match(learning, /<RailFrame data-testid="learning-home">\s*\{phone \? \(\s*<LearningPhoneView/);
   assert.doesNotMatch(learning, /<WorkerRail\b/);
