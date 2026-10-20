@@ -108,7 +108,7 @@ function freshDb() {
     CREATE TABLE project_metrics (
       id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL,
       snapshot_date TEXT NOT NULL, mrr REAL, arr REAL, cac REAL, ltv REAL,
-      monthly_churn_pct REAL, active_users INTEGER, new_users INTEGER,
+      monthly_churn_pct REAL, active_users INTEGER, new_users INTEGER, paying_accounts INTEGER,
       notes TEXT, source TEXT, created_by INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
