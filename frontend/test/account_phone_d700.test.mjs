@@ -259,15 +259,16 @@ const BUDGET = {
 };
 const PRODUCT = { configured: true, state: 'ready', product: { price_id: 'price_abc123', currency: 'usd', unit_amount: 1000 } };
 // D755 (#1915): A10m's Plans rows are the public plans-and-packs read's.
-const ALLOW = (d, m) => ({ daily_microusd: d, monthly_microusd: m, source: 'environment' });
+// D783 (#2124): a plan includes 25% of its price each month; no plan, none. No day figure.
+const ALLOW = (m) => ({ share: 0.25, monthly_microusd: m, source: m ? 'plan' : 'none' });
 const PLANS = {
   plans: [
-    { family: 'founder', licence_key: 'founder:free', product_id: null, plan_name: null, free: true, prices: [], allowance: ALLOW(0, 0) },
-    { family: 'investor', licence_key: 'investor:free', product_id: null, plan_name: null, free: true, prices: [], allowance: ALLOW(0, 0) },
-    { family: 'other', licence_key: 'other', product_id: null, plan_name: null, free: true, prices: [], allowance: ALLOW(0, 0) },
-    { family: 'advisor', licence_key: 'advisor', product_id: 'prod_adv', plan_name: 'Advisor', free: false, prices: [{ price_id: 'price_adv', unit_amount: 4900, currency: 'usd', interval: 'month', interval_count: 1 }], allowance: ALLOW(500_000, 2_000_000) },
-    { family: 'founder', licence_key: 'founder:growth', product_id: 'prod_g', plan_name: 'Validate + Build', free: false, prices: [{ price_id: 'price_g', unit_amount: 2000, currency: 'usd', interval: 'month', interval_count: 1 }], allowance: ALLOW(1_000_000, 5_000_000) },
-    { family: 'partner', licence_key: 'partner', product_id: 'prod_p', plan_name: 'Operating Partner', free: false, prices: [{ price_id: 'price_p', unit_amount: 9900, currency: 'usd', interval: 'month', interval_count: 1 }], allowance: ALLOW(0, 3_000_000) },
+    { family: 'founder', licence_key: 'founder:free', product_id: null, plan_name: null, free: true, prices: [], allowance: ALLOW(0) },
+    { family: 'investor', licence_key: 'investor:free', product_id: null, plan_name: null, free: true, prices: [], allowance: ALLOW(0) },
+    { family: 'other', licence_key: 'other', product_id: null, plan_name: null, free: true, prices: [], allowance: ALLOW(0) },
+    { family: 'advisor', licence_key: 'advisor', product_id: 'prod_adv', plan_name: 'Advisor', free: false, prices: [{ price_id: 'price_adv', unit_amount: 4900, currency: 'usd', interval: 'month', interval_count: 1 }], allowance: ALLOW(12_250_000) },
+    { family: 'founder', licence_key: 'founder:growth', product_id: 'prod_g', plan_name: 'Validate + Build', free: false, prices: [{ price_id: 'price_g', unit_amount: 2000, currency: 'usd', interval: 'month', interval_count: 1 }], allowance: ALLOW(5_000_000) },
+    { family: 'partner', licence_key: 'partner', product_id: 'prod_p', plan_name: 'Operating Partner', free: false, prices: [{ price_id: 'price_p', unit_amount: 9900, currency: 'usd', interval: 'month', interval_count: 1 }], allowance: ALLOW(24_750_000) },
   ],
   packs: [], covers: 'Covers Eadwyn.', resets: 'Resets at 00:00 UTC.',
 };
@@ -639,7 +640,7 @@ test('5. A4m–A10m: each section reads its values from the page\'s sources', ()
 
   const pricing = text(html(PHONE_VIEWS.pricing()));
   // D755 §11: every family's plans, each with its price and its own allowance; the member's plan under "Your plan".
-  assert.match(pricing, /Plans Founder Free No AI allowance on this plan\. Runs use your top-up balance\. \$0 Founder · Validate \+ Build Your plan · \$1\.00 a day · \$5\.00 a month \$20 \/ month Investor Free [^$]*\$0 Advisor · Advisor \$0\.50 a day · \$2\.00 a month \$49 \/ month Operating Partner · Operating Partner \$3\.00 a month \$99 \/ month Exploring and other accounts [^$]*\$0 Manage plan/);
+  assert.match(pricing, /Plans Founder Free No plan: every run uses your tokens\. \$0 Founder · Validate \+ Build Your plan · Includes \$5\.00 of AI each month: 25% of the price\. Past it, runs use your tokens\. \$20 \/ month Investor Free No plan: every run uses your tokens\. \$0 Advisor · Advisor Includes \$12\.25 of AI each month: 25% of the price\. Past it, runs use your tokens\. \$49 \/ month Operating Partner · Operating Partner Includes \$24\.75 of AI each month: 25% of the price\. Past it, runs use your tokens\. \$99 \/ month Exploring and other accounts No plan: every run uses your tokens\. \$0 Manage plan/);
   assert.match(html(PHONE_VIEWS.pricing()), /href="\/account\/billing"[^>]*>Manage plan</);
   assert.ok(pricing.includes(`Tokens Past your allowance ${TOKENS_LINE} Add tokens`));
   assert.ok(CANVAS_PAGES.pricing.chunk.includes(TOKENS_LINE), 'the Tokens line is AMP\'s');
@@ -714,19 +715,21 @@ test('8. Help: Popular this week first, no For you now, and Email support says w
 
 test('8. Plans (D755 §11): every row carries its own allowance; the member\'s licence marks one row', () => {
   const markup = html(PHONE_VIEWS.pricing());
-  assert.equal([...text(markup).matchAll(/ a day/g)].length, 2, 'Validate + Build and Advisor each say their day allowance');
+  // D783: members have no daily limit, so no row names a day; each paid row says its month.
+  assert.equal([...text(markup).matchAll(/ a day/g)].length, 0, 'no plan says a day allowance');
+  assert.equal([...text(markup).matchAll(/ of AI each month: 25% of the price/g)].length, 3, 'Validate + Build, Advisor and Operating Partner each say their month');
   assert.equal([...markup.matchAll(/data-testid="pricing-phone-current"/g)].length, 1);
   // While the member's allowance is out, no row is current; the allowances still show.
   const noBudget = html(h(PricingPhoneView, { pricing: ready(PLANS), budget: LOADING, product: ready(PRODUCT) }));
   assert.doesNotMatch(noBudget, /pricing-phone-current/);
-  assert.match(text(noBudget), /\$1\.00 a day · \$5\.00 a month/);
+  assert.match(text(noBudget), /Includes \$5\.00 of AI each month/);
   // While the read is out, no row and no "$0.00": the plans say they could not be read.
   const out = html(h(PricingPhoneView, { pricing: UNREADABLE, budget: ready(BUDGET), product: ready(PRODUCT) }));
   assert.doesNotMatch(out, /pricing-phone-(current|tier)/);
   assert.doesNotMatch(text(out), /\$0\.00/);
   // The current row follows the licence, not a role ladder.
   const adv = text(html(h(PricingPhoneView, { pricing: ready(PLANS), budget: ready({ ...BUDGET, licence: 'advisor' }), product: ready(PRODUCT) })));
-  assert.match(adv, /Advisor · Advisor Your plan · \$0\.50 a day/);
+  assert.match(adv, /Advisor · Advisor Your plan · Includes \$12\.25 of AI each month/);
 });
 
 test('8. a gated Learning draws the coming-soon line and Browse, Articles open, and reads none of the others', () => {

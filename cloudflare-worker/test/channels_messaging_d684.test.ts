@@ -1091,7 +1091,9 @@ test('#1586 voice: a spent budget shows on the note in our words; a retry runs o
     assert.equal(voiceJobs(queued).length, 1, 'nothing queued while the budget is spent');
     assert.equal((await call(env, OTHER, 'POST', `/threads/${uid}/voice/${note.uid}/retry`)).status, 404, 'not another member\'s');
 
-    db.prepare('UPDATE ai_licence_caps SET daily_microusd = 50000000, monthly_microusd = 50000000').run();
+    // D783: the member now pays a plan whose share covers the note.
+    db.exec(`INSERT INTO member_subscription_amounts(subscription_id, user_id, plan_family, amount_cents, currency, interval, interval_count, status)
+      SELECT 'sub_retry_'||id, id, 'founder', 20000, 'usd', 'month', 1, 'active' FROM users WHERE id > 1`);
     [note] = await waitingNotes(env, uid);
     assert.equal(note.transcription_failure.retry, 'available');
     const ok = await call(env, ME, 'POST', `/threads/${uid}/voice/${note.uid}/retry`);

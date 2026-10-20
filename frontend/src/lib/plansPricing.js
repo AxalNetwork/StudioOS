@@ -6,13 +6,13 @@
 // `reading` is `{ status, data }` as `useAccountRead` answers it: `loading`,
 // `ready` or anything else (unreadable). Prices are the read's, which are the
 // Stripe catalog's D1 mirror; nothing here types a price.
-import { microMoney } from './aiTokens.js';
+import { NO_PLAN_LINE, planAllowanceLine } from './planAllowance.js';
 
 export const TOKEN_PACKS_ID = 'token-packs';
 export const TOP_UP_WITH_PACKS = { label: 'Top up with token packs', href: `#${TOKEN_PACKS_ID}` };
 export const YOUR_PLAN = 'Your plan';
-export const NO_ALLOWANCE = 'No AI allowance on this plan. Runs use your top-up balance.';
-export const MI_ALLOWANCE = 'Does not change your AI allowance.';
+// D783: a free plan includes no AI; every run uses tokens.
+export const NO_ALLOWANCE = NO_PLAN_LINE;
 export const ALLOWANCE_UNREADABLE = "Unreadable · The AI allowances · The plans' prices are unaffected.";
 
 /** The family names (§11): after the role, as on the rail. */
@@ -44,17 +44,11 @@ export function planOf(metadata) {
 const micro = (n) => Number.isSafeInteger(n) && n >= 0;
 
 /**
- * "$1.00 a day · $5.00 a month", with only the parts above zero; the
- * no-allowance sentence when both are zero. Null when the allowance is not a
- * readable pair, so the caller says Unreadable and never "$0.00".
+ * D783: "Includes $19.75 of AI each month: 25% of the price. Past it, runs use
+ * your tokens.", or the no-plan line at $0. Null when the allowance is not
+ * readable, so the caller says Unreadable and never "$0.00".
  */
-export function allowanceLine(allowance) {
-  if (!allowance || !micro(allowance.daily_microusd) || !micro(allowance.monthly_microusd)) return null;
-  const parts = [];
-  if (allowance.daily_microusd > 0) parts.push(`${microMoney(allowance.daily_microusd)} a day`);
-  if (allowance.monthly_microusd > 0) parts.push(`${microMoney(allowance.monthly_microusd)} a month`);
-  return parts.length ? parts.join(' · ') : NO_ALLOWANCE;
-}
+export const allowanceLine = planAllowanceLine;
 
 const plansOf = (reading) => (reading?.status === 'ready' && Array.isArray(reading.data?.plans) ? reading.data.plans : null);
 
@@ -62,14 +56,13 @@ const plansOf = (reading) => (reading?.status === 'ready' && Array.isArray(readi
  * What one plan card says about AI (§11). `plan` is the read's row, or for a
  * catalog product the row with its `product_id`. Returns `null` while loading.
  *   { allowance, unreadable, covers, resets, topUp, current }
- * Market Intelligence Pro says it does not change the allowance and offers no
- * covers, resets or top-up lines: it has no allowance of its own.
+ * D783: Market Intelligence Pro is a paid plan like any other, so it gives
+ * its 25% too.
  */
 export function planAi(plan, reading, { licence = null } = {}) {
   if (reading?.status === 'loading') return null;
   const data = reading?.status === 'ready' ? reading.data : null;
   const current = !!plan && typeof licence === 'string' && plan.licence_key === licence;
-  if (plan?.family === 'market_intelligence') return { allowance: MI_ALLOWANCE, unreadable: false, covers: null, resets: null, topUp: null, current: false };
   const line = plan ? allowanceLine(plan.allowance) : null;
   if (!data || !line) return { allowance: ALLOWANCE_UNREADABLE, unreadable: true, covers: null, resets: null, topUp: null, current };
   return {

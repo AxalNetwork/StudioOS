@@ -22,6 +22,7 @@ import {
   FOUNDER_HANDLERS, FOUNDER_KINDS, FOUNDER_OPTIONS, FOUNDER_QUIET_PAGES,
 } from '../src/lib/railOptions/founder.js';
 import { pageKeyFor } from '../src/lib/railPages.js';
+import { railOptionFor } from '../src/lib/railOptions/index.js';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const CANVAS = JSON.parse(read('design/incoming/airail-every-page-data/canvas.json'));
@@ -193,6 +194,14 @@ const railKeys = (src) => [
   ...[...src.matchAll(/useRailOption\(([^;]*?)\);/g)].flatMap((m) => [...m[1].matchAll(/'([a-z]+:[a-z0-9_/-]+)'/g)].map((k) => k[1])),
   ...[...src.matchAll(/railOption="([a-z]+:[a-z0-9_/-]+)"/g)].map((m) => m[1]),
 ];
+/**
+ * D772 (#2098): a zone several profiles share names its control instead, and
+ * `railOptionFor` reads the key from the member's inventory. These are the
+ * keys its controls resolve to on a founder's page.
+ */
+const sharedKeys = (src, file, page) => [...src.matchAll(/railOptionFor\([^)]*control: '([^']+)'/g)]
+  .map((m) => railOptionFor(page, { file: file.replace(/^frontend\/src\//, ''), control: m[1] })?.key)
+  .filter(Boolean);
 
 test('every option names the address it is pressed on', () => {
   for (const o of FOUNDER_OPTIONS) {
@@ -211,7 +220,10 @@ test('on a wired section, each option is on its page and names itself to the rai
     if (o.handler === 'none') continue;
     const named = o.key.startsWith('fill:') ? fillNamed(sectionOf(o.page))
       : cycleDraft(o) ? draftNamed()
-      : (o.rail || [...new Set(o.at.map(([file]) => file))]).every((file) => railKeys(codeOnly(read(file))).includes(o.key));
+      : (o.rail || [...new Set(o.at.map(([file]) => file))]).every((file) => {
+        const src = codeOnly(read(file));
+        return railKeys(src).includes(o.key) || sharedKeys(src, file, o.page).includes(o.key);
+      });
     assert.ok(named, `${o.page} / ${o.key}: no useRailOption('${o.key}', …) where it lives`);
   }
   // And the other way: every option a wired file names is listed there.

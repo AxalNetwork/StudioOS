@@ -100,4 +100,4 @@ lands. D781's closing PR rewrites it to what shipped.
   - **AI allowances,** `/admin/platform/allowances`: plan amounts and held runs.
   - **One member's ledger:** `GET /api/ai-budget/members/:userId`.
 
-**After D776 (#2093).** Each account's consumption is shown by page and by option. The new run rows are `GET /api/ai-budget/runs`.
+**After D776 (#2093).** Each account's consumption is shown by page and by option. The new run rows are `GET /api/ai-budget/runs`. On HQ › AI allowances, HQ reads how members are charged and the models offered (`GET /api/ai/catalogue/hq`), and one member's month and each run (`GET /api/ai-budget/members/:userId/runs`, logged on every read).

@@ -53,7 +53,7 @@ import {
 // point; only the caller moved.
 import { insertHypothesis, insertHypothesisLink, setInterviewIcpFit, upsertPainSeverity } from './_founder_validate_writes';
 import { FILL_KINDS, fillKind } from '../services/fills/registry';
-import { claimFills, recordFill } from '../services/fills/provenance';
+import { claimFills, ensureProposalRunColumn, recordFill } from '../services/fills/provenance';
 // `PROPOSAL_KINDS`, `TASK_FOR_KIND`, `TAG_PROMPT`, `DRAFT_PROMPT` and the two
 // parsers are gone from this file: the registry owns them per kind now, and it is
 // the parsers themselves the registry calls. They stay exported from that module
@@ -684,6 +684,7 @@ founderValidate.post('/propose/:projectId', async (c) => {
 
   const created: Array<{ id: number; kind: string; payload: unknown }> = [];
   const refused: string[] = [];
+  await ensureProposalRunColumn(c.env);
   for (const p of proposed.slice(0, MAX_PROPOSALS_PER_RUN)) {
     // THE SECOND CHECK, AND NOT A REDUNDANT ONE. `parse` refuses what it can see
     // — an unmatched phrase, a figure it could not source — and this refuses what
@@ -700,8 +701,8 @@ founderValidate.post('/propose/:projectId', async (c) => {
     const ins = await c.env.DB.prepare(
       `INSERT INTO validate_proposals
          (project_id, kind, payload_json, model, task, created_by,
-          surface, fill_class, citation_json, target_ref)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          surface, fill_class, citation_json, target_ref, ai_usage_log_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       s.project.id, kind, JSON.stringify(p.payload),
       // The model that ACTUALLY ran, from the router's usage metadata. Not the
@@ -712,6 +713,8 @@ founderValidate.post('/propose/:projectId', async (c) => {
       spec.surface, spec.fillClass,
       p.citation ? JSON.stringify(p.citation) : null,
       p.targetRef,
+      // D777 part 2: the usage row of this run, so the value it fills can name it.
+      r.usageLogId ?? null,
     ).run();
     created.push({ id: Number(ins.meta?.last_row_id || 0), kind, payload: p.payload });
   }
@@ -794,6 +797,9 @@ type ProposalRow = {
   // has not applied it — both read as "no citation, no explicit target".
   target_ref: string | null; citation_json: string | null;
   model: string | null; task: string | null;
+  // Migration 503 (D777 part 2): the run that proposed it. Null before 503 and
+  // on a proposal from a path that does not record its run.
+  ai_usage_log_id: number | null;
 };
 
 /** The proposal plus the project that owns it, or null. */
@@ -802,8 +808,9 @@ async function loadProposal(env: Env, id: number): Promise<ProposalRow | null> {
   // the accept path now writes a provenance row and all four travel onto it.
   // Migration 246 added the first two; a database that has not run it returns
   // them as null, which is what the coalescing reads below expect.
+  await ensureProposalRunColumn(env);
   return env.DB.prepare(
-    `SELECT id, project_id, kind, payload_json, status, target_ref, citation_json, model, task
+    `SELECT id, project_id, kind, payload_json, status, target_ref, citation_json, model, task, ai_usage_log_id
        FROM validate_proposals WHERE id = ?`,
   ).bind(id).first<ProposalRow>();
 }
@@ -920,6 +927,9 @@ founderValidate.post('/proposals/:id/accept', async (c) => {
       model: row.model ?? null,
       task: row.task ?? null,
       decidedBy: s.user.id,
+      // D777 part 2: the row as the proposal named it, and the run that proposed it.
+      targetRowRef: row.target_ref ?? null,
+      usageLogId: row.ai_usage_log_id ?? null,
     });
     return json({ ok: true, kind: row.kind, ...(applied.result || {}) }, row.kind === 'hypothesis' ? 201 : 200);
   } catch (e) {

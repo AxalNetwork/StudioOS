@@ -148,14 +148,19 @@ export async function addToCapture(
     const enc = await encryptColumn(env, 'whatsapp_captures', 'media_refs_enc', uid, JSON.stringify([item]));
     const fetchBy = new Date(now.getTime() + CAPTURE_LIMITS.fetchDays * 86_400_000).toISOString();
     // The venture the draft opens in, fixed now (S1 on #1938): where the member
-    // pointed when they sent it, even if they change the picker later. Until
-    // #1939 records a choice on the link, their most recently updated venture.
+    // pointed when they sent it, even if they change the picker later. Their
+    // choice on the link (#1939 part 3, migration 504) while they can still
+    // write it, else their most recently updated venture.
     await env.DB.prepare(
       `INSERT INTO whatsapp_captures (uid, user_id, integration_id, media_refs_enc, item_count, status, fetch_by, created_at, project_id)
-       VALUES (?, ?, ?, ?, 1, 'waiting', ?, ?,
+       VALUES (?, ?, ?, ?, 1, 'waiting', ?, ?, COALESCE(
+         (SELECT p.id FROM whatsapp_link_settings s
+           JOIN projects p ON p.id = s.project_id AND p.deleted_at IS NULL
+           JOIN users u ON u.id = ? AND u.founder_id IS NOT NULL AND p.founder_id = u.founder_id
+           WHERE s.integration_id = ?),
          (SELECT p.id FROM projects p JOIN users u ON u.id = ? AND u.founder_id IS NOT NULL AND p.founder_id = u.founder_id
-           WHERE p.deleted_at IS NULL ORDER BY p.updated_at DESC, p.id DESC LIMIT 1))`,
-    ).bind(uid, link.user_id, link.id, enc, fetchBy, now.toISOString(), link.user_id).run();
+           WHERE p.deleted_at IS NULL ORDER BY p.updated_at DESC, p.id DESC LIMIT 1)))`,
+    ).bind(uid, link.user_id, link.id, enc, fetchBy, now.toISOString(), link.user_id, link.id, link.user_id).run();
     return { uid, created: true };
   }
   throw new Error('capture_contended');

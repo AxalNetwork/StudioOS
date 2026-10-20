@@ -231,6 +231,7 @@ test('GET /history pages newest first, adds runs on request, shows only the memb
 test('the public read lists every family with its allowance, names no person, never calls Stripe and is cached', async () => {
   const f = await world(); const s = stripeStub({ products: [], prices: [] });
   try {
+    // D783: a row typed for a member licence before D783 is not read; each plan gives 25% of its price.
     f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:growth',1000000,5000000,1)").run();
     f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('advisor',0,0,1)").run();
     const r = await call(f, 'GET', '/api/public/plans-and-packs', null);
@@ -242,14 +243,15 @@ test('the public read lists every family with its allowance, names no person, ne
       'investor:investor:free:null', 'investor:investor:professional:prod_pro', 'market_intelligence:null:prod_mi', 'other:other:null',
       'partner:partner:prod_partner',
     ], 'an unmarked product gets no card');
-    assert.deepEqual(byKey['founder:founder:growth:prod_growth'].allowance, { daily_microusd: 1000000, monthly_microusd: 5000000, source: 'recorded' });
-    assert.deepEqual(byKey['advisor:advisor:prod_advisor'].allowance, { daily_microusd: 0, monthly_microusd: 0, source: 'recorded' });
-    assert.deepEqual(byKey['founder:founder:studio:prod_studio'].allowance, { daily_microusd: 5000000, monthly_microusd: 50000000, source: 'environment' });
-    assert.equal(byKey['market_intelligence:null:prod_mi'].allowance, null);
-    assert.deepEqual(byKey['founder:founder:growth:prod_growth'].prices, [{ price_id: 'price_growth', unit_amount: 4900, currency: 'usd', interval: 'month', interval_count: 1 }]);
+    assert.deepEqual(byKey['founder:founder:growth:prod_growth'].allowance, { share: 0.25, monthly_microusd: 12250000, source: 'plan' });
+    assert.deepEqual(byKey['advisor:advisor:prod_advisor'].allowance, { share: 0.25, monthly_microusd: 7250000, source: 'plan' });
+    assert.deepEqual(byKey['founder:founder:studio:prod_studio'].allowance, { share: 0.25, monthly_microusd: 49750000, source: 'plan' });
+    assert.deepEqual(byKey['market_intelligence:null:prod_mi'].allowance, { share: 0.25, monthly_microusd: 4750000, source: 'plan' }, 'Market Intelligence Pro gives its share too');
+    assert.deepEqual(byKey['founder:founder:growth:prod_growth'].prices, [{ price_id: 'price_growth', unit_amount: 4900, currency: 'usd', interval: 'month', interval_count: 1, allowance_microusd: 12250000 }]);
     assert.equal(byKey['founder:founder:free:null'].free, true);
+    assert.deepEqual(byKey['founder:founder:free:null'].allowance, { share: 0.25, monthly_microusd: 0, source: 'none' }, 'no plan, no allowance');
     assert.deepEqual(r.body.packs.map((p: any) => p.label), ['$10 of tokens', '$25 of tokens']);
-    assert.match(r.body.covers, /^Covers Eadwyn/); assert.equal(r.body.resets, 'Resets at 00:00 UTC each day and on the 1st each month.');
+    assert.match(r.body.covers, /^Covers Eadwyn/); assert.equal(r.body.resets, 'Resets on the 1st of each month at 00:00 UTC.');
     const keys = keysOf(r.body);
     for (const k of ['recorded_by', 'recorded_by_name', 'recorded_at', 'user_id', 'member_id', 'name', 'email']) assert.ok(!keys.includes(k), `no ${k}`);
     for (const word of ['Owner', 'owner@example.test']) assert.ok(!r.text.includes(word), `no ${word}`);
