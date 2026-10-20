@@ -98,8 +98,6 @@ const PROGRAMME = {
   product_name: 'Ledger beta', summary: 'A new close process', tester_tasks: 'Run one month-end close',
   time_needed: '2 hours a week', places: 2, eligible_roles: ['founder'], questions: ['What do you use today?'],
 };
-const events = (w: any) => w.db.prepare('SELECT action, actor_user_id FROM testing_events ORDER BY id').all().map((r: any) => `${r.action}:${r.actor_user_id}`);
-const bell = (w: any, user: number) => w.db.prepare('SELECT type FROM notifications_inbox WHERE user_id = ? ORDER BY id').all(user).map((r: any) => r.type);
 
 /** A partner programme through submit, approve and open; returns its uid. */
 async function openPartnerProgramme(w: any, extra: Record<string, unknown> = {}) {
@@ -109,9 +107,6 @@ async function openPartnerProgramme(w: any, extra: Record<string, unknown> = {})
   assert.equal((await call(w, HQ, 'POST', `/admin/testing/programmes/${uid}/open`)).status, 200);
   return uid;
 }
-const applyAs = (w: any, who: number, uid: string, consent = true) =>
-  call(w, who, 'POST', `/testing/programmes/${uid}/apply`, { answers: ['Spreadsheets'], availability: 'Evenings', consent_email: consent });
-
 
 const IDA = 24, IAN = 25;
 /** Two more founders: one whose account is closed, one who withdraws. */
