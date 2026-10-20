@@ -656,7 +656,7 @@ test('the Worker AI rail sits beside the page, in the shared frame (D556), with 
   assert.match(rail, /role="founder"/);
   assert.match(rail, /coverage=\{accountRailCoverage\(data, activeLabel\)\}/);
   // RailFrame docks it to the edge and collapses it through --fwr-track.
-  assert.match(page, /<RailFrame\s+rail=\{\(\s*<WorkerRail\s+workspace="Account"/);
+  assert.match(page, /<RailFrame\s+rail=\{safeActive !== 'connectors' && \(\s*<WorkerRail\s+workspace="Account"/);
   assert.doesNotMatch(page, /grid-cols-\[minmax\(0,1fr\)_var\(--fwr-track/, 'no bare rail column beside the frame');
   // The voice rule, on the copy this page hands the rail.
   assert.doesNotMatch(rail, /advis|recommend|fiduciary/i);

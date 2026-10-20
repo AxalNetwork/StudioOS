@@ -414,13 +414,12 @@ export default function SettingsPage() {
     </>
   );
 
-  // D568 — the page sits beside the Worker AI rail, in the one frame every
-  // rail host uses (D556's `RailFrame`). D700 — on a phone the frame and its
-  // rail stay mounted, and the phone view replaces the heading and the body
-  // inside it.
+  // Account sections use the shared rail frame. The owner requested no AI
+  // rail on Connectors, including each connector's page, on desktop or phone.
+  // With no rail, RailFrame gives the whole column to the existing body.
   return (
     <RailFrame
-      rail={(
+      rail={safeActive !== 'connectors' && (
         <WorkerRail
           workspace="Account"
           // A literal, as on Send for signature: the Account canvas draws this
