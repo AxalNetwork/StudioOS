@@ -100,6 +100,12 @@ jobs:
       # it first — the same root build the deploy runs.
       - name: Build the SPA
         run: npm run build
+      - name: D789 focused render and mutation checks (temporary diagnostics)
+        run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/usage_console_d789.test.mjs frontend/test/usage_page_d642.test.mjs frontend/test/limits_page_d807.test.mjs
+      - name: D789 phone and dark browser checks (temporary diagnostics)
+        run: |
+          npx --no-install playwright install --with-deps chromium
+          node frontend/test/_usage_browser_d789.mjs
       - run: npm run test:drift
 
   # -------------------------------------------------------------------------

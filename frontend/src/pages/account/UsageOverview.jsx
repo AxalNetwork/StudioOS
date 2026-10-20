@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { toUtcInstant } from '../../lib/notices';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
+import { billingInvoicesApi } from '../../lib/api/billingInvoices';
 import { EmptyState, PhoneBar, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import { overviewScopeFor } from './BillingCards';
 import { allowanceView, balanceText } from './billingModel';
 import { limitView, packOrdersCard } from './limitsModel';
-import { INVOICES_PENDING, USAGE_SUBTITLE, costReadable, recentInvoices } from './costModel';
+import { USAGE_SUBTITLE, costReadable, monthIsEmpty, recentInvoices } from './costModel';
 import { DailyCostChart, TokenUsageChart } from './UsageCharts';
 
 const OPEN = 'text-xs font-semibold text-axal-violet hover:underline dark:text-violet-300';
@@ -101,12 +102,11 @@ function InvoicePdf({ row }) {
   };
   return <><button type="button" className={BTN.ghost} onClick={download} disabled={busy}>{busy ? 'Opening…' : 'PDF'}</button>{error && <span role="alert">{error}</span>}</>;
 }
-/** Ready for D806; no request is made to an endpoint that is not mounted yet. */
+/** D806's newest three unified order/plan invoices, preserving partial Stripe failure. */
 export function RecentInvoices({ invoices }) {
   const rows = invoices.status === 'ready' ? recentInvoices(invoices.data) : null;
   return <PanelCard title="Recent invoices" action={<Open card="invoices">Open billing</Open>} data-testid="overview-invoices">
-    {invoices.status === 'not_recorded' ? <p className="text-xs text-axal-muted dark:text-gray-400">Not recorded: {INVOICES_PENDING}</p>
-      : <UsageCardState read={invoices} what="Recent invoices">
+    <UsageCardState read={invoices} what="Recent invoices">
         {!rows ? <Unrecorded reason="The invoice list was not returned.">Not recorded</Unrecorded>
           : <>{invoices.data.degraded?.includes('stripe') && <Unreadable what="Plan invoices" claim="The order invoices below still load." onRetry={invoices.reload} />}
             {!rows.length ? <EmptyState size="sm" title="No invoices yet." /> : rows.map((row) => {
@@ -118,10 +118,10 @@ export function RecentInvoices({ invoices }) {
                 <Pill tone={row.status === 'paid' ? 'info' : 'neutral'}>{{ paid: 'Paid', refunded: 'Refunded', partly_refunded: 'Partly refunded', open: 'Open', void: 'Void' }[row.status] || 'Not recorded'}</Pill><span className="font-mono">{amount ?? 'Not recorded'}</span><InvoicePdf row={row} />
               </div>;
             })}</>}
-      </UsageCardState>}
+      </UsageCardState>
   </PanelCard>;
 }
-export function UsageOverviewView({ me, limit, overview, autoReload, cost, invoices, month }) {
+export function UsageOverviewView({ me, limit, overview, autoReload, cost, invoices, emptyMonth }) {
   return <div className="flex min-w-0 flex-col gap-4" data-testid="usage-overview">
     <div className="-mx-[22px] lg:hidden"><PhoneBar back={{ label: 'Account', to: '/account' }} title="Usage" sub={USAGE_SUBTITLE} /></div>
     <header className="hidden lg:block"><h2 className="text-xl font-extrabold tracking-axal-heading">Usage</h2><p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{USAGE_SUBTITLE}</p></header>
@@ -131,21 +131,31 @@ export function UsageOverviewView({ me, limit, overview, autoReload, cost, invoi
       <PanelCard title="Daily cost, last 30 days" action={<Open card="daily">Open cost</Open>} data-testid="overview-daily"><UsageCardState read={cost} what="Daily cost">{costReadable(cost.data) ? <DailyCostChart data={cost.data} /> : <Unrecorded reason="The daily cost breakdown was not returned.">Not recorded</Unrecorded>}</UsageCardState></PanelCard>
       <PanelCard title="Token usage, input vs output" action={<Open card="tokens">Open cost</Open>} data-testid="overview-tokens"><UsageCardState read={cost} what="Token usage">{costReadable(cost.data) ? <TokenUsageChart data={cost.data} /> : <Unrecorded reason="The daily token counts were not returned.">Not recorded</Unrecorded>}</UsageCardState></PanelCard>
     </div>
-    {month?.status === 'ready' && costReadable(month.data) && month.data.totals.runs === 0 && !month.data.truncated && <><EmptyState size="sm" title="No AI runs yet this month." /><Link to="/studio" className={BTN.ghost}>Open Studio</Link></>}
+    {emptyMonth === true && <><EmptyState size="sm" title="No AI runs yet this month." /><Link to="/studio" className={BTN.ghost}>Open Studio</Link></>}
     <div className="grid min-w-0 gap-3 md:grid-cols-2"><LimitsOverview me={me} limit={limit} /><RecentInvoices invoices={invoices} /></div>
   </div>;
 }
+/** Forward old anchors before mounting any account reads. */
 export default function UsageOverview({ role }) {
+  const { hash } = useLocation();
+  if (/^#(?:days|where|models|last-run|storage)$/.test(hash)) return <Navigate to={`/account/usage/cost${hash}`} replace />;
+  return <UsageOverviewReads role={role} />;
+}
+export function readRecentInvoices(client = billingInvoicesApi) {
+  return client.list({ page: 1, per: 3 });
+}
+function UsageOverviewReads({ role, now = new Date() }) {
   const me = useAccountRead(() => aiBudgetApi.mine());
   const limit = useAccountRead(() => aiBudgetApi.spendLimit());
   const overview = useAccountRead(() => api.billingOverview(overviewScopeFor(role)));
   const autoReload = useAccountRead(() => aiBudgetApi.autoReload());
   const cost = useAccountRead(() => aiBudgetApi.cost({ range: '30d', group: 'model' }));
-  const month = useAccountRead(() => aiBudgetApi.cost({ range: 'mtd', group: 'model' }));
-  const { hash } = useLocation();
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (/^#(?:days|where|models|last-run|storage)$/.test(hash)) navigate(`/account/usage/cost${hash}`, { replace: true });
-  }, [hash, navigate]);
-  return <UsageOverviewView me={me} limit={limit} overview={overview} autoReload={autoReload} cost={cost} month={month} invoices={{ status: 'not_recorded' }} />;
+  const invoices = useAccountRead(() => readRecentInvoices());
+  // A 30-day read covers the whole month except on the 31st. Only that UTC
+  // day needs the extra read; a charge of zero cannot prove zero runs.
+  const needsMonth = now.getUTCDate() === 31;
+  const month = useAccountRead(() => aiBudgetApi.cost({ range: 'mtd', group: 'model' }), { enabled: needsMonth });
+  const activity = needsMonth ? month : cost;
+  const emptyMonth = activity.status === 'ready' ? monthIsEmpty(activity.data, now) : null;
+  return <UsageOverviewView me={me} limit={limit} overview={overview} autoReload={autoReload} cost={cost} emptyMonth={emptyMonth} invoices={invoices} />;
 }

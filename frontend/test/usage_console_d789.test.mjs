@@ -41,7 +41,7 @@ const sample = () => ({
 });
 const me = { balance_microusd: 2500000, plan: { monthly_microusd: 20000000 }, month_spend_microusd: 5000000 };
 const limit = { charged_microusd: 5000000, limit_microusd: 20000000, resets_on: '2026-11-01', pack_orders: { today: 1, per_day: 5, window_hours: 24 } };
-const props = () => ({ me: ready(me), limit: ready(limit), overview: ready({ payment_methods: [] }), autoReload: ready({ enabled: true }), cost: ready(sample()), month: ready(sample()), invoices: { status: 'not_recorded' } });
+const props = () => ({ me: ready(me), limit: ready(limit), overview: ready({ payment_methods: [] }), autoReload: ready({ enabled: true }), cost: ready(sample()), emptyMonth: false, invoices: ready({ invoices: [] }) });
 const html = (element) => renderToStaticMarkup(h(MemoryRouter, {}, element));
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -126,10 +126,15 @@ test('model colours are stable across ranges, filters and charts; canvas IDs kee
     assert.equal(m.modelColour(OTHER), '#475569');
     const unknown = m.modelColour('@cf/future/model');
     assert.equal(unknown, m.modelColour('@cf/future/model'));
-    assert.ok(m.MODEL_PALETTE.includes(unknown));
+    assert.match(unknown, /^hsl\(/);
+    assert.ok(!m.MODEL_PALETTE.includes(unknown));
+    const ids = [...read('../../cloudflare-worker/src/services/ai/catalogue.ts').matchAll(/\bid: '([^']+)'/g)].map((match) => match[1]);
+    assert.ok(ids.length > 0, 'the actual catalogue was read');
+    assert.equal(new Set(ids.map(m.modelColour)).size, ids.length, 'every current catalogue model has a distinct stable colour');
   };
   check(colours);
   await killed('../src/lib/modelColours.js', 'return MODEL_COLOURS[key]', "return '#000000'", check);
+  await killed('../src/lib/modelColours.js', 'hash % 360_000', '0', check);
   const data = sample();
   const before = model.dailySeries(data).legend.find((r) => r.model === OTHER).colour;
   data.models.reverse();
@@ -165,11 +170,11 @@ test('cost rows keep units, partial charges and missing grouped fields', async (
 });
 
 test('invoice rows are newest three, retain PDFs, reject executable URLs and show partial Stripe failure', async () => {
-  const data = { items: [1, 4, 2, 3].map((n) => ({ kind: 'stripe', id: n, date: '2026-10-0' + n, description: 'Plan invoice', amount_cents: 2500, currency: 'USD', status: 'paid', pdf_url: 'https://example.com/invoice-' + n + '.pdf' })), degraded: ['stripe'] };
+  const data = { invoices: [1, 4, 2, 3].map((n) => ({ kind: 'stripe', id: n, date: '2026-10-0' + n, description: 'Plan invoice', amount_cents: 2500, currency: 'USD', status: 'paid', pdf_url: 'https://example.com/invoice-' + n + '.pdf' })), degraded: ['stripe'] };
   const check = (m) => {
     assert.deepEqual(m.recentInvoices(data).map((r) => r.id), [4, 3, 2]);
     assert.equal(m.invoiceHref('javascript:alert(1)'), null);
-    assert.deepEqual(m.recentInvoices({ items: [{ id: 'later', date: '2026-10-04 23:00:00' }, { id: 'earlier', date: '2026-10-04T12:00:00Z' }] }).map((r) => r.id), ['later', 'earlier']);
+    assert.deepEqual(m.recentInvoices({ invoices: [{ id: 'later', date: '2026-10-04 23:00:00' }, { id: 'earlier', date: '2026-10-04T12:00:00Z' }] }).map((r) => r.id), ['later', 'earlier']);
     assert.equal(m.invoiceHref('//example.com/a.pdf'), null);
     assert.equal(m.invoiceHref('/api/orders/ORDER-1/invoice'), '/api/orders/ORDER-1/invoice');
     assert.equal(m.invoiceHref('https://example.com/a.pdf'), 'https://example.com/a.pdf');
@@ -182,17 +187,17 @@ test('invoice rows are newest three, retain PDFs, reject executable URLs and sho
   assert.match(out, /invoice-4.pdf/);
   assert.doesNotMatch(out, /invoice-1.pdf/);
   assert.match(out, /\$25\.00/);
-  assert.match(html(h(overview.RecentInvoices, { invoices: ready({ items: [] }) })), /No invoices yet/);
+  assert.match(html(h(overview.RecentInvoices, { invoices: ready({ invoices: [] }) })), /No invoices yet/);
 });
 
-test('missing invoice dependency is explicit, while failed reads never become an empty list', async () => {
+test('missing invoice payload is explicit, while failed reads never become an empty list', async () => {
   const check = (m) => {
-    assert.match(html(h(m.RecentInvoices, { invoices: { status: 'not_recorded' } })), /Not recorded: The combined invoice list is not available yet/);
+    assert.match(html(h(m.RecentInvoices, { invoices: ready({}) })), /Not recorded/);
     assert.match(html(h(m.RecentInvoices, { invoices: failed })), /Recent invoices could not be read/);
     assert.doesNotMatch(html(h(m.RecentInvoices, { invoices: failed })), /No invoices yet/);
   };
   check(overview);
-  await killed('../src/pages/account/UsageOverview.jsx', 'Not recorded: {INVOICES_PENDING}', 'No invoices yet.', check);
+  await killed('../src/pages/account/UsageOverview.jsx', '<Unrecorded reason="The invoice list was not returned.">Not recorded</Unrecorded>', '<span>No invoices yet.</span>', check);
 });
 
 test('balance pills depend on their own successful reads and a missing limit is named', async () => {
@@ -231,7 +236,7 @@ test('empty, loading, unreadable and truncated cost remain distinct', async () =
   await killed('../src/pages/account/CostPage.jsx', 'read.truncated &&', 'false &&', check);
   assert.match(html(h(overview.UsageCardState, { read: { status: 'loading' }, what: 'Cost' })), /account-loading/);
   const empty = { ...sample(), totals: { ...sample().totals, runs: 0 }, days: [], models: [] };
-  assert.match(html(h(overview.UsageOverviewView, { ...props(), cost: ready(empty), month: ready(empty) })), /Open Studio/);
+  assert.match(html(h(overview.UsageOverviewView, { ...props(), cost: ready(empty), emptyMonth: true })), /Open Studio/);
 });
 
 test('CSV uses the authenticated client with range and group; Cost retains all detailed cards', async () => {
@@ -265,7 +270,8 @@ test('the canonical address and navigation offer Overview, Cost, Limits without 
   assert.match(settings, /usagePage === 'cost' \? <CostPage role=\{role\} \/>/);
   assert.match(settings, /import UsageSection from '.\/account\/UsageOverview'/);
   const source = read('../src/pages/account/UsageOverview.jsx');
-  assert.match(source, /navigate\(`\/account\/usage\/cost\$\{hash\}`, \{ replace: true \}\)/);
+  assert.match(source, /<Navigate to=\{`\/account\/usage\/cost\$\{hash\}`\} replace \/>/);
+  assert.ok(source.indexOf('return <Navigate') < source.indexOf('function UsageOverviewReads'), 'legacy redirects precede the read component');
 });
 
 test('stacked chart renders every model/day cost and token lines label the recorded values', async () => {
@@ -280,4 +286,36 @@ test('stacked chart renders every model/day cost and token lines label the recor
   };
   check(charts);
   await killed('../src/pages/account/UsageCharts.jsx', 'data-cost={s.cost}', 'data-cost={s.cost * 2}', check);
+});
+
+test('the month empty state reuses a complete 30-day slice and does not infer runs from spend', async () => {
+  const readFor = (from, to, runDay = null) => {
+    const days = [];
+    for (let ms = Date.parse(from + 'T00:00:00Z'); ms <= Date.parse(to + 'T00:00:00Z'); ms += 86400000) {
+      const day = new Date(ms).toISOString().slice(0, 10);
+      days.push({ day, by_model: day === runDay ? [{ model: MODEL, cost_usd: 0, input_tokens: 0, output_tokens: 0 }] : [] });
+    }
+    return { ...sample(), range: { from, to }, days, totals: { ...sample().totals, runs: runDay ? 1 : 0 } };
+  };
+  const check = (m) => {
+    assert.equal(m.monthIsEmpty(readFor('2026-09-21', '2026-10-20'), new Date('2026-10-20T12:00:00Z')), true);
+    assert.equal(m.monthIsEmpty(readFor('2026-09-21', '2026-10-20', '2026-10-01'), new Date('2026-10-20T12:00:00Z')), false, 'a free run still counts');
+    assert.equal(m.monthIsEmpty(readFor('2026-10-02', '2026-10-31'), new Date('2026-10-31T12:00:00Z')), null, '30 days cannot prove an empty 31-day month');
+    assert.equal(m.monthIsEmpty(readFor('2026-10-01', '2026-10-31'), new Date('2026-10-31T12:00:00Z')), true);
+    assert.equal(m.monthIsEmpty({ ...readFor('2026-10-01', '2026-10-20'), truncated: true }, new Date('2026-10-20T12:00:00Z')), null);
+  };
+  check(model);
+  await killed('../src/pages/account/costModel.js', "read.range.from > first", 'false', check);
+  await killed('../src/pages/account/costModel.js', 'd.by_model.length === 0', 'true', check);
+});
+
+test('overview reads only the newest three from the mounted unified invoice client', async () => {
+  const calls = [];
+  const client = { list: (value) => { calls.push(value); return Promise.resolve({ invoices: [] }); } };
+  await overview.readRecentInvoices(client);
+  assert.deepEqual(calls, [{ page: 1, per: 3 }]);
+  const changed = await mutant('../src/pages/account/UsageOverview.jsx', 'client.list({ page: 1, per: 3 })', 'client.list({ page: 1, per: 25 })');
+  calls.length = 0;
+  await changed.readRecentInvoices(client);
+  assert.notDeepEqual(calls, [{ page: 1, per: 3 }]);
 });
