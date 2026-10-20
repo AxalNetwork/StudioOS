@@ -100,7 +100,30 @@ jobs:
       # it first — the same root build the deploy runs.
       - name: Build the SPA
         run: npm run build
-      - run: npm run test:drift
+      - name: D789 focused render and mutation checks (temporary diagnostics)
+        run: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/usage_console_d789.test.mjs frontend/test/usage_page_d642.test.mjs frontend/test/limits_page_d807.test.mjs
+      - name: D789 phone and dark browser checks (temporary diagnostics)
+        run: |
+          npx --no-install playwright install --with-deps chromium
+          node frontend/test/_usage_browser_d789.mjs
+      - name: Full drift suite with bounded diagnostics
+        shell: bash
+        run: |
+          set +e
+          npm run test:drift > drift.log 2>&1
+          drift_status=$?
+          set -e
+          python3 - <<'PY'
+          from pathlib import Path
+          lines = Path('drift.log').read_text().splitlines()
+          keep = set(range(max(0, len(lines)-100), len(lines)))
+          for i, line in enumerate(lines):
+              if any(word in line for word in ('not ok', 'error:', 'ERR_ASSERTION', 'STALE:', '✖')):
+                  keep.update(range(max(0, i-3), min(len(lines), i+35)))
+          for i in sorted(keep): print(lines[i])
+          PY
+          echo EXIT=$drift_status
+          exit $drift_status
 
   # -------------------------------------------------------------------------
   # API ↔ Worker drift smoke test (T1). Static analysis: every /api/* path

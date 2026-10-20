@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { toUtcInstant } from '../../lib/notices';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { EmptyState, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
@@ -111,10 +112,10 @@ export function RecentInvoices({ invoices }) {
             {!rows.length ? <EmptyState size="sm" title="No invoices yet." /> : rows.map((row) => {
               let amount = null;
               try { if (Number.isSafeInteger(row.amount_cents) && row.currency) amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: row.currency }).format(row.amount_cents / 100); } catch { /* invalid currency remains missing */ }
-              const date = new Date(row.date);
+              const date = new Date(toUtcInstant(row.date) || NaN);
               return <div key={`${row.kind}:${row.id}`} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline py-3 text-xs last:border-0 dark:border-gray-800">
                 <div className="min-w-0"><time>{Number.isNaN(date.getTime()) ? 'Not recorded' : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })}</time><p className="break-words font-semibold">{row.description || 'Not recorded'}</p></div>
-                <span>{String(row.status || 'Not recorded').replace(/_/g, ' ')}</span><span className="font-mono">{amount ?? 'Not recorded'}</span><InvoicePdf row={row} />
+                <Pill tone={row.status === 'paid' ? 'info' : 'neutral'}>{{ paid: 'Paid', refunded: 'Refunded', partly_refunded: 'Partly refunded', open: 'Open', void: 'Void' }[row.status] || 'Not recorded'}</Pill><span className="font-mono">{amount ?? 'Not recorded'}</span><InvoicePdf row={row} />
               </div>;
             })}</>}
       </UsageCardState>}

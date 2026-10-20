@@ -1,4 +1,5 @@
 /** D789 (#2214): pure views of D787/D805's member cost read; no invented totals. */
+import { toUtcInstant } from '../../lib/notices';
 import { modelColour } from '../../lib/modelColours';
 import { usd, microUsd } from './usageModel';
 
@@ -96,8 +97,13 @@ export function invoiceHref(value) {
   if (/^\/api\/orders\/[A-Za-z0-9_-]+\/invoice$/.test(value)) return value;
   try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password ? url.href : null; } catch { return null; }
 }
+function invoiceTime(value) {
+  const instant = toUtcInstant(value);
+  const time = instant ? Date.parse(instant) : NaN;
+  return Number.isFinite(time) ? time : -Infinity;
+}
 export function recentInvoices(read) {
   if (!read || !Array.isArray(read.items)) return null;
-  return [...read.items].sort((a, b) => String(b.date).localeCompare(String(a.date)))
+  return [...read.items].sort((a, b) => invoiceTime(b.date) - invoiceTime(a.date))
     .slice(0, 3).map((r) => ({ ...r, href: invoiceHref(r.pdf_url) }));
 }

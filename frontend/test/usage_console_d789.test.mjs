@@ -162,12 +162,13 @@ test('invoice rows are newest three, retain PDFs, reject executable URLs and sho
   const check = (m) => {
     assert.deepEqual(m.recentInvoices(data).map((r) => r.id), [4, 3, 2]);
     assert.equal(m.invoiceHref('javascript:alert(1)'), null);
+    assert.deepEqual(m.recentInvoices({ items: [{ id: 'later', date: '2026-10-04 23:00:00' }, { id: 'earlier', date: '2026-10-04T12:00:00Z' }] }).map((r) => r.id), ['later', 'earlier']);
     assert.equal(m.invoiceHref('//example.com/a.pdf'), null);
     assert.equal(m.invoiceHref('/api/orders/ORDER-1/invoice'), '/api/orders/ORDER-1/invoice');
     assert.equal(m.invoiceHref('https://example.com/a.pdf'), 'https://example.com/a.pdf');
   };
   check(model);
-  await killed('../src/pages/account/costModel.js', 'String(b.date).localeCompare(String(a.date))', 'String(a.date).localeCompare(String(b.date))', check);
+  await killed('../src/pages/account/costModel.js', 'invoiceTime(b.date) - invoiceTime(a.date)', 'invoiceTime(a.date) - invoiceTime(b.date)', check);
   await killed('../src/pages/account/costModel.js', "url.protocol === 'https:'", "(url.protocol === 'https:' || url.protocol === 'javascript:')", check);
   const out = html(h(overview.RecentInvoices, { invoices: ready(data) }));
   assert.match(out, /Plan invoices could not be read/);
