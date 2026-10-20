@@ -39,6 +39,11 @@ export const TOKEN_SURFACES = [
   'cloudflare-worker/src/services/aiCredits.ts',
   'cloudflare-worker/src/services/aiTopups.ts',
   'cloudflare-worker/src/services/aiCreditReversals.ts',
+  // D794 (#2219): Billing's Auto-reload card and the Worker's reload notices.
+  'frontend/src/pages/account/AutoReloadCard.jsx',
+  'frontend/src/pages/account/AutoReloadCardSetup.jsx',
+  'frontend/src/pages/account/autoReloadModel.js',
+  'cloudflare-worker/src/services/aiAutoReload.ts',
 ];
 
 /** Where a person reads Perks credits: Perks, and HQ's member credits and credit rules. */

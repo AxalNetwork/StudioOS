@@ -63,7 +63,7 @@ function stripeCalls(): Call[] {
 const CALLS = stripeCalls();
 const isCreate = (c: Call) => c.method === 'POST' && c.path !== null && (STRIPE_CREATE_PATHS as readonly string[]).includes(stripePathOf(c.path));
 
-test('every stripeCall that POSTs to a create path names its money kind, and there are exactly the thirteen', () => {
+test('every stripeCall that POSTs to a create path names its money kind, and there are exactly the fourteen', () => {
   const creates = CALLS.filter(isCreate);
   assert.deepEqual(creates.map((c) => `${c.file} ${stripePathOf(c.path!)}`).sort(), [
     'routes/billing.ts /checkout/sessions', 'routes/billing.ts /checkout/sessions', 'routes/billing.ts /checkout/sessions',
@@ -71,7 +71,10 @@ test('every stripeCall that POSTs to a create path names its money kind, and the
     'routes/legal.ts /checkout/sessions', 'routes/legal.ts /invoiceitems', 'routes/legal.ts /invoices',
     'routes/orders.ts /payment_intents',
     'routes/payments.ts /payment_intents', 'routes/payments.ts /subscriptions',
-    'services/advisorConnect.ts /payment_intents', 'services/eventTickets.ts /payment_intents',
+    'services/advisorConnect.ts /payment_intents',
+    // D794 (#2219): an auto-reload is a token-pack order, created unconfirmed and confirmed off-session.
+    'services/aiAutoReload.ts /payment_intents',
+    'services/eventTickets.ts /payment_intents',
     'services/wellbeing/bookings.ts /payment_intents',
   ]);
   for (const c of creates) assert.ok(c.moneyKind, `${c.file}:${c.line} creates ${c.path} with no moneyKind`);
@@ -97,7 +100,8 @@ test('every stripeCall whose body writes metadata[kind] passes a moneyKind', () 
     'routes/billing.ts /checkout/sessions', 'routes/billing.ts /checkout/sessions', 'routes/billing.ts /checkout/sessions',
     'routes/billing.ts /subscriptions', 'routes/billing.ts /subscriptions/${subId}',
     'routes/legal.ts /checkout/sessions', 'routes/legal.ts /invoices', 'routes/legal.ts /payment_intents/${piId}',
-    'routes/orders.ts /payment_intents', 'services/advisorConnect.ts /payment_intents', 'services/eventTickets.ts /payment_intents',
+    'routes/orders.ts /payment_intents', 'services/advisorConnect.ts /payment_intents', 'services/aiAutoReload.ts /payment_intents',
+    'services/eventTickets.ts /payment_intents',
     'services/wellbeing/bookings.ts /payment_intents',
   ], 'the two re-stamping updates included');
   for (const c of writers) assert.ok(c.moneyKind, `${c.file}:${c.line} writes metadata[kind] with no moneyKind`);

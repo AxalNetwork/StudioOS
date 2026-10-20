@@ -74,7 +74,7 @@ const doorsIn = (code) => [...code.matchAll(/\bto="(\/[^"]*)"/g)].map((m) => m[1
 test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin after Contracts, one group, each an /admin console or /studio and never /branch/*', () => {
   assert.equal(SIDEBAR_GROUPS.admin.length, 1, 'S20 draws one group');
   assert.deepEqual(rows.map((r) => r.label),
-    ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Settings']);
+    ['Studio', 'Accounts', 'Approvals', 'Programs', 'Community', 'Contracts', 'Fund admin', 'Insights', 'Licences']);
   assert.deepEqual(rows.map((r) => r.to), [
     '/studio',
     '/admin/held/accounts',
@@ -150,7 +150,7 @@ test('off a branch, Studio card Open links are the S20 rows and never /branch/*'
     ['admin-studio-community', 'Community'],
     ['admin-studio-contracts', 'Contracts'],
     ['admin-studio-insights', 'Insights'],
-    ['admin-studio-settings', 'Settings'],
+    ['admin-studio-settings', 'Licences'],
   ];
   for (const [id, label] of cards) {
     const at = html.indexOf(`data-testid="${id}"`);
@@ -342,7 +342,7 @@ test('the accent is steel and the shell key is still admin', () => {
   assert.equal(shellRoleFor('admin', plain, true), 'admin', 'no new shell key: a plain admin still gets `admin`');
 });
 
-test('the wall rules: search says HQ-held accounts, the scope sentence is the frame\'s, licensing is only Settings', () => {
+test('the wall rules: search says HQ-held accounts, the scope sentence is the frame\'s, licensing is only Licences', () => {
   assert.match(ADMIN_PAGE, /: 'Searching HQ-held accounts';/, 'the Users table\'s search does not say what it searches off a branch');
   assert.match(CODE[ZONE], /data-testid="held-scope"/, 'the scope sentence is not drawn');
   assert.match(SRC[ZONE], /No branch is deployed yet, so these accounts have no branch database/,
@@ -354,6 +354,6 @@ test('the wall rules: search says HQ-held accounts, the scope sentence is the fr
     assert.doesNotMatch(CODE[file], /<WorkerRail\b/, `${file} mounts a rail of its own`);
   }
   const licence = rows.filter((r) => /licen[cs]e/.test(r.to));
-  assert.deepEqual(licence.map((r) => [r.label, r.to]), [['Settings', '/admin/my-licence']],
-    'licensing appears somewhere other than the read-only summary in Settings');
+  assert.deepEqual(licence.map((r) => [r.label, r.to]), [['Licences', '/admin/my-licence']],
+    'licensing appears somewhere other than the read-only summary in Licences (D796)');
 });
