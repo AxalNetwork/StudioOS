@@ -74,9 +74,16 @@ test('Portfolio: each board\'s route answers its page key for an investor, the l
 
 test('Portfolio: each board draws exactly one rail of its own', () => {
   for (const f of ['pages/investor/InvestorPortfolioCanvas.jsx', 'pages/investor/InvestorPortfolioPositions.jsx', 'pages/investor/InvestorPortfolioUpdates.jsx',
-    'pages/investor/InvestorPortfolioValueAdd.jsx', 'pages/PortfolioWorkspace.jsx']) {
+    'pages/investor/InvestorPortfolioValueAdd.jsx']) {
     assert.equal((read(f).match(/<WorkerRail\b/g) || []).length, 1, f);
   }
+  // PortfolioWorkspace draws one rail per viewer, each in its own branch: the
+  // investor's Performance (PR 1) and, since D773, the operating partner's Delivery.
+  const pw = read('pages/PortfolioWorkspace.jsx');
+  assert.equal((pw.match(/<WorkerRail\b/g) || []).length, 2);
+  assert.equal((pw.match(/<WorkerRail workspace="Portfolio" role="investor"/g) || []).length, 1, 'the investor\'s');
+  assert.equal((pw.match(/<WorkerRail workspace="Delivery" role="partner"/g) || []).length, 1, 'the partner\'s');
+  assert.match(pw, /if \(viewer === 'partner'\) \{\s*return \(/, 'the partner\'s rail is a branch of its own');
   // Performance's one rail is PortfolioWorkspace's frame (PR 1); its page draws none of its own.
   assert.doesNotMatch(read('pages/PortfolioPerformancePage.jsx'), /<WorkerRail\b|<RailFrame\b/);
 });
