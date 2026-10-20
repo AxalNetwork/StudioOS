@@ -40,8 +40,11 @@ const CSRF_HEADER = 'X-CSRF-Token';
 // mailbox UI (Gmail, Outlook), not the user's browser session — they
 // will never carry the studioos_csrf cookie+header pair. The HMAC token
 // in the URL IS the authorisation, so this path is safe to exempt.
+// D810 — the newsletter's one-click unsubscribe is the same case: its signed
+// token is the authorisation.
 const CSRF_PATH_EXEMPT = new Set([
   '/api/notifications/unsubscribe',
+  '/api/newsletter/unsubscribe',
 ]);
 
 function readCookie(cookieHeader: string, name: string): string | null {

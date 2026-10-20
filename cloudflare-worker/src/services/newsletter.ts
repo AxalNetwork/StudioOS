@@ -216,3 +216,71 @@ export function tooSoon(row: Pick<SubscriberRow, 'last_email_at'> | null, now = 
   const at = Date.parse(row.last_email_at.includes('T') ? row.last_email_at : `${row.last_email_at.replace(' ', 'T')}Z`);
   return Number.isFinite(at) && now - at < EMAIL_PACE_MS;
 }
+
+/** A fresh subscriber uid, the shape migration 515's backfill writes. */
+export function newSubscriberUid(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** May this member hold the investor topics? */
+export function isInvestorMember(user: { role?: string | null }): boolean {
+  return INVESTOR_ROLES.has(String(user.role || ''));
+}
+
+/** A member's subscriber row: theirs by user_id, else the one on their account email. */
+export async function memberSubscriber(env: Env, user: { id: number; email: string }): Promise<SubscriberRow | null> {
+  const byUser = await env.DB.prepare(`SELECT ${SUBSCRIBER_COLS} FROM newsletter_subscribers WHERE user_id = ?`).bind(user.id).first<SubscriberRow>();
+  if (byUser) return byUser;
+  const email = normalizeEmail(user.email);
+  return email ? subscriberByEmail(env, email) : null;
+}
+
+/**
+ * Turns the subscriber's mail back on with a fresh consent: confirmed, no
+ * confirm token, the consent recorded, and any `unsubscribe` suppression
+ * lifted. A row that was unsubscribed has its `token_version` raised, so links
+ * sent before the unsubscribe stop working.
+ */
+export async function markConfirmed(env: Env, row: SubscriberRow, extra: { userId?: number | null; ipHash?: string | null } = {}): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE newsletter_subscribers
+        SET status = 'confirmed', confirm_token_hash = NULL, confirm_expires_at = NULL,
+            consent_text_version = ?, consented_at = datetime('now'),
+            confirmed_at = datetime('now'), unsubscribed_at = NULL,
+            token_version = token_version + ?,
+            user_id = COALESCE(user_id, ?), ip_hash = COALESCE(?, ip_hash)
+      WHERE id = ?`,
+  ).bind(CONSENT_TEXT_VERSION, row.status === 'unsubscribed' ? 1 : 0, extra.userId ?? null, extra.ipHash ?? null, row.id).run();
+  await liftUnsubscribe(env, row.email);
+}
+
+/**
+ * Saves a signed-in member's choices on their account email. A member is
+ * signed in with a verified address, so no confirmation email is needed: the
+ * row is `account`-sourced and confirmed the first time a topic is turned on.
+ * Returns the row as it now stands.
+ */
+export async function saveMemberTopics(
+  env: Env, user: { id: number; email: string }, choices: Record<string, boolean>,
+): Promise<SubscriberRow | null> {
+  const email = normalizeEmail(user.email);
+  if (!email) return null;
+  let row = await memberSubscriber(env, user);
+  const turningOn = Object.values(choices).some(Boolean);
+  if (!row) {
+    if (!turningOn) return null;
+    await env.DB.prepare(
+      `INSERT INTO newsletter_subscribers (uid, email, user_id, status, source, consent_text_version, consented_at, confirmed_at)
+       VALUES (?, ?, ?, 'confirmed', 'account', ?, datetime('now'), datetime('now'))`,
+    ).bind(newSubscriberUid(), email, user.id, CONSENT_TEXT_VERSION).run();
+    await liftUnsubscribe(env, email);
+  } else {
+    if (row.user_id == null) {
+      await env.DB.prepare('UPDATE newsletter_subscribers SET user_id = ? WHERE id = ?').bind(user.id, row.id).run();
+    }
+    if (turningOn && row.status !== 'confirmed') await markConfirmed(env, row, { userId: user.id });
+  }
+  row = await memberSubscriber(env, user);
+  if (row) await setTopics(env, row.id, choices);
+  return row;
+}
