@@ -25,6 +25,12 @@ export const aiBudgetApi = {
     if (month) q.set('month', month);
     return request(`/ai-budget/runs?${q}`);
   },
+  // D788 — the member's own monthly spend limit: the limit, this UTC month's charge, the share used, the notices, the allowance.
+  spendLimit: () => request('/ai-budget/limit'),
+  // D788 — set the limit in dollars (null removes it) and its 50/80/100% notices. Needs a recent sign-in (403 step_up_required).
+  setSpendLimit: (monthlyLimitUsd, notify) => request('/ai-budget/limit', {
+    method: 'PUT', body: body({ monthly_limit_usd: monthlyLimitUsd, ...(notify ? { notify } : {}) }),
+  }),
   // D776 PR 2 — HQ (Admin or Super Admin): one member's month by option within a page, and each run. Audited.
   memberRuns: (userId, { month } = {}) => request(`/ai-budget/members/${enc(userId)}/runs${month ? `?month=${enc(month)}` : ''}`),
   // D776 PR 2 — HQ: how members are charged, and the models offered with the pages that name them.
