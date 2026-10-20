@@ -14,9 +14,9 @@ import '../../components/site/newsletter.css';
  * confirms. The page checks the link with the `GET`, which changes nothing,
  * and the person confirms with the button, which sends the `POST` once.
  *
- * "You're subscribed to [n] newsletters" needs the topics, and D810's JSON
- * answer carries none today: the page draws the count and the list when the
- * answer has them, and the plain sentence until then. No count is invented.
+ * "You're subscribed to [n] newsletters" and the list come from the POST's
+ * `topics` (their labels); an answer without them reads "You're subscribed."
+ * and no count is invented.
  */
 export function ConfirmView({ view, onConfirm, onRetry }) {
   if (view.state === 'loading') return <p className="ax-nl-lede" role="status">Checking your link…</p>;

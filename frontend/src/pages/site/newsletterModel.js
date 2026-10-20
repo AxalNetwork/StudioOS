@@ -98,12 +98,14 @@ export function checkView(result, error) {
 }
 
 /**
- * W2: the confirm (`POST`) as a page state. D810 answers `{ ok, status }` and,
- * should it ever carry them, the topics.
+ * W2: the confirm (`POST`) as a page state. D810 answers `{ ok, status, topics }`,
+ * the topics as their labels.
  */
 export function confirmView(result, error) {
   if (error) return confirmFailure(error);
-  const topics = Array.isArray(result?.topics) ? result.topics.map((t) => (typeof t === 'string' ? topicLabel(t) : t?.label)).filter(Boolean) : null;
+  // D810 answers the labels; a key 515 names reads as its label, any other string as itself.
+  const asLabel = (t) => (NEWSLETTER_TOPICS.some((x) => x.key === t) ? topicLabel(t) : t);
+  const topics = Array.isArray(result?.topics) ? result.topics.map((t) => (typeof t === 'string' ? asLabel(t) : t?.label)).filter(Boolean) : null;
   return { state: 'confirmed', topics };
 }
 

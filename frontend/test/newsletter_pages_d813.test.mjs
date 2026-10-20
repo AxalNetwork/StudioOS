@@ -192,6 +192,8 @@ test('the confirm page: confirmed, expired, used, unconfigured and an unexplaine
   const withTopics = model.confirmView({ ok: true, topics: ['brief', 'events'] }, null);
   assert.match(draw(withTopics), /You're subscribed to 2 newsletters\. The Axal VC Brief Events/);
   assert.equal(model.confirmedTitle(['x']), "You're subscribed to 1 newsletter.");
+  // D810's POST answers the labels themselves.
+  assert.deepEqual(model.confirmView({ ok: true, status: 'confirmed', topics: ['The Axal VC Brief', 'Events'] }, null).topics, ['The Axal VC Brief', 'Events']);
 
   const expired = draw(model.confirmView(null, refusal(410, 'token_expired')));
   assert.match(expired, /This link has expired\..*Subscribe again/);
