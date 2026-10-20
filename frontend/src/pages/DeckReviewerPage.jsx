@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useRailOption } from '../ui/railCrumbs';
+import { railPressHeaders } from '../lib/railPage.js';
 import { AssistLayout } from '../ui';
 
 // Pitch Deck Reviewer — upload a PDF/DOC/DOCX/PPTX, extract text via Cloudflare
@@ -34,10 +35,13 @@ function getCsrf() {
 
 // XHR upload so we can show real upload progress (the fetch-based api helper
 // can't report upload progress).
-function uploadWithProgress(url, formData, onProgress) {
+// D778 part 7: `headers` carries the press's rail context; this XHR bypasses
+// `request()`, so without it the upload named no page or option at all.
+function uploadWithProgress(url, formData, onProgress, headers = {}) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url);
+    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     const token = localStorage.getItem('token');
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     const csrf = getCsrf();
@@ -94,6 +98,11 @@ export default function DeckReviewerPage({ embedded = false }) {
   useRailOption(running === 'file' ? 'review:deck-file' : null, 'Drop your deck here or click to browse');
   useRailOption(running === 'text' ? 'review:deck-text' : null, 'Review pasted text');
   useRailOption(running === 'again' ? 'review:deck-again' : null, 'Regenerate review');
+  // D778 part 7 (#2103): a run answers only the review it was pressed on.
+  // Opening another review, or leaving the page, drops a run still at the model.
+  const runFor = useRef(0);
+  useEffect(() => () => { runFor.current += 1; }, []);
+  const startRun = () => { const run = runFor.current; return () => runFor.current !== run; };
 
   useEffect(() => {
     let alive = true;
@@ -128,15 +137,20 @@ export default function DeckReviewerPage({ embedded = false }) {
     const v = validate(file);
     if (v) { setError(v); return; }
     setError(''); setStatus(''); setReview(null);
+    const stale = startRun();
+    const headers = railPressHeaders('review:deck-file');
     setPhase('uploading'); setProgress(0); setRunning('file');
     try {
       const fd = new FormData();
       fd.append('file', file);
       if (projectId) fd.append('project_id', projectId);
       const result = await uploadWithProgress('/api/deck-reviewer/upload', fd, (p) => {
+        if (stale()) return;
         setProgress(p);
         if (p >= 100) setPhase('processing');
-      });
+      }, headers);
+      // A dropped run still wrote its review: it is listed, not opened.
+      if (stale()) { refreshList(); return; }
       setReview(result);
       setDirty(false);
       if (result.extraction_status === 'failed' || result.status === 'needs_manual') {
@@ -147,17 +161,21 @@ export default function DeckReviewerPage({ embedded = false }) {
       }
       refreshList();
     } catch (e) {
+      if (stale()) return;
       setError(e.message || 'Upload failed.');
     } finally {
-      setPhase('idle'); setProgress(0); setRunning(null);
+      if (!stale()) { setPhase('idle'); setProgress(0); setRunning(null); }
     }
   }
 
   async function handlePaste() {
     if (!pasteText.trim()) { setError('Paste some deck text first.'); return; }
+    const stale = startRun();
+    const headers = railPressHeaders('review:deck-text');
     setError(''); setStatus(''); setPhase('processing'); setRunning('text');
     try {
-      const result = await api.deckReviewer.paste({ text: pasteText, project_id: projectId || undefined, filename: 'Pasted deck' });
+      const result = await api.deckReviewer.paste({ text: pasteText, project_id: projectId || undefined, filename: 'Pasted deck' }, headers);
+      if (stale()) { refreshList(); return; }
       setReview(result);
       setShowPaste(false);
       setPasteText('');
@@ -165,14 +183,16 @@ export default function DeckReviewerPage({ embedded = false }) {
       setStatus('Review generated from pasted text.');
       refreshList();
     } catch (e) {
+      if (stale()) return;
       setError(e.message || 'Could not process pasted text.');
     } finally {
-      setPhase('idle'); setRunning(null);
+      if (!stale()) { setPhase('idle'); setRunning(null); }
     }
   }
 
   async function loadReview(id) {
-    setError('');
+    runFor.current += 1;
+    setPhase('idle'); setRunning(null); setError('');
     try {
       const full = await api.deckReviewer.get(id);
       setReview(full);
@@ -193,12 +213,15 @@ export default function DeckReviewerPage({ embedded = false }) {
 
   async function onRegenerate() {
     if (!review) return;
+    const stale = startRun();
+    const headers = railPressHeaders('review:deck-again');
     setPhase('processing'); setError(''); setRunning('again');
     try {
-      const full = await api.deckReviewer.regenerate(review.id);
+      const full = await api.deckReviewer.regenerate(review.id, headers);
+      if (stale()) return;
       setReview(full); setDirty(false); setStatus('Review regenerated.');
-    } catch (e) { setError(e.message || 'Regenerate failed.'); }
-    finally { setPhase('idle'); setRunning(null); }
+    } catch (e) { if (!stale()) setError(e.message || 'Regenerate failed.'); }
+    finally { if (!stale()) { setPhase('idle'); setRunning(null); } }
   }
 
   async function onPurgeRaw() {

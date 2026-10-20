@@ -5099,11 +5099,12 @@ export const api = {
   deckReviewer: {
     // FormData upload: request() detects FormData and omits the JSON Content-Type.
     upload: (formData) => request('/deck-reviewer/upload', { method: 'POST', body: formData }),
-    paste: (data) => request('/deck-reviewer/paste', { method: 'POST', body: JSON.stringify(data || {}) }),
+    // D778 part 7: `headers` is the press's own rail context (`railPressHeaders`).
+    paste: (data, headers) => request('/deck-reviewer/paste', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
     list: () => request('/deck-reviewer'),
     get: (id) => request(`/deck-reviewer/${id}`),
     save: (id, patch) => request(`/deck-reviewer/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
-    regenerate: (id) => request(`/deck-reviewer/${id}/regenerate`, { method: 'POST', body: JSON.stringify({}) }),
+    regenerate: (id, headers) => request(`/deck-reviewer/${id}/regenerate`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
     purgeRaw: (id) => request(`/deck-reviewer/${id}/raw`, { method: 'DELETE' }),
     remove: (id) => request(`/deck-reviewer/${id}`, { method: 'DELETE' }),
     exportUrl: (id, format) => `/api/deck-reviewer/${id}/export?format=${encodeURIComponent(format || 'json')}`,
