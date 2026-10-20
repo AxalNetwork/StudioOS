@@ -74,7 +74,7 @@ function stubStripe(customers: number) {
   globalThis.fetch = (async (url: string) => {
     calls.push(String(url));
     const u = new URL(String(url));
-    if (!u.hostname.endsWith('stripe.com')) throw new Error(`unexpected fetch ${url}`);
+    if (u.hostname !== 'api.stripe.com') throw new Error(`unexpected fetch ${url}`);
     const data = u.searchParams.get('status') === 'active'
       ? Array.from({ length: customers }, (_, i) => ({
         id: `sub_${i}`, customer: `cus_${i}`, status: 'active', created: 1, canceled_at: null,
