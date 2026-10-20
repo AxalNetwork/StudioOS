@@ -257,7 +257,7 @@ export function ledgerView(ledger) {
   }
   return { rows, next: str(ledger.next_before) };
 }
-export const PURCHASE_STATE = { waiting: 'Waiting', overdue: 'Overdue', credited: 'Credited', refunded: 'Refunded', disputed: 'Disputed' };
+export const PURCHASE_STATE = { waiting: 'Waiting', overdue: 'Overdue', credited: 'Added', refunded: 'Refunded', disputed: 'Disputed' };
 export function purchasesView(list) {
   if (!Array.isArray(list)) return null;
   const rows = [];

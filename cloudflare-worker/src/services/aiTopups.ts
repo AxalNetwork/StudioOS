@@ -133,7 +133,7 @@ export async function creditAiTopupFromPayment(env:Env,pi:any):Promise<boolean> 
         'pack_uid',pack_uid,'reason','first_purchase_only'),'payment_webhook',user_id FROM ai_topup_purchases
       WHERE payment_intent_id=? AND bonus_withheld_microusd>0 AND EXISTS(SELECT 1 FROM ai_credit_ledger WHERE uid=?)`).bind(pi.id,uid),
   ]);
-  if (results.length!==8 || results.some(r=>r.success!==true)) throw new Error('AI top-up credit unreadable');
+  if (results.length!==8 || results.some(r=>r.success!==true)) throw new Error('AI token top-up unreadable');
   const credited=Number(results[2].meta.changes)>0;
   if (credited) {
     const paid=await env.DB.prepare('SELECT credit_microusd,bonus_microusd FROM ai_topup_purchases WHERE payment_intent_id=?').bind(pi.id).first<any>();

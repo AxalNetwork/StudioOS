@@ -206,7 +206,7 @@ test('the member lookup draws each section, and a part that is not there blanks 
     assert.match(m.textOf('hq-member-balance'), /Balance \$12\.00 · held \$1\.00 · ledger \$12\.00/);
     assert.equal(m.allByTestId('hq-member-ledger-row').length, 2);
     assert.match(m.textOf('hq-member-ledger'), /Adjustment −\$3\.00 Refund of a failed run/);
-    assert.match(m.textOf('hq-member-purchases'), /\$25 of tokens · Credited/);
+    assert.match(m.textOf('hq-member-purchases'), /\$25 of tokens · Added/);
     assert.match(m.textOf('hq-member-shortfalls'), /No shortfall is recorded\./);
     assert.ok(m.byTestId('hq-member-adjust'));
   } finally { await m.unmount(); }
@@ -223,7 +223,7 @@ test('the member lookup draws each section, and a part that is not there blanks 
   try {
     await paged.click('hq-member-ledger-more');
     assert.match(paged.textOf('hq-member-ledger'), /The ledger could not be read/);
-    assert.match(paged.textOf('hq-member-purchases'), /Credited/);
+    assert.match(paged.textOf('hq-member-purchases'), /Added/);
     assert.match(paged.textOf('hq-member-balance'), /Balance \$12\.00/);
   } finally { await paged.unmount(); }
 });

@@ -8,6 +8,7 @@ import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
 import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
+import { COST_GROUPS, COST_RANGES, costCsv, memberCost, type CostGroup, type CostRange } from '../services/aiCost';
 import { CONSUMPTION_GROUPS, memberConsumption, memberMonth, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
@@ -57,6 +58,38 @@ r.get('/runs',async c=>{
   if (!monthBounds(month)) return c.json({error:'invalid_month',message:'Give the month as YYYY-MM.'},400);
   try { return c.json(await memberConsumption(c.env,user.id,group,month)); }
   catch(error) { return refuse(c,503,{code:'ai_runs_unreadable',message:'Unreadable: where your AI spend went could not be read.',raw:error,audience:'member'}); }
+});
+/**
+ * D787 (#2212): the member's own cost per day and per model, tokens in and
+ * out, the other units, cost and charged (`services/aiCost.ts`). `range` is
+ * `mtd` (the default), `30d` or `prev_month`, in UTC; `group` is `model` (the
+ * default), `page` or `option`. Their own rows only: no user or company is
+ * taken from the request. `cost.csv` is the same read, one row per day and model.
+ */
+function costQuery(c:any):{range:CostRange;group:CostGroup}|Response {
+  const range=(c.req.query('range')??'mtd') as CostRange;
+  if (!COST_RANGES.includes(range)) return c.json({error:'invalid_range',message:'Ask for mtd, 30d or prev_month.'},400);
+  const group=(c.req.query('group')??'model') as CostGroup;
+  if (!COST_GROUPS.includes(group)) return c.json({error:'invalid_group',message:'Group by model, page or option.'},400);
+  return {range,group};
+}
+r.get('/cost',async c=>{
+  const user=await requireAuth(c);
+  const q=costQuery(c);
+  if (q instanceof Response) return q;
+  try { return c.json(await memberCost(c.env,Number(user.id),q.range,q.group)); }
+  catch(error) { return refuse(c,503,{code:'ai_cost_unreadable',message:'Unreadable: your AI cost could not be read.',raw:error,audience:'member'}); }
+});
+r.get('/cost.csv',async c=>{
+  const user=await requireAuth(c);
+  const q=costQuery(c);
+  if (q instanceof Response) return q;
+  try {
+    const cost=await memberCost(c.env,Number(user.id),q.range,q.group);
+    return new Response(costCsv(cost),{headers:{'Content-Type':'text/csv; charset=utf-8',
+      'Content-Disposition':`attachment; filename="ai-cost-${cost.range.from}-to-${cost.range.to}.csv"`,'Cache-Control':'no-store'}});
+  }
+  catch(error) { return refuse(c,503,{code:'ai_cost_unreadable',message:'Unreadable: your AI cost could not be read.',raw:error,audience:'member'}); }
 });
 /**
  * D788 (#2213): the member's own monthly AI spend limit (`services/aiSpendLimit.ts`):
