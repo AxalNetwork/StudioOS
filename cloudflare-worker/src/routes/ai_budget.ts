@@ -1,15 +1,16 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireHqAdmin, requireSuperAdmin } from '../auth';
+import { requireAuth, requireFactor, requireHqAdmin, requireStepUp, requireSuperAdmin } from '../auth';
 import { AI_LICENCE_KEYS, AiBudgetReviewConflict, AiBudgetReviewNotFound, listAiBudgetReviews,
-  listAiLicenceCaps, loadAiBudget, settleAiBudgetReview, TYPED_CAP_LICENCES, usdToMicro } from '../services/aiBudget';
+  listAiLicenceCaps, loadAiBudget, planView, resolveAiCaps, settleAiBudgetReview, TYPED_CAP_LICENCES, usdToMicro } from '../services/aiBudget';
+import { parseSpendLimit, readSpendLimit, writeSpendLimit } from '../services/aiSpendLimit';
 import { PLAN_AI_SHARE } from '../services/planAllowance';
 import { aiTopupStatus, memberTopupReading, readAiTopupProduct } from '../services/aiTopups';
 import { HISTORY_MAX, ledgerBalance, memberAccount, memberHistory, memberTopUp, packLines, packLabel, reconcile, recordAdjustment } from '../services/aiCredits';
 import { logAdminAction } from '../services/adminAudit';
 import { CONSUMPTION_GROUPS, memberConsumption, memberMonth, monthBounds, monthKey, type ConsumptionGroup } from '../services/aiConsumption';
 import { refuse } from '../util/refusal';
-import { AUTH_ERROR_STATUSES } from '../util/authErrors';
+import { AUTH_ERROR_STATUSES, STEP_UP_REQUIRED, stepUpRefusalBody } from '../util/authErrors';
 
 const r=new Hono<{Bindings:Env}>();
 r.onError((error,c)=>{
@@ -56,6 +57,44 @@ r.get('/runs',async c=>{
   if (!monthBounds(month)) return c.json({error:'invalid_month',message:'Give the month as YYYY-MM.'},400);
   try { return c.json(await memberConsumption(c.env,user.id,group,month)); }
   catch(error) { return refuse(c,503,{code:'ai_runs_unreadable',message:'Unreadable: where your AI spend went could not be read.',raw:error,audience:'member'}); }
+});
+/**
+ * D788 (#2213): the member's own monthly AI spend limit (`services/aiSpendLimit.ts`):
+ * the limit, this UTC month's charge, the share used, the notices, and the plan's
+ * allowance beside it for context.
+ */
+r.get('/limit',async c=>{
+  const user=await requireAuth(c);
+  try {
+    const caps=await resolveAiCaps(c.env,user.id);
+    return c.json({...await readSpendLimit(c.env,user.id),
+      allowance:{monthly_microusd:caps.monthly_microusd,source:caps.source,plan:planView(caps.plan)}});
+  }
+  catch(error) { return refuse(c,503,{code:'ai_spend_limit_unreadable',message:'Unreadable: your AI spend limit could not be read.',raw:error,audience:'member'}); }
+});
+/**
+ * D788: set (`monthly_limit_usd` in dollars, at most two decimals, $0 to
+ * $100,000) or remove (`null`) the limit, and switch its notices. A money
+ * setting, so it asks for a recent sign-in as billing does: a TOTP session
+ * stepped up within its window.
+ */
+r.put('/limit',async c=>{
+  try { await requireFactor(c,'totp'); await requireStepUp(c); }
+  catch(error) {
+    // The gate's own answers, as billing's: the step-up body the SPA prompts from, else `{detail}`.
+    const msg=(error as Error)?.message;
+    if (msg===STEP_UP_REQUIRED) return c.json(stepUpRefusalBody(error),403);
+    if (msg && AUTH_ERROR_STATUSES[msg]) return c.json({detail:msg},AUTH_ERROR_STATUSES[msg] as 401|403);
+    throw error;
+  }
+  const user=await requireAuth(c);
+  const parsed=parseSpendLimit(await c.req.json().catch(()=>null));
+  if (!parsed.ok) return c.json({error:'invalid_spend_limit',field:parsed.field,message:parsed.message},400);
+  try {
+    await writeSpendLimit(c.env,user.id,parsed.limit_microusd,parsed.notify);
+    return c.json(await readSpendLimit(c.env,user.id));
+  }
+  catch(error) { return refuse(c,503,{code:'ai_spend_limit_unwritable',message:'Unreadable: your AI spend limit could not be saved.',raw:error,audience:'member'}); }
 });
 // D750, then D755 §14: why each pack is or is not offered, for the Super Admin only. The top-level
 // fields are D750's single-price line, DEPRECATED until CR8 draws `packs`.

@@ -41,7 +41,7 @@ export function refuseAssistOff(c: Context<any>): Response {
   return refuse(c, 403, { code: 'assist_off', message: ASSIST_OFF_MESSAGE });
 }
 
-const BUDGET_REFUSALS: ReadonlySet<string> = new Set(['budget_user_day', 'budget_user_month', 'budget_org_month', 'budget_review', 'kill_switch']);
+const BUDGET_REFUSALS: ReadonlySet<string> = new Set(['budget_user_day', 'budget_user_month', 'budget_org_month', 'budget_review', 'kill_switch', 'spend_limit']);
 
 /**
  * D766 (#2094): how a member's press answers a run `run()` refused. The switch
@@ -53,7 +53,8 @@ const BUDGET_REFUSALS: ReadonlySet<string> = new Set(['budget_user_day', 'budget
 export function refuseRun(c: Context<any>, r: { refusal?: string | null; error?: string }): Response | null {
   const why = r.refusal ?? '';
   if (why === 'assist_off') return refuseAssistOff(c);
-  if (BUDGET_REFUSALS.has(why)) return refuse(c, 402, { code: why, message: budgetRefusalMessage(why) });
+  // D788: the spend limit's words name the member's limit and its reset, which only the run's own message carries.
+  if (BUDGET_REFUSALS.has(why)) return refuse(c, 402, { code: why, message: why === 'spend_limit' && r.error ? r.error : budgetRefusalMessage(why) });
   if (why === 'guard_blocked' || why === 'guard_blocked_output') return refuse(c, 422, { code: why, message: r.error || 'Eadwyn cannot help with that.' });
   if (why === 'guard_unavailable' || why === 'misconfigured') return refuse(c, 503, { code: why, message: r.error || 'The AI check could not run. Nothing was charged.' });
   return null;
