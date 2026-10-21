@@ -739,6 +739,8 @@ export const ONBOARDING_CANVAS_PATHS = [
 ];
 
 export const SHARED_FULL_BLEED = [
+  // Pricing and Learning own their hero and body gutters, like Help.
+  '/pricing', '/pricing/', '/learning', '/learning/',
   '/referrals',
   // `/perks` is one page for founder, investor, advisor, admin and exploring
   // (a partner is sent to /offers/perk-deals). Its listing body supplies its

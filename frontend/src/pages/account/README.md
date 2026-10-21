@@ -75,3 +75,9 @@ live here, one file each:
   any of them. `frontend/test/account_phone_d700.test.mjs` holds that.
 
 Account (`/account`) and all its sections, including Connectors and individual connector pages, have no AI rail on desktop or phone, by the owner's request. `SettingsPage.jsx` passes no rail to the shared frame, so its content uses the available column.
+
+
+Account and all `/account/` subsections fill the app's content column without
+the shared 1280px cap. Shell padding remains, since phone frames cancel that
+padding themselves. `AccountPhonePage` accepts an optional `header` render function for the
+Learning home's image hero around its existing phone bar; other sections retain their default phone bar.

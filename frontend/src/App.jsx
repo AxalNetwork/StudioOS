@@ -1061,7 +1061,9 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
     // full width since the advisor shell shipped. Narrowing it to the derived
     // list would silently re-centre those, which is a separate decision from
     // this one.
-    || activeRole === 'advisor';
+    || activeRole === 'advisor'
+    // Account fills the column but keeps the shell gutter its phone frame cancels.
+    || /^\/account(?:\/|$)/.test(location.pathname);
   const flushSurface = fullBleedSurface;
   // The three role wizards paint their own background across this column.
   // Padding and the footer are the gaps around it; both have to go, or the

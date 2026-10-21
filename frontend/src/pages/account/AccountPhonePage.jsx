@@ -24,11 +24,12 @@ export function phonePending(status, what, claim, reload) {
  * (decision 9). The bar names itself to Eadwyn with its title (decision 12);
  * `PhoneBar` draws the button only while a founder rail is mounted.
  */
-export function AccountPhonePage({ pageKey, groups, testid, bleed = false, children = null }) {
+export function AccountPhonePage({ pageKey, groups, testid, bleed = false, header = null, children = null }) {
   const page = ACCOUNT_PHONE_PAGES[pageKey];
+  const bar = <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />;
   return (
     <div className={bleed ? BLEED_PAGE : PHONE_PAGE} data-testid={testid} data-phone="true">
-      <PhoneBar back={{ label: 'Back' }} title={page.title} sub={page.sub} eadwynLabel={page.title} />
+      {header ? header(bar) : bar}
       <div className="pt-[18px]">
         <PhoneRows groups={groups} />
       </div>
