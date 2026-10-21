@@ -210,8 +210,6 @@ const FEATURE_CATALOG: FeatureEntry[] = [
     url: '/build/financials', label: 'Financial Model Builder', roles: ['founder', 'admin', 'investor'] },
   { keywords: ['portfolio', 'portfolio health'],
     url: '/portfolio/health', label: 'Portfolio Health', roles: ['admin', 'investor', 'partner'] },
-  { keywords: ['watchlist'],
-    url: '/watchlist', label: 'Watchlist & Decision Journal', roles: ['admin', 'investor', 'partner'] },
   { keywords: ['settings', 'preferences', 'account'],
     url: '/account', label: 'Settings', roles: ['admin', 'founder', 'partner', 'investor'] },
   { keywords: ['notifications', 'inbox'],

@@ -275,7 +275,8 @@ test('the client posts finish with last_seq and auto, process and summarise, to 
   // D770 (#2095): manual unless the Stop sheet's choice is on.
   assert.match(client, /finish: \(id, lastSeq, auto = false\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/finish`, \{\s*method: 'POST', body: JSON\.stringify\(\{ last_seq: lastSeq, auto: auto === true \}\),/);
   assert.match(client, /process: \(id\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/process`, \{ method: 'POST'/);
-  assert.match(client, /summarise: \(id, model\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/summarise`/);
+  // D778 part 8: `headers` is the press's own rail context.
+  assert.match(client, /summarise: \(id, model, headers\) => request\(`\$\{P\}\/sessions\/\$\{enc\(id\)\}\/summarise`/);
   const worker = readFileSync('cloudflare-worker/src/routes/founder_validate_sessions.ts', 'utf8');
   for (const r of ['finish', 'process', 'summarise']) assert.match(worker, new RegExp(`sessions\\.post\\('/sessions/:id/${r}'`), r);
   assert.match(worker, /body\?\.auto === true/, 'the Worker reads auto the same way: only an explicit choice (D765, D770)');

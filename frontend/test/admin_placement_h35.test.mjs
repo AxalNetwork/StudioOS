@@ -51,16 +51,18 @@ const LEGACY_ROWS = [
   '/admin/lp-applications', '/monitoring', '/admin/telegram', '/admin/articles',
   '/admin/publications', '/admin/partners', '/admin/refer-earn', '/admin/team',
   '/admin/my-licence', '/admin/trash',
-  // studio
-  '/pipeline', '/scoring', '/portfolio/risk-matrix', '/advisory',
+  // studio. '/scoring' and '/portfolio/risk-matrix' stood here: the owner
+  // removed both pages on 2026-10-20, so there is no console left to place.
+  '/pipeline', '/advisory',
   // '/market-intel' and '/signals' stood here. D670 retired both pages; they
   // only redirect to /research now, so there is no console left to place.
   // '/matches' (AI Matches) stood here. The page was deleted, not moved, so
   // there is no console left to place and no route an exception could name.
   '/deals',
-  // capital
-  '/capital', '/liquidity', '/portfolio/health', '/portfolio/coverage', '/portfolio/reserves',
-  '/portfolio/waterfall', '/watchlist', '/legal-capital', '/incorporate', '/compliance',
+  // capital. '/capital', '/liquidity', '/portfolio/reserves' and '/watchlist'
+  // stood here, removed with their pages by the owner on 2026-10-20.
+  '/portfolio/health', '/portfolio/coverage',
+  '/portfolio/waterfall', '/legal-capital', '/incorporate', '/compliance',
   // network
   '/network', '/network-effects', '/my/jobs', '/services', '/needs', '/partner/insights',
   '/partner/office-hours', '/comarketing',
@@ -105,9 +107,11 @@ test('the question is the size it was measured at', () => {
   // row. A shorter list here means the guard is asking less than it did —
   // with recorded exceptions: /matches, the AI Matching Engine, was deleted
   // outright, and D670 retired /market-intel and /signals, which is the one
-  // way a legacy console leaves the question.
-  assert.equal(LEGACY_ROWS.length, 47);
-  assert.equal(new Set(LEGACY_ROWS).size, 47, 'a legacy route is listed twice');
+  // way a legacy console leaves the question. The owner's removals of
+  // 2026-10-20 took six more (Scoring, Risk Matrix, Capital, Liquidity,
+  // Reserves, Watchlist), deleted with their pages.
+  assert.equal(LEGACY_ROWS.length, 41);
+  assert.equal(new Set(LEGACY_ROWS).size, 41, 'a legacy route is listed twice');
   assert.ok(TABS.length >= 14, `ADMIN_SECTIONS read ${TABS.length} tabs; the map was drawn for 14`);
   assert.ok(X_ROW_PARKED, 'the commented-out /admin/x row is gone from sidebarConfig.js');
   assert.ok(ROUTES.size >= 300, `App.jsx parsed to ${ROUTES.size} routes — the route reader is broken`);
@@ -206,7 +210,7 @@ test('every placement names a real tier, a real row of that tier, and a real for
   }
   // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since,
   // and D670 retired Market Intelligence and Signals.
-  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 26, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals are gone');
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 20, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20');
 });
 
 test('the three decided placements hold: Wellbeing, X, Trash', () => {

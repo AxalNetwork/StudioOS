@@ -22,7 +22,6 @@ const MILESTONE_ROUTE_PREFIXES = [
   // covers the desk and every zone under it, which is the same thing the five
   // entries were reaching for one route at a time.
   '/build',
-  '/scoring',
   '/advisors',
   // /office-hours is retired and redirects to /practice/opportunities, which
   // is listed here in its place. A prefix that no longer resolves would stop

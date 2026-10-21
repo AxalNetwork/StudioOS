@@ -136,7 +136,7 @@ it, where in their nav, and how do they get there.*
 | Investor LP Canvas | `/studio` · `/deals` · `/portfolio` · `/funds` · `/network` · `/research` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
 | Legal Documents · Templates | `/admin/contracts?tab=templates` · `/admin?tab=bank-accounts` · `/esign/:token` · `/spinout-lab/investor-workspace` | Headerless | Full page (proposed) | Sidebar → Headerless → Axal VC Fund | UPGRADE | Low |
-| Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page | Sidebar → Headerless → Portfolio | UPGRADE | High |
+| Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Headerless | Full page | Sidebar → Headerless → Axal VC Fund | UPGRADE | High |
 | Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Pages · Diligence room | `/research/diligence/:grantUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -152,7 +152,7 @@ it, where in their nav, and how do they get there.*
 | Research · Main | `/research` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
-| Scoring Engine v2 | `/scoring` | Headerless | Full page | Sidebar → Headerless → Deals | UPGRADE | High |
+| Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
 ## Partner / Operator — 12 canvases
 
@@ -272,8 +272,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 105 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 44 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 103 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 46 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 42 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

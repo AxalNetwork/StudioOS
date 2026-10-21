@@ -20,7 +20,7 @@ live here, one file each:
 | `LimitsPage.jsx` | D807 (#2246): `/account/usage/limits`, Usage's Limits page — D788's monthly spend limit (Save, Remove, the 50/80/100% notices), and the plan allowance, auto-reload and today's token-pack orders read-only. Each card loads on its own; a phone draws its own bar back to Usage |
 | `limitsModel.js` | D807: the Limits page's words and figures, pure — `limitView`, `parseLimitUsd` (D788's rule), `allowanceCard`, `autoReloadCard`, `packOrdersCard`, and `USAGE_PAGES` with `usagePageFor`, the Usage pages the section list draws |
 | `autoReloadModel.js` | D794: the card's words, pure — `stateLine`, `cardText`, `packOptions`, `parseThreshold` (mirrors the Worker's threshold rule), `lastSkipped`, and `OFF_WORDS`, the Worker's sentences for why it turned off |
-| `UsageOverview.jsx` | D789 (#2214): B1 overview, independent spend/balance/limits/chart reads, safe recent-invoice renderer (D806 wiring pending), and legacy hash forwarding to Cost |
+| `UsageOverview.jsx` | D789 (#2214): B1 overview, independent spend/balance/limits/chart reads, D806's newest three unified invoices with authenticated PDF downloads and partial-read states, and legacy hash forwarding to Cost |
 | `CostPage.jsx` | D789: B2 Cost, range/group/model controls, per-kind totals, shared daily chart, responsive table, existing authenticated CSV and preserved detailed usage |
 | `UsageCharts.jsx` | D789: daily stacked model costs with keyboard/tap/hover details and the recorded input/output token lines |
 | `costModel.js` | D789: pure daily segments, table/totals/unit views and safe invoice URLs; missing values stay missing |
