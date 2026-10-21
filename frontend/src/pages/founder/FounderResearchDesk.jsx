@@ -124,7 +124,7 @@ export default function FounderResearchDesk() {
     if (!q || asking) return;
     setAsking(true); setAskError('');
     try {
-      // D778 part 10: the press names its option on the run, keeping the rail's page.
+      // D778 part 11: the press names its option on the run, keeping the rail's page.
       setAsked(await api.research.ask(q, undefined, railPressHeaders('ask:research')));
     } catch (cause) {
       setAsked(null);

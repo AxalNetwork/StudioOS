@@ -185,7 +185,7 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
     if (!q) return;
     setBusy(true); setError('');
     try {
-      // D778 part 10: the press names its profile's option on the run (founder's by default).
+      // D778 part 11: the press names its profile's option on the run (founder's by default).
       const r = await api.research.ask(q, sessionUid, railPressHeaders(askOption?.key ?? 'ask:library'));
       setQuestion('');
       // Back to the session view: a reader who asks a question while looking at

@@ -5076,7 +5076,7 @@ export const api = {
     askUpdateAnswer: (uid, body) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
     // `session_uid` is optional and the worker falls back to the caller's most
     // recent thread, so a reader who has just landed can ask without one.
-    // D778 part 10: `headers` is the press's own rail context (`railPressHeaders`).
+    // D778 part 11: `headers` is the press's own rail context (`railPressHeaders`).
     ask: (question, sessionUid, headers) => request('/research/ask', {
       ...(headers ? { headers } : {}),
       method: 'POST',
