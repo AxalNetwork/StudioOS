@@ -16,7 +16,7 @@ test('recovery is offered only to admins with unlinked tickets', () => {
   assert.match(html, /3 saved tickets/);
   assert.match(html, /Create missing GitHub issues/);
   assert.match(html, /up to 25/);
-  assert.match(html, /href="\/admin\?tab=github"/);
+  assert.match(html, /href="\/admin\/integration-keys#github"/);
   assert.doesNotMatch(html, /disabled=""/);
 });
 

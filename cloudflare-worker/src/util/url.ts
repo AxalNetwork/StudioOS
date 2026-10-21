@@ -38,7 +38,7 @@ export function callbackBase(env: { OAUTH_CALLBACK_BASE_URL?: string; APP_URL?: 
 /**
  * D751 (#1899 ruling 3): the one place a connector's OAuth callback URL is
  * built, `<callbackBase>/api/integrations/oauth/<key>/callback`. Each
- * provider's `redirectUri` returns it, and Admin → Integration keys shows the
+ * provider's `redirectUri` returns it, and HQ → Integration keys shows the
  * same value, so the URL an owner registers is the one the provider sends.
  */
 export function oauthCallbackUrl(env: { OAUTH_CALLBACK_BASE_URL?: string; APP_URL?: string }, key: string): string {
