@@ -58,7 +58,8 @@ import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { reportError } from '../../lib/log';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useEscapeClose } from '../useEscapeClose';
-import { useRailOption } from '../../ui/railCrumbs';
+import { useRailOption, useRailPage } from '../../ui/railCrumbs';
+import { railOptionFor } from '../../lib/railOptions/index.js';
 import { predictTarget } from '../../lib/advisor/router';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
@@ -205,7 +206,11 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // Tutor mode state.
   const [tutor, setTutor] = useState(null); // { topic, text, doc_anchor, page_target, streaming }
   // D771 (#2097): while a message is at the model, or the tutor is open, the rail is that option's.
-  useRailOption(asking ? 'ask:studio' : null, 'Send');
+  // D773 (#2099): the send is the founder's `ask:studio` and the advisor's and
+  // partner's `answer:interview`; each profile's inventory names its own.
+  const railPage = useRailPage()?.page;
+  const askOption = railOptionFor(railPage, { file: 'components/advisor/PersonalAdvisor.jsx', control: 'advisor.ask' });
+  useRailOption(asking ? (askOption?.key ?? 'ask:studio') : null, askOption?.label ?? 'Send');
   useRailOption(tutor ? 'explain:question' : null, 'Explain');
   const tutorAbortRef = useRef(null);
   const scrollerRef = useRef(null);
