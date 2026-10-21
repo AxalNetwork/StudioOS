@@ -59,7 +59,7 @@ it, where in their nav, and how do they get there.*
 | Legal & Capital Engine | `/legal-capital` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Metrics | `/build/metrics` | Headerless | Full page | Sidebar → Headerless → Build | UPGRADE | High |
-| More (founder phone) | `/more` (removed, owner, #2297: More opens the sidebar drawer) | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
+| More (founder phone) | `/more` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Office Hours | `/spinout-lab/office-hours` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | CURRENT | Low |
 | Pages · Benchmark | `/research/benchmarking/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -146,7 +146,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Investor Network | `/network` | Headerless | Full page | Sidebar → Headerless → Network | PARTIAL | High |
 | Pages · Investor Portfolio | `/portfolio/positions` · `/portfolio/updates` | Headerless | Full page (proposed) | Sidebar → Headerless → Portfolio | UPGRADE | Low |
 | Pages · Investor Research | `/market-intel` · `/research` · `/advisor/research*` · `/research/ask` | Headerless | Full page | Sidebar → Headerless → Research | RESKIN | High |
-| Portfolio | `/portfolio/value-add` | Headerless | Full page | Sidebar → Headerless → Portfolio | UPGRADE | High |
+| Portfolio | `/portfolio/health\|updates\|positions\|performance\|value-add` | Headerless | Full page (proposed) | Sidebar → Headerless → Portfolio | UPGRADE | Low |
 | Quarterly Report | `/lp-reports` · `/spinout-lab/investor-workspace` · `/lp-portal` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Axal VC Fund | UPGRADE | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Main | `/research` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
@@ -272,9 +272,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 103 | Live route, reachable from that workspace’s sidebar. |
+| High | 102 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 46 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 42 | Not routed. Proposed route only. |
+| Low | 43 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s
