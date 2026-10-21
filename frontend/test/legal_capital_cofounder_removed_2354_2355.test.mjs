@@ -50,10 +50,10 @@ test('both pages are gone, and each old address is a redirect counted with #2301
   const app = read('frontend/src/App.jsx');
   for (const [path, { page, to }] of Object.entries(REMOVED)) {
     assert.equal(existsSync(resolve(ROOT, `frontend/src/pages/${page}.jsx`)), false, `${page}.jsx is back`);
-    assert.doesNotMatch(app, new RegExp(`\\b${page}\\b`), `App.jsx still names ${page}`);
-    const esc = path.replace(/\//g, '\\/');
-    assert.match(app, new RegExp(`<Route path="${esc}" element=\\{<Navigate to="${to.replace(/\//g, '\\/')}" replace \\/>\\} \\/>`), path);
-    assert.match(app, new RegExp(`<Route path="${to.replace(/\//g, '\\/')}" `), `${to} is not a route`);
+    // Plain substring checks: the addresses are literals, so no pattern is built from them.
+    assert.ok(!app.includes(page), `App.jsx still names ${page}`);
+    assert.ok(app.includes(`<Route path="${path}" element={<Navigate to="${to}" replace />} />`), path);
+    assert.ok(app.includes(`<Route path="${to}" `), `${to} is not a route`);
     assert.equal(REDIRECT_ROUTES.filter((r) => r.path === path && !r.keep).length, 1, `${path} is not counted once with #2301`);
   }
   const doc = read('documentation/operations/REDIRECT_RETIREMENT.md').replace(/\s+/g, ' ');
