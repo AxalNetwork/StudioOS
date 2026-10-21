@@ -26,6 +26,14 @@
  *   PUT   /data-room/files/:id/checklist  { item | null }
  *   PUT   /prospects/:id/next-step   { next_step, next_step_due, warm_path }
  *
+ *   D840 part 2 (#2347): the founder's own Mercury feeds the modules.
+ *   POST   /mercury/sync                  reads Mercury; writes facts and proposals → { counts }
+ *   POST   /mercury/proposals/:id/accept  { section? }  lands it in its module
+ *   POST   /mercury/proposals/:id/dismiss               never proposed again
+ *   DELETE /mercury/facts/:id                           deleted; a re-sync never brings it back
+ *   A module's read carries `parts.mercury` for the founder alone
+ *   (`services/mercury/raiseFeeds.ts`).
+ *
  * The reads are `services/raiseCycle.ts`; the writes are
  * `services/raiseWriters.ts` (D691, #1700), each logging one row per record
  * it writes through `logCycleWrite` (decision 12). Every id a route takes,
@@ -38,6 +46,11 @@
  * the investor pipeline and who opened the data room: what the pipeline, cap
  * table and data-room tools already keep to the venture and admins. An
  * investor or a partner reaches nothing here.
+ *
+ * MERCURY IS THE FOUNDER'S ALONE (D840). Its parts and its routes answer only
+ * the project's own founder (`founder_id`, not an admin), in their active
+ * company, outside a support session, from their own connection. Anyone
+ * else's module read has no `parts.mercury`, and the routes answer 403.
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
@@ -50,6 +63,14 @@ import {
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
 import { raisePhone } from '../services/cycleFocus';
+import {
+  AcceptError, RAISE_PART_FOR, acceptRaiseProposal, deleteRaiseFact, dismissRaiseProposal, syncRaise,
+} from '../services/mercury/raiseFeeds';
+import { founderRaiseReads, founderMercuryConnection } from '../services/mercury/raiseAccess';
+import { isSupportSession } from '../integrations/providers/mercury';
+import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
+import { projectInActiveCompany } from '../services/tenancyScope';
+import { HolderError } from '../services/capTableWrites';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 
@@ -121,8 +142,14 @@ cycleRaise.get('/modules/:slug', async (c) => {
     console.warn('[cycle_raise] records unreadable:', slug, (e as Error)?.message);
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
+  const parts: Record<string, unknown> = slug === 'capital-relationships' ? { calls: await callsHistory(ctx) } : {};
+  const own = await mercuryOwner(c, s);
+  if (!(own instanceof Response)) {
+    try { parts.mercury = { integration_uid: own.uid, ...(await RAISE_PART_FOR[slug](c.env, own.integrationId, s.projectId) as object) }; }
+    catch { parts.mercury = { state: 'unreadable', reason: 'What Mercury fed this module could not be read' }; }
+  }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: mod.records_title }, card, records,
-    ...(slug === 'capital-relationships' ? {parts:{calls:await callsHistory(ctx)}} : {}) });
+    ...(Object.keys(parts).length ? { parts } : {}) });
 });
 
 // ---------------------------------------------------------------------------
@@ -267,6 +294,94 @@ cycleRaise.put('/prospects/:id/next-step', async (c) => {
       next_step: b.next_step, next_step_due: b.next_step_due, warm_path: b.warm_path,
     }));
   } catch (e) { return writeFailed(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// D840 part 2 — the founder's own Mercury
+// ---------------------------------------------------------------------------
+
+/** The project's own founder, in their active company, outside a support session, with their own connection. */
+async function mercuryOwner(c: any, s: { user: User; projectId: number }): Promise<{ integrationId: number; uid: string } | Response> {
+  const p = await c.env.DB.prepare('SELECT founder_id, company_id FROM projects WHERE id = ?').bind(s.projectId)
+    .first() as { founder_id: number | null; company_id: number | null } | null;
+  if (!p || p.founder_id == null || s.user.founder_id == null || Number(s.user.founder_id) !== Number(p.founder_id)) {
+    return c.json({ error: 'mercury_owner_only', detail: 'Only the startup’s founder reads its Mercury, from their own connection.' }, 403);
+  }
+  const company = await resolveActiveCompany(c.env, s.user, c.req.header(ACTIVE_COMPANY_HEADER));
+  if (!projectInActiveCompany(company, p)) return c.json({ error: 'mercury_owner_only', detail: 'Switch to this startup’s company first.' }, 403);
+  if (await isSupportSession(c)) return c.json({ error: 'support_session_refused', detail: 'A support session cannot read a member’s bank account.' }, 403);
+  const conn = await founderMercuryConnection(c.env, s.user);
+  if (!conn) return c.json({ error: 'mercury_not_connected', detail: 'Sign in with Mercury first.' }, 409);
+  return { integrationId: conn.id, uid: conn.uid };
+}
+
+const OUTCOME_STATUS = (o: { status: number }) => o.status as any;
+
+cycleRaise.post('/mercury/sync', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const own = await mercuryOwner(c, s);
+  if (own instanceof Response) return own;
+  const reads = await founderRaiseReads(c.env, s.user);
+  if (!reads.ok) return c.json({ error: reads.code, detail: reads.message }, reads.status as any);
+  try {
+    const counts = await syncRaise(c.env, own.integrationId, s.projectId, reads.reads, today());
+    await reads.log('mercury_raise_sync', counts);
+    return c.json({ ok: true, counts });
+  } catch (e) {
+    // Counts and a code only: no Mercury figure reaches a log.
+    console.error('[cycle_raise] mercury sync failed:', (e as { code?: string })?.code ?? 'error');
+    return c.json({ error: 'mercury_sync_failed', detail: 'Mercury could not be read. Nothing changed; try again.' }, 502);
+  } finally { await reads.close(); }
+});
+
+cycleRaise.post('/mercury/proposals/:id/accept', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const own = await mercuryOwner(c, s);
+  if (own instanceof Response) return own;
+  const b = await body(c);
+  // Only a statement needs Mercury again: its bytes.
+  const kind = (await c.env.DB.prepare('SELECT kind FROM mercury_raise_proposals WHERE id = ? AND integration_id = ? AND project_id = ?')
+    .bind(id, own.integrationId, s.projectId).first()) as { kind: string } | null;
+  const reads = kind?.kind === 'statement' ? await founderRaiseReads(c.env, s.user) : null;
+  if (reads && !reads.ok) return c.json({ error: reads.code, detail: reads.message }, reads.status as any);
+  try {
+    const out = await acceptRaiseProposal(c.env, {
+      integrationId: own.integrationId, projectId: s.projectId, id, user: s.user, reads: reads?.ok ? reads.reads : null, section: b.section,
+    });
+    if (!out.ok) return c.json({ error: out.code, detail: out.message }, OUTCOME_STATUS(out));
+    return c.json(out);
+  } catch (e) {
+    if (e instanceof HolderError) return c.json({ detail: e.sentence }, e.status as any);
+    if (e instanceof AcceptError) return c.json({ error: e.code, detail: e.sentence }, e.status as any);
+    return writeFailed(c, e);
+  } finally { if (reads?.ok) await reads.close(); }
+});
+
+cycleRaise.post('/mercury/proposals/:id/dismiss', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'Proposal not found' }, 404);
+  const own = await mercuryOwner(c, s);
+  if (own instanceof Response) return own;
+  const out = await dismissRaiseProposal(c.env, { integrationId: own.integrationId, projectId: s.projectId, id, user: s.user });
+  if (!out.ok) return c.json({ error: out.code, detail: out.message }, OUTCOME_STATUS(out));
+  return c.json(out);
+});
+
+cycleRaise.delete('/mercury/facts/:id', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const id = idParam(c.req.param('id'));
+  if (id == null) return c.json({ detail: 'Fact not found' }, 404);
+  const own = await mercuryOwner(c, s);
+  if (own instanceof Response) return own;
+  if (!(await deleteRaiseFact(c.env, { integrationId: own.integrationId, projectId: s.projectId, id }))) return c.json({ detail: 'Fact not found' }, 404);
+  return c.json({ ok: true });
 });
 
 export default cycleRaise;

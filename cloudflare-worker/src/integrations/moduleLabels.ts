@@ -17,6 +17,13 @@ export const MODULE_LABELS: Record<string, string> = {
   demand_signals: 'Demand and urgency signals',
   experiments: 'Experiments and evidence',
   verdict: 'Verdict',
+  // D840 part 2 (#2347): the Raise modules the founder's own Mercury feeds; names as `raiseCycle.ts` MODULES.
+  fundraising_readiness: 'Fundraising readiness',
+  use_of_funds: 'Use of funds',
+  data_room: 'Data room',
+  cap_table: 'Cap table',
+  investor_narrative: 'Investor narrative',
+  pitch_deck: 'Pitch deck',
 };
 
 
@@ -39,6 +46,12 @@ export const MODULE_HREFS: Record<string, string> = {
   revenue_and_traction: '/grow/revenue-and-traction',
   customers: '/grow/customers',
   network: '/network',
+  fundraising_readiness: '/raise/fundraising-readiness',
+  use_of_funds: '/raise/use-of-funds',
+  data_room: '/raise/data-room',
+  cap_table: '/raise/cap-table',
+  investor_narrative: '/raise/investor-narrative',
+  pitch_deck: '/raise/pitch-deck',
 };
 
 export function moduleHref(key: string): string | null {
