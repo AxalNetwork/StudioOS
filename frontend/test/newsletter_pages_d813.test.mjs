@@ -262,7 +262,7 @@ test('a link with no token is a bad link, and nothing is sent', async (t) => {
 
 const PREFS = { email: 'p***@example.com', status: 'confirmed', topics: { brief: true, portfolio: false, events: true, insights: false } };
 
-async function mountPrefs(t, stubs, url = '/newsletter/preferences?token=tok-0123456789abcdefghij') {
+async function mountPrefs(t, stubs, url = '/newsletter/preferences?token=test-token-placeholder') {
   stubApi(t, stubs);
   const v = await mountContracts(React.createElement(prefs.PreferencesFlow), url);
   t.after(() => v.unmount());
@@ -284,7 +284,7 @@ test('preferences: the read topics as switches in 515\'s order, and Save sends o
   assert.equal(v.props(save()).disabled, true, 'nothing to save until a switch moves');
   await v.toggle('Portfolio news');
   await v.click('Save');
-  assert.deepEqual(saves, [['tok-0123456789abcdefghij', { portfolio: true }]]);
+  assert.deepEqual(saves, [['test-token-placeholder', { portfolio: true }]]);
   assert.match(v.text(), /Saved\./);
   assert.equal(v.props(v.sw('Portfolio news'))['aria-checked'], 'true', 'redrawn from the answer');
 });
@@ -309,7 +309,7 @@ test('a link that names a topic offers "Unsubscribe from [topic]"; Resubscribe t
     preferences: async () => PREFS,
     unsubscribe: async (token, topic) => { calls.push(['unsubscribe', topic]); return { ok: true, topic, status: 'confirmed' }; },
     savePreferences: async (token, topics) => { calls.push(['save', topics]); return { ok: true, ...PREFS }; },
-  }, '/newsletter/preferences?token=tok-0123456789abcdefghij&topic=events');
+  }, '/newsletter/preferences?token=test-token-placeholder&topic=events');
   await v.click('Unsubscribe from Events');
   assert.match(v.text(), /You're unsubscribed from Events\.\s*Your other topics are unchanged\./);
   await v.click('Resubscribe');
