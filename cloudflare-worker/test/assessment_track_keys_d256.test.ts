@@ -2,7 +2,7 @@
  * D256 — the assessment track key in code has to be the key the seed
  * migrations actually use.
  *
- * `ASSESSMENT_TRACKS` exists twice — `cloudflare-worker/src/services/
+ * Originally `ASSESSMENT_TRACKS` existed twice — `cloudflare-worker/src/services/
  * assessmentSchema.ts` (whose own comment says "Keep in lockstep with the
  * seed migrations (108 / 110) — these are stable identifiers; never rename
  * one") and `frontend/src/pages/admin/assessment/jsonFields.js`, which
@@ -25,7 +25,9 @@
  * THIS TEST READS THE SEED MIGRATIONS OFF DISK, not the two lists against
  * each other — a test that only compared the lists could not have caught
  * this bug, since both lists agreed with each other and disagreed with the
- * data.
+ * data. The owner removed the editor and its jsonFields.js mirror on
+ * 2026-10-21. The Worker list, seed evidence and event routing remain covered;
+ * the deleted mirror no longer has a parity check.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -56,8 +58,8 @@ test('the seed migrations still seed exactly 6 tracks — the evidence this test
   const slugs = seededTrackSlugs();
   assert.equal(slugs.length, 6,
     `expected 6 seeded tracks in migrations 108+110, found ${slugs.length}: ${slugs.join(', ')}. `
-    + 'Either a track was added or removed — update ASSESSMENT_TRACKS in both '
-    + 'assessmentSchema.ts and jsonFields.js together — or the reader above stopped seeing '
+    + 'Either a track was added or removed — update ASSESSMENT_TRACKS in '
+    + 'assessmentSchema.ts — or the reader above stopped seeing '
     + 'one of the INSERTs.');
 });
 
@@ -66,17 +68,6 @@ test('ASSESSMENT_TRACKS (worker) names exactly the tracks the seed migrations se
   assert.deepEqual([...ASSESSMENT_TRACKS].sort(), seeded,
     'cloudflare-worker/src/services/assessmentSchema.ts\'s ASSESSMENT_TRACKS names a track '
     + 'no seed migration creates, or is missing one that is seeded');
-});
-
-test('ASSESSMENT_TRACKS (frontend mirror) names exactly the tracks the seed migrations seed', () => {
-  const src = read('frontend/src/pages/admin/assessment/jsonFields.js');
-  const body = src.slice(src.indexOf('export const ASSESSMENT_TRACKS'), src.indexOf('// The six item mechanics'));
-  const tracks = [...body.matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]).sort();
-  const seeded = seededTrackSlugs();
-  assert.deepEqual(tracks, seeded,
-    'frontend/src/pages/admin/assessment/jsonFields.js\'s ASSESSMENT_TRACKS names a track no '
-    + 'seed migration creates, or is missing one that is seeded — HQ\'s create-game suggestion '
-    + 'list would offer a key that creates an orphaned, unseeded track');
 });
 
 test('INVESTOR_TRACK is a track the seed migrations actually seed', () => {

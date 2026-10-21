@@ -1,7 +1,7 @@
 /**
  * D775 (#2101) PR 2 — the Super Admin's Content section on the rail.
  *
- * The section's eight boards are H18–H25 (`lib/railOptions/superAdmin.js`).
+ * The section's seven active boards are H18–H25 except retired H21 (`lib/railOptions/superAdmin.js`).
  * Under D768's shell provider (#2133) every rail takes its page key from the
  * route, so this checks the three things the section adds:
  *   · each board's route answers its own key, and so do Publications' record
@@ -37,8 +37,8 @@ function keyOf(route) {
   return pageKeyFor(path, 'super_admin', { search: search ? `?${search}` : '' });
 }
 
-test('the Content section is H18–H25, and each board\'s route answers its own key', () => {
-  assert.deepEqual(CONTENT.map((b) => b.id), ['H18', 'H19', 'H20', 'H21', 'H22', 'H23', 'H24', 'H25']);
+test('the Content section keeps H18–H25 except retired H21, and each board\'s route answers its own key', () => {
+  assert.deepEqual(CONTENT.map((b) => b.id), ['H18', 'H19', 'H20', 'H22', 'H23', 'H24', 'H25']);
   for (const b of CONTENT) assert.equal(keyOf(b.route), boardPage(b), `${b.id} ${b.route}`);
   // Publications is one board on three routes.
   for (const path of ['/admin/publications/new', '/admin/publications/41']) {

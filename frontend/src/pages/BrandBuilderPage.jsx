@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import PageExplainer from '../components/PageExplainer';
 import SectorSelect from '../components/SectorSelect';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Sparkles, Loader2, Check, RefreshCw, ExternalLink, Copy, Globe, Upload, Palette, PenLine, Eye, Users, LayoutTemplate, Share2, X, Monitor, Smartphone } from 'lucide-react';
 import { api } from '../lib/api';
 import { railPageHeaders } from '../lib/railPage.js';
@@ -15,6 +15,7 @@ import TemplateEditorPreview from '../components/brand/TemplateEditorPreview.jsx
 import { suggestAudienceAndGoal, getRecommendedTemplatesForAudience, generateInitialBrandKit } from '../lib/brand/flow.js';
 import { AssistLayout } from '../ui';
 import { useRailOption } from '../ui/railCrumbs';
+import BrandPagesSection from './founder/BrandPagesSection.jsx';
 
 // Task #24 — Brand & landing page generator.
 // Task #2 — Reworked into the audience-first flow:
@@ -50,6 +51,10 @@ const fillHeaders = option => {
 
 export default function BrandBuilderPage() {
   const { user } = useAuth();
+  // #2343: Grow's tab and the old /grow/brand address carry `?project_id=`,
+  // as Grow's Brand page read it; the builder opens on that venture.
+  const [searchParams] = useSearchParams();
+  const requestedProjectId = searchParams.get('project_id');
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
   const [project, setProject] = useState(null);
@@ -113,7 +118,8 @@ export default function BrandBuilderPage() {
     api.listProjects().then((r) => {
       const list = Array.isArray(r) ? r : (r?.projects || []);
       setProjects(list);
-      if (list.length && !projectId) setProjectId(list[0].id);
+      const requested = list.find((x) => String(x.id) === requestedProjectId);
+      if (list.length && !projectId) setProjectId((requested || list[0]).id);
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -999,6 +1005,10 @@ export default function BrandBuilderPage() {
           </div>
         </section>
       )}
+
+      {/* #2343: Grow's Brand page folded in here — every stored page, its
+          leads and conversion, the four chips and the leads export. */}
+      <BrandPagesSection projectId={projectId} projectName={project?.name} />
 
       {/* Waitlist preview */}
       {signups.length > 0 && (

@@ -4,6 +4,10 @@ Dedicated canvas landing pages for the Investor / LP role, mirroring the
 pattern in `../founder/`: a role-specific component owns the page instead of
 the generic route wrapper once a canvas has graduated.
 
+- `FromMercury.jsx` (D840 part 4, #2349) is the "From Mercury" part of
+  Deals · Commit and Closing, Fund · Calls, Accounting and Reporting, and
+  Portfolio's line saying Mercury feeds nothing there. Facts are shown;
+  proposals have Accept and Dismiss, and nothing is written without Accept.
 - `ProofOfFunds.jsx` (D752, #1891) is the investor's "Show Axal you can fund
   this": `useProofTargets`, `ProofDoor`, `ProofOfFundsSheet` and
   `SharedProofOfFunds`, drawn on the Deal Room, the LP workspace and My

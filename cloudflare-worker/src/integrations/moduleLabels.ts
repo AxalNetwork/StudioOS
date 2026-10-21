@@ -24,6 +24,12 @@ export const MODULE_LABELS: Record<string, string> = {
   cap_table: 'Cap table',
   investor_narrative: 'Investor narrative',
   pitch_deck: 'Pitch deck',
+  // D840 part 4 (#2349): the investor's sections a signed-in Mercury feeds.
+  deals_commit: 'Deals · Commit',
+  deals_closing: 'Deals · Closing',
+  fund_calls: 'Fund · Calls',
+  fund_ledger: 'Fund · Accounting',
+  fund_reporting: 'Fund · Reporting',
 };
 
 
@@ -52,6 +58,11 @@ export const MODULE_HREFS: Record<string, string> = {
   cap_table: '/raise/cap-table',
   investor_narrative: '/raise/investor-narrative',
   pitch_deck: '/raise/pitch-deck',
+  deals_commit: '/deals/commit',
+  deals_closing: '/deals/closing',
+  fund_calls: '/funds/calls',
+  fund_ledger: '/funds/ledger',
+  fund_reporting: '/funds/reporting',
 };
 
 export function moduleHref(key: string): string | null {

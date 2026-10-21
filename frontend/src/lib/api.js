@@ -50,6 +50,7 @@ export * from './api/licenceRequests.js';
 export * from './api/licenceTerms.js';
 export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
+export * from './api/mercuryInvestor.js';
 export * from './api/mercuryPersonal.js';
 export * from './api/newsletter.js';
 export * from './api/partnerSettlements.js';
@@ -5778,76 +5779,14 @@ export const assessment = {
   results: (userId) => request(`/assessment/results/${userId}`),
 };
 
-// Task #3 — Assessment admin authoring + analytics (§3/§5/§7.2). Each method
-// maps 1:1 to a /api/admin/assessment route on the worker (api-drift guard
-// checks this prefix). The writes are `requireHqAuthoring` on the worker —
-// an admin, and not on a branch (D106) — and the reads and preview are plain
-// `requireAdmin`. This comment used to say every route was requireAdmin,
-// which D106 made false (corrected in D214). The dev FastAPI backend does
-// NOT implement these, so this surface is worker-only — expect 404s in the
-// dev preview. D255 removed the dead `rescore` method (no caller); the
-// worker's own POST /sessions/:id/rescore route is unaffected.
+// Assessment Studio was removed at the owner's request (2026-10-21).
+// Branch Programs still reads the saved games and runs through these methods.
 export const adminAssessment = {
-  // Games
   listGames: () => request('/admin/assessment/games'),
-  createGame: (body) => request('/admin/assessment/games', { method: 'POST', body: JSON.stringify(body) }),
-  getGame: (slug) => request(`/admin/assessment/games/${encodeURIComponent(slug)}`),
-  updateGame: (slug, body) =>
-    request(`/admin/assessment/games/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(body) }),
-  publishGame: (slug) =>
-    request(`/admin/assessment/games/${encodeURIComponent(slug)}/publish`, { method: 'POST', body: '{}' }),
-  archiveGame: (slug) =>
-    request(`/admin/assessment/games/${encodeURIComponent(slug)}/archive`, { method: 'POST', body: '{}' }),
-  versionGame: (slug) =>
-    request(`/admin/assessment/games/${encodeURIComponent(slug)}/version`, { method: 'POST', body: '{}' }),
-
-  // Chapters (PUT/DELETE keyed by id; create is scoped to a game slug).
-  createChapter: (slug, body) =>
-    request(`/admin/assessment/games/${encodeURIComponent(slug)}/chapters`, { method: 'POST', body: JSON.stringify(body) }),
-  updateChapter: (id, body) =>
-    request(`/admin/assessment/chapters/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteChapter: (id) => request(`/admin/assessment/chapters/${id}`, { method: 'DELETE' }),
-
-  // Items (PUT/DELETE keyed by id; create is scoped to a game slug and needs
-  // chapterId or chapterSlug). DELETE soft-deactivates if the item has answers.
-  createItem: (slug, body) =>
-    request(`/admin/assessment/games/${encodeURIComponent(slug)}/items`, { method: 'POST', body: JSON.stringify(body) }),
-  updateItem: (id, body) =>
-    request(`/admin/assessment/items/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteItem: (id) => request(`/admin/assessment/items/${id}`, { method: 'DELETE' }),
-
-  // Archetypes (PUT/DELETE keyed by id; create scoped to a game slug).
-  createArchetype: (slug, body) =>
-    request(`/admin/assessment/games/${encodeURIComponent(slug)}/archetypes`, { method: 'POST', body: JSON.stringify(body) }),
-  updateArchetype: (id, body) =>
-    request(`/admin/assessment/archetypes/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteArchetype: (id) => request(`/admin/assessment/archetypes/${id}`, { method: 'DELETE' }),
-
-  // Badges (global; PUT/DELETE keyed by slug).
-  listBadges: () => request('/admin/assessment/badges'),
-  createBadge: (body) => request('/admin/assessment/badges', { method: 'POST', body: JSON.stringify(body) }),
-  updateBadge: (slug, body) =>
-    request(`/admin/assessment/badges/${encodeURIComponent(slug)}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteBadge: (slug) => request(`/admin/assessment/badges/${encodeURIComponent(slug)}`, { method: 'DELETE' }),
-
-  // Preview — scores a draft play-through in memory; persists NOTHING.
-  preview: (slug, responses) =>
-    request(`/admin/assessment/games/${encodeURIComponent(slug)}/preview`, {
-      method: 'POST',
-      body: JSON.stringify({ responses }),
-    }),
-  // Analytics — aggregate funnel/distribution/coverage for a game.
-  analytics: (slug) => request(`/admin/assessment/games/${encodeURIComponent(slug)}/analytics`),
-  // D446 — runs on this database. `cycle` is a cohort cycle id; the worker
-  // keeps a run whose start falls inside that cycle. Omit it to list every run.
   listSessions: (cycleId) => {
     const q = new URLSearchParams();
     if (cycleId !== undefined && cycleId !== null && String(cycleId) !== '') q.set('cycle', String(cycleId));
     const s = q.toString();
     return request(`/admin/assessment/sessions${s ? `?${s}` : ''}`);
   },
-  // D255 — `rescore` was removed here: no caller in frontend/src called it.
-  // The worker route (admin_assessment.ts, POST /sessions/:id/rescore)
-  // stays — check-api-drift reads api.js → worker only, so a route with no
-  // api.js caller is invisible to it either way.
 };

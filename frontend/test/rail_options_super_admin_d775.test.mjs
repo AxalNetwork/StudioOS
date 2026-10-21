@@ -37,14 +37,15 @@ function railMounts(file) {
   }));
 }
 
-test('the boards are the canvas\'s H1–H37, in its order and under its names', () => {
+test('the active boards preserve canvas IDs, excluding retired H21', () => {
   const profile = CANVAS.profiles[SUPER_ADMIN_PROFILE];
   const expected = Object.entries(profile).flatMap(([section, modules]) => [
     { section, module: null }, ...modules.map((module) => ({ section, module })),
   ]);
   assert.equal(expected.length, 37, 'the canvas no longer draws 37 Super Admin boards');
-  assert.deepEqual(SUPER_ADMIN_BOARDS.map(({ section, module }) => ({ section, module })), expected);
-  assert.deepEqual(SUPER_ADMIN_BOARDS.map((b) => b.id), expected.map((_, i) => `H${i + 1}`));
+  // The owner's page removal retires H21; frozen canvas IDs never shift.
+  const active = expected.map((b, i) => ({ ...b, id: `H${i + 1}` })).filter((b) => b.id !== 'H21');
+  assert.deepEqual(SUPER_ADMIN_BOARDS.map(({ id, section, module }) => ({ id, section, module })), active);
 });
 
 test('every board\'s files exist, and its rail file mounts the rail', () => {

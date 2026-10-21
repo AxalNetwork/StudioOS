@@ -62,7 +62,8 @@ const probes=[
  ['bindings','app','<FounderModuleBackLink user={user} />','<span />'],
  ['bindings','route','tools={moduleToolLinks(cycle, slug, user, q)}','tools={[]}'],
  ['redirect','app',"pathname: '/raise/capital-match'","pathname: '/grow/capital-match'"],
- ['redirect','app','hash: location.hash','hash: ""'],
+ // Anchored on its own route: #2335–#2343's forwards also keep the hash, earlier in App.jsx.
+ ['redirect','app',"pathname: '/raise/capital-match', search: location.search, hash: location.hash","pathname: '/raise/capital-match', search: location.search, hash: \"\""],
  ['match','match','workspace="Raise"','workspace="Grow"'],
  ['match','match','<FounderModuleBackLink user={user} />','<span />'],
  ['shell','shell',"prefix: '/raise', tagline:","prefix: '/grow', tagline:"],

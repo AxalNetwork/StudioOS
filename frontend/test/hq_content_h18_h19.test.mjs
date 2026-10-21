@@ -263,7 +263,7 @@ test('the route builds its six lanes in the canvas\'s order, with the canvas\'s 
 });
 
 test('every console is linked by a literal path, once, and the network-profiles route is never linked', () => {
-  for (const to of ['/admin/articles', '/admin/publications', '/admin/assessment', '/admin?tab=personas', '/admin?tab=network-profiles']) {
+  for (const to of ['/admin/articles', '/admin/publications', '/admin?tab=personas', '/admin?tab=network-profiles']) {
     assert.equal(count(P, `to="${to}"`), 1, `${to} is linked ${count(P, `to="${to}"`)} times`);
   }
   // Its reachability exemption says nothing links it; a link here would make that stale.
@@ -412,7 +412,7 @@ test('statuses no lane names are reported, never dropped', () => {
 
 // ─────────────────────────────────────────────────── C1 · Assessment Studio ──
 
-test('C1: loading, the summary failing and the block failing draw no games, and all keep the footer and the link', () => {
+test('C1: loading, the summary failing and the block failing draw no games, and all keep the footer without an editor link', () => {
   const states = [
     [render(AssessmentPanel, { loading: true }), /Reading the assessment games…/],
     [render(AssessmentPanel, { unreadable: true }), /Unreadable — The content summary did not answer, so the assessment games could not be read\./],
@@ -422,7 +422,7 @@ test('C1: loading, the summary failing and the block failing draw no games, and 
     assert.match(text(html), expected);
     assert.ok(!html.includes('data-testid="hq-assessment-games"'), 'a game list was drawn with nothing behind it');
     assert.ok(html.includes('data-testid="hq-assessment-edit-reach"'), 'the edit-reach footer went missing');
-    assert.deepEqual(hrefs(html), ['/admin/assessment']);
+    assert.deepEqual(hrefs(html), []);
   }
 });
 
@@ -434,7 +434,7 @@ test('C1: the footer says what an edit reaches, and never the canvas\'s republis
     assert.ok(!seen.includes('republishes to every branch'), 'C1 claims an edit republishes to branches');
     assert.ok(!seen.includes('the branch is told'), 'C1 claims a branch is told');
     // D487 — an edit reaches branches at the next push, and none is notified.
-    assert.match(seen, /It reaches the branches at the next push/);
+    assert.match(seen, /Saved assessment games reach the branches at the next push/);
     assert.match(seen, /Nothing is republished on its own, and no branch is notified\./);
   }
 });

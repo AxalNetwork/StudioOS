@@ -2962,13 +2962,13 @@ function buildLifecycleChecklist(
       return [
         { key: 'concept_summary', label: 'Write a one-line concept summary', done: m('concept_summary'), href: '/build/command-center?tab=founder-portal', manual: true },
         { key: 'talk_cofounders', label: 'Talk to 3 potential co-founders', done: m('talk_cofounders'), href: '/build/team?tab=cofounder', manual: true },
-        { key: 'first_hypothesis', label: 'Note your riskiest assumption', done: m('first_hypothesis'), href: '/build/discovery', manual: true },
+        { key: 'first_hypothesis', label: 'Note your riskiest assumption', done: m('first_hypothesis'), href: '/validate/customer-research', manual: true },
       ];
     case 'validate':
       return [
         { key: 'landing_published', label: 'Publish a landing page', done: s.landing_published, href: '/build/brand', manual: false },
-        { key: 'interviews_5', label: 'Log 5 customer interviews', done: s.interview_count >= 5, href: '/build/discovery', manual: false },
-        { key: 'validated_hypothesis', label: 'Validate a key hypothesis', done: m('validated_hypothesis'), href: '/build/discovery', manual: true },
+        { key: 'interviews_5', label: 'Log 5 customer interviews', done: s.interview_count >= 5, href: '/validate/customer-research', manual: false },
+        { key: 'validated_hypothesis', label: 'Validate a key hypothesis', done: m('validated_hypothesis'), href: '/validate/customer-research', manual: true },
       ];
     case 'build':
       return [
@@ -2984,9 +2984,9 @@ function buildLifecycleChecklist(
       ];
     case 'grow':
       return [
-        { key: 'metrics_logged', label: 'Log weekly metrics / connect Stripe', done: (s.latest_mrr ?? 0) > 0 || (s.active_users ?? 0) > 0, href: '/build/metrics', manual: false },
-        { key: 'mrr_positive', label: 'Reach positive MRR', done: (s.latest_mrr ?? 0) > 0, href: '/build/metrics', manual: false },
-        { key: 'retention_tracked', label: 'Track retention & churn', done: m('retention_tracked'), href: '/build/metrics', manual: true },
+        { key: 'metrics_logged', label: 'Log weekly metrics / connect Stripe', done: (s.latest_mrr ?? 0) > 0 || (s.active_users ?? 0) > 0, href: '/build/kpi', manual: false },
+        { key: 'mrr_positive', label: 'Reach positive MRR', done: (s.latest_mrr ?? 0) > 0, href: '/build/kpi', manual: false },
+        { key: 'retention_tracked', label: 'Track retention & churn', done: m('retention_tracked'), href: '/build/kpi', manual: true },
       ];
     case 'raise':
       return [

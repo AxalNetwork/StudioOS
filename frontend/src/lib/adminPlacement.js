@@ -62,8 +62,6 @@ export const ADMIN_PLACEMENT = [
   // The Admin Console itself, /admin, is on UNPLACED below: H35 says "Stays
   // reachable. Its 14 tabs are placed individually", and they are.
   row('Due Diligence', '/admin/due-diligence', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
-  row('Assessment Studio', '/admin/assessment', hq('Content', 'sub-nav'), false,
-    { how: 'Sub-navigation item (authoring). Admin · Programs shows the runs.', also: [admin('Programs', 'card link')] }),
   row('Best-Fit Console', '/admin/best-fit', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
   row('Event Admin', '/admin/events', admin('Community', 'card link'), false,
     { how: 'Card link. Its approvals are also an Approvals lane.', also: [admin('Approvals', 'lane')] }),

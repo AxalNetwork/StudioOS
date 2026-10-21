@@ -169,7 +169,8 @@ test('D704 test 5 (interviews): no tool, door or Lab link leads to the Interview
   assert.doesNotMatch(tools, /\/validate\/interviews/);
   assert.match(tools, /'market-intelligence': \(\) => \(\{ label: 'Open the competitor tracker', href: '\/build\/competitors' \}\)/, 'Market intelligence keeps its tool');
   assert.equal(FOUNDER_TOOLS.some((t) => t.path === '/validate/interviews' || t.aliases?.includes('/validate/interviews')), false, 'FOUNDER_TOOLS has no /validate/interviews');
-  assert.ok(FOUNDER_TOOLS.some((t) => t.path === '/build/discovery'), 'the other Customer research tools stay');
+  // `/build/discovery` was the third, until #2335 retired it.
+  assert.ok(FOUNDER_TOOLS.some((t) => t.path === '/build/marketplace'), 'the other Customer research tools stay');
   const lab = readFileSync('frontend/src/pages/SpinoutLabDiscoveryPage.jsx', 'utf8');
   assert.ok(lab.includes("<Link to={`/validate/customer-research/${interview.id}${interview.project_id ? `?project_id=${interview.project_id}` : ''}`}"), "the Lab's cell opens the interview's record, its venture kept");
   assert.match(lab, />Transcribe on Customer research →<\/Link>/);
