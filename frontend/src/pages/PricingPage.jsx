@@ -116,7 +116,7 @@ function PlanCard({ card }) {
   );
 }
 
-function Compare({ tab, cards }) {
+function Compare({ tab, cards, embedded = false }) {
   const D = useContext(Face);
   const groups = COMPARE[tab] || [];
   // The phone shows one plan: the member's own, else the second (the canvas's default).
@@ -136,9 +136,10 @@ function Compare({ tab, cards }) {
     );
   };
   const cols = { gridTemplateColumns: `minmax(0,1.6fr) repeat(${cards.length},minmax(0,1fr))` };
+  const Frame = embedded ? 'div' : 'section';
   return (
-    <section className="axp-sec axp-compare" aria-labelledby="axp-compare-h">
-      <h2 id="axp-compare-h" className="axp-h2">Compare plans</h2>
+    <Frame className={`${embedded ? '' : 'axp-sec '}axp-compare`} aria-labelledby={embedded ? undefined : 'axp-compare-h'}>
+      {!embedded && <h2 id="axp-compare-h" className="axp-h2">Compare plans</h2>}
       <div className="axp-desk axp-table">
         <div className="axp-thead" style={cols}><span />{cards.map((c) => <span key={c.id} className={`axp-th${D}`}>{c.name}</span>)}</div>
         {groups.map(([t, rows]) => (
@@ -170,6 +171,30 @@ function Compare({ tab, cards }) {
           ))}
         </div>
       </div>
+    </Frame>
+  );
+}
+
+/** Compare existing role plans without leaving the Models tab. The plan read
+ * is independent of model rates: failure of either never hides the other. */
+function ModelsCompare({ read, onRetry, user, role }) {
+  const [audience, setAudience] = useState(() => initialTab('', user ? role : null));
+  const built = read.status === 'ready'
+    ? planCards(read.body, PLAN_CARDS[audience], { held: heldCard(user, role, audience), signedIn: !!user })
+    : null;
+  return (
+    <section className="axp-sec axp-model-comparison" aria-labelledby="axp-models-compare-h">
+      <h2 id="axp-models-compare-h" className="axp-h2">Compare plans</h2>
+      <div className="axp-chips" role="group" aria-label="Compare plans for">
+        {PRICING_TABS.filter(t => t.key !== 'models').map(t => (
+          <button key={t.key} type="button" aria-pressed={audience === t.key}
+            data-testid={`models-compare-${t.key}`} className={`axp-chip${audience === t.key ? ' is-on' : ''}`}
+            onClick={() => setAudience(t.key)}>{t.label}</button>
+        ))}
+      </div>
+      {read.status === 'loading' && <Skeleton />}
+      {(read.status === 'unreadable' || built?.unreadable) && <Unavailable onRetry={onRetry} />}
+      {built && !built.unreadable && <Compare key={`models-compare-${audience}`} tab={audience} cards={built.cards} embedded />}
     </section>
   );
 }
@@ -322,6 +347,8 @@ export function PricingBody({ user = null }) {
     <Face.Provider value={D}>
     <div className={`axp${user ? ' axp-app' : ''}`} data-testid="pricing-page">
       <section className="axp-hero">
+        <img src="/site/home-hero.webp" alt="" className="axp-hero-image" />
+        <div aria-hidden="true" className="axp-hero-shade" />
         <h1 className="axp-h1">{HERO.title}</h1>
         <p className="axp-hero-p">{HERO.line}</p>
         <Tabs tab={tab} onPick={pickTab} />
@@ -341,6 +368,11 @@ export function PricingBody({ user = null }) {
         <section className="axp-sec axp-plans">
           {plans.status === 'loading' && <Skeleton />}
           {(plans.status === 'unreadable' || built?.unreadable) && <Unavailable onRetry={retryPlans} />}
+          {ready && (
+            <div className={`axp-grid axp-grid-${built.cards.length}`}>
+              {built.cards.map((c) => <PlanCard key={c.id} card={c} />)}
+            </div>
+          )}
           {ready && tab === 'investor' && (
             <div className="axp-lp">
               <div className="axp-lp-main">
@@ -353,11 +385,6 @@ export function PricingBody({ user = null }) {
               <ul className="axp-lp-feats">
                 {LP_ACCESS.feats.map((f) => <li key={f}><span className="axp-tick">{TICK}</span>{f}</li>)}
               </ul>
-            </div>
-          )}
-          {ready && (
-            <div className={`axp-grid axp-grid-${built.cards.length}`}>
-              {built.cards.map((c) => <PlanCard key={c.id} card={c} />)}
             </div>
           )}
         </section>
@@ -375,7 +402,9 @@ export function PricingBody({ user = null }) {
         </section>
       )}
 
-      {ready && <Compare key={`${tab}`} tab={tab} cards={built.cards} />}
+      {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} />}
+
+      {!roleTab && <ModelsCompare read={plans} onRetry={retryPlans} user={user} role={role} />}
 
       {!roleTab && (
         <section className="axp-sec axp-models">
@@ -385,7 +414,7 @@ export function PricingBody({ user = null }) {
       )}
       {!roleTab && <Packs read={plans} />}
 
-      <Faq key={tab} tab={tab} />
+      <Faq key={`faq-${tab}`} tab={tab} />
 
       {!user && (
         <section className="axp-sec">
