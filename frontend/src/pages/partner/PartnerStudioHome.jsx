@@ -4,7 +4,6 @@ import { ArrowUpRight, BriefcaseBusiness, Building2, Eye, RefreshCw, ShieldCheck
 import { api } from '../../lib/api';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
-import ProductTestingCard from '../productTesting/ProductTestingCard';
 import PartnerHomeP2 from './PartnerHomeP2';
 import './partnerStudioHome.css';
 
@@ -79,9 +78,6 @@ export default function PartnerStudioHome({
       {previewing
         ? <section className="partner-assessment-preview" data-testid="module-partner-assessment"><Sparkles size={18} /><div><strong>Partner/Operator assessment</strong><p>Skills, working values, and archetype are withheld in this visual role preview.</p></div></section>
         : <ProfileFitSection compact studio audience="partner" className="partner-fit" />}
-
-      {/* D814 (#2260): "Apply for Product Testing", above P2's own frame. */}
-      <ProductTestingCard previewing={previewing} className="mb-4" />
 
       <PartnerHomeP2 previewing={previewing} />
     </main>

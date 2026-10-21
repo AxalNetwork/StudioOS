@@ -27,7 +27,6 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
-import ProductTestingCard from '../productTesting/ProductTestingCard';
 import { api, spinoutLab } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { failedRead } from './founderStudioModel';
@@ -110,7 +109,7 @@ export default function FounderStudioHome({ user }) {
     return <StudioPhone tab={tab} ticketOpen={Boolean(ticket)} advisorAvailable={advisorAvailable}>{chat}</StudioPhone>;
   }
   return (
-    <FounderStudioBody user={user} reads={reads} onRetry={again} advisorAvailable={advisorAvailable} profileCard={<ProfileFitSection compact />} testingCard={<ProductTestingCard />}>
+    <FounderStudioBody user={user} reads={reads} onRetry={again} advisorAvailable={advisorAvailable} profileCard={<ProfileFitSection compact />}>
       {chat}
     </FounderStudioBody>
   );

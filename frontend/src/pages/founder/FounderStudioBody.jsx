@@ -13,7 +13,7 @@ import {
 } from './founderStudioModel';
 
 /** The canvas's zones over a set of reads. Exported so each state renders in a test. */
-export default function FounderStudioBody({ user, reads, onRetry, advisorAvailable = null, children = null, profileCard = null, testingCard = null, now = Date.now() }) {
+export default function FounderStudioBody({ user, reads, onRetry, advisorAvailable = null, children = null, profileCard = null, now = Date.now() }) {
   const header = useMemo(() => headerOf({ user, project: reads.project, lab: reads.lab }), [user, reads.project, reads.lab]);
   const summary = summaryOf(reads);
   const actions = actionsOf(reads);
@@ -141,8 +141,6 @@ export default function FounderStudioBody({ user, reads, onRetry, advisorAvailab
         </div>
 
         <aside className="grid content-start gap-4">
-          {/* D814 (#2260): "Apply for Product Testing", the Studio card every member profile carries. */}
-          {testingCard}
           <Zone title="Your founder profile" testId="zone-founder-profile" zone={profile.completion.state === LOADING ? profile.completion : { state: READY }} onRetry={onRetry} what="Your profile">
             <p className="text-[28px] font-extrabold tabular-nums" data-testid="founder-profile-pct">
               {profile.completion.state === READY ? `${profile.completion.pct}%` : <span className="text-[12px] font-semibold text-axal-muted"><Unrecorded reason={profile.completion.reason}>{profile.completion.state === UNREADABLE ? 'Unreadable' : 'Not recorded'}</Unrecorded></span>}
