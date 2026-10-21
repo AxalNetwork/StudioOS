@@ -37,6 +37,7 @@ import ToolsHistory from './ToolsHistory';
 import SolutionDesignFromCode from './SolutionDesignFromCode';
 import FoundingTeamFromCode from './FoundingTeamFromCode';
 import CompanyFromCode from './CompanyFromCode';
+import MercuryRaiseFeed from './MercuryRaiseFeed';
 import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
@@ -54,6 +55,9 @@ import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { moduleToolLinks } from './founderToolNavigation.js';
+
+/** D840 part 2 (#2347): a Raise module's From Mercury, from `parts.mercury`, which only the founder's own read carries. */
+const mercuryPart = (slug, data, ctx) => <MercuryRaiseFeed slug={slug} part={data?.parts?.mercury} projectId={ctx.projectId} reload={ctx.reload} />;
 
 /**
  * D661 (#1474) — a cycle's overview and module pages, wired to its read.
@@ -150,11 +154,14 @@ const CYCLE_DEFS = {
     action: (q, open) => ({ label: 'Call for Capital', href: `/raise/call${q}`, onOpen: open }),
     // D686 §5.6: Capital relationships' Calls history, anchored at #calls.
     // D752 (#1989): then the founder's "Match to my Mercury" for committed prospects.
+    // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
     parts: toFnMap({
+      ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
       'capital-relationships': (data, ctx) => (
         <>
           <CallsHistory calls={data?.parts?.calls} />
           <RaiseReceiptMatches role={ctx.role} onChanged={ctx.reload} />
+          {mercuryPart('capital-relationships', data, ctx)}
         </>
       ),
     }),

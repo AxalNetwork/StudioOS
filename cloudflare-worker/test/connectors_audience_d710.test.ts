@@ -24,6 +24,7 @@ import integrations, { logEvent } from '../src/routes/integrations.ts';
 import { REGISTRY, publicDescriptor } from '../src/integrations/registry.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import '../src/integrations/providers/mercury.ts';
+import { mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
 
 const JWT_SECRET = 'y'.repeat(64); // synthetic fixture key
 const ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'operator', 'service_provider'];
@@ -101,7 +102,10 @@ test('on HQ, /available lists mercury to an admin as an entity connection and to
     assert.deepEqual(own.capabilities, role === 'investor' ? ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals'] /* D840 part 4 */ : role === 'founder' ? ['Revenue import', 'Payment matching', 'Spending and runway'] : ['Revenue import', 'Payment matching'], role);
     assert.equal(own.permissions.length, 1, role);
     assert.match(own.permissions[0], /never sends, transfers or requests money/);
-    assert.deepEqual(own.feeds, role === 'founder' ? ['revenue_and_traction'] : role === 'investor' ? ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting'] : []);
+    // D840: a role's feeds are `MERCURY_FEEDS`' modules for it (D713's revenue, then part 2's Raise modules; part 4's investor sections).
+    assert.deepEqual(own.feeds, role === 'founder' || role === 'investor' ? mercuryFedModules(role) : []);
+    if (role === 'founder') assert.equal(own.feeds[0], 'revenue_and_traction');
+    if (role === 'investor') assert.deepEqual(own.feeds, ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
     if (role === 'investor') {
       assert.match(own.description, /^Your own Mercury account, read-only: show Axal's admins/);
       // D840 part 4: the investor's capacity is their own balance, shown to them alone; D752's admins still see none.

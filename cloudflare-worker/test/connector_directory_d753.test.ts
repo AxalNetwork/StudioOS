@@ -37,6 +37,7 @@ import '../src/integrations/providers/mercury.ts';
 import '../src/integrations/providers/salesforce.ts';
 import '../src/integrations/providers/slack.ts';
 import '../src/integrations/providers/stripe.ts';
+import { mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
 
 const {
   REGISTRY, CATEGORY_ORDER, CHANNEL_PAGES, FIRST_PARTY_CARDS, FIRST_PARTY_PAGES, PERSONAL_MERCURY,
@@ -240,7 +241,7 @@ test('Mercury\'s page follows its audience; the entity variant reads no entity s
   // D752 (#1886): PERSONAL_MERCURY is keyed by role.
   assert.equal(founder.description, PERSONAL_MERCURY.founder.description);
   assert.equal((await call(db, 'investor', '/directory/mercury')).body.connector.description, PERSONAL_MERCURY.investor.description);
-  assert.deepEqual(founder.feeds, ['revenue_and_traction']);
+  assert.deepEqual(founder.feeds, mercuryFedModules('founder'));
   assert.deepEqual((await call(db, 'partner', '/directory/mercury')).body.connector.feeds, []);
 });
 
