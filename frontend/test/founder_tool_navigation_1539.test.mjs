@@ -49,7 +49,9 @@ async function changed(kind,old,replacement,index) {
   return out;
 }
 const probes=[
- ['gates','navigation','hasTier(user, tool.requiredTier)','true'],
+ // The tier probe (hasTier → true) stood first. Its one tier-gated door,
+ // Open liquidity, was removed with Liquidity & Exits (owner, 2026-10-20), so
+ // no door carries a tier for the probe to catch.
  ['gates','navigation',"if (!['admin', 'founder'].includes(user?.role)) return [];","if (!user) return [];"],
  ['returns','back','to={link.href}','to="/wrong-module"'],
  ['returns','back','data-testid="founder-module-back"','data-testid="lost-back-link"'],

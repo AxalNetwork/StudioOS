@@ -1,27 +1,26 @@
-// Fund Ops workspace — consolidates Funds administration, LP Reporting and
-// Capital Calls into one tabbed workspace backed by the canonical stores.
+// Fund Ops workspace — Funds administration and fund performance in one
+// tabbed workspace backed by the canonical stores.
 //   • Funds admin  — the fund-operations view (AdminFundsView). Fund creation,
 //     capital calls and distributions are admin-only on the worker, so for
 //     non-admins this tab shows a blurred LockedPreview pointing them at
 //     their own position in the LP workspace.
-//   • LP Reporting — quarterly fund statements with live-computed TVPI/DPI.
+//   • LP Reporting and Accounting — REMOVED on the owner's instruction
+//     (2026-10-20): `/lp-reports` and `/funds/accounting` no longer exist. An
+//     investor's fund reports stay in the fund shell's Reporting zone
+//     (`/funds/reporting`) and its ledger in the Ledger zone (`/funds/ledger`).
 //   • Capital Calls — RETIRED (D371). `/funds/capital-calls` redirects to the
 //     Calls zone at `/funds/calls`, the fund's call ledger with writes. An
-//     admin's studio-wide list of every call is `/capital`; an investor's own
-//     calls are in the LP workspace's My-commitment section. The panel that
-//     lived here read those same two sources, read-only.
+//     investor's own calls are in the LP workspace's My-commitment section.
 //   • LP Workspace — RETIRED (D372). `/funds/lp-workspace` redirects to
 //     `/spinout-lab/investor-workspace`, the same component standalone.
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { Banknote, Calculator, FileBarChart, Landmark, TrendingUp } from 'lucide-react';
+import { Banknote, Landmark, TrendingUp } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import WorkspaceTabs, { WorkspaceHeader } from '../components/WorkspaceTabs';
 import LockedPreview from '../components/LockedPreview';
 import { AdminFundsView } from './FundsPage';
-import LPReportingPage from './LPReportingPage';
 import FundPerformancePage from './FundPerformancePage';
-import FundAccountingPage from './FundAccountingPage';
 
 // Inert teaser rendered under the blur for the non-admin "Funds admin" tab.
 function FundsAdminTeaser() {
@@ -46,19 +45,11 @@ export default function FundOpsWorkspace() {
   const { pathname } = useLocation();
   const { role } = useAuth();
   const isAdmin = role === 'admin';
-  const active = pathname.includes('/performance')
-    ? 'performance'
-    : pathname.includes('/accounting')
-    ? 'accounting'
-    : pathname.includes('/lp-reports')
-    ? 'reports'
-    : 'funds';
+  const active = pathname.includes('/performance') ? 'performance' : 'funds';
 
   const tabs = [
     { to: '/funds', label: 'Funds admin', icon: Banknote },
     { to: '/funds/performance', label: 'Performance', icon: TrendingUp },
-    { to: '/funds/accounting', label: 'Accounting', icon: Calculator },
-    { to: '/lp-reports', label: 'LP Reporting', icon: FileBarChart },
   ];
 
   return (
@@ -66,7 +57,7 @@ export default function FundOpsWorkspace() {
       <WorkspaceHeader
         icon={Landmark}
         title="Fund Ops"
-        description="Fund administration, LP reporting, and capital calls — one canonical LP and capital-call store behind them all."
+        description="Fund administration and fund performance — one canonical LP and capital-call store behind them."
       />
       <WorkspaceTabs tabs={tabs} />
 
@@ -83,8 +74,6 @@ export default function FundOpsWorkspace() {
           </LockedPreview>
         ))}
       {active === 'performance' && <FundPerformancePage embedded />}
-      {active === 'accounting' && <FundAccountingPage embedded />}
-      {active === 'reports' && <LPReportingPage embedded />}
     </div>
   );
 }

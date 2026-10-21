@@ -390,7 +390,7 @@ export default function ProjectDetail() {
               </div>
             </div>
           ) : (
-            <div className="text-sm text-gray-600">No score yet. <Link to="/scoring" className="text-violet-600 hover:underline">Run scoring</Link></div>
+            <div className="text-sm text-gray-600">No score yet.</div>
           )}
         </div>
       </div>

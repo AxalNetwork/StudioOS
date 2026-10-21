@@ -54,8 +54,6 @@ export const RETURNS = [
   ['/raise/capital/cap-table','/raise/cap-table','← Raise › Cap table'],
   ['/raise/capital/pipeline','/raise/capital-relationships','← Raise › Capital relationships'],
   ['/raise/data-room','/raise/data-room','← Raise › Data room'],
-  ['/raise/liquidity','/raise/cap-table','← Raise › Cap table'],
-  ['/liquidity','/raise/cap-table','← Raise › Cap table'],
   ['/raise/legal-engine','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/incorporation','/build/company-creation','← Build › Company creation'],
   ['/raise/legal-engine/founders','/build/company-creation','← Build › Company creation'],
@@ -77,7 +75,8 @@ export const checks = {
     });
     assert.deepEqual(out,[
       [{href:'/grow/brand?project_id=41',label:'Open landing-page builder',quiet:true},{href:'/grow/launch?project_id=41',label:'Open launch calendar',quiet:true}],
-      [{href:'/raise/liquidity?project_id=41',label:'Open liquidity',quiet:true}],
+      // Cap table's one door, Open liquidity, left with Liquidity & Exits (owner, 2026-10-20).
+      [],
       [{href:'/legal?project_id=41',label:'Open legal documents',quiet:true},{href:'/legal/send?project_id=41',label:'Open e-signature',quiet:true}],
       [{href:'/raise/capital-match?project_id=41',label:'Open investor match',quiet:true}],
       // D696: the files door's own query comes first; static markup escapes its `&`.
@@ -92,9 +91,9 @@ export const checks = {
       [
         ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
         ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/grow/brand','/grow/launch','/raise/liquidity','/legal','/legal/send','/raise/capital-match'],
         ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/grow/brand','/grow/launch','/raise/liquidity','/legal','/legal/send','/raise/capital-match'],[],[],[],
+        ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
+        ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],[],[],[],
       ]);
   },
   returns(m=actual) {
@@ -142,6 +141,6 @@ export const checks = {
       const block=routeBlock(app,t.path)||'';
       const roles=block.match(/guard\(\[([^\]]*)\]/)?.[1]||'';
       return [t.path,t.roles.every(r=>roles.includes("'"+r+"'"))];
-    }),[['/grow/brand',true],['/grow/launch',true],['/raise/liquidity',true],['/legal',true],['/legal/send',true],['/raise/capital-match',true],['/raise/data-room',true]]);
+    }),[['/grow/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-match',true],['/raise/data-room',true]]);
   },
 };
