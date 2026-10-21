@@ -71,3 +71,13 @@ from the browser. Stripe and the existing billing-country/VAT calculation stay
 on the existing checkout surface.
 
 `ProductsPage.jsx` (at `/pricing/products` since D786, #2211; `/plans-and-pricing` redirects to `/pricing` and `pricingRedirects.jsx` holds that redirect and `/pricing/investor`'s) mounts the public Token packs read after the plans on both desktop and phone; pack products are excluded from Add-ons, product details and the shared cart. The owner authorized this CR7 dependency under #1985; CR5 retains the plan-allowance and visitor-routing work.
+
+## Investor Spin-Out Lab width
+
+By the owner's request (2026-10-21), `SpinoutLabInvestorPage.jsx` fills the
+available app column at `/spinout-lab`. Its hero background reaches both edges;
+the body below has its own centered 1,240px width limit and content
+padding, as clarified by the owner. Heading and paragraph line lengths stay bounded for readability.
+The shell already supplies an edge-to-edge surface for this route; no other
+profile's Lab page or LP workspace layout changes. This layout correction
+allocates no new decision or migration number.
