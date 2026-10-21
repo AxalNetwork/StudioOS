@@ -237,7 +237,8 @@ newsletter.post('/newsletter/subscribe', async (c) => {
     for (const t of NEWSLETTER_TOPICS) if (!INVESTOR_TOPICS.has(t)) choices[t] = topics.includes(t);
     await setTopics(c.env, row.id, choices);
 
-    const confirmUrl = `${baseUrl(c.env)}/api/newsletter/confirm?token=${encodeURIComponent(confirm.token)}`;
+    // D813: the SPA's confirm page, which checks the link and confirms on a press.
+    const confirmUrl = `${baseUrl(c.env)}/newsletter/confirm?token=${encodeURIComponent(confirm.token)}`;
     await deliver(c.env, row, mail.confirmSubscription({ confirm_url: confirmUrl, topics: topicLabels(topics) }));
     return c.json(SIGNUP_ANSWER);
   } catch (e) { return mapError(c, e); }
@@ -303,7 +304,7 @@ newsletter.post('/newsletter/confirm', async (c) => {
     await deliver(c.env, fresh, mail.welcome({ topics, ...links }), links.unsubscribe_url);
     return html
       ? page(c, 200, 'Subscription confirmed', '<p>Thank you. Your subscription to Axal VC is confirmed, and a welcome email is on its way.</p>')
-      : c.json({ ok: true, status: 'confirmed' });
+      : c.json({ ok: true, status: 'confirmed', topics });
   } catch (e) { return mapError(c, e); }
 });
 

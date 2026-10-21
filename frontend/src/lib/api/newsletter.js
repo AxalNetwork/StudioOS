@@ -6,7 +6,7 @@
 //        the same answer whatever the address's state; 403 turnstile_failed
 //   GET  /api/newsletter/confirm?token=              → { ok, status: 'pending' }, and changes nothing:
 //        a mail scanner opens every link, so only the POST confirms (S1's review)
-//   POST /api/newsletter/confirm?token=              → { ok, status: 'confirmed' };
+//   POST /api/newsletter/confirm?token=              → { ok, status: 'confirmed', topics: [label] };
 //        either: 410 token_invalid | token_expired
 //   GET  /api/newsletter/preferences?token=          → { email (masked), status, topics: { <key>: bool } }
 //   PUT  /api/newsletter/preferences?token= { topics: { <key>: bool } }

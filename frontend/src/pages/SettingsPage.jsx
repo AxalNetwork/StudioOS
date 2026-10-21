@@ -24,6 +24,7 @@ import { AccountPhoneFrame, AccountPhoneIndex, AccountSectionNav, Outcome, Switc
 import { accountPathFor, accountViewFor, connectorKeyFor } from './account/accountPhone';
 import ProfileIdentityCanvas from './account/AccountProfile';
 import { PushDevices, SessionsCard } from './account/AccountDevices';
+import AccountNewsletters from './account/AccountNewsletters';
 import { Orders, PlanHeader, useBillingStatus } from './account/AccountBilling';
 import AutoReloadCard from './account/AutoReloadCard';
 import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard, useBillingReads } from './account/BillingCards';
@@ -494,6 +495,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
       {safeActive === 'notifications' && (
         <>
           <NotificationsSection data={data} flash={flash} />
+          <AccountNewsletters />
           <PushDevices />
           <DigestQuietHoursCard flash={flash} />
         </>
