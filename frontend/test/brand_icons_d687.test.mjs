@@ -310,10 +310,12 @@ test('8. the consent page draws a mark only for the identity the Worker verified
 test('9. no file imports lucide\'s GitBranch as a GitHub icon; GitHub Sync draws GitHub\'s mark (#1742)', async () => {
   const { srcFilesWith } = await import('./_srcFilesWith.mjs');
   assert.deepEqual(srcFilesWith(/GitBranch as Github/), []);
+  // The Admin Console's GitHub Sync entry, which drew the mark, is gone: the
+  // owner's ruling (2026-10-20) moved GitHub Sync to HQ's Integration keys
+  // page, whose section has a heading and no menu icon.
   const admin = read('frontend/src/pages/AdminPage.jsx');
-  assert.match(admin, /\{ value: 'github', label: 'GitHub Sync', Icon: GithubMark \}/);
-  assert.match(admin, /function GithubMark\(\{ size = 16, className = '' \}\) \{\n  return <BrandIcon provider="github" size=\{size\} variant="bare" tone="current" className=\{className\} \/>;/);
-  assert.match(admin, /^import BrandIcon from '\.\.\/ui\/BrandIcon';$/m);
+  assert.doesNotMatch(admin, /value: 'github'/);
+  assert.doesNotMatch(admin, /GitBranch/);
   // Drawn the way the menu draws every entry's icon: the mark, its key, the passed size and colour.
   const out = html(h(BrandIcon, { provider: 'github', size: 14, variant: 'bare', tone: 'current', className: 'shrink-0 text-gray-400 dark:text-gray-500' }));
   assert.match(out, /data-provider="github"/);

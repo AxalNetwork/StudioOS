@@ -16,7 +16,7 @@ One file per provider. Each module:
    fails otherwise (D751).
 6. An OAuth provider exports its `redirectUri(env)`, built with
    `oauthCallbackUrl` (`../../util/url.ts`), and `../../routes/admin_integration_keys.ts`'s
-   `CALLBACK_URL` lists it, so Admin → Integration keys shows the URL the
+   `CALLBACK_URL` lists it, so HQ → Integration keys shows the URL the
    provider sends. `tsc` enforces the list for managed keys (D751, #1882).
 
 GitHub's per-module feeds (D782, #2110) live in `github/`, one file per

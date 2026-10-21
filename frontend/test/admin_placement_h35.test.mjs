@@ -114,6 +114,9 @@ test('the question is the size it was measured at', () => {
   // Effects.
   assert.equal(LEGACY_ROWS.length, 40);
   assert.equal(new Set(LEGACY_ROWS).size, 40, 'a legacy route is listed twice');
+  // Fourteen tabs when the map was drawn. Integration keys and GitHub Sync
+  // left for HQ's own Super Admin page (the owner's ruling, 2026-10-20);
+  // D708's Bank accounts and D815's Product testing joined.
   assert.ok(TABS.length >= 14, `ADMIN_SECTIONS read ${TABS.length} tabs; the map was drawn for 14`);
   assert.ok(X_ROW_PARKED, 'the commented-out /admin/x row is gone from sidebarConfig.js');
   assert.ok(ROUTES.size >= 300, `App.jsx parsed to ${ROUTES.size} routes — the route reader is broken`);

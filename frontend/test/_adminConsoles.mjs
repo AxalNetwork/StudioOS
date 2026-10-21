@@ -30,6 +30,17 @@ export const ADMIN_CONSOLE_FILES = [
   'frontend/src/pages/admin/consoles/shared.jsx',
 ];
 
+/**
+ * The two consoles HQ's Integration keys page composes, not the Admin
+ * Console: the owner's ruling (2026-10-20) moved them out of `/admin` to the
+ * Super Admin's own page. They stay in the list above, so a test that pins a
+ * console's wording still reads them.
+ */
+export const HQ_KEYS_CONSOLE_FILES = [
+  'frontend/src/pages/admin/consoles/IntegrationKeysConsole.jsx',
+  'frontend/src/pages/admin/consoles/GithubSyncConsole.jsx',
+];
+
 /** The shell and every console, one after another, as written. */
 export function adminConsoleSource() {
   return ADMIN_CONSOLE_FILES.map((f) => readFileSync(resolve(process.cwd(), f), 'utf8')).join('\n');

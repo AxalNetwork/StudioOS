@@ -117,7 +117,8 @@ test('/admin draws the frame once around its tabs, each named for its board in D
   // Every board on an /admin tab, of either profile, is hosted by AdminPage.
   const tabbed = [...ADMIN_BOARDS.map((b) => ['admin', b]), ...SUPER_ADMIN_BOARDS.map((b) => ['super_admin', b])]
     .filter(([, b]) => b.route.startsWith('/admin?tab='));
-  assert.deepEqual(tabbed.map(([, b]) => b.id), ['S2', 'S6', 'S7', 'S28', 'S29', 'S30', 'H11', 'H22', 'H23', 'H24', 'H27', 'H28', 'H29', 'H30']);
+  // H27 and H28 left with the keys for HQ's own page (the owner's ruling, 2026-10-20).
+  assert.deepEqual(tabbed.map(([, b]) => b.id), ['S2', 'S6', 'S7', 'S28', 'S29', 'S30', 'H11', 'H22', 'H23', 'H24', 'H29', 'H30']);
   const code = codeOnly(read(ADMIN_PAGE));
   for (const [role, b] of tabbed) {
     assert.equal(b.host, ADMIN_PAGE, `${b.id} is not hosted by AdminPage`);

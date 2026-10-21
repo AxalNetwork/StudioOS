@@ -20,7 +20,7 @@ import {
   UserCircle, Shield, ShieldCheck, Network, Sparkles, Briefcase,
   TrendingUp, MessageSquare, Package, Calendar,
   Inbox, Radar, Wallet, Landmark, Mail,
-  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck,
+  Map, UserCog, Coins, FileStack, SlidersHorizontal, Banknote, BadgeCheck, KeyRound,
 } from 'lucide-react';
 
 // `workspaces/shellConfig.js` is a pure leaf module — it imports nothing — so
@@ -134,6 +134,10 @@ export const SIDEBAR_GROUPS = {
       // from Platform, beside Promo codes, and lights this row; the row keeps
       // its own subtree.
       { to: '/admin/platform', icon: SlidersHorizontal, label: 'Platform', match: ['/admin/platform', '/admin/credit-rules'] },
+      // The owner's ruling (2026-10-20): the providers' keys and GitHub Sync are
+      // Super Admin only and a row of their own, after Platform, whose strip
+      // carried them. They left the Admin Console, so a plain admin has no door.
+      { to: '/admin/integration-keys', icon: KeyRound, label: 'Integration keys' },
       // Y1 — three queues, not the shared Help Center. /help stays for every role.
       // D606 — the review queue (/hq/review) is Support's: the canvas lights this row.
       { to: '/admin/hq-support', icon: Inbox, label: 'Support', match: ['/admin/hq-support', '/hq/review'] },

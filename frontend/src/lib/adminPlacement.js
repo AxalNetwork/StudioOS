@@ -106,8 +106,10 @@ export const ADMIN_PLACEMENT = [
   tab('personas', 'Personas', hq('Content', 'sub-nav'),
     { how: 'Sub-navigation item (the taxonomy). Retagging one person lives on Admin · Accounts.', also: [admin('Accounts', 'card link')] }),
   tab('directory', 'Directory', admin('Approvals', 'lane'), { how: 'A lane.' }),
-  tab('integration-keys', 'Integration keys', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
-  tab('github', 'GitHub Sync', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
+  // Integration keys and GitHub Sync stood here as Platform sub-navigation
+  // items. The owner's ruling (2026-10-20) took both out of the Admin Console:
+  // they are one Super Admin page, `/admin/integration-keys`, with an HQ row
+  // of its own, so there is no legacy tab left to place.
   tab('payments', 'Payments', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
   // D708 (#1773) — beside Payments: the Super Admin's bank-account registry.
   tab('bank-accounts', 'Bank accounts', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Payments.' }),
@@ -223,7 +225,7 @@ export function alsoInFor(role, row) {
 // guard pins this list by value, so it cannot grow quietly.
 export const UNPLACED = [
   { key: '/admin', kind: 'row', label: 'Admin Console', route: '/admin', hqOnly: false,
-    why: 'Stays reachable. Its 14 tabs are placed individually.' },
+    why: 'Stays reachable. Its tabs are placed individually.' },
 ];
 
 /** The entries a shell draws on one of its rows: `tier` first, then `also`. */
