@@ -4,7 +4,7 @@
  *
  * The 29 working pages (26 since AI Matches went, and Market Intelligence and
  * Signals with D670; 20 since the owner removed six on 2026-10-20; 19 since
- * #2341 folded Advisory into Team › Advisors) left
+ * the owner removed Advisory, #2341) left
  * `SIDEBAR_GROUPS.admin`
  * for a top-bar launcher (D284); D563 retired that launcher, and each page now
  * lights a profile sidebar row (`workspaces_retired_d563.test.mjs`). Messages
@@ -58,8 +58,8 @@ const CANVAS = [
   // here; the owner removed both pages on 2026-10-20.
   // ['Studio', 'Market Intelligence', '/market-intel'] and ['Studio', 'Signals',
   // '/signals'] stood here; D670 retired both pages.
-  // ['Studio', 'Advisory', '/advisory'] stood here; #2341 folded it into
-  // Team › Advisors and the address forwards there.
+  // ['Studio', 'Advisory', '/advisory'] stood here; the owner removed it
+  // (#2341) and the address forwards to Team › Advisors.
   // ['Studio', 'AI Matches', '/matches'] stood here; that page was deleted.
   ['Studio', 'Deal Flow', '/deals'],
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist

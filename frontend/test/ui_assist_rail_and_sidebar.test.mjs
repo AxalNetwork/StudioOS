@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runCost, batchCost, spendMeter, formatCost } from '../src/ui/assistCost.js';
 
@@ -412,7 +412,8 @@ test('every assist surface names a task class the router actually routes', () =>
   // not know misreports all of them.
   const cfg = read('frontend/src/ui/eadwynConfig.js');
   const tasks = [...cfg.matchAll(/^\s*task:\s*'([a-z_]+)'/gm)].map((m) => m[1]);
-  assert.ok(tasks.length >= 4, 'the surfaces must declare their task classes');
+  // Three since the advisory surface left with /advisory (#2341).
+  assert.ok(tasks.length >= 3, 'the surfaces must declare their task classes');
   const router = read('cloudflare-worker/src/services/aiRouter.ts');
   // An entry opens `  name: {` at column 2; `provider:` may be on that line or
   // on the next. It used to have to be on the same line, and the first ROUTE
@@ -465,7 +466,8 @@ test('every mounted surface is one eadwynConfig knows', () => {
   const surfaces = new Set(
     [...read('frontend/src/ui/eadwynConfig.js').matchAll(/^  (\w+):\s*\{$/gm)].map((m) => m[1]),
   );
-  assert.ok(surfaces.size >= 4, 'ASSIST_SURFACES must have been parsed');
+  // Three since the advisory surface left with /advisory (#2341).
+  assert.ok(surfaces.size >= 3, 'ASSIST_SURFACES must have been parsed');
   const bad = [];
   for (const f of [...walkJs('frontend/src/pages'), ...walkJs('frontend/src/workspaces')]) {
     for (const m of scan(read(f)).matchAll(/<AssistLayout\s+surface="([^"]+)"/g)) {
@@ -604,9 +606,8 @@ test('each mount wraps its own page, once, inside the exported component', () =>
   // The three Spin-Out Lab pages left this list with D317: the Lab carries no
   // Eadwyn rail (workspace_frame_contract asserts that). The brand tool's
   // "Brand builder" card stays on BrandBuilderPage.
-  // AdvisoryPage moved into Team › Advisors as founder/TeamAdvisoryTools
-  // (#2341), its mount with it.
-  const PAGES = ['founder/TeamAdvisoryTools', 'BrandBuilderPage', 'DeckReviewerPage'];
+  // AdvisoryPage left this list with its page (#2341, the owner: "Remove").
+  const PAGES = ['BrandBuilderPage', 'DeckReviewerPage'];
   assert.doesNotMatch(read('frontend/src/pages/SpinoutLabBrandPage.jsx'), /<AssistLayout\b/,
     'the Spin-Out Lab brand page mounts an assist rail again');
   for (const name of PAGES) {
@@ -625,13 +626,13 @@ test('each mount wraps its own page, once, inside the exported component', () =>
   }
 });
 
-test('the tabbed advisory page only shows the rail on its AI tab', () => {
-  // TeamAdvisoryTools' (the retired AdvisoryPage's) other three tabs are a human advisor directory and two
-  // calculators. A spend meter beside any of them describes work the page is
-  // not doing — D15's rule, one level finer than the page.
-  const src = scan(read('frontend/src/pages/founder/TeamAdvisoryTools.jsx'));
-  assert.match(src, /if \(!\(tab === 'advisor'\)\) return page;/,
-    'the non-AI tabs must return the bare page');
+test('the advisory rail left with the /advisory page', () => {
+  // AdvisoryPage drew this rail on its AI tab only. The owner removed the
+  // page (#2341); /advisory forwards to Team › Advisors, which mounts no
+  // assist rail, so no source may mount the surface again by accident.
+  assert.equal(existsSync(resolve(root, 'frontend/src/pages/AdvisoryPage.jsx')), false, 'the page is gone');
+  const mounts = walkJs('frontend/src').filter((f) => /<AssistLayout surface="advisory"/.test(scan(read(f))));
+  assert.deepEqual(mounts, [], 'a page mounts the retired advisory rail');
 });
 
 test('no surface declares a mode toggle nothing reads', () => {

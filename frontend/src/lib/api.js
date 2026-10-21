@@ -374,7 +374,6 @@ export const LONG_TIMEOUT_MS = 180_000;
 export const SLOW_PATHS = [
   /^\/advisor\/tool\/auto$/,
   /^\/advisor\/transcribe$/,
-  /^\/advisory\//,                       // ask, financial-plan, diligence
   /^\/competitors\//,                    // crawl + Workers AI synthesis
   /^\/dd\/cases\/[^/]+\/(scan|report)$/,
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
@@ -1909,15 +1908,8 @@ export const api = {
     sources: () => request('/signals/sources'),
   },
 
-  askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
-  financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
-  runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),
-  // Task #75 — Advisory Suite advisor directory (founder-scoped).
-  advisorProfilesList: () => request('/advisory/advisors'),
-  advisorProfileUpdate: (id, data) => request(`/advisory/advisors/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  advisorProfileAssign: (id, projectIds) => request(`/advisory/advisors/${id}/assignments`, { method: 'PUT', body: JSON.stringify({ project_ids: projectIds }) }),
-  advisorProfileArchive: (id) => request(`/advisory/advisors/${id}/archive`, { method: 'POST' }),
-  advisorProfileRestore: (id) => request(`/advisory/advisors/${id}/restore`, { method: 'POST' }),
+  // #2341: the Advisory page's ask, financial plan, diligence and advisor-
+  // profile methods left with the page (the owner: "Remove").
 
   activityLog: (params) => request(`/activity${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),

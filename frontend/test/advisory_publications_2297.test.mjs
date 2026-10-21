@@ -1,8 +1,11 @@
 /**
- * #2341 and #2333 (from #2297's checklist): two duplicate pages retired.
+ * #2341 and #2333 (from #2297's checklist): two duplicate pages removed.
  *
- * - `/advisory` folds into Team › Advisors (`/build/team?mode=workspace&tab=advisors`), where
- *   `/advisors` already sends a founder. Its four panels move with it.
+ * - `/advisory` is removed (the owner: "Remove"). Its address forwards to
+ *   Team › Advisors (`/build/team?mode=workspace&tab=advisors`), the advisor
+ *   directory `/advisors` already sends a founder to. What only that page had
+ *   (the advisor-profile list, the template Q&A, the financial planner, the
+ *   diligence checker) left with it, client methods included.
  * - `/insights` folds into `/articles`, whose Briefs section lists what the
  *   Insights index listed. Each brief keeps its share link,
  *   `/insights/public/:slug`.
@@ -35,7 +38,7 @@ const sources = () => ({
   contacts: read('../src/pages/ContactsPage.jsx'),
   og: read('../src/lib/ogRegistry.js'),
   team: read('../src/pages/founder/FounderTeamPage.jsx'),
-  advisory: read('../src/pages/founder/TeamAdvisoryTools.jsx'),
+  api: read('../src/lib/api.js'),
   articles: read('../src/pages/ArticlesPage.jsx'),
   redirects: read('../../cloudflare-worker/src/services/redirectRoutes.ts'),
 });
@@ -78,19 +81,16 @@ function forwards(s) {
   assert.match(s.app, /<Route path="\/articles\/:slug" element=\{<ArticleReaderPage \/>\} \/>/);
 }
 
+const ADVISORY_ONLY = ['askAdvisory', 'financialPlan', 'runDiligence', 'advisorProfilesList', 'advisorProfileUpdate',
+  'advisorProfileAssign', 'advisorProfileArchive', 'advisorProfileRestore'];
+
 function survivors(s) {
-  // Team › Advisors mounts every panel /advisory had.
-  assert.match(s.team, /const TeamAdvisoryTools = lazy\(\(\) => import\('\.\/TeamAdvisoryTools'\)\);/);
+  // Team › Advisors is the founder's advisor directory, and stays one.
   const advisorsTab = s.team.slice(s.team.indexOf('function AdvisorsTab('), s.team.indexOf('// Hiring.'));
-  assert.match(advisorsTab, /<TeamAdvisoryTools \/>/, 'mounted in the Advisors tab');
-  for (const key of ['directory', 'advisor', 'financial', 'diligence']) {
-    assert.match(s.advisory, new RegExp(`\\{ key: '${key}', label:`), `the ${key} tab is kept`);
-  }
-  for (const call of ['advisorProfilesList', 'contactPromote', 'advisorProfileAssign', 'advisorProfileArchive', 'askAdvisory', 'financialPlan', 'runDiligence']) {
-    assert.match(s.advisory, new RegExp(`api\\.${call}\\(`), `${call} is still called`);
-  }
-  assert.match(s.advisory, /<PersonalAdvisor\b/, 'the Eadwyn chat is kept');
-  assert.match(s.advisory, /<AssistLayout surface="advisory">/, 'and its rail');
+  assert.match(advisorsTab, /<AdvisorsPage embedded \/>/, 'the directory is in the Advisors tab');
+  // The page's own tools left with it, not into Team.
+  assert.doesNotMatch(s.team, /AdvisoryTools|AdvisoryPage/, 'Team mounts nothing of the removed page');
+  for (const call of ADVISORY_ONLY) assert.doesNotMatch(s.api, new RegExp(`\\b${call}:`), `${call} left with its page`);
   // /articles lists the briefs, read from the publications store.
   assert.match(s.articles, /publications\.publicList\(\)/, 'Briefs reads the public publications list');
   assert.match(s.articles, /<BrowseArticles \/>\s*<Briefs \/>/, 'the page renders Briefs after the articles');
@@ -98,7 +98,7 @@ function survivors(s) {
 
 test('the duplicate pages and their entries are gone', () => {
   const s = sources();
-  assert.equal(existsSync(new URL('../src/pages/AdvisoryPage.jsx', import.meta.url)), false, 'AdvisoryPage moved');
+  assert.equal(existsSync(new URL('../src/pages/AdvisoryPage.jsx', import.meta.url)), false, 'AdvisoryPage removed');
   assert.equal(existsSync(new URL('../src/pages/insights/InsightsPage.jsx', import.meta.url)), false, 'InsightsPage removed');
   mutationChecked(removed, s, [
     ['app', "\nconst AdvisoryPage = lazy(() => import('./pages/AdvisoryPage'));", 'app: AdvisoryPage'],
@@ -129,14 +129,13 @@ test('the old addresses forward and are counted; the share link and authoring st
   ]);
 });
 
-test('Team › Advisors keeps every /advisory panel, and /articles reads the briefs', () => {
+test('Team › Advisors stays the directory, the page\'s tools are gone, and /articles reads the briefs', () => {
   const s = sources();
   mutationChecked(survivors, s, [
-    ['team', (t) => t.replace('          <TeamAdvisoryTools />\n', ''), 'mount'],
-    ['advisory', (a) => a.replace("{ key: 'financial', label:", "{ key: 'plan', label:"), 'financial tab'],
-    ['advisory', (a) => a.replace('api.runDiligence(', 'api.runSomething('), 'diligence call'],
-    ['advisory', (a) => a.replace('api.contactPromote(', 'api.contactPromoted('), 'promote call'],
-    ['advisory', (a) => a.replace('<AssistLayout surface="advisory">', '<AssistLayout surface="other">'), 'rail'],
+    ['team', (t) => t.replace('<AdvisorsPage embedded />', ''), 'directory'],
+    ['team', '\nconst TeamAdvisoryTools = lazy(() => import(\'./TeamAdvisoryTools\'));', 'tools carried into Team'],
+    ['api', "\n  financialPlan: (data) => request('/advisory/financial-plan'),", 'planner method'],
+    ['api', "\n  advisorProfilesList: () => request('/advisory/advisors'),", 'profile method'],
     ['articles', (a) => a.replace('<Briefs />', ''), 'briefs mount'],
     ['articles', (a) => a.replace('publications.publicList()', 'publications.list()'), 'briefs read'],
   ]);

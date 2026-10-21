@@ -77,7 +77,7 @@ test('the mapping covers exactly the 19 pages, and every line names a profile, a
   assert.deepEqual(Object.keys(PAGE_HOMES).sort(), WORKSPACES.map((w) => w.route).sort());
   // 28 until D670 retired Market Intelligence and Signals; 26 until the owner
   // removed Scoring, Risk Matrix, Capital, Liquidity, Reserves and Watchlist
-  // (2026-10-20); 20 until #2341 folded Advisory into Team › Advisors.
+  // (2026-10-20); 20 until the owner removed Advisory (#2341).
   assert.equal(WORKSPACES.length, 19);
   for (const [route, homes] of Object.entries(PAGE_HOMES)) {
     assert.ok(homes.length > 0, `${route} has no home`);

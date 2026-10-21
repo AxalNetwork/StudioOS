@@ -128,8 +128,8 @@ export const ADMIN_PLACEMENT = [
   // from that row's overview; on an admin shell the palette indexes them.
   // The owner removed six of them on 2026-10-20 — Scoring Engine, Risk Matrix,
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
-  // & Journal — page and route together. #2341 (2026-10-21) folded Advisory
-  // into Team › Advisors, and its address forwards there, so nineteen remain.
+  // & Journal — page and route together. #2341 (2026-10-21) removed Advisory;
+  // its address forwards to Team › Advisors, so nineteen remain.
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
   page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),

@@ -1244,7 +1244,7 @@ reaches them through View As and the command palette.
 | `/pipeline` | admin, founder, partner, investor | partner Pipeline | the row itself |
 | `/scoring` | Lab + admin, partner, investor | investor Deals | `match` + Also in **Removed (owner, 2026-10-20).** |
 | `/portfolio/risk-matrix` | admin, partner, investor | investor Portfolio | already under `/portfolio`; Also in **Removed (owner, 2026-10-20).** |
-| `/advisory` | admin, founder | founder Validate | `match` + Also in **Folded into Team › Advisors (#2341, 2026-10-21); the address forwards to `/build/team?mode=workspace&tab=advisors`.** |
+| `/advisory` | admin, founder | founder Validate | `match` + Also in **Removed (owner, 2026-10-21, #2341); the address forwards to `/build/team?mode=workspace&tab=advisors`.** |
 | `/deals` | admin, partner, investor | investor Deals | the row itself |
 | `/capital` | admin, investor | investor Portfolio | `match` + Also in **Removed (owner, 2026-10-20).** |
 | `/liquidity` | admin, founder, partner, investor | investor Portfolio | `match` + Also in. **A founder is redirected** to `/raise/liquidity?mode=workspace`, the same `LiquidityPage` inside Raise **Removed (owner, 2026-10-20).** |

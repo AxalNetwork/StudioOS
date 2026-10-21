@@ -3108,8 +3108,8 @@ function AppInner() {
           digest email. Research reads the same market data, so an old link
           (and a link in a digest already sent) lands there. */}
       <Route path="/market-intel" element={<Navigate to="/research" replace />} />
-      {/* #2341 — /advisory's directory and tools live in Team › Advisors,
-          where /advisors already sends a founder (#2297 §3). */}
+      {/* #2341 — the owner removed /advisory. Its address forwards to Team ›
+          Advisors, the directory /advisors already sends a founder to. */}
       <Route path="/advisory" element={guard(['admin', 'founder'], <Navigate to="/build/team?mode=workspace&tab=advisors" replace />)} />
       {/* Team (Grow › Talent). Founders reach the advisor directory,
           Co-founder Match and their roles through the Team workspace at

@@ -32,21 +32,8 @@ import { priceForTask } from '../hooks/useAiSpend';
  * misreports every figure on the rail, so each is traced to a call site.
  */
 export const ASSIST_SURFACES = {
-  // routes/advisor.ts → aiRouterRun({ task: 'advisor_explain' })
-  advisory: {
-    task: 'advisor_explain',
-    // 'Score explainer', not 'Advisory' (D400). The mode card renders
-    // `${label} assist`, so this read "Advisory assist" — the assistant
-    // named as giving advice, which the voice rule forbids. The regulated-
-    // wording scanner treats a one-word literal as an identifier and missed
-    // it. The surface explains scores and next steps, and the label says so.
-    // The surface key `advisory` keeps its name: Team › Advisors mounts it
-    // beside the human advisors, who are a real persona (#2341).
-    label: 'Score explainer',
-    unit: 'per explanation',
-    modeNote: 'Eadwyn explains scores and next steps on request.',
-    footer: { kind: 'screened', note: 'Every answer passes a safety screen first.' },
-  },
+  // The `advisory` surface (task advisor_explain, labelled "Score explainer"
+  // under D400) left with the /advisory page, its only mount (#2341).
   // services/deckExtract.ts → aiRun({ task: 'dd_synthesis' })
   deck_review: {
     task: 'dd_synthesis',

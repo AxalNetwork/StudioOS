@@ -11,7 +11,8 @@
  *      Neither is known when the read failed.
  *   2. A failed PRICING read removed the model block without a word, so the
  *      page looked like one with no model to offer.
- *   3. The `advisory` surface's label rendered "Advisory assist".
+ *   3. The `advisory` surface's label rendered "Advisory assist" (the
+ *      surface left with the /advisory page, #2341).
  *   4. The RECOMMENDED badge (covered in worker_rail_models.test.mjs).
  *
  * Run with:
@@ -114,24 +115,24 @@ const UNREADABLE_SPEND = {
 };
 const pricing = {
   prices: { 'x/model': { in: 0.1, out: 0.2 } },
-  routes: { advisor_explain: { model: 'x/model', alternates: [] } },
+  routes: { dd_synthesis: { model: 'x/model', alternates: [] } },
 };
 
 test('eadwynConfig passes an unreadable total as null, not zero', () => {
-  const cfg = eadwynConfig({ surface: 'advisory', spend: UNREADABLE_SPEND, pricing });
+  const cfg = eadwynConfig({ surface: 'deck_review', spend: UNREADABLE_SPEND, pricing });
   assert.equal(cfg.totalSpend, null, 'recorded:false became a number');
   assert.equal(cfg.planCap, 50);
   // No cap in the response is no cap, not a $0 cap.
-  const noCap = eadwynConfig({ surface: 'advisory', spend: { recorded: true, month: { spend_usd: 1 } }, pricing });
+  const noCap = eadwynConfig({ surface: 'deck_review', spend: { recorded: true, month: { spend_usd: 1 } }, pricing });
   assert.equal(noCap.planCap, null);
   assert.equal(noCap.totalSpend, 1);
 });
 
 test('AssistRail: an unreadable usage log renders Unreadable, never $0.00', () => {
-  const cfg = eadwynConfig({ surface: 'advisory', spend: UNREADABLE_SPEND, pricing });
+  const cfg = eadwynConfig({ surface: 'deck_review', spend: UNREADABLE_SPEND, pricing });
   let retried = 0;
   const html = renderToStaticMarkup(React.createElement(AssistRail, {
-    config: cfg, page: 'advisory', onRetrySpend: () => { retried += 1; },
+    config: cfg, page: 'deck_review', onRetrySpend: () => { retried += 1; },
   }));
   const text = renderedText(html);
   assert.doesNotMatch(text, /\$0\.00/, 'an unreadable usage log rendered as $0.00');
@@ -143,11 +144,11 @@ test('AssistRail: an unreadable usage log renders Unreadable, never $0.00', () =
 
 test('AssistRail: raw usage remains visible while its separate included allowance is loading', () => {
   const cfg = eadwynConfig({
-    surface: 'advisory',
+    surface: 'deck_review',
     spend: { recorded: true, month: { spend_usd: 12.5, cap_usd: 50, calls: 3 }, by_task: [] },
     pricing,
   });
-  const text = renderedText(renderToStaticMarkup(React.createElement(AssistRail, { config: cfg, page: 'advisory' })));
+  const text = renderedText(renderToStaticMarkup(React.createElement(AssistRail, { config: cfg, page: 'deck_review' })));
   assert.match(text, /\$12\.50/);
   assert.match(text, /Loading AI allowance/);
   assert.doesNotMatch(text, /\$50\.00/);
@@ -170,8 +171,10 @@ test('no assist surface is labelled as advice', () => {
     assert.doesNotMatch(s.label, /advis|advice|recommend|fiduciar/i,
       `ASSIST_SURFACES.${key}.label is "${s.label}"`);
   }
-  const cfg = eadwynConfig({ surface: 'advisory', spend: UNREADABLE_SPEND, pricing });
-  assert.equal(cfg.mode.label, 'Score explainer assist');
+  // The surface that once read "Advisory assist" left with /advisory (#2341).
+  assert.equal(ASSIST_SURFACES.advisory, undefined, 'the retired advisory surface is back');
+  const cfg = eadwynConfig({ surface: 'deck_review', spend: UNREADABLE_SPEND, pricing });
+  assert.equal(cfg.mode.label, 'Deck reviewer assist');
 });
 
 // ── Stale claims corrected in D400 ──────────────────────────────────────

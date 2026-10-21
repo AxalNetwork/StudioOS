@@ -53,7 +53,7 @@ const LEGACY_ROWS = [
   '/admin/my-licence', '/admin/trash',
   // studio. '/scoring' and '/portfolio/risk-matrix' stood here: the owner
   // removed both pages on 2026-10-20, so there is no console left to place.
-  // '/advisory' stood here: #2341 folded it into Team › Advisors.
+  // '/advisory' stood here: the owner removed it (#2341).
   '/pipeline',
   // '/market-intel' and '/signals' stood here. D670 retired both pages; they
   // only redirect to /research now, so there is no console left to place.
@@ -110,8 +110,8 @@ test('the question is the size it was measured at', () => {
   // outright, and D670 retired /market-intel and /signals, which is the one
   // way a legacy console leaves the question. The owner's removals of
   // 2026-10-20 took six more (Scoring, Risk Matrix, Capital, Liquidity,
-  // Reserves, Watchlist), deleted with their pages. #2341 folded /advisory
-  // into Team › Advisors (2026-10-21); its address only forwards now.
+  // Reserves, Watchlist), deleted with their pages. The owner removed
+  // /advisory on 2026-10-21 (#2341); its address only forwards now.
   assert.equal(LEGACY_ROWS.length, 40);
   assert.equal(new Set(LEGACY_ROWS).size, 40, 'a legacy route is listed twice');
   // Fourteen tabs when the map was drawn. Integration keys and GitHub Sync
@@ -215,7 +215,7 @@ test('every placement names a real tier, a real row of that tier, and a real for
   }
   // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since,
   // and D670 retired Market Intelligence and Signals.
-  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 19, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20, and #2341 folded Advisory into Team › Advisors');
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 19, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20, and removed Advisory in #2341');
 });
 
 test('the three decided placements hold: Wellbeing, X, Trash', () => {

@@ -35,7 +35,7 @@
  * model; issuing paperwork from this page; a payroll-load rate; talent leads
  * from a careers page; advisory grants flowing into the cap table.
  */
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   Users, UserCircle, Briefcase, LayoutGrid, Lock, Sparkles, Plus, Download, X, AlertTriangle, UserPlus,
@@ -53,10 +53,6 @@ import AdvisorsPage from '../AdvisorsPage';
 import CofounderMatchingPanel from './CofounderMatchingPanel';
 import CofounderPage from '../CofounderPage';
 import MyJobsPage from '../jobs/MyJobsPage';
-
-// #2341 — the retired /advisory page's panels. Lazy: they carry the Eadwyn
-// chat, which the rest of the Team page does not need to load.
-const TeamAdvisoryTools = lazy(() => import('./TeamAdvisoryTools'));
 
 // ---------------------------------------------------------------------------
 // Vocabulary. Mirrors services/companyTeam.ts; the worker refuses anything else.
@@ -729,13 +725,6 @@ function AdvisorsTab({ data, onOpen }) {
           <Card data-testid="advisor-directory"><AdvisorsPage embedded /></Card>
         </TierGate>
       )}
-
-      {/* #2341 — the retired /advisory page's panels, which forward here. */}
-      <Card>
-        <Suspense fallback={<p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>}>
-          <TeamAdvisoryTools />
-        </Suspense>
-      </Card>
     </div>
   );
 }
