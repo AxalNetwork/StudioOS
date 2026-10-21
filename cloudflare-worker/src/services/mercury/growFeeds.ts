@@ -621,14 +621,6 @@ export async function isTeamViewer(env: Env, viewer: { id: number; founder_id?: 
   return !!(await env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(p.company_id, viewer.id).first());
 }
 
-/** Whether the venture's founder holds an active Mercury connection (D840 part 3's checklist guard). */
-export async function founderHasMercury(env: Env, projectId: number): Promise<boolean> {
-  return !!(await env.DB.prepare(
-    `SELECT 1 FROM integrations i JOIN users u ON u.id = i.user_id JOIN projects p ON p.founder_id = u.founder_id
-      WHERE p.id = ? AND i.provider_key = 'mercury' AND i.status = 'active' LIMIT 1`,
-  ).bind(projectId).first());
-}
-
 /** Whether the viewer is the venture's founder, whose Mercury it is: only they decide what it proposes. */
 export async function isVentureFounder(env: Env, viewer: { founder_id?: number | null }, projectId: number): Promise<boolean> {
   if (viewer.founder_id == null) return false;

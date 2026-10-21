@@ -26,7 +26,7 @@ import type { Env } from '../types';
 import {
   type Card, type Figure, figure, notRecordedFigure, seriesState,
 } from './cycleCards';
-import { founderHasMercury } from './mercury/growFeeds';
+import { founderHasMercury } from './mercury/growPresence';
 import { billingPeriods, byMonth, cohortRetention, computeMovements, movementGap, prevMonth, readRecurring, type LedgerRecurring, type Movement } from './revenueMovements';
 
 export const GROW_QUESTION = 'How does this venture become larger and more enduring?';
