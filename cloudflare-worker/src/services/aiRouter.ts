@@ -317,10 +317,11 @@ export async function assistOff(env: Env, userId: number, page: string): Promise
  * null when it is not known yet (a run that cost more than its hold, waiting
  * for a Super Admin's decision). `units` are what the run was settled on.
  */
-interface RunCharge {
+export interface RunCharge {
   charged: number | null;
   reservationUid?: string | null;
-  units?: Record<string, number> | null;
+  // D851: a provider run also records its provider, `pricing_version` and `usage_reported` (strings and a flag; readers take numbers only).
+  units?: Record<string, number | string | boolean> | null;
   // D763: a guard row's run, `ai_usage_logs.guard_for`.
   guardFor?: number | null;
 }
@@ -1135,8 +1136,9 @@ async function addLogColumns493(env: Env): Promise<void> {
   await env.DB.exec(LOG_PAGE_INDEX_493);
 }
 
-type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef'>;
-async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: RefusalReason | null, charge: RunCharge = NOTHING_CHARGED): Promise<number | null> {
+export type UsageWho = Pick<RunOptions, 'userId' | 'surface' | 'railPage' | 'railOption' | 'recordRef'>;
+/** Also D851's provider runs (`aiProviders.ts`), so their rows read the same. */
+export async function recordUsage(env: Env, who: UsageWho, usage: UsageMeta, refusal: RefusalReason | null, charge: RunCharge = NOTHING_CHARGED): Promise<number | null> {
   await ensureLogSchema(env);
   const charged = charge.charged == null ? null : Math.max(0, Math.round(charge.charged));
   // `surface` stays the last column bound, as it was before migration 493.
