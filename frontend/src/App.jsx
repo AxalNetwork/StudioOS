@@ -154,7 +154,6 @@ const AdminSpinoutJourneyPreview = lazy(() => import('./pages/admin/AdminSpinout
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
 const AdminX = lazy(() => import('./pages/admin/AdminX'));
 // Task #3 — Assessment admin authoring + analytics surface.
-const AdminAssessment = lazy(() => import('./pages/admin/assessment/AdminAssessmentPage'));
 // Task #1 — Articles surfaces (public + author + admin queue).
 const ArticlesPage = lazy(() => import('./pages/ArticlesPage'));
 const ArticleReaderPage = lazy(() => import('./pages/ArticleReaderPage'));
@@ -1103,7 +1102,6 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/content">Overview</StripLink>
           <StripLink to="/admin/articles">Content queue</StripLink>
           <StripLink to="/admin/publications">Publications</StripLink>
-          <StripLink to="/admin/assessment">Assessment Studio</StripLink>
           <StripLink to="/admin?tab=personas">Personas</StripLink>
           <StripLink to="/admin?tab=network-profiles">Advisors &amp; Partners</StripLink>
           <StripLink to="/admin/team">Public team page</StripLink>
@@ -2815,7 +2813,6 @@ function AppInner() {
       <Route path="/admin/spinout-lab/preview" element={guard(['admin'], <AdminSpinoutJourneyPreview />)} />
       <Route path="/admin/telegram" element={guard(['admin'], hqOnly(<AdminTelegram />))} />
       <Route path="/admin/x" element={guard(['admin'], hqOnly(<AdminX />))} />
-      <Route path="/admin/assessment" element={guard(['admin'], <AdminAssessment />)} />
       {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}
       <Route path="/admin/best-fit" element={guard(['admin'], <AdminBestFitPage />)} />
       <Route path="/admin/profiling-trends" element={guard(['admin'], <AdminProfilingTrends />)} />

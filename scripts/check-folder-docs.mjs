@@ -78,7 +78,6 @@ const DOCUMENTED = new Map([
   ['frontend/src/components/products',        'the Plans & Pricing storefront pieces (D755)'],
   ['frontend/src/decks/templates',            'the pitch-deck slide templates'],
   ['frontend/src/pages/admin',                'the admin console'],
-  ['frontend/src/pages/admin/assessment',     'the assessment game editor'],
   ['frontend/src/pages/admin/consoles',       'one file per Admin Console tool (D648)'],
   ['frontend/src/pages/admin/contracts',      'the Contracts desk (D647), its Structure of the Fund sheet and the template editor (D717)'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],

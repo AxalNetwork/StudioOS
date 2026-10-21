@@ -46,7 +46,7 @@ const LEGACY_ROWS = [
   // home
   '/studio', '/messages',
   // admin
-  '/admin', '/admin/due-diligence', '/admin/assessment', '/admin/best-fit', '/admin/events',
+  '/admin', '/admin/due-diligence', '/admin/best-fit', '/admin/events',
   '/admin/jobs', '/admin/circles', '/admin/advisor-cohorts', '/admin/exploring',
   '/admin/lp-applications', '/monitoring', '/admin/telegram', '/admin/articles',
   '/admin/publications', '/admin/partners', '/admin/refer-earn', '/admin/team',
@@ -113,8 +113,8 @@ test('the question is the size it was measured at', () => {
   // Reserves, Watchlist), deleted with their pages, and #2324 took Network
   // Effects (#2297 §3), whose address now redirects to /network. The owner
   // removed /advisory on 2026-10-21 (#2341); its address only forwards now.
-  assert.equal(LEGACY_ROWS.length, 39);
-  assert.equal(new Set(LEGACY_ROWS).size, 39, 'a legacy route is listed twice');
+  assert.equal(LEGACY_ROWS.length, 38);
+  assert.equal(new Set(LEGACY_ROWS).size, 38, 'a legacy route is listed twice');
   // Fourteen tabs when the map was drawn. Integration keys and GitHub Sync
   // left for HQ's own Super Admin page (the owner's ruling, 2026-10-20);
   // D708's Bank accounts and D815's Product testing joined.

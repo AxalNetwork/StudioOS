@@ -9,7 +9,7 @@ import { Figure, laneOf, useHeldGlance } from './heldFigures';
  *
  * FIVE LITERAL LINKS: the Spin-Out Lab applications tab, the Lab console
  * (cohort calendar and applications), advisor cohort access, the
- * Assessment Studio, and Profiling trends (D358, aggregates only). `/admin/advisor-cohorts` has this page and the
+ * assessment run summaries, and Profiling trends (D358, aggregates only). `/admin/advisor-cohorts` has this page and the
  * Approvals lane as its only doors on this shell, so the links are written
  * out for the reachability walk.
  *
@@ -76,13 +76,11 @@ export default function HeldPrograms() {
         </li>
         <li>
           <Card className="h-full p-4" data-testid="held-programs-assessment">
-            <h2 className="text-[13px] font-extrabold tracking-tight text-axal-ink">Assessment Studio</h2>
+            <h2 className="text-[13px] font-extrabold tracking-tight text-axal-ink">Assessment runs</h2>
             <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
-              Assessment runs and their results, and the games behind them. On HQ a plain admin authors these
-              today; the route refuses authoring only on a branch.
+              Existing assessment runs and their results, and the saved games behind them.
             </p>
             <Figure state={glance} value={undefined} reason="Assessment runs are not counted on the Studio glance." testId="held-programs-assessment-count" />
-            <p className="mt-2 text-[11.5px]"><Link to="/admin/assessment" className={OPEN}>Open Assessment Studio</Link></p>
           </Card>
         </li>
         <li>

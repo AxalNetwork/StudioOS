@@ -226,7 +226,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
         match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/partners', '/admin/spinout-moderation'] },
       { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
-        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment', '/admin/profiling-trends'] },
+        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
       { to: '/admin/held/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles'] },
       // D647 — the shared Contracts page and template library. Not "read-only":
       // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin

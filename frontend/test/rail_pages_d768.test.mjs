@@ -125,7 +125,7 @@ test('a route answers its module and every page below it; the section answers th
   assert.equal(pageKeyFor('/funds/ledger', 'investor'), 'Investor · Fund · Distributions');
   assert.equal(pageKeyFor('/admin', 'super_admin', { search: '?tab=users' }), 'Super Admin · Team · Users');
   assert.equal(pageKeyFor('/admin', 'admin', { search: '?tab=profiles' }), 'Admin · Approvals · Entity profiles');
-  assert.equal(pageKeyFor('/admin/assessment', 'admin'), 'Admin · Programs · Assessment runs');
+  assert.equal(pageKeyFor('/admin/assessment', 'admin'), null);
   // An exact route never answers the pages below it.
   assert.equal(pageFor('/admin', 'admin').key, 'Admin · Admin console');
   assert.equal(pageKeyFor('/admin/licences', 'admin'), null, 'Licences is the Super Admin\'s');

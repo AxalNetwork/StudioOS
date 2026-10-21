@@ -237,9 +237,9 @@ test('Community links its five consoles at their own routes — Advisors & Partn
     'the console prose is BranchCommunity\'s own list, read rather than copied');
 });
 
-test('Programs links its five consoles; Accounts links the Users table, Exploring, Personas and Trash', () => {
+test('Programs links its four consoles; Accounts links the Users table, Exploring, Personas and Trash', () => {
   assert.deepEqual(doorsIn(CODE[LANDINGS.Programs]),
-    ['/admin?tab=lab-applications', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment', '/admin/profiling-trends']);
+    ['/admin?tab=lab-applications', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends']);
   assert.deepEqual(doorsIn(CODE[LANDINGS.Accounts]),
     ['/admin', '/admin/exploring', '/admin?tab=personas', '/admin/trash']);
 });
@@ -268,7 +268,7 @@ test('the three false labels are not rendered, and no gate was narrowed or raise
   for (const r of rows) assert.doesNotMatch(r.label, /read-only/i, `${r.label} says read-only`);
   assert.equal(rows.find((r) => r.label === 'Contracts').to, '/admin/contracts');
   // The gates this item touches nothing of.
-  for (const path of ['/admin/assessment', '/admin', '/monitoring', '/admin/articles', '/admin/publications', '/admin/team']) {
+  for (const path of ['/admin', '/monitoring', '/admin/articles', '/admin/publications', '/admin/team']) {
     const line = routeLine(path);
     assert.match(line, /guard\(\['admin'/, `${path} no longer admits an admin`);
     assert.doesNotMatch(line, /hqOnly\(/, `${path}'s gate was raised — D286 files that question, it does not decide it`);
