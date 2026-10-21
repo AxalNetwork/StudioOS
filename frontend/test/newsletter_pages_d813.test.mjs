@@ -483,11 +483,25 @@ test('the public pages carry the D529 security headers: `_headers` covers them a
   }
   assert.doesNotMatch(headers, /^\/newsletter/m, 'no rule of its own detaches a header from these paths');
   // The assets binding serves them only while no `run_worker_first` glob takes them.
-  const globRe = (g) => new RegExp(`^${g.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*')}$`);
+  // `*` matches any run of characters; everything else is literal. No RegExp is built from the file.
+  const globMatches = (glob, path) => {
+    const [first, ...rest] = glob.split('*');
+    if (!path.startsWith(first)) return false;
+    if (!rest.length) return path === first;
+    let at = first.length;
+    for (const [i, part] of rest.entries()) {
+      if (i === rest.length - 1) return path.length - part.length >= at && path.endsWith(part);
+      const found = path.indexOf(part, at);
+      if (found < 0) return false;
+      at = found + part.length;
+    }
+    return true;
+  };
+  assert.ok(globMatches('/api/*', '/api/x') && globMatches('/mcp', '/mcp') && !globMatches('/mcp', '/mcp/x') && !globMatches('/api/*', '/newsletter'), 'the matcher reads a glob');
   const toml = read('wrangler.toml');
   const globs = [...toml.matchAll(/run_worker_first = \[([^\]]+)\]/g)].flatMap((m) => [...m[1].matchAll(/"([^"]+)"/g)].map((g) => g[1]));
   assert.ok(globs.length >= 2, 'both tables were read');
   for (const path of ['/newsletter', '/newsletter/confirm', '/newsletter/preferences']) {
-    for (const g of globs) assert.doesNotMatch(path, globRe(g), `${g} would take ${path} from the assets binding and its headers`);
+    for (const g of globs) assert.ok(!globMatches(g, path), `${g} would take ${path} from the assets binding and its headers`);
   }
 });
