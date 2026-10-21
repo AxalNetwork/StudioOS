@@ -111,6 +111,25 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
     tools.push(tool('read_transaction', 'the transaction you pick', 'read', 'Reads the one transaction you picked, to confirm it before it is used.', null,
       ['`/account/${accountId}/transaction/${transactionId}`', ...mcp('getTransactionById')]));
   }
+  // D840 part 2 (#2347): the founder's Raise modules, through a sign-in only. Facts land; judgement waits for Accept.
+  if (variant === 'founder') {
+    tools.push(
+      tool('read_cashflow', 'your cashflow summary', 'read', 'Reads the last 3 full months’ cashflow, with your cash on hand, for a measured runway in Fundraising readiness.',
+        'fundraising_readiness', mcp('getCashflowSummary')),
+      tool('raise_spend', 'spending by category', 'read', 'Sums your spending by Mercury category over 3, 6 and 12 months, beside your planned split. Which section a category counts under is proposed for you to accept.',
+        'use_of_funds', mcp('listTransactions')),
+      tool('list_statements', 'your monthly statements', 'read', 'Lists your last 12 statements. Each one you accept is stored in your data room, behind NDA and seen by no investor until you open it.',
+        'data_room', mcp('getAccountStatements')),
+      tool('list_safe_requests', 'your SAFEs', 'read', 'Lists your Mercury SAFEs. Each one you accept becomes an instrument on your cap table.',
+        'cap_table', mcp('getSafeRequests')),
+      tool('raise_credits', 'credits that look like investment', 'read', 'Lists wires and ACH credits of $10,000 or more. Matching one to an investor, or adding a new one, waits for your Accept.',
+        'capital_relationships', mcp('listTransactions')),
+      tool('raise_figures', 'revenue, burn and runway', 'read', 'Measures revenue growth, burn and runway as figures your narrative can cite, from Mercury with their date. They are never typed into your text.',
+        'investor_narrative', mcp('listTransactions')),
+      tool('raise_deck_figures', 'traction figures', 'read', 'Offers the same figures to your deck’s traction slide, from Mercury with their date. They are never typed into your slides.',
+        'pitch_deck', mcp('getCashflowSummary')),
+    );
+  }
   if (member) {
     tools.push(tool('sign_in_with_mercury', 'your sign-in', 'account',
       'Registers Axal VC with Mercury’s sign-in once, and revokes your sign-in’s tokens when you disconnect. Your sign-in asks only for read access.',

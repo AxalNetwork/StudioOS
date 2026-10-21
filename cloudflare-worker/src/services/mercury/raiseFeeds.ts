@@ -16,7 +16,8 @@
  * | Investor narrative, Pitch deck | monthly revenue credits, burn, runway | facts `revenue:<YYYY-MM>` and `revenue:growth`, offered as citable figures, never typed into text |
  *
  * EVERY ROW GOES THROUGH THE LEDGER (`connector_fed_items`, D655). A fact's
- * ledger row is `raise:<project>:<fact_key>`; an accepted proposal's is
+ * ledger row is `raise:<project>:<fact_key>` (a revenue fact also has
+ * `raise:<project>:deck:<fact_key>`, in Pitch deck); an accepted proposal's is
  * `raise:<project>:<kind>:<source_key>`. A fact the founder deleted keeps its
  * ledger row with no `local_id`, and a re-sync never writes it back. A
  * proposal is proposed once: a decided one is never proposed again, and a
@@ -258,10 +259,15 @@ async function deletedFacts(env: Env, integrationId: number, projectId: number):
 interface Fact { kind: FactKind; key: string; label: string | null; months: number | null; amount: number | null; burn: number | null; value: number | null }
 
 function factStmts(env: Env, integrationId: number, projectId: number, asOf: string, f: Fact): D1PreparedStatement[] {
-  return [
+  const stmts = [
     env.DB.prepare(UPSERT_FACT).bind(integrationId, projectId, f.kind, f.key, f.label, f.months, f.amount, f.burn, f.value, asOf),
     env.DB.prepare(FACT_LEDGER).bind(integrationId, projectId, FACT_MODULE[f.kind], f.kind, FACT_EXT(projectId, f.key), integrationId, projectId, f.key),
   ];
+  // The deck cites the narrative's revenue figures: the same fact, its own ledger row, so Pitch deck counts what it was fed.
+  if (f.kind === 'revenue') {
+    stmts.push(env.DB.prepare(FACT_LEDGER).bind(integrationId, projectId, 'pitch_deck', f.kind, FACT_EXT(projectId, `deck:${f.key}`), integrationId, projectId, f.key));
+  }
+  return stmts;
 }
 
 const proposeStmt = (env: Env, integrationId: number, projectId: number, kind: ProposalKind, key: string, payload: unknown, target: string | null) =>

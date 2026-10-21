@@ -11,41 +11,40 @@
  * `MERCURY_READ_TOOLS` are ever called. A read's log row holds counts only.
  */
 import type { Env, User } from '../../types';
-import { decryptCredentials } from '../../integrations/secrets';
+import type { IntegrationRow } from '../../integrations/registry';
 import { MercuryClientError } from './client';
-import { openMercuryReads } from './reads';
+import { mcpAccessFor, mcpCredentialsOf, MERCURY_AUTH_TYPE } from './oauth';
+import { openMercuryReads, scopePermission } from './reads';
 import { raiseReadsOf, type RaiseReads } from './raiseFeeds';
 
-export interface FounderConnection { id: number; uid: string; auth_type: string | null; credentials_enc: string | null }
-
 /** The caller's own active Mercury connection, or null. */
-export async function founderMercuryConnection(env: Env, user: User): Promise<FounderConnection | null> {
+export async function founderMercuryConnection(env: Env, user: User): Promise<IntegrationRow | null> {
   return await env.DB.prepare(
-    `SELECT id, uid, auth_type, credentials_enc FROM integrations
-      WHERE user_id = ? AND provider_key = 'mercury' AND status = 'active' ORDER BY id LIMIT 1`,
-  ).bind(user.id).first<FounderConnection>();
+    `SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'mercury' AND status = 'active' ORDER BY id LIMIT 1`,
+  ).bind(user.id).first<IntegrationRow>();
 }
 
 export type FounderReads =
-  | { ok: true; reads: RaiseReads; log: (event: string, counts: Record<string, unknown>) => Promise<void>; close: () => Promise<void> }
+  | { ok: true; reads: RaiseReads; log: (event: string, counts: Record<string, unknown>) => Promise<void> }
   | { ok: false; status: number; code: string; message: string };
 
 /** Opens the founder's MCP reads, or says why it cannot. */
 export async function founderRaiseReads(env: Env, user: User): Promise<FounderReads> {
-  const conn = await founderMercuryConnection(env, user);
-  if (!conn) return { ok: false, status: 409, code: 'mercury_not_connected', message: 'Sign in with Mercury first.' };
-  if (conn.auth_type !== 'oauth_mcp') {
+  const row = await founderMercuryConnection(env, user);
+  if (!row) return { ok: false, status: 409, code: 'mercury_not_connected', message: 'Sign in with Mercury first.' };
+  if (row.auth_type !== MERCURY_AUTH_TYPE) {
     return { ok: false, status: 409, code: 'mercury_sign_in_required', message: 'Sign in with Mercury to fill your Raise modules; a pasted token does not reach them.' };
   }
-  let accessToken = '';
-  try {
-    const creds = await decryptCredentials(env, conn.uid, conn.credentials_enc);
-    accessToken = typeof creds?.access_token === 'string' ? creds.access_token : '';
-  } catch { accessToken = ''; }
-  if (!accessToken) return { ok: false, status: 503, code: 'credentials_unreadable', message: 'Your Mercury sign-in could not be read. Sign in with Mercury again.' };
+  let creds;
+  try { creds = await mcpCredentialsOf(env, row); } catch { creds = null; }
+  if (!creds) return { ok: false, status: 503, code: 'credentials_unreadable', message: 'Your Mercury sign-in could not be read. Sign in with Mercury again.' };
+  // Read-only, checked again on every use: a sign-in holding more than `read` is not read.
+  if (scopePermission(creds.scopes ?? []) !== 'read_only') {
+    return { ok: false, status: 403, code: 'write_scope_refused', message: 'Your Mercury sign-in holds more than read access. Sign in with Mercury again.' };
+  }
   let reads;
   try {
-    reads = await openMercuryReads({ accessToken });
+    reads = await openMercuryReads(await mcpAccessFor(env, row, creds));
   } catch (e) {
     if (e instanceof MercuryClientError && e.code === 'unauthorized') {
       return { ok: false, status: 409, code: 'mercury_reconnect_required', message: 'Mercury no longer accepts your sign-in. Sign in with Mercury again.' };
@@ -56,12 +55,12 @@ export async function founderRaiseReads(env: Env, user: User): Promise<FounderRe
     ok: true,
     reads: raiseReadsOf(reads),
     async log(event, counts) {
+      // Counts only: a value that is not a number or a flag keeps its letters and underscores, never a figure.
       const summary = Object.entries(counts).map(([k, v]) => `${k}=${typeof v === 'number' || typeof v === 'boolean' ? v : String(v).replace(/[^a-z_]/g, '')}`).join(' ');
       await env.DB.prepare(
         `INSERT INTO integration_logs (integration_id, user_id, provider_key, direction, event_type, status, response_summary)
          VALUES (?, ?, 'mercury', 'outbound', ?, 'ok', ?)`,
-      ).bind(conn.id, user.id, event, summary.slice(0, 500)).run().catch(() => {});
+      ).bind(row.id, user.id, event, summary.slice(0, 500)).run().catch(() => {});
     },
-    close: () => reads.close().catch(() => {}),
   };
 }

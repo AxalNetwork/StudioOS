@@ -40,6 +40,14 @@ export const MERCURY_FEEDS: readonly MercuryFeed[] = Object.freeze([
   { key: 'raise_receipts', role: 'founder', what: 'A wire matched to a raise prospect or a commitment', module: null, tools: BANK_LINES, decision: 'D752' },
   { key: 'practice_income', role: 'partner', what: 'An invoice matched to the credit that paid it', module: null, tools: BANK_LINES, decision: 'D713' },
   { key: 'partner_deals', role: 'partner', what: 'A payout or settlement matched to its line', module: null, tools: BANK_LINES, decision: 'D713' },
+  // D840 part 2 (#2347): the founder's Raise modules. Facts are written; a mapping, statement, SAFE or credit is proposed.
+  { key: 'raise_runway', role: 'founder', what: 'Runway at the last 3 months’ burn, measured', module: 'fundraising_readiness', tools: ['getAccounts', 'getCashflowSummary'], decision: 'D840' },
+  { key: 'raise_use_of_funds', role: 'founder', what: 'Spend by category over 3, 6 and 12 months, and each category’s proposed section', module: 'use_of_funds', tools: ['getAccounts', 'listTransactions'], decision: 'D840' },
+  { key: 'raise_data_room', role: 'founder', what: 'The last 12 statements, proposed for the data room', module: 'data_room', tools: ['getAccounts', 'getAccountStatements'], decision: 'D840' },
+  { key: 'raise_cap_table', role: 'founder', what: 'Each SAFE, proposed as an instrument', module: 'cap_table', tools: ['getSafeRequests'], decision: 'D840' },
+  { key: 'raise_capital_relationships', role: 'founder', what: 'Wires and ACH credits that look like investment, proposed as a match or a new investor', module: 'capital_relationships', tools: ['getAccounts', 'listTransactions'], decision: 'D840' },
+  { key: 'raise_narrative_figures', role: 'founder', what: 'Revenue growth, burn and runway the narrative can cite', module: 'investor_narrative', tools: ['getAccounts', 'listTransactions', 'getCashflowSummary'], decision: 'D840' },
+  { key: 'raise_deck_figures', role: 'founder', what: 'Revenue growth, burn and runway the deck’s traction slide can cite', module: 'pitch_deck', tools: ['getAccounts', 'listTransactions', 'getCashflowSummary'], decision: 'D840' },
   { key: 'capital_attestation', role: 'investor', what: 'A dated proof of funds of at least an amount you choose', module: null, tools: ['getOrganization', 'getAccounts'], decision: 'D752' },
 ] as const);
 

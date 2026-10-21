@@ -121,8 +121,10 @@ async function fixture() {
   `);
   const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', KEK_PII: 'k'.repeat(48), FILES: memR2() };
   const { fake, accessToken } = mercury();
-  const creds = await encryptCredentials(env, 'mc-one', { access_token: accessToken, token_type: 'bearer' });
-  const creds2 = await encryptCredentials(env, 'mc-two', { access_token: accessToken, token_type: 'bearer' });
+  // A sign-in's credentials as part 1's callback stores them (`oauth.ts` McpCredentials); invented.
+  const signIn = { access_token: accessToken, token_type: 'Bearer', expires_at: null, scopes: ['read', 'offline_access'], issuer: 'https://mcp.mercury.com', client_key: 'fixture-client' };
+  const creds = await encryptCredentials(env, 'mc-one', signIn);
+  const creds2 = await encryptCredentials(env, 'mc-two', signIn);
   db.prepare(`INSERT INTO integrations (id, uid, user_id, provider_key, auth_type, credentials_enc) VALUES (41, 'mc-one', 1, 'mercury', 'oauth_mcp', ?), (42, 'mc-two', 2, 'mercury', 'oauth_mcp', ?)`)
     .run(creds, creds2);
   const one = (sql: string, ...a: any[]) => db.prepare(sql).get(...a) as any;
@@ -244,9 +246,11 @@ test('2. a sync calls only read tools, writes facts with their ledger rows, and 
   assert.equal(f.one(`SELECT value FROM mercury_raise_facts WHERE fact_key = 'revenue:growth'`).value, 50);
   const facts = f.one('SELECT COUNT(*) AS n FROM mercury_raise_facts').n;
   const ledger = f.all(`SELECT module, kind, local_table, local_id FROM connector_fed_items WHERE integration_id = 41`);
-  assert.equal(ledger.length, facts, 'one ledger row per fact');
+  const revenue = f.one(`SELECT COUNT(*) AS n FROM mercury_raise_facts WHERE kind = 'revenue'`).n;
+  assert.equal(ledger.length, facts + revenue, 'one ledger row per fact, and the deck’s own for each revenue fact');
   assert.ok(ledger.every((l) => l.local_table === 'mercury_raise_facts' && l.local_id != null));
-  assert.deepEqual([...new Set(ledger.map((l) => l.module))].sort(), ['fundraising_readiness', 'investor_narrative', 'use_of_funds']);
+  assert.deepEqual([...new Set(ledger.map((l) => l.module))].sort(), ['fundraising_readiness', 'investor_narrative', 'pitch_deck', 'use_of_funds']);
+  assert.equal(ledger.filter((l) => l.module === 'pitch_deck').length, revenue);
 
   const kinds = f.all(`SELECT kind, source_key, target, status FROM mercury_raise_proposals ORDER BY kind, source_key`);
   assert.ok(kinds.every((k) => k.status === 'pending'));
@@ -360,6 +364,12 @@ test('4. a re-sync keeps a deleted fact deleted, never re-proposes a decided pro
   await withFake(f, () => sync(f.env));
   const runway = f.one(`SELECT id FROM mercury_raise_facts WHERE fact_key = 'runway'`);
   assert.equal((await call(f.env, `/api/cycles/raise/mercury/facts/${runway.id}?project=101`, 1, 'DELETE')).status, 200);
+  // A revenue fact is the narrative's and the deck's: deleting it unlinks both at once.
+  const sept = f.one(`SELECT id FROM mercury_raise_facts WHERE fact_key = 'revenue:2026-09'`);
+  assert.equal((await call(f.env, `/api/cycles/raise/mercury/facts/${sept.id}?project=101`, 1, 'DELETE')).status, 200);
+  assert.deepEqual(f.all(`SELECT module, local_id FROM connector_fed_items WHERE external_id IN ('raise:101:revenue:2026-09', 'raise:101:deck:revenue:2026-09') ORDER BY module`),
+    [{ module: 'investor_narrative', local_id: null }, { module: 'pitch_deck', local_id: null }]);
+  assert.equal((await call(f.env, `/api/cycles/raise/mercury/facts/${sept.id}?project=101`, 2, 'DELETE')).status, 403, 'another founder deletes nothing here');
   const fresh = proposal(f, 'investor_credit', fakeTx(7));
   await accept(f.env, fresh.id);
   const added = f.one(`SELECT id FROM raise_prospects WHERE project_id = 101 AND id != 501`).id;
@@ -371,6 +381,7 @@ test('4. a re-sync keeps a deleted fact deleted, never re-proposes a decided pro
 
   assert.equal((await withFake(f, () => sync(f.env))).status, 200);
   assert.equal(f.one(`SELECT COUNT(*) AS n FROM mercury_raise_facts WHERE fact_key = 'runway'`).n, 0, 'the deleted runway stays deleted');
+  assert.equal(f.one(`SELECT COUNT(*) AS n FROM mercury_raise_facts WHERE fact_key = 'revenue:2026-09'`).n, 0, 'and the deleted month');
   assert.equal(f.one(`SELECT local_id FROM connector_fed_items WHERE external_id = 'raise:101:runway'`).local_id, null);
   assert.equal(proposal(f, 'fund_mapping', 'Advertising').status, 'dismissed', 'never proposed again');
   assert.equal(proposal(f, 'investor_credit', fakeTx(7)).status, 'accepted');
@@ -412,6 +423,21 @@ test('5. only the founder sees Mercury, in their own company, from their own con
   const p = proposal(f, 'investor_credit', fakeTx(7));
   assert.equal((await call(f.env, `/api/cycles/raise/mercury/proposals/${p.id}/accept?project=202`, 2, 'POST')).status, 404);
   assert.equal(proposal(f, 'investor_credit', fakeTx(7)).status, 'pending');
+
+  // A sign-in holding more than read access is not read.
+  const wide = await encryptCredentials(f.env, 'mc-one', { access_token: f.accessToken, token_type: 'Bearer', expires_at: null, scopes: ['read', 'write'], issuer: 'https://mcp.mercury.com', client_key: 'fixture-client' });
+  const held = f.one('SELECT credentials_enc FROM integrations WHERE id = 41').credentials_enc;
+  f.db.prepare('UPDATE integrations SET credentials_enc = ? WHERE id = 41').run(wide);
+  const before = f.fake.toolCalls().length;
+  const refused = await withFake(f, () => sync(f.env));
+  assert.equal(refused.status, 403);
+  assert.equal(refused.body.error, 'write_scope_refused');
+  assert.equal(f.fake.toolCalls().length, before, 'no tool was called');
+  f.db.prepare('UPDATE integrations SET credentials_enc = ? WHERE id = 41').run(held);
+  // A pasted token reaches no Raise feed.
+  f.db.prepare(`UPDATE integrations SET auth_type = 'api_key' WHERE id = 41`).run();
+  assert.equal((await withFake(f, () => sync(f.env))).body.error, 'mercury_sign_in_required');
+  f.db.prepare(`UPDATE integrations SET auth_type = 'oauth_mcp' WHERE id = 41`).run();
 
   // No connection, no part.
   f.db.prepare(`UPDATE integrations SET status = 'revoked' WHERE id = 41`).run();

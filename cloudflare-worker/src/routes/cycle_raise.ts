@@ -312,7 +312,7 @@ async function mercuryOwner(c: any, s: { user: User; projectId: number }): Promi
   if (await isSupportSession(c)) return c.json({ error: 'support_session_refused', detail: 'A support session cannot read a member’s bank account.' }, 403);
   const conn = await founderMercuryConnection(c.env, s.user);
   if (!conn) return c.json({ error: 'mercury_not_connected', detail: 'Sign in with Mercury first.' }, 409);
-  return { integrationId: conn.id, uid: conn.uid };
+  return { integrationId: Number(conn.id), uid: String(conn.uid) };
 }
 
 const OUTCOME_STATUS = (o: { status: number }) => o.status as any;
@@ -332,7 +332,7 @@ cycleRaise.post('/mercury/sync', async (c) => {
     // Counts and a code only: no Mercury figure reaches a log.
     console.error('[cycle_raise] mercury sync failed:', (e as { code?: string })?.code ?? 'error');
     return c.json({ error: 'mercury_sync_failed', detail: 'Mercury could not be read. Nothing changed; try again.' }, 502);
-  } finally { await reads.close(); }
+  }
 });
 
 cycleRaise.post('/mercury/proposals/:id/accept', async (c) => {
@@ -358,7 +358,7 @@ cycleRaise.post('/mercury/proposals/:id/accept', async (c) => {
     if (e instanceof HolderError) return c.json({ detail: e.sentence }, e.status as any);
     if (e instanceof AcceptError) return c.json({ error: e.code, detail: e.sentence }, e.status as any);
     return writeFailed(c, e);
-  } finally { if (reads?.ok) await reads.close(); }
+  }
 });
 
 cycleRaise.post('/mercury/proposals/:id/dismiss', async (c) => {
