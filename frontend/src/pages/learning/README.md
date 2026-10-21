@@ -66,3 +66,11 @@ everywhere in Learning except Articles. The gate is applied before a wired
 view is mounted, so a gated profile never reads the Learning store. To lift
 it, set `LEARNING_COMING_SOON` to `false`, then remove the gate and its
 callers' coming-soon branches.
+
+
+The Learning home now owns its gutters like Help: its decorative hero uses
+`/site/home-hero.webp` with light/dark overlays, and its content has 16px/32px
+insets. Desktop and phone render the same `LearningHero`; the phone frame's
+optional header wraps its default bar, retaining Back, its subtitle and the
+conditional Eadwyn control, with one heading. The temporary
+coming-soon gate, links, searches and reads are unchanged.

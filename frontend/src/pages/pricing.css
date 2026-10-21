@@ -90,7 +90,7 @@
 .axp-save { font-weight: 700; font-size: 12px; color: #047857; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 99px; padding: 4px 10px; }
 
 /* ── sections ── */
-.axp-sec { max-width: 1180px; margin: 0 auto; padding: 30px 34px 0; }
+.axp-sec { width: 100%; margin: 0; padding: 30px 32px 0; }
 .axp-h2 { margin: 26px 0 18px; font-weight: 800; font-size: 32px; line-height: 1.14; letter-spacing: -.03em; color: var(--p-ink); }
 .axp-h2-s { font-size: 28px; margin: 8px 0 6px; }
 .axp-p { margin: 0 0 18px; max-width: 760px; font-size: 15px; line-height: 1.6; color: var(--p-body); }
@@ -216,7 +216,7 @@
 .axp .axp-pack .axp-btn { margin-top: 6px; padding: 10px 14px; }
 
 /* ── FAQ ── */
-.axp-faq { max-width: 860px; margin-top: 34px; }
+.axp-faq { margin-top: 34px; }
 .axp-faq-list { border-top: 1px solid var(--p-line); }
 .axp-faq-item { border-bottom: 1px solid var(--p-line); }
 .axp-faq-item button {

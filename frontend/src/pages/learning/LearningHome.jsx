@@ -12,7 +12,7 @@ import {
 import { readArticles, readCatalog, readEvents, readMe, readPublications } from './learningReads';
 import { readWebinars } from './webinarReads';
 import {
-  ComingSoonCard, LearningEmpty, LearningHeader, LearningLoading, LearningUnreadable, NotLiveYet,
+  ComingSoonCard, LearningEmpty, LearningLoading, LearningUnreadable, NotLiveYet,
   RouteUnreadable, SectionCard,
 } from './LearningStates';
 import { MyProgramsSection, OpenPrograms, useMyPrograms } from './MyPrograms';
@@ -423,6 +423,21 @@ function LearningCatalogue({
  *   now       the clock the webinar rows are placed against
  *   links     extra links for an admin: [{ to, label }]
  */
+/** The home shares Help's decorative artwork; no Learning reads or gates change. */
+export function LearningHero({ phoneBar = null }) {
+  return (
+    <header className="relative isolate overflow-hidden border-b border-violet-200 bg-violet-50 px-4 pb-8 pt-10 text-center md:px-8 dark:border-violet-900/60 dark:bg-violet-950" data-testid="learning-hero">
+      <img src="/site/home-hero.webp" alt="" className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_45%]" />
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-gradient-to-r from-violet-50/90 via-white/80 to-violet-50/70 dark:from-gray-950/90 dark:via-gray-950/80 dark:to-violet-950/80" />
+      {phoneBar ? <div className="[&>div]:border-0 [&>div]:bg-transparent [&>div]:p-0 dark:[&>div]:bg-transparent">{phoneBar}</div> : <>
+      <h1 className="text-[28px] font-extrabold leading-tight tracking-tight text-balance text-gray-900 dark:text-gray-100">Learning</h1>
+      <p className="mx-auto mt-2 max-w-2xl text-[13.5px] leading-relaxed text-gray-600 dark:text-gray-300">Courses, videos, webinars, articles, publications, events, exercises and exams, in one place.</p>
+      </>}
+      <div className="mt-5 flex justify-center"><WriteArticleLink /></div>
+    </header>
+  );
+}
+
 export function LearningHomeView({
   gated, tab, onTab = () => {}, query = '', onQuery = () => {}, q = '',
   catalog = IDLE, articles = IDLE, publications = IDLE, events = IDLE, me = IDLE,
@@ -431,31 +446,28 @@ export function LearningHomeView({
 }) {
   return (
     <>
-      <LearningHeader
-        eyebrow={null}
-        title="Learning"
-        sub="Courses, videos, webinars, articles, publications, events, exercises and exams, in one place."
-        action={<WriteArticleLink />}
-      />
-      <AdminLinks links={links} />
-      {gated ? (
-        <ComingSoonCard articlesLink={false} testid="learning-coming-soon-sections" />
-      ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <SectionCard title="Continue learning" testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} /></SectionCard>
-          <MyProgramsSection {...programs} />
-        </div>
-      )}
-      <LearningCatalogue
-        gated={gated} tab={tab} onTab={onTab} query={query} onQuery={onQuery} q={q}
-        catalog={catalog} articles={articles} publications={publications} events={events}
-        upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
-      />
-      {!gated && (
-        <SectionCard title="Upcoming webinars" testid="section-webinars">
-          <UpcomingWebinarsList state={upcoming} now={now} onRetry={onRetry.upcoming} />
-        </SectionCard>
-      )}
+      <LearningHero />
+      <div className="space-y-4 px-4 py-6 md:px-8">
+        <AdminLinks links={links} />
+        {gated ? (
+          <ComingSoonCard articlesLink={false} testid="learning-coming-soon-sections" />
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SectionCard title="Continue learning" testid="section-continue"><ContinueLearning state={me} onRetry={onRetry.me} /></SectionCard>
+            <MyProgramsSection {...programs} />
+          </div>
+        )}
+        <LearningCatalogue
+          gated={gated} tab={tab} onTab={onTab} query={query} onQuery={onQuery} q={q}
+          catalog={catalog} articles={articles} publications={publications} events={events}
+          upcoming={upcoming} past={past} now={now} onCatalogPage={onCatalogPage} onArticlesPage={onArticlesPage} onRetry={onRetry}
+        />
+        {!gated && (
+          <SectionCard title="Upcoming webinars" testid="section-webinars">
+            <UpcomingWebinarsList state={upcoming} now={now} onRetry={onRetry.upcoming} />
+          </SectionCard>
+        )}
+      </div>
     </>
   );
 }
@@ -547,7 +559,7 @@ export function learningPhoneGroups({ gated, me = IDLE, programs = PROGRAMS_IDLE
 /** A8m — the bar and the sections, then `children`: the tab lists Browse opens. */
 export function LearningPhoneView({ gated, me, programs, upcoming, now, onRetry, children = null }) {
   return (
-    <AccountPhonePage pageKey="learning" testid="learning-phone" groups={learningPhoneGroups({ gated, me, programs, upcoming, now, onRetry })}>
+    <AccountPhonePage pageKey="learning" testid="learning-phone" bleed header={bar => <LearningHero phoneBar={bar} />} groups={learningPhoneGroups({ gated, me, programs, upcoming, now, onRetry })}>
       {children}
     </AccountPhonePage>
   );
@@ -640,7 +652,7 @@ export default function LearningHome({ gated, links = [] }) {
           />
         </LearningPhoneView>
       ) : (
-        <div className="space-y-4">
+        <div className="min-w-0">
           <LearningHomeView
             gated={gated}
             tab={tab}
