@@ -43,5 +43,5 @@ test('the list is closed and well formed', () => {
   }
   assert.equal(isRedirectKey('/dashboard'), false, 'a bare path is not a redirect key');
   const keep = REDIRECT_ROUTES.filter((r) => r.keep).map((r) => r.path).sort();
-  assert.deepEqual(keep, ['/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
+  assert.deepEqual(keep, ['/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
 });

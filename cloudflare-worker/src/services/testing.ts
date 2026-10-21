@@ -412,10 +412,10 @@ async function changed(env: Env, stmts: any[]): Promise<boolean> {
 }
 
 /**
- * D814 (#2260): a member's notification opens My applications. The two that go
- * to a programme's creator name no page yet (D815 draws the partner's).
+ * #2314: the member application page is retired. New status notifications open
+ * Inbox, where their text remains readable. Historical URLs redirect to Studio.
  */
-export const MY_APPLICATIONS_LINK = '/product-testing?tab=applications';
+export const MY_APPLICATIONS_LINK = '/inbox';
 const MEMBER_NOTICES = new Set(['testing_applied', 'testing_picked', 'testing_not_picked']);
 
 async function tell(env: Env, userId: number | null | undefined, type: string, title: string, body: string, payload: Record<string, unknown>) {
