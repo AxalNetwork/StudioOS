@@ -49,17 +49,21 @@ test('a save sends null for a blank, never an empty string', () => {
   assert.deepEqual(profileBody('', '   '), { strength: null, organization: null });
 });
 
+// The table reads the real clock, so a due date that is still to come must stay
+// in the future: a fixed 2026 date turned this row overdue on 2026-10-21.
+const FUTURE_DUE = '2099-10-20';
+
 test('the relationship book shows strength, organisation, follow-up and last note, and an editor per row', () => {
   const rows = [
     { id: 1, uid: 'a', name: 'Ana', email: 'a@x.test', audience: 'investor', strength: 'warm', organization: 'Latitude Seed',
-      last_activity_at: ago(4), open_tasks: 1, next_task_due: '2026-10-20', last_reply_at: '2026-09-15 10:00:00' },
+      last_activity_at: ago(4), open_tasks: 1, next_task_due: FUTURE_DUE, last_reply_at: '2026-09-15 10:00:00' },
     { id: 2, uid: 'b', name: 'Bo', email: 'b@x.test', audience: 'advisor', strength: null, organization: null,
       last_activity_at: ago(71), open_tasks: 0, next_task_due: null, last_reply_at: null },
   ];
   const t = render(RelationshipTable, { rows });
   assert.match(t, /Ana\s*Latitude Seed/);
   assert.match(t, /Warm/);
-  assert.match(t, /Follow up due Oct 20, 2026/);
+  assert.match(t, /Follow up due Oct 20, 2099/);
   assert.match(t, /Sep 15, 2026/);
   assert.match(t, /Bo\s*b@x\.test/, 'no organisation: the email, not an inferred company');
   assert.match(t, /71 days ago · going cold/);
