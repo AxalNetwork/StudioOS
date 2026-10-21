@@ -165,9 +165,9 @@ export async function personalConnection(c: C, user: User, use: PersonalUse): Pr
     "SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'mercury' LIMIT 1",
   ).bind(user.id).first<IntegrationRow>();
   if (!row) return refused(c, 409, 'mercury_not_connected', 'Connect your own Mercury account first.');
-  if (row.status !== 'active') return refused(c, 409, 'mercury_reconnect_required', 'Your Mercury connection needs attention. Reconnect it with a Read Only token.');
-  const reader = await bankReaderFor(c.env, row);
   const again = row.auth_type === 'oauth_mcp' ? 'Sign in with Mercury again.' : 'Reconnect it with a Read Only token.';
+  if (row.status !== 'active') return refused(c, 409, 'mercury_reconnect_required', `Your Mercury connection needs attention. ${again}`);
+  const reader = await bankReaderFor(c.env, row);
   if (!reader) return refused(c, 503, 'credentials_unreadable', `Your Mercury connection could not be read. ${again}`);
   let read;
   try {

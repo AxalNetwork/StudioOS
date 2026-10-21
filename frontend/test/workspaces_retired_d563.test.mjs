@@ -73,12 +73,13 @@ const DESK = {
 // board registered, BucketOverview. Both draw the list for their own bucket.
 const BUCKET_BODIES = ['frontend/src/workspaces/BucketBoard.jsx', 'frontend/src/workspaces/BucketOverview.jsx'];
 
-test('the mapping covers exactly the 19 pages, and every line names a profile, a row and a door', () => {
+test('the mapping covers exactly the 18 pages, and every line names a profile, a row and a door', () => {
   assert.deepEqual(Object.keys(PAGE_HOMES).sort(), WORKSPACES.map((w) => w.route).sort());
   // 28 until D670 retired Market Intelligence and Signals; 26 until the owner
   // removed Scoring, Risk Matrix, Capital, Liquidity, Reserves and Watchlist
-  // (2026-10-20); 20 until #2324 removed Network Effects (#2297 §3).
-  assert.equal(WORKSPACES.length, 19);
+  // (2026-10-20); 20 until #2324 removed Network Effects (#2297 §3) and the
+  // owner removed Advisory (#2341).
+  assert.equal(WORKSPACES.length, 18);
   for (const [route, homes] of Object.entries(PAGE_HOMES)) {
     assert.ok(homes.length > 0, `${route} has no home`);
     for (const [role, row, door] of homes) {
@@ -194,6 +195,7 @@ test('the Lab page is linked from the Lab\'s own arsenal', () => {
 
 test('the removed pages have no route, no row match and no Also in entry (owner, 2026-10-20)', () => {
   const GONE = ['/scoring', '/portfolio/risk-matrix', '/capital', '/liquidity', '/raise/liquidity', '/portfolio/reserves', '/watchlist', '/watchlist/:uid', '/lp-reports', '/funds/accounting'];
+  // Network Effects has a compatibility redirect, pinned by network_effects_removed_2324.
   for (const route of GONE) {
     assert.equal(routeBlock(APP, route), null, `${route} is still a route`);
     assert.ok(!(route in PAGE_HOMES), `${route} still has a home`);

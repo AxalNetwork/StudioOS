@@ -37,12 +37,6 @@
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://axal.vc/roadmap</loc>
-    <lastmod>2026-05-20</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://axal.vc/register</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>

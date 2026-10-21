@@ -201,9 +201,8 @@ export function isPublicPath(pathname) {
     || currentPath === '/for-investors'
     || currentPath === '/for-service-partners'
     || currentPath === '/for-advisors'
-    // Audience-specific marketing landing pages (/lp/founder,
-    // /lp/investor, /lp/partner, /lp/customer-discovery,
-    // /lp/spinout-demo-day). Public surfaces: a background
+    // The Spin-Out demo day's landing page (/lp/spinout-demo-day).
+    // A public surface: a background
     // settings/me 401 for an anonymous visitor must not bounce
     // them to /login.
     || currentPath.startsWith('/lp/')
@@ -213,7 +212,6 @@ export function isPublicPath(pathname) {
     // anonymous visitor must not bounce them to /login.
     || currentPath === '/circles'
     || currentPath === '/communities'
-    || currentPath === '/roadmap'
     || currentPath === '/about'
     // D677 — the Firm page took /about; the team page moved to /team, and
     // Platform and Administrators are new public pages beside it.
@@ -375,7 +373,6 @@ export const LONG_TIMEOUT_MS = 180_000;
 export const SLOW_PATHS = [
   /^\/advisor\/tool\/auto$/,
   /^\/advisor\/transcribe$/,
-  /^\/advisory\//,                       // ask, financial-plan, diligence
   /^\/competitors\//,                    // crawl + Workers AI synthesis
   /^\/dd\/cases\/[^/]+\/(scan|report)$/,
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
@@ -1911,15 +1908,8 @@ export const api = {
     sources: () => request('/signals/sources'),
   },
 
-  askAdvisory: (data) => request('/advisory/ask', { method: 'POST', body: JSON.stringify(data) }),
-  financialPlan: (data) => request('/advisory/financial-plan', { method: 'POST', body: JSON.stringify(data) }),
-  runDiligence: (data) => request('/advisory/diligence', { method: 'POST', body: JSON.stringify(data) }),
-  // Task #75 — Advisory Suite advisor directory (founder-scoped).
-  advisorProfilesList: () => request('/advisory/advisors'),
-  advisorProfileUpdate: (id, data) => request(`/advisory/advisors/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  advisorProfileAssign: (id, projectIds) => request(`/advisory/advisors/${id}/assignments`, { method: 'PUT', body: JSON.stringify({ project_ids: projectIds }) }),
-  advisorProfileArchive: (id) => request(`/advisory/advisors/${id}/archive`, { method: 'POST' }),
-  advisorProfileRestore: (id) => request(`/advisory/advisors/${id}/restore`, { method: 'POST' }),
+  // #2341: the Advisory page's ask, financial plan, diligence and advisor-
+  // profile methods left with the page (the owner: "Remove").
 
   activityLog: (params) => request(`/activity${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),
@@ -2871,10 +2861,6 @@ export const api = {
   removeRelationship: (id) => request(`/partnernet/relationships/${id}/remove`, { method: 'POST' }),
   activityLogs: (limit = 50, offset = 0, action = '') => request(`/partnernet/activity/logs?limit=${limit}&offset=${offset}${action ? `&action_type=${action}` : ''}`),
   logActivity: (data) => request('/partnernet/activity/log', { method: 'POST', body: JSON.stringify(data) }),
-  // D572 part 3b — the board by metric and period, with the change against a
-  // stored earlier standing. Other members come back by rank, role and value only.
-  partnerLeaderboardBoard: ({ metric = 'score', period = 'all' } = {}) =>
-    request(`/partnernet/leaderboard/board?metric=${encodeURIComponent(metric)}&period=${encodeURIComponent(period)}`),
 
   legalGenerate: (data) => request('/legalcap/legal/generate', { method: 'POST', body: JSON.stringify(data) }),
   legalDocs: (dealId) => request(`/legalcap/legal/docs/${dealId}`),
@@ -5009,18 +4995,19 @@ export const api = {
   },
 
   // Competitor Analysis — in-house crawl + Workers AI synthesis (no paid APIs).
+  // D778 part 9: `headers` on the five runs is the press's own rail context (`railPressHeaders`).
   competitors: {
-    analyze: (data) => request('/competitors/analyze', { method: 'POST', body: JSON.stringify(data || {}) }),
+    analyze: (data, headers) => request('/competitors/analyze', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
     list: () => request('/competitors'),
     get: (id) => request(`/competitors/${id}`),
     save: (id, patch) => request(`/competitors/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
-    addCandidate: (id, data) => request(`/competitors/${id}/candidates`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    addCandidate: (id, data, headers) => request(`/competitors/${id}/candidates`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
     removeCandidate: (id, cid) => request(`/competitors/${id}/candidates/${cid}`, { method: 'DELETE' }),
     candidateUpdate: (id, cid, data) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
     addSource: (id, cid, data) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/sources`, { method: 'POST', body: JSON.stringify(data || {}) }),
-    crawlCandidate: (id, cid) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/crawl`, { method: 'POST', body: JSON.stringify({}) }),
-    rerun: (id, data) => request(`/competitors/${id}/rerun`, { method: 'POST', body: JSON.stringify(data || {}) }),
-    refresh: (id) => request(`/competitors/${id}/refresh`, { method: 'POST', body: JSON.stringify({}) }),
+    crawlCandidate: (id, cid, headers) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/crawl`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+    rerun: (id, data, headers) => request(`/competitors/${id}/rerun`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
+    refresh: (id, headers) => request(`/competitors/${id}/refresh`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
     remove: (id) => request(`/competitors/${id}`, { method: 'DELETE' }),
     fetchUrl: (url, refresh) => request('/competitors/fetch', { method: 'POST', body: JSON.stringify({ url, refresh: !!refresh }) }),
     exportUrl: (id, format) => `/api/competitors/${id}/export?format=${encodeURIComponent(format || 'json')}`,

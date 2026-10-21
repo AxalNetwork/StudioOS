@@ -65,10 +65,12 @@ test('Deals: every option of the section names itself on its band', () => {
 
 const PORTFOLIO = [['/portfolio', 'Investor · Portfolio'], ['/portfolio/health', 'Investor · Portfolio'], ['/portfolio/positions', 'Investor · Portfolio · Positions'],
   ['/portfolio/performance', 'Investor · Portfolio · Performance'], ['/portfolio/updates', 'Investor · Portfolio · Updates'],
-  ['/portfolio/value-add', 'Investor · Portfolio · Value-add'], ['/portfolio/growth', 'Investor · Portfolio · Value-add']];
+  ['/portfolio/value-add', 'Investor · Portfolio · Value-add']];
 
-test('Portfolio: each board\'s route answers its page key for an investor, the legacy Growth route Value-add\'s', () => {
+test('Portfolio: each board\'s route answers its page key for an investor; the retired Growth address is none of them', () => {
   for (const [route, key] of PORTFOLIO) assert.equal(pageKeyFor(route, 'investor'), key, route);
+  // #2297 retired /portfolio/growth: no route, no legacy alias, so no page key of its own.
+  assert.notEqual(pageKeyFor('/portfolio/growth', 'investor'), 'Investor · Portfolio · Value-add');
   for (const o of rowsOf('Portfolio')) assert.ok(PORTFOLIO.some(([, k]) => k === o.page), `${o.page} is a Portfolio board`);
 });
 

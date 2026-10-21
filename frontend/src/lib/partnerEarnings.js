@@ -1,7 +1,7 @@
 /**
- * Partner earnings (D569) — the pure half of the four partner screens
- * (`/partner/earnings`, `/partner/referrals`, `/partner/relationships/:id`,
- * `/partner/leaderboard`) and the admin console `/admin/commissions`.
+ * Partner earnings (D569) — the pure half of the three partner screens
+ * (`/partner/earnings`, `/partner/referrals`, `/partner/relationships/:id`;
+ * the leaderboard was removed, #2297) and the admin console `/admin/commissions`.
  *
  * Nothing here renders and nothing here fetches. Every vocabulary below is
  * the Worker's own, mirrored, and `frontend/test/partner_earnings_d569.test.mjs`
@@ -124,7 +124,7 @@ export const SOURCE_LABELS = {
 };
 
 /**
- * The four screens' own row, drawn by `ZoneNav` with this as its bucket. They
+ * The screens' own row, drawn by `ZoneNav` with this as its bucket. They
  * are not a bucket of the partner shell (`shellConfig.js` has no `/partner`
  * prefix, by D4), so the shell draws no pill row for them and this one stands
  * in. The relationship log is not on it: it is a page of one relationship,
@@ -136,7 +136,6 @@ export const EARNINGS_AREA = {
   zones: [
     { slug: 'earnings', label: 'Earnings' },
     { slug: 'referrals', label: 'Referrals' },
-    { slug: 'leaderboard', label: 'Leaderboard' },
   ],
 };
 
@@ -630,46 +629,6 @@ export function interactionBody({ kind, date, time, note, outcome }) {
     }
   }
   return body;
-}
-
-/* ------------------------------------------------------------------ *
- * The leaderboard
- * ------------------------------------------------------------------ */
-
-/**
- * D572 part 3b — the board's metrics and periods, in the route's own keys
- * (`services/partnerLeaderboard.ts`). The score is a standing, so it has no
- * quarter; the page draws that chip disabled with the reason.
- */
-export const BOARD_METRICS = [
-  { key: 'score', label: 'Network score', periods: ['all'] },
-  { key: 'referrals', label: 'Referrals', periods: ['all', 'quarter'] },
-  { key: 'commissions', label: 'Commissions', periods: ['all', 'quarter'] },
-];
-export const BOARD_PERIODS = [
-  { key: 'all', label: 'All time' },
-  { key: 'quarter', label: 'This quarter' },
-];
-
-/** What a board's value means, for its column and the viewer's line. */
-export function boardValueLabel(metric) {
-  if (metric === 'referrals') return 'Referrals made';
-  if (metric === 'commissions') return 'Commissions earned';
-  return 'Network score';
-}
-
-/**
- * A member's change, as the route sends it: a number of places (positive is
- * up), 'new' for a member not ranked at the earlier standing, or null when
- * there is nothing to compare with. Returns the text and its direction.
- */
-export function changeText(change) {
-  if (change === 'new') return { text: 'New', dir: 'new' };
-  if (typeof change !== 'number' || !Number.isFinite(change)) return null;
-  if (change === 0) return { text: 'No change', dir: 'same' };
-  return change > 0
-    ? { text: `▲ ${change}`, dir: 'up' }
-    : { text: `▼ ${Math.abs(change)}`, dir: 'down' };
 }
 
 /* ------------------------------------------------------------------ *

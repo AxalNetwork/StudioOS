@@ -38,10 +38,7 @@ const links = (html, testid) => [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g
 export const RETURNS = [
   ['/build/discovery','/validate/customer-research','← Validate › Customer research'],
   ['/build/marketplace','/validate/customer-research','← Validate › Customer research'],
-  ['/advisory','/validate/customer-research','← Validate › Customer research'],
   ['/execution','/build/product-roadmap','← Build › Product roadmap'],
-  ['/execution/board','/build/product-roadmap','← Build › Product roadmap'],
-  ['/execution/roadmap','/build/product-roadmap','← Build › Product roadmap'],
   ['/build/metrics','/build/operating-systems','← Build › Operating systems'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
   ['/comarketing','/grow/distribution','← Grow › Distribution'],

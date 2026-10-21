@@ -74,14 +74,13 @@ test('I4 is wired to real portfolio sources and preserves detailed tools', () =>
     'the canvas must take its zone row from the shell config, not hand-roll it');
   assert.ok(portfolio.includes('/portfolio/positions'),
     'the canvas keeps no door to the positions book');
-  // The alias still has to resolve, or every link that predates the rename
-  // 404s. Read the declaration rather than restating it, so renaming the slug
-  // in one place cannot leave this test asserting a path nothing routes.
+  // The /portfolio/growth alias is retired (#2297): value-add declares no
+  // legacy path and nothing routes the old address. The zone itself still
+  // routes, so the canvas's door to it resolves.
   const shell = read('frontend/src/workspaces/shellConfig.js');
-  const legacy = /\{ slug: 'value-add',[^}]*legacy: '([^']+)' \}/.exec(shell);
-  assert.ok(legacy, 'shellConfig no longer declares the value-add legacy path');
-  assert.ok(app.includes(`path="${legacy[1]}"`),
-    `${legacy[1]} is declared legacy for value-add but nothing routes it`);
+  assert.match(shell, /\{ slug: 'value-add', label: 'Value-add', archetype: A\.FEED \}/);
+  assert.ok(!app.includes('path="/portfolio/growth"'), '/portfolio/growth is routed again');
+  assert.ok(app.includes('path="/portfolio/value-add"'), 'nothing routes /portfolio/value-add');
   assert.match(portfolio, /Missing values stay blank rather than being estimated/);
   assert.match(portfolio, /At cost/);
   assert.match(portfolio, /mark coverage/);

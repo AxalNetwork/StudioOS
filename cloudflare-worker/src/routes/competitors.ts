@@ -12,10 +12,14 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { getSQL } from '../db';
 import { requireAuth } from '../auth';
+import { railFor } from '../util/railContext';
 import { canAccessProject } from '../services/projectAccess';
 import { ensureCompetitorSchema } from '../services/competitorSchema';
 import { insertManualCandidate } from './_competitor_writes';
 import {
+  COMPANIES_OPTIONS,
+  COMPANIES_PAGE,
+  analysisRecord,
   runCompetitorAnalysis,
   collectCandidateCrawl,
   sourceKind,
@@ -290,7 +294,9 @@ competitors.post('/analyze', async (c) => {
     VALUES (${id}, ${user.id}, ${projectId}, ${mode}, ${title}, ${JSON.stringify(inputs)}, 'running', ${nowIso()}, ${nowIso()})`;
 
   try {
-    const result = await runCompetitorAnalysis(c.env, user.id, id, inputs);
+    // D778 part 9: the press's page and option win; the record is the analysis this route made.
+    const rail = railFor(c, { page: COMPANIES_PAGE, option: COMPANIES_OPTIONS.analyze }, analysisRecord(id));
+    const result = await runCompetitorAnalysis(c.env, user.id, id, inputs, rail);
     await persistResult(c.env, id, result);
     await sql`UPDATE competitor_analyses SET status = 'complete', updated_at = ${nowIso()} WHERE id = ${id}`;
     const full = await loadAnalysis(c.env, user.id, id);
@@ -383,7 +389,7 @@ competitors.post('/:id/candidates', async (c) => {
     category: typeof body.category === 'string' ? body.category : undefined,
     summary: typeof body.summary === 'string' ? body.summary : undefined,
     crawl: !!body.crawl,
-  });
+  }, railFor(c, { page: COMPANIES_PAGE, option: COMPANIES_OPTIONS.candidate }, analysisRecord(id)));
   const full = await loadAnalysis(c.env, user.id, id);
   return c.json(full);
 });
@@ -493,7 +499,8 @@ competitors.post('/:id/candidates/:cid/crawl', async (c) => {
 
   const inputs = safeParse(analysis.inputs_json, {}) as AnalysisInputs;
   const depth = inputs.depth === 'deep' ? 'deep' : 'quick';
-  const { sources, signals } = await collectCandidateCrawl(c.env, user.id, id, cand, depth);
+  const { sources, signals } = await collectCandidateCrawl(c.env, user.id, id, cand, depth,
+    railFor(c, { page: COMPANIES_PAGE, option: COMPANIES_OPTIONS.site }, analysisRecord(id)));
   if (!sources.length) return c.json({ error: 'The site did not return a page to record.' }, 422);
 
   const haveSources = await sql`SELECT url FROM competitor_sources WHERE analysis_id = ${id} AND candidate_id = ${cid}`;
@@ -540,7 +547,8 @@ competitors.post('/:id/rerun', async (c) => {
 
   await sql`UPDATE competitor_analyses SET status = 'running', inputs_json = ${JSON.stringify(inputs)}, updated_at = ${nowIso()} WHERE id = ${id}`;
   try {
-    const result = await runCompetitorAnalysis(c.env, user.id, id, inputs);
+    const rail = railFor(c, { page: COMPANIES_PAGE, option: COMPANIES_OPTIONS.again }, analysisRecord(id));
+    const result = await runCompetitorAnalysis(c.env, user.id, id, inputs, rail);
     // Re-append preserved manual candidates that the rerun didn't rediscover.
     const names = new Set(result.candidates.map((x) => x.name.toLowerCase()));
     for (const m of manual as unknown as Candidate[]) {
@@ -575,7 +583,8 @@ competitors.post('/:id/refresh', async (c) => {
   // Reuse the pipeline's crawl by faking a result whose candidates are the
   // stored ones, then re-synthesizing. Simplest: rerun with stored inputs but
   // keep the manual set — delegate to the same code path.
-  const result = await runCompetitorAnalysis(c.env, user.id, id, inputs);
+  const rail = railFor(c, { page: COMPANIES_PAGE, option: COMPANIES_OPTIONS.sources }, analysisRecord(id));
+  const result = await runCompetitorAnalysis(c.env, user.id, id, inputs, rail);
   // Merge: keep any stored manual candidates the refresh didn't surface.
   const names = new Set(result.candidates.map((x) => x.name.toLowerCase()));
   for (const m of candRows) {
