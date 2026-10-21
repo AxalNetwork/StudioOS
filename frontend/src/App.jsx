@@ -153,7 +153,6 @@ const SpinoutModerationPage = lazy(() => import('./pages/admin/SpinoutModeration
 const AdminSpinoutJourneyPreview = lazy(() => import('./pages/admin/AdminSpinoutJourneyPreview'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
 const AdminX = lazy(() => import('./pages/admin/AdminX'));
-// Task #3 — Assessment admin authoring + analytics surface.
 // Task #1 — Articles surfaces (public + author + admin queue).
 const ArticlesPage = lazy(() => import('./pages/ArticlesPage'));
 const ArticleReaderPage = lazy(() => import('./pages/ArticleReaderPage'));

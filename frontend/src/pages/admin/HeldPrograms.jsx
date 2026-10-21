@@ -7,20 +7,11 @@ import { Figure, laneOf, useHeldGlance } from './heldFigures';
 /**
  * Admin · Programs on HQ-held accounts — S20's row (D286).
  *
- * FIVE LITERAL LINKS: the Spin-Out Lab applications tab, the Lab console
- * (cohort calendar and applications), advisor cohort access, the
- * assessment run summaries, and Profiling trends (D358, aggregates only). `/admin/advisor-cohorts` has this page and the
- * Approvals lane as its only doors on this shell, so the links are written
- * out for the reachability walk.
- *
- * ASSESSMENT IS NOT LABELLED "RESULTS ONLY". S22 says "shows assessment runs,
- * results only; authoring is HQ's", and the code says otherwise:
- * `requireHqAuthoring` (auth.ts) refuses only on a branch and its own doc
- * reads "a plain HQ admin authors these today and still does". A label that
- * withheld a power the route grants would be the chrome claiming what the
- * code does not do. The card says what is true; whether a plain HQ admin
- * SHOULD author is filed in D286 as the owner's question, and this page
- * narrows no gate.
+ * FOUR LITERAL LINKS: the Spin-Out Lab applications tab, the Lab console
+ * (cohort calendar and applications), advisor cohort access, and Profiling
+ * trends (D358, aggregates only). The Assessment editor and its card were
+ * removed at the owner's request on 2026-10-21. Links are written out for
+ * the reachability walk.
  */
 const OPEN = 'font-semibold text-axal-ink underline underline-offset-2';
 
@@ -32,16 +23,16 @@ export default function HeldPrograms() {
   return (
     <HeldZone
       workspace="Programs"
-      stance="Five consoles, each opened where it is decided"
-      coverage={['Five programme consoles; cohort applications pending counted on the Studio glance']}
-      coverageNote="Applications, cohorts and runs are counted in their consoles."
+      stance="Four consoles, each opened where it is decided"
+      coverage={['Four programme consoles; cohort applications pending counted on the Studio glance']}
+      coverageNote="Applications and cohorts are counted in their consoles."
       unavailable={[
         ['A cohort figure for a branch', 'No branch is deployed; the Lab console reads HQ’s own cohorts.'],
       ]}
     >
       <h1 className="text-[18px] font-extrabold tracking-tight text-axal-ink">Programs</h1>
       <p className="mt-1 text-[12.5px] text-axal-muted">
-        The Spin-Out Lab and the assessments around it, for accounts HQ holds.
+        The Spin-Out Lab, advisor cohort access and profiling trends, for accounts HQ holds.
       </p>
       <ul className="mt-3 grid gap-3 sm:grid-cols-2" data-testid="held-programs-consoles">
         <li>
@@ -72,15 +63,6 @@ export default function HeldPrograms() {
             </p>
             <Figure state={glance} value={undefined} reason={advisorReason || 'Access is assigned, not requested, so there is no pending queue.'} testId="held-programs-advisor-cohorts-count" />
             <p className="mt-2 text-[11.5px]"><Link to="/admin/advisor-cohorts" className={OPEN}>Open advisor cohort access</Link></p>
-          </Card>
-        </li>
-        <li>
-          <Card className="h-full p-4" data-testid="held-programs-assessment">
-            <h2 className="text-[13px] font-extrabold tracking-tight text-axal-ink">Assessment runs</h2>
-            <p className="mt-1.5 text-[12px] leading-relaxed text-axal-muted">
-              Existing assessment runs and their results, and the saved games behind them.
-            </p>
-            <Figure state={glance} value={undefined} reason="Assessment runs are not counted on the Studio glance." testId="held-programs-assessment-count" />
           </Card>
         </li>
         <li>
