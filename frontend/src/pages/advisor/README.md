@@ -21,3 +21,7 @@ booking still requires the existing authenticated role and subscription gates.
 Add behaviour in the mounted Worker first, reuse the approved canvas, and keep
 unknown facts Not recorded and failed reads Unreadable. New routes need
 regressions and desktop/phone verification; do not invent another workspace.
+
+Advisor `/studio` has no AI side rail, per the owner's 2026-10-21 request.
+Its Eadwyn interview and practice modules remain. Other advisor boards retain
+their existing rails; `NO_RAIL_ROUTES` records the Studio-only exception.

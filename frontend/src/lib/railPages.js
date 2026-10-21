@@ -441,6 +441,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/perks', railCount: 0, pageTestIds: ['perks-desk'], roles: ['founder', 'investor', 'advisor', 'admin', 'exploring'], why: 'Owner request: the standalone Perks page has no AI rail on desktop or phone. Partner Perk deals remains in its own workspace.' },
   { route: '/learning', railCount: 0, pageTestIds: ['learning-home'], roles: ['founder', 'investor', 'advisor', 'partner', 'admin'], why: 'Owner request: Learning home has no AI rail on desktop or phone. Learning subpages retain their rails.' },
   { route: '/studio', roles: ['admin'], why: 'Admin · Studio has no rail (D598).' },
+  { route: '/studio', railCount: 0, pageTestIds: ['advisor-studio-home'], roles: ['advisor'], why: 'Owner request: Advisor Studio has no AI side rail; its interview and practice modules remain.' },
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },
   { route: '/spinout-lab/apply', roles: [], why: 'The Spin-Out Lab application, before a lane is chosen: no profile yet.' },
   { route: '/spinout-lab/brief', roles: [], why: 'The public Spin-Out Lab brief.' },

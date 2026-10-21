@@ -5,7 +5,6 @@ import {
   RefreshCw, ShieldCheck, Sparkles, Store, Users,
 } from 'lucide-react';
 import { api } from '../../lib/api';
-import { RailFrame, WorkerRail } from '../../ui';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import { AWAITING_DECISION, isBookableSlot, slotMinutes, slotView } from './advisory/kit';
@@ -193,24 +192,8 @@ export default function AdvisorStudioHome({
     }).sort((a, b) => new Date(slotView(a).startsAt) - new Date(slotView(b).startsAt));
   }, [slots]);
 
-  // #2099: Home is a board too, so it draws the rail every advisor board has.
+  // Owner request: Advisor Studio keeps its interview and modules without a side rail.
   return (
-    <RailFrame
-      rail={(
-        <WorkerRail
-          workspace="Home"
-          role="advisor"
-          stance="Read across your practice record"
-          note="Eadwyn reads an interview answer, a voice note or an explain request only when you send it. Every tile reads your stored practice record and writes nothing."
-          coverage={[
-            'Today — your sessions and open slots',
-            'Storefront — your public profile',
-            'Engagements — sessions booked with you',
-            'Earnings — your payout account and commissions',
-          ]}
-        />
-      )}
-    >
     <main className="advisor-studio" data-testid="advisor-studio-home">
       {previewing && <div className="advisor-preview" data-testid="status-advisor-preview"><Eye size={15} /> Advisor role preview. Practice data and actions are withheld.</div>}
       {dashboardUnavailable && !previewing && <div className="advisor-warning"><span>{dashboardUnavailable}</span>{onRetryDashboard && <button type="button" onClick={onRetryDashboard} data-testid="button-retry-dashboard"><RefreshCw size={13} /> Retry</button>}</div>}
@@ -258,6 +241,5 @@ export default function AdvisorStudioHome({
         </Module>
       </div>
     </main>
-    </RailFrame>
   );
 }
