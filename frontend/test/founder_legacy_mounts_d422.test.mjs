@@ -89,7 +89,7 @@ const RETIRED = [
 
 test('a retired editor stays retired: no route mounts it, and its writes are the owner\'s call', () => {
   for (const { route, editor, issue } of RETIRED) {
-    assert.ok(!new RegExp(`<${editor}\\b`).test(app), `${editor} is mounted again; ${issue} retired it`);
+    assert.ok(![' ', '/', '>'].some((end) => app.includes(`<${editor}${end}`)), `${editor} is mounted again; ${issue} retired it`);
     assert.ok(!/element=\{guard\(/.test(routeBlock(route)), `${route} renders a page again; ${issue} retired it`);
   }
 });

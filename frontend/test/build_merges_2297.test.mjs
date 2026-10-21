@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { REDIRECT_ROUTES } from '../../cloudflare-worker/src/services/redirectRoutes.ts';
+import { codeOnlyJsx } from './_codeOnly.mjs';
 
 const root = process.cwd();
 const APP = readFileSync(resolve(root, 'frontend/src/App.jsx'), 'utf8');
@@ -43,9 +44,12 @@ test('no SPA source links a retired address', () => {
   const walk = (dir) => { for (const f of readdirSync(dir)) { const p = join(dir, f); if (statSync(p).isDirectory()) walk(p); else if (/\.(jsx?|ts)$/.test(f)) files.push(p); } };
   walk(resolve(root, 'frontend/src'));
   for (const [from] of MERGES) {
-    // A link is the address in a string or template: `'/x'`, `"/x"`, `` `/x `` followed by its end, `?` or `$`.
-    const link = new RegExp(`(?:to|href|route|path|url|page|page_target|link)\\s*[:=]\\s*\\{?\\s*['"\`]${from.replace(/\//g, '\\/')}(?=['"\`?$])`);
-    const hits = files.filter((p) => !p.endsWith('App.jsx') && link.test(readFileSync(p, 'utf8')));
+    // A link is the address quoted as a whole value: '/x', "/x" or `/x, ending
+    // at its close quote, a query (?) or a template interpolation ($). A shell
+    // zone's `legacy:` names its old address for the router (shellConfig.js),
+    // which is the forward itself, not a link, so it is left out.
+    const linked = (src) => ["'", '"', '`'].some((q) => ["'", '"', '`', '?', '$'].some((end) => src.includes(q + from + end)));
+    const hits = files.filter((p) => !p.endsWith('App.jsx') && linked(codeOnlyJsx(readFileSync(p, 'utf8')).split("legacy: '").map((part, i) => (i ? part.slice(part.indexOf("'") + 1) : part)).join('')));
     assert.deepEqual(hits.map((p) => p.slice(root.length + 1)), [], `still linked: ${from}`);
   }
 });
