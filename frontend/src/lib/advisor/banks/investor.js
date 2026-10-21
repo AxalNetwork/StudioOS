@@ -97,7 +97,7 @@ export const INVESTOR_BANK = [
     id: 'investor.watchlist.seed_companies',
     label: 'Any companies you’re already tracking? (comma-separated)',
     type: 'short',
-    explainer: 'We’ll add them to your Watchlist on the Portfolio page.',
+    explainer: 'We keep them with your investor profile.',
     doc_anchor: 'portals/portfolio-health',
     page_target: '/portfolio',
     validate: maxChars(500),

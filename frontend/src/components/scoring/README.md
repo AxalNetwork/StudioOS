@@ -1,7 +1,8 @@
 # components/scoring — the scoring engine's UI
 
-Composed by `frontend/src/pages/ScoringPage.jsx` and the Spin-Out Lab scoring
-surface.
+Composed by the Spin-Out Lab scoring surface (`frontend/src/pages/SpinoutLabScoringPage.jsx`).
+The partner and investor Scoring Engine page (`/scoring`) that also composed it
+was removed on the owner's instruction (2026-10-20).
 
 | File | What it is |
 | --- | --- |

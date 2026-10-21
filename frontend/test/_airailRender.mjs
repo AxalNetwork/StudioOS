@@ -169,11 +169,6 @@ export const RENDER_NOT_YET = {
   ],
   2098: [
     'Investor /studio',
-    'Investor /scoring',
-    'Investor /capital',
-    'Investor /liquidity',
-    'Investor /watchlist',
-    'Investor /lp-reports',
     'Investor /funds/performance',
   ],
   2099: [
@@ -206,7 +201,6 @@ export const RENDER_NOT_YET = {
     'Founder /company-settings',
     'Founder /updates',
     'Founder /studio/archetype',
-    'Investor /funds/accounting',
     'Investor /build/competitors',
     'Investor /build/metrics',
     'Investor /needs',

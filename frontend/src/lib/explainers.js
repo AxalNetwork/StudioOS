@@ -57,11 +57,6 @@ export const EXPLAINERS = {
     body: 'Outline-driven slides with proof points and metrics pulled from your financial model. Export to PDF or share a private link.',
     docPath: 'build/pitch-deck',
   },
-  scoring: {
-    title: 'How Axal VC scores readiness',
-    body: 'A diligence engine that turns the data you’ve already entered — discovery, market, team, traction — into a ranked readiness score with explanations.',
-    docPath: 'validate-grow/scoring',
-  },
   advisors: {
     title: 'Operators who’ve done this before',
     body: 'Browse the advisor directory by expertise, request an intro, and track how each engagement is moving the needle.',
@@ -87,11 +82,6 @@ export const EXPLAINERS = {
     body: 'Your founder home for the whole lifecycle — submit and score a new startup, run execution, operate the studio, and manage spin-outs, all in one tabbed workspace.',
     docPath: 'studio',
   },
-  capital: {
-    title: 'Capital & investment ops',
-    body: 'Run the fundraise — pipeline, materials, signed terms — and track allocations across funds and SPVs in one place.',
-    docPath: 'capital/fundraise',
-  },
   captable: {
     title: 'Cap table, kept honest',
     body: 'A live cap table with grants, SAFEs, options and conversions. Model new rounds and see who gets diluted before you sign.',
@@ -102,20 +92,10 @@ export const EXPLAINERS = {
     body: 'Commitments, capital calls, distributions and NAV per fund. Generate LP statements and tie every flow to its underlying portfolio company.',
     docPath: 'capital/funds',
   },
-  reserves: {
-    title: 'Reserve allocation, modelled',
-    body: 'Plan follow-on reserves per company and per stage. The model warns when you’re over-committed before you write the check.',
-    docPath: 'capital/funds',
-  },
   waterfall: {
     title: 'Exit waterfall simulator',
     body: 'Model a sale or IPO across preference stacks, participation and option pools — and see exactly who gets what at each clearing price.',
     docPath: 'capital/funds',
-  },
-  liquidity: {
-    title: 'Liquidity & secondaries',
-    body: 'Track tender offers, secondary interest and DPI per fund so you and your LPs always know where realisations stand.',
-    docPath: 'capital/liquidity',
   },
   metrics: {
     title: 'Portfolio metrics',
@@ -199,11 +179,6 @@ export const EXPLAINERS = {
   portfolio_health: {
     title: 'Portfolio health score',
     body: 'A composite score per company combining metrics, founder signals and external diligence. Drill in to see what’s driving it.',
-    docPath: 'portals/portfolio-health',
-  },
-  watchlist: {
-    title: 'Watchlist & decision journal',
-    body: 'Track the deals you’re leaning into and the reasons you bought (or passed). Honest pattern-matching, retrievable later.',
     docPath: 'portals/portfolio-health',
   },
   refer_earn: {

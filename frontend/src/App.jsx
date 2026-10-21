@@ -76,7 +76,6 @@ import { ParamRedirect } from './pages/cycles/ParamRedirect.jsx';
 import { ValidateZoneRedirect } from './pages/cycles/ValidateZoneRedirect.jsx';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const ArchetypeCardPage = lazy(() => import('./pages/ArchetypeCardPage'));
-const ScoringPage = lazy(() => import('./pages/ScoringPage'));
 
 // The four workspace shells, rebuilt from the design canvases. The IA itself
 // lives in src/workspaces/shellConfig.js — the sidebar, the zone nav and a
@@ -123,7 +122,6 @@ const WellbeingBookPage = lazy(() => import('./pages/wellbeing/WellbeingBookPage
 const WellbeingResourceLibrary = lazy(() => import('./pages/wellbeing/WellbeingResourceLibrary'));
 const ExpertProfilePage = lazy(() => import('./pages/ExpertProfilePage'));
 const ExpertEditorPage = lazy(() => import('./pages/ExpertEditorPage'));
-const CapitalPage = lazy(() => import('./pages/CapitalPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
 const DealsPage = lazy(() => import('./pages/DealsPage'));
 const DealRoomPage = lazy(() => import('./pages/DealRoomPage'));
@@ -307,9 +305,6 @@ const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 // D358 — aggregates of how profiles move over time (counts only).
 const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTrends'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
-const RiskMatrixPage = lazy(() => import('./pages/RiskMatrixPage'));
-const WatchlistJournalPage = lazy(() => import('./pages/WatchlistJournalPage'));
-const WatchlistItemPage = lazy(() => import('./pages/WatchlistItemPage'));
 const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
@@ -351,11 +346,12 @@ const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
 const PublicRoadmapPage = lazy(() => import('./pages/PublicRoadmapPage'));
 const PublicCertificateVerifyPage = lazy(() => import('./pages/PublicCertificateVerifyPage'));
 const MonitoringPage = lazy(() => import('./pages/MonitoringPage'));
-const LiquidityPage = lazy(() => import('./pages/LiquidityPage'));
 const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
 const PortfolioWorkspace = lazy(() => import('./pages/PortfolioWorkspace'));
 const PipelineWorkspace = lazy(() => import('./pages/PipelineWorkspace'));
-const FundModelingWorkspace = lazy(() => import('./pages/FundModelingWorkspace'));
+// Exit Waterfall renders on its own: Fund Modeling's other tab, Reserve
+// Allocation, was removed on the owner's instruction (2026-10-20).
+const WaterfallPage = lazy(() => import('./pages/WaterfallPage'));
 const ICDecisionsPage = lazy(() => import('./pages/ICDecisionsPage'));
 const ICDecisionPage = lazy(() => import('./pages/ICDecisionPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
@@ -420,7 +416,6 @@ const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
 const FounderRaiseDataRoom = lazy(() => import('./pages/founder/FounderRaiseDataRoom'));
-const FounderRaiseLiquidity = lazy(() => import('./pages/founder/FounderRaiseLiquidity'));
 const SentUpdatePage = lazy(() => import('./pages/founder/SentUpdatePage'));
 // D668 (#1498): an AI assistant's consent page (D665, D666).
 const ConnectAssistantPage = lazy(() => import('./pages/connect/ConnectAssistantPage'));
@@ -2327,10 +2322,6 @@ function AppInner() {
     && networkParams.get('mode') !== 'workspace'
     && !networkParams.has('tab')
     && !networkParams.has('intro');
-  // D563: a founder's /liquidity redirects to the Raise zone, and the query and
-  // the hash travel with it, as D422's redirects below do.
-  const liquidityParams = new URLSearchParams(location.search);
-  liquidityParams.set('mode', 'workspace');
   const researchParams = new URLSearchParams(location.search);
   const researchMode = researchParams.get('mode');
   const researchHasNonProjectQuery = [...researchParams.keys()].some((key) => key !== 'project_id');
@@ -2858,7 +2849,6 @@ function AppInner() {
           ranks the static segment above /:uid, so this never shadows a case UID. */}
       <Route path="/due-diligence/requests" element={guard(['founder', 'admin', 'partner', 'investor', 'advisor'], <DueDiligenceRequestsPage />)} />
       <Route path="/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
-      <Route path="/scoring" element={guard(labRoles(['admin', 'partner', 'investor']), <ScoringPage />)} />
       {/* /projects is RETIRED (task #101). It was the "Startups" list: a table
           of projects, a filter box, and the create form.
 
@@ -2879,7 +2869,7 @@ function AppInner() {
           redirect cannot carry a query string.
 
           /projects/:id below is NOT retired: ProjectDetail is deep-linked from
-          the dashboard, the investor desk, the risk matrix, the slide editor
+          the dashboard, the investor desk, the slide editor
           and the invite-accept flow. */}
       <Route path="/projects" element={<Navigate to="/build" replace />} />
       <Route path="/projects/:id" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('build', <ProjectDetail />))} />
@@ -2942,10 +2932,6 @@ function AppInner() {
             : new URLSearchParams(location.search).get('mode') === 'access'
               ? founderEditor(<FounderRaiseDataRoom />)
               : <CycleRoute cycle="raise" slug="data-room" />)} />
-       <Route path="/raise/liquidity" element={guard(['admin', 'founder'],
-         new URLSearchParams(location.search).get('mode') === 'workspace'
-           ? founderWorkspace('raise', founderEditor(<LiquidityPage currentUser={user} />))
-           : <FounderRaiseLiquidity />)} />
       {/* Every persona, listed explicitly. `guard([])` would deny everyone —
           RoleGuard tests `allowedRoles.includes(effectiveRole)`, which is
           always false on an empty array, so the route would exist and be
@@ -3012,7 +2998,6 @@ function AppInner() {
           comment on the public directory block relies on for path ranking, and
           /partners/onboard and /partners/portal are untouched. */}
       <Route path="/partners" element={<Navigate to="/directory" replace />} />
-      <Route path="/capital" element={guard(['admin', 'investor'], <CapitalPage />)} />
       {/*
         /tickets -> /help. The redirects are PERMANENT, not a migration shim:
         the worker emits `/tickets` into notification payloads
@@ -3205,10 +3190,6 @@ function AppInner() {
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Task #18 — Partner Coverage Analytics (admin/partner-only internal dashboard). */}
       <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <PortfolioCoveragePage />)} />
-      {/* Task #10 — portfolio Venture Risk matrix (internal deal team). */}
-      <Route path="/portfolio/risk-matrix" element={guard(['admin', 'partner', 'investor'], <RiskMatrixPage />)} />
-      <Route path="/watchlist" element={guard(['admin', 'partner', 'investor'], <WatchlistJournalPage />)} />
-      <Route path="/watchlist/:uid" element={guard(['admin', 'partner', 'investor'], <WatchlistItemPage />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       {/* 'advisor' belongs here: services/trust.ts ROLE_MATRIX gives advisors four
@@ -3219,20 +3200,14 @@ function AppInner() {
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], investorWorkspace('trust', <TrustCenterPage chromeless={effectiveRole === 'investor'} />))} />
       <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
-      {/* D563: a founder's /liquidity was the same LiquidityPage that
-          /raise/liquidity?mode=workspace renders inside the Raise shell, so
-          the founder is sent there; a partner or investor still lands here. */}
-      <Route path="/liquidity" element={guard(['admin', 'founder', 'partner', 'investor'], effectiveRole === 'founder' ? <Navigate replace to={{ pathname: '/raise/liquidity', search: `?${liquidityParams}`, hash: location.hash }} /> : founderEditor(<LiquidityPage currentUser={user} />))} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
       <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />
       <Route path="/lp-portal" element={<LpPortalRedirect />} />
       <Route path="/funds/lp-workspace" element={<FundLpWorkspaceRedirect />} />
-      <Route path="/portfolio/reserves" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
-      <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <FundModelingWorkspace />)} />
+      <Route path="/portfolio/waterfall" element={guard(['admin', 'investor'], <WaterfallPage />)} />
       {/* Task #18 — investor-lifecycle features ported from PR #119. */}
       <Route path="/ic" element={guard(['admin', 'partner', 'investor'], <ICDecisionsPage />)} />
       <Route path="/ic/:uid" element={guard(['admin', 'partner', 'investor'], <ICDecisionPage />)} />
-      <Route path="/lp-reports" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
       {/* D463 — the guard stays ['admin','investor']: this is a zone route of
           the portfolio shell, and the founder's shell has no such zone. The
           founder's composer is the Investor update card on /build/metrics. */}
@@ -3438,7 +3413,6 @@ function AppInner() {
       <Route path="/portfolio/growth" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/funds/performance" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
-      <Route path="/funds/accounting" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
       <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
       <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
       <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />

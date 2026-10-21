@@ -83,10 +83,11 @@ test('a real Error is re-thrown, so app.onError still handles errors', async () 
 });
 
 test('index.ts routes every request through the wrapper', () => {
-  // The helper is worthless unwired, and there are TWO returns of app.fetch —
-  // the non-/api/ branch and the /api/ one. A fix applied to only one leaves
-  // half the worker throwing.
+  // Every Hono dispatch must preserve thrown Response objects, including
+  // service-authenticated paths that bypass browser bootstrap.
   const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/index.ts'), 'utf8');
-  assert.equal((src.match(/withThrownResponses\(\(\) => app\.fetch\(/g) || []).length, 2);
+  const dispatches = (src.match(/\bapp\.fetch\(/g) || []).length;
+  assert.ok(dispatches > 0, 'the Worker must dispatch requests');
+  assert.equal((src.match(/withThrownResponses\(\(\) => app\.fetch\(/g) || []).length, dispatches);
   assert.doesNotMatch(src, /\n\s*return app\.fetch\(/, 'no unwrapped app.fetch may remain');
 });

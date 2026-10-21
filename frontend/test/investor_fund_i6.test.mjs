@@ -39,10 +39,10 @@ test('I6 composes live fund sources and preserves detailed tools', () => {
   for (const route of ['/funds/lps', '/funds/calls', '/funds/ledger', '/funds/reporting']) {
     assert.ok(page.includes(route), `the landing opens no door to ${route}`);
   }
-  // And the legacy ops tool keeps its own doors, named as handoffs in the card
-  // bodies rather than sitting where a zone link belongs.
+  // The legacy ops tool's Accounting and LP Reporting handoffs went with those
+  // tabs (owner, 2026-10-20): the landing must not link a route that is gone.
   for (const route of ['/funds/accounting', '/lp-reports']) {
-    assert.ok(page.includes(route), `the landing dropped the handoff to ${route}`);
+    assert.ok(!page.includes(route), `the landing still links the removed ${route}`);
   }
   // Re-aimed by D371: `/funds/capital-calls` retired into the Calls zone, so
   // the call-ledger handoff opens `/funds/calls` itself rather than a route
