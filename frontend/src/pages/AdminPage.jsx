@@ -36,8 +36,9 @@ export { LegalPanel };
 // dropdown trigger and menu both render from this list instead of a hardcoded
 // row of tab buttons — fourteen sections today, one per entry below (the
 // comment said twelve until D285; the list had grown twice; D708 added Bank
-// accounts; Integration Keys and GitHub Sync left for HQ's own Super Admin
-// page, /admin/integration-keys, on the owner's ruling of 2026-10-20). Pending counts
+// accounts, D815 added Product testing; Integration Keys and GitHub Sync left
+// for HQ's own Super Admin page, /admin/integration-keys, on the owner's ruling
+// of 2026-10-20). Pending counts
 // are computed per-render in the page and passed in via `badges` keyed by
 // section value.
 const ADMIN_SECTIONS = [
