@@ -308,7 +308,6 @@ const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 // D358 — aggregates of how profiles move over time (counts only).
 const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTrends'));
 const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
-const NetworkEffectsPage = lazy(() => import('./pages/NetworkEffectsPage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
@@ -3499,7 +3498,9 @@ function AppInner() {
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
       <Route path="/account/integrations" element={authOnly(<IntegrationsRedirect />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Navigate to="/referrals" replace />)} />
-      <Route path="/network-effects" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('grow', founderEditor(<NetworkEffectsPage />)))} />
+      {/* #2324 (#2297 §3): Network Effects is removed; its parts belong to Network, Deals and the
+          marketplace. The old address lands on Network, and is counted with #2301's redirects. */}
+      <Route path="/network-effects" element={<Navigate to="/network" replace />} />
       {/* /pipeline lives with the Partner bucket routes above — the partner
           canvas claims the prefix root as its Pipeline overview, and the
           investor deal pipeline keeps the zone slugs below it. */}

@@ -274,8 +274,8 @@ export const SIDEBAR_GROUPS = {
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
-  //   • "Network Effects" (/network-effects) is demoted to More while a single
-  //     "Network" entry (/network) leads Validate; both routes stay live.
+  //   • "Network Effects" (/network-effects) is removed (#2324, #2297 §3); its
+  //     old address redirects to the single "Network" entry (/network).
   //   • Task #1 — "Contacts" (/contacts) is merged into the Network page as its
   //     default "Contacts" tab; /contacts redirects to /network?tab=contacts and
   //     /relationships redirects to /network?tab=relationships.
@@ -303,7 +303,8 @@ export const SIDEBAR_GROUPS = {
   //   Build    → Execution · Roadmap · Metrics      (canvas: This week ·
   //              Board · Roadmap · Cadence · KPI entry)
   //   Raise    → Pitch · Capital · Legal · Data room · Liquidity
-  //   Grow     → Talent · Brand · Launch · Perks · Network effects
+  //   Grow     → Talent · Brand · Launch · Perks   (Network effects was
+  //              removed by #2324)
   //   Research → Market · Signals
   //
   // Seven destinations had ZERO inbound links anywhere outside this file —
@@ -346,7 +347,7 @@ export const SIDEBAR_GROUPS = {
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
       { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/legal-capital', '/incorporate', '/compliance'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
-        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
+        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks'] },
       // Points at /network, not at the first zone: /network is the one route
       // that role-branches its element, so it is the landing every license can
       // open, and it forwards to the zone. The three /network/* zone routes are
@@ -403,7 +404,7 @@ export const SIDEBAR_GROUPS = {
   //     partners only.
   //   • /advisors "Find a Advisor" — founder-oriented (a service partner is the
   //     expert, not the mentee); conditional.
-  //   • /network-effects "Network Effects" — too abstract to earn a nav slot.
+  //   • /network-effects "Network Effects" — removed (#2324); it redirects to /network.
   //   • /articles/draft "Articles" — low-frequency authoring; conditional for
   //     content/press partners.
   // ── Partner / Operator — the canonical shell from the Partner canvas ────────

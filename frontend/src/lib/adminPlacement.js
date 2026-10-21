@@ -129,7 +129,8 @@ export const ADMIN_PLACEMENT = [
   // The owner removed six of them on 2026-10-20 — Scoring Engine, Risk Matrix,
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
   // & Journal — page and route together. #2341 (2026-10-21) removed Advisory;
-  // its address forwards to Team › Advisors, so nineteen remain.
+  // its address forwards to Team › Advisors. #2324 removed Network Effects,
+  // so eighteen remain.
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
   page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),
@@ -139,7 +140,6 @@ export const ADMIN_PLACEMENT = [
   page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
   page('Capital & Legal', 'Compliance Calendar', '/compliance', 'Filings and their deadlines.'),
   page('Network & Growth', 'Network', '/network', 'Relationships and introductions.'),
-  page('Network & Growth', 'Network Effects', '/network-effects', 'How activity compounds across the network.'),
   page('Network & Growth', 'Jobs', '/my/jobs', 'Open roles.'),
   page('Network & Growth', 'Service Catalogue', '/services', 'Services offered to companies.'),
   page('Network & Growth', 'Needs Board', '/needs', 'Needs posted by founders.'),
@@ -155,7 +155,7 @@ export const ADMIN_PLACEMENT = [
 export const WORKSPACE_GROUP_ORDER = ['Studio', 'Capital & Legal', 'Network & Growth', 'More'];
 
 /**
- * The working pages (nineteen since 2026-10-21), the list the command palette reads for an admin shell
+ * The working pages (eighteen since 2026-10-21), the list the command palette reads for an admin shell
  * (D284). Derived from the map, never typed twice.
  */
 export const WORKSPACES = ADMIN_PLACEMENT
@@ -194,7 +194,6 @@ export const PAGE_HOMES = {
   '/incorporate': [['founder', 'Raise', 'also']],
   '/compliance': [['founder', 'Raise', 'also']],
   '/network': [['founder', 'Network', 'row'], ['investor', 'Network', 'row'], ['partner', 'Network', 'row'], ['advisor', 'Network', 'row']],
-  '/network-effects': [['founder', 'Grow', 'also']],
   '/my/jobs': [['partner', 'Network', 'also'], ['advisor', 'Network', 'also']],
   '/services': [['partner', 'Offers', 'also']],
   '/needs': [['partner', 'Pipeline', 'also']],

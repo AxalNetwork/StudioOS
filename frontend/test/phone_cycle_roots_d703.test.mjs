@@ -101,7 +101,7 @@ const READS = {
 };
 const NAMES = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow' };
 // Validate's one "Also in" page, Advisory, was removed (#2341).
-const ALSO = { validate: [], build: [], raise: ['Legal & Capital', 'Incorporate', 'Compliance Calendar', 'Co-Founder Agreement'], grow: ['Network Effects', 'Co-marketing', 'Perks'] };
+const ALSO = { validate: [], build: [], raise: ['Legal & Capital', 'Incorporate', 'Compliance Calendar', 'Co-Founder Agreement'], grow: ['Co-marketing', 'Perks'] }; // Network Effects left with #2324
 
 // ── The stub DOM, with a founder rail when asked ──────────────────────────
 
