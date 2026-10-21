@@ -34,6 +34,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import learningRoutes from './routes/learning';
 import BranchDigestRedirect from './pages/branch/BranchDigestRedirect';
 import HqCreditsRedirect from './pages/hq/HqCreditsRedirect';
+import { useRedirectBeacon } from './lib/redirectBeacon';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -261,6 +262,9 @@ const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPag
 // D642 (#1435) — U7, each plan's AI allowance and the runs held for a check.
 const HqPlatformAllowancesPage = lazy(() => import('./pages/hq/PlatformAllowancesPage'));
 const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPage'));
+// The owner's ruling (2026-10-20): the providers' keys and GitHub Sync, one
+// Super Admin page and its own HQ row, no longer Admin Console tabs.
+const HqIntegrationKeysPage = lazy(() => import('./pages/hq/IntegrationKeysPage'));
 const HqAnalyticsPage = lazy(() => import('./pages/hq/HqAnalyticsPage'));
 const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
@@ -340,6 +344,11 @@ const AdministratorsPage = lazy(() => import('./pages/site/AdministratorsPage'))
 const MethodologyPage = lazy(() => import('./pages/site/MethodologyPage'));
 const IntelligencePage = lazy(() => import('./pages/site/IntelligencePage'));
 const ResourcesPage = lazy(() => import('./pages/site/ResourcesPage'));
+// D813 (#2259) — the newsletter's public pages: signup, confirm, and the
+// preferences a link in every email opens (no sign-in).
+const NewsletterPage = lazy(() => import('./pages/site/NewsletterPage'));
+const NewsletterConfirmPage = lazy(() => import('./pages/site/NewsletterConfirmPage'));
+const NewsletterPreferencesPage = lazy(() => import('./pages/site/NewsletterPreferencesPage'));
 const DemoPage = lazy(() => import('./pages/DemoPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
@@ -1098,8 +1107,6 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/switches">Switches</StripLink>
           <StripLink to="/admin/platform/topology">Topology</StripLink>
           <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
-          <StripLink to="/admin?tab=integration-keys">Integration keys</StripLink>
-          <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
           <StripLink to="/admin?tab=payments">Payments</StripLink>
           <StripLink to="/admin?tab=bank-accounts">Bank accounts</StripLink>
           <StripLink to="/admin?tab=product-testing">Product testing</StripLink>
@@ -1884,6 +1891,8 @@ function AppInner() {
   // D575 — on a phone a zone pill opens its lens in place: the routes below
   // render the lens's location while the URL and history stay put.
   const lensLocation = useLensLocation();
+  // #2301 — count each opening of an old redirect address before it is retired.
+  useRedirectBeacon(location.pathname);
 
   // `opts.hq` is only meaningful for mode 'admin': true is the HQ shell
   // ("Super Admin" in the list), false the plain shell ("Admin"). Other modes
@@ -2793,6 +2802,10 @@ function AppInner() {
       <Route path="/admin/platform/switches" element={guard(['admin'], hqOnly(<HqPlatformSwitchesPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
+      {/* The owner's ruling (2026-10-20) — Integration keys, with GitHub Sync as
+          its second section (#github), is a Super Admin row of its own. The
+          old Admin Console tab links (integration-keys, github) redirect here. */}
+      <Route path="/admin/integration-keys" element={guard(['admin'], hqOnly(<HqIntegrationKeysPage />))} />
       <Route path="/admin/hq-support" element={guard(['admin'], hqOnly(<HqSupportPage />))} />
       <Route path="/hq/review" element={guard(['admin'], hqOnly(<ReviewQueuePage />))} />
       {/* D638 (#1384, #1412) — the one page for the reward rules and grants, Super Admin only.
@@ -3600,6 +3613,9 @@ function AppInner() {
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
+      <Route path="/newsletter" element={<NewsletterPage />} />
+      <Route path="/newsletter/confirm" element={<NewsletterConfirmPage />} />
+      <Route path="/newsletter/preferences" element={<NewsletterPreferencesPage />} />
       {/* D677 — /about is the Firm page; the team page moved to /team. */}
       <Route path="/about" element={<FirmPage />} />
       <Route path="/team" element={<TeamPage />} />

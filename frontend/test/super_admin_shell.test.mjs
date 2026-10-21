@@ -49,7 +49,7 @@ test('every row points at a route that is actually registered', () => {
   );
 });
 
-test('all twelve rows are present: the canvas\'s eleven in canvas order, with D714\'s Fund admin after Funds', () => {
+test('all thirteen rows are present: the canvas\'s eleven in canvas order, with D714\'s Fund admin after Funds and Integration keys after Platform', () => {
   // The canvas order is Home, Licences, Funds, Contracts, Team, Revenue,
   // Content, Platform, Support, Security, Settings. "Security", not
   // "Governance" — decision A4.
@@ -61,8 +61,11 @@ test('all twelve rows are present: the canvas\'s eleven in canvas order, with D7
   // the eight-row shell this array started as came from the newer
   // `Support Security · Super.dc.html`. D714 (#1779) decision 7 places Fund
   // admin straight after Funds, until the canvas "Fund Administration · Admin"
-  // places it elsewhere.
-  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Support', 'Security', 'Settings']);
+  // places it elsewhere. The owner's ruling (2026-10-20) gives Integration
+  // keys, with GitHub Sync on the same page, a Super Admin row after Platform,
+  // whose strip carried both.
+  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings']);
+  assert.equal(rows.find((r) => r.label === 'Integration keys')?.to, '/admin/integration-keys');
   assert.equal(rows.find((r) => r.label === 'Fund admin')?.to, '/admin/fund-admin');
   assert.equal(rows.find((r) => r.label === 'Revenue')?.to, '/admin/revenue');
   assert.equal(rows.find((r) => r.label === 'Content')?.to, '/admin/content',
