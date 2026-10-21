@@ -49,5 +49,7 @@ write a bordered white box with a title, it already exists here.
 Google gradients and the Microsoft identity symbol. Source view boxes and
 multi-colour palettes are preserved, with a white backing in dark mode.
 React `useId` scopes gradient, filter and clip-path references per icon.
-The remaining Carta, Affinity CRM, Docusign and Teams initials each carry a
+Mercury now uses its official connector SVG and DocuSign its official embedded
+favicon; both are pinned to vendor repositories (D687 follow-up).
+The remaining Carta, legacy Affinity CRM and Teams initials each carry a
 specific reason; see the 2026-10-16 follow-up in D687 for the current inventory.

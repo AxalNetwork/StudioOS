@@ -752,7 +752,10 @@ research.post('/ask', async (c) => {
       task: 'research_ask',
       userId: user.id,
       surface: AI_SURFACE.researchAsk,
-      rail: railFor(c, { page: 'research', option: 'ask:library' }),
+      // D778 part 11: the press's page and option win (the founder's Research
+      // desk sends `ask:research`; every profile's Ask sends its own key); the
+      // record is the thread the answer is written to.
+      rail: railFor(c, { page: ASK_PAGE, option: ASK_OPTION }, `research_ask_session:${session.uid}`),
       // `text` rather than `messages`: the router hashes it for the cache key
       // and this task is uncached, but the shape is what every non-chat task
       // uses. The instructions live in the prompt itself so the retrieved
@@ -3658,6 +3661,14 @@ research.get('/drafts', async (c) => {
  * since it holds the member's Manual switch. Shared bands use the workspace
  * preference keys in SHARED_DRAFT_PAGES below.
  */
+/**
+ * D778 part 11 (#2103): Ask's page and option in the founder inventory
+ * (`frontend/src/lib/railOptions/founder.js`), for a client that sent no rail
+ * context. Before part 11 the fallback was the workspace key `research`.
+ */
+export const ASK_PAGE = 'Founder · Research · Ask';
+export const ASK_OPTION = 'ask:library';
+
 export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'build/roadmap': 'Founder · Build · Product roadmap',
   'build/this-week': 'Founder · Build · Operating systems',

@@ -1269,6 +1269,10 @@ projects.get('/:projectId/market-assumptions', async (c) => {
         model: fill.model,
         citation: fill.citation,
         proposed_value: fill.proposed_value,
+        // D777 part 4: which run filled it and what that run cost (D762), so the
+        // drawer can say so; null is "Not recorded", never a zero cost.
+        run: fill.run,
+        ai_proposal_id: fill.ai_proposal_id,
       };
     }
   }

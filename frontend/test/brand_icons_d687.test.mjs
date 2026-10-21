@@ -82,7 +82,7 @@ const GENERIC = { phone_speaker: 'Phone', sms: 'MessageSquare', paste: 'Clipboar
 // ── 1. Every key is classified ──────────────────────────────────────────────
 
 test('1. every key the app draws is classified, exactly once', () => {
-  assert.deepEqual(SOURCES.registry, ['figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'affinity', 'github', 'zoom', 'google_calendar', 'microsoft_365', 'mercury'], 'the Worker registry\'s 15 keys, figma\'s one-line entry included');
+  assert.deepEqual(SOURCES.registry, ['figma', 'hubspot', 'calendly', 'salesforce', 'carta', 'slack', 'docusign', 'crunchbase', 'stripe', 'github', 'zoom', 'google_calendar', 'microsoft_365', 'mercury'], 'the Worker registry\'s 14 keys, figma\'s one-line entry included');
   for (const key of ALL_KEYS) {
     const c = canon(key);
     const homes = Object.entries(TABLES).filter(([, t]) => Object.hasOwn(t, c)).map(([n]) => n);
@@ -97,21 +97,18 @@ test('1. every key the app draws is classified, exactly once', () => {
   for (const [k, icon] of Object.entries(GENERIC)) assert.equal(BRAND_GENERIC[k].Icon.displayName, icon, `${k} draws lucide ${icon}`);
 });
 
-test('D752 (#1907): Mercury stays the monogram, never lucide Landmark and never the canvas placeholder #5b6cff', () => {
-  assert.ok(Object.hasOwn(BRAND_MONOGRAM, 'mercury'), 'mercury is a monogram entry');
-  assert.ok(!Object.hasOwn(BRAND_MARKS, 'mercury') && !Object.hasOwn(BRAND_GENERIC, 'mercury'), 'and in no other table');
-  assert.equal(resolveBrand('mercury').kind, 'monogram');
-  assert.match(BRAND_MONOGRAM.mercury.reason, /re-checked 2026-10-18/);
-  for (const variant of ['tile', 'bare']) {
-    const out = html(h(BrandIcon, { provider: 'mercury', name: 'Mercury', variant }));
-    assert.match(out, /data-brand="monogram"[^>]*data-provider="mercury"[^>]*>M</, variant);
-    assert.doesNotMatch(out, /lucide|landmark|<svg/i, `${variant}: no lucide glyph`);
-    assert.doesNotMatch(out, /5b6cff/i, `${variant}: never the placeholder colour`);
+test('Mercury and DocuSign use pinned official artwork in tiles and page headings', () => {
+  for (const provider of ['mercury', 'docusign']) {
+    assert.equal(resolveBrand(provider).kind, 'mark');
+    for (const variant of ['tile', 'bare']) {
+      const out = html(h(BrandIcon, { provider, variant }));
+      assert.match(out, new RegExp(`data-provider="${provider}"`));
+      assert.doesNotMatch(out, /data-brand="monogram"|lucide|https?:\/\//);
+    }
   }
-  assert.doesNotMatch(JSON.stringify(BRAND_MONOGRAM.mercury), /5b6cff/i);
-  const src = read('frontend/src/ui/BrandIcon.jsx');
-  assert.doesNotMatch(src, /5b6cff/i, 'BrandIcon.jsx never names the placeholder colour');
-  assert.doesNotMatch(/import \{([^}]*)\} from 'lucide-react'/.exec(src)[1], /\bLandmark\b/, 'BrandIcon.jsx imports no lucide Landmark');
+  assert.match(BRAND_MARKS.mercury.source, /MercuryTechnologies\/n8n-nodes-mercury/);
+  assert.match(BRAND_MARKS.docusign.source, /docusign\/code-examples-node/);
+  assert.match(BRAND_MARKS.docusign.artwork[0].attrs.href, /^data:image\/png;base64,/);
 });
 
 // ── 2. No orphans, no duplicates ────────────────────────────────────────────
@@ -187,7 +184,7 @@ test('5. each mark reads on its tile in light and in dark', () => {
     if (m.dark.toLowerCase() === '#ffffff') white.push(k);
     else assert.equal(m.dark, m.hex, `${k} keeps its brand colour in dark mode`);
   }
-  assert.deepEqual(white.sort(), ['chatgpt', 'github', 'grok', 'linkedin', 'signal', 'tiktok', 'x', 'zoom']);
+  assert.deepEqual(white.sort(), ['chatgpt', 'github', 'grok', 'linkedin', 'mercury', 'signal', 'tiktok', 'x', 'zoom']);
 });
 
 // ── 6. Rendering ────────────────────────────────────────────────────────────
@@ -335,16 +332,18 @@ test('10. the LinkedIn CSV import draws LinkedIn\'s recorded treatment, through 
   else assert.match(out, /data-brand="monogram"[^>]*data-provider="linkedin"[^>]*>L</);
 });
 
-test('vendor follow-up: all seven recovered brands draw artwork, including catalogue aliases', () => {
-  assert.deepEqual(Object.keys(VENDOR_MARKS).sort(), ['chatgpt', 'google', 'grok', 'linkedin', 'microsoft', 'salesforce', 'slack']);
+test('vendor follow-up: all recovered brands draw artwork, including catalogue aliases', () => {
+  assert.deepEqual(Object.keys(VENDOR_MARKS).sort(), ['chatgpt', 'docusign', 'google', 'grok', 'linkedin', 'mercury', 'microsoft', 'salesforce', 'slack']);
   for (const provider of [...Object.keys(VENDOR_MARKS), 'google_calendar', 'microsoft_365']) {
     const resolved = resolveBrand(provider);
     const out = html(h(BrandIcon, { provider, name: provider }));
     assert.equal(resolved.kind, 'mark', provider);
     assert.match(out, /data-brand="mark"/, provider);
     assert.doesNotMatch(out, /data-brand="monogram"/, provider);
-    assert.match(out, /<(path|rect)\b/, provider);
-    assert.doesNotMatch(out, /<script|<image|<foreignObject|<img|https?:\/\//i, provider);
+    assert.match(out, /<(path|rect|image)\b/, provider);
+    assert.doesNotMatch(out, /<script|<foreignObject|<img|https?:\/\//i, provider);
+    if (provider === 'docusign') assert.match(out, /<image[^>]*href="data:image\/png;base64,[A-Za-z0-9+/=]+"/);
+    else assert.doesNotMatch(out, /<image/i, provider);
     assert.ok(out.includes(`viewBox="${resolved.mark.viewBox}"`), provider);
   }
 });
@@ -461,7 +460,7 @@ test('9. one copy of every mark: each BRAND_MARKS path lives only in ui/BrandIco
   const firstFill = (nodes) => { for (const n of nodes || []) { if (n.attrs?.fill?.startsWith('#')) return n.attrs.fill; const f = firstFill(n.children); if (f) return f; } return null; };
   for (const [k, m] of Object.entries(BRAND_MARKS)) {
     // A mark drawn only from shapes (Microsoft's four squares) has no path; its first fill is its fingerprint.
-    const print = firstPath(m)?.slice(0, 16) || firstFill(m.artwork);
+    const print = firstPath(m)?.slice(0, 16) || firstFill(m.artwork) || m.artwork?.find(n => n.tag === 'image')?.attrs.href;
     assert.ok(print, `${k} has a path or a coloured shape`);
     assert.deepEqual(srcFilesWith(new RegExp(print.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')), ['frontend/src/ui/BrandIcon.jsx'], `${k}'s mark is copied outside BrandIcon.jsx`);
   }

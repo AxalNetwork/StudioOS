@@ -77,8 +77,6 @@ const SHARED = (P) => [
   off('/trust', key(P, 'Trust')),
   off('/calendar', key(P, 'Calendar')),
   off('/my/events', key(P, 'Events')),
-  // D814 (#2260): the programmes and My applications.
-  off('/product-testing', key(P, 'Product testing')),
   off('/learning', key(P, 'Learning')),
   off('/referrals', key(P, 'Referrals')),
   off('/company-settings', key(P, 'Company settings')),
