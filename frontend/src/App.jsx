@@ -165,8 +165,6 @@ const ArticlesQueuePage = lazy(() => import('./pages/admin/ArticlesQueuePage'));
 const AdminPublicationNew = lazy(() => import('./pages/admin/PublicationNew'));
 const AdminPublicationDetail = lazy(() => import('./pages/admin/PublicationDetail'));
 const PublicInsight = lazy(() => import('./pages/insights/PublicInsight'));
-const InsightsPage = lazy(() => import('./pages/insights/InsightsPage'));
-const AdvisoryPage = lazy(() => import('./pages/AdvisoryPage'));
 const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
@@ -2851,7 +2849,9 @@ function AppInner() {
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
-      <Route path="/insights" element={<InsightsPage />} />
+      {/* #2333 — one publications list: /articles carries the briefs the
+          /insights index listed; each brief keeps its share link below. */}
+      <Route path="/insights" element={<Navigate to="/articles#briefs" replace />} />
       <Route path="/insights/public/:slug" element={<PublicInsight />} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
@@ -3108,7 +3108,9 @@ function AppInner() {
           digest email. Research reads the same market data, so an old link
           (and a link in a digest already sent) lands there. */}
       <Route path="/market-intel" element={<Navigate to="/research" replace />} />
-      <Route path="/advisory" element={guard(['admin', 'founder'], founderEditor(<AdvisoryPage />))} />
+      {/* #2341 — /advisory's directory and tools live in Team › Advisors,
+          where /advisors already sends a founder (#2297 §3). */}
+      <Route path="/advisory" element={guard(['admin', 'founder'], <Navigate to="/build/team?mode=workspace&tab=advisors" replace />)} />
       {/* Team (Grow › Talent). Founders reach the advisor directory,
           Co-founder Match and their roles through the Team workspace at
           /build/team; the legacy standalone routes stay live for every other

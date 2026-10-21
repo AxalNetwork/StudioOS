@@ -1,10 +1,10 @@
-import BrandIcon from '../ui/BrandIcon.jsx';
+import BrandIcon from '../../ui/BrandIcon.jsx';
 import React, { useEffect, useState } from 'react';
 import { Brain, Send, DollarSign, BarChart3, CheckCircle, AlertTriangle, XCircle, Info, ChevronDown, Users, Inbox, Mail, MailX, Archive, RotateCcw, Pencil, X, ArrowUpRight, Building2, Calendar, Clock } from 'lucide-react';
-import { api } from '../lib/api';
-import PersonalAdvisor from '../components/advisor/PersonalAdvisor';
-import IncomingLeadsStrip, { leadSourceLabel } from '../components/IncomingLeadsStrip';
-import { AssistLayout } from '../ui';
+import { api } from '../../lib/api';
+import PersonalAdvisor from '../../components/advisor/PersonalAdvisor';
+import IncomingLeadsStrip, { leadSourceLabel } from '../../components/IncomingLeadsStrip';
+import { AssistLayout } from '../../ui';
 
 // D687: each mark is BrandIcon's one copy (ui/BrandIcon.jsx), in the surrounding text's colour.
 const Linkedin = ({ size = 18 }) => <BrandIcon provider="linkedin" size={size} variant="bare" tone="current" />;
@@ -21,7 +21,16 @@ function ModernSelect({ value, onChange, children, ...props }) {
   );
 }
 
-export default function AdvisoryPage() {
+/**
+ * #2341 — what the retired founder page `/advisory` held, inside Team ›
+ * Advisors (`/build/team?mode=workspace&tab=advisors`), the founder's advisor directory
+ * (#2297 §3: people in `/network`, the directory in `/advisors`, which sends a
+ * founder here). The four panels moved unchanged: the advisor-profile
+ * directory (waitlist promote, mentor leads, edit, assign, archive), the
+ * Eadwyn chat with its template fallback and rail, the financial planner and
+ * the diligence checker. `/advisory` forwards here.
+ */
+export default function TeamAdvisoryTools() {
   // People-first: the advisor directory leads and is the default landing tab;
   // the AI surfaces follow it.
   const [tab, setTab] = useState('directory');
@@ -32,9 +41,9 @@ export default function AdvisoryPage() {
   }, []);
 
   const page = (
-    <div>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Advisory</h1>
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">Your advisors first — plus AI strategy, financial planning, and diligence tools</p>
+    <div data-testid="team-advisory-tools">
+      <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-1">Advisor directory and tools</h2>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Your advisors first — plus AI strategy, financial planning, and diligence tools</p>
 
       <div className="flex gap-1 mb-6 flex-wrap">
         {[

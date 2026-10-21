@@ -235,14 +235,6 @@ const ROUTES = [
     prefix: true,
   },
   {
-    path: '/insights',
-    title: 'Insights',
-    description: 'Data and analysis from across the Axal VC network.',
-    type: 'website',
-    section: 'content',
-    prefix: true,
-  },
-  {
     path: '/jobs',
     title: 'Jobs',
     description: 'Open roles across Axal VC portfolio companies and the firm itself.',

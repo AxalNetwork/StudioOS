@@ -101,7 +101,7 @@ const AUDIENCE_ROUTING = {
   cofounder: { label: 'Co-founder Match', to: '/spinout-lab/cofounder-match' },
   investor: { label: 'Capital', to: '/spinout-lab/capital' },
   partner: { label: 'Marketplace', to: '/build/marketplace' },
-  mentor: { label: 'Advisory', to: '/advisory' },
+  mentor: { label: 'Team › Advisors', to: '/build/team?mode=workspace&tab=advisors' },
 };
 
 // Read-only "Form fields" chips per audience — mirrors the design's

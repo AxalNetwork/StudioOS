@@ -105,7 +105,6 @@ const FOUNDER = [
   alias('/validate/record', key(F, 'Validate', 'Customer research'), 'Record a session opens on Customer research, where the interview lands.'),
   alias('/validate/session', key(F, 'Validate', 'Customer research'), 'An interview session is a Customer research record (D660).'),
   alias('/validate/inbox', key(F, 'Validate', 'Customer research'), 'Inbox chats become interview notes in Customer research (D757 §2.12).'),
-  alias('/advisory', key(F, 'Validate'), 'The founder’s Validate row lists Advisory under “Also in” (PAGE_HOMES).'),
   alias('/build/competitors', key(F, 'Validate', 'Market intelligence'), 'Competitor analysis is Market intelligence’s own tool.'),
   ...CYCLE('Build', '/build', [
     ['solution-design', 'Solution design'], ['prototype-mvp', 'Prototype / MVP'], ['product-roadmap', 'Product roadmap'],

@@ -604,7 +604,9 @@ test('each mount wraps its own page, once, inside the exported component', () =>
   // The three Spin-Out Lab pages left this list with D317: the Lab carries no
   // Eadwyn rail (workspace_frame_contract asserts that). The brand tool's
   // "Brand builder" card stays on BrandBuilderPage.
-  const PAGES = ['AdvisoryPage', 'BrandBuilderPage', 'DeckReviewerPage'];
+  // AdvisoryPage moved into Team › Advisors as founder/TeamAdvisoryTools
+  // (#2341), its mount with it.
+  const PAGES = ['founder/TeamAdvisoryTools', 'BrandBuilderPage', 'DeckReviewerPage'];
   assert.doesNotMatch(read('frontend/src/pages/SpinoutLabBrandPage.jsx'), /<AssistLayout\b/,
     'the Spin-Out Lab brand page mounts an assist rail again');
   for (const name of PAGES) {
@@ -624,10 +626,10 @@ test('each mount wraps its own page, once, inside the exported component', () =>
 });
 
 test('the tabbed advisory page only shows the rail on its AI tab', () => {
-  // AdvisoryPage's other three tabs are a human advisor directory and two
+  // TeamAdvisoryTools' (the retired AdvisoryPage's) other three tabs are a human advisor directory and two
   // calculators. A spend meter beside any of them describes work the page is
   // not doing — D15's rule, one level finer than the page.
-  const src = scan(read('frontend/src/pages/AdvisoryPage.jsx'));
+  const src = scan(read('frontend/src/pages/founder/TeamAdvisoryTools.jsx'));
   assert.match(src, /if \(!\(tab === 'advisor'\)\) return page;/,
     'the non-AI tabs must return the bare page');
 });

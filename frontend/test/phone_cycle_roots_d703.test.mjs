@@ -100,7 +100,8 @@ const READS = {
   },
 };
 const NAMES = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow' };
-const ALSO = { validate: ['Advisory'], build: [], raise: ['Legal & Capital', 'Incorporate', 'Compliance Calendar', 'Co-Founder Agreement'], grow: ['Network Effects', 'Co-marketing', 'Perks'] };
+// Validate's one "Also in" page, Advisory, folded into Team › Advisors (#2341).
+const ALSO = { validate: [], build: [], raise: ['Legal & Capital', 'Incorporate', 'Compliance Calendar', 'Co-Founder Agreement'], grow: ['Network Effects', 'Co-marketing', 'Perks'] };
 
 // ── The stub DOM, with a founder rail when asked ──────────────────────────
 

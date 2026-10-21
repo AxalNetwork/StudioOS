@@ -40,8 +40,8 @@ export const ASSIST_SURFACES = {
     // named as giving advice, which the voice rule forbids. The regulated-
     // wording scanner treats a one-word literal as an identifier and missed
     // it. The surface explains scores and next steps, and the label says so.
-    // The ROUTE `/advisory` keeps its name: that page also holds the human
-    // advisors, who are a real persona.
+    // The surface key `advisory` keeps its name: Team › Advisors mounts it
+    // beside the human advisors, who are a real persona (#2341).
     label: 'Score explainer',
     unit: 'per explanation',
     modeNote: 'Eadwyn explains scores and next steps on request.',
