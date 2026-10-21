@@ -1,6 +1,18 @@
-import React from 'react';
+import React, { isValidElement } from 'react';
 import { Link } from 'react-router-dom';
 import Pill from '../Pill';
+
+/**
+ * A row's icon: a drawn element as given, or an icon component (a sidebar
+ * row's lucide icon, which More's rows carry) drawn at 18px. A component handed
+ * to React as a child is React error #31; More crashed on it (2026-10-21).
+ */
+export function rowIcon(icon) {
+  if (!icon) return null;
+  if (isValidElement(icon)) return icon;
+  const Icon = icon;
+  return <Icon size={18} aria-hidden="true" className="text-gray-600 dark:text-gray-400" />;
+}
 
 /**
  * D699's page rows, with D700's optional parts (`Account Mobile Page.dc.html`):
@@ -9,7 +21,8 @@ import Pill from '../Pill';
  *   · a row's `bar`, a 7px meter under it, as a percentage;
  *   · a row's `notRecordedReason`, carried on the Not recorded chip as
  *     `ui/Honesty`'s `Unrecorded` carries its reason;
- *   · a group's `cta` ({ label, to | href | onClick }) and `note`.
+ *   · a group's `cta` ({ label, to | href | onClick }) and `note`;
+ *   · a row's `icon` (`rowIcon`).
  * A row is a link (`to`, or `href` for a whole-page address such as
  * `mailto:`), a button (`onClick`), or, with neither, a plain row with no ›.
  */
@@ -24,7 +37,7 @@ export function PhoneRows({ groups = [] }) {
         {group.rows.map((row, rowIndex) => {
           const live = !!(row.to || row.href || row.onClick);
           const line = <>
-            {row.icon && <span className="flex-none">{row.icon}</span>}
+            {row.icon && <span className="flex-none">{rowIcon(row.icon)}</span>}
             <span className="min-w-0 flex-1">
               <span className="block text-[14px] font-bold text-gray-900 dark:text-gray-100">{row.title}</span>
               {row.description && <span className="block text-[11.5px] text-gray-600 dark:text-gray-400">{row.description}</span>}
