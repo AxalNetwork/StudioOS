@@ -219,7 +219,22 @@ function Proposals({ section, proposals, map, busy, act, fundId }) {
         <>
           <h3 className={SUB}>Accepted</h3>
           <ul className="m-0 flex list-none flex-col gap-1 p-0">
-            {done.map((p) => <li key={p.uid} className={LINE}>{proposalText(section, p)} <span className={FAINT}>· Accepted, citing the transaction</span></li>)}
+            {done.map((p) => (
+              <li key={p.uid} className={LINE}>
+                {section === 'reporting' ? `Statement ending ${p.posted_on} (••${p.account_last_four}) attached to this period's report` : proposalText(section, p)}{' '}
+                <span className={FAINT}>· Accepted{section === 'reporting' ? '' : ', citing the transaction'}</span>
+                {section === 'reporting' && (
+                  <button type="button" className={`${BTN2} ml-2`} disabled={busy != null} data-testid={`mercury-statement-pdf-${p.uid}`}
+                    onClick={() => act(`pdf-${p.uid}`, async () => {
+                      const { blob, filename } = await mercuryInvestorApi.statementPdfBlob(p.uid);
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url; link.download = filename; link.click();
+                      URL.revokeObjectURL(url);
+                    })}>Download PDF</button>
+                )}
+              </li>
+            ))}
           </ul>
         </>
       )}

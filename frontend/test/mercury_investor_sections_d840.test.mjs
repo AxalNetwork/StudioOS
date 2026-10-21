@@ -119,3 +119,23 @@ test('the capacity is read on Deals · Commit only: no other SPA file calls it',
   assert.deepEqual(readers, ['lib/api/mercuryInvestor.js', 'pages/investor/FromMercury.jsx']);
   assert.ok(!src('pages/investor/FromMercury.jsx').replace(/section === 'commit' && <Capacity/, '').includes('<Capacity'), 'Capacity is drawn only for the commit section');
 });
+
+test('an attached statement is downloaded through its owner\'s route, and only Reporting offers it', async () => {
+  // Mutation checked: the button on a section other than reporting → the closing assertion fails.
+  const asked = [];
+  const restore = stub({
+    reporting: async () => ({ month_end_cash: [], statements: [{ uid: 'b'.repeat(32), period_id: 71, account_last_four: '4242', period_end: '2026-09-30', state: 'accepted' }] }),
+    statementPdfBlob: async (uid) => { asked.push(uid); return { blob: new Blob(['%PDF']), filename: 'statement-2026-09-30.pdf' }; },
+  });
+  const saved = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+  URL.createObjectURL = () => 'blob:fixture'; URL.revokeObjectURL = () => {};
+  const m = await mount({ section: 'reporting', fundId: 11 });
+  try {
+    assert.match(m.all(), /Statement ending 2026-09-30 \(••4242\) attached to this period's report/);
+    await m.click(`mercury-statement-pdf-${'b'.repeat(32)}`);
+    assert.deepEqual(asked, ['b'.repeat(32)]);
+  } finally { await m.unmount(); restore(); URL.createObjectURL = saved.create; URL.revokeObjectURL = saved.revoke; }
+  const restore2 = stub({ proposals: async () => ({ proposals: [{ ...PROPOSAL, state: 'accepted' }] }) });
+  const m2 = await mount({ section: 'closing' });
+  try { assert.equal(m2.by(`mercury-statement-pdf-${PROPOSAL.uid}`), undefined); } finally { await m2.unmount(); restore2(); }
+});

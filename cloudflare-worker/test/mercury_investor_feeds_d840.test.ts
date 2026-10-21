@@ -101,7 +101,14 @@ function harness(real = false) {
     if (s) return c.json({ detail: err.message }, s);
     throw err;
   });
-  const env = envFor(db);
+  // The private FILES bucket, in memory.
+  const files = new Map<string, Uint8Array>();
+  const FILES = {
+    put: async (k: string, v: Uint8Array) => { files.set(k, new Uint8Array(v)); },
+    get: async (k: string) => (files.has(k) ? { body: files.get(k) } : null),
+    delete: async (k: string) => { files.delete(k); },
+  };
+  const env = envFor(db, { FILES });
   async function call(method: string, path: string, as: number, opts: { body?: unknown; impersonated?: boolean; env?: any } = {}) {
     const res = await app.request(`/api/mercury/investor${path}`, {
       method,
@@ -111,9 +118,9 @@ function harness(real = false) {
     const text = await res.text();
     let body: any = null;
     try { body = JSON.parse(text); } catch { /* not JSON */ }
-    return { status: res.status, body, text };
+    return { status: res.status, body, text, type: res.headers.get('Content-Type') };
   }
-  return { db, fake, call, opened, env, accessToken };
+  return { db, fake, call, opened, env, accessToken, files };
 }
 
 const ledger = (db: any, ext: string) => one(db, 'SELECT module, kind, local_table, local_id FROM connector_fed_items WHERE integration_id = ? AND external_id = ?', INTEGRATION, ext);
@@ -317,9 +324,21 @@ test('Reporting: month-end cash is a fact; the statement is attached only on Acc
   assert.equal((await h.call('GET', `/reporting?fund_id=12`, INVESTOR)).status, 404);
   assert.equal((await h.call('GET', `/reporting?fund_id=${FUND}`, OTHER_INVESTOR)).status, 404);
 
-  const a = await h.call('POST', `/proposals/${rep.statements[0].uid}/accept`, INVESTOR);
+  const uid = rep.statements[0].uid;
+  assert.equal((await h.call('GET', `/proposals/${uid}/statement.pdf`, INVESTOR)).status, 404, 'nothing is attached before Accept');
+  assert.equal(h.files.size, 0);
+
+  // Accept reads the PDF from the investor's own Mercury and keeps it under the owner.
+  const a = await h.call('POST', `/proposals/${uid}/accept`, INVESTOR);
   assert.equal(a.status, 200, a.text);
   assert.equal((await h.call('GET', `/reporting?fund_id=${FUND}`, INVESTOR)).body.statements[0].state, 'accepted');
+  assert.deepEqual([...h.files.keys()], [`mercury-statements/${INVESTOR}/${uid}.pdf`]);
+  const pdf = await h.call('GET', `/proposals/${uid}/statement.pdf`, INVESTOR);
+  assert.equal(pdf.status, 200);
+  assert.equal(pdf.type, 'application/pdf');
+  assert.ok(pdf.text.startsWith('%PDF'));
+  assert.equal((await h.call('GET', `/proposals/${uid}/statement.pdf`, OTHER_INVESTOR)).status, 404, 'another investor gets nothing');
+  assert.equal((await h.call('GET', `/proposals/${uid}/statement.pdf`, ADMIN)).status, 403, 'nor does an admin');
 
   assert.equal((await h.call('DELETE', `/reporting/cash/${rep.month_end_cash[0].id}`, INVESTOR)).status, 200);
   await h.call('POST', '/sync', INVESTOR, { body: { section: 'reporting', fund_id: FUND, from: '2026-08-01', to: TODAY } });
@@ -403,4 +422,16 @@ test('the opener: a signed-in investor reads through Mercury\'s MCP server; a pa
   h = harness(true);
   h.db.exec(`DELETE FROM integrations WHERE id = ${INTEGRATION}`);
   assert.equal((await h.call('GET', '/accounts', INVESTOR)).body.error, 'mercury_not_connected');
+});
+
+test('Reporting: a statement Mercury gives no PDF for is not attached, and stays proposed', async () => {
+  const h = harness();
+  delete (h.fake.state.data.statements.statements[0] as any).downloadUrl;
+  await h.call('POST', '/sync', INVESTOR, { body: { section: 'reporting', fund_id: FUND, from: '2026-08-01', to: TODAY } });
+  const [st] = (await h.call('GET', `/reporting?fund_id=${FUND}`, INVESTOR)).body.statements;
+  const a = await h.call('POST', `/proposals/${st.uid}/accept`, INVESTOR);
+  assert.equal(a.status, 409);
+  assert.equal(a.body.error, 'statement_unavailable');
+  assert.equal((await h.call('GET', `/reporting?fund_id=${FUND}`, INVESTOR)).body.statements[0].state, 'proposed');
+  assert.equal(h.files.size, 0);
 });

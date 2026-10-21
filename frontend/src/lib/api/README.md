@@ -81,6 +81,8 @@ D840 (#2349): `mercuryInvestor.js` calls `/api/mercury/investor`, an
 investor's own Mercury feeding their sections: `capacity` (theirs alone),
 `sync` per section, `proposals`, `accept` and `dismiss`, `reporting` (a fund
 they are GP of) and `ledgerMap`. A proposal writes nothing until `accept`.
+`statementPdfBlob(uid)` reads an attached statement's PDF as a Blob, outside the
+typed drift surface; only its owner can read it.
 
 D752 (#1890): `adminCapitalAttestations.js` reads an investor's shared proof of
 funds for Axal's admins on HQ: `forTarget(purpose, targetId)`, `forDeal(dealId)`

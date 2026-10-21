@@ -35,12 +35,12 @@ import { entityAccountRefusal, isSupportSession, readOnlyRefusal } from '../inte
 import { INVESTOR_LANDS, MERCURY_FEEDS, PORTFOLIO_NOTE } from '../integrations/mercuryFeeds';
 import { MODULE_HREFS, MODULE_LABELS } from '../integrations/moduleLabels';
 import { MercuryClientError, type MercuryFetch } from '../services/mercury/client';
-import { MERCURY_AUTH_TYPE, mcpAccessFor, mcpCredentialsOf } from '../services/mercury/oauth';
+import { MERCURY_AUTH_TYPE, mercuryAccessFor } from '../services/mercury/oauth';
 import { openMercuryReads, scopePermission, type MercuryReads } from '../services/mercury/reads';
 import {
   acceptProposal, adminFunds, callProposalsFor, capacityOf, categoryMap, closingDrafts, deleteCapacity, deleteMonthEndCash,
   dismissProposal, gpFunds, ledgerDrafts, listProposals, monthEndCash, ownCommitments, ownProposal, readCapacity, readLines,
-  readMonthEndCash, readStatements, statementDrafts, writeCapacity, writeMonthEndCash, writeProposals,
+  readMonthEndCash, readStatements, statementDrafts, statementKeyOf, writeCapacity, writeMonthEndCash, writeProposals,
   type InvestorReader, type ProposalKind,
 } from '../services/mercury/investorFeeds';
 
@@ -130,12 +130,10 @@ export function openOwnInvestorMercuryWith(fetcher?: MercuryFetch): OpenInvestor
     if (!row) return refused(c, 409, 'mercury_not_connected', 'Sign in with Mercury on your Connectors page first.');
     if (row.auth_type !== MERCURY_AUTH_TYPE) return refused(c, 409, 'mercury_signin_required', 'These sections read through Sign in with Mercury. A Read Only API token serves proof of funds only.');
     if (row.status !== 'active') return refused(c, 409, 'mercury_reconnect_required', 'Your Mercury connection needs attention. Sign in with Mercury again.');
-    let creds;
-    try { creds = await mcpCredentialsOf(c.env, row); } catch { creds = null; }
-    if (!creds) return refused(c, 503, 'credentials_unreadable', 'Your Mercury connection could not be read. Sign in with Mercury again.');
     let reads: MercuryReads;
     try {
-      const access = await mcpAccessFor(c.env, row, creds, fetcher);
+      const access = await mercuryAccessFor(c.env, Number(user.id), fetcher);
+      if (!access) return refused(c, 503, 'credentials_unreadable', 'Your Mercury connection could not be read. Sign in with Mercury again.');
       const scope = readOnlyRefusal(scopePermission(access.scopes), true);
       if (scope) return refused(c, scope.status, scope.code, scope.sentence);
       reads = await openMercuryReads(access);
@@ -308,13 +306,47 @@ export function createMercuryInvestor(opts: MercuryInvestorOptions = {}) {
     if (act === 'dismiss') {
       return await dismissProposal(c.env, user, prop) ? c.json({ ok: true }) : refused(c, 409, 'already_decided', 'This proposal was already accepted or dismissed.');
     }
-    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-    const out = await acceptProposal(c.env, user, prop, body && typeof body === 'object' && !Array.isArray(body) ? body : {});
-    return out.ok ? c.json({ ok: true, result_ref: out.result_ref }) : refused(c, out.status, out.code, out.message);
+    const raw = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const finish = async (extras = {}) => {
+      const out = await acceptProposal(c.env, user, prop, body, extras);
+      return out.ok ? c.json({ ok: true, result_ref: out.result_ref }) : refused(c, out.status, out.code, out.message);
+    };
+    if (prop.kind !== 'statement' || prop.state !== 'proposed') return finish();
+    // A statement is attached as its PDF, read now from the investor's own Mercury.
+    return withMercury(c, user, async (conn) => {
+      const accounts = (await conn.reader.accounts()).filter((a) => a.last_four === prop.account_last_four);
+      let pdf = null;
+      for (const a of accounts) {
+        pdf = await conn.reader.statementPdf(a.mercury_account_id, prop.mercury_id);
+        if (pdf) break;
+      }
+      await logRead(c.env, conn.integrationId, user, 'statement', { pdfs: pdf ? 1 : 0 });
+      return finish({ statementPdf: pdf });
+    });
   }
 
   app.post('/proposals/:uid/accept', (c) => decide(c, 'accept'));
   app.post('/proposals/:uid/dismiss', (c) => decide(c, 'dismiss'));
+
+  /** An attached statement's PDF: its owner only (`result_ref` is the key only once accepted), from the private bucket. */
+  app.get('/proposals/:uid/statement.pdf', async (c) => {
+    const user = await requireAuth(c);
+    const p = await policy(c, user);
+    if (p) return p;
+    const uid = c.req.param('uid') ?? '';
+    const prop = /^[0-9a-f]{32}$/i.test(uid) ? await ownProposal(c.env, user, uid.toLowerCase()) : null;
+    if (!prop || prop.kind !== 'statement' || prop.result_ref !== statementKeyOf(user, prop)) {
+      return refused(c, 404, 'statement_not_found', 'No attached statement here.');
+    }
+    const obj = c.env.FILES ? await c.env.FILES.get(prop.result_ref) : null;
+    if (!obj) return refused(c, 404, 'statement_not_found', 'No attached statement here.');
+    return new Response(obj.body, { headers: {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="statement-${prop.posted_on ?? 'mercury'}.pdf"`,
+      'Cache-Control': 'private, no-store',
+    } });
+  });
 
   app.get('/reporting', async (c) => {
     const user = await requireAuth(c);

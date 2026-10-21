@@ -36,14 +36,14 @@
 import type { Env, User } from '../../types';
 import type { ParsedAccount } from './parse';
 import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES } from './parse';
-import type { McpTransaction, MercuryReads, Statement } from './reads';
+import type { McpTransaction, MercuryReads, Statement, StatementPdf } from './reads';
 import { callLineFits, openLines, type OpenLine } from './match';
 import { recordReceipt } from '../fundCallLedger';
 import { LedgerRefusal, postLedgerEntry } from '../fundLedger';
 import { newUid } from './store';
 
-/** A reader of the investor's own Mercury: the three tools this file uses. */
-export type InvestorReader = Pick<MercuryReads, 'accounts' | 'transactions' | 'statements'>;
+/** A reader of the investor's own Mercury: what this file uses. */
+export type InvestorReader = Pick<MercuryReads, 'accounts' | 'transactions' | 'statements' | 'statementPdf'>;
 
 export type ProposalKind = 'closing' | 'call' | 'ledger' | 'statement';
 export type InvestorSection = 'commit' | 'closing' | 'calls' | 'ledger' | 'reporting';
@@ -476,7 +476,8 @@ const no = (status: 400 | 404 | 409, code: string, message: string): AcceptOutco
  * Accept one proposal: the only place a proposal writes. Each kind re-checks
  * that its target is still the caller's own before writing anything.
  */
-export async function acceptProposal(env: Env, user: User, p: ProposalRow, body: Record<string, unknown> = {}): Promise<AcceptOutcome> {
+export async function acceptProposal(env: Env, user: User, p: ProposalRow, body: Record<string, unknown> = {},
+  extras: { statementPdf?: StatementPdf | null } = {}): Promise<AcceptOutcome> {
   if (p.state !== 'proposed') return no(409, 'already_decided', 'This proposal was already accepted or dismissed.');
   if (p.kind === 'closing') {
     const own = await env.DB.prepare("SELECT 1 AS x FROM commitments WHERE id = ? AND investor_user_id = ? AND status <> 'withdrawn'")
@@ -537,5 +538,18 @@ export async function acceptProposal(env: Env, user: User, p: ProposalRow, body:
   if (!p.fund_id || !(await gpFunds(env, user, p.fund_id)).length) return no(404, 'target_not_found', 'That is not a fund you are GP of.');
   const period = await env.DB.prepare('SELECT 1 AS x FROM fund_report_periods WHERE id = ? AND fund_id = ?').bind(p.target_id, p.fund_id).first();
   if (!period) return no(404, 'target_not_found', 'No such report period on this fund.');
-  return await markAccepted(env, user, p, p.mercury_id) ? { ok: true, result_ref: p.mercury_id } : no(409, 'already_decided', 'This proposal was already accepted or dismissed.');
+  // The PDF itself, read by the route from the investor's own Mercury, is what is attached.
+  const pdf = extras.statementPdf;
+  if (!pdf) return no(409, 'statement_unavailable', 'Mercury gave no PDF for that statement, so nothing was attached.');
+  if (!env.FILES) return no(409, 'statement_unavailable', 'Statements cannot be stored in this environment, so nothing was attached.');
+  const key = statementKeyOf(user, p);
+  await env.FILES.put(key, pdf.bytes, { httpMetadata: { contentType: 'application/pdf' } });
+  if (!await markAccepted(env, user, p, key)) {
+    await env.FILES.delete(key);
+    return no(409, 'already_decided', 'This proposal was already accepted or dismissed.');
+  }
+  return { ok: true, result_ref: key };
 }
+
+/** Where an attached statement lives: under its owner, in the private FILES bucket, read only through the owner's route. */
+export const statementKeyOf = (user: User, p: Pick<ProposalRow, 'uid'>) => `mercury-statements/${Number(user.id)}/${p.uid}.pdf`;
