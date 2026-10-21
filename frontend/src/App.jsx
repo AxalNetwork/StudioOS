@@ -1188,7 +1188,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           status bar (Codex on #1039). Here, whichever bar is first sits below
           it, and every bar keeps its own height. `env(…, 0px)` is 0 on every
           screen without an inset. */}
-      <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+      {/* `app-shell` reserves the top safe-area inset (index.css; D504), unless the
+          founder's phone band is the first thing in it and takes the inset itself.
+          The height is the dynamic viewport where the browser has one: iOS Safari's
+          100vh is taller than the visible screen, so the whole shell scrolled and
+          took the band with it. */}
+      <div className="app-shell flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ height: '100dvh' }}>
         {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
             `isImpersonating` is `!!realUser`, which an HQ support session never
             sets (the operator is a row in HQ's database this deployment cannot
