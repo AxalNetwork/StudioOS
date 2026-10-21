@@ -11,6 +11,7 @@ import ZoneDraft from '../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, MeteredNote } from '../../workspaces/canvasKit';
 import { useRailOption, useRailPage } from '../../ui/railCrumbs';
 import { railOptionFor } from '../../lib/railOptions';
+import { railPressHeaders } from '../../lib/railPage.js';
 
 /**
  * Research · Ask — answers drawn only from your own library, or no answer.
@@ -184,7 +185,8 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
     if (!q) return;
     setBusy(true); setError('');
     try {
-      const r = await api.research.ask(q, sessionUid);
+      // D778 part 11: the press names its profile's option on the run (founder's by default).
+      const r = await api.research.ask(q, sessionUid, railPressHeaders(askOption?.key ?? 'ask:library'));
       setQuestion('');
       // Back to the session view: a reader who asks a question while looking at
       // `All history` has just added to a thread they cannot see, and leaving
