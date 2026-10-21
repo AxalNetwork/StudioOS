@@ -9,7 +9,7 @@ import { Banner, Group, Row, Sheet } from './ConnectorSheet';
 import { agoLabel } from './connectorsModel';
 import {
   ADMIN_ONLY, BRANCH_MANAGED, DISCONNECT_REASON_MIN, ENTITY_AUDIT_FOOT, ENTITY_DISCONNECT_NOTE, ENTITY_SHEET_AUDIT_FOOT, ENTITY_FEEDS, MEMBER_GROUPS, OPEN_BANKING,
-  READS_ROW, TOKEN_HELP, USE_DOORS, confirmReadOnlyLabel, entityRows, landsWords, neverRows, retryAfterSentence, usesRows,
+  READS_ROW, TOKEN_HELP, USE_DOORS, confirmReadOnlyLabel, entityRows, landsWords, neverRows, retryAfterSentence, usesRows, viaRow,
 } from './mercuryModel';
 import { mercuryPersonalApi } from '../../lib/api/mercuryPersonal';
 
@@ -327,11 +327,17 @@ export function MercuryLandsGroup({ role }) {
   );
 }
 
-/** "How it reads", in place of the Sync group: a member's Mercury never syncs, so there is no Sync now. */
-export function MercuryReadsGroup() {
+/**
+ * "How it reads", in place of the Sync group: a member's Mercury never syncs,
+ * so there is no Sync now. D840 (#2346): a connected row also says how it
+ * connected, a sign-in through Mercury's MCP server or a pasted token.
+ */
+export function MercuryReadsGroup({ conn = null }) {
+  const via = viaRow(conn);
   return (
     <Group label={MEMBER_GROUPS.reads}>
       <Row a={READS_ROW} />
+      {via && <div data-testid="mercury-via"><Row a={via} /></div>}
     </Group>
   );
 }

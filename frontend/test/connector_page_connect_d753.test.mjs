@@ -57,7 +57,11 @@ test('pageAction: one action per row of decision 6\'s table', () => {
   const stripe = pageAction(row('stripe'));
   assert.deepEqual([stripe.kind, stripe.label, stripe.aria], ['oauth', 'Connect to Axal VC', 'Connect Stripe to Axal VC']);
   assert.equal(pageAction(row('google')).kind, 'oauth', 'a first-party sign-in is a sign-in');
-  for (const key of ['crunchbase', 'mercury', 'hubspot']) assert.equal(pageAction(row(key)).kind, 'key', key);
+  for (const key of ['crunchbase', 'hubspot']) assert.equal(pageAction(row(key)).kind, 'key', key);
+  // D840 (#2346): a member's Mercury signs in with Mercury; its Read Only token is on the chevron.
+  const mercury = pageAction(row('mercury'));
+  assert.deepEqual([mercury.kind, mercury.label], ['oauth', 'Sign in with Mercury']);
+  assert.deepEqual(pageChoices(row('mercury')).alt, [{ id: 'pat', label: 'Use a Read Only API token' }]);
   const calendlyOff = buildCatalogue({ providers: [P('calendly', 'Calendly', { supports_pat: true, configured: false })], items: [], firstParty: {} })[0];
   assert.equal(pageAction(calendlyOff).kind, 'key', 'Calendly with no OAuth client connects with its token (D751)');
   assert.equal(pageAction(row('calendly')).kind, 'oauth', 'Calendly signs in; its token is on the chevron');
@@ -265,7 +269,9 @@ test('Mercury\'s Read Only confirm is required, and a refused token clears the f
   const f = stubFetch((c) => (c.path === '/connectors/connect' ? [400, { error: 'mercury_token_refused', message: 'Mercury refused that token.' }] : [200, {}]));
   const m = await mount(page('mercury'), '/account/connectors/mercury');
   try {
-    await m.click('connector-page-connect-button');
+    // D840: the token is the other way in, from the chevron.
+    await m.click('connector-page-choices');
+    await m.click('connector-page-alt-pat');
     await m.change('connector-key', 'invented-mercury-token');
     await m.submit('connector-page-key-form');
     assert.equal(f.calls.filter((c) => c.path === '/connectors/connect').length, 0, 'nothing is posted without the confirm');
@@ -334,9 +340,71 @@ test('the key form draws "Get one at <Service>" from the Worker\'s sign_in.key_h
   const body = { state: 'ready', connector: { display_name: 'Mercury', sign_in: { kind: 'key', label: 'Read Only API token', key_help_href: 'https://docs.mercury.test/tokens' } } };
   const m = await mount(page('mercury', { body }), '/account/connectors/mercury');
   try {
-    await m.click('connector-page-connect-button');
+    await m.click('connector-page-choices');
+    await m.click('connector-page-alt-pat');
     const link = m.by('connector-key-help');
     assert.equal(m.props(link).href, 'https://docs.mercury.test/tokens');
     assert.match(m.text(), /Get one at Mercury/);
   } finally { await m.unmount(); f.restore(); }
+});
+
+// ---------------------------------------------------------------- D840 (#2346): Sign in with Mercury
+
+test('D840: a member\'s Sign in with Mercury calls Mercury\'s own start, then sends the browser to authorize_url', async () => {
+  const f = stubFetch((c) => (c.path === '/integrations/mercury/oauth/start' ? [200, { ok: true, authorize_url: 'https://mcp.mercury.test/authorize?state=s' }] : [200, {}]));
+  const m = await mount(page('mercury'), '/account/connectors/mercury');
+  try {
+    const btn = m.by('connector-page-connect-button');
+    assert.match(m.text(m.by('connector-page-action')), /Sign in with Mercury/);
+    assert.equal(m.props(btn)['aria-label'], 'Sign in with Mercury to connect it to Axal VC');
+    await m.click('connector-page-connect-button');
+    assert.deepEqual(f.calls.filter((c) => c.path.includes('/oauth/')).map((c) => c.path), ['/integrations/mercury/oauth/start']);
+    assert.deepEqual(m.assigned, ['https://mcp.mercury.test/authorize?state=s']);
+    assert.equal(f.calls.filter((c) => c.path === '/connectors/connect').length, 0, 'no token is posted');
+  } finally { await m.unmount(); f.restore(); }
+});
+
+test('D840: a refused start prints the Worker\'s sentence and assigns nothing', async () => {
+  const f = stubFetch((c) => (c.path === '/integrations/mercury/oauth/start'
+    ? [503, { code: 'mercury_sign_in_unavailable', message: 'Mercury\'s sign-in could not be reached, so nothing was sent to Mercury.' }] : [200, {}]));
+  const m = await mount(page('mercury'), '/account/connectors/mercury');
+  try {
+    await m.click('connector-page-connect-button');
+    assert.deepEqual(m.assigned, []);
+    assert.ok(m.by('connector-page-notice'), 'a notice');
+  } finally { await m.unmount(); f.restore(); }
+});
+
+test('D840: the sign-in\'s return says what happened on the member\'s page, in Mercury\'s words', async () => {
+  const f = stubFetch(() => [200, {}]);
+  try {
+    let m = await mount(page('mercury'), '/account/connectors/mercury?oauth=ok&provider=mercury');
+    try { assert.equal(m.props(m.by('connector-page-notice'))['data-kind'], 'connected'); } finally { await m.unmount(); }
+    m = await mount(page('mercury'), '/account/connectors/mercury?oauth=error&provider=mercury&reason=scope_refused');
+    try {
+      assert.equal(m.props(m.by('connector-page-notice'))['data-kind'], 'refused');
+      assert.match(m.text(), /granted more than read access, so it was refused and revoked/);
+    } finally { await m.unmount(); }
+    m = await mount(page('mercury'), '/account/connectors/mercury?oauth=error&provider=mercury&reason=access_denied');
+    try { assert.equal(m.props(m.by('connector-page-notice'))['data-kind'], 'cancelled'); } finally { await m.unmount(); }
+    m = await mount(page('mercury'), '/account/connectors/mercury?oauth=error&provider=mercury&reason=Call_us');
+    try { assert.doesNotMatch(m.text(), /Call_us/, 'an unknown reason is not printed as words'); } finally { await m.unmount(); }
+  } finally { f.restore(); }
+});
+
+test('D840: Manage on a signed-in Mercury, and "How it reads" names how it connected', async () => {
+  const { manageItems } = await import('../src/pages/account/connectorPageModel.js');
+  const { viaRow, signInWords, SIGN_IN_REASONS } = await import('../src/pages/account/mercuryModel.js');
+  const signedIn = { ...row('mercury'), connection: { uid: 'u-m', provider_key: 'mercury', status: 'active', auth_type: 'oauth_mcp' } };
+  assert.deepEqual(manageItems(signedIn).map((i) => i.label), ['Sync now', 'Sign in again', 'Use a Read Only API token', 'Disconnect']);
+  assert.match(viaRow(signedIn.connection), /^Signed in with Mercury: read access only/);
+  assert.match(viaRow({ auth_type: 'api_key' }), /Read Only API token/);
+  assert.equal(viaRow(null), null);
+  assert.equal(viaRow({ auth_type: 'constructor' }), null);
+  assert.equal(signInWords('toString'), '');
+  // Every reason the Worker returns with has words, except a cancel, which reads as one.
+  const worker = (await import('node:fs')).readFileSync('cloudflare-worker/src/routes/mercury_oauth.ts', 'utf8');
+  const reasons = [.../CALLBACK_REASONS = \[([^\]]+)\]/.exec(worker)[1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]);
+  assert.ok(reasons.length >= 10);
+  for (const r of reasons) assert.ok(r === 'access_denied' || Object.hasOwn(SIGN_IN_REASONS, r), r);
 });

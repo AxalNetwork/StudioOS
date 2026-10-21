@@ -78,30 +78,48 @@ const notRead = (name: string) => `Eadwyn does not read ${name} yet.`;
 
 const MERCURY_API = 'https://api.mercury.com/api/v1';
 const MERCURY_DOCS = 'https://docs.mercury.com';
+/** D840 (#2346): Mercury's MCP server, which a member's sign-in reads through (`services/mercury/mcp.ts`). */
+const MERCURY_MCP = 'https://mcp.mercury.com/mcp';
 
 type MercuryVariant = 'entity' | 'founder' | 'partner' | 'investor';
 
+/**
+ * Each tool names the API path a pasted token reads and, for a member, the
+ * MCP tool their sign-in calls instead (D840). `mercury_feeds_d840.test.ts`
+ * holds the MCP names to `integrations/mercuryFeeds.ts`.
+ */
 function mercuryTools(variant: MercuryVariant): PageTool[] {
+  const member = variant !== 'entity';
+  // Each MCP read is one JSON-RPC POST (`mcp.ts`), named here so the page's write check knows it reads.
+  const mcp = (name: string) => (member ? [`'${name}'`, "jsonrpc: '2.0'"] : []);
   const tools = [
-    tool('read_organization', 'your organization', 'read', 'Reads the organization’s id and legal name, to match it to the right owner.', null, ["read(token, '/organization'"]),
-    tool('list_accounts', 'account names and last four digits', 'read', 'Lists the organization’s accounts by name, kind and last four digits.', null, ["read(token, '/accounts'"]),
+    tool('read_organization', 'your organization', 'read', 'Reads the organization’s id and legal name, to match it to the right owner.', null, ["read(token, '/organization'", ...mcp('getOrganization')]),
+    tool('list_accounts', 'account names and last four digits', 'read', 'Lists the organization’s accounts by name, kind and last four digits.', null, ["read(token, '/accounts'", ...mcp('getAccounts')]),
   ];
   // D752: an investor's proof of funds reads accounts only, never a transaction.
-  if (variant === 'investor') return tools;
-  tools.push(
-    tool('list_transactions', 'transactions', 'read',
-      variant === 'entity' ? 'Reads each account’s transactions every hour, for reconciliation against capital calls and fees.'
-        : variant === 'founder' ? 'Lists the credits in your account. Only the ones you import become revenue rows.'
-          : 'Lists your account’s transactions so you can pick the one that settled an invoice, payout or deal.',
-      variant === 'founder' ? 'revenue_and_traction' : null,
-      ['`/account/${accountId}/transactions`']),
-  );
-  if (variant !== 'entity') {
+  if (variant !== 'investor') {
+    tools.push(
+      tool('list_transactions', 'transactions', 'read',
+        variant === 'entity' ? 'Reads each account’s transactions every hour, for reconciliation against capital calls and fees.'
+          : variant === 'founder' ? 'Lists the credits in your account. Only the ones you import become revenue rows.'
+            : 'Lists your account’s transactions so you can pick the one that settled an invoice, payout or deal.',
+        variant === 'founder' ? 'revenue_and_traction' : null,
+        ['`/account/${accountId}/transactions`', ...mcp('listTransactions')]),
+    );
+  }
+  if (variant !== 'entity' && variant !== 'investor') {
     tools.push(tool('read_transaction', 'the transaction you pick', 'read', 'Reads the one transaction you picked, to confirm it before it is used.', null,
-      ['`/account/${accountId}/transaction/${transactionId}`']));
+      ['`/account/${accountId}/transaction/${transactionId}`', ...mcp('getTransactionById')]));
+  }
+  if (member) {
+    tools.push(tool('sign_in_with_mercury', 'your sign-in', 'account',
+      'Registers Axal VC with Mercury’s sign-in once, and revokes your sign-in’s tokens when you disconnect. Your sign-in asks only for read access.',
+      null, ['server.registration_endpoint', 'server.revocation_endpoint']));
   }
   return tools;
 }
+
+const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s own MCP server and asks only for read access. It calls only the read tools named below, and refuses any other. A Read Only API token works too.';
 
 function mercuryPage(variant: MercuryVariant): ConnectorPage {
   const entity = variant === 'entity';
@@ -110,12 +128,11 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
       : variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
         : variant === 'investor' ? 'Proof of funds for a commitment you made, shared with Axal’s admins. Read-only, never a balance.'
           : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
-    long_description: entity
-      ? [
+    long_description: entity ? [
         'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money.',
         'A Super Admin adds a Read Only API token for each Axal entity. Axal VC reads the organization, its accounts and their transactions, and proposes matches to capital calls and fees for a person to confirm.',
       ]
-      : variant === 'founder'
+      : [...(variant === 'founder'
         ? [
           'Your own Mercury account, read-only.',
           'Axal VC lists the credits in your account. Only the credits you choose to import become rows in Revenue and traction. It never sends, transfers or requests money.',
@@ -128,16 +145,17 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
           : [
           'Your own Mercury account, read-only.',
           'Axal VC lists your transactions so you can match an invoice, a payout or a partner-deal settlement to the line that settled it. It never sends, transfers or requests money.',
-        ],
+        ]), MERCURY_SIGN_IN],
     tools: mercuryTools(variant),
     prompts: [],
     prompts_reason: notRead('Mercury'),
     made_by: AXAL,
     service: { name: 'Mercury', href: null },
+    // D840 (#2346): a member signs in with Mercury (its MCP server, read-only), or pastes a Read Only API token.
     sign_in: entity
       ? { kind: 'entity', label: 'Read Only API token, added for each Axal entity by the Super Admin', key_help_href: null }
-      : { kind: 'key', label: 'Read Only API token', key_help_href: MERCURY_DOCS },
-    endpoints: { sign_in: null, api: MERCURY_API },
+      : { kind: 'oauth_or_key', label: 'Sign in with Mercury, or a Read Only API token', key_help_href: MERCURY_DOCS },
+    endpoints: { sign_in: entity ? null : MERCURY_MCP, api: MERCURY_API },
     added: '2026-10',
     links: { ...NO_LINKS, developer_docs: MERCURY_DOCS },
     verified_on: null,
