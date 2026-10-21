@@ -441,7 +441,6 @@ test('step 11. the footer, share buttons, author card and Referrals draw BrandIc
     ['frontend/src/pages/admin/AdminTeam.jsx', ['linkedin', 'x']],
     ['frontend/src/pages/AdvisoryPage.jsx', ['linkedin']],
     ['frontend/src/pages/jobs/JobManagePage.jsx', ['linkedin']],
-    // CompanyProfilePanel.jsx left with Network Effects, its only page (#2297).
   ];
   for (const [file, keys] of wrappers) {
     const src = read(file);

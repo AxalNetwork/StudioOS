@@ -102,7 +102,7 @@ export default {
       id: 'relationships',
       title: 'Relationships',
       overview:
-        "Relationships is your private rolodex inside the platform — the people you've met through the studio, the introductions you've made and received, and the notes you keep on each contact. It is a working view of who you actually know.",
+        "Relationships is your private rolodex inside the platform — the people you've met through the studio, the introductions you've made and received, and the notes you keep on each contact.",
       howto: [
         'Open Relationships from the sidebar.',
         'Browse contacts by name, role, or last interaction.',
@@ -164,7 +164,9 @@ export default {
         'Referring yourself with an alternate email is detected and forfeits earnings.',
         'Sharing in spammy channels can get your link blacklisted by referees’ employers.',
       ],
-      related: [],
+      related: [
+        { label: 'Relationships', href: '#network/relationships' },
+      ],
     },
   ],
 };

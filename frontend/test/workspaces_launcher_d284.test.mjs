@@ -3,7 +3,8 @@
  * tasks 420 and 408), with the Workspaces launcher retired (D563).
  *
  * The 29 working pages (26 since AI Matches went, and Market Intelligence and
- * Signals with D670; 20 since the owner removed six on 2026-10-20) left
+ * Signals with D670; 20 since the owner removed six on 2026-10-20; 19 since
+ * #2324 removed Network Effects) left
  * `SIDEBAR_GROUPS.admin`
  * for a top-bar launcher (D284); D563 retired that launcher, and each page now
  * lights a profile sidebar row (`workspaces_retired_d563.test.mjs`). Messages
@@ -67,7 +68,7 @@ const CANVAS = [
   ['Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall'],
   ['Capital & Legal', 'Legal & Capital', '/legal-capital'],
   ['Capital & Legal', 'Incorporate', '/incorporate'], ['Capital & Legal', 'Compliance Calendar', '/compliance'],
-  // Network Effects (/network-effects) stood here; the owner removed it (#2297).
+  // Network Effects stood here; #2324 removed the page (#2297 §3).
   ['Network & Growth', 'Network', '/network'],
   ['Network & Growth', 'Jobs', '/my/jobs'], ['Network & Growth', 'Service Catalogue', '/services'],
   ['Network & Growth', 'Needs Board', '/needs'], ['Network & Growth', 'Demand Insights', '/partner/insights'],

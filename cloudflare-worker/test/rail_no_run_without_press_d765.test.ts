@@ -97,9 +97,8 @@ test('the syndicate rationale and the monitoring AI summary are presses (POST); 
   assert.match(mon, /monitoring\.post\('\/anomalies', \(c\) => anomalies\(c, true\)\);/);
   assert.match(mon, /if \(withAi && c\.env\.AI\) \{/);
   const api = readFileSync(join(ROOT, '../frontend/src/lib/api.js'), 'utf8');
-  // The syndicate rationale's only caller was the Network Effects page, removed
-  // in #2297 (#2324); the route above stays a press for any future caller.
-  assert.doesNotMatch(api, /\/recommendations`(?![^\n]*method: 'POST')/, 'a client read of the rationale that is not a press');
+  // #2324 removed the page that pressed it; any client call that comes back must be the POST.
+  for (const m of api.matchAll(/request\(`\/networkfx\/syndicates\/\$\{id\}\/recommendations`([^)]*)\)/g)) assert.match(m[1], /method: 'POST'/);
   assert.match(api, /nextQuestion: \(focus\) =>\n\s+request\(`\/advisor\/next-question[^\n]*\{ method: 'POST'/);
   assert.match(api, /monitoringAnomaliesSummary: \(\) => request\('\/monitoring\/anomalies', \{ method: 'POST'/);
 });

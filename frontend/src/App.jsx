@@ -3480,6 +3480,9 @@ function AppInner() {
       <Route path="/integrations" element={authOnly(<IntegrationsRedirect />)} />
       <Route path="/account/integrations" element={authOnly(<IntegrationsRedirect />)} />
       <Route path="/payouts" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <Navigate to="/referrals" replace />)} />
+      {/* #2324 (#2297 §3): Network Effects is removed; its parts belong to Network, Deals and the
+          marketplace. The old address lands on Network, and is counted with #2301's redirects. */}
+      <Route path="/network-effects" element={<Navigate to="/network" replace />} />
       {/* /pipeline lives with the Partner bucket routes above — the partner
           canvas claims the prefix root as its Pipeline overview, and the
           investor deal pipeline keeps the zone slugs below it. */}

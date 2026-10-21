@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Card, Pill, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
@@ -6,6 +6,7 @@ import WorkspaceShell from '../../workspaces/WorkspaceShell';
 import { StatedLimit } from '../advisor/expertise/kit';
 import { companyHref } from '../../lib/companyDirectoryView.js';
 import { useRailOption } from '../../ui/railCrumbs';
+import { railPressHeaders } from '../../lib/railPage.js';
 import {
   categoryLabel,
   detailRows,
@@ -184,19 +185,28 @@ export default function CompanyCandidate({ role = 'founder' }) {
   const explanation = draftExplanation(candidate?.summary, sources);
   const manual = candidate?.origin === 'manual';
 
+  // D778 part 9 (#2103): a press answers only the company it was pressed on.
+  // Opening another company (or leaving) moves this on; a press that comes back
+  // after that is dropped with its result, its notice and its busy state.
+  const runFor = useRef(0);
+  useEffect(() => { runFor.current += 1; setBusy(false); setCrawling(false); }, [analysisId, candidateId]);
+  useEffect(() => () => { runFor.current += 1; }, []);
+
   const run = async (fn) => {
+    const mine = ++runFor.current;
     setNotice(null);
     setBusy(true);
     try {
       const full = await fn();
+      if (runFor.current !== mine) return null;
       if (full) adopt(full);
       setNotice({ ok: true, text: 'Saved.' });
       return full;
     } catch (e) {
-      setNotice({ ok: false, text: e?.message || 'That did not save.' });
+      if (runFor.current === mine) setNotice({ ok: false, text: e?.message || 'That did not save.' });
       return null;
     } finally {
-      setBusy(false);
+      if (runFor.current === mine) setBusy(false);
     }
   };
 
@@ -334,7 +344,12 @@ export default function CompanyCandidate({ role = 'founder' }) {
                       type="button"
                       className={ghostBtn}
                       disabled={busy}
-                      onClick={async () => { setCrawling(true); await run(() => api.competitors.crawlCandidate(analysisId, candidateId)); setCrawling(false); }}
+                      onClick={async () => {
+                        setCrawling(true);
+                        const pressed = runFor.current + 1;
+                        await run(() => api.competitors.crawlCandidate(analysisId, candidateId, railPressHeaders('extract:site')));
+                        if (runFor.current === pressed) setCrawling(false);
+                      }}
                     >
                       Crawl site
                     </button>

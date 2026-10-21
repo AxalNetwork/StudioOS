@@ -22,7 +22,7 @@
  *    when that list is empty on a page that has an active company.
  *
  * 4. THE DIRECT ADD IS GONE ON EVERY SIDE. `CompanyProfilePanel`'s modal
- *    joined an existing account without asking it; the panel now points at
+ *    joined an existing account without asking it; the panel pointed at
  *    Company Settings, `api.addCompanyMember` has no caller and is removed,
  *    and the worker no longer mounts POST /company/:uid/members. D69 kept the
  *    method for that one surface; D434 retires the surface on D304's rule.
@@ -168,9 +168,10 @@ test('the Workspace card creates through the switcher\'s own rules and counts ho
 // 4. The direct add, retired.
 // ---------------------------------------------------------------------------
 
-test('the direct add is gone from the panel, the client and the worker', () => {
-  // The panel itself left with Network Effects, its only page (owner, #2297).
-  assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/components/CompanyProfilePanel.jsx')), 'CompanyProfilePanel.jsx is back');
+test('the direct add is gone from the client and the worker', () => {
+  // `CompanyProfilePanel` held the modal; #2324 removed it with the Network
+  // Effects page, its only caller, so no surface can bring the direct add back.
+  assert.equal(existsSync(resolve(process.cwd(), 'frontend/src/components/CompanyProfilePanel.jsx')), false);
   assert.doesNotMatch(API, /addCompanyMember:|`\/company\/\$\{uid\}\/members`, \{ method: 'POST'/);
   assert.doesNotMatch(WORKER, /r\.post\('\/company\/:uid\/members'/);
   // The two member mutations that were never the defect stay mounted.
