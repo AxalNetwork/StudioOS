@@ -58,16 +58,19 @@ import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { reportError } from '../../lib/log';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useEscapeClose } from '../useEscapeClose';
-import { useRailOption } from '../../ui/railCrumbs';
+import { useRailOption, useRailPage } from '../../ui/railCrumbs';
+import { railOptionFor } from '../../lib/railOptions/index.js';
 import { predictTarget } from '../../lib/advisor/router';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
 import MyBugReports from '../tickets/MyBugReports';
 import { PanelTabs, TasksPanel, TicketsPanel } from './EadwynPanels';
-import { PhoneFocus, PhoneTicketCard, threadLabel, useIsDesktop } from './eadwynPhone';
+import { PhoneFocus, PhoneTicketCard, threadLabel, useFootFill, useIsDesktop } from './eadwynPhone';
 import { startPrompt } from '../../lib/eadwynTickets';
 import { TICKET_TYPES } from '../../lib/ticketScreens';
 
+// D778 part 12: the file the inventories name the Studio presses at, as `railOptionFor` reads it.
+const STUDIO_FILE = 'components/advisor/PersonalAdvisor.jsx';
 const STORAGE_KEY = 'advisor:state';
 
 /** Resolve auth + CSRF headers for raw fetch calls (SSE bypasses api.js). */
@@ -205,11 +208,20 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // Tutor mode state.
   const [tutor, setTutor] = useState(null); // { topic, text, doc_anchor, page_target, streaming }
   // D771 (#2097): while a message is at the model, or the tutor is open, the rail is that option's.
-  useRailOption(asking ? 'ask:studio' : null, 'Send');
-  useRailOption(tutor ? 'explain:question' : null, 'Explain');
+  // D778 part 12 (#2103): the advisor's and the partner's Studio key both presses their own way,
+  // so each is read from the mounted page's inventory; the founder's keys are the fallback.
+  const railPage = useRailPage()?.page ?? null;
+  const sendOption = railOptionFor(railPage, { file: STUDIO_FILE, control: 'advisor.ask' });
+  const explainOption = railOptionFor(railPage, { file: STUDIO_FILE, control: 'explain' });
+  const sendKey = sendOption?.key ?? 'ask:studio';
+  const explainKey = explainOption?.key ?? 'explain:question';
+  useRailOption(asking ? sendKey : null, sendOption?.label ?? 'Send');
+  useRailOption(tutor ? explainKey : null, explainOption?.label ?? 'Explain');
   const tutorAbortRef = useRef(null);
   const scrollerRef = useRef(null);
   const isDesktop = useIsDesktop();
+  // The phone frame reaches the scroll's foot, so the composer stands there.
+  const [phoneFrame, phoneFill] = useFootFill();
 
   // ---------- Persistence -------------------------------------------------
   useEffect(() => {
@@ -582,7 +594,8 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         method: 'POST',
         credentials: 'include',
         signal: controller.signal,
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...authHeaders() },
+        // D778 part 12: the press names its option on the run, keeping the mounted rail's page.
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...authHeaders(), ...railPressHeaders(explainKey) },
         body: JSON.stringify({ topic, conversation_id: conversationId }),
       });
       if (!res.ok || !res.body) {
@@ -636,7 +649,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     } finally {
       tutorAbortRef.current = null;
     }
-  }, [conversationId, question]);
+  }, [conversationId, question, explainKey]);
 
   // Task #5 (AV) — route a free-form message through the LLM tool-binding
   // endpoint and append the returned {result, cta} envelope as a
@@ -647,7 +660,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     setMessages((m) => [...m, { role: 'user', content: raw }]);
     setInput('');
     try {
-      const r = await api.advisor.toolAuto(raw);
+      const r = await api.advisor.toolAuto(raw, railPressHeaders(sendKey));
       setMessages((m) => [...m, {
         role: 'tool',
         content: JSON.stringify({ result: r.result, cta: r.cta }),
@@ -664,7 +677,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       setBusy(false);
       setAsking(false);
     }
-  }, []);
+  }, [sendKey]);
 
   // Detect "explain X" as user input — open tutor instead of answering.
   const handleSend = useCallback(() => {
@@ -729,8 +742,18 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // attribute the answer. `section` is a SECTION key (e.g. "BUILD"),
   // never a route path — assigning a path here would poison the /queue +
   // /next-question focus filter downstream.
+  //
+  // Below 1024px the chat and the task list are tabs, so a picked question
+  // also opens the chat (the owner, 2026-10-21: a tapped task stayed on Tasks
+  // and the question was nowhere in sight), as Start a task does, and the
+  // phone frame scrolls its new line into view once the thread is drawn.
+  const revealPickRef = useRef(false);
   const handlePickQuestion = useCallback((q) => {
     if (!q || !q.id) return;
+    if (!isDesktop) {
+      revealPickRef.current = true;
+      setPanelTab('conversation');
+    }
     setQuestion({
       id: q.id,
       prompt: q.prompt,
@@ -742,7 +765,14 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     if (q.section && q.section !== focusSection) {
       setFocusSection(q.section);
     }
-  }, [focusSection]);
+  }, [focusSection, isDesktop, setPanelTab]);
+  useEffect(() => {
+    if (!revealPickRef.current || panelTab !== 'conversation') return;
+    revealPickRef.current = false;
+    // The phone thread is part of the page's scroll: bring its newest line,
+    // the picked question, to the middle of the screen, clear of the composer.
+    scrollerRef.current?.lastElementChild?.scrollIntoView?.({ block: 'center' });
+  }, [panelTab, messages]);
 
   // Task #9 — after a ticket is filed, confirm inline in the transcript
   // with a link back to the Help Center (and the GitHub issue if the
@@ -886,7 +916,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   if (phone) {
     const last = messages[messages.length - 1];
     return (
-      <div data-card data-testid="eadwyn-phone" className="flex flex-col">
+      <div ref={phoneFrame} data-card data-testid="eadwyn-phone" className="flex flex-col" style={phoneFill ? { minHeight: phoneFill } : undefined}>
         {weekBanner && <WeekBanner week={weekBanner.week} />}
         {ticketPanel}
         {panelTab === 'conversation' ? (
@@ -905,7 +935,12 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
               phone
             />
             {belowThread}
-            <div className="sticky bottom-[var(--mobile-tabbar-h,0px)] z-10 bg-white dark:bg-gray-950" data-testid="eadwyn-phone-composer">
+            {/* Last row with mt-auto: at the frame's foot (useFootFill) on a short
+                thread, pinned on a long one. bottom-0, not the tab bar's height:
+                a sticky row is held inside the scroll's padding, and the shell's
+                <main> already pads by the bar (mobileTabBar.css), so the bar's
+                height again left a 56px gap above it. */}
+            <div className="sticky bottom-0 z-10 mt-auto bg-white dark:bg-gray-950" data-testid="eadwyn-phone-composer">
               {question && (
                 <CurrentQuestion
                   q={question}

@@ -28,7 +28,7 @@ import { withGuard } from './_guard_stub.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { run as aiRun, __resetForTest } from '../src/services/aiRouter.ts';
-import { recordFill, fillsForRow } from '../src/services/fills/provenance.ts';
+import { recordFill, fillsForRow, claimFills } from '../src/services/fills/provenance.ts';
 import founderValidate from '../src/routes/founder_validate.ts';
 
 const SQL = new URL('../sql/', import.meta.url);
@@ -180,4 +180,41 @@ test('D777 migration 503 is additive, and declares what the runtime adds', () =>
     'ALTER TABLE fill_provenance ADD COLUMN ai_usage_log_id INTEGER', 'CREATE INDEX IF NOT EXISTS idx_fill_provenance_usage ON fill_provenance (ai_usage_log_id)']) {
     assert.ok(runtime.includes(ddl), `the runtime repeats: ${ddl}`);
   }
+});
+
+// ── Part 4: the reads a member sees answer the run ──────────────────────────
+
+test('D777 part 4: a claim\'s fill answers the run that wrote it and what it cost, on the board read', async () => {
+  // Mutations checked: the run left out of claimFills; the usage id not joined (every run null); a typed-over claim still marked.
+  const w = world();
+  // Two earlier runs, so the usage row's id is never the hypothesis's.
+  await run(w); await run(w);
+  const r = await run(w);
+  const ins = w.f.db.prepare(`INSERT INTO validate_proposals (project_id, kind, payload_json, model, task, created_by, surface, fill_class, target_ref, ai_usage_log_id)
+    VALUES (7, 'hypothesis', ?, ?, 'validate_draft_hypotheses', 1, 'validate/hypotheses', 'restatement', 'hypotheses', ?)`)
+    .run(JSON.stringify({ claim: 'Ops leads will pay to stop reconciling by hand.' }), r.usage.model, r.usageLogId);
+  const a = await accept(w, Number(ins.lastInsertRowid));
+  assert.notEqual(r.usageLogId, a.body.hypothesis.id, 'the ids must differ for the join to be tested');
+  assert.equal(a.status, 201, JSON.stringify(a.body));
+  const id = a.body.hypothesis.id;
+  const claim = 'Ops leads will pay to stop reconciling by hand.';
+  const fills = await claimFills(w.env, 7, [{ id, claim }]);
+  const log = one(w, 'SELECT rail_page, rail_option, charged_microusd, est_cost_usd FROM ai_usage_logs WHERE id = ?', r.usageLogId);
+  assert.deepEqual(fills.get(id), {
+    edited: false, model: r.usage.model, fill_class: 'restatement',
+    run: { usage_log_id: r.usageLogId, rail_page: log.rail_page, rail_option: 'fill:hypothesis', charged_microusd: log.charged_microusd, est_cost_usd: log.est_cost_usd },
+    ai_proposal_id: null,
+  });
+  // The founder typed over it: no mark, and so no run to show.
+  assert.equal((await claimFills(w.env, 7, [{ id, claim: 'Something they wrote.' }])).get(id), undefined);
+  // An unreadable usage log keeps the mark and answers no run: "Not recorded".
+  w.f.db.exec('DROP TABLE ai_usage_logs');
+  assert.equal((await claimFills(w.env, 7, [{ id, claim }])).get(id)?.run, null);
+});
+
+test('D777 part 4: the market assumptions read hands each filled field its run and proposal', () => {
+  const src = readFileSync(new URL('../src/routes/projects.ts', import.meta.url), 'utf8');
+  const at = src.indexOf("projects.get('/:projectId/market-assumptions'");
+  const route = src.slice(at, src.indexOf("projects.put('/:projectId/market-assumptions'", at));
+  assert.match(route, /filled\[key\] = \{[\s\S]*?run: fill\.run,\s*ai_proposal_id: fill\.ai_proposal_id,\s*\};/);
 });

@@ -150,7 +150,7 @@ test('every page that shows a rate reads it from the one helper', () => {
     'pages/hq/RevenuePage.jsx',
     'pages/CompanySettingsPage.jsx',
     'pages/IntroductionsPanel.jsx',
-    'pages/NetworkEffectsPage.jsx',
+    // pages/NetworkEffectsPage.jsx was the sixth; #2324 removed the page.
   ]) {
     const src = FILES.get(rel);
     assert.ok(src, `${rel} must exist`);

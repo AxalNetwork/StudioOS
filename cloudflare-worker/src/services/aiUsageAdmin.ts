@@ -132,6 +132,12 @@ const BY_MODEL = `SELECT model,
        SUM(CASE WHEN charged_microusd IS NULL AND refusal IS NULL THEN 1 ELSE 0 END) AS not_recorded
   FROM ai_usage_logs WHERE created_at >= ? AND created_at < ?
  GROUP BY model ORDER BY charged DESC, model`;
+// D791 part 2: the daily chart by model needs each day's split, Cloudflare's cost beside the charge.
+const BY_DAY_MODEL = `SELECT substr(created_at, 1, 10) AS day, model,
+       COALESCE(SUM(est_cost_usd), 0) AS cost_usd,
+       COALESCE(SUM(charged_microusd), 0) AS charged
+  FROM ai_usage_logs WHERE created_at >= ? AND created_at < ?
+ GROUP BY substr(created_at, 1, 10), model ORDER BY day, model`;
 // The member's licence columns (`aiLicenceKey`), name and email, each by name. Never `u.*`.
 const BY_MEMBER = `SELECT a.user_id, COALESCE(u.display_name, u.name) AS name, u.email, u.role, u.subscription_tier, u.subscription_status,
        u.subscription_renews_at, u.investor_tier, u.investor_subscription_status, u.investor_subscription_renews_at,
@@ -186,7 +192,9 @@ const CAPS = `SELECT c.user_id, COALESCE(u.display_name, u.name) AS name, u.emai
 const TOPUPS = `SELECT user_id, COALESCE(SUM(credit_microusd), 0) AS topups
   FROM ai_topup_purchases WHERE credited_at IS NOT NULL AND credited_at >= ? AND credited_at < ? GROUP BY user_id`;
 // A member search: the exact id, or an email prefix, with the same sums as the top members. At most SEARCH_MAX rows.
-const SEARCH_BY_ID = `SELECT u.id AS user_id, COALESCE(u.display_name, u.name) AS name, u.email,
+const SEARCH_BY_ID = `SELECT u.id AS user_id, COALESCE(u.display_name, u.name) AS name, u.email, u.created_at AS joined,
+       u.role, u.subscription_tier, u.subscription_status,
+       u.subscription_renews_at, u.investor_tier, u.investor_subscription_status, u.investor_subscription_renews_at,
        COALESCE(a.runs, 0) AS runs, COALESCE(a.refused, 0) AS refused, COALESCE(a.cost_usd, 0) AS cost_usd, COALESCE(a.charged, 0) AS charged,
        COALESCE(a.recorded_cost_usd, 0) AS recorded_cost_usd, COALESCE(a.not_recorded, 0) AS not_recorded, COALESCE(t.topups, 0) AS topups
   FROM users u
@@ -202,6 +210,8 @@ const SEARCH_BY_ID = `SELECT u.id AS user_id, COALESCE(u.display_name, u.name) A
         WHERE credited_at IS NOT NULL AND credited_at >= ? AND credited_at < ? AND user_id = ? GROUP BY user_id) t ON t.user_id = u.id
  WHERE u.id = ?`;
 const SEARCH_BY_EMAIL = `SELECT u.id AS user_id, COALESCE(u.display_name, u.name) AS name, u.email,
+       u.role, u.subscription_tier, u.subscription_status,
+       u.subscription_renews_at, u.investor_tier, u.investor_subscription_status, u.investor_subscription_renews_at,
        COALESCE(a.runs, 0) AS runs, COALESCE(a.refused, 0) AS refused, COALESCE(a.cost_usd, 0) AS cost_usd, COALESCE(a.charged, 0) AS charged,
        COALESCE(a.recorded_cost_usd, 0) AS recorded_cost_usd, COALESCE(a.not_recorded, 0) AS not_recorded, COALESCE(t.topups, 0) AS topups
   FROM users u
@@ -241,8 +251,8 @@ const MEMBER_PAUSE = `SELECT p.reason, p.paused_at, p.paused_by, COALESCE(b.disp
 const MEMBER_CAP = `SELECT c.monthly_microusd, c.set_at, c.set_by, COALESCE(b.display_name, b.name) AS set_by_name, b.email AS set_by_email
   FROM member_ai_caps c LEFT JOIN users b ON b.id = c.set_by WHERE c.user_id = ?`;
 // The member's pause and cap history: the audit lines this file writes, newest first.
-const MEMBER_HISTORY = `SELECT l.action, l.details, l.created_at, l.actor
-  FROM activity_logs l
+const MEMBER_HISTORY = `SELECT l.action, l.details, l.created_at, l.actor, COALESCE(a.display_name, a.name) AS actor_name
+  FROM activity_logs l LEFT JOIN users a ON a.id = CAST(l.actor AS INTEGER)
  WHERE l.user_id = ? AND l.action IN ('ai_member_paused', 'ai_member_unpaused', 'ai_member_cap_set', 'ai_member_cap_cleared')
  ORDER BY l.id DESC LIMIT 100`;
 const MEMBER_BALANCE = 'SELECT balance_microusd FROM ai_topup_accounts WHERE user_id = ?';
@@ -256,10 +266,17 @@ const text = (v: unknown) => (typeof v === 'string' && v ? v : null);
 /** A member as this Super Admin page names one: id, name and account email (the owner's ruling, 2026-10-20). */
 const member = (id: unknown, name: unknown, email: unknown) => ({ id: int(id), name: text(name), email: text(email) });
 type Member = ReturnType<typeof member>;
-/** A member's row: their sums over the range and the tokens they bought in it. Top members and the search share it. */
+/**
+ * A member's row: their sums over the range and the tokens they bought in it.
+ * Top members and the search share it. D791 part 2: with the member's role and
+ * AI plan (`aiLicenceKey`, read now, as the splits read them), which the page's
+ * Members table prints under the name; null when the account is gone.
+ */
 function memberRow(r: any, topups: number) {
   const { runs, refused, cost_microusd, charged_microusd, margin_microusd, not_recorded } = sums(r);
-  return { member: member(r.user_id, r.name, r.email), runs, refused, cost_microusd, charged_microusd, margin_microusd, not_recorded, topups_microusd: topups };
+  const known = r.role != null;
+  return { member: member(r.user_id, r.name, r.email), role: known ? String(r.role) : null, plan: known ? aiLicenceKey(r) : null,
+    runs, refused, cost_microusd, charged_microusd, margin_microusd, not_recorded, topups_microusd: topups };
 }
 
 /** The flag sentences, from the figures that raised them. */
@@ -325,6 +342,8 @@ export async function platformAiUsage(env: Env, range: AiUsageRange, now = new D
   const bounds = rangeBounds(range, now)!;
   const byDay = (await all(env, BY_DAY, bounds.from, bounds.to)).map((r) => ({ day: r.day, ...sums(r) }));
   const byModel = (await all(env, BY_MODEL, bounds.from, bounds.to)).map((r) => ({ model: r.model, ...sums(r) }));
+  const byDayModel = (await all(env, BY_DAY_MODEL, bounds.from, bounds.to))
+    .map((r) => ({ day: r.day, model: r.model, cost_microusd: micro(r.cost_usd), charged_microusd: int(r.charged) }));
   const members = await all(env, BY_MEMBER, bounds.from, bounds.to);
   const topups = new Map((await all(env, TOPUPS, bounds.from, bounds.to)).map((r) => [int(r.user_id), int(r.topups)]));
   const byRole = new Map<string, Sums>(), byPlan = new Map<string, Sums>();
@@ -357,6 +376,9 @@ export async function platformAiUsage(env: Env, range: AiUsageRange, now = new D
   return {
     range, from: bounds.from, to: bounds.to, generated_at: sqlTime(now),
     totals, by_day: byDay, by_model: byModel, by_role: split(byRole, 'role'), by_plan: split(byPlan, 'plan'),
+    // D791 part 2: the board's daily chart by model, and "AI tokens bought" (every member's packs credited in the range, bonus left out).
+    by_day_model: byDayModel,
+    topups_microusd: [...topups.values()].reduce((t, v) => t + v, 0),
     top_charged: top.sort((a, b) => b.charged_microusd - a.charged_microusd || a.member.id - b.member.id).slice(0, TOP_MEMBERS),
     top_velocity: velocity,
     flags: await aiUsageFlags(env, now),
@@ -409,11 +431,14 @@ export async function aiMemberDetail(env: Env, userId: number, range: AiUsageRan
   const history = (await all(env, MEMBER_HISTORY, userId)).map((h) => {
     let details: unknown = null;
     try { details = JSON.parse(String(h.details)); } catch { details = null; }
-    return { action: h.action, at: h.created_at, actor_id: int(h.actor), details };
+    // D791 part 2: the panel names who made the change; the line itself keeps the id.
+    return { action: h.action, at: h.created_at, actor_id: int(h.actor), actor_name: text(h.actor_name), details };
   });
   return {
     range, from: bounds.from, to: bounds.to,
     member: totals.member,
+    // D791 part 2: what the member panel prints beside the name.
+    role: totals.role, plan: totals.plan, joined: text(row.joined),
     totals: { runs: totals.runs, refused: totals.refused, cost_microusd: totals.cost_microusd, charged_microusd: totals.charged_microusd,
       margin_microusd: totals.margin_microusd, not_recorded: totals.not_recorded, topups_microusd: totals.topups_microusd },
     by_model: (await all(env, MEMBER_BY_MODEL, userId, bounds.from, bounds.to)).map((r) => ({ model: r.model, ...sums(r) })),

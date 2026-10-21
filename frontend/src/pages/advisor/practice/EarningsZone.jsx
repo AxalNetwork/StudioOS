@@ -14,6 +14,7 @@ import { advisorZoneActions } from '../../../workspaces/advisorZoneActions';
 import { advisorZoneFilters } from '../../../workspaces/advisorZoneFilters';
 import useAiSpend from '../../../hooks/useAiSpend';
 import { formatCost } from '../../../ui/assistCost';
+import { useRailOption } from '../../../ui/railCrumbs';
 
 /**
  * Practice · Earnings — canvas **D4**, `/practice/earnings`, tagged LEDGER.
@@ -147,6 +148,9 @@ export default function EarningsZone() {
   const [note, setNote] = useState(null);
   const [draft, setDraft] = useState('');
   const [drafting, setDrafting] = useState(false);
+  // D773 (#2099): while the band drafts, the run is the Earnings board's
+  // `draft:period-narrative` (lib/railOptions/advisor.js).
+  useRailOption(drafting ? 'draft:period-narrative' : null, 'Draft it');
   // The model's last text for this window, so Accept can say who wrote what is filed.
   const [modelText, setModelText] = useState(null);
   const [editing, setEditing] = useState(false);

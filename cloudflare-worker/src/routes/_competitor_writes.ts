@@ -23,7 +23,11 @@
  */
 import type { Env } from '../types';
 import { getSQL } from '../db';
+import type { RailContext } from '../services/aiRouter';
 import {
+  COMPANIES_OPTIONS,
+  COMPANIES_PAGE,
+  analysisRecord,
   buildManualCandidate,
   type AnalysisInputs,
   type Candidate,
@@ -52,13 +56,15 @@ export async function insertManualCandidate(
   analysisId: string,
   inputs: AnalysisInputs,
   data: ManualCandidateInput,
+  /** D778 part 9: the press's rail context. Only a crawl runs a model. */
+  rail: RailContext = { page: COMPANIES_PAGE, option: COMPANIES_OPTIONS.candidate, record: analysisRecord(analysisId) },
 ): Promise<Candidate> {
   const sql = getSQL(env);
   try {
     const posRows = await sql`SELECT COALESCE(MAX(position), -1) AS maxpos FROM competitor_candidates WHERE analysis_id = ${analysisId}`;
     const nextPos = Number(posRows[0]?.maxpos ?? -1) + 1;
 
-    const { candidate, sources, signals } = await buildManualCandidate(env, userId, inputs, data);
+    const { candidate, sources, signals } = await buildManualCandidate(env, userId, inputs, data, rail);
     candidate.position = nextPos;
 
     await sql`INSERT INTO competitor_candidates (id, analysis_id, name, domain, url, category, relevance_score, scores_json, summary, details_json, origin, position)

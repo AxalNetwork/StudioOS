@@ -158,6 +158,13 @@ export default function OnboardingFounderPage() {
         if (!v.primary_need) return 'Pick your primary need';
         return null;
       },
+      // The owner (2026-10-21): the company can wait. Skipping drops this
+      // step's answers, so no company is made; the band's company pill creates
+      // one later.
+      skip: {
+        label: 'Skip for now',
+        clears: ['company_name', 'jurisdiction', 'stage_detail', 'first_workspace', 'primary_need', 'problem', 'full_name'],
+      },
       render: ({ values, set }) => (
         <div className="space-y-4">
           <TextField label="Company name" value={values.company_name} onChange={(x) => set('company_name', x)} placeholder="Meridian Robotics" />

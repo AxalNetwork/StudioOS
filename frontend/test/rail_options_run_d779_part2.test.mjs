@@ -193,11 +193,12 @@ test('the interview’s Answer picks a tool on the press and writes only the con
   for (const o of rows) assert.equal(o.source.marker, 'api.advisor.toolAuto(');
   assert.equal(pa.split('api.advisor.toolAuto(').length - 1, 1);
   // The pick's result is a message in the thread with its buttons; the member presses one.
-  assert.match(pa, /const r = await api\.advisor\.toolAuto\(raw\);\s*setMessages\(\(m\) => \[\.\.\.m, \{\s*role: 'tool',/);
+  // D778 part 12: the press sends its profile's own option (`sendKey`) with the run.
+  assert.match(pa, /const r = await api\.advisor\.toolAuto\(raw, railPressHeaders\(sendKey\)\);\s*setMessages\(\(m\) => \[\.\.\.m, \{\s*role: 'tool',/);
   const body = route(advisor, 'advisor', 'post', '/tool/auto');
   for (const t of handlerWrites(body)) assert.ok(HISTORY.includes(t), `/tool/auto writes ${t}`);
   assert.doesNotMatch(body, /recordAnswer\(|writeRouter|routeWrite\(/, '/tool/auto records an answer');
-  assert.match(body, /rail: railFor\(c, \{ page: pageFromPath\(AI_SURFACE\.studio, 'studio'\), option: 'tool:advisor' \}\)/);
+  assert.match(body, /rail: railFor\(c, \{ page: pageFromPath\(AI_SURFACE\.studio, 'studio'\), option: studioOption\('send', user\.role\) \}\)/);
   // The tools it runs read and return a call to action; none of them writes.
   const tools = workerFile('services/advisor/tools.ts');
   assert.deepEqual(writes(tools), []);
@@ -212,7 +213,7 @@ test('the interview’s Explain streams into the tutor panel and writes only the
   const body = route(advisor, 'advisor', 'post', '/explain');
   for (const t of handlerWrites(body)) assert.ok(HISTORY.includes(t), `/explain writes ${t}`);
   assert.doesNotMatch(body, /recordAnswer\(|writeRouter|routeWrite\(/);
-  assert.match(body, /option: 'explain:advisor'/);
+  assert.match(body, /option: studioOption\('explain', user\.role\)/);
 });
 
 test('the voice answer fills the composer; the member sends it, and transcribing writes nothing', () => {
@@ -229,11 +230,11 @@ test('the voice answer fills the composer; the member sends it, and transcribing
 test('Ask answers on the press, and its answer is stored unsaved until Save', () => {
   for (const o of ROWS.filter((r) => r.key === 'ask:library')) assert.equal(o.source.marker, 'api.research.ask(');
   const ask = spa('pages/research/AskZone.jsx');
-  assert.match(ask, /const r = await api\.research\.ask\(q, sessionUid\);/);
+  assert.match(ask, /const r = await api\.research\.ask\(q, sessionUid, railPressHeaders\(askOption\?\.key \?\? 'ask:library'\)\);/);
   assert.match(ask, /onClick=\{\(\) => toggleSaved\(t\)\}/, 'Save is not a press');
   assert.match(read('cloudflare-worker/sql/migrations/221_research_ask_sessions.sql'), /saved\s+INTEGER NOT NULL DEFAULT 0/);
   assert.match(route(research, 'research', 'patch', '/ask/answers/:uid'), /UPDATE research_ask_answers SET saved = \?/);
-  assert.match(route(research, 'research', 'post', '/ask'), /rail: railFor\(c, \{ page: 'research', option: 'ask:library' \}\)/);
+  assert.match(route(research, 'research', 'post', '/ask'), /rail: railFor\(c, \{ page: ASK_PAGE, option: ASK_OPTION \}, `research_ask_session:\$\{session\.uid\}`\)/); // D778 part 11: the inventory's page and option (`founder_research_ask_d778.test.ts`).
 });
 
 test('the competitor analysis runs on the press and writes only its own analysis', () => {
@@ -241,8 +242,8 @@ test('the competitor analysis runs on the press and writes only its own analysis
   assert.deepEqual(rows.map((o) => o.key), ['analyze:competitors', 'rerun:analysis', 'refresh:sources']);
   const ui = spa('components/CompetitorAnalysis.jsx');
   for (const o of rows) assert.equal(ui.split(o.source.marker).length - 1, 1, `${o.key}: not one press`);
-  // Re-run keeps the member's hand-added competitors.
-  assert.match(ui, /api\.competitors\.rerun\(analysis\.id, \{ inputs: analysis\.inputs \|\| inputs, keep_manual: true \}\)/);
+  // Re-run keeps the member's hand-added competitors (and, D778 part 9, sends its press's option).
+  assert.match(ui, /api\.competitors\.rerun\(analysis\.id, \{ inputs: analysis\.inputs \|\| inputs, keep_manual: true \}, railPressHeaders\(pressKey\.rerun\)\)/);
   const src = workerFile('routes/competitors.ts');
   const OWN = ['competitor_analyses', 'competitor_analysis_outputs', 'competitor_candidates', 'competitor_signals', 'competitor_sources'];
   for (const [method, path] of [['post', '/analyze'], ['post', '/:id/rerun'], ['post', '/:id/refresh']]) {
@@ -254,8 +255,11 @@ test('the competitor analysis runs on the press and writes only its own analysis
   const persist = src.slice(src.indexOf('export async function persistResult'), src.indexOf('async function loadAnalysis'));
   for (const t of writes(persist)) assert.ok(OWN.includes(t), `persistResult writes ${t}`);
   assert.doesNotMatch(persist, /ai_rail_proposals|validate_proposals|fill_provenance|INSERT INTO projects|UPDATE projects/);
-  // And the synthesis runs on the page's rail (D765).
-  assert.match(workerFile('services/competitorAnalysis.ts'), /rail: \{ page: 'research', option: 'scan:competitors' \}/);
+  // And the synthesis runs on the press's rail (D765): the inventory's page and
+  // option when the press sent none (D778 part 9, `founder_competitors_d778.test.ts`).
+  const svc = workerFile('services/competitorAnalysis.ts');
+  assert.match(svc, /export const COMPANIES_PAGE = 'research';/);
+  assert.match(svc.slice(svc.indexOf('async function runJson'), svc.indexOf('function splitList')), /\n\s+rail,\n/);
 });
 
 // ------------------------------------------------------------------ uploads

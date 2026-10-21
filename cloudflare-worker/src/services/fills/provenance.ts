@@ -50,6 +50,8 @@ export interface RecordFillInput {
   targetRowRef?: string | null;
   /** D777 part 2: the `ai_usage_logs` row of the run that produced the value. */
   usageLogId?: number | null;
+  /** D777 part 3 (migration 518): the `ai_rail_proposals` row the member kept. */
+  aiProposalId?: number | null;
 }
 
 /**
@@ -95,6 +97,9 @@ export async function ensureFillProvenanceSchema(env: Env): Promise<void> {
     if (!have.has('target_row_ref')) await env.DB.exec('ALTER TABLE fill_provenance ADD COLUMN target_row_ref TEXT');
     if (!have.has('ai_usage_log_id')) await env.DB.exec('ALTER TABLE fill_provenance ADD COLUMN ai_usage_log_id INTEGER');
     await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_fill_provenance_usage ON fill_provenance (ai_usage_log_id)');
+    // Migration 518's column (D777 part 3), the same way.
+    if (!have.has('ai_proposal_id')) await env.DB.exec('ALTER TABLE fill_provenance ADD COLUMN ai_proposal_id INTEGER');
+    await env.DB.exec('CREATE INDEX IF NOT EXISTS idx_fill_provenance_rail_proposal ON fill_provenance (ai_proposal_id)');
     READY.set(bindingKey(env), true);
   } catch (e) {
     console.error('[fills] ensureFillProvenanceSchema:', (e as Error).message);
@@ -145,8 +150,8 @@ export async function recordFill(env: Env, input: RecordFillInput): Promise<numb
     `INSERT INTO fill_provenance
        (target_table, target_row_id, target_column, proposal_id, fill_class,
         proposed_value, written_value, edited, citation_json, model, task, decided_by,
-        target_row_ref, ai_usage_log_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        target_row_ref, ai_usage_log_id, ai_proposal_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     input.target.table,
     input.target.rowId,
@@ -162,6 +167,7 @@ export async function recordFill(env: Env, input: RecordFillInput): Promise<numb
     input.decidedBy ?? null,
     input.targetRowRef ? String(input.targetRowRef).slice(0, 300) : null,
     Number.isSafeInteger(input.usageLogId) && Number(input.usageLogId) > 0 ? input.usageLogId : null,
+    Number.isSafeInteger(input.aiProposalId) && Number(input.aiProposalId) > 0 ? input.aiProposalId : null,
   ).run();
   return Number(r.meta?.last_row_id) || 0;
 }
@@ -260,6 +266,11 @@ export interface FilledValue {
    * read: "Not recorded", never a zero cost.
    */
   run: FillRun | null;
+  /**
+   * D777 part 3 (migration 518): the `ai_rail_proposals` row the member kept,
+   * when the value came from a rail placement. `null` for any other fill.
+   */
+  ai_proposal_id: number | null;
 }
 
 export interface FillRun {
@@ -320,14 +331,14 @@ export async function fillsForRow(
   await ensureFillProvenanceSchema(env);
   const r = await env.DB.prepare(
     `SELECT target_column, fill_class, proposed_value, written_value, edited,
-            citation_json, model, created_at, ai_usage_log_id
+            citation_json, model, created_at, ai_usage_log_id, ai_proposal_id
        FROM fill_provenance
       WHERE target_table = ? AND target_row_id = ?
       ORDER BY id DESC`,
   ).bind(table, rowId).all<{
     target_column: string; fill_class: string; proposed_value: string | null;
     written_value: string | null; edited: number; citation_json: string | null;
-    model: string | null; created_at: string; ai_usage_log_id: number | null;
+    model: string | null; created_at: string; ai_usage_log_id: number | null; ai_proposal_id: number | null;
   }>();
   const seen = new Set<string>();
   const newest = (r.results || []).filter((row) => {
@@ -350,6 +361,7 @@ export async function fillsForRow(
       model: row.model,
       created_at: row.created_at,
       run: runs.get(Number(row.ai_usage_log_id)) ?? null,
+      ai_proposal_id: row.ai_proposal_id ?? null,
     });
   }
   return out;
@@ -411,10 +423,13 @@ export function filledColumns(
  */
 export async function claimFills(env: Env, projectId: number, items: any[]): Promise<Map<number, {
   edited: boolean; model: string | null; fill_class: string;
+  /** D777 part 4: the run that wrote the claim, as `fillsForRow` answers it; null is "Not recorded". */
+  run: FillRun | null;
+  ai_proposal_id: number | null;
 }>> {
   await ensureFillProvenanceSchema(env);
   const rows = await env.DB.prepare(
-    `SELECT fp.target_row_id, fp.written_value, fp.edited, fp.model, fp.fill_class
+    `SELECT fp.target_row_id, fp.written_value, fp.edited, fp.model, fp.fill_class, fp.ai_usage_log_id, fp.ai_proposal_id
        FROM fill_provenance fp
        JOIN hypotheses h ON h.id = fp.target_row_id
       WHERE fp.target_table = 'hypotheses' AND fp.target_column = 'claim'
@@ -422,19 +437,26 @@ export async function claimFills(env: Env, projectId: number, items: any[]): Pro
       ORDER BY fp.id DESC`,
   ).bind(projectId).all<{
     target_row_id: number; written_value: string | null; edited: number;
-    model: string | null; fill_class: string;
+    model: string | null; fill_class: string; ai_usage_log_id: number | null; ai_proposal_id: number | null;
   }>();
   const claimNow = new Map<number, string>(items.map((h) => [Number(h.id), String(h.claim ?? '').trim()]));
   const seen = new Set<number>();
-  const out = new Map<number, { edited: boolean; model: string | null; fill_class: string }>();
+  const kept: typeof rows.results = [];
   for (const r of rows.results || []) {
     const id = Number(r.target_row_id);
     if (seen.has(id)) continue;
     seen.add(id);
     const now = claimNow.get(id);
-    if (now && String(r.written_value ?? '').trim() === now) {
-      out.set(id, { edited: r.edited === 1, model: r.model ?? null, fill_class: r.fill_class });
-    }
+    if (now && String(r.written_value ?? '').trim() === now) kept.push(r);
+  }
+  const runs = await runsByLogId(env, kept.map((r) => Number(r.ai_usage_log_id)).filter((id) => id > 0));
+  const out = new Map<number, { edited: boolean; model: string | null; fill_class: string; run: FillRun | null; ai_proposal_id: number | null }>();
+  for (const r of kept) {
+    out.set(Number(r.target_row_id), {
+      edited: r.edited === 1, model: r.model ?? null, fill_class: r.fill_class,
+      run: runs.get(Number(r.ai_usage_log_id)) ?? null,
+      ai_proposal_id: r.ai_proposal_id ?? null,
+    });
   }
   return out;
 }

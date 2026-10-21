@@ -9,6 +9,7 @@ import ResearchOverviewPanel from '../research/ResearchOverviewPanel';
 import './founderResearchDesk.css';
 import { LensNavLink } from '../../workspaces/lens';
 import { useRailOption } from '../../ui/railCrumbs';
+import { railPressHeaders } from '../../lib/railPage.js';
 
 export const asList = (value, key) => Array.isArray(value) ? value : (Array.isArray(value?.[key]) ? value[key] : []);
 const firstText = (...values) => values.find((value) => value !== null && value !== undefined && String(value).trim() !== '');
@@ -123,7 +124,8 @@ export default function FounderResearchDesk() {
     if (!q || asking) return;
     setAsking(true); setAskError('');
     try {
-      setAsked(await api.research.ask(q));
+      // D778 part 11: the press names its option on the run, keeping the rail's page.
+      setAsked(await api.research.ask(q, undefined, railPressHeaders('ask:research')));
     } catch (cause) {
       setAsked(null);
       setAskError(cause?.message || 'That question could not be answered right now.');

@@ -49,8 +49,8 @@ test('Carta and DocuSign are beta (connectable OAuth), not coming_soon', () => {
   ]);
 });
 
-test('Salesforce and Affinity stay coming_soon', () => {
-  for (const key of ['salesforce', 'affinity']) {
+test('Salesforce stays coming_soon', () => {
+  for (const key of ['salesforce']) {
     const d = getDescriptor(key);
     assert.ok(d, `${key} is in the registry`);
     assert.equal(d.status, 'coming_soon', `${key} should remain waitlisted`);
@@ -122,4 +122,9 @@ test('mapToProjectFields handles a sparse snapshot', () => {
     last_funding_round: null,
     total_funding: null,
   });
+});
+
+test('Affinity is removed from the available connector catalogue and descriptor lookup', () => {
+  assert.equal(getDescriptor('affinity'), null);
+  assert.equal(REGISTRY.some(p => p.key === 'affinity'), false);
 });

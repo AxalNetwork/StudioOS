@@ -33,6 +33,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/settings', keep: true },
   { path: '/settings/:section', keep: true },
   { path: '/dashboard' },
+  { path: '/product-testing', keep: true }, // #2314: historical member notifications
   { path: '/onboarding/licence' },
   { path: '/build/deck' },
   { path: '/build/deck-reviewer' },
@@ -112,6 +113,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/partner-portal' },
   { path: '/docs' },
   { path: '/communities' },
+  { path: '/network-effects' }, // #2324: the page is removed (#2297 §3); it lands on Network
   // #2321 — the older audience landing pages, forwarded to the door pages.
   { path: '/lp/founder' },
   { path: '/lp/customer-discovery' },

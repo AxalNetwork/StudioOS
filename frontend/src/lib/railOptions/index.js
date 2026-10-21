@@ -21,7 +21,11 @@
  *
  * The control is read from each row's own source marker: a `surface="…"`
  * band, an `api.research.ask|upload|reindex(` call, or the advisor's and
- * partner's `type="file"` for an upload.
+ * partner's `type="file"` for an upload. D773 (#2099) adds the two shared
+ * components the advisor and the partner reach with keys of their own: the
+ * Eadwyn interview's send (`api.advisor.answer|toolAuto(`, control
+ * `advisor.ask`) and Competitor analysis's runs (`api.competitors.<verb>(`,
+ * control `competitors.<verb>`).
  */
 import { pageKeyFor } from '../railPages.js';
 import { FOUNDER_OPTIONS } from './founder.js';
@@ -36,6 +40,11 @@ export function controlOf(marker) {
   if (surface) return surface;
   const call = /api\.research\.(ask|upload|reindex)\(/.exec(m)?.[1];
   if (call) return call;
+  if (/api\.advisor\.(answer|toolAuto)\(/.test(m)) return 'advisor.ask';
+  const competitors = /api\.competitors\.(analyze|rerun|refresh|addCandidate)\(/.exec(m)?.[1];
+  if (competitors) return `competitors.${competitors}`;
+  // D778 part 12: Explain is distinct from the shared Studio send control.
+  if (/api\.advisor\.explainUrl\(|openTutor\(/.test(m)) return 'explain';
   return m === 'type="file"' ? 'upload' : null;
 }
 

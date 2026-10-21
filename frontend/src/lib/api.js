@@ -10,6 +10,7 @@ import { railBody } from './railPages.js';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/adminAiUsage.js';
 export * from './api/adminCapitalAttestations.js';
 export * from './api/adminIncorporations.js';
 export * from './api/adminLearning.js';
@@ -1333,8 +1334,9 @@ export const api = {
     // LLM tool-binding entry point. The user types a free-form message;
     // the worker calls aiRouter.run('tool_call') to pick a tool, validates
     // the envelope, and dispatches via the same gated pipeline as `tool()`.
-    toolAuto: (message) =>
-      request('/advisor/tool/auto', { method: 'POST', body: JSON.stringify({ message }) }),
+    // D778 part 12: the press's rail headers (`railPressHeaders`) as an optional last argument.
+    toolAuto: (message, headers) =>
+      request('/advisor/tool/auto', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({ message }) }),
     conversation: (uid) => request(`/advisor/conversations/${encodeURIComponent(uid)}`),
     explainUrl: () => '/api/advisor/explain',
     // Task #3 (AS) — list field_sources rows for the current user,
@@ -2794,26 +2796,13 @@ export const api = {
   deckGetBrand: () => request('/decks/brand'),
   deckSetWatermark: (url) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url }) }),
 
-  networkFxEffects: () => request('/networkfx/effects'),
-  networkFxCompounding: () => request('/networkfx/referrals/compounding'),
-  networkFxSyndicates: (status) => request('/networkfx/syndicates' + (status ? `?status=${status}` : '')),
+  // #2324: the Network Effects page is removed; these are the syndicate reads
+  // and the close a deal room (components/deals/DealSyndicates.jsx) still uses.
   networkFxSyndicate: (id) => request(`/networkfx/syndicates/${id}`),
   // D630 — the syndicates linked to one company. `syndicates.deal_id` holds a
   // project id, so the filter is named for what it holds.
   networkFxProjectSyndicates: (projectId) => request(`/networkfx/syndicates?project_id=${encodeURIComponent(projectId)}`),
-  networkFxCreateSyndicate: (data) => request('/networkfx/syndicates', { method: 'POST', body: JSON.stringify(data) }),
-  networkFxJoinSyndicate: (id, data) => request(`/networkfx/syndicates/${id}/join`, { method: 'POST', body: JSON.stringify(data) }),
   networkFxCloseSyndicate: (id) => request(`/networkfx/syndicates/${id}/close`, { method: 'POST', body: JSON.stringify({}) }),
-  // D765: the model's rationale is a press, so a POST.
-  networkFxSyndicateRecs: (id) => request(`/networkfx/syndicates/${id}/recommendations`, { method: 'POST', body: JSON.stringify({}) }),
-  networkFxMarketplaceMe: () => request('/networkfx/marketplace/me'),
-  networkFxSaveMarketplace: (data) => request('/networkfx/marketplace/me', { method: 'PUT', body: JSON.stringify(data) }),
-  networkFxMarketplaceSearch: (filters = {}) => {
-    const q = new URLSearchParams(Object.entries(filters).filter(([_, v]) => v != null && v !== '')).toString();
-    return request('/networkfx/marketplace/search' + (q ? '?' + q : ''));
-  },
-  networkFxRequestIntro: (data) => request('/networkfx/marketplace/request-intro', { method: 'POST', body: JSON.stringify(data) }),
-  networkFxMarketplaceMatch: (data) => request('/networkfx/marketplace/match', { method: 'POST', body: JSON.stringify(data) }),
 
   getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
@@ -5019,18 +5008,19 @@ export const api = {
   },
 
   // Competitor Analysis — in-house crawl + Workers AI synthesis (no paid APIs).
+  // D778 part 9: `headers` on the five runs is the press's own rail context (`railPressHeaders`).
   competitors: {
-    analyze: (data) => request('/competitors/analyze', { method: 'POST', body: JSON.stringify(data || {}) }),
+    analyze: (data, headers) => request('/competitors/analyze', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
     list: () => request('/competitors'),
     get: (id) => request(`/competitors/${id}`),
     save: (id, patch) => request(`/competitors/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
-    addCandidate: (id, data) => request(`/competitors/${id}/candidates`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    addCandidate: (id, data, headers) => request(`/competitors/${id}/candidates`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
     removeCandidate: (id, cid) => request(`/competitors/${id}/candidates/${cid}`, { method: 'DELETE' }),
     candidateUpdate: (id, cid, data) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
     addSource: (id, cid, data) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/sources`, { method: 'POST', body: JSON.stringify(data || {}) }),
-    crawlCandidate: (id, cid) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/crawl`, { method: 'POST', body: JSON.stringify({}) }),
-    rerun: (id, data) => request(`/competitors/${id}/rerun`, { method: 'POST', body: JSON.stringify(data || {}) }),
-    refresh: (id) => request(`/competitors/${id}/refresh`, { method: 'POST', body: JSON.stringify({}) }),
+    crawlCandidate: (id, cid, headers) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/crawl`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+    rerun: (id, data, headers) => request(`/competitors/${id}/rerun`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
+    refresh: (id, headers) => request(`/competitors/${id}/refresh`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
     remove: (id) => request(`/competitors/${id}`, { method: 'DELETE' }),
     fetchUrl: (url, refresh) => request('/competitors/fetch', { method: 'POST', body: JSON.stringify({ url, refresh: !!refresh }) }),
     exportUrl: (id, format) => `/api/competitors/${id}/export?format=${encodeURIComponent(format || 'json')}`,
@@ -5076,7 +5066,9 @@ export const api = {
     askUpdateAnswer: (uid, body) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
     // `session_uid` is optional and the worker falls back to the caller's most
     // recent thread, so a reader who has just landed can ask without one.
-    ask: (question, sessionUid) => request('/research/ask', {
+    // D778 part 11: `headers` is the press's own rail context (`railPressHeaders`).
+    ask: (question, sessionUid, headers) => request('/research/ask', {
+      ...(headers ? { headers } : {}),
       method: 'POST',
       body: JSON.stringify(sessionUid ? { question, session_uid: sessionUid } : { question }),
     }),

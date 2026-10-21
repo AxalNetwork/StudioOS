@@ -3,7 +3,8 @@
  * tasks 420 and 408), with the Workspaces launcher retired (D563).
  *
  * The 29 working pages (26 since AI Matches went, and Market Intelligence and
- * Signals with D670; 20 since the owner removed six on 2026-10-20) left
+ * Signals with D670; 20 since the owner removed six on 2026-10-20; 19 since
+ * #2324 removed Network Effects) left
  * `SIDEBAR_GROUPS.admin`
  * for a top-bar launcher (D284); D563 retired that launcher, and each page now
  * lights a profile sidebar row (`workspaces_retired_d563.test.mjs`). Messages
@@ -67,7 +68,8 @@ const CANVAS = [
   ['Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall'],
   ['Capital & Legal', 'Legal & Capital', '/legal-capital'],
   ['Capital & Legal', 'Incorporate', '/incorporate'], ['Capital & Legal', 'Compliance Calendar', '/compliance'],
-  ['Network & Growth', 'Network', '/network'], ['Network & Growth', 'Network Effects', '/network-effects'],
+  // Network Effects stood here; #2324 removed the page (#2297 §3).
+  ['Network & Growth', 'Network', '/network'],
   ['Network & Growth', 'Jobs', '/my/jobs'], ['Network & Growth', 'Service Catalogue', '/services'],
   ['Network & Growth', 'Needs Board', '/needs'], ['Network & Growth', 'Demand Insights', '/partner/insights'],
   ['Network & Growth', 'Partner Office Hours', '/partner/office-hours'], ['Network & Growth', 'Co-Marketing Review', '/comarketing'],
@@ -75,11 +77,11 @@ const CANVAS = [
   ['More', 'Perks', '/perks'],
 ];
 
-test('the palette list is the canvas list less the retired and removed pages: 20 pages in four groups, every one a registered route', () => {
+test('the palette list is the canvas list less the retired and removed pages: 19 pages in four groups, every one a registered route', () => {
   assert.deepEqual(WORKSPACES.map((w) => [w.group, w.label, w.route]), CANVAS);
   assert.deepEqual(WORKSPACE_GROUP_ORDER, ['Studio', 'Capital & Legal', 'Network & Growth', 'More']);
   assert.deepEqual(WORKSPACE_GROUP_ORDER.map((g) => [g, WORKSPACES.filter((w) => w.group === g).length]),
-    [['Studio', 3], ['Capital & Legal', 6], ['Network & Growth', 8], ['More', 3]]);
+    [['Studio', 3], ['Capital & Legal', 6], ['Network & Growth', 7], ['More', 3]]);
   for (const w of WORKSPACES) {
     assert.ok(w.description && w.description.endsWith('.'), `${w.route} has no description`);
     assert.ok(registered(w.route), `palette route ${w.route} is not registered in App.jsx`);
