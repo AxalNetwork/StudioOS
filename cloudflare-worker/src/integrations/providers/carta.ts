@@ -36,7 +36,7 @@ const AUTH_HOST = 'https://login.carta.com';
 const API_BASE = 'https://api.carta.com/v1alpha1';
 const SCOPES = ['read:cap_table', 'read:stakeholders', 'read:securities'];
 
-/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+/** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, PROVIDER_KEY);
 }
@@ -45,7 +45,7 @@ async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
   const { loadOauthCreds } = await import('../../services/providerOauthKeys');
   const c = await loadOauthCreds(env, 'carta');
   if (!c) {
-    throw new Error('carta_oauth_unconfigured: set CARTA_CLIENT_ID/CARTA_CLIENT_SECRET as secrets, or configure them in Admin → Integration Keys.');
+    throw new Error('carta_oauth_unconfigured: set CARTA_CLIENT_ID/CARTA_CLIENT_SECRET as secrets, or configure them in HQ → Integration keys.');
   }
   return { id: c.id, secret: c.secret };
 }

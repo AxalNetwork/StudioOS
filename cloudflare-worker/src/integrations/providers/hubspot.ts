@@ -57,7 +57,7 @@ const SCOPES = [
   'crm.schemas.deals.read',
 ];
 
-/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+/** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, PROVIDER_KEY);
 }
@@ -67,7 +67,7 @@ async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
   const { loadOauthCreds } = await import('../../services/providerOauthKeys');
   const cred = await loadOauthCreds(env, 'hubspot');
   if (!cred) {
-    throw new Error('hubspot_oauth_unconfigured: HUBSPOT_CLIENT_ID/HUBSPOT_CLIENT_SECRET secrets must be set on the worker (or configured via Admin → Integration Keys).');
+    throw new Error('hubspot_oauth_unconfigured: HUBSPOT_CLIENT_ID/HUBSPOT_CLIENT_SECRET secrets must be set on the worker (or configured via HQ → Integration keys).');
   }
   return { id: cred.id, secret: cred.secret };
 }

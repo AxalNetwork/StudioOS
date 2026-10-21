@@ -35,10 +35,13 @@
  * same bar as the dispatch, and each is audited once through
  * `logAdminAction` (D159) — the secret NAMES, never a value.
  *
- * THE READS STAY `requireAdmin`. `GET /` answers booleans, the repository it
- * names and the webhook URL; `POST /test` exercises the token and changes no
- * secret (its write probe opens one fixed-text issue and closes it). Support
- * staff need both to tell a broken mirror from a working one.
+ * THE READS ARE SUPER ADMIN TOO (the owner's ruling, 2026-10-20). D223 left
+ * them on `requireAdmin`: `GET /` answers booleans, the repository it names
+ * and the webhook URL, and `POST /test` exercises the token and changes no
+ * secret (its write probe opens one fixed-text issue and closes it). The
+ * owner ruled that GitHub Sync is the Super Admin's alone, a section of HQ's
+ * Integration keys page (`/admin/integration-keys#github`, `hqOnly`), so
+ * both reads take `requireSuperAdmin`. The writes keep D223's bar.
  *
  * AND `GET /` NO LONGER CARRIES `token_preview`. It was `maskClientId` of the
  * token — eight characters of a whole credential. That mask was written for
@@ -48,7 +51,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireSuperAdminWriteBar } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { setSecret, deleteSecret } from '../services/cloudflareSecrets';
 import { logAdminAction } from '../services/adminAudit';
 import { refusalBody } from '../util/refusal';
@@ -72,7 +75,7 @@ function webhookUrl(c: any): string {
 }
 
 r.get('/', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   const env = c.env;
   const hasToken = !!env.GITHUB_ACCESS_TOKEN;
   return c.json({
@@ -189,7 +192,7 @@ r.put('/', async (c) => {
  * thing that settles it: create a real issue and immediately close it.
  */
 r.post('/test', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   const env = c.env;
   if (!env.GITHUB_ACCESS_TOKEN || !env.GITHUB_REPO_OWNER || !env.GITHUB_REPO_NAME) {
     return c.json({

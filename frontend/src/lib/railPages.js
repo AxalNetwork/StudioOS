@@ -369,8 +369,9 @@ const SUPER = [
   own('/admin/platform', key(SA, 'Platform')),
   alias('/admin/platform/switches', key(SA, 'Platform'), 'Platform’s Switches item, on its overview.'),
   alias('/admin/platform/topology', key(SA, 'Platform'), 'Platform’s Topology item, on its overview.'),
-  own('/admin?tab=integration-keys', key(SA, 'Platform', 'Integration keys')),
-  own('/admin?tab=github', key(SA, 'Platform', 'GitHub sync')),
+  // One Super Admin page since the owner's ruling of 2026-10-20; GitHub sync is its #github section.
+  own('/admin/integration-keys', key(SA, 'Platform', 'Integration keys')),
+  own('/admin/integration-keys#github', key(SA, 'Platform', 'GitHub sync')),
   own('/admin?tab=payments', key(SA, 'Platform', 'Payments catalogue')),
   own('/admin?tab=promos', key(SA, 'Platform', 'Promo codes')),
   own('/admin/credit-rules', key(SA, 'Platform', 'Credit rules')),

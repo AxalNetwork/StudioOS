@@ -789,7 +789,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       mirror = ` It did not reach the GitHub issue tracker, so it will not appear on the board there${reason ? `: ${reason}` : '.'}`;
       if (reason && !/[.!?]$/.test(reason)) mirror += '.';
       if (user?.role === 'admin') {
-        mirror += ' An admin can look into it in Admin Console → GitHub Sync — Test issue creation there will say exactly what the token is missing.';
+        mirror += ' A Super Admin can look into it in HQ → Integration keys → GitHub Sync — Test issue creation there will say exactly what the token is missing.';
       }
     } else if (status === 'not_configured' && user?.role === 'admin') {
       mirror = ' The GitHub mirror is not configured in this environment, so no issue was opened —'

@@ -8,7 +8,7 @@ saves the ticket in D1, then creates an issue in the repository named by
 
 ## Confirmed production blocker, 2026-10-02
 
-The operator ran **Admin Console → GitHub Sync → Test issue creation** and
+The operator ran **HQ → Integration keys → GitHub Sync → Test issue creation** (`/admin/integration-keys#github`, Super Admin only) and
 reported: “The token reached the repo but may not create issues — it needs
 Issues: Read and write.” This is the write probe's GitHub HTTP 403 response.
 Production binding inspection also confirmed the token is present and the
@@ -29,7 +29,7 @@ production token permission.
    organization approval. Preserve permissions used by other Worker features,
    including Actions write if this token dispatches branch deployments.
 3. If replacing the token, a StudioOS Super Admin must save it in
-   **Admin Console → GitHub Sync** after a fresh TOTP step-up. Never put a token
+   **HQ → Integration keys → GitHub Sync** after a fresh TOTP step-up. Never put a token
    in chat, source control, or a ticket. Updating the existing token's
    permissions does not require saving its unchanged value again.
 4. Run **Test issue creation**. It must create a real test issue and close it.

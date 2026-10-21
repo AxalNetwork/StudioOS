@@ -1,6 +1,7 @@
 /**
- * SMS backup factor: admin can provision GCIP from Integration Keys.
- * The Settings card points there instead of a wrangler-only secret.
+ * SMS backup factor: a Super Admin can provision GCIP from Integration keys.
+ * The Settings card points there instead of a wrangler-only secret, and only
+ * a Super Admin gets the link (the owner's ruling, 2026-10-20).
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,10 +18,11 @@ test('Admin Integration Keys lists Google Identity (SMS)', () => {
   assert.match(src, /gcip:\s*\['GCIP_PROJECT_ID',\s*'GCIP_API_KEY'\]/);
 });
 
-test('Settings SMS unavailable card links admins to Integration Keys', () => {
+test('Settings SMS unavailable card links the Super Admin to Integration keys', () => {
   const src = readFileSync(resolve(root, 'frontend/src/pages/SettingsPage.jsx'), 'utf8');
   assert.match(src, /data-testid="sms-admin-keys-link"/);
-  assert.match(src, /\/admin\?tab=integration-keys/);
+  assert.match(src, /href="\/admin\/integration-keys"/);
+  assert.match(src, /\{isSuperAdmin && \(\s*<a\s+href="\/admin\/integration-keys"/, 'a plain admin gets no link to a page they cannot open');
   assert.match(src, /Google Identity \(SMS\)/);
 });
 
