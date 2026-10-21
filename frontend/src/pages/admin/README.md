@@ -66,7 +66,7 @@ its confirmed process actions, and the HQ take rate for the super admin. It is
 reached from the referral review console (`ReferralReview.jsx`) and shares
 its drawing pieces with the partner earnings screens (`parts.jsx`).
 
-`assessment/` holds the assessment game editor — see its own README.
+Assessment Studio (`/admin/assessment`) was removed at the owner’s request on 2026-10-21. Existing games and runs remain readable in HQ Content and Branch Programs.
 
 `fundAdmin/` is D714's fund administration console at `/admin/fund-admin`, for
 the Super Admin and every Admin on HQ: capital calls, distributions,

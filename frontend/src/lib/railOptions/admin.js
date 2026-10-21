@@ -24,7 +24,7 @@
  * `handler`, plus the `file` it is in and an `anchor` unique to it there).
  * An option that runs no model is not a row (`railOptions/README.md`).
  *
- * No control on these 39 boards runs a model today, so `ADMIN_OPTIONS` is
+ * No control on these 38 active boards runs a model today, so `ADMIN_OPTIONS` is
  * empty. The upload and report controls the boards do have are
  * `ADMIN_QUIET_CONTROLS`, each with why it runs none, so the test can still
  * hold every control in the boards' files to one list or the other.
@@ -61,7 +61,7 @@ export const ADMIN_BOARDS = [
   { id: 'S19', section: 'Programs', module: null, route: '/admin/held/programs', files: ['pages/admin/HeldPrograms.jsx'], rail: HELD },
   { id: 'S20', section: 'Programs', module: 'Spin-Out Lab', route: '/admin/spinout-lab', files: ['pages/admin/AdminSpinoutLab.jsx'], rail: null, noRail: SPINOUT, alias: 'S12' },
   { id: 'S21', section: 'Programs', module: 'Advisor cohorts', route: '/admin/advisor-cohorts', files: ['pages/admin/AdvisorCohortAssignments.jsx'], rail: FRAME, alias: 'S18' },
-  { id: 'S22', section: 'Programs', module: 'Assessment runs', route: '/admin/assessment', files: ['pages/admin/assessment/AdminAssessmentPage.jsx'], rail: FRAME },
+  // S22: Assessment Studio was removed at the owner's request (2026-10-21); its ID stays retired.
   { id: 'S23', section: 'Programs', module: 'Profiling trends', route: '/admin/profiling-trends', files: ['pages/admin/AdminProfilingTrends.jsx'], rail: FRAME },
   { id: 'S24', section: 'Community', module: null, route: '/admin/held/community', files: ['pages/admin/HeldCommunity.jsx'], rail: HELD },
   { id: 'S25', section: 'Community', module: 'Events', route: '/admin/events', files: ['pages/admin/AdminEventsPage.jsx'], rail: FRAME, alias: 'S15' },
