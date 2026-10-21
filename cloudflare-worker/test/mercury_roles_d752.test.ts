@@ -17,6 +17,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/mercury_roles_d752.test.ts
  */
+import { mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
@@ -93,9 +94,11 @@ test('publicDescriptor serves the investor\'s variant on HQ and never the audien
   for (const field of ['entity_roles', 'personal_roles', 'personal_hq_only_roles']) assert.ok(!(field in own), field);
   const founder = publicDescriptor(mercury, { role: 'founder', hq: false }) as any;
   assert.equal(founder.description, FOUNDER_DESCRIPTION);
-  assert.deepEqual(founder.feeds, ['revenue_and_traction']);
+  // D840: the founder's feeds are `MERCURY_FEEDS`' modules, D713's first.
+  assert.deepEqual(founder.feeds, mercuryFedModules('founder'));
+  assert.equal(founder.feeds[0], 'revenue_and_traction');
   assert.deepEqual(connectorFeeds('mercury', 'investor'), []);
-  assert.deepEqual(connectorFeeds('mercury', 'founder'), ['revenue_and_traction']);
+  assert.deepEqual(connectorFeeds('mercury', 'founder'), mercuryFedModules('founder'));
   assert.deepEqual(connectorFeeds('mercury', 'partner'), []);
 });
 

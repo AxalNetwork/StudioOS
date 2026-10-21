@@ -5,11 +5,12 @@
 -- `connector_fed_items` ledger (D655, migration 445) so a re-sync updates a
 -- row and a row the founder deleted stays deleted.
 --
---   project_metrics.cash_in
+--   project_metrics.cash_in_cents
 --     Revenue and traction's monthly snapshot (`source = 'mercury'`, one row
 --     per full month, dated the month's last day) records the month's
---     operating money in beside its net burn. Dollars, as the other columns.
---     Never a balance: cash on hand stays D752's confirmed save.
+--     operating money in beside its net burn, in integer cents (the older
+--     columns are dollars; a new money column is cents). Never a balance:
+--     cash on hand stays D752's confirmed save.
 --
 --   mercury_grow_facts
 --     The figures that are the venture's team's alone: cash, treasury and
@@ -32,7 +33,7 @@
 -- NON-IDEMPOTENT (D1's ALTER TABLE has no IF NOT EXISTS): apply through the
 -- ledger-driven runner, which runs it once (`npm run d1:migrate:remote`).
 
-ALTER TABLE project_metrics ADD COLUMN cash_in REAL;
+ALTER TABLE project_metrics ADD COLUMN cash_in_cents INTEGER;
 
 CREATE TABLE IF NOT EXISTS mercury_grow_facts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

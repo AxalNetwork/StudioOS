@@ -4,7 +4,7 @@
  *
  *   Revenue and traction      FACT  one `project_metrics` row per full month
  *                                   (`source = 'mercury'`): operating money in
- *                                   (`cash_in`) and net burn. A credit that
+ *                                   (`cash_in_cents`) and net burn. A credit that
  *                                   matches exactly one paid invoice lands as a
  *                                   revenue entry with the invoice's customer,
  *                                   replacing D713's pick for it; every other
@@ -389,8 +389,13 @@ const LEDGER_LINK = `INSERT INTO connector_fed_items (integration_id, project_id
 const LEDGER_TOUCH = `UPDATE connector_fed_items SET last_seen_at = CURRENT_TIMESTAMP WHERE integration_id = ? AND external_id = ?`;
 const LEDGER_UNLINK = `UPDATE connector_fed_items SET local_id = NULL WHERE integration_id = ? AND external_id = ?`;
 
-/** Tables a landing may link, so a table name never comes from data. */
-const LANDING_TABLES = new Set(['project_metrics', 'mercury_grow_facts', 'revenue_entries', 'growth_partners']);
+/** The tables a landing may link, each with its own fixed read, so a table name never comes from data. */
+const ALIVE: Record<string, string> = {
+  project_metrics: 'SELECT 1 FROM project_metrics WHERE id = ? AND project_id = ?',
+  mercury_grow_facts: 'SELECT 1 FROM mercury_grow_facts WHERE id = ? AND project_id = ?',
+  revenue_entries: 'SELECT 1 FROM revenue_entries WHERE id = ? AND project_id = ?',
+  growth_partners: 'SELECT 1 FROM growth_partners WHERE id = ? AND project_id = ?',
+};
 
 /**
  * The ledger's word on one external item: `deleted` when the founder deleted
@@ -401,8 +406,8 @@ export async function ledgerState(env: Env, integrationId: number, externalId: s
   Promise<{ state: 'new' } | { state: 'deleted' } | { state: 'linked'; id: number }> {
   const l = await env.DB.prepare(LEDGER_OF).bind(integrationId, externalId).first<Ledger>();
   if (!l) return { state: 'new' };
-  if (l.local_id == null || !l.local_table || !LANDING_TABLES.has(l.local_table)) return { state: 'deleted' };
-  const alive = await env.DB.prepare(`SELECT 1 FROM ${l.local_table} WHERE id = ? AND project_id = ?`).bind(l.local_id, projectId).first();
+  if (l.local_id == null || !l.local_table || !Object.hasOwn(ALIVE, l.local_table)) return { state: 'deleted' };
+  const alive = await env.DB.prepare(ALIVE[l.local_table]).bind(l.local_id, projectId).first();
   if (alive) return { state: 'linked', id: Number(l.local_id) };
   await env.DB.prepare(LEDGER_UNLINK).bind(integrationId, externalId).run();
   return { state: 'deleted' };
@@ -473,17 +478,17 @@ async function landMonths(env: Env, integrationId: number, p: GrowProject, month
     const notes = `Money in and net burn for ${m.month}, read from your Mercury on ${today}.`;
     if (known.state === 'linked') {
       await env.DB.batch([
-        env.DB.prepare(`UPDATE project_metrics SET cash_in = ?, net_burn = ?, notes = ? WHERE id = ? AND project_id = ?`)
-          .bind(dollars(m.cash_in_cents), dollars(m.net_burn_cents), notes, known.id, p.id),
+        env.DB.prepare(`UPDATE project_metrics SET cash_in_cents = ?, net_burn = ?, notes = ? WHERE id = ? AND project_id = ?`)
+          .bind(m.cash_in_cents, dollars(m.net_burn_cents), notes, known.id, p.id),
         env.DB.prepare(LEDGER_TOUCH).bind(integrationId, externalId),
       ]);
     } else {
       const row = await env.DB.prepare(
-        `INSERT INTO project_metrics (project_id, snapshot_date, cash_in, net_burn, notes, source, created_by)
+        `INSERT INTO project_metrics (project_id, snapshot_date, cash_in_cents, net_burn, notes, source, created_by)
            VALUES (?, ?, ?, ?, ?, 'mercury', ?)
-         ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET cash_in = excluded.cash_in, net_burn = excluded.net_burn, notes = excluded.notes
+         ON CONFLICT(project_id, snapshot_date, source) DO UPDATE SET cash_in_cents = excluded.cash_in_cents, net_burn = excluded.net_burn, notes = excluded.notes
          RETURNING id`,
-      ).bind(p.id, monthEnd(m.month), dollars(m.cash_in_cents), dollars(m.net_burn_cents), notes, p.founder_user_id).first<{ id: number }>();
+      ).bind(p.id, monthEnd(m.month), m.cash_in_cents, dollars(m.net_burn_cents), notes, p.founder_user_id).first<{ id: number }>();
       await env.DB.prepare(LEDGER_LINK).bind(integrationId, p.id, 'revenue_and_traction', 'metric_month', externalId, 'project_metrics', row?.id ?? null).run();
     }
     counts.metric_months += 1;
@@ -617,6 +622,14 @@ export async function isTeamViewer(env: Env, viewer: { id: number; founder_id?: 
   return !!(await env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(p.company_id, viewer.id).first());
 }
 
+/** Whether the venture's founder holds an active Mercury connection (D840 part 3's checklist guard). */
+export async function founderHasMercury(env: Env, projectId: number): Promise<boolean> {
+  return !!(await env.DB.prepare(
+    `SELECT 1 FROM integrations i JOIN users u ON u.id = i.user_id JOIN projects p ON p.founder_id = u.founder_id
+      WHERE p.id = ? AND i.provider_key = 'mercury' AND i.status = 'active' LIMIT 1`,
+  ).bind(projectId).first());
+}
+
 /** Whether the viewer is the venture's founder, whose Mercury it is: only they decide what it proposes. */
 export async function isVentureFounder(env: Env, viewer: { founder_id?: number | null }, projectId: number): Promise<boolean> {
   if (viewer.founder_id == null) return false;
@@ -677,11 +690,11 @@ export async function growFromMercury(env: Env, projectId: number, slug: GrowFee
 async function teamPart(env: Env, projectId: number, slug: GrowFeedSlug, viewer: { id: number; founder_id?: number | null }, today: string) {
   if (slug === 'revenue-and-traction') {
     const months = ((await env.DB.prepare(
-      `SELECT m.id, substr(m.snapshot_date, 1, 7) AS month, m.cash_in, m.net_burn FROM project_metrics m
+      `SELECT m.id, substr(m.snapshot_date, 1, 7) AS month, m.cash_in_cents, m.net_burn FROM project_metrics m
          JOIN connector_fed_items f ON f.local_table = 'project_metrics' AND f.local_id = m.id AND f.kind = 'metric_month'
         WHERE m.project_id = ? AND m.source = 'mercury' ORDER BY m.snapshot_date`,
-    ).bind(projectId).all<{ id: number; month: string; cash_in: number | null; net_burn: number | null }>()).results || [])
-      .map((m) => ({ id: m.id, month: m.month, cash_in_cents: m.cash_in == null ? null : Math.round(m.cash_in * 100), net_burn_cents: m.net_burn == null ? null : Math.round(m.net_burn * 100) }));
+    ).bind(projectId).all<{ id: number; month: string; cash_in_cents: number | null; net_burn: number | null }>()).results || [])
+      .map((m) => ({ id: m.id, month: m.month, cash_in_cents: m.cash_in_cents, net_burn_cents: m.net_burn == null ? null : Math.round(m.net_burn * 100) }));
     const inv = await facts(env, projectId, ['invoices_paid', 'invoices_open', 'invoices_overdue']);
     const landed = await env.DB.prepare(
       `SELECT COUNT(*) AS n FROM connector_fed_items f JOIN revenue_entries e ON e.id = f.local_id AND f.local_table = 'revenue_entries'

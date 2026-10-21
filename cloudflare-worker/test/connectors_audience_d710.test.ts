@@ -15,6 +15,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/connectors_audience_d710.test.ts
  */
+import { mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
@@ -101,7 +102,8 @@ test('on HQ, /available lists mercury to an admin as an entity connection and to
     assert.deepEqual(own.capabilities, role === 'investor' ? ['Proof of funds'] : role === 'founder' ? ['Revenue import', 'Payment matching', 'Spending and runway'] : ['Revenue import', 'Payment matching'], role);
     assert.equal(own.permissions.length, 1, role);
     assert.match(own.permissions[0], /never sends, transfers or requests money/);
-    assert.deepEqual(own.feeds, role === 'founder' ? ['revenue_and_traction'] : []);
+    // D840: a role's feeds are `MERCURY_FEEDS`' modules for it.
+    assert.deepEqual(own.feeds, mercuryFedModules(role));
     if (role === 'investor') {
       assert.match(own.description, /^Your own Mercury account, read-only: show Axal's admins/);
       assert.match(own.permissions[0], /never stores or shows a balance/);

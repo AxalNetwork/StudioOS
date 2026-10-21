@@ -281,9 +281,9 @@ test('fake: a sync reads only through the allowlisted tools and writes nothing t
 test('revenue and traction: a monthly mercury snapshot per full month, and the paid invoice\'s credit lands; the others stay picks', async () => {
   const { db, env } = await growDb();
   const { counts } = await syncOnce(env);
-  const months = db.prepare(`SELECT snapshot_date, cash_in, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND source = 'mercury' ORDER BY snapshot_date`).all(PID) as any[];
-  assert.deepEqual(months.map((m) => [m.snapshot_date, m.cash_in, m.net_burn, m.cash_balance]), [
-    ['2026-07-31', 3000, 7000, null], ['2026-08-31', 3000, 8500, null], ['2026-09-30', 2500, 7500, null],
+  const months = db.prepare(`SELECT snapshot_date, cash_in_cents, net_burn, cash_balance FROM project_metrics WHERE project_id = ? AND source = 'mercury' ORDER BY snapshot_date`).all(PID) as any[];
+  assert.deepEqual(months.map((m) => [m.snapshot_date, m.cash_in_cents, m.net_burn, m.cash_balance]), [
+    ['2026-07-31', 300000, 7000, null], ['2026-08-31', 300000, 8500, null], ['2026-09-30', 250000, 7500, null],
   ], 'cash on hand is never written to project_metrics');
   const entries = db.prepare(`SELECT customer, amount_cents, received_on, source, source_ref, revenue_type FROM revenue_entries WHERE project_id = ?`).all(PID) as any[];
   assert.deepEqual(entries.map((e) => ({ ...e })), [{ customer: 'Customer Co', amount_cents: 250000, received_on: '2026-09-05', source: 'mercury', source_ref: fakeTx(12), revenue_type: 'one_time' }]);
