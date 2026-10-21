@@ -170,18 +170,17 @@ export default {
       ],
     },
     {
-      id: 'public-roadmap',
-      title: 'Public roadmap, pricing & demo',
+      id: 'pricing-demo',
+      title: 'Pricing & demo',
       overview:
-        "Anyone — including visitors who haven't signed up yet — can browse what the studio is working on, compare subscription tiers, and book a demo. These pages live on the public site and link straight into sign-up when a visitor is ready.",
+        "Anyone — including visitors who haven't signed up yet — can compare subscription tiers and book a demo. These pages live on the public site and link straight into sign-up when a visitor is ready.",
       howto: [
-        'Open /roadmap to see the shipped, in-progress, and planned features grouped by theme.',
         'Open /pricing to compare Free, Growth, and Studio tiers side-by-side.',
         'Open /demo to book a walkthrough with the studio team.',
         'Share any of these links externally — they require no account.',
       ],
       tips: [
-        'The roadmap is the same source the team uses internally; if a feature is missing, request it from the demo form and we will consider it.',
+        'If a feature is missing, request it from the demo form and we will consider it.',
         'Pricing changes show on this page first; bookmark it if you want to track tier-by-tier inclusions over time.',
       ],
       pitfalls: [

@@ -31,7 +31,7 @@ export default function PortfolioWorkspace({ activeRole }) {
       ? 'positions'
       : pathname.includes('/performance')
         ? 'performance'
-        : pathname.includes('/growth') || pathname.includes('/value-add')
+        : pathname.includes('/value-add')
           ? 'growth'
           : 'health';
 
@@ -44,7 +44,7 @@ export default function PortfolioWorkspace({ activeRole }) {
     { to: '/portfolio/updates', label: 'Updates', icon: Inbox, roles: ['admin', 'investor'] },
     { to: '/portfolio/positions', label: 'Cap Table', icon: PieChart, roles: ['admin', 'investor'] },
     { to: '/portfolio/performance', label: 'Performance', icon: TrendingUp, roles: ['admin', 'investor'] },
-    { to: '/portfolio/growth', label: 'Growth', icon: Rocket, roles: ['admin', 'investor'] },
+    { to: '/portfolio/value-add', label: 'Value-add', icon: Rocket, roles: ['admin', 'investor'] },
   ].filter((t) => !role || t.roles.includes(role));
 
   if ((activeRole || role) === 'investor' && active === 'health') {
