@@ -16,14 +16,33 @@
  *
  * WHAT IT REFUSES.
  *   · A proposal for a field Eadwyn never fills (D777's registry): a payload
- *     that names its `field` is checked before it is stored.
+ *     that names its `field` is checked before it is stored, AND again when it
+ *     is kept (D777 part 3). A proposal stored before its field was listed is
+ *     discarded on the press, because it can never become acceptable; a
+ *     member's edit that names a listed field is refused and the proposal
+ *     stays open. Either way `NeverFillRefusal` is thrown and nothing is kept.
  *   · Another member's row: every read and every decision binds `user_id`.
  *   · A second decision: a row is decided once, atomically
  *     (`WHERE status = 'proposed'`), so two presses cannot both keep it.
  */
 import type { Env } from '../types';
 import { railOptionKey, railPageKey, railRecordKey } from './aiRouter';
-import { neverFillReason } from './fills/neverFill';
+import { neverFillMessage, neverFillReason } from './fills/neverFill';
+import { recordFill } from './fills/provenance';
+import type { Citation, FillClass, FillTarget } from './fills/types';
+
+/** D777 part 3: a press that would keep a value for a field Eadwyn never fills. */
+export class NeverFillRefusal extends Error {
+  readonly field: string;
+  /** True when the stored proposal itself names the field, so it was discarded. */
+  readonly discarded: boolean;
+  constructor(field: string, discarded: boolean) {
+    super(neverFillMessage(field));
+    this.name = 'NeverFillRefusal';
+    this.field = field;
+    this.discarded = discarded;
+  }
+}
 
 export type RailProposalKind = 'draft' | 'proposal' | 'note';
 export type RailProposalStatus = 'proposed' | 'accepted' | 'edited' | 'discarded' | 'withdrawn';
@@ -153,6 +172,24 @@ export async function decideRail(env: Env, userId: number, uid: string, decision
   const status: RailProposalStatus | null = decision === 'accept' ? 'accepted' : decision === 'edit' ? 'edited' : decision === 'discard' ? 'discarded' : null;
   if (!status) return null;
   if (status === 'edited' && (!edited || typeof edited !== 'object' || JSON.stringify(edited).length > MAX_PAYLOAD_CHARS)) return null;
+  // D777 part 3: keeping a value re-checks the never-fill registry. The stored
+  // field may have been listed since it was proposed, and an edit may name one.
+  if (status === 'accepted' || status === 'edited') {
+    const open = await getRail(env, userId, uid);
+    if (open && open.status === 'proposed') {
+      const stored = open.payload.field;
+      if (typeof stored === 'string' && neverFillReason(stored)) {
+        await env.DB.prepare(
+          `UPDATE ai_rail_proposals
+              SET status = 'discarded', decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE uid = ? AND user_id = ? AND status = 'proposed'`,
+        ).bind(uid, userId).run();
+        throw new NeverFillRefusal(stored, true);
+      }
+      const named = status === 'edited' ? edited?.field : undefined;
+      if (typeof named === 'string' && neverFillReason(named)) throw new NeverFillRefusal(named, false);
+    }
+  }
   const res = await env.DB.prepare(
     `UPDATE ai_rail_proposals
         SET status = ?, decided_payload_json = ?, decided_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
@@ -172,4 +209,55 @@ export async function withdrawRail(env: Env, userId: number, option: string, rec
       WHERE user_id = ? AND rail_option = ? AND record_ref = ? AND status = 'proposed'`,
   ).bind(userId, o, r).run();
   return Number(res.meta?.changes || 0);
+}
+
+/**
+ * D777 part 3: record the one value a member kept from a rail placement, after
+ * the record's own Save has written it. One proposal, one field, one row: a
+ * placement is accepted one by one, so nothing here records in bulk.
+ *
+ * The proposal must be the member's own, a `proposal` (not a draft or a note),
+ * and kept (`accepted` or `edited`). Its run (`usage_log_id`) and the proposal
+ * itself (`ai_proposal_id`, migration 518) are copied onto the provenance row,
+ * so the field can say which run placed it and what it cost. `recordFill`
+ * refuses a field Eadwyn never fills, whatever the caller passed.
+ */
+export interface RailFillInput {
+  userId: number;
+  uid: string;
+  target: FillTarget;
+  /** What the record's Save actually wrote. */
+  writtenValue: string;
+  fillClass: FillClass;
+  citation?: Citation | null;
+  targetRowRef?: string | null;
+}
+
+export async function recordRailFill(env: Env, input: RailFillInput): Promise<number> {
+  const row = await env.DB.prepare(
+    `SELECT id, rail_option, kind, status, payload_json, decided_payload_json, model, usage_log_id
+       FROM ai_rail_proposals WHERE uid = ? AND user_id = ?`,
+  ).bind(input.uid, input.userId).first<{
+    id: number; rail_option: string; kind: RailProposalKind; status: RailProposalStatus;
+    payload_json: string; decided_payload_json: string | null; model: string | null; usage_log_id: number | null;
+  }>();
+  if (!row) throw new Error('ai_rail_proposals: no such proposal of yours');
+  if (row.kind !== 'proposal') throw new Error('ai_rail_proposals: only a placement proposal fills a field');
+  if (row.status !== 'accepted' && row.status !== 'edited') throw new Error('ai_rail_proposals: the proposal has not been kept');
+  const payload = parse(row.payload_json) || {};
+  const value = payload.value ?? payload.text ?? '';
+  return recordFill(env, {
+    target: input.target,
+    proposalId: null,
+    aiProposalId: row.id,
+    usageLogId: row.usage_log_id,
+    fillClass: input.fillClass,
+    proposedValue: typeof value === 'string' ? value : JSON.stringify(value),
+    writtenValue: input.writtenValue,
+    citation: input.citation ?? null,
+    model: row.model,
+    task: row.rail_option,
+    decidedBy: input.userId,
+    targetRowRef: input.targetRowRef ?? null,
+  });
 }

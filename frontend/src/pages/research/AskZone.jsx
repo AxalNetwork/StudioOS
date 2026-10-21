@@ -463,6 +463,8 @@ export default function AskZone({ zoneActions, zoneFilters, role = 'founder' }) 
           surface="research/ask"
           railOption={railOptionFor(railPage, { file: ZONE_FILE, control: 'research/ask' })?.key}
           scopeKey={sessionUid}
+          scoped
+          blocked={!sessionUid ? 'Ask a question first — there is nothing in this session to gather yet.' : null}
           label="Draft · session brief"
           accept="Accept brief"
           run="Draft the brief"

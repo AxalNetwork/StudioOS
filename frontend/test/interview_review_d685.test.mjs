@@ -60,7 +60,7 @@ test('the review opens on the session ?session= names, else the newest with a tr
 
 test('the switcher names each session by date, how it was held, and where it stands; a missing part says so', () => {
   assert.equal(sessionLabel(S(7, 'structured', { call_label: 'Video call · Zoom' })), '2026-10-07 · Video call · Zoom · Findings proposed');
-  assert.equal(sessionLabel(S(7, 'transcribed', { channel: 'phone' })), '2026-10-07 · Audio call · Transcribed');
+  assert.equal(sessionLabel(S(7, 'transcribed', { channel: 'phone' })), '2026-10-07 · Call · Transcribed', 'an audio call is a Call (the owner, 2026-10-21)');
   assert.equal(sessionLabel({ status: 'odd' }), 'Date not recorded · Channel not recorded · odd', 'an unknown status is shown as written');
   assert.equal(statusWord(null), 'Not recorded');
   assert.deepEqual(whoLine({ interviewee_name: ' Dana ', interviewee_company: '' }), { name: 'Dana', company: 'Not recorded' });

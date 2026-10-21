@@ -399,7 +399,8 @@ test('15. the composer: "Currently:", the option chips, Skip and the canvas\'s p
   assert.ok(!code.includes('explain ...'), 'the three dots are gone');
   assert.match(PHONE_FRAME, /<CurrentQuestion\n\s+q=\{question\}/);
   assert.match(PHONE_FRAME, /<Composer\n[\s\S]*?onSkip=\{skip\}[\s\S]*?options=\{question\?\.options\}\n\s+onPickOption=\{\(opt\) => submit\(opt\)\}/);
-  assert.match(PHONE_FRAME, /sticky bottom-\[var\(--mobile-tabbar-h,0px\)\]/, 'pinned above the tab bar');
+  // bottom-0: the shell's <main> pads by the tab bar, and a sticky row is held inside that padding (2026-10-21).
+  assert.match(PHONE_FRAME, /className="sticky bottom-0 [^"]*" data-testid="eadwyn-phone-composer"/, 'pinned above the tab bar');
   assert.doesNotMatch(PHONE_FRAME, /<Header\b|<PanelTabs\b/, 'the phone frame has no header and no panel tabs');
   assert.match(PHONE_FRAME, /\{belowThread\}/);
   assert.match(PHONE_FRAME, /<Transcript\n[\s\S]*?\n\s+phone\n\s+\/>/);

@@ -1,10 +1,11 @@
-import React, { Suspense, lazy, useCallback, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext.js';
 import { companyLabel, useCompanyReadState } from '../CompanySwitcher.jsx';
 import { AccountSheet, initialsOf } from './AccountSheet.jsx';
 import { CompanySheet } from './CompanySheet.jsx';
 import { usePhoneWidth } from './usePhoneWidth.js';
+import { AXAL_MARK } from '../../components/AxalLogo.jsx';
 
 // The same lazy module the desktop header loads, so the bell stays one chunk.
 const NotificationBell = lazy(() => import('../../components/NotificationBell.jsx'));
@@ -18,6 +19,21 @@ const NotificationBell = lazy(() => import('../../components/NotificationBell.js
  */
 export const BAND_BACKGROUND = 'linear-gradient(180deg, rgba(20,12,38,.22) 0%, rgba(20,12,38,.55) 100%), '
   + 'url(/site/lab-band.webp) center 18% / cover no-repeat rgb(20,12,38)';
+
+/** The band's darkest colour, as the status bar's tint while the band is drawn. */
+export const BAND_TINT = '#140c26';
+
+/**
+ * Sets the page's theme colour to the band's and returns how to put the old one
+ * back. Nothing to do on a page without the tag.
+ */
+export function tintStatusBar(doc) {
+  const meta = doc?.querySelector?.('meta[name="theme-color"]');
+  if (!meta) return () => {};
+  const before = meta.getAttribute('content');
+  meta.setAttribute('content', BAND_TINT);
+  return () => { if (before == null) meta.removeAttribute('content'); else meta.setAttribute('content', before); };
+}
 
 // CO:227's Studio glyph: two four-pointed stars.
 const STUDIO_PATHS = [
@@ -35,6 +51,12 @@ const TARGET = 'inline-flex h-11 min-w-11 items-center justify-center rounded-lg
  * pill opens Switch company and the initials open the account sheet. The pill
  * carries `data-company-switcher`, so `/company-settings`' "Switch company ↑"
  * finds it before the drawer's switcher and opens the sheet on a phone.
+ *
+ * UNDER THE CLOCK. As the shell's first element the band takes the top
+ * safe-area inset (`data-phone-band`, index.css), so its illustration fills
+ * the status bar's area; its 52px row sits below the inset. While it is drawn
+ * the page's theme colour is the band's, for browsers that tint the status bar
+ * from it, and the previous one comes back when it goes.
  */
 export function PhoneHeader({ user, onLogout, branchFact }) {
   const { company } = useActiveCompany();
@@ -43,16 +65,22 @@ export function PhoneHeader({ user, onLogout, branchFact }) {
   const pill = useRef(null);
   const avatar = useRef(null);
   const close = useCallback(() => setSheet(null), []);
+  useEffect(() => tintStatusBar(typeof document === 'undefined' ? null : document), []);
   return (
     <>
       <header
         data-testid="phone-header"
-        className="relative z-40 h-[52px] shrink-0 overflow-hidden text-white lg:hidden"
+        data-phone-band=""
+        className="relative z-40 shrink-0 overflow-hidden text-white lg:hidden"
         style={{ background: BAND_BACKGROUND }}
       >
+        <div className="relative h-[52px]">
         <div className="absolute inset-y-0 left-[22px] right-[22px] flex items-center justify-between gap-[10px]">
           <div className="flex items-center gap-1.5">
-            <img src="/axal-logo.png" alt="" width="15" height="15" className="block h-[15px] w-[15px] object-contain brightness-0 invert" />
+            {/* The mark the desktop header draws (AxalLogo), on a white chip: the
+                old `/axal-logo.png` is an opaque 1320×2868 image, and inverting it
+                drew a white block instead of a logo. */}
+            <img src={AXAL_MARK} alt="" width="18" height="18" className="block h-[18px] w-[18px] rounded-[4px] bg-white object-contain p-px" />
             <span className="text-[12px] font-extrabold tracking-[-.012em] [text-shadow:0_1px_2px_rgba(0,0,0,.35)]">Axal VC</span>
           </div>
           <button
@@ -94,6 +122,7 @@ export function PhoneHeader({ user, onLogout, branchFact }) {
               </span>
             </button>
           </div>
+        </div>
         </div>
       </header>
       {sheet === 'company' && <CompanySheet onClose={close} opener={pill} />}

@@ -55,7 +55,7 @@ test('D690 decision 9: State maps every key the Worker sends to its words; none 
 test('D690 decision 10: no column draws a channel, though the row keeps its channel cell', () => {
   const recs = records([ROW]);
   assert.equal(recs.cols.some((c) => c.key === 'channel' || c.key === 'stage'), false);
-  assert.equal(cellView(recs.rows[0].cells.channel).text, 'Video call', 'the cell stays for the record page');
+  assert.equal(cellView(recs.rows[0].cells.channel).text, 'Call', 'the cell stays for the record page');
   const html = renderToStaticMarkup(h(MemoryRouter, null, h(RecordsTable, { title: 'Interviews', records: recs })));
   // The grid itself, header row to the last row; Channel stays a filter above it.
   const start = html.indexOf('role="row"');
@@ -64,7 +64,7 @@ test('D690 decision 10: no column draws a channel, though the row keeps its chan
   const text = renderedText(`<div ${html.slice(start, end)}`);
   assert.ok(text.includes('State'), 'the State heading is drawn');
   assert.ok(text.includes('Ready to review'));
-  assert.equal(text.includes('Video call'), false, 'no channel under a State heading');
+  assert.equal(text.includes('Call'), false, 'no channel under a State heading');
   assert.equal(text.includes('Channel'), false);
   assert.ok(renderedText(html).includes('Channel: all'), 'Channel is still a filter');
 });

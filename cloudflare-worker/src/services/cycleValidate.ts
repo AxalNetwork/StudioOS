@@ -1036,7 +1036,8 @@ export const LISTS: Record<ModuleSlug, { cols: string[]; filters: FilterSpec[]; 
       { key: 'icp', label: 'ICP fit', options: [opt('strong', 'Strong'), opt('partial', 'Partial'), opt('none', 'None'), NOT_RECORDED] },
       // Deck-eligible is FVW's `quote_consent === true`: the same rows as Agreed.
       { key: 'consent', label: 'Consent', options: [opt('agreed', 'Agreed · deck-eligible'), opt('declined', 'Declined'), opt('not_asked', 'Not asked')] },
-      { key: 'channel', label: 'Channel', options: [opt('in_person', 'In person'), opt('video', 'Video call'), opt('phone', 'Audio call'), opt('text', 'Text chat')] },
+      // Video and audio calls are one "Call" (the owner, 2026-10-21): `call` matches both stored channels.
+      { key: 'channel', label: 'Channel', options: [opt('in_person', 'In person'), opt('call', 'Call'), opt('text', 'Text chat')] },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },
@@ -1230,11 +1231,11 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const consent = ['agreed', 'declined', 'not_asked'].includes(f.consent) ? f.consent : '';
   // D685: `pipeline` is the recruiting picker's filter, the three stages still to come.
   const stage = ['lead', 'invited', 'booked', 'done', 'pipeline'].includes(f.stage) ? f.stage : '';
-  const channel = ['in_person', 'video', 'phone', 'text', 'manual'].includes(f.channel) ? f.channel : '';
+  const channel = ['in_person', 'call', 'video', 'phone', 'text', 'manual'].includes(f.channel) ? f.channel : '';
   const like = rq.q ? `%${rq.q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : '';
   // Every condition is a bound parameter; an empty one switches itself off.
   // The statement is literal twice over (count and page) rather than spliced.
-  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, stage, stage, stage, channel, channel];
+  const binds = [ctx.projectId, like, like, like, icp, icp, icp, consent, consent, consent, consent, stage, stage, stage, channel, channel, channel];
   const sort = rq.sort === 'oldest' || rq.sort === 'name' || rq.sort === 'booked' ? rq.sort : 'newest';
   const total = await ctx.env.DB.prepare(
     `SELECT COUNT(*) AS n FROM discovery_interviews
@@ -1243,7 +1244,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         AND (? = '' OR (? = 'not_recorded' AND icp_fit IS NULL) OR icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND quote_consent = 1) OR (? = 'declined' AND quote_consent = 0) OR (? = 'not_asked' AND quote_consent IS NULL))
         AND (? = '' OR COALESCE(stage, 'done') = ? OR (? = 'pipeline' AND stage IN ('lead', 'invited', 'booked')))
-        AND (? = '' OR channel = ?)`,
+        AND (? = '' OR channel = ? OR (? = 'call' AND channel IN ('video', 'phone')))`,
   ).bind(...binds).first<{ n: number }>();
   // The page, each interview beside its latest session (by id). A pains blob
   // that is not JSON counts as no pain, never as a failed read.
@@ -1261,7 +1262,7 @@ async function researchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         AND (? = '' OR (? = 'not_recorded' AND i.icp_fit IS NULL) OR i.icp_fit = ?)
         AND (? = '' OR (? = 'agreed' AND i.quote_consent = 1) OR (? = 'declined' AND i.quote_consent = 0) OR (? = 'not_asked' AND i.quote_consent IS NULL))
         AND (? = '' OR COALESCE(i.stage, 'done') = ? OR (? = 'pipeline' AND i.stage IN ('lead', 'invited', 'booked')))
-        AND (? = '' OR i.channel = ?)
+        AND (? = '' OR i.channel = ? OR (? = 'call' AND i.channel IN ('video', 'phone')))
       ORDER BY CASE WHEN ? = 'booked' THEN CASE i.stage WHEN 'booked' THEN 0 WHEN 'invited' THEN 1 WHEN 'lead' THEN 2 ELSE 3 END END ASC,
                CASE WHEN ? = 'name' THEN lower(i.interviewee_name) END ASC,
                CASE WHEN ? = 'oldest' THEN d END ASC,

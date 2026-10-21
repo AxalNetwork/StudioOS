@@ -3658,8 +3658,8 @@ research.get('/drafts', async (c) => {
  * inventory gives it (`frontend/src/lib/railOptions/founder.js`, which
  * `founder_draft_surfaces.test.ts` holds this table to). A run from a client
  * that sent no rail page names that page; a mounted rail's page still wins,
- * since it holds the member's Manual switch. A surface other profiles share
- * (`research/ask`, `network/relationships`) keeps the page from its path.
+ * since it holds the member's Manual switch. Shared bands use the workspace
+ * preference keys in SHARED_DRAFT_PAGES below.
  */
 /**
  * D778 part 10 (#2103): Ask's page and option in the founder inventory
@@ -3684,6 +3684,17 @@ export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'network/re-engagement': 'Founder · Network',
   'network/intro-email': 'Founder · Network',
   'research/funds': 'Founder · Research · Funds',
+};
+
+// D778 part 10: these bands belong to several profiles. The fallback is the
+// workspace where the Manual switch and model picks are stored, even when a
+// phone lens leaves the browser's pathname on another page. Request headers
+// still win in railFor; inventory labels are not preference-section keys.
+export const SHARED_DRAFT_PAGES: Readonly<Record<string, string>> = {
+  'network/relationships': 'network',
+  'network/introductions': 'network',
+  'research/ask': 'research',
+  'research/library': 'research',
 };
 
 /**
@@ -3723,7 +3734,7 @@ research.post('/drafts', async (c) => {
       maxTokens: 500,
       surface: page,
       // D765: the band's page and the draft as the option.
-      rail: railFor(c, { page: FOUNDER_DRAFT_PAGES[surface] ?? pageFromPath(page, pageFromPath(surface, 'research')), option: `draft:${surface}` }),
+      rail: railFor(c, { page: FOUNDER_DRAFT_PAGES[surface] ?? SHARED_DRAFT_PAGES[surface] ?? pageFromPath(page, pageFromPath(surface, 'research')), option: `draft:${surface}` }),
     });
   } catch (e) {
     console.error('[research] draft failed:', (e as Error).message);

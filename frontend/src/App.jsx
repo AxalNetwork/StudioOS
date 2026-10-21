@@ -261,6 +261,7 @@ const HqPlatformPage = lazy(() => import('./pages/hq/PlatformPage'));
 const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPage'));
 // D642 (#1435) — U7, each plan's AI allowance and the runs held for a check.
 const HqPlatformAllowancesPage = lazy(() => import('./pages/hq/PlatformAllowancesPage'));
+const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
 const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPage'));
 // The owner's ruling (2026-10-20): the providers' keys and GitHub Sync, one
 // Super Admin page and its own HQ row, no longer Admin Console tabs.
@@ -1107,6 +1108,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/switches">Switches</StripLink>
           <StripLink to="/admin/platform/topology">Topology</StripLink>
           <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
+          <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
           <StripLink to="/admin?tab=payments">Payments</StripLink>
           <StripLink to="/admin?tab=bank-accounts">Bank accounts</StripLink>
           <StripLink to="/admin?tab=product-testing">Product testing</StripLink>
@@ -1186,7 +1188,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           status bar (Codex on #1039). Here, whichever bar is first sits below
           it, and every bar keeps its own height. `env(…, 0px)` is 0 on every
           screen without an inset. */}
-      <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+      {/* `app-shell` reserves the top safe-area inset (index.css; D504), unless the
+          founder's phone band is the first thing in it and takes the inset itself.
+          The height is the dynamic viewport where the browser has one: iOS Safari's
+          100vh is taller than the visible screen, so the whole shell scrolled and
+          took the band with it. */}
+      <div className="app-shell flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100" style={{ height: '100dvh' }}>
         {/* D142 / S13 — ABOVE `PortalSwitcher`, and the order is the point.
             `isImpersonating` is `!!realUser`, which an HQ support session never
             sets (the operator is a row in HQ's database this deployment cannot
@@ -2673,7 +2680,8 @@ function AppInner() {
       <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], partnerPrivateWorkspace(user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=needs" replace /> : <PartnerWorkspaceTabs set="pipeline" user={user}><NeedsBoardPage user={user} /></PartnerWorkspaceTabs>))} />
       <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], partnerPrivateWorkspace(user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=services" replace /> : <PartnerWorkspaceTabs set="offers" user={user}><ServiceCatalogPage user={user} /></PartnerWorkspaceTabs>))} />
       <Route path="/founder/post-need" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=mine" replace /> : <NeedsBoardPage user={user} />)} />
-      <Route path="/partner/needs" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<NeedsBoardPage user={user} />))} />
+      {/* D773 (#2099): the partner's alias of Leads takes Leads' frame, tabs and rail. */}
+      <Route path="/partner/needs" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><NeedsBoardPage user={user} /></PartnerWorkspaceTabs>))} />
       <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><PartnerInsightsPage /></PartnerWorkspaceTabs>))} />
       {/* D569 — the partner earnings screens, at the canvas's own routes: no
           partner bucket holds them (`shellConfig.js` has no `/partner` prefix),
@@ -2802,6 +2810,7 @@ function AppInner() {
       <Route path="/admin/platform/switches" element={guard(['admin'], hqOnly(<HqPlatformSwitchesPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
+      <Route path="/admin/platform/ai-usage" element={guard(['admin'], hqOnly(<HqAiUsagePage />))} />
       {/* The owner's ruling (2026-10-20) — Integration keys, with GitHub Sync as
           its second section (#github), is a Super Admin row of its own. The
           old Admin Console tab links (integration-keys, github) redirect here. */}

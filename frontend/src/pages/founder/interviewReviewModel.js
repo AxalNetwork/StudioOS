@@ -19,7 +19,7 @@ const STATUS_WORDS = {
   reviewed: 'Reviewed',
 };
 
-const CHANNELS = { in_person: 'In person', video: 'Video call', phone: 'Audio call', text: 'Text chat' };
+const CHANNELS = { in_person: 'In person', video: 'Call', phone: 'Call', text: 'Text chat' };
 
 /**
  * The session the review opens on: the one `?session=` names when it belongs

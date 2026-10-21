@@ -264,7 +264,8 @@ const band = (company, readState = { loading: false, failed: false }) => {
 
 test('D699 the band: image, pill, Studio, bell and initials, all 44px targets (test 17)', () => {
   const html = band({ id: 1, company_name: 'Juniper Labs' });
-  assert.match(html, /<header data-testid="phone-header" class="[^"]*\bh-\[52px\][^"]*\blg:hidden\b/);
+  // The 52px row sits inside the band, below the top inset the band takes as the shell's first element (2026-10-21).
+  assert.match(html, /<header data-testid="phone-header" data-phone-band="" class="[^"]*\blg:hidden\b[^"]*"[^>]*><div class="relative h-\[52px\]">/);
   for (const part of ['rgba(20,12,38,.22) 0%', 'rgba(20,12,38,.55) 100%', 'url(/site/lab-band.webp) center 18% / cover', 'rgb(20,12,38)']) {
     assert.ok(BAND_BACKGROUND.includes(part), part);
   }
