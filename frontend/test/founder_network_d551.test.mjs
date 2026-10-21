@@ -25,6 +25,8 @@ const render = (C, props) => renderedText(renderToStaticMarkup(createElement(Mem
 const NOW = Date.parse('2026-10-05T12:00:00Z');
 // The table reads the clock, so its fixture does too.
 const ago = (days) => new Date(Date.now() - days * 86400_000 - 3600_000).toISOString();
+// A due date that stays ahead of the clock: a fixed one turned overdue on the day after it.
+const dueIn = (days) => new Date(Date.now() + days * 86400_000).toISOString().slice(0, 10);
 
 test('strength reads its label, and an unscored contact is Not recorded, never Cool', () => {
   assert.equal(strengthLabel({ strength: 'strong' }), 'Strong');
@@ -52,14 +54,17 @@ test('a save sends null for a blank, never an empty string', () => {
 test('the relationship book shows strength, organisation, follow-up and last note, and an editor per row', () => {
   const rows = [
     { id: 1, uid: 'a', name: 'Ana', email: 'a@x.test', audience: 'investor', strength: 'warm', organization: 'Latitude Seed',
-      last_activity_at: ago(4), open_tasks: 1, next_task_due: '2026-10-20', last_reply_at: '2026-09-15 10:00:00' },
+      last_activity_at: ago(4), open_tasks: 1, next_task_due: dueIn(15), last_reply_at: '2026-09-15 10:00:00' },
     { id: 2, uid: 'b', name: 'Bo', email: 'b@x.test', audience: 'advisor', strength: null, organization: null,
       last_activity_at: ago(71), open_tasks: 0, next_task_due: null, last_reply_at: null },
   ];
   const t = render(RelationshipTable, { rows });
   assert.match(t, /Ana\s*Latitude Seed/);
   assert.match(t, /Warm/);
-  assert.match(t, /Follow up due Oct 20, 2026/);
+  // The wording against a fixed clock is pinned above; here the table shows the row's own.
+  const due = followUp(rows[0]);
+  assert.equal(due.state, 'due');
+  assert.ok(t.includes(due.text), `the table does not show "${due.text}"`);
   assert.match(t, /Sep 15, 2026/);
   assert.match(t, /Bo\s*b@x\.test/, 'no organisation: the email, not an inferred company');
   assert.match(t, /71 days ago · going cold/);
