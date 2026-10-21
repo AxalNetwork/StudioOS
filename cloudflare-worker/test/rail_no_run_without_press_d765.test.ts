@@ -97,7 +97,9 @@ test('the syndicate rationale and the monitoring AI summary are presses (POST); 
   assert.match(mon, /monitoring\.post\('\/anomalies', \(c\) => anomalies\(c, true\)\);/);
   assert.match(mon, /if \(withAi && c\.env\.AI\) \{/);
   const api = readFileSync(join(ROOT, '../frontend/src/lib/api.js'), 'utf8');
-  assert.match(api, /networkFxSyndicateRecs: \(id\) => request\(`\/networkfx\/syndicates\/\$\{id\}\/recommendations`, \{ method: 'POST'/);
+  // The syndicate rationale's only caller was the Network Effects page, removed
+  // in #2297 (#2324); the route above stays a press for any future caller.
+  assert.doesNotMatch(api, /\/recommendations`(?![^\n]*method: 'POST')/, 'a client read of the rationale that is not a press');
   assert.match(api, /nextQuestion: \(focus\) =>\n\s+request\(`\/advisor\/next-question[^\n]*\{ method: 'POST'/);
   assert.match(api, /monitoringAnomaliesSummary: \(\) => request\('\/monitoring\/anomalies', \{ method: 'POST'/);
 });
