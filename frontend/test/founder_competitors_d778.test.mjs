@@ -192,10 +192,10 @@ test('in the workspace, a run answers only the analysis it was pressed on: openi
     const saved = m.nodes().find((n) => n.tagName === 'BUTTON' && textOf(n).includes('Payroll'));
     await act(async () => { m.props(saved).onClick({}); }); await m.settle();
     // The workspace draws names in their edit fields; each analysis's company site tells them apart.
-    assert.ok(m.text().includes('https://a-two.example'), 'the opened analysis is drawn');
+    assert.match(m.text(), /https:\/\/a-two\.example/, 'the opened analysis is drawn');
     await act(async () => { net.pending.shift().ok(ONE_RERUN); }); await m.settle();
-    assert.ok(m.text().includes('https://a-two.example'), 'the opened analysis stays');
-    assert.ok(!m.text().includes('https://rerun.example'), 'the dropped run is not drawn');
+    assert.match(m.text(), /https:\/\/a-two\.example/, 'the opened analysis stays');
+    assert.doesNotMatch(m.text(), /https:\/\/rerun\.example/, 'the dropped run is not drawn');
     await m.press('Re-run');
     assert.equal(net.calls.filter((c) => c[0] === 'rerun').at(-1)[1], 'a-two', 'and the workspace is pressable again');
   } finally { await m.unmount(); net.restore(); api.listProjects = origProjects; }
