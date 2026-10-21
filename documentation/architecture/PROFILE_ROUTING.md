@@ -36,7 +36,7 @@ it, where in their nav, and how do they get there.*
 | Apply and Status | `/spinout-lab/apply` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Brand & Landing Page | `/spinout-lab/brand` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Cap Table | `/spinout-lab/captable` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Cap Table Pro | `/raise/capital/cap-table` · `/build/captable` · `/share/captable/:token` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
+| Cap Table Pro | `/raise/capital/cap-table` · `/share/captable/:token` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Capital | `/spinout-lab/capital` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Co-founder Agreement | `/spinout-lab/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Co-founder Match | `/spinout-lab/cofounder-match` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
@@ -58,7 +58,7 @@ it, where in their nav, and how do they get there.*
 | Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Raise | OUT OF SCOPE | High |
 | Legal & Capital Engine | `/legal-capital` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
-| Metrics | `/build/metrics` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Metrics | `/build/kpi` | Headerless | Full page | Sidebar → Headerless → Build | UPGRADE | High |
 | More (founder phone) | `/more` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Office Hours | `/spinout-lab/office-hours` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | CURRENT | Low |
@@ -272,8 +272,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 102 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 47 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 103 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 46 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 42 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

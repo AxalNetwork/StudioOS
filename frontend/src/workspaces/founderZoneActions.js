@@ -121,7 +121,7 @@ export const FOUNDER_ZONE_ACTIONS = {
   // with it. Bulk entry on this page is `Import CSV`; a single month is
   // entered on Grow · Revenue and traction (`POST /cycles/grow/kpis`).
   'build/kpi': [
-    { label: 'Bulk entry', unbuilt: 'bulk entry is Import CSV on this page; one month is entered on Grow · Revenue and traction' },
+    { label: 'Bulk entry', unbuilt: 'no hand-entry grid is stored; Import CSV loads several months at once' },
     { label: 'Import CSV', kind: 'handler', handler: 'importCsv' },
     { label: 'Stripe sync', unbuilt: 'the Stripe import was retired with the Metrics editor' },
     { label: 'Definitions', kind: 'handler', handler: 'definitions' },
