@@ -5008,18 +5008,19 @@ export const api = {
   },
 
   // Competitor Analysis — in-house crawl + Workers AI synthesis (no paid APIs).
+  // D778 part 9: `headers` on the five runs is the press's own rail context (`railPressHeaders`).
   competitors: {
-    analyze: (data) => request('/competitors/analyze', { method: 'POST', body: JSON.stringify(data || {}) }),
+    analyze: (data, headers) => request('/competitors/analyze', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
     list: () => request('/competitors'),
     get: (id) => request(`/competitors/${id}`),
     save: (id, patch) => request(`/competitors/${id}`, { method: 'PATCH', body: JSON.stringify(patch || {}) }),
-    addCandidate: (id, data) => request(`/competitors/${id}/candidates`, { method: 'POST', body: JSON.stringify(data || {}) }),
+    addCandidate: (id, data, headers) => request(`/competitors/${id}/candidates`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
     removeCandidate: (id, cid) => request(`/competitors/${id}/candidates/${cid}`, { method: 'DELETE' }),
     candidateUpdate: (id, cid, data) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}`, { method: 'PATCH', body: JSON.stringify(data || {}) }),
     addSource: (id, cid, data) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/sources`, { method: 'POST', body: JSON.stringify(data || {}) }),
-    crawlCandidate: (id, cid) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/crawl`, { method: 'POST', body: JSON.stringify({}) }),
-    rerun: (id, data) => request(`/competitors/${id}/rerun`, { method: 'POST', body: JSON.stringify(data || {}) }),
-    refresh: (id) => request(`/competitors/${id}/refresh`, { method: 'POST', body: JSON.stringify({}) }),
+    crawlCandidate: (id, cid, headers) => request(`/competitors/${encodeURIComponent(id)}/candidates/${encodeURIComponent(cid)}/crawl`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+    rerun: (id, data, headers) => request(`/competitors/${id}/rerun`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify(data || {}) }),
+    refresh: (id, headers) => request(`/competitors/${id}/refresh`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
     remove: (id) => request(`/competitors/${id}`, { method: 'DELETE' }),
     fetchUrl: (url, refresh) => request('/competitors/fetch', { method: 'POST', body: JSON.stringify({ url, refresh: !!refresh }) }),
     exportUrl: (id, format) => `/api/competitors/${id}/export?format=${encodeURIComponent(format || 'json')}`,
