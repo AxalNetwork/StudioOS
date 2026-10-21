@@ -443,6 +443,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/studio', roles: ['admin'], why: 'Admin · Studio has no rail (D598).' },
   { route: '/studio', railCount: 0, pageTestIds: ['advisor-studio-home'], roles: ['advisor'], why: 'Owner request: Advisor Studio has no AI side rail; its interview and practice modules remain.' },
   { route: '/studio/tickets/new', roles: ['admin'], why: 'Studio’s own form; Admin · Studio has no rail (D598).' },
+  { route: '/spinout-lab/investor-workspace', railCount: 0, pageTestIds: ['investor-workspace-axal-vc-fund'], roles: ['investor'], why: 'Owner request: the LP investor workspace has no AI side rail; its content and access gates remain.' },
   { route: '/spinout-lab/apply', roles: [], why: 'The Spin-Out Lab application, before a lane is chosen: no profile yet.' },
   { route: '/spinout-lab/brief', roles: [], why: 'The public Spin-Out Lab brief.' },
   { route: '/advisors/:uid', roles: [], why: 'An advisor’s public profile.' },

@@ -89,13 +89,13 @@ test('I8 Performance draws the investor rail in the shared frame; an admin\'s Pe
   assert.match(read('pages/PortfolioWorkspace.jsx'), /<WorkerRail workspace="Portfolio" role="investor"/);
 });
 
-test('I11 Axal VC Fund draws the investor rail in the shared frame; the chrome\'s other keys do not', async () => {
+test('I11 Axal VC Fund keeps its content without the owner-removed AI rail', async () => {
   const { default: InvestorWorkspacePage } = await import('../src/pages/investor/InvestorWorkspacePage.jsx');
   const fund = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/spinout-lab/investor-workspace'] },
     h(InvestorWorkspacePage, { page: 'axal-vc-fund' })));
-  assert.match(fund, /data-testid="axal-vc-fund-frame"/);
+  assert.doesNotMatch(fund, /axal-vc-fund-frame|class="fwr(?: |")/);
   assert.match(fund, /data-testid="investor-workspace-axal-vc-fund"/);
   const trust = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/trust'] }, h(InvestorWorkspacePage, { page: 'trust' })));
   assert.doesNotMatch(trust, /axal-vc-fund-frame/);
-  assert.match(read('pages/investor/InvestorWorkspacePage.jsx'), /<WorkerRail workspace="Axal VC Fund" role="investor"/);
+  assert.doesNotMatch(read('pages/investor/InvestorWorkspacePage.jsx'), /<WorkerRail\b|<RailFrame\b/);
 });

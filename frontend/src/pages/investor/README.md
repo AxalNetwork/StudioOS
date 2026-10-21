@@ -201,3 +201,8 @@ Guards: `frontend/test/investor_portfolio_ip3.test.mjs` and
 `cloudflare-worker/test/portfolio_support_scope.test.ts` — 56 mutants between
 them, all caught. The worker one drives the access rules against real SQLite,
 because the widened write gate is the riskiest part of the change.
+
+The owner removed the AI side rail from `/spinout-lab/investor-workspace`
+(2026-10-21). Its LP content, refresh control and access gates remain. The
+zero-rail expectation is recorded in `NO_RAIL_ROUTES` for investors;
+other Investor boards retain their existing rails.
