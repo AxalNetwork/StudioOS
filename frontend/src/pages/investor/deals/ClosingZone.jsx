@@ -11,6 +11,7 @@ import { SearchInput } from '../../advisor/network/kit';
 import { dealStage, dealMoneyExact } from '../../../lib/dealFlow';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { exportView } from '../../../lib/csvExport';
+import FromMercury from '../FromMercury';
 
 /**
  * Deals · Closing — canvas **ID4**, `/deals/closing`. COLLECTION.
@@ -910,6 +911,8 @@ export default function InvestorClosingZone() {
             </p>
           </StatedLimit>
         </div>
+        {/* D840 (#2349): the investor's own outgoing wires, proposed against their commitments; recorded only on Accept. */}
+        <FromMercury section="closing" />
       </ZoneBody>
     </>
   );

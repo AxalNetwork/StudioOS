@@ -98,13 +98,15 @@ test('on HQ, /available lists mercury to an admin as an entity connection and to
   for (const role of PERSONAL) {
     const own = (await call(db, role, 'GET', '/available')).body.items.find((p: any) => p.key === 'mercury');
     assert.deepEqual([own.connection_source, own.has_implementation, own.status, own.auth_type], ['integrations', true, 'beta', 'api_key'], role);
-    assert.deepEqual(own.capabilities, role === 'investor' ? ['Proof of funds'] : role === 'founder' ? ['Revenue import', 'Payment matching', 'Spending and runway'] : ['Revenue import', 'Payment matching'], role);
+    assert.deepEqual(own.capabilities, role === 'investor' ? ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals'] /* D840 part 4 */ : role === 'founder' ? ['Revenue import', 'Payment matching', 'Spending and runway'] : ['Revenue import', 'Payment matching'], role);
     assert.equal(own.permissions.length, 1, role);
     assert.match(own.permissions[0], /never sends, transfers or requests money/);
-    assert.deepEqual(own.feeds, role === 'founder' ? ['revenue_and_traction'] : []);
+    assert.deepEqual(own.feeds, role === 'founder' ? ['revenue_and_traction'] : role === 'investor' ? ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting'] : []);
     if (role === 'investor') {
       assert.match(own.description, /^Your own Mercury account, read-only: show Axal's admins/);
-      assert.match(own.permissions[0], /never stores or shows a balance/);
+      // D840 part 4: the investor's capacity is their own balance, shown to them alone; D752's admins still see none.
+      assert.match(own.permissions[0], /only you see a balance/);
+      assert.match(own.description, /Axal's admins never see your balance\./);
     } else if (role === 'founder') {
       assert.match(own.description, /venture revenue, and see each month's spending, burn, cash on hand and runway/);
     } else {

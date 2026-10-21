@@ -8,6 +8,7 @@ import './investorFundLanding.css';
 import './investorFundAccounting.css';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import FundLedgerPanel from './FundLedgerPanel';
+import FromMercury from './FromMercury';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 
@@ -67,6 +68,8 @@ export default function InvestorFundAccounting() {
     <section className="i6-card if3-ledger"><header><div><h2>Capital accounts</h2><span>Every supported capital line derives from fund analytics</span></div><span>Read-only collection</span></header>{loading ? <div className="i6-skeleton" /> : <table><thead><tr><th>Line</th><th>Amount</th><th>State</th><th>Note</th></tr></thead><tbody>{lines.map(([label, value, note, state]) => <tr key={label}><td>{label}</td><td>{value == null ? state || (error ? 'Unreadable' : 'Not recorded') : money(value)}</td><td><span className={value == null ? 'if3-state unavailable' : 'if3-state recorded'}>{value == null ? state || (error ? 'Unreadable' : 'Not recorded') : 'Recorded'}</span></td><td>{note}</td></tr>)}</tbody></table>}<p className="i6-footnote">The operational ledger above reads posted fees and expenses by fund and period. These capital lines retain their separate recorded sources.</p></section>
     {fund?.lp_capital?.length > 0 && <section className="i6-card if3-ledger"><header><div><h2>LP capital</h2><span>Called, collected and outstanding from recorded lines and receipts</span></div></header><table><thead><tr><th>LP</th><th>Called</th><th>Collected</th><th>Outstanding</th><th>Note</th></tr></thead><tbody>{fund.lp_capital.map(lp => <tr key={lp.limited_partner_id}><td>{lp.name || `LP #${lp.limited_partner_id}`}</td>{['called_cents', 'collected_cents', 'outstanding_cents'].map(field => { const metric = capitalMetric(lp, field); return <td key={field}>{metric.value == null ? metric.state : money(metric.value)}</td>; })}<td>{lp.capital_reason || 'Recorded receipts; outstanding is called less those receipts'}</td></tr>)}</tbody></table></section>}
     <section className="i6-card if3-boundary"><header><div><h2>Accounting boundary</h2><span>Source-preserved · no write</span></div></header><p>IF3 does not reconcile, close periods, export a journal, attach a fee note, or change LP capital accounts. Only assigned fund administrators and admins may post to the operational ledger.</p></section>
+    {/* D840 (#2349): ledger entries proposed from the administrator's own Mercury; posted only on Accept. */}
+    <FromMercury section="ledger" fundId={fund?.id ?? null} />
     <footer className="i6-footnote">Fund source-preserved · no journal export, reconcile, close, or AI write action from this page.</footer>
   </main><WorkerRail
     workspace="Fund"
