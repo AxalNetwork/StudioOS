@@ -13,6 +13,7 @@ with the answer, and when to stop.
 | `no_write_allowlist.json` | Answers that are deliberately not persisted. |
 | `guardrails.ts` | What the model may not do. |
 | `tools.ts` | Tool definitions for the model. |
+| `studioRail.ts` | The option each profile's Studio Send and Explain name on their runs (D778 part 12). |
 | `profilingModules.ts` | Module definitions. |
 | `rollout.ts` | Staged rollout gating. |
 | `banks.manifest.json` | The bank registry. |

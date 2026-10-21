@@ -119,6 +119,7 @@ import { enqueueJob } from '../services/queue';
 import { notifyAdvisorPageFill, notifyAdvisorProgress } from '../services/realtime';
 import { bindingKey } from '../util/schemaBootstrap';
 import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
+import { studioOption } from '../services/advisor/studioRail';
 
 const advisor = new Hono<{ Bindings: Env }>();
 
@@ -2266,7 +2267,7 @@ advisor.post('/explain', async (c) => {
     task: 'advisor_explain',
     userId: user.id,
     surface: AI_SURFACE.studio,
-    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'explain:advisor' }),
+    rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: studioOption('explain', user.role) }),
     systemPrompt: systemPromptText,
     messages: [{ role: 'user', content: safeTopic }],
     maxTokens: EXPLAIN_MAX_TOKENS,
@@ -2600,7 +2601,7 @@ advisor.post('/tool/auto', async (c) => {
       task: 'tool_call',
       userId: user.id,
       surface: AI_SURFACE.studio,
-      rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: 'tool:advisor' }),
+      rail: railFor(c, { page: pageFromPath(AI_SURFACE.studio, 'studio'), option: studioOption('send', user.role) }),
       systemPrompt: TOOL_CALL_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: message }],
       maxTokens: 256,
