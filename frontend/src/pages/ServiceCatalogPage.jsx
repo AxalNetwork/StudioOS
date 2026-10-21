@@ -22,104 +22,25 @@ const CAT_LABEL = {
 };
 
 /**
- * `embedded`: mounted on /offers/catalog as the zone body, inside a
+ * The Offers · Catalog zone body (`/offers/catalog`): `MineTab` alone, inside a
  * WorkspaceShell that has already drawn the crumb, the h1 and the zone pills.
- * It renders `MineTab` ALONE — no heading block and no tab row.
+ * PO1 in `design/canvases/integrated/Pages · Partner Offers.dc.html` declares
+ * one control row and no tab row; its subject is "what the firm sells".
  *
- * That last clause is a reversal, and the sentence it replaces is worth keeping
- * visible: "Browse / My offerings / Stripe Connect are views WITHIN the catalog
- * rather than sibling zones, so they are this page's controls and stay." The
- * reasoning was that a tab row is a control, and a zone may draw its own
- * controls. What it missed is what the tabs actually select between. Browse
- * catalogue is the PUBLIC marketplace — every other firm's offerings — and
- * Stripe Connect is payouts. Neither is a view of "what this firm sells", which
- * is what PO1 defines the zone to be; they are different subjects that happened
- * to share a component. Both keep their own route at `/services`.
+ * #2338 — the standalone `/services` page that also lived here (Browse
+ * catalogue, My offerings, Stripe Connect behind one tab row) is removed
+ * (#2297 §7); `/services` forwards to this zone, or to the founder
+ * marketplace for a founder. `FounderMarketplacePage.jsx` still imports
+ * `BrowseTab`, `MineTab` and `StripeTab` from this file.
  *
- * It was not a theoretical objection. `tab` initialises to `'mine'` only when
- * `isPartner`, so an admin — a super admin previewing the workspace, most often
- * — opened /offers/catalog and got the public marketplace grid under the
- * "Service catalog" heading, with the LEDGER body never mounted at all. Every
- * element of the artboard was present in this file and none of it on screen.
- */
-/**
  * `zoneActions` is a render prop, and it is deliberately not a role check.
- * `/offers/catalog` mounts this page as a partner zone and wants the zone's
- * header actions above the list; `/services` mounts the same page for admins
- * and investors and wants nothing. The caller decides, this page only renders
- * what it is handed — so the partner's table stays in the partner's file and
- * this shared page learns nothing about licences. It is called with the rows
- * the tab has loaded, because an export of "this view" needs the view.
+ * The caller decides, this file only renders what it is handed — so the
+ * partner's table stays in the partner's file and this shared module learns
+ * nothing about licences. It is called with the rows the tab has loaded,
+ * because an export of "this view" needs the view.
  */
-export default function ServiceCatalogPage({ user, embedded = false, zoneActions, zoneFilters, role }) {
-  const isPartner = user?.role === 'partner';
-  const isFounder = user?.role === 'founder';
-  const isAdmin = user?.role === 'admin';
-  const [tab, setTab] = useState(isPartner ? 'mine' : 'browse');
-
-  const tabs = [
-    { key: 'browse', label: 'Browse catalogue', icon: Search },
-    ...(isPartner || isAdmin ? [{ key: 'mine', label: 'My offerings', icon: Package }] : []),
-    ...(isPartner ? [{ key: 'stripe', label: 'Stripe Connect', icon: ShieldCheck }] : []),
-  ];
-
-  // MOUNTED AS `/offers/catalog`, THE ZONE IS `MineTab` AND NOTHING ELSE.
-  //
-  // The note that stood in `PartnerBucketRoutes` said `embedded` deliberately
-  // keeps these tab rows, because Browse / My offerings / Stripe Connect are
-  // "views WITHIN a zone, not sibling zones". Two facts say otherwise.
-  //
-  // The first is the artboard. PO1 in `design/canvases/integrated/Pages ·
-  // Partner Offers.dc.html` declares one control row — `filters: ['All',
-  // 'Fixed','Retainer','Seat']`, `ops: ['New service','Pricing history',
-  // 'Export']` — and no tab row at all. Its h1 is "Service catalog" and its
-  // blurb is "What the firm sells". Browse catalogue is the PUBLIC
-  // marketplace: every OTHER firm's offerings. That is a different subject
-  // under this zone's heading, not a view of it. Stripe Connect is payouts.
-  //
-  // The second is what an admin actually saw. `tab` starts at `'mine'` only
-  // when `isPartner`, so every admin — including a super admin previewing the
-  // workspace — landed on `/offers/catalog` and got the public marketplace
-  // grid under the Catalog heading, with the LEDGER body below never mounted.
-  // A control row that can put a different subject under the zone's own h1 is
-  // navigation, and the shell has already drawn the navigation.
-  //
-  // Nothing is removed from the product: both other subjects keep their own
-  // routes, `/services` (this same page, unembedded, with all three tabs) and
-  // `/perks`. What changes is that the zone renders the zone.
-  if (embedded) {
-    return <MineTab user={user} zoneActions={zoneActions} zoneFilters={zoneFilters} role={role} />;
-  }
-
-  // Everything below is the standalone `/services` page: the zone mount
-  // returned above, so nothing here needs to ask whether it is embedded.
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Service Catalogue</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Productised partner offerings — fixed price, fixed scope, fixed SLA. Founders book
-          directly; engagements run through the same lifecycle as accepted quotes.
-        </p>
-      </div>
-
-      <div className="border-b border-gray-200 flex gap-6 overflow-x-auto dark:border-gray-800">
-        {tabs.map((t) => {
-          const Icon = t.icon;
-          return (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 px-1 py-3 text-sm border-b-2 -mb-px whitespace-nowrap ${tab === t.key ? 'border-violet-600 text-violet-700 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-900'}`}>
-              <Icon size={14} /> {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === 'browse' && <BrowseTab user={user} isFounder={isFounder} />}
-      {tab === 'mine' && (isPartner || isAdmin) && <MineTab user={user} zoneActions={zoneActions} zoneFilters={zoneFilters} role={role} />}
-      {tab === 'stripe' && isPartner && <StripeTab />}
-    </div>
-  );
+export default function ServiceCatalogPage({ user, zoneActions, zoneFilters, role }) {
+  return <MineTab user={user} zoneActions={zoneActions} zoneFilters={zoneFilters} role={role} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -432,8 +353,8 @@ export function MineTab({ user, zoneActions, zoneFilters, role }) {
     <div className="space-y-4">
       {/* `role` IS THE SHELL'S LICENCE, NOT THE VIEWER'S, and the distinction
           matters here more than on a page that serves one licence. This
-          component is mounted at `/services` and at `/offers/catalog`, and both
-          sit inside `PartnerWorkspaceTabs` — so an admin reading a partner's
+          component is mounted at `/offers/catalog`, inside the partner
+          shell — so an admin reading a partner's
           catalogue is still in the amber shell, and chips painted from
           `user.role` would put founder violet inside it. The caller says which
           shell it is, the same way it already supplies the actions: this page

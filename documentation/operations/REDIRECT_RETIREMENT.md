@@ -15,8 +15,13 @@ The owner ticked "the internal redirects (§12), after 90 days" on #2297 on
     code holds.
   - A page that #2297 removes joins the list when its old address is kept as
     a redirect, so bookmarks still land and the hits are counted with the
-    rest: `/network-effects` (#2324) lands on `/network`, and the four older
-    `/lp/*` landing pages (#2321) land on their door pages.
+    rest: `/network-effects` (#2324) lands on `/network`; the four older
+    `/lp/*` landing pages (#2321) land on their door pages;
+    `/portfolio/coverage` (#2337) on `/delivery/health`; `/needs`,
+    `/partner/needs`, `/founder/post-need` and `/services` (#2338) on
+    `/pipeline/leads` or `/offers/catalog` (a founder on the matching
+    `/build/marketplace` tab); `/partners/portal` and `/partner-portal`
+    (#2342) on `/referrals`.
   - A route that redirects some roles and renders a page for others is a page
     and is not listed. `/raise/data-room`, which §12 names, is one: founders
     open the Data room there.

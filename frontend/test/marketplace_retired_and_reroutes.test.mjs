@@ -15,7 +15,10 @@ const code = (p) => read(p)
 
 test('/marketplace redirects to a surface that works, and its page is gone', () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /path="\/marketplace" element=\{<Navigate to="\/services" replace \/>\}/);
+  // #2338: `/services` itself only forwards now, so `/marketplace` goes where
+  // `/services` goes, in one hop: a founder's marketplace tab, else the
+  // partner's Offers · Catalog.
+  assert.match(app, /path="\/marketplace" element=\{<MarketplaceRedirect role=\{user\?\.role\} founderTab="services" to="\/offers\/catalog" \/>\}/);
   assert.doesNotMatch(app, /\bMarketplacePage\b(?!.*Founder)/);
   assert.equal(existsSync(resolve(root, 'frontend/src/pages/MarketplacePage.jsx')), false);
   // FounderMarketplacePage is a different, working page and must survive.

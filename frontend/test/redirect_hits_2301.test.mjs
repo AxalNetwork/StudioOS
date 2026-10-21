@@ -42,7 +42,13 @@ test('the list is App.jsx\'s redirect-only routes, no more and no fewer', () => 
   assert.deepEqual([...new Set(routes)].sort(), REDIRECT_ROUTES.map((r) => r.path).sort(),
     'a redirect route added, removed or turned into a page: update cloudflare-worker/src/services/redirectRoutes.ts');
   // A route that redirects for some roles only is a page, and is not listed.
-  for (const page of ['/raise/data-room', '/needs', '/build', '/raise', '/profile', '/admin']) assert.equal(routes.includes(page), false, page);
+  for (const page of ['/raise/data-room', '/build', '/raise', '/profile', '/admin']) assert.equal(routes.includes(page), false, page);
+  // #2337, #2338, #2342: the pages removed on 2026-10-21 forward everyone now,
+  // so they are counted until #2319 retires them. `/needs` stood in the list
+  // above while it still rendered the board for a partner.
+  for (const gone of ['/portfolio/coverage', '/needs', '/services', '/founder/post-need', '/partner/needs', '/partners/portal', '/partner-portal']) {
+    assert.ok(routes.includes(gone), `${gone} renders a page again`);
+  }
 });
 
 test('an address resolves to its pattern, exact before splat, never its ids', () => {
