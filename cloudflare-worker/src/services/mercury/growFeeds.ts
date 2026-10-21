@@ -797,13 +797,18 @@ export async function dismissPartnerProposal(env: Env, projectId: number, id: nu
   return pr ? 'decided' : 'not_found';
 }
 
-/** A team member deletes a Mercury fact; the ledger keeps it deleted through every later sync. */
-export async function deleteGrowFact(env: Env, projectId: number, id: number, extra: D1PreparedStatement[] = []): Promise<boolean> {
-  const r = await env.DB.prepare('DELETE FROM mercury_grow_facts WHERE id = ? AND project_id = ?').bind(id, projectId).run();
-  if (!Number(r.meta?.changes ?? 0)) return false;
+const SLUG_OF: Record<string, GrowFeedSlug> = {
+  revenue_and_traction: 'revenue-and-traction', durable_company_building: 'durable-company-building',
+  team_expansion: 'team-expansion', distribution: 'distribution',
+};
+
+/** A team member deletes a Mercury fact; the ledger keeps it deleted through every later sync. Its module's slug, or null when none was deleted. */
+export async function deleteGrowFact(env: Env, projectId: number, id: number, extra: D1PreparedStatement[] = []): Promise<GrowFeedSlug | null> {
+  const row = await env.DB.prepare('DELETE FROM mercury_grow_facts WHERE id = ? AND project_id = ? RETURNING module').bind(id, projectId).first<{ module: string }>();
+  if (!row) return null;
   await env.DB.batch([
     env.DB.prepare(`UPDATE connector_fed_items SET local_id = NULL WHERE project_id = ? AND local_table = 'mercury_grow_facts' AND local_id = ?`).bind(projectId, id),
     ...extra,
   ]);
-  return true;
+  return SLUG_OF[row.module] ?? 'revenue-and-traction';
 }

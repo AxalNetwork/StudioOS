@@ -9,6 +9,11 @@ export const MODULE_LABELS: Record<string, string> = {
   company_creation: 'Company creation',
   market_intelligence: 'Market intelligence',
   revenue_and_traction: 'Revenue and traction',
+  // D840 part 3: the Grow modules the founder's Mercury feeds.
+  durable_company_building: 'Durable company-building',
+  team_expansion: 'Team expansion',
+  distribution: 'Distribution',
+  partner_network: 'Partner network',
   customers: 'Customers',
   operating_systems: 'Operating systems',
   // D757 §2.12: the Validate modules a Zoom transcript suggests into; names as `cycleValidate.ts` MODULES.
@@ -37,6 +42,10 @@ export const MODULE_HREFS: Record<string, string> = {
   experiments: '/validate/experiments',
   verdict: '/validate/verdict',
   revenue_and_traction: '/grow/revenue-and-traction',
+  durable_company_building: '/grow/durable-company-building',
+  team_expansion: '/grow/team-expansion',
+  distribution: '/grow/distribution',
+  partner_network: '/grow/partner-network',
   customers: '/grow/customers',
   network: '/network',
 };
