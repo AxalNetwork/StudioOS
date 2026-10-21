@@ -225,6 +225,11 @@ export function isPublicPath(pathname) {
     || currentPath === '/intelligence'
     || currentPath === '/resources'
     || currentPath === '/contact'
+    // D813 (#2259) — the newsletter's signup, and the confirm and preferences
+    // pages a link in an email opens; none of them takes a sign-in.
+    || currentPath === '/newsletter'
+    || currentPath === '/newsletter/confirm'
+    || currentPath === '/newsletter/preferences'
     // D756 (#1894) — an interviewee reaches these from a chat link and has no account here.
     || currentPath === '/privacy'
     || currentPath === '/privacy/interviews'
