@@ -18,10 +18,11 @@ import './mobileTabBar.css';
  * icons, plus Messages, the one door a phone otherwise lacks. A tab lights for
  * exactly the pages its sidebar row lights for.
  *
- * MORE IS A PAGE, `/more` (D699, superseding D425's "More opens a bottom
- * sheet, never a screen"). The canvas links it (CO:219) and draws it
- * (CO:244-247), so More is a link: current on `/more`, and marked active when
- * the page is one of its rows.
+ * MORE OPENS THE MENU. D699 made More a page, `/more`; the owner removed that
+ * page (#2297), so More is a button that opens the sidebar drawer (`onMore`,
+ * App.jsx), which holds every row More listed. It is marked active when the
+ * page is one of More's rows. Messages, the one More row that is not a sidebar
+ * row, is the first row of the band's account sheet.
  *
  * SAFE AREAS. The page tag asks for `viewport-fit=cover` (index.html), so the
  * bar pads itself by `env(safe-area-inset-bottom)` to clear the home
@@ -34,7 +35,7 @@ import './mobileTabBar.css';
  * MOUNTED BY THE SHELL, NOT HERE. App.jsx mounts it beside the drawer.
  */
 
-export default function MobileTabBar({ role }) {
+export default function MobileTabBar({ role, onMore }) {
   const { pathname } = useLocation();
   const plan = mobilePlan(role);
   const drawn = plan !== null;
@@ -50,8 +51,7 @@ export default function MobileTabBar({ role }) {
   }, [drawn]);
 
   if (!plan) return null;
-  const onMore = rowActive({ to: '/more' }, pathname);
-  const moreActive = onMore || plan.more.some((row) => rowActive(row, pathname));
+  const moreActive = plan.more.some((row) => rowActive(row, pathname));
 
   return (
     <nav
@@ -62,16 +62,17 @@ export default function MobileTabBar({ role }) {
       {plan.tabs.map((row) => (
         <TabLink key={row.to} row={row} active={rowActive(row, pathname)} />
       ))}
-      <Link
-        to="/more"
-        aria-current={onMore ? 'page' : undefined}
+      <button
+        type="button"
+        onClick={onMore}
+        aria-label="More: open the menu"
         className={`${TAB} ${moreActive ? TAB_ON : TAB_OFF}`}
         data-active={moreActive ? 'true' : 'false'}
-        data-testid="link-mobile-tab-more"
+        data-testid="button-mobile-tab-more"
       >
         <MoreHorizontal size={20} aria-hidden="true" />
         <span>More</span>
-      </Link>
+      </button>
     </nav>
   );
 }

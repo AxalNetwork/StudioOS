@@ -98,7 +98,7 @@ const CENSUS = {
   'Interviews › attach audio and Transcribe': ['the record\'s tools', () => /<InterviewRecording interview=\{row\}/.test(record)],
   'Interviews › ICP fit, consent and company': ['the record\'s tools', () => /<InterviewEvidenceFields fit=\{row\.icp_fit\}/.test(record)],
   'Interviews › Need/Nice per pain': ['the record\'s tools', () => /<PainSeverity interviewId=\{row\.id\}/.test(record)],
-  'Interviews › the Marketplace and Advisory card': ['Customer research section, More tools', () => /More tools/.test(sections.interviews) && /\/build\/marketplace/.test(sections.interviews) && /\/advisory/.test(sections.interviews)],
+  'Interviews › the Marketplace and Advisory card': ['Customer research section, More tools', () => /More tools/.test(sections.interviews) && /\/build\/marketplace/.test(sections.interviews) && /\/build\/team\?mode=workspace&(?:amp;)?tab=advisors/.test(sections.interviews)],
 
   'Pain map › chip ICP only': ['the Problem discovery filter ICP only', () => option('problem-discovery', 'icp', 'yes')],
   'Pain map › chip All interviews': ['the cleared filter: no chip chosen', () => !filters('problem-discovery').filters.some((f) => f.options.some((o) => /^All/.test(o.label)))],

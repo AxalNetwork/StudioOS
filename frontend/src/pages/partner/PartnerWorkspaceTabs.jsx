@@ -18,7 +18,8 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  * THE ROLE FILTER IS THE POINT, and it is why this could not be a static array.
  * The tab targets do not share a guard:
  *
- *   /partner/insights                 admin partner investor
+ *   /pipeline/leads, /offers/catalog  admin partner
+ *   /partner/insights                 admin partner
  *   /perks                            admin founder partner investor advisor exploring
  *   /comarketing                      admin partner founder investor
  *   /partner/office-hours             admin partner
@@ -58,7 +59,7 @@ const SETS = {
     { to: '/pipeline/leads', label: 'Leads', icon: Target,
       roles: ['admin', 'partner'] },
     { to: '/partner/insights', label: 'Demand', icon: TrendingUp,
-      roles: ['admin', 'partner', 'investor'] },
+      roles: ['admin', 'partner'] },
     { to: '/pipeline/retainers', label: 'Retainers', icon: Layers,
       roles: ['admin', 'partner'] },
   ],

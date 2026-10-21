@@ -75,7 +75,7 @@ export const GUIDE_PLACEMENT = {
   "getting-started/onboarding": {"area": "getting-started", "surface": "/onboarding/chat", "appliesTo": null},
   "getting-started/invite-team": {"area": "getting-started", "surface": "/build/team", "appliesTo": null},
   "getting-started/help-and-shortcuts": {"area": "getting-started", "surface": null, "appliesTo": null},
-  "getting-started/public-roadmap": {"area": "getting-started", "surface": null, "appliesTo": null},
+  "getting-started/pricing-demo": {"area": "getting-started", "surface": null, "appliesTo": null},
   "getting-started/personal-advisor": {"area": "getting-started", "surface": "/studio", "appliesTo": null},
   "spin-out-lab/overview": {"area": "spin-out-lab", "surface": null, "appliesTo": ["founder"]},
   "spin-out-lab/week-1": {"area": "spin-out-lab", "surface": "/spinout-lab/discovery", "appliesTo": ["founder"]},
