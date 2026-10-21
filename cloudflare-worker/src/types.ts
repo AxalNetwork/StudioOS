@@ -5,6 +5,8 @@ export interface Env {
   // requests. MCP_PUBLIC_ORIGIN is the origin the resource is named by
   // (default https://axal.vc), so a preview Worker can be connected too.
   MCP_SERVER_ENABLED?: string;
+  /** D841 (#2464): member API keys; anything but "true" answers 404 on /api/developer/keys. */
+  API_KEYS_ENABLED?: string;
   OAUTH_KV?: KVNamespace;
   MCP_PUBLIC_ORIGIN?: string;
   // D653: stays off until owner/counsel authorize private founder round calls.
