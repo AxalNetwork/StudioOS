@@ -20,6 +20,8 @@ lives in `providers/`.
 | `connectorRules.ts` | `hasScopeOverreach` (a grant wider than the request is refused) and the validation of a connector's settings patch. |
 | `autopush.ts` | Background pushes started outside the connector routes (a deal's stage change, a new project), logged to `integration_logs` like a user's own push. |
 | `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
+| `mcpClient.ts` | D847 (#2468): the Worker as an MCP client of any provider, through one client. `openMcpSession` speaks both eras (`legacy` with `initialize` and the session id, `modern` `2026-07-28` with `_meta` and the `Mcp-*` headers, `auto` probing), with a per-session POST budget, 10-second deadlines, a 25-second wall, a 2 MB body cap and redirects refused; it offers only the record's read tools the server lists, and logs every unknown, annotated, invalid or changed tool as one `mcp_tool_drift` line. Discovery, registration (pre-registered, CIMD, DCR), PKCE, RFC 9207 `iss`, the leased refresh and revoke. Never imports `../mcp/` (StudioOS's own MCP server, D784). |
+| `mcpProviders.ts` | D847: `MCP_PROVIDERS`, one frozen record per MCP provider (Mercury's first): its server URLs and hosts, scopes, read and write tools (none without a publishing issue), registration order, era, budget, tool pins and D840's legacy names. Imports nothing. |
 
 ## Who sees a provider
 
