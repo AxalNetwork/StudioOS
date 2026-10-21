@@ -601,8 +601,8 @@ export default function SpinoutLabCofounderAgreementPage() {
               Stored in your startup's legal documents. Axal has no in-app signing flow for this document — the generated copy carries wet-ink signature blocks.
             </div>
           </div>
-          <Link to="/legal-capital" className="text-[11.5px] font-bold text-violet-600 dark:text-violet-400 hover:underline shrink-0 inline-flex items-center gap-1">
-            Open Legal &amp; Capital <ExternalLink size={10} />
+          <Link to="/raise/legal" className="text-[11.5px] font-bold text-violet-600 dark:text-violet-400 hover:underline shrink-0 inline-flex items-center gap-1">
+            Open Legal <ExternalLink size={10} />
           </Link>
         </div>
       )}
@@ -683,7 +683,7 @@ export default function SpinoutLabCofounderAgreementPage() {
               <Users size={14} className="text-violet-500 shrink-0" />
               <p className="text-[12px] text-gray-600 dark:text-gray-300 flex-1">
                 A co-founder agreement needs at least two named founders — there's no solo declaration document.
-                Still searching? Use <Link to="/cofounder" className="text-violet-600 hover:underline">Co-founder Match</Link>.
+                Still searching? Use <Link to="/spinout-lab/cofounder-match" className="text-violet-600 hover:underline">Co-founder Match</Link>.
               </p>
             </div>
           )}

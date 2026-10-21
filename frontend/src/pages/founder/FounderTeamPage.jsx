@@ -3,9 +3,12 @@
  * (D435, migration 326). Mounted at /build/team?mode=workspace in place of the
  * retired TeamBuildingPage, whose three tabs (Advisor / Co-Founder / Jobs) were
  * the discovery surfaces — the advisor directory, Co-founder Match and the
- * jobs list. Those still open here, inside the tab that owns them, so the
- * founder redirects (`/advisors`, `/cofounder`, `/my/jobs`) keep landing:
- * `?tab=advisor` → Advisors, `?tab=cofounder` and `?tab=jobs` → Hiring.
+ * jobs list. The advisor directory and the jobs list still open here, inside
+ * the tab that owns them, so the founder redirects (`/advisors`, `/my/jobs`)
+ * keep landing: `?tab=advisor` → Advisors, `?tab=jobs` → Hiring, and the
+ * legacy `?tab=cofounder` → Hiring. The co-founder browse page is removed
+ * (#2355); Hiring and the Co-founders tab link to Co-founder Match at
+ * /spinout-lab/cofounder-match, the one matcher (#2297 §3).
  *
  * WHAT IS READ, AND FROM WHERE. One request (`GET /company/:uid/team`) returns
  * the roster, coverage and plan from their own stores, plus three reads it
@@ -36,7 +39,7 @@
  * from a careers page; advisory grants flowing into the cap table.
  */
 import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Users, UserCircle, Briefcase, LayoutGrid, Lock, Sparkles, Plus, Download, X, AlertTriangle, UserPlus,
 } from 'lucide-react';
@@ -51,7 +54,6 @@ import { buildDecisionModel, DECISION_OUTCOMES } from '../../lib/cofounderMatchV
 import { Card, Pill, Unrecorded, Unreadable } from '../../ui';
 import AdvisorsPage from '../AdvisorsPage';
 import CofounderMatchingPanel from './CofounderMatchingPanel';
-import CofounderPage from '../CofounderPage';
 import MyJobsPage from '../jobs/MyJobsPage';
 
 // ---------------------------------------------------------------------------
@@ -69,6 +71,8 @@ export const TABS = [
 // The retired page's tab ids, which the founder redirects in App.jsx still
 // send. Each lands in the tab that now owns that job.
 const LEGACY_TABS = { advisor: 'advisors', cofounder: 'hiring', jobs: 'hiring' };
+// The one co-founder matcher (#2297 §3); the /cofounder browse page is removed (#2355).
+const COFOUNDER_MATCH = '/spinout-lab/cofounder-match';
 export function resolveTab(param) {
   if (!param) return 'roster';
   if (TABS.some((t) => t.id === param)) return param;
@@ -289,6 +293,7 @@ function Locked({ children = 'Locked' }) {
 export default function FounderTeamPage() {
   const { company } = useActiveCompany();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const tab = resolveTab(searchParams.get('tab'));
   const [team, setTeam] = useState({ phase: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -417,7 +422,7 @@ export default function FounderTeamPage() {
           {tab === 'coverage' && <CoverageTab data={data} company={company} flash={setFlash} onSaved={reload} />}
           {tab === 'cofounders' && (
             <TierGate tier="studio" label="Co-founder Match" blurb="Match with a complementary co-founder — identities stay private until interest is mutual.">
-              <CofounderMatchingPanel onBrowse={() => selectTab('hiring')} />
+              <CofounderMatchingPanel onBrowse={() => navigate(COFOUNDER_MATCH)} />
             </TierGate>
           )}
 
@@ -736,7 +741,6 @@ function AdvisorsTab({ data, onOpen }) {
 function HiringTab({ data }) {
   const [jobs, reloadJobs] = useJobs();
   const [showJobs, setShowJobs] = useState(false);
-  const [showMatch, setShowMatch] = useState(false);
   const cf = data.cofounder;
   const model = cf?.available ? buildDecisionModel({ meta: cf.meta, milestoneKeys: [] }) : null;
   const live = jobs.phase === 'ready' ? jobs.rows.filter((j) => j.status !== 'draft' && j.status !== 'closed') : [];
@@ -788,9 +792,9 @@ function HiringTab({ data }) {
             <h2 className="font-semibold text-gray-900 dark:text-gray-100">Co-founder search</h2>
             <p className="text-xs text-gray-500 dark:text-gray-400">The Week-3 decision recorded on the company’s project in Co-founder Match.</p>
           </div>
-          <button type="button" onClick={() => setShowMatch((v) => !v)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700" data-testid="open-cofounder-match">
-            {showMatch ? 'Hide Co-founder Match' : 'Open Co-founder Match'}
-          </button>
+          <Link to={COFOUNDER_MATCH} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm dark:border-gray-700" data-testid="open-cofounder-match">
+            Open Co-founder Match
+          </Link>
         </div>
         <div className="mt-3 text-sm" data-testid="cofounder-decision">
           {!cf?.available ? <Unrecorded reason={cf?.reason}>{cf?.reason || 'No decision is recorded.'}</Unrecorded> : (
@@ -802,13 +806,6 @@ function HiringTab({ data }) {
             </>
           )}
         </div>
-        {showMatch && (
-          <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800">
-            <TierGate tier="studio" label="Co-founder Match" blurb="Match with a complementary co-founder — identities stay private until interest is mutual.">
-              <div data-testid="cofounder-embedded"><CofounderPage embedded /></div>
-            </TierGate>
-          </div>
-        )}
       </Card>
     </div>
   );

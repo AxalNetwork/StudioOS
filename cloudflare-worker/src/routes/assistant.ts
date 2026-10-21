@@ -193,7 +193,7 @@ const FEATURE_CATALOG: FeatureEntry[] = [
   { keywords: ['spinout lab', 'spin-out lab', 'spinout', '28-day spin-out'],
     url: '/spinout-lab', label: 'Spin-Out Lab', roles: ['founder', 'admin'] },
   { keywords: ['cap table', 'captable', 'cap-table'],
-    url: '/legal-capital', label: 'Cap-Table Simulator', roles: ['founder', 'admin', 'investor'] },
+    url: '/raise/capital/cap-table', label: 'Cap-Table Simulator', roles: ['founder', 'admin'] },
   { keywords: ['incorporation', 'incorporate', 'wizard'],
     url: '/incorporate', label: 'Incorporation Wizard', roles: ['founder', 'admin'] },
   { keywords: ['compliance calendar', 'compliance', '83(b)', '83b'],

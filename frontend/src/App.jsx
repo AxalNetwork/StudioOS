@@ -290,7 +290,6 @@ const MyJobsPage = lazy(() => import('./pages/jobs/MyJobsPage'));
 const JobEditorPage = lazy(() => import('./pages/jobs/JobEditorPage'));
 const JobManagePage = lazy(() => import('./pages/jobs/JobManagePage'));
 const MyApplicationsPage = lazy(() => import('./pages/jobs/MyApplicationsPage'));
-const CofounderPage = lazy(() => import('./pages/CofounderPage'));
 // Team (D435) — the founder's roster, advisors, hiring and coverage at
 // /build/team?mode=workspace. It replaced TeamBuildingPage, whose Advisor /
 // Co-Founder / Jobs tabs were the discovery surfaces; those open inside the
@@ -303,7 +302,6 @@ const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 // D358 — aggregates of how profiles move over time (counts only).
 const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTrends'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
-const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
 const SupportRedeemPage = lazy(() => import('./pages/SupportRedeemPage'));
 const JoinBranchPage = lazy(() => import('./pages/JoinBranchPage'));
@@ -2418,9 +2416,9 @@ function AppInner() {
           neither dresses as the other. */}
       <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), <SpinoutLabBrandPage />)} />
       <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
-      {/* Co-founder Match tool page (design: Co-founder Match.dc) — the Lab
-          decision console; /cofounder stays the full browse/connections/NDA
-          surface and is linked from the page header. */}
+      {/* Co-founder Match tool page (design: Co-founder Match.dc) — the one
+          co-founder matcher (#2297 §3). The older /cofounder browse page is
+          removed (#2355) and its address lands here. */}
       <Route path="/spinout-lab/cofounder-match" element={guard(labRoles(['admin', 'founder']), <SpinoutLabCofounderMatchPage />)} />
       {/* Graduation Certificate (design: Graduation Certificate.dc) — the
           Week-4 credential, conferred on the incorporation_completed
@@ -2894,9 +2892,9 @@ function AppInner() {
       {/* Task #1 — RAISE Workspaces. Three founder workspaces compose the
           existing pages via an `embedded` prop; each guarded for the roles of
           the pages it wraps. Standalone routes (/incorporate, /incorporate/*,
-          /compliance, /legal-capital) stay intact for the investor/partner
-          personas that share them; /build/financials and /build/captable
-          forward to Capital's tabs (#2339, #2340). */}
+          /compliance) stay intact for the investor/partner personas that share
+          them; /build/financials and /build/captable forward to Capital's tabs
+          (#2339, #2340). */}
        <Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder']),
          new URLSearchParams(location.search).get('mode') === 'workspace'
            ? founderWorkspace('raise', founderEditor(<PitchWorkspacePage />))
@@ -3171,7 +3169,10 @@ function AppInner() {
       <Route path="/jobs/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobEditorPage />)} />
       <Route path="/jobs/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <JobManagePage />)} />
-      <Route path="/cofounder" element={guard(labRoles(['admin', 'founder']), user?.role === 'founder' ? <Navigate to="/build/team?mode=workspace&tab=cofounder" replace /> : <CofounderPage />)} />
+      {/* #2355 (#2297 §3): the /cofounder browse page is removed; Co-founder Match at
+          /spinout-lab/cofounder-match is the one matcher. The old address lands there,
+          and is counted with #2301's redirects. */}
+      <Route path="/cofounder" element={<Navigate to="/spinout-lab/cofounder-match" replace />} />
       {/* Task #20 — Consolidated profile/advisor flow. The advisor conversation
           now builds the skill + values profile; the legacy /skills and /values
           routes redirect here (underlying data stores kept intact). */}
@@ -3513,7 +3514,10 @@ function AppInner() {
       <Route path="/network/introductions" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
       <Route path="/network/organizations" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
       <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
-      <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
+      {/* #2354 (#2297 §3): the Legal & Capital Engine is removed, one of four legal
+          surfaces. The old address lands on Raise › Legal, and is counted with
+          #2301's redirects. */}
+      <Route path="/legal-capital" element={<Navigate to="/raise/legal" replace />} />
       {/* #2342 — the partner deal portal and its older alias forward to Refer & earn. */}
       <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortalRedirect />)} />
       <Route path="/partners/portal" element={guard(['admin', 'partner'], <PartnerPortalRedirect />)} />

@@ -171,7 +171,7 @@ export const NEW_FOUNDER_BANK = [
     type: 'short',
     explainer: 'We’ll use this in the deck and surface co-founder matching if you’re solo.',
     doc_anchor: 'getting-started/invite-team',
-    page_target: '/cofounder',
+    page_target: '/spinout-lab/cofounder-match',
     validate: maxChars(280),
   },
 

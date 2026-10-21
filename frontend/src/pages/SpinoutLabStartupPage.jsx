@@ -637,7 +637,7 @@ export default function SpinoutLabStartupPage() {
                   are neither clickable nor keyboard-activatable. */}
               {cofounderUnlocked ? (
                 <Link
-                  to="/cofounder"
+                  to="/spinout-lab/cofounder-match"
                   data-testid="link-add-cofounder"
                   className="flex-1 h-9 rounded-lg text-xs font-semibold inline-flex items-center justify-center border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300"
                 >

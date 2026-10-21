@@ -346,9 +346,9 @@ export const SIDEBAR_GROUPS = {
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'] },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
-      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/legal-capital', '/incorporate', '/compliance'] },
+      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/incorporate', '/compliance'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
-        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks'] },
+        match: ['/grow', '/build/team', '/advisors', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks'] },
       // Points at /network, not at the first zone: /network is the one route
       // that role-branches its element, so it is the landing every license can
       // open, and it forwards to the zone. The three /network/* zone routes are
@@ -399,9 +399,9 @@ export const SIDEBAR_GROUPS = {
   //     removed on the owner's instruction, 2026-10-20.)
   //   • /market-intel "Market Intelligence" — investor-flavoured intel dropped
   //     to keep the partner UX lean; Demand Insights is the kept signal.
-  //   • /portfolio/health "Portfolio Health", /legal-capital "Legal & Capital" —
-  //     investor/founder capital surfaces; conditional for equity-holding
-  //     partners only.
+  //   • /portfolio/health "Portfolio Health" — investor/founder capital
+  //     surface; conditional for equity-holding partners only. (/legal-capital
+  //     stood here; it was removed (#2354) and redirects to /raise/legal.)
   //   • /advisors "Find a Advisor" — founder-oriented (a service partner is the
   //     expert, not the mentee); conditional.
   //   • /network-effects "Network Effects" — removed (#2324); it redirects to /network.
