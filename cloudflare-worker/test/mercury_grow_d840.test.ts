@@ -384,6 +384,7 @@ test('partner network: a payment to an Axal partner is a proposal that needs Acc
   const link = db.prepare(`SELECT module, kind, local_table FROM connector_fed_items WHERE module = 'partner_network'`).get() as any;
   assert.deepEqual({ ...link }, { module: 'partner_network', kind: 'partner_payment', local_table: 'growth_partners' });
   assert.equal(await acceptPartnerProposal(env, PID, p.id, {}, FOUNDER, create), 'decided');
+  assert.equal(made.length, 1, 'a decided proposal creates no second partner');
   // A second proposal, dismissed, stays dismissed through a sync.
   db.prepare(`INSERT INTO partners (name, email, company, status) VALUES ('Quin', 'q@axal.example', 'Landlord Co', 'active')`).run();
   await syncOnce(env);

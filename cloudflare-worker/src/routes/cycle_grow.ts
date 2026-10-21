@@ -55,7 +55,7 @@ import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
 import { hasRecords } from '../services/records';
 import {
-  GROW_FEED_SLUGS, acceptPartnerProposal, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, type GrowFeedSlug,
+  GROW_FEED_SLUGS, acceptPartnerProposal, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, isVentureFounder, type GrowFeedSlug,
 } from '../services/mercury/growFeeds';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -434,10 +434,7 @@ r.put('/checklist/:key', write(async (c, u, pid, b) => {
 
 /** The founder of the venture, whose Mercury it is; anyone else is refused. */
 async function founderOf(c: C, user: User, pid: number): Promise<void> {
-  const p = await c.env.DB.prepare('SELECT founder_id FROM projects WHERE id = ?').bind(pid).first<{ founder_id: number | null }>();
-  if (!p || p.founder_id == null || user.founder_id == null || Number(user.founder_id) !== Number(p.founder_id)) {
-    throw new Refused(403, 'Only the founder decides on what their Mercury proposes');
-  }
+  if (!(await isVentureFounder(c.env, user, pid))) throw new Refused(403, 'Only the founder decides on what their Mercury proposes');
 }
 
 const DECIDED: Record<string, [number, string]> = {

@@ -615,6 +615,13 @@ export async function isTeamViewer(env: Env, viewer: { id: number; founder_id?: 
   return !!(await env.DB.prepare('SELECT 1 FROM user_company_links WHERE company_id = ? AND user_id = ?').bind(p.company_id, viewer.id).first());
 }
 
+/** Whether the viewer is the venture's founder, whose Mercury it is: only they decide what it proposes. */
+export async function isVentureFounder(env: Env, viewer: { founder_id?: number | null }, projectId: number): Promise<boolean> {
+  if (viewer.founder_id == null) return false;
+  return !!(await env.DB.prepare('SELECT 1 FROM projects WHERE id = ? AND founder_id IS NOT NULL AND founder_id = ?')
+    .bind(projectId, viewer.founder_id).first());
+}
+
 export const TEAM_ONLY = 'From the founder\'s Mercury: only the venture\'s team sees these figures.';
 export const NOT_SYNCED = 'Not recorded: the founder has not synced their Mercury into Grow yet.';
 
@@ -736,9 +743,7 @@ export async function growFromMercury(env: Env, projectId: number, slug: GrowFee
        FROM mercury_partner_proposals pr LEFT JOIN growth_partners g ON g.id = pr.growth_partner_id AND g.project_id = pr.project_id
       WHERE pr.project_id = ? AND pr.state IN ('pending', 'accepted') ORDER BY pr.state DESC, pr.paid_cents DESC, pr.id`,
   ).bind(projectId).all<Record<string, unknown>>()).results || []);
-  const founder = await env.DB.prepare(
-    'SELECT 1 FROM projects WHERE id = ? AND founder_id IS NOT NULL AND founder_id = ?',
-  ).bind(projectId, viewer.founder_id ?? null).first();
+  const founder = await isVentureFounder(env, viewer, projectId);
   if (!proposals.length) return { state: 'not_recorded' as const, reason: NOT_SYNCED };
   return {
     state: 'ok' as const, can_decide: !!founder,
