@@ -11,7 +11,8 @@
  *   POST /revoke                                     RFC 7009
  *   POST /mcp                                        JSON-RPC: initialize, notifications/initialized,
  *                                                    tools/list, tools/call
- *   DELETE /mcp                                      ends the session
+ *   DELETE /mcp                                      ends the session (the client sends none)
+ *   GET  /fake-statements/<id>.pdf                   a statement PDF, bearer required
  *
  * `tools/list` offers the read tools AND Mercury's write tools (by name only:
  * a request for one is recorded and answered with an error), so a test can
@@ -42,6 +43,9 @@ const b64url = (buf) => Buffer.from(buf).toString('base64').replace(/=+$/, '').r
 const s256 = (v) => b64url(createHash('sha256').update(v).digest());
 const token = (p) => `${p}-${b64url(randomBytes(12))}`;
 
+/** One statement's PDF bytes: a PDF header and an invented body. */
+export const FAKE_PDF = new TextEncoder().encode('%PDF-1.4\n% fixture statement, invented\n%%EOF\n');
+
 export const FAKE_ACC_A = '11111111-1111-4111-8111-111111111111';
 export const FAKE_ACC_B = '22222222-2222-4222-8222-222222222222';
 export const fakeTx = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -56,7 +60,7 @@ export function defaultMcpData() {
     transactions: [],
     cashflow: { months: [{ month: '2026-09', incomingCents: 500000, outgoingCents: -200000, cashflowCents: 300000 }], truncated: false },
     treasury: { accounts: [{ id: '33333333-3333-4333-8333-333333333333', status: 'active', currentBalance: 10000, availableBalance: 10000 }] },
-    statements: { statements: [{ id: '44444444-4444-4444-8444-444444444444', startDate: '2026-09-01', endDate: '2026-09-30', endingBalance: 1200.5, transactionCount: 3, downloadUrl: 'https://example.invalid/statement.pdf' }] },
+    statements: { statements: [{ id: '44444444-4444-4444-8444-444444444444', startDate: '2026-09-01', endDate: '2026-09-30', endingBalance: 1200.5, transactionCount: 3, downloadUrl: `${ISSUER}/fake-statements/44444444-4444-4444-8444-444444444444.pdf` }] },
     invoices: { invoices: [{ id: '55555555-5555-4555-8555-555555555555', invoiceNumber: 'INV-1', customerId: '66666666-6666-4666-8666-666666666666', amount: 2500, status: 'paid', invoiceDate: '2026-09-02', dueDate: '2026-10-02' }] },
     customers: { customers: [{ id: '66666666-6666-4666-8666-666666666666', name: 'Customer Co', email: 'billing@example.invalid', address: { line1: 'Fixture' } }] },
     recipients: { recipients: [{ id: '77777777-7777-4777-8777-777777777777', name: 'Vendor Co', status: 'active', lastPaidDate: '2026-09-15', electronicRoutingInfo: { accountNumber: 'recipient-account-fixture', routingNumber: 'routing-fixture-only' } }] },
@@ -86,6 +90,8 @@ export function mercuryMcpFake(opts = {}) {
     failRefresh: 0,
     /** Answer `tools/list` with only these names, when set. */
     tools: null,
+    /** The statement PDF's answer, `{ bytes, type, length, redirect }`, each optional. */
+    statement: null,
   };
   const calls = [];
 
@@ -205,6 +211,13 @@ export function mercuryMcpFake(opts = {}) {
       state.revoked.push(f.get('token_type_hint') || 'unknown');
       state.access.delete(t); state.refresh.delete(t);
       return new Response(null, { status: 200 });
+    }
+    if (method === 'GET' && u.pathname.startsWith('/fake-statements/')) {
+      call.statement = true;
+      if (!state.access.has(bearer)) return json({ error: 'invalid_token' }, 401);
+      const s = state.statement || {};
+      if (s.redirect) return new Response(null, { status: 302, headers: { Location: s.redirect } });
+      return new Response(s.bytes ?? FAKE_PDF, { status: 200, headers: { 'Content-Type': s.type ?? 'application/pdf', ...(s.length ? { 'Content-Length': String(s.length) } : {}) } });
     }
     if (u.pathname === '/mcp') {
       if (!state.access.has(bearer)) return json({ error: 'invalid_token' }, 401, { 'WWW-Authenticate': `Bearer resource_metadata="${ISSUER}/.well-known/oauth-protected-resource/mcp"` });

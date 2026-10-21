@@ -27,6 +27,7 @@
  */
 import { getOrganization as apiOrganization, getTransaction as apiTransaction, listAccounts as apiAccounts, listTransactions as apiTransactions, MercuryClientError, type MercuryFetch } from './client';
 import { openMercuryMcp, type MercuryMcpSession } from './mcp';
+import { DeadlineExceeded, withDeadline } from '../../util/deadline';
 
 export { MERCURY_MCP_URL, MERCURY_READ_TOOLS } from './mcp';
 import { dayOf, parseAccounts, parseOrganization, parseTokenPermission, parseTransaction, parseTransactions, toCents, type ParsedAccount, type ParsedOrganization, type ParsedTransaction, type TokenPermission } from './parse';
@@ -67,6 +68,25 @@ export interface Customer { id: string; name: string | null }
 export interface Recipient { id: string; name: string | null; status: string | null; last_paid_on: string | null }
 export interface SafeRequest { id: string; investor_name: string | null; amount_cents: number | null; valuation_cap_cents: number | null; status: string | null; created_on: string | null }
 export interface Category { id: string; name: string | null }
+export interface StatementPdf { bytes: Uint8Array; content_type: 'application/pdf' }
+
+/** D840: a statement PDF's limits. */
+export const STATEMENT_PDF_MAX_BYTES = 15 * 1024 * 1024;
+export const STATEMENT_PDF_MAX_REDIRECTS = 2;
+const STATEMENT_DEADLINE_MS = 15_000;
+
+/**
+ * The hosts a statement's download link may name: https on `mercury.com` or a
+ * subdomain, with no credentials and no port. Checked before every request,
+ * redirects included (the SSRF guard).
+ */
+export function isStatementHost(raw: unknown): raw is string {
+  if (typeof raw !== 'string') return false;
+  let u: URL;
+  try { u = new URL(raw); } catch { return false; }
+  return u.protocol === 'https:' && !u.username && !u.password && !u.port
+    && (u.hostname === 'mercury.com' || u.hostname.endsWith('.mercury.com'));
+}
 
 function toMcpTransaction(raw: unknown): McpTransaction | null {
   const t = parseTransaction(raw);
@@ -191,6 +211,14 @@ export interface MercuryReads {
   recipients(): Promise<Recipient[]>;
   safeRequests(): Promise<SafeRequest[]>;
   categories(): Promise<Category[]>;
+  /**
+   * One statement's PDF, or null when the account has no such statement or it
+   * names no link. The link (UNVERIFIED: `downloadUrl`) is read here and never
+   * returned. GET only, on `isStatementHost` only, at most
+   * `STATEMENT_PDF_MAX_REDIRECTS` redirects each re-checked, `application/pdf`
+   * only, at most `STATEMENT_PDF_MAX_BYTES`. The bytes are never logged.
+   */
+  statementPdf(accountId: string, statementId: string): Promise<StatementPdf | null>;
 }
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -207,7 +235,9 @@ export async function openMercuryReads(access: McpAccess): Promise<MercuryReads>
     const fresh = await access.refresh();
     if (!fresh) throw e;
     session = await openMercuryMcp({ accessToken: fresh, fetcher: access.fetcher });
+    access = { ...access, accessToken: fresh };
   }
+  let token = access.accessToken;
   const call = (name: string, args: Record<string, unknown> = {}) => session.callTool(name, args);
 
   /** Every page of a cursor list, up to `MAX_PAGES`. */
@@ -281,7 +311,72 @@ export async function openMercuryReads(access: McpAccess): Promise<MercuryReads>
     async recipients() { return all('getRecipients', {}, parseRecipients); },
     async safeRequests() { return parseSafeRequests(await call('getSafeRequests')); },
     async categories() { return all('listCategories', {}, parseCategories); },
+    async statementPdf(accountId, statementId) {
+      if (!ident(accountId) || !ident(statementId)) throw new MercuryClientError('path_not_allowed');
+      let link: unknown = null;
+      let after: string | null = null;
+      for (let p = 0; p < MAX_PAGES && link == null; p++) {
+        const body = await call('getAccountStatements', { accountId, limit: PAGE_LIMIT, ...(after ? { start_after: after } : {}) });
+        const hit = listOf(body, 'statements').map(obj).find((s) => s?.id === statementId);
+        if (hit) { link = hit.downloadUrl ?? null; break; }
+        after = nextPage(body);
+        if (!after) break;
+      }
+      if (link == null) return null;
+      return fetchStatementPdf(link, token, access.fetcher ?? fetch);
+    },
   };
+}
+
+/** GET a statement link: the host checked before each hop, the type and size checked before the bytes are kept. */
+export async function fetchStatementPdf(link: unknown, accessToken: string, fetcher: MercuryFetch, max = STATEMENT_PDF_MAX_BYTES): Promise<StatementPdf> {
+  let url = link;
+  for (let hop = 0; ; hop++) {
+    if (!isStatementHost(url)) throw new MercuryClientError(hop === 0 ? 'path_not_allowed' : 'redirect_refused');
+    let res: Response;
+    try {
+      res = await withDeadline(fetcher(url, {
+        method: 'GET', redirect: 'manual', headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/pdf' },
+      }), STATEMENT_DEADLINE_MS, 'mercury_statement');
+    } catch (e) {
+      throw new MercuryClientError(e instanceof DeadlineExceeded ? 'timeout' : 'network_error');
+    }
+    if (res.status >= 300 && res.status < 400) {
+      if (hop >= STATEMENT_PDF_MAX_REDIRECTS) throw new MercuryClientError('redirect_refused', res.status);
+      const next = res.headers.get('Location');
+      try { url = next ? new URL(next, url).toString() : null; } catch { url = null; }
+      continue;
+    }
+    if (res.status === 0) throw new MercuryClientError('redirect_refused');
+    if (res.status === 401 || res.status === 403) throw new MercuryClientError('unauthorized', res.status);
+    if (res.status === 429) throw new MercuryClientError('rate_limited', 429);
+    if (!res.ok) throw new MercuryClientError('http_error', res.status);
+    if (!/^application\/pdf(?:\s*;|$)/i.test(res.headers.get('Content-Type') || '')) throw new MercuryClientError('bad_json', res.status);
+    const declared = Number(res.headers.get('Content-Length'));
+    if (Number.isFinite(declared) && declared > max) throw new MercuryClientError('http_error', 413);
+    const bytes = await readCapped(res, max);
+    return { bytes, content_type: 'application/pdf' };
+  }
+}
+
+/** The body, stopped and refused past `max` bytes whatever the headers said. */
+async function readCapped(res: Response, max: number): Promise<Uint8Array> {
+  const reader = res.body?.getReader();
+  if (!reader) return new Uint8Array(0);
+  const parts: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await withDeadline(reader.read(), STATEMENT_DEADLINE_MS, 'mercury_statement')
+      .catch((e) => { throw new MercuryClientError(e instanceof DeadlineExceeded ? 'timeout' : 'network_error'); });
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) { await reader.cancel().catch(() => undefined); throw new MercuryClientError('http_error', 413); }
+    parts.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.byteLength; }
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────── the feeds' reader, both paths
