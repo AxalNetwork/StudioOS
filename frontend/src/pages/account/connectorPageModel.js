@@ -9,8 +9,9 @@
  * unknown keys.
  */
 import {
-  REGISTRY_ALIAS, TIER_LABEL, authKind, cardAction, categoryOf, connectionStatus, connectorPagePath, flowBanner, isEntityRow, oauthReturn, patOnly,
+  REGISTRY_ALIAS, TIER_LABEL, authKind, cardAction, categoryOf, connectionStatus, connectorPagePath, flowBanner, isEntityRow, isPersonalMercury, oauthReturn, patOnly,
 } from './connectorsModel.js';
+import { MCP_SIGN_IN, TOKEN_ALT } from './mercuryModel.js';
 import { channelEntry, isChannelKey } from './channelPageModel.js';
 
 export { connectorPagePath };
@@ -38,14 +39,16 @@ export function pageEntry({ data, key, channels } = {}) {
 }
 
 /**
- * The sign-in return the page reads: only one naming its own key, and never
- * Mercury's (D715 decision 3). `{ ret, strip }`; `{ ret: null, strip }` for
- * any other return, which is stripped and ignored; null when there is none.
+ * The sign-in return the page reads: only one naming its own key.
+ * `{ ret, strip }`; `{ ret: null, strip }` for any other return, which is
+ * stripped and ignored; null when there is none. D840 (#2346): a member's
+ * Mercury sign-in returns here, so Mercury's is read too; the page drops it
+ * for the Axal entities' row (D715 decision 3), which has no sign-in.
  */
 export function pageReturn(search, key) {
   const ret = oauthReturn(search);
   if (!ret) return null;
-  return ret.key === key && key !== 'mercury' ? { ret, strip: ret.strip } : { ret: null, strip: ret.strip };
+  return ret.key === key ? { ret, strip: ret.strip } : { ret: null, strip: ret.strip };
 }
 
 /** D753 F4 (#1957): the GitHub App's Setup URL query. Stripped on GitHub's page; never printed or stored. */
@@ -109,6 +112,8 @@ export function pageAction(p, { view = 'idle' } = {}) {
   }
   if (p.locked) return { kind: 'plan', pill: TIER_LABEL[p.tier] || 'Paid plan', label: 'See plans', to: '/account/billing' };
   if (view === 'signin') return { kind: 'starting', label: `Opening ${name}…`, busy: true };
+  // D840: a member's Mercury names its sign-in; the token is on the chevron (`pageChoices`).
+  if (isPersonalMercury(p)) return { kind: 'oauth', label: MCP_SIGN_IN, aria: `${MCP_SIGN_IN} to connect it to Axal VC` };
   return { kind: keyPath(p) ? 'key' : 'oauth', label: 'Connect to Axal VC', aria: `Connect ${name} to Axal VC` };
 }
 
@@ -129,7 +134,9 @@ export function manageItems(p) {
   if (conn.uid) items.push({ id: 'sync', label: 'Sync now' });
   if (!attention) {
     if (keyPath(p)) { if (conn.uid) items.push({ id: 'replace', label: authKind(p) === 'key' && p.key !== 'mercury' ? 'Replace key' : 'Replace token' }); }
-    else items.push({ id: 'reconnect', label: 'Reconnect' });
+    else items.push({ id: 'reconnect', label: isPersonalMercury(p) ? 'Sign in again' : 'Reconnect' });
+    // D840: a member's Mercury also takes a Read Only token in place of the sign-in.
+    if (isPersonalMercury(p) && conn.uid) items.push({ id: 'replace', label: conn.auth_type === 'oauth_mcp' ? TOKEN_ALT : 'Replace token' });
   }
   items.push({ id: 'disconnect', label: 'Disconnect' });
   return items;
@@ -149,7 +156,8 @@ export function pageChoices(p) {
       : null;
   const kind = authKind(p);
   const alt = [];
-  if (p.supports_pat && kind === 'oauth' && !patOnly(p)) alt.push({ id: 'pat', label: 'Use a personal access token' });
+  if (isPersonalMercury(p)) alt.push({ id: 'pat', label: TOKEN_ALT });
+  else if (p.supports_pat && kind === 'oauth' && !patOnly(p)) alt.push({ id: 'pat', label: 'Use a personal access token' });
   if (kind === 'token_first' && !p.oauthOff) alt.push({ id: 'oauth', label: `Sign in with ${p.display_name} instead` });
   return { env, alt };
 }
@@ -216,7 +224,7 @@ export function signInLabel(p) {
   const name = p?.display_name || 'the service';
   switch (authKind(p)) {
     case 'first_party':
-    case 'oauth': return `Sign in with ${name}`;
+    case 'oauth': return isPersonalMercury(p) ? `${MCP_SIGN_IN}, or a Read Only API token` : `Sign in with ${name}`;
     case 'token_first': return `Private App token, or sign in with ${name}`;
     default: return p?.key === 'mercury' ? 'Read Only API token' : 'API key';
   }

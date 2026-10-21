@@ -62,10 +62,14 @@ const LEGACY_ROWS = [
   '/deals',
   // capital. '/capital', '/liquidity', '/portfolio/reserves' and '/watchlist'
   // stood here, removed with their pages by the owner on 2026-10-20.
-  '/portfolio/health', '/portfolio/coverage',
+  // '/portfolio/coverage' stood here, removed with its page by the owner on
+  // 2026-10-21 (#2337); the address only forwards to /delivery/health now.
+  '/portfolio/health',
   '/portfolio/waterfall', '/legal-capital', '/incorporate', '/compliance',
   // network
-  '/network', '/my/jobs', '/services', '/needs', '/partner/insights',
+  // '/services' and '/needs' stood here, removed with their pages by the owner
+  // on 2026-10-21 (#2338); both addresses only forward now.
+  '/network', '/my/jobs', '/partner/insights',
   '/partner/office-hours', '/comarketing',
   // more
   '/incorporate/cofounder-agreement', '/spinout-lab/83b', '/perks',
@@ -111,10 +115,11 @@ test('the question is the size it was measured at', () => {
   // way a legacy console leaves the question. The owner's removals of
   // 2026-10-20 took six more (Scoring, Risk Matrix, Capital, Liquidity,
   // Reserves, Watchlist), deleted with their pages, and #2324 took Network
-  // Effects (#2297 §3), whose address now redirects to /network. The owner
-  // removed /advisory on 2026-10-21 (#2341); its address only forwards now.
-  assert.equal(LEGACY_ROWS.length, 38);
-  assert.equal(new Set(LEGACY_ROWS).size, 38, 'a legacy route is listed twice');
+  // Effects (#2297 §3), whose address now redirects to /network. On 2026-10-21
+  // the owner removed Advisory (#2341), Portfolio Coverage, Service Catalogue,
+  // Needs Board (#2337, #2338), and the Assessment editor (direct request).
+  assert.equal(LEGACY_ROWS.length, 35);
+  assert.equal(new Set(LEGACY_ROWS).size, 35, 'a legacy route is listed twice');
   // Fourteen tabs when the map was drawn. Integration keys and GitHub Sync
   // left for HQ's own Super Admin page (the owner's ruling, 2026-10-20);
   // D708's Bank accounts and D815's Product testing joined.
@@ -216,7 +221,7 @@ test('every placement names a real tier, a real row of that tier, and a real for
   }
   // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since,
   // and D670 retired Market Intelligence and Signals.
-  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 18, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20, #2324 Network Effects and #2341 Advisory');
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 15, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20, #2324 Network Effects, #2341 Advisory, and #2337 and #2338 three more');
 });
 
 test('the three decided placements hold: Wellbeing, X, Trash', () => {

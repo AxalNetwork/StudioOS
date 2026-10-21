@@ -139,11 +139,12 @@ export const ATTESTATION_DOOR = { text: 'Show Axal you can fund this', href: '/s
  * #1780 (canvas PR): each use row's door, to the screen where that use
  * happens (#1778's screens, #1848). A use with no screen on `main` has no
  * door: `raise_receipts` and `venture_spend` are matched and read from their
- * own pages' panels, which this sheet does not link yet.
+ * own pages' panels, which this sheet does not link yet. `practice_income`
+ * lost its door with #2338: invoices were matched on the needs board's
+ * Engagements tab at `/partner/needs`, and the owner removed that page.
  */
 export const USE_DOORS = {
   venture_revenue: { text: 'Import from Mercury', href: '/spinout-lab/revenue' },
-  practice_income: { text: 'Match an invoice', href: '/partner/needs' },
   partner_deals: { text: 'Match a payout or settlement', href: '/partner/earnings' },
   capital_attestation: ATTESTATION_DOOR,
 };
@@ -247,7 +248,48 @@ export function landsWords(role) {
 }
 
 export const READS_ROW = 'Only when you ask. No scheduled sync.';
-export const MEMBER_REPLACE = 'Replace the token with a Read Only one from your own Mercury organization.';
+export const MEMBER_REPLACE = 'Sign in with Mercury again, or replace the token with a Read Only one from your own Mercury organization.';
+
+// ── D840 (#2346): Sign in with Mercury, through Mercury's MCP server ──────────
+
+/** The band's one action for a member's Mercury, and the other way in. */
+export const MCP_SIGN_IN = 'Sign in with Mercury';
+export const TOKEN_ALT = 'Use a Read Only API token';
+/** How the connection reads, in "How it reads". */
+export const VIA_ROWS = Object.freeze({
+  oauth_mcp: 'Signed in with Mercury: read access only, through Mercury’s own MCP server.',
+  api_key: 'A Read Only API token you pasted.',
+});
+
+/** "How it reads"'s second row, from the connection's `auth_type`; null when there is no connection. */
+export function viaRow(conn) {
+  if (!conn) return null;
+  return Object.hasOwn(VIA_ROWS, conn.auth_type) ? VIA_ROWS[conn.auth_type] : null;
+}
+
+/**
+ * The Worker's reason words on a failed sign-in's return
+ * (`routes/mercury_oauth.ts`' `CALLBACK_REASONS`), in the member's words.
+ * A reason not here gets the generic refusal; `access_denied` is a cancel.
+ */
+export const SIGN_IN_REASONS = Object.freeze({
+  invalid_state: 'That sign-in had expired or was already used. Nothing was connected. Sign in with Mercury again.',
+  csrf_mismatch: 'That sign-in was started in another browser or tab. Nothing was connected. Sign in with Mercury again from here.',
+  missing_code: 'Mercury did not finish the sign-in. Nothing was connected. Try again.',
+  not_allowed: 'Your profile cannot connect its own Mercury. Nothing was connected.',
+  token_exchange_failed: 'Mercury did not complete the sign-in. Nothing was connected. Try again, or use a Read Only API token.',
+  scope_refused: 'That sign-in granted more than read access, so it was refused and revoked. Nothing was connected.',
+  mercury_entity_account: 'This Mercury organization belongs to an Axal entity. Sign in to your own organization; Axal\'s accounts are connected only for fund administration.',
+  bank_registry_unavailable: 'Axal\'s account registry could not be read, so the sign-in could not be checked. Nothing was saved; try again later.',
+  mercury_unreadable: 'Your Mercury account could not be read after you signed in. Nothing was saved; try again.',
+  discovery_failed: 'Mercury\'s sign-in could not be reached. Nothing was connected. Try again, or use a Read Only API token.',
+  callback_failed: 'The sign-in did not complete. Nothing was connected. Try again.',
+});
+
+/** The sentence for a failed sign-in's reason, or '' for one this map does not hold. */
+export function signInWords(reason) {
+  return Object.hasOwn(SIGN_IN_REASONS, reason) ? SIGN_IN_REASONS[reason] : '';
+}
 const FOUNDER_PARTNER_DISCONNECT = 'Revenue rows you imported and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.';
 
 /** What disconnecting keeps, by role (D752). */

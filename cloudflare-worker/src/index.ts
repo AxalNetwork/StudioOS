@@ -337,6 +337,7 @@ import adminMoneyRails from './routes/admin_money_rails';
 import { adminPartnerSettlements, partnerSettlements } from './routes/partner_settlements';
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
+import mercuryOauthRoutes from './routes/mercury_oauth';
 import adminBankAccounts from './routes/admin_bank_accounts';
 import adminFundStructure from './routes/admin_fund_structure';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
@@ -1230,6 +1231,8 @@ app.route('/api/settings', settings);
 // router so `/api/connectors/assistants` never reaches its `/:key` routes.
 app.route('/api/connectors/assistants', assistantGrants);
 app.route('/api/mcp/consent', mcpConsent);
+// D840 (#2346): Sign in with Mercury, ahead of the integrations router.
+app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
 app.route('/api/connectors', integrations);
 app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).

@@ -27,6 +27,10 @@
  * A 401 or 403, a reported permission above read-only, or an Axal entity's
  * organization marks the row `error`.
  *
+ * D840 (#2346): a member connects with a pasted token or signs in with
+ * Mercury; `bankReaderFor` gives the same reader either way, so every use
+ * below reads the same organization, accounts and lines on both paths.
+ *
  * WHAT IS STORED. Only match rows (transaction id, last four, signed cents,
  * posted date, target) and, for imports, the revenue rows a founder picks.
  * Candidate lists, with their counterparty names, are built per request and
@@ -35,10 +39,11 @@
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import type { IntegrationRow } from '../integrations/registry';
-import { decryptCredentials } from '../integrations/secrets';
-import { entityAccountRefusal, isSupportSession, namesAxalEntity, readOnlyRefusal, readOrganization } from '../integrations/providers/mercury';
-import { getTransaction, listTransactions, MercuryClientError } from './mercury/client';
-import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES, parseTransaction, parseTransactions, toCents, type ParsedAccount, type ParsedTransaction } from './mercury/parse';
+import { entityAccountRefusal, isSupportSession, namesAxalEntity, readOnlyRefusal } from '../integrations/providers/mercury';
+import { MercuryClientError } from './mercury/client';
+import { bankReaderFor } from './mercury/connection';
+import type { MercuryBankReader } from './mercury/reads';
+import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES, toCents, type ParsedAccount, type ParsedTransaction } from './mercury/parse';
 import { branchOf, HQ_ONLY } from '../util/branch';
 import { refuse } from '../util/refusal';
 
@@ -138,7 +143,8 @@ export async function personalPolicy(c: C, user: User, use: PersonalUse): Promis
 
 export interface PersonalConnection {
   row: IntegrationRow;
-  token: string;
+  /** The member's reader: their pasted token, or their sign-in (D840). */
+  reader: MercuryBankReader;
   accounts: ParsedAccount[];
   use: PersonalUse;
   /** The organization's legal name as Mercury gave it on this read (D752). */
@@ -159,20 +165,17 @@ export async function personalConnection(c: C, user: User, use: PersonalUse): Pr
     "SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'mercury' LIMIT 1",
   ).bind(user.id).first<IntegrationRow>();
   if (!row) return refused(c, 409, 'mercury_not_connected', 'Connect your own Mercury account first.');
-  if (row.status !== 'active') return refused(c, 409, 'mercury_reconnect_required', 'Your Mercury connection needs attention. Reconnect it with a Read Only token.');
-  let token = '';
-  try {
-    const creds = await decryptCredentials(c.env, row.uid, row.credentials_enc);
-    token = typeof creds?.api_key === 'string' ? creds.api_key : '';
-  } catch { token = ''; }
-  if (!token) return refused(c, 503, 'credentials_unreadable', 'Your Mercury token could not be read. Reconnect it with a Read Only token.');
+  const again = row.auth_type === 'oauth_mcp' ? 'Sign in with Mercury again.' : 'Reconnect it with a Read Only token.';
+  if (row.status !== 'active') return refused(c, 409, 'mercury_reconnect_required', `Your Mercury connection needs attention. ${again}`);
+  const reader = await bankReaderFor(c.env, row);
+  if (!reader) return refused(c, 503, 'credentials_unreadable', `Your Mercury connection could not be read. ${again}`);
   let read;
   try {
-    read = await readOrganization(token);
+    read = await reader.readOrganization();
   } catch (e) {
     if (e instanceof MercuryClientError && e.code === 'unauthorized') {
       await markError(c.env, row, 'token_rejected');
-      return refused(c, 409, 'mercury_reconnect_required', 'Mercury no longer accepts your token. Reconnect it with a Read Only token.');
+      return refused(c, 409, 'mercury_reconnect_required', `Mercury no longer accepts your connection. ${again}`);
     }
     return refuse(c, 502, { code: 'mercury_unreadable', message: 'Your Mercury account could not be read. Nothing changed; try again.', raw: e, audience: 'owner' });
   }
@@ -186,14 +189,15 @@ export async function personalConnection(c: C, user: User, use: PersonalUse): Pr
     if (entity.status === 409) await markError(c.env, row, entity.code);
     return refused(c, entity.status, entity.code, entity.sentence);
   }
-  return { row, token, accounts: read.accounts, use, legal_name: read.org.legal_name };
+  return { row, reader, accounts: read.accounts, use, legal_name: read.org.legal_name };
 }
 
 /** A Mercury read that failed after the connection was checked: a 401 or 403 marks the row `error`. */
 export async function readFailure(c: C, conn: PersonalConnection, e: unknown): Promise<Response> {
   if (e instanceof MercuryClientError && e.code === 'unauthorized') {
     await markError(c.env, conn.row, 'token_rejected');
-    return refused(c, 409, 'mercury_reconnect_required', 'Mercury no longer accepts your token. Reconnect it with a Read Only token.');
+    const again = conn.reader.via === 'oauth_mcp' ? 'Sign in with Mercury again.' : 'Reconnect it with a Read Only token.';
+    return refused(c, 409, 'mercury_reconnect_required', `Mercury no longer accepts your connection. ${again}`);
   }
   return refuse(c, 502, { code: 'mercury_unreadable', message: 'Your Mercury account could not be read. Nothing changed; try again.', raw: e, audience: 'owner' });
 }
@@ -247,16 +251,17 @@ export async function listOwnTransactions(conn: PersonalConnection, window: { fr
   let capped = false;
   let refused = 0;
   for (const account of conn.accounts) {
-    for (let offset = 0; ; offset += PAGE) {
+    for (let cursor: string | null = null; ;) {
       const limit = Math.min(PAGE, MAX_LINES - lines.length);
       if (limit <= 0) { capped = true; break; }
-      const page = parseTransactions(await listTransactions(conn.token, account.mercury_account_id, { start: window.from, limit, offset }));
+      const page = await conn.reader.transactionsPage(account.mercury_account_id, { start: window.from, limit, cursor });
       refused += page.refused;
       for (const t of page.transactions) {
         const day = t.posted_on ?? t.created_on;
         if (day && day >= window.from && day <= window.to) lines.push(toLine(t, account));
       }
-      if (page.transactions.length + page.refused < limit) break;
+      if (!page.next) break;
+      cursor = page.next;
     }
     if (capped) break;
   }
@@ -266,13 +271,8 @@ export async function listOwnTransactions(conn: PersonalConnection, window: { fr
 /** One of the member's lines, re-read by id from their own accounts; null when none of them holds it. */
 export async function readOwnTransaction(conn: PersonalConnection, transactionId: string): Promise<BankLine | null> {
   for (const account of conn.accounts) {
-    try {
-      const t = parseTransaction(await getTransaction(conn.token, account.mercury_account_id, transactionId));
-      if (t && t.mercury_transaction_id === transactionId) return toLine(t, account);
-    } catch (e) {
-      if (e instanceof MercuryClientError && e.code === 'http_error' && e.status === 404) continue;
-      throw e;
-    }
+    const t = await conn.reader.transaction(account.mercury_account_id, transactionId);
+    if (t && t.mercury_transaction_id === transactionId) return toLine(t, account);
   }
   return null;
 }

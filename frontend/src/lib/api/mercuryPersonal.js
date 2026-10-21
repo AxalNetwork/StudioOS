@@ -12,7 +12,8 @@
 // Worker refuses without `confirm_visible: true`; the sheet sends it only
 // after the founder confirms who reads saved figures.
 // Nothing here sends, transfers or requests money.
-// Worker: routes/mercury_personal.ts, and routes/revenue.ts (credits, import, spending).
+// D840 (#2346) adds the sign-in's start; the browser comes back to the Mercury page.
+// Worker: routes/mercury_personal.ts, routes/revenue.ts (credits, import, spending) and routes/mercury_oauth.ts (sign-in).
 import { request } from '../api.js';
 
 const project = (id) => `/revenue/projects/${encodeURIComponent(id)}`;
@@ -25,6 +26,8 @@ const qs = (o) => {
 
 export const mercuryPersonalApi = {
   status: () => request('/mercury/personal/status'),
+  /** D840 (#2346): Sign in with Mercury. `{ authorize_url }`; the browser goes there, and returns to `/account/connectors/mercury`. */
+  oauthStart: () => request('/integrations/mercury/oauth/start'),
   /** The project's posted credits, each importable or listed with its reason. Writes nothing. */
   credits: (projectId, { from, to } = {}) => request(`${project(projectId)}/mercury-credits${qs({ from, to })}`),
   /** `items`: `[{ transaction_id, customer, revenue_type }]`, at most 200. Amount and date are Mercury's. */

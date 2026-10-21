@@ -273,7 +273,7 @@ test('notifyExpiringRevshareWindows: fires one warning per threshold + one admin
     assert.equal(call.type, 'partner_revshare_window_closing');
     assert.equal(call.category, 'deals');
     assert.deepEqual(call.channels, ['in_app', 'email']);
-    assert.equal(call.link, '/partners/portal');
+    assert.equal(call.link, '/referrals');
     assert.ok(call.payload.closes_at, 'closes_at populated in payload');
     assert.ok(call.payload.referral_code, 'referral_code populated');
   }

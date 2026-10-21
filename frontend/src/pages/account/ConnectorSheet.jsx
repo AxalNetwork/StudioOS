@@ -375,13 +375,15 @@ export function ToolModals({ conn, flow, onChanged }) {
 export function SettingsGroup({ p, onTool, onReplace }) {
   const conn = p.connection;
   const kind = authKind(p);
-  if (!conn || !(p.key === 'hubspot' || p.key === 'salesforce' || p.key === 'linkedin' || (conn.uid && kind !== 'oauth'))) return null;
+  // D840: a member's Mercury connected with a token keeps its token row, though it signs in by default.
+  const token = conn?.uid && (kind !== 'oauth' || (isPersonalMercury(p) && conn.auth_type === 'api_key'));
+  if (!conn || !(p.key === 'hubspot' || p.key === 'salesforce' || p.key === 'linkedin' || token)) return null;
   return (
     <Group label="Settings">
       {p.key === 'hubspot' && <Row a="Pipeline" b={conn.config?.pipeline_label || 'Default pipeline'} action={<button type="button" className={BTN.link} onClick={() => onTool('hubspot')}>Change</button>} />}
       {p.key === 'salesforce' && <Row a="Stages and fields" b={conn.config?.is_sandbox ? 'Sandbox' : 'Production'} action={<button type="button" className={BTN.link} onClick={() => onTool('salesforce')}>Change</button>} />}
       {p.key === 'linkedin' && <Row a="Your connections" b="Import Connections.csv for referrals." action={<button type="button" className={BTN.link} onClick={() => onTool('csv')}>Import</button>} />}
-      {conn.uid && kind !== 'oauth' && <Row a={kind === 'key' ? 'API key' : 'Access token'} b={conn.api_key_preview ? `Ends ${conn.api_key_preview}` : 'Stored encrypted'} action={<button type="button" className={BTN.link} onClick={onReplace}>Replace</button>} />}
+      {token && <Row a={p.key === 'mercury' ? 'Read Only token' : kind === 'key' ? 'API key' : 'Access token'} b={conn.api_key_preview ? `Ends ${conn.api_key_preview}` : 'Stored encrypted'} action={<button type="button" className={BTN.link} onClick={onReplace}>Replace</button>} />}
     </Group>
   );
 }
@@ -613,9 +615,15 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             </div>
           </Group>
         )}
-        {p.supports_pat && kind === 'oauth' && !tokenOnly && (
+        {p.supports_pat && kind === 'oauth' && !tokenOnly && !personalMercury && (
           <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
             Your workspace blocks outside apps? <button type="button" className={BTN.link} onClick={() => go('key')}>Use a personal access token instead</button>
+          </p>
+        )}
+        {/* D840 (#2346): a member signs in with Mercury; the Read Only token is the other way in. */}
+        {personalMercury && (
+          <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
+            <button type="button" className={BTN.link} onClick={() => go('key')} data-testid="connector-mercury-token">Use a Read Only API token instead</button>
           </p>
         )}
         {tokenOnly && kind === 'oauth' && (
