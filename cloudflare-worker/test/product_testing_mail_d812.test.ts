@@ -1,8 +1,8 @@
 /**
  * D812 part 2a (#2258) — the two reads Mail's Product testing page takes through
  * D811's signed link: `mailProgrammes` and `mailApplicants` (services/testing.ts),
- * on the same SQLite harness as product_testing_d812.test.ts. Nothing mounts
- * them yet (part 2b does, behind D811's signature check).
+ * on the same SQLite harness as product_testing_d812.test.ts. Part 2b mounts
+ * them on D811's signed router (mail_link_testing_d812.test.ts signs real requests).
  *
  * The email rule, one case each: a picked tester who consented is the only
  * applicant with an address. Picked without consent, applied, declined, an
@@ -63,8 +63,13 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
 
 function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'super_admins', 'partners', 'notifications_inbox']) db.exec(ddl(t));
+  for (const t of ['users', 'super_admins', 'partners', 'notifications_inbox', 'insight_subscriptions']) db.exec(ddl(t));
+  // APPLIED, NOT MIRRORED: 515 and 517 are the tables D811's tester rule reads
+  // (suppressions, unsubscribes, `mail_enabled`), so the email rule is tested
+  // against the schema as it ships.
+  db.exec(readFileSync(`${SQL}/migrations/515_newsletter_lists.sql`, 'utf8'));
   db.exec(readFileSync(`${SQL}/migrations/516_product_testing.sql`, 'utf8'));
+  db.exec(readFileSync(`${SQL}/migrations/517_mail_link.sql`, 'utf8'));
   const u = db.prepare('INSERT INTO users (id, email, name, role, partner_id) VALUES (?, ?, ?, ?, ?)');
   for (const [id, role, name, firm] of [
     [HQ, 'admin', 'Hana Q', null], [ADMIN, 'admin', 'Plain Admin', null],
@@ -214,10 +219,15 @@ test('every programme, with its owner, status, places, applicants and dates', as
   assert.ok(!JSON.stringify(await mailProgrammes(w.env)).includes('@'), 'no address in the programme list');
 });
 
-test('nothing in the Worker mounts the two reads yet', () => {
+test('the two reads are mounted only on D811\'s signed router, after its signature check (part 2b)', () => {
   const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
   for (const f of ['cloudflare-worker/src/index.ts', 'cloudflare-worker/src/routes/testing.ts']) {
     const src = read(f);
-    assert.ok(!src.includes('mailApplicants') && !src.includes('mailProgrammes'), `${f} mounts a Mail read before D811's signature check`);
+    assert.ok(!src.includes('mailApplicants') && !src.includes('mailProgrammes'), `${f} mounts a Mail read outside D811's signed router`);
   }
+  // The signed requests themselves are mail_link_testing_d812.test.ts's; this pins the order.
+  const link = read('cloudflare-worker/src/routes/mail_link.ts');
+  const auth = link.indexOf("app.use('*', mailLinkAuth());");
+  assert.ok(auth > 0 && link.indexOf("app.get('/testing/programmes'") > auth && link.indexOf("app.get('/testing/programmes/:uid/applicants'") > auth,
+    'a Mail read is mounted before mailLinkAuth');
 });
