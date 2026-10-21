@@ -24,11 +24,14 @@
  * they were `requireAdmin`, so every admin, a branch's included, could
  * overwrite a provider's OAuth pair.
  *
- * THE READS STAY `requireAdmin`, deliberately. `GET /` returns where each key
- * lives, the client-id preview (the public half of the pair) and a count of
- * connected users; `POST /:provider/test` exercises the configured pair
- * against the provider and changes nothing. Neither returns a secret or moves
- * one, and an admin triaging "Slack won't connect" needs both.
+ * THE READS ARE SUPER ADMIN TOO (the owner's ruling, 2026-10-20). D223 left
+ * `GET /` and `POST /:provider/test` on `requireAdmin`, because neither
+ * returns a secret or moves one and an admin triaging "Slack won't connect"
+ * used both. The owner ruled that this console is the Super Admin's alone:
+ * the page moved out of the Admin Console to HQ's own row
+ * (`/admin/integration-keys`, `hqOnly`), and both reads take
+ * `requireSuperAdmin`, so a plain admin, or any admin on a branch, is refused
+ * here as well as in the shell. The writes keep D223's bar.
  *
  * Every write is audited ONCE through `logAdminAction` (D159's single
  * definition): one `activity_logs` row and one `admin_audit_log` row per
@@ -37,7 +40,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireSuperAdminWriteBar } from '../auth';
+import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import {
   MANAGED_PROVIDERS,
@@ -213,7 +216,7 @@ function cfErrorJson(c: any, res: CfSecretResult, fallback = 'cf_api_failed') {
 // env-only clients, here and not in `listProviderKeyStatus`, so HQ's Platform
 // summary (D213) reads what it always did.
 r.get('/', async (c) => {
-  await requireAdmin(c);
+  await requireSuperAdmin(c);
   const status = await listProviderKeyStatus(c.env);
   return c.json({
     providers: status.items.map((item) => ({ ...item, ...setupFields(c.env, item.provider_key as ManagedProviderKey) })),
@@ -355,7 +358,7 @@ r.post('/:provider/rotate', async (c) => {
 
 // Dry-run a provider auth call to verify the configured credentials.
 r.post('/:provider/test', async (c) => {
-  const admin = await requireAdmin(c);
+  const admin = await requireSuperAdmin(c);
   const provider = c.req.param('provider');
   if (!isManaged(provider)) {
     return c.json({ error: 'unknown_provider', allowed: MANAGED_PROVIDERS }, 400);

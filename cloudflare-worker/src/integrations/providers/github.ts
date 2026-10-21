@@ -65,7 +65,7 @@ export interface GithubRepository { full_name: string; private: boolean; updated
 export interface SyncProgress { state: 'running' | 'done' | 'failed'; pct: number; reading: string; updated_at: string }
 
 
-/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+/** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, PROVIDER_KEY);
 }
@@ -73,7 +73,7 @@ export function redirectUri(env: Env): string {
 async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
   const { loadOauthCreds } = await import('../../services/providerOauthKeys');
   const c = await loadOauthCreds(env, 'github');
-  if (!c) throw new Error('github_oauth_unconfigured: set GITHUB_APP_CLIENT_ID/GITHUB_APP_CLIENT_SECRET, or configure them in Admin → Integration Keys.');
+  if (!c) throw new Error('github_oauth_unconfigured: set GITHUB_APP_CLIENT_ID/GITHUB_APP_CLIENT_SECRET, or configure them in HQ → Integration keys.');
   return c;
 }
 

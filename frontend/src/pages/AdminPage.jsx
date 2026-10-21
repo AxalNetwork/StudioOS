@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Shield, Users, ChevronDown, Briefcase, Check, ShieldCheck, FileText, Sparkles, KeyRound, Heart, Ticket, CreditCard, Package, FlaskConical, Landmark, TestTubeDiagonal } from 'lucide-react';
-import BrandIcon from '../ui/BrandIcon';
+import { Shield, Users, ChevronDown, Briefcase, Check, ShieldCheck, FileText, Sparkles, Heart, Ticket, CreditCard, Package, FlaskConical, Landmark, TestTubeDiagonal } from 'lucide-react';
 import { useAuth } from '../hooks/useAuthSync';
 import { isSuperAdminUser } from '../lib/shellRole';
 import { crumbsOfKey, pageFor } from '../lib/railPages';
@@ -15,8 +14,6 @@ import KycConsole from './admin/consoles/KycConsole';
 import { LegalPanel } from './admin/consoles/LegalConsole';
 import { PersonasPanel } from './admin/consoles/PersonasConsole';
 import { DirectoryPanel } from './admin/consoles/DirectoryConsole';
-import { IntegrationKeysPanel } from './admin/consoles/IntegrationKeysConsole';
-import { GithubSyncPanel } from './admin/consoles/GithubSyncConsole';
 import { PromoCodesPanel } from './admin/consoles/PromoCodesConsole';
 import { PaymentsPanel } from './admin/consoles/PaymentsConsole';
 import { BankAccountsPanel } from './admin/consoles/BankAccountsConsole';
@@ -35,20 +32,13 @@ import AdminSpinoutLab from './admin/AdminSpinoutLab';
 // (`LegacyContractsRedirect`).
 export { LegalPanel };
 
-/**
- * GitHub Sync's entry draws GitHub's own mark from `ui/BrandIcon.jsx` (D687,
- * #1742), not lucide's branch glyph. It takes the `size` and `className` the
- * other entries' icons take, so the menu tints it like them.
- */
-function GithubMark({ size = 16, className = '' }) {
-  return <BrandIcon provider="github" size={size} variant="bare" tone="current" className={className} />;
-}
-
 // Task #15 — single ordered source for the Admin Console section nav. The
 // dropdown trigger and menu both render from this list instead of a hardcoded
-// row of tab buttons — sixteen sections today, one per entry below (the
+// row of tab buttons — fourteen sections today, one per entry below (the
 // comment said twelve until D285; the list had grown twice; D708 added Bank
-// accounts). Pending counts
+// accounts, D815 added Product testing; Integration Keys and GitHub Sync left
+// for HQ's own Super Admin page, /admin/integration-keys, on the owner's ruling
+// of 2026-10-20). Pending counts
 // are computed per-render in the page and passed in via `badges` keyed by
 // section value.
 const ADMIN_SECTIONS = [
@@ -59,8 +49,6 @@ const ADMIN_SECTIONS = [
   { value: 'legal', label: 'Legal', Icon: FileText },
   { value: 'personas', label: 'Personas', Icon: Sparkles },
   { value: 'directory', label: 'Directory', Icon: Sparkles },
-  { value: 'integration-keys', label: 'Integration Keys', Icon: KeyRound },
-  { value: 'github', label: 'GitHub Sync', Icon: GithubMark },
   { value: 'promos', label: 'Promo Codes', Icon: Ticket },
   { value: 'payments', label: 'Payments', Icon: Package },
   // D708 (#1773) — the Super Admin's registry of each entity's bank accounts.
@@ -251,8 +239,6 @@ export default function AdminPage({ onImpersonate, section = null }) {
       {tab === 'legal' && <div data-testid="admin-legal-panel"><LegalPanel /></div>}
       {tab === 'personas' && <PersonasPanel />}
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}
-      {tab === 'integration-keys' && <div data-testid="admin-integration-keys-panel"><IntegrationKeysPanel /></div>}
-      {tab === 'github' && <div data-testid="admin-github-panel"><GithubSyncPanel /></div>}
       {tab === 'promos' && <div data-testid="admin-promos-panel"><PromoCodesPanel /></div>}
       {tab === 'payments' && <div data-testid="admin-payments-panel"><PaymentsPanel /></div>}
       {tab === 'bank-accounts' && <div data-testid="admin-bank-accounts-panel"><BankAccountsPanel /></div>}

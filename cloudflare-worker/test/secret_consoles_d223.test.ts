@@ -268,24 +268,28 @@ test('the integration-keys save still dates the key: D213 reads the row it write
   assert.ok(!('user_id' in details), 'D159: a `user_id` key would name a target');
 });
 
-/* ── the reads stay open, and say nothing of the token ─────────────────── */
+/* ── the reads are the Super Admin's, and say nothing of the token ─────── */
 
-test('the reads stay requireAdmin: a plain admin reads the integration-keys and GitHub consoles', async () => {
+test('the reads are the Super Admin\'s: the holder reads both consoles, a plain admin is refused', async () => {
+  // D223 kept the reads on requireAdmin. The owner's ruling (2026-10-20) made
+  // both consoles Super Admin only, reads included.
   const db = freshDb();
   const env = envFor(db);
   for (const c of [
     { app: 'integrationKeys', method: 'GET', path: '/' },
     { app: 'github', method: 'GET', path: '/' },
   ] as Call[]) {
-    const r = await call(env, c, PLAIN_ADMIN, 'totp-plain');
+    const r = await call(env, c, HOLDER, 'totp-holder');
     assert.equal(r.status, 200, `${c.app} ${c.path}: ${r.text}`);
+    const plain = await call(env, c, PLAIN_ADMIN, 'totp-plain');
+    assert.equal(plain.status, 403, `${c.app} ${c.path} answered a plain admin: ${plain.text}`);
   }
   assert.equal(auditRows(db).length, 0, 'a read wrote an audit row');
 });
 
 test('GET /api/admin/github carries has_token and no preview of the token', async () => {
   const db = freshDb();
-  const r = await call(envFor(db), { app: 'github', method: 'GET', path: '/' }, PLAIN_ADMIN, 'totp-plain');
+  const r = await call(envFor(db), { app: 'github', method: 'GET', path: '/' }, HOLDER, 'totp-holder');
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.has_token, true);
   assert.ok(!('token_preview' in r.body), 'token_preview is back on the payload');

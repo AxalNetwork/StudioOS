@@ -72,7 +72,7 @@ const DEMO_AUTH_HOST = 'https://account-d.docusign.com';
 
 function authHost(isDemo: boolean): string { return isDemo ? DEMO_AUTH_HOST : PROD_AUTH_HOST; }
 
-/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+/** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, PROVIDER_KEY);
 }
@@ -85,7 +85,7 @@ async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
   const id = (env as unknown as Record<string, string | undefined>).DOCUSIGN_CLIENT_ID;
   const secret = (env as unknown as Record<string, string | undefined>).DOCUSIGN_CLIENT_SECRET;
   if (!id || !secret) {
-    throw new Error('docusign_oauth_unconfigured: DOCUSIGN_CLIENT_ID/DOCUSIGN_CLIENT_SECRET secrets must be set on the worker (or configured via Admin → Integration Keys).');
+    throw new Error('docusign_oauth_unconfigured: DOCUSIGN_CLIENT_ID/DOCUSIGN_CLIENT_SECRET secrets must be set on the worker (or configured via HQ → Integration keys).');
   }
   return { id, secret };
 }

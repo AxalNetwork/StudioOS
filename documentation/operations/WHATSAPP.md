@@ -85,7 +85,7 @@ every step here is done from the owner's machine.
    - `WHATSAPP_VERIFY_TOKEN` (a long random string you make up);
    - `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` (step 4).
 
-   They are not in Admin → Integration Keys. A secret needs no deploy.
+   They are not in HQ → Integration keys. A secret needs no deploy.
 6. **The webhook.** App Dashboard → WhatsApp → Configuration.
    - Callback URL: `https://axal.vc/api/channels/whatsapp/webhook`.
    - Verify token: the same string as `WHATSAPP_VERIFY_TOKEN`.

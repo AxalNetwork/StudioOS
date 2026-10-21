@@ -60,7 +60,7 @@ adminSlack.post('/test/:channel', async (c) => {
       { label: 'Channel key', value: key },
       { label: 'Posted by', value: user.email || `user ${user.id}` },
     ],
-    cta: { label: 'Open Admin', path: '/admin?tab=integration-keys' },
+    cta: { label: 'Open Integration keys', path: '/admin/integration-keys' },
   });
 
   const result = await postToChannel(c.env, {
