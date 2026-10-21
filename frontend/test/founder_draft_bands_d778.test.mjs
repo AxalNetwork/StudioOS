@@ -291,3 +291,22 @@ test('D778 part 10: leaving the page ends pending acceptance callbacks', async (
   await act(async () => decision.ok(proposal('closed')));
   assert.deepEqual(accepted, []);
 });
+
+test('D778 part 10: mounting a rail during a paid run does not retire that view or lose its result', async () => {
+  const reads = [];
+  const m = await mount({ surface: 'research/ask', scopeKey: 'session-a', scoped: true }, {
+    zoneDrafts: async (...args) => { reads.push(args); return { items: [] }; },
+  });
+  try {
+    await m.press('Draft it');
+    await m.render({ surface: 'research/ask', scopeKey: 'session-a', scoped: true, railOption: 'draft:brief' });
+    await m.settle();
+    assert.ok(m.button('Drafting…'), 'the running press keeps busy despite an option-label change');
+    assert.equal(reads.length, 1, 'no premature reload before the pending draft exists');
+    await act(async () => m.pending[0].ok(proposal('paid-run')));
+    await m.settle();
+    assert.ok(m.text().includes('Draft paid-run'));
+    assert.equal(m.calls.length, 1, 'no second paid run');
+    assert.equal(m.calls[0][4]['X-Rail-Option'], encodeURIComponent('draft:research/ask'), 'the run retains its press-time option');
+  } finally { await m.unmount(); }
+});

@@ -195,7 +195,7 @@ export default function ZoneDraft({
     actionFor.current += 1;
     setItem(null); setEditing(null); setBusy(''); setNote(''); setGuardLink(null);
     return () => { runFor.current += 1; };
-  }, [surface, scopeKey, scoped, option]);
+  }, [surface, scopeKey, scoped]);
 
   const load = useCallback(async () => {
     const mine = runFor.current;
@@ -214,7 +214,7 @@ export default function ZoneDraft({
       // reporting an error over a page that is otherwise fine.
       setItem(null);
     }
-  }, [surface, scoped, scopeKey, option]);
+  }, [surface, scoped, scopeKey]);
   useEffect(() => { load(); }, [load]);
 
   const doRun = async () => {
