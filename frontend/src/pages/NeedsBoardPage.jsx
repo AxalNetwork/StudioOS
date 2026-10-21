@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import {
   Plus, Send, Check, X, AlertCircle, Search, Filter, Briefcase, Clock, DollarSign,
-  ShieldCheck, FileText, Trash2, Edit3, ChevronRight, Inbox, Handshake,
+  ShieldCheck, FileText, Trash2, Edit3, ChevronRight, Handshake,
   Play, Package, Star, Receipt, XCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -30,11 +29,6 @@ const QUOTE_TONE = {
   withdrawn: 'bg-gray-100 text-gray-600 border-gray-200',
 };
 
-// `embedded`: `workspaces/partner/PartnerBucketRoutes` mounts this page on
-// /pipeline/leads, inside a WorkspaceShell that has already drawn the crumb,
-// the heading and the zone pills. Only the heading block is suppressed — the
-// tab row below it is a different axis (Browse / My needs / My quotes /
-// Engagements are views of this board, not sibling zones), so it stays.
 /**
  * EVERY LIST ON THIS PAGE READ THE WRONG ENVELOPE KEY, and so every one of them
  * was permanently empty — on `/needs`, `/partner/needs`, `/founder/post-need`
@@ -57,49 +51,13 @@ const QUOTE_TONE = {
  * caught by a `||` default that turns the absence into a confident answer.
  * `frontend/test/needs_envelope.test.mjs` now pins all four.
  */
-export default function NeedsBoardPage({ user, embedded = false, zoneActions }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const isFounder = user?.role === 'founder';
-  const isPartner = user?.role === 'partner';
-  const defaultTab = isFounder ? 'mine' : 'browse';
-  const [tab, setTab] = useState(searchParams.get('tab') || defaultTab);
-  useEffect(() => { setSearchParams({ tab }, { replace: true }); }, [tab]);
-
-  const tabs = [
-    { key: 'browse', label: 'Browse open needs', icon: Search },
-    ...(isFounder ? [{ key: 'mine', label: 'My needs', icon: Inbox }] : []),
-    ...(isPartner ? [{ key: 'quotes', label: 'My quotes', icon: FileText }] : []),
-    { key: 'engagements', label: 'Engagements', icon: Handshake },
-  ];
-
-  return (
-    <div className="space-y-6">
-      {!embedded && (
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Needs Board</h1>
-          <p className="text-sm text-gray-500 mt-1">Founders post needs and RFPs. Partners submit quotes. Accepted quotes become engagements.</p>
-        </div>
-      )}
-
-      <div className="border-b border-gray-200 flex gap-6 overflow-x-auto dark:border-gray-800">
-        {tabs.map((t) => {
-          const Icon = t.icon;
-          return (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex items-center gap-2 px-1 py-3 text-sm border-b-2 -mb-px whitespace-nowrap ${tab === t.key ? 'border-violet-600 text-violet-700 font-semibold' : 'border-transparent text-gray-500 hover:text-gray-900'}`}>
-              <Icon size={14} /> {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === 'browse' && <BrowseTab user={user} zoneActions={zoneActions} />}
-      {tab === 'mine' && isFounder && <MyNeedsTab user={user} />}
-      {tab === 'quotes' && isPartner && <MyQuotesTab />}
-      {tab === 'engagements' && <EngagementsTab user={user} />}
-    </div>
-  );
-}
+/**
+ * #2338 — THE PAGE IS GONE; ITS TABS STAY. `/needs`, `/partner/needs` and
+ * `/founder/post-need` rendered this file's default export, the standalone
+ * Needs Board. The owner removed those addresses (#2297 §7), and they only
+ * forward now. The founder marketplace (`FounderMarketplacePage.jsx`, on
+ * `/build/marketplace`) imports the tabs below, so the file keeps them.
+ */
 
 // ---------------------------------------------------------------------------
 // Browse — public open needs (partners + investors + admins)
