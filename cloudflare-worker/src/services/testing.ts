@@ -16,8 +16,12 @@
  * PLACES ARE HELD IN SQL. A pick is `UPDATE … WHERE (picked count) < places`,
  * one statement, so two owners picking at once cannot pass the limit.
  *
- * MAIL'S TESTERS ARE `testersAudience`: picked applications whose member agreed
- * to be emailed about this programme. Nothing here emails anyone.
+ * MAIL'S TESTERS ARE D811'S `testerRecipients` (`services/mailLinkTesters.ts`):
+ * picked, consenting testers who have not turned programme emails off, on a
+ * programme that has opened, at an address neither suppressed nor
+ * unsubscribed. `testersAudience` and `mailApplicants` here read that same
+ * rule, and `mail_link_testing_d812.test.ts` holds the three to the same
+ * people. Nothing here emails anyone.
  */
 import type { Env } from '../types';
 import { notify } from './notify';
@@ -290,17 +294,22 @@ export async function summary(env: Env, user: { id: number; role: string }) {
 }
 
 /**
- * Mail's `testers:<uid>` list (D811 mounts it): the picked applicants who
- * agreed to be emailed about this programme, active accounts only.
+ * The testers Mail may write to, without paging: D811's `testerRecipients`
+ * rule (#2296), which is what `testers:<uid>` sends to. Picked, consented,
+ * `mail_enabled`, an active account with an address, a programme that has
+ * opened, and an address neither suppressed nor unsubscribed.
  */
 export async function testersAudience(env: Env, programmeUid: string) {
   const { results } = await env.DB.prepare(
-    `SELECT u.id AS user_id, u.email, COALESCE(u.display_name, u.name) AS name, a.consent_version
+    `SELECT u.id AS user_id, lower(trim(u.email)) AS email, COALESCE(u.display_name, u.name) AS name, a.consent_version
        FROM testing_applications a
        JOIN testing_programmes p ON p.id = a.programme_id
        JOIN users u ON u.id = a.user_id
-      WHERE p.uid = ? AND a.status = 'picked' AND a.consent_email_at IS NOT NULL
-        AND u.is_active = 1 AND u.email IS NOT NULL
+      WHERE p.uid = ? AND p.status IN ('open', 'testing', 'closed')
+        AND a.status = 'picked' AND a.consent_email_at IS NOT NULL AND a.mail_enabled = 1 AND u.is_active = 1
+        AND u.email IS NOT NULL AND trim(u.email) <> ''
+        AND NOT EXISTS (SELECT 1 FROM email_suppressions z WHERE z.email = lower(trim(u.email)))
+        AND NOT EXISTS (SELECT 1 FROM newsletter_subscribers s WHERE s.email = lower(trim(u.email)) AND s.status = 'unsubscribed')
       ORDER BY a.id`,
   ).bind(programmeUid).all();
   return (results || []).map((r: any) => ({
@@ -313,10 +322,9 @@ export async function testersAudience(env: Env, programmeUid: string) {
 // ---------------------------------------------------------------------------
 // Mail's Product testing page (D812 part 2a, #2258)
 //
-// Two reads for AxalNetwork/mail, through D811's signed link (#2257) and nothing
-// else: nothing in this Worker mounts them yet, so neither is reachable until
-// part 2b puts them behind that signature check. `testersAudience` above stays
-// the only list Mail sends to.
+// Two reads for AxalNetwork/mail, mounted only on D811's signed router
+// (`routes/mail_link.ts`, part 2b), behind its signature check and rate limit.
+// `testers:<uid>` stays the only list Mail sends to.
 // ---------------------------------------------------------------------------
 
 /** The first line of the first answer, at most 140 characters: what Mail's list shows. */
@@ -342,10 +350,13 @@ export async function mailProgrammes(env: Env) {
  * answers, when they applied, and their status. A withdrawn application is
  * left out, as the owner's list leaves it out.
  *
- * THE EMAIL IS IN THE SELECT ONLY FOR A PICKED TESTER WHO CONSENTED, on an
- * active account: the rule `testersAudience` reads, written in the query so no
- * other address leaves the database. Everyone else's `email` is null. An
- * unknown uid is null, never another programme's list.
+ * THE EMAIL IS IN THE SELECT ONLY FOR SOMEONE `testers:<uid>` WOULD SEND TO:
+ * D811's `testerRecipients` rule, written in the query's CASE so no other
+ * address leaves the database. That is a picked tester who consented and has
+ * not turned programme emails off (`mail_enabled`), on an active account, on a
+ * programme that has opened, at an address neither suppressed nor
+ * unsubscribed. Everyone else's `email` is null. An unknown uid is null, never
+ * another programme's list.
  */
 export async function mailApplicants(env: Env, programmeUid: string) {
   const p = await env.DB.prepare(
@@ -358,9 +369,14 @@ export async function mailApplicants(env: Env, programmeUid: string) {
   const { results } = await env.DB.prepare(
     `SELECT a.uid, a.answers, a.status, a.created_at, a.consent_email_at,
             COALESCE(u.display_name, u.name) AS name, u.role,
-            CASE WHEN a.status = 'picked' AND a.consent_email_at IS NOT NULL AND u.is_active = 1
-                 THEN u.email ELSE NULL END AS email
+            CASE WHEN p.status IN ('open', 'testing', 'closed')
+                  AND a.status = 'picked' AND a.consent_email_at IS NOT NULL AND a.mail_enabled = 1 AND u.is_active = 1
+                  AND u.email IS NOT NULL AND trim(u.email) <> ''
+                  AND NOT EXISTS (SELECT 1 FROM email_suppressions z WHERE z.email = lower(trim(u.email)))
+                  AND NOT EXISTS (SELECT 1 FROM newsletter_subscribers s WHERE s.email = lower(trim(u.email)) AND s.status = 'unsubscribed')
+                 THEN lower(trim(u.email)) ELSE NULL END AS email
        FROM testing_applications a JOIN users u ON u.id = a.user_id
+       JOIN testing_programmes p ON p.id = a.programme_id
       WHERE a.programme_id = ? AND a.status <> 'withdrawn'
       ORDER BY a.id`,
   ).bind(p.id).all();

@@ -32,7 +32,7 @@ function setMeta(selector, attr, value) {
   return { el, prev, created };
 }
 
-function fireAnalytics(path) {
+export function fireAnalytics(path) {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return;
   try {
     const body = JSON.stringify({

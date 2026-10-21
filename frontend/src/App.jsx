@@ -34,6 +34,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import learningRoutes from './routes/learning';
 import BranchDigestRedirect from './pages/branch/BranchDigestRedirect';
 import HqCreditsRedirect from './pages/hq/HqCreditsRedirect';
+import { useRedirectBeacon } from './lib/redirectBeacon';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -340,6 +341,11 @@ const AdministratorsPage = lazy(() => import('./pages/site/AdministratorsPage'))
 const MethodologyPage = lazy(() => import('./pages/site/MethodologyPage'));
 const IntelligencePage = lazy(() => import('./pages/site/IntelligencePage'));
 const ResourcesPage = lazy(() => import('./pages/site/ResourcesPage'));
+// D813 (#2259) — the newsletter's public pages: signup, confirm, and the
+// preferences a link in every email opens (no sign-in).
+const NewsletterPage = lazy(() => import('./pages/site/NewsletterPage'));
+const NewsletterConfirmPage = lazy(() => import('./pages/site/NewsletterConfirmPage'));
+const NewsletterPreferencesPage = lazy(() => import('./pages/site/NewsletterPreferencesPage'));
 const DemoPage = lazy(() => import('./pages/DemoPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
@@ -1875,6 +1881,8 @@ function AppInner() {
   // D575 — on a phone a zone pill opens its lens in place: the routes below
   // render the lens's location while the URL and history stay put.
   const lensLocation = useLensLocation();
+  // #2301 — count each opening of an old redirect address before it is retired.
+  useRedirectBeacon(location.pathname);
 
   // `opts.hq` is only meaningful for mode 'admin': true is the HQ shell
   // ("Super Admin" in the list), false the plain shell ("Admin"). Other modes
@@ -3587,6 +3595,9 @@ function AppInner() {
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
+      <Route path="/newsletter" element={<NewsletterPage />} />
+      <Route path="/newsletter/confirm" element={<NewsletterConfirmPage />} />
+      <Route path="/newsletter/preferences" element={<NewsletterPreferencesPage />} />
       {/* D677 — /about is the Firm page; the team page moved to /team. */}
       <Route path="/about" element={<FirmPage />} />
       <Route path="/team" element={<TeamPage />} />
