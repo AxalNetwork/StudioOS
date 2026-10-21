@@ -10,7 +10,7 @@ export const PERSONAS = [
     label: 'LP — Individual',
     short_description: 'Individual limited partner committing personal capital to the main fund.',
     role_alignment: 'partner',
-    nav_extras: [{ to: '/capital', label: 'Capital & Investment' }],
+    nav_extras: [],
     follow_up_questions: [
       { key: 'check_size_usd', prompt: 'Typical check size you write per fund (USD)?', type: 'number' },
       { key: 'accreditation', prompt: 'Are you a US-accredited investor? (yes / no / non-US)', type: 'choice', choices: ['yes', 'no', 'non-US'] },
@@ -23,7 +23,7 @@ export const PERSONAS = [
     label: 'LP — Institutional',
     short_description: 'Institutional LP (endowment, foundation, pension, fund-of-funds).',
     role_alignment: 'partner',
-    nav_extras: [{ to: '/capital', label: 'Capital & Investment' }, { to: '/funds', label: 'Funds' }],
+    nav_extras: [{ to: '/funds', label: 'Funds' }],
     follow_up_questions: [
       { key: 'institution_name', prompt: 'Institution name?', type: 'text' },
       { key: 'aum_usd', prompt: 'Approximate AUM (USD)?', type: 'number' },
@@ -75,7 +75,7 @@ export const PERSONAS = [
     label: 'Sovereign / Family Office',
     short_description: 'Sovereign wealth, family office, or multi-family office investor.',
     role_alignment: 'partner',
-    nav_extras: [{ to: '/capital', label: 'Capital & Investment' }, { to: '/liquidity', label: 'Liquidity & Exits' }],
+    nav_extras: [],
     follow_up_questions: [
       { key: 'office_name', prompt: 'Office name?', type: 'text' },
       { key: 'aum_usd', prompt: 'Approximate AUM (USD)?', type: 'number' },

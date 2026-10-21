@@ -113,7 +113,7 @@ function FundDetail({ fund }) {
 
         <section className="i6-card i6-accounting" id="accounting">
           <header><div><h2>Fund accounting</h2><span>Contracted terms and capital accounts</span></div><Link to="/funds/ledger" data-testid="link-fund-ledger"><ArrowUpRight size={15} /></Link></header>
-          <div className="i6-manual"><span>Ledger basis</span><p>Capital accounts and contracted terms are recorded here. Period close, reconciliation and journal export live in the Fund Ops accounting workspace.</p><Link to="/funds/accounting" data-testid="link-open-fundops-accounting">Open Fund Ops accounting</Link></div>
+          <div className="i6-manual"><span>Ledger basis</span><p>Capital accounts and contracted terms are recorded here. Axal offers no period close, reconciliation or journal export.</p></div>
           <dl className="i6-ledger">
             <div><dt>Commitments</dt><dd>{fmtCents(fund.committed_cents)}</dd></div><div><dt>Contributed</dt><dd>{fmtCents(fund.called_cents)}</dd></div><div><dt>Unfunded</dt><dd>{fmtCents(unfunded)}</dd></div><div><dt>Distributed</dt><dd>{fmtCents(fund.distributed_cents)}</dd></div><div><dt>Management fee</dt><dd>{fmtRate(fund.management_fee) || <Unrecorded />}</dd></div><div><dt>Accrued expenses</dt><dd><Unrecorded>Unavailable</Unrecorded></dd></div>
           </dl>
@@ -121,7 +121,7 @@ function FundDetail({ fund }) {
 
         <section className="i6-card i6-reporting" id="reporting">
           <header><div><h2>LP reporting</h2><span>{detail.periods === null ? 'Checking issued periods' : unread(detail.periods) ? 'Issued periods unavailable' : `${detail.periods.length} period${detail.periods.length === 1 ? '' : 's'} on record`}</span></div><Link to="/funds/reporting" data-testid="link-fund-reporting"><ArrowUpRight size={15} /></Link></header>
-          <div className="i6-manual"><span>Report control</span><p>LP pack authoring and publishing live in the reporting workspace. This landing page never represents a draft as delivered.</p><Link to="/lp-reports" data-testid="link-open-lp-reporting">Open LP reporting</Link></div>
+          <div className="i6-manual"><span>Report control</span><p>This landing page never represents a draft as delivered.</p></div>
           {unread(detail.periods) && <Unreadable what="The reporting archive" />}
           {Array.isArray(detail.periods) && detail.periods.length > 0 && <ul className="i6-periods">{detail.periods.slice(0, 3).map((period) => <li key={period.id || period.period}><FileText size={13} />{period.period || period.label || `Period ${period.id}`}<span>{period.issued_at ? `Issued ${date(period.issued_at)}` : 'Draft'}</span></li>)}</ul>}
         </section>

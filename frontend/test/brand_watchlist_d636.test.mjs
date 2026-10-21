@@ -10,9 +10,10 @@
  *   - saved templates: "[n] of 50 · across all your projects", each from its
  *     project or stated as not recorded, and the 51st refused with the
  *     Worker's own sentence;
- *   - the watchlist item's fields with Not recorded and how it ended, and a
- *     journal entry with its outcome and the "Edited after the outcome" mark;
  *   - every screen's loading, empty and Unreadable-with-Try-again states;
+ *
+ * The watchlist screen (M6, `/watchlist/:uid`) was removed with the Watchlist
+ * page on the owner's instruction (2026-10-20); its assertions left with it.
  *   - where each one is wired.
  *
  * Run:
@@ -32,8 +33,6 @@ import {
 } from '../src/lib/brandAddress.js';
 import { SiteAddressCard, PageAddressRow } from '../src/components/brand/BrandAddressPanel.jsx';
 import { LIMIT_LINE, SaveTemplateForm, TemplatesList } from '../src/components/brand/SavedTemplatesPanel.jsx';
-import { endedLine, expectedLine, itemRows, timelineOf } from '../src/lib/watchlistItem.js';
-import { ItemFields, JournalEntryCard, WatchlistItemView } from '../src/pages/WatchlistItemPage.jsx';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (p) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -150,78 +149,15 @@ test('the templates list draws loading, empty and Unreadable with Try again', ()
 });
 
 // ---------------------------------------------------------------------------
-// M6 — the watchlist item and its journal entries
-// ---------------------------------------------------------------------------
-
-const ITEM = {
-  uid: 'w-1', external_name: 'Northwind', sector: 'Fintech', stage: 'Seed', created_at: '2026-08-01T00:00:00Z',
-  thesis: 'Payments rails for SMEs', conviction: 'high', source: 'Intro from a founder', tags: ['b2b', 'payments'],
-  status: 'passed_on', passed_reason: 'Too early', passed_at: '2026-09-01T10:00:00Z', next_check_at: null,
-};
-
-test('the item shows its fields in order, Not recorded where absent, and how it ended', () => {
-  assert.deepEqual(itemRows(ITEM).map((r) => r.k), ['Thesis', 'Conviction', 'Source', 'Tags', 'Status', 'Next check', 'Ended']);
-  const out = text(html(h(ItemFields, { item: ITEM })));
-  assert.match(out, /Conviction High/);
-  assert.match(out, /Tags b2b · payments/);
-  assert.match(out, /Next check Not recorded \. Next check: no date set\./);
-  assert.match(out, /Ended Passed · Too early · 1 Sept 2026|Ended Passed · Too early · 1 Sep 2026/);
-  assert.equal(endedLine({ status: 'passed_on', passed_reason: null }), 'Passed · no reason recorded');
-  assert.match(endedLine({ status: 'converted', converted_deal_id: 7, converted_at: '2026-09-02T00:00:00Z' }), /^Converted to a deal · 2 Sept? 2026$/);
-  assert.equal(endedLine({ status: 'converted', converted_deal_id: null }), 'Converted to a deal · the deal is not recorded');
-  assert.equal(endedLine({ status: 'watching' }), null);
-  assert.doesNotMatch(text(html(h(ItemFields, { item: { ...ITEM, status: 'watching' } }))), /Ended/);
-});
-
-const ENTRY = {
-  uid: 'j-1', decision: 'defer', conviction: 3, thesis: 'The round is led by a fund we know.', key_risks: 'Regulation',
-  expected_outcome: 'Series A', expected_multiple: 3, expected_timeline_months: 60,
-  outcome_status: 'partial', outcome_notes: 'Raised, smaller', outcome_actual_multiple: 1.4, edited_after_outcome_at: '2026-09-20T00:00:00Z',
-};
-
-test('a journal entry shows the decision and what was expected, then the outcome, marked when edited after it', () => {
-  assert.equal(expectedLine(ENTRY), 'Series A · 3× · 5 years');
-  assert.equal(timelineOf(18), '18 months');
-  const markup = html(h(JournalEntryCard, { entry: ENTRY }));
-  const out = text(markup);
-  assert.match(out, /^Defer Conviction 3 \/ 5 Edited after the outcome Thesis The round is led by a fund we know\. Risks Regulation Expected Series A · 3× · 5 years Outcome Partial Actual 1\.4× Raised, smaller$/);
-  assert.match(markup, /data-testid="journal-edited-after-outcome"[^>]*>Edited after the outcome</);
-  // No mark without D618's record.
-  assert.doesNotMatch(html(h(JournalEntryCard, { entry: { ...ENTRY, edited_after_outcome_at: null } })), /Edited after the outcome/);
-  const pending = text(html(h(JournalEntryCard, { entry: { ...ENTRY, outcome_status: 'pending', edited_after_outcome_at: null, key_risks: null, expected_outcome: null, expected_multiple: null, expected_timeline_months: null }, onRecordOutcome: noop })));
-  assert.match(pending, /Risks Not recorded \. No risks were written\./);
-  assert.match(pending, /Outcome: not recorded yet\. Record outcome$/);
-});
-
-test('the item page draws loading, empty and Unreadable with Try again for each read, never an empty list on failure', () => {
-  const view = (item, entries) => html(h(WatchlistItemView, { item, entries, onRetryItem: noop, onRetryEntries: noop, onWrite: noop }));
-  const okItem = ready(ITEM);
-  const empty = text(view(okItem, ready([])));
-  assert.match(empty, /Northwind Fintech · Seed · on the watchlist since 1 Aug 2026/);
-  assert.match(empty, /No journal entry for this company yet\. Write an entry$/);
-  const badEntries = view(okItem, { status: 'unreadable' });
-  assert.match(badEntries, /data-testid="watchlist-journal-unreadable"/);
-  assert.match(text(badEntries), /Unreadable The journal entries for this company could not be read just now\. Try again/);
-  assert.doesNotMatch(badEntries, /No journal entry for this company yet/);
-  const badItem = view({ status: 'unreadable' }, ready([ENTRY]));
-  assert.match(text(badItem), /Unreadable This item could not be read just now\. Try again/);
-  assert.match(text(view({ status: 'loading' }, { status: 'loading' })), /Reading this item… Journal Reading the journal…/);
-  assert.match(text(view(okItem, ready([ENTRY]))), /Journal Write an entry Defer Conviction 3 \/ 5/);
-});
-
-// ---------------------------------------------------------------------------
 // Where they are wired
 // ---------------------------------------------------------------------------
 
 test('the screens are wired where the canvas places them', () => {
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/watchlist\/:uid" element=\{guard\(\['admin', 'partner', 'investor'\], <WatchlistItemPage \/>\)\} \/>/);
-  assert.match(read('frontend/src/pages/WatchlistJournalPage.jsx'), /<Link to=\{`\/watchlist\/\$\{encodeURIComponent\(it\.uid\)\}`\}/);
+  assert.doesNotMatch(app, /<Route path="\/watchlist/, 'the removed Watchlist pages are routed again');
   const brandPage = read('frontend/src/pages/SpinoutLabBrandPage.jsx');
   assert.match(brandPage, /<BrandAddressPanel projectId=\{projectId\} pages=\{pages\} onPagesChanged=\{refreshPages\} \/>/);
   assert.match(brandPage, /<SavedTemplatesPanel projectId=\{projectId\} pages=\{pages\} onPagesChanged=\{refreshPages\} \/>/);
   const api = read('frontend/src/lib/api.js');
   assert.match(api, /brandSetPageAddress: \(pageId, pageSlug\) => request\(`\/brand\/landing\/pages\/\$\{pageId\}\/address`/);
-  assert.match(api, /'project_uid', 'watchlist_uid', 'owner'/);
-  assert.match(read('documentation/architecture/ROUTE_MAP.md'), /^\| Deal Flow \|.*\*\*UPDATE \(D636, #1394, Ops canvas M6 `sp-watchlist`, lit under Deals\):\*\* `\/watchlist\/:uid` → `pages\/WatchlistItemPage\.jsx`/m);
 });

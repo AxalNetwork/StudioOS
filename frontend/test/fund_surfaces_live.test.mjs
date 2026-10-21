@@ -32,7 +32,9 @@ function scan(src) {
   return out;
 }
 
-const FUND_PAGES = ['frontend/src/pages/FundPerformancePage.jsx', 'frontend/src/pages/FundAccountingPage.jsx'];
+// FundAccountingPage.jsx stood here; the owner removed Fund Ops' Accounting
+// tab (/funds/accounting) on 2026-10-20.
+const FUND_PAGES = ['frontend/src/pages/FundPerformancePage.jsx'];
 // Portfolio Growth is guarded for the fixture rules but not the fund-metric
 // ones: it reports introductions, which have no multiples or ratios.
 const PORTFOLIO_PAGES = ['frontend/src/pages/PortfolioGrowthPage.jsx'];
@@ -110,11 +112,9 @@ test('every refusal carries the reason the server gave', () => {
   // "Not recorded" with no explanation sends the GP to support. The server
   // ships an `unavailable` map; the pages must actually thread it through.
   for (const p of FUND_PAGES) {
-    if (p.endsWith('FundAccountingPage.jsx')) {
-      assert.match(scan(read(p)), /<FundLedgerPanel/, 'accounting must reach the live ledger');
-      assert.match(scan(read('frontend/src/pages/investor/FundLedgerPanel.jsx')), /<EmptyState>\{fund\.reason\}/, 'ledger must render the server reason');
-    } else assert.match(scan(read(p)), /reason=\{unavailable(?:\.|\[)/, `${p} must pass the server's reason`);
+    assert.match(scan(read(p)), /reason=\{unavailable(?:\.|\[)/, `${p} must pass the server's reason`);
   }
+  assert.match(scan(read('frontend/src/pages/investor/FundLedgerPanel.jsx')), /<EmptyState>\{fund\.reason\}/, 'ledger must render the server reason');
 });
 
 // --- money ---------------------------------------------------------------
@@ -130,13 +130,13 @@ test('fund money crosses the wire as integer cents', () => {
 
 // --- the pages stay reachable -------------------------------------------
 
-test('both pages are still mounted as FundOpsWorkspace tabs', () => {
+test('Performance is still a FundOpsWorkspace tab; Accounting and LP Reporting are gone (owner, 2026-10-20)', () => {
   const ws = scan(read('frontend/src/pages/FundOpsWorkspace.jsx'));
   assert.match(ws, /<FundPerformancePage embedded/);
-  assert.match(ws, /<FundAccountingPage embedded/);
+  assert.doesNotMatch(ws, /FundAccountingPage|LPReportingPage/);
   const app = scan(read('frontend/src/App.jsx'));
   assert.match(app, /path="\/funds\/performance"/);
-  assert.match(app, /path="\/funds\/accounting"/);
+  assert.doesNotMatch(app, /path="\/funds\/accounting"|path="\/lp-reports"/);
   // Portfolio Growth stays a tab; withdrawing two sections is not withdrawing
   // the surface, and the nav must not point at a hole.
   const pw = scan(read('frontend/src/pages/PortfolioWorkspace.jsx'));

@@ -80,7 +80,7 @@ export default {
       howto: [
         'Publish a Beta Signup link from the startup page; share it with discovery contacts.',
         'Open Co-founder Match, set what you’re looking for (skills, time commitment, location), and review matches.',
-        'Open conversations with up to 3 candidates; capture notes on each in the Decision Journal.',
+        'Open conversations with up to 3 candidates; keep notes on each one.',
       ],
       tips: [
         'Don’t propose equity in the first conversation — focus on chemistry and complementary skills.',

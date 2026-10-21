@@ -90,19 +90,8 @@ import { makeZoneFilters } from './zoneFilterBuilder.js';
 // the point: a reason that survives its own fix is a reason that will be cited
 // again. This is the second one to go the same way (`NO_SESSION_RECORD`, below,
 // went when migration 221 landed), which is the pattern working.
-// `NO_LIQUIDITY_LEDGER` STOOD HERE — "no restriction, tender or liquidity-event
-// ledger is connected" — over `Restrictions`, `Tender` and `History`. It was FALSE
-// for two of the three, and the file's own note about `NO_SESSION_RECORD` two
-// paragraphs down had already recorded the shape of that mistake: one sentence
-// covering several different absences stops being true one absence at a time, and
-// nothing notices.
-//
-// `liquidity_events`, `secondary_listings` and `secondary_rofr_notices` all exist,
-// `routes/liquidity.ts` is mounted at `/api/liquidity`, and nine `api.liquidity*`
-// methods reach it. `GET /liquidity/my-portfolio` is `requireAuth` ONLY — a founder
-// may call it — and it returns both `my_listings` and `exit_history`. So the ledger
-// was connected the whole time; only `Tender` had nothing behind it, and it now
-// says so in its own words.
+// `NO_LIQUIDITY_LEDGER` stood here, over the Raise · Liquidity zone's labels.
+// The owner removed Liquidity & Exits (2026-10-20), zone and page together.
 // `NO_SESSION_RECORD` stood here — "no session history is stored, so no past
 // question, kept answer or discarded one exists to look through" — and covered
 // all four of Ask's labels. Migration 221 stored the history, and removing the
@@ -300,24 +289,6 @@ export const FOUNDER_ZONE_FILTERS = {
     { canvas: 'By artifact', key: 'artifacts' },
     { canvas: 'By investor', key: 'investors' },
     { canvas: 'Gaps', key: 'gaps' },
-  ],
-  // The waterfall is derived from the stored cap table. The other three want a
-  // ledger this product has never had, which is also why all four stats on this
-  // page read Unavailable rather than zero.
-  'raise/liquidity': [
-    { canvas: 'Restrictions', key: 'restrictions' },
-    { canvas: 'Waterfall', key: 'waterfall' },
-    // THE ONE OF THE THREE THAT WAS GENUINELY ABSENT, and it needed its own
-    // sentence to say so. A tender is the COMPANY offering to buy its own shares
-    // back; `secondary_listings` is one holder offering to sell theirs. No table,
-    // route or field expresses the first, and calling a seller's listing a tender
-    // would misname the party doing the buying.
-    {
-      canvas: 'Tender',
-      unbuilt: 'a tender is the company offering to buy shares back, and only holder-side listings are stored — nothing records an offer made by the company',
-      hover: 'Only holder-side listings are stored — no company buy-back is recorded.',
-    },
-    { canvas: 'History', key: 'history' },
   ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
