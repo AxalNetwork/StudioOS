@@ -97,42 +97,34 @@ test('/offers/catalog mounts the catalogue rather than a card pointing at it', (
   assert.match(mount, /<ServiceCatalogPage\b/,
     'the same component at a second route is what Leads and Perk deals already do');
   assert.match(mount, /\buser=\{user\}/, 'the catalogue is mounted without its user');
-  assert.match(mount, /\bembedded\b/, 'the catalogue is mounted unembedded, so it draws a second heading');
+  // #2338: the page has one body now, the zone's, so there is no `embedded`
+  // flag to hand it; one handed here would be read by nothing.
+  assert.doesNotMatch(mount, /\bembedded\b/, 'ServiceCatalogPage takes no embedded flag since #2338');
   const copyAt = code.indexOf('const COPY');
   const copyBlock = code.slice(copyAt, code.indexOf('const ZONE_LINES', copyAt));
   assert.doesNotMatch(copyBlock, /catalog:/,
     'a no-store card in front of a working page tells an operator a built feature is missing');
 });
 
-test('the embedded mount is the LEDGER body alone — no tab row, no second heading', () => {
+test('the catalogue is the LEDGER body alone — no tab row, no second heading', () => {
   const code = codeOnly(PAGE);
-  // The rule is what `embedded` DOES, not how many props sit beside it.
-  assert.match(code, /function ServiceCatalogPage\(\{[^}]*\buser\b[^}]*\bembedded = false\b[^}]*\}\)/);
+  // WHAT THIS TEST PINNED BEFORE #2338. The page had two bodies: the zone's,
+  // returned early when `embedded`, and the standalone `/services` page with a
+  // heading and a Browse catalogue / My offerings / Stripe Connect tab row.
+  // The owner removed `/services` (#2297 §7), so the default export IS the
+  // zone body: it returns `MineTab` and nothing that chooses a tab.
+  const body = code.slice(code.indexOf('export default function ServiceCatalogPage'));
+  assert.match(body.slice(0, 300),
+    /^export default function ServiceCatalogPage\(\{[^}]*\buser\b[^}]*\}\) \{\s*return <MineTab\b/,
+    'the catalogue must return the LEDGER body itself, not a shell that chooses a tab');
+  assert.doesNotMatch(code, /<h1\b/, 'a second heading inside the shell that already drew one');
+  assert.doesNotMatch(code, /label: 'Browse catalogue'/, 'the removed /services tab row is back');
 
-  // WHAT THIS ASSERTION USED TO SAY, AND WHY IT SAYS THE OPPOSITE NOW. It read
-  // `assert.equal((code.match(/!embedded/g) || []).length, 1)` under the
-  // message "Browse / My offerings / Stripe Connect are views WITHIN the
-  // catalog, not sibling zones — they are this page's controls and must
-  // survive being embedded". The test was right that the decision deserved
-  // pinning and wrong about which way.
-  //
-  // Browse catalogue lists every OTHER firm's offerings and Stripe Connect is
-  // payouts; neither is a view of "what this firm sells", which is what PO1
-  // defines /offers/catalog to be. And the tab row could select them: `tab`
-  // initialises to `'mine'` only when `isPartner`, so an admin opening the
-  // zone got the public marketplace grid under the "Service catalog" heading
-  // and never reached the LEDGER body at all. A row that can put a different
-  // subject under the zone's own h1 is navigation, and the shell already drew
-  // the navigation. Both subjects keep their home on the unembedded
-  // `/services` mount, which is why this is a move and not a removal.
-  const embeddedReturn = code.slice(code.indexOf('if (embedded)'));
-  assert.match(embeddedReturn.slice(0, 200), /return <MineTab\b/,
-    'the zone mount must return the LEDGER body itself, not a shell that chooses a tab');
-
-  // And the two subjects it no longer draws still have somewhere to be drawn:
-  // the tab list is intact below the early return, for `/services`.
-  assert.match(code, /key: 'browse', label: 'Browse catalogue'/,
-    'Browse catalogue must survive on the standalone /services mount');
-  assert.match(code, /key: 'stripe', label: 'Stripe Connect'/,
-    'Stripe Connect must survive on the standalone /services mount');
+  // The two subjects the tab row offered still live where a founder reaches
+  // them: the founder marketplace imports both from this file.
+  const founder = codeOnly(read('frontend/src/pages/FounderMarketplacePage.jsx'));
+  assert.match(founder, /BrowseTab as ServicesBrowseTab/, 'the founder marketplace lost Browse catalogue');
+  assert.match(founder, /\bStripeTab\b/, 'the founder marketplace lost Stripe Connect');
+  assert.match(code, /export function BrowseTab\b/);
+  assert.match(code, /export function StripeTab\b/);
 });

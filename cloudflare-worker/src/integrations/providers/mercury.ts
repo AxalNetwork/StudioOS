@@ -34,12 +34,14 @@
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../../types';
-import { ConnectRefusal, audienceFor, getDescriptor, personalHqOnlyOffHq, personalHqOnlySentence, personalMercuryFor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
+import { ConnectRefusal, audienceFor, type IntegrationRow, getDescriptor, personalHqOnlyOffHq, personalHqOnlySentence, personalMercuryFor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
 import { selectJwt } from '../../auth';
 import { branchOf } from '../../util/branch';
 import { canHoldValidateSource } from '../../routes/_founder_validate_helpers';
-import { getOrganization, listAccounts, MercuryClientError } from '../../services/mercury/client';
-import { parseAccounts, parseOrganization, parseTokenPermission, type ParsedAccount, type ParsedOrganization, type TokenPermission } from '../../services/mercury/parse';
+import { MercuryClientError } from '../../services/mercury/client';
+import { tokenBankReader, type OrganizationRead } from '../../services/mercury/reads';
+import { mcpCredentialsOf, revokeGrant } from '../../services/mercury/oauth';
+import type { ParsedAccount, ParsedOrganization, TokenPermission } from '../../services/mercury/parse';
 import { AXAL_ENTITIES } from '../../services/legalDocFormat';
 
 type C = Context<{ Bindings: Env }>;
@@ -116,22 +118,11 @@ export async function isSupportSession(c: C): Promise<boolean> {
   return !!(await selectJwt(c))?.payload.impersonated_by;
 }
 
-export interface OrganizationRead {
-  org: ParsedOrganization;
-  accounts: ParsedAccount[];
-  permission: TokenPermission;
-}
+export type { OrganizationRead };
 
 /** The organization and its checking and savings accounts, through the GET-only client. */
-export async function readOrganization(token: string): Promise<OrganizationRead> {
-  const orgBody = await getOrganization(token);
-  const accountsBody = await listAccounts(token);
-  const permission = parseTokenPermission(orgBody);
-  return {
-    org: parseOrganization(orgBody),
-    accounts: parseAccounts(accountsBody).accounts,
-    permission: permission === 'not_reported' ? parseTokenPermission(accountsBody) : permission,
-  };
+export function readOrganization(token: string): Promise<OrganizationRead> {
+  return tokenBankReader(token).readOrganization();
 }
 
 async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectResult> {
@@ -169,6 +160,10 @@ async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectRe
   if (scope) throw scope;
   const entity = await entityAccountRefusal(c.env, read.org, read.accounts);
   if (entity) throw entity;
+  // D840: a token replaces a sign-in on the same row; the sign-in's grant is revoked first.
+  const prior = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'mercury'").bind(user.id).first<IntegrationRow>();
+  const priorGrant = prior ? await mcpCredentialsOf(c.env, prior) : null;
+  if (priorGrant) await revokeGrant(c.env, priorGrant);
   return {
     credentials: { api_key: token },
     external_account_id: read.org.id,
@@ -178,4 +173,14 @@ async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectRe
   };
 }
 
-registerProvider({ key: 'mercury', connect });
+/**
+ * D840 (#2346): a member who signed in with Mercury has their grant revoked,
+ * best effort, before the generic route deletes the row. A pasted token has
+ * nothing to revoke: the member deletes it in Mercury.
+ */
+async function disconnect(c: C, _user: User, row: IntegrationRow): Promise<void> {
+  const creds = await mcpCredentialsOf(c.env, row);
+  if (creds) await revokeGrant(c.env, creds);
+}
+
+registerProvider({ key: 'mercury', connect, disconnect });

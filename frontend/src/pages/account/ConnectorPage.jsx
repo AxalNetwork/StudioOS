@@ -76,7 +76,9 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, zoomHowItWorks, zoomNotices } from
  * audited read on mount and no header action. A member's own Mercury draws
  * its groups (what it is for, where it lands, what it reads) above the token
  * form until it is connected, then in "Your connection" with Manage's Sync
- * now, Replace token and Disconnect: no interim panel, no sign-in redirect.
+ * now, Replace token and Disconnect: no interim panel. D840 (#2346): the band
+ * signs in with Mercury, the chevron opens the token form, and the sign-in
+ * returns to this page.
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -178,8 +180,10 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   const auth = useAuth();
   const superAdmin = isSuperAdminUser(auth?.user);
   // A return opens on what happened. GitHub's lands on its Repositories section instead (`pageLanding`, #1957).
-  const [view, setView] = useState(() => (ret ? ret.view : 'idle'));
-  const [flowRet, setFlowRet] = useState(ret || {});
+  // D715 decision 3: the Axal entities' Mercury has no sign-in, so a return naming it says nothing there.
+  const shownRet = isEntityRow(p) ? null : ret;
+  const [view, setView] = useState(() => (shownRet ? shownRet.view : 'idle'));
+  const [flowRet, setFlowRet] = useState(shownRet || {});
   const setFlowView = (v) => { setFlowRet({}); setView(v); };
   const flow = useConnectFlow(p, { setView: setFlowView, onChanged });
   const name = p.display_name;
@@ -291,7 +295,7 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false 
           <div data-testid="connector-page-mercury">
             <MercuryUsesGroups role={role} />
             <MercuryLandsGroup role={role} />
-            <MercuryReadsGroup />
+            <MercuryReadsGroup conn={conn} />
           </div>
         ) : <CompaniesGroup conn={conn} onChanged={onChanged} />}
         {/* Decision 8: a partner's Mercury feeds no module. */}
@@ -575,7 +579,7 @@ function ChoicesInline({ p, choices, flow }) {
         </fieldset>
       )}
       {choices.alt.map((a) => (
-        <button key={a.id} type="button" className={`${BTN.link} self-start`} onClick={() => takeAlt(a.id)} data-testid={`connector-page-alt-${a.id}`}>{a.label}</button>
+        <button key={a.id} type="button" className={`${BTN.link} self-start max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center`} onClick={() => takeAlt(a.id)} data-testid={`connector-page-alt-${a.id}`}>{a.label}</button>
       ))}
     </div>
   );

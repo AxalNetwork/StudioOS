@@ -341,7 +341,7 @@ export const SIDEBAR_GROUPS = {
       // whatever path was free, and the row was never pointed back. `match`
       // keeps every legacy and section URL highlighting the right row.
       { to: '/validate', icon: MessageSquare, label: 'Validate',
-        match: ['/validate', '/build/marketplace', '/needs', '/services'] },
+        match: ['/validate', '/build/marketplace'] },
       { to: '/build', icon: Briefcase, label: 'Build',
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'] },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
@@ -387,8 +387,8 @@ export const SIDEBAR_GROUPS = {
   // Intentional removals from the partner nav (documented so a nav-integrity
   // guard treats them as deliberate, not silent drops — every route below
   // stays registered and reachable for other roles or via deep link):
-  //   • /partner-portal "Partner Portal" — the page is retired. The route
-  //     redirects to Studio, which is the home.
+  //   • /partner-portal and /partners/portal "Partner Portal" — the page is
+  //     removed (#2342). Both routes redirect to /referrals.
   //   • /projects "Projects" and /pipeline "Pipeline Board" — studio/investor
   //     execution + deal-pipeline surfaces, not partner-facing.
   //   • /deals "Deal Flow" — only relevant to investor-type partners
@@ -399,8 +399,7 @@ export const SIDEBAR_GROUPS = {
   //     removed on the owner's instruction, 2026-10-20.)
   //   • /market-intel "Market Intelligence" — investor-flavoured intel dropped
   //     to keep the partner UX lean; Demand Insights is the kept signal.
-  //   • /portfolio/health "Portfolio Health", /portfolio/coverage
-  //     "Portfolio Coverage", /legal-capital "Legal & Capital" —
+  //   • /portfolio/health "Portfolio Health", /legal-capital "Legal & Capital" —
   //     investor/founder capital surfaces; conditional for equity-holding
   //     partners only.
   //   • /advisors "Find a Advisor" — founder-oriented (a service partner is the
@@ -468,16 +467,16 @@ export const SIDEBAR_GROUPS = {
       // each retired /partner/operations address is replaced by the successor
       // D395 redirects it to (D505).
       { to: '/pipeline', icon: Target, label: 'Pipeline',
-        match: ['/pipeline', '/needs', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'] },
+        match: ['/pipeline', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'] },
       // The retired Overview's job went to `/company-settings` (the firm
       // profile card, D390/D395). That page is the sidebar's pinned footer for
       // every role (see the investor block's note), so it is NOT listed here:
       // a `match` entry would light Delivery beside the footer's own row, two
       // rows for one page. The other successors sit under this row's root.
       { to: '/delivery', icon: Briefcase, label: 'Delivery',
-        match: ['/delivery', '/delivery/health', '/portfolio/coverage'] },
+        match: ['/delivery', '/delivery/health'] },
       { to: '/offers', icon: Package, label: 'Offers',
-        match: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours',
+        match: ['/offers', '/perks', '/comarketing', '/partner/office-hours',
                 '/offers/catalog'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/my/jobs'] },
@@ -707,7 +706,7 @@ export const PARTNER_FULL_BLEED = [
   // addresses left this list with D505: they redirect (D395), and each
   // successor that owns a full-bleed body is already in workspaceRoutes above
   // (`/company-settings` is a centred page by design and stays out).
-  '/needs', '/services', '/perks', '/partner/insights',
+  '/perks', '/partner/insights',
 ];
 
 /**

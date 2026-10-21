@@ -160,9 +160,6 @@ export const RENDER_NOT_YET = {
     'Founder /build/marketplace',
     'Founder /build/brand',
     'Founder /raise/legal-engine',
-    'Founder /needs',
-    'Founder /founder/post-need',
-    'Founder /services',
   ],
   2098: [
     'Investor /studio',
@@ -199,8 +196,6 @@ export const RENDER_NOT_YET = {
     'Founder /updates',
     'Founder /studio/archetype',
     'Investor /build/competitors',
-    'Investor /needs',
-    'Investor /services',
     'Investor /messages',
     'Investor /help',
     'Investor /pricing',

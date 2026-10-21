@@ -19,6 +19,7 @@
 import { TIER_PLANS } from '../../components/PaywallModal';
 import {
   memberDisconnectNote, PERSONAL_DOES, personalFeedsFallback, PERSONAL_LAST_SYNC, personalAttention, personalToolBanner,
+  signInWords,
 } from './mercuryModel.js';
 
 export const PAGE_SIZE = 10;
@@ -438,7 +439,8 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
 export function connectorsRedirect({ search = '', hash = '' } = {}) {
   const ret = oauthReturn(search);
   if (!ret) return { pathname: '/account/connectors', search, hash };
-  // D715 decision 3: Mercury has no sign-in. A return naming it is crafted and never reaches the Mercury page, whose mount makes the audited read.
+  // D715 decision 3: a return here naming Mercury is crafted and never reaches the Mercury page, whose mount makes the audited read.
+  // D840's sign-in returns to the Mercury page itself (`routes/mercury_oauth.ts`), never through here.
   if (ret.key === 'mercury') return { pathname: '/account/connectors', search: stripReturn(search, ret.strip), hash };
   // D753 — a sign-in comes back to its own connector's page.
   return { pathname: connectorPagePath(ret.key), search, hash };
@@ -495,6 +497,8 @@ export function oauthReturn(search) {
     if (!key) return null;
     // GitHub reads nothing until its repositories are chosen: its sign-in lands on that choice (D686 §5.4).
     if (oauth === 'ok') return { key, view: key === 'github' ? 'sync' : 'connected', reason: '', banner: '', strip };
+    // D840: a failed Mercury sign-in says which check stopped it, in the member's words.
+    if (key === 'mercury' && signInWords(reason)) return { key, view: 'refused', reason, banner: signInWords(reason), strip };
     if (oauth === 'rolling_out') return { key, view: 'refused', reason: 'rolling_out', banner: 'rolling_out', strip };
     if (CANCELLED.has(reason)) return { key, view: 'cancelled', reason, banner: '', strip };
     // The Worker's word is `scope_overreach` (integrations.ts); `overreach` is kept for older links.
@@ -569,7 +573,7 @@ export function toolDeepLink(search, catalogue) {
   // A venture has no use for Axal's own accounts (D715 decision 2).
   const list = (Array.isArray(catalogue) ? catalogue : []).filter((p) => !isEntityRow(p));
   if (ret) {
-    // Mercury has no sign-in, so a return that names it is crafted, and opens nothing (D715 decision 3).
+    // Mercury's sign-in returns to its own page (D840), so a return here that names it is crafted, and opens nothing (D715 decision 3).
     const known = ret.key !== 'mercury' && list.some((p) => p.key === ret.key);
     return { panel: known ? { key: ret.key, view: ret.view, ret } : null, strip: ret.strip };
   }
@@ -631,6 +635,8 @@ export function stripReturn(search, keys) {
  */
 export function authKind(p) {
   if (p?.first_party) return 'first_party';
+  // D840 (#2346): a member signs in with Mercury first; the Read Only token is the other way in.
+  if (isPersonalMercury(p)) return 'oauth';
   if (p?.auth_type === 'api_key') return 'key';
   if (p?.key === 'hubspot' && p?.supports_pat) return 'token_first';
   return 'oauth';

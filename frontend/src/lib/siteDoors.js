@@ -359,7 +359,7 @@ export const DOORS = {
     live: [
       { t: 'Provider profile', route: '/partners/:slug' },
       { t: 'Public directory listing', route: '/directory' },
-      { t: 'Live founder requests', route: '/partner/needs' },
+      { t: 'Live founder requests', route: '/pipeline/leads' },
       // Dropped: "Verification badges", "KYB, conflicts, and contracts".
       { t: 'Partner insights', route: '/partner/insights' },
       // Dropped: "Stripe Connect payouts".

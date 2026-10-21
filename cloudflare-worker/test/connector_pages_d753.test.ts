@@ -91,7 +91,8 @@ const NOT_ROWS = new Set(['linkedin', ...CHANNELS]);
 /** Each connector's own files. `services/notify.ts` holds Slack's one write but also sends mail, so it is not scanned for coverage. */
 const SOURCES: Record<string, string[]> = {
   github: ['integrations/providers/github.ts', 'integrations/providers/github/roadmap.ts', 'integrations/providers/github/solutionDesign.ts', 'integrations/providers/github/team.ts', 'integrations/providers/github/company.ts', 'integrations/providers/github/mvp.ts'],
-  mercury: ['services/mercury/client.ts'],
+  // D840: a member's sign-in reads through the MCP client and its typed reads, and signs in through `oauth.ts`.
+  mercury: ['services/mercury/client.ts', 'services/mercury/mcp.ts', 'services/mercury/reads.ts', 'services/mercury/oauth.ts'],
   slack: ['integrations/providers/slack.ts', 'services/notify.ts'],
   zoom: ['services/channels/zoom.ts'],
   google_calendar: ['services/calendar.ts', 'services/channels/googleMeet.ts'],
@@ -115,12 +116,13 @@ const linesOf = (file: string) => {
 };
 
 /** The sign-in's own token exchange and refresh: not tools (D753 decision 3). */
-const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL'];
+const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint'];
 /** A read that is a POST. */
-const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"] };
+const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
 /** Connection plumbing: a revoke, a deauthorize, a webhook subscription or listener, a signing key. */
 const ACCOUNT_CALLS: Record<string, string[]> = {
   github: ['/grant`'],
+  mercury: ['server.registration_endpoint', 'server.revocation_endpoint'],
   hubspot: ['/oauth/v1/refresh-tokens/'],
   calendly: ['/webhook_subscriptions', "fetch(uri, { method: 'DELETE'"],
   salesforce: ['/services/oauth2/revoke'],
@@ -327,6 +329,8 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
   google_calendar: { file: 'services/calendar.ts', sign_in: ['GOOGLE_AUTH_URL', ''], api: 'GOOGLE_CALENDAR_API' },
   microsoft_365: { file: 'services/calendar.ts', sign_in: ['MICROSOFT_AUTHORITY', '/common/oauth2/v2.0/authorize'], api: 'MICROSOFT_GRAPH' },
   mercury: { file: 'services/mercury/client.ts', sign_in: null, api: 'MERCURY_API_BASE' },
+  // D840: a member's page names the MCP server their sign-in reads through.
+  mercury_personal: { file: 'services/mercury/mcp.ts', sign_in: ['MERCURY_MCP_URL', ''], api: null },
   linkedin: { file: 'routes/linkedin.ts', sign_in: ['LINKEDIN_AUTHORIZE_URL', ''], api: 'LINKEDIN_USERINFO_URL' },
   // Both sign in inside the provider's own app (Meta's popup, the bot link), so neither has a sign-in URL.
   whatsapp: { file: 'services/channels/whatsapp.ts', sign_in: null, api: 'GRAPH_BASE' },
@@ -336,6 +340,12 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
 test('9. endpoints equal the providers\' own constants', () => {
   for (const e of ENTRIES) {
     const spec = ENDPOINTS[e.key];
+    if (e.key === 'mercury' && e.variant !== 'entity') {
+      const mcp = ENDPOINTS.mercury_personal;
+      assert.equal(e.page.endpoints.sign_in, constant(SRC(mcp.file), mcp.sign_in![0]), `${e.id}: sign_in`);
+      assert.equal(e.page.endpoints.api, constant(SRC(spec.file), spec.api!), `${e.id}: api`);
+      continue;
+    }
     if (!spec) {
       assert.deepEqual(e.page.endpoints, { sign_in: null, api: null }, `${e.id} has no implementation, so no endpoints`);
       continue;
@@ -369,6 +379,8 @@ test('10. sign-in kinds', () => {
     if (e.variant === 'entity') assert.equal(kind, 'entity', e.id);
     else if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
     else if (['google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
+    // D840: a member signs in with Mercury or pastes a Read Only token.
+    else if (e.key === 'mercury') assert.equal(kind, 'oauth_or_key', e.id);
     else if (row!.auth_type === 'api_key') assert.equal(kind, 'key', e.id);
     else if (row!.supports_pat) assert.equal(kind, 'oauth_or_key', e.id);
     else assert.equal(kind, 'oauth', e.id);
