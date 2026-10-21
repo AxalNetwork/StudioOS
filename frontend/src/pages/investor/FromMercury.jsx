@@ -23,7 +23,7 @@ const KIND = { closing: 'closing', calls: 'call', ledger: 'ledger', reporting: '
 const SUB = 'm-0 text-[11px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400';
 const LINE = 'm-0 text-[12px] text-axal-ink/80 dark:text-gray-300';
 const FAINT = 'text-[11px] text-axal-faint dark:text-gray-500';
-const BTN = 'rounded-md bg-indigo-700 px-3 py-1 text-[12px] font-bold text-white transition-colors hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-indigo-500';
+const BTN = 'rounded-md bg-indigo-700 px-3 py-1 text-[12px] font-bold text-white transition-colors hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400';
 const BTN2 = 'rounded-md border border-axal-hairline px-3 py-1 text-[12px] font-bold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:text-gray-200';
 
 export const money = (cents) => (Number.isSafeInteger(cents)
