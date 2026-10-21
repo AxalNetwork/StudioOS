@@ -546,7 +546,7 @@ export function IntegrationKeysPanel({ loading, unreadable, keys }) {
         No screen reveals a saved key: once saved it is write-only, so no masked secret is drawn and nothing here
         re-hides after thirty seconds. Nothing stores when a key expires, so none is drawn as expired.
       </p>
-      <Link to="/admin?tab=integration-keys" className={CONSOLE_LINK} data-testid="hq-h16-link-keys">
+      <Link to="/admin/integration-keys" className={CONSOLE_LINK} data-testid="hq-h16-link-keys">
         <ConsoleLinkBody
           title="Integration keys"
           note="Configure or test a key there; rotate and remove are offered only for a key held in the database. This panel changes none."
@@ -635,7 +635,7 @@ export function GithubSyncPanel({ loading, unreadable, sync }) {
   return (
     <>
       {body}
-      <Link to="/admin?tab=github" className={CONSOLE_LINK} data-testid="hq-h16-link-sync">
+      <Link to="/admin/integration-keys#github" className={CONSOLE_LINK} data-testid="hq-h16-link-sync">
         <ConsoleLinkBody title="GitHub sync" note="The token, the repository, and the test that says what the token is missing." />
       </Link>
     </>

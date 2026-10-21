@@ -77,8 +77,8 @@ test('the page draws H16 as four zones, in the artboard\'s order, each once, bef
 
 test('each console is linked once, from its own panel, by a literal path', () => {
   const links = [
-    ['/admin?tab=integration-keys', 'hq-h16-link-keys'],
-    ['/admin?tab=github', 'hq-h16-link-sync'],
+    ['/admin/integration-keys', 'hq-h16-link-keys'],
+    ['/admin/integration-keys#github', 'hq-h16-link-sync'],
     ['/admin?tab=payments', 'hq-h16-link-payments'],
     ['/admin?tab=promos', 'hq-h16-link-promos'],
   ];
@@ -94,8 +94,8 @@ test('each console is linked once, from its own panel, by a literal path', () =>
 
 test('the four panels each render exactly one console link, and it is the right one', () => {
   const cases = [
-    [IntegrationKeysPanel, { keys: { available: false, reason: 'x' } }, '/admin?tab=integration-keys'],
-    [GithubSyncPanel, { unreadable: true }, '/admin?tab=github'],
+    [IntegrationKeysPanel, { keys: { available: false, reason: 'x' } }, '/admin/integration-keys'],
+    [GithubSyncPanel, { unreadable: true }, '/admin/integration-keys#github'],
     [PaymentsCatalogPanel, { unreadable: true }, '/admin?tab=payments'],
     [PromoCodesPanel, { promos: { available: false, reason: 'x' } }, '/admin?tab=promos'],
   ];

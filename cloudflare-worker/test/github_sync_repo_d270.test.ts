@@ -194,8 +194,9 @@ test('D270: DELETE removes the token and the webhook secret, and never the repos
 /* ── GET ────────────────────────────────────────────────────────────────── */
 
 test('D270: GET reports the deployed repository, or null — never a display default', async () => {
+  // The read is the Super Admin's since the owner's ruling (2026-10-20).
   const db = freshDb();
-  const r = await call(envFor(db), 'GET', undefined, PLAIN_ADMIN, 'totp-plain');
+  const r = await call(envFor(db), 'GET', undefined, HOLDER, 'totp-holder');
   assert.equal(r.status, 200, r.text);
   assert.equal(r.body.repo_owner, 'AxalNetwork');
   assert.equal(r.body.repo_name, 'StudioOS');
@@ -203,7 +204,7 @@ test('D270: GET reports the deployed repository, or null — never a display def
   assert.match(r.body.repo_note, /wrangler\.toml/);
   assert.ok(!('default_repo_owner' in r.body) && !('default_repo_name' in r.body));
 
-  const unset = await call(envFor(db, { GITHUB_REPO_OWNER: undefined, GITHUB_REPO_NAME: '' }), 'GET', undefined, PLAIN_ADMIN, 'totp-plain');
+  const unset = await call(envFor(db, { GITHUB_REPO_OWNER: undefined, GITHUB_REPO_NAME: '' }), 'GET', undefined, HOLDER, 'totp-holder');
   assert.equal(unset.body.repo_owner, null);
   assert.equal(unset.body.repo_name, null);
   assert.equal(unset.body.configured, false);

@@ -360,7 +360,7 @@ test('5b. D751 (#1881): a suggested connector Axal cannot connect reads Not set 
   assert.match(text(row(plain, 'microsoft')), /Not set up here/);
   assert.doesNotMatch(plain, /Add its keys in Integration keys/);
   const sup = html(h(ConnectorsPhoneView, { data, superAdmin: true }), '/account/connectors');
-  assert.match(row(sup, 'github'), /^<a[^>]*href="\/admin\?tab=integration-keys"/);
+  assert.match(row(sup, 'github'), /^<a[^>]*href="\/admin\/integration-keys"/);
   assert.match(text(row(sup, 'github')), /Add its keys in Integration keys\./);
   assert.doesNotMatch(row(sup, 'microsoft'), /integration-keys/, 'a first-party client is not a console key yet');
 });

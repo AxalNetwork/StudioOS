@@ -820,7 +820,7 @@ export function SyncStrip({ sync, failed, onRetry }) {
     <Card>
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-[13.5px] font-extrabold tracking-tight">GitHub sync</h2>
-        <Link to="/admin?tab=github" className="text-[11px] font-semibold text-[#881337] underline dark:text-rose-300">
+        <Link to="/admin/integration-keys#github" className="text-[11px] font-semibold text-[#881337] underline dark:text-rose-300">
           Mirror settings →
         </Link>
       </div>
