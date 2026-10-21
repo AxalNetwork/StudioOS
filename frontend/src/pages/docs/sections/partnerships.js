@@ -31,7 +31,7 @@ export default {
       id: 'deal-engine',
       title: 'Partner deal engine',
       overview:
-        "The deal engine is a stage-based pipeline (sourced → vetted → in-diligence → committed → closed) for opportunities partners bring into the studio. Partners earn credit on the Network Effects board for sourced deals that close, with optional revenue share.",
+        "The deal engine is a stage-based pipeline (sourced → vetted → in-diligence → committed → closed) for opportunities partners bring into the studio. Partners earn credit for sourced deals that close, with optional revenue share.",
       howto: [
         'Open Partnerships → Pipeline.',
         'Click "Source a deal" and capture company, contact, and source notes.',

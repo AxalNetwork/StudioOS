@@ -91,10 +91,14 @@ test('the editors keep their deep links: ?mode=workspace, Discovery ?tab=, and t
   // Research: any query beyond project_id, or ?mode=workspace, skips the desk.
   assert.match(app, /const founderResearchLanding = effectiveRole === 'founder'\s*&& \(researchMode === 'landing' \|\| \(!researchHasNonProjectQuery && researchMode !== 'workspace'\)\);/);
   // AND THE PATHS THAT STILL LINK TO THEM GO TO THE EDITOR, not the redirect:
-  // the Roadmap zone sends objective edits to `/execution/roadmap`. (The
+  // the Roadmap zone sends objective edits to the editor's roadmap section,
+  // `/execution?mode=workspace#execution-roadmap` (#2297 removed the
+  // `/execution/roadmap` mount; the page scrolls to the hash). (The
   // Validate interviews zone that linked `?tab=interviews` is gone, D704: ICP
   // fit is edited on the interview's record, `interview_record_d697`.)
-  assert.match(routeBlock('/execution/roadmap'), /<ExecutionPage \/>/);
+  assert.equal(routeBlock('/execution/roadmap'), '', '#2297 removed the sub-route');
+  assert.match(routeBlock('/execution'), /!founderExecutionEditor[\s\S]*<ExecutionPage \/>/);
+  assert.match(codeOnly(raw('frontend/src/pages/founder/FounderBuildRoadmap.jsx')), /to=\{`\/execution\?mode=workspace\$\{[^\n]*?\}#execution-roadmap`\}/);
 });
 
 test('no founder desk embeds a legacy editor', () => {
@@ -112,7 +116,7 @@ test('no founder desk embeds a legacy editor', () => {
 test('the Build zones crumb back to /build, not the retired address', () => {
   for (const file of ['FounderBuildBoard', 'FounderBuildCadence', 'FounderBuildKpi', 'FounderBuildRoadmap', 'FounderBuildThisWeek']) {
     const src = codeOnly(raw(`frontend/src/pages/founder/${file}.jsx`));
-    assert.ok(!/to=["{`]*\/execution["`?$]/.test(src.replace(/\/execution\/roadmap/g, '')),
+    assert.ok(!/to=["{`]*\/execution["`?$]/.test(src.replace(/\/execution\?mode=workspace/g, '')),
       `${file} links the retired /execution address`);
     assert.match(src, /> Build<\/Link>|>Back to Build<\/Link>/, `${file} lost its way back to the Build desk`);
   }
