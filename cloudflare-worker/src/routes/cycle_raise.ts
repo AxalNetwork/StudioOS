@@ -143,8 +143,9 @@ cycleRaise.get('/modules/:slug', async (c) => {
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
   const parts: Record<string, unknown> = slug === 'capital-relationships' ? { calls: await callsHistory(ctx) } : {};
-  const own = await mercuryOwner(c, s);
-  if (!(own instanceof Response)) {
+  // The Mercury part fails on its own: an owner check that cannot be read shows no part, never a failed module.
+  const own = await mercuryOwner(c, s).catch(() => null);
+  if (own && !(own instanceof Response)) {
     try { parts.mercury = { integration_uid: own.uid, ...(await RAISE_PART_FOR[slug](c.env, own.integrationId, s.projectId) as object) }; }
     catch { parts.mercury = { state: 'unreadable', reason: 'What Mercury fed this module could not be read' }; }
   }

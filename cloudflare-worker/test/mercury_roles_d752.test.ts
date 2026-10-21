@@ -27,6 +27,7 @@ import {
 } from '../src/integrations/registry.ts';
 import { HQ_ONLY_USES, PERSONAL_USES, personalPolicy } from '../src/services/mercuryPersonal.ts';
 import { personalFixture, bank, req, count, TOKEN } from './_mercury_personal_d713.ts';
+import { mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
 
 const mercury = getDescriptor('mercury')!;
 
@@ -93,9 +94,10 @@ test('publicDescriptor serves the investor\'s variant on HQ and never the audien
   for (const field of ['entity_roles', 'personal_roles', 'personal_hq_only_roles']) assert.ok(!(field in own), field);
   const founder = publicDescriptor(mercury, { role: 'founder', hq: false }) as any;
   assert.equal(founder.description, FOUNDER_DESCRIPTION);
-  assert.deepEqual(founder.feeds, ['revenue_and_traction']);
+  assert.deepEqual(founder.feeds, mercuryFedModules('founder'));
   assert.deepEqual(connectorFeeds('mercury', 'investor'), []);
-  assert.deepEqual(connectorFeeds('mercury', 'founder'), ['revenue_and_traction']);
+  assert.deepEqual(connectorFeeds('mercury', 'founder'), mercuryFedModules('founder'));
+  assert.ok(connectorFeeds('mercury', 'founder').includes('revenue_and_traction'));
   assert.deepEqual(connectorFeeds('mercury', 'partner'), []);
 });
 
