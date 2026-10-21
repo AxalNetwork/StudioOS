@@ -51,8 +51,9 @@ const PROFILES = {
     canvas: /^Pages · Founder /,
     buckets: /^(validate|build|grow|network|raise|research)\//,
     // 30 → 26 (D704): the four `validate/*` zones are retired and listed in
-    // `excluded` below. 30 artboard zones − 4 retired = 26.
-    zones: 26,
+    // `excluded` below. 30 artboard zones − 4 retired = 26. 26 → 25: the owner
+    // removed `raise/liquidity` (2026-10-20), also excluded below.
+    zones: 25,
     // 17 → 22 → 23. Five ops that were `unbuilt` became links because their
     // destination already existed and the reader may open it: `Send to Problem
     // slide` on two zones, `Configure zone`, `Edit templates` and `Send for
@@ -80,12 +81,14 @@ const PROFILES = {
     // one, and `/jobs/new` is a route a founder may open. Task #68 built the
     // posting surface; this desk had simply never pointed at it.
     // 23 → 21 (D704): the two `Open the Problem slide` links, on `validate/pain-map`
-    // and `validate/verdict`, went with their zones.
-    links: 21,
+    // and `validate/verdict`, went with their zones. 21 → 20: `raise/liquidity`'s
+    // `Model an exit` went with that zone (owner, 2026-10-20).
+    links: 20,
     // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
     // zone a review archive, so an export over the rows the page is showing is
-    // the same `kind: 'export'` every other zone uses.
-    exports: 21,
+    // the same `kind: 'export'` every other zone uses. 21 → 20: `raise/liquidity`'s
+    // `Export` went with that zone (owner, 2026-10-20).
+    exports: 20,
     // Seven ops the PAGE performs: six of Validate's — three open a dialog the
     // workspace owns and three are server-side CSV downloads with a busy state —
     // plus `research/ask`'s `New brief` and `research/library`'s `Upload` —
@@ -136,7 +139,8 @@ const PROFILES = {
     elsewhere: ['Brief me'],
     // D704 (decision 4): the canvas is retired in place, so the guard still
     // checks that the artboard draws these four and that no table declares them.
-    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict'],
+    // The owner removed Liquidity & Exits on 2026-10-20; its artboard stays drawn.
+    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity'],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
     // #1539 moves FG5's existing body/controls to Raise; its artboard remains the visual source.

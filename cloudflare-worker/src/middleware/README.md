@@ -26,3 +26,5 @@ allows on error is not a gate.
 Row-level scoping is *not* here: that lives in
 `cloudflare-worker/src/services/tenancyScope.ts`, because it composes into SQL
 rather than short-circuiting a request.
+
+D811: `mailLink.ts` authenticates the Mail service HMAC and guards request size, timestamp and replay, independently of browser sessions.

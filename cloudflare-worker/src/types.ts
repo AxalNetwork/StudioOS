@@ -332,6 +332,8 @@ export interface Env {
   // owner (PRODUCTION.md §4). Production refuses those links without it;
   // dev/preview fall back to JWT_SECRET.
   NEWSLETTER_TOKEN_KEY?: string;
+  // D811: shared only with the Axal VC Mail Worker; unset means 404.
+  MAIL_LINK_SECRET?: string;
   // Task #3 (Y-1) — email of the Axal counter-signer that receives
   // the third leg of the 3-way Founder/Investor/Axal NDA. Defaults to
   // 'legal@axal.vc' when unset (see services/trustEnvelope.ts).

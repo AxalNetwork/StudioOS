@@ -6,9 +6,9 @@ import { actual, checks } from './_founder_tool_checks.mjs';
  * S1's decision A: the profile sidebars keep the rows their approved canvases
  * draw. Each kept page joins the `match` of the row that owns it, so it lights
  * that row, and the row's overview links it in an "Also in" list. The command
- * palette still indexes all 28 on an admin shell, and every page keeps its
- * route. One page redirects, and only a founder: `/liquidity`, which is the
- * same `LiquidityPage` that `/raise/liquidity?mode=workspace` renders.
+ * palette still indexes them on an admin shell, and every page keeps its
+ * route. `/liquidity` redirected a founder to `/raise/liquidity`; the owner
+ * removed both on 2026-10-20, with five more of the pages.
  *
  * `PAGE_HOMES` in `lib/adminPlacement.js` is the mapping. This file checks
  * every line of it against the three things that make it true: the route's
@@ -73,10 +73,12 @@ const DESK = {
 // board registered, BucketOverview. Both draw the list for their own bucket.
 const BUCKET_BODIES = ['frontend/src/workspaces/BucketBoard.jsx', 'frontend/src/workspaces/BucketOverview.jsx'];
 
-test('the mapping covers exactly the 26 pages, and every line names a profile, a row and a door', () => {
+test('the mapping covers exactly the 20 pages, and every line names a profile, a row and a door', () => {
   assert.deepEqual(Object.keys(PAGE_HOMES).sort(), WORKSPACES.map((w) => w.route).sort());
-  // 28 until D670 retired Market Intelligence and Signals.
-  assert.equal(WORKSPACES.length, 26);
+  // 28 until D670 retired Market Intelligence and Signals; 26 until the owner
+  // removed Scoring, Risk Matrix, Capital, Liquidity, Reserves and Watchlist
+  // (2026-10-20).
+  assert.equal(WORKSPACES.length, 20);
   for (const [route, homes] of Object.entries(PAGE_HOMES)) {
     assert.ok(homes.length > 0, `${route} has no home`);
     for (const [role, row, door] of homes) {
@@ -145,7 +147,7 @@ test('every "also" page is linked from its row\'s overview', () => {
 
 test('the Also in list draws exactly the "also" pages, and a row with none draws nothing', () => {
   assert.deepEqual(alsoInFor('investor', 'Portfolio').map((w) => w.route),
-    ['/portfolio/risk-matrix', '/capital', '/liquidity', '/portfolio/reserves', '/portfolio/waterfall', '/watchlist']);
+    ['/portfolio/waterfall']);
   assert.deepEqual(alsoInFor('founder', 'Raise').map((w) => w.route),
     ['/legal-capital', '/incorporate', '/compliance', '/incorporate/cofounder-agreement']);
   // `row` doors are the row itself; they are not listed under it.
@@ -190,22 +192,19 @@ test('the Lab page is linked from the Lab\'s own arsenal', () => {
   }
 });
 
-test('the one retired page redirects a founder to the zone that replaced it, and no one else', () => {
-  const block = routeBlock(APP, '/liquidity');
-  assert.match(block, /effectiveRole === 'founder' \? <Navigate replace to=\{\{ pathname: '\/raise\/liquidity', search: `\?\$\{liquidityParams\}`, hash: location\.hash \}\} \/>/);
-  // The query and the hash travel, as D422's redirects do; only `mode` is set.
-  assert.match(APP, /const liquidityParams = new URLSearchParams\(location\.search\);\n\s*liquidityParams\.set\('mode', 'workspace'\);/,
-    'the redirect must keep the query it arrived with and set mode=workspace');
-  assert.match(block, /: founderEditor\(<LiquidityPage currentUser=\{user\} \/>\)/,
-    'a partner or investor no longer lands on /liquidity');
-  assert.ok(guardRoles('/raise/liquidity').includes('founder'), 'the redirect lands on a route the founder cannot open');
-  assert.match(routeBlock(APP, '/raise/liquidity'), /get\('mode'\) === 'workspace'\s*\?[^:]*<LiquidityPage/,
-    '/raise/liquidity?mode=workspace no longer renders LiquidityPage');
-  // The founder's Raise row no longer claims a path a founder cannot render.
-  const raise = rowsOf('founder').find((r) => r.label === 'Raise');
-  assert.ok(!raise.match.includes('/liquidity'), 'founder Raise still matches /liquidity');
-  assert.ok(lights(raise, '/raise/liquidity'), 'founder Raise does not light the redirect target');
-  // The editor returns to Raise's Cap table with its selected project.
+test('the removed pages have no route, no row match and no Also in entry (owner, 2026-10-20)', () => {
+  const GONE = ['/scoring', '/portfolio/risk-matrix', '/capital', '/liquidity', '/raise/liquidity', '/portfolio/reserves', '/watchlist', '/watchlist/:uid', '/lp-reports', '/funds/accounting'];
+  for (const route of GONE) {
+    assert.equal(routeBlock(APP, route), null, `${route} is still a route`);
+    assert.ok(!(route in PAGE_HOMES), `${route} still has a home`);
+  }
+  assert.doesNotMatch(APP, /LiquidityPage|liquidityParams/, 'the Liquidity page or its redirect is still wired');
+  for (const role of ['founder', 'investor', 'partner']) {
+    for (const r of rowsOf(role)) {
+      for (const route of GONE) assert.ok(!(r.match || []).includes(route), `${role} ${r.label} still matches ${route}`);
+    }
+  }
+  // The editors still return to their modules.
   checks.returns(actual);
 });
 

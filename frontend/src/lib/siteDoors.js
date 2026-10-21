@@ -122,7 +122,7 @@ export const DOORS = {
         k: 'Raise',
         t: 'Raise money, and stay legal.',
         d: 'See where the round stands, build your pitch deck and share it by link, and keep SAFEs, the option pool, and dilution on the cap table. Track investor prospects and who can introduce you, keep a data room, and see your legal documents, signatures, and deadlines, the 83(b) among them, in one place.',
-        list: ['Status', 'Pitch', 'Capital', 'Investor match', 'Legal', 'Data room', 'Liquidity'],
+        list: ['Status', 'Pitch', 'Capital', 'Investor match', 'Legal', 'Data room'],
       },
       {
         k: 'Grow',
@@ -269,7 +269,6 @@ export const DOORS = {
     statusNote: 'Portfolio reporting for LPs is live. The dedicated LP data room and capital-account portal is coming soon.',
     live: [
       { t: 'Curated pipeline', route: '/deals/pipeline' },
-      { t: 'Venture-readiness score with evidence', route: '/scoring' },
       // Dropped: "Stripe and Plaid verification" (no Plaid integration).
       { t: 'Deal rooms', route: '/deals/:dealId' },
       { t: 'Relationships and notes', route: '/network/relationships' },

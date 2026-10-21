@@ -4,53 +4,6 @@ export default {
   icon: 'TrendingUp',
   subsections: [
     {
-      id: 'scoring',
-      title: 'Scoring',
-      overview:
-        "Scoring runs your startup through a 100-point algorithm covering Market, Team, Product, Capital, Strategic Fit, and Distribution. Tier 1 (≥85) is fast-tracked, Tier 2 (70–84) gets conditional next steps, and below 70 means more validation is needed before re-submitting.",
-      howto: [
-        'Open Scoring from your startup menu.',
-        'Confirm or update the inputs (TAM, team experience, MVP cost, etc.).',
-        'Click "Run scoring" — results appear in seconds with per-dimension breakdowns.',
-        'Review the lowest-scoring dimensions and use them to focus your next iteration.',
-      ],
-      tips: [
-        'Re-score after major milestones — first revenue, key hire, signed LOI — to track momentum.',
-        'The dimension explanations call out what you’re missing so you know what to improve.',
-      ],
-      pitfalls: [
-        'Tweaking inputs to chase a higher number instead of improving the underlying business is wasted effort — every score is signed and admins can see the input history.',
-        'A high Market score on a thin Team score still triggers studio review; balance matters more than peaks.',
-      ],
-      related: [
-        { label: 'Scoring anti-cheat', href: '#validate-grow/scoring-integrity' },
-        { label: 'Pitch Deck', href: '#build/pitch-deck' },
-      ],
-    },
-    {
-      id: 'scoring-integrity',
-      title: 'Scoring integrity & anti-cheat',
-      overview:
-        "Every score is signed and time-stamped. The studio team can see when you re-scored, which inputs changed, and whether the change reflects real-world progress. Repeated input flips without supporting evidence flag the startup for manual review.",
-      howto: [
-        'Re-score after a milestone, not before — back up changes with discovery notes, metrics, or signed contracts.',
-        'Use the Decision Journal to record why an input changed; it shows up next to the score history.',
-        'If a re-score is rejected by the studio team, you’ll see a banner with the reason and a link to fix it.',
-      ],
-      tips: [
-        'Stable, slowly improving scores read better to investors than spiky ones.',
-        'Scoring is one of many studio signals — milestones and metrics matter more for tier upgrades.',
-      ],
-      pitfalls: [
-        'Coordinating multiple accounts to inflate one startup breaches the terms of service and is detectable.',
-        'Backdating inputs (“we had this all along”) without supporting evidence is treated as a re-score, not a correction.',
-      ],
-      related: [
-        { label: 'Scoring', href: '#validate-grow/scoring' },
-        { label: 'Trust Center', href: '#validate-grow/trust-center' },
-      ],
-    },
-    {
       id: 'trust-center',
       title: 'Trust Center',
       overview:
@@ -138,7 +91,7 @@ export default {
       ],
       tips: [
         'Send a one-paragraph context note when you book — advisors prepare better with a clear ask.',
-        'Capture the advisor’s feedback in your Decision Journal so you don’t lose it.',
+        'Write down the advisor’s feedback straight after the session so you don’t lose it.',
       ],
       pitfalls: [
         'Booking without a calendar connected forces a manual ICS download — connect a calendar first.',

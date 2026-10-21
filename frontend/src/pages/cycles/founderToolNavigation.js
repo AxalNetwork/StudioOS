@@ -6,7 +6,6 @@ import { cycleOf } from './cycleModel.js';
 export const FOUNDER_TOOLS = [
   { path: '/grow/brand', cycle: 'grow', module: 'distribution', label: 'Open landing-page builder', door: true, roles: ['admin', 'founder'] },
   { path: '/grow/launch', cycle: 'grow', module: 'distribution', label: 'Open launch calendar', door: true, roles: ['admin', 'founder'] },
-  { path: '/raise/liquidity', aliases: ['/liquidity'], cycle: 'raise', module: 'cap-table', label: 'Open liquidity', door: true, roles: ['admin', 'founder'], requiredTier: 'studio' },
   { path: '/legal', cycle: 'build', module: 'company-creation', label: 'Open legal documents', door: true, roles: ['admin', 'founder'] },
   { path: '/legal/send', cycle: 'build', module: 'company-creation', label: 'Open e-signature', door: true, roles: ['admin', 'founder', 'partner', 'investor', 'advisor'] },
   { path: '/raise/capital-match', aliases: ['/grow/capital-match'], cycle: 'raise', module: 'capital-relationships', label: 'Open investor match', door: true, roles: ['admin', 'founder'] },

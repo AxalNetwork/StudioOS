@@ -138,8 +138,9 @@ test('the gate clock is fixed from event.scheduledTime before the drain', () => 
   const drain = body.indexOf('await processQueueBatch(env, 25)');
   assert.ok(decl > 0 && drain > decl, 'the gate clock is no longer taken from scheduledTime before the drain');
   assert.equal((body.match(/const now = /g) || []).length, 1, 'a second `now` is declared in the handler');
-  // The one consumer that keeps the wall clock, on purpose (D122's rule).
-  assert.match(body, /sweepWatchlistReminders\(env, new Date\(\)\)/);
+  // The one consumer that kept the wall clock on purpose (D122's rule), the
+  // watchlist reminder sweep, left with the Watchlist page (owner, 2026-10-20).
+  assert.doesNotMatch(body, /sweepWatchlistReminders/);
   // No gate anywhere in the handler reads the wall clock: the behavioural
   // tests above drive the 03:00 block, and this covers every other one.
   const wallGates = body.match(/if \([^\n]*new Date\(\)\.getUTC[^\n]*/g) || [];

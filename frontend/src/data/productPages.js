@@ -290,7 +290,7 @@ export const PRODUCT_PAGES = {
       'Diligence — reference checks, KYC and scoring breakdowns',
       'CRM & pipeline — relationships, contacts and deal stages',
       'Warm intros to founders, calendar bookings included',
-      'Portfolio visibility — health, positions and risk matrix',
+      'Portfolio visibility — health and positions',
       'Market Intelligence — sector signals and thesis-fit matching',
       'LP reporting with peer benchmarks (Institutional)',
     ],

@@ -209,7 +209,7 @@ capital.post('/calls', async (c) => {
         type: 'capital_call_issued',
         title: `Capital call: $${call.amount}`,
         body: `A capital call has been issued${call.due_date ? ` (due ${call.due_date})` : ''}.`,
-        link: '/capital',
+        link: '/spinout-lab/investor-workspace',
         payload: { call_id: call.id, amount: call.amount, due_date: call.due_date },
         channels: ['in_app', 'email', 'slack'],
       });
@@ -374,7 +374,7 @@ capital.post('/calls/:id/pay', async (c) => {
         type: 'capital_call_paid',
         title: `Capital call recorded as paid: $${updated.amount}`,
         body: "Your fund's general partner has recorded this capital call as paid.",
-        link: '/capital',
+        link: '/spinout-lab/investor-workspace',
         payload: { call_id: updated.id, amount: updated.amount },
         channels: ['in_app', 'email'],
       });

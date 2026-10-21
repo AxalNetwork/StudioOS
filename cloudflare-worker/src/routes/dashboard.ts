@@ -383,11 +383,13 @@ dashboard.get('/investor-lifecycle', async (c) => {
 
   // Ordered funnel. `href` deep-links to the surface that moves the stage.
   const stages = [
-    { id: 'watching', label: 'Watching', count: counts.watching, reached: counts.watching > 0, href: '/watchlist' },
+    // The Watchlist page was removed (owner, 2026-10-20): Watching opens the
+    // deal flow, and Committed the portfolio its commitments become.
+    { id: 'watching', label: 'Watching', count: counts.watching, reached: counts.watching > 0, href: '/deals' },
     { id: 'intro', label: 'Warm intro', count: counts.intros, reached: counts.intros > 0, href: '/deals' },
     { id: 'dealroom', label: 'Deal room', count: counts.dealrooms, reached: counts.dealrooms > 0, href: '/deals' },
     { id: 'diligence', label: 'Diligence', count: counts.dd_total, reached: counts.dd_total > 0, href: '/due-diligence' },
-    { id: 'committed', label: 'Committed', count: counts.committed, reached: counts.committed > 0, href: '/watchlist' },
+    { id: 'committed', label: 'Committed', count: counts.committed, reached: counts.committed > 0, href: '/portfolio' },
   ];
 
   // Current stage = the deepest one with any activity (falls back to the first).

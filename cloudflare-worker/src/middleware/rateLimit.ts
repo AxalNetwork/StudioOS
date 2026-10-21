@@ -309,6 +309,23 @@ const BUCKETS: Bucket[] = [
   // retry, nothing for a script. Anchored so no sibling share route
   // (view, nda, feedback, deal pack) is capped by it. failClosed: if KV is
   // down the account-creating write waits rather than running uncapped.
+  // D811 — Mail reads and feedback, a separate fail-closed service bucket.
+  {
+    name: 'testing_mail_public',
+    limit: 30,
+    windowSec: 60,
+    test: (p) => p === '/api/testing/mail' || p.startsWith('/api/testing/mail/'),
+    scope: 'ip',
+    failClosed: true,
+  },
+  {
+    name: 'mail_link',
+    limit: 120,
+    windowSec: 60,
+    test: (p) => p === '/api/mail-link' || p.startsWith('/api/mail-link/'),
+    scope: 'ip',
+    failClosed: true,
+  },
   // D810 — the newsletter's public routes: a signup mails whatever address it
   // is given, and the confirm and preferences routes take a token a script
   // could try to guess. Unsubscribe is outside it (see NEWSLETTER_PUBLIC).
@@ -481,6 +498,9 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
     if (RATE_LIMIT_EXEMPT.some(p => path === p || path.startsWith(p + '/'))) return next();
 
     const method = c.req.method;
+    // RFC 8058 mailbox bursts and KV outages must not prevent signed opt-outs.
+    // The route still verifies the programme-scoped token before any write.
+    if (path === '/api/testing/mail/unsubscribe' && (method === 'POST' || method === 'PUT')) return next();
     const env = c.env;
     const ctx = c.executionCtx as any;
 

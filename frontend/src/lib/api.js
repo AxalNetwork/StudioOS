@@ -1004,9 +1004,6 @@ export const api = {
   scoreStartup: (data) => request('/scoring/score', { method: 'POST', body: JSON.stringify(data) }),
   getScores: (projectId, opts = {}) => request(`/scoring/scores/${projectId}${opts.includeSandbox ? '?include_sandbox=1' : ''}`),
   getCohortBenchmark: (projectId) => request(`/scoring/cohort-benchmark/${encodeURIComponent(projectId)}`),
-  generateDealMemo: (projectId) => request(`/scoring/score/${projectId}/deal-memo`, { method: 'POST' }),
-  getDealMemos: (projectId) => request(`/scoring/deal-memos/${projectId}`),
-  scoringQueue: () => request('/scoring/queue'),
   // Admin sign-off queue for flagged / tampered snapshots.
   getScoreFlags: (status = 'flagged') => request(`/monitoring/score-flags?status=${encodeURIComponent(status)}`),
   reviewScoreFlag: (id, decision, notes) => request(`/monitoring/score-flags/${id}/review`, { method: 'POST', body: JSON.stringify({ decision, notes }) }),
@@ -1363,13 +1360,8 @@ export const api = {
   recommendPartners: (sector) => request(`/partners/matchmaking/recommend${sector ? `?sector=${sector}` : ''}`),
   matchPartners: (intent) => request('/partners/match', { method: 'POST', body: JSON.stringify({ intent }) }),
 
-  listInvestors: () => request('/capital/investors'),
-  createInvestor: (data) => request('/capital/investors', { method: 'POST', body: JSON.stringify(data) }),
-  getInvestor: (id) => request(`/capital/investors/${id}`),
   createCapitalCallV2: (data) => request('/capital/calls', { method: 'POST', body: JSON.stringify(data) }),
   listCapitalCalls: (status) => request(`/capital/calls${status ? `?status=${status}` : ''}`),
-  payCapitalCall: (id) => request(`/capital/calls/${id}/pay`, { method: 'POST' }),
-  portfolio: () => request('/capital/portfolio'),
 
   listTickets: (status) => request(`/tickets${status ? `?status=${status}` : ''}`),
   createTicket: (data) => request('/tickets', { method: 'POST', body: JSON.stringify(data) }),
@@ -3105,24 +3097,6 @@ export const api = {
   fundCapitalCall: (id, amount, note) =>
     request(`/funds/${id}/capital-call`, { method: 'POST', body: JSON.stringify({ amount, note }) }),
 
-  // ---------- Liquidity / Secondary market ----------
-  liquidityMarketplace: () => request('/liquidity/marketplace'),
-  liquidityList: (data) => request('/liquidity/list', { method: 'POST', body: JSON.stringify(data) }),
-  liquidityMatch: (listing_id) =>
-    request('/liquidity/match', { method: 'POST', body: JSON.stringify({ listing_id }) }),
-  liquidityListingMatches: (id) => request(`/liquidity/listings/${id}/matches`),
-  liquidityExecuteExit: (data) =>
-    request('/liquidity/execute-exit', { method: 'POST', body: JSON.stringify(data) }),
-  liquidityMyPortfolio: () => request('/liquidity/my-portfolio'),
-  liquidityEvents: () => request('/liquidity/events'),
-  // Settlement side of a secondary — seller or admin only. Proceeds is a
-  // calculator (nothing is stored); the ROFR notice is real state.
-  liquidityProceeds: (id, terms = {}) =>
-    request(`/liquidity/listings/${id}/proceeds`, { method: 'POST', body: JSON.stringify(terms) }),
-  liquidityRofr: (id) => request(`/liquidity/listings/${id}/rofr`),
-  liquidityUpdateRofr: (id, data) =>
-    request(`/liquidity/listings/${id}/rofr`, { method: 'PUT', body: JSON.stringify(data) }),
-
   // ---------- VC Funds / LP Portal / Distributions ----------
   fundsList: (status) => request(`/funds${status ? `?status=${status}` : ''}`),
   fundsGet: (id) => request(`/funds/${id}`),
@@ -4065,7 +4039,6 @@ export const api = {
   // Worker-only (D1); the dev FastAPI backend 404s on the whole prefix.
   // Reads gate to admin/partner/investor; analyst writes (override/recompute)
   // gate to admin/partner.
-  ventureRiskMatrix: () => request('/venture-risk/matrix'),
   ventureRiskByProject: (projectId) => request(`/venture-risk/by-project/${projectId}`),
   ventureRiskRecompute: (projectId) =>
     request(`/venture-risk/${projectId}/recompute`, { method: 'POST' }),
@@ -4785,37 +4758,6 @@ export const api = {
   portfolioCoverage: (fundId) =>
     request(`/portfolio/coverage${fundId ? `?fund_id=${encodeURIComponent(fundId)}` : ''}`),
 
-  // ---------- Watchlist + Decision Journal (Task #49) ----------
-  watchlistList: (opts = {}) => {
-    const qs = new URLSearchParams();
-    if (opts.status) qs.set('status', opts.status);
-    if (opts.owner) qs.set('owner', opts.owner);
-    const s = qs.toString();
-    return request(`/watchlist${s ? `?${s}` : ''}`);
-  },
-  watchlistCreate: (data) => request('/watchlist', { method: 'POST', body: JSON.stringify(data) }),
-  watchlistGet: (uid) => request(`/watchlist/${uid}`),
-  watchlistUpdate: (uid, data) => request(`/watchlist/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
-  watchlistDelete: (uid) => request(`/watchlist/${uid}`, { method: 'DELETE' }),
-  watchlistConvert: (uid, data = {}) =>
-    request(`/watchlist/${uid}/convert`, { method: 'POST', body: JSON.stringify(data) }),
-
-  journalList: (opts = {}) => {
-    const qs = new URLSearchParams();
-    for (const k of ['decision', 'outcome_status', 'project_uid', 'watchlist_uid', 'owner']) {
-      if (opts[k]) qs.set(k, opts[k]);
-    }
-    const s = qs.toString();
-    return request(`/journal${s ? `?${s}` : ''}`);
-  },
-  journalCreate: (data) => request('/journal', { method: 'POST', body: JSON.stringify(data) }),
-  journalGet: (uid) => request(`/journal/${uid}`),
-  journalUpdate: (uid, data) => request(`/journal/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
-  journalRecordOutcome: (uid, data) =>
-    request(`/journal/${uid}/outcome`, { method: 'POST', body: JSON.stringify(data) }),
-  journalDelete: (uid) => request(`/journal/${uid}`, { method: 'DELETE' }),
-  antiportfolio: (owner = 'me') => request(`/antiportfolio?owner=${encodeURIComponent(owner)}`),
-
   // ---------- IC Decisions (Commit) ----------
   icList: (opts = {}) => {
     const q = new URLSearchParams();
@@ -4845,8 +4787,6 @@ export const api = {
     const qs = q.toString();
     return request(`/lp-reports${qs ? `?${qs}` : ''}`);
   },
-  lpReportCreate: (data) => request('/lp-reports', { method: 'POST', body: JSON.stringify(data) }),
-  lpReportPublish: (uid) => request(`/lp-reports/${uid}/publish`, { method: 'POST' }),
 
   // ---------- Company Updates (Support) ----------
   portfolioUpdatesList: (opts = {}) => {
@@ -4966,18 +4906,8 @@ export const api = {
   pushSubscriptions: () => request('/notifications/push/subscriptions'),
   pushTest: () => request('/notifications/push/test', { method: 'POST' }),
 
-  // Task #46 — Reserve allocation + waterfall simulator.
-  fundSimReservesList: (fundId) => request(`/fund-sim/funds/${fundId}/reserves`),
-  fundSimReservesReplace: (fundId, items) =>
-    request(`/fund-sim/funds/${fundId}/reserves`, {
-      method: 'PUT',
-      body: JSON.stringify({ items }),
-    }),
-  fundSimReservesSimulate: (fundId, body) =>
-    request(`/fund-sim/funds/${fundId}/reserves/simulate`, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
+  // Task #46 — the waterfall simulator. Its reserve-allocation half was
+  // removed with the Reserve Allocation page (owner, 2026-10-20).
   fundSimWaterfall: (fundId, body) =>
     request(`/fund-sim/funds/${fundId}/waterfall/simulate`, {
       method: 'POST',

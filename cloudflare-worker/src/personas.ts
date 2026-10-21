@@ -66,7 +66,7 @@ export const PERSONAS: Persona[] = [
       { key: 'sector_focus', prompt: 'Any sector/thesis focus you care about?', type: 'text' },
       { key: 'liquidity_horizon', prompt: 'Comfortable lock-up horizon? (3-5y / 5-10y / 10y+)', type: 'choice', choices: ['3-5y', '5-10y', '10y+'] },
     ],
-    nav_extras: [{ to: '/capital', label: 'Capital & Investment' }],
+    nav_extras: [],
   },
   {
     id: 'lp_institutional',
@@ -80,7 +80,7 @@ export const PERSONAS: Persona[] = [
       { key: 'allocation_target_usd', prompt: 'Target allocation to venture this cycle (USD)?', type: 'number' },
       { key: 'mandate_constraints', prompt: 'Any mandate constraints (geography, sector, ESG, ticket cap)?', type: 'text' },
     ],
-    nav_extras: [{ to: '/capital', label: 'Capital & Investment' }, { to: '/funds', label: 'Funds' }],
+    nav_extras: [{ to: '/funds', label: 'Funds' }],
   },
   {
     id: 'gp_external',
@@ -136,7 +136,7 @@ export const PERSONAS: Persona[] = [
       { key: 'allocation_target_usd', prompt: 'Venture allocation target (USD)?', type: 'number' },
       { key: 'co_invest_appetite', prompt: 'Appetite for direct co-investment alongside fund commitments?', type: 'choice', choices: ['yes', 'no', 'selective'] },
     ],
-    nav_extras: [{ to: '/capital', label: 'Capital & Investment' }, { to: '/liquidity', label: 'Liquidity & Exits' }],
+    nav_extras: [],
   },
   {
     id: 'academic',
