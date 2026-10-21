@@ -11,6 +11,7 @@ import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { titleCase as caseLabel } from '../../lib/absence';
 import { useManagedFund, FundPicker } from './managedFund';
+import FromMercury from './FromMercury';
 
 const titleCase = (value) => caseLabel(value) || 'Unrecorded';
 const periodOf = (row) => row.period || row.label || row.reporting_period || `Period ${row.id || 'unrecorded'}`;
@@ -77,6 +78,8 @@ export default function InvestorFundReporting() {
     <section className="if4-stats"><Stat label="Periods" value={state.error || !state.rows.length ? null : state.rows.length} note={state.rows.length ? `${published} published` : 'Archive source unavailable'} /><Stat label="Current pack" value={latest ? periodOf(latest) : null} note={latest ? titleCase(statusOf(latest)) : 'No current pack recorded'} /><Stat label="Delivery" value={deliveryKnown ? 'Recorded' : null} note={deliveryKnown ? 'Per-LP delivery source' : 'Per-LP delivery unavailable'} /><Stat label="Next audited" value={null} note="Audit schedule not recorded" /></section>
     <section className="i6-card if4-archive"><header><div><h2>Report archive</h2><span>{state.loading ? 'Loading source records' : `${visible.length} of ${state.rows.length} records`}</span></div><span>Read-only collection</span></header>{state.loading ? <div className="i6-skeleton" /> : state.error || !state.rows.length ? <div className="i6-empty if4-empty"><AlertCircle size={17} /><div><strong>Report archive is unavailable.</strong><p>Pack contents, publication state, and per-LP delivery cannot be displayed without stored reporting records.</p></div></div> : !visible.length ? <div className="i6-empty">No reporting records match this filter.</div> : <div className="if4-table-wrap"><table><thead><tr><th>Period</th><th>State</th><th>Delivered</th><th>Contents</th></tr></thead><tbody>{visible.map((row) => <tr key={row.uid || row.id || periodOf(row)}><td><strong>{periodOf(row)}</strong><small>{row.issued_at ? `Issued ${date(row.issued_at)}` : 'Source period'}</small></td><td><span className={`if4-pill ${statusOf(row)}`}>{titleCase(statusOf(row))}</span></td><td>{row.delivery_count ?? row.delivered_count ?? row.delivery_status ?? 'Unavailable'}</td><td><ReportContents row={row} /></td></tr>)}</tbody></table></div>}<p className="i6-footnote">A draft is not represented as delivered. This page never builds, publishes, exports, or changes an LP pack.</p></section>
     <section className="i6-card if4-boundary"><header><div><h2>Reporting boundary</h2><span>Source-preserved · no write</span></div></header><p>Axal offers no pack authoring, publishing, archive export or delivery log here. Missing per-LP delivery data is not treated as delivery to all LPs.</p></section>
+    {/* D840 (#2349): month-end cash from the GP's own Mercury, and its statement attached on Accept. */}
+    <FromMercury section="reporting" fundId={managed.fund?.id ?? null} />
     <footer className="i6-footnote">Fund source-preserved · no pack builder, publish, export, or AI write action from this page.</footer>
   </main><WorkerRail
     workspace="Fund"

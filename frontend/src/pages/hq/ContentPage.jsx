@@ -22,16 +22,10 @@
  * said localises the item it names; Brand approval is the rest, a submission
  * from before the relation was recorded saying so on its card.
  *
- * THE OTHER THREE PANELS ARE READ-ONLY SUMMARIES OF CONSOLES THAT STAY WHERE
- * THEY ARE (D214). H18 and H19's changelog says they retire the assessment
- * authoring console, the Personas tab and the network-profiles console; the
- * owner's brief says nothing retires. So the Assessment Studio, the personas
- * taxonomy and the Advisors & Partners deck roster each read the store their
- * console writes, draw what the canvas asks for that is stored, state what is
- * not with its reason, and end in ONE literal link to that console. None of
- * them holds a control. The roster links `/admin?tab=network-profiles`, never
- * the standalone path, because that route's reachability exemption would go
- * stale the moment something here linked it.
+ * The deck roster and Personas taxonomy link to their existing consoles.
+ * Assessment games remain a summary with the existing push control; the
+ * owner removed the authoring page on 2026-10-21. The roster links the
+ * /admin?tab=network-profiles tab, never the standalone path.
  *
  * THE MASTER TEMPLATE LIBRARY IS A LINK, NOT A SECOND COPY. The artboard
  * draws it here, but it already lives at `/admin/contracts` over the
@@ -432,7 +426,7 @@ export function ContentBoard({ loading, unreadable, board, pipeline, unifiedReas
   );
 }
 
-/* ── H18 · C1 · the Assessment Studio ────────────────────────────────────── */
+/* ── H18 · C1 · assessment games ────────────────────────────────────── */
 
 const GAME_PILL = {
   published: ['Published', PILL_GREEN],
@@ -599,16 +593,10 @@ export function AssessmentPanel({ loading, unreadable, assessment, push, onPushG
           nothing on its own (D487): the push does, and no branch is notified,
           so this says what an edit actually reaches. */}
       <p className="mt-2 text-[11px] leading-relaxed text-axal-muted" data-testid="hq-assessment-edit-reach">
-        Editing a game on the console changes HQ&rsquo;s copy only. It reaches the branches at the next push, which
+        Saved assessment games reach the branches at the next push, which
         sends every published game to every branch and archives on each one any game HQ no longer publishes. Nothing
         is republished on its own, and no branch is notified.
       </p>
-      <Link to="/admin/assessment" className={CONSOLE_LINK} data-testid="hq-content-link-assessment">
-        <ConsoleLinkBody
-          title="Assessment Studio"
-          note="Author games, chapters, archetypes and questions there. Authoring is refused on a branch. This panel changes none."
-        />
-      </Link>
     </>
   );
 }
@@ -887,7 +875,7 @@ export default function ContentPage() {
       workspace="Content"
       role="super_admin"
       stance="Read-only summary"
-      note="This rail summarises the pipeline board, the publications store, the branch localisation lane, the Assessment Studio, the personas taxonomy and the deck roster. It takes no action and decides no submission."
+      note="This rail summarises the pipeline board, the publications store, the branch localisation lane, assessment games, the personas taxonomy and the deck roster. It takes no action and decides no submission."
       coverage={coverage}
       coverageNote={coverage.length ? undefined
         : (loading || lane === null
@@ -940,8 +928,8 @@ export default function ContentPage() {
             Six lanes, from Draft to Published, drawn from the stores that exist: articles, publications, and the
             content escalations branches send HQ. Every row names its store, because the two stores still mean two
             different things by &ldquo;published&rdquo;, and a lane that cannot be counted says why rather than
-            holding a number. Below it, the deck roster, the Assessment Studio and the personas taxonomy — each a read-only
-            summary of its console, ending in a link to it.
+            holding a number. Below it, the deck roster, assessment games and the personas taxonomy — each a read-only
+            summary of the records on this platform.
           </p>
         </header>
 
@@ -1115,7 +1103,7 @@ export default function ContentPage() {
           </Zone>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Zone title="Assessment Studio" sub="games, chapters, archetypes · authored on HQ only" testid="hq-content-assessment">
+            <Zone title="Assessment games" sub="saved games, chapters, archetypes and runs" testid="hq-content-assessment">
               <AssessmentPanel loading={loading} unreadable={unreadable} assessment={assessment} push={push} onPushGames={pushGames} />
             </Zone>
             <Zone title="Personas taxonomy" sub="the set is code · a retag is Admin's" testid="hq-content-personas">

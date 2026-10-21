@@ -26,10 +26,12 @@ const BOARDS = Object.entries(CANVAS.profiles).flatMap(([profile, sections]) => 
 
 // ── parity with the canvas ──────────────────────────────────────────────────
 
-test('every section and module on the canvas is reached by a route or an alias', () => {
+test('every active section and module on the canvas is reached by a route or an alias', () => {
   assert.deepEqual(Object.keys(CANVAS.profiles), PROFILES, 'the six profiles, in the canvas\'s order');
   assert.equal(BOARDS.length, 204);
-  const missing = BOARDS.filter(([profile, k]) => !keysOf(profile).has(k)).map(([, k]) => k);
+  // Owner removal, 2026-10-21: the frozen canvas retains the deleted editor.
+  const retired = new Set(['Admin · Programs · Assessment runs', 'Super Admin · Content · Assessment Studio']);
+  const missing = BOARDS.filter(([profile, k]) => !retired.has(k) && !keysOf(profile).has(k)).map(([, k]) => k);
   assert.deepEqual(missing, []);
   // An alias points at a page a route owns, in its own profile, and says why.
   for (const a of RAIL_BOARD_ALIASES) {
@@ -125,7 +127,7 @@ test('a route answers its module and every page below it; the section answers th
   assert.equal(pageKeyFor('/funds/ledger', 'investor'), 'Investor · Fund · Distributions');
   assert.equal(pageKeyFor('/admin', 'super_admin', { search: '?tab=users' }), 'Super Admin · Team · Users');
   assert.equal(pageKeyFor('/admin', 'admin', { search: '?tab=profiles' }), 'Admin · Approvals · Entity profiles');
-  assert.equal(pageKeyFor('/admin/assessment', 'admin'), 'Admin · Programs · Assessment runs');
+  assert.equal(pageKeyFor('/admin/assessment', 'admin'), null);
   // An exact route never answers the pages below it.
   assert.equal(pageFor('/admin', 'admin').key, 'Admin · Admin console');
   assert.equal(pageKeyFor('/admin/licences', 'admin'), null, 'Licences is the Super Admin\'s');

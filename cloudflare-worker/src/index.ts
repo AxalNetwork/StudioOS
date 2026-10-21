@@ -338,6 +338,7 @@ import { adminPartnerSettlements, partnerSettlements } from './routes/partner_se
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
+import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
 import adminFundStructure from './routes/admin_fund_structure';
 // PaymentIntent + SetupIntent surface for the Axal-branded embedded card UI.
@@ -972,6 +973,8 @@ app.route('/api/partner-settlements', partnerSettlements);
 app.route('/api/mercury/personal', mercuryPersonalRoutes);
 // D752 — an investor's proof of capital: dated statements from their own Mercury, read-only, HQ only.
 app.route('/api/mercury/attestations', mercuryAttestationRoutes);
+// D840 part 4 — an investor's own Mercury feeds their sections, read-only, HQ only.
+app.route('/api/mercury/investor', mercuryInvestorRoutes);
 // D708 — each Axal entity's bank accounts, Super Admin only. Before the
 // catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
 app.route('/api/admin/bank-accounts', adminBankAccounts);

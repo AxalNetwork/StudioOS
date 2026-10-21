@@ -11,6 +11,7 @@ import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { useManagedFund, FundPicker } from './managedFund';
+import FromMercury from './FromMercury';
 import { FundActControl, useFundActs } from '../../lib/fundActs';
 import ZoneDraft from '../../workspaces/ZoneDraft';
 import { reminderSubject } from './fundLpCommsModel';
@@ -237,6 +238,8 @@ export default function InvestorFundCalls() {
             </tbody></table></div>}
       </section>
     </>}
+    {/* D840 (#2349): payments from the GP's own Mercury, matched to open lines; a receipt is recorded only on Accept. */}
+    <FromMercury section="calls" fundId={fund?.id ?? null} />
     <footer className="i6-footnote">New call and Record receipt write to the fund’s ledger, and Log as sent writes the fund’s comms log. Draft reminder drafts a reminder for you to send yourself: nothing on this page sends one, or exports anything but the receipts it shows.</footer>
   </main><WorkerRail
     workspace="Fund"

@@ -41,7 +41,6 @@ export const HQ_STRIPS = {
     ['Overview', '/admin/content'],
     ['Content queue', '/admin/articles'],
     ['Publications', '/admin/publications'],
-    ['Assessment Studio', '/admin/assessment'],
     ['Personas', '/admin?tab=personas'],
     ['Advisors & Partners', '/admin?tab=network-profiles'],
     ['Public team page', '/admin/team'],

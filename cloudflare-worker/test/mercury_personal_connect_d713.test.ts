@@ -64,7 +64,7 @@ test('D752: an investor connects on HQ with the investor\'s capabilities; on a b
     const hq = await connect(env, 30);
     assert.equal(hq.status, 200, hq.text);
     const row: any = db.prepare("SELECT * FROM integrations WHERE user_id = 30 AND provider_key = 'mercury'").get();
-    assert.deepEqual(JSON.parse(row.capabilities_json), ['Proof of funds']);
+    assert.deepEqual(JSON.parse(row.capabilities_json), ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals']); // D840 part 4 adds the sections
     assert.equal(row.external_account_name, 'Own Holdings LLC');
     for (const c of b.calls) assert.equal(c.method, 'GET');
   } finally { b.restore(); }

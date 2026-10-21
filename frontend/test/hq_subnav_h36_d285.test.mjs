@@ -65,7 +65,7 @@ PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Integration keys'), 2);
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Bank accounts') + 1, 0, ['Product testing', '/admin?tab=product-testing']);
 const CONTENT = [
   ['Overview', '/admin/content'], ['Content queue', '/admin/articles'], ['Publications', '/admin/publications'],
-  ['Assessment Studio', '/admin/assessment'], ['Personas', '/admin?tab=personas'],
+  ['Personas', '/admin?tab=personas'],
   ['Advisors & Partners', '/admin?tab=network-profiles'], ['Public team page', '/admin/team'],
 ];
 const pairs = (items) => items.map((i) => [i.label, i.route]);
