@@ -65,7 +65,7 @@ test('D705: the mirror names the Fund and signs each party under its own title',
 test('D705: no code or named page prints the old fund name', () => {
   for (const f of [
     '../src/lib/legalDocFormat.js', '../src/brand/gvpn.ts', '../src/pages/TeamPage.jsx',
-    '../src/pages/RiskDisclosuresPage.jsx',
+    '../src/pages/RiskDisclosuresPage.jsx', // InvestorDealflowHomePage went with the /lp/* pages (#2297)
     '../../cloudflare-worker/src/services/legalDocFormat.ts', '../../cloudflare-worker/src/routes/esign.ts',
     '../../README.md', '../../documentation/architecture/LEGAL_ENTITIES.md',
   ]) assert.equal(readFileSync(new URL(f, import.meta.url), 'utf8').includes('Axal VC Fund I, LP'), false, f);

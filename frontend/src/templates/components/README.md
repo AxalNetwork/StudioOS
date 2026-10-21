@@ -15,6 +15,6 @@ blocks and supplies content; the blocks do no fetching and hold no state.
 
 ## The rule
 
-**A name in `ProofBar` must be true.** These are
+**A figure or a name in `ProofBar` must be true.** These are
 public marketing surfaces; a placeholder figure left in a template ships as a
 claim. If the number is not available, drop the block rather than filling it.

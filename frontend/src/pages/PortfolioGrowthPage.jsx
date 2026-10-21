@@ -8,7 +8,7 @@ import { api } from '../lib/api';
 import { titleCase as caseLabel } from '../lib/absence';
 
 /**
- * Portfolio Growth — /portfolio/growth, a tab of PortfolioWorkspace.
+ * Portfolio Growth — /portfolio/value-add, a tab of PortfolioWorkspace.
  *
  * The page had three sections and read data/portfolioAnalytics.js for all of
  * them, with zero API calls. Checked one at a time against the schema:

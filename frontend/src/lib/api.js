@@ -200,9 +200,8 @@ export function isPublicPath(pathname) {
     || currentPath === '/for-investors'
     || currentPath === '/for-service-partners'
     || currentPath === '/for-advisors'
-    // Audience-specific marketing landing pages: /lp/spinout-demo-day,
-    // and the four older /lp/* addresses that forward to the door pages
-    // (#2321). Public surfaces: a background
+    // The Spin-Out demo day page and the four retired /lp/* addresses that
+    // forward to the door pages (#2321). Public surfaces: a background
     // settings/me 401 for an anonymous visitor must not bounce
     // them to /login.
     || currentPath.startsWith('/lp/')
@@ -212,7 +211,6 @@ export function isPublicPath(pathname) {
     // anonymous visitor must not bounce them to /login.
     || currentPath === '/circles'
     || currentPath === '/communities'
-    || currentPath === '/roadmap'
     || currentPath === '/about'
     // D677 — the Firm page took /about; the team page moved to /team, and
     // Platform and Administrators are new public pages beside it.
@@ -2870,10 +2868,6 @@ export const api = {
   removeRelationship: (id) => request(`/partnernet/relationships/${id}/remove`, { method: 'POST' }),
   activityLogs: (limit = 50, offset = 0, action = '') => request(`/partnernet/activity/logs?limit=${limit}&offset=${offset}${action ? `&action_type=${action}` : ''}`),
   logActivity: (data) => request('/partnernet/activity/log', { method: 'POST', body: JSON.stringify(data) }),
-  // D572 part 3b — the board by metric and period, with the change against a
-  // stored earlier standing. Other members come back by rank, role and value only.
-  partnerLeaderboardBoard: ({ metric = 'score', period = 'all' } = {}) =>
-    request(`/partnernet/leaderboard/board?metric=${encodeURIComponent(metric)}&period=${encodeURIComponent(period)}`),
 
   legalGenerate: (data) => request('/legalcap/legal/generate', { method: 'POST', body: JSON.stringify(data) }),
   legalDocs: (dealId) => request(`/legalcap/legal/docs/${dealId}`),

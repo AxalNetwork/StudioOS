@@ -12,8 +12,8 @@
  *   2. SpinoutDemoDayPage's "What Is the Spin-Out Lab" subhead — same claim,
  *      same fix.
  *   3. FounderHomePage's testimonial sub — "the 38 companies" was never
- *      backed by anything. Its guards left with the page (#2321: `/lp/founder`
- *      now forwards to `/for-founders`).
+ *      backed by anything. Its pins went with the page: #2297 removed the
+ *      `/lp/*` campaign pages, FounderHomePage among them.
  *
  * Run with: node --import ./frontend/test/_deck-loader.mjs --test frontend/test/spinout_lab_copy_d508.test.mjs
  */

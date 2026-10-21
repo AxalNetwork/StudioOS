@@ -300,13 +300,6 @@ const ROUTES = [
     section: 'company',
   },
   {
-    path: '/roadmap',
-    title: 'Roadmap',
-    description: "What we're building next — vote on the features that matter to you.",
-    type: 'website',
-    section: 'company',
-  },
-  {
     path: '/status',
     title: 'System status',
     description: 'Real-time health of Axal VC StudioOS services, plus a 90-day uptime history.',
@@ -380,11 +373,9 @@ const ROUTES = [
     section: 'company',
   },
 
-  // ---- Audience landing pages (/lp/*) ------------------------------------
-  // A full public marketing page — PublicNav, PublicFooter, hero, FAQ — not
-  // an app surface that happens to be ungated. It is built to be shared.
-  // The four older /lp/* pages were removed (#2321) and forward to the door
-  // pages, which carry their own entries.
+  // ---- The Spin-Out demo day's landing page (/lp/*) ----------------------
+  // A full public marketing page, built to be shared; the four audience
+  // pages beside it were removed (owner, #2297). Copy is the page's own hero.
   {
     path: '/lp/spinout-demo-day',
     title: 'Spin-Out Lab Demo Day',

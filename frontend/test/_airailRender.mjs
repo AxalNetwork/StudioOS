@@ -165,7 +165,6 @@ export const RENDER_NOT_YET = {
     'Founder /needs',
     'Founder /founder/post-need',
     'Founder /services',
-    'Founder /more',
   ],
   2098: [
     'Investor /studio',
@@ -228,7 +227,6 @@ export const RENDER_NOT_YET = {
     'Advisor /updates',
     'Advisor /studio/archetype',
     'Operating Partner /partner/relationships',
-    'Operating Partner /partner/leaderboard',
     'Operating Partner /build/competitors',
     'Operating Partner /build/metrics',
     'Operating Partner /raise/legal-engine',

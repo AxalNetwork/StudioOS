@@ -1,7 +1,8 @@
 /**
  * D569 (#1174) — the partner earnings screens and the admin commissions
  * console: `/partner/earnings`, `/partner/referrals`,
- * `/partner/relationships/:id`, `/partner/leaderboard` and `/admin/commissions`.
+ * `/partner/relationships/:id` and `/admin/commissions` (the leaderboard,
+ * `/partner/leaderboard`, was removed: owner, #2297).
  *
  * Every component is rendered with fixtures shaped like the Worker's real
  * answers (`routes/network.ts`, `routes/partnernet.ts`, `routes/introductions.ts`,
@@ -550,14 +551,6 @@ test('logging an interaction: the route\'s fields, an optional outcome, and the 
 });
 
 /* ------------------------------------------------------------------ *
- * The leaderboard
- * ------------------------------------------------------------------ */
-
-// D572 part 3b replaced the score-only board with metrics, periods and
-// change from `GET /partnernet/leaderboard/board`; its states are pinned in
-// `partner_leaderboard_d572.test.mjs`.
-
-/* ------------------------------------------------------------------ *
  * The admin console
  * ------------------------------------------------------------------ */
 
@@ -773,7 +766,6 @@ test('every method the screens call reaches its Worker route', async () => {
     await api.relationshipEvents(5);
     await api.partnerInteractionLog(5);
     await api.partnerInteractionAdd(5, { kind: 'call', note: 'x' });
-    await api.partnerLeaderboardBoard({ metric: 'referrals', period: 'quarter' });
     await api.adminCommissionRules();
     await api.adminUpdateCommissionRule('referral_kyc_approved', { amount_cents: 7500, percentage_bps: null, description: null, active: true });
     await api.adminCommissions();
@@ -793,7 +785,6 @@ test('every method the screens call reaches its Worker route', async () => {
     'GET /partnernet/relationships/5/events',
     'GET /partnernet/relationships/5/interactions',
     'POST /partnernet/relationships/5/interactions',
-    'GET /partnernet/leaderboard/board?metric=referrals&period=quarter',
     'GET /network/admin/commission-rules',
     'PATCH /network/admin/commission-rules/referral_kyc_approved',
     'GET /network/admin/commissions',
@@ -803,9 +794,9 @@ test('every method the screens call reaches its Worker route', async () => {
     'PUT /admin/platform/take-rate',
   ]);
   assert.deepEqual(JSON.parse(calls[2][2]), { amount_cents: 75000, currency: 'USD', payout_method: 'wire' });
-  assert.deepEqual(JSON.parse(calls[12][2]), { amount_cents: 7500, percentage_bps: null, description: null, active: true });
-  assert.deepEqual(JSON.parse(calls[15][2]), { action: 'fail', failure_reason: 'returned' });
-  assert.deepEqual(JSON.parse(calls[17][2]), { bps: 1200 });
+  assert.deepEqual(JSON.parse(calls[11][2]), { amount_cents: 7500, percentage_bps: null, description: null, active: true });
+  assert.deepEqual(JSON.parse(calls[14][2]), { action: 'fail', failure_reason: 'returned' });
+  assert.deepEqual(JSON.parse(calls[16][2]), { bps: 1200 });
 
   // And each is a mounted route, behind the gate the page assumes.
   const index = read('cloudflare-worker/src/index.ts');
@@ -832,13 +823,14 @@ test('every method the screens call reaches its Worker route', async () => {
   assert.doesNotMatch(NETWORK, /network\.(post|put|delete)\('\/admin\/commission-rules/);
 });
 
-test('the five routes are mounted with the guards their routes need, and each has a door', () => {
+test('the four routes are mounted with the guards their routes need, and each has a door', () => {
   const app = read('frontend/src/App.jsx');
   const line = (path) => app.split('\n').find((l) => l.includes(`path="${path}"`) && l.includes('<Route'));
   assert.match(line('/partner/earnings'), /guard\(\['admin', 'partner'\], <PartnerEarnings \/>\)/);
   assert.match(line('/partner/referrals'), /guard\(\['admin', 'partner'\], <PartnerReferrals \/>\)/);
   assert.match(line('/partner/relationships/:id'), /guard\(\['admin', 'partner'\], <PartnerRelationshipLog \/>\)/);
-  assert.match(line('/partner/leaderboard'), /guard\(\['admin', 'partner'\], <PartnerLeaderboard user=\{user\} \/>\)/);
+  // The leaderboard was removed (owner, #2297).
+  assert.equal(line('/partner/leaderboard'), undefined);
   // Every partner's earnings and payouts, and the payout writes: the Super
   // Admin's, though the routes still answer any admin (#1183 asks for that).
   assert.match(line('/admin/commissions'), /guard\(\['admin'\], hqOnly\(<AdminCommissions user=\{user\} \/>\)\)/);
@@ -848,7 +840,7 @@ test('the five routes are mounted with the guards their routes need, and each ha
   assert.match(read('frontend/src/pages/admin/ReferralReview.jsx'), /to="\/admin\/commissions"/);
   assert.match(read('frontend/src/workspaces/NetworkWorkspace.jsx'), /<RelationshipRequests logPath=\{role === 'partner' \? relationshipLogPath : undefined\} \/>/);
   assert.match(read('frontend/src/components/RelationshipRequests.jsx'), /logPath \? \(\s*<Link to=\{logPath\(r\.id\)\}/);
-  assert.deepEqual(EARNINGS_AREA.zones.map((z) => `${EARNINGS_AREA.prefix}/${z.slug}`), ['/partner/earnings', '/partner/referrals', '/partner/leaderboard']);
+  assert.deepEqual(EARNINGS_AREA.zones.map((z) => `${EARNINGS_AREA.prefix}/${z.slug}`), ['/partner/earnings', '/partner/referrals']);
 });
 
 test('the rails speak as Eadwyn may: no advisor, advice, recommendation or fiduciary', () => {
@@ -860,8 +852,6 @@ test('the rails speak as Eadwyn may: no advisor, advice, recommendation or fiduc
     assert.ok(rails.length === 1, `${f} mounts ${rails.length} rails`);
     assert.doesNotMatch(rails[0], /advis|advice|recommend|fiduciar/i, `${f}'s rail breaks the voice rule`);
   }
-  // The leaderboard has no rail, by its canvas.
-  assert.doesNotMatch(read('frontend/src/pages/partner/earnings/PartnerLeaderboard.jsx'), /<WorkerRail/);
 });
 
 test('D572 part 2: a plain admin is told the console is the Super Admin\'s, and it asks the Worker for nothing', () => {
