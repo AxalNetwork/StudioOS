@@ -39,8 +39,6 @@ export const RETURNS = [
   ['/build/marketplace','/validate/customer-research','← Validate › Customer research'],
   ['/advisory','/validate/customer-research','← Validate › Customer research'],
   ['/execution','/build/product-roadmap','← Build › Product roadmap'],
-  ['/execution/board','/build/product-roadmap','← Build › Product roadmap'],
-  ['/execution/roadmap','/build/product-roadmap','← Build › Product roadmap'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
   ['/comarketing','/grow/distribution','← Grow › Distribution'],
   ['/raise/pitch','/raise/pitch-deck','← Raise › Pitch deck'],

@@ -474,12 +474,6 @@ const ALLOWED = [
   },
   {
     rule: 'hand-built',
-    file: 'pages/ApiBridgePage.jsx',
-    phrase: 'err.detail || "Request failed"',
-    why: 'inside the bridge code sample the page shows developers — text, not code this app runs',
-  },
-  {
-    rule: 'hand-built',
     file: 'pages/research/CompanyCandidate.jsx',
     phrase: 'That URL did not return a page.',
     why: 'POST /competitors/fetch answers 200 {ok:false, error:<code>} — the Worker should refuse instead; filed with task 435',

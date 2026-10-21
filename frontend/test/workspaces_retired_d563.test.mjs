@@ -194,6 +194,7 @@ test('the Lab page is linked from the Lab\'s own arsenal', () => {
 
 test('the removed pages have no route, no row match and no Also in entry (owner, 2026-10-20)', () => {
   const GONE = ['/scoring', '/portfolio/risk-matrix', '/capital', '/liquidity', '/raise/liquidity', '/portfolio/reserves', '/watchlist', '/watchlist/:uid', '/lp-reports', '/funds/accounting'];
+  // Network Effects has a compatibility redirect, pinned by network_effects_removed_2324.
   for (const route of GONE) {
     assert.equal(routeBlock(APP, route), null, `${route} is still a route`);
     assert.ok(!(route in PAGE_HOMES), `${route} still has a home`);

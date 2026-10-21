@@ -683,7 +683,7 @@ export const INVESTOR_FULL_BLEED = [
   // Legacy mounts the shell config does not claim, each still live and still
   // rendering the same canvas at the same width.
   '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions',
-  '/portfolio/health', '/portfolio/growth', '/portfolio/performance',
+  '/portfolio/health', '/portfolio/performance',
   '/portfolio/waterfall',
 ];
 

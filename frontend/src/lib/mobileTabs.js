@@ -18,7 +18,9 @@ import { SIDEBAR_GROUPS } from '../sidebarConfig.js';
  * D699 (Cycle Overview canvas, CO:219) supersedes D425's founder allocation:
  * the tabs are the four cycles, Validate, Build, Raise and Grow; Studio moves
  * to the band's glyph (`ui/phone/PhoneHeader.jsx`), so no tab and not More is
- * lit on `/studio` (CO:218); and More is a page, `/more`, not a sheet.
+ * lit on `/studio` (CO:218). More was a page, `/more`, until the owner removed
+ * it (#2297): More now opens the sidebar drawer, and `more` is the set of rows
+ * that light it.
  *
  * FOUNDER FIRST. The other licences keep D425: `mobilePlan` returns null for
  * them and the bar draws nothing, rather than a founder bar on an investor's
@@ -40,11 +42,12 @@ export const TAB_ICONS = {
 export const FOUNDER_BAND_PATHS = ['/studio'];
 
 /**
- * Doors that are not sidebar rows, carried in More because a phone has no
- * other way to them.
+ * Doors that are not sidebar rows, among the rows that light More.
  *
- * - Messages left the sidebar for the top bar (D284), and the top bar hides
- *   it below 640px, so a phone had no Messages door at all.
+ * - Messages left the sidebar for the top bar (D284). The top bar hid it
+ *   below 640px, and a founder's phone draws the band instead, so the More
+ *   page carried it. Since that page was removed (#2297) it is the band's
+ *   account sheet's first row.
  *
  * Trust and Company Settings were D425's More rows. Since D699 the account
  * sheet carries Trust Center and the company sheet carries Company Settings,

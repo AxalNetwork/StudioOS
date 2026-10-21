@@ -56,12 +56,12 @@ const renderAs = (role) => renderToStaticMarkup(
 test('the shell mounts the bar once, beside the drawer backdrop, with the resolved role and no founder default', () => {
   assert.match(CODE, /import MobileTabBar from '\.\/components\/MobileTabBar';/);
   assert.equal((CODE.match(/<MobileTabBar /g) || []).length, 1, 'mounted exactly once');
-  assert.match(CODE, /<MobileTabBar role=\{shellRole\} \/>/, 'the role is the shell\'s as resolved');
+  assert.match(CODE, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/, 'the role is the shell\'s as resolved');
   assert.doesNotMatch(CODE, /<MobileTabBar role=\{shellRole \|\| /, 'no `|| \'founder\'` on the bar: a viewer with no role gets no bar');
   // Beside the backdrop: the mount follows the drawer's backdrop block, inside
   // the same flex container as the aside, so the drawer (z-50) still covers it.
   const backdrop = CODE.indexOf("onClick={() => setSidebarOpen(false)} />");
-  const mount = CODE.indexOf('<MobileTabBar role={shellRole} />');
+  const mount = CODE.indexOf('<MobileTabBar role={shellRole} onMore={() => setSidebarOpen(true)} />');
   assert.ok(backdrop > 0 && mount > backdrop && mount - backdrop < 700, 'the bar is mounted right after the drawer backdrop');
   // The sidebar keeps its own default — that one is a nav, not a bar.
   assert.match(CODE, /<SidebarNav groups=\{sidebarGroups\} role=\{shellRole \|\| 'founder'\}/);

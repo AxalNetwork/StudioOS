@@ -45,9 +45,9 @@ export const FOUNDER_ZONE_ACTIONS = {
     // where the roadmap is edited. `/build/roadmap` is the READ-ONLY view of
     // the same data — sending a reader there to change something is the
     // round trip this note is meant to save them. The editor is
-    // `/execution/roadmap` (`RoadmapPage` calls `api.moveOkr`), which is the
+    // `/execution?mode=workspace` (`RoadmapPage` calls `api.moveOkr`), which is the
     // destination `New scenario` below already uses for the same reason.
-    { label: 'Configure zone', to: '/execution/roadmap', linkNote: 'This desk reads the roadmap’s Now column; the roadmap is edited in Execution.' },
+    { label: 'Configure zone', to: '/execution?mode=workspace#execution-roadmap', linkNote: 'This desk reads the roadmap’s Now column; the roadmap is edited in Execution.' },
   ],
   // TWO OF THESE THREE ARE LIVE AS OF MIGRATION 253. `Bulk move` is a multi-select
   // plus one all-or-nothing UPDATE that the lane's WIP limit can refuse;
