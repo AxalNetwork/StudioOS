@@ -81,7 +81,8 @@ export async function recordUsage(env: Env, row: UsageEvent): Promise<boolean> {
     ).run();
     return true;
   } catch (e) {
-    console.warn(`[api-usage] could not record ${row.executionId}:`, (e as Error)?.message || 'unknown');
+    // A constant message; the id and the error ride as separate arguments.
+    console.warn('[api-usage] could not record a usage row', row.executionId, (e as Error)?.message || 'unknown');
     return false;
   }
 }
