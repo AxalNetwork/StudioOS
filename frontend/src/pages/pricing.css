@@ -238,9 +238,14 @@
 .axp .axp-btn-white { background: #fff; color: #141118; border-color: #fff; }
 .axp .axp-btn-ghost { background: transparent; color: #fff; border-color: rgba(255, 255, 255, .4); }
 
+/* ── narrow: the four-wide grids go two-wide ── */
+@container (max-width: 980px) {
   .axp-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .axp-packs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
+/* ── phone (the canvas's 390 artboards): cards stack, one plan compared ── */
+@container (max-width: 640px) {
   .axp-hero, .axp-sec { padding-left: 18px; padding-right: 18px; }
   .axp-hero { padding-top: 44px; }
   .axp-h1 { font-size: 42px; }
@@ -250,4 +255,4 @@
   .axp-desk { display: none; }
   .axp-phone { display: block; }
   .axp-mcards { display: flex; }
-
+}
