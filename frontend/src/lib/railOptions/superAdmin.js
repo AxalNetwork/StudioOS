@@ -36,6 +36,7 @@ export const SUPER_ADMIN_PROFILE = 'Super Admin';
 
 const FRAME = 'pages/admin/AdminBoardFrame.jsx';
 const ADMIN_PAGE = 'pages/AdminPage.jsx';
+const KEYS_PAGE = 'pages/hq/IntegrationKeysPage.jsx';
 
 export const SUPER_ADMIN_BOARDS = [
   { id: 'H1', section: 'Licences', module: null, route: '/admin/licences', files: ['pages/admin/AdminLicences.jsx'], rail: 'pages/admin/AdminLicences.jsx' },
@@ -64,8 +65,10 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H24', section: 'Content', module: 'Directory', route: '/admin?tab=directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
   { id: 'H25', section: 'Content', module: 'Public team page', route: '/admin/team', files: ['pages/admin/AdminTeam.jsx'], rail: 'pages/admin/AdminTeam.jsx' },
   { id: 'H26', section: 'Platform', module: null, route: '/admin/platform', files: ['pages/hq/PlatformPage.jsx'], rail: 'pages/hq/PlatformPage.jsx' },
-  { id: 'H27', section: 'Platform', module: 'Integration keys', route: '/admin?tab=integration-keys', files: ['pages/admin/consoles/IntegrationKeysConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
-  { id: 'H28', section: 'Platform', module: 'GitHub sync', route: '/admin?tab=github', files: ['pages/admin/consoles/GithubSyncConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  // H27 and H28 are one Super Admin page since the owner's ruling of
+  // 2026-10-20, GitHub sync its `#github` section; the page draws the frame.
+  { id: 'H27', section: 'Platform', module: 'Integration keys', route: '/admin/integration-keys', files: ['pages/admin/consoles/IntegrationKeysConsole.jsx'], rail: FRAME, host: KEYS_PAGE },
+  { id: 'H28', section: 'Platform', module: 'GitHub sync', route: '/admin/integration-keys#github', files: ['pages/admin/consoles/GithubSyncConsole.jsx'], rail: FRAME, host: KEYS_PAGE },
   { id: 'H29', section: 'Platform', module: 'Payments catalogue', route: '/admin?tab=payments', files: ['pages/admin/consoles/PaymentsConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
   { id: 'H30', section: 'Platform', module: 'Promo codes', route: '/admin?tab=promos', files: ['pages/admin/consoles/PromoCodesConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
   { id: 'H31', section: 'Platform', module: 'Credit rules', route: '/admin/credit-rules', files: ['pages/hq/CreditRulesRegistryPage.jsx'], rail: 'pages/hq/CreditRulesRegistryPage.jsx' },

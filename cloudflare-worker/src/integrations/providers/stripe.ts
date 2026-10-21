@@ -59,7 +59,7 @@ const PROVIDER_KEY = 'stripe';
 const STRIPE_API = 'https://api.stripe.com';
 const STRIPE_CONNECT = 'https://connect.stripe.com';
 
-/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+/** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, PROVIDER_KEY);
 }
@@ -68,7 +68,7 @@ async function ensureCreds(env: Env): Promise<{ clientId: string; secret: string
   const { loadOauthCreds } = await import('../../services/providerOauthKeys');
   const c = await loadOauthCreds(env, 'stripe');
   if (!c) {
-    throw new Error('stripe_oauth_unconfigured: set STRIPE_CONNECT_CLIENT_ID and STRIPE_SECRET_KEY as secrets, or configure them in Admin → Integration Keys.');
+    throw new Error('stripe_oauth_unconfigured: set STRIPE_CONNECT_CLIENT_ID and STRIPE_SECRET_KEY as secrets, or configure them in HQ → Integration keys.');
   }
   return { clientId: c.id, secret: c.secret };
 }
