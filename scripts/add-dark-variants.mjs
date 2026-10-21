@@ -11,7 +11,6 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const FILES = [
-  'frontend/src/pages/NetworkEffectsPage.jsx',
   'frontend/src/pages/ReferEarnPage.jsx',
   'frontend/src/pages/PipelinePage.jsx',
   'frontend/src/pages/StudioOpsPage.jsx',

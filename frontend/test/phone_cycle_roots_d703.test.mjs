@@ -100,7 +100,7 @@ const READS = {
   },
 };
 const NAMES = { validate: 'Validate', build: 'Build', raise: 'Raise', grow: 'Grow' };
-const ALSO = { validate: ['Advisory'], build: [], raise: ['Legal & Capital', 'Incorporate', 'Compliance Calendar', 'Co-Founder Agreement'], grow: ['Network Effects', 'Co-marketing', 'Perks'] };
+const ALSO = { validate: ['Advisory'], build: [], raise: ['Legal & Capital', 'Incorporate', 'Compliance Calendar', 'Co-Founder Agreement'], grow: ['Co-marketing', 'Perks'] }; // Network Effects left with #2324
 
 // ── The stub DOM, with a founder rail when asked ──────────────────────────
 

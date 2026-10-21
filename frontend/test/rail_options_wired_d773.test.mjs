@@ -79,7 +79,7 @@ test('D773: the shared interview and competitor runs keep the founder\'s keys an
   assert.equal(railOptionFor(advisorCompanies, { file: competitors, control: 'competitors.refresh' })?.key, 'refresh:sources');
   // Outside a listed page the founder's literal stays the default.
   assert.match(read(competitors), /useRailOption\(running === 'analyze' \? \(analyzeOption\?\.key \?\? 'analyse:competitors'\) : null,/);
-  assert.match(read(interview), /useRailOption\(asking \? \(askOption\?\.key \?\? 'ask:studio'\) : null,/);
+  assert.match(read(interview), /useRailOption\(asking \? sendKey : null,/);
 });
 
 test('D773: the boards that drew no rail draw one in the shared frame, for their own profile', () => {

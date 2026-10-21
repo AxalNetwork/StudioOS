@@ -84,7 +84,7 @@ export const PARTNER_BANK = [
     label: 'Where does your deal flow come from today? (comma-separated)',
     type: 'short',
     explainer: 'e.g. Inbound, Network, Accelerators, Conferences',
-    doc_anchor: 'network/effects',
+    doc_anchor: 'network/relationships',
     page_target: '/studio',
     validate: all(required, csvNonEmpty(1)),
   },

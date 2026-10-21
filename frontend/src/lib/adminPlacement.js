@@ -132,9 +132,9 @@ export const ADMIN_PLACEMENT = [
   // with the launcher).
   // The owner removed six of them on 2026-10-20 — Scoring Engine, Risk Matrix,
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
-  // & Journal — page and route together, so twenty remained. #2337 and #2338
-  // removed Portfolio Coverage, Service Catalogue and Needs Board on
-  // 2026-10-21, so seventeen remain.
+  // & Journal — page and route together, so twenty remained. #2324 removed
+  // Network Effects, and #2337 and #2338 removed Portfolio Coverage, Service
+  // Catalogue and Needs Board on 2026-10-21, so sixteen remain.
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
   page('Studio', 'Advisory', '/advisory', 'Advisors, financial planning and diligence checks.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
@@ -144,7 +144,6 @@ export const ADMIN_PLACEMENT = [
   page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
   page('Capital & Legal', 'Compliance Calendar', '/compliance', 'Filings and their deadlines.'),
   page('Network & Growth', 'Network', '/network', 'Relationships and introductions.'),
-  page('Network & Growth', 'Network Effects', '/network-effects', 'How activity compounds across the network.'),
   page('Network & Growth', 'Jobs', '/my/jobs', 'Open roles.'),
   page('Network & Growth', 'Demand Insights', '/partner/insights', 'Partner demand analytics.'),
   page('Network & Growth', 'Partner Office Hours', '/partner/office-hours', 'Partner session bookings.'),
@@ -197,7 +196,6 @@ export const PAGE_HOMES = {
   '/incorporate': [['founder', 'Raise', 'also']],
   '/compliance': [['founder', 'Raise', 'also']],
   '/network': [['founder', 'Network', 'row'], ['investor', 'Network', 'row'], ['partner', 'Network', 'row'], ['advisor', 'Network', 'row']],
-  '/network-effects': [['founder', 'Grow', 'also']],
   '/my/jobs': [['partner', 'Network', 'also'], ['advisor', 'Network', 'also']],
   '/partner/insights': [['partner', 'Pipeline', 'also']],
   '/partner/office-hours': [['partner', 'Offers', 'also']],

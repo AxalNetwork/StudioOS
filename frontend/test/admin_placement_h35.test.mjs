@@ -68,7 +68,7 @@ const LEGACY_ROWS = [
   // network
   // '/services' and '/needs' stood here, removed with their pages by the owner
   // on 2026-10-21 (#2338); both addresses only forward now.
-  '/network', '/network-effects', '/my/jobs', '/partner/insights',
+  '/network', '/my/jobs', '/partner/insights',
   '/partner/office-hours', '/comarketing',
   // more
   '/incorporate/cofounder-agreement', '/spinout-lab/83b', '/perks',
@@ -113,11 +113,12 @@ test('the question is the size it was measured at', () => {
   // outright, and D670 retired /market-intel and /signals, which is the one
   // way a legacy console leaves the question. The owner's removals of
   // 2026-10-20 took six more (Scoring, Risk Matrix, Capital, Liquidity,
-  // Reserves, Watchlist), deleted with their pages, and the owner's removals
-  // of 2026-10-21 three more (Portfolio Coverage, Service Catalogue, Needs
-  // Board; #2337, #2338).
-  assert.equal(LEGACY_ROWS.length, 38);
-  assert.equal(new Set(LEGACY_ROWS).size, 38, 'a legacy route is listed twice');
+  // Reserves, Watchlist), deleted with their pages, and #2324 took Network
+  // Effects (#2297 §3), whose address now redirects to /network. The owner's
+  // removals of 2026-10-21 took three more (Portfolio Coverage, Service
+  // Catalogue, Needs Board; #2337, #2338).
+  assert.equal(LEGACY_ROWS.length, 37);
+  assert.equal(new Set(LEGACY_ROWS).size, 37, 'a legacy route is listed twice');
   // Fourteen tabs when the map was drawn. Integration keys and GitHub Sync
   // left for HQ's own Super Admin page (the owner's ruling, 2026-10-20);
   // D708's Bank accounts and D815's Product testing joined.
@@ -219,7 +220,7 @@ test('every placement names a real tier, a real row of that tier, and a real for
   }
   // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since,
   // and D670 retired Market Intelligence and Signals.
-  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 17, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20 and three on 2026-10-21');
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 16, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20, #2324 Network Effects, and #2337 and #2338 three more');
 });
 
 test('the three decided placements hold: Wellbeing, X, Trash', () => {
