@@ -15,7 +15,8 @@ import { mercuryView, monthLabel } from './growFromMercury';
  *   - Partner network: payments to an Axal partner, proposed. Only the founder
  *     accepts or dismisses; nothing is linked without Accept.
  *
- * Each figure says "From Mercury, as of <date>". A team member may delete a
+ * The founder syncs on demand ("Sync from Mercury"); nothing reads their bank
+ * on a schedule. Each figure says "From Mercury, as of <date>". A team member may delete a
  * figure, and the next sync leaves it deleted. Anyone outside the founder's
  * company sees only the sentence that the figures are the team's.
  */
@@ -37,7 +38,14 @@ export default function GrowFromMercury({ slug, part, projectId, reload }) {
     <section id="from-mercury" className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid={`cycle-part-mercury-${slug}`} aria-labelledby="from-mercury-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         <h2 id="from-mercury-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From Mercury</h2>
-        <span className={FAINT}>{view.source || 'Read-only, from the founder’s own Mercury'}</span>
+        <span className="flex items-baseline gap-2">
+          <span className={FAINT}>{view.source || 'Read-only, from the founder’s own Mercury'}</span>
+          {view.canSync && projectId && (
+            <button type="button" disabled={busy != null} data-testid="mercury-sync"
+              onClick={() => act('sync', () => cyclesWrite.grow.syncMercury(projectId), 'Mercury could not be read. Nothing changed; try again.')}
+              className="rounded-md border border-axal-hairline px-2.5 py-0.5 text-[11.5px] font-bold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:text-gray-200">{busy === 'sync' ? 'Syncing…' : 'Sync from Mercury'}</button>
+          )}
+        </span>
       </div>
       {view.state === 'unreadable' && <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="mercury-unreadable">{view.reason}</p>}
       {(view.state === 'team_only' || view.state === 'not_recorded') && <p className={MUTED} data-testid={`mercury-${view.state}`}>{view.reason}</p>}

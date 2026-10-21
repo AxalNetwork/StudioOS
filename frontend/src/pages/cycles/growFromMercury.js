@@ -39,10 +39,10 @@ export function mercuryView(part) {
   if (!part || typeof part !== 'object') return { state: 'none', empty: true };
   if (part.state === 'unreadable') return { state: 'unreadable', empty: false, reason: part.reason || 'The Mercury figures could not be read.' };
   if (part.state === 'team_only') return { state: 'team_only', empty: false, reason: part.reason || 'Only the venture’s team sees these figures.' };
-  if (part.state === 'not_recorded') return { state: 'not_recorded', empty: false, reason: part.reason || 'Not recorded' };
+  if (part.state === 'not_recorded') return { state: 'not_recorded', empty: false, reason: part.reason || 'Not recorded', canSync: part.can_sync === true };
   if (part.state !== 'ok') return { state: 'none', empty: true };
   return {
-    state: 'ok', empty: false, source: part.source || null,
+    state: 'ok', empty: false, source: part.source || null, canSync: part.can_sync === true,
     months: list(part.months).map((m) => ({ id: m.id, month: m.month, cash_in: money(m.cash_in_cents), net_burn: money(m.net_burn_cents) })),
     invoices: list(part.invoices).map((i) => ({ id: i.id, state: i.state, count: Number.isSafeInteger(i.count) ? i.count : 0, amount: money(i.amount_cents) })),
     invoicesReason: part.invoices_reason || null,

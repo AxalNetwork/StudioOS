@@ -78,6 +78,9 @@ test('partner network: Accept and Dismiss only on a pending proposal, and only f
   assert.doesNotMatch(html, /mercury-accept-10/, 'an accepted proposal has no buttons');
   assert.match(html, /Linked to Twin Co/);
   assert.doesNotMatch(draw('partner-network', { ...PARTNERS, can_decide: false }), /mercury-accept-/);
+  // Sync is the founder's: drawn only when the read says so, and on an empty part too.
+  assert.doesNotMatch(draw('partner-network', PARTNERS), /mercury-sync/);
+  assert.match(draw('team-expansion', { state: 'not_recorded', reason: 'Not recorded: the founder has not synced their Mercury into Grow yet.', can_sync: true }), /mercury-sync/);
 });
 
 async function mount(slug, part, reload) {
@@ -102,6 +105,7 @@ test('Accept, Dismiss and Delete each call their route once, then reload; a refu
   cyclesWrite.grow.acceptMercuryPartner = async (project, id) => { calls.push(['accept', project, id]); return { ok: true }; };
   cyclesWrite.grow.dismissMercuryPartner = async (project, id) => { calls.push(['dismiss', project, id]); throw new Error('That proposal was already decided'); };
   cyclesWrite.grow.deleteMercuryFact = async (project, id) => { calls.push(['delete', project, id]); return { ok: true }; };
+  cyclesWrite.grow.syncMercury = async (project) => { calls.push(['sync', project]); return { ok: true }; };
   const p = await mount('partner-network', PARTNERS, () => { reloads += 1; });
   try {
     await p.click('mercury-accept-9');
@@ -112,11 +116,14 @@ test('Accept, Dismiss and Delete each call their route once, then reload; a refu
     assert.equal(reloads, 1, 'a refused Dismiss does not reload');
     assert.equal(p.text(p.by('mercury-error')), 'That proposal was already decided');
   } finally { await p.unmount(); }
-  const d = await mount('durable-company-building', DURABLE, () => { reloads += 1; });
+  const d = await mount('durable-company-building', { ...DURABLE, can_sync: true }, () => { reloads += 1; });
   try {
     await d.click('mercury-delete-3');
     assert.deepEqual(calls[2], ['delete', 101, 3]);
     assert.equal(reloads, 2);
+    await d.click('mercury-sync');
+    assert.deepEqual(calls[3], ['sync', 101]);
+    assert.equal(reloads, 3);
   } finally { await d.unmount(); Object.assign(cyclesWrite.grow, saved); }
 });
 
@@ -126,10 +133,12 @@ test('the three calls go to the Worker\'s routes, and every fed module mounts th
   await w.grow.acceptMercuryPartner(101, 9);
   await w.grow.dismissMercuryPartner(101, 10);
   await w.grow.deleteMercuryFact(101, 3);
+  await w.grow.syncMercury(101);
   assert.deepEqual(sent, [
     ['/cycles/grow/mercury/partner-proposals/9/accept', 'POST', JSON.stringify({ project: 101 })],
     ['/cycles/grow/mercury/partner-proposals/10/dismiss', 'POST', JSON.stringify({ project: 101 })],
     ['/cycles/grow/mercury/facts/3?project=101', 'DELETE', null],
+    ['/cycles/grow/mercury/sync', 'POST', JSON.stringify({ project: 101 })],
   ]);
   const route = readFileSync(new URL('../src/pages/cycles/CycleRoute.jsx', import.meta.url), 'utf8');
   for (const slug of ['revenue-and-traction', 'durable-company-building', 'team-expansion', 'distribution', 'partner-network']) {
@@ -140,4 +149,5 @@ test('the three calls go to the Worker\'s routes, and every fed module mounts th
   assert.ok(worker.includes("r.post('/mercury/partner-proposals/:id/accept'"));
   assert.ok(worker.includes("r.post('/mercury/partner-proposals/:id/dismiss'"));
   assert.ok(worker.includes("r.delete('/mercury/facts/:id'"));
+  assert.ok(worker.includes("r.post('/mercury/sync'"));
 });

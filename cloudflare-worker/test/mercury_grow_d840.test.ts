@@ -17,11 +17,15 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import cycleGrow from '../src/routes/cycle_grow.ts';
 import { DURABILITY_ITEMS, checklist } from '../src/services/growCycle.ts';
+import { GROW_FEED_KINDS, MERCURY_FEEDS, mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
+import { fedCounts } from '../src/integrations/fed.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { signedInFake, FAKE_ACC_A, fakeTx } from './_mercury_mcp_fake.mjs';
 import { openMercuryReads } from '../src/services/mercury/reads.ts';
 import { ensureProjectMetricsSchema } from '../src/routes/progress.ts';
+import { ensureIntegrationsSchema } from '../src/integrations/registry.ts';
+import { encryptCredentials } from '../src/integrations/secrets.ts';
 import {
   landGrow, readGrow, growFromMercury, acceptPartnerProposal, dismissPartnerProposal, deleteGrowFact, isTeamViewer, TEAM_ONLY,
 } from '../src/services/mercury/growFeeds.ts';
@@ -192,7 +196,6 @@ async function growDb() {
            CREATE TABLE user_company_links (id INTEGER PRIMARY KEY, company_id INTEGER, user_id INTEGER);
            CREATE TABLE documents (id INTEGER PRIMARY KEY, project_id INTEGER);
            CREATE TABLE activity_logs (id INTEGER PRIMARY KEY, project_id INTEGER, action TEXT, details TEXT, user_id INTEGER, entity_type TEXT, entity_id TEXT, actor TEXT);
-           CREATE TABLE integrations (id INTEGER PRIMARY KEY, uid TEXT, user_id INTEGER, provider_key TEXT, status TEXT, credentials_enc TEXT, config_json TEXT);
            CREATE TABLE waitlist_signups (id INTEGER PRIMARY KEY, project_id INTEGER, email TEXT, audience TEXT, created_at TEXT DEFAULT (datetime('now')));
            CREATE TABLE spinout_lab_milestones (id INTEGER PRIMARY KEY, user_id INTEGER, week INTEGER, milestone_key TEXT, completed_at TEXT);`);
   for (const t of ['partners', 'raise_prospects', 'deals', 'commitments', 'entities', 'compliance_events']) db.exec(tableFromBaseline(baseline, t));
@@ -207,6 +210,8 @@ async function growDb() {
   db.exec(file('477'));
   db.exec(file('490'));
   const env = { JWT_SECRET: 'unit-test-jwt-secret-0123456789-abcdef', ENVIRONMENT: 'development', DB: d1Over(db) } as any;
+  env.KEK_PII = 'fixture-cipher-key-'.repeat(4);
+  await ensureIntegrationsSchema(env);
   await ensureProjectMetricsSchema(env);
   db.exec(file('521'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?, ?, ?, ?, ?)');
@@ -221,7 +226,7 @@ async function growDb() {
   db.prepare('INSERT INTO user_company_links (company_id, user_id) VALUES (70, ?)').run(COFOUNDER);
   db.prepare(`INSERT INTO project_members (project_id, user_id, role, status) VALUES (?, ?, 'advisor', 'accepted')`).run(PID, ADVISOR);
   db.prepare(`INSERT INTO project_members (project_id, user_id, role, status) VALUES (?, ?, 'cofounder', 'accepted')`).run(PID, COFOUNDER);
-  db.prepare(`INSERT INTO integrations (id, uid, user_id, provider_key, status) VALUES (?, 'mi', ?, 'mercury', 'active')`).run(INTEGRATION, FOUNDER);
+  db.prepare(`INSERT INTO integrations (id, uid, user_id, provider_key, status, auth_type) VALUES (?, 'mi', ?, 'mercury', 'active', 'oauth_mcp')`).run(INTEGRATION, FOUNDER);
   db.prepare(`INSERT INTO partners (name, email, company, status) VALUES ('Pat', 'pat@axal.example', 'Brightlane Advisory LLC', 'active')`).run();
   db.prepare(`INSERT INTO growth_channels (uid, project_id, name, utm_source) VALUES ('ch-google', ?, 'Google Ads', 'google')`).run(PID);
   for (const name of ['Ena', 'Eli']) {
@@ -258,10 +263,8 @@ function growFake() {
 
 async function syncOnce(env: any, s = growFake()) {
   const reads = await openMercuryReads({ accessToken: s.accessToken, fetcher: s.fake.fetch });
-  try {
-    const read = await readGrow(env, reads, FOUNDER, TODAY);
-    return { counts: await landGrow(env, INTEGRATION, { id: PID, founder_user_id: FOUNDER }, read, TODAY), fake: s.fake, read };
-  } finally { await reads.close(); }
+  const read = await readGrow(env, reads, FOUNDER, TODAY);
+  return { counts: await landGrow(env, INTEGRATION, { id: PID, founder_user_id: FOUNDER }, read, TODAY), fake: s.fake, read };
 }
 
 test('fake: a sync reads only through the allowlisted tools and writes nothing to Mercury', async () => {
@@ -373,6 +376,8 @@ test('partner network: a payment to an Axal partner is a proposal that needs Acc
   assert.equal(db.prepare(`SELECT 1 FROM connector_fed_items WHERE module = 'partner_network'`).get(), undefined);
   // The co-founder sees it but cannot decide; nobody else sees it.
   assert.equal(((await growFromMercury(env, PID, 'partner-network', viewers.cofounder, TODAY)) as any).can_decide, false);
+  assert.equal(((await growFromMercury(env, PID, 'partner-network', viewers.cofounder, TODAY)) as any).can_sync, false, 'only the founder syncs');
+  assert.equal(part.can_sync, true);
   const made: string[] = [];
   const create = async (name: string) => {
     const uid = `gp-${made.length + 1}`; made.push(name);
@@ -500,4 +505,76 @@ test('durable: the runway item counts only for a founder with Mercury, or once t
   db.prepare(`INSERT INTO durability_checklist (project_id, item_key, done_at) VALUES (?, 'runway_12_months', '2026-10-01')`).run(PID);
   const ticked = await checklist(env, PID).then((l) => l.find((i) => i.key === 'runway_12_months'));
   assert.deepEqual([ticked?.done, ticked?.source], [true, 'manual'], 'ticked by hand: counted');
+});
+
+test('the page lists exactly what is built: each Grow feed lands only the kinds the sync writes', async () => {
+  // Mutation checked: drop distribution from MERCURY_FEEDS → the module list fails; land a kind the list does not name → the ledger check fails.
+  const grow = MERCURY_FEEDS.filter((f) => f.decision === 'D840' && f.role === 'founder');
+  assert.deepEqual(grow.map((f) => f.module).sort(), Object.keys(GROW_FEED_KINDS).sort());
+  for (const m of Object.keys(GROW_FEED_KINDS)) assert.ok(mercuryFedModules('founder').includes(m), m);
+  const { db, env } = await growDb();
+  await syncOnce(env);
+  const id = (db.prepare('SELECT id FROM mercury_partner_proposals').get() as any).id;
+  await acceptPartnerProposal(env, PID, id, {}, FOUNDER, async (name) => {
+    db.prepare(`INSERT INTO growth_partners (uid, project_id, name, type) VALUES ('gp-x', ?, ?, 'other')`).run(PID, name); return 'gp-x';
+  });
+  const landed = db.prepare('SELECT DISTINCT module, kind FROM connector_fed_items').all() as any[];
+  for (const r of landed) assert.ok((GROW_FEED_KINDS[r.module] ?? []).includes(r.kind), `${r.module}/${r.kind} is not on the list`);
+  const modules = new Set(landed.map((r) => r.module));
+  for (const m of Object.keys(GROW_FEED_KINDS)) assert.ok(modules.has(m), `${m} is on the list but nothing landed there`);
+  // "Now fed by" counts each Grow module from the ledger.
+  const counts = await fedCounts(env, INTEGRATION, 'mercury', 'founder');
+  for (const m of Object.keys(GROW_FEED_KINDS)) assert.ok((counts.find((c) => c.module === m)?.count ?? 0) > 0, `${m} counted`);
+});
+
+/** The founder's row as a sign-in leaves it: the fake's access token, encrypted. */
+async function signedInRow(db: any, env: any, s: { accessToken: string }) {
+  const enc = await encryptCredentials(env, 'mi', { access_token: s.accessToken, expires_at: null, scopes: ['read', 'offline_access'], issuer: 'https://mcp.mercury.com', client_key: 'fake-client' } as any);
+  db.prepare('UPDATE integrations SET credentials_enc = ? WHERE id = ?').run(enc, INTEGRATION);
+}
+
+test('route: the founder syncs Grow from their own signed-in Mercury; nobody else can, and a pasted token is told to sign in', async () => {
+  const { db, env } = await growDb();
+  const s = growFake();
+  await signedInRow(db, env, s);
+  const off = s.fake.install();
+  try {
+    for (const who of [COFOUNDER, ADMIN, PARTNER, ADVISOR, INVESTOR]) {
+      const r = await call(env, who, 'POST', '/api/cycles/grow/mercury/sync', { project: PID });
+      assert.equal(r.status, 403, `${who} → ${r.status}`);
+    }
+    assert.equal(s.fake.calls.length, 0, 'a refused sync reaches no Mercury');
+    const ok = await call(env, FOUNDER, 'POST', '/api/cycles/grow/mercury/sync', { project: PID });
+    assert.equal(ok.status, 200, JSON.stringify(ok.body));
+    assert.deepEqual({ months: ok.body.counts.metric_months, credits: ok.body.counts.invoice_credits, proposals: ok.body.counts.partner_proposals },
+      { months: 3, credits: 1, proposals: 1 });
+    assert.doesNotMatch(JSON.stringify(ok.body), /610000|1000000|800000/, 'the answer carries counts, never a figure');
+    assert.ok(db.prepare(`SELECT 1 FROM activity_logs WHERE action = 'grow_mercury_synced' AND user_id = ?`).get(FOUNDER));
+    assert.ok((db.prepare('SELECT last_synced_at FROM integrations WHERE id = ?').get(INTEGRATION) as any).last_synced_at);
+    // A pasted token cannot read invoices or treasury.
+    db.prepare(`UPDATE integrations SET auth_type = 'api_key' WHERE id = ?`).run(INTEGRATION);
+    const token = await call(env, FOUNDER, 'POST', '/api/cycles/grow/mercury/sync', { project: PID });
+    assert.deepEqual([token.status, token.body.error], [409, 'mercury_sign_in_required']);
+    db.prepare(`UPDATE integrations SET status = 'disconnected' WHERE id = ?`).run(INTEGRATION);
+    const none = await call(env, FOUNDER, 'POST', '/api/cycles/grow/mercury/sync', { project: PID });
+    assert.deepEqual([none.status, none.body.error], [404, 'mercury_not_connected']);
+  } finally { off(); }
+});
+
+test('route: a Mercury that fails says so and writes nothing, with no figure in the answer or the log', async () => {
+  const { db, env } = await growDb();
+  const s = growFake();
+  await signedInRow(db, env, s);
+  s.fake.state.status = 500;
+  const off = s.fake.install();
+  const logged: string[] = [];
+  const orig = console.error;
+  console.error = (...a: unknown[]) => { logged.push(a.map(String).join(' ')); };
+  try {
+    const r = await call(env, FOUNDER, 'POST', '/api/cycles/grow/mercury/sync', { project: PID });
+    assert.deepEqual([r.status, r.body.error], [502, 'mercury_read_failed']);
+    assert.equal(db.prepare('SELECT 1 FROM mercury_grow_facts').get(), undefined);
+    assert.equal(db.prepare(`SELECT 1 FROM project_metrics WHERE source = 'mercury'`).get(), undefined);
+    assert.doesNotMatch(logged.join('\n'), /\d{4,}/, 'no figure reaches the log');
+  } finally { off(); console.error = orig; }
 });

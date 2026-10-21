@@ -26,6 +26,7 @@
  * D840 part 3 (#2348): the founder's own Mercury. A fed module's read carries
  * `parts.from_mercury`, the figures for the founder's company's members only
  * (`services/mercury/growFeeds.ts`); anyone else gets `team_only`.
+ *   POST   /mercury/sync                           the founder only, from their own signed-in Mercury
  *   POST   /mercury/partner-proposals/:id/accept   { growth_partner_uid? }  the founder only
  *   POST   /mercury/partner-proposals/:id/dismiss                          the founder only
  *   DELETE /mercury/facts/:id                      a writer on the founder's company; stays deleted
@@ -54,8 +55,9 @@ import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
 import { hasRecords } from '../services/records';
+import { isSupportSession } from '../integrations/providers/mercury';
 import {
-  GROW_FEED_SLUGS, acceptPartnerProposal, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, isVentureFounder, type GrowFeedSlug,
+  GROW_FEED_SLUGS, GrowSyncRefused, acceptPartnerProposal, syncGrowFromMercury, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, isVentureFounder, type GrowFeedSlug,
 } from '../services/mercury/growFeeds';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -448,6 +450,20 @@ const proposalId = (c: C) => {
   return id;
 };
 
+r.post('/mercury/sync', async (c) => {
+  try {
+    const user = await requireAuth(c); const b = await body(c);
+    const pid = await project(c, user, b.project, true);
+    await founderOf(c, user, pid);
+    if (await isSupportSession(c)) throw new Refused(403, 'A support session cannot read a member\'s bank account');
+    const counts = await syncGrowFromMercury(c.env, user.id, pid, new Date().toISOString().slice(0, 10));
+    await logGrowWrite(c.env, pid, user.id, { module: 'revenue-and-traction', entityId: pid, action: 'grow_mercury_synced', summary: 'Grow synced from Mercury' });
+    return c.json({ ok: true, counts });
+  } catch (e) {
+    if (e instanceof GrowSyncRefused) return c.json({ error: e.code, detail: e.sentence }, e.status);
+    return fail(c, e);
+  }
+});
 r.post('/mercury/partner-proposals/:id/accept', write(async (c, u, pid, b) => {
   await founderOf(c, u, pid);
   const id = proposalId(c);
