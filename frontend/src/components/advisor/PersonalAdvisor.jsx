@@ -58,7 +58,8 @@ import { safeReadJSON, safeWriteJSON } from '../../lib/storage';
 import { reportError } from '../../lib/log';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useEscapeClose } from '../useEscapeClose';
-import { useRailOption } from '../../ui/railCrumbs';
+import { useRailOption, useRailPage } from '../../ui/railCrumbs';
+import { railOptionFor } from '../../lib/railOptions';
 import { predictTarget } from '../../lib/advisor/router';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
@@ -68,6 +69,8 @@ import { PhoneFocus, PhoneTicketCard, threadLabel, useIsDesktop } from './eadwyn
 import { startPrompt } from '../../lib/eadwynTickets';
 import { TICKET_TYPES } from '../../lib/ticketScreens';
 
+// D778 part 12: the file the inventories name the Studio presses at, as `railOptionFor` reads it.
+const STUDIO_FILE = 'components/advisor/PersonalAdvisor.jsx';
 const STORAGE_KEY = 'advisor:state';
 
 /** Resolve auth + CSRF headers for raw fetch calls (SSE bypasses api.js). */
@@ -205,8 +208,15 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // Tutor mode state.
   const [tutor, setTutor] = useState(null); // { topic, text, doc_anchor, page_target, streaming }
   // D771 (#2097): while a message is at the model, or the tutor is open, the rail is that option's.
-  useRailOption(asking ? 'ask:studio' : null, 'Send');
-  useRailOption(tutor ? 'explain:question' : null, 'Explain');
+  // D778 part 12 (#2103): the advisor's and the partner's Studio key both presses their own way,
+  // so each is read from the mounted page's inventory; the founder's keys are the fallback.
+  const railPage = useRailPage()?.page ?? null;
+  const sendOption = railOptionFor(railPage, { file: STUDIO_FILE, control: 'send' });
+  const explainOption = railOptionFor(railPage, { file: STUDIO_FILE, control: 'explain' });
+  const sendKey = sendOption?.key ?? 'ask:studio';
+  const explainKey = explainOption?.key ?? 'explain:question';
+  useRailOption(asking ? sendKey : null, sendOption?.label ?? 'Send');
+  useRailOption(tutor ? explainKey : null, explainOption?.label ?? 'Explain');
   const tutorAbortRef = useRef(null);
   const scrollerRef = useRef(null);
   const isDesktop = useIsDesktop();
@@ -582,7 +592,8 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
         method: 'POST',
         credentials: 'include',
         signal: controller.signal,
-        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...authHeaders() },
+        // D778 part 12: the press names its option on the run, keeping the mounted rail's page.
+        headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...authHeaders(), ...railPressHeaders(explainKey) },
         body: JSON.stringify({ topic, conversation_id: conversationId }),
       });
       if (!res.ok || !res.body) {
@@ -636,7 +647,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     } finally {
       tutorAbortRef.current = null;
     }
-  }, [conversationId, question]);
+  }, [conversationId, question, explainKey]);
 
   // Task #5 (AV) — route a free-form message through the LLM tool-binding
   // endpoint and append the returned {result, cta} envelope as a
@@ -647,7 +658,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     setMessages((m) => [...m, { role: 'user', content: raw }]);
     setInput('');
     try {
-      const r = await api.advisor.toolAuto(raw);
+      const r = await api.advisor.toolAuto(raw, railPressHeaders(sendKey));
       setMessages((m) => [...m, {
         role: 'tool',
         content: JSON.stringify({ result: r.result, cta: r.cta }),
@@ -664,7 +675,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
       setBusy(false);
       setAsking(false);
     }
-  }, []);
+  }, [sendKey]);
 
   // Detect "explain X" as user input — open tutor instead of answering.
   const handleSend = useCallback(() => {

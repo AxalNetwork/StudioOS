@@ -1328,8 +1328,9 @@ export const api = {
     // LLM tool-binding entry point. The user types a free-form message;
     // the worker calls aiRouter.run('tool_call') to pick a tool, validates
     // the envelope, and dispatches via the same gated pipeline as `tool()`.
-    toolAuto: (message) =>
-      request('/advisor/tool/auto', { method: 'POST', body: JSON.stringify({ message }) }),
+    // D778 part 12: the press's rail headers (`railPressHeaders`) as an optional last argument.
+    toolAuto: (message, headers) =>
+      request('/advisor/tool/auto', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({ message }) }),
     conversation: (uid) => request(`/advisor/conversations/${encodeURIComponent(uid)}`),
     explainUrl: () => '/api/advisor/explain',
     // Task #3 (AS) — list field_sources rows for the current user,

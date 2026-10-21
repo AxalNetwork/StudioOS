@@ -36,6 +36,10 @@ export function controlOf(marker) {
   if (surface) return surface;
   const call = /api\.research\.(ask|upload|reindex)\(/.exec(m)?.[1];
   if (call) return call;
+  // D778 part 12: the Studio interview's Send and Explain, which the founder,
+  // advisor and partner inventories each key their own way.
+  if (/api\.advisor\.(answer|toolAuto)\(/.test(m)) return 'send';
+  if (/api\.advisor\.explainUrl\(|openTutor\(/.test(m)) return 'explain';
   return m === 'type="file"' ? 'upload' : null;
 }
 
