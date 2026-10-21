@@ -33,7 +33,7 @@ const GHOST = 'inline-flex items-center justify-center whitespace-nowrap rounded
 const FIELD = 'w-full rounded-axal-sm border border-axal-hairline bg-white px-2.5 py-1.5 text-[13px] text-axal-ink focus:outline-none focus:ring-2 focus:ring-rose-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100';
 const HEAD = 'border-b border-axal-hairline bg-axal-ground/60 font-mono text-[10px] font-semibold uppercase tracking-[0.06em] text-axal-muted dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-400';
 const NUM = 'text-right font-mono tabular-nums';
-const SEG = (on) => `rounded-[7px] px-3 py-1 text-[12px] font-semibold ${on ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-muted hover:text-axal-ink dark:text-gray-400'}`;
+const SEG = (on) => `rounded-[7px] px-3 py-1 text-[12px] font-semibold ${on ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`;
 
 const FLAG_TONE = {
   paused: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
