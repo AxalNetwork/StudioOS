@@ -41,12 +41,29 @@ import { oauthCallbackUrl } from '../../util/url';
 import type { Env, User } from '../../types';
 import { projectEnabled } from '../companyScope';
 import {
+  getDescriptor,
   registerProvider,
   type ConnectInput,
   type ConnectResult,
   type IntegrationRow,
   type SyncResult,
 } from '../registry';
+import {
+  categoryOfStatus,
+  checkToolInput,
+  classifyWith,
+  healthOfCategory,
+  oneCall,
+  registerConnectorAdapter,
+  toolOf,
+  type ConnectorAdapter,
+  type ConnectorContext,
+  type ConnectorTool,
+  type ErrorCategory,
+  type ExecuteResult,
+  type HealthResult,
+  type ToolInputSchema,
+} from '../contract';
 import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../secrets';
 export { GITHUB_LANDINGS, GITHUB_READ_BY } from '../githubFeeds';
 import { roadmapRun } from './github/roadmap';
@@ -637,20 +654,22 @@ export async function syncGithub(env: Env, row: IntegrationRow, budget = SYNC_SU
   };
 }
 
+// D782 (#2115): a connection's contributor logins and repository facts are personal
+// data that go with it, whether or not the grant can still be revoked. A failed delete
+// never blocks the revoke: the rows also cascade with the connection's row.
+async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<void> {
+  const local = await Promise.allSettled([deleteContributorsOf(c.env, row.id), deleteFactsOf(c.env, row.id)]);
+  if (local.some((r) => r.status === 'rejected')) console.warn('[github] disconnect: the local GitHub rows were not deleted here; they cascade with the connection');
+  await revokeGrant(c.env, await accessToken(c.env, row));
+}
+
 registerProvider({
   key: PROVIDER_KEY,
   // D751: whether Axal holds the OAuth client, from the cache `ensureCreds` reads.
   ready: async (env) => (await import('../../services/providerOauthKeys')).oauthCredsReady(env, 'github'),
   connect,
   revokeGranted,
-  // D782 (#2115): a connection's contributor logins and repository facts are personal
-  // data that go with it, whether or not the grant can still be revoked. A failed delete
-  // never blocks the revoke: the rows also cascade with the connection's row.
-  disconnect: async (c, _user, row) => {
-    const local = await Promise.allSettled([deleteContributorsOf(c.env, row.id), deleteFactsOf(c.env, row.id)]);
-    if (local.some((r) => r.status === 'rejected')) console.warn('[github] disconnect: the local GitHub rows were not deleted here; they cascade with the connection');
-    await revokeGrant(c.env, await accessToken(c.env, row));
-  },
+  disconnect,
   buildAuthorizeUrl,
   sync: (c, _user, row) => syncGithub(c.env, row),
   // The repository choice has its own route (`PUT /:uid/repositories`), which
@@ -660,3 +679,73 @@ registerProvider({
     return { ok: true, patch };
   },
 });
+
+// ───────────────────────────────────────────────────────────── D848 contract
+
+/**
+ * D848 (#2469): GitHub as a `ConnectorAdapter`. The same connect, disconnect
+ * and revoke as the routes, plus three read tools the connector's page names,
+ * each a request `connect` and the repository choice already make. Nothing it
+ * runs writes to GitHub.
+ */
+const NO_INPUT: ToolInputSchema = { type: 'object', properties: {}, additionalProperties: false };
+const GITHUB_TOOLS: readonly ConnectorTool[] = Object.freeze([
+  { name: 'read_account', input_schema: NO_INPUT, access: 'read', unit: 'call' },
+  { name: 'read_installations', input_schema: NO_INPUT, access: 'read', unit: 'call' },
+  { name: 'list_repositories', input_schema: NO_INPUT, access: 'read', unit: 'call' },
+] as const);
+
+const GITHUB_API_STATUS = /^github_api_failed: (\d{3})\b/;
+
+/** A GitHub call's error as a category. Only the status and our own codes are read. */
+export function classifyGithubError(e: unknown): ErrorCategory {
+  return classifyWith(e, (message) => {
+    const status = GITHUB_API_STATUS.exec(message);
+    if (status) return categoryOfStatus(Number(status[1]));
+    if (message.startsWith('github_sign_in_expired') || message.startsWith('github_credentials_missing')
+      || message.startsWith('github_refresh_failed')) return 'auth';
+    if (message.startsWith('github_refresh_busy') || message.startsWith('github_refresh_unavailable')) return 'provider_down';
+    return null;
+  });
+}
+
+async function executeGithub(name: string, input: unknown, ctx: ConnectorContext): Promise<ExecuteResult> {
+  const tool = toolOf(githubAdapter, name);
+  checkToolInput(tool.input_schema, input);
+  const token = await accessToken(ctx.env, ctx.row);
+  if (tool.name === 'read_account') {
+    const me = await ghJson<any>(token, '/user');
+    return { result: { login: typeof me?.login === 'string' ? me.login : null, id: me?.id != null ? String(me.id) : null }, usage: oneCall() };
+  }
+  const granted = await grantedPermissions(token);
+  if (tool.name === 'read_installations') {
+    return { result: { installations: granted.installations, permissions: granted.scopes }, usage: oneCall() };
+  }
+  const repositories = await accessibleRepositories(token, granted.installations);
+  return { result: { repositories: repositories.map((r) => ({ full_name: r.full_name, private: r.private, updated_at: r.updated_at })) }, usage: oneCall() };
+}
+
+/** Whether the connection's token still reads the member's own account. */
+async function githubHealth(ctx: ConnectorContext): Promise<HealthResult> {
+  try {
+    await ghJson<unknown>(await accessToken(ctx.env, ctx.row), '/user');
+    return { state: 'ok', error_category: null };
+  } catch (e) {
+    const category = classifyGithubError(e);
+    return { state: healthOfCategory(category), error_category: category };
+  }
+}
+
+export const githubAdapter: ConnectorAdapter = {
+  key: PROVIDER_KEY,
+  pattern: 'api',
+  capabilities: () => getDescriptor(PROVIDER_KEY)?.capabilities ?? [],
+  tools: () => GITHUB_TOOLS,
+  connect,
+  disconnect,
+  revoke: revokeGranted,
+  execute: executeGithub,
+  health: githubHealth,
+  classifyError: classifyGithubError,
+};
+registerConnectorAdapter(githubAdapter);
