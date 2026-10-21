@@ -18,6 +18,10 @@ link list the nav, the burger menu and the footer read.
 | `IntelligencePage.jsx` | `/intelligence`, from the public model read | D678 |
 | `ResourcesPage.jsx` | `/resources`, the Network overview | D679 |
 | `LegalDocument.jsx` | the frame `/terms`, `/privacy` and `/risk-disclosures` share | D680 |
+| `NewsletterPage.jsx` | `/newsletter`, the signup with the six public topics (board W1) | D813 |
+| `NewsletterConfirmPage.jsx` | `/newsletter/confirm?token=`, confirmed, expired and used links (W2) | D813 |
+| `NewsletterPreferencesPage.jsx` | `/newsletter/preferences?token=`, the topics, Save, unsubscribe and Resubscribe, no sign-in (W3) | D813 |
+| `newsletterModel.js` | the newsletter pages' words and rules, pure; the topics are migration 515's | D813 |
 
 The Network section's other pages (Articles, the Directory, Events, Circles,
 Jobs) and Contact were rebuilt in their existing files under
@@ -25,7 +29,8 @@ Jobs) and Contact were rebuilt in their existing files under
 
 Each group's styles are one stylesheet here, imported by its pages:
 `doors.css`, `firm.css`, `method.css`, `network.css`, `network2.css` and
-`contact.css`. The page copy is the owner's and lives in `frontend/src/lib/`
+`contact.css`; the newsletter's is `frontend/src/components/site/newsletter.css`, beside the
+signup block `SitePage` draws above every footer (D813). The page copy is the owner's and lives in `frontend/src/lib/`
 (`siteDoors.js`, `siteFirm.js`, `siteMethod.js`, `siteIntelligence.js`,
 `siteResources.js`, `siteNetwork2.js`).
 

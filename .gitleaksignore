@@ -66,3 +66,8 @@ ea14fa69b6089abb2615fd3805541846acab1160:cloudflare-worker/test/cycle_records_va
 # placeholder, so no later commit carries it. Scoped to the one finding, as
 # D334's entry is.
 fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources_audience_d757.test.ts:generic-api-key:41
+# D813 (#2259): a made-up preferences token in the newsletter pages test's
+# default URL, handed to a stubbed API and never to any server. It was never a
+# credential. The next commit uses a lower-entropy placeholder, so no later
+# commit carries it. Scoped to the one finding, as D334's entry is.
+96ce08bedd1d010c3a33accd3786343872b7df40:frontend/test/newsletter_pages_d813.test.mjs:generic-api-key:226

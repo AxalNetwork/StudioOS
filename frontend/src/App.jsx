@@ -343,6 +343,11 @@ const AdministratorsPage = lazy(() => import('./pages/site/AdministratorsPage'))
 const MethodologyPage = lazy(() => import('./pages/site/MethodologyPage'));
 const IntelligencePage = lazy(() => import('./pages/site/IntelligencePage'));
 const ResourcesPage = lazy(() => import('./pages/site/ResourcesPage'));
+// D813 (#2259) — the newsletter's public pages: signup, confirm, and the
+// preferences a link in every email opens (no sign-in).
+const NewsletterPage = lazy(() => import('./pages/site/NewsletterPage'));
+const NewsletterConfirmPage = lazy(() => import('./pages/site/NewsletterConfirmPage'));
+const NewsletterPreferencesPage = lazy(() => import('./pages/site/NewsletterPreferencesPage'));
 const DemoPage = lazy(() => import('./pages/DemoPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
@@ -3605,6 +3610,9 @@ function AppInner() {
 
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/contact" element={<ContactPage />} />
+      <Route path="/newsletter" element={<NewsletterPage />} />
+      <Route path="/newsletter/confirm" element={<NewsletterConfirmPage />} />
+      <Route path="/newsletter/preferences" element={<NewsletterPreferencesPage />} />
       {/* D677 — /about is the Firm page; the team page moved to /team. */}
       <Route path="/about" element={<FirmPage />} />
       <Route path="/team" element={<TeamPage />} />
