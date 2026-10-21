@@ -56,7 +56,7 @@ export interface RaiseLine {
   voided: boolean;
 }
 
-export interface RaiseStatement { id: string; month: string; last_four: string | null }
+export interface RaiseStatement { id: string; account_id: string; month: string; last_four: string | null }
 export interface RaiseSafe {
   id: string;
   investor_name: string | null;
@@ -76,7 +76,7 @@ export interface RaiseReads {
   /** The monthly statements Mercury lists, any order. */
   statements(): Promise<RaiseStatement[]>;
   /** One statement's PDF, or null when Mercury no longer serves it. */
-  statementPdf(id: string): Promise<{ bytes: Uint8Array; content_type: string } | null>;
+  statementPdf(accountId: string, id: string): Promise<{ bytes: Uint8Array; content_type: string } | null>;
   /** The organization's SAFE requests. */
   safes(): Promise<RaiseSafe[]>;
 }
@@ -369,7 +369,7 @@ export async function syncRaise(env: Env, integrationId: number, projectId: numb
   try {
     const list = (await reads.statements()).filter((s) => s.id && MONTH.test(s.month))
       .sort((a, b) => b.month.localeCompare(a.month) || a.id.localeCompare(b.id)).slice(0, MAX_STATEMENTS);
-    if (list.length) await env.DB.batch(list.map((s) => proposeStmt(env, integrationId, projectId, 'statement', s.id, { month: s.month, last_four: s.last_four }, null)));
+    if (list.length) await env.DB.batch(list.map((s) => proposeStmt(env, integrationId, projectId, 'statement', s.id, { month: s.month, last_four: s.last_four, account_id: s.account_id }, null)));
     counts.statements = list.length;
   } catch { counts.statements = 'unreadable'; }
 
@@ -600,7 +600,9 @@ async function acceptStatement(env: Env, a: { integrationId: number; projectId: 
   if (!a.reads) throw new AcceptError(409, 'mercury_reconnect_required', 'Sign in with Mercury again to add the statement.');
   const project = await env.DB.prepare('SELECT id, uid FROM projects WHERE id = ?').bind(a.projectId).first<{ id: number; uid: string }>();
   if (!project?.uid) throw new AcceptError(404, 'project_not_found', 'This venture has no data room.');
-  const pdf = await a.reads.statementPdf(p.source_key);
+  const accountId = typeof p.payload.account_id === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(p.payload.account_id) ? p.payload.account_id : null;
+  if (!accountId) throw new AcceptError(404, 'statement_not_found', 'Mercury no longer serves that statement.');
+  const pdf = await a.reads.statementPdf(accountId, p.source_key);
   if (!pdf || !pdf.bytes?.byteLength) throw new AcceptError(404, 'statement_not_found', 'Mercury no longer serves that statement.');
   if (pdf.bytes.byteLength > MAX_STATEMENT_BYTES) throw new AcceptError(413, 'too_large', 'That statement is larger than the data room takes.');
   const uid = crypto.randomUUID().replace(/-/g, '');
@@ -709,12 +711,8 @@ async function log(env: Env, user: User, projectId: number, module: ModuleSlug, 
 /** The newest-first statement months a list read spans: the last 13 months, so the last 12 are complete. */
 const STATEMENT_SPAN_DAYS = 400;
 
-/**
- * Binds `RaiseReads` to part 1's MCP reads. `statementPdf` is passed in until
- * part 1 gives a statement's bytes (#2346); without it an accepted statement
- * refuses, and nothing is written.
- */
-export function raiseReadsOf(r: MercuryReads, statementPdf?: RaiseReads['statementPdf']): RaiseReads {
+/** Binds `RaiseReads` to part 1's MCP reads; a statement's bytes are `statementPdf`'s (#2346). */
+export function raiseReadsOf(r: MercuryReads): RaiseReads {
   let accounts: Awaited<ReturnType<MercuryReads['accounts']>> | null = null;
   const accountsOnce = async () => (accounts ??= await r.accounts());
   return {
@@ -753,13 +751,14 @@ export function raiseReadsOf(r: MercuryReads, statementPdf?: RaiseReads['stateme
       for (const a of accs) {
         for (const s of await r.statements(a.mercury_account_id, { start })) {
           const month = (s.period_start ?? s.period_end ?? '').slice(0, 7);
-          if (MONTH.test(month)) out.push({ id: s.id, month, last_four: a.last_four });
+          if (MONTH.test(month)) out.push({ id: s.id, account_id: a.mercury_account_id, month, last_four: a.last_four });
         }
       }
       return out;
     },
-    async statementPdf(id) {
-      return statementPdf ? statementPdf(id) : null;
+    async statementPdf(accountId, id) {
+      const pdf = await r.statementPdf(accountId, id);
+      return pdf ? { bytes: pdf.bytes, content_type: pdf.content_type } : null;
     },
     async safes() {
       return (await r.safeRequests()).map((s) => ({

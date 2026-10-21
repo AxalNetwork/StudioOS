@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Card, Pill, Unrecorded, WorkerRail } from '../../ui';
 import { api } from '../../lib/api';
@@ -10,6 +10,7 @@ import {
 } from './companyAnalysisRead';
 import { companyHref } from '../../lib/companyDirectoryView.js';
 import { useRailOption } from '../../ui/railCrumbs';
+import { railPressHeaders } from '../../lib/railPage.js';
 
 /**
  * `/research/companies/:id` — one saved competitor analysis (canvas 90eb4cf2).
@@ -128,17 +129,26 @@ export default function CompanyAnalysis({ role = 'founder' }) {
   }, [id, take]);
   useEffect(() => { load(); }, [load]);
 
+  // D778 part 9 (#2103): a press answers only the analysis it was pressed on.
+  // Opening another analysis (or leaving) moves this on; a press that comes
+  // back after that is dropped with its result, its notice and its busy state.
+  const runFor = useRef(0);
+  useEffect(() => { runFor.current += 1; setBusy(''); }, [id]);
+  useEffect(() => () => { runFor.current += 1; }, []);
+
   const run = async (key, fn, ok) => {
+    const mine = ++runFor.current;
     setBusy(key);
     setNotice(null);
     try {
       const full = await fn();
+      if (runFor.current !== mine) return;
       if (full) take(full);
       if (ok) setNotice({ ok: true, text: ok });
     } catch (e) {
-      setNotice({ ok: false, text: e?.message || 'That did not go through.' });
+      if (runFor.current === mine) setNotice({ ok: false, text: e?.message || 'That did not go through.' });
     } finally {
-      setBusy('');
+      if (runFor.current === mine) setBusy('');
     }
   };
 
@@ -277,11 +287,11 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                   {busy === 'save' ? 'Saving…' : 'Save'}
                 </button>
                 <button type="button" className={ghostBtn} disabled={busy !== '' || running}
-                  onClick={() => run('rerun', () => api.competitors.rerun(id, { inputs: analysis.inputs, keep_manual: true }), 'Re-run finished.')}>
+                  onClick={() => run('rerun', () => api.competitors.rerun(id, { inputs: analysis.inputs, keep_manual: true }, railPressHeaders('analyse:again')), 'Re-run finished.')}>
                   {busy === 'rerun' ? 'Running…' : 'Re-run'}
                 </button>
                 <button type="button" className={ghostBtn} disabled={busy !== '' || running}
-                  onClick={() => run('refresh', () => api.competitors.refresh(id), 'Sources refreshed.')}>
+                  onClick={() => run('refresh', () => api.competitors.refresh(id, railPressHeaders('analyse:sources')), 'Sources refreshed.')}>
                   {busy === 'refresh' ? 'Refreshing…' : 'Refresh sources'}
                 </button>
                 <button type="button" className={ghostBtn} onClick={exportJson}>JSON</button>
@@ -317,11 +327,11 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                 <p className="mt-1 text-[12px] text-axal-muted">A failed run is not an empty landscape. Nothing was discovered, so nothing is listed.</p>
                 <div className="mt-3 flex gap-2">
                   <button type="button" className={primaryBtn} disabled={busy !== ''}
-                    onClick={() => run('rerun', () => api.competitors.rerun(id, { inputs: analysis.inputs, keep_manual: true }), 'Re-run finished.')}>
+                    onClick={() => run('rerun', () => api.competitors.rerun(id, { inputs: analysis.inputs, keep_manual: true }, railPressHeaders('analyse:again')), 'Re-run finished.')}>
                     Re-run
                   </button>
                   <button type="button" className={ghostBtn} disabled={busy !== ''}
-                    onClick={() => run('rerun', () => api.competitors.rerun(id, { inputs: { ...(analysis.inputs || {}), depth: 'quick' }, keep_manual: true }), 'Quick scan finished.')}>
+                    onClick={() => run('rerun', () => api.competitors.rerun(id, { inputs: { ...(analysis.inputs || {}), depth: 'quick' }, keep_manual: true }, railPressHeaders('analyse:again')), 'Quick scan finished.')}>
                     Quick scan
                   </button>
                 </div>
@@ -444,7 +454,7 @@ export default function CompanyAnalysis({ role = 'founder' }) {
                       </label>
                       <button type="button" className={primaryBtn} disabled={!manual.name.trim() || busy !== ''}
                         onClick={() => run('add', async () => {
-                          const full = await api.competitors.addCandidate(id, { ...manual, name: manual.name.trim() });
+                          const full = await api.competitors.addCandidate(id, { ...manual, name: manual.name.trim() }, railPressHeaders('extract:candidate'));
                           setManual(EMPTY_MANUAL);
                           return full;
                         })}>

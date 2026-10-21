@@ -350,3 +350,29 @@ export async function mcpAccessFor(env: Env, row: IntegrationRow, creds: McpCred
     },
   };
 }
+
+/**
+ * D840 (#2346): the access a route uses to read a member's OWN Mercury through
+ * the MCP server, refreshed when needed. Null when the member has no active
+ * signed-in row (no row, a pasted token, `status` not `active`, or tokens
+ * that cannot be read). Parts 2–4 call this, then `openMercuryReads(access)`.
+ *
+ * THE ROW. A member's one `integrations` row with `provider_key = 'mercury'`.
+ *  - `auth_type`: `oauth_mcp` for a sign-in, `api_key` for a pasted token (D713).
+ *  - `credentials_enc`: the only place the tokens live, AES-GCM bound to the
+ *    row's `uid` (`secrets.ts`), as `McpCredentials`:
+ *    `{ access_token, refresh_token, expires_at (epoch ms), token_type, scopes, issuer, client_key }`.
+ *  - `scopes_json`: the granted scopes; `config_json`: `{ read_only: 'reported', via: 'oauth_mcp' }`;
+ *    `external_account_id` / `external_account_name`: the organization's id and legal name.
+ *
+ * It reads only the caller's own row: `userId` is the signed-in member, never
+ * a parameter from a request.
+ */
+export async function mercuryAccessFor(env: Env, userId: number, fetcher?: MercuryFetch): Promise<(McpAccess & { scopes: string[] }) | null> {
+  const row = await env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'mercury' LIMIT 1")
+    .bind(userId).first<IntegrationRow>();
+  if (!row || row.status !== 'active') return null;
+  let creds: McpCredentials | null = null;
+  try { creds = await mcpCredentialsOf(env, row); } catch { creds = null; }
+  return creds ? mcpAccessFor(env, row, creds, fetcher) : null;
+}

@@ -11,6 +11,7 @@ import { recordedRelevance } from '../pages/research/companyCandidateRead';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
 import { useRailOption, useRailPage } from '../ui/railCrumbs';
 import { railOptionFor } from '../lib/railOptions/index.js';
+import { railPressHeaders } from '../lib/railPage.js';
 
 // Competitor Analysis — in-house, Cloudflare-native competitive intelligence.
 // Discovery + controlled public-web crawl + Workers AI synthesis. Prefills from
@@ -157,6 +158,19 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   useRailOption(running === 'rerun' ? (rerunOption?.key ?? 'analyse:again') : null, rerunOption?.label ?? 'Re-run');
   useRailOption(running === 'refresh' ? (refreshOption?.key ?? 'analyse:sources') : null, refreshOption?.label ?? 'Refresh sources');
   useRailOption(running === 'add' ? 'extract:candidate' : null, 'Add');
+  // D778 part 9 (#2103): each press sends its own option with the run, keeping
+  // the mounted rail's page, before the busy render hands it to the rail.
+  const pressKey = {
+    analyze: analyzeOption?.key ?? 'analyse:competitors',
+    rerun: rerunOption?.key ?? 'analyse:again',
+    refresh: refreshOption?.key ?? 'analyse:sources',
+    add: 'extract:candidate',
+  };
+  // A run answers only the analysis it was pressed on. Opening another one, or
+  // leaving, moves this on; a run that comes back after that is dropped with
+  // its result, its error and its busy state.
+  const runFor = useRef(0);
+  useEffect(() => () => { runFor.current += 1; }, []);
   const [analysis, setAnalysis] = useState(null);
   const [saved, setSaved] = useState([]);
   // 'loading' until the first answer, then 'ready' or 'failed'. Four screens,
@@ -261,6 +275,8 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   }
 
   async function loadAnalysis(id) {
+    runFor.current += 1;
+    setAnalyzing(false); setRunning(null);
     setError('');
     try {
       const full = await api.competitors.get(id);
@@ -278,11 +294,14 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     setStatus('');
     setAnalyzing(true); setRunning('analyze');
     setAnalysis(null);
+    const run = ++runFor.current;
     try {
       const payload = { ...inputs };
       if (mode === 'startup' && projectId) { payload.project_id = projectId; payload.mode = 'startup'; }
       else payload.mode = 'custom';
-      const full = await api.competitors.analyze(payload);
+      const full = await api.competitors.analyze(payload, railPressHeaders(pressKey.analyze));
+      // A dropped run has still written its analysis: list it, don't open it.
+      if (runFor.current !== run) { applySaved(await api.competitors.list().catch(() => READ_FAILED)); return; }
       // D313 — in the Research zone a finished run opens on its own page, the
       // same place the saved list links; elsewhere it opens in place.
       if (linkToDossier && full?.id) {
@@ -294,9 +313,9 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
       // A successful run clears a failed read: the list just answered.
       applySaved(await api.competitors.list().catch(() => READ_FAILED));
     } catch (e) {
-      setError(e.message || 'Analysis failed. Try again or reduce depth.');
+      if (runFor.current === run) setError(e.message || 'Analysis failed. Try again or reduce depth.');
     } finally {
-      setAnalyzing(false); setRunning(null);
+      if (runFor.current === run) { setAnalyzing(false); setRunning(null); }
     }
   }
 
@@ -304,14 +323,16 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     if (!analysis) return;
     setAnalyzing(true); setRunning('rerun');
     setError('');
+    const run = ++runFor.current;
     try {
-      const full = await api.competitors.rerun(analysis.id, { inputs: analysis.inputs || inputs, keep_manual: true });
+      const full = await api.competitors.rerun(analysis.id, { inputs: analysis.inputs || inputs, keep_manual: true }, railPressHeaders(pressKey.rerun));
+      if (runFor.current !== run) return;
       setAnalysis(full);
       setDirty(false);
     } catch (e) {
-      setError(e.message || 'Re-run failed.');
+      if (runFor.current === run) setError(e.message || 'Re-run failed.');
     } finally {
-      setAnalyzing(false); setRunning(null);
+      if (runFor.current === run) { setAnalyzing(false); setRunning(null); }
     }
   }
 
@@ -319,15 +340,17 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     if (!analysis) return;
     setAnalyzing(true); setRunning('refresh');
     setError('');
+    const run = ++runFor.current;
     try {
-      const full = await api.competitors.refresh(analysis.id);
+      const full = await api.competitors.refresh(analysis.id, railPressHeaders(pressKey.refresh));
+      if (runFor.current !== run) return;
       setAnalysis(full);
       setDirty(false);
       setStatus('Sources refreshed.');
     } catch (e) {
-      setError(e.message || 'Refresh failed.');
+      if (runFor.current === run) setError(e.message || 'Refresh failed.');
     } finally {
-      setAnalyzing(false); setRunning(null);
+      if (runFor.current === run) { setAnalyzing(false); setRunning(null); }
     }
   }
 
@@ -356,14 +379,16 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
     setError('');
     // Only a crawl of the site runs a model.
     if (manual.crawl && manual.url.trim()) setRunning('add');
+    const run = ++runFor.current;
     try {
-      const full = await api.competitors.addCandidate(analysis.id, manual);
+      const full = await api.competitors.addCandidate(analysis.id, manual, railPressHeaders(pressKey.add));
+      if (runFor.current !== run) return;
       setAnalysis(full);
       setManual({ name: '', url: '', category: 'direct', crawl: true, summary: '' });
       setShowManual(false);
     } catch (e) {
-      setError(e.message || 'Could not add competitor.');
-    } finally { setRunning(null); }
+      if (runFor.current === run) setError(e.message || 'Could not add competitor.');
+    } finally { if (runFor.current === run) setRunning(null); }
   }
 
   async function onRemoveCandidate(cid) {

@@ -36,17 +36,16 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import raise from '../src/routes/cycle_raise.ts';
 import { MERCURY_READ_TOOLS } from '../src/services/mercury/mcp.ts';
-import { openMercuryReads } from '../src/services/mercury/reads.ts';
 import {
-  MIN_INVESTMENT_CENTS, STATEMENT_ACCESS, fullMonths, looksLikeInvestment, matchProspect, raiseReadsOf, revenueByMonth, revenueGrowth,
-  runwayFact, spendByCategory, suggestSection, syncRaise, type RaiseLine,
+  MIN_INVESTMENT_CENTS, STATEMENT_ACCESS, fullMonths, looksLikeInvestment, matchProspect, revenueByMonth, revenueGrowth,
+  runwayFact, spendByCategory, suggestSection, type RaiseLine,
 } from '../src/services/mercury/raiseFeeds.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { addColumnsFrom, tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { personalMatchTables } from './_mercury_d713.ts';
 import { memR2 } from './_channels_fixture.ts';
-import { FAKE_ACC_A, fakeTx, signedInFake } from './_mercury_mcp_fake.mjs';
+import { FAKE_ACC_A, FAKE_PDF, ISSUER, fakeTx, signedInFake } from './_mercury_mcp_fake.mjs';
 
 const JWT_SECRET = 'x'.repeat(64); // synthetic test fixture
 const TODAY = '2026-10-21';
@@ -71,7 +70,8 @@ const LINES = [
   tx(9, 40000, '2026-09-27', { kind: 'incomingDomesticWire', counterpartyName: 'Already Revenue Inc' }),
 ];
 const STATEMENTS = { statements: [
-  { id: 'stmt-2026-09', startDate: '2026-09-01', endDate: '2026-09-30', endingBalance: 1200.5, transactionCount: 3, downloadUrl: 'https://example.invalid/s.pdf' },
+  { id: 'stmt-2026-09', startDate: '2026-09-01', endDate: '2026-09-30', endingBalance: 1200.5, transactionCount: 3, downloadUrl: `${ISSUER}/fake-statements/stmt-2026-09.pdf` },
+  // Mercury lists it but gives no link: nothing to store.
   { id: 'stmt-2026-08', startDate: '2026-08-01', endDate: '2026-08-31', endingBalance: 900, transactionCount: 2 },
 ] };
 const CASHFLOW = { months: ['2026-07', '2026-08', '2026-09'].map((month) => ({ month, incomingCents: 100000, outgoingCents: -200000, cashflowCents: -100000 })), truncated: false };
@@ -83,7 +83,6 @@ function mercury() {
   fake.state.data.statements = STATEMENTS;
   return { fake, accessToken };
 }
-const PDF = new TextEncoder().encode('%PDF-1.4 invented statement');
 
 // ───────────────────────────────────────────── the database
 
@@ -296,11 +295,11 @@ test('3. Accept lands each row in its module, with its ledger row; Dismiss write
   assert.equal(funds.sections.find((s: any) => s.key === 'product').actual_cents[3], 50000, 'actuals beside the plan, through the accepted mapping');
   assert.equal(funds.sections.find((s: any) => s.key === 'infrastructure').actual_cents[3], 0);
 
-  // Data room: the statement's bytes, NDA, seen by nobody until the founder opens them.
-  const stmt = proposal(f, 'statement', 'stmt-2026-09');
+  // Data room: a statement Mercury gives no bytes for writes nothing and stays pending.
+  const stmt = proposal(f, 'statement', 'stmt-2026-08');
   const noPdf = await withFake(f, () => accept(f.env, stmt.id));
   assert.equal(noPdf.status, 404, 'no bytes, nothing written');
-  assert.equal(proposal(f, 'statement', 'stmt-2026-09').status, 'pending');
+  assert.equal(proposal(f, 'statement', 'stmt-2026-08').status, 'pending');
   assert.equal(f.one('SELECT COUNT(*) AS n FROM data_room_files').n, 0);
 
   // Cap table: an Investors · SAFE entry at the SAFE's amount and cap. With no founder on the table, it is refused and handed back.
@@ -333,26 +332,30 @@ test('3. Accept lands each row in its module, with its ledger row; Dismiss write
   assert.equal(f.one(`SELECT COUNT(*) AS n FROM connector_fed_items WHERE kind = 'fund_mapping'`).n, 2);
 });
 
-test('3b. an accepted statement is stored in the data room, NDA and seen by nobody, through the founder\'s reads', async () => {
-  // Mutations checked: the file stored open or `invited`; the bytes not stored; the checklist item dropped; a statement
-  // read past the allowlist.
+test('3b. an accepted statement is stored in the data room, NDA and seen by nobody, through part 1\'s statementPdf', async () => {
+  // Mutations checked: the file stored open or `invited`; the bytes not stored; the checklist item dropped; the
+  // statement's account not carried on its proposal (no read can find it).
   const f = await fixture();
-  const reads = await withFake(f, async () => raiseReadsOf(await openMercuryReads({ accessToken: f.accessToken }), async (id) => (id === 'stmt-2026-09' ? { bytes: PDF, content_type: 'application/pdf' } : null)));
-  await withFake(f, () => syncRaise(f.env, 41, 101, reads, TODAY));
+  await withFake(f, () => sync(f.env));
   const stmt = proposal(f, 'statement', 'stmt-2026-09');
-  const { acceptRaiseProposal } = await import('../src/services/mercury/raiseFeeds.ts');
-  const user = f.one('SELECT * FROM users WHERE id = 1');
-  const out = await acceptRaiseProposal(f.env, { integrationId: 41, projectId: 101, id: stmt.id, user, reads });
-  assert.equal(out.ok, true, JSON.stringify(out));
+  assert.match(JSON.parse(stmt.payload_json).account_id, /^[0-9a-f-]{36}$/);
+  const out = await withFake(f, () => accept(f.env, stmt.id));
+  assert.equal(out.status, 200, out.text);
+  assert.ok(f.fake.calls.some((c: any) => c.statement), 'the bytes were read from Mercury');
   const file = f.one('SELECT * FROM data_room_files');
   assert.deepEqual([file.visibility, file.access_tier, file.checklist_item, file.content_type], [STATEMENT_ACCESS.visibility, 'nobody', 'financial_statements', 'application/pdf']);
   assert.ok(file.r2_key.startsWith('data-room/p-101/'));
-  assert.deepEqual([...f.env.FILES.objects.get(file.r2_key).bytes], [...PDF]);
+  assert.deepEqual([...f.env.FILES.objects.get(file.r2_key).bytes], [...FAKE_PDF]);
   assert.equal(f.one(`SELECT local_id FROM connector_fed_items WHERE kind = 'statement'`).local_id, file.id);
-  const missing = proposal(f, 'statement', 'stmt-2026-08');
-  const none = await acceptRaiseProposal(f.env, { integrationId: 41, projectId: 101, id: missing.id, user, reads });
-  assert.equal(none.ok, false);
-  assert.equal(proposal(f, 'statement', 'stmt-2026-08').status, 'pending', 'handed back when Mercury no longer serves it');
+  const room = (await mod(f.env, 'data-room')).parts.mercury;
+  assert.deepEqual(room.proposals.map((p: any) => p.month), ['2026-08'], 'the accepted one is no longer proposed');
+  assert.ok(!('account_id' in room.proposals[0]), 'an account id is not shown');
+  // Deleted from the data room, it is not brought back by a re-sync.
+  f.db.prepare('DELETE FROM data_room_files WHERE id = ?').run(file.id);
+  await withFake(f, () => sync(f.env));
+  assert.equal(f.one('SELECT COUNT(*) AS n FROM data_room_files').n, 0);
+  assert.equal(proposal(f, 'statement', 'stmt-2026-09').status, 'accepted');
+  assert.equal(f.one(`SELECT local_id FROM connector_fed_items WHERE kind = 'statement'`).local_id, null);
 });
 
 // ───────────────────────────────────────────── 4. a re-sync

@@ -235,14 +235,6 @@ const ROUTES = [
     prefix: true,
   },
   {
-    path: '/insights',
-    title: 'Insights',
-    description: 'Data and analysis from across the Axal VC network.',
-    type: 'website',
-    section: 'content',
-    prefix: true,
-  },
-  {
     path: '/jobs',
     title: 'Jobs',
     description: 'Open roles across Axal VC portfolio companies and the firm itself.',
@@ -296,13 +288,6 @@ const ROUTES = [
     path: '/changelog',
     title: 'Changelog',
     description: "What's new in Axal VC StudioOS — every shipped change, tagged by audience.",
-    type: 'website',
-    section: 'company',
-  },
-  {
-    path: '/roadmap',
-    title: 'Roadmap',
-    description: "What we're building next — vote on the features that matter to you.",
     type: 'website',
     section: 'company',
   },
@@ -380,43 +365,9 @@ const ROUTES = [
     section: 'company',
   },
 
-  // ---- Audience landing pages (/lp/*) ------------------------------------
-  // Full public marketing pages — PublicNav, PublicFooter, hero, metrics
-  // strip, FAQ — not app surfaces that happen to be ungated. They are built
-  // to be shared, and until now every one of them previewed as the homepage.
-  // Copy below is taken from each page's own hero.
-  {
-    path: '/lp/investor',
-    title: 'The most disciplined dealflow in frontier tech',
-    description:
-      'Every company scored, verified, and sanctions-screened before it reaches your desk. We screen everything so you see only what matters.',
-    type: 'website',
-    section: 'product',
-  },
-  {
-    path: '/lp/founder',
-    title: 'Build something worth funding',
-    description:
-      'From idea to investor-ready in 28 days. One platform covering everything — legal, product, team, and capital.',
-    type: 'website',
-    section: 'product',
-  },
-  {
-    path: '/lp/partner',
-    title: 'Join the network that builds',
-    description:
-      "Axal VC's Global Venture Partner Network connects service providers, investors, advisors, and operators with the best early-stage companies in frontier technology.",
-    type: 'website',
-    section: 'product',
-  },
-  {
-    path: '/lp/customer-discovery',
-    title: "We're building what you need",
-    description:
-      "Customer discovery for Axal VC's next product cycle. If you're a founder, operator, or investor, we want 20 minutes of your time.",
-    type: 'website',
-    section: 'product',
-  },
+  // ---- The Spin-Out demo day's landing page (/lp/*) ----------------------
+  // A full public marketing page, built to be shared; the four audience
+  // pages beside it were removed (owner, #2297). Copy is the page's own hero.
   {
     path: '/lp/spinout-demo-day',
     title: 'Spin-Out Lab Demo Day',

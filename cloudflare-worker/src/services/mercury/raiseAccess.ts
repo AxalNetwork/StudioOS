@@ -3,7 +3,8 @@
  *
  * The connection is the founder's own `integrations` row (`user_id` is the
  * caller, `provider_key = 'mercury'`, active), signed in through Mercury's MCP
- * (`auth_type = 'oauth_mcp'`, part 1, #2346). A pasted API token reaches no
+ * (`auth_type = 'oauth_mcp'`, part 1, #2346) and opened by part 1's
+ * `mercuryAccessFor`. A pasted API token reaches no
  * Raise feed: the cashflow summary, the statements and the SAFE requests are
  * MCP tools only.
  *
@@ -13,7 +14,7 @@
 import type { Env, User } from '../../types';
 import type { IntegrationRow } from '../../integrations/registry';
 import { MercuryClientError } from './client';
-import { mcpAccessFor, mcpCredentialsOf, MERCURY_AUTH_TYPE } from './oauth';
+import { mercuryAccessFor, MERCURY_AUTH_TYPE } from './oauth';
 import { openMercuryReads, scopePermission } from './reads';
 import { raiseReadsOf, type RaiseReads } from './raiseFeeds';
 
@@ -35,16 +36,16 @@ export async function founderRaiseReads(env: Env, user: User): Promise<FounderRe
   if (row.auth_type !== MERCURY_AUTH_TYPE) {
     return { ok: false, status: 409, code: 'mercury_sign_in_required', message: 'Sign in with Mercury to fill your Raise modules; a pasted token does not reach them.' };
   }
-  let creds;
-  try { creds = await mcpCredentialsOf(env, row); } catch { creds = null; }
-  if (!creds) return { ok: false, status: 503, code: 'credentials_unreadable', message: 'Your Mercury sign-in could not be read. Sign in with Mercury again.' };
+  let access;
+  try { access = await mercuryAccessFor(env, Number(user.id)); } catch { access = null; }
+  if (!access) return { ok: false, status: 503, code: 'credentials_unreadable', message: 'Your Mercury sign-in could not be read. Sign in with Mercury again.' };
   // Read-only, checked again on every use: a sign-in holding more than `read` is not read.
-  if (scopePermission(creds.scopes ?? []) !== 'read_only') {
+  if (scopePermission(access.scopes ?? []) !== 'read_only') {
     return { ok: false, status: 403, code: 'write_scope_refused', message: 'Your Mercury sign-in holds more than read access. Sign in with Mercury again.' };
   }
   let reads;
   try {
-    reads = await openMercuryReads(await mcpAccessFor(env, row, creds));
+    reads = await openMercuryReads(access);
   } catch (e) {
     if (e instanceof MercuryClientError && e.code === 'unauthorized') {
       return { ok: false, status: 409, code: 'mercury_reconnect_required', message: 'Mercury no longer accepts your sign-in. Sign in with Mercury again.' };

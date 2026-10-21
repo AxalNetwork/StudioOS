@@ -104,11 +104,13 @@ test('1: the Interviews strip says FVW\'s four labels from parts.stats, the neve
   assert.doesNotMatch(missing, />0</);
 });
 
-test('1: More tools links the Marketplace and Advisory under their own descriptions', () => {
+test('1: More tools links the Marketplace and Team › Advisors under their own descriptions', () => {
   const html = ssr(h(InterviewsSection, { parts: RESEARCH_PARTS, openDialog: noop, onLog: noop, onExport: noop }));
   assert.match(html, /More tools/);
   assert.match(html, /href="\/build\/marketplace"[^>]*>Marketplace: partners&#x27; services, and the needs you post</);
-  assert.match(html, /href="\/advisory"[^>]*>Advisory: the advisor directory</);
+  // #2341: the advisor directory is Team › Advisors; /advisory only forwards.
+  assert.match(html, /href="\/build\/team\?mode=workspace&amp;tab=advisors"[^>]*>Team › Advisors: the advisor directory</);
+  assert.doesNotMatch(html, /href="\/advisory"/);
   assert.doesNotMatch(html, /Find interviewees/);
 });
 

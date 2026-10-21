@@ -266,7 +266,7 @@ export const SHELLS = {
           // `/portfolio/health`, which is the overview, not this zone.
           { slug: 'positions', label: 'Positions', archetype: A.LEDGER },
           { slug: 'updates', label: 'Updates', archetype: A.FEED },
-          { slug: 'value-add', label: 'Value-add', archetype: A.FEED, legacy: '/portfolio/growth' },
+          { slug: 'value-add', label: 'Value-add', archetype: A.FEED },
         ] },
       // Axal VC Fund — LP participation in Axal's own fund. Not the GP add-on
       // below it, and not touched by this migration.
