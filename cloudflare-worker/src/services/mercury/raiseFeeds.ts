@@ -228,8 +228,8 @@ const UPSERT_FACT = `INSERT INTO mercury_raise_facts (integration_id, project_id
        burn_cents = excluded.burn_cents, value = excluded.value, as_of = excluded.as_of, updated_at = CURRENT_TIMESTAMP`;
 // The ledger row links to the fact just written; one deleted since is not written (`deletedFacts`).
 const FACT_LEDGER = `INSERT INTO connector_fed_items (integration_id, project_id, module, kind, external_id, local_table, local_id)
-     SELECT ?, ?, ?, ?, ?, 'mercury_raise_facts', id FROM mercury_raise_facts
-      WHERE integration_id = ? AND project_id = ? AND fact_key = ?
+     VALUES (?, ?, ?, ?, ?, 'mercury_raise_facts',
+       (SELECT id FROM mercury_raise_facts WHERE integration_id = ? AND project_id = ? AND fact_key = ?))
      ON CONFLICT(integration_id, external_id) DO UPDATE SET
        last_seen_at = CURRENT_TIMESTAMP, local_table = excluded.local_table, local_id = excluded.local_id`;
 // Once per source: a decided proposal is never proposed again; a pending one is refreshed.
@@ -239,10 +239,18 @@ const PROPOSE = `INSERT INTO mercury_raise_proposals (integration_id, project_id
        payload_json = excluded.payload_json, target = excluded.target, updated_at = CURRENT_TIMESTAMP
      WHERE mercury_raise_proposals.status = 'pending'`;
 // A landed row the founder deleted elsewhere unlinks its ledger row, so it reads as deleted (#1906).
-const UNLINK_GONE = (table: string) => `UPDATE connector_fed_items SET local_id = NULL
-     WHERE integration_id = ? AND project_id = ? AND local_table = '${table}' AND local_id IS NOT NULL
-       AND external_id LIKE 'raise:%' AND NOT EXISTS (SELECT 1 FROM ${table} t WHERE t.id = connector_fed_items.local_id)`;
-const LANDED_TABLES = ['mercury_raise_facts', 'data_room_files', 'raise_prospects'];
+// One statement per landed table, each spelled out: no table name is spliced into SQL.
+const UNLINK_GONE = [
+  `UPDATE connector_fed_items SET local_id = NULL
+     WHERE integration_id = ? AND project_id = ? AND local_table = 'mercury_raise_facts' AND local_id IS NOT NULL AND external_id LIKE 'raise:%'
+       AND NOT EXISTS (SELECT 1 FROM mercury_raise_facts t WHERE t.id = connector_fed_items.local_id)`,
+  `UPDATE connector_fed_items SET local_id = NULL
+     WHERE integration_id = ? AND project_id = ? AND local_table = 'data_room_files' AND local_id IS NOT NULL AND external_id LIKE 'raise:%'
+       AND NOT EXISTS (SELECT 1 FROM data_room_files t WHERE t.id = connector_fed_items.local_id)`,
+  `UPDATE connector_fed_items SET local_id = NULL
+     WHERE integration_id = ? AND project_id = ? AND local_table = 'raise_prospects' AND local_id IS NOT NULL AND external_id LIKE 'raise:%'
+       AND NOT EXISTS (SELECT 1 FROM raise_prospects t WHERE t.id = connector_fed_items.local_id)`,
+];
 
 export type SyncCounts = Record<string, number | boolean | string>;
 
@@ -281,7 +289,7 @@ const proposeStmt = (env: Env, integrationId: number, projectId: number, kind: P
 export async function syncRaise(env: Env, integrationId: number, projectId: number, reads: RaiseReads, today: string): Promise<SyncCounts> {
   const counts: SyncCounts = {};
   // Rows the founder deleted through a module's own tools read as deleted.
-  await env.DB.batch(LANDED_TABLES.map((t) => env.DB.prepare(UNLINK_GONE(t)).bind(integrationId, projectId)));
+  await env.DB.batch(UNLINK_GONE.map((sql) => env.DB.prepare(sql).bind(integrationId, projectId)));
   const deleted = await deletedFacts(env, integrationId, projectId);
   const keep = (facts: Fact[]) => facts.filter((f) => !deleted.has(f.key));
 
