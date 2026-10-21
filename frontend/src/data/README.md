@@ -1,12 +1,11 @@
 # frontend/src/data — static reference data
 
-Values that are genuinely constant and belong in the bundle: pricing tiers,
-roadmap entries, taxonomy lists.
+Values that are genuinely constant and belong in the bundle: pricing tiers
+and taxonomy lists.
 
 | File | What it is |
 | --- | --- |
 | `pricing.js` | Plan tiers as displayed on `/pricing`. |
-| `roadmap.js` | Public roadmap entries. |
 | `network.js` | Directory categories, programme catalogue, audience/format taxonomies. |
 | `productPages.js` | Product-page copy blocks. |
 

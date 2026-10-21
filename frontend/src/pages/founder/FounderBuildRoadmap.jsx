@@ -218,7 +218,7 @@ export default function FounderBuildRoadmap() {
                       </div>
                     </div>
                   ) : (
-                    <div className="fb-roadmap-inline-empty"><CircleDot size={18} /><div><strong>No roadmap items are recorded.</strong><p>Use the roadmap editor to add an objective and key results for this startup.</p><Link to={`/execution/roadmap${selectedId ? `?project_id=${selectedId}` : ''}`}>Open roadmap editor</Link></div></div>
+                    <div className="fb-roadmap-inline-empty"><CircleDot size={18} /><div><strong>No roadmap items are recorded.</strong><p>Use the roadmap editor to add an objective and key results for this startup.</p><Link to={`/execution?mode=workspace${selectedId ? `&project_id=${selectedId}` : ''}#execution-roadmap`}>Open roadmap editor</Link></div></div>
                   )}
                   <p className="fb-roadmap-note">
                     Quarter and column come from the stored roadmap item. <strong>Blocked</strong> is

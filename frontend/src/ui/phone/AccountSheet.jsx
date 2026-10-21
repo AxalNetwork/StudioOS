@@ -4,8 +4,11 @@ import { useActiveCompany } from '../../contexts/ActiveCompanyContext.js';
 import { CheckInStatus } from '../../components/FounderWellbeingMenu.jsx';
 import { PhoneSheet, SheetRow } from './PhoneSheet.jsx';
 
+// Messages is here because a founder's phone draws the band, not the top bar
+// that carries the Messages door (D284); the More page that carried it was
+// removed (#2297).
 const ACCOUNT_ROWS = [
-  ['Your profile', '/profile'], ['Account', '/account'], ['Usage', '/account/usage'],
+  ['Messages', '/messages'], ['Your profile', '/profile'], ['Account', '/account'], ['Usage', '/account/usage'],
   ['Connectors', '/account/connectors'], ['Trust Center', '/trust'], ['Perks', '/perks'],
   ['Calendar', '/calendar'], ['Events', '/my/events'], ['Learning', '/learning'],
   ['Help Center', '/help'], ['Pricing', '/pricing'],

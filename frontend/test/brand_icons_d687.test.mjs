@@ -439,7 +439,6 @@ test('step 11. the footer, share buttons, author card and Referrals draw BrandIc
     ['frontend/src/pages/ArticleReaderPage.jsx', ['x', 'linkedin', 'facebook']],
     ['frontend/src/pages/PublicProfilePage.jsx', ['linkedin', 'x', 'github']],
     ['frontend/src/pages/admin/AdminTeam.jsx', ['linkedin', 'x']],
-    ['frontend/src/pages/AdvisoryPage.jsx', ['linkedin']],
     ['frontend/src/pages/jobs/JobManagePage.jsx', ['linkedin']],
   ];
   for (const [file, keys] of wrappers) {

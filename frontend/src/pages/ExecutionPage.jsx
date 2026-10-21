@@ -14,9 +14,9 @@ import RoadmapPage from './RoadmapPage';
 // standalone /projects, /pipeline and /build/roadmap routes stay intact for the
 // other personas.
 //
-// The legacy /execution/board and /execution/roadmap sub-routes still resolve
-// here and simply scroll to the matching section, so no dead route remains and
-// old deep links keep working.
+// A link names its section by hash (`#execution-board`, `#execution-roadmap`)
+// and the page scrolls to it. The /execution/board and /execution/roadmap
+// sub-routes that did this were removed (owner, #2297).
 
 function SectionHeader({ icon: Icon, title, description }) {
   return (
@@ -35,14 +35,13 @@ function SectionHeader({ icon: Icon, title, description }) {
 export default function ExecutionPage({ embedded = false }) {
   const location = useLocation();
 
-  // Legacy sub-routes scroll to their section; the base route scrolls to top.
+  // A section's hash scrolls to it; otherwise the page scrolls to top.
   // Skip entirely when embedded (inside Command Center) so switching to the
   // Execution tab never yanks the window scroll position around.
   useEffect(() => {
     if (embedded) return;
-    let targetId = null;
-    if (location.pathname.startsWith('/execution/board')) targetId = 'execution-board';
-    else if (location.pathname.startsWith('/execution/roadmap')) targetId = 'execution-roadmap';
+    const hash = location.hash.replace(/^#/, '');
+    const targetId = hash === 'execution-board' || hash === 'execution-roadmap' ? hash : null;
 
     const t = setTimeout(() => {
       if (targetId) {
@@ -52,7 +51,7 @@ export default function ExecutionPage({ embedded = false }) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }, 60);
     return () => clearTimeout(t);
-  }, [location.pathname, embedded]);
+  }, [location.hash, embedded]);
 
   return (
     <div data-testid="execution-page" className="space-y-10">

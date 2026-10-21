@@ -141,10 +141,12 @@ test('Performance is still a FundOpsWorkspace tab; Accounting and LP Reporting a
   // the surface, and the nav must not point at a hole.
   const pw = scan(read('frontend/src/pages/PortfolioWorkspace.jsx'));
   assert.match(pw, /<PortfolioGrowthPage embedded/);
+  // #2297 retired the /portfolio/growth address; the tab's door is
+  // /portfolio/value-add, the same surface.
   // Reachability, not row-ness. The investor shell collapsed the four portfolio
   // rows into one row on /portfolio/health, so Growth's door is now this
   // workspace's tab bar rather than a nav entry of its own. Assert the door.
-  assert.match(pw, /to: '\/portfolio\/growth'/);
+  assert.match(pw, /to: '\/portfolio\/value-add'/);
   // Re-aimed in D284: the row that satisfied this was the admin's Portfolio
   // Health row, which left the sidebar for the Workspaces launcher with the
   // other working pages. The property is unchanged — something still lands
