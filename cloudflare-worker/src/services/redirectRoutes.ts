@@ -4,7 +4,7 @@
  * Each entry is a `<Route path>` in `frontend/src/App.jsx` whose element always
  * forwards to another address (a `<Navigate>` or a `*Redirect` component, with
  * or without a role guard), never a page. Routes that redirect for some roles
- * and render a page for others (`/raise/data-room`, `/needs`, `/build`, …) are
+ * and render a page for others (`/raise/data-room`, `/build`, …) are
  * not here: they are pages. `frontend/test/redirect_hits_2301.test.mjs` reads
  * App.jsx and fails if this list and the routes drift apart.
  *
@@ -113,9 +113,20 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/payouts' },
   { path: '/relationships' },
   { path: '/partner-portal' },
+  { path: '/partners/portal' }, // #2342
+  { path: '/portfolio/coverage' }, // #2337
+  { path: '/needs' }, // #2338
+  { path: '/services' }, // #2338
+  { path: '/founder/post-need' }, // #2338
+  { path: '/partner/needs' }, // #2338
   { path: '/docs' },
   { path: '/communities' },
   { path: '/network-effects' }, // #2324: the page is removed (#2297 §3); it lands on Network
+  // #2321 — the older audience landing pages, forwarded to the door pages.
+  { path: '/lp/founder' },
+  { path: '/lp/customer-discovery' },
+  { path: '/lp/investor' },
+  { path: '/lp/partner' },
 ]);
 
 /** The key a hit is counted under in `public_pageviews.path`. */

@@ -158,11 +158,11 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| BD Console | `/partner/operations/overview` · `/capabilities` · `/portfolio` · `/engagements` · `/performance` · `/needs` | Headerless | Full page | Sidebar → Headerless → Pipeline | UPGRADE | High |
+| BD Console | `/partner/operations/overview` · `/capabilities` · `/portfolio` · `/engagements` · `/performance` · `/needs` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Co-marketing | `/comarketing` · `/comarketing/:pitch` | Headerless | Full page | Sidebar → Headerless → Offers | UPGRADE | High |
 | Detail Layer Canvas II | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Get Paid & Invoicing | `/payouts` · `/referrals` | — (no nav entry) | Full page | Deep link / in-page action | RESKIN | Medium |
-| Pages · Partner Pipeline | `/needs` · `/partner/operations/*` | Headerless | Full page | Sidebar → Headerless → Pipeline | UPGRADE | High |
+| Pages · Partner Pipeline | `/needs` · `/partner/operations/*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Partner Operator Canvas | `/studio` · `/spinout-lab` · `/needs` · `/partner/insights` · `/partner/operations/*` · `/services` · `/perks` · `/comarketing` · `/partner/office-hours` · `/network` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | Perks & Products | `/perks` | Headerless | Full page | Sidebar → Headerless → Offers | NEW | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -272,8 +272,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 103 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 46 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 101 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 48 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 42 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
