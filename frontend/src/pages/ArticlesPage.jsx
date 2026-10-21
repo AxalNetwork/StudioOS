@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import { articles as api } from '../lib/api';
+import { articles as api, publications } from '../lib/api';
 import { reportError } from '../lib/log';
 import SitePage from '../components/site/SitePage';
 import NetworkSubNav from '../components/site/NetworkSubNav';
 import { FilterPills, EmptyNote } from '../components/site/SiteBlocks';
+import { titleCase } from '../lib/absence';
 import { articleFilterOptions, articleMeta, initials, sectorLabel, tintFor } from '../lib/siteResources';
 import './site/network.css';
 
@@ -19,6 +20,11 @@ import './site/network.css';
  * examples. Search, the author-role filter, the featured strip and pagination
  * are the page's own behaviour, kept. Authoring (drafts, the editor, "My
  * Articles") lives in the writing workspace at /articles/draft.
+ *
+ * #2333 — the one publications list. The HQ briefs (`admin_publications`) that
+ * the retired `/insights` index listed are the Briefs section below the
+ * articles; `/insights` forwards to `/articles#briefs`, and each brief still
+ * opens at its share link, `/insights/public/:slug`.
  */
 
 const ROLE_FILTERS = [
@@ -200,6 +206,74 @@ function BrowseArticles() {
   );
 }
 
+function formatBriefDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+// The HQ briefs, each opening at its public share link. A failed read says so:
+// "none" would be a claim the page cannot make.
+export function Briefs() {
+  const [items, setItems] = useState(null);
+  const [failed, setFailed] = useState(false);
+  const { hash } = useLocation();
+  useEffect(() => {
+    let cancelled = false;
+    publications.publicList()
+      .then((d) => { if (!cancelled) setItems(Array.isArray(d?.publications) ? d.publications : []); })
+      .catch((e) => {
+        reportError('Articles:briefs', e);
+        if (!cancelled) { setFailed(true); setItems([]); }
+      });
+    return () => { cancelled = true; };
+  }, []);
+  // `/insights` lands here as `/articles#briefs`; scroll once the list is drawn.
+  useEffect(() => {
+    if (hash === '#briefs' && items) document.getElementById('briefs')?.scrollIntoView?.();
+  }, [hash, items]);
+
+  return <BriefsView items={items} failed={failed} />;
+}
+
+/** The Briefs section for one read: `items` null while loading. */
+export function BriefsView({ items, failed = false }) {
+  return (
+    <section id="briefs" aria-labelledby="ax-art-briefs-h" data-testid="articles-briefs">
+      <h2 id="ax-art-briefs-h" className="ax-lbl-q ax-nw-panel-k ax-art-k">Briefs</h2>
+      {items === null ? (
+        <EmptyNote>Loading…</EmptyNote>
+      ) : failed ? (
+        <EmptyNote>Unreadable: the briefs could not be read, so this is not a claim that there are none.</EmptyNote>
+      ) : items.length === 0 ? (
+        <EmptyNote>No published briefs yet.</EmptyNote>
+      ) : (
+        <div className="ax-art-grid">
+          {items.map((p) => {
+            const meta = [p.section ? titleCase(p.section) : '', formatBriefDate(p.published_at)].filter(Boolean).join(' · ');
+            return (
+              <article key={p.slug} className="ax-card ax-art-card">
+                <div className="ax-art-body">
+                  <div className="ax-art-top">
+                    <span className="ax-chip">Brief</span>
+                    {meta && <span className="ax-mono ax-art-date">{meta}</span>}
+                  </div>
+                  <h3 className="ax-art-t"><Link to={`/insights/public/${encodeURIComponent(p.slug)}`}>{p.title}</Link></h3>
+                  {p.subtitle && <p className="ax-art-x">{p.subtitle}</p>}
+                </div>
+                <div className="ax-art-foot">
+                  <span className="ax-art-author">Axal VC</span>
+                  <span className="ax-art-read" aria-hidden="true">Read →</span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function ArticlesPage() {
   return (
     <SitePage title="Articles">
@@ -211,6 +285,7 @@ export default function ArticlesPage() {
           Writing on company formation, pre-seed underwriting, and what we learn from running cohorts. Published as we learn it, not on a content calendar.
         </p>
         <BrowseArticles />
+        <Briefs />
       </div>
     </SitePage>
   );

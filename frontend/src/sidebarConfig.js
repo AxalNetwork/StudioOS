@@ -340,7 +340,7 @@ export const SIDEBAR_GROUPS = {
       // whatever path was free, and the row was never pointed back. `match`
       // keeps every legacy and section URL highlighting the right row.
       { to: '/validate', icon: MessageSquare, label: 'Validate',
-        match: ['/validate', '/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
+        match: ['/validate', '/build/discovery', '/build/marketplace', '/needs', '/services'] },
       { to: '/build', icon: Briefcase, label: 'Build',
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution'] },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits

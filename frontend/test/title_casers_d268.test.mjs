@@ -49,9 +49,10 @@ test('hyphens now normalise to spaces where only underscores did', () => {
     'networkType', 'portfolioCanvas']) {
     assert.equal(PAGES[k]()('co-invest_round'), 'Co Invest Round', k);
   }
-  // AdminLpApplications and InsightsPage call titleCase directly now.
+  // AdminLpApplications and ArticlesPage (whose Briefs took over the retired
+  // InsightsPage's list, #2333) call titleCase directly now.
   assert.match(src('pages/admin/AdminLpApplications.jsx'), /import \{ titleCase \} from '\.\.\/\.\.\/lib\/absence';/);
-  assert.match(src('pages/insights/InsightsPage.jsx'), /return titleCase\(s\);/);
+  assert.match(src('pages/ArticlesPage.jsx'), /p\.section \? titleCase\(p\.section\)/);
 });
 
 test('input is now trimmed before casing', () => {
@@ -110,7 +111,7 @@ test('pageLabel keeps its route map and its empty string', () => {
 test('no converted file declares its own caser', () => {
   for (const rel of ['lib/advisor/router.js', 'lib/assessmentMeta.js',
     'pages/FundPerformancePage.jsx', 'pages/PortfolioGrowthPage.jsx', 'pages/admin/AdminLpApplications.jsx',
-    'pages/insights/InsightsPage.jsx', 'pages/investor/InvestorFundLPs.jsx', 'pages/investor/InvestorFundLanding.jsx',
+    'pages/ArticlesPage.jsx', 'pages/investor/InvestorFundLPs.jsx', 'pages/investor/InvestorFundLanding.jsx',
     'pages/investor/InvestorFundReporting.jsx', 'pages/investor/InvestorNetworkWorkspace.jsx',
     'pages/investor/InvestorPortfolioCanvas.jsx', 'pages/investor/InvestorPortfolioUpdates.jsx',
     'pages/pipeline/bucketing.js']) {
