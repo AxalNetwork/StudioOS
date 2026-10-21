@@ -516,18 +516,20 @@ export const PERSONAL_MERCURY: Readonly<Record<PersonalMercuryRole, Readonly<Per
     description: 'Your own Mercury account, read-only: import the credits you choose as venture revenue, and see each month\'s spending, burn, cash on hand and runway. Only the figures you choose are saved.',
     capabilities: ['Revenue import', 'Payment matching', 'Spending and runway'],
     permissions: ['Read your Mercury account names, last four digits, available balances and the transactions you review; it never sends, transfers or requests money.'],
-    // D840 part 3 (#2348): the Grow modules, in `MERCURY_FEEDS`' order.
-    feeds: ['revenue_and_traction', 'durable_company_building', 'team_expansion', 'distribution', 'partner_network'],
+    // D840 parts 2 (#2347) and 3 (#2348): the Raise and Grow modules, in `MERCURY_FEEDS`' order.
+    feeds: ['revenue_and_traction', 'fundraising_readiness', 'use_of_funds', 'data_room', 'cap_table', 'capital_relationships', 'investor_narrative', 'pitch_deck',
+      'durable_company_building', 'team_expansion', 'distribution', 'partner_network'],
   }),
   partner: Object.freeze({
     description: FOUNDER_PARTNER_DESCRIPTION, capabilities: FOUNDER_PARTNER_CAPABILITIES,
     permissions: FOUNDER_PARTNER_PERMISSIONS, feeds: [],
   }),
   investor: Object.freeze({
-    description: "Your own Mercury account, read-only: show Axal's admins that you can fund a commitment you made, with a dated statement of at least an amount you choose. Axal's admins never see your balance.",
-    capabilities: ['Proof of funds'],
-    permissions: ['Read your Mercury account names, last four digits and available balances while you prepare a statement; it never stores or shows a balance, and never sends, transfers or requests money.'],
-    feeds: [],
+    description: "Your own Mercury account, read-only: show Axal's admins that you can fund a commitment you made, with a dated statement of at least an amount you choose, and fill your Deals and Fund sections. Axal's admins never see your balance.",
+    capabilities: ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals'],
+    permissions: ['Read your Mercury account names, last four digits, available balances, transactions and statements for your own sections; only you see a balance, and it never sends, transfers or requests money.'],
+    // D840 part 4 (#2349): the investor's sections, held to `mercuryFeeds.ts`.
+    feeds: ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting'],
   }),
 });
 

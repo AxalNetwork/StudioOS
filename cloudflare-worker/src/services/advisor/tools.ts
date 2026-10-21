@@ -108,7 +108,7 @@ function asPositiveInt(v: unknown): number | null {
  */
 const PAGE_ALLOWLIST: Record<string, string> = {
   '/projects': 'Projects',
-  '/build/discovery': 'Discovery',
+  '/validate/customer-research': 'Customer research',
   '/build/roadmap': 'Roadmap',
   '/build/brand': 'Brand',
   '/build/deck': 'Pitch Deck',
@@ -120,7 +120,8 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/marketplace': 'Marketplace',
   '/incorporate': 'Incorporate',
   '/legal': 'Legal',
-  '/legal-capital': 'Legal & Capital',
+  // `/legal-capital` was removed (#2354); its contract CTAs open Raise › Legal.
+  '/raise/legal': 'Legal',
   '/compliance': 'Compliance',
   '/help': 'Help Center',
   // `/docs` redirects into `/help`; kept so an older stored CTA still labels.
@@ -287,14 +288,14 @@ async function startContract(ctx: ToolContext, args: ToolArgs): Promise<ToolEnve
   params.set('template', template);
   if (counterparty) params.set('counterparty', counterparty);
   if (dealId) params.set('deal_id', String(dealId));
-  const route = `/legal-capital?${params.toString()}`;
+  const route = `/raise/legal?${params.toString()}`;
   const label = `Draft ${template.toUpperCase()}`;
   return {
     result: { template, counterparty, deal_id: dealId, prefilled: true },
     cta: {
       label, route,
       primary: { label, route },
-      secondary: { label: 'See all contracts', route: '/legal-capital' },
+      secondary: { label: 'See all contracts', route: '/raise/legal' },
     },
   };
 }
@@ -346,14 +347,14 @@ async function draftCofounderAgreement(_ctx: ToolContext, args: ToolArgs): Promi
   params.set('template', 'cofounder');
   if (cofounderEmail) params.set('cofounder_email', cofounderEmail);
   if (equityPct) params.set('equity_pct', String(equityPct));
-  const route = `/legal-capital?${params.toString()}`;
+  const route = `/raise/legal?${params.toString()}`;
   const label = 'Draft cofounder agreement';
   return {
     result: { template: 'cofounder', cofounder_email: cofounderEmail || null, equity_pct: equityPct },
     cta: {
       label, route,
       primary: { label, route },
-      secondary: { label: 'See all templates', route: '/legal-capital' },
+      secondary: { label: 'See all templates', route: '/raise/legal' },
     },
   };
 }

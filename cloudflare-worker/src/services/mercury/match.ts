@@ -78,10 +78,20 @@ const eligibleBinds = () => [JSON.stringify(POSTED_STATUSES), JSON.stringify(INT
 
 export interface Credit { id: number; uid: string; mercury_transaction_id: string; amount_cents: number; posted_on: string; entity_key: string; last_four: string }
 
-interface OpenLine { id: number; outstanding_cents: number; from: string; to: string }
+export interface OpenLine { id: number; outstanding_cents: number; from: string; to: string }
 
-/** Fund I's open lines with their outstanding cents and date window. */
-async function openLines(env: Env, fundId: number): Promise<OpenLine[]> {
+/**
+ * The capital-call rule, alone: a credit fits a line when it is exactly the
+ * line's outstanding cents and was posted inside the line's window. D840
+ * (#2349) reuses it for an investor's own fund; the entity matcher below is
+ * its first caller.
+ */
+export function callLineFits(line: OpenLine, credit: { amount_cents: number; posted_on: string }): boolean {
+  return line.outstanding_cents === credit.amount_cents && credit.posted_on >= line.from && credit.posted_on <= line.to;
+}
+
+/** A fund's open lines with their outstanding cents and date window (Fund I's, for the entity matcher). */
+export async function openLines(env: Env, fundId: number): Promise<OpenLine[]> {
   const r = await env.DB.prepare(
     `SELECT cc.id, cc.due_date, cc.created_at, fcc.created_at AS issued_at,
             COALESCE(cc.amount_cents, CAST(ROUND(cc.amount * 100) AS INTEGER))
@@ -128,7 +138,7 @@ export async function proposeMatches(env: Env, d?: Partial<MatchDeps>): Promise<
   const periods = (fundId == null ? [] : await m.feePeriods(env, fundId)).filter((p) => p.status === 'issued' || p.status === 'paid');
   for (const c of credits) {
     if (c.entity_key === 'fund' && fundId != null) {
-      const fits = lines.filter((l) => l.outstanding_cents === c.amount_cents && c.posted_on >= l.from && c.posted_on <= l.to);
+      const fits = lines.filter((l) => callLineFits(l, c));
       if (fits.length === 1 && await insertMatch(env, c, 'capital_call_line', fits[0].id, c.amount_cents, 'matcher', null)) proposed += 1;
     } else if (c.entity_key === 'gp') {
       const fits = periods.filter((p) => p.net_total_cents === c.amount_cents && c.posted_on >= p.window_start && c.posted_on <= plusDays(p.window_end, WINDOW_DAYS_AFTER));

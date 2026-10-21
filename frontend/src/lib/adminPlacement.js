@@ -62,8 +62,6 @@ export const ADMIN_PLACEMENT = [
   // The Admin Console itself, /admin, is on UNPLACED below: H35 says "Stays
   // reachable. Its 14 tabs are placed individually", and they are.
   row('Due Diligence', '/admin/due-diligence', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
-  row('Assessment Studio', '/admin/assessment', hq('Content', 'sub-nav'), false,
-    { how: 'Sub-navigation item (authoring). Admin · Programs shows the runs.', also: [admin('Programs', 'card link')] }),
   row('Best-Fit Console', '/admin/best-fit', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
   row('Event Admin', '/admin/events', admin('Community', 'card link'), false,
     { how: 'Card link. Its approvals are also an Approvals lane.', also: [admin('Approvals', 'lane')] }),
@@ -129,13 +127,13 @@ export const ADMIN_PLACEMENT = [
   // The owner removed six of them on 2026-10-20 — Scoring Engine, Risk Matrix,
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
   // & Journal — page and route together. #2324 removed Network Effects,
-  // #2341 removed Advisory, and #2337 and #2338 removed Portfolio Coverage,
-  // Service Catalogue and Needs Board on 2026-10-21, so fifteen remain.
+  // #2341 removed Advisory, #2337 and #2338 removed Portfolio Coverage,
+  // Service Catalogue and Needs Board on 2026-10-21, and #2354 removed Legal &
+  // Capital (its address forwards to Raise › Legal), so fourteen remain.
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
   page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),
   page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall', 'Proceeds by class at a given exit.'),
-  page('Capital & Legal', 'Legal & Capital', '/legal-capital', 'Documents and capital records.'),
   page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
   page('Capital & Legal', 'Compliance Calendar', '/compliance', 'Filings and their deadlines.'),
   page('Network & Growth', 'Network', '/network', 'Relationships and introductions.'),
@@ -186,7 +184,6 @@ export const PAGE_HOMES = {
   '/deals': [['investor', 'Deals', 'row']],
   '/portfolio/health': [['investor', 'Portfolio', 'row']],
   '/portfolio/waterfall': [['investor', 'Portfolio', 'also']],
-  '/legal-capital': [['founder', 'Raise', 'also']],
   '/incorporate': [['founder', 'Raise', 'also']],
   '/compliance': [['founder', 'Raise', 'also']],
   '/network': [['founder', 'Network', 'row'], ['investor', 'Network', 'row'], ['partner', 'Network', 'row'], ['advisor', 'Network', 'row']],

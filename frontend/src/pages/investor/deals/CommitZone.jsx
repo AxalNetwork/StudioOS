@@ -9,6 +9,7 @@ import ZoneToolbar from '../../../workspaces/ZoneToolbar';
 import ZoneDraft from '../../../workspaces/ZoneDraft';
 import { Eyebrow, Instrument, NotRecorded } from '../../../workspaces/canvasKit';
 import { ZoneBody, NothingYet, StatedLimit } from '../../advisor/expertise/kit';
+import FromMercury from '../FromMercury';
 
 /**
  * Deals · Commit — canvas **ID3**, `/deals/commit`. LEDGER.
@@ -718,6 +719,8 @@ export default function InvestorCommitZone() {
             </p>
           </StatedLimit>
         </div>
+        {/* D840 (#2349): capacity from the investor's own Mercury, on this page only. */}
+        <FromMercury section="commit" />
       </ZoneBody>
     </>
   );

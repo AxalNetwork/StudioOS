@@ -131,7 +131,7 @@ export default {
       overview:
         "Co-founder Match introduces solo founders to candidates with complementary skills, time availability, and chemistry signals. Profiles are private until both sides opt in to a conversation.",
       howto: [
-        'Open Co-founder Match and complete your profile (skills, time commitment, location, motivations).',
+        'Open Co-founder Match in the Spin-Out Lab (Week 3) and read your founder match brief.',
         'Review match suggestions, like or pass on each.',
         'When two people both like each other a chat unlocks.',
         'When you’re ready to commit, run the Cofounder Agreement flow.',

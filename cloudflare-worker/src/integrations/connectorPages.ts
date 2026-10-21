@@ -111,6 +111,35 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
     tools.push(tool('read_transaction', 'the transaction you pick', 'read', 'Reads the one transaction you picked, to confirm it before it is used.', null,
       ['`/account/${accountId}/transaction/${transactionId}`', ...mcp('getTransactionById')]));
   }
+  // D840 part 2 (#2347): the founder's Raise modules, through a sign-in only. Facts land; judgement waits for Accept.
+  if (variant === 'founder') {
+    tools.push(
+      tool('read_cashflow', 'your cashflow summary', 'read', 'Reads the last 3 full months’ cashflow, with your cash on hand, for a measured runway in Fundraising readiness.',
+        'fundraising_readiness', mcp('getCashflowSummary')),
+      tool('raise_spend', 'spending by category', 'read', 'Sums your spending by Mercury category over 3, 6 and 12 months, beside your planned split. Which section a category counts under is proposed for you to accept.',
+        'use_of_funds', mcp('listTransactions')),
+      tool('list_statements', 'your monthly statements', 'read', 'Lists your last 12 statements. Each one you accept is stored in your data room, behind NDA and seen by no investor until you open it.',
+        'data_room', mcp('getAccountStatements')),
+      tool('list_safe_requests', 'your SAFEs', 'read', 'Lists your Mercury SAFEs. Each one you accept becomes an instrument on your cap table.',
+        'cap_table', mcp('getSafeRequests')),
+      tool('raise_credits', 'credits that look like investment', 'read', 'Lists wires and ACH credits of $10,000 or more. Matching one to an investor, or adding a new one, waits for your Accept.',
+        'capital_relationships', mcp('listTransactions')),
+      tool('raise_figures', 'revenue, burn and runway', 'read', 'Measures revenue growth, burn and runway as figures your narrative can cite, from Mercury with their date. They are never typed into your text.',
+        'investor_narrative', mcp('listTransactions')),
+      tool('raise_deck_figures', 'traction figures', 'read', 'Offers the same figures to your deck’s traction slide, from Mercury with their date. They are never typed into your slides.',
+        'pitch_deck', mcp('getCashflowSummary')),
+    );
+  }
+  // D840 part 4 (#2349): a signed-in investor's sections, each read through the MCP server only.
+  if (variant === 'investor') {
+    tools.push(
+      tool('read_capacity', 'available balances of the accounts you pick', 'read', 'Reads the available balance of the accounts you pick, as your capacity beside your own commitments. Only you see it.', 'deals_commit', [...mcp('getAccounts')]),
+      tool('list_payments_out', 'outgoing wires and ACH payments', 'read', 'Lists your outgoing payments, to propose the one that funded a commitment. Nothing is recorded until you accept it.', 'deals_closing', [...mcp('listTransactions')]),
+      tool('list_payments_in', 'incoming payments', 'read', 'Lists the credits into your fund’s accounts, to propose the capital-call line each one pays. A receipt is recorded only when you accept it.', 'fund_calls', [...mcp('listTransactions')]),
+      tool('list_categorised_transactions', 'transactions and their categories', 'read', 'Lists your fund’s transactions with Mercury’s categories, to propose a ledger entry for each. An entry is posted only when you accept it.', 'fund_ledger', [...mcp('listTransactions')]),
+      tool('read_statements', 'statements', 'read', 'Reads your accounts’ monthly statements, for month-end cash in your period report, and proposes attaching a statement to its period.', 'fund_reporting', [...mcp('getAccountStatements')]),
+    );
+  }
   // D840 part 3 (#2348): what the founder's Grow sync reads, each where it lands.
   if (variant === 'founder') {
     tools.push(
@@ -153,6 +182,7 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
           ? [
             'Your own Mercury account, read-only, on HQ only (D752).',
             'Axal VC reads your accounts’ names, kinds and last four digits, so you can pick the ones a proof of funds counts. Axal’s admins see only a dated statement of at least an amount you choose, never a balance. It never sends, transfers or requests money.',
+            'Signed in with Mercury, it also fills your sections (D840): your capacity beside your own commitments, on your page only; and proposals for Deals · Closing, Fund · Calls, Accounting and Reporting, which write nothing until you accept them. Portfolio gets nothing from Mercury.',
           ]
           : [
           'Your own Mercury account, read-only.',

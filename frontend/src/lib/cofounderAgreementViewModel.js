@@ -978,7 +978,7 @@ export function buildCofounderAgreementViewModel(input) {
     canExecute: false,
     reason: SOLO_REASON,
     nextSteps: [
-      { label: 'Find a co-founder', to: '/cofounder' },
+      { label: 'Find a co-founder', to: '/spinout-lab/cofounder-match' },
       { label: 'Set 100% ownership in Cap Table', to: '/spinout-lab/captable' },
       { label: 'Back to Workspace', to: '/spinout-lab' },
     ],

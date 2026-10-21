@@ -1,5 +1,5 @@
 // Task #2 — On-screen skills radar (recharts) used by the Profile & Fit section,
-// Network/Events archetype surfaces, and the admin Assessment Studio preview.
+// Network/Events archetype surfaces.
 // Theme-agnostic mid-tone strokes (no Tailwind gray utilities) so it reads in
 // both light + dark without dark-mode pairings.
 import React from 'react';

@@ -509,7 +509,7 @@ test('durable: the runway item counts only for a founder with Mercury, or once t
 
 test('the page lists exactly what is built: each Grow feed lands only the kinds the sync writes', async () => {
   // Mutation checked: drop distribution from MERCURY_FEEDS → the module list fails; land a kind the list does not name → the ledger check fails.
-  const grow = MERCURY_FEEDS.filter((f) => f.decision === 'D840' && f.role === 'founder');
+  const grow = MERCURY_FEEDS.filter((f) => f.key.startsWith('grow_'));
   assert.deepEqual(grow.map((f) => f.module).sort(), Object.keys(GROW_FEED_KINDS).sort());
   for (const m of Object.keys(GROW_FEED_KINDS)) assert.ok(mercuryFedModules('founder').includes(m), m);
   const { db, env } = await growDb();

@@ -6,7 +6,11 @@ const root='cloudflare-worker/src';
 const walk=p=>readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(join(p,e.name)):[join(p,e.name)]);
 // D840 (#2346): Sign in with Mercury writes and reads the member's own row (`routes/mercury_oauth.ts`, `services/mercury/oauth.ts`).
 const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPersonal.ts','routes/mercury_personal.ts','routes/revenue.ts','routes/needs.ts','routes/network.ts','routes/partner_settlements.ts','services/onboardingChecklist.ts','services/raiseCycle.ts','routes/mercury_oauth.ts','services/mercury/oauth.ts',
-  // D840 part 3: the founder's own Mercury, read on their own sync into their Grow modules.
+  // D840 part 2 (#2347): the founder's own sign-in, and a Raise credit confirmed as a raise receipt.
+  'services/mercury/raiseAccess.ts','services/mercury/raiseFeeds.ts',
+  // D840 part 4 (#2349): the investor's sections open the caller's own row (its id and how it connected).
+  'routes/mercury_investor.ts',
+  // D840 part 3 (#2348): the founder's own Mercury, read on their own sync into their Grow modules.
   'services/mercury/growFeeds.ts']);
 const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts','services/capitalAttestations.ts',
   // D840 part 3: the founder's confirmed raise receipts are financing in their Grow months.
@@ -28,7 +32,9 @@ test('only member-facing routes can import personal Mercury logic',()=>{
 const PERSONAL = ['integrations/providers/mercury.ts', 'services/mercuryPersonal.ts', 'routes/mercury_personal.ts',
   'services/capitalAttestations.ts', 'services/capitalAttestationTerms.ts', 'routes/mercury_attestations.ts',
   // D840: the sign-in and the reader it gives a member's row are personal code too.
-  'routes/mercury_oauth.ts', 'services/mercury/oauth.ts', 'services/mercury/connection.ts', 'services/mercury/reads.ts'];
+  'routes/mercury_oauth.ts', 'services/mercury/oauth.ts', 'services/mercury/connection.ts', 'services/mercury/reads.ts',
+  // D840 part 4 (#2349): the investor's sections.
+  'routes/mercury_investor.ts', 'services/mercury/investorFeeds.ts'];
 const src = (f) => readFileSync(join(root, f), 'utf8');
 const code = (f) => src(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 

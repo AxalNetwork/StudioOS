@@ -226,7 +226,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
         match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/partners', '/admin/spinout-moderation'] },
       { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
-        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/assessment', '/admin/profiling-trends'] },
+        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
       { to: '/admin/held/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles'] },
       // D647 — the shared Contracts page and template library. Not "read-only":
       // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin
@@ -272,7 +272,8 @@ export const SIDEBAR_GROUPS = {
   //   • The legacy founder landing page and standalone Spin-Outs page were
   //     retired. Execution remains a first-class row.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
-  //     (/build/metrics) as the founder's own company-health view; the
+  //     (/build/metrics, which #2336 retired into /build/kpi) as the
+  //     founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
   //   • "Network Effects" (/network-effects) is removed (#2324, #2297 §3); its
   //     old address redirects to the single "Network" entry (/network).
@@ -340,14 +341,14 @@ export const SIDEBAR_GROUPS = {
       // whatever path was free, and the row was never pointed back. `match`
       // keeps every legacy and section URL highlighting the right row.
       { to: '/validate', icon: MessageSquare, label: 'Validate',
-        match: ['/validate', '/build/discovery', '/build/marketplace'] },
+        match: ['/validate', '/build/marketplace'] },
       { to: '/build', icon: Briefcase, label: 'Build',
-        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution'] },
+        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'] },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
-      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/legal-capital', '/incorporate', '/compliance'] },
+      { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/incorporate', '/compliance'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
-        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks'] },
+        match: ['/grow', '/build/team', '/advisors', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks'] },
       // Points at /network, not at the first zone: /network is the one route
       // that role-branches its element, so it is the landing every license can
       // open, and it forwards to the zone. The three /network/* zone routes are
@@ -398,9 +399,9 @@ export const SIDEBAR_GROUPS = {
   //     removed on the owner's instruction, 2026-10-20.)
   //   • /market-intel "Market Intelligence" — investor-flavoured intel dropped
   //     to keep the partner UX lean; Demand Insights is the kept signal.
-  //   • /portfolio/health "Portfolio Health", /legal-capital "Legal & Capital" —
-  //     investor/founder capital surfaces; conditional for equity-holding
-  //     partners only.
+  //   • /portfolio/health "Portfolio Health" — investor/founder capital
+  //     surface; conditional for equity-holding partners only. (/legal-capital
+  //     stood here; it was removed (#2354) and redirects to /raise/legal.)
   //   • /advisors "Find a Advisor" — founder-oriented (a service partner is the
   //     expert, not the mentee); conditional.
   //   • /network-effects "Network Effects" — removed (#2324); it redirects to /network.
@@ -649,14 +650,15 @@ function workspaceRoutes(role) {
  */
 export const FOUNDER_FULL_BLEED = [
   ...workspaceRoutes('founder'),
-  // The legacy paths. Since D422, bare `/build/discovery` and `/execution`
-  // are `<Navigate replace>` redirects for a founder — to `/validate` and
-  // `/build` — and render a page only with `?mode=workspace` (the editors D422
-  // kept); `/build/team?mode=workspace` is the Team workspace (D435). They stay
-  // listed so the editor each still mounts keeps the desk's width. These are
-  // the only hand-typed entries left, because they are exactly the routes the
-  // shell config does NOT claim. (`/signals` left with its page, D670.)
-  '/build/discovery', '/execution', '/build/team',
+  // The legacy paths. Since D422, bare `/execution` is a `<Navigate replace>`
+  // redirect for a founder, to `/build`, and renders a page only with
+  // `?mode=workspace` (the editor D422 kept); `/build/team?mode=workspace` is
+  // the Team workspace (D435). They stay listed so the editor each still
+  // mounts keeps the desk's width. These are the only hand-typed entries left,
+  // because they are exactly the routes the shell config does NOT claim.
+  // (`/signals` left with its page, D670; `/build/discovery` with its editor,
+  // #2335.)
+  '/execution', '/build/team',
 ];
 
 /**

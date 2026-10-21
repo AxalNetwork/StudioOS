@@ -120,7 +120,7 @@ export default function FounderGrowFocus() {
     return snapshots.slice(0, 1);
   }, [snapshots, view]);
   const current = latest?.mrr != null ? `${moneyValue(latest.mrr)} MRR` : latest?.active_users != null ? `${numberValue(latest.active_users)} active users` : latest ? 'Snapshot recorded' : 'Not recorded';
-  const nav = [['Focus', `/grow/focus${query}`], ['Customers', `/grow/customers${query}`], ['Talent', `/grow/talent${query}`], ['Brand', `/grow/brand${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = [['Focus', `/grow/focus${query}`], ['Customers', `/grow/customers${query}`], ['Talent', `/grow/talent${query}`], ['Brand', `/build/brand${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-focus" data-testid="founder-grow-focus"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-focus-crumb"><Link to={`/build/team${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Focus</b></div><div><h1>This month&apos;s focus</h1><p>The month&apos;s metric, targets, and experiment log.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-focus-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Focus' ? 'is-active' : ''}>{label}</LensLink>)}</nav>
@@ -153,7 +153,7 @@ function FocusContent({ targetsReadable = true, project, latest, snapshots, sele
         and Targets — had no store behind them and rendered an Unavailable
         panel once clicked; they state their reason in the row instead, so
         the reader learns it without having to try. */}
-    <div className="fg-focus-tabs"><div className="fg-focus-actions"><Link to={`/build/metrics${query}`} data-testid="link-open-grow-metrics"><BarChart3 size={13} /> Open metrics</Link></div></div>
+    <div className="fg-focus-tabs"><div className="fg-focus-actions"><Link to={`/build/kpi${query}`} data-testid="link-open-grow-metrics"><BarChart3 size={13} /> Open metrics</Link></div></div>
     <div className="fg-focus-stats"><Stat label="Current" value={current} note={latest ? `Snapshot ${formatDate(latest.snapshot_date)}` : 'No metric snapshot recorded'} />
       {/* THE TARGET TILE IS THE STORE'S NOW. It read "Not recorded · No target
       source connected" on every account for twenty-one migrations, because
@@ -171,7 +171,7 @@ function FocusContent({ targetsReadable = true, project, latest, snapshots, sele
     {view === 'targets'
       ? <section className="a5-card fg-focus-log"><Head icon={Crosshair} title="Targets" meta={latest ? `Read against ${formatDate(latest.snapshot_date)}` : 'No snapshot to read against yet'} /><TargetsPanel project={project} targets={targets} targetKeys={targetKeys} latest={latest} onSaved={onSaved} /></section>
       : <section className="a5-card fg-focus-log"><Head icon={Target} title="Metric snapshot log" meta={view === 'latest' ? 'Latest stored record' : 'Snapshots returned from the last six months'} /><SnapshotTable rows={selectedRows} latest={latest} /></section>}
-    <section className="a5-focus fg-focus-read"><div className="a5-head"><div><CheckCircle2 size={15} /><h2>Read this month honestly</h2></div><span>Source-derived</span></div><p>{latest ? `The latest stored snapshot is ${formatDate(latest.snapshot_date)}. ${latest.mrr != null ? `MRR is ${moneyValue(latest.mrr)}.` : latest.active_users != null ? `Active users are ${numberValue(latest.active_users)}.` : 'The snapshot does not include a primary metric value.'} No target or experiment effect is inferred from this record.` : 'There is no stored metric snapshot for this startup, so current performance, targets, and experiment effects remain unavailable.'}</p><Link className="a5-link" to={`/build/metrics${query}`}>Open the metrics composer <ChevronRight size={14} /></Link></section>
+    <section className="a5-focus fg-focus-read"><div className="a5-head"><div><CheckCircle2 size={15} /><h2>Read this month honestly</h2></div><span>Source-derived</span></div><p>{latest ? `The latest stored snapshot is ${formatDate(latest.snapshot_date)}. ${latest.mrr != null ? `MRR is ${moneyValue(latest.mrr)}.` : latest.active_users != null ? `Active users are ${numberValue(latest.active_users)}.` : 'The snapshot does not include a primary metric value.'} No target or experiment effect is inferred from this record.` : 'There is no stored metric snapshot for this startup, so current performance, targets, and experiment effects remain unavailable.'}</p><Link className="a5-link" to={`/build/kpi${query}`}>Open the metrics composer <ChevronRight size={14} /></Link></section>
   </div>;
 }
 function SnapshotTable({ rows, latest }) {

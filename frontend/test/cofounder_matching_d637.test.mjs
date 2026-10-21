@@ -88,7 +88,10 @@ test('the Team page has a cofounders tab that renders the panel', () => {
   assert.equal(resolveTab('cofounder'), 'hiring', 'the legacy id still lands where it did');
   assert.deepEqual(TABS.map((t) => t.id), ['roster', 'advisors', 'hiring', 'coverage', 'cofounders']);
   const src = codeOnly(readFileSync(new URL('../src/pages/founder/FounderTeamPage.jsx', import.meta.url), 'utf8'));
-  assert.match(src, /\{tab === 'cofounders' && \(\s*<TierGate tier="studio"[^>]*>\s*<CofounderMatchingPanel onBrowse=\{\(\) => selectTab\('hiring'\)\} \/>/);
+  // #2355: Browse opens Co-founder Match, the one matcher, now that the
+  // Hiring tab no longer embeds the removed /cofounder page.
+  assert.match(src, /\{tab === 'cofounders' && \(\s*<TierGate tier="studio"[^>]*>\s*<CofounderMatchingPanel onBrowse=\{\(\) => navigate\(COFOUNDER_MATCH\)\} \/>/);
+  assert.match(src, /const COFOUNDER_MATCH = '\/spinout-lab\/cofounder-match';/);
   const panel = codeOnly(readFileSync(new URL('../src/pages/founder/CofounderMatchingPanel.jsx', import.meta.url), 'utf8'));
   assert.match(panel, /client\.cofounderUnlistMe\(\)/);
   assert.match(panel, /client\.cofounderWithdrawInterest\(s\.user_uid\)/);

@@ -122,7 +122,7 @@ export const PERSONAS: Persona[] = [
       { key: 'avg_check_size_usd', prompt: 'Average check size (USD)?', type: 'number' },
       { key: 'commercial_attachment', prompt: 'Do you typically attach commercial agreements (POC, distribution, M&A right of first refusal)?', type: 'choice', choices: ['yes', 'no', 'sometimes'] },
     ],
-    nav_extras: [{ to: '/deals', label: 'Deal Flow' }, { to: '/legal-capital', label: 'Legal & Capital' }],
+    nav_extras: [{ to: '/deals', label: 'Deal Flow' }],
   },
   {
     id: 'sovereign_family_office',
@@ -180,7 +180,7 @@ export const PERSONAS: Persona[] = [
     // D254 — was `[{ to: '/founder', ... }, ...]`; no `/founder` route exists
     // (only `/founder/post-need`), and the frontend mirror the sidebar
     // actually draws from never had that entry. Taken from the frontend.
-    nav_extras: [{ to: '/legal-capital', label: 'Legal & Capital' }],
+    nav_extras: [{ to: '/raise/legal', label: 'Legal' }],
   },
   {
     id: 'operator_advisor',

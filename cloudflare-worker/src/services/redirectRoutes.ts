@@ -74,6 +74,11 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/market-intel' },
   { path: '/grow/updates' },
   { path: '/grow/capital-match' },
+  { path: '/grow/brand' }, // #2343: Grow's Brand page folded into /build/brand
+  { path: '/build/discovery' }, // #2335: → Validate · Customer research
+  { path: '/build/metrics' }, // #2336: → /build/kpi
+  { path: '/build/financials' }, // #2339: → /raise/capital/model
+  { path: '/build/captable' }, // #2340: → /raise/capital/cap-table
   { path: '/build/command-center' },
   { path: '/mentors' },
   { path: '/office-hours' },
@@ -127,6 +132,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/lp/customer-discovery' },
   { path: '/lp/investor' },
   { path: '/lp/partner' },
+  { path: '/legal-capital' }, // #2354: the page is removed (#2297 §3); it lands on Raise › Legal
+  { path: '/cofounder' }, // #2355: the page is removed (#2297 §3); it lands on Co-founder Match
 ]);
 
 /** The key a hit is counted under in `public_pageviews.path`. */

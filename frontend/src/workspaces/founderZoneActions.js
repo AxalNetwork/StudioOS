@@ -116,17 +116,21 @@ export const FOUNDER_ZONE_ACTIONS = {
   // cannot hold a modal's state), which is why they are handlers rather than
   // links: the import needs a dry run and a rejection list, and the definition
   // editor needs the metric picker the route's own `keys` supplies.
+  // `Bulk entry` and `Stripe sync` linked `/build/metrics`'s editor, which
+  // #2336 retired on the owner's call ("Remove", #2297), the Stripe import
+  // with it. Bulk entry on this page is `Import CSV`; a single month is
+  // entered on Grow · Revenue and traction (`POST /cycles/grow/kpis`).
   'build/kpi': [
-    { label: 'Bulk entry', to: '/build/metrics' },
+    { label: 'Bulk entry', unbuilt: 'no hand-entry grid is stored; Import CSV loads several months at once' },
     { label: 'Import CSV', kind: 'handler', handler: 'importCsv' },
-    { label: 'Stripe sync', to: '/build/metrics' },
+    { label: 'Stripe sync', unbuilt: 'the Stripe import was retired with the Metrics editor' },
     { label: 'Definitions', kind: 'handler', handler: 'definitions' },
   ],
 
   // ── Grow ─────────────────────────────────────────────────────────────────
   'grow/focus': [
     { label: 'New experiment', unbuilt: 'experiments are not a stored record' },
-    { label: 'Change metric', to: '/build/metrics' },
+    { label: 'Change metric', to: '/build/kpi' },
     { label: 'Export', kind: 'export' },
   ],
   'grow/talent': [

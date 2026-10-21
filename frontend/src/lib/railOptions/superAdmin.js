@@ -13,9 +13,8 @@
  * section board). `route` is where the board is drawn today; D720 §11's table
  * places H11 on the Users tab of `/admin` and H13 on H12's page. `files` are
  * the components the board renders, the board's own first. `rail` is the file
- * that mounts the board's `<WorkerRail>`, which may be a parent's: H21 and
- * the `/admin` tabs draw the Admin profile's `AdminBoardFrame` (D774, #2100),
- * H21 because its route is the Admin's Assessment runs. `host` is the page
+ * that mounts the board's `<WorkerRail>`, which may be a parent's: the
+ * `/admin` tabs draw the Admin profile's `AdminBoardFrame` (D774, #2100). `host` is the page
  * that draws the frame around a board's files when they are a tab of it.
  *
  * OPTIONS follow this folder's rules (`README.md`): one row per control that
@@ -24,7 +23,7 @@
  * (one of the canvas's fourteen) and `handler`. `source` is `file` (under
  * `frontend/src/`) and `match`, the call the parity test finds.
  *
- * One control on these 37 boards runs a model: H20's "Draft with AI". The
+ * One control on these 36 active boards runs a model: H20's "Draft with AI". The
  * uploads (H1's brand mark, the photos on H23 and H25, H34's post media, H37's
  * headshot and LinkedIn PDF, which a deterministic parser reads) only store a
  * file, so they are not rows. Monitoring's anomaly panel (H33) calls a model on
@@ -59,7 +58,7 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H18', section: 'Content', module: null, route: '/admin/content', files: ['pages/hq/ContentPage.jsx'], rail: 'pages/hq/ContentPage.jsx' },
   { id: 'H19', section: 'Content', module: 'Content queue', route: '/admin/articles', files: ['pages/admin/ArticlesQueuePage.jsx'], rail: 'pages/admin/ArticlesQueuePage.jsx' },
   { id: 'H20', section: 'Content', module: 'Publications', route: '/admin/publications', files: ['pages/admin/Publications.jsx', 'pages/admin/PublicationNew.jsx', 'pages/admin/PublicationDetail.jsx'], rail: 'pages/admin/PublicationsFrame.jsx' },
-  { id: 'H21', section: 'Content', module: 'Assessment Studio', route: '/admin/assessment', files: ['pages/admin/assessment/AdminAssessmentPage.jsx'], rail: FRAME },
+  // H21: Assessment Studio was removed at the owner's request (2026-10-21); its ID stays retired.
   { id: 'H22', section: 'Content', module: 'Personas', route: '/admin?tab=personas', files: ['pages/admin/consoles/PersonasConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
   { id: 'H23', section: 'Content', module: 'Advisors and partners', route: '/admin?tab=network-profiles', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: ADMIN_PAGE },
   { id: 'H24', section: 'Content', module: 'Directory', route: '/admin?tab=directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },

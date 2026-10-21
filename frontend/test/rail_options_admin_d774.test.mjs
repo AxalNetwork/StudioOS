@@ -60,14 +60,15 @@ function linesOf(file, needle) {
 const nameOf = (b) => b.module || b.section;
 const byId = (id) => ADMIN_BOARDS.find((b) => b.id === id);
 
-test('the boards are the canvas\'s S1–S39, in its order and under its names', () => {
+test('the active boards preserve canvas IDs, excluding retired S22', () => {
   const profile = CANVAS.profiles[ADMIN_PROFILE];
   const expected = Object.entries(profile).flatMap(([section, modules]) => [
     { section, module: null }, ...modules.map((module) => ({ section, module })),
   ]);
   assert.equal(expected.length, 39, 'the canvas no longer draws 39 Admin boards');
-  assert.deepEqual(ADMIN_BOARDS.map(({ section, module }) => ({ section, module })), expected);
-  assert.deepEqual(ADMIN_BOARDS.map((b) => b.id), expected.map((_, i) => `S${i + 1}`));
+  // The owner's page removal retires S22; frozen canvas IDs never shift.
+  const active = expected.map((b, i) => ({ ...b, id: `S${i + 1}` })).filter((b) => b.id !== 'S22');
+  assert.deepEqual(ADMIN_BOARDS.map(({ id, section, module }) => ({ id, section, module })), active);
 });
 
 test('every board\'s files exist, and its rail file mounts the rail', () => {
@@ -103,7 +104,7 @@ test('a board on a shared route names the board that owns it, which the canvas l
 
 test('the boards with a page of their own sit in AdminBoardFrame under their own name', () => {
   const framed = ADMIN_BOARDS.filter((b) => b.rail === FRAME && !b.alias && !b.host);
-  assert.deepEqual(framed.map((b) => b.id), ['S3', 'S4', 'S8', 'S9', 'S10', 'S11', 'S15', 'S16', 'S17', 'S18', 'S22', 'S23', 'S31', 'S39']);
+  assert.deepEqual(framed.map((b) => b.id), ['S3', 'S4', 'S8', 'S9', 'S10', 'S11', 'S15', 'S16', 'S17', 'S18', 'S23', 'S31', 'S39']);
   for (const b of framed) {
     for (const f of b.files) {
       assert.deepEqual(frames(f), [nameOf(b)], `${f}: the frame is not named "${nameOf(b)}", once`);

@@ -56,6 +56,12 @@ export function makeCycleWrites(request) {
       prospectUpdate: (projectId, id, body) => request(`/cycles/raise/prospects/${seg(id)}?${q(projectId)}`, { method: 'PATCH', body: JSON.stringify(body) }),
       upload: (projectUid, body) => request(`/data-room/${seg(projectUid)}/files`, { method: 'POST', body: JSON.stringify(body) }),
       fileUpdate: (projectUid, uid, body) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+      // D840 part 2 (#2347): the founder's own Mercury. A sync writes facts and
+      // proposals; nothing reaches a module without Accept.
+      mercurySync: (projectId) => request(`/cycles/raise/mercury/sync?${q(projectId)}`, { method: 'POST' }),
+      acceptMercuryProposal: (projectId, id, body) => request(`/cycles/raise/mercury/proposals/${seg(id)}/accept?${q(projectId)}`, { method: 'POST', ...(body ? { body: JSON.stringify(body) } : {}) }),
+      dismissMercuryProposal: (projectId, id) => request(`/cycles/raise/mercury/proposals/${seg(id)}/dismiss?${q(projectId)}`, { method: 'POST' }),
+      deleteMercuryFact: (projectId, id) => request(`/cycles/raise/mercury/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
     },
     grow: {
       feedback: (projectId, body) => request('/cycles/grow/feedback', { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),

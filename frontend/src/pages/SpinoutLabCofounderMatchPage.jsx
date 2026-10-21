@@ -21,14 +21,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowRight, Users, Loader2, Lock, AlertTriangle, X, Check,
+  Users, Loader2, Lock, AlertTriangle, X, Check,
   Compass, Search, Scale, UserCheck,
 } from 'lucide-react';
 import { api, spinoutLab, assessment } from '../lib/api';
 import { archetypeMeta } from '../lib/assessmentMeta';
 import { markMilestone } from '../lib/spinoutLabHooks';
 import { pickLabProject } from './SpinoutLabStartupPage';
-import LabPageHeader, { labBtn, LAB_ICON_SIZE } from '../components/spinout/LabPageHeader';
+import LabPageHeader from '../components/spinout/LabPageHeader';
 import LabPageShell from '../components/spinout/LabPageShell';
 import IncomingLeadsStrip from '../components/IncomingLeadsStrip';
 import { Unrecorded, Unreadable } from '../ui';
@@ -246,11 +246,6 @@ export default function SpinoutLabCofounderMatchPage() {
         subtitle="Founder match brief, ranked candidates, and the track decision — advance, keep searching, or go solo."
         status="Active"
         weekChip="Unlocked · Wk 3"
-        actions={(
-          <Link to="/cofounder" data-testid="link-full-browse" className={labBtn('secondary')}>
-            Full browse & connections <ArrowRight size={LAB_ICON_SIZE} />
-          </Link>
-        )}
       />
 
       {/* Decision readiness — evidence modules */}
@@ -350,7 +345,7 @@ export default function SpinoutLabCofounderMatchPage() {
             ) : browse.failed ? (
               <div className={`${CARD} text-center py-8`} data-testid="candidates-error">
                 <AlertTriangle className="w-6 h-6 text-amber-400 mx-auto mb-2" />
-                <p className="text-[12.5px] text-gray-500 dark:text-gray-400">Couldn't load candidates. The full browse surface may still work — try <Link className="text-violet-600 hover:underline" to="/cofounder">/cofounder</Link>.</p>
+                <p className="text-[12.5px] text-gray-500 dark:text-gray-400">Couldn't load candidates. Reload the page to try again.</p>
               </div>
             ) : cards.length === 0 ? (
               <div className={`${CARD} text-center py-8`} data-testid="candidates-empty">
@@ -652,8 +647,7 @@ export default function SpinoutLabCofounderMatchPage() {
           {(myProfile?.unavailable || myProfile?.failed) && (
             <div className={`${CARD} text-[11.5px] text-gray-500 dark:text-gray-400`} data-testid="card-profile-nudge">
               <Search size={13} className="inline mr-1 text-violet-500" />
-              You don't have a co-founder profile yet — candidates stay unscored until you do.{' '}
-              <Link to="/cofounder" className="text-violet-600 hover:underline font-semibold">Create it on the browse surface</Link>.
+              You don't have a co-founder profile yet, so candidates stay unscored.
             </div>
           )}
         </div>

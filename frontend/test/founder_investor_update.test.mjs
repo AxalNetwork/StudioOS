@@ -2,6 +2,11 @@
  * D463 — the founder's investor update on /build/metrics, and the
  * partner/admin deal-flow page with a deal source.
  *
+ * #2336 (the owner's "Remove", #2297): `/build/metrics` forwards to
+ * `/build/kpi`, and the Investor update card went with `MetricsPage`. The
+ * founder's update is composed in Grow · Share an update (D654) over the same
+ * `portfolio_updates` store; the tests below pin the retirement and that.
+ *
  * THE FOUNDER HALF. `POST /portfolio-updates` has always taken the owning
  * founder, but the only composer sat on `/portfolio/updates`, guarded
  * `['admin','investor']` — and the Portfolio workspace's Updates tab listed
@@ -18,45 +23,40 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
-const METRICS = codeOnly(read('frontend/src/pages/MetricsPage.jsx'));
+const SHARE = codeOnly(read('frontend/src/pages/founder/ShareUpdateSheet.jsx'));
 const UPDATES = codeOnly(read('frontend/src/pages/PortfolioUpdatesPage.jsx'));
 const WORKSPACE = read('frontend/src/pages/PortfolioWorkspace.jsx');
 const APP = read('frontend/src/App.jsx');
 const DEALS = codeOnly(read('frontend/src/pages/DealsPage.jsx'));
 const PIPELINE = codeOnly(read('frontend/src/pages/investor/deals/PipelineZone.jsx'));
 
-test('the Metrics page composes the update over the existing store', () => {
-  assert.match(METRICS, /api\.portfolioUpdateCreate\(\{/,
-    'the Investor update card must post to the existing store');
-  assert.match(METRICS, /project_id: projectId/, 'the update must attach to the project on the page');
-  assert.match(METRICS, /status: send \? 'submitted' : 'draft'/,
-    'submit and save-draft are the store’s two states');
-  // The KPIs start from the latest snapshot on the page, so the update and
-  // the metrics cannot disagree at birth.
-  assert.match(METRICS, /mrr: latest\?\.mrr \?\? ''/, 'the composer no longer pre-fills from the snapshot');
-  // And it reads back what the founder sent — the investor inbox’s own rows.
-  assert.match(METRICS, /api\.portfolioUpdatesList\(\{ project_id: projectId \}\)/,
-    'the card must list the project’s updates');
-  // Named, not silently absent: the test copy and the send log need outbound
-  // mail (Session 4's area).
-  assert.match(METRICS, /test copy to yourself and a send log need outbound mail/,
-    'the missing outbound mail is no longer named on screen');
+test('the Metrics page and its Investor update card are retired (#2336)', () => {
+  assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/MetricsPage.jsx')), 'MetricsPage is back');
+  const at = APP.indexOf('<Route path="/build/metrics"');
+  assert.ok(at > 0, '/build/metrics is no longer routed: a retired address forwards, never 404s');
+  assert.match(APP.slice(at, APP.indexOf('\n', at)),
+    /element=\{<Navigate replace to=\{\{ pathname: '\/build\/kpi', search: location\.search, hash: location\.hash \}\} \/>\}/,
+    '/build/metrics no longer forwards to KPI entry with its query');
 });
 
-test('a failed updates read is unreadable, never an empty sent list', () => {
-  assert.match(METRICS, /That is not a claim that none exists\./,
-    'a failed read must not render as "no updates"');
+test('the founder still composes an investor update: Grow · Share an update', () => {
+  // D654: the sheet drafts, saves and sends a `portfolio_updates` row, the
+  // store the retired card wrote.
+  for (const call of ['api.create(', 'api.save(', 'api.send(']) {
+    assert.ok(SHARE.includes(call), `Share an update stopped calling ${call}`);
+  }
+  assert.match(APP, /<Route path="\/grow\/update"/, 'the founder lost the Share an update address');
 });
 
-test('the /portfolio/updates guard and the tab agree, and the founder’s composer is on /build/metrics', () => {
+test('the /portfolio/updates guard and the tab agree, and the founder composes elsewhere', () => {
   // The route is a zone of the portfolio shell, and the founder's shell has
   // no such zone — so the guard stays narrow and the tab matches it. The
-  // founder's composer is the Investor update card on /build/metrics instead.
+  // founder's composer is Grow · Share an update (#2336 retired the card).
   const at = APP.indexOf('path="/portfolio/updates"');
   assert.ok(at > 0, 'the /portfolio/updates route is gone');
   const block = APP.slice(at, at + 300);

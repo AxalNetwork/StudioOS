@@ -292,8 +292,9 @@ test('every founder zone page\'s section row switches lenses on a phone (D575)',
     }
   }
   // Twenty-seven until D661 (#1474) retired four desks, each with one row;
-  // twenty-two until the owner removed Raise · Liquidity (2026-10-20).
-  assert.ok(rows.length >= 21, `only ${rows.length} founder section rows are lens switchers`);
+  // twenty-two until the owner removed Raise · Liquidity (2026-10-20);
+  // twenty-one until #2343 folded Grow · Brand into the brand builder.
+  assert.ok(rows.length >= 20, `only ${rows.length} founder section rows are lens switchers`);
 });
 
 test('the Worker AI rail is one component, and every founder workspace has it', () => {
@@ -363,7 +364,7 @@ test('the founder full-bleed list covers every desk and section page', () => {
   assert.ok(listed.size >= 20, 'FOUNDER_FULL_BLEED is unexpectedly small');
   const required = [
     ...Object.values(WORKSPACES).map(([root]) => root),
-    '/build/discovery', '/execution', '/build/team',
+    '/execution', '/build/team', // `/build/discovery` left with its editor (#2335)
     ...allZoneRoutes('founder'),
   ];
   assert.deepEqual(required.filter((p) => !listed.has(p)), [],
