@@ -522,10 +522,11 @@ test('D751: a connector Axal has not set up says so, and a company refusal says 
   assert.equal(flowBanner('company', 'GitHub'), company);
   for (const s of [press, back, company, flowBanner('setup_unreadable', 'GitHub')]) assert.doesNotMatch(s, /refused|Ask your|_configured|_unconfigured/);
 
-  // The Integration keys link: only this app's admin tabs.
-  assert.equal(INTEGRATION_KEYS_HREF, '/admin?tab=integration-keys');
-  assert.equal(adminKeysHref({ admin_href: '/admin?tab=integration-keys' }), '/admin?tab=integration-keys');
-  for (const bad of ['https://evil.test/', '/admin?tab=x" onclick="y', '//evil.test', '/admin?tab=', 7]) {
+  // The Integration keys link: only this app's admin pages and tabs.
+  assert.equal(INTEGRATION_KEYS_HREF, '/admin/integration-keys');
+  assert.equal(adminKeysHref({ admin_href: '/admin/integration-keys' }), '/admin/integration-keys');
+  assert.equal(adminKeysHref({ admin_href: '/admin?tab=payments' }), '/admin?tab=payments');
+  for (const bad of ['https://evil.test/', '/admin?tab=x" onclick="y', '//evil.test', '/admin?tab=', '/admin/', '/admin//evil.test', '/admin/x/../y', 7]) {
     assert.equal(adminKeysHref({ admin_href: bad }), INTEGRATION_KEYS_HREF, String(bad));
   }
   assert.equal(adminKeysHref(undefined), INTEGRATION_KEYS_HREF);
@@ -605,7 +606,7 @@ test('D751: a connector Axal has no client for reads Not set up here, and a Supe
   const sup = html(h(ConnectorsView, { data: ready(cat), initialTab: 'discover', superAdmin: true }), '/account/connectors?tab=discover');
   // One fixed pattern; the testid is matched as text, so no pattern is built from a key.
   const link = (key) => (sup.match(/<a\b[^>]*>[^<]*<\/a>/g) || []).find((t) => t.includes(` data-testid="connector-keys-link-${key}"`)) || null;
-  assert.match(link('github') || '', /href="\/admin\?tab=integration-keys"/);
+  assert.match(link('github') || '', /href="\/admin\/integration-keys"/);
   assert.match(link('github') || '', />Add its keys in Integration keys</);
   assert.ok(link('calendly'), 'Calendly gets the way to its keys');
   assert.match(sup, /data-testid="connector-card-calendly" data-action="add"/, 'and keeps its +');

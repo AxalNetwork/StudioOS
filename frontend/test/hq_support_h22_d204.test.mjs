@@ -234,7 +234,7 @@ test('the mirror strip shows two counts and a lag it says it does not have', () 
   assert.match(t, /Average lagNot recorded/);
   assert.ok(t.includes(LAG), 'the lag’s reason is not shown on the page');
   assert.match(t, /1 attempt found no GitHub token configured\./);
-  assert.match(html, /href="\/admin\?tab=github"/);
+  assert.match(html, /href="\/admin\/integration-keys#github"/);
   // D213 — H16's P2 is built: Platform's GitHub Sync panel lists the mirror's
   // latest attempts. The strip links it by a literal path and no longer says
   // the console is missing.
