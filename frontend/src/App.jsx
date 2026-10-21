@@ -380,10 +380,6 @@ const ChooseLicencePage = lazy(() => import('./pages/ChooseLicencePage'));
 // does not belong in the entry chunk.
 const AcceptTermsPage = lazy(() => import('./pages/AcceptTermsPage'));
 // Template landing pages — audience-specific conversion surfaces.
-const FounderHomePage = lazy(() => import('./pages/templates/FounderHomePage'));
-const CustomerDiscoveryHomePage = lazy(() => import('./pages/templates/CustomerDiscoveryHomePage'));
-const InvestorDealflowHomePage = lazy(() => import('./pages/templates/InvestorDealflowHomePage'));
-const PartnerPartnershipHomePage = lazy(() => import('./pages/templates/PartnerPartnershipHomePage'));
 const SpinoutDemoDayPage = lazy(() => import('./pages/templates/SpinoutDemoDayPage'));
 const OnboardingInvestorPage = lazy(() => import('./pages/OnboardingInvestorPage'));
 const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage'));
@@ -3640,11 +3636,14 @@ function AppInner() {
       <Route path="/roadmap" element={<PublicRoadmapPage />} />
       <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
-      {/* Audience-specific landing page templates. */}
-      <Route path="/lp/founder" element={<FounderHomePage />} />
-      <Route path="/lp/customer-discovery" element={<CustomerDiscoveryHomePage />} />
-      <Route path="/lp/investor" element={<InvestorDealflowHomePage />} />
-      <Route path="/lp/partner" element={<PartnerPartnershipHomePage />} />
+      {/* #2321 — the four older audience landing pages are gone: the door
+          pages (D676) replaced them (#2297 §11). Each address forwards to its
+          door, so a link shared outside keeps working, and is counted in
+          #2301's redirect inventory. */}
+      <Route path="/lp/founder" element={<Navigate to="/for-founders" replace />} />
+      <Route path="/lp/customer-discovery" element={<Navigate to="/for-founders" replace />} />
+      <Route path="/lp/investor" element={<Navigate to="/for-investors" replace />} />
+      <Route path="/lp/partner" element={<Navigate to="/for-service-partners" replace />} />
       <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
       {/* ── Route modules (D528) ── one line per frontend/src/routes/<area>.jsx,
           alphabetical, each `{<area>Routes(routeTools)}`; the imports sit in

@@ -381,42 +381,10 @@ const ROUTES = [
   },
 
   // ---- Audience landing pages (/lp/*) ------------------------------------
-  // Full public marketing pages — PublicNav, PublicFooter, hero, metrics
-  // strip, FAQ — not app surfaces that happen to be ungated. They are built
-  // to be shared, and until now every one of them previewed as the homepage.
-  // Copy below is taken from each page's own hero.
-  {
-    path: '/lp/investor',
-    title: 'The most disciplined dealflow in frontier tech',
-    description:
-      'Every company scored, verified, and sanctions-screened before it reaches your desk. We screen everything so you see only what matters.',
-    type: 'website',
-    section: 'product',
-  },
-  {
-    path: '/lp/founder',
-    title: 'Build something worth funding',
-    description:
-      'From idea to investor-ready in 28 days. One platform covering everything — legal, product, team, and capital.',
-    type: 'website',
-    section: 'product',
-  },
-  {
-    path: '/lp/partner',
-    title: 'Join the network that builds',
-    description:
-      "Axal VC's Global Venture Partner Network connects service providers, investors, advisors, and operators with the best early-stage companies in frontier technology.",
-    type: 'website',
-    section: 'product',
-  },
-  {
-    path: '/lp/customer-discovery',
-    title: "We're building what you need",
-    description:
-      "Customer discovery for Axal VC's next product cycle. If you're a founder, operator, or investor, we want 20 minutes of your time.",
-    type: 'website',
-    section: 'product',
-  },
+  // A full public marketing page — PublicNav, PublicFooter, hero, FAQ — not
+  // an app surface that happens to be ungated. It is built to be shared.
+  // The four older /lp/* pages were removed (#2321) and forward to the door
+  // pages, which carry their own entries.
   {
     path: '/lp/spinout-demo-day',
     title: 'Spin-Out Lab Demo Day',

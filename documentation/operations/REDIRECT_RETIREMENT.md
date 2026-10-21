@@ -10,8 +10,10 @@ The owner ticked "the internal redirects (§12), after 90 days" on #2297 on
   another address. `frontend/test/redirect_hits_2301.test.mjs` reads App.jsx
   and fails if the two drift apart, so a new redirect, or one turned into a
   page, cannot go uncounted.
-  - It has 84 patterns. That is more than #2297 §12's "51", which names 44 and
-    ends "and others"; the list is what the code holds.
+  - It has 88 patterns. That is more than #2297 §12's "51", which names 44 and
+    ends "and others"; the list is what the code holds. Four of them are the
+    older `/lp/*` landing pages removed by #2321, which forward to the door
+    pages and retire with the rest unless they are still hit.
   - A route that redirects some roles and renders a page for others is a page
     and is not listed. `/raise/data-room`, which §12 names, is one: founders
     open the Data room there.

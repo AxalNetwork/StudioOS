@@ -112,6 +112,11 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/partner-portal' },
   { path: '/docs' },
   { path: '/communities' },
+  // #2321 — the older audience landing pages, forwarded to the door pages.
+  { path: '/lp/founder' },
+  { path: '/lp/customer-discovery' },
+  { path: '/lp/investor' },
+  { path: '/lp/partner' },
 ]);
 
 /** The key a hit is counted under in `public_pageviews.path`. */
