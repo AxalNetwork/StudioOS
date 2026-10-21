@@ -82,8 +82,11 @@ const PROFILES = {
     // posting surface; this desk had simply never pointed at it.
     // 23 → 21 (D704): the two `Open the Problem slide` links, on `validate/pain-map`
     // and `validate/verdict`, went with their zones. 21 → 20: `raise/liquidity`'s
-    // `Model an exit` went with that zone (owner, 2026-10-20).
-    links: 20,
+    // `Model an exit` went with that zone (owner, 2026-10-20). 20 → 18:
+    // `build/kpi`'s `Bulk entry` and `Stripe sync` linked `/build/metrics`'s
+    // editor, retired with its hand entry and Stripe import (#2336); both
+    // are stated gaps now. `grow/focus`'s `Change metric` links `/build/kpi`.
+    links: 18,
     // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
     // zone a review archive, so an export over the rows the page is showing is
     // the same `kind: 'export'` every other zone uses. 21 → 20: `raise/liquidity`'s

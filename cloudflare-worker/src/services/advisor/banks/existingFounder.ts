@@ -74,7 +74,7 @@ export const EXISTING_FOUNDER_BANK: Question[] = [
   ]),
 
   // ---- ICP / CUSTOMER FIT --------------------------------------------
-  ...block('FIT', '/build/discovery', 'build/customer-discovery', [
+  ...block('FIT', '/validate/customer-research', 'build/customer-discovery', [
     { id: 'founder.fit.icp_statement', prompt: 'One-sentence ICP today: "We sell to <persona> at <company stage> who are trying to <job-to-be-done>."', imp: 'high', mi: 'fit' },
     { id: 'founder.fit.icp_v_buyer', prompt: 'Is the user the same as the economic buyer? If not, name each.', mi: 'fit' },
     { id: 'founder.fit.icp_segments', prompt: 'How many distinct customer segments are you actively serving? Which is your bullseye?', mi: 'fit' },
@@ -90,7 +90,7 @@ export const EXISTING_FOUNDER_BANK: Question[] = [
   ]),
 
   // ---- METRICS / FINANCIALS ------------------------------------------
-  ...block('METRICS', '/build/financials', 'capital/metrics', [
+  ...block('METRICS', '/raise/capital/model', 'capital/metrics', [
     { id: 'founder.financials.runway_months', prompt: 'How many months of runway do you have? (whole number)', kind: 'number', imp: 'critical', ev: true, followups: ['founder.financials.monthly_burn_usd'] },
     { id: 'founder.financials.monthly_burn_usd', prompt: 'Monthly burn (USD).', kind: 'number', imp: 'critical', ev: true, mi: 'capital_velocity', followups: ['founder.financials.mrr_usd'] },
     { id: 'founder.financials.mrr_usd', prompt: 'Monthly recurring revenue (USD). Enter 0 if none.', kind: 'number', imp: 'high', ev: true, mi: 'demand_supply', followups: ['founder.financials.gross_margin_pct'] },
@@ -108,7 +108,7 @@ export const EXISTING_FOUNDER_BANK: Question[] = [
   ]),
 
   // ---- PIPELINE / GTM -------------------------------------------------
-  ...block('GTM', '/build/metrics', 'capital/metrics', [
+  ...block('GTM', '/build/kpi', 'capital/metrics', [
     { id: 'founder.pipeline.top_deals', prompt: 'What are your top 3 sales deals or design partners in flight?', imp: 'normal' },
     { id: 'founder.pipeline.size_usd', prompt: 'Total open pipeline value (USD).', kind: 'number', skip: true, mi: 'demand_supply', ev: true },
     { id: 'founder.pipeline.avg_sales_cycle_days', prompt: 'Average sales cycle in days.', kind: 'number', skip: true },
@@ -214,7 +214,7 @@ export const EXISTING_FOUNDER_BANK: Question[] = [
   ]),
 
   // ---- DEEP DIVES — sector / stage specific (≥12) --------------------
-  ...block('DEEP_DIVE', '/build/metrics', 'capital/metrics', [
+  ...block('DEEP_DIVE', '/build/kpi', 'capital/metrics', [
     { id: 'founder.dd.fintech_kyc', prompt: 'Fintech only — what KYC / KYB provider are you using, and what is your false-positive rate?', kind: 'short', skip: true },
     { id: 'founder.dd.fintech_licensing', prompt: 'Fintech only — what money transmitter / banking partner / charter relationship do you rely on?', kind: 'short', skip: true },
     { id: 'founder.dd.fintech_chargeback_pct', prompt: 'Fintech only — chargeback / dispute rate (%).', kind: 'number', skip: true, ev: true },

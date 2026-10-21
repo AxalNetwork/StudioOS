@@ -91,7 +91,7 @@ export default function FounderGrowPartnerships() {
   const query = project?.id ? `?project_id=${project.id}` : '';
   const { rows, counts } = useMemo(() => partnershipViews(pitches), [pitches]);
   const visible = rows[view] || rows.all;
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/build/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-partnerships" data-testid="founder-grow-partnerships"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-partnerships-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Partnerships</b></div><div><h1>Partnerships</h1><p>Partner pipeline, proposals and retainers.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-partnerships-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Partnerships' ? 'is-active' : ''}>{label}</LensLink>)}</nav>

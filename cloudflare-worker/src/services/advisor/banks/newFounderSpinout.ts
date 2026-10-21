@@ -76,40 +76,40 @@ export const NEW_FOUNDER_SPINOUT_BANK: Question[] = [
     prompt: 'Pick 3 prospective customers to interview. Who is the first one?',
     input_kind: 'short', importance: 'critical',
     unlock_required: { milestones: ['project_created'] },
-    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    page_target: '/validate/customer-research', doc_anchor: 'build/customer-discovery',
     followups: ['founder.discovery.interview1.pains'],
     validate: 'short' },
   { id: 'founder.discovery.interview1.pains', persona: 'founder', section: 'BUILD',
     prompt: "What pain are you testing with them?",
     input_kind: 'long', importance: 'high',
     unlock_required: { milestones: ['project_created'] },
-    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    page_target: '/validate/customer-research', doc_anchor: 'build/customer-discovery',
     validate: 'long' },
   { id: 'founder.discovery.interview2.name', persona: 'founder', section: 'BUILD',
     prompt: 'Second interviewee?',
     input_kind: 'short', importance: 'critical',
     unlock_required: { milestones: ['customer_interview_logged_1'] },
-    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    page_target: '/validate/customer-research', doc_anchor: 'build/customer-discovery',
     followups: ['founder.discovery.interview2.pains'],
     validate: 'short' },
   { id: 'founder.discovery.interview2.pains', persona: 'founder', section: 'BUILD',
     prompt: "And the pain you're testing with them?",
     input_kind: 'long', importance: 'high',
     unlock_required: { milestones: ['customer_interview_logged_1'] },
-    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    page_target: '/validate/customer-research', doc_anchor: 'build/customer-discovery',
     validate: 'long' },
   { id: 'founder.discovery.interview3.name', persona: 'founder', section: 'BUILD',
     prompt: 'Third interviewee?',
     input_kind: 'short', importance: 'critical',
     unlock_required: { milestones: ['customer_interview_logged_2'] },
-    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    page_target: '/validate/customer-research', doc_anchor: 'build/customer-discovery',
     followups: ['founder.discovery.interview3.pains'],
     validate: 'short' },
   { id: 'founder.discovery.interview3.pains', persona: 'founder', section: 'BUILD',
     prompt: "And the pain you're testing with them?",
     input_kind: 'long', importance: 'high',
     unlock_required: { milestones: ['customer_interview_logged_2'] },
-    page_target: '/build/discovery', doc_anchor: 'build/customer-discovery',
+    page_target: '/validate/customer-research', doc_anchor: 'build/customer-discovery',
     validate: 'long' },
 
   // ---- WEEK 2 — Roadmap + Brand + Deck (gated by Week-1 milestones) --
@@ -233,7 +233,7 @@ export const NEW_FOUNDER_SPINOUT_BANK: Question[] = [
     prompt: 'Roughly, who will own the company at incorporation? (e.g. "Founders 90%, ESOP 10%")',
     input_kind: 'long', importance: 'high',
     unlock_required: { week: 4, milestones: ['incorporation_completed'] },
-    page_target: '/build/captable', doc_anchor: 'capital/cap-table',
+    page_target: '/raise/capital/cap-table', doc_anchor: 'capital/cap-table',
     validate: 'long' },
 
   // =====================================================================
@@ -242,7 +242,7 @@ export const NEW_FOUNDER_SPINOUT_BANK: Question[] = [
   // =====================================================================
 
   // ---- Week 1 deep dives — Discovery quality + ICP signal -----------
-  ...lab(1, 'BUILD', '/build/discovery', 'build/customer-discovery', [
+  ...lab(1, 'BUILD', '/validate/customer-research', 'build/customer-discovery', [
     { id: 'founder.lab.discovery.icp_v1', prompt: "In one sentence, who is your initial ICP today? (job title + company stage)", kind: 'short', imp: 'high', mi: 'fit' },
     { id: 'founder.lab.discovery.icp_buyer_vs_user', prompt: 'Is the person feeling the pain the same person who would write a check? If not, who is each?', mi: 'fit' },
     { id: 'founder.lab.discovery.willingness_to_pay', prompt: 'On the discovery calls, did anyone explicitly say they would pay? Quote them if so.', mi: 'sentiment', sent: true },
@@ -317,7 +317,7 @@ export const NEW_FOUNDER_SPINOUT_BANK: Question[] = [
   ]),
 
   // ---- Week 3 deep dive extras — vision, validation rigour ---------
-  ...lab(3, 'BUILD', '/build/metrics', 'capital/metrics', [
+  ...lab(3, 'BUILD', '/build/kpi', 'capital/metrics', [
     { id: 'founder.lab.metrics.first_north_star', prompt: 'What is your single north-star metric for the next 90 days?', imp: 'high', mi: 'demand_supply' },
     { id: 'founder.lab.metrics.weekly_target', prompt: 'And the weekly numerical target for that metric?', kind: 'short', mi: 'demand_supply' },
     { id: 'founder.lab.metrics.tracking_tool', prompt: 'Where will you track it (spreadsheet, dashboard tool, manual log)?', kind: 'short' },

@@ -18,7 +18,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PREVIOUS_LINK_LIVE, PREVIOUS_LINK_WITHDRAWN, replaceDeckShare } from '../src/lib/deckShareViews.js';
 import { PACKET_NOT_BUILT, PACKET_NOT_BUILT_STATUSES } from '../src/lib/incorporationPricing.js';
@@ -180,11 +180,13 @@ test('notRecordedInputs names every missing figure; Preview and Save refuse on i
 // ---- 4. metrics date -------------------------------------------------------
 
 test('metrics entry: the snapshot carries the date the founder sees', () => {
-  // The Build desk's inline entry went with the desk (D661, #1474); the
-  // metrics editor is where a snapshot is entered, and it sends the date in
-  // its own date field, not one it picks.
-  const page = read('frontend/src/pages/MetricsPage.jsx');
-  assert.match(page, /<input type="date" value=\{value\.snapshot_date\} onChange=\{\(e\) => onChange\(\{ \.\.\.value, snapshot_date: e\.target\.value \}\)\}/);
-  const save = between(page, 'async function handleSave()', 'await api.createMetricsSnapshot');
-  assert.match(save, /snapshot_date: adding\.snapshot_date,/);
+  // The Build desk's inline entry went with the desk (D661, #1474), and the
+  // Metrics editor with `/build/metrics` (#2336, the owner's "Remove"). The
+  // Lab's revenue log is where a snapshot is entered by hand now, and it sends
+  // the date in its own date field, not one it picks.
+  assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/MetricsPage.jsx')), 'MetricsPage is back');
+  const page = read('frontend/src/pages/SpinoutLabRevenuePage.jsx');
+  assert.match(page, /<input type="date" className=\{INPUT\} value=\{sf\.snapshot_date\} onChange=\{\(e\) => setSf\(\{ \.\.\.sf, snapshot_date: e\.target\.value \}\)\}/);
+  const save = between(page, 'const body = { snapshot_date: sf.snapshot_date };', 'await api.createMetricsSnapshot');
+  assert.ok(save !== null && save !== undefined, 'the revenue log stopped sending the date it shows');
 });

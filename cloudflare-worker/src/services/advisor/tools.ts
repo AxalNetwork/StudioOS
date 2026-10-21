@@ -108,7 +108,7 @@ function asPositiveInt(v: unknown): number | null {
  */
 const PAGE_ALLOWLIST: Record<string, string> = {
   '/projects': 'Projects',
-  '/build/discovery': 'Discovery',
+  '/validate/customer-research': 'Customer research',
   '/build/roadmap': 'Roadmap',
   '/build/brand': 'Brand',
   '/build/deck': 'Pitch Deck',

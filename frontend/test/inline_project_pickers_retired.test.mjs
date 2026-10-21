@@ -53,7 +53,9 @@ const FROM_URL = [
   'pages/founder/FounderBuildKpi.jsx',
   'pages/founder/FounderBuildRoadmap.jsx',
   'pages/founder/FounderBuildThisWeek.jsx',
-  'pages/founder/FounderGrowBrand.jsx',
+  // FounderGrowBrand.jsx stood here; #2343 folded it into the brand builder,
+  // which reads `?project_id=` (pages/BrandBuilderPage.jsx).
+  'pages/BrandBuilderPage.jsx',
   'pages/founder/FounderGrowCapitalMatch.jsx',
   'pages/founder/FounderGrowCustomers.jsx',
   'pages/founder/FounderGrowFocus.jsx',
@@ -145,7 +147,8 @@ test('the zone body does not deflect to a workspace with a control of its own', 
   // with Liquidity & Exits (2026-10-20). Brand's destination is still reachable
   // from the zone header's `New page` action, so what went is the duplicate
   // handle, not the surface.
-  const brand = code('frontend/src/pages/founder/FounderGrowBrand.jsx');
+  // #2343: Grow · Brand's body is now `BrandPagesSection`, on the builder.
+  const brand = code('frontend/src/pages/founder/BrandPagesSection.jsx');
   assert.doesNotMatch(brand, /link-open-grow-brand-workspace/);
   assert.doesNotMatch(brand, /Open workspace/,
     'Grow · Brand must not carry a body-level "Open workspace" control');

@@ -35,42 +35,42 @@
       {
         "persona": "founder",
         "id": "founder.discovery.interview1.name",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.discovery.interview1.pains",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.discovery.interview2.name",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.discovery.interview2.pains",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.discovery.interview3.name",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "section": "BUILD"
       },
       {
         "persona": "founder",
         "id": "founder.discovery.interview3.pains",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "section": "BUILD"
       },
@@ -203,7 +203,7 @@
       {
         "persona": "founder",
         "id": "founder.captable.ownership",
-        "page_target": "/build/captable",
+        "page_target": "/raise/capital/cap-table",
         "doc_anchor": "capital/cap-table",
         "section": "CAPITAL"
       },
@@ -633,7 +633,7 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.icp_statement",
         "mi_section": "fit"
@@ -641,7 +641,7 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.icp_v_buyer",
         "mi_section": "fit"
@@ -649,7 +649,7 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.icp_segments",
         "mi_section": "fit"
@@ -657,14 +657,14 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.activation_definition"
       },
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.activation_rate_pct",
         "mi_section": "demand_supply"
@@ -672,14 +672,14 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.retention_30d_pct"
       },
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.nps_or_csat",
         "mi_section": "sentiment"
@@ -687,7 +687,7 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.ipspf_signal",
         "mi_section": "sentiment"
@@ -695,7 +695,7 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.churn_top_reason",
         "mi_section": "sentiment"
@@ -703,7 +703,7 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.expansion_signal",
         "mi_section": "demand_supply"
@@ -711,7 +711,7 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.adoption_curve",
         "mi_section": "talc"
@@ -719,21 +719,21 @@
       {
         "persona": "founder",
         "section": "FIT",
-        "page_target": "/build/discovery",
+        "page_target": "/validate/customer-research",
         "doc_anchor": "build/customer-discovery",
         "id": "founder.fit.discovery_volume_qtr"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.runway_months"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.monthly_burn_usd",
         "mi_section": "capital_velocity"
@@ -741,7 +741,7 @@
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.mrr_usd",
         "mi_section": "demand_supply"
@@ -749,63 +749,63 @@
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.arr_usd"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.gross_margin_pct"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.cac_usd"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.ltv_usd"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.payback_months"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.net_revenue_retention_pct"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.gross_revenue_retention_pct"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.magic_number"
       },
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.bookings_qtr_usd",
         "mi_section": "demand_supply"
@@ -813,7 +813,7 @@
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.budget_vs_actual",
         "mi_section": "capital_velocity"
@@ -821,21 +821,21 @@
       {
         "persona": "founder",
         "section": "METRICS",
-        "page_target": "/build/financials",
+        "page_target": "/raise/capital/model",
         "doc_anchor": "capital/metrics",
         "id": "founder.financials.financial_model_link"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.pipeline.top_deals"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.pipeline.size_usd",
         "mi_section": "demand_supply"
@@ -843,21 +843,21 @@
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.pipeline.avg_sales_cycle_days"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.pipeline.win_rate_pct"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.primary_channel",
         "mi_section": "demand_supply"
@@ -865,21 +865,21 @@
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.channel_cac_split"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.outbound_volume_wk"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.inbound_lead_volume_wk",
         "mi_section": "demand_supply"
@@ -887,14 +887,14 @@
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.first_call_to_close_pct"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.avg_acv_usd",
         "mi_section": "demand_supply"
@@ -902,35 +902,35 @@
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.pricing_model"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.pricing_changes_planned"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.brand_awareness"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.community_motion"
       },
       {
         "persona": "founder",
         "section": "GTM",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.gtm.customer_advisory_board"
       },
@@ -1397,35 +1397,35 @@
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.fintech_kyc"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.fintech_licensing"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.fintech_chargeback_pct"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.ai_inference_cost_per_1k"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.ai_model_strategy",
         "mi_section": "sector_heat"
@@ -1433,35 +1433,35 @@
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.ai_data_moat"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.healthcare_hipaa_status"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.consumer_cac_payback_months"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.consumer_d30_retention_pct"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.b2b_saas_logos_paid",
         "mi_section": "demand_supply"
@@ -1469,7 +1469,7 @@
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.b2b_saas_seat_expansion",
         "mi_section": "demand_supply"
@@ -1477,21 +1477,21 @@
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.climate_carbon_metric"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.deeptech_tech_readiness"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.preseed_lois",
         "mi_section": "demand_supply"
@@ -1499,14 +1499,14 @@
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.seriesa_cohort_retention"
       },
       {
         "persona": "founder",
         "section": "DEEP_DIVE",
-        "page_target": "/build/metrics",
+        "page_target": "/build/kpi",
         "doc_anchor": "capital/metrics",
         "id": "founder.dd.seriesb_growth_rate",
         "mi_section": "capital_velocity"

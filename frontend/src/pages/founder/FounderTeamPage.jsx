@@ -549,7 +549,7 @@ function RosterTab({ data, onOpen }) {
             : !(data.cap_table.projects || []).length ? 'No project of this company has a cap table, so equity is read from the recorded grants only. '
               : fd ? `${fmtNum(fd)} shares fully diluted across ${data.cap_table.projects.length === 1 ? 'the cap table of ' + data.cap_table.projects[0].name : `${data.cap_table.projects.length} project cap tables`}. `
                 : 'The cap table read returned no holders with a share count. '}
-          <Link to="/build/captable" className="text-violet-700 underline dark:text-violet-300">Reconcile in Cap Table →</Link>
+          <Link to="/raise/capital/cap-table" className="text-violet-700 underline dark:text-violet-300">Reconcile in Cap Table →</Link>
         </p>
       </Card>
 

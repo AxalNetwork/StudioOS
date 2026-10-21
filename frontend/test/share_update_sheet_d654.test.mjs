@@ -191,7 +191,7 @@ test('metrics: From Revenue and traction, month on month only when given, Remove
   assert.match(removed, /Removed: MRR · Restore/);
   assert.doesNotMatch(removed, /\$38,400/);
   const none = sheet({ step: 1, context: { ...base.context, no_metrics: true }, metrics: [], projectId: 7 }).html;
-  assert.match(none, /<a [^>]*href="\/build\/metrics\?project_id=7"[^>]*>Enter figures by hand<\/a>/);
+  assert.match(none, /<a [^>]*href="\/grow\/revenue-and-traction\?project_id=7"[^>]*>Enter figures by hand<\/a>/);
 });
 
 test('highlights: Edit and Done, Add a lowlight, and the hand route on the unavailable path', () => {
@@ -452,7 +452,7 @@ test('D686: the preview opens with "<Venture> · October" once the context names
 test('D686: no metrics offers Connect a tool as a button, with figures by hand as the second way', () => {
   const html = sheet({ step: 1, metrics: [], context: { ...base.context, metrics: [], no_metrics: true }, projectId: 7 }).html;
   assert.match(html, /<button type="button" class="[^"]*bg-violet-600[^"]*">Connect a tool<\/button>/, 'a primary button, not a link');
-  assert.match(html, /<a [^>]*class="[^"]*border-axal-hairline[^"]*"[^>]*href="\/build\/metrics\?project_id=7"[^>]*>Enter figures by hand<\/a>|<a [^>]*href="\/build\/metrics\?project_id=7"[^>]*class="[^"]*border-axal-hairline[^"]*"[^>]*>Enter figures by hand<\/a>/);
+  assert.match(html, /<a [^>]*class="[^"]*border-axal-hairline[^"]*"[^>]*href="\/grow\/revenue-and-traction\?project_id=7"[^>]*>Enter figures by hand<\/a>|<a [^>]*href="\/grow\/revenue-and-traction\?project_id=7"[^>]*class="[^"]*border-axal-hairline[^"]*"[^>]*>Enter figures by hand<\/a>/);
   const src = readFileSync('frontend/src/pages/founder/ShareUpdateSheet.jsx', 'utf8');
   assert.match(src, /onClick=\{on\.connectTool\}>Connect a tool<\/button>/);
   assert.match(src, /connectTool: \(\) => set\(\{ connecting: true \}\)/);
