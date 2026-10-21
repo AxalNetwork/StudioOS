@@ -64,7 +64,7 @@ import { useWebSocket } from '../../hooks/useWebSocket';
 import AdvisorProgressWidget from './AdvisorProgressWidget';
 import MyBugReports from '../tickets/MyBugReports';
 import { PanelTabs, TasksPanel, TicketsPanel } from './EadwynPanels';
-import { PhoneFocus, PhoneTicketCard, threadLabel, useIsDesktop } from './eadwynPhone';
+import { PhoneFocus, PhoneTicketCard, threadLabel, useFootFill, useIsDesktop } from './eadwynPhone';
 import { startPrompt } from '../../lib/eadwynTickets';
 import { TICKET_TYPES } from '../../lib/ticketScreens';
 
@@ -210,6 +210,8 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   const tutorAbortRef = useRef(null);
   const scrollerRef = useRef(null);
   const isDesktop = useIsDesktop();
+  // The phone frame reaches the scroll's foot, so the composer stands there.
+  const [phoneFrame, phoneFill] = useFootFill();
 
   // ---------- Persistence -------------------------------------------------
   useEffect(() => {
@@ -886,7 +888,7 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   if (phone) {
     const last = messages[messages.length - 1];
     return (
-      <div data-card data-testid="eadwyn-phone" className="flex flex-col">
+      <div ref={phoneFrame} data-card data-testid="eadwyn-phone" className="flex flex-col" style={phoneFill ? { minHeight: phoneFill } : undefined}>
         {weekBanner && <WeekBanner week={weekBanner.week} />}
         {ticketPanel}
         {panelTab === 'conversation' ? (
@@ -905,7 +907,12 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
               phone
             />
             {belowThread}
-            <div className="sticky bottom-[var(--mobile-tabbar-h,0px)] z-10 bg-white dark:bg-gray-950" data-testid="eadwyn-phone-composer">
+            {/* Last row with mt-auto: at the frame's foot (useFootFill) on a short
+                thread, pinned on a long one. bottom-0, not the tab bar's height:
+                a sticky row is held inside the scroll's padding, and the shell's
+                <main> already pads by the bar (mobileTabBar.css), so the bar's
+                height again left a 56px gap above it. */}
+            <div className="sticky bottom-0 z-10 mt-auto bg-white dark:bg-gray-950" data-testid="eadwyn-phone-composer">
               {question && (
                 <CurrentQuestion
                   q={question}
