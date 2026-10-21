@@ -54,6 +54,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/news' },
   { path: '/news' },
   { path: '/articles/mine' },
+  { path: '/insights' }, // #2333: the briefs are a section of /articles
+  { path: '/advisory' }, // #2341: Team › Advisors
   { path: '/projects' },
   { path: '/build/tools' },
   { path: '/incorporate/83b' },

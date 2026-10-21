@@ -37,7 +37,6 @@ const links = (html, testid) => [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g
     quiet: !/\b(?:rounded|border|bg)-/.test(m[1].match(/class="([^"]*)"/)?.[1]||'')}));
 export const RETURNS = [
   ['/build/marketplace','/validate/customer-research','← Validate › Customer research'],
-  ['/advisory','/validate/customer-research','← Validate › Customer research'],
   ['/execution','/build/product-roadmap','← Build › Product roadmap'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
   ['/comarketing','/grow/distribution','← Grow › Distribution'],

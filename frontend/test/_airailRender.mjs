@@ -156,7 +156,6 @@ export const RENDER_NOT_YET = {
     'Founder /studio',
     'Founder /studio/tickets/new',
     'Founder /validate/inbox',
-    'Founder /advisory',
     'Founder /build/team',
     'Founder /build/marketplace',
     'Founder /build/brand',

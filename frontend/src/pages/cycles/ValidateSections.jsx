@@ -140,7 +140,7 @@ export function InterviewsSection({ parts, openDialog, onLog, onExport }) {
       <div className="flex flex-col gap-1.5 border-t border-axal-hairline pt-3 dark:border-gray-800" data-testid="validate-more-tools">
         <span className="text-[12px] font-extrabold text-axal-ink dark:text-gray-100">More tools</span>
         <Link to="/build/marketplace" className={LINK}>Marketplace: partners' services, and the needs you post</Link>
-        <Link to="/advisory" className={LINK}>Advisory: the advisor directory</Link>
+        <Link to="/build/team?mode=workspace&tab=advisors" className={LINK}>Team › Advisors: the advisor directory</Link>
       </div>
     </section>
   );
