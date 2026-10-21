@@ -752,7 +752,7 @@ research.post('/ask', async (c) => {
       task: 'research_ask',
       userId: user.id,
       surface: AI_SURFACE.researchAsk,
-      // D778 part 10: the press's page and option win (the founder's Research
+      // D778 part 11: the press's page and option win (the founder's Research
       // desk sends `ask:research`; every profile's Ask sends its own key); the
       // record is the thread the answer is written to.
       rail: railFor(c, { page: ASK_PAGE, option: ASK_OPTION }, `research_ask_session:${session.uid}`),
@@ -3662,9 +3662,9 @@ research.get('/drafts', async (c) => {
  * preference keys in SHARED_DRAFT_PAGES below.
  */
 /**
- * D778 part 10 (#2103): Ask's page and option in the founder inventory
+ * D778 part 11 (#2103): Ask's page and option in the founder inventory
  * (`frontend/src/lib/railOptions/founder.js`), for a client that sent no rail
- * context. Before part 10 the fallback was the workspace key `research`.
+ * context. Before part 11 the fallback was the workspace key `research`.
  */
 export const ASK_PAGE = 'Founder · Research · Ask';
 export const ASK_OPTION = 'ask:library';

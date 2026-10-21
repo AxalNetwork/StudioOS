@@ -233,7 +233,7 @@ test('Ask answers on the press, and its answer is stored unsaved until Save', ()
   assert.match(ask, /onClick=\{\(\) => toggleSaved\(t\)\}/, 'Save is not a press');
   assert.match(read('cloudflare-worker/sql/migrations/221_research_ask_sessions.sql'), /saved\s+INTEGER NOT NULL DEFAULT 0/);
   assert.match(route(research, 'research', 'patch', '/ask/answers/:uid'), /UPDATE research_ask_answers SET saved = \?/);
-  assert.match(route(research, 'research', 'post', '/ask'), /rail: railFor\(c, \{ page: ASK_PAGE, option: ASK_OPTION \}, `research_ask_session:\$\{session\.uid\}`\)/); // D778 part 10: the inventory's page and option (`founder_research_ask_d778.test.ts`).
+  assert.match(route(research, 'research', 'post', '/ask'), /rail: railFor\(c, \{ page: ASK_PAGE, option: ASK_OPTION \}, `research_ask_session:\$\{session\.uid\}`\)/); // D778 part 11: the inventory's page and option (`founder_research_ask_d778.test.ts`).
 });
 
 test('the competitor analysis runs on the press and writes only its own analysis', () => {
