@@ -16,10 +16,15 @@ const checkedId = (value, prefix) => {
  * Create replacements first; verify them before executing any archive action.
  * Re-export and re-plan after an interrupted application to avoid duplicates. */
 export function planFounderPrices(catalog) {
+  return planRecurringPrices(catalog, FOUNDER_PRICES, 'tier');
+}
+
+/** Shared offline request planner; metadata keys come from its fixed callers. */
+export function planRecurringPrices(catalog, specs, metadataKey) {
   if (!Array.isArray(catalog?.products)) throw new Error('Expected a catalogue products array');
   const create = [], archive = [];
-  for (const spec of FOUNDER_PRICES) {
-    const products = catalog.products.filter(p => p.active === true && p.kind === 'subscription' && p.metadata?.tier === spec.tier);
+  for (const spec of specs) {
+    const products = catalog.products.filter(p => p.active === true && p.kind === 'subscription' && p.metadata?.[metadataKey] === spec.tier);
     if (products.length !== 1) throw new Error(`Expected exactly one active ${spec.tier} subscription product`);
     const product = products[0];
     const id = checkedId(product.id, 'prod');
