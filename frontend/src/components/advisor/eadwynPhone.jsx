@@ -15,8 +15,9 @@
  *   PhoneFocus      "Focus a section" and its chips (SMP:39-42)
  *   PhoneBuckets    Proposed, Pending and Completed (SMP:44-56)
  *   PhoneTicketCard "New ticket" (SMP:38), with no default type (D544)
+ *   useFootFill     the chat's least height, so the composer stands at the foot
  */
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BookOpen, CheckCircle2, ChevronDown, ChevronRight, Loader2, Lock, Sparkles } from 'lucide-react';
 import { usePhoneWidth } from '../../ui/phone/usePhoneWidth.js';
@@ -34,6 +35,47 @@ import { dayText, sameDay, storedDate } from '../../pages/founder/studioPhoneMod
  */
 export function useIsDesktop() {
   return !usePhoneWidth();
+}
+
+/**
+ * The chat's least height on a phone (the owner, 2026-10-21: the composer was
+ * "in the middle of the screen"): from the frame's top to the scroll's visible
+ * foot, less the tab bar's clearance (`[data-app-scroll]`'s bottom padding,
+ * mobileTabBar.css). The frame is a column whose last row, the composer, has
+ * `mt-auto`, so on a short thread the composer stands at the foot and the
+ * shell's footer goes below the fold; on a long one its `sticky` holds it
+ * there. Measured, not a `calc`: the band, any strip, the Studio bar and a
+ * notice sit above the frame at heights only layout knows. Null without a
+ * scroll container (a test, a server render): the frame keeps its own height.
+ */
+export function footFill(frame, scroller, view = globalThis) {
+  if (!frame || !scroller) return null;
+  const pad = Number.parseFloat(view.getComputedStyle?.(scroller)?.paddingBottom) || 0;
+  const top = frame.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+  return Math.max(0, Math.floor(scroller.clientHeight - pad - top));
+}
+
+/**
+ * `footFill` for the frame its callback ref lands on, measured again whenever
+ * the scroll or the content above can have moved it. A callback ref, not a ref
+ * object: the frame mounts after the chat's first read, not on its first render.
+ */
+export function useFootFill() {
+  const [frame, setFrame] = useState(null);
+  const [minHeight, setMinHeight] = useState(null);
+  useLayoutEffect(() => {
+    const scroller = frame?.closest?.('[data-app-scroll]');
+    if (!scroller) return undefined;
+    const measure = () => setMinHeight(footFill(frame, scroller));
+    measure();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    ro?.observe(scroller);
+    const content = frame.closest('[data-app-main]');
+    if (content) ro?.observe(content);
+    window.addEventListener('resize', measure);
+    return () => { ro?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [frame]);
+  return [setFrame, minHeight];
 }
 
 /**
