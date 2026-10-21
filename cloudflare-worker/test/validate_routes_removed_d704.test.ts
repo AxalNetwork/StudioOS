@@ -86,6 +86,15 @@ test('12. no Worker source names an old page path, except AI_SURFACE_ALIASES\'s 
       assert.deepEqual([...map.matchAll(OLD_PAGE)].map((m) => m[0]), OLD_TO_MODULE.map(([old]) => old), 'the map holds exactly the three keys');
       src = src.slice(0, at) + src.slice(end);
     }
+    // #2301: the redirect list names old addresses to count their hits before they
+    // are retired; it links nothing. They may stand only inside REDIRECT_ROUTES,
+    // which frontend/test/redirect_hits_2301.test.mjs holds equal to App.jsx's redirects.
+    if (f.endsWith('/services/redirectRoutes.ts')) {
+      const at = src.indexOf('export const REDIRECT_ROUTES');
+      const end = src.indexOf(']);', at);
+      assert.ok(at > 0 && end > at, 'the redirect list is where the guard expects it');
+      src = src.slice(0, at) + src.slice(end);
+    }
     for (const m of src.matchAll(OLD_PAGE)) hits.push(`${f.slice(root.length + 1)}: ${m[0]}`);
   }
   assert.deepEqual(hits, []);
