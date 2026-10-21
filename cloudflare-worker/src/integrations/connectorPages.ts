@@ -387,23 +387,6 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://stripe.com/docs/connect/standard-accounts' },
     verified_on: null,
   },
-  affinity: {
-    tagline: 'Deal flow from Affinity’s relationship CRM. Coming soon.',
-    long_description: [
-      'Sync deal flow with Affinity’s relationship intelligence CRM.',
-      'Axal VC has not built this connector yet. Nothing connects, and nothing is read or written.',
-    ],
-    tools: [],
-    prompts: [],
-    prompts_reason: 'Nothing to ask yet: this connector is not built.',
-    made_by: AXAL,
-    service: { name: 'Affinity', href: null },
-    sign_in: { kind: 'key', label: 'Affinity API key', key_help_href: 'https://api-docs.affinity.co/' },
-    endpoints: { sign_in: null, api: null },
-    added: null,
-    links: { ...NO_LINKS, developer_docs: 'https://api-docs.affinity.co/' },
-    verified_on: null,
-  },
   github: {
     tagline: 'Issues, milestones, pull requests and releases from the repositories you choose. Read-only.',
     long_description: [
