@@ -640,6 +640,10 @@ test('D685: the recruiting picker\'s pipeline filter and booked-first order; the
   assert.deepEqual(m.body.records.rows.map((x: any) => x.interviewee), ['A lead', 'An invite', 'A booking'], 'newest first by default');
   m = await call(db, FOUNDER, 'GET', `/modules/customer-research?project=${P}&filter=channel:video`);
   assert.deepEqual(m.body.records.rows.map((x: any) => x.interviewee), ['Held']);
+  // Video and audio calls are one Call (the owner, 2026-10-21): `call` lists both, and its count is theirs.
+  m = await call(db, FOUNDER, 'GET', `/modules/customer-research?project=${P}&filter=channel:call`);
+  assert.deepEqual(m.body.records.rows.map((x: any) => x.interviewee), ['Held', 'Old held']);
+  assert.equal(m.body.records.total, 2);
   m = await call(db, FOUNDER, 'GET', `/modules/customer-research?project=${P}&filter=channel:fax`);
   assert.equal(m.body.records.total, 5, 'an unknown channel is no filter, not an empty list');
 });

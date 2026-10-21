@@ -15,7 +15,7 @@ import { assignedSentence, threadRow } from './channelThreads.js';
 import { recordSourceLine } from '../../lib/validateSourceWording.js';
 import { chatConsentBlock, chatConsentOf, consentChoices, consentLine, noticeBlocked, windowClosedSentence } from './chatConsent.js';
 import {
-  CONSENTS, DURATIONS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callLabel, chipStatus, consentNote,
+  CONSENTS, DURATIONS, HOW_OPTIONS, NOT_STORED, PROVIDERS, SETUP_FIELDS, STAGE_WORD, assignTarget, callChannel, callLabel, chipStatus, consentNote, howOf,
   attachesCall, attachOutcome, defaultProvider, estimate, hasMeetingLink, languageOptions, meetingLinkProblem, modeOf, newStartKey, pipelineRows, sessionBody, setupBody,
   startRefusal, startState, talkingPoints, threadsFor, modeNote,
 } from './recordSetup.js';
@@ -284,7 +284,17 @@ export default function RecordLightbox({
   };
   const pick = (row) => { setPicked(row); setPipeline((p) => ({ ...p, open: false })); setRefusal(null); };
 
-  const pickMode = (next) => { setMode(next); setProvider(defaultProvider(next, channels)); setLink(''); setRefusal(null); setThread(null); };
+  // How's Call (2026-10-21): its channel is the default chip's, and a chip from the other
+  // channel moves the call to it, so the link, the tab share and the microphone follow the chip.
+  const pickMode = (next) => {
+    const first = next === 'call' ? defaultProvider('video', channels) : defaultProvider(next, channels);
+    setMode(next === 'call' ? callChannel(first) || 'video' : next); setProvider(first); setLink(''); setRefusal(null); setThread(null);
+  };
+  const pickProvider = (next) => {
+    setProvider(next);
+    const channel = howOf(mode) === 'call' ? callChannel(next) : null;
+    if (channel && channel !== mode) { setMode(channel); setLink(''); }
+  };
   // Flux transcribes English only: choosing it takes a language it cannot take back to Detect.
   const pickLive = (v) => { const next = v || null; setLive(next); if (!languageOptions(models, next).some((l) => l.code === language)) setLanguage(''); };
 
@@ -396,7 +406,6 @@ export default function RecordLightbox({
   };
 
   const consentNoteId = 'record-consent-note';
-  const modeOptions = MODES.map((x) => ({ value: x.key, label: x.label }));
 
   return (
     <Lightbox label="Record a session" eyebrow="Validate · Customer research" title="Record a session" sub="It lands in Interviews when you stop."
@@ -458,12 +467,12 @@ export default function RecordLightbox({
         </Section>
 
         <Section title="How" testId="record-how">
-          <Radios label="How" options={modeOptions} value={mode} onChange={pickMode} testId="record-mode"
-            className="grid grid-cols-2 gap-1.5 sm:grid-cols-4" style={tile} />
+          <Radios label="How" options={HOW_OPTIONS} value={howOf(mode)} onChange={pickMode} testId="record-mode"
+            className="grid grid-cols-3 gap-1.5" style={tile} />
           <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-mode-note">{modeNote(mode, recorder ? recorder.canShareTab !== false : true)}</p>
           {recordSourceLine(mode, provider) && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="record-source-note">{recordSourceLine(mode, provider)}</p>}
           {chips.length > 0 && (
-            <Radios label="Provider" testId="record-provider" value={provider} onChange={setProvider}
+            <Radios label="Provider" testId="record-provider" value={provider} onChange={pickProvider}
               options={chips.map((c) => { const st = chipStatus(mode, c, channels); return { value: c.value, label: `${c.label} · ${st.word}`, disabled: st.disabled, title: st.disabled ? 'Not available yet' : undefined,
                 // D687 step 10: the bare 16px mark, real marks only (fallback none), as Schedule a call's chips draw it.
                 icon: <BrandIcon provider={c.value} size={16} variant="bare" fallback="none" /> }; })} />

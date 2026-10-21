@@ -29,18 +29,53 @@ export const SETUP_FIELDS = Object.freeze({
 
 export const NOT_STORED = 'Not saved yet: the Worker does not store this field.';
 
+/**
+ * The four channels a session is stored with. The owner merged Video call and
+ * Audio call into one "Call" (2026-10-21): How offers `HOW_OPTIONS`, and a
+ * call's channel is the one its provider chip names (`callChannel`), so a
+ * meeting link, a tab share or the microphone on speaker still follow the call
+ * that was picked, and the Worker stores `video` or `phone` as before.
+ */
 export const MODES = [
   { key: 'in_person', label: 'In person', audio: true, start: 'Start recording', note: 'Put the phone on the table between you. It records this device’s microphone.' },
-  { key: 'video', label: 'Video call', audio: true, start: 'Start the call', note: 'Paste the meeting link. It records the call’s audio.' },
-  { key: 'phone', label: 'Audio call', audio: true, start: 'Start recording', note: 'Put the call on speaker. It records this device’s microphone.' },
+  { key: 'video', label: 'Call', audio: true, start: 'Start the call', note: 'Paste the meeting link. It records the call’s audio.' },
+  { key: 'phone', label: 'Call', audio: true, start: 'Start recording', note: 'Put the call on speaker. It records this device’s microphone.' },
   { key: 'text', label: 'Text chat', audio: false, start: 'Import the chat', note: 'No audio. Import the conversation from the app it happened in, or paste it.' },
 ];
 export const modeOf = (key) => MODES.find((m) => m.key === key) || MODES[0];
+
+/** The How choices: In person, Call (a video or an audio call) and Text chat. */
+export const HOW_OPTIONS = Object.freeze([
+  { value: 'in_person', label: 'In person' },
+  { value: 'call', label: 'Call' },
+  { value: 'text', label: 'Text chat' },
+]);
+/** The How choice a channel is drawn under. */
+export const howOf = (mode) => (mode === 'video' || mode === 'phone' ? 'call' : mode);
 
 /** On a phone a video call records the microphone only: there is no tab to share (§5.8.6). */
 export const PHONE_VIDEO_NOTE = 'On a phone it records this device’s microphone only.';
 /** The mode's note, with the phone sentence on Video where this browser cannot share a tab. */
 export const modeNote = (mode, canShareTab = true) => (mode === 'video' && !canShareTab ? `${modeOf(mode).note} ${PHONE_VIDEO_NOTE}` : modeOf(mode).note);
+
+/**
+ * A call's chips, one list for both channels since the owner merged them
+ * (2026-10-21). `channel` is what the call is stored and recorded as: a
+ * meeting (Zoom, Google Meet, Teams) is `video`, with its link and, on a
+ * computer, a shared tab; an app call or the phone on speaker is `phone`,
+ * recorded from this device's microphone.
+ */
+export const CALL_CHIPS = Object.freeze([
+  { value: 'zoom', label: 'Zoom', link: 'zoom', channel: 'video' },
+  { value: 'google_meet', label: 'Google Meet', link: 'google_meet', channel: 'video' },
+  { value: 'teams', label: 'Microsoft Teams', ready: true, channel: 'video' },
+  { value: 'whatsapp', label: 'WhatsApp', ready: true, channel: 'phone' },
+  { value: 'telegram', label: 'Telegram', ready: true, channel: 'phone' },
+  { value: 'signal', label: 'Signal', ready: true, channel: 'phone' },
+  { value: 'phone_speaker', label: 'This phone, on speaker', ready: true, channel: 'phone' },
+]);
+/** The channel a call's chip is stored as, or null for no such chip. */
+export const callChannel = (provider) => CALL_CHIPS.find((c) => c.value === provider)?.channel ?? null;
 
 /**
  * The chips under How, per mode (§5.3). `link` names the connection a chip's
@@ -49,19 +84,8 @@ export const modeNote = (mode, canShareTab = true) => (mode === 'video' && !canS
  */
 export const PROVIDERS = {
   in_person: [],
-  video: [
-    { value: 'zoom', label: 'Zoom', link: 'zoom' },
-    { value: 'google_meet', label: 'Google Meet', link: 'google_meet' },
-    { value: 'teams', label: 'Microsoft Teams', ready: true },
-    { value: 'whatsapp', label: 'WhatsApp video', ready: true },
-    { value: 'telegram', label: 'Telegram video', ready: true },
-  ],
-  phone: [
-    { value: 'phone_speaker', label: 'This phone, on speaker', ready: true },
-    { value: 'whatsapp', label: 'WhatsApp call', ready: true },
-    { value: 'telegram', label: 'Telegram call', ready: true },
-    { value: 'signal', label: 'Signal call', ready: true },
-  ],
+  video: CALL_CHIPS,
+  phone: CALL_CHIPS,
   text: [
     { value: 'whatsapp', label: 'WhatsApp', link: 'whatsapp' },
     { value: 'telegram', label: 'Telegram', link: 'telegram' },
