@@ -39,6 +39,7 @@ import { preflightOAuthSecrets } from '../src/services/calendar.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
+const SUPER = 901;
 const ADMIN = 902;
 const FOUNDER = 903;
 
@@ -73,9 +74,12 @@ function freshDb() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'super_admins', 'user_sessions', 'activity_logs', 'admin_audit_log', 'provider_oauth_keys', 'integrations']) db.exec(ddl(t));
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
+  u.run(SUPER, 'admin', 'The Holder', 'holder@example.test');
   u.run(ADMIN, 'admin', 'Plain Admin', 'admin@example.test');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test');
+  db.prepare('INSERT INTO super_admins (user_id) VALUES (?)').run(SUPER);
   const s = db.prepare("INSERT INTO user_sessions (user_id, jti, factor, created_at) VALUES (?, ?, ?, datetime('now'))");
+  s.run(SUPER, 'totp-super', 'totp');
   s.run(ADMIN, 'totp-admin', 'totp');
   s.run(FOUNDER, 'totp-founder', 'totp');
   return db;
@@ -105,9 +109,12 @@ app.onError((err: any, c) => {
   if (s) return c.json({ detail: err.message }, s);
   throw err;
 });
-async function list(env: any, as = ADMIN) {
+// The list is the Super Admin's since the owner's ruling (2026-10-20).
+const SESSION: Record<number, [string, string]> = { [SUPER]: ['totp-super', 'admin'], [ADMIN]: ['totp-admin', 'admin'], [FOUNDER]: ['totp-founder', 'founder'] };
+async function list(env: any, as = SUPER) {
+  const [jti, role] = SESSION[as];
   const res = await app.request('/', {
-    headers: { Authorization: `Bearer ${await token(as, as === ADMIN ? 'totp-admin' : 'totp-founder', as === ADMIN ? 'admin' : 'founder')}` },
+    headers: { Authorization: `Bearer ${await token(as, jti, role)}` },
   }, env);
   const text = await res.text();
   let body: any = {};
@@ -240,10 +247,12 @@ test('no client value leaves: no secret, no full client id, no preview on an env
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────
-test('access is unchanged: a plain admin reads, a founder is refused, and the read audits and calls nothing', async () => {
-  // Mutation checked: requireAdmin removed (the founder reads 200).
+test('access: the Super Admin reads, a plain admin and a founder are refused, and the read audits and calls nothing', async () => {
+  // The owner's ruling (2026-10-20): the keys are the Super Admin's alone.
   const db = freshDb();
   assert.equal((await list(envFor(db))).status, 200);
+  const a = await list(envFor(db), ADMIN);
+  assert.equal(a.status, AUTH_ERROR_STATUSES['Super admin required'] ?? 403, a.text);
   const f = await list(envFor(db), FOUNDER);
   assert.equal(f.status, AUTH_ERROR_STATUSES['Admin required'] ?? 403, f.text);
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM admin_audit_log').get() as any).n, 0);

@@ -436,10 +436,10 @@ test('D751: pressing Continue on an unset GitHub says it is not set up, never "r
 test('D751: a Super Admin also gets the Integration keys link, and a crafted admin_href never becomes it', async () => {
   const SUPER = { id: 1, role: 'admin', is_super_admin: 1 };
   for (const [body, want] of [
-    [UNCONFIGURED_503, '/admin?tab=integration-keys'],
-    [{ ...UNCONFIGURED_503, admin_href: '/admin?tab=integration-keys' }, '/admin?tab=integration-keys'],
+    [UNCONFIGURED_503, '/admin/integration-keys'],
+    [{ ...UNCONFIGURED_503, admin_href: '/admin/integration-keys' }, '/admin/integration-keys'],
     [{ ...UNCONFIGURED_503, admin_href: '/admin?tab=keys-github' }, '/admin?tab=keys-github'],
-    [{ ...UNCONFIGURED_503, admin_href: 'https://evil.test/' }, '/admin?tab=integration-keys'],
+    [{ ...UNCONFIGURED_503, admin_href: 'https://evil.test/' }, '/admin/integration-keys'],
   ]) {
     const { m, f } = await pressGithub([503, body], SUPER);
     try {

@@ -311,7 +311,7 @@ export const REGISTRY: ProviderDescriptor[] = [
     description: 'Mirror your Carta cap table (issuer, stakeholders, securities) into the Capital module on a 6-hour sync.',
     // 2026-09-10 — unparked to 'beta'. OAuth + 6-hour cap-table sync +
     // Data Imports one-shot already shipped; coming_soon only hid Connect.
-    // Needs CARTA_CLIENT_ID/SECRET (env or Admin → Integration Keys).
+    // Needs CARTA_CLIENT_ID/SECRET (env or HQ → Integration keys).
     // Salesforce / Affinity stay coming_soon.
     status: 'beta',
     tier: 'studio',
@@ -345,7 +345,7 @@ export const REGISTRY: ProviderDescriptor[] = [
     // 2026-09-10 — unparked to 'beta'. Envelope send, Connect webhook,
     // hourly reconcile, and Admin e-sign picker already shipped;
     // coming_soon only hid Connect. Needs DOCUSIGN_CLIENT_ID/SECRET
-    // (env or Admin → Integration Keys). Demo vs production is chosen
+    // (env or HQ → Integration keys). Demo vs production is chosen
     // in the connect modal (?demo=1|0). Salesforce / Affinity stay
     // coming_soon.
     status: 'beta',

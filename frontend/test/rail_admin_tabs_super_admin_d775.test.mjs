@@ -26,9 +26,11 @@ const tabOf = (route) => new URLSearchParams(route.split('?')[1] || '').get('tab
 const TABS = [...read('pages/AdminPage.jsx').matchAll(/value: '([a-z-]+)'/g)].map((m) => m[1]);
 const nameOf = (b) => b.module || b.section;
 
-test('the Super Admin\'s /admin tabs are the eight boards, each drawn by the frame under its name', () => {
+test('the Super Admin\'s /admin tabs are the six boards, each drawn by the frame under its name', () => {
+  // H27 Integration keys and H28 GitHub sync were tabs here until the owner's
+  // ruling (2026-10-20) moved both to HQ's own page; the next test holds them.
   const boards = SUPER_ADMIN_BOARDS.filter((b) => b.route.startsWith('/admin?tab='));
-  assert.deepEqual(boards.map((b) => b.id), ['H11', 'H22', 'H23', 'H24', 'H27', 'H28', 'H29', 'H30']);
+  assert.deepEqual(boards.map((b) => b.id), ['H11', 'H22', 'H23', 'H24', 'H29', 'H30']);
   for (const b of boards) {
     assert.equal(b.rail, 'pages/admin/AdminBoardFrame.jsx', `${b.id}'s rail is not the tab frame`);
     assert.equal(b.railPending, undefined, `${b.id} still says it waits`);
@@ -38,6 +40,24 @@ test('the Super Admin\'s /admin tabs are the eight boards, each drawn by the fra
   // No other tab draws a Super Admin rail: each one that does is one of the eight.
   const drawn = TABS.filter((t) => tabBoard(t, 'super_admin'));
   assert.deepEqual(drawn.sort(), boards.map((b) => tabOf(b.route)).sort());
+});
+
+test('H27 and H28 are HQ\'s Integration keys page, which draws the frame named for the section the address opens', () => {
+  const [keys, sync] = ['H27', 'H28'].map((id) => SUPER_ADMIN_BOARDS.find((b) => b.id === id));
+  assert.equal(keys.route, '/admin/integration-keys');
+  assert.equal(sync.route, '/admin/integration-keys#github');
+  for (const b of [keys, sync]) {
+    assert.equal(b.host, 'pages/hq/IntegrationKeysPage.jsx', `${b.id} is not hosted by the keys page`);
+    assert.equal(b.rail, 'pages/admin/AdminBoardFrame.jsx', `${b.id}'s rail is not the board frame`);
+    const [path, hash] = b.route.split('#');
+    assert.equal(pageKeyFor(path, 'super_admin', { hash: hash ? `#${hash}` : '' }), boardPage(b), `${b.id}: the page map`);
+  }
+  const page = read('pages/hq/IntegrationKeysPage.jsx');
+  assert.match(page, /const board = github \? 'GitHub sync' : 'Integration keys';/);
+  assert.match(page, /<AdminBoardFrame\s+workspace=\{board\}/);
+  assert.equal(page.split('<AdminBoardFrame').length - 1, 1, 'more than one frame on the page');
+  // No /admin tab is either board any more.
+  for (const t of ['integration-keys', 'github']) assert.ok(!TABS.includes(t), `?tab=${t} is still a section`);
 });
 
 test('an admin\'s tabs are named for the Admin profile\'s boards, from the same map', () => {

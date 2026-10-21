@@ -175,7 +175,7 @@ test('D751 5-6: an unset GitHub is refused before any state; an admin is told wh
   assert.ok(!('admin_href' in s.body) && !('env_vars' in s.body), 'a founder gets the sentence only');
   assert.equal(f.states(), 0);
   const a = await start(f.env, 'github', ADMIN);
-  assert.equal(a.body.admin_href, '/admin?tab=integration-keys');
+  assert.equal(a.body.admin_href, '/admin/integration-keys');
   assert.deepEqual(a.body.env_vars, ['GITHUB_APP_CLIENT_ID', 'GITHUB_APP_CLIENT_SECRET']);
   assert.equal(f.states(), 0);
 

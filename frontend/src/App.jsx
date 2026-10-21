@@ -262,6 +262,9 @@ const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPag
 const HqPlatformAllowancesPage = lazy(() => import('./pages/hq/PlatformAllowancesPage'));
 const HqAiUsagePage = lazy(() => import('./pages/hq/AiUsagePage'));
 const HqPlatformTopologyPage = lazy(() => import('./pages/hq/PlatformTopologyPage'));
+// The owner's ruling (2026-10-20): the providers' keys and GitHub Sync, one
+// Super Admin page and its own HQ row, no longer Admin Console tabs.
+const HqIntegrationKeysPage = lazy(() => import('./pages/hq/IntegrationKeysPage'));
 const HqAnalyticsPage = lazy(() => import('./pages/hq/HqAnalyticsPage'));
 const HqSecurityPage = lazy(() => import('./pages/hq/SecurityPage'));
 const HqSupportPage = lazy(() => import('./pages/hq/HqSupportPage'));
@@ -1100,8 +1103,6 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/topology">Topology</StripLink>
           <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
           <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
-          <StripLink to="/admin?tab=integration-keys">Integration keys</StripLink>
-          <StripLink to="/admin?tab=github">GitHub Sync</StripLink>
           <StripLink to="/admin?tab=payments">Payments</StripLink>
           <StripLink to="/admin?tab=bank-accounts">Bank accounts</StripLink>
           <StripLink to="/admin?tab=product-testing">Product testing</StripLink>
@@ -2796,6 +2797,10 @@ function AppInner() {
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
       <Route path="/admin/platform/ai-usage" element={guard(['admin'], hqOnly(<HqAiUsagePage />))} />
+      {/* The owner's ruling (2026-10-20) — Integration keys, with GitHub Sync as
+          its second section (#github), is a Super Admin row of its own. The
+          old Admin Console tab links (integration-keys, github) redirect here. */}
+      <Route path="/admin/integration-keys" element={guard(['admin'], hqOnly(<HqIntegrationKeysPage />))} />
       <Route path="/admin/hq-support" element={guard(['admin'], hqOnly(<HqSupportPage />))} />
       <Route path="/hq/review" element={guard(['admin'], hqOnly(<ReviewQueuePage />))} />
       {/* D638 (#1384, #1412) — the one page for the reward rules and grants, Super Admin only.

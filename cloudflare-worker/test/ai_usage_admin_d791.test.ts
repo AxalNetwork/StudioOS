@@ -30,6 +30,11 @@ const L8 = '@cf/meta/llama-3.1-8b-instruct-fp8';
 const NOW = new Date('2026-10-20T12:00:00Z');
 const at = (msBefore: number) => new Date(NOW.getTime() - msBefore).toISOString().slice(0, 19).replace('T', ' ');
 const H = 3_600_000, D = 24 * H;
+// The HTTP routes read the real clock, so a run they must find is logged against it, not NOW:
+// `ago` before the real now, and `today` inside the real UTC day (an hour ago is yesterday just after midnight).
+const stamp = (ms: number) => new Date(ms).toISOString().slice(0, 19).replace('T', ' ');
+const ago = (msBefore: number) => stamp(Date.now() - msBefore);
+const today = () => { const now = new Date(); return stamp(Math.max(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()), now.getTime() - 60_000)); };
 
 function world() {
   __resetForTest();
@@ -351,8 +356,8 @@ test('every member object names id, name and email; no prompt or output in any a
   // Mutations checked: u.email dropped from a member; a velocity, flag or caps member built without the email.
   const w = world();
   try {
-    w.log({ charged: 6_000_000, at: at(H) });
-    w.log({ user: INVESTOR, refusal: 'guard_blocked', at: at(H) });
+    w.log({ charged: 6_000_000, at: today() });
+    w.log({ user: INVESTOR, refusal: 'guard_blocked', at: today() });
     await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}/pause`, { method: 'POST', body: { reason: REASON } });
     await call(w, SUPER, `/api/admin/ai-usage/members/${INVESTOR}/cap`, { method: 'PUT', body: { monthly_usd: 3, reason: REASON } });
     const r = await call(w, SUPER, '/api/admin/ai-usage?range=mtd');
@@ -379,13 +384,13 @@ test('the member search: an exact id, or a case-insensitive email prefix, at mos
   // left as wildcards; the 50 cap dropped; the topups summed outside the range; an empty query searched.
   const w = world();
   try {
-    w.log({ cost: 0.002, charged: 2500, at: at(H) });
-    w.log({ user: 20, cost: 0.001, charged: 900, at: at(H) });
-    w.log({ user: 20, cost: 0.001, charged: 700_000, at: at(40 * D) });  // outside 30d
+    w.log({ cost: 0.002, charged: 2500, at: ago(H) });
+    w.log({ user: 20, cost: 0.001, charged: 900, at: ago(H) });
+    w.log({ user: 20, cost: 0.001, charged: 700_000, at: ago(40 * D) });  // outside 30d
     const topup = (user: number, n: number, credit: number, when: string) => w.f.db.prepare(`INSERT INTO ai_topup_purchases(payment_intent_id,order_ref,user_id,price_id,credit_microusd,expected_total_cents,currency,credited_at)
       VALUES(?,?,?,'price_fixture',?,500,'usd',?)`).run(`pi_s${user}_${n}`, `os${user}_${n}`, user, credit, when);
-    topup(MEMBER, 1, 5_000_000, at(2 * D));
-    topup(MEMBER, 2, 9_000_000, at(40 * D));                               // outside 30d
+    topup(MEMBER, 1, 5_000_000, ago(2 * D));
+    topup(MEMBER, 2, 9_000_000, ago(40 * D));                              // outside 30d
     const top = (await platformAiUsage(w.env, '30d', new Date())).top_charged.find((t: any) => t.member.id === MEMBER);
     // D791 part 2: "AI tokens bought" is the range's credited packs, the one outside 30d left out.
     // Mutation checked: the platform total summing every top-up ever.

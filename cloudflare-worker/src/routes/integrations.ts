@@ -566,7 +566,7 @@ async function unconfiguredRefusal(c: Context<{ Bindings: Env }>, user: User, de
     : desc.key === 'zoom' ? [...(await import('../services/channels/zoom')).ZOOM_CLIENT_ENV_VARS] : null;
   const extra: Record<string, unknown> = { provider: desc.key };
   if (user.role === 'admin') {
-    if (managed) extra.admin_href = '/admin?tab=integration-keys';
+    if (managed) extra.admin_href = '/admin/integration-keys';
     if (envVars) extra.env_vars = envVars;
   }
   return refuse(c, 503, {

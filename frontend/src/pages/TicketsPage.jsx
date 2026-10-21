@@ -130,7 +130,7 @@ export function TicketGithubRecovery({ isAdmin, pending, configured, busy, onRet
       <div className="min-w-0 text-[13px]">
         <p className="font-semibold">{pending} saved ticket{pending === 1 ? ' is' : 's are'} not on the tracker.</p>
         <p className="mt-1 text-[12.5px]">
-          Check the token in <a href="/admin?tab=github" className="underline">Admin Console → GitHub Sync</a> using Test issue creation.
+          A Super Admin checks the token in <a href="/admin/integration-keys#github" className="underline">HQ → Integration keys → GitHub Sync</a> using Test issue creation.
           {' '}Once that passes, retry here to create up to 25 missing issues. Ticket titles and descriptions are sent to the configured GitHub repository; no name or email is.
         </p>
         {configured === false && <p className="mt-1 text-[12.5px]">Configure GitHub Sync before retrying.</p>}
@@ -485,11 +485,11 @@ function TicketForm({ isAdmin, role }) {
         if (reason && !/[.!?]$/.test(reason)) text += '.';
         text += ' An admin can retry it from the ticket queue, and you can follow it from Your tickets.';
         if (isAdmin) {
-          text += ' Look into it in Admin Console → GitHub Sync — Test issue creation there will say exactly what the token is missing.';
+          text += ' A Super Admin can look into it in HQ → Integration keys → GitHub Sync — Test issue creation there will say exactly what the token is missing.';
         }
         outcome = { tone: 'amber', title: saved, text };
       } else if (status === 'not_configured' && isAdmin) {
-        outcome = { tone: 'amber', title: saved, text: 'The GitHub mirror is not configured in this environment, so no issue was opened — set it up in Admin Console → GitHub Sync.' };
+        outcome = { tone: 'amber', title: saved, text: 'The GitHub mirror is not configured in this environment, so no issue was opened — a Super Admin sets it up in HQ → Integration keys → GitHub Sync.' };
       } else {
         outcome = { tone: 'amber', title: saved, text: 'You can follow it from Your tickets.' };
       }

@@ -226,8 +226,8 @@ const OWN = {
   kyc: ['kycAdminQueue'],
   personas: ['listPersonasAdmin'],
   directory: ['adminListDirectoryPartners'],
-  'integration-keys': ['adminListIntegrationKeys'],
-  github: ['adminGetGithubConfig'],
+  // Integration keys and GitHub Sync left the console for HQ's own page
+  // (the owner's ruling, 2026-10-20); `integration_keys_hq_only.test.mjs`.
   promos: ['adminListPromos', 'catalogProducts'],
   payments: ['adminCatalogList', 'adminStripeGetConfig', 'adminStripeListWebhooks'],
   wellbeing: ['wellbeingExperts'],
