@@ -49,6 +49,7 @@ import { reportError } from '../lib/log';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import useAssistMode from '../hooks/useAssistMode';
 import FillProposals from '../workspaces/FillProposals';
+import { fillRunLine } from '../lib/fillRun.js';
 
 const LBL = 'text-[11px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500';
 const CARD = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-sm';
@@ -78,7 +79,7 @@ const GHOST_SM = 'h-[26px] px-2.5 rounded-[7px] border border-gray-200 dark:bord
  * a figure they have since typed over — the server already withholds it, because a
  * provenance row is compared against what the row holds now.
  */
-function FilledMark({ fill }) {
+export function FilledMark({ fill }) {
   if (!fill) return null;
   const source = fill.citation?.kind === 'library'
     ? fill.citation.title || 'a document in your library'
@@ -93,6 +94,8 @@ function FilledMark({ fill }) {
     fill.citation?.quote ? `“${fill.citation.quote}”` : null,
     fill.edited && fill.proposed_value ? `It proposed: ${fill.proposed_value}` : null,
     fill.model ? `Model: ${fill.model.split('/').pop()}` : null,
+    // D777 part 4: the run that filled it and what it cost.
+    fillRunLine(fill.run),
   ].filter(Boolean).join('\n');
   return (
     <span
