@@ -469,7 +469,6 @@ export default function SpinoutLabDiscoveryPage() {
     return true;
   });
   const readyCount = readiness.filter((r) => r.ok).length;
-  const logTool = project ? `/build/discovery?project_id=${project.id}` : '/build/discovery';
 
   // ICP fit summary (D1 161). Percentages are over ASSESSED interviews only —
   // an interview with icp_fit null is "not yet assessed", so counting it in
@@ -627,9 +626,10 @@ export default function SpinoutLabDiscoveryPage() {
 
               {/* Pain point validation */}
               <div className={CARD} data-testid="discovery-pains">
+                {/* "Curate groups" linked the Discovery editor's pain-group
+                    curation, which #2335 retired with /build/discovery. */}
                 <div className="flex items-center justify-between gap-3 mb-1">
                   <div className={LBL}>Pain point validation</div>
-                  <Link to={logTool} className="text-[11px] font-semibold text-violet-700 dark:text-violet-300 whitespace-nowrap">Curate groups →</Link>
                 </div>
                 <p className="text-[11.5px] text-gray-400 dark:text-gray-500 mb-2">Ranked by mentions — the top pain anchors the deck&rsquo;s Problem slide.</p>
                 {/* Severity legend (D351). Two stored values; the canvas's

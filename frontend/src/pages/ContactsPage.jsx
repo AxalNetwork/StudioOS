@@ -219,7 +219,7 @@ function ContactDrawer({ contact, busy, onClose, onStatus, onPromote, onChanged,
         )}
 
         {contact.promoted_ref_id && (() => {
-          const dest = contact.promoted_to === 'discovery' ? { to: '/build/discovery', label: 'Customer Discovery' }
+          const dest = contact.promoted_to === 'discovery' ? { to: '/validate/customer-research', label: 'Customer Discovery' }
             : contact.promoted_to === 'advisory' ? { to: '/advisory', label: 'Advisory Suite' }
               : { to: '/raise', label: 'Raise pipeline' };
           return (

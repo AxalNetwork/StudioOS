@@ -180,7 +180,7 @@ export default function FinancialsPage({ embedded = false }) {
     <div className="space-y-6">
       {/* Task #3 (AS) — surface advisor-sourced fills with one-line
           citations so founders can audit what the advisor wrote. */}
-      <AdvisorFilledBanner page="/build/financials" />
+      <AdvisorFilledBanner page="/raise/capital/model" />
       <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3">
         {!embedded && (
           <div>

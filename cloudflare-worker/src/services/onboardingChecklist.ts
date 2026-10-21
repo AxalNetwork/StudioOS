@@ -90,8 +90,8 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     // D713: the key stays `ef.plaid` so saved progress survives. It says
     // revenue, its first use; D752 adds spending (`venture_spend`).
     { key: 'ef.plaid',      label: 'Connect Mercury (verify revenue)',   route: connectorPagePath('mercury'), autoDetect: true },
-    { key: 'ef.captable',   label: 'Connect or upload cap table',        route: '/build/captable',             autoDetect: true },
-    { key: 'ef.financials', label: 'Populate financial model',           route: '/build/financials',           autoDetect: true },
+    { key: 'ef.captable',   label: 'Connect or upload cap table',        route: '/raise/capital/cap-table',             autoDetect: true },
+    { key: 'ef.financials', label: 'Populate financial model',           route: '/raise/capital/model',           autoDetect: true },
     { key: 'ef.83b',        label: 'Confirm 83(b) status',               route: '/spinout-lab/83b',            autoDetect: true },
     // NO STORE, so no detector: nothing in the schema records an IP assignment
     // (measured 2026-09-21 against baseline + post-cutoff migrations). The step

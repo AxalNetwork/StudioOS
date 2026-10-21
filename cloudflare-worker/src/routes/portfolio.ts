@@ -415,7 +415,7 @@ r.post('/chase', async (c) => {
             type: 'portfolio_update_chase',
             title: `Update requested${project.name ? ` for ${project.name}` : ''}`,
             body: 'Your investor is asking for this period’s update.',
-            link: '/build/metrics',
+            link: '/build/kpi',
             payload: { project_id: pid },
             channels: ['in_app', 'email'],
             category: 'portfolio',

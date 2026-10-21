@@ -389,10 +389,6 @@ const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage')
 const OnboardingChatPage = lazy(() => import('./pages/OnboardingChatPage'));
 const BrandBuilderPage = lazy(() => import('./pages/BrandBuilderPage'));
 const CompetitorAnalysisPage = lazy(() => import('./pages/CompetitorAnalysisPage'));
-const FinancialsPage = lazy(() => import('./pages/FinancialsPage'));
-const DiscoveryPage = lazy(() => import('./pages/DiscoveryPage'));
-const MetricsPage = lazy(() => import('./pages/MetricsPage'));
-const CapTablePage = lazy(() => import('./pages/CapTablePage'));
 // D632 — a draft variant, renamed and edited in place.
 const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
@@ -2336,17 +2332,13 @@ function AppInner() {
   const founderResearchLanding = effectiveRole === 'founder'
     && (researchMode === 'landing' || (!researchHasNonProjectQuery && researchMode !== 'workspace'));
   // D422. FOUNDER MOUNTS THAT WERE A SECOND URL FOR A DESK. Bare
-  // `/execution` and `/build/discovery` rendered, for a founder, the very desk
-  // `/build` and `/validate` render — so each desk had two addresses and the
-  // sidebar had to match both. They redirect now, query string and all. The
-  // EDITORS behind them stay: `?mode=workspace` (and Discovery's `?tab=`) still
-  // opens ExecutionPage and DiscoveryPage, because no canvas zone yet carries
-  // their writes — creating a task or an objective, editing or deleting an
-  // interview, curating a pain group. `/signals` was the third, and D670
-  // retired its page: it redirects to `/research` for everyone.
-  const founderDiscoveryEditor = effectiveRole === 'founder'
-    && (new URLSearchParams(location.search).get('mode') === 'workspace'
-      || ['leads', 'interviews', 'insights'].includes(new URLSearchParams(location.search).get('tab')));
+  // `/execution` rendered, for a founder, the very desk `/build` renders, so
+  // it redirects, query string and all. The EDITOR behind it stays:
+  // `?mode=workspace` still opens ExecutionPage, because no canvas zone yet
+  // carries its writes — creating a task or an objective. `/build/discovery`
+  // was the second, and #2335 retired it with its editor (the owner's call):
+  // it forwards to Validate · Customer research for everyone. `/signals` was
+  // the third, and D670 retired its page: it redirects to `/research`.
   const founderExecutionEditor = effectiveRole === 'founder'
     && new URLSearchParams(location.search).get('mode') === 'workspace';
 
@@ -2552,12 +2544,12 @@ function AppInner() {
                 : buildCompetitorsRedirect(location.search)}
               replace
             />)} />
-      <Route path="/build/financials" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('raise', <FinancialsPage />))} />
-      <Route path="/build/discovery" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), effectiveRole !== 'founder'
-        ? <DiscoveryPage />
-        : founderDiscoveryEditor
-          ? founderWorkspace('validate', founderEditor(<DiscoveryPage initialTab="interviews" workspaceMode />))
-          : <Navigate to={`/validate${location.search}`} replace />)} />
+      {/* #2339, #2335 (the owner's "Remove", #2297): two retired pages. The
+          Financial Model is Capital's tab, the same FinancialsPage; customer
+          discovery is Validate · Customer research. Each old address forwards,
+          query and hash kept, until #2319 retires the redirects. */}
+      <Route path="/build/financials" element={<Navigate replace to={{ pathname: '/raise/capital/model', search: location.search, hash: location.hash }} />} />
+      <Route path="/build/discovery" element={<Navigate replace to={{ pathname: '/validate/customer-research', search: location.search, hash: location.hash }} />} />
 
       {/* ── Validate ─────────────────────────────────────────────────────────
           D661 (#1474): /validate is the cycle overview from #1487's read, and
@@ -2645,17 +2637,19 @@ function AppInner() {
       <Route path="/research/benchmarking" element={guard(labRoles(['admin', 'investor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/benchmarking/:uid" element={guard(labRoles(['admin', 'investor']), <BenchmarkDetail role={researchRole} />)} />
       <Route path="/research/client-prep" element={guard(labRoles(['admin', 'advisor', 'partner']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      {/* Legacy Customer Discovery folds into the unified Discovery workspace. */}
-      <Route path="/customer-discovery" element={<Navigate to="/build/discovery" replace />} />
+      {/* Legacy Customer Discovery lands on Validate · Customer research (#2335). */}
+      <Route path="/customer-discovery" element={<Navigate to="/validate/customer-research" replace />} />
       <Route path="/build/roadmap" element={guard(labRoles(['admin', 'founder']), <FounderBuildRoadmap />)} />
       <Route path="/build/cadence" element={guard(labRoles(['admin', 'founder']), <FounderBuildCadence />)} />
       <Route path="/build/kpi" element={guard(labRoles(['admin', 'founder']), <FounderBuildKpi />)} />
-      <Route path="/build/metrics" element={guard(['admin', 'founder', 'partner', 'investor'], founderWorkspace('build', founderEditor(<MetricsPage />)))} />
+      {/* #2336 (the owner's "Remove", #2297): Metrics is KPI entry's. */}
+      <Route path="/build/metrics" element={<Navigate replace to={{ pathname: '/build/kpi', search: location.search, hash: location.hash }} />} />
       {/* D670 — the Signals page is retired. Research reads the same signals
           table, so an old link lands there for everyone, with its query kept
           as D422's redirects keep theirs (`?project_id=` lands where it did). */}
       <Route path="/signals" element={<Navigate to={`/research${location.search}`} replace />} />
-      <Route path="/build/captable" element={guard(labRoles(['admin', 'founder', 'partner', 'investor']), founderWorkspace('raise', <CapTablePage />))} />
+      {/* #2340 (the owner's "Remove", #2297): the cap table is Capital's tab. */}
+      <Route path="/build/captable" element={<Navigate replace to={{ pathname: '/raise/capital/cap-table', search: location.search, hash: location.hash }} />} />
       {/* documentation/architecture/DECISIONS.md D11 — /marketplace was a partner-provider directory with
           inquiry threads and reviews whose backend exists only in the dev-only
           FastAPI: all 11 api.marketplace* calls hit /marketplace/* and the
@@ -2912,9 +2906,10 @@ function AppInner() {
       <Route path="/execution/roadmap" element={guard(['admin', 'founder'], founderWorkspace('build', founderEditor(<ExecutionPage />)))} />
       {/* Task #1 — RAISE Workspaces. Three founder workspaces compose the
           existing pages via an `embedded` prop; each guarded for the roles of
-          the pages it wraps. Standalone routes (/build/financials, /build/captable,
-          /incorporate, /incorporate/*, /compliance, /legal-capital) stay intact
-          for the investor/partner personas that share them. */}
+          the pages it wraps. Standalone routes (/incorporate, /incorporate/*,
+          /compliance, /legal-capital) stay intact for the investor/partner
+          personas that share them; /build/financials and /build/captable
+          forward to Capital's tabs (#2339, #2340). */}
        <Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder']),
          new URLSearchParams(location.search).get('mode') === 'workspace'
            ? founderWorkspace('raise', founderEditor(<PitchWorkspacePage />))

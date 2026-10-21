@@ -125,16 +125,20 @@ test('the tab bar\'s clearance is on the scroll container, so the footer after t
 });
 
 test('the FOUNDER_FULL_BLEED comment describes the legacy routes as the redirects they are (D422)', () => {
-  const block = SIDEBAR.slice(SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED'), SIDEBAR.indexOf("'/build/discovery', '/execution', '/build/team',"));
-  assert.match(block, /Since D422, bare `\/build\/discovery` and `\/execution`\s*\/\/ are `<Navigate replace>` redirects/);
+  const block = SIDEBAR.slice(SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED'), SIDEBAR.indexOf("'/execution', '/build/team',"));
+  assert.match(block, /Since D422, bare `\/execution` is a `<Navigate replace>`\s*\/\/ redirect/);
   assert.doesNotMatch(block, /keep rendering the same desk/, 'the old sentence said they still render the desk');
   // The claim is true of App.jsx: each bare route is a Navigate for a founder.
   // (`/signals` was the third; D670 made it a redirect for everyone and it
   // left the list.)
   assert.match(CODE, /path="\/execution" element=\{guard\(\['admin', 'founder'\], effectiveRole === 'founder' && !founderExecutionEditor\s*\? <Navigate to=\{`\/build\$\{location\.search\}`\} replace \/>/);
   assert.match(CODE, /path="\/signals" element=\{<Navigate to=\{`\/research\$\{location\.search\}`\} replace \/>\}/);
+  // `/build/discovery` left the list with its editor (#2335): it forwards to
+  // Customer research for everyone, so no page there needs the desk's width.
   const discovery = CODE.slice(CODE.indexOf('path="/build/discovery"'), CODE.indexOf('path="/build/discovery"') + 600);
-  assert.match(discovery, /<Navigate to=\{`\/validate\$\{location\.search\}`\} replace \/>/);
+  assert.match(discovery, /<Navigate replace to=\{\{ pathname: '\/validate\/customer-research', search: location\.search, hash: location\.hash \}\} \/>/);
+  const list = SIDEBAR.slice(SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED'), SIDEBAR.indexOf('];', SIDEBAR.indexOf('export const FOUNDER_FULL_BLEED')));
+  assert.ok(!list.includes("'/build/discovery'"), '/build/discovery is listed as a full-bleed page again');
 });
 
 test('the cookie banner sits above the bar on a phone (S1 on #985): its bottom is the bar\'s height plus 16px, and 16px where there is no bar', async () => {

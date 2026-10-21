@@ -10,7 +10,9 @@
  * same element `/build`, `/validate` and `/research` mount. They redirect, and
  * keep the query string, so `?new=1`, `?project_id=` and `?mode=landing` land
  * where they did. D670 then retired the Signals page itself, on the owner's
- * call: `/signals` redirects to `/research` for everyone, query kept.
+ * call: `/signals` redirects to `/research` for everyone, query kept. #2335
+ * did the same for `/build/discovery` and its Discovery editor: it forwards to
+ * Validate · Customer research for everyone, query and hash kept.
  *
  * WHAT COULD NOT, MEASURED. The editors behind those mounts are still the only
  * place a founder can make certain writes. The gap map's table retired them
@@ -48,7 +50,10 @@ test('the three second addresses redirect to their desk, query string kept', () 
   // D670: `/signals` is a plain redirect for everyone now, the query still kept.
   assert.ok(routeBlock('/signals').includes('<Route path="/signals" element={<Navigate to={`/research${location.search}`} replace />} />'),
     '/signals no longer redirects everyone to /research with the query kept');
-  for (const [path, desk] of [['/execution', '/build'], ['/build/discovery', '/validate']]) {
+  // #2335: `/build/discovery` forwards to Customer research for everyone.
+  assert.ok(routeBlock('/build/discovery').includes(`<Route path="/build/discovery" element={<Navigate replace to={{ pathname: '/validate/customer-research', search: location.search, hash: location.hash }} />} />`),
+    '/build/discovery no longer forwards everyone to Customer research with the query kept');
+  for (const [path, desk] of [['/execution', '/build']]) {
     const block = routeBlock(path);
     assert.ok(block, `${path} is no longer routed — a retired route must redirect, never 404`);
     assert.ok(block.includes(`<Navigate to={\`${desk}\${location.search}\`} replace />`),
@@ -67,13 +72,27 @@ test('the three second addresses redirect to their desk, query string kept', () 
  */
 const EDITORS = [
   { route: '/execution', mount: '<ExecutionPage />', writes: ['pipelineCreateTask', 'pipelineUpdateTask', 'pipelineAdvance', 'pipelineDecide', 'castVote', 'pipelineTriggerReview', 'pipelineSnapshot', 'createOkr', 'updateOkr', 'deleteOkr'] },
-  { route: '/build/discovery', mount: '<DiscoveryPage initialTab="interviews" workspaceMode />', writes: ['updateInterview', 'deleteInterview', 'assignPain', 'renamePainGroup', 'deletePainGroup'] },
+  // `/build/discovery` stood here with `DiscoveryPage`'s interview and
+  // pain-group writes. #2335 retired the page on the owner's call rather than
+  // on this rule ("Remove", #2297): the writes went with it. RETIRED pins that.
   // `/signals` stood here with `signals.list` and `signals.refresh`. D670
   // retired the page on the owner's call rather than on this rule: the list is
   // read by the Research desk, and the admin's manual refresh went with the
   // page (the nightly cron still runs).
   { route: '/network', mount: '<NetworkPage />', writes: ['contactCreate', 'contactUpdate', 'contactAddTask', 'contactPromote', 'introAccept', 'introDecline', 'introSetTerms', 'partnerBookAdd', 'partnerBookLogInteraction'] },
 ];
+
+/** Editors the owner retired with their homeless writes: no route mounts them. */
+const RETIRED = [
+  { route: '/build/discovery', editor: 'DiscoveryPage', issue: '#2335', writes: ['updateInterview', 'assignPain', 'renamePainGroup', 'deletePainGroup'] },
+];
+
+test('a retired editor stays retired: no route mounts it, and its writes are the owner\'s call', () => {
+  for (const { route, editor, issue } of RETIRED) {
+    assert.ok(!new RegExp(`<${editor}\\b`).test(app), `${editor} is mounted again; ${issue} retired it`);
+    assert.ok(!/element=\{guard\(/.test(routeBlock(route)), `${route} renders a page again; ${issue} retired it`);
+  }
+});
 
 test('an editor stays mounted while a founder zone lacks any of its writes', () => {
   for (const { route, mount, writes } of EDITORS) {
@@ -85,9 +104,10 @@ test('an editor stays mounted while a founder zone lacks any of its writes', () 
   }
 });
 
-test('the editors keep their deep links: ?mode=workspace, Discovery ?tab=, and the Research landing', () => {
+test('the editors keep their deep links: ?mode=workspace and the Research landing', () => {
   assert.match(app, /const founderExecutionEditor = effectiveRole === 'founder'\s*&& new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace';/);
-  assert.match(app, /const founderDiscoveryEditor = effectiveRole === 'founder'\s*&& \(new URLSearchParams\(location\.search\)\.get\('mode'\) === 'workspace'\s*\|\| \['leads', 'interviews', 'insights'\]\.includes\(new URLSearchParams\(location\.search\)\.get\('tab'\)\)\);/);
+  // Discovery's `?mode=workspace` and `?tab=` went with its editor (#2335).
+  assert.ok(!app.includes('founderDiscoveryEditor'), 'the retired Discovery editor switch is back');
   // Research: any query beyond project_id, or ?mode=workspace, skips the desk.
   assert.match(app, /const founderResearchLanding = effectiveRole === 'founder'\s*&& \(researchMode === 'landing' \|\| \(!researchHasNonProjectQuery && researchMode !== 'workspace'\)\);/);
   // AND THE PATHS THAT STILL LINK TO THEM GO TO THE EDITOR, not the redirect:

@@ -111,7 +111,9 @@ test('a tab lights for exactly the pages its sidebar row lights for', () => {
   assert.deepEqual(lit('/build/board'), ['Build']);
   assert.deepEqual(lit('/execution'), ['Build']);
   // The two a prefix match gets wrong.
-  assert.deepEqual(lit('/build/discovery'), ['Validate']);
+  // `/build/discovery` stood here until #2335 retired it; the marketplace is
+  // the other /build/* page Validate's row owns.
+  assert.deepEqual(lit('/build/marketplace'), ['Validate']);
   assert.deepEqual(lit('/build/team'), ['Grow']);
   // A row with no `match` is the sidebar's `NavLink end`: exact, slash-tolerant.
   assert.equal(rowActive(rows.Studio, '/studio'), true);

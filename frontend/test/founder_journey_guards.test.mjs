@@ -44,10 +44,13 @@ test('every assistant FEATURE_CATALOG deep-link resolves to a registered SPA rou
   const urls = [...catalog.matchAll(/url:\s*'([^']+)'/g)].map((m) => m[1]);
   assert.ok(urls.length >= 15, `catalog looks truncated (${urls.length} urls)`);
   const routes = new Set([...app.matchAll(/path="([^"]+)"/g)].map((m) => m[1]));
+  // A cycle module page (`/validate/customer-research`, #2335) is served by a
+  // `:slug` route, so a pattern route counts when its fixed segments match.
+  const patterns = [...routes].filter((r) => r.includes('/:')).map((r) => new RegExp(`^${r.replace(/:[^/]+/g, '[^/]+')}$`));
   for (const u of urls) {
     const pathname = u.split('?')[0];
     assert.ok(
-      routes.has(pathname),
+      routes.has(pathname) || patterns.some((p) => p.test(pathname)),
       `assistant deep-link "${u}" has no registered route — the assistant would send users to a 404`,
     );
   }

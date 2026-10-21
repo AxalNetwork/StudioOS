@@ -165,7 +165,7 @@ export const DOORS = {
       { t: 'Roadmap', route: '/build/roadmap' },
       { t: 'Cadence and KPIs', route: '/build/cadence' },
       { t: 'Pitch deck builder', route: '/raise/pitch' },
-      { t: 'Cap table', route: '/build/captable' },
+      { t: 'Cap table', route: '/raise/capital/cap-table' },
       { t: 'Investor match', route: '/raise/capital-match' },
       { t: 'Data room', route: '/raise/data-room' },
       { t: 'Legal and 83(b)', route: '/raise/legal' },

@@ -272,7 +272,8 @@ export const SIDEBAR_GROUPS = {
   //   • The legacy founder landing page and standalone Spin-Outs page were
   //     retired. Execution remains a first-class row.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
-  //     (/build/metrics) as the founder's own company-health view; the
+  //     (/build/metrics, which #2336 retired into /build/kpi) as the
+  //     founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
   //   • "Network Effects" (/network-effects) is demoted to More while a single
   //     "Network" entry (/network) leads Validate; both routes stay live.
@@ -339,9 +340,9 @@ export const SIDEBAR_GROUPS = {
       // whatever path was free, and the row was never pointed back. `match`
       // keeps every legacy and section URL highlighting the right row.
       { to: '/validate', icon: MessageSquare, label: 'Validate',
-        match: ['/validate', '/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
+        match: ['/validate', '/build/marketplace', '/needs', '/services', '/advisory'] },
       { to: '/build', icon: Briefcase, label: 'Build',
-        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution'] },
+        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'] },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
       { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/legal-capital', '/incorporate', '/compliance'] },
@@ -649,14 +650,15 @@ function workspaceRoutes(role) {
  */
 export const FOUNDER_FULL_BLEED = [
   ...workspaceRoutes('founder'),
-  // The legacy paths. Since D422, bare `/build/discovery` and `/execution`
-  // are `<Navigate replace>` redirects for a founder — to `/validate` and
-  // `/build` — and render a page only with `?mode=workspace` (the editors D422
-  // kept); `/build/team?mode=workspace` is the Team workspace (D435). They stay
-  // listed so the editor each still mounts keeps the desk's width. These are
-  // the only hand-typed entries left, because they are exactly the routes the
-  // shell config does NOT claim. (`/signals` left with its page, D670.)
-  '/build/discovery', '/execution', '/build/team',
+  // The legacy paths. Since D422, bare `/execution` is a `<Navigate replace>`
+  // redirect for a founder, to `/build`, and renders a page only with
+  // `?mode=workspace` (the editor D422 kept); `/build/team?mode=workspace` is
+  // the Team workspace (D435). They stay listed so the editor each still
+  // mounts keeps the desk's width. These are the only hand-typed entries left,
+  // because they are exactly the routes the shell config does NOT claim.
+  // (`/signals` left with its page, D670; `/build/discovery` with its editor,
+  // #2335.)
+  '/execution', '/build/team',
 ];
 
 /**

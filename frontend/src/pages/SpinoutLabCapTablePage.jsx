@@ -797,7 +797,7 @@ export default function SpinoutLabCapTablePage() {
             )}
             <p className="text-[10.5px] text-gray-400 dark:text-gray-500 mt-3">
               Exit waterfalls, saved variants, and scenario comparison live in{' '}
-              <Link to="/build/captable" className="text-violet-600 hover:underline inline-flex items-center gap-0.5">advanced modeling <ExternalLink size={9} /></Link>.
+              <Link to="/raise/capital/cap-table" className="text-violet-600 hover:underline inline-flex items-center gap-0.5">advanced modeling <ExternalLink size={9} /></Link>.
             </p>
           </div>
         </div>

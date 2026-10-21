@@ -36,13 +36,11 @@ const links = (html, testid) => [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g
   .map((m)=>({href:m[1].match(/href="([^"]*)"/)?.[1],label:stripTags(m[2]),
     quiet: !/\b(?:rounded|border|bg)-/.test(m[1].match(/class="([^"]*)"/)?.[1]||'')}));
 export const RETURNS = [
-  ['/build/discovery','/validate/customer-research','← Validate › Customer research'],
   ['/build/marketplace','/validate/customer-research','← Validate › Customer research'],
   ['/advisory','/validate/customer-research','← Validate › Customer research'],
   ['/execution','/build/product-roadmap','← Build › Product roadmap'],
   ['/execution/board','/build/product-roadmap','← Build › Product roadmap'],
   ['/execution/roadmap','/build/product-roadmap','← Build › Product roadmap'],
-  ['/build/metrics','/build/operating-systems','← Build › Operating systems'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
   ['/comarketing','/grow/distribution','← Grow › Distribution'],
   ['/network-effects','/grow/partner-network','← Grow › Partner network'],

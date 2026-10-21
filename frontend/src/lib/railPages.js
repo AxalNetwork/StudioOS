@@ -118,7 +118,6 @@ const FOUNDER = [
   alias('/build/board', key(F, 'Build', 'Operating systems'), 'The legacy Board zone: the company’s operating board.'),
   alias('/build/cadence', key(F, 'Build', 'Operating systems'), 'The legacy Cadence zone.'),
   alias('/build/kpi', key(F, 'Build', 'Operating systems'), 'The legacy KPI entry zone.'),
-  alias('/build/metrics', key(F, 'Build', 'Operating systems'), 'KPI entry’s legacy route.'),
   alias('/build/marketplace', key(F, 'Build', 'Operating systems'), 'The service marketplace a founder runs the company with.'),
   alias('/build/brand', key(F, 'Grow', 'Distribution'), 'Brand is distribution’s material; Build has no brand module.'),
   ...CYCLE('Raise', '/raise', [
@@ -190,7 +189,6 @@ const INVESTOR = [
   alias('/funds/performance', key(I, 'Fund'), 'Fund Ops’ performance tab, on the fund.'),
   off('/raise/data-room', key(I, 'Data room')),
   off('/build/competitors', key(I, 'Competitor analysis')),
-  off('/build/metrics', key(I, 'Metrics')),
   off('/needs', key(I, 'Needs board')),
   off('/services', key(I, 'Service catalogue')),
   ...NETWORK(I),
@@ -262,7 +260,6 @@ const PARTNER = [
   off('/partner/relationships', key(O, 'Relationship log')),
   off('/partner/leaderboard', key(O, 'Leaderboard')),
   off('/build/competitors', key(O, 'Competitor analysis')),
-  off('/build/metrics', key(O, 'Metrics')),
   off('/raise/legal-engine', key(O, 'Legal engine')),
   off('/deals', key(O, 'Deal room')),
   ...SHARED(O).filter((p) => p.route !== '/perks'),
