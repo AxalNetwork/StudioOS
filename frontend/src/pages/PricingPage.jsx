@@ -341,6 +341,11 @@ export function PricingBody({ user = null }) {
         <section className="axp-sec axp-plans">
           {plans.status === 'loading' && <Skeleton />}
           {(plans.status === 'unreadable' || built?.unreadable) && <Unavailable onRetry={retryPlans} />}
+          {ready && (
+            <div className={`axp-grid axp-grid-${built.cards.length}`}>
+              {built.cards.map((c) => <PlanCard key={c.id} card={c} />)}
+            </div>
+          )}
           {ready && tab === 'investor' && (
             <div className="axp-lp">
               <div className="axp-lp-main">
@@ -353,11 +358,6 @@ export function PricingBody({ user = null }) {
               <ul className="axp-lp-feats">
                 {LP_ACCESS.feats.map((f) => <li key={f}><span className="axp-tick">{TICK}</span>{f}</li>)}
               </ul>
-            </div>
-          )}
-          {ready && (
-            <div className={`axp-grid axp-grid-${built.cards.length}`}>
-              {built.cards.map((c) => <PlanCard key={c.id} card={c} />)}
             </div>
           )}
         </section>
@@ -375,7 +375,7 @@ export function PricingBody({ user = null }) {
         </section>
       )}
 
-      {ready && <Compare key={`${tab}`} tab={tab} cards={built.cards} />}
+      {ready && <Compare key={`compare-${tab}`} tab={tab} cards={built.cards} />}
 
       {!roleTab && (
         <section className="axp-sec axp-models">
@@ -385,7 +385,7 @@ export function PricingBody({ user = null }) {
       )}
       {!roleTab && <Packs read={plans} />}
 
-      <Faq key={tab} tab={tab} />
+      <Faq key={`faq-${tab}`} tab={tab} />
 
       {!user && (
         <section className="axp-sec">
