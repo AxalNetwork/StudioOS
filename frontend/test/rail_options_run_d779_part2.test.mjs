@@ -193,11 +193,12 @@ test('the interview’s Answer picks a tool on the press and writes only the con
   for (const o of rows) assert.equal(o.source.marker, 'api.advisor.toolAuto(');
   assert.equal(pa.split('api.advisor.toolAuto(').length - 1, 1);
   // The pick's result is a message in the thread with its buttons; the member presses one.
-  assert.match(pa, /const r = await api\.advisor\.toolAuto\(raw\);\s*setMessages\(\(m\) => \[\.\.\.m, \{\s*role: 'tool',/);
+  // D778 part 12: the press sends its profile's own option (`sendKey`) with the run.
+  assert.match(pa, /const r = await api\.advisor\.toolAuto\(raw, railPressHeaders\(sendKey\)\);\s*setMessages\(\(m\) => \[\.\.\.m, \{\s*role: 'tool',/);
   const body = route(advisor, 'advisor', 'post', '/tool/auto');
   for (const t of handlerWrites(body)) assert.ok(HISTORY.includes(t), `/tool/auto writes ${t}`);
   assert.doesNotMatch(body, /recordAnswer\(|writeRouter|routeWrite\(/, '/tool/auto records an answer');
-  assert.match(body, /rail: railFor\(c, \{ page: pageFromPath\(AI_SURFACE\.studio, 'studio'\), option: 'tool:advisor' \}\)/);
+  assert.match(body, /rail: railFor\(c, \{ page: pageFromPath\(AI_SURFACE\.studio, 'studio'\), option: studioOption\('send', user\.role\) \}\)/);
   // The tools it runs read and return a call to action; none of them writes.
   const tools = workerFile('services/advisor/tools.ts');
   assert.deepEqual(writes(tools), []);
@@ -212,7 +213,7 @@ test('the interview’s Explain streams into the tutor panel and writes only the
   const body = route(advisor, 'advisor', 'post', '/explain');
   for (const t of handlerWrites(body)) assert.ok(HISTORY.includes(t), `/explain writes ${t}`);
   assert.doesNotMatch(body, /recordAnswer\(|writeRouter|routeWrite\(/);
-  assert.match(body, /option: 'explain:advisor'/);
+  assert.match(body, /option: studioOption\('explain', user\.role\)/);
 });
 
 test('the voice answer fills the composer; the member sends it, and transcribing writes nothing', () => {

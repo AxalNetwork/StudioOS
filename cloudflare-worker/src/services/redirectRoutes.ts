@@ -118,6 +118,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/partner-portal' },
   { path: '/docs' },
   { path: '/communities' },
+  { path: '/network-effects' }, // #2324: the page is removed (#2297 §3); it lands on Network
 ]);
 
 /** The key a hit is counted under in `public_pageviews.path`. */

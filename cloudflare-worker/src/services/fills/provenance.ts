@@ -423,10 +423,13 @@ export function filledColumns(
  */
 export async function claimFills(env: Env, projectId: number, items: any[]): Promise<Map<number, {
   edited: boolean; model: string | null; fill_class: string;
+  /** D777 part 4: the run that wrote the claim, as `fillsForRow` answers it; null is "Not recorded". */
+  run: FillRun | null;
+  ai_proposal_id: number | null;
 }>> {
   await ensureFillProvenanceSchema(env);
   const rows = await env.DB.prepare(
-    `SELECT fp.target_row_id, fp.written_value, fp.edited, fp.model, fp.fill_class
+    `SELECT fp.target_row_id, fp.written_value, fp.edited, fp.model, fp.fill_class, fp.ai_usage_log_id, fp.ai_proposal_id
        FROM fill_provenance fp
        JOIN hypotheses h ON h.id = fp.target_row_id
       WHERE fp.target_table = 'hypotheses' AND fp.target_column = 'claim'
@@ -434,19 +437,26 @@ export async function claimFills(env: Env, projectId: number, items: any[]): Pro
       ORDER BY fp.id DESC`,
   ).bind(projectId).all<{
     target_row_id: number; written_value: string | null; edited: number;
-    model: string | null; fill_class: string;
+    model: string | null; fill_class: string; ai_usage_log_id: number | null; ai_proposal_id: number | null;
   }>();
   const claimNow = new Map<number, string>(items.map((h) => [Number(h.id), String(h.claim ?? '').trim()]));
   const seen = new Set<number>();
-  const out = new Map<number, { edited: boolean; model: string | null; fill_class: string }>();
+  const kept: typeof rows.results = [];
   for (const r of rows.results || []) {
     const id = Number(r.target_row_id);
     if (seen.has(id)) continue;
     seen.add(id);
     const now = claimNow.get(id);
-    if (now && String(r.written_value ?? '').trim() === now) {
-      out.set(id, { edited: r.edited === 1, model: r.model ?? null, fill_class: r.fill_class });
-    }
+    if (now && String(r.written_value ?? '').trim() === now) kept.push(r);
+  }
+  const runs = await runsByLogId(env, kept.map((r) => Number(r.ai_usage_log_id)).filter((id) => id > 0));
+  const out = new Map<number, { edited: boolean; model: string | null; fill_class: string; run: FillRun | null; ai_proposal_id: number | null }>();
+  for (const r of kept) {
+    out.set(Number(r.target_row_id), {
+      edited: r.edited === 1, model: r.model ?? null, fill_class: r.fill_class,
+      run: runs.get(Number(r.ai_usage_log_id)) ?? null,
+      ai_proposal_id: r.ai_proposal_id ?? null,
+    });
   }
   return out;
 }

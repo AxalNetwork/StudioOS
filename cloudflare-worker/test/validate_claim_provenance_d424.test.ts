@@ -71,6 +71,8 @@ test('a claim that still says what Eadwyn wrote carries the mark, with its model
   const { marks } = await board();
   assert.deepEqual(marks.get(1), {
     edited: false, model: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', fill_class: 'synthesis',
+    // D777 part 4: a fill recorded with no run reads "Not recorded", never a zero cost.
+    run: null, ai_proposal_id: null,
   });
 });
 

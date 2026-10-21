@@ -1334,8 +1334,9 @@ export const api = {
     // LLM tool-binding entry point. The user types a free-form message;
     // the worker calls aiRouter.run('tool_call') to pick a tool, validates
     // the envelope, and dispatches via the same gated pipeline as `tool()`.
-    toolAuto: (message) =>
-      request('/advisor/tool/auto', { method: 'POST', body: JSON.stringify({ message }) }),
+    // D778 part 12: the press's rail headers (`railPressHeaders`) as an optional last argument.
+    toolAuto: (message, headers) =>
+      request('/advisor/tool/auto', { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({ message }) }),
     conversation: (uid) => request(`/advisor/conversations/${encodeURIComponent(uid)}`),
     explainUrl: () => '/api/advisor/explain',
     // Task #3 (AS) — list field_sources rows for the current user,
@@ -2795,26 +2796,13 @@ export const api = {
   deckGetBrand: () => request('/decks/brand'),
   deckSetWatermark: (url) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url }) }),
 
-  networkFxEffects: () => request('/networkfx/effects'),
-  networkFxCompounding: () => request('/networkfx/referrals/compounding'),
-  networkFxSyndicates: (status) => request('/networkfx/syndicates' + (status ? `?status=${status}` : '')),
+  // #2324: the Network Effects page is removed; these are the syndicate reads
+  // and the close a deal room (components/deals/DealSyndicates.jsx) still uses.
   networkFxSyndicate: (id) => request(`/networkfx/syndicates/${id}`),
   // D630 — the syndicates linked to one company. `syndicates.deal_id` holds a
   // project id, so the filter is named for what it holds.
   networkFxProjectSyndicates: (projectId) => request(`/networkfx/syndicates?project_id=${encodeURIComponent(projectId)}`),
-  networkFxCreateSyndicate: (data) => request('/networkfx/syndicates', { method: 'POST', body: JSON.stringify(data) }),
-  networkFxJoinSyndicate: (id, data) => request(`/networkfx/syndicates/${id}/join`, { method: 'POST', body: JSON.stringify(data) }),
   networkFxCloseSyndicate: (id) => request(`/networkfx/syndicates/${id}/close`, { method: 'POST', body: JSON.stringify({}) }),
-  // D765: the model's rationale is a press, so a POST.
-  networkFxSyndicateRecs: (id) => request(`/networkfx/syndicates/${id}/recommendations`, { method: 'POST', body: JSON.stringify({}) }),
-  networkFxMarketplaceMe: () => request('/networkfx/marketplace/me'),
-  networkFxSaveMarketplace: (data) => request('/networkfx/marketplace/me', { method: 'PUT', body: JSON.stringify(data) }),
-  networkFxMarketplaceSearch: (filters = {}) => {
-    const q = new URLSearchParams(Object.entries(filters).filter(([_, v]) => v != null && v !== '')).toString();
-    return request('/networkfx/marketplace/search' + (q ? '?' + q : ''));
-  },
-  networkFxRequestIntro: (data) => request('/networkfx/marketplace/request-intro', { method: 'POST', body: JSON.stringify(data) }),
-  networkFxMarketplaceMatch: (data) => request('/networkfx/marketplace/match', { method: 'POST', body: JSON.stringify(data) }),
 
   getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
