@@ -64,7 +64,7 @@ const LEGACY_ROWS = [
   '/portfolio/health', '/portfolio/coverage',
   '/portfolio/waterfall', '/legal-capital', '/incorporate', '/compliance',
   // network
-  '/network', '/network-effects', '/my/jobs', '/services', '/needs', '/partner/insights',
+  '/network', '/my/jobs', '/services', '/needs', '/partner/insights',
   '/partner/office-hours', '/comarketing',
   // more
   '/incorporate/cofounder-agreement', '/spinout-lab/83b', '/perks',
@@ -109,9 +109,10 @@ test('the question is the size it was measured at', () => {
   // outright, and D670 retired /market-intel and /signals, which is the one
   // way a legacy console leaves the question. The owner's removals of
   // 2026-10-20 took six more (Scoring, Risk Matrix, Capital, Liquidity,
-  // Reserves, Watchlist), deleted with their pages.
-  assert.equal(LEGACY_ROWS.length, 41);
-  assert.equal(new Set(LEGACY_ROWS).size, 41, 'a legacy route is listed twice');
+  // Reserves, Watchlist), deleted with their pages, and #2324 took Network
+  // Effects (#2297 §3), whose address now redirects to /network.
+  assert.equal(LEGACY_ROWS.length, 40);
+  assert.equal(new Set(LEGACY_ROWS).size, 40, 'a legacy route is listed twice');
   // Fourteen tabs when the map was drawn. Integration keys and GitHub Sync
   // left for HQ's own Super Admin page (the owner's ruling, 2026-10-20);
   // D708's Bank accounts and D815's Product testing joined.
@@ -213,7 +214,7 @@ test('every placement names a real tier, a real row of that tier, and a real for
   }
   // S23 and H37 launched 29 pages; AI Matches (/matches) was deleted since,
   // and D670 retired Market Intelligence and Signals.
-  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 20, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20');
+  assert.equal(ADMIN_PLACEMENT.filter((e) => e.tier === 'palette').length, 19, 'S23 and H37 drew 26 pages once AI Matches, Market Intelligence and Signals were gone; the owner removed six more on 2026-10-20, and #2324 Network Effects');
 });
 
 test('the three decided placements hold: Wellbeing, X, Trash', () => {
