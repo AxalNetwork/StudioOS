@@ -18,6 +18,7 @@ const sources = () => ({
   advisor: read('../src/pages/advisor/AdvisorStudioHome.jsx'),
   partner: read('../src/pages/partner/PartnerStudioHome.jsx'),
   redirects: read('../../cloudflare-worker/src/services/redirectRoutes.ts'),
+  notifications: read('../../cloudflare-worker/src/services/testing.ts'),
 });
 
 function removed(s) {
@@ -30,6 +31,7 @@ function removed(s) {
 }
 
 function forwards(s) {
+  assert.match(s.notifications, /export const MY_APPLICATIONS_LINK = '\/inbox';/, 'new status notifications open Inbox');
   assert.match(s.app, /<Route path="\/product-testing" element=\{guard\(\[[^\]]+\], <Navigate to="\/studio" replace \/>\)\} \/>/, 'old member links forward to Studio behind auth');
   assert.match(s.redirects, /\{ path: '\/product-testing', keep: true \}/, 'historical notification URL stays in the redirect inventory');
 }
@@ -53,6 +55,8 @@ test('the member page, desktop/phone Account entries and Studio cards are retire
 
 test('old Product testing URLs redirect to Studio and remain counted', () => {
   const s = sources();
+  forwards(s);
+  assert.throws(() => forwards({ ...s, notifications: s.notifications.replace("MY_APPLICATIONS_LINK = '/inbox'", "MY_APPLICATIONS_LINK = '/product-testing?tab=applications'") }), assert.AssertionError);
   forwards(s);
   const route = s.app.split('\n').find((line) => line.includes('<Route path="/product-testing"'));
   assert.throws(() => forwards({ ...s, app: s.app.replace(route, route.replace('to="/studio"', 'to="/account"')) }), assert.AssertionError);
