@@ -9,7 +9,7 @@ const interviewee = z.object({ label: z.string().min(1).max(80), role: z.string(
 export const INTERVIEW_TOOLS: McpTool[] = [
   {
     name: 'submit_interview', title: 'Submit an interview', description: TOOLS.submit_interview.description,
-    requiredScope: 'validate:write', company: true, readOnly: false,
+    requiredScope: 'validate:write', source: 'axal', version: '1.0.0', company: true, readOnly: false,
     inputSchema: {
       company: z.number().int().positive(),
       channel: z.enum(['in_person', 'video', 'phone', 'text', 'manual']),
@@ -22,14 +22,14 @@ export const INTERVIEW_TOOLS: McpTool[] = [
   },
   {
     name: 'propose_placements', title: 'Propose interview placements', description: TOOLS.propose_placements.description,
-    requiredScope: 'validate:write', company: false, readOnly: false,
+    requiredScope: 'validate:write', source: 'axal', version: '1.0.0', company: false, readOnly: false,
     inputSchema: { session_id: z.number().int().positive(), run_label: z.string().max(80).optional(),
       placements: z.array(z.object({ module: z.string(), kind: z.string(), payload: z.record(z.string(), z.unknown()), quote: z.string().max(400) })).min(1).max(100) },
     run: ({ env, props, args }) => proposePlacements(env, grant(props), args as any),
   },
   {
     name: 'structure_with_studioos', title: 'Structure an interview with StudioOS', description: TOOLS.structure_with_studioos.description,
-    requiredScope: 'validate:write', company: false, readOnly: false,
+    requiredScope: 'validate:write', source: 'axal', version: '1.0.0', company: false, readOnly: false,
     inputSchema: { session_id: z.number().int().positive(), model: z.string().optional() },
     run: ({ env, props, args }) => structureWithStudioos(env, grant(props), args as any),
   },
