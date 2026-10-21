@@ -120,9 +120,9 @@ test('the five landings are guard([\'admin\']) without hqOnly, under a prefix no
 });
 
 test('every console link on a landing is literal, registered, and never under /branch/', () => {
-  // D358 — Programs gained a fifth door, Profiling trends.
+  // Programs has four doors after the owner removed the Assessment editor.
   // D506 — Approvals gained its fifteenth door, Spinout moderation (D442's console).
-  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 5, Community: 5, Insights: 0 };
+  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 4, Community: 5, Insights: 0 };
   for (const [label, file] of Object.entries(LANDINGS)) {
     const doors = doorsIn(CODE[file]);
     assert.equal(doors.length, expectedDoors[label], `${label} draws ${doors.length} literal links, expected ${expectedDoors[label]}`);
