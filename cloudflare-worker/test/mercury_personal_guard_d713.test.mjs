@@ -4,7 +4,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 const root='cloudflare-worker/src';
 const walk=p=>readdirSync(p,{withFileTypes:true}).flatMap(e=>e.isDirectory()?walk(join(p,e.name)):[join(p,e.name)]);
-const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPersonal.ts','routes/mercury_personal.ts','routes/revenue.ts','routes/needs.ts','routes/network.ts','routes/partner_settlements.ts','services/onboardingChecklist.ts','services/raiseCycle.ts']);
+// D840 (#2346): Sign in with Mercury writes and reads the member's own row (`routes/mercury_oauth.ts`, `services/mercury/oauth.ts`).
+const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPersonal.ts','routes/mercury_personal.ts','routes/revenue.ts','routes/needs.ts','routes/network.ts','routes/partner_settlements.ts','services/onboardingChecklist.ts','services/raiseCycle.ts','routes/mercury_oauth.ts','services/mercury/oauth.ts']);
 const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts','services/capitalAttestations.ts']);
 test('personal match tables and provider queries stay within the personal allowlist',()=>{
   for(const f of walk(root).filter(f=>/\.[cm]?[jt]s$/.test(f))) {
@@ -21,7 +22,9 @@ test('only member-facing routes can import personal Mercury logic',()=>{
 
 // ─────────────────────────────────────────────── PR B: what personal code may read and register
 const PERSONAL = ['integrations/providers/mercury.ts', 'services/mercuryPersonal.ts', 'routes/mercury_personal.ts',
-  'services/capitalAttestations.ts', 'services/capitalAttestationTerms.ts', 'routes/mercury_attestations.ts'];
+  'services/capitalAttestations.ts', 'services/capitalAttestationTerms.ts', 'routes/mercury_attestations.ts',
+  // D840: the sign-in and the reader it gives a member's row are personal code too.
+  'routes/mercury_oauth.ts', 'services/mercury/oauth.ts', 'services/mercury/connection.ts', 'services/mercury/reads.ts'];
 const src = (f) => readFileSync(join(root, f), 'utf8');
 const code = (f) => src(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
@@ -31,11 +34,12 @@ test('no Eadwyn connector reader reads Mercury', () => {
   assert.doesNotMatch(line, /mercury/i);
 });
 
-test('the personal provider registers connect and nothing else: no sync, push, webhook, preview or action', () => {
+// D840 (#2346): `disconnect` revokes a sign-in's tokens before the generic route deletes the row; it reads and writes nothing else.
+test('the personal provider registers connect and disconnect only: no sync, push, webhook, preview or action', () => {
   const s = code('integrations/providers/mercury.ts');
   const reg = [...s.matchAll(/registerProvider\(\{([^}]*)\}\)/g)];
   assert.equal(reg.length, 1);
-  assert.deepEqual(reg[0][1].split(',').map((k) => k.split(':')[0].trim()).filter(Boolean).sort(), ['connect', 'key']);
+  assert.deepEqual(reg[0][1].split(',').map((k) => k.split(':')[0].trim()).filter(Boolean).sort(), ['connect', 'disconnect', 'key']);
   for (const hook of ['sync', 'push', 'handleWebhook', 'webhook', 'preview', 'actions', 'revokeGranted']) {
     assert.doesNotMatch(s, new RegExp(`\\b${hook}\\s*[:(]`), hook);
   }

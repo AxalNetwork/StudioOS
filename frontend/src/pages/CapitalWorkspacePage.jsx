@@ -15,8 +15,8 @@ import RaisePipelinePage from './RaisePipelinePage';
 // legacy /raise route redirects into the pipeline tab (see App.jsx).
 //
 // Frontend-only — no page logic, data, or API changes. The standalone
-// /build/financials and /build/captable routes stay intact for the
-// investor/partner personas who also use them.
+// /build/financials and /build/captable pages are retired (#2339, #2340, the
+// owner's "Remove"): both addresses forward to these tabs.
 
 const TABS = [
   { id: 'model', to: '/raise/capital/model', label: 'Financial Model', icon: DollarSign },

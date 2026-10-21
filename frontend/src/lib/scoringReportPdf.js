@@ -1,6 +1,6 @@
 // Spin-Out Lab — client-side "Investor-ready report" PDF for the Scoring
 // Engine export modal (audit B7). Vector-drawn with jsPDF, same approach as
-// coveragePdf.js — no html2canvas: the on-screen cards use dark-mode classes
+// the coverage PDF (removed in #2337) — no html2canvas: the on-screen cards use dark-mode classes
 // and CSS grid that rasterise poorly, and a vector page is sharper and
 // smaller.
 //

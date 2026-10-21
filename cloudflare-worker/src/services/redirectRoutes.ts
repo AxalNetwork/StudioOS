@@ -4,7 +4,7 @@
  * Each entry is a `<Route path>` in `frontend/src/App.jsx` whose element always
  * forwards to another address (a `<Navigate>` or a `*Redirect` component, with
  * or without a role guard), never a page. Routes that redirect for some roles
- * and render a page for others (`/raise/data-room`, `/needs`, `/build`, …) are
+ * and render a page for others (`/raise/data-room`, `/build`, …) are
  * not here: they are pages. `frontend/test/redirect_hits_2301.test.mjs` reads
  * App.jsx and fails if this list and the routes drift apart.
  *
@@ -74,6 +74,11 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/market-intel' },
   { path: '/grow/updates' },
   { path: '/grow/capital-match' },
+  { path: '/grow/brand' }, // #2343: Grow's Brand page folded into /build/brand
+  { path: '/build/discovery' }, // #2335: → Validate · Customer research
+  { path: '/build/metrics' }, // #2336: → /build/kpi
+  { path: '/build/financials' }, // #2339: → /raise/capital/model
+  { path: '/build/captable' }, // #2340: → /raise/capital/cap-table
   { path: '/build/command-center' },
   { path: '/mentors' },
   { path: '/office-hours' },
@@ -113,6 +118,12 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/payouts' },
   { path: '/relationships' },
   { path: '/partner-portal' },
+  { path: '/partners/portal' }, // #2342
+  { path: '/portfolio/coverage' }, // #2337
+  { path: '/needs' }, // #2338
+  { path: '/services' }, // #2338
+  { path: '/founder/post-need' }, // #2338
+  { path: '/partner/needs' }, // #2338
   { path: '/docs' },
   { path: '/communities' },
   { path: '/network-effects' }, // #2324: the page is removed (#2297 §3); it lands on Network

@@ -243,7 +243,8 @@ test('a crafted return: another key\'s is ignored and stripped; Stripe\'s refusa
     assert.doesNotMatch(bad.text(), /Call_us/);
   } finally { await bad.unmount(); f.restore(); }
   assert.deepEqual(pageReturn('?oauth=ok&provider=hubspot', 'stripe'), { ret: null, strip: ['oauth', 'provider', 'reason'] });
-  assert.equal(pageReturn('?oauth=ok&provider=mercury', 'mercury').ret, null);
+  // D840 (#2346): a member's Mercury sign-in returns to its page; the entity row drops it on the page itself.
+  assert.equal(pageReturn('?oauth=ok&provider=mercury', 'mercury').ret.view, 'connected');
   assert.equal(pageReturn('?tab=discover', 'stripe'), null);
 });
 

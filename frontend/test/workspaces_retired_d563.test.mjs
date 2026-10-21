@@ -73,13 +73,14 @@ const DESK = {
 // board registered, BucketOverview. Both draw the list for their own bucket.
 const BUCKET_BODIES = ['frontend/src/workspaces/BucketBoard.jsx', 'frontend/src/workspaces/BucketOverview.jsx'];
 
-test('the mapping covers exactly the 17 pages, and every line names a profile, a row and a door', () => {
+test('the mapping covers exactly the 14 pages, and every line names a profile, a row and a door', () => {
   assert.deepEqual(Object.keys(PAGE_HOMES).sort(), WORKSPACES.map((w) => w.route).sort());
   // 28 until D670 retired Market Intelligence and Signals; 26 until the owner
   // removed Scoring, Risk Matrix, Capital, Liquidity, Reserves and Watchlist
-  // (2026-10-20); 20 until #2324 removed Network Effects (#2297 §3) and the
-  // owner removed Advisory (#2341); 18 until #2354 removed Legal & Capital.
-  assert.equal(WORKSPACES.length, 17);
+  // (2026-10-20); 20 until #2324 removed Network Effects (#2297 §3); 19 until
+  // the owner removed Advisory, Portfolio Coverage, Service Catalogue and Needs Board
+  // (2026-10-21, #2341, #2337 and #2338); 15 until #2354 removed Legal & Capital.
+  assert.equal(WORKSPACES.length, 14);
   for (const [route, homes] of Object.entries(PAGE_HOMES)) {
     assert.ok(homes.length > 0, `${route} has no home`);
     for (const [role, row, door] of homes) {
@@ -208,6 +209,25 @@ test('the removed pages have no route, no row match and no Also in entry (owner,
   }
   // The editors still return to their modules.
   checks.returns(actual);
+});
+
+test('the pages removed on 2026-10-21 only forward, and no row or Also in names them (#2337, #2338)', () => {
+  // Unlike the 2026-10-20 removals these keep their address, as a redirect the
+  // inventory counts (#2301) until #2319 retires it.
+  const FORWARDS = {
+    '/portfolio/coverage': /<Navigate to="\/delivery\/health" replace \/>/,
+    '/services': /<MarketplaceRedirect role=\{user\?\.role\} founderTab="services" to="\/offers\/catalog" \/>/,
+    '/needs': /<MarketplaceRedirect role=\{user\?\.role\} founderTab="needs" to="\/pipeline\/leads" \/>/,
+  };
+  for (const [route, forward] of Object.entries(FORWARDS)) {
+    const block = routeBlock(APP, route);
+    assert.ok(block, `${route} lost its redirect`);
+    assert.match(block, forward, `${route} renders something other than its forward`);
+    assert.ok(!(route in PAGE_HOMES), `${route} still has a home`);
+    for (const role of ['founder', 'investor', 'partner']) {
+      for (const r of rowsOf(role)) assert.ok(!(r.match || []).includes(route), `${role} ${r.label} still matches ${route}`);
+    }
+  }
 });
 
 test('no launcher: the component is gone and nothing in the header renders it', () => {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, CheckCircle2, Database, Download, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Database, RefreshCw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { WorkerRail } from '../../ui';
 import './founderBuildKpi.css';
@@ -315,10 +315,11 @@ export default function FounderBuildKpi() {
                         ? `${definitions.length} definition${definitions.length === 1 ? '' : 's'} on record`
                         : 'Define a metric'}
                     </button>
-                    <Link to={`/build/metrics${projectId ? `?project_id=${projectId}` : ''}`} className="fb-kpi-editor-link"><Download size={13} /> Open editor</Link>
+                    {/* "Open editor" opened /build/metrics, which #2336 retired:
+                        this page is the KPI editor now. */}
                   </div>
                 </div>
-                {displayed ? <div className="fb-kpi-table-wrap"><table><thead><tr><th>Metric</th><th>Value</th><th>Target</th><th>Vs target</th><th>Source</th></tr></thead><tbody>{selectedMetricRows.map((row) => <KpiRow key={row.key} row={row} />)}</tbody></table></div> : <div className="fb-kpi-inline-empty"><Database size={18} /><div><strong>No KPI snapshots are recorded.</strong><p>Open the existing editor to enter the first dated snapshot for this startup.</p><Link to={`/build/metrics${projectId ? `?project_id=${projectId}` : ''}`}>Open KPI editor</Link></div></div>}
+                {displayed ? <div className="fb-kpi-table-wrap"><table><thead><tr><th>Metric</th><th>Value</th><th>Target</th><th>Vs target</th><th>Source</th></tr></thead><tbody>{selectedMetricRows.map((row) => <KpiRow key={row.key} row={row} />)}</tbody></table></div> : <div className="fb-kpi-inline-empty"><Database size={18} /><div><strong>No KPI snapshots are recorded.</strong><p>Enter the first month on Grow · Revenue and traction, or import a CSV above.</p><Link to={`/grow/revenue-and-traction${projectId ? `?project_id=${projectId}` : ''}`}>Enter a month</Link></div></div>}
                 {/* THIS SENTENCE NAMED FOUR THINGS AS ABSENT AND WAS WRONG ABOUT
                     ALL FOUR. Targets have been stored since migration 173 (both
                     ends built by #194), cash and burn are columns on

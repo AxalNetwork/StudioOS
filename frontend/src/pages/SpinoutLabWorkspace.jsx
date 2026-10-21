@@ -66,8 +66,8 @@ export const TOOL_INFO = {
   // The lab-facing company record page (design: workspace tool pages); the
   // raw /projects list stays reachable from it via "Edit record".
   projects: { label: 'Startups', to: '/spinout-lab/startup', desc: 'Your company record and founding team', icon: Building2 },
-  // Lab-facing discovery dashboard (design: workspace tool pages); the raw
-  // interview-logging tool at /build/discovery stays reachable from it.
+  // Lab-facing discovery dashboard (design: workspace tool pages). The raw
+  // interview-logging tool at /build/discovery is retired (#2335).
   'customer-discovery': { label: 'Customer Discovery', to: '/spinout-lab/discovery', desc: 'Interview log and ICP tracker', icon: MessagesSquare },
   // Lab-facing market page (design: workspace tool pages); the platform-wide
   // investor/partner MI dashboard stays at /market-intel.

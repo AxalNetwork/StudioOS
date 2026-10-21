@@ -29,7 +29,7 @@ const sources = (projectId) => ({
   account: { label: 'Account', href: '/account' },
   discovery: { label: 'Customer Discovery', href: '/customer-discovery' },
   roadmap: { label: 'Roadmap', href: '/build/roadmap' },
-  captable: { label: 'Cap Table', href: '/build/captable' },
+  captable: { label: 'Cap Table', href: '/raise/capital/cap-table' },
   incorporation: { label: 'Incorporation', href: '/incorporate' },
   team: { label: 'Team', href: '/team' },
 });

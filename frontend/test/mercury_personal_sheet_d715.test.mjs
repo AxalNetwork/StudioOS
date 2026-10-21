@@ -359,7 +359,9 @@ test('D752: an investor\'s Yours row reads "Statements you share"; a partner\'s 
 test('#1780: each use row links the screen where it happens; a use with no screen links nothing', async () => {
   for (const [who, status, doors] of [
     [FOUNDER, STATUS.founder, { venture_revenue: '/spinout-lab/revenue' }],
-    [PARTNER, STATUS.partnerHq, { practice_income: '/partner/needs', partner_deals: '/partner/earnings' }],
+    // #2338: practice_income's door was `/partner/needs`, whose Engagements tab
+    // matched invoices. The owner removed that page, so the use links nothing.
+    [PARTNER, STATUS.partnerHq, { partner_deals: '/partner/earnings' }],
   ]) {
     const stub = stubStatus(status);
     const m = await mount(h(MercuryUsesGroups), { user: who });
@@ -370,6 +372,7 @@ test('#1780: each use row links the screen where it happens; a use with no scree
         assert.equal(m.pr(door).href, href);
       }
       assert.equal(m.by('mercury-door-venture_spend'), undefined, 'venture_spend has no screen to link yet');
+      assert.equal(m.by('mercury-door-practice_income'), undefined, 'practice_income lost its screen with #2338');
     } finally { await m.unmount(); stub.restore(); }
   }
 });

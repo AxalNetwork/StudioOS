@@ -235,7 +235,8 @@ test('Mercury\'s page follows its audience; the entity variant reads no entity s
   assert.ok(!sql.some((s) => /mercury_|activity_logs/.test(s)), sql.join('\n'));
   assert.equal((await call(db, 'admin', '/directory/mercury', { branch: true })).status, 404);
   const founder = (await call(db, 'founder', '/directory/mercury')).body.connector;
-  assert.deepEqual([founder.connection_source, founder.sign_in.kind], ['integrations', 'key']);
+  // D840 (#2346): a member signs in with Mercury, or pastes a Read Only token.
+  assert.deepEqual([founder.connection_source, founder.sign_in.kind], ['integrations', 'oauth_or_key']);
   // D752 (#1886): PERSONAL_MERCURY is keyed by role.
   assert.equal(founder.description, PERSONAL_MERCURY.founder.description);
   assert.equal((await call(db, 'investor', '/directory/mercury')).body.connector.description, PERSONAL_MERCURY.investor.description);

@@ -194,7 +194,7 @@ export default function SpinoutLabStartupPage() {
           : { chip: 'Not started', cls: CHIP.notStarted }),
       },
       {
-        label: 'Cap table', note: 'Founder stock issued in Week 4', to: '/build/captable', testid: 'readiness-captable',
+        label: 'Cap table', note: 'Founder stock issued in Week 4', to: '/raise/capital/cap-table', testid: 'readiness-captable',
         ...(wk(4) ? { chip: wk(4), cls: CHIP.locked, locked: true }
           : graduated ? { chip: 'In progress', cls: CHIP.progress }
           : { chip: 'Not started', cls: CHIP.notStarted }),

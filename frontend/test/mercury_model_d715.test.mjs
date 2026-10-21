@@ -153,7 +153,7 @@ test('decision 8: the member\'s groups, the three "never" rows, where it lands, 
   assert.equal(landsWords('investor'), 'Only the statements you choose to share with Axal\'s admins');
   for (const role of ['advisor', 'admin', 'constructor']) assert.equal(landsWords(role), null, role);
   assert.equal(READS_ROW, 'Only when you ask. No scheduled sync.');
-  assert.equal(MEMBER_REPLACE, 'Replace the token with a Read Only one from your own Mercury organization.');
+  assert.equal(MEMBER_REPLACE, 'Sign in with Mercury again, or replace the token with a Read Only one from your own Mercury organization.');
   const d713Note = 'Revenue rows you imported and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.';
   const founderNote = 'Revenue rows you imported, figures you saved and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.';
   assert.equal(MEMBER_DISCONNECT_NOTE.founder, founderNote);

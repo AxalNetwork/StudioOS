@@ -3,8 +3,8 @@
  * tasks 420 and 408), with the Workspaces launcher retired (D563).
  *
  * The 29 working pages (26 since AI Matches went, and Market Intelligence and
- * Signals with D670; 20 since the owner removed six on 2026-10-20; 18 since
- * #2324 removed Network Effects and the owner removed Advisory, #2341) left
+ * Signals with D670; 20 since the owner removed six on 2026-10-20; 15 since
+ * #2324, #2341, #2337 and #2338 removed five more) left
  * `SIDEBAR_GROUPS.admin`
  * for a top-bar launcher (D284); D563 retired that launcher, and each page now
  * lights a profile sidebar row (`workspaces_retired_d563.test.mjs`). Messages
@@ -64,25 +64,26 @@ const CANVAS = [
   ['Studio', 'Deal Flow', '/deals'],
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
   // & Journal stood in this group; the owner removed them on 2026-10-20.
-  ['Capital & Legal', 'Portfolio Health', '/portfolio/health'], ['Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage'],
+  // Portfolio Coverage, Service Catalogue and Needs Board stood here; the owner
+  // removed them on 2026-10-21 (#2337, #2338).
+  ['Capital & Legal', 'Portfolio Health', '/portfolio/health'],
   ['Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall'],
   // ['Capital & Legal', 'Legal & Capital', '/legal-capital'] stood here; the
   // owner removed it (#2354) and the address forwards to Raise › Legal.
   ['Capital & Legal', 'Incorporate', '/incorporate'], ['Capital & Legal', 'Compliance Calendar', '/compliance'],
   // Network Effects stood here; #2324 removed the page (#2297 §3).
   ['Network & Growth', 'Network', '/network'],
-  ['Network & Growth', 'Jobs', '/my/jobs'], ['Network & Growth', 'Service Catalogue', '/services'],
-  ['Network & Growth', 'Needs Board', '/needs'], ['Network & Growth', 'Demand Insights', '/partner/insights'],
+  ['Network & Growth', 'Jobs', '/my/jobs'], ['Network & Growth', 'Demand Insights', '/partner/insights'],
   ['Network & Growth', 'Partner Office Hours', '/partner/office-hours'], ['Network & Growth', 'Co-Marketing Review', '/comarketing'],
   ['More', 'Co-Founder Agreement', '/incorporate/cofounder-agreement'], ['More', '83(b) Tracker', '/spinout-lab/83b'],
   ['More', 'Perks', '/perks'],
 ];
 
-test('the palette list is the canvas list less the retired and removed pages: 17 pages in four groups, every one a registered route', () => {
+test('the palette list is the canvas list less the retired and removed pages: 14 pages in four groups, every one a registered route', () => {
   assert.deepEqual(WORKSPACES.map((w) => [w.group, w.label, w.route]), CANVAS);
   assert.deepEqual(WORKSPACE_GROUP_ORDER, ['Studio', 'Capital & Legal', 'Network & Growth', 'More']);
   assert.deepEqual(WORKSPACE_GROUP_ORDER.map((g) => [g, WORKSPACES.filter((w) => w.group === g).length]),
-    [['Studio', 2], ['Capital & Legal', 5], ['Network & Growth', 7], ['More', 3]]);
+    [['Studio', 2], ['Capital & Legal', 4], ['Network & Growth', 5], ['More', 3]]);
   for (const w of WORKSPACES) {
     assert.ok(w.description && w.description.endsWith('.'), `${w.route} has no description`);
     assert.ok(registered(w.route), `palette route ${w.route} is not registered in App.jsx`);
@@ -95,11 +96,18 @@ test('no page is labelled as an AI advisor, and the three founder redirects stil
   // The voice rule: the model is Eadwyn, never an advisor. H37's "AI Advisory
   // Suite" went with the launcher (D563).
   assert.ok(!WORKSPACES.some((w) => /\bAI Advis/i.test(w.label)), 'a page is labelled as an AI advisor again');
-  for (const path of ['/my/jobs', '/services', '/needs']) {
+  const jobs = APP.split('\n').find((l) => l.includes('path="/my/jobs"'));
+  assert.ok(jobs, '/my/jobs is not routed');
+  assert.match(jobs, /user\?\.role === 'founder' \? <Navigate/, '/my/jobs no longer redirects only a founder');
+  // #2338: /services and /needs are removed and forward everyone, but only a
+  // founder still lands on the founder marketplace's tab.
+  for (const [path, tab] of [['/services', 'services'], ['/needs', 'needs']]) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.ok(line, `${path} is not routed`);
-    assert.match(line, /user\?\.role === 'founder' \? <Navigate/, `${path} no longer redirects only a founder`);
+    assert.match(line, new RegExp(`<MarketplaceRedirect role=\\{user\\?\\.role\\} founderTab="${tab}"`), `${path} no longer sends a founder to their tab`);
   }
+  assert.match(APP, /function MarketplaceRedirect\(\{ role, founderTab, to \}\) \{[\s\S]{0,80}?if \(role === 'founder'\) return <Navigate to=\{`\/build\/marketplace\?tab=\$\{founderTab\}`\} replace \/>;/,
+    'the founder branch of the marketplace redirect is gone');
 });
 
 /* ------------------------------------------------------------------ *

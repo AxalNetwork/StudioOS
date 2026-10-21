@@ -218,7 +218,7 @@ export function ShareUpdateView({ s, on }) {
       // (S02-B, #1597); closing it re-reads the context. By hand stays the second way.
       body = <ul><li className={ROW}><div><div className="font-semibold">Connect Stripe or accounting</div><div className="text-axal-muted">Then figures fill in here each month.</div></div>
         <div className="flex shrink-0 flex-wrap items-center gap-2"><button type="button" className={PRIMARY} onClick={on.connectTool}>Connect a tool</button>
-          <Link className={GHOST} to={`/build/metrics?project_id=${encodeURIComponent(s.projectId ?? '')}`}>Enter figures by hand</Link></div></li></ul>;
+          <Link className={GHOST} to={`/grow/revenue-and-traction?project_id=${encodeURIComponent(s.projectId ?? '')}`}>Enter figures by hand</Link></div></li></ul>;
     } else {
       const removed = s.removedMetrics || [];
       body = (

@@ -269,7 +269,8 @@ const page = (rel) => codeOnly(readFileSync(`frontend/src/${rel}`, 'utf8'));
 const rowOf = (src) => { const a = src.indexOf('<tr key={s.id}'); return src.slice(a, src.indexOf('</tr>', a)); };
 
 test('the badge: delete only — each page badges a Mercury row and offers it no edit', () => {
-  for (const rel of ['pages/SpinoutLabRevenuePage.jsx', 'pages/MetricsPage.jsx']) {
+  // `pages/MetricsPage.jsx` stood here; #2336 retired it with `/build/metrics`.
+  for (const rel of ['pages/SpinoutLabRevenuePage.jsx']) {
     const src = page(rel);
     const row = rowOf(src);
     assert.match(row, /\{isMercuryRow\(s\) \? <MercurySourceBadge \/> : \(/, rel);

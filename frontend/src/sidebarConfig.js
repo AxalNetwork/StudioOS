@@ -272,7 +272,8 @@ export const SIDEBAR_GROUPS = {
   //   • The legacy founder landing page and standalone Spin-Outs page were
   //     retired. Execution remains a first-class row.
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
-  //     (/build/metrics) as the founder's own company-health view; the
+  //     (/build/metrics, which #2336 retired into /build/kpi) as the
+  //     founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
   //   • "Network Effects" (/network-effects) is removed (#2324, #2297 §3); its
   //     old address redirects to the single "Network" entry (/network).
@@ -340,9 +341,9 @@ export const SIDEBAR_GROUPS = {
       // whatever path was free, and the row was never pointed back. `match`
       // keeps every legacy and section URL highlighting the right row.
       { to: '/validate', icon: MessageSquare, label: 'Validate',
-        match: ['/validate', '/build/discovery', '/build/marketplace', '/needs', '/services'] },
+        match: ['/validate', '/build/marketplace'] },
       { to: '/build', icon: Briefcase, label: 'Build',
-        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution'] },
+        match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/execution'] },
       // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
       { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/incorporate', '/compliance'] },
@@ -386,8 +387,8 @@ export const SIDEBAR_GROUPS = {
   // Intentional removals from the partner nav (documented so a nav-integrity
   // guard treats them as deliberate, not silent drops — every route below
   // stays registered and reachable for other roles or via deep link):
-  //   • /partner-portal "Partner Portal" — the page is retired. The route
-  //     redirects to Studio, which is the home.
+  //   • /partner-portal and /partners/portal "Partner Portal" — the page is
+  //     removed (#2342). Both routes redirect to /referrals.
   //   • /projects "Projects" and /pipeline "Pipeline Board" — studio/investor
   //     execution + deal-pipeline surfaces, not partner-facing.
   //   • /deals "Deal Flow" — only relevant to investor-type partners
@@ -398,10 +399,9 @@ export const SIDEBAR_GROUPS = {
   //     removed on the owner's instruction, 2026-10-20.)
   //   • /market-intel "Market Intelligence" — investor-flavoured intel dropped
   //     to keep the partner UX lean; Demand Insights is the kept signal.
-  //   • /portfolio/health "Portfolio Health", /portfolio/coverage
-  //     "Portfolio Coverage" — investor/founder capital surfaces; conditional
-  //     for equity-holding partners only. (/legal-capital stood here; it was
-  //     removed (#2354) and redirects to /raise/legal.)
+  //   • /portfolio/health "Portfolio Health" — investor/founder capital
+  //     surface; conditional for equity-holding partners only. (/legal-capital
+  //     stood here; it was removed (#2354) and redirects to /raise/legal.)
   //   • /advisors "Find a Advisor" — founder-oriented (a service partner is the
   //     expert, not the mentee); conditional.
   //   • /network-effects "Network Effects" — removed (#2324); it redirects to /network.
@@ -467,16 +467,16 @@ export const SIDEBAR_GROUPS = {
       // each retired /partner/operations address is replaced by the successor
       // D395 redirects it to (D505).
       { to: '/pipeline', icon: Target, label: 'Pipeline',
-        match: ['/pipeline', '/needs', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'] },
+        match: ['/pipeline', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'] },
       // The retired Overview's job went to `/company-settings` (the firm
       // profile card, D390/D395). That page is the sidebar's pinned footer for
       // every role (see the investor block's note), so it is NOT listed here:
       // a `match` entry would light Delivery beside the footer's own row, two
       // rows for one page. The other successors sit under this row's root.
       { to: '/delivery', icon: Briefcase, label: 'Delivery',
-        match: ['/delivery', '/delivery/health', '/portfolio/coverage'] },
+        match: ['/delivery', '/delivery/health'] },
       { to: '/offers', icon: Package, label: 'Offers',
-        match: ['/offers', '/services', '/perks', '/comarketing', '/partner/office-hours',
+        match: ['/offers', '/perks', '/comarketing', '/partner/office-hours',
                 '/offers/catalog'] },
       { to: '/network', icon: Users, label: 'Network',
         match: ['/network', '/relationships', '/contacts', '/my/jobs'] },
@@ -650,14 +650,15 @@ function workspaceRoutes(role) {
  */
 export const FOUNDER_FULL_BLEED = [
   ...workspaceRoutes('founder'),
-  // The legacy paths. Since D422, bare `/build/discovery` and `/execution`
-  // are `<Navigate replace>` redirects for a founder — to `/validate` and
-  // `/build` — and render a page only with `?mode=workspace` (the editors D422
-  // kept); `/build/team?mode=workspace` is the Team workspace (D435). They stay
-  // listed so the editor each still mounts keeps the desk's width. These are
-  // the only hand-typed entries left, because they are exactly the routes the
-  // shell config does NOT claim. (`/signals` left with its page, D670.)
-  '/build/discovery', '/execution', '/build/team',
+  // The legacy paths. Since D422, bare `/execution` is a `<Navigate replace>`
+  // redirect for a founder, to `/build`, and renders a page only with
+  // `?mode=workspace` (the editor D422 kept); `/build/team?mode=workspace` is
+  // the Team workspace (D435). They stay listed so the editor each still
+  // mounts keeps the desk's width. These are the only hand-typed entries left,
+  // because they are exactly the routes the shell config does NOT claim.
+  // (`/signals` left with its page, D670; `/build/discovery` with its editor,
+  // #2335.)
+  '/execution', '/build/team',
 ];
 
 /**
@@ -705,7 +706,7 @@ export const PARTNER_FULL_BLEED = [
   // addresses left this list with D505: they redirect (D395), and each
   // successor that owns a full-bleed body is already in workspaceRoutes above
   // (`/company-settings` is a centred page by design and stays out).
-  '/needs', '/services', '/perks', '/partner/insights',
+  '/perks', '/partner/insights',
 ];
 
 /**

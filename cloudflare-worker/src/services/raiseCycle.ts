@@ -69,7 +69,7 @@ export const TOOL_HREF = {
   capTable: '/raise/capital/cap-table',
   pipeline: '/raise/capital/pipeline',
   model: '/raise/capital/model',
-  metrics: '/build/metrics',
+  metrics: '/build/kpi',
 } as const;
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

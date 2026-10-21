@@ -165,13 +165,13 @@ export const DOORS = {
       { t: 'Roadmap', route: '/build/roadmap' },
       { t: 'Cadence and KPIs', route: '/build/cadence' },
       { t: 'Pitch deck builder', route: '/raise/pitch' },
-      { t: 'Cap table', route: '/build/captable' },
+      { t: 'Cap table', route: '/raise/capital/cap-table' },
       { t: 'Investor match', route: '/raise/capital-match' },
       { t: 'Data room', route: '/raise/data-room' },
       { t: 'Legal and 83(b)', route: '/raise/legal' },
       { t: 'Talent', route: '/grow/talent' },
       { t: 'Customers and partnerships', route: '/grow/customers' },
-      { t: 'Brand', route: '/grow/brand' },
+      { t: 'Brand', route: '/build/brand' },
       { t: 'Launches and events', route: '/grow/launch' },
       { t: 'Warm introductions', route: '/network/introductions' },
       { t: 'Research and Ask', route: '/research/ask' },
@@ -359,7 +359,7 @@ export const DOORS = {
     live: [
       { t: 'Provider profile', route: '/partners/:slug' },
       { t: 'Public directory listing', route: '/directory' },
-      { t: 'Live founder requests', route: '/partner/needs' },
+      { t: 'Live founder requests', route: '/pipeline/leads' },
       // Dropped: "Verification badges", "KYB, conflicts, and contracts".
       { t: 'Partner insights', route: '/partner/insights' },
       // Dropped: "Stripe Connect payouts".

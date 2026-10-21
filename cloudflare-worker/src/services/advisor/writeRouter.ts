@@ -962,7 +962,7 @@ export async function routeAnswer(
             table: 'discovery_interviews',
             column: field === 'name' ? 'interviewee_name' : 'pains_json',
             id: row?.id,
-            page_url: '/build/discovery',
+            page_url: '/validate/customer-research',
           },
         };
       } catch (e) {

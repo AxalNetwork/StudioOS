@@ -58,7 +58,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'long',
     explainer: 'Saved as growth_signals on your startup — feeds the metrics dashboard.',
     doc_anchor: 'capital/metrics',
-    page_target: '/build/metrics',
+    page_target: '/build/kpi',
     validate: maxChars(800),
   },
 
@@ -78,7 +78,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'long',
     explainer: 'We’ll mirror this into the cap-table simulator. Refine numbers there.',
     doc_anchor: 'capital/cap-table',
-    page_target: '/build/captable',
+    page_target: '/raise/capital/cap-table',
     validate: all(required, minChars(10)),
   },
 
@@ -89,7 +89,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'number',
     explainer: 'Drives the runway gauge on the founder dashboard.',
     doc_anchor: 'capital/metrics',
-    page_target: '/build/financials',
+    page_target: '/raise/capital/model',
     validate: all(required, nonNegativeNumber),
   },
   {
@@ -98,7 +98,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'number',
     explainer: 'Used by the financial model builder to estimate fundraise timing.',
     doc_anchor: 'capital/metrics',
-    page_target: '/build/financials',
+    page_target: '/raise/capital/model',
     validate: all(required, nonNegativeNumber),
   },
   {
@@ -107,7 +107,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'number',
     explainer: 'Feeds MRR into your metrics + portfolio-health colour rating.',
     doc_anchor: 'capital/metrics',
-    page_target: '/build/financials',
+    page_target: '/raise/capital/model',
     validate: nonNegativeNumber,
   },
 
@@ -118,7 +118,7 @@ export const EXISTING_FOUNDER_BANK = [
     type: 'long',
     explainer: 'Recorded as a pipeline note today; the full CRM-style view lives on the metrics page.',
     doc_anchor: 'capital/metrics',
-    page_target: '/build/metrics',
+    page_target: '/build/kpi',
     validate: all(required, minChars(10)),
   },
 

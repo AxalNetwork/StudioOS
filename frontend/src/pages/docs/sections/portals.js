@@ -27,22 +27,22 @@ export default {
     },
     {
       id: 'partner',
-      title: 'Partner Portal',
+      title: 'Partner workspace',
       overview:
-        "The Partner Portal is the home for service providers: your service catalog, current engagements, the Needs Board with active RFPs, demand insights, and your office-hours schedule.",
+        "Studio is the home for service providers: your leads and proposals under Pipeline, your engagements under Delivery, your service catalog and perk deals under Offers, demand insights, and your office-hours schedule.",
       howto: [
-        'Open Partner Portal from the sidebar (default landing page for partner accounts).',
-        'Manage your service listings under My Service Catalogue.',
-        'Respond to RFPs from the Needs Board.',
+        'Open Studio from the sidebar (default landing page for partner accounts).',
+        'Manage your service listings under Offers · Catalog.',
+        'Read the open founder needs matched to your firm under Pipeline · Leads.',
         'Publish open slots under My Office Hours.',
       ],
       tips: [
         'Demand Insights tells you which service categories founders want most — a great signal for pricing or new offerings.',
-        'Fast response time is the biggest differentiator on the Needs Board.',
+        'Fast response time is the biggest differentiator on a founder need.',
       ],
       pitfalls: [
         'Listing services without sample work or reviews leaves you below partners who do — fill the profile out fully.',
-        'Ignoring Needs Board RFPs for more than 24 hours costs you most of the deal flow.',
+        'Leaving a lead unread for more than 24 hours costs you most of the deal flow.',
       ],
       related: [
         { label: 'Marketplace', href: '#network/marketplace' },
