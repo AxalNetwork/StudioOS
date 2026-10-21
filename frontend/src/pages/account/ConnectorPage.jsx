@@ -579,7 +579,7 @@ function ChoicesInline({ p, choices, flow }) {
         </fieldset>
       )}
       {choices.alt.map((a) => (
-        <button key={a.id} type="button" className={`${BTN.link} self-start`} onClick={() => takeAlt(a.id)} data-testid={`connector-page-alt-${a.id}`}>{a.label}</button>
+        <button key={a.id} type="button" className={`${BTN.link} self-start max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center`} onClick={() => takeAlt(a.id)} data-testid={`connector-page-alt-${a.id}`}>{a.label}</button>
       ))}
     </div>
   );
