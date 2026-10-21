@@ -82,7 +82,7 @@ canvas behind it still shows up here.
 | Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
 | Account | My Profile | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
-## `super_admin` — 12 destinations in 1 group
+## `super_admin` — 13 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
@@ -95,6 +95,7 @@ canvas behind it still shows up here.
 | HQ | Revenue | `/admin/revenue` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Content | `/admin/content` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Platform | `/admin/platform` | — (no canvas; shipped ahead of the design corpus) |
+| HQ | Integration keys | `/admin/integration-keys` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Support | `/admin/hq-support` | Support Security · Super |
 | HQ | Security | `/admin/security` | Support Security · Super |
 | HQ | Settings | `/account` | — (no canvas; shipped ahead of the design corpus) |
@@ -114,7 +115,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-31 of the 64 sidebar rows above are not claimed
+32 of the 65 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -142,6 +143,7 @@ rather than merely absent.
 - super_admin · HQ · Revenue (`/admin/revenue`)
 - super_admin · HQ · Content (`/admin/content`)
 - super_admin · HQ · Platform (`/admin/platform`)
+- super_admin · HQ · Integration keys (`/admin/integration-keys`)
 - super_admin · HQ · Settings (`/account`)
 - branch_admin · Branch · Studio (`/studio`)
 - branch_admin · Branch · Accounts (`/branch/accounts`)

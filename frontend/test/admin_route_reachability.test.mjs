@@ -53,7 +53,7 @@ import { fileURLToPath } from 'node:url';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
 import { readRoutesSource, lazyImports, conflictingLazyImports } from './_routesSource.mjs';
-import { adminConsoleSource, ADMIN_CONSOLE_FILES } from './_adminConsoles.mjs';
+import { adminConsoleSource, ADMIN_CONSOLE_FILES, HQ_KEYS_CONSOLE_FILES } from './_adminConsoles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -264,8 +264,10 @@ const SECOND_MOUNTS = new Map([
  * alone. Checked against the hosts' own imports below, so it cannot drift.
  */
 const COMPOSED = new Map([
-  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx')],
+  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx' && !HQ_KEYS_CONSOLE_FILES.includes(f))],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
+  // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
+  ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],
   // D800 (#2233): the Licences page draws its tab row and its tabs' links from
   // the files beside it.
   ['frontend/src/pages/subsidiary/MyLicencePage.jsx', [

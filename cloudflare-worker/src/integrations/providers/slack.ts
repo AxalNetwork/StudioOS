@@ -32,7 +32,7 @@ const PROVIDER_KEY = 'slack';
 const AUTH_HOST = 'https://slack.com';
 const SCOPES = ['incoming-webhook'];
 
-/** The callback URL registered with the provider; Admin → Integration keys shows the same (D751). */
+/** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
   return oauthCallbackUrl(env, PROVIDER_KEY);
 }
@@ -44,7 +44,7 @@ async function ensureCreds(env: Env): Promise<{ id: string; secret: string }> {
   const { loadOauthCreds } = await import('../../services/providerOauthKeys');
   const c = await loadOauthCreds(env, 'slack');
   if (!c) {
-    throw new Error('slack_oauth_unconfigured: SLACK_CLIENT_ID/SLACK_CLIENT_SECRET secrets must be set on the worker (or configured via Admin → Integration Keys).');
+    throw new Error('slack_oauth_unconfigured: SLACK_CLIENT_ID/SLACK_CLIENT_SECRET secrets must be set on the worker (or configured via HQ → Integration keys).');
   }
   return { id: c.id, secret: c.secret };
 }

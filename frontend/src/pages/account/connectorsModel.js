@@ -648,7 +648,7 @@ export function isUnconfigured(code) {
 }
 
 /** Where a Super Admin sets a connector's keys (D751 decision 6). */
-export const INTEGRATION_KEYS_HREF = '/admin?tab=integration-keys';
+export const INTEGRATION_KEYS_HREF = '/admin/integration-keys';
 
 /** D751 (#1881): Axal holds no OAuth client, but the connector takes a personal access token, so the token is its only way in. */
 export const patOnly = (p) => !!(p?.oauthOff && p?.supports_pat);
@@ -666,12 +666,13 @@ export function keysHref(p, { superAdmin = false } = {}) {
 
 /**
  * The Integration keys link for an `unconfigured` failure: the Worker's
- * `admin_href` when it is one of this app's admin tabs, else the console. A
- * crafted value (another host, `//`, a quote) never becomes a link (D651).
+ * `admin_href` when it is one of this app's admin pages or tabs, else the
+ * Integration keys page. A crafted value (another host, `//`, a quote) never
+ * becomes a link (D651).
  */
 export function adminKeysHref(data) {
   const h = data?.admin_href;
-  return typeof h === 'string' && /^\/admin\?tab=[a-z0-9-]+$/.test(h) ? h : INTEGRATION_KEYS_HREF;
+  return typeof h === 'string' && /^\/admin(?:\/[a-z0-9-]+|\?tab=[a-z0-9-]+)$/.test(h) ? h : INTEGRATION_KEYS_HREF;
 }
 
 /**
