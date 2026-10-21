@@ -73,13 +73,13 @@ const DESK = {
 // board registered, BucketOverview. Both draw the list for their own bucket.
 const BUCKET_BODIES = ['frontend/src/workspaces/BucketBoard.jsx', 'frontend/src/workspaces/BucketOverview.jsx'];
 
-test('the mapping covers exactly the 18 pages, and every line names a profile, a row and a door', () => {
+test('the mapping covers exactly the 17 pages, and every line names a profile, a row and a door', () => {
   assert.deepEqual(Object.keys(PAGE_HOMES).sort(), WORKSPACES.map((w) => w.route).sort());
   // 28 until D670 retired Market Intelligence and Signals; 26 until the owner
   // removed Scoring, Risk Matrix, Capital, Liquidity, Reserves and Watchlist
   // (2026-10-20); 20 until #2324 removed Network Effects (#2297 §3) and the
-  // owner removed Advisory (#2341).
-  assert.equal(WORKSPACES.length, 18);
+  // owner removed Advisory (#2341); 18 until #2354 removed Legal & Capital.
+  assert.equal(WORKSPACES.length, 17);
   for (const [route, homes] of Object.entries(PAGE_HOMES)) {
     assert.ok(homes.length > 0, `${route} has no home`);
     for (const [role, row, door] of homes) {
@@ -150,7 +150,7 @@ test('the Also in list draws exactly the "also" pages, and a row with none draws
   assert.deepEqual(alsoInFor('investor', 'Portfolio').map((w) => w.route),
     ['/portfolio/waterfall']);
   assert.deepEqual(alsoInFor('founder', 'Raise').map((w) => w.route),
-    ['/legal-capital', '/incorporate', '/compliance', '/incorporate/cofounder-agreement']);
+    ['/incorporate', '/compliance', '/incorporate/cofounder-agreement']);
   // `row` doors are the row itself; they are not listed under it.
   assert.ok(!alsoInFor('partner', 'Pipeline').some((w) => w.route === '/pipeline'));
   assert.deepEqual(alsoInFor('investor', 'Trust'), []);

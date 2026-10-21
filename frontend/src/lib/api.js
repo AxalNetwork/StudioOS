@@ -377,7 +377,6 @@ export const SLOW_PATHS = [
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
   /^\/funds\/[^/]+\/regenerate-lpa$/,
-  /^\/legalcap\/legal\/generate$/,
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
   /^\/scoring\//,                        // score, deal-memo, generateMemo
@@ -2861,14 +2860,6 @@ export const api = {
   activityLogs: (limit = 50, offset = 0, action = '') => request(`/partnernet/activity/logs?limit=${limit}&offset=${offset}${action ? `&action_type=${action}` : ''}`),
   logActivity: (data) => request('/partnernet/activity/log', { method: 'POST', body: JSON.stringify(data) }),
 
-  legalGenerate: (data) => request('/legalcap/legal/generate', { method: 'POST', body: JSON.stringify(data) }),
-  legalDocs: (dealId) => request(`/legalcap/legal/docs/${dealId}`),
-  legalSign: (id) => request(`/legalcap/legal/docs/${id}/sign`, { method: 'PATCH', body: JSON.stringify({}) }),
-  createCapitalCall: (data) => request('/legalcap/capital/call', { method: 'POST', body: JSON.stringify(data) }),
-  capitalSend: (id) => request(`/legalcap/capital/call/${id}/send`, { method: 'PATCH', body: JSON.stringify({}) }),
-  respondCapitalCall: (id, data) => request(`/legalcap/capital/call/${id}/respond`, { method: 'POST', body: JSON.stringify(data) }),
-  lpPortal: () => request('/capital/lp-portal'),
-
   // ───── Pipeline community voting ─────
   getVotes: (dealId, includeComments = false) =>
     request(`/pipeline/votes/${dealId}${includeComments ? '?include_comments=true' : ''}`),
@@ -2878,11 +2869,7 @@ export const api = {
   // D370: no `.catch(() => [])`. That turned a failed read into "no capital
   // calls", which is a claim; a caller that wants a fallback writes its own.
   capitalCalls: () => request('/legalcap/capital/calls'),
-  diligenceReview: (data) => request('/legalcap/diligence/review', { method: 'POST', body: JSON.stringify(data) }),
-  diligenceFor: (dealId) => request(`/legalcap/diligence/${dealId}`),
   complianceFor: (dealId) => request(`/legalcap/compliance/${dealId}`),
-  subsidiaryFor: (dealId) => request(`/legalcap/subsidiaries/${dealId}`),
-  spinout: (data) => request('/legalcap/subsidiary/spinout', { method: 'POST', body: JSON.stringify(data) }),
 
   spinoutExecute: (data) => request('/legalcap/spinout/execute', { method: 'POST', body: JSON.stringify(data) }),
   spinoutStatus: (dealId) => request(`/legalcap/spinout/status/${dealId}`),
@@ -4688,7 +4675,6 @@ export const api = {
   cofounderUpsertMe: (data) =>
     request('/cofounder/me', { method: 'PUT', body: JSON.stringify(data) }),
   cofounderUnlistMe: () => request('/cofounder/me', { method: 'DELETE' }),
-  cofounderVocab: () => request('/cofounder/vocab'),
   cofounderBrowse: (opts = {}) => {
     const qs = new URLSearchParams();
     for (const k of ['q', 'skill', 'sector', 'commitment']) {
@@ -4707,14 +4693,6 @@ export const api = {
     request(`/cofounder/interest/${userUid}`, { method: 'DELETE' }),
   cofounderListConnections: () => request('/cofounder/connections'),
   cofounderGetConnection: (uid) => request(`/cofounder/connections/${uid}`),
-  cofounderGetMyNda: (uid) => request(`/cofounder/connections/${uid}/nda`),
-  cofounderSignNda: (uid, data) =>
-    request(`/cofounder/connections/${uid}/nda/sign`, {
-      method: 'POST', body: JSON.stringify(data),
-    }),
-  cofounderCloseConnection: (uid, reason) =>
-    request(`/cofounder/connections/${uid}${reason ? `?reason=${encodeURIComponent(reason)}` : ''}`,
-            { method: 'DELETE' }),
 
   // ---------- Portfolio Health (Task #44) ----------
   portfolioHealthList: (opts = {}) => {

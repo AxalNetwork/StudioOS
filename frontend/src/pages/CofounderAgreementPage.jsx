@@ -425,9 +425,9 @@ export default function CofounderAgreementPage({ embedded = false }) {
             <strong>{result.document.title}</strong> is now in your startup's legal documents.
           </p>
           <div className="mt-4 flex items-center justify-center gap-3">
-            <button onClick={() => navigate('/legal-capital')}
+            <button onClick={() => navigate('/raise/legal')}
               className="px-4 py-2 text-sm font-semibold rounded-md bg-violet-600 hover:bg-violet-700 text-white">
-              Open in Legal & Capital
+              Open in Legal
             </button>
             <button onClick={() => { setStep(0); setResult(null); }}
               className="px-4 py-2 text-sm font-semibold rounded-md border hover:bg-gray-50">

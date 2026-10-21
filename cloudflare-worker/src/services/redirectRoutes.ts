@@ -121,6 +121,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/lp/customer-discovery' },
   { path: '/lp/investor' },
   { path: '/lp/partner' },
+  { path: '/legal-capital' }, // #2354: the page is removed (#2297 §3); it lands on Raise › Legal
+  { path: '/cofounder' }, // #2355: the page is removed (#2297 §3); it lands on Co-founder Match
 ]);
 
 /** The key a hit is counted under in `public_pageviews.path`. */

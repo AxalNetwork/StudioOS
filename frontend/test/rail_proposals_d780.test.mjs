@@ -13,7 +13,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { codeOnly } from './_codeOnly.mjs';
 import { railProposalsApi } from '../src/lib/api.js';
 
@@ -44,15 +44,17 @@ test('H20: the proposal fills the open editor only, and Save names it', () => {
   assert.match(page, /setProposal\(res\.summary_proposal \|\| null\);/, 'the detail page does not read the proposal');
 });
 
-test('legal notes: drawn beside the document from the proposals store, never in its body', () => {
-  // Mutations checked: the notes read from the document; the notes drawn inside the body's <pre>.
-  const page = read('pages/LegalCapitalPage.jsx');
-  assert.match(page, /const LEGAL_NOTES_OPTION = 'draft:legal\/notes';/);
-  assert.match(page, /railProposalsApi\.list\(\{ option: LEGAL_NOTES_OPTION, record: `legal_doc:\$\{docId\}` \}\)/);
-  assert.match(page, /railProposalsApi\.decide\(uid, decision\)/);
-  assert.doesNotMatch(page, /\.suggestions\b/, 'the page reads suggestions from the document');
-  const viewer = page.slice(page.indexOf('function DocViewerModal'), page.indexOf('function CreateCallModal'));
-  assert.match(viewer, /\{doc\.body\}<\/pre>\s*\{doc\.id \? <LegalNotes docId=\{doc\.id\} \/> : null\}/);
+test('legal notes: their one viewer, the Legal & Capital page, is removed; the Worker still files them as proposals', () => {
+  // The notes were drawn beside the document by LegalCapitalPage.jsx alone.
+  // #2354 (#2297 §3, the owner's Remove) deleted that page and every feature
+  // only it had; the Worker still files the notes as proposals (D780), so a
+  // page that shows them again reads them from the proposals store.
+  // Mutations checked: the page file restored; the Worker's option renamed;
+  // the notes filed against the deal instead of the document.
+  assert.ok(!existsSync(new URL('../src/pages/LegalCapitalPage.jsx', import.meta.url)), 'the removed Legal & Capital page is back');
+  const legalcap = readFileSync(new URL('../../cloudflare-worker/src/routes/legalcap.ts', import.meta.url), 'utf8');
+  assert.match(legalcap, /export const LEGAL_NOTES_OPTION = 'draft:legal\/notes';/);
+  assert.match(legalcap, /option: LEGAL_NOTES_OPTION, record: `legal_doc:\$\{doc\.id\}`/, 'the Worker stops filing the notes as proposals');
 });
 
 test('part 2, /admin/x alt text: generating proposes, "Use it" is the Save, Discard decides', () => {

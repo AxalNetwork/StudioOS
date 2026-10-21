@@ -27,7 +27,6 @@ const MILESTONE_ROUTE_PREFIXES = [
   // is listed here in its place. A prefix that no longer resolves would stop
   // refreshing lab state on the surface that replaced it.
   '/practice',
-  '/cofounder',
   '/incorporate',
 ];
 

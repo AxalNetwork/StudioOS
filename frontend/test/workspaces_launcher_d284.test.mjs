@@ -66,7 +66,8 @@ const CANVAS = [
   // & Journal stood in this group; the owner removed them on 2026-10-20.
   ['Capital & Legal', 'Portfolio Health', '/portfolio/health'], ['Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage'],
   ['Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall'],
-  ['Capital & Legal', 'Legal & Capital', '/legal-capital'],
+  // ['Capital & Legal', 'Legal & Capital', '/legal-capital'] stood here; the
+  // owner removed it (#2354) and the address forwards to Raise › Legal.
   ['Capital & Legal', 'Incorporate', '/incorporate'], ['Capital & Legal', 'Compliance Calendar', '/compliance'],
   // Network Effects stood here; #2324 removed the page (#2297 §3).
   ['Network & Growth', 'Network', '/network'],
@@ -77,11 +78,11 @@ const CANVAS = [
   ['More', 'Perks', '/perks'],
 ];
 
-test('the palette list is the canvas list less the retired and removed pages: 18 pages in four groups, every one a registered route', () => {
+test('the palette list is the canvas list less the retired and removed pages: 17 pages in four groups, every one a registered route', () => {
   assert.deepEqual(WORKSPACES.map((w) => [w.group, w.label, w.route]), CANVAS);
   assert.deepEqual(WORKSPACE_GROUP_ORDER, ['Studio', 'Capital & Legal', 'Network & Growth', 'More']);
   assert.deepEqual(WORKSPACE_GROUP_ORDER.map((g) => [g, WORKSPACES.filter((w) => w.group === g).length]),
-    [['Studio', 2], ['Capital & Legal', 6], ['Network & Growth', 7], ['More', 3]]);
+    [['Studio', 2], ['Capital & Legal', 5], ['Network & Growth', 7], ['More', 3]]);
   for (const w of WORKSPACES) {
     assert.ok(w.description && w.description.endsWith('.'), `${w.route} has no description`);
     assert.ok(registered(w.route), `palette route ${w.route} is not registered in App.jsx`);

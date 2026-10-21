@@ -102,8 +102,8 @@ export default function ExecutionConsole({ execution, canEdit, showBuilder, onNe
       <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-2 text-center leading-snug">{ex.disabledReason}</p>
 
       <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap items-center gap-4">
-        <Link to="/legal-capital" className="text-[11.5px] font-bold text-violet-600 dark:text-violet-400 hover:underline inline-flex items-center gap-1" data-testid="link-legal-capital">
-          Open Legal &amp; Capital <ExternalLink size={10} />
+        <Link to="/raise/legal" className="text-[11.5px] font-bold text-violet-600 dark:text-violet-400 hover:underline inline-flex items-center gap-1" data-testid="link-raise-legal">
+          Open Legal <ExternalLink size={10} />
         </Link>
         <Link to="/spinout-lab/compliance" className="text-[11.5px] font-bold text-violet-600 dark:text-violet-400 hover:underline inline-flex items-center gap-1" data-testid="link-compliance">
           Compliance <ExternalLink size={10} />

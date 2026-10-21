@@ -130,13 +130,13 @@ export const ADMIN_PLACEMENT = [
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
   // & Journal — page and route together. #2341 (2026-10-21) removed Advisory;
   // its address forwards to Team › Advisors. #2324 removed Network Effects,
-  // so eighteen remain.
+  // and #2354 removed Legal & Capital (its address forwards to Raise › Legal),
+  // so seventeen remain.
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
   page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),
   page('Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage', 'Who covers which company.'),
   page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall', 'Proceeds by class at a given exit.'),
-  page('Capital & Legal', 'Legal & Capital', '/legal-capital', 'Documents and capital records.'),
   page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
   page('Capital & Legal', 'Compliance Calendar', '/compliance', 'Filings and their deadlines.'),
   page('Network & Growth', 'Network', '/network', 'Relationships and introductions.'),
@@ -190,7 +190,6 @@ export const PAGE_HOMES = {
   '/portfolio/health': [['investor', 'Portfolio', 'row']],
   '/portfolio/coverage': [['partner', 'Delivery', 'also']],
   '/portfolio/waterfall': [['investor', 'Portfolio', 'also']],
-  '/legal-capital': [['founder', 'Raise', 'also']],
   '/incorporate': [['founder', 'Raise', 'also']],
   '/compliance': [['founder', 'Raise', 'also']],
   '/network': [['founder', 'Network', 'row'], ['investor', 'Network', 'row'], ['partner', 'Network', 'row'], ['advisor', 'Network', 'row']],

@@ -79,7 +79,7 @@ check('generated card shows', await page.locator('[data-testid="card-generated"]
 await page.waitForSelector('[data-testid="card-existing"]', { timeout: 8000 }).catch(() => {});
 const status0 = await page.locator('[data-testid="doc-status-0"]').innerText().catch(() => '');
 check('doc status awaiting signature', /awaiting/i.test(status0), `got "${status0}"`);
-check('legal-capital link present', (await page.locator('a[href="/legal-capital"]').count().catch(() => 0)) > 0);
+check('raise-legal link present', (await page.locator('a[href="/raise/legal"]').count().catch(() => 0)) > 0);
 
 // 8. Reload → existing detection, builder hidden, new-version affordance
 await page.reload({ waitUntil: 'networkidle' });

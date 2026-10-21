@@ -62,7 +62,7 @@ export const PERSONAS = [
     label: 'Corporate VC',
     short_description: 'Strategic / corporate VC arm of an operating company.',
     role_alignment: 'partner',
-    nav_extras: [{ to: '/deals', label: 'Deal Flow' }, { to: '/legal-capital', label: 'Legal & Capital' }],
+    nav_extras: [{ to: '/deals', label: 'Deal Flow' }],
     follow_up_questions: [
       { key: 'parent_company', prompt: 'Parent company?', type: 'text' },
       { key: 'strategic_thesis', prompt: 'Strategic thesis (what unlocks value for the parent)?', type: 'text' },
@@ -114,7 +114,7 @@ export const PERSONAS = [
     label: 'Founder — Existing Company',
     short_description: 'Founder of an existing company on the Strategic Scale partnership track.',
     role_alignment: 'founder',
-    nav_extras: [{ to: '/legal-capital', label: 'Legal & Capital' }],
+    nav_extras: [{ to: '/raise/legal', label: 'Legal' }],
     follow_up_questions: [
       { key: 'company_name', prompt: 'Company name?', type: 'text' },
       { key: 'current_stage', prompt: 'Current stage? (Pre-seed / Seed / Series A / Series B+ / Bootstrapped/Profitable)', type: 'choice', choices: ['Pre-seed', 'Seed', 'Series A', 'Series B+', 'Bootstrapped/Profitable'] },

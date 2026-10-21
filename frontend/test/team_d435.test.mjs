@@ -69,11 +69,15 @@ test('the Team page is mounted in workspace mode, the old page is gone, and the 
   assert.doesNotMatch(route, /founderGrowLanding|FounderGrowDesk/, 'the bare route branches on a retired desk');
   assert.doesNotMatch(APP, /TeamBuildingPage/);
   assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/TeamBuildingPage.jsx')), 'the retired page is deleted (D304)');
-  for (const [path, tab] of [['/advisors', 'advisor'], ['/my/jobs', 'jobs'], ['/cofounder', 'cofounder']]) {
+  for (const [path, tab] of [['/advisors', 'advisor'], ['/my/jobs', 'jobs']]) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.match(line, new RegExp(`user\\?\\.role === 'founder' \\? <Navigate to="/build/team\\?mode=workspace&tab=${tab}" replace />`), path);
   }
   assert.doesNotMatch(APP, /to="\/build\/team\?tab=/, 'a redirect dropped mode=workspace, which old links still carry');
+  // #2355 removed the /cofounder page: its address forwards every role to
+  // Co-founder Match, the one matcher (#2297 §3), not to the Team page.
+  const cofounder = APP.split('\n').find((l) => l.includes('path="/cofounder"'));
+  assert.match(cofounder, /element=\{<Navigate to="\/spinout-lab\/cofounder-match" replace \/>\}/);
   // The founder home's bookings card that linked here was retired with the
   // 69dc42f3 body (D564); no founder Studio link sends a bare ?tab= either.
   assert.doesNotMatch(codeOnly(read('frontend/src/pages/founder/FounderStudioBody.jsx')), /\/build\/team\?tab=/);
@@ -89,9 +93,12 @@ test('the legacy tab ids land in the tab that owns the job, and tab changes keep
   assert.equal(resolveTab('nonsense'), 'roster');
   const page = slice(CODE, 'export default function FounderTeamPage', 'function exportRoster(');
   assert.match(page, /const next = new URLSearchParams\(searchParams\);\s*next\.set\('tab', id\);/, 'the other params (mode=workspace) survive a tab change');
-  // The discovery surfaces the retired page embedded still open here.
+  // The discovery surfaces the retired page embedded still open here, but
+  // the co-founder browse page is removed (#2355): Hiring links to Co-founder
+  // Match instead of embedding it.
   assert.match(CODE, /<AdvisorsPage embedded \/>/);
-  assert.match(CODE, /<CofounderPage embedded \/>/);
+  assert.doesNotMatch(CODE, /CofounderPage/);
+  assert.match(CODE, /<Link to=\{COFOUNDER_MATCH\}[^>]*data-testid="open-cofounder-match"/);
   assert.match(CODE, /<MyJobsPage embedded \/>/);
   assert.match(CODE, /<TierGate tier="growth"/);
   assert.match(CODE, /<TierGate tier="studio"/);
