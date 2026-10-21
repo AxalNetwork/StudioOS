@@ -18,13 +18,16 @@ import { AI_SURFACE } from './aiSurfaces';
 import { fetchPage, pagesForDomain, normalizeUrl, type FetchedPage } from './webFetch';
 
 /**
- * D778 part 9 (#2103): the founder inventory's page and options for these runs
- * (`frontend/src/lib/railOptions/founder.js`, Founder · Research · Companies).
- * A press's own headers win (`railFor`); these stand for a client that sent
- * none. Before part 9 every run logged `research` / `scan:competitors`, a key
- * no inventory lists. The advisor's Companies board sends its own keys (D773).
+ * D778 part 9 (#2103): the fallback for these runs, for a client that sent no
+ * rail context. A press's own headers win (`railFor`). The routes are shared
+ * (the advisor's Companies board sends its own keys, D773), so the page stays
+ * the workspace key `research`, where the member's Manual switch is stored, as
+ * part 10's `SHARED_DRAFT_PAGES` keeps it (`routes/research.ts`); the options
+ * are the founder inventory's (`frontend/src/lib/railOptions/founder.js`,
+ * Founder · Research · Companies). Before part 9 every run logged
+ * `scan:competitors`, a key no inventory lists.
  */
-export const COMPANIES_PAGE = 'Founder · Research · Companies';
+export const COMPANIES_PAGE = 'research';
 export const COMPANIES_OPTIONS = {
   analyze: 'analyse:competitors',
   again: 'analyse:again',

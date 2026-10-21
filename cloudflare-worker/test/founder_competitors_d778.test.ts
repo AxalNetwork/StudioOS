@@ -25,6 +25,7 @@ import { SignJWT } from 'jose';
 
 import competitors from '../src/routes/competitors.ts';
 import { COMPANIES_OPTIONS, COMPANIES_PAGE } from '../src/services/competitorAnalysis.ts';
+import { SHARED_DRAFT_PAGES } from '../src/routes/research.ts';
 import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withGuard } from './_guard_stub.mjs';
@@ -116,8 +117,10 @@ async function pressAll(db: any, headersFor: (option: string) => Record<string, 
   return out;
 }
 
-test('D778: Companies\' five presses fall back to the page and options D771\'s inventory gives them', () => {
-  const rows = FOUNDER_OPTIONS.filter((o: any) => o.page === COMPANIES_PAGE && o.handler !== 'none');
+test('D778: Companies\' five presses fall back to the workspace and the options D771\'s inventory gives them', () => {
+  // The routes are shared, so the page is the workspace the Manual switch is stored under (part 10).
+  assert.equal(COMPANIES_PAGE, SHARED_DRAFT_PAGES['research/ask']);
+  const rows = FOUNDER_OPTIONS.filter((o: any) => o.page === 'Founder · Research · Companies' && o.handler !== 'none');
   assert.deepEqual(rows.map((o: any) => o.key).sort(), Object.values(COMPANIES_OPTIONS).sort());
 });
 

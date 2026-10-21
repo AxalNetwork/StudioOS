@@ -257,7 +257,7 @@ test('the competitor analysis runs on the press and writes only its own analysis
   // And the synthesis runs on the press's rail (D765): the inventory's page and
   // option when the press sent none (D778 part 9, `founder_competitors_d778.test.ts`).
   const svc = workerFile('services/competitorAnalysis.ts');
-  assert.match(svc, /export const COMPANIES_PAGE = 'Founder · Research · Companies';/);
+  assert.match(svc, /export const COMPANIES_PAGE = 'research';/);
   assert.match(svc.slice(svc.indexOf('async function runJson'), svc.indexOf('function splitList')), /\n\s+rail,\n/);
 });
 
