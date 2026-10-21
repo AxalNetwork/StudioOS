@@ -176,6 +176,13 @@ test('3. refresh: an expired token is refreshed and stored; a refused refresh as
     assert.match(refused.body.message, /Sign in with Mercury again/);
     assert.equal(row(db, 30).status, 'error');
     assert.equal(row(db, 30).last_error, 'token_rejected');
+
+    // The refresh itself marks the row, whatever its caller does next.
+    const { refreshCredentials, mcpCredentialsOf } = await import('../src/services/mercury/oauth.ts');
+    db.prepare("UPDATE integrations SET status = 'active', last_error = NULL WHERE user_id = 30").run();
+    fake.state.failRefresh = 1;
+    assert.equal(await refreshCredentials(env, row(db, 30), (await mcpCredentialsOf(env, row(db, 30)))!), null);
+    assert.equal(row(db, 30).status, 'error');
   } finally { off(); }
 });
 
@@ -302,4 +309,24 @@ test('8. no token, code or verifier reaches a log, a log row or a response', asy
   assert.doesNotMatch(rows, secrets, 'a log row');
   for (const r of responses) assert.doesNotMatch(r ?? '', secrets, 'a response');
   assert.doesNotMatch(rows, /code_verifier|pkce/i);
+});
+
+test('9. mercuryAccessFor: the member\'s own active sign-in, read through the MCP server; null for a token, no row or an error row', async () => {
+  const { mercuryAccessFor } = await import('../src/services/mercury/oauth.ts');
+  const { openMercuryReads } = await import('../src/services/mercury/reads.ts');
+  const { db, env, fake, off } = await setup();
+  try {
+    assert.equal(await mercuryAccessFor(env, 10), null, 'no row');
+    await signIn(env, fake, 10);
+    const access = await mercuryAccessFor(env, 10);
+    assert.ok(access);
+    assert.deepEqual(access!.scopes, ['read', 'offline_access']);
+    assert.equal((await (await openMercuryReads(access!)).organization()).legal_name, 'Own Venture Inc');
+    assert.equal(await mercuryAccessFor(env, 20), null, 'another member\'s sign-in is never this one\'s');
+    const { connected } = await import('./_mercury_personal_d713.ts');
+    await connected(db, env, 20);
+    assert.equal(await mercuryAccessFor(env, 20), null, 'a pasted token is not a sign-in');
+    db.prepare("UPDATE integrations SET status = 'error' WHERE user_id = 10").run();
+    assert.equal(await mercuryAccessFor(env, 10), null, 'a row needing attention');
+  } finally { off(); }
 });

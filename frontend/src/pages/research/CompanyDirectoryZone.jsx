@@ -17,7 +17,7 @@
 // coverage strip has no "as of" date because the API reports none per field.
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronDown, ExternalLink, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ChevronDown, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Card } from '../../ui';
 import ZoneToolbar from '../../workspaces/ZoneToolbar';
 import { researchCompaniesApi } from '../../lib/api/researchCompanies.js';
@@ -365,7 +365,6 @@ export default function CompanyDirectoryZone({ role = 'founder', zoneActions = n
             initial={{ sector_label: params.get('sector_label') || '', country: params.get('country') || '' }} />
           <p className="text-[11px] leading-relaxed text-axal-faint">
             <strong>Source boundary:</strong> each company record names its source: Wikidata (CC0) or, for UK companies, Companies House, which contains public sector information licensed under the Open Government Licence v3.0. Website links are references. Funding, revenue, headcount and market share appear only where a named source records them, with that source and its date. What no source holds reads “Not recorded”.
-            {' '}<Link to="/research/gtm" className="inline-flex items-center gap-1 font-semibold text-axal-violet underline">Go-to-market intelligence <ExternalLink size={11} /></Link>
           </p>
         </>
       ) : (

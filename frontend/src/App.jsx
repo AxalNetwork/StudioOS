@@ -96,7 +96,6 @@ const BenchmarkDetail = lazy(() => import('./pages/research/BenchmarkDetail'));
 const MarketReading = lazy(() => import('./pages/research/MarketReading'));
 const MarketSectorProfile = lazy(() => import('./pages/research/MarketSectorProfile'));
 const GeographyProfile = lazy(() => import('./pages/research/GeographyProfile'));
-const GtmIntelligence = lazy(() => import('./pages/research/GtmIntelligence'));
 const DiligenceRoom = lazy(() => import('./pages/research/DiligenceRoom'));
 const DiligenceFile = lazy(() => import('./pages/research/DiligenceFile'));
 const InvestorDealsRoutes = lazy(() => import('./workspaces/investor/InvestorDealsRoutes'));
@@ -126,7 +125,6 @@ const ExpertEditorPage = lazy(() => import('./pages/ExpertEditorPage'));
 const TicketsPage = lazy(() => import('./pages/TicketsPage'));
 const DealsPage = lazy(() => import('./pages/DealsPage'));
 const DealRoomPage = lazy(() => import('./pages/DealRoomPage'));
-const PartnerDealPortal = lazy(() => import('./pages/PartnerDealPortal'));
 const PartnerOnboardPage = lazy(() => import('./pages/PartnerOnboardPage'));
 const AdminPartnerInvitations = lazy(() => import('./pages/admin/PartnerInvitations'));
 const AdminPublications = lazy(() => import('./pages/admin/Publications'));
@@ -165,8 +163,6 @@ const ArticlesQueuePage = lazy(() => import('./pages/admin/ArticlesQueuePage'));
 const AdminPublicationNew = lazy(() => import('./pages/admin/PublicationNew'));
 const AdminPublicationDetail = lazy(() => import('./pages/admin/PublicationDetail'));
 const PublicInsight = lazy(() => import('./pages/insights/PublicInsight'));
-const InsightsPage = lazy(() => import('./pages/insights/InsightsPage'));
-const AdvisoryPage = lazy(() => import('./pages/AdvisoryPage'));
 const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const AdminTrashPage = lazy(() => import('./pages/AdminTrashPage'));
@@ -180,7 +176,6 @@ const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCa
 const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
 const SharedCapTablePage = lazy(() => import('./pages/SharedCapTablePage'));
 const LabReportSharePage = lazy(() => import('./pages/LabReportSharePage'));
-const ApiBridgePage = lazy(() => import('./pages/ApiBridgePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
 // The investor journey's two pages. Separate lazy imports (rather than reaching
@@ -309,7 +304,6 @@ const FounderTeamPage = lazy(() => import('./pages/founder/FounderTeamPage'));
 const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 // D358 — aggregates of how profiles move over time (counts only).
 const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTrends'));
-const PortfolioCoveragePage = lazy(() => import('./pages/PortfolioCoveragePage'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const LegalCapitalPage = lazy(() => import('./pages/LegalCapitalPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
@@ -352,7 +346,6 @@ const NewsletterPreferencesPage = lazy(() => import('./pages/site/NewsletterPref
 const DemoPage = lazy(() => import('./pages/DemoPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
-const PublicRoadmapPage = lazy(() => import('./pages/PublicRoadmapPage'));
 const PublicCertificateVerifyPage = lazy(() => import('./pages/PublicCertificateVerifyPage'));
 const MonitoringPage = lazy(() => import('./pages/MonitoringPage'));
 const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
@@ -378,10 +371,6 @@ const ChooseLicencePage = lazy(() => import('./pages/ChooseLicencePage'));
 // does not belong in the entry chunk.
 const AcceptTermsPage = lazy(() => import('./pages/AcceptTermsPage'));
 // Template landing pages — audience-specific conversion surfaces.
-const FounderHomePage = lazy(() => import('./pages/templates/FounderHomePage'));
-const CustomerDiscoveryHomePage = lazy(() => import('./pages/templates/CustomerDiscoveryHomePage'));
-const InvestorDealflowHomePage = lazy(() => import('./pages/templates/InvestorDealflowHomePage'));
-const PartnerPartnershipHomePage = lazy(() => import('./pages/templates/PartnerPartnershipHomePage'));
 const SpinoutDemoDayPage = lazy(() => import('./pages/templates/SpinoutDemoDayPage'));
 const OnboardingInvestorPage = lazy(() => import('./pages/OnboardingInvestorPage'));
 const OnboardingPartnerPage = lazy(() => import('./pages/OnboardingPartnerPage'));
@@ -396,7 +385,6 @@ const CapTablePage = lazy(() => import('./pages/CapTablePage'));
 const CapTableVariantsPage = lazy(() => import('./pages/CapTableVariantsPage'));
 const DataRoomPage = lazy(() => import('./pages/raise/DataRoomPage'));
 const MessagesPage = lazy(() => import('./pages/MessagesPage'));
-const MorePage = lazy(() => import('./pages/MorePage'));
 // D702 (#1664) — the founder's profile pages (Studio · Mobile S6m, S7m, S9m, S10m).
 const YouPage = lazy(() => import('./pages/profile/YouPage'));
 const VenturePage = lazy(() => import('./pages/profile/VenturePage'));
@@ -404,7 +392,6 @@ const ProfilePreviewPage = lazy(() => import('./pages/profile/PreviewPage'));
 const VisibilityPage = lazy(() => import('./pages/profile/VisibilityPage'));
 const PerksPage = lazy(() => import('./pages/PerksPage'));
 const FounderMarketplacePage = lazy(() => import('./pages/FounderMarketplacePage'));
-const NeedsBoardPage = lazy(() => import('./pages/NeedsBoardPage'));
 // Wraps the Pipeline/Offers pages in the tab bar that lets those shell rows
 // own their sections. Role-filtered — see PartnerWorkspaceTabs.jsx.
 const PartnerWorkspaceTabs = lazy(() => import('./pages/partner/PartnerWorkspaceTabs'));
@@ -438,14 +425,12 @@ const FounderGrowBrand = lazy(() => import('./pages/founder/FounderGrowBrand'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
-const ServiceCatalogPage = lazy(() => import('./pages/ServiceCatalogPage'));
 const PartnerInsightsPage = lazy(() => import('./pages/PartnerInsightsPage'));
 // D569 — the partner earnings screens (canvas pe-earnings, pe-referrals,
 // pe-log, pe-board).
 const PartnerEarnings = lazy(() => import('./pages/partner/earnings/PartnerEarnings'));
 const PartnerReferrals = lazy(() => import('./pages/partner/earnings/PartnerReferrals'));
 const PartnerRelationshipLog = lazy(() => import('./pages/partner/earnings/PartnerRelationshipLog'));
-const PartnerLeaderboard = lazy(() => import('./pages/partner/earnings/PartnerLeaderboard'));
 const PublicDirectoryPage = lazy(() => import('./pages/PublicDirectoryPage'));
 const CirclesPage = lazy(() => import('./pages/CirclesPage'));
 const PublicPartnerProfilePage = lazy(() => import('./pages/PublicPartnerProfilePage'));
@@ -560,14 +545,25 @@ function DashboardRedirect() {
   return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
 }
 
-// /partner-portal was the LP/capital-call cockpit. Investors were already sent
-// to Studio; the page stayed mounted for admin and partner bookmarks and for
-// the admin More item. Studio is the home for every licence, and deals,
-// capital, and the firm profile each have their own route. Old bookmarks keep
-// their query string and hash.
+// #2342 — /partners/portal was the partner deal portal (terms, tiers, the
+// deal's referral code, redemptions, milestones) and /partner-portal its older
+// alias. The owner removed the page and its features (#2297 §7); both
+// addresses land on Refer & earn. Old bookmarks keep their query string and
+// hash.
 function PartnerPortalRedirect() {
   const loc = useLocation();
-  return <Navigate to={{ pathname: '/studio', search: loc.search, hash: loc.hash }} replace />;
+  return <Navigate to={{ pathname: '/referrals', search: loc.search, hash: loc.hash }} replace />;
+}
+
+// #2338 — the needs board and the service catalogue at their pre-bucket
+// addresses (/needs, /services, /founder/post-need, /partner/needs and the
+// older /marketplace) are removed (#2297 §7). A founder keeps the redirect to
+// the matching tab of the founder marketplace; everyone else lands on the
+// partner's zone that took the job, Pipeline · Leads or Offers · Catalog.
+function MarketplaceRedirect({ role, founderTab, to }) {
+  const loc = useLocation();
+  if (role === 'founder') return <Navigate to={`/build/marketplace?tab=${founderTab}`} replace />;
+  return <Navigate to={{ pathname: to, search: loc.search, hash: loc.hash }} replace />;
 }
 
 // D371 — /funds/capital-calls was Fund Ops' Capital Calls tab: a read-only
@@ -1393,7 +1389,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
               resolved, without the sidebar's `|| 'founder'` fallback, so a
               viewer with no role gets no bar. The bar renders nothing for a
               licence whose plan is not built yet (`mobilePlan` returns null). */}
-          <MobileTabBar role={shellRole} />
+          <MobileTabBar role={shellRole} onMore={() => setSidebarOpen(true)} />
           {/* D699 — the founder's last opened cycle per company, for the
               company sheet. Never while an operator acts as someone else. */}
           <CompanyVisits role={shellRole} record={!isImpersonating && !(isAdmin && activeRole !== 'admin')} />
@@ -2630,7 +2626,6 @@ function AppInner() {
       <Route path="/research/geographies" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
       <Route path="/research/geographies/:code" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <GeographyProfile role={researchRole} />)} />
       <Route path="/research/companies" element={guard(labRoles(['admin', 'founder', 'advisor']), <ResearchWorkspace role={researchRole} user={user} />)} />
-      <Route path="/research/gtm" element={guard(labRoles(['admin', 'founder', 'partner', 'investor', 'advisor']), <GtmIntelligence />)} />
       <Route path="/research/companies/company/:uid" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyProfile role={researchRole} />)} />
       <Route path="/research/companies/:id" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyAnalysis role={researchRole} />)} />
       <Route path="/research/companies/:analysisId/:candidateId" element={guard(labRoles(['admin', 'founder', 'advisor']), <CompanyCandidate role={researchRole} />)} />
@@ -2663,18 +2658,16 @@ function AppInner() {
           (partners.ts) — so the redirect lands on one of those rather than a
           page where nothing loads. Inquiry threads and reviews have no backend
           anywhere and leave with the page. */}
-      <Route path="/marketplace" element={<Navigate to="/services" replace />} />
-      {/* Task #2 — Founder Marketplace merges the Service Catalogue (/services) and
-          Needs Board (/needs) into one tabbed page at /build/marketplace. The
-          standalone routes below stay registered for the partner/investor/admin
-          personas; founders are redirected into the matching ?tab= here. */}
+      <Route path="/marketplace" element={<MarketplaceRedirect role={user?.role} founderTab="services" to="/offers/catalog" />} />
+      {/* Task #2 — Founder Marketplace merges the Service Catalogue and the
+          Needs Board into one tabbed page at /build/marketplace. #2338: their
+          standalone addresses below only forward now (MarketplaceRedirect). */}
       <Route path="/build/marketplace" element={guard(['admin', 'founder'], founderWorkspace('validate', founderEditor(<FounderMarketplacePage user={user} />)))} />
-      <Route path="/needs" element={guard(['admin', 'founder', 'partner', 'investor'], partnerPrivateWorkspace(user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=needs" replace /> : <PartnerWorkspaceTabs set="pipeline" user={user}><NeedsBoardPage user={user} /></PartnerWorkspaceTabs>))} />
-      <Route path="/services" element={guard(['admin', 'founder', 'partner', 'investor'], partnerPrivateWorkspace(user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=services" replace /> : <PartnerWorkspaceTabs set="offers" user={user}><ServiceCatalogPage user={user} /></PartnerWorkspaceTabs>))} />
-      <Route path="/founder/post-need" element={guard(['admin', 'founder'], user?.role === 'founder' ? <Navigate to="/build/marketplace?tab=mine" replace /> : <NeedsBoardPage user={user} />)} />
-      {/* D773 (#2099): the partner's alias of Leads takes Leads' frame, tabs and rail. */}
-      <Route path="/partner/needs" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><NeedsBoardPage user={user} /></PartnerWorkspaceTabs>))} />
-      <Route path="/partner/insights" element={guard(['admin', 'partner', 'investor'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><PartnerInsightsPage /></PartnerWorkspaceTabs>))} />
+      <Route path="/needs" element={guard(['admin', 'founder', 'partner'], <MarketplaceRedirect role={user?.role} founderTab="needs" to="/pipeline/leads" />)} />
+      <Route path="/services" element={guard(['admin', 'founder', 'partner'], <MarketplaceRedirect role={user?.role} founderTab="services" to="/offers/catalog" />)} />
+      <Route path="/founder/post-need" element={guard(['admin', 'founder'], <MarketplaceRedirect role={user?.role} founderTab="mine" to="/pipeline/leads" />)} />
+      <Route path="/partner/needs" element={guard(['admin', 'partner'], <MarketplaceRedirect role={user?.role} founderTab="needs" to="/pipeline/leads" />)} />
+      <Route path="/partner/insights" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="pipeline" user={user}><PartnerInsightsPage /></PartnerWorkspaceTabs>))} />
       {/* D569 — the partner earnings screens, at the canvas's own routes: no
           partner bucket holds them (`shellConfig.js` has no `/partner` prefix),
           so they are pages of their own with one pill row between three of
@@ -2688,7 +2681,6 @@ function AppInner() {
       <Route path="/partner/earnings" element={guard(['admin', 'partner'], <PartnerEarnings />)} />
       <Route path="/partner/referrals" element={guard(['admin', 'partner'], <PartnerReferrals />)} />
       <Route path="/partner/relationships/:id" element={guard(['admin', 'partner'], <PartnerRelationshipLog />)} />
-      <Route path="/partner/leaderboard" element={guard(['admin', 'partner'], <PartnerLeaderboard user={user} />)} />
       <Route path="/deck/:id/print" element={guard(['admin', 'founder', 'partner', 'investor'], <PitchDeckPrintPage />)} />
       <Route path="/deck/share/:token" element={<PitchDeckPrintPage shareMode />} />
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
@@ -2850,7 +2842,9 @@ function AppInner() {
       <Route path="/admin/publications" element={guard(['admin'], <AdminPublications />)} />
       <Route path="/admin/publications/new" element={guard(['admin'], <AdminPublicationNew />)} />
       <Route path="/admin/publications/:id" element={guard(['admin'], <AdminPublicationDetail />)} />
-      <Route path="/insights" element={<InsightsPage />} />
+      {/* #2333 — one publications list: /articles carries the briefs the
+          /insights index listed; each brief keeps its share link below. */}
+      <Route path="/insights" element={<Navigate to="/articles#briefs" replace />} />
       <Route path="/insights/public/:slug" element={<PublicInsight />} />
       <Route path="/admin/due-diligence" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligencePage />)} />
       <Route path="/admin/due-diligence/:uid" element={guard(['admin', 'partner', 'investor', 'advisor'], <AdminDueDiligenceCasePage />)} />
@@ -2907,8 +2901,6 @@ function AppInner() {
         : founderWorkspace('build', founderEditor(<ExecutionPage />)))} />
       <Route path="/build/this-week" element={guard(['admin', 'founder'], <FounderBuildThisWeek />)} />
       <Route path="/build/board" element={guard(['admin', 'founder'], <FounderBuildBoard />)} />
-      <Route path="/execution/board" element={guard(['admin', 'founder'], founderWorkspace('build', founderEditor(<ExecutionPage />)))} />
-      <Route path="/execution/roadmap" element={guard(['admin', 'founder'], founderWorkspace('build', founderEditor(<ExecutionPage />)))} />
       {/* Task #1 — RAISE Workspaces. Three founder workspaces compose the
           existing pages via an `embedded` prop; each guarded for the roles of
           the pages it wraps. Standalone routes (/build/financials, /build/captable,
@@ -2950,7 +2942,6 @@ function AppInner() {
           always false on an empty array, so the route would exist and be
           unreachable. */}
       <Route path="/messages" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MessagesPage user={user} />)} />
-      <Route path="/more" element={guard(['admin', 'founder'], <MorePage />)} />
       {/* Same explicit list. The partner and admin tabs inside the page are
           gated on the role again there — a role that cannot submit a listing
           simply does not see the tab. */}
@@ -3107,7 +3098,9 @@ function AppInner() {
           digest email. Research reads the same market data, so an old link
           (and a link in a digest already sent) lands there. */}
       <Route path="/market-intel" element={<Navigate to="/research" replace />} />
-      <Route path="/advisory" element={guard(['admin', 'founder'], founderEditor(<AdvisoryPage />))} />
+      {/* #2341 — the owner removed /advisory. Its address forwards to Team ›
+          Advisors, the directory /advisors already sends a founder to. */}
+      <Route path="/advisory" element={guard(['admin', 'founder'], <Navigate to="/build/team?mode=workspace&tab=advisors" replace />)} />
       {/* Team (Grow › Talent). Founders reach the advisor directory,
           Co-founder Match and their roles through the Team workspace at
           /build/team; the legacy standalone routes stay live for every other
@@ -3200,8 +3193,9 @@ function AppInner() {
           everyone else. `/portfolio/health` stays live as its legacy alias. */}
       <Route path="/portfolio" element={guard(['admin', 'founder', 'partner', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/health" element={guard(['admin', 'founder', 'partner', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
-      {/* Task #18 — Partner Coverage Analytics (admin/partner-only internal dashboard). */}
-      <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <PortfolioCoveragePage />)} />
+      {/* #2337 — Partner coverage analytics is removed (#2297 §7); its address
+          forwards to Delivery · Health. */}
+      <Route path="/portfolio/coverage" element={guard(['admin', 'partner'], <Navigate to="/delivery/health" replace />)} />
       <Route path="/activity" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <ActivityPage />)} />
       <Route path="/kyc" element={guard(['admin', 'founder', 'partner', 'investor'], <KYCPage />)} />
       {/* 'advisor' belongs here: services/trust.ts ROLE_MATRIX gives advisors four
@@ -3210,7 +3204,6 @@ function AppInner() {
           carries no role gating, so every advisor could see the link, click it,
           and be bounced off the only page listing what they owe. */}
       <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], investorWorkspace('trust', <TrustCenterPage chromeless={effectiveRole === 'investor'} />))} />
-      <Route path="/api-bridge" element={guard(['admin'], <ApiBridgePage />)} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
       <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />
@@ -3422,7 +3415,6 @@ function AppInner() {
       <Route path="/pipeline/commit" element={<Navigate to="/deals/commit" replace />} />
       <Route path="/pipeline/transactions" element={<Navigate to="/deals/closing" replace />} />
       <Route path="/portfolio/performance" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
-      <Route path="/portfolio/growth" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/funds/performance" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
       <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
@@ -3528,12 +3520,9 @@ function AppInner() {
       <Route path="/network/organizations" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <NetworkWorkspace role={networkRole} />)} />
       <Route path="/relationships" element={<Navigate to="/network?tab=relationships" replace />} />
       <Route path="/legal-capital" element={guard(['admin', 'founder', 'partner', 'investor'], <LegalCapitalPage />)} />
-      {/* Retired LP/capital-call cockpit. Bookmarks for admin, partner, and
-          investor land on Studio. /partners/portal below is a different page. */}
+      {/* #2342 — the partner deal portal and its older alias forward to Refer & earn. */}
       <Route path="/partner-portal" element={guard(['admin', 'partner', 'investor'], <PartnerPortalRedirect />)} />
-      {/* Task #9 (X-2) — Deal-specific partner page (referral code,
-          granted tiers, redemption count). */}
-      <Route path="/partners/portal" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerDealPortal />))} />
+      <Route path="/partners/portal" element={guard(['admin', 'partner'], <PartnerPortalRedirect />)} />
       {/* Task #2 (DD) — Direct-URL guard for admin docs. Non-admins
           (or anonymous visitors) hitting /docs/admin/* see a Not Found
           screen so the page literally pretends not to exist; admins are
@@ -3639,14 +3628,14 @@ function AppInner() {
       <Route path="/changelog" element={<ChangelogPage />} />
       {/* Public credential verification — unauthenticated by design. */}
       <Route path="/verify/:token" element={<PublicCertificateVerifyPage />} />
-      <Route path="/roadmap" element={<PublicRoadmapPage />} />
       <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
-      {/* Audience-specific landing page templates. */}
-      <Route path="/lp/founder" element={<FounderHomePage />} />
-      <Route path="/lp/customer-discovery" element={<CustomerDiscoveryHomePage />} />
-      <Route path="/lp/investor" element={<InvestorDealflowHomePage />} />
-      <Route path="/lp/partner" element={<PartnerPartnershipHomePage />} />
+      {/* #2321 — the retired audience pages forward to their door pages.
+          Keep external links working and count the redirects in #2301. */}
+      <Route path="/lp/founder" element={<Navigate to="/for-founders" replace />} />
+      <Route path="/lp/customer-discovery" element={<Navigate to="/for-founders" replace />} />
+      <Route path="/lp/investor" element={<Navigate to="/for-investors" replace />} />
+      <Route path="/lp/partner" element={<Navigate to="/for-service-partners" replace />} />
       <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
       {/* ── Route modules (D528) ── one line per frontend/src/routes/<area>.jsx,
           alphabetical, each `{<area>Routes(routeTools)}`; the imports sit in

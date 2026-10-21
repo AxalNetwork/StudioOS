@@ -86,7 +86,6 @@ test('every call gets a deadline, and it clears both bounds that constrain it', 
 test('generation and upload get the long deadline without a call site remembering', () => {
   // Generation: the worker is calling aiRouter, Workers AI, or a live crawl.
   assert.equal(deadlineFor('/decks/generate'), LONG_TIMEOUT_MS);
-  assert.equal(deadlineFor('/advisory/ask'), LONG_TIMEOUT_MS);
   // Path ids in the middle — the case a startsWith list could not express.
   assert.equal(deadlineFor('/funds/12/regenerate-lpa'), LONG_TIMEOUT_MS);
   assert.equal(deadlineFor('/references/ab3/transcribe'), LONG_TIMEOUT_MS);

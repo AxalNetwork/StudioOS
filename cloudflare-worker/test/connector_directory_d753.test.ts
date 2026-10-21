@@ -22,6 +22,7 @@ import crunchbase from '../src/routes/crunchbase.ts';
 import { CATALOG } from '../src/services/onboardingChecklist.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import * as registry from '../src/integrations/registry.ts';
+import { mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { writesProjectData } from '../src/integrations/companyScope.ts';
@@ -235,11 +236,14 @@ test('Mercury\'s page follows its audience; the entity variant reads no entity s
   assert.ok(!sql.some((s) => /mercury_|activity_logs/.test(s)), sql.join('\n'));
   assert.equal((await call(db, 'admin', '/directory/mercury', { branch: true })).status, 404);
   const founder = (await call(db, 'founder', '/directory/mercury')).body.connector;
-  assert.deepEqual([founder.connection_source, founder.sign_in.kind], ['integrations', 'key']);
+  // D840 (#2346): a member signs in with Mercury, or pastes a Read Only token.
+  assert.deepEqual([founder.connection_source, founder.sign_in.kind], ['integrations', 'oauth_or_key']);
   // D752 (#1886): PERSONAL_MERCURY is keyed by role.
   assert.equal(founder.description, PERSONAL_MERCURY.founder.description);
   assert.equal((await call(db, 'investor', '/directory/mercury')).body.connector.description, PERSONAL_MERCURY.investor.description);
-  assert.deepEqual(founder.feeds, ['revenue_and_traction']);
+  // D840: the founder's feeds are `MERCURY_FEEDS`' modules, D713's first.
+  assert.deepEqual(founder.feeds, mercuryFedModules('founder'));
+  assert.equal(founder.feeds[0], 'revenue_and_traction');
   assert.deepEqual((await call(db, 'partner', '/directory/mercury')).body.connector.feeds, []);
 });
 

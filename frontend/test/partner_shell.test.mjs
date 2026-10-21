@@ -77,9 +77,11 @@ test('canonical Partner deep links are owned by the correct workspace', () => {
     // performance → /pipeline/analytics, portfolio → /delivery/health,
     // capabilities → /offers/catalog. Overview's successor, /company-settings,
     // is the pinned footer's own row and so sits in no row's `match`.
-    Pipeline: ['/pipeline', '/needs', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'],
+    // #2338: '/needs' (Pipeline) and '/services' (Offers) left with their
+    // pages; both addresses forward to the zones below.
+    Pipeline: ['/pipeline', '/partner/insights', '/pipeline/proposals', '/pipeline/analytics'],
     Delivery: ['/delivery', '/delivery/health'],
-    Offers: ['/offers', '/services', '/perks', '/comarketing', '/offers/catalog'],
+    Offers: ['/offers', '/perks', '/comarketing', '/offers/catalog'],
     Network: ['/network', '/relationships', '/contacts'],
     // '/signals' and '/market-intel' left with their pages (D670).
     Research: ['/research'],
@@ -100,10 +102,18 @@ test('collapsed Pipeline and Offers sections remain reachable from Partner tabs'
   const routeLine = (path) => app.split('\n').find(
     (line) => line.includes(`path="${path}"`) && line.includes('<Route'),
   );
+  // #2338: Leads and Catalog are the bucket's own zones now, not the removed
+  // board and catalogue pages, and the old addresses only forward to them.
+  for (const [zone, old] of [['/pipeline/leads', '/needs'], ['/offers/catalog', '/services']]) {
+    assert.ok(bars.includes(`to: '${zone}'`), `${zone} is in no Partner tab set`);
+    assert.ok(routeLine(zone).includes('<PartnerBucketRoutes />'), `${zone} is not the bucket's zone`);
+    const forward = routeLine(old);
+    assert.ok(forward.includes('<MarketplaceRedirect role={user?.role} founderTab="') && forward.includes(`" to="${zone}" />`),
+      `${old} does not forward to ${zone}`);
+    assert.ok(!bars.includes(`to: '${old}'`), `a tab still opens the removed ${old}`);
+  }
   for (const path of [
-    '/needs',
     '/partner/insights',
-    '/services',
     '/perks',
     '/comarketing',
   ]) {

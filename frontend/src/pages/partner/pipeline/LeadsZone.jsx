@@ -157,9 +157,9 @@ function LeadCard({ row, busy, onPass, note }) {
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        {/* ACCEPT IS A BID, and a bid is a quote — so it goes where quotes are
-            written rather than being a second way to create one here. */}
-        <Link to={`/needs/${row.need_uid}`} className={buttonClass}>Accept · bid on it</Link>
+        {/* #2338 — "Accept · bid on it" linked to `/needs/<uid>`, a route that
+            never existed. The owner removed the needs board and asked for no
+            bidding to be rebuilt here, so the dead link went with it. */}
         <button type="button" className={ghostButtonClass} onClick={() => setPassing((v) => !v)}>
           {passing ? 'Cancel' : 'Pass'}
         </button>
@@ -288,11 +288,9 @@ export default function PartnerLeadsZone() {
             title="No open lead right now"
             body={
               'A lead is an open marketplace need this firm has neither bid on '
-              + 'nor passed on. Bid and it becomes a proposal; pass and it moves '
-              + 'to the table of passes with your reason, so nobody reads it '
-              + 'again next quarter.'
+              + 'nor passed on. Pass and it moves to the table of passes with '
+              + 'your reason, so nobody reads it again next quarter.'
             }
-            action={<Link to="/needs" className="text-[12.5px] font-semibold text-amber-700 underline">Browse the marketplace</Link>}
           />
         )}
       >

@@ -10,7 +10,7 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  *
  * WHY A WRAPPER AND NOT AN EDIT. `PartnerOperationsWorkspace` puts its tab bar
  * inside one page that renders all five of its children with an `embedded`
- * prop. The pages these rows point at — NeedsBoardPage, ServiceCatalogPage,
+ * prop. The pages these rows point at — PartnerInsightsPage, CoMarketingPage,
  * and the rest — are 500–1000 line files that take no such prop and
  * share no shell. Wrapping them at the route is additive: no page changes, no
  * new props, and reverting is deleting one element from App.jsx.
@@ -18,14 +18,14 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  * THE ROLE FILTER IS THE POINT, and it is why this could not be a static array.
  * The tab targets do not share a guard:
  *
- *   /needs, /services                 admin founder partner investor
- *   /partner/insights                 admin partner investor
+ *   /pipeline/leads, /offers/catalog  admin partner
+ *   /partner/insights                 admin partner
  *   /perks                            admin founder partner investor advisor exploring
  *   /comarketing                      admin partner founder investor
  *   /partner/office-hours             admin partner
  *   /pipeline/*, /offers/* zones      admin partner
  *
- * An investor on /services would otherwise see Office Hours and Capabilities
+ * An investor on /comarketing would otherwise see Office Hours and Capabilities
  * tabs that bounce them off the guard. A tab that cannot be opened is worse
  * than an absent one: the absent one costs a click-path this shell already
  * accounts for, the dead one costs trust in the whole bar. So each tab carries
@@ -36,8 +36,12 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  * `sidebarConfig.js` AND out of the PENDING list in `partner_shell.test.mjs`,
  * in the same commit — the test enforces it.
  *
- * D773 (#2099) — THE RAIL. For a partner, the pages this wraps (Leads, Demand,
- * Catalog, Office hours, Visibility) draw the operating partner's rail, one per
+ * #2338 — Leads and Catalog point at their zones, `/pipeline/leads` and
+ * `/offers/catalog`: the board and the catalogue they used to wrap at `/needs`
+ * and `/services` are removed, and those addresses only forward now.
+ *
+ * D773 (#2099) — THE RAIL. For a partner, the pages this wraps (Demand,
+ * Office hours, Visibility) draw the operating partner's rail, one per
  * page, in the shared frame. Its page key and crumbs come from the shell's
  * `RailPageProvider` (D768's page map), so the rail needs only its section's
  * name. The shell's static "AI assist" card, which stood where the rail now
@@ -52,16 +56,16 @@ const RAIL = {
 
 const SETS = {
   pipeline: [
-    { to: '/needs', label: 'Leads', icon: Target, match: ['/needs', '/partner/needs'],
-      roles: ['admin', 'founder', 'partner', 'investor'] },
+    { to: '/pipeline/leads', label: 'Leads', icon: Target,
+      roles: ['admin', 'partner'] },
     { to: '/partner/insights', label: 'Demand', icon: TrendingUp,
-      roles: ['admin', 'partner', 'investor'] },
+      roles: ['admin', 'partner'] },
     { to: '/pipeline/retainers', label: 'Retainers', icon: Layers,
       roles: ['admin', 'partner'] },
   ],
   offers: [
-    { to: '/services', label: 'Catalog', icon: Package,
-      roles: ['admin', 'founder', 'partner', 'investor'] },
+    { to: '/offers/catalog', label: 'Catalog', icon: Package,
+      roles: ['admin', 'partner'] },
     { to: '/perks', label: 'Perk deals', icon: Gift,
       roles: ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'] },
     { to: '/comarketing', label: 'Visibility', icon: Megaphone,

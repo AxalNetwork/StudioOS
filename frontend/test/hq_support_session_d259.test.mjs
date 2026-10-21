@@ -20,7 +20,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -143,8 +143,8 @@ test('D259: no caller in frontend/src posts to /admin/impersonate/ without a rea
     });
   }
   assert.deepEqual(offenders, [], 'an impersonation call is made with no reason');
-  assert.ok(!raw('frontend/src/pages/ApiBridgePage.jsx').includes('/api/admin/impersonate'),
-    'the API Bridge page still documents an impersonation endpoint a bridge token cannot open');
+  // The API Bridge page that documented it was removed (owner, #2297).
+  assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/ApiBridgePage.jsx')), 'ApiBridgePage.jsx is back');
 });
 
 test('D259: the uncalled cohort impersonation reader leaves api.js; its route stays', () => {

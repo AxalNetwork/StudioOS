@@ -71,8 +71,9 @@ test('the investor Portfolio Growth tab is NOT what was withdrawn', () => {
   // Its door moved when the investor shell collapsed the four portfolio rows
   // into one: PortfolioWorkspace's tab bar links it now, not a nav row. That
   // is still a door, so this asserts reachability rather than row-ness — the
-  // property the test was always about.
-  assert.match(read('frontend/src/pages/PortfolioWorkspace.jsx'), /to: '\/portfolio\/growth'/);
+  // property the test was always about. #2297 retired the /portfolio/growth
+  // address; the door is /portfolio/value-add, the same surface.
+  assert.match(read('frontend/src/pages/PortfolioWorkspace.jsx'), /to: '\/portfolio\/value-add'/);
   assert.equal(existsSync(resolve(root, 'frontend/src/pages/PortfolioGrowthPage.jsx')), true);
 });
 

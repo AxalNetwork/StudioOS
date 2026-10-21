@@ -126,26 +126,20 @@ export const ADMIN_PLACEMENT = [
   // H37 drew them in a Workspaces launcher on the admin shells; D563 retired
   // it. Each now lights the profile row in `PAGE_HOMES` below and is linked
   // from that row's overview; on an admin shell the palette indexes them.
-  // "/advisory" is labelled by its page's own heading, "Advisory": the
-  // launcher's "AI Advisory Suite" called the AI an advisor, which the voice
-  // rule forbids (H37 flagged it, D284 left it to the owner, D563 drops it
-  // with the launcher).
   // The owner removed six of them on 2026-10-20 — Scoring Engine, Risk Matrix,
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
-  // & Journal — page and route together, so twenty remain.
+  // & Journal — page and route together. #2324 removed Network Effects,
+  // #2341 removed Advisory, and #2337 and #2338 removed Portfolio Coverage,
+  // Service Catalogue and Needs Board on 2026-10-21, so fifteen remain.
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
-  page('Studio', 'Advisory', '/advisory', 'Advisors, financial planning and diligence checks.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
   page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),
-  page('Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage', 'Who covers which company.'),
   page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall', 'Proceeds by class at a given exit.'),
   page('Capital & Legal', 'Legal & Capital', '/legal-capital', 'Documents and capital records.'),
   page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
   page('Capital & Legal', 'Compliance Calendar', '/compliance', 'Filings and their deadlines.'),
   page('Network & Growth', 'Network', '/network', 'Relationships and introductions.'),
   page('Network & Growth', 'Jobs', '/my/jobs', 'Open roles.'),
-  page('Network & Growth', 'Service Catalogue', '/services', 'Services offered to companies.'),
-  page('Network & Growth', 'Needs Board', '/needs', 'Needs posted by founders.'),
   page('Network & Growth', 'Demand Insights', '/partner/insights', 'Partner demand analytics.'),
   page('Network & Growth', 'Partner Office Hours', '/partner/office-hours', 'Partner session bookings.'),
   page('Network & Growth', 'Co-Marketing Review', '/comarketing', 'Co-marketing submissions to review.'),
@@ -158,7 +152,7 @@ export const ADMIN_PLACEMENT = [
 export const WORKSPACE_GROUP_ORDER = ['Studio', 'Capital & Legal', 'Network & Growth', 'More'];
 
 /**
- * The working pages (twenty since 2026-10-20), the list the command palette reads for an admin shell
+ * The working pages (eighteen since 2026-10-21), the list the command palette reads for an admin shell
  * (D284). Derived from the map, never typed twice.
  */
 export const WORKSPACES = ADMIN_PLACEMENT
@@ -189,18 +183,14 @@ export const WORKSPACES = ADMIN_PLACEMENT
  */
 export const PAGE_HOMES = {
   '/pipeline': [['partner', 'Pipeline', 'row']],
-  '/advisory': [['founder', 'Validate', 'also']],
   '/deals': [['investor', 'Deals', 'row']],
   '/portfolio/health': [['investor', 'Portfolio', 'row']],
-  '/portfolio/coverage': [['partner', 'Delivery', 'also']],
   '/portfolio/waterfall': [['investor', 'Portfolio', 'also']],
   '/legal-capital': [['founder', 'Raise', 'also']],
   '/incorporate': [['founder', 'Raise', 'also']],
   '/compliance': [['founder', 'Raise', 'also']],
   '/network': [['founder', 'Network', 'row'], ['investor', 'Network', 'row'], ['partner', 'Network', 'row'], ['advisor', 'Network', 'row']],
   '/my/jobs': [['partner', 'Network', 'also'], ['advisor', 'Network', 'also']],
-  '/services': [['partner', 'Offers', 'also']],
-  '/needs': [['partner', 'Pipeline', 'also']],
   '/partner/insights': [['partner', 'Pipeline', 'also']],
   '/partner/office-hours': [['partner', 'Offers', 'also']],
   '/comarketing': [['partner', 'Offers', 'also'], ['founder', 'Grow', 'also', {

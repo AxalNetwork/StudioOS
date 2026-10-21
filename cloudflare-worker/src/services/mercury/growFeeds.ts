@@ -42,8 +42,7 @@ import { recomputeRevenueMovements } from '../revenueMovements';
 import { MERCURY_INSERT } from '../../routes/revenue';
 import { INTERNAL_KINDS, POSTED_STATUSES, VOID_STATUSES } from './parse';
 import { openMercuryReads, type Customer, type Invoice, type McpTransaction, type MercuryReads } from './reads';
-import { mcpAccessFor, mcpCredentialsOf, MERCURY_AUTH_TYPE } from './oauth';
-import type { IntegrationRow } from '../../integrations/registry';
+import { mercuryAccessFor, MERCURY_AUTH_TYPE } from './oauth';
 
 /** How many full months a sync reads and writes. */
 export const GROW_MONTHS = 12;
@@ -853,17 +852,18 @@ export class GrowSyncRefused extends Error {
  */
 export async function syncGrowFromMercury(env: Env, founderUserId: number, projectId: number, today: string): Promise<GrowCounts> {
   const row = await env.DB.prepare(
-    `SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'mercury' AND status = 'active' ORDER BY id DESC LIMIT 1`,
-  ).bind(founderUserId).first<IntegrationRow>();
+    `SELECT id, auth_type FROM integrations WHERE user_id = ? AND provider_key = 'mercury' AND status = 'active' LIMIT 1`,
+  ).bind(founderUserId).first<{ id: number; auth_type: string }>();
   if (!row) throw new GrowSyncRefused(404, 'mercury_not_connected', 'Connect your Mercury first: sign in with Mercury on your Connectors page.');
   if (row.auth_type !== MERCURY_AUTH_TYPE) {
     throw new GrowSyncRefused(409, 'mercury_sign_in_required', 'Sign in with Mercury to fill Grow: a pasted token reads only your bank lines, not your invoices or treasury.');
   }
-  const creds = await mcpCredentialsOf(env, row);
-  if (!creds) throw new GrowSyncRefused(409, 'mercury_sign_in_required', 'Sign in with Mercury again: your sign-in could not be read.');
+  // Part 1's resolver: the member's own sign-in, refreshed when it is about to expire.
+  const access = await mercuryAccessFor(env, founderUserId);
+  if (!access) throw new GrowSyncRefused(409, 'mercury_sign_in_required', 'Sign in with Mercury again: your sign-in could not be read.');
   let read: GrowRead;
   try {
-    read = await readGrow(env, await openMercuryReads(await mcpAccessFor(env, row, creds)), founderUserId, today);
+    read = await readGrow(env, await openMercuryReads(access), founderUserId, today);
   } catch (e) {
     console.error('[growFeeds] Mercury read failed:', (e as Error).name);
     throw new GrowSyncRefused(502, 'mercury_read_failed', 'Mercury could not be read. Nothing changed; try again.');

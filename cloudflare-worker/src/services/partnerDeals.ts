@@ -834,7 +834,8 @@ export async function notifyExpiringRevshareWindows(env: Env): Promise<{
             type: 'partner_revshare_window_closing',
             title,
             body,
-            link: '/partners/portal',
+            // #2342: the deal portal at /partners/portal is removed.
+            link: '/referrals',
             channels: ['in_app', 'email'],
             // 'deals' bucket already exists in the notification-prefs
             // matrix; partners can opt out from Settings → Notifications.

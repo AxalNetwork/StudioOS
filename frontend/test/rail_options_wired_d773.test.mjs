@@ -19,7 +19,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { codeOnly } from './_codeOnly.mjs';
 import { ADVISOR_RAIL_OPTIONS } from '../src/lib/railOptions/advisor.js';
@@ -86,7 +86,7 @@ test('D773: the boards that drew no rail draw one in the shared frame, for their
   const frames = [
     ['pages/partner/PartnerWorkspaceTabs.jsx', /<RailFrame rail=\{rail\}>/, /<WorkerRail workspace=\{railMeta\.workspace\} role="partner"/],
     ['pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx', /<RailFrame rail=\{<WorkerRail workspace="Practice" role="advisor"/, null],
-    ['pages/research/GtmIntelligence.jsx', /<RailFrame rail=\{rail\}>/, /const rail = <GtmRail role=\{role\} \/>;/],
+    // pages/research/GtmIntelligence.jsx drew one too, until #2297 removed /research/gtm (#2329).
     ['pages/PortfolioWorkspace.jsx', /<RailFrame data-testid="portfolio-partner-frame" rail=\{\(\s*<WorkerRail workspace="Delivery" role="partner"/, null],
   ];
   for (const [file, frame, rail] of frames) {
@@ -94,15 +94,17 @@ test('D773: the boards that drew no rail draw one in the shared frame, for their
     assert.match(src, frame, `${file}: the rail is not in the shared frame`);
     if (rail) assert.match(src, rail, `${file}: the rail is not the profile's`);
   }
-  // GTM gives each of its four profiles a literal mount of its own tier.
-  const gtm = read('pages/research/GtmIntelligence.jsx');
-  for (const r of ['founder', 'investor', 'advisor', 'partner']) assert.match(gtm, new RegExp(`<WorkerRail workspace="Research" role="${r}"`), r);
+  // The GTM page and its four literal mounts went with /research/gtm (#2329).
+  assert.ok(!existsSync(resolve(process.cwd(), 'frontend/src/pages/research/GtmIntelligence.jsx')), 'the GTM page is back');
   // The shells' static "AI assist" cards stand down where the real rail docks.
   assert.match(read('pages/partner/PartnerWorkspaceTabs.jsx'), /tabs=\{visibleTabs\}\s+rail=\{false\}/);
   assert.match(read('pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx'), /embedded=\{embedded\}\s+rail=\{false\}/);
-  // The partner's alias of Leads takes Leads' frame and lights Leads' tab.
+  // The partner's alias of Leads took Leads' frame here until #2338 removed
+  // the needs board: `/partner/needs` now forwards to Leads itself, which
+  // draws the shell's rail, and the Pipeline tab points there.
   const app = read('App.jsx');
-  assert.match(app, /path="\/partner\/needs" element=\{guard\(\['admin', 'partner'\], partnerPrivateWorkspace\(<PartnerWorkspaceTabs set="pipeline" user=\{user\}><NeedsBoardPage user=\{user\} \/><\/PartnerWorkspaceTabs>\)\)\}/);
+  assert.match(app, /path="\/partner\/needs" element=\{guard\(\['admin', 'partner'\], <MarketplaceRedirect role=\{user\?\.role\} founderTab="needs" to="\/pipeline\/leads" \/>\)\}/);
+  assert.match(read('pages/partner/PartnerWorkspaceTabs.jsx'), /\{ to: '\/pipeline\/leads', label: 'Leads'/);
 });
 
 test('D773: no advisor or partner route is waiting on #2099 any more', () => {

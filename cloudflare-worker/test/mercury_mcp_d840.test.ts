@@ -13,6 +13,8 @@
  *  6. A 401 at open tries the refresh once; the budget bounds the requests.
  *  7. Only `reads.ts` imports `mcp.ts`, and no token reaches a log.
  *  8. The feeds' reader gives the same organization, accounts and lines on the MCP path.
+ *  9. A statement's PDF: GET only, Mercury hosts only (redirects re-checked),
+ *     a PDF only, at most 15 MB; the link is never returned.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/mercury_mcp_d840.test.ts
@@ -22,8 +24,8 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { MERCURY_READ_TOOLS, MCP_REQUEST_BUDGET, openMercuryMcp } from '../src/services/mercury/mcp.ts';
-import { mcpBankReader, openMercuryReads, scopePermission } from '../src/services/mercury/reads.ts';
-import { FAKE_ACC_A, FAKE_ACC_B, FAKE_WRITE_TOOLS, fakeTx, signedInFake } from './_mercury_mcp_fake.mjs';
+import { fetchStatementPdf, isStatementHost, mcpBankReader, openMercuryReads, scopePermission, STATEMENT_PDF_MAX_BYTES } from '../src/services/mercury/reads.ts';
+import { FAKE_ACC_A, FAKE_ACC_B, FAKE_PDF, FAKE_WRITE_TOOLS, fakeTx, signedInFake } from './_mercury_mcp_fake.mjs';
 
 test('1. the read-tool list is pinned and names no tool that writes or moves money', () => {
   assert.deepEqual([...MERCURY_READ_TOOLS], [
@@ -104,7 +106,7 @@ test('4. every typed read returns parsed data, and no number, EIN, email, addres
   assert.equal((out.safes as any[])[0].amount_cents, 2500000);
   assert.equal((out.categories as any[])[0].name, 'Software');
   const all = JSON.stringify(out);
-  for (const banned of ['routing-fixture-only', 'recipient-account-fixture', 'ein-fixture-only', 'billing@example.invalid', 'example.invalid', 'line1']) {
+  for (const banned of ['routing-fixture-only', 'recipient-account-fixture', 'ein-fixture-only', 'billing@example.invalid', 'example.invalid', 'fake-statements', 'downloadUrl', 'line1']) {
     assert.ok(!all.includes(banned), banned);
   }
   assert.deepEqual(fake.toolCalls().filter((t) => !MERCURY_READ_TOOLS.includes(t)), []);
@@ -185,4 +187,48 @@ test('8. the feeds\' reader on the MCP path: organization, accounts, a page and 
   assert.equal(scopePermission(['offline_access']), 'above_read_only');
   assert.equal(scopePermission([]), 'not_reported');
   assert.ok(fake.calls.every((c) => c.method === 'POST'), 'POST only, never a DELETE');
+});
+
+test('9. a statement PDF: GET on a Mercury host only, redirects re-checked, a PDF only, capped; the link is never returned', async () => {
+  const { fake, accessToken } = signedInFake();
+  const r = await openMercuryReads({ accessToken, fetcher: fake.fetch });
+  const SID = '44444444-4444-4444-8444-444444444444';
+  const pdf = await r.statementPdf(FAKE_ACC_A, SID);
+  assert.deepEqual([...pdf!.bytes], [...FAKE_PDF]);
+  assert.equal(pdf!.content_type, 'application/pdf');
+  assert.deepEqual(Object.keys(pdf!).sort(), ['bytes', 'content_type'], 'no link in the answer');
+  const get = fake.calls.filter((c) => c.statement);
+  assert.deepEqual(get.map((c) => [c.method, c.redirect, c.authorized]), [['GET', 'manual', true]]);
+  assert.equal(await r.statementPdf(FAKE_ACC_A, '55555555-5555-4555-8555-555555555555'), null, 'no such statement');
+  await assert.rejects(() => r.statementPdf(FAKE_ACC_A, '../x'), (e: any) => e.code === 'path_not_allowed');
+
+  // The SSRF guard: a foreign host is refused before any request, at the link or at a redirect.
+  for (const bad of ['https://evil.example/s.pdf', 'http://mcp.mercury.com/s.pdf', 'https://mercury.com.evil.example/s.pdf', 'https://user:pw@mcp.mercury.com/s.pdf', 'https://mcp.mercury.com:8443/s.pdf', 'file:///etc/passwd', 42]) {
+    assert.equal(isStatementHost(bad), false, String(bad));
+  }
+  assert.equal(isStatementHost('https://mercury.com/s.pdf'), true);
+  const n = fake.calls.length;
+  fake.state.data.statements.statements[0].downloadUrl = 'https://evil.example/s.pdf';
+  await assert.rejects(() => r.statementPdf(FAKE_ACC_A, SID), (e: any) => e.code === 'path_not_allowed');
+  assert.equal(fake.calls.filter((c) => c.statement).length, 1, 'the foreign host was never fetched');
+  fake.state.data.statements.statements[0].downloadUrl = `https://mcp.mercury.com/fake-statements/${SID}.pdf`;
+  fake.state.statement = { redirect: 'https://evil.example/s.pdf' };
+  await assert.rejects(() => r.statementPdf(FAKE_ACC_A, SID), (e: any) => e.code === 'redirect_refused');
+  assert.ok(fake.calls.length > n);
+
+  // A redirect loop on Mercury's own host stops at the limit.
+  fake.state.statement = { redirect: `https://mcp.mercury.com/fake-statements/${SID}.pdf` };
+  await assert.rejects(() => r.statementPdf(FAKE_ACC_A, SID), (e: any) => e.code === 'redirect_refused');
+  assert.equal(fake.calls.filter((c) => c.statement).length, 2 + 3, 'the first hop and two redirects, then refused');
+
+  // Not a PDF, a declared size over the cap, and an undeclared body over the cap.
+  fake.state.statement = { type: 'text/html' };
+  await assert.rejects(() => r.statementPdf(FAKE_ACC_A, SID), (e: any) => e.code === 'bad_json');
+  fake.state.statement = { length: STATEMENT_PDF_MAX_BYTES + 1 };
+  await assert.rejects(() => r.statementPdf(FAKE_ACC_A, SID), (e: any) => e.status === 413);
+  const big = new Uint8Array(1024);
+  const stream = () => new ReadableStream({ start(c) { for (let i = 0; i < 4; i++) c.enqueue(big); c.close(); } });
+  const fetcher = async () => new Response(stream(), { status: 200, headers: { 'Content-Type': 'application/pdf' } });
+  await assert.rejects(() => fetchStatementPdf('https://mcp.mercury.com/s.pdf', accessToken, fetcher as any, 4095), (e: any) => e.status === 413);
+  assert.equal((await fetchStatementPdf('https://mcp.mercury.com/s.pdf', accessToken, fetcher as any, 4096)).bytes.byteLength, 4096);
 });
