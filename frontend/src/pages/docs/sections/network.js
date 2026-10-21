@@ -102,7 +102,7 @@ export default {
       id: 'relationships',
       title: 'Relationships',
       overview:
-        "Relationships is your private rolodex inside the platform — the people you've met through the studio, the introductions you've made and received, and the notes you keep on each contact. It complements the Network Effects leaderboard with a working view of who you actually know.",
+        "Relationships is your private rolodex inside the platform — the people you've met through the studio, the introductions you've made and received, and the notes you keep on each contact.",
       howto: [
         'Open Relationships from the sidebar.',
         'Browse contacts by name, role, or last interaction.',
@@ -118,7 +118,6 @@ export default {
         'Asking for an intro without context lands at the bottom of the mutual\'s queue — a one-liner reason raises the response rate dramatically.',
       ],
       related: [
-        { label: 'Network Effects', href: '#network/effects' },
         { label: 'Matches', href: '#network/matches' },
       ],
     },
@@ -166,29 +165,7 @@ export default {
         'Sharing in spammy channels can get your link blacklisted by referees’ employers.',
       ],
       related: [
-        { label: 'Network Effects', href: '#network/effects' },
-      ],
-    },
-    {
-      id: 'effects',
-      title: 'Network Effects',
-      overview:
-        "Network Effects shows you the strength of your network: introductions made, intros received, value delivered, and the second-degree reach you’ve unlocked. It’s the leaderboard for being a great network member.",
-      howto: [
-        'Open Network Effects from the sidebar.',
-        'See your introductions made, accepted, and reciprocated.',
-        'View your second-degree reach — who you can reach via one intro.',
-      ],
-      tips: [
-        'The best way to climb the leaderboard is to make great intros — quality, not quantity.',
-        'Track value delivered (deals closed, hires made) so the studio can recognize top connectors.',
-      ],
-      pitfalls: [
-        'Mass-introducing without checking both sides want the intro hurts your score and your reputation.',
-        'Refusing to log accepted intros leaves your second-degree reach under-counted.',
-      ],
-      related: [
-        { label: 'Refer & Earn', href: '#network/refer-earn' },
+        { label: 'Relationships', href: '#network/relationships' },
       ],
     },
   ],

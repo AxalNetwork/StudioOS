@@ -25,7 +25,8 @@
  *                                        150 bps would read "2%". Latent only:
  *                                        `COMPOUNDING_BPS` is [10000, 5000,
  *                                        2500], all whole percents, so nothing
- *                                        is misreported today
+ *                                        is misreported today. The page was
+                                        removed in #2324
  *
  * THE FILED COUNT WAS THREE AND THE MEASURED COUNT IS SIX, because the first
  * count grepped the one body the first three shared. The other three divide by

@@ -119,7 +119,6 @@ export default {
       ],
       related: [
         { label: 'Partner deal engine', href: '#partnerships/deal-engine' },
-        { label: 'Network Effects', href: '#network/effects' },
       ],
     },
   ],

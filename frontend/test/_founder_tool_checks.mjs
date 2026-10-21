@@ -45,7 +45,6 @@ export const RETURNS = [
   ['/build/metrics','/build/operating-systems','← Build › Operating systems'],
   ['/build/team','/grow/team-expansion','← Grow › Team expansion'],
   ['/comarketing','/grow/distribution','← Grow › Distribution'],
-  ['/network-effects','/grow/partner-network','← Grow › Partner network'],
   ['/raise/pitch','/raise/pitch-deck','← Raise › Pitch deck'],
   ['/raise/pitch/positioning','/raise/investor-narrative','← Raise › Investor narrative'],
   ['/raise/pitch/review','/raise/pitch-deck','← Raise › Pitch deck'],
