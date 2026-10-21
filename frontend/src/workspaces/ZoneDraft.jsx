@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCost } from '../ui/assistCost';
@@ -186,28 +186,43 @@ export default function ZoneDraft({
   // D778 part 3: a run answers only the band it was pressed on. Another surface or
   // record (a scoped band switching rooms), or leaving the page, makes it stale.
   const runFor = useRef(0);
-  useEffect(() => () => { runFor.current += 1; }, [surface, scopeKey]);
+  // D778 part 10: loads and decisions belong to that same view. Starting an
+  // action also retires an earlier load of the same view's saved draft. Old
+  // requests must not clear a newer action's busy state in their finally.
+  const actionFor = useRef(0);
+  useLayoutEffect(() => {
+    runFor.current += 1;
+    actionFor.current += 1;
+    setItem(null); setEditing(null); setBusy(''); setNote(''); setGuardLink(null);
+    return () => { runFor.current += 1; };
+  }, [surface, scopeKey, scoped, option]);
 
   const load = useCallback(async () => {
+    const mine = runFor.current;
+    const action = actionFor.current;
+    const stale = () => mine !== runFor.current || action !== actionFor.current;
     try {
       const r = await api.research.zoneDrafts(surface, scoped ? scopeKey : undefined);
+      if (stale()) return;
       // The newest, whether or not it has been accepted: the artboard shows one
       // block, and a reader who accepted a draft should still see what they
       // accepted rather than an empty slot inviting them to pay for it again.
       setItem((r?.items || [])[0] || null);
     } catch {
+      if (stale()) return;
       // A band that cannot read its own drafts says nothing rather than
       // reporting an error over a page that is otherwise fine.
       setItem(null);
     }
-  }, [surface, scoped, scopeKey]);
+  }, [surface, scoped, scopeKey, option]);
   useEffect(() => { load(); }, [load]);
 
   const doRun = async () => {
     if (blocked) return;
     setBusy('run'); setNote(''); setGuardLink(null);
     const mine = runFor.current;
-    const stale = () => mine !== runFor.current;
+    const action = ++actionFor.current;
+    const stale = () => mine !== runFor.current || action !== actionFor.current;
     try {
       const r = await api.research.zoneDraftRun(surface, scopeKey, bandPage(), pressHeaders(option));
       if (stale()) return;
@@ -225,35 +240,45 @@ export default function ZoneDraft({
       setNote(e?.code === 'nothing_to_draft'
         ? (nothingToDraft || 'There is nothing on this page to draft over yet.')
         : guard?.message || 'That draft could not be written right now.');
-    } finally { setBusy(''); }
+    } finally { if (!stale()) setBusy(''); }
   };
 
   const doAccept = async () => {
     if (!item) return;
     setBusy('accept'); setNote('');
+    const mine = runFor.current;
+    const action = ++actionFor.current;
+    const stale = () => mine !== runFor.current || action !== actionFor.current;
     try {
       const r = await api.research.zoneDraftAccept(item.uid, editing != null ? editing : undefined);
+      if (stale()) return;
       setItem(r?.item || item);
       setEditing(null);
       if (onAccepted) onAccepted(r?.item || item);
     } catch (e) {
+      if (stale()) return;
       // D278 — a 409 is the surface refusing to write its record (a note that
       // would overflow), and its sentence is ours to print; anything else is
       // a failure with no more to say.
       setNote(e?.status === 409 && e?.message ? e.message : 'That could not be saved right now.');
-    } finally { setBusy(''); }
+    } finally { if (!stale()) setBusy(''); }
   };
 
   const doDiscard = async () => {
     if (!item) return;
     setBusy('discard'); setNote('');
+    const mine = runFor.current;
+    const action = ++actionFor.current;
+    const stale = () => mine !== runFor.current || action !== actionFor.current;
     try {
       await api.research.zoneDraftDiscard(item.uid);
+      if (stale()) return;
       setItem(null);
       setEditing(null);
     } catch {
+      if (stale()) return;
       setNote('That could not be discarded right now.');
-    } finally { setBusy(''); }
+    } finally { if (!stale()) setBusy(''); }
   };
 
   return (
