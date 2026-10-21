@@ -11,6 +11,7 @@
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/brand_icons_d687.test.mjs
  */
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React from 'react';
@@ -210,9 +211,9 @@ test('6. a mark is decoration: aria-hidden, unfocusable, no title, with its key;
   assert.match(tile, /<svg[^>]*width="18"/);
   assert.match(html(h(BrandIcon, { provider: 'stripe', size: 24 })), /width:24px;height:24px[\s\S]*<svg[^>]*width="14"/);
   assert.match(html(h(BrandIcon, { provider: 'stripe', variant: 'bare', size: 20 })), /^<svg[^>]*width="20"/, 'bare: the glyph alone at its own size');
-  const mono = html(h(BrandIcon, { provider: 'carta', name: 'Carta' }));
+  const mono = html(h(BrandIcon, { provider: 'teams', name: 'Microsoft Teams' }));
   for (const cls of ['bg-axal-lavender', 'text-axal-violet-deep', 'dark:bg-violet-900/30', 'dark:text-violet-300']) assert.ok(mono.includes(cls), cls);
-  assert.match(mono, /data-provider="carta"[^>]*>C</);
+  assert.match(mono, /data-provider="teams"[^>]*>MT</);
   assert.equal(TILE_CLASS.includes('dark:bg-gray-800'), true);
   assert.equal(uiBarrel.BrandIcon, BrandIcon, 'imported from the ui barrel');
   assert.match(read('frontend/src/ui/README.md'), /`BrandIcon\.jsx`/, 'listed in ui/README');
@@ -333,7 +334,7 @@ test('10. the LinkedIn CSV import draws LinkedIn\'s recorded treatment, through 
 });
 
 test('vendor follow-up: all recovered brands draw artwork, including catalogue aliases', () => {
-  assert.deepEqual(Object.keys(VENDOR_MARKS).sort(), ['chatgpt', 'docusign', 'google', 'grok', 'linkedin', 'mercury', 'microsoft', 'salesforce', 'slack']);
+  assert.deepEqual(Object.keys(VENDOR_MARKS).sort(), ['carta', 'chatgpt', 'docusign', 'google', 'grok', 'linkedin', 'mercury', 'microsoft', 'salesforce', 'slack']);
   for (const provider of [...Object.keys(VENDOR_MARKS), 'google_calendar', 'microsoft_365']) {
     const resolved = resolveBrand(provider);
     const out = html(h(BrandIcon, { provider, name: provider }));
@@ -342,7 +343,7 @@ test('vendor follow-up: all recovered brands draw artwork, including catalogue a
     assert.doesNotMatch(out, /data-brand="monogram"/, provider);
     assert.match(out, /<(path|rect|image)\b/, provider);
     assert.doesNotMatch(out, /<script|<foreignObject|<img|https?:\/\//i, provider);
-    if (provider === 'docusign') assert.match(out, /<image[^>]*href="data:image\/png;base64,[A-Za-z0-9+/=]+"/);
+    if (['carta', 'docusign'].includes(provider)) assert.match(out, /<image[^>]*href="data:image\/png;base64,[A-Za-z0-9+/=]+"/);
     else assert.doesNotMatch(out, /<image/i, provider);
     assert.ok(out.includes(`viewBox="${resolved.mark.viewBox}"`), provider);
   }
@@ -469,4 +470,17 @@ test('9. one copy of every mark: each BRAND_MARKS path lives only in ui/BrandIco
   // not recorded yet (D687's open row, #1008 item 22), and a monogram must
   // never sit on a Continue with Google button, so the three buttons keep it.
   assert.deepEqual(srcFilesWith('#FFC107'), ['frontend/src/pages/LoginPage.jsx', 'frontend/src/pages/RegisterPage.jsx', 'frontend/src/pages/SettingsPage.jsx']);
+});
+
+test('Carta renders its pinned official connector artwork without a logo-host request', () => {
+  const mark = resolveBrand('carta');
+  assert.equal(mark.kind, 'mark');
+  const png = Buffer.from(mark.mark.artwork[0].attrs.href.split(',')[1], 'base64');
+  const blob = createHash('sha1').update(`blob ${png.length}\0`).update(png).digest('hex');
+  assert.equal(blob, 'c7bf5de83736be025161803a9b1736b6c6e99932', 'unchanged official Carta PNG');
+  for (const variant of ['tile', 'bare']) {
+    const out = html(h(BrandIcon, { provider: 'carta', name: 'Carta', size: 56, variant }));
+    assert.match(out, /<image[^>]*href="data:image\/png;base64,/);
+    assert.doesNotMatch(out, /data-brand="monogram"|https?:\/\//);
+  }
 });

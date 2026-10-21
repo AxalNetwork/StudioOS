@@ -438,7 +438,7 @@ test('Build’s "Connect a tool": list, failed, locked and loading', () => {
   assert.match(t, /Salesforce What it will feed is not recorded Coming soon/, 'D686 §5.4: a coming-soon row says what it will feed, or that it is not recorded');
   assert.match(t, /Sorted by category · 1–\d+ of \d+ CRM /, 'the failing tool\'s group first while the failed banner shows');
   assert.match(t, /Payments Stripe Stripe cap one, Stripe cap two · synced \d+ (min|h|days?) ago Connected Disconnect/, 'D686 §3.1 item 2: a connected row offers Disconnect');
-  assert.match(t, /Cap table C Carta Carta cap one, Carta cap two Raise \+ Grow Upgrade to Raise \+ Grow/, 'the real tier, never "Pro"');
+  assert.match(t, /Cap table Carta Carta cap one, Carta cap two Raise \+ Grow Upgrade to Raise \+ Grow/, 'the real tier, never "Pro"');
   assert.match(t, /Calendar Calendly .* Not connected Connect/);
   assert.match(t, /Google Calendar Calendar, Gmail invites · last sync not recorded Connected Disconnect/);
   const locked = html(h(ConnectToolView, { data: ready(CAT.filter((p) => p.key !== 'hubspot')), onClose() {} }));
