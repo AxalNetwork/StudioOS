@@ -186,28 +186,31 @@ test('the Interviews list: titled Interviews, with a Channel filter, and the cha
   const recs = adaptRecords('validate', 'customer-research', { cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'], rows: [{ ...ROW, channel: 'phone' }], total: 1, page: 1, page_size: 25 });
   const f = recs.filters.find((x) => x.key === 'channel');
   assert.equal(f.label, 'Channel');
-  assert.deepEqual(f.options, [{ value: 'in_person', label: 'In person' }, { value: 'video', label: 'Video call' }, { value: 'phone', label: 'Audio call' }, { value: 'text', label: 'Text chat' }]);
+  // Video and audio calls are one Call (the owner, 2026-10-21); `call` filters both.
+  assert.deepEqual(f.options, [{ value: 'in_person', label: 'In person' }, { value: 'call', label: 'Call' }, { value: 'text', label: 'Text chat' }]);
   assert.deepEqual(recs.filters.map((x) => x.key), ['icp', 'consent', 'channel'], 'D697 decision 4: State replaced Stage; the Worker keeps stage:pipeline for the picker');
   assert.deepEqual(labelsOf(recs.cols).slice(5), ['State'], 'D690: State ends the list; Channel is a filter');
-  assert.equal(cellView(recs.rows[0].cells.channel).text, 'Audio call');
+  assert.equal(cellView(recs.rows[0].cells.channel).text, 'Call');
 });
 
 test('channels are words: all four, the old manual rows, an unknown one as written, and none as Not recorded', () => {
   const cell = (channel) => cellView(RECORDS['customer-research'].row({ ...ROW, channel }).cells.channel);
   assert.equal(cell('in_person').text, 'In person');
-  assert.equal(cell('video').text, 'Video call');
-  assert.equal(cell('phone').text, 'Audio call');
+  assert.equal(cell('video').text, 'Call');
+  assert.equal(cell('phone').text, 'Call');
   assert.equal(cell('text').text, 'Text chat');
   assert.equal(cell('manual').text, 'Entered by hand');
   assert.equal(cell('telegram').text, 'telegram', 'a value this table does not know is shown, not dropped');
   assert.deepEqual(cell(null), { text: 'Not recorded', nr: true });
   assert.deepEqual(cell(undefined), { text: 'Not recorded', nr: true });
-  assert.deepEqual(Object.keys(CHANNEL), ['in_person', 'video', 'phone', 'text', 'manual']);
+  assert.deepEqual(Object.keys(CHANNEL), ['in_person', 'video', 'phone', 'call', 'text', 'manual']);
 });
 
 test('the Worker already filters the interview log on channel (bound), so the filter needs no new route', () => {
   const svc = read('cloudflare-worker/src/services/cycleValidate.ts');
-  assert.match(svc, /AND \(\? = '' OR channel = \?\)/);
-  assert.match(svc, /const channel = \['in_person', 'video', 'phone', 'text', 'manual'\]\.includes\(f\.channel\) \? f\.channel : '';/);
-  assert.ok(renderedText(html(h(RecordsTable, { title: 'Interviews', records: { cols: [{ key: 'a', label: 'A' }], rows: [], total: 0, page: 1, page_size: 25, filters: [{ key: 'channel', label: 'Channel', options: [{ value: 'video', label: 'Video call' }] }] } }))).includes('Channel: all'));
+  // `call` is the merged filter: both stored call channels (the owner, 2026-10-21).
+  assert.match(svc, /AND \(\? = '' OR channel = \? OR \(\? = 'call' AND channel IN \('video', 'phone'\)\)\)/);
+  assert.match(svc, /AND \(\? = '' OR i\.channel = \? OR \(\? = 'call' AND i\.channel IN \('video', 'phone'\)\)\)/);
+  assert.match(svc, /const channel = \['in_person', 'call', 'video', 'phone', 'text', 'manual'\]\.includes\(f\.channel\) \? f\.channel : '';/);
+  assert.ok(renderedText(html(h(RecordsTable, { title: 'Interviews', records: { cols: [{ key: 'a', label: 'A' }], rows: [], total: 0, page: 1, page_size: 25, filters: [{ key: 'channel', label: 'Channel', options: [{ value: 'call', label: 'Call' }] }] } }))).includes('Channel: all'));
 });

@@ -284,5 +284,5 @@ test('D756 #1981 a Telegram chat\'s session, notes and all, is a text chat, neve
   assert.equal(chunkRows(w.db, sessionId).length, 1, 'the note is stored as recorder audio');
   assert.equal(s.submitted_via, 'telegram', 'Customer research reads it as "Imported from Telegram"');
   assert.equal(callLabel(s.channel, s.call_provider), 'Text chat · Telegram');
-  assert.equal(callLabel('phone', 'telegram'), 'Audio call · Telegram call', 'only a phone session is a call');
+  assert.equal(callLabel('phone', 'telegram'), 'Call · Telegram', 'only a phone session is a call');
 });

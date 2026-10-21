@@ -70,15 +70,14 @@ export function callRefusal(channel: string, provider: string | null, meetingUrl
 /** The session's call, in words. Derived on every read, never stored. Null in person. */
 export function callLabel(channel: string, provider: string | null): string | null {
   if (channel === 'in_person') return null;
-  const kind = channel === 'video' ? 'Video call' : channel === 'phone' ? 'Audio call'
+  // Video and audio calls are one "Call" (the owner, 2026-10-21); the provider says which.
+  const kind = channel === 'video' || channel === 'phone' ? 'Call'
     : channel === 'text' ? 'Text chat' : channel === 'manual' ? 'Entered by hand' : null;
   if (!kind) return null;
   if (!provider) return kind;
   if (provider === 'paste') return 'Text chat · Pasted transcript';
-  if (provider === 'phone_speaker') return 'Audio call · Phone on speaker';
-  const name = PROVIDER_NAMES[provider] || provider;
-  return channel === 'phone' && (provider === 'whatsapp' || provider === 'telegram' || provider === 'signal')
-    ? `${kind} · ${name} call` : `${kind} · ${name}`;
+  if (provider === 'phone_speaker') return 'Call · Phone on speaker';
+  return `${kind} · ${PROVIDER_NAMES[provider] || provider}`;
 }
 
 // ---------------------------------------------------------------------------
