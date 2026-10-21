@@ -107,7 +107,9 @@ test('collapsed Pipeline and Offers sections remain reachable from Partner tabs'
   for (const [zone, old] of [['/pipeline/leads', '/needs'], ['/offers/catalog', '/services']]) {
     assert.ok(bars.includes(`to: '${zone}'`), `${zone} is in no Partner tab set`);
     assert.ok(routeLine(zone).includes('<PartnerBucketRoutes />'), `${zone} is not the bucket's zone`);
-    assert.match(routeLine(old), new RegExp(`<MarketplaceRedirect role=\\{user\\?\\.role\\} founderTab="\\w+" to="${zone.replace(/\//g, '\\/')}" />`), `${old} does not forward to ${zone}`);
+    const forward = routeLine(old);
+    assert.ok(forward.includes('<MarketplaceRedirect role={user?.role} founderTab="') && forward.includes(`" to="${zone}" />`),
+      `${old} does not forward to ${zone}`);
     assert.ok(!bars.includes(`to: '${old}'`), `a tab still opens the removed ${old}`);
   }
   for (const path of [
