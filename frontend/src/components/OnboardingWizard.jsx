@@ -8,7 +8,9 @@ import { ONBOARDING_COMPLETE_EVENT } from '../lib/onboarding';
 // after every step so a refresh / re-login resumes where the user left
 // off. Calls onFinish() after the final step + POST /complete.
 //
-// `steps` is: [{ key, title, description?, render: ({values, set, error}) => JSX, validate?: (values) => string|null }]
+// `steps` is: [{ key, title, description?, render: ({values, set, error}) => JSX, validate?: (values) => string|null,
+//   skip?: { label, clears: [keys] } }]. A step with `skip` offers a quiet "skip for now": it
+//   drops the step's own answers (`clears`), skips its validation, and moves on, or finishes.
 
 export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 'Finish', onDark = false }) {
   const [stepIdx, setStepIdx] = useState(0);
@@ -68,15 +70,30 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
       const v = step.validate(values);
       if (v) { setError(v); return; }
     }
+    await advance(values);
+  };
+
+  // Skip for now: the step's answers are dropped, not saved half-filled, so a
+  // skipped company step leaves no company name for the Worker to make a
+  // project from (`applyFounderOnboarding` skips a seed without one).
+  const skipStep = async () => {
+    setError('');
+    const next = { ...values };
+    for (const key of steps[stepIdx].skip?.clears || []) delete next[key];
+    setValues(next);
+    await advance(next);
+  };
+
+  const advance = async (nextValues) => {
     setBusy(true);
     if (stepIdx + 1 < steps.length) {
       const nextStep = stepIdx + 1;
-      await persist(nextStep, values);
+      await persist(nextStep, nextValues);
       setStepIdx(nextStep);
       setBusy(false);
     } else {
       // Final step — persist final values then mark complete.
-      await persist(stepIdx, values);
+      await persist(stepIdx, nextValues);
       try {
         await api.onboardingComplete(flow);
         setCompleted(true);
@@ -97,7 +114,7 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
         return;
       }
       setBusy(false);
-      if (onFinish) onFinish(values);
+      if (onFinish) onFinish(nextValues);
     }
   };
 
@@ -166,6 +183,17 @@ export default function OnboardingWizard({ flow, steps, onFinish, finishLabel = 
           >
             <ArrowLeft size={14} /> Back
           </button>
+          {step.skip && (
+            <button
+              type="button"
+              onClick={skipStep}
+              disabled={busy}
+              data-testid="onboarding-skip-step"
+              className="ml-auto text-sm font-medium text-gray-600 underline-offset-2 hover:text-gray-900 hover:underline disabled:opacity-40 dark:text-gray-300 dark:hover:text-gray-100"
+            >
+              {step.skip.label}
+            </button>
+          )}
           <button
             type="button"
             onClick={goNext}

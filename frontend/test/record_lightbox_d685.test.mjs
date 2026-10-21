@@ -67,11 +67,13 @@ test('each mode: its note, its Start label, and Transcript only where there is a
   }
 });
 
-test('the four modes are a radiogroup: one tab stop, and the chosen one is checked', () => {
+test('How is a radiogroup of three, a video or an audio call being one Call: one tab stop, and the chosen one is checked', () => {
   const out = render({ initialMode: 'phone' });
   assert.match(out, /role="radiogroup" aria-label="How"/);
-  assert.match(tag(out, 'record-mode-phone'), /aria-checked="true"/);
-  assert.match(tag(out, 'record-mode-phone'), /tabindex="0"/);
+  assert.deepEqual([...out.matchAll(/data-testid="record-mode-([a-z_]+)"/g)].map((m) => m[1]).filter((k) => k !== 'note'), ['in_person', 'call', 'text']);
+  assert.match(tag(out, 'record-mode-call'), /aria-checked="true"/, 'an audio call is drawn under Call');
+  assert.match(tag(out, 'record-mode-call'), /tabindex="0"/);
+  assert.match(tag(render({ initialMode: 'video' }), 'record-mode-call'), /aria-checked="true"/, 'and so is a video call');
   assert.match(tag(out, 'record-mode-in_person'), /aria-checked="false"/);
   assert.match(tag(out, 'record-mode-in_person'), /tabindex="-1"/);
   assert.match(out, /role="radiogroup" aria-label="Consent"/);
@@ -105,7 +107,7 @@ test('Who: name and company inputs, or the interview it was opened on', () => {
 test('provider chips show their status; Connect links to Connectors; importing from an app that is not set up is disabled', () => {
   const video = render({ initialMode: 'video', channels: CHANNELS });
   const text = renderedText(video);
-  for (const t of ['Zoom · Connected', 'Google Meet · Connect', 'Microsoft Teams · Ready', 'WhatsApp video · Ready', 'Telegram video · Ready']) assert.ok(text.includes(t), t);
+  for (const t of ['Zoom · Connected', 'Google Meet · Connect', 'Microsoft Teams · Ready', 'WhatsApp · Ready', 'Telegram · Ready', 'Signal · Ready', 'This phone, on speaker · Ready']) assert.ok(text.includes(t), t);
   const wa = render({ initialMode: 'text', channels: CHANNELS });
   assert.ok(renderedText(tag(wa, 'record-provider-whatsapp') + 'x').length > 0);
   assert.ok(renderedText(wa).includes('WhatsApp · Connect'));
@@ -273,7 +275,7 @@ test('an interview it was opened on (maybe already held) opens on its own route,
   const s = spies();
   const m = await mount({ ...s.props, interview: { id: 7, interviewee_name: 'Dana Ruiz' } });
   try {
-    await m.click('record-mode-video');
+    await m.click('record-mode-call');
     await m.click('record-consents-in_app');
     await m.click('record-start');
     assert.equal(s.calls.createInterview.length + s.calls.open.length, 0, 'the setup call would refuse a held interview');
@@ -282,6 +284,24 @@ test('an interview it was opened on (maybe already held) opens on its own route,
     assert.match(key, /^record-./);
     assert.deepEqual(body, { channel: 'video', consent: { status: 'given', method: 'in_app' }, live_model: 'nova', final_model: 'whisper', call_provider: 'zoom', points: [2, 1] });
     assert.deepEqual(s.calls.started[0][1], { id: 7, interviewee_name: 'Dana Ruiz', interviewee_company: null });
+  } finally { await m.unmount(); }
+});
+
+test('a Call\'s chip decides its channel: an app call or the phone on speaker is stored as phone, with no meeting link', async () => {
+  // The owner (2026-10-21) merged Video and Audio call. Mutation checked: the chip not moving the channel.
+  const s = spies();
+  const m = await mount({ ...s.props, interview: { id: 7, interviewee_name: 'Dana Ruiz' } });
+  try {
+    await m.click('record-mode-call');
+    assert.ok(m.by('record-link'), 'Zoom, the first chip, is a meeting: its link is asked for');
+    await m.click('record-provider-whatsapp');
+    assert.equal(m.by('record-link'), undefined, 'a WhatsApp call has no meeting link');
+    assert.match(m.text(), /Put the call on speaker\. It records this device’s microphone\./);
+    await m.click('record-consents-in_app');
+    await m.click('record-start');
+    const [[, { client_key: _key, ...body }]] = s.calls.create;
+    assert.equal(body.channel, 'phone');
+    assert.equal(body.call_provider, 'whatsapp');
   } finally { await m.unmount(); }
 });
 

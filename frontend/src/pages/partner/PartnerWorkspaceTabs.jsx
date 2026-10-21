@@ -1,6 +1,7 @@
 import React from 'react';
 import { Target, TrendingUp, Layers, Package, Gift, Megaphone, Award } from 'lucide-react';
 import WorkspaceTabs from '../../components/WorkspaceTabs';
+import { RailFrame, WorkerRail } from '../../ui';
 import PartnerWorkspaceShell from './PartnerWorkspaceShell';
 
 /**
@@ -34,11 +35,24 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  * When a bar covers every section of a row, that row's siblings come out of
  * `sidebarConfig.js` AND out of the PENDING list in `partner_shell.test.mjs`,
  * in the same commit — the test enforces it.
+ *
+ * D773 (#2099) — THE RAIL. For a partner, the pages this wraps (Leads, Demand,
+ * Catalog, Office hours, Visibility) draw the operating partner's rail, one per
+ * page, in the shared frame. Its page key and crumbs come from the shell's
+ * `RailPageProvider` (D768's page map), so the rail needs only its section's
+ * name. The shell's static "AI assist" card, which stood where the rail now
+ * docks, is turned off here (`rail={false}`), so there is one right column.
  */
+
+/** The rail's section name per tab set, as the canvas names the partner's rows. */
+const RAIL = {
+  pipeline: { workspace: 'Pipeline', note: 'Eadwyn reads the leads and demand on this page. Nothing is sent until you send it.' },
+  offers: { workspace: 'Offers', note: 'Eadwyn reads the offers on this page. Nothing is published until you publish it.' },
+};
 
 const SETS = {
   pipeline: [
-    { to: '/needs', label: 'Leads', icon: Target,
+    { to: '/needs', label: 'Leads', icon: Target, match: ['/needs', '/partner/needs'],
       roles: ['admin', 'founder', 'partner', 'investor'] },
     { to: '/partner/insights', label: 'Demand', icon: TrendingUp,
       roles: ['admin', 'partner'] },
@@ -59,7 +73,7 @@ const SETS = {
 
 export default function PartnerWorkspaceTabs({ set, user, children }) {
   const tabs = (SETS[set] || []).filter((t) => t.roles.includes(user?.role));
-  const visibleTabs = tabs.map(({ to, label, icon }) => ({ to, label, icon }));
+  const visibleTabs = tabs.map(({ to, label, icon, match }) => ({ to, label, icon, ...(match ? { match } : {}) }));
   if (user?.role !== 'partner') {
     return (
       <>
@@ -71,13 +85,18 @@ export default function PartnerWorkspaceTabs({ set, user, children }) {
   const meta = set === 'offers'
     ? { workspace: 'offers', icon: Package }
     : { workspace: 'pipeline', icon: Target };
+  const railMeta = RAIL[set] || RAIL.pipeline;
+  const rail = <WorkerRail workspace={railMeta.workspace} role="partner" note={railMeta.note} />;
   return (
-    <PartnerWorkspaceShell
-      {...meta}
-      tabs={visibleTabs}
-    >
-      {children}
-    </PartnerWorkspaceShell>
+    <RailFrame rail={rail}>
+      <PartnerWorkspaceShell
+        {...meta}
+        tabs={visibleTabs}
+        rail={false}
+      >
+        {children}
+      </PartnerWorkspaceShell>
+    </RailFrame>
   );
 }
 

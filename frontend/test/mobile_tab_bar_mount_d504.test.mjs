@@ -76,18 +76,21 @@ test('the bar mounts for a founder below 1024px and does not mount for a viewer 
 });
 
 test('the shell root reserves the top safe-area inset, the header keeps its fixed 56px, and the viewport asks for cover', () => {
-  const INSET = "paddingTop: 'env(safe-area-inset-top, 0px)'";
+  // The inset is the stylesheet's `.app-shell` rule (2026-10-21), so the founder's
+  // phone band can take it instead when it is the root's first element.
+  const INSET = '.app-shell { padding-top: env(safe-area-inset-top, 0px); }';
   // The inset is on the shell's root, once. The root is the column every
   // strip renders in, so whichever bar is first — PortalSwitcher on an
   // admin's phone, a support or impersonation strip, the header — sits below
   // the status bar. Codex on #1039 found the first draft's inset on the header
   // alone, which left those earlier bars under the status bar.
-  const rootAt = CODE.indexOf('<div className="flex flex-col h-screen overflow-hidden');
-  assert.ok(rootAt > 0, 'the shell root is gone');
+  const rootAt = CODE.indexOf('<div className="app-shell flex flex-col h-screen overflow-hidden');
+  assert.ok(rootAt > 0, 'the shell root is gone, or lost the class that reserves the inset');
   const root = CODE.slice(rootAt, CODE.indexOf('>', rootAt) + 1);
   assert.ok(root.length < 300, 'the root tag is one element');
-  assert.match(root, new RegExp(`style=\\{\\{ ${INSET.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\}\\}`), 'the shell root does not reserve the top inset');
-  assert.equal(CODE.split(INSET).length - 1, 1, 'the inset is reserved exactly once: a second one (on the header, say) would open a gap of two insets');
+  const css = read('frontend/src/index.css');
+  assert.equal(css.split(INSET).length - 1, 1, 'the shell root does not reserve the top inset, or reserves it twice');
+  assert.equal(CODE.split('safe-area-inset-top').length - 1, 0, 'the inset is reserved inline as well: a gap of two insets');
   for (const first of ['<SafeMount name="HqSupportSessionBar">', '<PortalSwitcher', '<SafeMount name="BranchNotDeployedBar">', '<header className="z-40']) {
     assert.ok(CODE.indexOf(first) > rootAt, `${first} renders outside the root that carries the inset`);
   }

@@ -115,7 +115,7 @@ const LISTS: Record<string, { title: string; cols: string[]; filters: Array<[str
   'customer-research': {
     title: 'Interviews', cols: ['Interviewee', 'Company', 'Date', 'ICP fit', 'Consent', 'State'],
     filters: [['icp', 'ICP fit', ['strong', 'partial', 'none', 'not_recorded']], ['consent', 'Consent', ['agreed', 'declined', 'not_asked']],
-      ['channel', 'Channel', ['in_person', 'video', 'phone', 'text']]],
+      ['channel', 'Channel', ['in_person', 'call', 'text']]],
     sorts: ['newest', 'oldest', 'name'],
   },
   'ideal-customer-profile': {

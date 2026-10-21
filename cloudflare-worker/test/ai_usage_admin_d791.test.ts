@@ -107,9 +107,20 @@ test('the totals: runs, cost, charged and margin by day, model, role and plan, g
     assert.deepEqual(u.by_role.map((r: any) => [r.role, r.runs, r.charged_microusd]), [['founder', 2, 2625], ['investor', 1, 1250], ['system', 1, 0]]);
     assert.deepEqual(u.by_plan.map((p: any) => [p.plan, p.charged_microusd]), [['founder:free', 2625], ['investor:free', 1250], ['system', 0]]);
     assert.deepEqual(u.top_charged, [
-      { member: MIA, runs: 2, refused: 1, cost_microusd: 6_100, charged_microusd: 2_625, margin_microusd: 2_625 - 2_100, not_recorded: 1, topups_microusd: 0 },
-      { member: INV, runs: 1, refused: 0, cost_microusd: 1_000, charged_microusd: 1_250, margin_microusd: 250, not_recorded: 0, topups_microusd: 0 },
+      { member: MIA, role: 'founder', plan: 'founder:free', runs: 2, refused: 1, cost_microusd: 6_100, charged_microusd: 2_625, margin_microusd: 2_625 - 2_100, not_recorded: 1, topups_microusd: 0 },
+      { member: INV, role: 'investor', plan: 'investor:free', runs: 1, refused: 0, cost_microusd: 1_000, charged_microusd: 1_250, margin_microusd: 250, not_recorded: 0, topups_microusd: 0 },
     ]);
+    // D791 part 2: the daily chart's split by day and model sums to the days and the models; no top-ups were bought.
+    // Mutations checked: the split grouped by day alone; the cost read as the charge.
+    const cell = (day: string, model: string) => u.by_day_model.find((x: any) => x.day === day && x.model === model);
+    for (const d of u.by_day) {
+      const cells = u.by_day_model.filter((x: any) => x.day === d.day);
+      assert.equal(cells.reduce((t: number, x: any) => t + x.charged_microusd, 0), d.charged_microusd, d.day);
+      assert.equal(cells.reduce((t: number, x: any) => t + x.cost_microusd, 0), d.cost_microusd, d.day);
+    }
+    assert.equal(new Set(u.by_day_model.map((x: any) => x.model)).size, u.by_model.length);
+    assert.ok(cell('2026-10-20', L70), 'a day and model cell');
+    assert.equal(u.topups_microusd, 0);
     // The ranges.
     assert.deepEqual(rangeBounds('7d', NOW), { from: '2026-10-14 00:00:00', to: '2026-10-21 00:00:00' });
     assert.deepEqual(rangeBounds('mtd', NOW), { from: '2026-10-01 00:00:00', to: '2026-10-21 00:00:00' });
@@ -384,6 +395,9 @@ test('the member search: an exact id, or a case-insensitive email prefix, at mos
     topup(MEMBER, 1, 5_000_000, ago(2 * D));
     topup(MEMBER, 2, 9_000_000, ago(40 * D));                              // outside 30d
     const top = (await platformAiUsage(w.env, '30d', new Date())).top_charged.find((t: any) => t.member.id === MEMBER);
+    // D791 part 2: "AI tokens bought" is the range's credited packs, the one outside 30d left out.
+    // Mutation checked: the platform total summing every top-up ever.
+    assert.equal((await platformAiUsage(w.env, '30d', new Date())).topups_microusd, 5_000_000);
 
     // By id: that member alone, never member 20 for "2".
     const byId = await call(w, SUPER, `/api/admin/ai-usage/members?q=${MEMBER}&range=30d`);
@@ -392,7 +406,7 @@ test('the member search: an exact id, or a case-insensitive email prefix, at mos
     assert.equal(byId.body.members[0].topups_microusd, 5_000_000);
     // A member with no runs reads zeros, not nothing.
     assert.deepEqual((await call(w, SUPER, '/api/admin/ai-usage/members?q=77')).body.members,
-      [{ member: { id: 77, name: 'Member 77', email: 'member77@example.test' }, runs: 0, refused: 0, cost_microusd: 0, charged_microusd: 0,
+      [{ member: { id: 77, name: 'Member 77', email: 'member77@example.test' }, role: 'founder', plan: 'founder:free', runs: 0, refused: 0, cost_microusd: 0, charged_microusd: 0,
         margin_microusd: 0, not_recorded: 0, topups_microusd: 0 }]);
     assert.deepEqual((await call(w, SUPER, '/api/admin/ai-usage/members?q=999999')).body.members, []);
 
@@ -447,7 +461,9 @@ test('one member: by model and by day, the same totals as their top-members row,
     const d = r.body;
     assert.deepEqual(d.member, MIA);
     const top = (await call(w, SUPER, '/api/admin/ai-usage?range=7d')).body.top_charged.find((t: any) => t.member.id === MEMBER);
-    const { member: _m, ...topSums } = top;
+    const { member: _m, role: _r, plan: _p, ...topSums } = top;
+    // D791 part 2: the member panel's role, plan and join date.
+    assert.deepEqual([d.role, d.plan, typeof d.joined], [top.role, top.plan, 'string']);
     assert.deepEqual(d.totals, topSums, 'the detail\'s totals are not the top-members row');
     assert.deepEqual(d.totals, { runs: 3, refused: 1, cost_microusd: 7_000, charged_microusd: 3_500, margin_microusd: 500, not_recorded: 1, topups_microusd: 0 });
     assert.deepEqual(d.by_model.map((m: any) => [m.model, m.runs, m.cost_microusd, m.charged_microusd, m.not_recorded]),
@@ -464,6 +480,8 @@ test('one member: by model and by day, the same totals as their top-members row,
     assert.deepEqual(d.history.map((h: any) => [h.action, h.actor_id, h.details.reason]),
       [['ai_member_paused', SUPER, REASON], ['ai_member_cap_set', SUPER, REASON]]);
     assert.equal(d.history[0].at, '2026-10-20 11:00:00');
+    // D791 part 2: each line names who made the change, for the member panel. Mutation checked: the actor join dropped.
+    assert.ok(d.history.every((h: any) => typeof h.actor_name === 'string' && h.actor_name.length > 0), JSON.stringify(d.history));
     assert.doesNotMatch(JSON.stringify(d), /"prompt"|"output"|"messages"|"response"/);
 
     // A store that cannot be read says so, never zero.

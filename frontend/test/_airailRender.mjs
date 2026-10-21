@@ -171,14 +171,6 @@ export const RENDER_NOT_YET = {
     'Investor /funds/performance',
   ],
   2099: [
-    'Advisor /advisor/advisory',
-    'Operating Partner /needs',
-    'Operating Partner /partner/needs',
-    'Operating Partner /partner/insights',
-    'Operating Partner /portfolio',
-    'Operating Partner /services',
-    'Operating Partner /partner/office-hours',
-    'Operating Partner /comarketing',
   ],
   2100: [
     'Admin /branch',
