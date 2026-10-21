@@ -61,7 +61,7 @@ export const RETURNS = [
   ['/raise/legal-engine/equity','/build/company-creation','← Build › Company creation'],
   ['/raise/capital-match','/raise/capital-relationships','← Raise › Capital relationships'],
   ['/grow/capital-match','/raise/capital-relationships','← Raise › Capital relationships'],
-  ['/grow/brand','/grow/distribution','← Grow › Distribution'],
+  ['/build/brand','/grow/distribution','← Grow › Distribution'],
   ['/grow/launch','/grow/distribution','← Grow › Distribution'],
   ['/legal','/build/company-creation','← Build › Company creation'],
   ['/legal/send','/build/company-creation','← Build › Company creation'],
@@ -74,7 +74,7 @@ export const checks = {
       return links(render(m.CycleModulePage,{cycle,slug,tools,data:{module:{name:slug},records:{cols:[],rows:[],total:0}}}), 'cycle-module-tool');
     });
     assert.deepEqual(out,[
-      [{href:'/grow/brand?project_id=41',label:'Open landing-page builder',quiet:true},{href:'/grow/launch?project_id=41',label:'Open launch calendar',quiet:true}],
+      [{href:'/build/brand?project_id=41',label:'Open landing-page builder',quiet:true},{href:'/grow/launch?project_id=41',label:'Open launch calendar',quiet:true}],
       // Cap table's one door, Open liquidity, left with Liquidity & Exits (owner, 2026-10-20).
       [],
       [{href:'/legal?project_id=41',label:'Open legal documents',quiet:true},{href:'/legal/send?project_id=41',label:'Open e-signature',quiet:true}],
@@ -89,11 +89,11 @@ export const checks = {
     const groups=[['grow','distribution'],['raise','cap-table'],['build','company-creation'],['raise','capital-relationships']];
     assert.deepEqual(users.map(user=>groups.flatMap(([c,s])=>m.navigation.moduleToolLinks(c,s,user)).map(l=>l.href)),
       [
-        ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
-        ['/grow/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],[],[],[],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],
+        ['/build/brand','/grow/launch','/legal','/legal/send','/raise/capital-match'],[],[],[],
       ]);
   },
   returns(m=actual) {
@@ -114,7 +114,7 @@ export const checks = {
   },
   bindings(m=actual) {
     const app=codeOnly(m.sources.app);
-    const routes=RETURNS.map(r=>r[0]).filter(p=>!['/raise/capital-match','/grow/capital-match','/grow/brand','/grow/launch','/legal','/legal/send'].includes(p));
+    const routes=RETURNS.map(r=>r[0]).filter(p=>!['/raise/capital-match','/grow/capital-match','/build/brand','/grow/launch','/legal','/legal/send'].includes(p));
     assert.deepEqual([routes.map(p=>[p,routeBlock(app,p)?.includes('founderEditor(')??false]),
       /const founderEditor = \(component\) => <><FounderModuleBackLink user=\{user\} \/>\{component\}<\/>/.test(app),
       /tools=\{moduleToolLinks\(cycle, slug, user, q\)\}/.test(m.sources.route)],
@@ -139,8 +139,8 @@ export const checks = {
     const app=codeOnly(m.sources.app);
     assert.deepEqual(m.navigation.FOUNDER_TOOLS.filter(t=>t.door).map(t=>{
       const block=routeBlock(app,t.path)||'';
-      const roles=block.match(/guard\(\[([^\]]*)\]/)?.[1]||'';
+      const roles=block.match(/guard\((?:labRoles\()?\[([^\]]*)\]/)?.[1]||'';
       return [t.path,t.roles.every(r=>roles.includes("'"+r+"'"))];
-    }),[['/grow/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-match',true],['/raise/data-room',true]]);
+    }),[['/build/brand',true],['/grow/launch',true],['/legal',true],['/legal/send',true],['/raise/capital-match',true],['/raise/data-room',true]]);
   },
 };

@@ -435,7 +435,6 @@ const FounderGrowTalent = lazy(() => import('./pages/founder/FounderGrowTalent')
 const FounderGrowCustomers = lazy(() => import('./pages/founder/FounderGrowCustomers'));
 const FounderGrowPartnerships = lazy(() => import('./pages/founder/FounderGrowPartnerships'));
 const FounderGrowCapitalMatch = lazy(() => import('./pages/founder/FounderGrowCapitalMatch'));
-const FounderGrowBrand = lazy(() => import('./pages/founder/FounderGrowBrand'));
 const FounderGrowLaunch = lazy(() => import('./pages/founder/FounderGrowLaunch'));
 const FounderNetworkDesk = lazy(() => import('./pages/founder/FounderNetworkDesk'));
 const FounderResearchDesk = lazy(() => import('./pages/founder/FounderResearchDesk'));
@@ -2430,8 +2429,9 @@ function AppInner() {
           (any founder, plus active lab members).
           A SPIN-OUT LAB PAGE, NOT A GROW PAGE. It used to be wrapped in
           founderWorkspace('grow', …) and the Grow tab bar, so the Lab tool
-          wore Grow's header, tabs and seam. Grow's Brand page is /grow/brand;
-          the two are separate pages and neither dresses as the other. */}
+          wore Grow's header, tabs and seam. Grow's Brand page is /build/brand
+          (#2343: /grow/brand forwards there); the two are separate pages and
+          neither dresses as the other. */}
       <Route path="/spinout-lab/brand" element={guard(labRoles(['admin', 'founder']), <SpinoutLabBrandPage />)} />
       <Route path="/spinout-lab/cofounder-agreement" element={guard(labRoles(['admin']), <SpinoutLabCofounderAgreementPage />)} />
       {/* Co-founder Match tool page (design: Co-founder Match.dc) — the Lab
@@ -3145,7 +3145,9 @@ function AppInner() {
       <Route path="/grow/partnerships" element={guard(['admin', 'founder'], <FounderGrowPartnerships />)} />
       <Route path="/raise/capital-match" element={guard(['admin', 'founder'], <FounderGrowCapitalMatch user={user} />)} />
       <Route path="/grow/capital-match" element={guard(['admin', 'founder'], <Navigate replace to={{ pathname: '/raise/capital-match', search: location.search, hash: location.hash }} />)} />
-      <Route path="/grow/brand" element={guard(['admin', 'founder'], <FounderGrowBrand />)} />
+      {/* #2343: one brand page. Grow's read of pages and leads moved into the
+          builder (`BrandPagesSection`); the old address forwards there. */}
+      <Route path="/grow/brand" element={<Navigate replace to={{ pathname: '/build/brand', search: location.search, hash: location.hash }} />} />
       <Route path="/grow/launch" element={guard(['admin', 'founder'], <FounderGrowLaunch />)} />
       <Route path="/build/command-center" element={guard(labRoles(['admin', 'founder']), <Navigate to="/studio" replace />)} />
       {/* Task #74 — back-compat redirect from the pre-rename /mentors path. */}

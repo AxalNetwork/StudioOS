@@ -143,7 +143,6 @@ const FOUNDER = [
   alias('/grow/talent', key(F, 'Grow', 'Team expansion'), 'The legacy Talent zone.'),
   alias('/grow/customers', key(F, 'Grow', 'Revenue and traction'), 'The legacy Customers zone.'),
   alias('/grow/partnerships', key(F, 'Grow', 'Partner network'), 'The legacy Partnerships zone.'),
-  alias('/grow/brand', key(F, 'Grow', 'Distribution'), 'The legacy Brand zone.'),
   alias('/grow/launch', key(F, 'Grow', 'Distribution'), 'The legacy Launch zone.'),
   alias('/needs', key(F, 'Grow', 'Partner network'), 'A founder posts needs for partners.'),
   alias('/founder/post-need', key(F, 'Grow', 'Partner network'), 'Post a need, for partners.'),

@@ -72,6 +72,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/market-intel' },
   { path: '/grow/updates' },
   { path: '/grow/capital-match' },
+  { path: '/grow/brand' }, // #2343: Grow's Brand page folded into /build/brand
   { path: '/build/command-center' },
   { path: '/mentors' },
   { path: '/office-hours' },

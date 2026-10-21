@@ -95,7 +95,7 @@ export default function FounderGrowCustomers() {
     const rows = customers.filter((row) => sourceLabel(row.source) === source);
     return { source, rows, latest: rows[0], stages: [...new Set(rows.map((row) => statusLabel(row.crm_status)))] };
   }), [customers, sources]);
-  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/grow/brand${query}`], ['Launch', `/grow/launch${query}`]];
+  const nav = [['Focus', `/grow/focus${query}`], ['Talent', `/grow/talent${query}`], ['Customers', `/grow/customers${query}`], ['Partnerships', `/grow/partnerships${query}`], ['Brand', `/build/brand${query}`], ['Launch', `/grow/launch${query}`]];
 
   return <main className="a5-grow fg-customers" data-testid="founder-grow-customers"><div className="a5-grow-canvas"><div className="a5-grow-main">
     <header className="a5-grow-hero"><div className="fg-customers-crumb"><Link to={`/grow/focus${query}`}><ArrowLeft size={13} /> Grow</Link><span>‹</span><b>Customers</b></div><div><h1>Customer pipeline</h1><p>Pipeline, segments, sequences and step conversion.</p></div><nav aria-label="Grow sections">{nav.map(([label, to]) => <LensLink data-testid={`link-grow-customers-${label.toLowerCase().replace(' ', '-')}`} key={label} to={to} className={label === 'Customers' ? 'is-active' : ''}>{label}</LensLink>)}</nav>

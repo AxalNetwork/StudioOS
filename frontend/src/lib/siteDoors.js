@@ -171,7 +171,7 @@ export const DOORS = {
       { t: 'Legal and 83(b)', route: '/raise/legal' },
       { t: 'Talent', route: '/grow/talent' },
       { t: 'Customers and partnerships', route: '/grow/customers' },
-      { t: 'Brand', route: '/grow/brand' },
+      { t: 'Brand', route: '/build/brand' },
       { t: 'Launches and events', route: '/grow/launch' },
       { t: 'Warm introductions', route: '/network/introductions' },
       { t: 'Research and Ask', route: '/research/ask' },
