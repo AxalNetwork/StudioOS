@@ -639,6 +639,7 @@ publicRoutes.get('/p/:partner_slug', async (c) => {
 // ---------- /status ------------------------------------------------
 type ServiceHealth = {
   name: string;
+  match?: string;
   status: 'operational' | 'degraded' | 'down' | 'unknown';
   uptime_pct?: number;
   history?: Array<{ day: string; status: string }>;
@@ -698,18 +699,28 @@ async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<Serv
     try { await env.DB.prepare('SELECT 1').first(); }
     catch { dbStatus = 'down'; }
   }
-  services.push({ name: 'API + Database (D1)', status: dbStatus });
-  services.push({ name: 'Token store (KV)', status: bindings.kv_tokens ? 'operational' : 'down' });
-  services.push({ name: 'Rate limit store (KV)', status: bindings.kv_rate_limits ? 'operational' : 'down' });
-  services.push({ name: 'Realtime pipeline (DO)', status: bindings.durable_pipeline ? 'operational' : 'down' });
-  services.push({ name: 'Onboarding chat (DO)', status: bindings.durable_onboarding ? 'operational' : 'down' });
-  // Workers AI + R2 aren't in /api/health (no probe wired yet); fall back to
-  // binding presence so the row appears but is honestly labelled "unknown"
-  // when we can't tell.
-  const ai = !!(env as unknown as { AI?: unknown }).AI;
-  services.push({ name: 'AI scoring (Workers AI)', status: ai ? 'operational' : 'unknown' });
-  const r2 = !!(env as unknown as { R2?: unknown }).R2;
-  services.push({ name: 'File storage (R2)', status: r2 ? 'operational' : 'unknown' });
+  // Rows name what a visitor uses, never the platform part behind it. `match`
+  // keeps the technical word an incident's `affected_services` may name (an
+  // admin tagging "D1" or "R2") so renaming a row never drops an incident
+  // from its strip; it is stripped before the response.
+  services.push({ name: 'API and database', match: 'd1 db database api', status: dbStatus });
+  services.push({ name: 'Sign-in sessions', match: 'kv tokens token store', status: bindings.kv_tokens ? 'operational' : 'down' });
+  services.push({ name: 'Rate limiting', match: 'kv rate limit', status: bindings.kv_rate_limits ? 'operational' : 'down' });
+  services.push({ name: 'Live updates', match: 'do realtime pipeline', status: bindings.durable_pipeline ? 'operational' : 'down' });
+  services.push({ name: 'Onboarding chat', match: 'do onboarding', status: bindings.durable_onboarding ? 'operational' : 'down' });
+  // None of these is in /api/health, so binding presence stands in, and an
+  // absent binding reads "unknown". File storage is the `FILES` bucket: the probe
+  // used to read `env.R2`, a binding that has never existed, so the row was
+  // always "unknown" and the page rolled up to "Degraded".
+  const bound = (key: string) => !!(env as unknown as Record<string, unknown>)[key];
+  const presence = (key: string): ServiceHealth['status'] => (bound(key) ? 'operational' : 'unknown');
+  services.push({ name: 'AI scoring', match: 'workers ai', status: presence('AI') });
+  services.push({ name: 'File storage', match: 'r2 files', status: presence('FILES') });
+  services.push({ name: 'Search', match: 'vectorize vector', status: presence('VECTORIZE') });
+  services.push({ name: 'Background jobs', match: 'queue job_queue', status: presence('JOB_QUEUE') });
+  services.push({ name: 'Published pages', match: 'publications', status: presence('PUBLICATIONS') });
+  services.push({ name: 'Backups', match: 'backups', status: presence('BACKUPS') });
+  services.push({ name: 'Document rendering', match: 'browser rendering pdf', status: presence('BROWSER') });
   return services;
 }
 
@@ -779,8 +790,8 @@ publicRoutes.get('/status', async (c) => {
     (r.results || []).forEach((row) => resolvedById.set(row.id, row));
   } catch { /* ignore */ }
 
-  const enriched = services.map((svc) => {
-    const slug = svc.name.toLowerCase();
+  const enriched = services.map(({ match, ...svc }) => {
+    const slug = `${svc.name} ${match || ''}`.toLowerCase();
     const cells = days.map((day) => {
       let status: 'operational' | 'degraded' | 'down' = 'operational';
       for (const inc of incidents) {
