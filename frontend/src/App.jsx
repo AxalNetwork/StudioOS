@@ -34,6 +34,7 @@ import RouteErrorBoundary from './components/RouteErrorBoundary';
 import learningRoutes from './routes/learning';
 import BranchDigestRedirect from './pages/branch/BranchDigestRedirect';
 import HqCreditsRedirect from './pages/hq/HqCreditsRedirect';
+import { useRedirectBeacon } from './lib/redirectBeacon';
 // ── end route modules ─────────────────────────────────────────────────────
 import {
   Menu,
@@ -1890,6 +1891,8 @@ function AppInner() {
   // D575 — on a phone a zone pill opens its lens in place: the routes below
   // render the lens's location while the URL and history stay put.
   const lensLocation = useLensLocation();
+  // #2301 — count each opening of an old redirect address before it is retired.
+  useRedirectBeacon(location.pathname);
 
   // `opts.hq` is only meaningful for mode 'admin': true is the HQ shell
   // ("Super Admin" in the list), false the plain shell ("Admin"). Other modes
