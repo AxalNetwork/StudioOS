@@ -5,6 +5,7 @@ import type { MailLinkEnv } from '../middleware/mailLink';
 import { rateLimitMiddleware } from '../middleware/rateLimit';
 import { audienceList, audienceRecipients, parseAudience, readCursor } from '../services/mailLinkAudiences';
 import { applyMailEvents, parseMailEvents } from '../services/mailLinkEvents';
+import { mailApplicants, mailProgrammes } from '../services/testing';
 
 const app = new Hono<MailLinkEnv>();
 // This router mounts before browser/session middleware. Even a failing rate
@@ -34,6 +35,22 @@ app.get('/audiences/:key/recipients', async c => {
   if (after === null) return c.json({ error: 'invalid_cursor', detail: 'Use the next_cursor from this audience.' }, 400);
   const result = await audienceRecipients(c.env, audience, after);
   await c.env.DB.prepare('INSERT INTO mail_link_reads (audience, count) VALUES (?, ?)').bind(key, result.recipients.length).run();
+  return c.json(result);
+});
+// D812 part 2b (#2258): Mail's Product testing page. Programmes, and one
+// programme's applicants, whose `email` is set only for someone `testers:<uid>`
+// sends to. Each read is logged as the audience reads are, never with an address.
+app.get('/testing/programmes', async c => {
+  const items = await mailProgrammes(c.env);
+  await c.env.DB.prepare('INSERT INTO mail_link_reads (audience, count) VALUES (?, ?)').bind('testing:programmes', items.length).run();
+  return c.json({ items });
+});
+app.get('/testing/programmes/:uid/applicants', async c => {
+  const uid = c.req.param('uid');
+  if (!/^[0-9a-f-]{8,64}$/i.test(uid)) return c.json({ error: 'not_found', detail: 'No programme has that uid.' }, 404);
+  const result = await mailApplicants(c.env, uid);
+  if (!result) return c.json({ error: 'not_found', detail: 'No programme has that uid.' }, 404);
+  await c.env.DB.prepare('INSERT INTO mail_link_reads (audience, count) VALUES (?, ?)').bind(`testing:applicants:${uid}`, result.items.length).run();
   return c.json(result);
 });
 app.post('/events', async c => {

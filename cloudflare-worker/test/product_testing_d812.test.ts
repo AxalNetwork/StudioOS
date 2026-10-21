@@ -69,8 +69,13 @@ function makeD1(db: InstanceType<typeof DatabaseSync>) {
 
 function world() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'super_admins', 'partners', 'notifications_inbox']) db.exec(ddl(t));
+  for (const t of ['users', 'super_admins', 'partners', 'notifications_inbox', 'insight_subscriptions']) db.exec(ddl(t));
+  // APPLIED, NOT MIRRORED: 515 and 517 are the tables D811's tester rule reads
+  // (suppressions, unsubscribes, `mail_enabled`), so the email rule is tested
+  // against the schema as it ships.
+  db.exec(readFileSync(`${SQL}/migrations/515_newsletter_lists.sql`, 'utf8'));
   db.exec(readFileSync(`${SQL}/migrations/516_product_testing.sql`, 'utf8'));
+  db.exec(readFileSync(`${SQL}/migrations/517_mail_link.sql`, 'utf8'));
   const u = db.prepare('INSERT INTO users (id, email, name, role, partner_id) VALUES (?, ?, ?, ?, ?)');
   for (const [id, role, name, firm] of [
     [HQ, 'admin', 'Hana Q', null], [ADMIN, 'admin', 'Plain Admin', null],

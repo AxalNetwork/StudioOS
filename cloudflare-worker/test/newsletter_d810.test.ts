@@ -135,10 +135,11 @@ function unpace(db: InstanceType<typeof DatabaseSync>) {
 async function subscribeAndConfirm(h: ReturnType<typeof harness>, email: string, topics: string[]) {
   const res = await h.json('POST', '/api/newsletter/subscribe', { email, topics });
   assert.equal(res.status, 200);
-  const confirm = linkIn(h.mails.at(-1)!.text, '/api/newsletter/confirm');
+  const confirm = linkIn(h.mails.at(-1)!.text, '/newsletter/confirm');
   const ok = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(confirm)}`, { method: 'POST', headers: { Accept: 'application/json' } });
   assert.equal(ok.status, 200);
-  return { confirm, prefs: linkIn(h.mails.at(-1)!.text, '/newsletter/preferences') };
+  const confirmed = await ok.json() as any;
+  return { confirm, confirmed, prefs: linkIn(h.mails.at(-1)!.text, '/newsletter/preferences') };
 }
 
 test('subscribe answers identically for a new, a pending and a confirmed address', async () => {
@@ -179,7 +180,9 @@ test('opening the confirm link changes nothing; only the POST confirms (a mail s
   const h = harness();
   try {
     await h.json('POST', '/api/newsletter/subscribe', { email: 'scan@example.test', topics: ['brief'] });
-    const token = linkIn(h.mails.at(-1)!.text, '/api/newsletter/confirm');
+    const token = linkIn(h.mails.at(-1)!.text, '/newsletter/confirm');
+    // D813: the email opens the SPA's confirm page, which confirms on a press.
+    assert.doesNotMatch(h.mails.at(-1)!.text, /\/api\/newsletter\/confirm/, 'the email links the page, not the Worker route');
     const sent = h.mails.length;
     const status = () => (h.db.prepare(`SELECT status, confirm_token_hash FROM newsletter_subscribers WHERE email = 'scan@example.test'`).get() as any);
     const json = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(token)}`, { headers: { Accept: 'application/json' } });
@@ -202,7 +205,9 @@ test('opening the confirm link changes nothing; only the POST confirms (a mail s
 test('a confirm token works once and expires', async () => {
   const h = harness();
   try {
-    const { confirm } = await subscribeAndConfirm(h, 'once@example.test', ['brief']);
+    const { confirm, confirmed } = await subscribeAndConfirm(h, 'once@example.test', ['brief', 'events']);
+    // D813's W2 draws "You're subscribed to [n] newsletters" from these labels.
+    assert.deepEqual(confirmed, { ok: true, status: 'confirmed', topics: ['The Axal VC Brief', 'Events'] });
     const row = h.db.prepare(`SELECT status, confirm_token_hash, consent_text_version, consented_at FROM newsletter_subscribers WHERE email = 'once@example.test'`).get() as any;
     assert.equal(row.status, 'confirmed');
     assert.equal(row.confirm_token_hash, null, 'the hash is cleared on use');
@@ -216,7 +221,7 @@ test('a confirm token works once and expires', async () => {
     assert.equal((await again.json() as any).code, 'token_invalid');
 
     await h.json('POST', '/api/newsletter/subscribe', { email: 'late@example.test', topics: [] });
-    const late = linkIn(h.mails.at(-1)!.text, '/api/newsletter/confirm');
+    const late = linkIn(h.mails.at(-1)!.text, '/newsletter/confirm');
     h.db.exec(`UPDATE newsletter_subscribers SET confirm_expires_at = '2000-01-01T00:00:00.000Z' WHERE email = 'late@example.test'`);
     const expired = await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(late)}`, { method: 'POST', headers: { Accept: 'application/json' } });
     assert.equal(expired.status, 410);
@@ -328,7 +333,7 @@ test('the raw IP is never stored', async () => {
     await h.json('POST', '/api/newsletter/subscribe', { email: 'ip@example.test', topics: ['brief'] });
     const pending = JSON.stringify(h.db.prepare(`SELECT * FROM newsletter_subscribers WHERE email = 'ip@example.test'`).all());
     assert.equal(pending.includes(IP), false, 'the signup stored the raw IP');
-    const confirm = linkIn(h.mails.at(-1)!.text, '/api/newsletter/confirm');
+    const confirm = linkIn(h.mails.at(-1)!.text, '/newsletter/confirm');
     assert.equal((await h.req(`/api/newsletter/confirm?token=${encodeURIComponent(confirm)}`, { method: 'POST', headers: { Accept: 'application/json' } })).status, 200);
     for (const table of ['newsletter_subscribers', 'newsletter_subscriber_topics', 'email_suppressions']) {
       const dump = JSON.stringify(h.db.prepare(`SELECT * FROM ${table}`).all());
