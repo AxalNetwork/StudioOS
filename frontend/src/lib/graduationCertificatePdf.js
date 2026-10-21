@@ -4,8 +4,8 @@
 // (spin-out-lab-pipeline/project/Graduation Certificate.dc.html, a 840×594
 // artboard — the same 1.414 ratio, so the layout maps 1:1 onto A4 landscape).
 //
-// Vector-drawn with jsPDF, the same approach as scoringReportPdf.js and
-// coveragePdf.js: no html2canvas. The on-screen certificate uses dark-mode
+// Vector-drawn with jsPDF, the same approach as scoringReportPdf.js and the
+// removed coverage PDF: no html2canvas. The on-screen certificate uses dark-mode
 // classes, a container-query transform scale and a background photograph,
 // all of which rasterise badly; a vector page is sharper, smaller, and
 // prints correctly.

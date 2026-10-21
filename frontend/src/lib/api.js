@@ -4757,12 +4757,6 @@ export const api = {
   portfolioHealthRecomputeOne: (projectUid) =>
     request(`/portfolio/health/recompute/${projectUid}`, { method: 'POST' }),
 
-  // ---------- Partner Coverage Analytics (Task #18) ----------
-  // Admin/partner-only portfolio-wide skill-gap heatmap. Optional fund scoping
-  // via fund_id. Returns per-company 8-axis radar scores + portfolio aggregate.
-  portfolioCoverage: (fundId) =>
-    request(`/portfolio/coverage${fundId ? `?fund_id=${encodeURIComponent(fundId)}` : ''}`),
-
   // ---------- IC Decisions (Commit) ----------
   icList: (opts = {}) => {
     const q = new URLSearchParams();

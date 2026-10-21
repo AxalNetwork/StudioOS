@@ -100,9 +100,12 @@ test('D773: the boards that drew no rail draw one in the shared frame, for their
   // The shells' static "AI assist" cards stand down where the real rail docks.
   assert.match(read('pages/partner/PartnerWorkspaceTabs.jsx'), /tabs=\{visibleTabs\}\s+rail=\{false\}/);
   assert.match(read('pages/advisor/advisory/AdvisorAdvisoryWorkspace.jsx'), /embedded=\{embedded\}\s+rail=\{false\}/);
-  // The partner's alias of Leads takes Leads' frame and lights Leads' tab.
+  // The partner's alias of Leads took Leads' frame here until #2338 removed
+  // the needs board: `/partner/needs` now forwards to Leads itself, which
+  // draws the shell's rail, and the Pipeline tab points there.
   const app = read('App.jsx');
-  assert.match(app, /path="\/partner\/needs" element=\{guard\(\['admin', 'partner'\], partnerPrivateWorkspace\(<PartnerWorkspaceTabs set="pipeline" user=\{user\}><NeedsBoardPage user=\{user\} \/><\/PartnerWorkspaceTabs>\)\)\}/);
+  assert.match(app, /path="\/partner\/needs" element=\{guard\(\['admin', 'partner'\], <MarketplaceRedirect role=\{user\?\.role\} founderTab="needs" to="\/pipeline\/leads" \/>\)\}/);
+  assert.match(read('pages/partner/PartnerWorkspaceTabs.jsx'), /\{ to: '\/pipeline\/leads', label: 'Leads'/);
 });
 
 test('D773: no advisor or partner route is waiting on #2099 any more', () => {

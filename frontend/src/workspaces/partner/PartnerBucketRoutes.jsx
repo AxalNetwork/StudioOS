@@ -151,8 +151,8 @@ function Loading() {
  * tab. It is gone because the zone is no longer the shared marketplace board —
  * `LeadsZone` reads this firm's own leads, scores them against its own fit
  * rules and records a pass with its reason, none of which a board serving four
- * licences could do. The marketplace itself is still at `/needs`, and the
- * zone's empty state links there.
+ * licences could do. #2338 removed that board's own address too: `/needs`
+ * forwards to this zone.
  *
  * `embedded` MAKES EACH PAGE RENDER ITS ZONE AND NOTHING ELSE — no heading
  * block of its own, because the shell above has already drawn the crumb, the h1
@@ -167,7 +167,8 @@ function Loading() {
  * firm's offerings, My perks is what this reader redeemed, Review queue is admin
  * moderation, Stripe Connect is payouts. None is a view of "what this firm
  * sells" or "this firm's own perk listings" — they are different subjects that
- * share a component, and each keeps its own route (`/services`, `/perks`).
+ * share a component. `/perks` keeps its own route; `/services` was removed
+ * (#2338) and forwards to this zone.
  *
  * The artboards agree and are the contract: PO1 and PO2 in `design/canvases/
  * integrated/Pages · Partner Offers.dc.html` each declare one `filters` row and
@@ -238,7 +239,7 @@ const LIVE = {
     // wears. `role="partner"` is therefore the shell's licence and not the
     // viewer's: an admin reading a partner's catalogue is still in this shell,
     // and chips painted from `user.role` would put founder violet inside it.
-    catalog: (user) => <ServiceCatalogPage user={user} embedded role="partner"
+    catalog: (user) => <ServiceCatalogPage user={user} role="partner"
       zoneFilters={(opts) => partnerZoneFilters('offers/catalog', opts)}
       zoneActions={(rows, handlers) => partnerZoneActions('offers/catalog', { handlers, view: {
         header: ['Service', 'Model', 'Price (cents)', 'Sold', 'What’s included'],

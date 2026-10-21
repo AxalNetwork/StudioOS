@@ -139,11 +139,12 @@ export const ATTESTATION_DOOR = { text: 'Show Axal you can fund this', href: '/s
  * #1780 (canvas PR): each use row's door, to the screen where that use
  * happens (#1778's screens, #1848). A use with no screen on `main` has no
  * door: `raise_receipts` and `venture_spend` are matched and read from their
- * own pages' panels, which this sheet does not link yet.
+ * own pages' panels, which this sheet does not link yet. `practice_income`
+ * lost its door with #2338: invoices were matched on the needs board's
+ * Engagements tab at `/partner/needs`, and the owner removed that page.
  */
 export const USE_DOORS = {
   venture_revenue: { text: 'Import from Mercury', href: '/spinout-lab/revenue' },
-  practice_income: { text: 'Match an invoice', href: '/partner/needs' },
   partner_deals: { text: 'Match a payout or settlement', href: '/partner/earnings' },
   capital_attestation: ATTESTATION_DOOR,
 };

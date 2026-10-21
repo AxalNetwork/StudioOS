@@ -63,23 +63,24 @@ const CANVAS = [
   ['Studio', 'Deal Flow', '/deals'],
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
   // & Journal stood in this group; the owner removed them on 2026-10-20.
-  ['Capital & Legal', 'Portfolio Health', '/portfolio/health'], ['Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage'],
+  // Portfolio Coverage, Service Catalogue and Needs Board stood here; the owner
+  // removed them on 2026-10-21 (#2337, #2338).
+  ['Capital & Legal', 'Portfolio Health', '/portfolio/health'],
   ['Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall'],
   ['Capital & Legal', 'Legal & Capital', '/legal-capital'],
   ['Capital & Legal', 'Incorporate', '/incorporate'], ['Capital & Legal', 'Compliance Calendar', '/compliance'],
   ['Network & Growth', 'Network', '/network'], ['Network & Growth', 'Network Effects', '/network-effects'],
-  ['Network & Growth', 'Jobs', '/my/jobs'], ['Network & Growth', 'Service Catalogue', '/services'],
-  ['Network & Growth', 'Needs Board', '/needs'], ['Network & Growth', 'Demand Insights', '/partner/insights'],
+  ['Network & Growth', 'Jobs', '/my/jobs'], ['Network & Growth', 'Demand Insights', '/partner/insights'],
   ['Network & Growth', 'Partner Office Hours', '/partner/office-hours'], ['Network & Growth', 'Co-Marketing Review', '/comarketing'],
   ['More', 'Co-Founder Agreement', '/incorporate/cofounder-agreement'], ['More', '83(b) Tracker', '/spinout-lab/83b'],
   ['More', 'Perks', '/perks'],
 ];
 
-test('the palette list is the canvas list less the retired and removed pages: 20 pages in four groups, every one a registered route', () => {
+test('the palette list is the canvas list less the retired and removed pages: 17 pages in four groups, every one a registered route', () => {
   assert.deepEqual(WORKSPACES.map((w) => [w.group, w.label, w.route]), CANVAS);
   assert.deepEqual(WORKSPACE_GROUP_ORDER, ['Studio', 'Capital & Legal', 'Network & Growth', 'More']);
   assert.deepEqual(WORKSPACE_GROUP_ORDER.map((g) => [g, WORKSPACES.filter((w) => w.group === g).length]),
-    [['Studio', 3], ['Capital & Legal', 6], ['Network & Growth', 8], ['More', 3]]);
+    [['Studio', 3], ['Capital & Legal', 5], ['Network & Growth', 6], ['More', 3]]);
   for (const w of WORKSPACES) {
     assert.ok(w.description && w.description.endsWith('.'), `${w.route} has no description`);
     assert.ok(registered(w.route), `palette route ${w.route} is not registered in App.jsx`);
@@ -92,11 +93,18 @@ test('no page is labelled as an AI advisor, and the three founder redirects stil
   // The voice rule: the model is Eadwyn, never an advisor. H37's "AI Advisory
   // Suite" went with the launcher (D563).
   assert.ok(!WORKSPACES.some((w) => /\bAI Advis/i.test(w.label)), 'a page is labelled as an AI advisor again');
-  for (const path of ['/my/jobs', '/services', '/needs']) {
+  const jobs = APP.split('\n').find((l) => l.includes('path="/my/jobs"'));
+  assert.ok(jobs, '/my/jobs is not routed');
+  assert.match(jobs, /user\?\.role === 'founder' \? <Navigate/, '/my/jobs no longer redirects only a founder');
+  // #2338: /services and /needs are removed and forward everyone, but only a
+  // founder still lands on the founder marketplace's tab.
+  for (const [path, tab] of [['/services', 'services'], ['/needs', 'needs']]) {
     const line = APP.split('\n').find((l) => l.includes(`path="${path}"`));
     assert.ok(line, `${path} is not routed`);
-    assert.match(line, /user\?\.role === 'founder' \? <Navigate/, `${path} no longer redirects only a founder`);
+    assert.match(line, new RegExp(`<MarketplaceRedirect role=\\{user\\?\\.role\\} founderTab="${tab}"`), `${path} no longer sends a founder to their tab`);
   }
+  assert.match(APP, /function MarketplaceRedirect\(\{ role, founderTab, to \}\) \{[\s\S]{0,80}?if \(role === 'founder'\) return <Navigate to=\{`\/build\/marketplace\?tab=\$\{founderTab\}`\} replace \/>;/,
+    'the founder branch of the marketplace redirect is gone');
 });
 
 /* ------------------------------------------------------------------ *

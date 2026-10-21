@@ -132,12 +132,13 @@ export const ADMIN_PLACEMENT = [
   // with the launcher).
   // The owner removed six of them on 2026-10-20 — Scoring Engine, Risk Matrix,
   // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
-  // & Journal — page and route together, so twenty remain.
+  // & Journal — page and route together, so twenty remained. #2337 and #2338
+  // removed Portfolio Coverage, Service Catalogue and Needs Board on
+  // 2026-10-21, so seventeen remain.
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
   page('Studio', 'Advisory', '/advisory', 'Advisors, financial planning and diligence checks.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
   page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),
-  page('Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage', 'Who covers which company.'),
   page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall', 'Proceeds by class at a given exit.'),
   page('Capital & Legal', 'Legal & Capital', '/legal-capital', 'Documents and capital records.'),
   page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
@@ -145,8 +146,6 @@ export const ADMIN_PLACEMENT = [
   page('Network & Growth', 'Network', '/network', 'Relationships and introductions.'),
   page('Network & Growth', 'Network Effects', '/network-effects', 'How activity compounds across the network.'),
   page('Network & Growth', 'Jobs', '/my/jobs', 'Open roles.'),
-  page('Network & Growth', 'Service Catalogue', '/services', 'Services offered to companies.'),
-  page('Network & Growth', 'Needs Board', '/needs', 'Needs posted by founders.'),
   page('Network & Growth', 'Demand Insights', '/partner/insights', 'Partner demand analytics.'),
   page('Network & Growth', 'Partner Office Hours', '/partner/office-hours', 'Partner session bookings.'),
   page('Network & Growth', 'Co-Marketing Review', '/comarketing', 'Co-marketing submissions to review.'),
@@ -193,7 +192,6 @@ export const PAGE_HOMES = {
   '/advisory': [['founder', 'Validate', 'also']],
   '/deals': [['investor', 'Deals', 'row']],
   '/portfolio/health': [['investor', 'Portfolio', 'row']],
-  '/portfolio/coverage': [['partner', 'Delivery', 'also']],
   '/portfolio/waterfall': [['investor', 'Portfolio', 'also']],
   '/legal-capital': [['founder', 'Raise', 'also']],
   '/incorporate': [['founder', 'Raise', 'also']],
@@ -201,8 +199,6 @@ export const PAGE_HOMES = {
   '/network': [['founder', 'Network', 'row'], ['investor', 'Network', 'row'], ['partner', 'Network', 'row'], ['advisor', 'Network', 'row']],
   '/network-effects': [['founder', 'Grow', 'also']],
   '/my/jobs': [['partner', 'Network', 'also'], ['advisor', 'Network', 'also']],
-  '/services': [['partner', 'Offers', 'also']],
-  '/needs': [['partner', 'Pipeline', 'also']],
   '/partner/insights': [['partner', 'Pipeline', 'also']],
   '/partner/office-hours': [['partner', 'Offers', 'also']],
   '/comarketing': [['partner', 'Offers', 'also'], ['founder', 'Grow', 'also', {
