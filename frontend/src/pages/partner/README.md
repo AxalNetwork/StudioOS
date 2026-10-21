@@ -9,7 +9,7 @@ imports. The bucket roots and the zone routing live in
 | `pipeline/` | Pipeline zones: Leads, Proposals, Negotiations, Retainers, Analytics. |
 | `delivery/` | Delivery zones: Board (with the engagement lifecycle and invoice ledger, D395), Deliverables, Capacity, Status reports, Health (with Founder reviews, D390). |
 | `offers/` | Offers zones: Catalog, Visibility, Proof, Audience fit. |
-| `earnings/` | The four earnings screens at the canvas's own routes (D569): `/partner/earnings`, `/partner/referrals`, `/partner/relationships/:id` and `/partner/leaderboard`. Not a bucket of the shell, so they draw their own pill row (`EARNINGS_AREA`). `parts.jsx` is what they share with the admin console `/admin/commissions`; the rules about what a figure means are in `frontend/src/lib/partnerEarnings.js`. |
+| `earnings/` | The three earnings screens at the canvas's own routes (D569): `/partner/earnings`, `/partner/referrals` and `/partner/relationships/:id` (the leaderboard was removed, #2297). Not a bucket of the shell, so they draw their own pill row (`EARNINGS_AREA`). `parts.jsx` is what they share with the admin console `/admin/commissions`; the rules about what a figure means are in `frontend/src/lib/partnerEarnings.js`. |
 | `kit.jsx` | The one import surface for partner zones; its header lists the three traps it exists to defuse. |
 | `PartnerStudioHome.jsx` | Partner Studio, what `/studio` renders for a partner: the masthead, Eadwyn (`StudioInterview`) and the profile band, around `PartnerHomeP2` (D564). |
 | `PartnerHomeP2.jsx` | Partner Studio's body, the canvas's P2 (D394), mounted by `PartnerStudioHome` since the owner signed it off on #981 (D564). |

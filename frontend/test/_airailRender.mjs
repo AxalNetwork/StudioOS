@@ -165,17 +165,13 @@ export const RENDER_NOT_YET = {
     'Founder /needs',
     'Founder /founder/post-need',
     'Founder /services',
-    'Founder /more',
-    'Founder /research/gtm',
   ],
   2098: [
     'Investor /studio',
     'Investor /funds/performance',
-    'Investor /research/gtm',
   ],
   2099: [
     'Advisor /advisor/advisory',
-    'Advisor /research/gtm',
     'Operating Partner /needs',
     'Operating Partner /partner/needs',
     'Operating Partner /partner/insights',
@@ -183,7 +179,6 @@ export const RENDER_NOT_YET = {
     'Operating Partner /services',
     'Operating Partner /partner/office-hours',
     'Operating Partner /comarketing',
-    'Operating Partner /research/gtm',
   ],
   2100: [
     'Admin /branch',
@@ -240,7 +235,6 @@ export const RENDER_NOT_YET = {
     'Advisor /updates',
     'Advisor /studio/archetype',
     'Operating Partner /partner/relationships',
-    'Operating Partner /partner/leaderboard',
     'Operating Partner /build/competitors',
     'Operating Partner /build/metrics',
     'Operating Partner /raise/legal-engine',

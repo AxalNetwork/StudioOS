@@ -16,7 +16,6 @@ export const FOUNDER_TOOLS = [
   { path: '/build/metrics', cycle: 'build', module: 'operating-systems' },
   { path: '/build/team', cycle: 'grow', module: 'team-expansion' },
   { path: '/comarketing', cycle: 'grow', module: 'distribution' },
-  { path: '/network-effects', cycle: 'grow', module: 'partner-network' },
   { path: '/raise/pitch', cycle: 'raise', module: 'pitch-deck' },
   { path: '/raise/pitch/positioning', cycle: 'raise', module: 'investor-narrative' },
   { path: '/raise/capital', cycle: 'raise', module: 'use-of-funds' },

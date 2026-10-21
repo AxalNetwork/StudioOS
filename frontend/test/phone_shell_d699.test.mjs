@@ -19,18 +19,16 @@ import { setReadState } from '../src/ui/CompanySwitcher.jsx';
 import NotificationBell from '../src/components/NotificationBell.jsx';
 import MobileTabBar from '../src/components/MobileTabBar.jsx';
 import { FOUNDER_BAND_PATHS, mobilePlan } from '../src/lib/mobileTabs.js';
-import { PERSONAS } from '../src/lib/personas.js';
 import { companySheetApi } from '../src/lib/api/companySheet.js';
 import { KEY as SUPPORT_KEY } from '../src/lib/supportSession.js';
 import { existsSync } from 'node:fs';
 import { __resetEadwynPanelForTest, useEadwynPanel, useEadwynRailServes } from '../src/ui/eadwynPanel.js';
 import { AccountSheet } from '../src/ui/phone/AccountSheet.jsx';
 import { ActiveCompanyContext } from '../src/contexts/ActiveCompanyContext.js';
-import { moreGroups } from '../src/pages/MorePage.jsx';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 
 const h = React.createElement;
-const render = (element, path = '/more') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, element));
+const render = (element, path = '/studio') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, element));
 const read = file => readFileSync(resolve(file), 'utf8');
 
 test('D699 sheet keeps the canvas frame and modal semantics', () => {
@@ -96,18 +94,19 @@ test('D699 company row descriptions are honest and dated in en-GB', () => {
   assert.equal(companyRowDescription({ cycles_active: [], last_opened: { cycle: 'grow', at: '2025-10-12T00:00:00Z' } }, false, now), 'Grow · last opened 12 Oct 2025');
 });
 
-test('D699 More carries both canvas rows and sidebar/persona extras', () => {
-  const groups = moreGroups();
-  assert.equal(groups[0].label, 'Around the cycles');
-  assert.deepEqual(groups[0].rows.map(row => row.to), ['/network', '/research']);
-  assert.deepEqual(groups[1].rows.map(row => row.to), ['/spinout-lab', '/messages']);
-  assert.deepEqual(moreGroups(undefined, 'founder_existing')[1].rows.map(row => row.to), ['/spinout-lab', '/messages', '/legal-capital']);
-  const clone = { founder: SIDEBAR_GROUPS.founder.map(group => ({ ...group, items: [...group.items] })) };
-  clone.founder[0].items.push({ to: '/new-place', label: 'New place' });
-  assert.ok(moreGroups(clone)[1].rows.some(row => row.to === '/new-place'));
+test('#2297: the More page is gone; More opens the drawer, and Messages is an account-sheet row', () => {
+  // Mutations checked: the /more route kept; More's button without onMore; Messages dropped from the sheet.
+  assert.ok(!existsSync(resolve('frontend/src/pages/MorePage.jsx')), 'MorePage.jsx is back');
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /path="\/more" element=\{guard\(\['admin', 'founder'\]/);
-  assert.match(read('frontend/src/pages/MorePage.jsx'), /Unreadable — persona links could not be loaded/);
+  assert.doesNotMatch(app, /path="\/more"/);
+  assert.match(app, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/);
+  // The drawer is the sidebar, persona extras and all (getSidebarGroups), so More's rows are all in it.
+  assert.match(app, /<SidebarNav groups=\{sidebarGroups\}/);
+  const plan = mobilePlan('founder');
+  const sidebar = new Set(SIDEBAR_GROUPS.founder.flatMap(group => group.items.map(row => row.to)));
+  for (const row of plan.more.filter(r => r.to !== '/messages')) assert.ok(sidebar.has(row.to), `${row.to} is in More but not the drawer`);
+  // Messages was More's one row that is not a sidebar row.
+  assert.match(read('frontend/src/ui/phone/AccountSheet.jsx'), /\['Messages', '\/messages'\]/);
 });
 
 test('D699 one switch writer and account sheet member routes', () => {
@@ -151,7 +150,7 @@ test('D699 company sheet switches a member to their last opened cycle', async ()
   try {
     mounted = await mountContracts(h(ActiveCompanyContext.Provider, { value: {
       company: rows[0], companies: rows, setCompany: co => selected.push(co.id), setCompanies() {},
-    } }, h(React.Fragment, null, h(CompanySheet, { onClose() {} }), h(Route))), '/more');
+    } }, h(React.Fragment, null, h(CompanySheet, { onClose() {} }), h(Route))), '/studio');
     await mounted.flush();
     assert.match(mounted.text(), /Active · Validate, Build/);
     assert.match(mounted.text(), /Orchard OpsNot started/);
@@ -178,7 +177,7 @@ test('D699 refused company creation keeps the editor open with the server reason
   const content = node => node.nodeType === 3 ? node.textContent || '' : node.childNodes?.length ? node.childNodes.map(content).join('') : node.textContent || '';
   let mounted;
   try {
-    mounted = await mountContracts(h(CompanySheet, { onClose() {} }), '/more');
+    mounted = await mountContracts(h(CompanySheet, { onClose() {} }), '/studio');
     await mounted.flush();
     const add = mounted.nodes().find(node => node.tagName === 'BUTTON' && content(node).includes('Create a company'));
     assert.ok(add, mounted.text());
@@ -217,7 +216,7 @@ test('D699 a cycle page is a visit, sent once an hour per company and cycle (tes
   assert.deepEqual(visitToRecord('/raise', 4, last, now), { companyId: 4, cycle: 'raise' }, 'another company is a new pair');
   assert.deepEqual(visitToRecord('/grow', 3, last, now), { companyId: 3, cycle: 'grow' });
   assert.deepEqual(visitToRecord('/validate/problem-discovery/12', 3, null, now), { companyId: 3, cycle: 'validate' });
-  for (const path of ['/network', '/studio', '/more', '/validate/interviews', '/raise/cap-table/variants']) {
+  for (const path of ['/network', '/studio', '/messages', '/validate/interviews', '/raise/cap-table/variants']) {
     assert.equal(visitToRecord(path, 3, null, now), null, path);
   }
   for (const id of [null, undefined, 0, -1, '3']) assert.equal(visitToRecord('/grow', id, null, now), null, String(id));
@@ -251,7 +250,7 @@ test('D699 the recorder sends a founder\'s visit, and never an operator\'s (test
   assert.deepEqual(await visitsSent({ role: 'founder', record: true }, { support: true }), [], 'an HQ support session');
   assert.deepEqual(await visitsSent({ role: 'investor', record: true }), [], 'not a founder');
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<MobileTabBar role=\{shellRole\} \/>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<CompanyVisits role=\{shellRole\} record=\{!isImpersonating && !\(isAdmin && activeRole !== 'admin'\)\} \/>/);
+  assert.match(app, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<CompanyVisits role=\{shellRole\} record=\{!isImpersonating && !\(isAdmin && activeRole !== 'admin'\)\} \/>/);
 });
 
 const ada = { id: 7, name: 'Ada Quill', email: 'ada@example.test' };
@@ -310,13 +309,13 @@ test('D699 one header is mounted: the band for a founder on a phone, today\'s ot
   assert.equal(app.split('aria-label="Open menu"').length - 1, 1, 'the hamburger lives in today\'s header only');
 });
 
-test('D699 the founder tabs are the four cycles, and More is the /more page (test 18)', () => {
+test('D699 the founder tabs are the four cycles, and More opens the drawer (test 18, #2297)', () => {
   const plan = mobilePlan('founder');
   assert.deepEqual(plan.tabs.map(row => row.to), ['/validate', '/build', '/raise', '/grow']);
   assert.ok(!plan.more.some(row => FOUNDER_BAND_PATHS.includes(row.to)), '/studio is in More');
   const bar = path => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [path] }, h(MobileTabBar, { role: 'founder' })));
-  assert.match(bar('/more'), /aria-current="page"[^>]*data-testid="link-mobile-tab-more" href="\/more"/);
-  assert.match(bar('/network/relationships'), /data-active="true" data-testid="link-mobile-tab-more"/);
+  assert.match(bar('/network/relationships'), /<button type="button" aria-label="More: open the menu"[^>]*data-active="true" data-testid="button-mobile-tab-more"/);
+  assert.doesNotMatch(bar('/network/relationships'), /href="\/more"/);
   assert.doesNotMatch(bar('/studio'), /aria-current="page"|data-active="true"/, 'something is lit on /studio');
   assert.doesNotMatch(bar('/validate'), /aria-haspopup/);
   for (const role of ['investor', 'advisor', 'partner', 'admin', 'exploring']) assert.equal(mobilePlan(role), null, role);
@@ -339,27 +338,20 @@ test('D699 census: every destination a founder\'s phone had keeps a phone home (
   want('/wellbeing', 'FounderWellbeingMenu');
 
   const offered = new Set(['/studio', ...mobilePlan('founder').tabs.map(row => row.to)]);
-  for (const group of moreGroups()) for (const row of group.rows) offered.add(row.to);
+  // More opens the drawer (#2297), which holds every sidebar row and the company-settings link.
+  for (const row of SIDEBAR_GROUPS.founder.flatMap(group => group.items)) offered.add(row.to);
+  offered.add('/company-settings');
   const sheets = read('frontend/src/ui/phone/CompanySheet.jsx') + read('frontend/src/ui/phone/AccountSheet.jsx');
   for (const [, to] of sheets.matchAll(/'(\/[a-z][a-z/-]*)'/g)) offered.add(to);
   for (const [, to] of sheets.matchAll(/to="(\/[a-z][a-z/-]*)"/g)) offered.add(to);
   for (const [to, from] of wanted) assert.ok(offered.has(to), `${to} (${from}) has no phone home`);
 
-  // Each founder persona's extras reach /more; a persona of another alignment adds none, as in the sidebar.
-  for (const persona of PERSONAS.filter(p => p.role_alignment === 'founder')) {
-    const rows = new Set(moreGroups(undefined, persona.id).flatMap(group => group.rows.map(row => row.to)));
-    for (const extra of persona.nav_extras) assert.ok(rows.has(extra.to) || offered.has(extra.to), `${persona.id}: ${extra.to}`);
-  }
-  const partner = PERSONAS.find(p => p.role_alignment === 'partner' && p.nav_extras.length);
-  const base = moreGroups().flatMap(group => group.rows.map(row => row.to));
-  assert.deepEqual(moreGroups(undefined, partner.id).flatMap(group => group.rows.map(row => row.to)), base, `${partner.id} adds partner rows to a founder's More`);
-
   // The switch and the create go through the one switch path.
   const companySheet = read('frontend/src/ui/phone/CompanySheet.jsx');
   assert.match(companySheet, /switchTo\(co\)/);
   assert.match(companySheet, /await create\(name\.trim\(\)\)/);
-  // The one control with no phone home: the sidebar search filters drawer
-  // rows, and the drawer is not reachable on a founder's phone (D699.md).
+  // The sidebar search filters the drawer's rows; since #2297 More opens the
+  // drawer, so a founder's phone reaches the search too.
   assert.match(read('frontend/src/ui/SidebarNav.jsx'), /search/i);
 });
 

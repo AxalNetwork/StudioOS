@@ -270,8 +270,8 @@ export const SIDEBAR_GROUPS = {
   //   • "Portfolio Health" (/portfolio/health) — folded into Metrics
   //     (/build/metrics) as the founder's own company-health view; the
   //     /portfolio/health route stays registered and reachable for other roles.
-  //   • "Network Effects" (/network-effects) is demoted to More while a single
-  //     "Network" entry (/network) leads Validate; both routes stay live.
+  //   • "Network Effects" (/network-effects) was removed (owner, #2297); the
+  //     single "Network" entry (/network) leads Validate.
   //   • Task #1 — "Contacts" (/contacts) is merged into the Network page as its
   //     default "Contacts" tab; /contacts redirects to /network?tab=contacts and
   //     /relationships redirects to /network?tab=relationships.
@@ -342,7 +342,7 @@ export const SIDEBAR_GROUPS = {
       // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
       { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/legal-capital', '/incorporate', '/compliance'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
-        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
+        match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks'] },
       // Points at /network, not at the first zone: /network is the one route
       // that role-branches its element, so it is the landing every license can
       // open, and it forwards to the zone. The three /network/* zone routes are
@@ -676,7 +676,7 @@ export const INVESTOR_FULL_BLEED = [
   // Legacy mounts the shell config does not claim, each still live and still
   // rendering the same canvas at the same width.
   '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions',
-  '/portfolio/health', '/portfolio/growth', '/portfolio/performance',
+  '/portfolio/health', '/portfolio/performance',
   '/portfolio/waterfall',
 ];
 

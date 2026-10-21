@@ -1158,7 +1158,7 @@ publicRoutes.post('/analytics/pageview', async (c) => {
   const body = await c.req.json<{ path?: string }>().catch(() => ({} as { path?: string }));
   const raw = String(body.path || '').trim();
   // Only count paths from our known public surfaces; ignore everything else.
-  const allowed = new Set(['/', '/pricing', '/demo', '/status', '/changelog', '/roadmap', '/spinout-lab', '/terms', '/privacy']);
+  const allowed = new Set(['/', '/pricing', '/demo', '/status', '/changelog', '/spinout-lab', '/terms', '/privacy']);
   const path = raw.split('?')[0].split('#')[0];
   if (!allowed.has(path)) return c.body(null, 204);
   try {

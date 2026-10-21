@@ -199,9 +199,8 @@ export function isPublicPath(pathname) {
     || currentPath === '/for-investors'
     || currentPath === '/for-service-partners'
     || currentPath === '/for-advisors'
-    // Audience-specific marketing landing pages (/lp/founder,
-    // /lp/investor, /lp/partner, /lp/customer-discovery,
-    // /lp/spinout-demo-day). Public surfaces: a background
+    // The Spin-Out demo day's landing page (/lp/spinout-demo-day).
+    // A public surface: a background
     // settings/me 401 for an anonymous visitor must not bounce
     // them to /login.
     || currentPath.startsWith('/lp/')
@@ -211,7 +210,6 @@ export function isPublicPath(pathname) {
     // anonymous visitor must not bounce them to /login.
     || currentPath === '/circles'
     || currentPath === '/communities'
-    || currentPath === '/roadmap'
     || currentPath === '/about'
     // D677 — the Firm page took /about; the team page moved to /team, and
     // Platform and Administrators are new public pages beside it.
@@ -2789,26 +2787,11 @@ export const api = {
   deckGetBrand: () => request('/decks/brand'),
   deckSetWatermark: (url) => request('/decks/brand/watermark', { method: 'PUT', body: JSON.stringify({ watermark_url: url }) }),
 
-  networkFxEffects: () => request('/networkfx/effects'),
-  networkFxCompounding: () => request('/networkfx/referrals/compounding'),
-  networkFxSyndicates: (status) => request('/networkfx/syndicates' + (status ? `?status=${status}` : '')),
   networkFxSyndicate: (id) => request(`/networkfx/syndicates/${id}`),
   // D630 — the syndicates linked to one company. `syndicates.deal_id` holds a
   // project id, so the filter is named for what it holds.
   networkFxProjectSyndicates: (projectId) => request(`/networkfx/syndicates?project_id=${encodeURIComponent(projectId)}`),
-  networkFxCreateSyndicate: (data) => request('/networkfx/syndicates', { method: 'POST', body: JSON.stringify(data) }),
-  networkFxJoinSyndicate: (id, data) => request(`/networkfx/syndicates/${id}/join`, { method: 'POST', body: JSON.stringify(data) }),
   networkFxCloseSyndicate: (id) => request(`/networkfx/syndicates/${id}/close`, { method: 'POST', body: JSON.stringify({}) }),
-  // D765: the model's rationale is a press, so a POST.
-  networkFxSyndicateRecs: (id) => request(`/networkfx/syndicates/${id}/recommendations`, { method: 'POST', body: JSON.stringify({}) }),
-  networkFxMarketplaceMe: () => request('/networkfx/marketplace/me'),
-  networkFxSaveMarketplace: (data) => request('/networkfx/marketplace/me', { method: 'PUT', body: JSON.stringify(data) }),
-  networkFxMarketplaceSearch: (filters = {}) => {
-    const q = new URLSearchParams(Object.entries(filters).filter(([_, v]) => v != null && v !== '')).toString();
-    return request('/networkfx/marketplace/search' + (q ? '?' + q : ''));
-  },
-  networkFxRequestIntro: (data) => request('/networkfx/marketplace/request-intro', { method: 'POST', body: JSON.stringify(data) }),
-  networkFxMarketplaceMatch: (data) => request('/networkfx/marketplace/match', { method: 'POST', body: JSON.stringify(data) }),
 
   getDashboard: (fresh = false) => request('/dashboard' + (fresh ? '?fresh=1' : '')),
   // Task #81 — read-only investor deal lifecycle (funnel counts by stage).
@@ -2876,10 +2859,6 @@ export const api = {
   removeRelationship: (id) => request(`/partnernet/relationships/${id}/remove`, { method: 'POST' }),
   activityLogs: (limit = 50, offset = 0, action = '') => request(`/partnernet/activity/logs?limit=${limit}&offset=${offset}${action ? `&action_type=${action}` : ''}`),
   logActivity: (data) => request('/partnernet/activity/log', { method: 'POST', body: JSON.stringify(data) }),
-  // D572 part 3b — the board by metric and period, with the change against a
-  // stored earlier standing. Other members come back by rank, role and value only.
-  partnerLeaderboardBoard: ({ metric = 'score', period = 'all' } = {}) =>
-    request(`/partnernet/leaderboard/board?metric=${encodeURIComponent(metric)}&period=${encodeURIComponent(period)}`),
 
   legalGenerate: (data) => request('/legalcap/legal/generate', { method: 'POST', body: JSON.stringify(data) }),
   legalDocs: (dealId) => request(`/legalcap/legal/docs/${dealId}`),

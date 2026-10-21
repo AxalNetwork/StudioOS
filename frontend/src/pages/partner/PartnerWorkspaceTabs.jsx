@@ -18,7 +18,7 @@ import PartnerWorkspaceShell from './PartnerWorkspaceShell';
  * The tab targets do not share a guard:
  *
  *   /needs, /services                 admin founder partner investor
- *   /partner/insights                 admin partner investor
+ *   /partner/insights                 admin partner
  *   /perks                            admin founder partner investor advisor exploring
  *   /comarketing                      admin partner founder investor
  *   /partner/office-hours             admin partner
@@ -41,7 +41,7 @@ const SETS = {
     { to: '/needs', label: 'Leads', icon: Target,
       roles: ['admin', 'founder', 'partner', 'investor'] },
     { to: '/partner/insights', label: 'Demand', icon: TrendingUp,
-      roles: ['admin', 'partner', 'investor'] },
+      roles: ['admin', 'partner'] },
     { to: '/pipeline/retainers', label: 'Retainers', icon: Layers,
       roles: ['admin', 'partner'] },
   ],

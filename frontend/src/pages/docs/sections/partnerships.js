@@ -36,7 +36,7 @@ export default {
         'Open Partnerships → Pipeline.',
         'Click "Source a deal" and capture company, contact, and source notes.',
         'Move the deal across stages as it progresses; admins approve stage changes that gate compensation.',
-        'On close, the deal logs against your partner profile and on the Network Effects leaderboard.',
+        'On close, the deal logs against your partner profile.',
       ],
       tips: [
         'Add a one-paragraph rationale on every sourced deal — admins use it to prioritise diligence.',
@@ -119,7 +119,6 @@ export default {
       ],
       related: [
         { label: 'Partner deal engine', href: '#partnerships/deal-engine' },
-        { label: 'Network Effects', href: '#network/effects' },
       ],
     },
   ],

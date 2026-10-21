@@ -59,7 +59,7 @@ it, where in their nav, and how do they get there.*
 | Legal & Capital Engine | `/legal-capital` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Metrics | `/build/metrics` | Headerless | Full page | Sidebar → Headerless → Build | UPGRADE | High |
-| More (founder phone) | `/more` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
+| More (founder phone) | `/more` (removed, owner, #2297: More opens the sidebar drawer) | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Office Hours | `/spinout-lab/office-hours` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Ops Page · Advisor practice (A1–A5, D573) | `/practice/deliverables` · `/practice/session-types` · `/practice/booking-links` · `/practice/access-log` · `/advisors/:uid` · `/b/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | CURRENT | Low |
 | Pages · Benchmark | `/research/benchmarking/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |

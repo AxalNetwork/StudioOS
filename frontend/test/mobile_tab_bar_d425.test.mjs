@@ -124,16 +124,16 @@ test('the bar marks the current tab, and More when the page is one of its rows',
   const onBoard = renderAt('/build/board');
   assert.match(onBoard, /aria-current="page"[^>]*data-testid="link-mobile-tab-build"/);
   assert.equal((onBoard.match(/aria-current="page"/g) || []).length, 1, 'more than one tab claims the page');
-  assert.match(onBoard, /data-active="false" data-testid="link-mobile-tab-more"/);
+  assert.match(onBoard, /data-active="false" data-testid="button-mobile-tab-more"/);
 
   const onNetwork = renderAt('/network/relationships');
   assert.doesNotMatch(onNetwork, /aria-current="page"/, 'a tab claims a page that belongs to More');
-  assert.match(onNetwork, /data-active="true" data-testid="link-mobile-tab-more"/);
+  assert.match(onNetwork, /data-active="true" data-testid="button-mobile-tab-more"/);
 
   // D699: nothing is lit on /studio, which the band's glyph carries (CO:218).
   const onStudio = renderAt('/studio');
   assert.doesNotMatch(onStudio, /aria-current="page"/);
-  assert.match(onStudio, /data-active="false" data-testid="link-mobile-tab-more"/);
+  assert.match(onStudio, /data-active="false" data-testid="button-mobile-tab-more"/);
 });
 
 // ── Targets, the sheet, safe areas ───────────────────────────────────────────
@@ -147,23 +147,24 @@ test('five targets, each at least 44pt, and the bar only below 1024px', () => {
     assert.match(cls, /text-\[9\.5px\] font-bold/, 'a tab label is not the canvas\'s 9.5px/700');
   }
   assert.match(html, /<nav aria-label="Primary" class="mtb [^"]*lg:hidden/, 'the bar shows on desktop, or lost its safe-area class');
-  // D699: More is a page, so nothing in the bar opens a dialog.
+  // More opens the drawer (#2297), so nothing in the bar opens a dialog.
   assert.doesNotMatch(html, /aria-haspopup="dialog"/, 'More still opens a sheet');
 });
 
-test('More is a link to the /more page, current there, and the sheet is gone (D699)', () => {
-  const onMore = renderAt('/more');
-  assert.match(onMore, /<a aria-current="page"[^>]*data-testid="link-mobile-tab-more" href="\/more"/);
-  assert.equal((onMore.match(/aria-current="page"/g) || []).length, 1, 'a tab claims /more too');
-  assert.match(onMore, /data-active="true" data-testid="link-mobile-tab-more"/);
-  assert.doesNotMatch(onMore, /<button/, 'More is still a button');
+test('More is a button that opens the drawer; the /more page and the sheet are gone (#2297)', async () => {
+  // Mutations checked: More back to a link; the button without onMore; the /more route kept.
+  const html = renderAt('/studio');
+  assert.match(html, /<button type="button" aria-label="More: open the menu"[^>]*data-testid="button-mobile-tab-more"/);
+  assert.doesNotMatch(html, /href="\/more"/, 'More still links to the removed page');
   assert.equal(TabBarModule.MoreSheet, undefined, 'the More sheet is still exported');
   const src = codeOnly(read('frontend/src/components/MobileTabBar.jsx'));
+  assert.match(src, /onClick=\{onMore\}/);
   assert.doesNotMatch(src, /role="dialog"|aria-modal/, 'the bar still draws a dialog');
-  // The sheet's frame now lives in `ui/phone/PhoneSheet.jsx` (phone_shell_d699, test 9).
   assert.doesNotMatch(read('frontend/src/components/mobileTabBar.css'), /\.mtb-sheet/);
-  // /more is a route the founder guard admits.
-  assert.match(read('frontend/src/App.jsx'), /<Route path="\/more" element=\{guard\(\['admin', 'founder'\]/);
+  // App hands More the drawer's opener, and /more is no longer a route.
+  const app = read('frontend/src/App.jsx');
+  assert.match(app, /<MobileTabBar role=\{shellRole\} onMore=\{\(\) => setSidebarOpen\(true\)\} \/>/);
+  assert.doesNotMatch(app, /<Route path="\/more"/);
 });
 
 test('the bar clears the home indicator and the notch, and never covers the page', () => {
