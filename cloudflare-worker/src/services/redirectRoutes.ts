@@ -122,6 +122,11 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/docs' },
   { path: '/communities' },
   { path: '/network-effects' }, // #2324: the page is removed (#2297 §3); it lands on Network
+  // #2321 — the older audience landing pages, forwarded to the door pages.
+  { path: '/lp/founder' },
+  { path: '/lp/customer-discovery' },
+  { path: '/lp/investor' },
+  { path: '/lp/partner' },
 ]);
 
 /** The key a hit is counted under in `public_pageviews.path`. */

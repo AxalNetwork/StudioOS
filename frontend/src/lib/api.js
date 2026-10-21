@@ -200,8 +200,8 @@ export function isPublicPath(pathname) {
     || currentPath === '/for-investors'
     || currentPath === '/for-service-partners'
     || currentPath === '/for-advisors'
-    // The Spin-Out demo day's landing page (/lp/spinout-demo-day).
-    // A public surface: a background
+    // The Spin-Out demo day page and the four retired /lp/* addresses that
+    // forward to the door pages (#2321). Public surfaces: a background
     // settings/me 401 for an anonymous visitor must not bounce
     // them to /login.
     || currentPath.startsWith('/lp/')

@@ -39,13 +39,9 @@ export const ALLOWLIST = new Set([
   // PDF/print surfaces — intentionally light, render off-screen for export.
   'frontend/src/pages/PitchDeckPrintPage.jsx',
   'frontend/src/pages/PitchDeckPage.jsx',
-  // Public marketing home templates — each calls useForcedLightTheme() so it
+  // Public marketing home template — it calls useForcedLightTheme() so it
   // renders a fixed light palette regardless of the app theme. Exempt like the
   // other public surfaces above.
-  'frontend/src/pages/templates/CustomerDiscoveryHomePage.jsx',
-  'frontend/src/pages/templates/FounderHomePage.jsx',
-  'frontend/src/pages/templates/InvestorDealflowHomePage.jsx',
-  'frontend/src/pages/templates/PartnerPartnershipHomePage.jsx',
   'frontend/src/pages/templates/SpinoutDemoDayPage.jsx',
 ]);
 

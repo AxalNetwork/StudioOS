@@ -3630,7 +3630,12 @@ function AppInner() {
       <Route path="/verify/:token" element={<PublicCertificateVerifyPage />} />
       <Route path="/academy/:slug" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
       <Route path="/academy" element={guard(['admin', 'founder', 'partner', 'investor'], <AcademyLessonPage />)} />
-      {/* The Spin-Out demo day's landing page; the four audience pages are retired (#2297). */}
+      {/* #2321 — the retired audience pages forward to their door pages.
+          Keep external links working and count the redirects in #2301. */}
+      <Route path="/lp/founder" element={<Navigate to="/for-founders" replace />} />
+      <Route path="/lp/customer-discovery" element={<Navigate to="/for-founders" replace />} />
+      <Route path="/lp/investor" element={<Navigate to="/for-investors" replace />} />
+      <Route path="/lp/partner" element={<Navigate to="/for-service-partners" replace />} />
       <Route path="/lp/spinout-demo-day" element={<SpinoutDemoDayPage />} />
       {/* ── Route modules (D528) ── one line per frontend/src/routes/<area>.jsx,
           alphabetical, each `{<area>Routes(routeTools)}`; the imports sit in

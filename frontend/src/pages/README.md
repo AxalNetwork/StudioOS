@@ -38,7 +38,7 @@ Naming follows the surface, not the persona: `PortfolioHealthPage`,
 | `insights/` | Insight reader and its public variant. |
 | `learning/` | The Learning center (D562): one routed page for every `/learning` route, its presentational components, and the temporary coming-soon gate. Start at `learning/README.md`. |
 | `docs/` | The Help Center layout and its content sections. |
-| `templates/` | Persona home-page templates. |
+| `templates/` | `SpinoutDemoDayPage.jsx`, the public `/lp/spinout-demo-day` page. The four older persona landing pages were removed by #2321; their addresses forward to the door pages. |
 | `connect/` | D668: `/connect/assistant`, where a founder approves an AI assistant (D665) for the companies they tick. Its own README holds the rules. |
 | `account/` | The Account center's sections (D568), mounted by `SettingsPage.jsx`, which is still `/account`: the section list and shared kit in `AccountCenter.jsx`, one file per canvas section, and the pure helpers in `accountCenterModel.js`, `usageModel.js` and `connectorsModel.js`. Connectors (D651) replaced the Integrations page. Documented in `scripts/check-folder-docs.mjs` and in its own README. |
 | `profile/` | The founder's profile pages (D702): You, Your venture, What others see and Visibility, at `/profile`, `/profile/venture`, `/profile/preview` and `/profile/visibility`, for founders only, with their shared frame and pure model. Documented in its own README. |
