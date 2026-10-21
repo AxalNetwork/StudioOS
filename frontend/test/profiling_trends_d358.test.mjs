@@ -92,7 +92,7 @@ test('D358: the page is an admin route, lit under Programs, with a door on the P
   assert.match(APP, /<Route path="\/admin\/profiling-trends" element=\{guard\(\['admin'\], <AdminProfilingTrends \/>\)\} \/>/);
   assert.match(SIDEBAR, /match: \['\/admin\/spinout-lab', '\/admin\/advisor-cohorts', '\/admin\/assessment', '\/admin\/profiling-trends'\] \}/);
   assert.match(PROGRAMS, /<Link to="\/admin\/profiling-trends" className=\{OPEN\}>Open profiling trends<\/Link>/);
-  assert.match(PROGRAMS, /stance="Five consoles, each opened where it is decided"/);
+  assert.match(PROGRAMS, /stance="Four consoles, each opened where it is decided"/);
 });
 
 test('D358: api.js carries both calls on their Worker paths', () => {
