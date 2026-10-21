@@ -322,6 +322,8 @@ export function PricingBody({ user = null }) {
     <Face.Provider value={D}>
     <div className={`axp${user ? ' axp-app' : ''}`} data-testid="pricing-page">
       <section className="axp-hero">
+        <img src="/site/home-hero.webp" alt="" className="axp-hero-image" />
+        <div aria-hidden="true" className="axp-hero-shade" />
         <h1 className="axp-h1">{HERO.title}</h1>
         <p className="axp-hero-p">{HERO.line}</p>
         <Tabs tab={tab} onPick={pickTab} />
