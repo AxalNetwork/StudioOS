@@ -260,6 +260,12 @@ function routesForHost(base) {
     // D756 (#1894): the interviewee recording notice, a PUBLIC route reached
     // from a chat link by someone with no account.
     { path: '/privacy/interviews', shell: true },
+    // D813 (#2259): the newsletter signup, and the two pages a link in an
+    // email opens. All three are PUBLIC, and each serves the shell before any
+    // token is read, so none is passed.
+    { path: '/newsletter', shell: true },
+    { path: '/newsletter/confirm', shell: true },
+    { path: '/newsletter/preferences', shell: true },
     // The Help Center's addresses (#103, 2026-09-07). `/help` stopped being a
     // one-segment path when the ticket flow moved under it, and the same pass
     // gave `/support` a route for the first time — `ErrorState` had been
