@@ -341,8 +341,11 @@ test('a non-Super Admin gets 403 on every route; a Super Admin without a recent 
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────
-test('every member object names id, name and email; no prompt or output in any answer; bad input is refused', async () => {
+test('every member object names id, name and email; no prompt or output in any answer; bad input is refused', async (t) => {
   // Mutations checked: u.email dropped from a member; a velocity, flag or caps member built without the email.
+  // The route reads the clock and this test's runs are dated from NOW, so the
+  // clock is NOW: on the real one, "today" stopped holding them on 2026-10-21.
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const w = world();
   try {
     w.log({ charged: 6_000_000, at: today() });
