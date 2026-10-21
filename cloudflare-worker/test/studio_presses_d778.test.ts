@@ -17,6 +17,11 @@ import { PARTNER_RAIL_OPTIONS } from '../../frontend/src/lib/railOptions/partner
 import { controlOf } from '../../frontend/src/lib/railOptions/index.js';
 
 const STUDIO = /components\/advisor\/PersonalAdvisor\.jsx$/;
+// D773's shared control name maps to D778's Send press.
+const studioPress = (marker: string) => {
+  const control = controlOf(marker);
+  return control === 'advisor.ask' ? 'send' : control;
+};
 const advisor = readFileSync(new URL('../src/routes/advisor.ts', import.meta.url), 'utf8');
 /** One handler's body, from its registration to the next one. */
 const route = (path: string) => {
@@ -31,13 +36,13 @@ function inventoryRows() {
   const rows: Array<{ role: string; control: string; key: string }> = [];
   for (const o of FOUNDER_OPTIONS as any[]) {
     for (const [file, marker] of o.at || []) {
-      const control = controlOf(marker);
+      const control = studioPress(marker);
       if (STUDIO.test(file) && (control === 'send' || control === 'explain')) rows.push({ role: 'founder', control, key: o.key });
     }
   }
   for (const [role, list] of [['advisor', ADVISOR_RAIL_OPTIONS], ['partner', PARTNER_RAIL_OPTIONS]] as const) {
     for (const o of list as any[]) {
-      const control = controlOf(o.source?.marker);
+      const control = studioPress(o.source?.marker);
       if (STUDIO.test(o.source?.file || '') && (control === 'send' || control === 'explain')) rows.push({ role, control, key: o.key });
     }
   }

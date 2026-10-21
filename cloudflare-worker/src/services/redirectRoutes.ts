@@ -33,6 +33,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/settings', keep: true },
   { path: '/settings/:section', keep: true },
   { path: '/dashboard' },
+  { path: '/product-testing', keep: true }, // #2314: historical member notifications
   { path: '/onboarding/licence' },
   { path: '/build/deck' },
   { path: '/build/deck-reviewer' },

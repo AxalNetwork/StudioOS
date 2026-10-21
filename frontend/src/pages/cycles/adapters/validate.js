@@ -303,7 +303,8 @@ export const STATE = {
  * row. A value this table does not know is shown as the Worker wrote it, never
  * dropped; a missing one is "Not recorded".
  */
-export const CHANNEL = { in_person: 'In person', video: 'Video call', phone: 'Audio call', text: 'Text chat', manual: 'Entered by hand' };
+// Video and audio calls are one "Call" (the owner, 2026-10-21); `call` is the filter that matches both.
+export const CHANNEL = { in_person: 'In person', video: 'Call', phone: 'Call', call: 'Call', text: 'Text chat', manual: 'Entered by hand' };
 
 /**
  * Each list's title where the module's name is not it (CO:611, :612, :616):
@@ -384,7 +385,7 @@ export const RECORDS = {
       // D697 decision 4: FVW's Deck-eligible view is the Agreed rows, and Stage
       // gave way to State (the Worker keeps `stage:pipeline` for the recruiting picker).
       { key: 'consent', label: 'Consent', options: [{ value: 'agreed', label: 'Agreed · deck-eligible' }, { value: 'declined', label: 'Declined' }, { value: 'not_asked', label: 'Not asked' }] },
-      { key: 'channel', label: 'Channel', options: ['in_person', 'video', 'phone', 'text'].map((value) => ({ value, label: CHANNEL[value] })) },
+      { key: 'channel', label: 'Channel', options: ['in_person', 'call', 'text'].map((value) => ({ value, label: CHANNEL[value] })) },
     ],
     sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }, { key: 'name', label: 'Name' }],
   },

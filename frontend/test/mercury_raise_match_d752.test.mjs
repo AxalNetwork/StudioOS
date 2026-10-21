@@ -58,10 +58,10 @@ test('the deal\'s founder only: an investor, an admin, a partner or another foun
   assert.deepEqual([...COMMITMENT_MATCH_STATUSES], ['pending', 'confirmed']);
 });
 
-test('Capital relationships: the panel is drawn for a founder only, with the Mercury monogram, and reads nothing until pressed', () => {
+test('Capital relationships: the panel is drawn for a founder only, with the Mercury logo, and reads nothing until pressed', () => {
   for (const role of ['investor', 'admin', 'partner', null]) assert.equal(ssr(h(RaiseReceiptMatches, { role, api: noop })), '', String(role));
   const html = ssr(h(RaiseReceiptMatches, { role: 'founder', api: noop }));
-  assert.match(html, /data-brand="monogram" data-provider="mercury"/);
+  assert.match(html, /data-brand="mark"[\s\S]*data-provider="mercury"/);
   assert.match(html, /data-testid="raise-match-open"[^>]*>Match to my Mercury</);
   assert.ok(text(html).includes(RAISE_PANEL_LEAD));
   assert.doesNotMatch(html, /raise-match-list|raise-match-loading/);

@@ -9,7 +9,8 @@ import {
 import { api } from '../lib/api';
 import { recordedRelevance } from '../pages/research/companyCandidateRead';
 import ZoneToolbar from '../workspaces/ZoneToolbar';
-import { useRailOption } from '../ui/railCrumbs';
+import { useRailOption, useRailPage } from '../ui/railCrumbs';
+import { railOptionFor } from '../lib/railOptions/index.js';
 
 // Competitor Analysis — in-house, Cloudflare-native competitive intelligence.
 // Discovery + controlled public-web crawl + Workers AI synthesis. Prefills from
@@ -145,9 +146,16 @@ export default function CompetitorAnalysis({ project = null, embedded = false, c
   const [analyzing, setAnalyzing] = useState(false);
   // D771 (#2097): which run is at the model, so the rail names that option.
   const [running, setRunning] = useState(null);
-  useRailOption(running === 'analyze' ? 'analyse:competitors' : null, 'Analyze competitors');
-  useRailOption(running === 'rerun' ? 'analyse:again' : null, 'Re-run');
-  useRailOption(running === 'refresh' ? 'analyse:sources' : null, 'Refresh sources');
+  // D773 (#2099): the advisor's Companies board keys these runs its own way
+  // (`analyze:competitors`, `rerun:analysis`, `refresh:sources`); the founder's
+  // keys stay the default, read from the same inventories.
+  const railPage = useRailPage()?.page;
+  const analyzeOption = railOptionFor(railPage, { file: 'components/CompetitorAnalysis.jsx', control: 'competitors.analyze' });
+  const rerunOption = railOptionFor(railPage, { file: 'components/CompetitorAnalysis.jsx', control: 'competitors.rerun' });
+  const refreshOption = railOptionFor(railPage, { file: 'components/CompetitorAnalysis.jsx', control: 'competitors.refresh' });
+  useRailOption(running === 'analyze' ? (analyzeOption?.key ?? 'analyse:competitors') : null, analyzeOption?.label ?? 'Analyze competitors');
+  useRailOption(running === 'rerun' ? (rerunOption?.key ?? 'analyse:again') : null, rerunOption?.label ?? 'Re-run');
+  useRailOption(running === 'refresh' ? (refreshOption?.key ?? 'analyse:sources') : null, refreshOption?.label ?? 'Refresh sources');
   useRailOption(running === 'add' ? 'extract:candidate' : null, 'Add');
   const [analysis, setAnalysis] = useState(null);
   const [saved, setSaved] = useState([]);

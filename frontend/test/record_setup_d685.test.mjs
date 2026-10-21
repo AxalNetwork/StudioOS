@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  CONSENTS, MODES, NOT_STORED, PROVIDERS, SETUP_FIELDS, callLabel, cents, chipStatus, connectionOf, consentNote, defaultProvider, estimate, isConnected,
+  CALL_CHIPS, CONSENTS, HOW_OPTIONS, MODES, NOT_STORED, PROVIDERS, callChannel, howOf, SETUP_FIELDS, callLabel, cents, chipStatus, connectionOf, consentNote, defaultProvider, estimate, isConnected,
   hasMeetingLink, meetingLinkProblem, money, parseConversation, sessionBody, startState, talkingPoints,
   FLUX, STAGE_WORD, assignTarget, languageOptions, newStartKey, pipelineRows, recordingHref, setupBody, startRefusal, threadsFor,
 } from '../src/pages/founder/recordSetup.js';
@@ -27,11 +27,14 @@ const READ = {
   connections: [{ provider: 'telegram', connected: true }, { provider: 'whatsapp', connected: false }],
 };
 
-test('the four modes, their notes and their Start labels are the canvas\'s, word for word', () => {
+test('the four channels, their notes and their Start labels; How offers three, a video or an audio call being one Call', () => {
+  // The owner (2026-10-21): "Audio & video call are the same, merge".
   assert.deepEqual(MODES.map((m) => [m.key, m.label, m.start]), [
-    ['in_person', 'In person', 'Start recording'], ['video', 'Video call', 'Start the call'],
-    ['phone', 'Audio call', 'Start recording'], ['text', 'Text chat', 'Import the chat'],
+    ['in_person', 'In person', 'Start recording'], ['video', 'Call', 'Start the call'],
+    ['phone', 'Call', 'Start recording'], ['text', 'Text chat', 'Import the chat'],
   ]);
+  assert.deepEqual(HOW_OPTIONS.map((o) => [o.value, o.label]), [['in_person', 'In person'], ['call', 'Call'], ['text', 'Text chat']]);
+  assert.deepEqual(['in_person', 'video', 'phone', 'text'].map(howOf), ['in_person', 'call', 'call', 'text']);
   assert.deepEqual(MODES.map((m) => m.note), [
     'Put the phone on the table between you. It records this device’s microphone.',
     'Paste the meeting link. It records the call’s audio.',
@@ -43,16 +46,24 @@ test('the four modes, their notes and their Start labels are the canvas\'s, word
 
 test('the chips per mode, and the default provider', () => {
   assert.deepEqual(PROVIDERS.in_person, []);
-  assert.deepEqual(PROVIDERS.video.map((p) => p.label), ['Zoom', 'Google Meet', 'Microsoft Teams', 'WhatsApp video', 'Telegram video']);
-  assert.deepEqual(PROVIDERS.phone.map((p) => p.label), ['This phone, on speaker', 'WhatsApp call', 'Telegram call', 'Signal call']);
+  // A call's chips are one list; each names the channel it is stored and recorded as.
+  assert.equal(PROVIDERS.video, CALL_CHIPS);
+  assert.equal(PROVIDERS.phone, CALL_CHIPS);
+  assert.deepEqual(CALL_CHIPS.map((p) => [p.label, p.channel]), [
+    ['Zoom', 'video'], ['Google Meet', 'video'], ['Microsoft Teams', 'video'],
+    ['WhatsApp', 'phone'], ['Telegram', 'phone'], ['Signal', 'phone'], ['This phone, on speaker', 'phone'],
+  ]);
+  assert.equal(callChannel('teams'), 'video');
+  assert.equal(callChannel('phone_speaker'), 'phone');
+  assert.equal(callChannel('paste'), null, 'not a call chip');
   assert.deepEqual(PROVIDERS.text.map((p) => p.label), ['WhatsApp', 'Telegram', 'Paste a transcript', 'Signal', 'SMS', 'LinkedIn', 'Slack']);
   assert.equal(defaultProvider('video'), 'zoom');
-  assert.equal(defaultProvider('phone'), 'phone_speaker');
+  assert.equal(defaultProvider('phone'), 'zoom', 'one list: a Call opens on its first chip, a video meeting');
   assert.equal(defaultProvider('in_person'), null);
   assert.equal(defaultProvider('text', null), 'paste', 'a disabled chip is never the default');
   assert.equal(defaultProvider('text', READ), 'whatsapp', 'a connectable one is');
-  assert.equal(callLabel('video', 'zoom'), 'Video call · Zoom');
-  assert.equal(callLabel('phone', 'whatsapp'), 'Audio call · WhatsApp call');
+  assert.equal(callLabel('video', 'zoom'), 'Call · Zoom');
+  assert.equal(callLabel('phone', 'whatsapp'), 'Call · WhatsApp');
   assert.equal(callLabel('in_person', null), null);
   assert.equal(callLabel('text', 'paste'), null);
 });

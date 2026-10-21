@@ -470,7 +470,7 @@ test('D685: the setup call creates the interview from Who, booked today, and ope
   assert.equal(r.body.interview.interviewee_name, 'Priya');
   assert.equal(r.body.interview.interviewee_company, 'Northwind');
   assert.equal(r.body.interview.stage, 'booked');
-  assert.equal(r.body.call_label, 'Video call · Zoom');
+  assert.equal(r.body.call_label, 'Call · Zoom');
   assert.equal(r.body.meeting_url, 'https://acme.zoom.us/j/123456789');
   const row = interviewRow(f, r.body.interview.id);
   assert.equal(row.channel, 'video');
@@ -479,11 +479,11 @@ test('D685: the setup call creates the interview from Who, booked today, and ope
   // A reload keeps the interviewee and the company: GET /sessions/:id carries them.
   const read = await call(f.env, FOUNDER, 'GET', `/sessions/${r.body.session.id}`);
   assert.equal(read.body.interview.interviewee_company, 'Northwind');
-  assert.equal(read.body.call_label, 'Video call · Zoom');
+  assert.equal(read.body.call_label, 'Call · Zoom');
   // The per-interview list carries the interview too.
   const list = await call(f.env, FOUNDER, 'GET', `/interviews/${r.body.interview.id}/sessions`);
   assert.equal(list.body.interview.interviewee_name, 'Priya');
-  assert.equal(list.body.items[0].call_label, 'Video call · Zoom');
+  assert.equal(list.body.items[0].call_label, 'Call · Zoom');
 });
 
 test('D685: a repeated client_key answers the same pair; a double Start makes one interview', async () => {
@@ -537,7 +537,7 @@ test('D685: channel × call provider pairs and the meeting-link host rules', asy
   assert.equal(audioLink.status, 400);
   assert.equal(audioLink.body.message, 'Only a video call has a meeting link.');
   const phone = await one({ channel: 'phone', call_provider: 'whatsapp' });
-  assert.equal(phone.body.call_label, 'Audio call · WhatsApp call');
+  assert.equal(phone.body.call_label, 'Call · WhatsApp');
   assert.equal((await one({ channel: 'manual' })).status, 400, 'manual is no longer offered by the setup call');
 });
 
@@ -1075,7 +1075,7 @@ test('D685 §5.6: GET /sessions/active is the caller\'s own, newest first, witho
   assert.deepEqual(r.body.items.map((x: any) => [x.id, x.status]), [[idb, 'paused'], [ida, 'recording']]);
   const first = r.body.items[1];
   assert.deepEqual([first.interviewee_name, first.project_id, first.channel, first.chunk_seqs, first.processing], [interviewRow(f, 1).interviewee_name, 10, 'in_person', [0], null]);
-  assert.equal(r.body.items[0].call_label, 'Audio call');
+  assert.equal(r.body.items[0].call_label, 'Call');
   assert.ok(first.recording_since && 'active_ms' in first);
   // Another member sees none of them.
   assert.deepEqual((await call(f.env, OTHER, 'GET', '/sessions/active')).body.items, []);

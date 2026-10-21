@@ -54,6 +54,8 @@ const PLATFORM = [
 ];
 // D642 (#1435) — U7's page joins the Platform row after Topology, so it lights that row.
 PLATFORM.splice(3, 0, ['AI allowances', '/admin/platform/allowances']);
+// D791 part 2 (#2216) — HQ › AI usage joins the Platform row after AI allowances.
+PLATFORM.splice(4, 0, ['AI usage', '/admin/platform/ai-usage']);
 // D708 (#1773) — the Bank accounts console joins the Platform row after Payments.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Payments') + 1, 0, ['Bank accounts', '/admin?tab=bank-accounts']);
 // The owner's ruling (2026-10-20) — Integration keys and GitHub Sync leave the

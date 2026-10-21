@@ -13,6 +13,10 @@
  * `StudioInterview`, `FounderStudioHome` or `AdvisorProgressWidget`, which a
  * Node test cannot import.
  *
+ * THE BAR STAYS. It is sticky at the top of the shell's scroll (`<main>`), above
+ * the chat's own sticky composer (z-20 over z-10), so it stays put while the
+ * thread, Tasks or My tickets scroll under it.
+ *
  * THE GUTTER. The shell pads `/studio` (`p-4 md:p-6`); the page cancels it with
  * matching negative margins, as D699's More page does, and the bar and body use
  * the canvas's 22px.
@@ -164,7 +168,10 @@ export default function StudioPhone({ tab = 'conversation', ticketOpen = false, 
   const closeMenu = useCallback(() => setMenu(false), []);
   return (
     <div className="-m-4 min-h-full bg-white text-gray-900 md:-m-6 dark:bg-gray-950 dark:text-gray-100" data-testid="studio-phone">
-      <div className="flex items-center justify-between gap-2.5 border-b border-[#ececf1] px-[22px] pb-3 pt-3.5 dark:border-gray-800">
+      {/* Sticky at the scroll's top (the owner, 2026-10-21: it scrolled away with
+          the page). The page is drawn below 1024px only, so this is phone-only;
+          its own background keeps the content from showing through. */}
+      <div className="sticky top-0 z-20 flex items-center justify-between gap-2.5 border-b border-[#ececf1] bg-white px-[22px] pb-3 pt-3.5 dark:border-gray-800 dark:bg-gray-950" data-testid="studio-phone-bar">
         <div className="flex items-center gap-2.5">
           <img src="/eadwyn-ai.png" alt="Eadwyn" width="34" height="34" className="block h-[34px] w-[34px] shrink-0 object-contain [image-rendering:pixelated]" />
           <div>

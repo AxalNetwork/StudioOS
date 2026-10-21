@@ -23,7 +23,7 @@ test('each profile\'s Studio page resolves Send and Explain to its own inventory
   // Mutations checked: controlOf without the Studio markers (every lookup null); Explain read as Send.
   const look = (role) => {
     const page = pageKeyFor('/studio', role);
-    return [railOptionFor(page, { file: FILE, control: 'send' })?.key ?? null, railOptionFor(page, { file: FILE, control: 'explain' })?.key ?? null];
+    return [railOptionFor(page, { file: FILE, control: 'advisor.ask' })?.key ?? null, railOptionFor(page, { file: FILE, control: 'explain' })?.key ?? null];
   };
   assert.deepEqual(look('founder'), ['ask:studio', 'explain:question']);
   assert.deepEqual(look('advisor'), ['answer:interview', 'explain:question']);
@@ -37,7 +37,7 @@ test('the presses light and send the looked-up option, with the founder\'s keys 
   const src = codeOnly(readFileSync('frontend/src/components/advisor/PersonalAdvisor.jsx', 'utf8'));
   assert.match(src, /const STUDIO_FILE = 'components\/advisor\/PersonalAdvisor\.jsx';/);
   assert.match(src, /const railPage = useRailPage\(\)\?\.page \?\? null;/);
-  assert.match(src, /const sendOption = railOptionFor\(railPage, \{ file: STUDIO_FILE, control: 'send' \}\);/);
+  assert.match(src, /const sendOption = railOptionFor\(railPage, \{ file: STUDIO_FILE, control: 'advisor.ask' \}\);/);
   assert.match(src, /const explainOption = railOptionFor\(railPage, \{ file: STUDIO_FILE, control: 'explain' \}\);/);
   assert.match(src, /const sendKey = sendOption\?\.key \?\? 'ask:studio';/);
   assert.match(src, /const explainKey = explainOption\?\.key \?\? 'explain:question';/);

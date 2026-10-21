@@ -752,7 +752,10 @@ research.post('/ask', async (c) => {
       task: 'research_ask',
       userId: user.id,
       surface: AI_SURFACE.researchAsk,
-      rail: railFor(c, { page: 'research', option: 'ask:library' }),
+      // D778 part 11: the press's page and option win (the founder's Research
+      // desk sends `ask:research`; every profile's Ask sends its own key); the
+      // record is the thread the answer is written to.
+      rail: railFor(c, { page: ASK_PAGE, option: ASK_OPTION }, `research_ask_session:${session.uid}`),
       // `text` rather than `messages`: the router hashes it for the cache key
       // and this task is uncached, but the shape is what every non-chat task
       // uses. The instructions live in the prompt itself so the retrieved
@@ -3655,9 +3658,17 @@ research.get('/drafts', async (c) => {
  * inventory gives it (`frontend/src/lib/railOptions/founder.js`, which
  * `founder_draft_surfaces.test.ts` holds this table to). A run from a client
  * that sent no rail page names that page; a mounted rail's page still wins,
- * since it holds the member's Manual switch. A surface other profiles share
- * (`research/ask`, `network/relationships`) keeps the page from its path.
+ * since it holds the member's Manual switch. Shared bands use the workspace
+ * preference keys in SHARED_DRAFT_PAGES below.
  */
+/**
+ * D778 part 11 (#2103): Ask's page and option in the founder inventory
+ * (`frontend/src/lib/railOptions/founder.js`), for a client that sent no rail
+ * context. Before part 11 the fallback was the workspace key `research`.
+ */
+export const ASK_PAGE = 'Founder · Research · Ask';
+export const ASK_OPTION = 'ask:library';
+
 export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'build/roadmap': 'Founder · Build · Product roadmap',
   'build/this-week': 'Founder · Build · Operating systems',
@@ -3673,6 +3684,17 @@ export const FOUNDER_DRAFT_PAGES: Readonly<Record<string, string>> = {
   'network/re-engagement': 'Founder · Network',
   'network/intro-email': 'Founder · Network',
   'research/funds': 'Founder · Research · Funds',
+};
+
+// D778 part 10: these bands belong to several profiles. The fallback is the
+// workspace where the Manual switch and model picks are stored, even when a
+// phone lens leaves the browser's pathname on another page. Request headers
+// still win in railFor; inventory labels are not preference-section keys.
+export const SHARED_DRAFT_PAGES: Readonly<Record<string, string>> = {
+  'network/relationships': 'network',
+  'network/introductions': 'network',
+  'research/ask': 'research',
+  'research/library': 'research',
 };
 
 /**
@@ -3712,7 +3734,7 @@ research.post('/drafts', async (c) => {
       maxTokens: 500,
       surface: page,
       // D765: the band's page and the draft as the option.
-      rail: railFor(c, { page: FOUNDER_DRAFT_PAGES[surface] ?? pageFromPath(page, pageFromPath(surface, 'research')), option: `draft:${surface}` }),
+      rail: railFor(c, { page: FOUNDER_DRAFT_PAGES[surface] ?? SHARED_DRAFT_PAGES[surface] ?? pageFromPath(page, pageFromPath(surface, 'research')), option: `draft:${surface}` }),
     });
   } catch (e) {
     console.error('[research] draft failed:', (e as Error).message);
