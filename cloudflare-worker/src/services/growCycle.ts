@@ -452,7 +452,16 @@ export async function checklist(env: Env, projectId: number) {
       .bind(projectId).first<{ value: number | null; as_of: string }>();
     runway = r ? { months: r.value, as_of: r.as_of } : null;
   } catch { /* no Mercury store on this database: Mercury ticks nothing */ }
-  return DURABILITY_ITEMS.map((i) => {
+  // A Mercury item counts only for a founder with an active Mercury connection,
+  // or once ticked by hand: it never lowers the score of a founder without one.
+  let mercury = false;
+  try {
+    mercury = !!(await env.DB.prepare(
+      `SELECT 1 FROM integrations i JOIN users u ON u.id = i.user_id JOIN projects p ON p.founder_id = u.founder_id
+        WHERE p.id = ? AND i.provider_key = 'mercury' AND i.status = 'active' LIMIT 1`,
+    ).bind(projectId).first());
+  } catch { /* no connections on this database */ }
+  return DURABILITY_ITEMS.filter((i) => !i.mercury || mercury || !!mine.get(i.key)).map((i) => {
     const byLab = i.lab ? lab.has(i.lab) : false;
     const byHand = !!mine.get(i.key);
     const byMercury = i.mercury === 'runway' && runway != null && runway.months != null && runway.months >= MERCURY_RUNWAY_MONTHS;

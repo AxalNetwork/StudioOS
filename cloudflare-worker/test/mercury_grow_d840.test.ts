@@ -177,10 +177,10 @@ const ddl = (p: string) => file(p).split(/;\s*\n/).map((x) => x.replace(/^\s*--.
 
 const TODAY = '2026-10-21';
 const PID = 7; const INTEGRATION = 41;
-const FOUNDER = 1; const COFOUNDER = 2; const ADMIN = 3; const PARTNER = 4; const ADVISOR = 5;
+const FOUNDER = 1; const COFOUNDER = 2; const ADMIN = 3; const PARTNER = 4; const ADVISOR = 5; const INVESTOR = 6;
 export const viewers = {
   founder: { id: FOUNDER, founder_id: 10 }, cofounder: { id: COFOUNDER, founder_id: 11 }, admin: { id: ADMIN, founder_id: null },
-  partner: { id: PARTNER, founder_id: null }, advisor: { id: ADVISOR, founder_id: 12 },
+  partner: { id: PARTNER, founder_id: null }, advisor: { id: ADVISOR, founder_id: 12 }, investor: { id: INVESTOR, founder_id: null },
 };
 
 async function growDb() {
@@ -215,6 +215,8 @@ async function growDb() {
   u.run(ADMIN, 'admin', null, 'Ann', 'ann@axal.example');
   u.run(PARTNER, 'partner', null, 'Pat', 'pat@axal.example');
   u.run(ADVISOR, 'founder', 12, 'Ada', 'ada@else.example');
+  u.run(INVESTOR, 'investor', null, 'Ivy', 'ivy@fund.example');
+  db.prepare(`INSERT INTO project_members (project_id, user_id, role, status) VALUES (?, ?, 'investor', 'accepted')`).run(PID, INVESTOR);
   db.prepare(`INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (?, 'p7', 'Venture', 10, 70)`).run(PID);
   db.prepare('INSERT INTO user_company_links (company_id, user_id) VALUES (70, ?)').run(COFOUNDER);
   db.prepare(`INSERT INTO project_members (project_id, user_id, role, status) VALUES (?, ?, 'advisor', 'accepted')`).run(PID, ADVISOR);
@@ -328,7 +330,7 @@ test('durable company-building: cash, treasury and runway, from Mercury with the
 test('no balance is shown outside the founder\'s company', async () => {
   const { env } = await growDb();
   await syncOnce(env);
-  for (const who of ['admin', 'partner', 'advisor'] as const) {
+  for (const who of ['admin', 'partner', 'advisor', 'investor'] as const) {
     assert.equal(await isTeamViewer(env, viewers[who], PID), false, who);
     for (const slug of ['revenue-and-traction', 'durable-company-building', 'team-expansion', 'distribution', 'partner-network'] as const) {
       const part = await growFromMercury(env, PID, slug, viewers[who], TODAY);
@@ -396,7 +398,7 @@ test('partner network: a payment to an Axal partner is a proposal that needs Acc
 
 const app = new Hono<any>();
 app.route('/api/cycles/grow', cycleGrow);
-const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [COFOUNDER]: 'founder', [ADMIN]: 'admin', [PARTNER]: 'partner', [ADVISOR]: 'founder' };
+const ROLE: Record<number, string> = { [FOUNDER]: 'founder', [COFOUNDER]: 'founder', [ADMIN]: 'admin', [PARTNER]: 'partner', [ADVISOR]: 'founder', [INVESTOR]: 'investor' };
 async function call(env: any, who: number, method: string, path: string, body?: unknown) {
   const token = await new SignJWT({ user_id: who, role: ROLE[who] }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(env.JWT_SECRET));
@@ -414,8 +416,9 @@ test('route: each fed module carries its Mercury part; the team reads figures, a
     const mine = await call(env, FOUNDER, 'GET', `/api/cycles/grow/modules/${slug}?project=${PID}`);
     assert.equal(mine.status, 200, slug);
     assert.equal(mine.body.parts.from_mercury.state, 'ok', slug);
-    for (const who of [ADMIN, PARTNER, ADVISOR]) {
+    for (const who of [ADMIN, PARTNER, ADVISOR, INVESTOR]) {
       const theirs = await call(env, who, 'GET', `/api/cycles/grow/modules/${slug}?project=${PID}`);
+      if (who === INVESTOR && theirs.status === 403) continue; // an investor may read nothing of the venture at all
       assert.equal(theirs.status, 200, `${who} reads ${slug}`);
       assert.deepEqual(theirs.body.parts.from_mercury, { state: 'team_only', reason: TEAM_ONLY }, `${who} on ${slug}`);
       assert.doesNotMatch(JSON.stringify(theirs.body), /610000|1000000|"cents":800000/, `no Mercury figure reaches ${who} on ${slug}`);
@@ -438,7 +441,7 @@ test('route: only the founder accepts or dismisses; accept links one partner and
   const { db, env } = await growDb();
   await syncOnce(env);
   const id = (db.prepare('SELECT id FROM mercury_partner_proposals').get() as any).id;
-  for (const who of [COFOUNDER, ADMIN, PARTNER, ADVISOR]) {
+  for (const who of [COFOUNDER, ADMIN, PARTNER, ADVISOR, INVESTOR]) {
     const r = await call(env, who, 'POST', `/api/cycles/grow/mercury/partner-proposals/${id}/accept`, { project: PID });
     assert.ok([403].includes(r.status), `${who} → ${r.status}`);
   }
@@ -458,7 +461,7 @@ test('route: a team writer deletes a Mercury figure and it stays deleted; nobody
   const { db, env } = await growDb();
   await syncOnce(env);
   const id = (db.prepare(`SELECT id FROM mercury_grow_facts WHERE kind = 'marketing_spend' AND period = '2026-07'`).get() as any).id;
-  for (const who of [ADMIN, PARTNER, ADVISOR]) {
+  for (const who of [ADMIN, PARTNER, ADVISOR, INVESTOR]) {
     const r = await call(env, who, 'DELETE', `/api/cycles/grow/mercury/facts/${id}?project=${PID}`);
     assert.equal(r.status, 403, `${who}`);
   }
@@ -481,4 +484,19 @@ test('durable: Mercury ticks the runway item at twelve months, with its date and
   assert.doesNotMatch(JSON.stringify(done), /\b12\b/, 'the figure is not in the checklist');
   db.prepare(`UPDATE mercury_grow_facts SET value = 11.9 WHERE kind = 'runway'`).run();
   assert.equal((await item()).done, false);
+});
+
+test('durable: the runway item counts only for a founder with Mercury, or once ticked by hand', async () => {
+  // Mutation checked: drop the filter → the founder without Mercury gets nine items and the first assert fails;
+  // filter without `mine` → the hand tick is dropped and the last assert fails.
+  const { db, env } = await growDb();
+  const keys = () => checklist(env, PID).then((l) => l.map((i) => i.key));
+  assert.ok((await keys()).includes('runway_12_months'), 'an active Mercury connection: counted');
+  db.prepare(`UPDATE integrations SET status = 'disconnected' WHERE id = ?`).run(INTEGRATION);
+  const without = await keys();
+  assert.equal(without.length, DURABILITY_ITEMS.length - 1, 'no Mercury: not in the list, so not in the total');
+  assert.ok(!without.includes('runway_12_months'));
+  db.prepare(`INSERT INTO durability_checklist (project_id, item_key, done_at) VALUES (?, 'runway_12_months', '2026-10-01')`).run(PID);
+  const ticked = await checklist(env, PID).then((l) => l.find((i) => i.key === 'runway_12_months'));
+  assert.deepEqual([ticked?.done, ticked?.source], [true, 'manual'], 'ticked by hand: counted');
 });
