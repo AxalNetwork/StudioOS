@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
+import { mercuryPersonalApi } from '../../lib/api/mercuryPersonal';
 import { safeWriteJSON } from '../../lib/storage';
 import { PENDING_LINKEDIN_IMPORT_KEY } from '../../lib/linkedinCsv';
 import { successBanner } from './githubSync';
@@ -86,6 +87,9 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
       if (returnTo === 'build') keepBuildProject(projectId);
       if (kind === 'first_party') {
         url = await startFirstParty(p.key, returnTo || 'integrations', api, projectId);
+      } else if (personalMercury) {
+        // D840 (#2346): Mercury's own sign-in route; it returns to /account/connectors/mercury.
+        url = (await mercuryPersonalApi.oauthStart())?.authorize_url;
       } else {
         const params = returnTo === 'build' ? { return_to: 'build', ...(Number(projectId) > 0 ? { project_id: String(Number(projectId)) } : {}) } : {};
         if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';

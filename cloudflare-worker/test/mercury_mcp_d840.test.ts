@@ -159,7 +159,6 @@ test('7. only reads.ts imports mcp.ts, and no token reaches a log', async () => 
     const r = await openMercuryReads({ accessToken, fetcher: fake.fetch });
     await r.accounts();
     await assert.rejects(() => openMercuryReads({ accessToken: 'fake-access-not-live', fetcher: fake.fetch }));
-    await r.close();
   } finally { Object.assign(console, keep); }
   for (const line of logged) {
     assert.ok(!line.includes(accessToken) && !line.includes('fake-access'), 'a token was logged');
@@ -185,6 +184,5 @@ test('8. the feeds\' reader on the MCP path: organization, accounts, a page and 
   assert.equal(scopePermission(['read', 'write']), 'above_read_only');
   assert.equal(scopePermission(['offline_access']), 'above_read_only');
   assert.equal(scopePermission([]), 'not_reported');
-  await reader.close();
-  assert.equal(fake.calls.at(-1)!.method, 'DELETE');
+  assert.ok(fake.calls.every((c) => c.method === 'POST'), 'POST only, never a DELETE');
 });

@@ -27,6 +27,8 @@
  */
 import { getOrganization as apiOrganization, getTransaction as apiTransaction, listAccounts as apiAccounts, listTransactions as apiTransactions, MercuryClientError, type MercuryFetch } from './client';
 import { openMercuryMcp, type MercuryMcpSession } from './mcp';
+
+export { MERCURY_MCP_URL, MERCURY_READ_TOOLS } from './mcp';
 import { dayOf, parseAccounts, parseOrganization, parseTokenPermission, parseTransaction, parseTransactions, toCents, type ParsedAccount, type ParsedOrganization, type ParsedTransaction, type TokenPermission } from './parse';
 
 const obj = (v: unknown): Record<string, unknown> | null =>
@@ -189,7 +191,6 @@ export interface MercuryReads {
   recipients(): Promise<Recipient[]>;
   safeRequests(): Promise<SafeRequest[]>;
   categories(): Promise<Category[]>;
-  close(): Promise<void>;
 }
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -280,7 +281,6 @@ export async function openMercuryReads(access: McpAccess): Promise<MercuryReads>
     async recipients() { return all('getRecipients', {}, parseRecipients); },
     async safeRequests() { return parseSafeRequests(await call('getSafeRequests')); },
     async categories() { return all('listCategories', {}, parseCategories); },
-    close: () => session.close(),
   };
 }
 
@@ -303,7 +303,6 @@ export interface MercuryBankReader {
   transactionsPage(accountId: string, page: { start: string; limit: number; cursor: string | null }): Promise<TransactionsPage>;
   /** One line of that account by id, or null when the account does not hold it. */
   transaction(accountId: string, transactionId: string): Promise<ParsedTransaction | null>;
-  close(): Promise<void>;
 }
 
 /** A pasted Read Only API token, through D710's GET-only client. */
@@ -334,7 +333,6 @@ export function tokenBankReader(token: string, fetcher?: MercuryFetch): MercuryB
         throw e;
       }
     },
-    async close() { /* nothing is held */ },
   };
 }
 
@@ -373,6 +371,5 @@ export function mcpBankReader(access: McpAccess & { scopes: readonly string[] })
       const { mercury_account_id: _a, ...line } = t;
       return line;
     },
-    async close() { if (opened) await (await opened).close(); },
   };
 }

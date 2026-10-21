@@ -18,7 +18,8 @@
  * THE SESSION. `openMercuryMcp` sends `initialize`, keeps the server's
  * `Mcp-Session-Id` for every later request, sends `notifications/initialized`
  * and reads `tools/list` (every page) once. A session lives for one Worker
- * request; nothing is cached across requests.
+ * request; nothing is cached across requests, and the server expires it.
+ * The client sends POST only: no DELETE, so no request can remove anything.
  *
  * THE BUDGET. Each POST is one Worker subrequest. A session makes at most
  * `MCP_REQUEST_BUDGET` of them, and each has `MCP_DEADLINE_MS`. A redirect is
@@ -91,7 +92,6 @@ export interface MercuryMcpSession {
   /** POSTs made so far, initialize included. */
   readonly requests: number;
   callTool(name: string, args?: Record<string, unknown>): Promise<unknown>;
-  close(): Promise<void>;
 }
 
 interface JsonRpcResponse { jsonrpc?: string; id?: unknown; result?: unknown; error?: unknown }
@@ -212,17 +212,6 @@ export async function openMercuryMcp(opts: McpSessionOptions): Promise<MercuryMc
       // Refused before any request: a name off the list, or one this server does not offer.
       if (!isReadTool(name) || !offered.includes(name)) throw new MercuryClientError('path_not_allowed');
       return toolData(await request('tools/call', { name, arguments: args }));
-    },
-    async close(): Promise<void> {
-      // Best effort, and only when the budget allows: the session also expires on the server.
-      if (!sessionId || requests >= budget) return;
-      requests += 1;
-      try {
-        await withDeadline(fetcher(url, {
-          method: 'DELETE', redirect: 'manual',
-          headers: { Authorization: `Bearer ${opts.accessToken}`, 'Mcp-Session-Id': sessionId },
-        }), MCP_DEADLINE_MS, 'mercury_mcp');
-      } catch { /* the server's own expiry ends it */ }
     },
   };
 }
