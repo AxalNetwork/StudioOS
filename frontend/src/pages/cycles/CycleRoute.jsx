@@ -37,6 +37,7 @@ import ToolsHistory from './ToolsHistory';
 import SolutionDesignFromCode from './SolutionDesignFromCode';
 import FoundingTeamFromCode from './FoundingTeamFromCode';
 import CompanyFromCode from './CompanyFromCode';
+import GrowFromMercury from './GrowFromMercury';
 import MercuryRaiseFeed from './MercuryRaiseFeed';
 import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
@@ -56,6 +57,8 @@ import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { moduleToolLinks } from './founderToolNavigation.js';
 
+/** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
+const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
 /** D840 part 2 (#2347): a Raise module's From Mercury, from `parts.mercury`, which only the founder's own read carries. */
 const mercuryPart = (slug, data, ctx) => <MercuryRaiseFeed slug={slug} part={data?.parts?.mercury} projectId={ctx.projectId} reload={ctx.reload} />;
 
@@ -264,10 +267,20 @@ const CYCLE_DEFS = {
         <UpdatesHistory updates={data?.parts?.updates} reason={data?.parts?.updates_reason} onShare={ctx.openAction} />
         <DurabilityChecklist items={data?.parts?.checklist}
           onToggle={ctx.projectId ? (key, done) => cyclesWrite.grow.checklist(ctx.projectId, key, done).then(ctx.reload) : undefined} />
+        {fromMercury('durable-company-building', data, ctx)}
       </>),
       // The replies customer and partner asks brought in, beside the rows.
-      distribution: (data) => <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />,
-      'partner-network': (data) => <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />,
+      distribution: (data, ctx) => (<>
+        <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Lead" />
+        {fromMercury('distribution', data, ctx)}
+      </>),
+      'partner-network': (data, ctx) => (<>
+        <UpdateAskReplies replies={data?.parts?.from_update_asks} pill="Partner" />
+        {fromMercury('partner-network', data, ctx)}
+      </>),
+      // D840 part 3 (#2348): the founder's own Mercury, anchored at #from-mercury.
+      'revenue-and-traction': (data, ctx) => fromMercury('revenue-and-traction', data, ctx),
+      'team-expansion': (data, ctx) => fromMercury('team-expansion', data, ctx),
     }),
   },
   /**

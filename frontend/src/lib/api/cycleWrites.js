@@ -82,6 +82,11 @@ export function makeCycleWrites(request) {
       marketUpdate: (projectId, uid, body) => request(`/cycles/grow/markets/${seg(uid)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       roleUpdate: (projectId, id, body) => request(`/cycles/grow/roles/${seg(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
       obligationUpdate: (projectId, id, body) => request(`/cycles/grow/obligations/${seg(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, project: projectId }) }),
+      // D840 part 3 (#2348): the founder's decision on a partner payment their Mercury proposed, and a team member deleting a Mercury figure.
+      syncMercury: (projectId) => request('/cycles/grow/mercury/sync', { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      acceptMercuryPartner: (projectId, id, body = {}) => request(`/cycles/grow/mercury/partner-proposals/${seg(id)}/accept`, { method: 'POST', body: JSON.stringify({ ...body, project: projectId }) }),
+      dismissMercuryPartner: (projectId, id) => request(`/cycles/grow/mercury/partner-proposals/${seg(id)}/dismiss`, { method: 'POST', body: JSON.stringify({ project: projectId }) }),
+      deleteMercuryFact: (projectId, id) => request(`/cycles/grow/mercury/facts/${seg(id)}?${q(projectId)}`, { method: 'DELETE' }),
     },
     // D696 (#1658): a record's own action, as `cyclesApi.recordAction` sends it; a
     // FormData body (Upload proof) goes as it is.

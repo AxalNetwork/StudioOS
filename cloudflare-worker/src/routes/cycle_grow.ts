@@ -23,6 +23,14 @@
  *   POST  /markets                 PATCH /markets/:uid
  *   POST  /obligations             PATCH /obligations/:id    PUT /checklist/:key
  *
+ * D840 part 3 (#2348): the founder's own Mercury. A fed module's read carries
+ * `parts.from_mercury`, the figures for the founder's company's members only
+ * (`services/mercury/growFeeds.ts`); anyone else gets `team_only`.
+ *   POST   /mercury/sync                           the founder only, from their own signed-in Mercury
+ *   POST   /mercury/partner-proposals/:id/accept   { growth_partner_uid? }  the founder only
+ *   POST   /mercury/partner-proposals/:id/dismiss                          the founder only
+ *   DELETE /mercury/facts/:id                      a writer on the founder's company; stays deleted
+ *
  * Every request value is bound. A typed figure is `source: 'manual'`.
  */
 import { Hono } from 'hono';
@@ -47,6 +55,10 @@ import { canAskAgain } from '../services/updateShare';
 import { isAdmin } from './_t13t14t15_helpers';
 import { growPhone } from '../services/cycleFocus';
 import { hasRecords } from '../services/records';
+import { isSupportSession } from '../integrations/providers/mercury';
+import {
+  GROW_FEED_SLUGS, GrowSyncRefused, acceptPartnerProposal, syncGrowFromMercury, deleteGrowFact, dismissPartnerProposal, growFromMercury, isTeamViewer, isVentureFounder, type GrowFeedSlug,
+} from '../services/mercury/growFeeds';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -361,9 +373,21 @@ r.get('/modules/:slug', async (c) => {
     const sort = String(c.req.query('sort') || '').slice(0, 60) || recs.sorts[0]?.key || '';
     const shaped = shapeRecords(recs.rows, String(c.req.query('q') || '').slice(0, 120), String(c.req.query('filter') || '').slice(0, 300), sort);
     const pg = pageOf(shaped, c.req.query('page'), c.req.query('page_size'));
-    return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow') }, ...(recs.parts ? { parts: recs.parts } : {}) });
+    const parts = { ...(recs.parts ?? {}), ...(await mercuryPart(c, user, pid, meta.slug)) };
+    return c.json({ module: mod, card, records: { cols: recs.cols, ...pg, filters: recs.filters, sorts: recs.sorts, linkable: hasRecords('grow') }, ...(Object.keys(parts).length ? { parts } : {}) });
   } catch (e) { return fail(c, e); }
 });
+
+/** D840 part 3: a fed module's Mercury part; a failed read is `unreadable`, never empty, and the rest of the module still loads. */
+async function mercuryPart(c: C, user: User, pid: number, slug: string): Promise<{ from_mercury?: unknown }> {
+  if (!(GROW_FEED_SLUGS as readonly string[]).includes(slug)) return {};
+  try {
+    return { from_mercury: await growFromMercury(c.env, pid, slug as GrowFeedSlug, user, new Date().toISOString().slice(0, 10)) };
+  } catch (e) {
+    console.error('[cycle_grow] mercury part unreadable:', slug, (e as Error).name);
+    return { from_mercury: { state: 'unreadable', reason: 'Unreadable: the Mercury figures could not be read' } };
+  }
+}
 
 // ── Writes ──────────────────────────────────────────────────────────────────
 // Each route gates the venture for writing, then hands the body to its writer.
@@ -407,5 +431,67 @@ r.put('/checklist/:key', write(async (c, u, pid, b) => {
   if (!DURABILITY_ITEMS.some((i) => i.key === key)) throw new Refused(404, 'Not a checklist item');
   return setChecklistItem(c.env, pid, u, key, b.done === true);
 }));
+
+// ── D840 part 3: the founder's Mercury ─────────────────────────────────────
+
+/** The founder of the venture, whose Mercury it is; anyone else is refused. */
+async function founderOf(c: C, user: User, pid: number): Promise<void> {
+  if (!(await isVentureFounder(c.env, user, pid))) throw new Refused(403, 'Only the founder decides on what their Mercury proposes');
+}
+
+const DECIDED: Record<string, [number, string]> = {
+  not_found: [404, 'That proposal is not on this venture'],
+  decided: [409, 'That proposal was already decided'],
+  unknown_partner: [404, 'That partner is not on this venture'],
+};
+const proposalId = (c: C) => {
+  const id = Number(param(c, 'id'));
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Refused(404, 'That proposal is not on this venture');
+  return id;
+};
+
+r.post('/mercury/sync', async (c) => {
+  try {
+    const user = await requireAuth(c); const b = await body(c);
+    const pid = await project(c, user, b.project, true);
+    await founderOf(c, user, pid);
+    if (await isSupportSession(c)) throw new Refused(403, 'A support session cannot read a member\'s bank account');
+    const counts = await syncGrowFromMercury(c.env, user.id, pid, new Date().toISOString().slice(0, 10));
+    await logGrowWrite(c.env, pid, user.id, { module: 'revenue-and-traction', entityId: pid, action: 'grow_mercury_synced', summary: 'Grow synced from Mercury' });
+    return c.json({ ok: true, counts });
+  } catch (e) {
+    if (e instanceof GrowSyncRefused) return c.json({ error: e.code, detail: e.sentence }, e.status);
+    return fail(c, e);
+  }
+});
+r.post('/mercury/partner-proposals/:id/accept', write(async (c, u, pid, b) => {
+  await founderOf(c, u, pid);
+  const id = proposalId(c);
+  const create = async (name: string) => (await addPartner(c.env, pid, u, { name, type: 'other' })).uid;
+  const out = await acceptPartnerProposal(c.env, pid, id, { growth_partner_uid: b.growth_partner_uid }, u.id, create);
+  if (out !== 'ok') throw new Refused(...DECIDED[out]);
+  await logGrowWrite(c.env, pid, u.id, { module: 'partner-network', entityId: id, action: 'grow_mercury_partner_accepted', summary: 'Mercury partner payment linked' });
+  return { ok: true, id, state: 'accepted' };
+}));
+r.post('/mercury/partner-proposals/:id/dismiss', write(async (c, u, pid) => {
+  await founderOf(c, u, pid);
+  const id = proposalId(c);
+  const out = await dismissPartnerProposal(c.env, pid, id, u.id);
+  if (out !== 'ok') throw new Refused(...DECIDED[out]);
+  await logGrowWrite(c.env, pid, u.id, { module: 'partner-network', entityId: id, action: 'grow_mercury_partner_dismissed', summary: 'Mercury partner payment dismissed' });
+  return { ok: true, id, state: 'dismissed' };
+}));
+r.delete('/mercury/facts/:id', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const pid = await project(c, user, c.req.query('project'), true);
+    if (!(await isTeamViewer(c.env, user, pid))) throw new Refused(403, 'Only the venture\'s team can change its Mercury figures');
+    const id = Number(param(c, 'id'));
+    const slug = Number.isSafeInteger(id) && id > 0 ? await deleteGrowFact(c.env, pid, id) : null;
+    if (!slug) throw new Refused(404, 'That figure is not on this venture');
+    await logGrowWrite(c.env, pid, user.id, { module: slug, entityId: id, action: 'grow_mercury_fact_deleted', summary: 'Mercury figure deleted' });
+    return c.json({ ok: true, id });
+  } catch (e) { return fail(c, e); }
+});
 
 export default r;

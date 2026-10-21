@@ -30,6 +30,11 @@ export const MODULE_LABELS: Record<string, string> = {
   fund_calls: 'Fund · Calls',
   fund_ledger: 'Fund · Accounting',
   fund_reporting: 'Fund · Reporting',
+  // D840 part 3: the Grow modules the founder's Mercury feeds.
+  durable_company_building: 'Durable company-building',
+  team_expansion: 'Team expansion',
+  distribution: 'Distribution',
+  partner_network: 'Partner network',
 };
 
 
@@ -63,6 +68,11 @@ export const MODULE_HREFS: Record<string, string> = {
   fund_calls: '/funds/calls',
   fund_ledger: '/funds/ledger',
   fund_reporting: '/funds/reporting',
+  // D840 part 3: the Grow modules the founder's Mercury feeds.
+  durable_company_building: '/grow/durable-company-building',
+  team_expansion: '/grow/team-expansion',
+  distribution: '/grow/distribution',
+  partner_network: '/grow/partner-network',
 };
 
 export function moduleHref(key: string): string | null {

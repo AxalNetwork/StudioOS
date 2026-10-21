@@ -516,8 +516,9 @@ export const PERSONAL_MERCURY: Readonly<Record<PersonalMercuryRole, Readonly<Per
     description: 'Your own Mercury account, read-only: import the credits you choose as venture revenue, and see each month\'s spending, burn, cash on hand and runway. Only the figures you choose are saved.',
     capabilities: ['Revenue import', 'Payment matching', 'Spending and runway'],
     permissions: ['Read your Mercury account names, last four digits, available balances and the transactions you review; it never sends, transfers or requests money.'],
-    // D840 part 2 (#2347): the Raise modules, in `MERCURY_FEEDS`' order.
-    feeds: ['revenue_and_traction', 'fundraising_readiness', 'use_of_funds', 'data_room', 'cap_table', 'capital_relationships', 'investor_narrative', 'pitch_deck'],
+    // D840 parts 2 (#2347) and 3 (#2348): the Raise and Grow modules, in `MERCURY_FEEDS`' order.
+    feeds: ['revenue_and_traction', 'fundraising_readiness', 'use_of_funds', 'data_room', 'cap_table', 'capital_relationships', 'investor_narrative', 'pitch_deck',
+      'durable_company_building', 'team_expansion', 'distribution', 'partner_network'],
   }),
   partner: Object.freeze({
     description: FOUNDER_PARTNER_DESCRIPTION, capabilities: FOUNDER_PARTNER_CAPABILITIES,

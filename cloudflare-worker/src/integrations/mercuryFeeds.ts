@@ -48,6 +48,12 @@ export const MERCURY_FEEDS: readonly MercuryFeed[] = Object.freeze([
   { key: 'raise_capital_relationships', role: 'founder', what: 'Wires and ACH credits that look like investment, proposed as a match or a new investor', module: 'capital_relationships', tools: ['getAccounts', 'listTransactions'], decision: 'D840' },
   { key: 'raise_narrative_figures', role: 'founder', what: 'Revenue growth, burn and runway the narrative can cite', module: 'investor_narrative', tools: ['getAccounts', 'listTransactions', 'getCashflowSummary'], decision: 'D840' },
   { key: 'raise_deck_figures', role: 'founder', what: 'Revenue growth, burn and runway the deck’s traction slide can cite', module: 'pitch_deck', tools: ['getAccounts', 'listTransactions', 'getCashflowSummary'], decision: 'D840' },
+  // D840 part 3 (#2348): the founder's Grow modules, landed by `services/mercury/growFeeds.ts`.
+  { key: 'grow_revenue', role: 'founder', what: 'Each month’s money in and net burn, invoices paid, open and overdue, and the credits that match a paid invoice', module: 'revenue_and_traction', tools: ['getAccounts', 'listTransactions', 'listInvoices', 'listCustomers'], decision: 'D840' },
+  { key: 'grow_durable', role: 'founder', what: 'Cash, treasury and runway, for your team only', module: 'durable_company_building', tools: ['getAccounts', 'listTransactions', 'getTreasury'], decision: 'D840' },
+  { key: 'grow_team', role: 'founder', what: 'Payroll by month, for your team only', module: 'team_expansion', tools: ['listTransactions'], decision: 'D840' },
+  { key: 'grow_distribution', role: 'founder', what: 'Marketing and advertising spend by month and by channel, for your team only', module: 'distribution', tools: ['listTransactions'], decision: 'D840' },
+  { key: 'grow_partners', role: 'founder', what: 'Payments to an Axal partner, proposed for you to link', module: 'partner_network', tools: ['listTransactions'], decision: 'D840' },
   { key: 'capital_attestation', role: 'investor', what: 'A dated proof of funds of at least an amount you choose', module: null, tools: ['getOrganization', 'getAccounts'], decision: 'D752' },
   // D840 part 4 (#2349): a signed-in investor's sections (`services/mercury/investorFeeds.ts`).
   // Facts are written; the rest are proposals the investor accepts.
@@ -70,6 +76,15 @@ export const INVESTOR_LANDS: Readonly<Record<string, 'statement' | 'fact' | 'pro
 
 /** Portfolio data belongs to the companies: Mercury feeds nothing there, and the page says so. */
 export const PORTFOLIO_NOTE = 'Mercury feeds nothing in Portfolio: portfolio figures belong to the companies, not to your bank account.';
+
+/** D840 part 3: the Grow landings, by module (the keys `growFeeds.ts` writes to the ledger). */
+export const GROW_FEED_KINDS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  revenue_and_traction: ['metric_month', 'credit', 'invoices_paid', 'invoices_open', 'invoices_overdue'],
+  durable_company_building: ['cash', 'treasury', 'runway'],
+  team_expansion: ['payroll'],
+  distribution: ['marketing_spend', 'channel_spend'],
+  partner_network: ['partner_payment'],
+});
 
 /** The modules a role's Mercury feeds, in the list's order. */
 export function mercuryFedModules(role: string | null | undefined): string[] {

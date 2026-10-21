@@ -427,7 +427,9 @@ test('durable company-building: the checklist starts from the Lab\'s gates; obli
   assert.deepEqual([list.key_person_cover.done, list.key_person_cover.source], [true, 'manual']);
   assert.equal(list.ein_received.done, false);
   const card = (await overview(f)).body.cards.find((c: any) => c.slug === 'durable-company-building');
-  assert.deepEqual(card.series.checklist, { done: 2, total: DURABILITY_ITEMS.length, pct: Math.round((2 / DURABILITY_ITEMS.length) * 100) });
+  // D840 part 3: a Mercury item counts only for a founder with Mercury; this one has none.
+  const counted = DURABILITY_ITEMS.filter((i) => !i.mercury).length;
+  assert.deepEqual(card.series.checklist, { done: 2, total: counted, pct: Math.round((2 / counted) * 100) });
   assert.equal(card.next.text, 'Give Board meeting an owner.');
   assert.ok(card.series.calendar.some((event: any) => event.title === 'Board meeting' && event.due === due));
   const patch = (body: any) => call(f, FOUNDER, 'PATCH', `/api/cycles/grow/obligations/${ob.body.id}`, { project: PID, ...body });

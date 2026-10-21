@@ -140,6 +140,17 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
       tool('read_statements', 'statements', 'read', 'Reads your accounts’ monthly statements, for month-end cash in your period report, and proposes attaching a statement to its period.', 'fund_reporting', [...mcp('getAccountStatements')]),
     );
   }
+  // D840 part 3 (#2348): what the founder's Grow sync reads, each where it lands.
+  if (variant === 'founder') {
+    tools.push(
+      tool('list_invoices', 'invoices', 'read', 'Reads your invoices, to count them paid, open and overdue, and to land a credit that matches exactly one paid invoice.', 'revenue_and_traction', mcp('listInvoices')),
+      tool('list_customers', 'customer names', 'read', 'Reads your invoice customers’ names, to name a credit that matches their paid invoice. No email or address is kept.', null, mcp('listCustomers')),
+      tool('read_treasury', 'treasury balance', 'read', 'Reads your treasury balance, shown with cash and runway to your team only.', 'durable_company_building', mcp('getTreasury')),
+      tool('payroll_by_month', 'payroll by month', 'read', 'Sums each month’s payroll from your transactions, shown to your team only.', 'team_expansion', mcp('listTransactions')),
+      tool('marketing_spend', 'marketing spend', 'read', 'Sums each month’s marketing and advertising spend, and by channel where a payee names one of your channels.', 'distribution', mcp('listTransactions')),
+      tool('partner_payments', 'payments to Axal partners', 'read', 'Finds payments to an Axal partner’s company and proposes linking them; nothing is linked until you accept.', 'partner_network', mcp('listTransactions')),
+    );
+  }
   if (member) {
     tools.push(tool('sign_in_with_mercury', 'your sign-in', 'account',
       'Registers Axal VC with Mercury’s sign-in once, and revokes your sign-in’s tokens when you disconnect. Your sign-in asks only for read access.',
@@ -165,6 +176,7 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
         ? [
           'Your own Mercury account, read-only.',
           'Axal VC lists the credits in your account. Only the credits you choose to import become rows in Revenue and traction. It never sends, transfers or requests money.',
+          'When you sync Grow, it fills Revenue and traction, Durable company-building, Team expansion, Distribution and Partner network: facts are written, a partner match is proposed for you to accept, and cash, treasury, runway, payroll and spend are shown to your team only.',
         ]
         : variant === 'investor'
           ? [

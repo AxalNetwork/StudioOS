@@ -9,8 +9,12 @@ const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPers
   // D840 part 2 (#2347): the founder's own sign-in, and a Raise credit confirmed as a raise receipt.
   'services/mercury/raiseAccess.ts','services/mercury/raiseFeeds.ts',
   // D840 part 4 (#2349): the investor's sections open the caller's own row (its id and how it connected).
-  'routes/mercury_investor.ts']);
-const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts','services/capitalAttestations.ts']);
+  'routes/mercury_investor.ts',
+  // D840 part 3 (#2348): the founder's own Mercury, read on their own sync into their Grow modules.
+  'services/mercury/growFeeds.ts','services/mercury/growPresence.ts']);
+const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts','services/capitalAttestations.ts',
+  // D840 part 3: the founder's confirmed raise receipts are financing in their Grow months.
+  'services/mercury/growFeeds.ts']);
 test('personal match tables and provider queries stay within the personal allowlist',()=>{
   for(const f of walk(root).filter(f=>/\.[cm]?[jt]s$/.test(f))) {
     const s=readFileSync(f,'utf8');

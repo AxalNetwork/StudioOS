@@ -26,6 +26,7 @@ import type { Env } from '../types';
 import {
   type Card, type Figure, figure, notRecordedFigure, seriesState,
 } from './cycleCards';
+import { founderHasMercury } from './mercury/growPresence';
 import { billingPeriods, byMonth, cohortRetention, computeMovements, movementGap, prevMonth, readRecurring, type LedgerRecurring, type Movement } from './revenueMovements';
 
 export const GROW_QUESTION = 'How does this venture become larger and more enduring?';
@@ -54,7 +55,7 @@ export type GrowSlug = typeof GROW_MODULES[number]['slug'];
  * (`SpinoutLabCompliancePage.jsx`, milestone keys in `spinoutLabCatalog.ts`):
  * a Lab venture's own milestones tick them; anyone else ticks them by hand.
  */
-export const DURABILITY_ITEMS: ReadonlyArray<{ key: string; label: string; lab: string | null }> = [
+export const DURABILITY_ITEMS: ReadonlyArray<{ key: string; label: string; lab: string | null; mercury?: 'runway' }> = [
   { key: 'ein_received', label: 'Tax ID (EIN) received', lab: 'ein_received' },
   { key: 'founder_stock_issued', label: 'Founder stock issued', lab: 'founder_stock_issued' },
   { key: 'section83b_filed', label: '83(b) elections filed', lab: 'section83b_filed' },
@@ -63,7 +64,12 @@ export const DURABILITY_ITEMS: ReadonlyArray<{ key: string; label: string; lab: 
   { key: 'data_room_built', label: 'Data room built', lab: 'data_room_built' },
   { key: 'key_person_cover', label: 'Key-person cover set up', lab: null },
   { key: 'board_cadence', label: 'Board meeting cadence agreed', lab: null },
+  // D840 part 3: the founder's own Mercury ticks it from its runway; anyone else ticks it by hand.
+  { key: 'runway_12_months', label: 'Twelve months of runway', lab: null, mercury: 'runway' },
 ];
+
+/** D840 part 3: the runway Mercury last measured ticks an item whose `mercury` is 'runway' at this many months. */
+export const MERCURY_RUNWAY_MONTHS = 12;
 
 export const MARKET_PARTS = [
   ['demand', 'Demand'], ['regulation', 'Regulation'], ['partners', 'Partners'], ['cost', 'Cost to enter'],
@@ -439,11 +445,25 @@ export async function checklist(env: Env, projectId: number) {
     ).bind(projectId).all<{ k: string; at: string | null }>();
     lab = new Map((r.results || []).map((x) => [x.k, x.at]));
   } catch { /* not a Lab venture's database: the Lab ticks nothing */ }
-  return DURABILITY_ITEMS.map((i) => {
+  // D840 part 3: the runway the founder's Mercury last measured. Only the tick
+  // and its date are read here, never the figure, which is the team's alone.
+  let runway: { months: number | null; as_of: string } | null = null;
+  try {
+    const r = await env.DB.prepare(`SELECT value, as_of FROM mercury_grow_facts WHERE project_id = ? AND kind = 'runway' AND period = 'current'`)
+      .bind(projectId).first<{ value: number | null; as_of: string }>();
+    runway = r ? { months: r.value, as_of: r.as_of } : null;
+  } catch { /* no Mercury store on this database: Mercury ticks nothing */ }
+  // A Mercury item counts only for a founder with an active Mercury connection,
+  // or once ticked by hand: it never lowers the score of a founder without one.
+  let mercury = false;
+  try { mercury = await founderHasMercury(env, projectId); } catch { /* no connections on this database */ }
+  return DURABILITY_ITEMS.filter((i) => !i.mercury || mercury || !!mine.get(i.key)).map((i) => {
     const byLab = i.lab ? lab.has(i.lab) : false;
     const byHand = !!mine.get(i.key);
-    return { key: i.key, label: i.label, done: byLab || byHand, source: byLab ? 'Spin-Out Lab' : byHand ? 'manual' : null,
-      done_at: byLab ? lab.get(i.lab!) ?? null : mine.get(i.key) ?? null };
+    const byMercury = i.mercury === 'runway' && runway != null && runway.months != null && runway.months >= MERCURY_RUNWAY_MONTHS;
+    return { key: i.key, label: i.label, done: byLab || byHand || byMercury,
+      source: byLab ? 'Spin-Out Lab' : byHand ? 'manual' : byMercury ? `From Mercury, as of ${runway!.as_of}` : null,
+      done_at: byLab ? lab.get(i.lab!) ?? null : byHand ? mine.get(i.key) ?? null : byMercury ? runway!.as_of : null };
   });
 }
 
