@@ -78,7 +78,8 @@ test('the registry, the uses and the variants agree; the partner keeps D713\'s w
   assert.equal(PERSONAL_MERCURY.founder.description, FOUNDER_DESCRIPTION);
   assert.deepEqual(PERSONAL_MERCURY.founder.capabilities, ['Revenue import', 'Payment matching', 'Spending and runway']);
   assert.deepEqual(PERSONAL_MERCURY.founder.permissions, [FOUNDER_PERMISSION]);
-  assert.deepEqual(PERSONAL_MERCURY.investor.capabilities, ['Proof of funds']);
+  // D840 part 4 (#2349): the investor's sections joined proof of funds.
+  assert.deepEqual(PERSONAL_MERCURY.investor.capabilities, ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals']);
   assert.equal(personalMercuryFor('advisor'), null);
   assert.equal(personalMercuryFor('Investor'), PERSONAL_MERCURY.investor);
 });
@@ -86,15 +87,15 @@ test('the registry, the uses and the variants agree; the partner keeps D713\'s w
 test('publicDescriptor serves the investor\'s variant on HQ and never the audience fields; connectorFeeds goes by role', () => {
   const own = publicDescriptor(mercury, { role: 'investor', hq: true }) as any;
   assert.equal(own.description, PERSONAL_MERCURY.investor.description);
-  assert.deepEqual(own.capabilities, ['Proof of funds']);
+  assert.deepEqual(own.capabilities, ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals']);
   assert.deepEqual(own.permissions, PERSONAL_MERCURY.investor.permissions);
-  assert.deepEqual(own.feeds, []);
+  assert.deepEqual(own.feeds, ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
   assert.equal(own.has_implementation, true);
   for (const field of ['entity_roles', 'personal_roles', 'personal_hq_only_roles']) assert.ok(!(field in own), field);
   const founder = publicDescriptor(mercury, { role: 'founder', hq: false }) as any;
   assert.equal(founder.description, FOUNDER_DESCRIPTION);
   assert.deepEqual(founder.feeds, ['revenue_and_traction']);
-  assert.deepEqual(connectorFeeds('mercury', 'investor'), []);
+  assert.deepEqual(connectorFeeds('mercury', 'investor'), ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
   assert.deepEqual(connectorFeeds('mercury', 'founder'), ['revenue_and_traction']);
   assert.deepEqual(connectorFeeds('mercury', 'partner'), []);
 });

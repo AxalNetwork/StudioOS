@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import FromMercury from './FromMercury';
 import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
@@ -162,6 +163,8 @@ export default function InvestorPortfolioPositions() {
       />
       <section className="i4-card ip1-unavailable"><div className="i4-section-head"><div><h2>What this book will not do</h2><p>Read-only, and specific about which writes are elsewhere</p></div></div><strong>Every valuation and ownership write is an admin action.</strong><p>A mark is appended by an admin against a position, and a follow-on is a new round on that position — both are recorded through the governed write path, not from this book. This page reads them: the history below carries each mark with the date it speaks for, the event behind it and the basis it was arrived at on, because a round-priced mark and a GP estimate must not look alike.</p></section>
       {state.analytics?.unmarked_position_count > 0 && <div className="i4-coverage">{state.analytics.unmarked_position_count} of {state.analytics.position_count} positions have no valuation mark and are carried at cost{state.analytics.mark_coverage != null ? ` · ${Math.round(state.analytics.mark_coverage * 100)}% mark coverage` : ''}.</div>}
+      {/* D840 (#2349): Mercury feeds nothing in Portfolio, and the page says so. */}
+      <FromMercury section="portfolio" />
       <footer className="i4-boundary">Investor workspace · data shown is restricted to this investor’s accessible position book.</footer>
     </>}
   </main><PositionsRail rows={rows} analytics={state.analytics} unavailable={state.unavailable} sourceError={state.error} /></div>;
