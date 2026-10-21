@@ -139,8 +139,7 @@ export default function InvestorPortfolioPositions() {
       <AlertsSection rows={rows} unavailable={state.unavailable} />
       {/* ══ QUARTER-END EXPORT — the book read as of a date. `as_of` cuts the
           flows AND the marks at the date (positions.ts), so the figures are
-          the quarter's own rather than today's with an old label. The rendered
-          four-page LP document is /lp-reports, not this page. ══ */}
+          the quarter's own rather than today's with an old label. ══ */}
       <QuarterEndExport />
       {/* WAS a card asserting "History remains read-only on this collection"
           and that IP1 "does not ... write marks, add follow-ons, or accept an
@@ -390,8 +389,7 @@ function AlertsSection({ rows, unavailable }) {
 /**
  * The quarter-end export: the book read as of a date. `positionsAnalytics`
  * takes `as_of` and the route cuts the flows AND the marks at the date, so the
- * figures are the quarter's own. The rendered four-page LP document is
- * /lp-reports — this export is the book's figures, traced to the positions.
+ * figures are the quarter's own: the book's figures, traced to the positions.
  */
 function lastQuarterEnd() {
   const now = new Date();
@@ -437,7 +435,7 @@ function QuarterEndExport() {
   return (
     <section className="i4-card" data-testid="ip1-quarter-end">
       <div className="i4-section-head">
-        <div><h2>Quarter-end export</h2><p>The book read as of a date — flows and marks both cut at it. The rendered LP document is /lp-reports.</p></div>
+        <div><h2>Quarter-end export</h2><p>The book read as of a date — flows and marks both cut at it.</p></div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} aria-label="Export as of" data-testid="input-quarter-end-date"

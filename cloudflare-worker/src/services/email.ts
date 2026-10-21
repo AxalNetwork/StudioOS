@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import { isSuppressed } from './newsletter';
 
 // A DEADLINE ON EVERY OUTBOUND CALL IN THE MAIL PATH. `/magic/start` awaits the
 // send inline, so a Google endpoint that never answers holds a person's sign-in
@@ -271,6 +272,8 @@ export async function sendAgreementAssignedEmail(
   signLink: string,
   adminName: string,
 ): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing — agreement email not sent');
     return false;
@@ -359,6 +362,8 @@ export async function sendPartnerInvitationEmail(
   link: string,
   personalMessage: string,
 ): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing — partner invitation not sent');
     return false;
@@ -459,6 +464,8 @@ export async function sendCompanyInvitationEmail(
   inviterName: string,
   link: string,
 ): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing — company invitation not sent');
     return false;
@@ -578,6 +585,8 @@ export async function sendReferralInviteEmail(
   code: string,
   personalMessage: string,
 ): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing — referral invite not sent');
     return false;
@@ -697,6 +706,8 @@ export async function sendContactInviteEmail(
   link: string,
   personalMessage: string,
 ): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing — contact invite not sent');
     return false;
@@ -744,6 +755,8 @@ export async function sendFlaggedScoreEmail(
   recipientName: string,
   payload: FlaggedScoreEmailPayload,
 ): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) return false;
   try {
     const accessToken = await getGmailAccessToken(env);
@@ -818,6 +831,8 @@ export async function sendNotificationEmail(
   body: string,
   opts?: { html?: string; from?: string },
 ): Promise<boolean> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return false;
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     return false;
   }
@@ -847,6 +862,8 @@ export async function sendNotificationEmail(
 }
 
 export async function sendVerificationEmail(env: Env, to: string, name: string, verificationUrl: string): Promise<boolean> {
+  // D810 — the suppression list, by reason (security).
+  if (await isSuppressed(env, to, 'security')) return false;
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing');
     return false;
@@ -888,6 +905,8 @@ export async function sendSignedPdfForwardedEmail(
   pdfBytes: Uint8Array,
   opts?: { message?: string; from?: string },
 ): Promise<{ ok: boolean; error?: string }> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, to, 'transactional')) return { ok: false, error: 'suppressed' };
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_REFRESH_TOKEN) {
     return { ok: false, error: 'Gmail not configured on this environment' };
   }
@@ -1087,6 +1106,8 @@ export async function sendBrandedInvoiceEmail(
   env: Env,
   opts: BrandedInvoiceOpts,
 ): Promise<{ ok: boolean; error?: string }> {
+  // D810 — the suppression list, by reason (transactional).
+  if (await isSuppressed(env, opts.to, 'transactional')) return { ok: false, error: 'suppressed' };
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_REFRESH_TOKEN) {
     return { ok: false, error: 'Gmail not configured on this environment' };
   }

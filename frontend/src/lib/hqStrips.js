@@ -31,6 +31,7 @@ export const HQ_STRIPS = {
     ['AI allowances', '/admin/platform/allowances'],
     ['Payments', '/admin?tab=payments'],
     ['Bank accounts', '/admin?tab=bank-accounts'],
+    ['Product testing', '/admin?tab=product-testing'],
     ['Promo codes', '/admin?tab=promos'],
     ['Monitoring', '/monitoring'],
     ['Telegram', '/admin/telegram'],

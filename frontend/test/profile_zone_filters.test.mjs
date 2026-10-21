@@ -134,8 +134,9 @@ const PROFILES = {
     pages: ['frontend/src/pages/founder', 'frontend/src/workspaces', 'frontend/src/workspaces/founder'],
     actions: 'frontend/src/workspaces/founderZoneActions.js',
     // 30 → 26 (D704): the four `validate/*` zones are retired; see `excluded`.
-    zones: 26,
-    mounted: 26,
+    // 26 → 25: the owner removed `raise/liquidity` (2026-10-20), page and all.
+    zones: 25,
+    mounted: 25,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
     // EMPTY, AND THIS TIME THE COUNT PROVES IT RATHER THAN AGREEING WITH IT.
     // The four `validate/*` zones sat here for one release, and the note that
@@ -165,7 +166,7 @@ const PROFILES = {
     // The count moved 26 → 30 in the same commit, and back to 26 when D704
     // retired the four zones, which now sit here by name (decision 4): the
     // canvas still draws them, and no table may declare them.
-    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict'],
+    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity'],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.

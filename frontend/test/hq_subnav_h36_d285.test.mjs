@@ -56,6 +56,8 @@ const PLATFORM = [
 PLATFORM.splice(3, 0, ['AI allowances', '/admin/platform/allowances']);
 // D708 (#1773) — the Bank accounts console joins the Platform row after Payments.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Payments') + 1, 0, ['Bank accounts', '/admin?tab=bank-accounts']);
+// D815 (#2261) — HQ › Product testing joins the Platform row after Bank accounts.
+PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Bank accounts') + 1, 0, ['Product testing', '/admin?tab=product-testing']);
 // The owner's ruling (2026-10-20) — Integration keys and GitHub Sync leave the
 // strip for an HQ row of their own, `/admin/integration-keys`.
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Integration keys'), 2);
@@ -187,10 +189,10 @@ test('the Admin Console tab follows location.search, writes back with replace, a
   assert.match(ADMIN_PAGE, /onChange=\{pickTab\}/, 'the section nav does not go through the write-back');
   assert.match(ADMIN_PAGE, /if \(section && ADMIN_SECTION_VALUES\.has\(section\)\) return section;/, 'the section override no longer wins the first read');
   assert.doesNotMatch(adminConsoleSource(), /row of 12 tab buttons/, 'the comment still says twelve');
-  // D708 (#1773) added Bank accounts, the fifteenth; the owner's ruling
-  // (2026-10-20) took Integration keys and GitHub Sync to HQ's own page.
-  assert.match(adminConsoleSource(), /thirteen sections today/);
-  assert.equal(TABS.length, 13);
+  // D708 (#1773) added Bank accounts, the fifteenth; D815 (#2261) Product testing, the sixteenth;
+  // the owner's ruling (2026-10-20) took Integration keys and GitHub Sync to HQ's own page.
+  assert.match(adminConsoleSource(), /fourteen sections today/);
+  assert.equal(TABS.length, 14);
 });
 
 /* ------------------------------------------------------------------ *

@@ -64,13 +64,6 @@ const QUICK_ACTIONS = [
     run: (nav) => nav('/legal'),
   },
   {
-    id: 'qa.run-scoring',
-    label: 'Run scoring',
-    hint: 'Score an opportunity',
-    roles: ['admin', 'founder', 'partner', 'investor'],
-    run: (nav) => nav('/scoring'),
-  },
-  {
     id: 'qa.open-advisor',
     label: 'Open Personal Advisor',
     hint: 'Ask the AI advisor',

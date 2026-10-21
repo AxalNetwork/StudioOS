@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import StudioInterview from '../../components/advisor/StudioInterview';
 import ProfileFitSection from '../../components/profile/ProfileFitSection';
 import InvestorQuotaBars from '../../components/InvestorQuotaBars';
+import ProductTestingCard from '../productTesting/ProductTestingCard';
 import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import { Unreadable, Unrecorded } from '../../ui';
@@ -122,6 +123,8 @@ export default function InvestorStudioHome({
           {previewing ? <Status>Investor-scoped events are withheld in administrator preview.</Status> : records.events === undefined ? <Loading /> : failures.events ? <Unreadable what="Upcoming events" claim="This is not a claim that nothing is scheduled." onRetry={retrySources} /> : events.length ? <div className="is-event-list">{events.map((event, index) => <Link to="/calendar" key={event.id || index} data-testid={`link-investor-event-${event.id || index}`}><b>{event.title || event.name || 'Event title not recorded'}</b><span>{formatDate(event.start_at || event.starts_at || event.date)}</span></Link>)}</div> : <Status>No upcoming events recorded.</Status>}
         </article>
       </div>
+      {/* D814 (#2260): "Apply for Product Testing". */}
+      <ProductTestingCard previewing={previewing} className="mt-4" />
     </section>
   );
 }
@@ -130,5 +133,5 @@ function AdvisorUnavailable({ previewing = false }) { return <section className=
 function AssessmentUnavailable() { return <section className="is-assessment-unavailable" data-testid="status-investor-assessment-preview"><div><b>Skills</b><span>Investor-scoped assessment withheld</span></div><div><b>Values</b><span>Investor-scoped assessment withheld</span></div><div><b>Investor archetype</b><span>Investor-scoped assessment withheld</span></div></section>; }
 function CardHead({ title, to, label }) { return <header className="is-card-head"><h2>{title}</h2><Link to={to} data-testid={`link-investor-${title.toLowerCase().replaceAll(' ', '-')}`}>{label}<ArrowUpRight size={13} /></Link></header>; }
 function Status({ children, error }) { return <p className={`is-status ${error ? 'is-status-error' : ''}`} data-testid="status-investor-empty">{children}</p>; }
-function Opportunity({ item, index }) { const id = item.deal_id || item.id; const value = score(item); return <div className="is-opportunity" data-testid={`row-investor-opportunity-${id || index}`}><span className="is-score">{value == null ? <Unrecorded reason="No match score is recorded for this deal.">Unscored</Unrecorded> : Math.round(value)}</span><div><b>{item.deal_name || item.name || 'Confidential deal'}</b><p>{[item.sector, item.stage, item.source].filter(Boolean).map(readable).join(' · ') || 'Details not recorded'}</p><nav><Link to={id ? `/projects/${id}` : '/deals'} data-testid={`link-investor-open-deal-${id || index}`}>Open</Link><Link to="/watchlist" data-testid={`link-investor-watchlist-${id || index}`}>Watchlist</Link><Link to="/deals" data-testid={`link-investor-request-intro-${id || index}`}>Request intro</Link></nav></div></div>; }
+function Opportunity({ item, index }) { const id = item.deal_id || item.id; const value = score(item); return <div className="is-opportunity" data-testid={`row-investor-opportunity-${id || index}`}><span className="is-score">{value == null ? <Unrecorded reason="No match score is recorded for this deal.">Unscored</Unrecorded> : Math.round(value)}</span><div><b>{item.deal_name || item.name || 'Confidential deal'}</b><p>{[item.sector, item.stage, item.source].filter(Boolean).map(readable).join(' · ') || 'Details not recorded'}</p><nav><Link to={id ? `/projects/${id}` : '/deals'} data-testid={`link-investor-open-deal-${id || index}`}>Open</Link><Link to="/deals" data-testid={`link-investor-request-intro-${id || index}`}>Request intro</Link></nav></div></div>; }
 function PortfolioRows({ data }) { const source = data?.analytics || data || {}; return <><Row label="IRR" value={source.irr != null ? `${source.irr}%` : null} /><Row label="TVPI" value={source.tvpi != null ? `${source.tvpi}×` : null} /><Row label="MOIC" value={source.moic != null ? `${source.moic}×` : null} /></>; }

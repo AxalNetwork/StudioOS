@@ -106,7 +106,9 @@ export const CATALOG: Record<ChecklistRole, ChecklistItem[]> = {
     { key: 'inv.persona',   label: 'Complete persona chatbot',           route: '/onboarding/persona',         autoDetect: true },
     { key: 'inv.kyc',       label: 'Complete KYC + Accreditation',       route: '/kyc',                        autoDetect: true },
     { key: 'inv.nda',       label: 'Sign Investor NDA with Axal',        route: '/trust',                      autoDetect: true },
-    { key: 'inv.thesis',    label: 'Save your thesis + watchlist',       route: '/watchlist',                  autoDetect: true },
+    // The step detects a saved thesis (investor_profiles.thesis_text); it sent
+    // the investor to the Watchlist page, which the owner removed (2026-10-20).
+    { key: 'inv.thesis',    label: 'Save your investment thesis',        route: '/account/profile',           autoDetect: true },
     { key: 'inv.crm',       label: 'Connect Affinity / HubSpot (optional)', route: connectorPagePath('hubspot'), autoDetect: true },
     // 'inv.review' (Review 3 matched founders) and 'inv.intro' (Request your
     // first intro) both sent the investor to /matches, which was removed with

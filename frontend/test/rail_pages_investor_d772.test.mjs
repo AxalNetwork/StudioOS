@@ -90,7 +90,8 @@ test('Portfolio: every option of the section names itself on its band', () => {
 // ------------------------------------------------------------------ Fund (I12–I17)
 
 const FUND = [['/funds', 'Investor · Fund'], ['/funds/lps', 'Investor · Fund · LPs'], ['/funds/calls', 'Investor · Fund · Capital calls'],
-  ['/funds/ledger', 'Investor · Fund · Distributions'], ['/funds/reporting', 'Investor · Fund · Reporting'], ['/lp-reports', 'Investor · Fund · Reporting']];
+  ['/funds/ledger', 'Investor · Fund · Distributions'], ['/funds/reporting', 'Investor · Fund · Reporting']];
+// ['/lp-reports', …] stood here: the owner removed LP Reporting (2026-10-20).
 
 test('Fund: each board\'s route answers its page key; Overview is Fund\'s alias and Distributions the ledger\'s', () => {
   for (const [route, key] of FUND) assert.equal(pageKeyFor(route, 'investor'), key, route);

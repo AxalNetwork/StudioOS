@@ -121,7 +121,6 @@ const PAGE_ALLOWLIST: Record<string, string> = {
   '/incorporate': 'Incorporate',
   '/legal': 'Legal',
   '/legal-capital': 'Legal & Capital',
-  '/capital': 'Capital',
   '/compliance': 'Compliance',
   '/help': 'Help Center',
   // `/docs` redirects into `/help`; kept so an older stored CTA still labels.

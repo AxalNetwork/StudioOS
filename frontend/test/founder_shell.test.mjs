@@ -136,7 +136,7 @@ test('a founder never gets two tab bars on one page', () => {
     '/perks must not stack a second tab bar on the canvas');
 });
 
-test('liquidity keeps its Studio navigation gate on the module door',()=>checks.gates(actual));
+test('the module doors keep their role gates (Liquidity, the one tier-gated door, was removed)',()=>checks.gates(actual));
 
 test('every module tool door carries its route\'s access rule',()=>checks.guards(actual));
 
@@ -291,8 +291,9 @@ test('every founder zone page\'s section row switches lenses on a phone (D575)',
       assert.doesNotMatch(m[0], /<(?:Nav)?Link\b/, `${f}'s section row has a pill that navigates on a phone`);
     }
   }
-  // Twenty-seven until D661 (#1474) retired four desks, each with one row.
-  assert.ok(rows.length >= 22, `only ${rows.length} founder section rows are lens switchers`);
+  // Twenty-seven until D661 (#1474) retired four desks, each with one row;
+  // twenty-two until the owner removed Raise · Liquidity (2026-10-20).
+  assert.ok(rows.length >= 21, `only ${rows.length} founder section rows are lens switchers`);
 });
 
 test('the Worker AI rail is one component, and every founder workspace has it', () => {

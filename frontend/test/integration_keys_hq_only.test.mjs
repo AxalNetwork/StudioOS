@@ -12,7 +12,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
@@ -72,10 +72,11 @@ test('the old addresses redirect to the page, GitHub Sync to its section', () =>
 test('nothing in the app links the old addresses', () => {
   const hits = [];
   const walk = (dir) => {
-    for (const name of readdirSync(dir)) {
-      const p = join(dir, name);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (/\.(jsx?|tsx?)$/.test(name) && !p.endsWith('LegacyContractsRedirect.jsx')) {
+    // One listing gives each entry's kind, so no path is checked and then opened (CodeQL js/file-system-race).
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (/\.(jsx?|tsx?)$/.test(entry.name) && !p.endsWith('LegacyContractsRedirect.jsx')) {
         if (/\/admin\?tab=(integration-keys|github)\b/.test(readFileSync(p, 'utf8'))) hits.push(p.slice(root.length + 1));
       }
     }

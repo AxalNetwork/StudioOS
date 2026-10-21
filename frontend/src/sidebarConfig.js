@@ -184,7 +184,8 @@ export const SIDEBAR_GROUPS = {
       { to: '/branch/insights', icon: TrendingUp, label: 'Insights', match: ['/branch/insights'] },
       // D796 (#2229): "Settings" became "Licences", the branch's licence copy on
       // My Licence; it stays lit on Branch settings, which that page links.
-      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences', match: ['/admin/my-licence', '/branch/settings'] },
+      // D800 (#2233): `count` draws the number of "Needs you" items on the row.
+      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences', match: ['/admin/my-licence', '/branch/settings'], count: 'licence_needs' },
     ]},
   ],
 
@@ -241,7 +242,9 @@ export const SIDEBAR_GROUPS = {
       // (/admin/licences) is super-admin-only server-side and lives in the HQ
       // group above; a row for it here was a door that opened onto 403s.
       // D796 (#2229): the row was "Settings" and is "Licences", as the owner named it.
-      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences' },
+      // D800 (#2233): the row stays lit on every tab (`/admin/my-licence/*`), and
+      // `count` draws the number of "Needs you" items on it.
+      { to: '/admin/my-licence', icon: BadgeCheck, label: 'Licences', match: ['/admin/my-licence'], count: 'licence_needs' },
       // X (Twitter) broadcaster temporarily hidden — OAuth not provisioned yet.
       // Re-enable once X_CLIENT_ID/SECRET are bound on the prod worker.
       // { to: '/admin/x', icon: Megaphone, label: 'X (Twitter)' },
@@ -309,9 +312,6 @@ export const SIDEBAR_GROUPS = {
   // because those bars exist; /messages is reached from the top-bar Messages
   // button (D284), which replaced the row it kept here.
   //
-  // /liquidity's `requiredTier: 'studio'` moved onto its tab rather than being
-  // dropped: the route itself has no tier gate, so the nav was the whole gate.
-  //
   // As in the investor shell, the Spin-Out Lab row ships verbatim — it is not
   // a modification target, and the canvas folds it into Home without saying
   // what Home would then be.
@@ -342,8 +342,8 @@ export const SIDEBAR_GROUPS = {
         match: ['/validate', '/build/discovery', '/build/marketplace', '/needs', '/services', '/advisory'] },
       { to: '/build', icon: Briefcase, label: 'Build',
         match: ['/build/this-week', '/build/board', '/build/roadmap', '/build/cadence', '/build/kpi', '/build/metrics', '/execution'] },
-      // D563: the launcher's founder legal pages light Raise, and /liquidity
-      // left the list: a founder there is redirected to /raise/liquidity.
+      // D563: the launcher's founder legal pages light Raise. Liquidity & Exits
+      // (/liquidity, /raise/liquidity) was removed (owner, 2026-10-20).
       { to: '/raise', icon: Sparkles, label: 'Raise', match: ['/raise', '/legal-capital', '/incorporate', '/compliance'] },
       { to: '/grow', icon: TrendingUp, label: 'Grow',
         match: ['/grow', '/build/team', '/advisors', '/cofounder', '/my/jobs', '/jobs', '/my/applications', '/build/brand', '/comarketing', '/perks', '/network-effects'] },
@@ -392,13 +392,13 @@ export const SIDEBAR_GROUPS = {
   //   • /deals "Deal Flow" — only relevant to investor-type partners
   //     (GP / angel / scout / corporate-VC personas); conditional, to be
   //     re-surfaced when the sidebar supports persona gating.
-  //   • /scoring "Scoring Engine", /portfolio/risk-matrix "Risk Matrix",
-  //     /admin/due-diligence "Due Diligence" — investor/studio diligence tools.
+  //   • /admin/due-diligence "Due Diligence" — an investor/studio diligence
+  //     tool. (/scoring and /portfolio/risk-matrix stood here; both pages were
+  //     removed on the owner's instruction, 2026-10-20.)
   //   • /market-intel "Market Intelligence" — investor-flavoured intel dropped
   //     to keep the partner UX lean; Demand Insights is the kept signal.
   //   • /portfolio/health "Portfolio Health", /portfolio/coverage
-  //     "Portfolio Coverage", /watchlist "Watchlist & Journal",
-  //     /liquidity "Liquidity & Exits", /legal-capital "Legal & Capital" —
+  //     "Portfolio Coverage", /legal-capital "Legal & Capital" —
   //     investor/founder capital surfaces; conditional for equity-holding
   //     partners only.
   //   • /advisors "Find a Advisor" — founder-oriented (a service partner is the
@@ -500,17 +500,18 @@ export const SIDEBAR_GROUPS = {
       // renders the sections. A row aimed at a zone skips the overview, which
       // is precisely how the founder overviews were lost the first time.
       { to: '/deals', icon: Handshake, label: 'Deals',
-        match: ['/deals', '/pipeline', '/raise/data-room', '/scoring'] },
+        match: ['/deals', '/pipeline', '/raise/data-room'] },
       // Positions is the canvas's word for the holdings view. /portfolio is the
       // overview; /portfolio/positions is the book; /portfolio/health is the
       // legacy alias that still renders the overview, and the generic tab bar
       // labels the book "Cap Table" — three names across two pages, and
       // settling that vocabulary is a content decision. What the row owes is
       // the root.
-      // D563: the launcher's investor pages outside /portfolio light it too.
-      { to: '/portfolio', icon: Briefcase, label: 'Portfolio', match: ['/portfolio', '/watchlist', '/capital', '/liquidity'] },
+      // D563: the launcher's investor pages outside /portfolio lit it too;
+      // Watchlist, Capital and Liquidity were removed (owner, 2026-10-20).
+      { to: '/portfolio', icon: Briefcase, label: 'Portfolio', match: ['/portfolio'] },
       { to: '/spinout-lab/investor-workspace', icon: Landmark, label: 'Axal VC Fund' },
-      { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds', '/lp-reports'], requiredInvestorTier: 'institutional' },
+      { to: '/funds', icon: Wallet, label: 'Fund', match: ['/funds'], requiredInvestorTier: 'institutional' },
       { to: '/network', icon: Handshake, label: 'Network', match: ['/network', '/relationships', '/contacts'] },
       { to: '/research', icon: Radar, label: 'Research', match: ['/research'] },
       { to: '/trust', icon: ShieldCheck, label: 'Trust' },
@@ -680,7 +681,7 @@ export const INVESTOR_FULL_BLEED = [
   // rendering the same canvas at the same width.
   '/pipeline', '/pipeline/screening', '/pipeline/commit', '/pipeline/transactions',
   '/portfolio/health', '/portfolio/growth', '/portfolio/performance',
-  '/portfolio/risk-matrix', '/portfolio/reserves', '/portfolio/waterfall',
+  '/portfolio/waterfall',
 ];
 
 /**

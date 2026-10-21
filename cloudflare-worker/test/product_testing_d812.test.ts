@@ -26,7 +26,7 @@ import { resolve } from 'node:path';
 import { SignJWT } from 'jose';
 import { Hono } from 'hono';
 import { testing, partnerTesting, adminTesting } from '../src/routes/testing.ts';
-import { testersAudience, CONSENT_VERSION } from '../src/services/testing.ts';
+import { testersAudience, CONSENT_VERSION, MY_APPLICATIONS_LINK } from '../src/services/testing.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const SQL = resolve(process.cwd(), 'cloudflare-worker/sql');
@@ -269,6 +269,12 @@ test('every change appends one event and tells the bell', async () => {
   assert.equal(events(w).length, before);
   assert.deepEqual(bell(w, FRAN), ['testing_applied', 'testing_picked', 'testing_not_picked']);
   assert.deepEqual(bell(w, ACME), ['testing_programme_approved']);
+  // D814 (#2260): a member's notification opens My applications; the creator's names no page yet.
+  // Mutation checked: drop `link` from tell's notify → every link is null.
+  const links = (user: number) => w.db.prepare('SELECT link FROM notifications_inbox WHERE user_id = ? ORDER BY id').all(user).map((r: any) => r.link);
+  assert.deepEqual(links(FRAN), [MY_APPLICATIONS_LINK, MY_APPLICATIONS_LINK, MY_APPLICATIONS_LINK]);
+  assert.equal(MY_APPLICATIONS_LINK, '/product-testing?tab=applications');
+  assert.deepEqual(links(ACME), [null]);
 });
 
 test('the testers audience is the picked applicants who consented; the summary counts what the caller can join', async () => {

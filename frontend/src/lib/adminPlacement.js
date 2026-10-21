@@ -113,6 +113,7 @@ export const ADMIN_PLACEMENT = [
   tab('payments', 'Payments', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
   // D708 (#1773) — beside Payments: the Super Admin's bank-account registry.
   tab('bank-accounts', 'Bank accounts', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Payments.' }),
+  tab('product-testing', 'Product testing', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Bank accounts (D815).' }),
   tab('promos', 'Promo codes', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item. Promo ceilings stay on Revenue.' }),
   tab('billing', 'Billing', hq('Revenue', 'card link'), { how: 'Card link.' }),
   // Wellbeing had no home on H35. The decision: Admin · Community — the
@@ -129,18 +130,15 @@ export const ADMIN_PLACEMENT = [
   // launcher's "AI Advisory Suite" called the AI an advisor, which the voice
   // rule forbids (H37 flagged it, D284 left it to the owner, D563 drops it
   // with the launcher).
+  // The owner removed six of them on 2026-10-20 — Scoring Engine, Risk Matrix,
+  // Capital & Investment, Liquidity & Exits, Reserve Allocation and Watchlist
+  // & Journal — page and route together, so twenty remain.
   page('Studio', 'Pipeline Board', '/pipeline', 'Deals by stage on one board.'),
-  page('Studio', 'Scoring Engine', '/scoring', 'Venture-readiness scores and the evidence behind them.'),
-  page('Studio', 'Risk Matrix', '/portfolio/risk-matrix', 'Portfolio companies by risk dimension.'),
   page('Studio', 'Advisory', '/advisory', 'Advisors, financial planning and diligence checks.'),
   page('Studio', 'Deal Flow', '/deals', 'Incoming deals and their status.'),
-  page('Capital & Legal', 'Capital & Investment', '/capital', 'Rounds, commitments and instruments.'),
-  page('Capital & Legal', 'Liquidity & Exits', '/liquidity', 'Secondaries and recorded exits.'),
   page('Capital & Legal', 'Portfolio Health', '/portfolio/health', 'Health signals per company.'),
   page('Capital & Legal', 'Portfolio Coverage', '/portfolio/coverage', 'Who covers which company.'),
-  page('Capital & Legal', 'Reserve Allocation', '/portfolio/reserves', 'Follow-on reserves by company.'),
   page('Capital & Legal', 'Exit Waterfall', '/portfolio/waterfall', 'Proceeds by class at a given exit.'),
-  page('Capital & Legal', 'Watchlist & Journal', '/watchlist', 'Tracked companies and notes.'),
   page('Capital & Legal', 'Legal & Capital', '/legal-capital', 'Documents and capital records.'),
   page('Capital & Legal', 'Incorporate', '/incorporate', 'Entity formation workflow.'),
   page('Capital & Legal', 'Compliance Calendar', '/compliance', 'Filings and their deadlines.'),
@@ -161,7 +159,7 @@ export const ADMIN_PLACEMENT = [
 export const WORKSPACE_GROUP_ORDER = ['Studio', 'Capital & Legal', 'Network & Growth', 'More'];
 
 /**
- * The 28 working pages, the list the command palette reads for an admin shell
+ * The working pages (twenty since 2026-10-20), the list the command palette reads for an admin shell
  * (D284). Derived from the map, never typed twice.
  */
 export const WORKSPACES = ADMIN_PLACEMENT
@@ -169,7 +167,7 @@ export const WORKSPACES = ADMIN_PLACEMENT
   .map(({ group, label, route, what }) => ({ group, label, route, description: what }));
 
 /**
- * Where each of the 28 lives in the profile shells (D563). One entry per page:
+ * Where each of the working pages lives in the profile shells (D563). One entry per page:
  * `[role, row, door]`, where `row` is the profile sidebar row's label and
  * `door` says how the page is reached from that row:
  *
@@ -189,24 +187,14 @@ export const WORKSPACES = ADMIN_PLACEMENT
  * in more than one group within a role"). `frontend/test/
  * workspaces_retired_d563.test.mjs` checks every line against App.jsx and
  * `sidebarConfig.js`.
- *
- * `/liquidity` is the one page that redirects, and only a founder: its
- * founder page is the Raise · Liquidity zone (`/raise/liquidity`, the same
- * `LiquidityPage` in workspace mode). A partner or investor still lands on it.
  */
 export const PAGE_HOMES = {
   '/pipeline': [['partner', 'Pipeline', 'row']],
-  '/scoring': [['investor', 'Deals', 'also']],
-  '/portfolio/risk-matrix': [['investor', 'Portfolio', 'also']],
   '/advisory': [['founder', 'Validate', 'also']],
   '/deals': [['investor', 'Deals', 'row']],
-  '/capital': [['investor', 'Portfolio', 'also']],
-  '/liquidity': [['investor', 'Portfolio', 'also']],
   '/portfolio/health': [['investor', 'Portfolio', 'row']],
   '/portfolio/coverage': [['partner', 'Delivery', 'also']],
-  '/portfolio/reserves': [['investor', 'Portfolio', 'also']],
   '/portfolio/waterfall': [['investor', 'Portfolio', 'also']],
-  '/watchlist': [['investor', 'Portfolio', 'also']],
   '/legal-capital': [['founder', 'Raise', 'also']],
   '/incorporate': [['founder', 'Raise', 'also']],
   '/compliance': [['founder', 'Raise', 'also']],

@@ -51,6 +51,13 @@ export const ESIGN_SENDER_ACTION = /^\/api\/(legal\/)?esign\/\d+\/(remind|void)$
 // under /api/decks. Exported so the test executes the pattern itself.
 export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 
+// D810 — three of the four public newsletter routes, and nothing else under
+// the word. Unsubscribe is left out on purpose (S1's review): RFC 8058
+// one-click POSTs arrive from the mailbox provider's servers, many people's
+// from a few addresses, so a per-IP cap would drop real unsubscribes. Its
+// HMAC-signed token cannot be guessed, so the cap bought nothing there.
+export const NEWSLETTER_PUBLIC = /^\/api\/newsletter\/(subscribe|confirm|preferences)$/;
+
 /**
  * The founder's advisory-session charge — `POST /bookings/:id/pay`, D81.
  *
@@ -302,6 +309,38 @@ const BUCKETS: Bucket[] = [
   // retry, nothing for a script. Anchored so no sibling share route
   // (view, nda, feedback, deal pack) is capped by it. failClosed: if KV is
   // down the account-creating write waits rather than running uncapped.
+  // D811 — Mail reads and feedback, a separate fail-closed service bucket.
+  {
+    name: 'testing_mail_public',
+    limit: 30,
+    windowSec: 60,
+    test: (p) => p === '/api/testing/mail' || p.startsWith('/api/testing/mail/'),
+    scope: 'ip',
+    failClosed: true,
+  },
+  {
+    name: 'mail_link',
+    limit: 120,
+    windowSec: 60,
+    test: (p) => p === '/api/mail-link' || p.startsWith('/api/mail-link/'),
+    scope: 'ip',
+    failClosed: true,
+  },
+  // D810 — the newsletter's public routes: a signup mails whatever address it
+  // is given, and the confirm and preferences routes take a token a script
+  // could try to guess. Unsubscribe is outside it (see NEWSLETTER_PUBLIC).
+  // 10/min/IP across the three: room for a
+  // person and a typo, nothing for a script. Each address is also paced to one
+  // signup email per ten minutes in the route itself. failClosed: if KV is
+  // down a public mail-sending write waits rather than running uncapped.
+  {
+    name: 'newsletter_public',
+    limit: 10,
+    windowSec: 60,
+    test: (p) => NEWSLETTER_PUBLIC.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
   {
     name: 'deck_share_signup',
     limit: 6,
@@ -459,6 +498,9 @@ export const rateLimitMiddleware = (): MiddlewareHandler<{ Bindings: Env }> => {
     if (RATE_LIMIT_EXEMPT.some(p => path === p || path.startsWith(p + '/'))) return next();
 
     const method = c.req.method;
+    // RFC 8058 mailbox bursts and KV outages must not prevent signed opt-outs.
+    // The route still verifies the programme-scoped token before any write.
+    if (path === '/api/testing/mail/unsubscribe' && (method === 'POST' || method === 'PUT')) return next();
     const env = c.env;
     const ctx = c.executionCtx as any;
 

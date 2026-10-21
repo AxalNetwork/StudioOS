@@ -268,6 +268,13 @@ const COMPOSED = new Map([
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
   ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],
+  // D800 (#2233): the Licences page draws its tab row and its tabs' links from
+  // the files beside it.
+  ['frontend/src/pages/subsidiary/MyLicencePage.jsx', [
+    'frontend/src/pages/subsidiary/LicenceFrame.jsx',
+    'frontend/src/pages/subsidiary/LicenceSummary.jsx',
+    'frontend/src/pages/subsidiary/LicenceTerms.jsx',
+  ]],
 ]);
 
 /** path → the files whose doors that path can reach. */

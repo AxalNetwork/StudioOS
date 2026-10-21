@@ -115,7 +115,7 @@ export default function FounderRaisePitch() {
           <div className="fr-pitch-crumb"><Link to={`/raise/status${query}`} data-testid="link-pitch-back"><ArrowLeft size={13} /> Raise</Link><span>/</span><strong>Pitch</strong></div>
           <div className="fr-pitch-title-row"><div><h1>Pitch</h1><p className="fr-pitch-subtitle">Versions, narrative variants, exports and share analytics.</p></div></div>
           <nav className="fr-pitch-zone-nav" aria-label="Raise sections">
-            <LensLink to={`/raise/status${query}`}>Status</LensLink><LensLink to={`/raise/pitch${query}`} className="is-active" data-testid="link-pitch-zone">Pitch</LensLink><LensLink to={`/raise/capital${query}`}>Capital</LensLink><LensLink to={`/raise/legal${query}`}>Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink><LensLink to={`/raise/liquidity${query}`}>Liquidity</LensLink>
+            <LensLink to={`/raise/status${query}`}>Status</LensLink><LensLink to={`/raise/pitch${query}`} className="is-active" data-testid="link-pitch-zone">Pitch</LensLink><LensLink to={`/raise/capital${query}`}>Capital</LensLink><LensLink to={`/raise/legal${query}`}>Legal</LensLink><LensLink to={`/raise/data-room${query}`}>Data room</LensLink>
           </nav>
           <ZoneToolbar
               filters={founderZoneFilters('raise/pitch', { value: view, onChange: setView })}

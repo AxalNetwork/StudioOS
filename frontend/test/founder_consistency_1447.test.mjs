@@ -1,8 +1,9 @@
 /**
  * #1447 — founder workspace consistency (from #1440, the founder blueprint).
  *
- *   - Liquidity is a working link in every Raise zone, not a disabled
- *     "Liquidity unavailable" pill: `/raise/liquidity` exists.
+ *   - Liquidity was a working link in every Raise zone. The owner removed
+ *     Liquidity & Exits (2026-10-20), so no Raise zone links it any more and
+ *     `/raise/liquidity` is not a route.
  *   - Grow lists `/comarketing` under the founder's name for it, not the admin
  *     palette's "Co-Marketing Review".
  *   - The sidebar's stage comment states the order the rows and the Worker's
@@ -29,20 +30,22 @@ const ZONES = {
   'Data room': 'FounderRaiseDataRoom.jsx',
 };
 
-test('every Raise zone links Liquidity like its siblings, and none says it is unavailable', () => {
+test('no Raise zone links Liquidity, and none says it is unavailable', () => {
   for (const [zone, file] of Object.entries(ZONES)) {
     const code = codeOnly(read(`../src/pages/founder/${file}`));
     const nav = /<nav [^>]*aria-label="Raise sections"[\s\S]*?<\/nav>/.exec(code)?.[0];
     assert.ok(nav, `${zone}: no "Raise sections" row`);
-    assert.match(nav, /<LensLink to=\{`\/raise\/liquidity\$\{query\}`\}>Liquidity<\/LensLink>/, `${zone}: Liquidity is not a link`);
+    assert.doesNotMatch(nav, /\/raise\/liquidity/, `${zone}: the row still links Liquidity`);
     // Its siblings in the same row are the same element, so the treatment matches.
     assert.match(nav, /<LensLink to=\{`\/raise\/capital\$\{query\}`\}/, `${zone}: the row's siblings are not LensLinks`);
     assert.doesNotMatch(code, /Liquidity unavailable/, `${zone} still says Liquidity is unavailable`);
   }
 });
 
-test('the Liquidity link opens a real route', () => {
-  assert.match(read('../src/App.jsx'), /<Route path="\/raise\/liquidity"/);
+test('Liquidity has no route left: /raise/liquidity and /liquidity are gone', () => {
+  const app = read('../src/App.jsx');
+  assert.doesNotMatch(app, /<Route path="\/raise\/liquidity"/);
+  assert.doesNotMatch(app, /<Route path="\/liquidity"/);
 });
 
 test('Grow lists co-marketing under the founder\'s label, and the partner keeps the palette one', () => {

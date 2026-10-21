@@ -63,7 +63,11 @@ test('old hashes and page addresses still resolve every same guide, with admin e
 test('home renders task areas, four previews, surface labels and single-role badges', () => {
   // Funds & portfolio reads INVESTOR for a founder since D670 removed the
   // Market Intelligence guide, the one guide in that area for every role.
-  assert.deepEqual(helpAreas(visible).map((a) => a.badge), [null, 'FOUNDER', null, null, null, 'INVESTOR', null, null, null, null, null]);
+  // Building your startup reads FOUNDER since the owner removed Scoring and
+  // its two guides, the area's partner and investor ones, and Raising & cap
+  // table since the Liquidity guide, its one guide for every role, went with
+  // Liquidity & Exits (2026-10-20).
+  assert.deepEqual(helpAreas(visible).map((a) => a.badge), [null, 'FOUNDER', 'FOUNDER', null, 'FOUNDER', 'INVESTOR', null, null, null, null, null]);
   const output = html(BrowseByTask, { sections: visible });
   assert.deepEqual([...output.matchAll(/<h3[^>]*>(.*?)<\/h3>/gs)].map((m) => renderedText(m[1])), labels.slice(0, -1));
   const lab = output.slice(output.indexOf('The Spin-Out Lab'), output.indexOf('Building your startup'));
@@ -85,7 +89,7 @@ test('an area with two different single-role audiences has no badge', () => {
 for (const [role, allowed] of [['investor', true], ['admin', true], ['founder', false], ['partner', false], ['advisor', false]]) {
   test(`fund guide: ${role} sees metadata and ${allowed ? 'can' : 'cannot'} open the surface`, () => {
     const output = html(HelpArticle, { sections: visible, area: 'capital', guide: 'funds', user: { role } });
-    assert.equal(renderedText(output.match(/<nav aria-label="Breadcrumb"[^>]*>(.*?)<\/nav>/s)[1]).trim(), 'Help/Funds & portfolio/Funds, Reserves, Waterfall');
+    assert.equal(renderedText(output.match(/<nav aria-label="Breadcrumb"[^>]*>(.*?)<\/nav>/s)[1]).trim(), 'Help/Funds & portfolio/Funds and Waterfall');
     assert.equal(renderedText(output.match(/<span class="rounded-full[^>]*>(.*?)<\/span>/s)[1]).trim(), 'Funds & portfolio');
     assert.match(renderedText(output), /Where this livesFunds/);
     assert.match(renderedText(output), /Applies toInvestor/);
@@ -127,7 +131,7 @@ test('search, related-area rail, popular cards and admin answers name the task a
   assert.doesNotMatch(renderedText(result), /Core/);
   const article = html(HelpArticle, { sections: visible, area: 'build', guide: 'pitch-deck', user: { role: 'founder' } });
   const rail = article.match(/<nav aria-label="Guides in Raising &amp; cap table"[^>]*>(.*?)<\/nav>/s)[1];
-  assert.deepEqual([...rail.matchAll(/href="([^\"]+)"/g)].map((m) => m[1]).sort(), ['/help/build/deck-share-viewer', '/help/build/pitch-deck', '/help/capital/cap-table', '/help/capital/fundraise', '/help/capital/investors', '/help/capital/liquidity']);
+  assert.deepEqual([...rail.matchAll(/href="([^\"]+)"/g)].map((m) => m[1]).sort(), ['/help/build/deck-share-viewer', '/help/build/pitch-deck', '/help/capital/cap-table', '/help/capital/fundraise', '/help/capital/investors']);
   assert.deepEqual(popularGuides({ guides: [{ anchor, views: 2 }] }, visible), [{ anchor, title: 'Pitch Deck', area: 'Raising & cap table', views: 2 }]);
   const view = adminFeedbackView({ guides: [{ anchor, yes: 1, no: 2 }], missing: [] }, SECTIONS);
   assert.match(renderedText(html(GuideAnswersAdminView, { read: { status: 'ok', view }, onRetry() {} })), /Raising & cap table/);
