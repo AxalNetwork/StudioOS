@@ -736,8 +736,18 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
   // attribute the answer. `section` is a SECTION key (e.g. "BUILD"),
   // never a route path — assigning a path here would poison the /queue +
   // /next-question focus filter downstream.
+  //
+  // Below 1024px the chat and the task list are tabs, so a picked question
+  // also opens the chat (the owner, 2026-10-21: a tapped task stayed on Tasks
+  // and the question was nowhere in sight), as Start a task does, and the
+  // phone frame scrolls its new line into view once the thread is drawn.
+  const revealPickRef = useRef(false);
   const handlePickQuestion = useCallback((q) => {
     if (!q || !q.id) return;
+    if (!isDesktop) {
+      revealPickRef.current = true;
+      setPanelTab('conversation');
+    }
     setQuestion({
       id: q.id,
       prompt: q.prompt,
@@ -749,7 +759,14 @@ export default function PersonalAdvisor({ disablePersistedFullscreen = false, on
     if (q.section && q.section !== focusSection) {
       setFocusSection(q.section);
     }
-  }, [focusSection]);
+  }, [focusSection, isDesktop, setPanelTab]);
+  useEffect(() => {
+    if (!revealPickRef.current || panelTab !== 'conversation') return;
+    revealPickRef.current = false;
+    // The phone thread is part of the page's scroll: bring its newest line,
+    // the picked question, to the middle of the screen, clear of the composer.
+    scrollerRef.current?.lastElementChild?.scrollIntoView?.({ block: 'center' });
+  }, [panelTab, messages]);
 
   // Task #9 — after a ticket is filed, confirm inline in the transcript
   // with a link back to the Help Center (and the GitHub issue if the
