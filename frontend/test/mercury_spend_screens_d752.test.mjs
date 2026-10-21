@@ -293,9 +293,9 @@ test('the words: the spending use, and the founder\'s never row and landing say 
   assert.doesNotMatch(words, /advis|advice|recommend|fiduciar/i);
 });
 
-test('the icon and the card: the Mercury monogram, beside Stripe\'s, drawn for the founder only', () => {
+test('the icon and the card: the Mercury logo, beside Stripe\'s, drawn for the founder only', () => {
   const card = ssr(h(MercurySpendCard, { projectId: 7 }));
-  assert.match(card, /data-brand="monogram" data-provider="mercury"/);
+  assert.match(card, /data-brand="mark"[\s\S]*data-provider="mercury"/);
   assert.ok(text(card).includes('Spending from Mercury'));
   const sheetSrc = readFileSync('frontend/src/components/spinout/MercurySpend.jsx', 'utf8');
   assert.equal((sheetSrc.match(/<BrandIcon provider="mercury" name="Mercury"/g) || []).length, 2);

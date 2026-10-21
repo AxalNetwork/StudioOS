@@ -279,6 +279,16 @@ select::-ms-expand { display: none; }
 
 [data-app-main].edge-to-edge-surface { padding: 0; }
 
+/* The top safe-area inset is reserved once, on the shell root (D504), so a
+   strip drawn above the header (a support session, an impersonation, the
+   admin's portal switcher) sits below the status bar. On a founder's phone the
+   band (ui/phone/PhoneHeader.jsx) takes the inset instead when it is the
+   root's first element, so its illustration runs up behind the clock rather
+   than the shell's grey; any strip above it keeps the root's inset. */
+.app-shell { padding-top: env(safe-area-inset-top, 0px); }
+.app-shell:has(> [data-phone-band]:first-child) { padding-top: 0; }
+.app-shell > [data-phone-band]:first-child { padding-top: env(safe-area-inset-top, 0px); }
+
 /* The role wizards (`/onboarding/founder|investor|partner`) are the body
    under the sidebar and the header. The landscape has to live on the scroll
    container: that box is already edge to edge, and `background-attachment:

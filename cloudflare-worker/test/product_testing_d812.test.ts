@@ -274,11 +274,11 @@ test('every change appends one event and tells the bell', async () => {
   assert.equal(events(w).length, before);
   assert.deepEqual(bell(w, FRAN), ['testing_applied', 'testing_picked', 'testing_not_picked']);
   assert.deepEqual(bell(w, ACME), ['testing_programme_approved']);
-  // D814 (#2260): a member's notification opens My applications; the creator's names no page yet.
+  // #2314: new member status notifications open Inbox after the page is retired.
   // Mutation checked: drop `link` from tell's notify → every link is null.
   const links = (user: number) => w.db.prepare('SELECT link FROM notifications_inbox WHERE user_id = ? ORDER BY id').all(user).map((r: any) => r.link);
   assert.deepEqual(links(FRAN), [MY_APPLICATIONS_LINK, MY_APPLICATIONS_LINK, MY_APPLICATIONS_LINK]);
-  assert.equal(MY_APPLICATIONS_LINK, '/product-testing?tab=applications');
+  assert.equal(MY_APPLICATIONS_LINK, '/inbox');
   assert.deepEqual(links(ACME), [null]);
 });
 

@@ -57,7 +57,8 @@ test('A7 asks through the Research store, on the press, and says why when it can
   // D421. The question box stayed local; `/research/ask` answered from the
   // founder's library all along.
   assert.match(desk, /<form className="a7-question" onSubmit=\{ask\}>/, 'the question box does not submit');
-  assert.match(desk, /setAsked\(await api\.research\.ask\(q\)\);/, 'the desk does not ask the Research store');
+  // D778 part 11: the press names its option (`ask:research`) on the run.
+  assert.match(desk, /setAsked\(await api\.research\.ask\(q, undefined, railPressHeaders\('ask:research'\)\)\);/, 'the desk does not ask the Research store');
   assert.match(raw('cloudflare-worker/src/routes/research.ts'), /research\.post\('\/ask'/, 'the ask route is gone');
   // NOTHING RUNS ON A VISIT: the call sits inside the submit handler only.
   const handler = desk.slice(desk.indexOf('const ask = async (event) =>'), desk.indexOf('const data = useMemo'));

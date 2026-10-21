@@ -10,6 +10,7 @@ import { railBody } from './railPages.js';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/adminAiUsage.js';
 export * from './api/adminCapitalAttestations.js';
 export * from './api/adminIncorporations.js';
 export * from './api/adminLearning.js';
@@ -5077,7 +5078,9 @@ export const api = {
     askUpdateAnswer: (uid, body) => request(`/research/ask/answers/${encodeURIComponent(uid)}`, { method: 'PATCH', body: JSON.stringify(body) }),
     // `session_uid` is optional and the worker falls back to the caller's most
     // recent thread, so a reader who has just landed can ask without one.
-    ask: (question, sessionUid) => request('/research/ask', {
+    // D778 part 11: `headers` is the press's own rail context (`railPressHeaders`).
+    ask: (question, sessionUid, headers) => request('/research/ask', {
+      ...(headers ? { headers } : {}),
       method: 'POST',
       body: JSON.stringify(sessionUid ? { question, session_uid: sessionUid } : { question }),
     }),

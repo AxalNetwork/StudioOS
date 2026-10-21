@@ -300,6 +300,8 @@ export default function PlatformAllowancesPage() {
           </Link>
           <h1 className="mt-1 text-2xl font-extrabold tracking-axal-heading text-axal-ink dark:text-gray-100">AI allowances</h1>
           <p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">The daily and monthly AI allowance each plan includes, runs held for a check, the token packs members can buy, one member's AI account and their month, what needs reconciling, how members are charged and the models offered.</p>
+          {/* D791 part 2: every member's AI use, the flags, Pause AI and a member's cap. */}
+          <Link to="/admin/platform/ai-usage" className="mt-1 inline-block text-[12.5px] font-semibold text-axal-violet-deep hover:underline dark:text-violet-300" data-testid="hq-allowances-ai-usage-link">Open AI usage →</Link>
         </div>
         {done && <p role="status" className="rounded-lg border border-axal-hairline bg-axal-ground px-3 py-2 text-[12px] dark:border-gray-800 dark:bg-gray-800/40" data-testid="hq-allowances-done">{done}</p>}
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.8fr)_minmax(0,1fr)]">

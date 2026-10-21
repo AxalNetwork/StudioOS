@@ -29,8 +29,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
+import { readFileSync } from 'node:fs';
 
-import research, { FOUNDER_DRAFT_PAGES } from '../src/routes/research.ts';
+import research, { FOUNDER_DRAFT_PAGES, SHARED_DRAFT_PAGES } from '../src/routes/research.ts';
 import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
@@ -708,7 +709,111 @@ test('D778: a mounted rail\'s page and the press\'s option win over the fallback
     'the mounted page holds the member\'s Manual switch, so it is the one checked');
 });
 
-test('D778: a shared band keeps the page from its path', async () => {
+test('D778: a shared band does not borrow a founder-only inventory label', async () => {
   assert.equal(FOUNDER_DRAFT_PAGES['research/ask'], undefined);
   assert.equal(FOUNDER_DRAFT_PAGES['network/relationships'], undefined);
+});
+
+// D778 part 10: the four bands shared with other profiles. Fixtures use the
+// committed schemas, a stubbed provider, and only synthetic member content.
+function sharedDraftDb() {
+  const db = freshDb();
+  for (const name of ['213_research_library.sql', '221_research_ask_sessions.sql', '224_partner_book.sql', '465_ai_rail_preferences.sql']) {
+    db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
+  }
+  for (const user of [MINE.user, THEIRS.user]) {
+    db.prepare('INSERT INTO research_ask_sessions (uid, owner_user_id) VALUES (?, ?)').run(`session-${user}`, user);
+    const session = db.prepare('SELECT id FROM research_ask_sessions WHERE owner_user_id = ?').get(user) as any;
+    db.prepare("INSERT INTO research_ask_answers (uid, session_id, owner_user_id, question, answer, reason) VALUES (?, ?, ?, ?, ?, 'answered')")
+      .run(`answer-${user}`, session.id, user, `Question ${user}`, `Answer ${user}`);
+    db.prepare('INSERT INTO research_documents (uid, owner_user_id, title, r2_key) VALUES (?, ?, ?, ?)')
+      .run(`document-${user}`, user, `Document ${user}`, `synthetic/${user}`);
+    for (let n = 0; n < 2; n++) {
+      db.prepare('INSERT INTO partner_book_contacts (uid, owner_user_id, name, organization) VALUES (?, ?, ?, ?)')
+        .run(`contact-${user}-${n}`, user, `Contact ${user}-${n}`, `Organization ${user}`);
+      const contact = db.prepare('SELECT id FROM partner_book_contacts WHERE uid = ?').get(`contact-${user}-${n}`) as any;
+      db.prepare("INSERT INTO partner_book_interactions (uid, contact_id, owner_user_id, happened_at) VALUES (?, ?, ?, '2026-10-20')")
+        .run(`interaction-${user}-${n}`, contact.id, user);
+    }
+  }
+  return db;
+}
+
+const sharedScope = (surface: string) => surface === 'research/ask' ? `session-${MINE.user}` : '';
+
+test('D778 part 10: all four shared bands name their option and real workspace, not the phone lens pathname', async () => {
+  assert.deepEqual(SHARED_DRAFT_PAGES, {
+    'network/relationships': 'network', 'network/introductions': 'network',
+    'research/ask': 'research', 'research/library': 'research',
+  });
+  const keys = Object.keys(SHARED_DRAFT_PAGES).map((s) => `draft:${s}`).sort();
+  assert.deepEqual(keys, ['draft:network/introductions', 'draft:network/relationships', 'draft:research/ask', 'draft:research/library']);
+  for (const [surface, page] of Object.entries(SHARED_DRAFT_PAGES)) {
+    assert.ok(FOUNDER_OPTIONS.some((o: any) => o.key === `draft:${surface}`));
+    const db = sharedDraftDb();
+    try {
+      const before = businessCounts(db);
+      const r = await draft(db, MINE, surface, sharedScope(surface), '/studio');
+      assert.equal(r.status, 201, surface);
+      assert.deepEqual({ ...railRuns(db)[0] }, { user_id: MINE.user, rail_page: page, rail_option: `draft:${surface}` });
+      assert.equal(r.body.item.accepted, false);
+      assert.deepEqual(businessCounts(db), before, 'only an unaccepted draft and run bookkeeping are stored');
+      assert.doesNotMatch(r.prompt || '', /Question 71|Answer 71|Document 71|Contact 71/, 'another member is never source material');
+    } finally { db.close(); }
+  }
+});
+
+test('D778 part 10: Manual on the actual workspace refuses each shared band before a provider or charge', async () => {
+  for (const [surface, page] of Object.entries(SHARED_DRAFT_PAGES)) {
+    const db = sharedDraftDb();
+    try {
+      db.prepare("INSERT INTO ai_rail_preferences(uid,user_id,section,task,mode) VALUES(?,?,?,'','manual')")
+        .run(`off-${surface}`, MINE.user, page);
+      const before = businessCounts(db);
+      const r = await draft(db, MINE, surface, sharedScope(surface), '/studio');
+      assert.equal(r.status, 403, surface);
+      assert.equal(r.body.error, 'assist_off');
+      assert.equal(r.prompt, null, 'no drafting provider');
+      assert.equal((db.prepare('SELECT COUNT(*) AS n FROM ai_usage_logs').get() as any).n, 0, 'no guard or charged run');
+      assert.equal((db.prepare('SELECT COUNT(*) AS n FROM research_zone_drafts').get() as any).n, 0);
+      assert.deepEqual(businessCounts(db), before);
+    } finally { db.close(); }
+  }
+});
+
+test('D778 part 10: the mounted workspace and per-press option still win for every shared band', async () => {
+  for (const surface of Object.keys(SHARED_DRAFT_PAGES)) {
+    const db = sharedDraftDb();
+    try {
+      const r = await draft(db, MINE, surface, sharedScope(surface), '/studio', undefined,
+        { 'X-Rail-Page': 'mounted-workspace', 'X-Rail-Option': encodeURIComponent(`draft:${surface}`) });
+      assert.equal(r.status, 201);
+      assert.deepEqual({ ...railRuns(db)[0] }, { user_id: MINE.user, rail_page: 'mounted-workspace', rail_option: `draft:${surface}` });
+    } finally { db.close(); }
+  }
+});
+
+test('D778 part 10: each shared draft waits for its owner to Accept, preserving the underlying records', async () => {
+  for (const surface of Object.keys(SHARED_DRAFT_PAGES)) {
+    const db = sharedDraftDb();
+    try {
+      const before = businessCounts(db);
+      const r = await draft(db, MINE, surface, sharedScope(surface));
+      assert.equal(r.status, 201);
+      const uid = r.body.item.uid;
+      const acceptAs = async (user: number) => research.fetch(new Request(`http://x/drafts/${uid}`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${await token(user, 'founder')}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ body: 'The member edited this draft.' }),
+      }), { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) } as any);
+      assert.equal((await acceptAs(THEIRS.user)).status, 404);
+      assert.equal((db.prepare('SELECT accepted_at FROM research_zone_drafts WHERE uid = ?').get(uid) as any).accepted_at, null);
+      const accepted = await acceptAs(MINE.user);
+      assert.equal(accepted.status, 200);
+      const kept = await accepted.json() as any;
+      assert.equal(kept.item.accepted, true);
+      assert.equal(kept.item.body, 'The member edited this draft.');
+      assert.deepEqual(businessCounts(db), before, 'Accept keeps the draft; it sends no introduction and assigns nobody');
+      assert.equal((db.prepare('SELECT COUNT(*) AS n FROM partner_book_contacts WHERE firm_owner_user_id IS NOT NULL').get() as any).n, 0);
+    } finally { db.close(); }
+  }
 });
