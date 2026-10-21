@@ -7,6 +7,7 @@ import {
   TrendingUp, Map, Sparkles, Mail, Loader2, AlertCircle, Eye, X,
   Globe, Layers,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 
 const TONES = {
@@ -30,7 +31,6 @@ export default function PartnerInsightsPage() {
   const [heat, setHeat] = useState(null);
   const [trend, setTrend] = useState(null);
   const [feed, setFeed] = useState(null);
-  const [sub, setSub] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -48,13 +48,12 @@ export default function PartnerInsightsPage() {
       throw e;
     };
     try {
-      const [h, t, f, s] = await Promise.all([
+      const [h, t, f] = await Promise.all([
         api.insightsHeatmap(windowDays).catch(quiet404({ matrix: [], stages: [], totals_by_category: {}, total_needs: 0 })),
         api.insightsTrends(6).catch(quiet404({ months: [], series: [] })),
         api.insightsFeed(Math.min(windowDays, 365)).catch(quiet404({ items: [], sectors: [], geographies: [] })),
-        api.insightsNewsletterStatus().catch(() => ({ active: false })),
       ]);
-      setHeat(h); setTrend(t); setFeed(f); setSub(s);
+      setHeat(h); setTrend(t); setFeed(f);
     } catch (e) {
       // A non-404 from one of the insights endpoints reached the outer catch.
       // Classify into fixed friendly strings — never leak raw e.message.
@@ -68,31 +67,6 @@ export default function PartnerInsightsPage() {
     finally { setLoading(false); }
   }
   useEffect(() => { loadAll(); /* eslint-disable-line */ }, [windowDays]);
-
-  async function toggleSub() {
-    setError(null);
-    const wasActive = !!sub?.active;
-    try {
-      const next = wasActive
-        ? await api.insightsNewsletterUnsubscribe()
-        : await api.insightsNewsletterSubscribe();
-      setSub(next);
-    } catch (e) {
-      const status = e?.status;
-      const msg = (e?.message || '').toLowerCase();
-      if (status === 401 || status === 403) {
-        setError('Your session expired. Please sign in again to manage your digest subscription.');
-      } else if (status === 404 || msg.includes('not found')) {
-        setError("The weekly digest isn't available on this deployment yet. Please check back soon, or contact support.");
-      } else {
-        setError(
-          wasActive
-            ? "Couldn't unsubscribe right now. Please retry in a moment."
-            : "Couldn't subscribe to the weekly digest right now. Please retry in a moment."
-        );
-      }
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -108,9 +82,10 @@ export default function PartnerInsightsPage() {
             <option value={180}>Last 6 months</option>
             <option value={365}>Last 12 months</option>
           </select>
-          <button onClick={toggleSub} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border transition ${sub?.active ? 'bg-violet-50 text-violet-700 border-violet-300 hover:bg-violet-100' : 'bg-violet-600 text-white border-violet-600 hover:bg-violet-700'}`}>
-            <Mail size={14} /> {sub?.active ? 'Subscribed' : 'Subscribe to weekly digest'}
-          </button>
+          {/* D813 (#2259): the weekly digest is the Insights newsletter now, chosen with the rest in Account. */}
+          <Link to="/account/notifications" className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium border border-violet-300 bg-violet-50 text-violet-700 transition hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-200 dark:hover:bg-violet-900/40">
+            <Mail size={14} /> Newsletters in Account
+          </Link>
           <button onClick={() => setPreviewOpen(true)} className="text-sm border border-gray-300 rounded-md px-3 py-1.5 hover:bg-gray-50 flex items-center gap-1.5 dark:border-gray-700"><Eye size={14} /> Preview digest</button>
         </div>
       </div>

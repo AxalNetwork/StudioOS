@@ -24,6 +24,7 @@ import { TASK_LABELS, MODEL_NAMES } from '../services/aiCatalog';
 import { publicModels, type PublicModel } from '../services/ai/publicModels';
 import { sendNotificationEmail } from '../services/email';
 import { CONTACT_MAILBOX, DEFAULT_CONTACT_MAILBOX } from './contact';
+import { isRedirectKey } from '../services/redirectRoutes';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -1160,7 +1161,9 @@ publicRoutes.post('/analytics/pageview', async (c) => {
   // Only count paths from our known public surfaces; ignore everything else.
   const allowed = new Set(['/', '/pricing', '/demo', '/status', '/changelog', '/roadmap', '/spinout-lab', '/terms', '/privacy']);
   const path = raw.split('?')[0].split('#')[0];
-  if (!allowed.has(path)) return c.body(null, 204);
+  // #2301: an old redirect address opened in the SPA, counted under its own
+  // `redirect:<pattern>` key — only a pattern on the list (services/redirectRoutes.ts).
+  if (!allowed.has(path) && !isRedirectKey(path)) return c.body(null, 204);
   try {
     await c.env.DB.prepare(
       `INSERT INTO public_pageviews (day, path, views) VALUES (?, ?, 1)

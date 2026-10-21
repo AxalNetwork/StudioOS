@@ -215,6 +215,13 @@ const ROUTES = [
     type: 'website',
     section: 'company',
   },
+  {
+    path: '/newsletter',
+    title: 'Newsletter',
+    description: 'The Axal VC Brief and our other newsletters: portfolio news, founder calls, events, insights and announcements.',
+    type: 'website',
+    section: 'company',
+  },
 
   // ---- Content surfaces --------------------------------------------------
   {
