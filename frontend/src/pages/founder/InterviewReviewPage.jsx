@@ -7,6 +7,7 @@ import SessionSummary from './SessionSummary';
 import { REVIEWABLE, afterDelete, findPassages, pickSession, recordParts, sessionLabel, statusWord } from './interviewReviewModel';
 import { FOCUSABLE, tabTarget } from '../../ui/lightboxFocus.js';
 import { useRailOption } from '../../ui/railCrumbs';
+import { railPressHeaders } from '../../lib/railPage.js';
 import { RecordActions, RecordActivity, RecordFacts, RecordSection } from '../cycles/RecordView';
 import { declaredActions, pillView, recordActionBody, recordFormFor, toneOf } from '../cycles/recordModel';
 import FormLightbox from '../cycles/FormLightbox';
@@ -201,6 +202,9 @@ export default function InterviewRecord({
   useEffect(() => { void loadList(); }, [loadList]);
   const chosen = pickSession(list?.items, params.get('session'));
   const chosenId = chosen?.id ?? null;
+  // D778 part 8 (#2103): the session open now; a Summarise answers only the one it was pressed on.
+  const openSession = useRef(chosenId);
+  openSession.current = chosenId;
   const { player, held, audioError, setAudioError, open: openRecording } = useSessionPlayer(sessions, chosenId);
   const loadDetail = useCallback(() => (chosenId == null ? undefined : sessions.get(chosenId).then(setDetail).catch(() => setDetail(null))), [sessions, chosenId]);
   const loadReceipt = useCallback(() => (chosenId == null ? undefined : sessions.receipt(chosenId).then(setReceipt).catch(() => setReceipt(null))), [sessions, chosenId]);
@@ -217,12 +221,16 @@ export default function InterviewRecord({
   const shown = findPassages(segments, search);
 
   const summarise = async () => {
+    const pressedFor = chosenId;
     setSummarising({ busy: true, error: null });
     try {
-      await sessions.summarise(session.id);
+      // The press names its own option, keeping the mounted rail's page.
+      await sessions.summarise(session.id, undefined, railPressHeaders('summarise:session'));
+      if (openSession.current !== pressedFor) return;
       setSummarising({ busy: false, error: null });
       loadDetail(); loadReceipt();
     } catch (e) {
+      if (openSession.current !== pressedFor) return;
       setSummarising({ busy: false, error: e?.message || 'The summary could not be written.' });
     }
   };

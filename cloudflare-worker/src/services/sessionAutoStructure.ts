@@ -54,6 +54,8 @@
  * reach it through `digestSession`.
  */
 import type { Env } from '../types';
+import type { RailContext } from './aiRouter';
+import { DIGEST_OPTIONS, DIGEST_PAGE } from './interviewProcessing';
 import { sessionDigestConsentBlocks } from './interviewSessions';
 import { IntakeError, writableSession } from './interviewIntake';
 import { structureTranscript, toSegments, type ReceiptLine, type SegmentRow } from './interviewStructuring';
@@ -93,7 +95,7 @@ function newRunId(): string {
  * already proposed on the interview (automatic runs, D757).
  */
 export async function structureSession(
-  env: Env, opts: { sessionId: number; userId: number; trigger: StructureTrigger; model?: string; dedupe?: boolean },
+  env: Env, opts: { sessionId: number; userId: number; trigger: StructureTrigger; model?: string; dedupe?: boolean; rail?: RailContext },
 ): Promise<StructureOutcome> {
   let session;
   try {
@@ -117,6 +119,8 @@ export async function structureSession(
   const runId = newRunId();
   const out = await structureTranscript(env, {
     userId: opts.userId, model: opts.model, segments, context: await loadStructureContext(env, session.project_id), step,
+    // D778 part 8: the press's rail, else the inventory's option on the session it read.
+    rail: opts.rail ?? { page: DIGEST_PAGE, option: DIGEST_OPTIONS.structure, record: `session:${session.id}` },
   });
   // The last receipt line is the refused call: the run's, or pass B's (D757: pass A's placements stand).
   const lastRefusal = !out.ok ? out.refusal ?? null : out.passBRefusal !== undefined ? out.passBRefusal ?? null : undefined;

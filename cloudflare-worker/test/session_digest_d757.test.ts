@@ -368,3 +368,95 @@ test('the Customer research record shows the draft to writers, labelled, and onl
   assert.equal(kept.rows[0].a, 'They reconcile invoices by hand.', 'no Draft label once kept');
   assert.equal(kept.rows[1].a, QUOTE_WITHHELD);
 });
+
+// ── D778 part 8 (#2103): the digest's three presses name their option ───────
+
+const PLACED = { placements: [] };
+const ANSWER = { answer: 'By hand, every Friday.', cites: [{ from: 0, to: 1000 }] };
+const digestRuns = (db: any) => (db.prepare(
+  `SELECT task, rail_page, rail_option, record_ref FROM ai_usage_logs
+    WHERE task IN ('summarise_interview', 'structure_interview') AND guard_for IS NULL ORDER BY id`,
+).all() as any[]).map((r) => ({ ...r }));
+
+async function press(env: any, path: string, body: unknown, headers: Record<string, string> = {}) {
+  const tok = await new SignJWT({ user_id: ME, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const res = await app.fetch(new Request(`http://x/api/founder/validate${path}`, {
+    method: 'POST', headers: { Authorization: `Bearer ${tok}`, 'content-type': 'application/json', ...headers }, body: JSON.stringify(body),
+  }), env);
+  return { status: res.status, body: await res.json().catch(() => null) as any };
+}
+
+test('D778 part 8: the three digest options are the founder inventory\'s, on Customer research; the run page is the switch\'s section', async () => {
+  const { DIGEST_OPTIONS, DIGEST_PAGE } = await import('../src/services/interviewProcessing.ts');
+  const { VALIDATE_SECTION } = await import('../src/services/validateEngine.ts');
+  const { FOUNDER_OPTIONS } = await import('../../frontend/src/lib/railOptions/founder.js');
+  for (const key of Object.values(DIGEST_OPTIONS)) {
+    const rows = FOUNDER_OPTIONS.filter((o: any) => o.key === key);
+    assert.equal(rows.length, 1, key);
+    assert.equal(rows[0].page, 'Founder · Validate · Customer research', key);
+  }
+  // Mutation checked: naming the inventory's label here runs a press the founder switched off (below).
+  assert.equal(DIGEST_PAGE, VALIDATE_SECTION);
+});
+
+test('D778 part 8: with no rail mounted, Summarise, Structure and Ask each log validate, their own option and the session', async () => {
+  // Mutations checked: each route's old fallback (summarise:interview, place:interview), a fixed context
+  // instead of railFor, the stage rail not reaching summariseSession or structureSession, and the browser's record winning.
+  const f = world({ summary: DIGEST, structure: PLACED });
+  const id = await call2(f);
+  const record = `session:${id}`;
+  const rec = { 'X-Rail-Record': 'project:999' };
+  assert.equal((await press(f.env, `/sessions/${id}/summarise`, {}, rec)).status, 201);
+  assert.equal((await press(f.env, `/sessions/${id}/structure`, {}, rec)).status, 201);
+  f.env.AI.run = async (model: string) => (/guard/.test(model) ? { response: 'safe' } : { response: JSON.stringify(ANSWER) });
+  const asked = await press(f.env, `/sessions/${id}/ask`, { question: 'How do they reconcile?' }, rec);
+  assert.equal(asked.status, 200, JSON.stringify(asked.body));
+  const runs = digestRuns(f.db);
+  const byOption = (o: string) => runs.filter((r) => r.rail_option === o);
+  assert.deepEqual(byOption('summarise:session').map((r) => [r.task, r.rail_page, r.record_ref]), [['summarise_interview', 'validate', record]]);
+  assert.ok(byOption('structure:transcript').length >= 1);
+  for (const r of byOption('structure:transcript')) assert.deepEqual([r.task, r.rail_page, r.record_ref], ['structure_interview', 'validate', record]);
+  assert.deepEqual(byOption('ask:transcript').map((r) => [r.task, r.rail_page, r.record_ref]), [['structure_interview', 'validate', record]]);
+  assert.equal(runs.length, byOption('summarise:session').length + byOption('structure:transcript').length + 1, 'no run names another key');
+});
+
+test('D778 part 8: a mounted rail\'s page and the press\'s option win on all three', async () => {
+  const f = world({ summary: DIGEST, structure: PLACED });
+  const id = await call2(f);
+  const h = (option: string) => ({ 'X-Rail-Page': 'Validate', 'X-Rail-Option': option });
+  assert.equal((await press(f.env, `/sessions/${id}/summarise`, {}, h('summarise:session'))).status, 201);
+  assert.equal((await press(f.env, `/sessions/${id}/structure`, {}, h('structure:transcript'))).status, 201);
+  f.env.AI.run = async (model: string) => (/guard/.test(model) ? { response: 'safe' } : { response: JSON.stringify(ANSWER) });
+  assert.equal((await press(f.env, `/sessions/${id}/ask`, { question: 'How?' }, h('ask:transcript'))).status, 200);
+  const runs = digestRuns(f.db);
+  assert.ok(runs.length >= 3);
+  for (const r of runs) assert.equal(r.rail_page, 'Validate');
+  assert.deepEqual([...new Set(runs.map((r) => r.rail_option))].sort(), ['ask:transcript', 'structure:transcript', 'summarise:session']);
+});
+
+test('D778 part 8: the Validate switch still refuses all three presses with no rail mounted, and nothing runs or is charged', async () => {
+  // The session page mounts no rail, so its presses use the fallback page.
+  // Mutation checked: DIGEST_PAGE set to the inventory label lets all three run here.
+  const f = world({ summary: DIGEST, structure: PLACED });
+  const id = await call2(f);
+  f.db.prepare("INSERT INTO ai_rail_preferences(uid, user_id, section, task, mode) VALUES ('off-d778', ?, 'validate', '', 'manual')").run(ME);
+  for (const [path, body] of [['summarise', {}], ['structure', {}], ['ask', { question: 'How?' }]] as const) {
+    const r = await press(f.env, `/sessions/${id}/${path}`, body);
+    assert.equal(r.status, 403, path);
+    assert.equal(r.body.refusal, 'assist_off', path);
+  }
+  assert.equal(f.ai.length, 0, 'no model ran');
+  assert.equal(n(f.db, "SELECT COUNT(*) n FROM ai_usage_logs WHERE task IN ('summarise_interview', 'structure_interview') AND COALESCE(charged_microusd, 0) > 0"), 0);
+});
+
+test('D778 part 8: a Summarise keeps its digest a draft, and a Structure only proposes: nothing lands on the interview before Keep or Accept', async () => {
+  const f = world({ summary: DIGEST, structure: PLACED });
+  const id = await call2(f);
+  const before = { ...f.db.prepare('SELECT * FROM discovery_interviews WHERE id = ?').get(INTERVIEW) };
+  assert.equal((await press(f.env, `/sessions/${id}/summarise`, {})).status, 201);
+  assert.equal((await press(f.env, `/sessions/${id}/structure`, {})).status, 201);
+  assert.equal(row(f.db, id).digest_kept_at, null, 'the digest waits for Keep');
+  assert.deepEqual({ ...f.db.prepare('SELECT * FROM discovery_interviews WHERE id = ?').get(INTERVIEW) }, before, 'the interview record is unchanged');
+  assert.equal(n(f.db, "SELECT COUNT(*) n FROM validate_proposals WHERE session_id = ? AND status <> 'proposed'", id), 0, 'nothing accepted');
+});

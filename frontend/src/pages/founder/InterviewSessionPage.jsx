@@ -168,18 +168,25 @@ export function SessionRail({ session, models, receipt }) {
  * error, so `InterviewReview` can tell a budget refusal from a writer's
  * refusal from a citation refusal by the Worker's own fields.
  */
-export function makeReviewActions({ api, sessionId, set, onSpent }) {
+export function makeReviewActions({ api, sessionId, set, onSpent, isLive = () => true }) {
+  // D778 part 8 (#2103): a run answers only the session it was pressed on.
+  // Once `isLive` says another session is open, its result, refusal and
+  // re-reads are dropped, so the old session's placements never land in the new view.
+  const put = (fn) => { if (isLive()) set(fn); };
+  const spent = () => { if (isLive()) onSpent?.(); };
   const reload = async () => {
-    try { const read = await api.placements(sessionId); set((st) => ({ ...st, read })); } catch { set((st) => ({ ...st, read: null })); }
+    if (!isLive()) return;
+    try { const read = await api.placements(sessionId); put((st) => ({ ...st, read })); } catch { put((st) => ({ ...st, read: null })); }
   };
   return {
     reload,
     async structure(model) {
       set((st) => ({ ...st, running: true, runError: null }));
       // Only a model id is sent; anything else (a click event, say) is no model, so the Worker picks its default (#1589).
-      try { await api.structure(sessionId, typeof model === 'string' && model ? model : undefined); await reload(); } catch (e) { set((st) => ({ ...st, runError: e })); }
-      set((st) => ({ ...st, running: false }));
-      onSpent?.();
+      // D778 part 8: the press names its own option, keeping the mounted rail's page.
+      try { await api.structure(sessionId, typeof model === 'string' && model ? model : undefined, railPressHeaders('structure:transcript')); await reload(); } catch (e) { put((st) => ({ ...st, runError: e })); }
+      put((st) => ({ ...st, running: false }));
+      spent();
     },
     async accept(id, payload) {
       set((st) => ({ ...st, busyId: id, errors: { ...st.errors, [id]: null } }));
@@ -205,12 +212,12 @@ export function makeReviewActions({ api, sessionId, set, onSpent }) {
     async ask(question) {
       set((st) => ({ ...st, ask: { busy: true, result: null, error: null } }));
       try {
-        const result = await api.ask(sessionId, question);
-        set((st) => ({ ...st, ask: { busy: false, result, error: null } }));
+        const result = await api.ask(sessionId, question, railPressHeaders('ask:transcript'));
+        put((st) => ({ ...st, ask: { busy: false, result, error: null } }));
       } catch (e) {
-        set((st) => ({ ...st, ask: { busy: false, result: null, error: e } }));
+        put((st) => ({ ...st, ask: { busy: false, result: null, error: e } }));
       }
-      onSpent?.();
+      spent();
     },
   };
 }
@@ -220,8 +227,19 @@ export const REVIEW_INITIAL = { read: undefined, running: false, runError: null,
 /** The review step, mounted: reads the placements and wires each action. */
 export function ReviewStep({ api, sessionId, theme, receiptItems, onSpent, grouped = null }) {
   const [st, setSt] = useState(REVIEW_INITIAL);
-  const actions = React.useMemo(() => makeReviewActions({ api, sessionId, set: setSt, onSpent }), [api, sessionId, onSpent]);
-  useEffect(() => { actions.reload(); }, [actions]);
+  // D778 part 8: each session's actions carry their own liveness, ended when another session opens.
+  const actions = React.useMemo(() => {
+    const live = { current: true };
+    return { ...makeReviewActions({ api, sessionId, set: setSt, onSpent, isLive: () => live.current }), live };
+  }, [api, sessionId, onSpent]);
+  const opened = React.useRef(sessionId);
+  useEffect(() => {
+    actions.live.current = true;
+    // Another session: its state starts clean rather than inheriting a running press.
+    if (opened.current !== sessionId) { opened.current = sessionId; setSt(REVIEW_INITIAL); }
+    actions.reload();
+    return () => { actions.live.current = false; };
+  }, [actions, sessionId]);
   // D771 (#2097): a structuring run or a question at the transcript is the rail's option while it runs.
   useRailOption(st.running ? 'structure:transcript' : null, 'Structure the transcript');
   useRailOption(st.ask?.busy ? 'ask:transcript' : null, 'Ask');
@@ -329,6 +347,10 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
   const [transcribing, setTranscribing] = useState(false);
   useRailOption(summarising ? 'summarise:session' : null, 'Summarise');
   useRailOption(transcribing ? 'transcribe:recording' : null, 'Transcribe');
+  // D778 part 8: the session open now; a Summarise answers only the one it was pressed on.
+  const openId = React.useRef(id);
+  openId.current = id;
+  useEffect(() => { setDigestBusy(false); setSummarising(false); setDigestError(null); }, [id]);
 
   const load = useCallback(() => api.get(id).then((r) => { setData(r); return r; }).catch((e) => { setError(e?.message || 'Unreadable'); setData(null); }), [api, id]);
   const loadReceipt = useCallback(() => api.receipt(id).then(setReceipt).catch(() => setReceipt(null)), [api, id]);
@@ -439,8 +461,16 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
     try { const r = await api.editDigest(session.id, edit); setData((d) => ({ ...d, digest: r.digest })); setDigestBusy(false); return true; } catch (e) { setDigestError(e?.data?.detail || e?.message || 'The edit could not be saved.'); setDigestBusy(false); return false; }
   };
   const summarise = async () => {
+    const pressedFor = id;
+    const current = () => openId.current === pressedFor;
     setDigestBusy(true); setSummarising(true); setDigestError(null);
-    try { await api.summarise(session.id); await load(); } catch (e) { setDigestError(e?.data?.detail || e?.message || 'The summary could not be written.'); }
+    try {
+      await api.summarise(session.id, undefined, railPressHeaders('summarise:session'));
+      if (current()) await load();
+    } catch (e) {
+      if (current()) setDigestError(e?.data?.detail || e?.message || 'The summary could not be written.');
+    }
+    if (!current()) return;
     setDigestBusy(false); setSummarising(false); loadReceipt();
   };
   const review = ['transcribed', 'structured', 'reviewed'].includes(session.status) && (
