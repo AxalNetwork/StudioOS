@@ -285,3 +285,9 @@ once, in the app only.
 D811: `mailLinkAudiences.ts` reads consented, suppression-filtered Mail audiences and signed D810 links. `mailLinkEvents.ts` validates and atomically applies feedback with receipts and service-actor audit.
 
 D811: `mailLinkTesters.ts` reads picked, consented programme audiences and signs programme/email-scoped preferences and unsubscribe links, with atomic opt-in/out and actor audits.
+
+D886 B1 (#2579): `meetingBots.ts` owns dispatch validation, plan limits,
+content-free status projection, the runtime interface and the full-call budget
+check. `MeetingBotRun` serializes state and renews two-minute bot-fee holds on
+the existing ledger. Transcription remains B6's `aiRouter` charge. See D886 §12
+for the callback, runtime lease, privacy and release contracts.

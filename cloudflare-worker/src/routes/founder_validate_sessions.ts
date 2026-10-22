@@ -1,3 +1,4 @@
+import { BotError, dispatchBot, sessionBot, botControl, botView, stopSessionBot } from '../services/meetingBots';
 /**
  * D657 — interview sessions on Validate: record, transcribe live and in full,
  * mark, review, delete. Mounted on `/api/founder/validate` beside
@@ -179,6 +180,41 @@ sessions.get('/meetings/upcoming', async (c) => {
     const status = e.retryable ? 503 : /_(not_connected|reconnect)$/.test(e.code) ? 409 : 502;
     return json({ detail: e.code, message: MEETING_ERRORS[e.code] }, status);
   }
+});
+
+// D886 B1: all bot controls stay behind the session's normal tenant scope.
+const botFailure = (e: unknown) => e instanceof BotError
+  ? json(e.body(), e.status)
+  : json({ code: 'bot_unavailable', detail: 'The meeting bot is temporarily unavailable.', message: 'The meeting bot is temporarily unavailable.' }, 503);
+
+sessions.post('/sessions/:id/bot', async (c) => {
+  const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
+  if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ code: 'invalid_body', message: 'Provide a meeting link.' }, 400);
+  try { return json({ bot: await dispatchBot(c.env, scoped.user, scoped.session, body) }, 202); }
+  catch (e) { return botFailure(e); }
+});
+sessions.get('/sessions/:id/bot', async (c) => {
+  const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
+  if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  if (!c.env.MEETING_BOT_RUN) return json({ code: 'bot_unavailable', message: 'The meeting bot is not set up here.' }, 503);
+  try {
+    const run = await sessionBot(c.env, scoped.session.id, scoped.user.id);
+    if (!run) return json({bot:null});
+    const response=await botControl(c.env,run.uid,'init');
+    if (!response.ok) return botFailure(new BotError(503,'bot_unavailable','The meeting bot is temporarily unavailable.'));
+    return json({bot:await response.json()});
+  } catch (e) { return botFailure(e); }
+});
+sessions.post('/sessions/:id/bot/stop', async (c) => {
+  const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
+  if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  try {
+    await stopSessionBot(c.env, scoped.session.id, scoped.user.id, true);
+    const run = await sessionBot(c.env, scoped.session.id, scoped.user.id);
+    return json({ bot: run ? botView(run) : null });
+  } catch (e) { return botFailure(e); }
 });
 
 // ---------------------------------------------------------------------------
@@ -708,10 +744,11 @@ sessions.patch('/sessions/:id/consent', async (c) => {
   if (s instanceof Response) return s;
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
   const before = s.session.status;
-  if (!['draft', 'paused', ...AFTER_RECORDING].includes(before)) return json({ detail: 'consent_locked', status: before }, 409);
+  if (!['draft', 'paused', ...AFTER_RECORDING, ...(s.session.submitted_via === 'meeting_bot' ? ['recording'] : [])].includes(before)) return json({ detail: 'consent_locked', status: before }, 409);
   const body = await c.req.json<any>().catch(() => ({}));
   const status = String(body?.status || '');
   if (!(CONSENT as readonly string[]).includes(status)) return json({ detail: 'invalid_consent', accepted: CONSENT }, 400);
+  if (before === 'recording' && s.session.submitted_via === 'meeting_bot' && status !== 'declined') return json({ detail: 'consent_locked', status: before }, 409);
   const method = status === 'given' ? String(body?.method || '') : '';
   if (status === 'given' && !(CONSENT_METHODS as readonly string[]).includes(method)) {
     return json({ detail: 'consent_method_required', accepted: CONSENT_METHODS }, 400);
@@ -730,6 +767,9 @@ sessions.patch('/sessions/:id/consent', async (c) => {
             consent_at = CASE WHEN ? = 'given' THEN datetime('now') ELSE NULL END, updated_at = datetime('now')
       WHERE id = ?`,
   ).bind(status, method || null, status, s.session.id).run();
+  if (status === 'declined') {
+    try { await stopSessionBot(c.env, s.session.id, s.session.created_by_user_id); } catch (e) { return botFailure(e); }
+  }
   // A paused recording whose consent is withdrawn is stopped, not resumed.
   if (status !== 'given' && s.session.status === 'paused') await transition(c.env, s.session, 'stop');
   // D765 (#2090): consent given no longer starts a summary; the founder presses Summarise.
@@ -746,6 +786,7 @@ for (const action of Object.keys(TRANSITIONS) as (keyof typeof TRANSITIONS)[]) {
     const s = await scopeSession(c);
     if (s instanceof Response) return s;
     if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
+    if (s.session.submitted_via === 'meeting_bot') return json({ code: 'bot_control_required', message: 'Use the meeting bot controls for this session.' }, 409);
     // THE WORKER ENFORCES CONSENT. A page that hides the button is not the gate.
     if (action === 'start' || action === 'resume') {
       const blocked = consentBlocks(s.session.channel, s.session.consent_status, {
@@ -790,6 +831,7 @@ sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   if (s instanceof Response) return s;
   if (!c.env.FILES) return json({ detail: 'storage_not_configured' }, 503);
   if (!AUDIO_CHANNELS.has(s.session.channel)) return json({ detail: 'no_audio_on_this_channel' }, 400);
+  if (s.session.submitted_via === 'meeting_bot') return json({ code: 'bot_upload_required', message: 'Bot audio uses its one-time upload permission.' }, 409);
   const blocked = consentBlocks(s.session.channel, s.session.consent_status, {
     hasAudio: await sessionHasAudio(c.env, s.session.id), submittedVia: s.session.submitted_via ?? null,
   });
@@ -1192,6 +1234,8 @@ function runMoving(session: SessionRow): boolean {
 sessions.delete('/sessions/:id/audio', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  try { await stopSessionBot(c.env, s.session.id, s.session.created_by_user_id); } catch (e) { return botFailure(e); }
+  s.session = (await loadSession(c.env, s.session.id)) ?? s.session;
   if (runMoving(s.session)) return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
   try {
     const r = await deleteSessionAudio(c.env, s.session, s.user.id, 'deleted');
@@ -1206,6 +1250,8 @@ sessions.delete('/sessions/:id/audio', async (c) => {
 sessions.delete('/sessions/:id', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
+  try { await stopSessionBot(c.env, s.session.id, s.session.created_by_user_id); } catch (e) { return botFailure(e); }
+  s.session = (await loadSession(c.env, s.session.id)) ?? s.session;
   if (runMoving(s.session)) return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
   try {
     const r = await deleteSession(c.env, s.session, s.user.id);

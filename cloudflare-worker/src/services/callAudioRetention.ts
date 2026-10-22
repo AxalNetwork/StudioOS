@@ -63,7 +63,7 @@ async function due(env: Env, now: Date): Promise<SessionRow[]> {
     `SELECT s.* FROM interview_sessions s
        LEFT JOIN member_call_audio_settings m ON m.user_id = s.created_by_user_id
       WHERE s.audio_removed_at IS NULL
-        AND (s.submitted_via = 'upload' OR EXISTS (SELECT 1 FROM interview_channel_refs r WHERE r.session_id = s.id))
+        AND (s.submitted_via IN ('upload','meeting_bot') OR EXISTS (SELECT 1 FROM interview_channel_refs r WHERE r.session_id = s.id))
         AND s.status NOT IN ('recording', 'paused', 'transcribing')
         AND (s.processing_stage IS NULL OR s.processing_stage IN ('done', 'failed'))
         AND (m.user_id IS NULL OR m.call_audio_retention_days IS NOT NULL)

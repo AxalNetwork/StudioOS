@@ -1482,3 +1482,13 @@ address is returned. These links remain usable when `MAIL_LINK_SECRET` is unset.
 ## Assessment Studio removal — owner, 2026-10-21
 
 `/admin/assessment` and its editor were removed at the owner's request. HQ Content and Admin Programs no longer link to it. The Admin S22 and Super Admin H21 page mappings are retired; their canvas IDs are not reused. Saved games and runs remain available to the existing read-only summaries, and Branch Programs retains its game/run reads.
+
+### Meeting bot control plane (D886 B1, #2579)
+
+- POST/GET `/api/founder/validate/sessions/:id/bot`, POST `…/bot/stop`:
+  `founder_validate_sessions.ts`; creator-only current project write scope.
+- POST `/api/meeting-bots/:uid/events`, PUT `…/:uid/chunks/:seq`:
+  `meeting_bot_callbacks.ts`; HMAC callbacks and short-lived one-use upload tokens.
+- `MeetingBotRun` controls transitions, alarms, runtime leases and ledger blocks.
+  Interface implementation only; no live runtime or public switch enabled by B1.
+  B7 owns the UI. D886 §12 is the request/response contract.

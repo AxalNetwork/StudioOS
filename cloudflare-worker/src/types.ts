@@ -421,6 +421,11 @@ export interface Env {
   // Durable Objects for real-time WebSocket fan-out. Optional so unit-test
   // envs without DO bindings don't crash; the realtime route returns 503
   // when these are undefined.
+  MEETING_BOT?: string;
+  MEETING_BOT_SECRET?: string;
+  MEETING_BOT_COST_MICROUSD_PER_MINUTE?: string;
+  MEETING_BOT_RUN?: DurableObjectNamespace;
+  MEETING_BOT_RUNTIME?: import('./services/meetingBots').BotRuntime;
   PIPELINE_ROOM?: DurableObjectNamespace;
   ONBOARDING_CHAT?: DurableObjectNamespace;
   // Vectorize index `axal-search` (768-dim, cosine) for semantic search.
