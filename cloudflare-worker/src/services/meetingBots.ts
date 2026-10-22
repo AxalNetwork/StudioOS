@@ -1,3 +1,4 @@
+import { doNamespace } from '../util/doNamespace';
 /** D886 B1: authenticated dispatch and a content-free public view. The DO alone changes run status. */
 import { refusalBody } from '../util/refusal';
 import type { Env, User } from '../types';
@@ -98,7 +99,8 @@ export async function botSession(env: Env, run: Pick<BotRun, 'user_id'|'session_
 }
 export async function botControl(env: Env, uid: string, action: string, init?: RequestInit): Promise<Response> {
   if (!env.MEETING_BOT_RUN) throw new BotError(503, 'bot_unavailable', 'The meeting bot is not set up here.');
-  return env.MEETING_BOT_RUN.get(env.MEETING_BOT_RUN.idFromName(uid)).fetch(new Request(`https://meeting-bot.internal/${action}`, {
+  const ns = doNamespace(env, env.MEETING_BOT_RUN);
+  return ns.get(ns.idFromName(uid)).fetch(new Request(`https://meeting-bot.internal/${action}`, {
     ...({ duplex: 'half' } as Record<string, string>), method: 'POST', ...init, headers: { 'x-bot-run': uid, ...Object.fromEntries(new Headers(init?.headers)) },
   }));
 }
