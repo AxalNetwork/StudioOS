@@ -79,15 +79,20 @@ credentials into an issue. See §7 before any general-availability PR.
      required popup version and `extras` with W1 (#2501). Version/deprecation
      claims in the earlier runbook were not verified here.
 5. **Worker secrets, before the webhook.** Meta checks the verify token when the
-   webhook is saved, and without the secrets the Worker answers 503. Run
-   this from the repository root for each:
+   webhook is saved, and without the secrets the Worker answers 503. Set them
+   in HQ › Integration keys › Channels › "WhatsApp · members' own numbers
+   (way A)" (D885: Super Admin, with a recent step-up), or run this from the
+   repository root for each:
    `npx wrangler secret put <NAME> --config wrangler.toml --env production`.
    - `WHATSAPP_APP_ID`;
    - `WHATSAPP_APP_SECRET` (App settings → Basic → App secret);
-   - `WHATSAPP_VERIFY_TOKEN` (a long random string you make up);
+   - `WHATSAPP_VERIFY_TOKEN` (a long random string: in HQ, press **Generate**
+     and copy the value it shows once into Meta's webhook form);
    - `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` (step 4).
 
-   They are not in HQ → Integration keys. A secret needs no deploy.
+   The same page sets way B's three secrets, under "WhatsApp · through Axal's
+   number (way B)"; `WHATSAPP_AXAL_DISPLAY_NUMBER` and `WHATSAPP_CHANNEL` are
+   vars, changed by a PR. A secret needs no deploy.
 6. **The webhook.** App Dashboard → WhatsApp → Configuration.
    - Callback URL: `https://axal.vc/api/channels/whatsapp/webhook`.
    - Verify token: the same string as `WHATSAPP_VERIFY_TOKEN`.

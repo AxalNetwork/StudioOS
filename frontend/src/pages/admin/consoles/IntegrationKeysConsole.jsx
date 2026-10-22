@@ -19,6 +19,8 @@ import {
 // #2199 — a refused Save or Rotate is said inside the dialog.
 import { keySaveRefusal, TOKEN_MISSING_LEAD } from '../../../lib/integrationKeys';
 import { ConsoleUnreadable } from './shared';
+// D885 (#2561) — the interview channels' secrets.
+import ChannelKeysSection from './ChannelKeysSection';
 
 /**
  * D648 (#1448) — the Integration keys console.
@@ -112,6 +114,8 @@ export function IntegrationKeysPanel() {
   const [failed, setFailed] = useState(false);
   // D751 — the OAuth clients set only at deploy; an older Worker sends none.
   const [envOnly, setEnvOnly] = useState([]);
+  // D885 — the interview channels; an older Worker sends none.
+  const [channels, setChannels] = useState([]);
 
   const refresh = async () => {
     setLoading(true);
@@ -119,6 +123,7 @@ export function IntegrationKeysPanel() {
       const r = await api.adminListIntegrationKeys();
       setRows(r.providers || []);
       setEnvOnly(Array.isArray(r.other_oauth) ? r.other_oauth : []);
+      setChannels(Array.isArray(r.channels) ? r.channels : []);
       setUnreadableReason(r.db_readable === false ? (r.unreadable_reason || 'The key table could not be read.') : null);
       setFailed(false);
     } catch (e) {
@@ -287,6 +292,10 @@ export function IntegrationKeysPanel() {
             {envOnly.map((o) => <EnvOnlyOauthCard key={o.key} row={o} />)}
           </div>
         </section>
+      )}
+
+      {!loading && !failed && channels.length > 0 && (
+        <ChannelKeysSection channels={channels} holdsSecretWrites={holdsSecretWrites} onChanged={() => refresh()} showToast={showToast} />
       )}
 
       {editing && (
