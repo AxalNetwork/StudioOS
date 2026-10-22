@@ -33,6 +33,7 @@ import calendarRouter from '../src/routes/calendar.ts';
 import { GOOGLE_MEET_TRANSCRIPT_SCOPE } from '../src/services/calendar.ts';
 import { MEETING_ERRORS, importMeetingRef, loadRef } from '../src/services/channels/meetings.ts';
 import { fetchTranscript, participantLabel, sweepMeet } from '../src/services/channels/googleMeet.ts';
+import { upcomingCalls } from '../src/services/channels/meetingSetup.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
 
 const GOOGLE_SUB = '10987654321';
@@ -408,4 +409,19 @@ test('the recording read is the member\'s own Meet call only', async (t) => {
   f.db.prepare("UPDATE interview_channel_refs SET user_id = ?, provider = 'zoom' WHERE uid = ?").run(ME, made.body.meeting.uid);
   const zoomRef = await request(f, 'GET', `/interviews/${INTERVIEW}/meetings/${made.body.meeting.uid}/recording`);
   assert.equal(zoomRef.status, 404);
+});
+
+test('a call attached from the Calendar (or scheduled from Axal) is not offered again by D875\'s upcoming list', async (t) => {
+  const f = world();
+  await meetConnected(f);
+  const upcoming = event({ id: 'event-upcoming', start: { dateTime: iso(2 * HOUR) }, end: { dateTime: iso(3 * HOUR) } });
+  const other = event({ id: 'event-other', hangoutLink: 'https://meet.google.com/qrs-tuvw-xyz',
+    conferenceData: { entryPoints: [{ entryPointType: 'video', uri: 'https://meet.google.com/qrs-tuvw-xyz' }] },
+    start: { dateTime: iso(4 * HOUR) }, end: { dateTime: iso(5 * HOUR) } });
+  mockFetch(t, { ...TOKEN, [`GET ${CAL}`]: () => json({ items: [upcoming, other] }), [`GET ${CAL}/event-upcoming`]: () => json(upcoming) });
+  const before = await upcomingCalls(f.env, ME);
+  assert.deepEqual(before.calls.map((c) => c.join_url).sort(), [`https://meet.google.com/${MEET_CODE}`, 'https://meet.google.com/qrs-tuvw-xyz']);
+  assert.equal((await attach(f, { event_id: 'event-upcoming' })).status, 201);
+  const after = await upcomingCalls(f.env, ME);
+  assert.deepEqual(after.calls.map((c) => c.join_url), ['https://meet.google.com/qrs-tuvw-xyz'], 'held under its event id');
 });

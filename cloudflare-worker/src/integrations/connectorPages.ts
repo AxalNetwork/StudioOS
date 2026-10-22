@@ -501,6 +501,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Schedule a Zoom call from a Validate interview on your own Zoom account. When the call’s cloud transcript is ready, it is imported into the interview.',
       'Axal VC creates a meeting only when you schedule an interview call, and deletes it when you cancel. It reads a meeting’s recordings only to download its transcript into Customer research.',
+      'A call that ends without a cloud transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
       'When you disconnect, Axal VC revokes its Zoom grant.',
     ],
     tools: [
@@ -530,6 +531,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
+      'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
       'At sign-in, Google also asks for permission to read Gmail. Axal VC does not read your Gmail.',
     ],
     tools: [
@@ -634,7 +636,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
     long_description: [
       'Customers’ chats with your business number wait here for 30 days. Add one to an interview, and Axal asks the customer for consent in the chat before anything is recorded.',
       'Axal sends only what you ask it to, and only within 24 hours of the customer’s last message. Messages are billed by Meta to your WhatsApp Business Account after 1,000 a month.',
-      'Calls: not yet. WhatsApp calls do not reach Axal; record a call with the in-app recorder instead.',
+      'Calls stay closed on numbers connected through the WhatsApp Business app. Axal does not answer or place WhatsApp calls; use the in-app recorder with everyone’s consent instead.',
     ],
     tools: [
       tool('list_numbers', 'your business account’s numbers', 'read', 'Lists the numbers in your WhatsApp Business Account, to confirm the one you signed up is yours, and again before you disconnect.', null,
