@@ -168,6 +168,17 @@ Then repeat steps 2 to 6 with Google Meet, once §2 is done.
 - 503 `provider_unavailable`, "Zoom calls are not available on Axal yet." or
   the Google Meet sentence: the provider's secrets are unset.
 
+Attaching a Meet call from the founder's Calendar (D871, no `session_id`):
+
+- 404 `meeting_not_in_calendar`: no event with that Meet code or id is on the
+  founder's primary calendar, or it has no Meet conference.
+- 409 `meeting_not_hosted`: another account organises it; its transcript is
+  in that account's Drive.
+- 409 `meeting_no_time` (an all-day event), `meeting_expired` (it ended more
+  than 30 days ago, past Meet's retention), `meeting_link_reused`.
+- The live check (§3) should note what Meet names an external participant:
+  D871 §2 leaves it UNVERIFIED.
+
 A call that cannot be imported keeps its reason on the call, in one of the
 sentences of `MEETING_ERRORS` (`cloudflare-worker/src/services/channels/meetings.ts`).
 The ones the owner is likely to see during setup:
@@ -181,6 +192,7 @@ The ones the owner is likely to see during setup:
 | `meet_transcripts_unavailable` | The member's grant lacks `meetings.space.readonly` (§2 step 5). |
 | `meet_api_disabled` | The Meet REST API is off in the Cloud project (§2 step 3). |
 | `meet_no_transcript` | Nobody turned transcription on, or the Workspace edition lacks it. |
+| `meet_no_transcript_recording` | As above, but the call was recorded. The founder downloads it from Drive (`GET …/meetings/:refUid/recording` gives the link) and uploads it; Axal holds no Drive scope (D871). |
 
 ## 5. Rollback
 

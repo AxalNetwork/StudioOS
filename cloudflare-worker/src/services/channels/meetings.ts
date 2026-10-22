@@ -77,6 +77,9 @@ export const MEETING_ERRORS = {
   meet_fetch_failed: 'Google Meet refused the request for this call’s transcript. Try again later.',
   meet_no_record: 'Google Meet has no record of this call, so there is no transcript to import. If it took place, use the recorder or paste the conversation.',
   meet_no_transcript: 'Google Meet made no transcript of this call. Transcripts need a Google Workspace edition that includes Meet transcription, and someone in the call has to turn transcription on.',
+  // D871 (#2518), option A: the call was recorded but not transcribed. The
+  // recording is in the organiser's Google Drive, which Axal does not read.
+  meet_no_transcript_recording: 'Google Meet made no transcript of this call, but it was recorded to your Google Drive. Download the recording from Drive, then upload it here to transcribe it.',
   transcript_empty: 'The transcript had no speech in it to import.',
   transcript_too_large: 'The transcript is larger than Axal imports. Paste the part you need instead.',
   interview_gone: 'The interview or its session no longer exists, or is no longer yours, so nothing was imported.',
