@@ -247,7 +247,7 @@ const mutations: Array<[string, keyof Api, string, string, string, (a: Api) => P
   ['the purge keeps audio forever', 'callAudioRetention', 'services/callAudioRetention.ts',
     '>= COALESCE(m.call_audio_retention_days, ?2)', '>= COALESCE(m.call_audio_retention_days, ?2) * 1000', purge],
   ['the purge takes the recorder\'s audio', 'callAudioRetention', 'services/callAudioRetention.ts',
-    "AND (s.submitted_via = 'upload' OR EXISTS (SELECT 1 FROM interview_channel_refs r WHERE r.session_id = s.id))", '', purge],
+    "AND (s.submitted_via IN ('upload','meeting_bot') OR EXISTS (SELECT 1 FROM interview_channel_refs r WHERE r.session_id = s.id))", '', purge],
   ['the purge takes a young call', 'callAudioRetention', 'services/callAudioRetention.ts',
     '>= COALESCE(m.call_audio_retention_days, ?2)', '>= 0', purge],
 ];
