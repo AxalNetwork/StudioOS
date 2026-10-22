@@ -37,7 +37,7 @@ import {
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { FAKE_PDF, fakeTx } from './_mercury_mcp_fake.mjs';
 import {
-  TODAY, tx, LINES, CASHFLOW, mercury, fixture, call, sync, mod, accept, dismiss, proposal, withFake,
+  TODAY, tx, LINES, CASHFLOW, fixture, call, sync, mod, accept, dismiss, proposal, withFake,
 } from './_mercury_raise_fixture.ts';
 
 // ───────────────────────────────────────────── 1. the rules
