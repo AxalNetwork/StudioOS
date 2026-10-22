@@ -204,6 +204,14 @@ and a placement's quote must be verbatim in the stored transcript. Nothing is
 accepted on the founder's behalf. `interviewSessions.ts`'s `deleteSession`
 now takes the session's pending proposals with it.
 
+D877 (#2524): `callAudioRetention.ts` keeps a call's audio for its founder's
+retention, apart from its text. A call is a session with a Zoom or Meet ref,
+or an upload (D872). It reads and writes the member's setting (migration 530;
+30 days by default, `null` keeps until deleted), and `purgeExpiredCallAudio`,
+run by the daily cron, removes audio past it through `interviewSessions.ts`'s
+`deleteSessionAudio`, which the founder's audio-only delete also calls. The
+segments stay, and the session records `audio_removed_at` and its reason.
+
 D684 (#1575): `interviewIntake.ts` is the one way an outside channel writes
 into an interview. It reloads the member and re-checks the venture on every
 write, takes the interview only from an id already scoped to the member, and
