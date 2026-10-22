@@ -13,6 +13,7 @@ import { tableFromBaseline } from './_baseline.mjs';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import channels from '../src/routes/channels.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 export const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -84,6 +85,7 @@ export function world(opts: { axal?: Partial<typeof AXAL>; upTo492?: boolean } =
   for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
     'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
   for (const m of CHANNEL_MIGRATIONS) db.exec(mig(m));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   if (opts.upTo492 !== false) {
     db.exec(mig('492_whatsapp_sender_links.sql'));
     db.exec(mig('497_whatsapp_capture_import.sql'));

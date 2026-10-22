@@ -29,6 +29,7 @@ import { withThrownResponses } from '../src/util/thrownResponse.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import '../src/services/channels/zoom.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const { CONNECTOR_METADATA, getDescriptor, pageDescriptor, publicDescriptor, zoomDistribution } = registry as any;
 
@@ -112,6 +113,7 @@ function fixture(extraEnv: Record<string, string> = {}) {
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql',
     '488_channel_consents.sql', '492_whatsapp_sender_links.sql', '504_whatsapp_link_settings.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   const env = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', ...ZOOM_ENV, ...CHANNEL_ENV, ...extraEnv } as any;
   const states = () => (db.prepare('SELECT COUNT(*) AS n FROM oauth_state_tokens').get() as any).n as number;
   return { db, env, states };

@@ -16,6 +16,7 @@ import {
 } from '../src/services/validateWriters.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASE = readFileSync(resolve('cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const migration = (name: string) => readFileSync(resolve('cloudflare-worker/sql/migrations', name), 'utf8');
@@ -30,6 +31,7 @@ function fixture() {
   db.exec('CREATE UNIQUE INDEX idx_hypothesis_pain_links_unique ON hypothesis_pain_links (hypothesis_id, pain_group_id, direction)');
   db.exec('CREATE UNIQUE INDEX idx_interview_pain_sev_unique ON interview_pain_severities (interview_id, phrase_norm)');
   db.exec(migration('438_interview_sessions.sql'));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(migration('447_assistant_interviews.sql'));
   db.exec(migration('453_interview_processing.sql'));
   db.exec(migration('459_cycle_activity_convention.sql'));
@@ -240,6 +242,7 @@ function wideFixture() {
   db.exec('CREATE UNIQUE INDEX idx_interview_pain_sev_unique ON interview_pain_severities (interview_id, phrase_norm)');
   db.exec('CREATE UNIQUE INDEX idx_pain_group_aliases_project_phrase ON pain_group_aliases (project_id, phrase_norm)');
   db.exec(migration('438_interview_sessions.sql'));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(migration('440_validate_cycle_stores.sql'));
   db.exec(migration('447_assistant_interviews.sql'));
   db.exec(migration('453_interview_processing.sql'));

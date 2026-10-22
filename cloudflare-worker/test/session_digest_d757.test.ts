@@ -26,6 +26,7 @@ import { NOTES, digestSession } from '../src/services/validateEngine.ts';
 import { MAX_DIGEST_OVERVIEW, MAX_DIGEST_PARTS, checkDigest } from '../src/services/interviewStructuring.ts';
 import { VALIDATE_SPECS } from '../src/services/records/validate.ts';
 import { QUOTE_WITHHELD } from '../src/services/cycleValidate.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -76,6 +77,7 @@ function world(reply: Reply) {
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     '452_record_session_setup.sql', '453_interview_processing.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   applyEngineSchema(db);
   const ai: { task: 'summary' | 'structure'; prompt: string }[] = [];
   const env: any = {
