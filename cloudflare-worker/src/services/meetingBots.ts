@@ -103,7 +103,7 @@ export async function botControl(env: Env, uid: string, action: string, init?: R
   }));
 }
 export async function dispatchBot(env: Env, user: User, session: SessionRow, args: { meeting_url?: unknown; scheduled_at?: unknown }, now = Date.now()) {
-  await botSession(env, { user_id: user.id, session_id: session.id, project_id: session.project_id });
+  session = await botSession(env, { user_id: user.id, session_id: session.id, project_id: session.project_id });
   if (!AUDIO_CHANNELS.has(session.channel)) throw new BotError(400,'bot_needs_audio','Choose an audio recording session for the meeting bot.');
   const parsed = botPlatform(args.meeting_url);
   if (!botConfigured(env) || !await botMemberEnabled(env,user)) throw new BotError(503, 'bot_unavailable', 'The meeting bot is not set up here.');
@@ -121,9 +121,13 @@ export async function dispatchBot(env: Env, user: User, session: SessionRow, arg
   const transcription=billedMicro('@cf/deepgram/nova-3',{audio_minutes:limit},multiplier);
   await checkBotBudget(env,user.id,rate*limit+transcription,new Date(now));
   try {
-    await env.DB.prepare(`INSERT INTO meeting_bots(uid,user_id,project_id,session_id,platform,meeting_url_enc,scheduled_at,limit_minutes,cost_per_minute_microusd,rate_per_minute_microusd,created_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(uid,user.id,session.project_id,session.id,parsed.platform,link,scheduled,limit,cost,rate,now).run();
-  } catch {
+    const inserted=await env.DB.batch([env.DB.prepare(`INSERT INTO meeting_bots(uid,user_id,project_id,session_id,platform,meeting_url_enc,scheduled_at,limit_minutes,cost_per_minute_microusd,rate_per_minute_microusd,created_at)
+      SELECT ?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM interview_sessions WHERE id = ? AND status = 'draft' AND audio_bytes = 0)`).bind(uid,user.id,session.project_id,session.id,parsed.platform,link,scheduled,limit,cost,rate,now,session.id),
+      env.DB.prepare("UPDATE interview_sessions SET submitted_via = 'meeting_bot' WHERE id = ? AND status = 'draft' AND EXISTS (SELECT 1 FROM meeting_bots WHERE uid = ?)").bind(session.id,uid),
+    ]);
+    if (!inserted[0].meta.changes) throw new BotError(409,'session_in_use','Create a fresh session for Eadwyn AI.');
+  } catch (e) {
+    if (e instanceof BotError) throw e;
     const raced = await env.DB.prepare("SELECT uid FROM meeting_bots WHERE session_id = ? AND status NOT IN ('done','failed','stopped')").bind(session.id).first();
     if (raced) throw new BotError(409, 'bot_already_running', 'A meeting bot is already running for this session.');
     throw new BotError(503, 'bot_unavailable', 'The meeting bot could not be queued.');

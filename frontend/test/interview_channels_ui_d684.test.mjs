@@ -623,7 +623,7 @@ test('Schedule a call: Zoom or Meet, the body the Worker reads, and a refusal th
   try {
     await m.flush();
     await m.click('button-schedule-meeting');
-    assert.deepEqual(sent, [[7, { provider: 'zoom', starts_at: new Date('2099-01-05T10:00:00').toISOString(), duration_min: 30, consent: { status: 'given', method: 'verbal' } }]]);
+    assert.deepEqual(sent, [[7, { provider: 'zoom', starts_at: new Date('2099-01-05T10:00:00').toISOString(), duration_min: 30, auto_send_bot: true, consent: { status: 'given', method: 'verbal' } }]]);
     assert.match(m.text(), /Zoom no longer accepts Axal’s access\. .* Open Connectors/);
   } finally { await m.unmount(); }
 });

@@ -10,6 +10,8 @@ import { cycleValidateApi } from '../../lib/api/cycleValidate.js';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
 import { AssistantEntry } from './AssistantEntry';
 import { WhatsAppEntry, useWhatsAppLink } from '../account/WhatsAppWayB';
+import { botPlatform, botRefusal } from './meetingBotSession.js';
+import MeetingBotConsentNotice from './MeetingBotConsentNotice.jsx';
 import { SchedulePanel } from './InterviewChannels';
 import { assignedSentence, threadRow } from './channelThreads.js';
 import { recordSourceLine } from '../../lib/validateSourceWording.js';
@@ -259,7 +261,8 @@ export default function RecordLightbox({
   const blockedReason = importing && !thread && state.ok ? 'Choose a chat to import.' : state.ok ? chatBlock : null;
   const linkProblem = hasMeetingLink(mode, provider) ? meetingLinkProblem(provider, link) : null;
   const ready = state.ok && !blockedReason && !linkProblem && !busy;
-  const label = m.start;
+  const botReady = mode === 'video' && !!botPlatform(link);
+  const label = botReady ? 'Send Eadwyn AI' : m.start;
   const languages = languageOptions(models, live);
 
   // The chats waiting for this app, read when its chip is chosen.
@@ -329,9 +332,10 @@ export default function RecordLightbox({
     }
   };
 
-  const submit = async () => {
+  const submit = async (choice = 'default') => {
+    const useBot = botReady && choice !== 'device';
     if (!ready || sending.current) return;
-    const handsOver = !!recorder && m.audio;
+    const handsOver = !!recorder && m.audio && !useBot;
     // #1588: while this tab still records (or saves) another session, a second
     // Start is refused before the microphone opens or a session is made, and
     // offers that recording, as the Worker's 409 does.
@@ -365,10 +369,21 @@ export default function RecordLightbox({
       // be held, which the setup call refuses: it opens on that interview's own
       // route, with the same fields. A pick from the pipeline, or a new person,
       // is the one setup call.
+      const captureFields = useBot ? { ...fields, meeting_url: false } : fields;
       const r = interview
-        ? await sessions.create(interview.id, { ...sessionBody(setup, fields), client_key: startKey.current })
-        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: startKey.current }, fields));
+        ? await sessions.create(interview.id, { ...sessionBody(setup, captureFields), client_key: `${startKey.current}${useBot ? '-bot' : ''}` })
+        : await sessions.open(setupBody(setup, { projectId, interview: picked, clientKey: `${startKey.current}${useBot ? '-bot' : ''}` }, captureFields));
       const into = person(r.interview);
+      if (useBot) {
+        try {
+          await sessions.sendBot(r.session.id, { meeting_url: link.trim() });
+          onStarted?.({ ...r.session, submitted_via: 'meeting_bot' }, into);
+        } catch (e) {
+          setRefusal({ text: botRefusal(e), sessionHref: `/validate/session/${encodeURIComponent(r.session.id)}` });
+          setBusy(false); sending.current = false;
+        }
+        return;
+      }
       if (handsOver) {
         // A connected Zoom or Meet: the call is attached too, so its own
         // transcript can be imported after it. A refusal never stops the
@@ -398,7 +413,7 @@ export default function RecordLightbox({
       }
       onStarted?.(r.session, into);
     } catch (e) {
-      recorder?.release();
+      if (handsOver) recorder?.release();
       setRefusal(startRefusal(e));
       setBusy(false);
       sending.current = false;
@@ -415,8 +430,9 @@ export default function RecordLightbox({
           <span className="text-[11.5px] text-axal-faint">Runs on Cloudflare Workers AI</span>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onClose} className="rounded-[9px] px-3 py-2 text-[12.5px] font-bold text-axal-muted hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800" data-testid="record-cancel">Cancel</button>
-            <button type="button" onClick={submit} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : 'record-start-reason')}
-              data-testid="record-start" className={ready ? 'rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep' : 'cursor-not-allowed rounded-[9px] bg-violet-300 px-3.5 py-2 text-[13px] font-bold text-white dark:bg-violet-900/60 dark:text-violet-300'}>{busy ? 'Starting…' : label}</button>
+            {botReady && <button type="button" onClick={() => submit('device')} disabled={!ready} className="rounded-[9px] border border-gray-300 px-3 py-2 text-[12.5px] font-bold text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200" data-testid="record-device">Record this device</button>}
+            <button type="button" onClick={() => submit()} aria-disabled={!ready || undefined} aria-describedby={ready ? undefined : (m.audio && !CONSENTS.some(([k]) => k === consent) ? consentNoteId : 'record-start-reason')}
+              disabled={busy} data-testid="record-start" className={ready ? 'rounded-[9px] bg-axal-violet px-3.5 py-2 text-[13px] font-bold text-white hover:bg-axal-violet-deep' : 'cursor-not-allowed rounded-[9px] bg-violet-300 px-3.5 py-2 text-[13px] font-bold text-white dark:bg-violet-900/60 dark:text-violet-300'}>{busy ? 'Starting…' : label}</button>
           </div>
         </div>
       )}>
@@ -487,6 +503,7 @@ export default function RecordLightbox({
                 : linkProblem ? <span role="alert" className="font-normal text-red-700 dark:text-red-400">{linkProblem}</span> : null}
             </label>
           )}
+          {botReady && <MeetingBotConsentNotice />}
           {mode === 'text' && provider === 'paste' && (
             <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">The conversation
               <textarea className={FIELD} rows={6} value={conversation} onChange={(e) => setConversation(e.target.value)} data-testid="record-conversation" />
@@ -589,7 +606,7 @@ export default function RecordLightbox({
         {refusal && (
           <p role="alert" className="m-0 mt-1 text-[12.5px] font-semibold text-red-700 dark:text-red-400" data-testid="record-error">
             {refusal.text}
-            {refusal.liveHref && <>{' '}<Link to={refusal.liveHref} replace className="underline" data-testid="record-error-live">Return to that recording</Link></>}
+            {refusal.sessionHref && <Link to={refusal.sessionHref} className="ml-1 underline">Open the session to check its status</Link>}{refusal.liveHref && <>{' '}<Link to={refusal.liveHref} replace className="underline" data-testid="record-error-live">Return to that recording</Link></>}
           </p>
         )}
         {assigned && <p role="status" className="m-0 mt-1 text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="record-assigned">{assigned}</p>}
