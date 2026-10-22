@@ -17,7 +17,8 @@
  *     request or a later "sign out everywhere" refuses the call;
  *   - a tool that takes a company re-checks it (`grantCompany`): in the grant,
  *     and still writable by the user;
- *   - the grant's per-minute limit is counted;
+ *   - the grant's per-minute limit is counted, then the member's across every
+ *     grant and key they hold (D849, `USER_CALLS_PER_MINUTE`);
  *   - one activity_logs line is written: tool, company, client, outcome.
  *     Never the arguments, never the result.
  *   - D843 (#2465): one `api_usage_events` row is written for every outcome,
@@ -44,7 +45,7 @@ import type { SCOPES } from './oauth';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { METERING_POLICY, MeteringRefused, listed, meteredCall, quoteFor, toolOperation, type MeteringPolicy } from '../services/metering';
 import {
-  ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, type GrantProps, type ToolOutcome,
+  ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, withinUserLimit, type GrantProps, type ToolOutcome,
 } from './grants';
 import { newExecutionId, recordUsage, type UsageErrorCategory } from '../services/apiUsage';
 import { budgetRefusalMessage } from '../services/aiRouter';
@@ -271,6 +272,12 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     if (grantId && !(await withinGrantLimit(env, grantId))) {
       await log('rate_limited', 'rate_limited');
       return errorResult('Too many calls from this connection. Wait a minute and try again.', 'rate_limited', executionId);
+    }
+    // D849: the member's own limit, across every connection and key they hold.
+    // An in-app call (no grant or API key) keeps its own turn caps.
+    if ((grantId || props.keyUid) && !(await withinUserLimit(env, user.id))) {
+      await log('rate_limited', 'rate_limited');
+      return errorResult('Too many calls from your account across its connections. Wait a minute and try again.', 'rate_limited', executionId);
     }
     stage = 'company';
     let company: ToolRun['company'] = null;

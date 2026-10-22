@@ -8,6 +8,7 @@ import { request } from '../api.js';
 //   create  POST /developer/keys               { name, scopes, companies, expires_in_days?, monthly_limit_microusd? } → { key, secret }
 //   revoke  POST /developer/keys/:uid/revoke   → { key }
 //   rotate  POST /developer/keys/:uid/rotate   → { key, secret, replaced }
+//   limits  GET  /developer/limits             D849: the per-member, per-connection and per-key limits in force
 const enc = encodeURIComponent;
 
 export const developerKeysApi = {
@@ -15,4 +16,5 @@ export const developerKeysApi = {
   create: (body) => request('/developer/keys', { method: 'POST', body: JSON.stringify(body) }),
   revoke: (uid) => request(`/developer/keys/${enc(uid)}/revoke`, { method: 'POST' }),
   rotate: (uid) => request(`/developer/keys/${enc(uid)}/rotate`, { method: 'POST' }),
+  limits: () => request('/developer/limits'),
 };
