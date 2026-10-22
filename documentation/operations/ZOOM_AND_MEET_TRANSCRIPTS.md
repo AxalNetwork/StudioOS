@@ -47,8 +47,13 @@ that turns out different is a one-line PR.
    (`cloudflare-worker/src/integrations/registry.ts`) and refuses a wider one.
 4. **Events.** Features → Access → Event subscription:
    - Event notification endpoint: `https://axal.vc/api/channels/zoom/webhook`.
-   - Events: `meeting.ended`, `recording.transcript_completed` and
-     `app_deauthorized`. No others: anything else is acknowledged and ignored.
+   - Events: `meeting.ended`, `recording.transcript_completed`,
+     `recording.completed` (D870: a call with no transcript is transcribed
+     from its audio-only recording) and `app_deauthorized`. No others:
+     anything else is acknowledged and ignored.
+   - For D870, the account's cloud recording must save an **audio-only
+     file** (Settings → Recording → Cloud recording → "Audio only"). Without
+     it, a call with no transcript has nothing to transcribe.
    - Copy the **Secret Token** for step 5. Do not press Validate yet.
 5. **Secrets.** From the repository root, once each:
 
@@ -178,6 +183,9 @@ The ones the owner is likely to see during setup:
 | `zoom_reconnect` | Zoom refused Axal's token (revoked, or the app's credentials changed). Reconnect. |
 | `zoom_no_transcript` | No cloud transcript: the plan, cloud recording or "Create audio transcript" (§1 step 9). |
 | `zoom_fetch_failed` | Zoom refused the recording list. *Unverified* (§3): whether downloading the transcript needs a scope beyond listing. |
+| `stt_consent_missing` | D870: no transcript, and the interview has no consent recorded, so the audio was not fetched. Record consent on the interview, then Retry. |
+| `stt_budget`, `stt_paused` | D870: the member's AI tokens ran out, or their AI is paused. The audio chunks are kept; Retry after a top-up transcribes only what is left. |
+| `zoom_audio_unreadable`, `zoom_audio_too_large` | D870: the audio-only file is not an AAC M4A, or is over 80 MB. |
 | `meet_transcripts_unavailable` | The member's grant lacks `meetings.space.readonly` (§2 step 5). |
 | `meet_api_disabled` | The Meet REST API is off in the Cloud project (§2 step 3). |
 | `meet_no_transcript` | Nobody turned transcription on, or the Workspace edition lacks it. |

@@ -62,6 +62,7 @@ import { CHANNEL_LIMITS } from '../src/services/channels/types.ts';
 import { registerChannelJob, runChannelJob, registerChannelSweep, runChannelSweeps } from '../src/services/channels/jobs.ts';
 import { runSessionStructureJob, structureSession, sweepQuietChats } from '../src/services/sessionAutoStructure.ts';
 import { callRefusal } from '../src/services/sessionSetup.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -112,10 +113,13 @@ function world() {
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
+    '529_meeting_transcript_source.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store and channel_threads.consent_state.
     '488_channel_consents.sql', '492_whatsapp_sender_links.sql', '504_whatsapp_link_settings.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)

@@ -31,7 +31,16 @@ export interface MeetingRef {
   id: number; uid: string; provider: MeetingProvider; external_ref: string; session_id: number;
   interview_id: number; user_id: number; join_url: string | null; starts_at: string | null; ends_at: string | null;
   status: MeetingStatus; last_error: string | null; created_at: string; updated_at: string;
+  /** D870 (migration 529): where the imported text came from; NULL until an import, and on rows from before it. */
+  transcript_source?: TranscriptSource | null;
+  /** D870: the call's language as the founder set it (ISO-639-1); NULL is auto. */
+  call_lang?: string | null;
+  /** D870: the audio run's key, minted when the call's audio is first stored as chunks. */
+  stt_reservation_uid?: string | null;
 }
+
+/** D870: the provider's own transcript, or Workers AI speech-to-text over the call's audio recording. */
+export type TranscriptSource = 'native' | 'whisper';
 
 /** How early before its slot a call may start, and how late after it. */
 export const SLOT_EARLY_MS = 30 * 60 * 1000;
@@ -86,6 +95,13 @@ export const MEETING_ERRORS = {
   zoom_cancel_unconfirmed: 'Axal stopped importing this call, but Zoom did not confirm cancellation. Cancel it in Zoom too.',
   meet_cancel_unconfirmed: 'Axal stopped importing this call, but Google did not confirm cancellation. Cancel it in Google Calendar too.',
   import_failed: 'The transcript could not be imported. Try again in a minute.',
+  // D870 (#2517): the audio path, when the provider made no transcript.
+  zoom_audio_unreadable: 'Zoom’s audio recording of this call could not be read, so it was not transcribed. You can still use the recorder or paste the conversation.',
+  zoom_audio_too_large: 'Zoom’s audio recording of this call is larger than Axal transcribes. Upload the part you need instead.',
+  stt_consent_missing: 'The interviewee’s consent to be recorded is not recorded on this interview, so Axal did not transcribe the call’s audio.',
+  stt_budget: 'You have no AI tokens left to transcribe this call’s audio. Add AI tokens or wait for your allowance, then press Retry. The audio is kept until then.',
+  stt_paused: 'Your AI is paused, so this call’s audio was not transcribed. Resume it in Account › AI, then press Retry. The audio is kept until then.',
+  stt_failed: 'The call’s audio could not be transcribed. Try again in a minute.',
 } as const;
 export type MeetingErrorCode = keyof typeof MEETING_ERRORS;
 
@@ -205,9 +221,12 @@ export async function dueRefs(
 
 /** What an adapter found when asked for a call's transcript. */
 export type TranscriptFetch =
-  | { kind: 'segments'; segments: ImportedSegment[] }
+  /** `source` and `model` (D870) say where the text came from; absent is the provider's own transcript. */
+  | { kind: 'segments'; segments: ImportedSegment[]; source?: TranscriptSource; model?: string }
   /** The provider is still making it: leave the call waiting. */
   | { kind: 'waiting' }
+  /** D870: the call's audio is part-way through transcription; the next run continues it. */
+  | { kind: 'pending' }
   /** Settled: there is none, and `code` says why. */
   | { kind: 'none'; code: MeetingErrorCode }
   | { kind: 'error'; code: MeetingErrorCode; retryable: boolean };
@@ -233,8 +252,8 @@ const unreachable = (p: MeetingProvider): MeetingErrorCode => (p === 'zoom' ? 'z
 
 const attachedUid = (ref: MeetingRef) => `meeting:${ref.uid}`;
 
-/** The recording is never a provider transcript's destination. */
-async function destinationSession(env: Env, ref: MeetingRef): Promise<{ id: number; attached: boolean }> {
+/** The recording is never a provider transcript's destination. D870 stores a call's audio chunks here too. */
+export async function destinationSession(env: Env, ref: MeetingRef): Promise<{ id: number; attached: boolean }> {
   const { session: anchor } = await writableSession(env, Number(ref.user_id), Number(ref.session_id));
   if (Number(anchor.interview_id) !== Number(ref.interview_id) || Number(anchor.created_by_user_id) !== Number(ref.user_id)) {
     throw new IntakeError(404, 'session_not_found', 'That session no longer exists.');
@@ -260,7 +279,7 @@ async function destinationSession(env: Env, ref: MeetingRef): Promise<{ id: numb
 }
 
 /** Store a provider transcript in its own session while preserving a live recording's interview transcript. */
-async function storeWithoutReplacingRecording(env: Env, ref: MeetingRef, sessionId: number, segments: ImportedSegment[], mirror = false): Promise<number> {
+async function storeWithoutReplacingRecording(env: Env, ref: MeetingRef, sessionId: number, segments: ImportedSegment[], mirror = false, model = `${ref.provider}_transcript`): Promise<number> {
   await writableSession(env, Number(ref.user_id), sessionId);
   const clean = segments.map((s) => ({
     text: String(s.text ?? '').trim(), speaker: String(s.speaker ?? '').trim().slice(0, 80) || 'Speaker ?',
@@ -273,10 +292,10 @@ async function storeWithoutReplacingRecording(env: Env, ref: MeetingRef, session
     ...clean.map((s) => env.DB.prepare(
       `INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, speaker_raw, text, model)
        VALUES (?, 'final', ?, ?, ?, NULL, ?, ?)`,
-    ).bind(sessionId, s.start, s.end, s.speaker, s.text, `${ref.provider}_transcript`)),
+    ).bind(sessionId, s.start, s.end, s.speaker, s.text, model)),
     env.DB.prepare(
       `UPDATE interview_sessions SET status = 'transcribed', final_model = ?, updated_at = datetime('now') WHERE id = ?`,
-    ).bind(`${ref.provider}_transcript`, sessionId),
+    ).bind(model, sessionId),
     ...(mirror ? [env.DB.prepare(
       `UPDATE discovery_interviews SET transcript = (
          SELECT group_concat(text, char(10)) FROM (
@@ -321,6 +340,10 @@ export async function importMeetingRef(
     await setRefStatus(env, ref.id, 'ended', null);
     return { status: 'waiting', code: null, retryable: false, segments: 0 };
   }
+  if (got.kind === 'pending') {
+    await setRefStatus(env, ref.id, 'transcript_ready', null);
+    return { status: 'waiting', code: null, retryable: false, segments: 0 };
+  }
   if (got.kind === 'none') {
     await setRefStatus(env, ref.id, 'no_transcript', got.code);
     return { status: 'no_transcript', code: got.code, retryable: false, segments: 0 };
@@ -336,8 +359,9 @@ export async function importMeetingRef(
       `SELECT 1 FROM interview_sessions s WHERE s.interview_id = ? AND s.id <> ? AND s.submitted_via IS NULL
         AND EXISTS (SELECT 1 FROM interview_transcript_segments t WHERE t.session_id = s.id AND t.source = 'final') LIMIT 1`,
     ).bind(ref.interview_id, destination.id).first());
-    const n = await storeWithoutReplacingRecording(env, ref, destination.id, got.segments, !recordedElsewhere);
+    const n = await storeWithoutReplacingRecording(env, ref, destination.id, got.segments, !recordedElsewhere, got.model);
     await setRefStatus(env, ref.id, 'imported', null);
+    await env.DB.prepare('UPDATE interview_channel_refs SET transcript_source = ? WHERE id = ?').bind(got.source ?? 'native', ref.id).run();
     // D765 (#2090), D720 §6: the transcript is in; the founder presses
     // Summarise or Structure, since no member run starts without a press.
     return { status: 'imported', code: null, retryable: false, segments: n };
@@ -368,6 +392,29 @@ export function meetingImportHandler(provider: MeetingProvider, importer: Meetin
   };
 }
 
+/** ISO-639-1 (two or three letters), optionally with a region; anything else is auto. */
+export function normalCallLang(raw: unknown): string | null {
+  const v = String(raw ?? '').trim().toLowerCase();
+  return /^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$/.test(v) ? v : null;
+}
+
+/**
+ * D870: the language a member's call is in, set by the member on their own
+ * interview's call (NULL is auto). It reaches the call's restarted instances
+ * too, so each instance's source choice and transcription read it. A settled
+ * call keeps its text: the language changes what the next import does.
+ */
+export async function setCallLanguage(env: Env, userId: number, interviewId: number, uid: string, lang: unknown): Promise<MeetingRef | null> {
+  const ref = await memberRef(env, userId, interviewId, uid);
+  if (!ref) return null;
+  const value = normalCallLang(lang);
+  await env.DB.prepare(
+    `UPDATE interview_channel_refs SET call_lang = ?, updated_at = datetime('now')
+      WHERE user_id = ? AND interview_id = ? AND provider = ? AND (id = ? OR external_ref LIKE ?)`,
+  ).bind(value, userId, interviewId, ref.provider, ref.id, `${ref.external_ref}:%`).run();
+  return loadRef(env, ref.uid);
+}
+
 /** Wire one meeting into the scheduling response: the ref with its reason, never a token or text. */
 export function meetingView(ref: MeetingRef, label: string) {
   const code = errorCodeOf(ref.last_error);
@@ -376,6 +423,7 @@ export function meetingView(ref: MeetingRef, label: string) {
   return {
     uid: ref.uid, provider: ref.provider, label, join_url: ref.join_url, starts_at: ref.starts_at, ends_at: ref.ends_at,
     status: ref.status, provider_cancelled: confirmed ? true : unconfirmed ? false : null, error: confirmed ? null : ref.last_error, error_code: confirmed ? null : code,
+    transcript_source: ref.transcript_source ?? null, call_lang: ref.call_lang ?? null,
     interview_id: Number(ref.interview_id), session_id: Number(ref.session_id),
     created_at: ref.created_at, updated_at: ref.updated_at,
   };

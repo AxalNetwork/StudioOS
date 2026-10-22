@@ -83,7 +83,7 @@ test('a valid key: initialize, tools/list and tools/call work, with an execution
   const list = await mcp(env, secret, 'tools/list');
   assert.equal(list.status, 200);
   assert.deepEqual(list.body.result.tools.map((t: any) => t.name).sort(),
-    ['assign_chat_to_interview', 'get_interview_guide', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'propose_placements', 'structure_with_studioos', 'submit_interview']);
+    ['assign_chat_to_interview', 'get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_meetings', 'propose_placements', 'structure_with_studioos', 'submit_interview', 'summarize_meeting']);
   const r = await call(env, secret, 'list_companies');
   assert.equal(r.body.result.isError, undefined, JSON.stringify(r.body));
   assert.deepEqual(json(r).companies, [{ id: P, name: 'Acme' }]);

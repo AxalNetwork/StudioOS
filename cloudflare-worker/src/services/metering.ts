@@ -20,9 +20,18 @@
  * THE COMPOSITE RULE. A tool that runs AI through `aiRouter` is charged by that
  * run's own hold, as every run is. A tool's fee is a second component under the
  * same execution id, with its own key, so neither is counted twice.
+ *
+ * A KEY'S OWN CAP (D849, #2472). A call through a member API key holds under
+ * `key:<uid>:exec:…` (`apiKeyLimits.ts`), so the key's month spend is its own
+ * holds. When the key has a monthly cap, the call is refused with
+ * `key_limit_reached` if the key's spend plus the quote would pass it: checked
+ * before the hold and again after it, counting the new hold, which is released
+ * when the re-check fails. A settled charge may then pass 80% or 100% of the
+ * cap, which notifies the member once.
  */
 import type { Env } from '../types';
 import { reserveAiBudget, settleAiReservation } from './aiBudget';
+import { KEY_LIMIT_SENTENCE, keyHoldKey, keyMonthSpend, keyMonthlyLimit, noteKeyLimitThresholds, overCap } from './apiKeyLimits';
 
 export interface MeteredOperation {
   /** Integer micro-USD per unit. */
@@ -63,6 +72,11 @@ export const METERING_POLICY: MeteringPolicy = Object.freeze({
     [toolOperation('list_channel_chats')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('get_session_insights')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('assign_chat_to_interview')]: { price_microusd: 0, unit: 'call' },
+    // D874's call tools. summarize_meeting's model run holds and settles its
+    // own AI tokens through aiRouter, so its tool fee is 0 (the composite rule).
+    [toolOperation('list_meetings')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('get_meeting_transcript')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('summarize_meeting')]: { price_microusd: 0, unit: 'call' },
   }) as Record<string, MeteredOperation>,
 });
 
@@ -137,7 +151,7 @@ export interface MeteredCallInput {
   component?: string;
   /** The server-side quote (`quoteFor`). */
   quoteMicrousd: number;
-  /** The member key the call came through, for the usage row (#2465). Not used for the hold. */
+  /** The member key the call came through: its holds are tagged with it, and its own monthly cap applies (D849). */
   apiKeyUid?: string | null;
   pricingVersion?: string;
   timeoutMs?: number;
@@ -159,6 +173,8 @@ const ID = /^[A-Za-z0-9._:-]{1,120}$/;
 export async function meteredCall<T>(env: Env, input: MeteredCallInput, run: (meter: Meter) => Promise<T>): Promise<{ value: T; usage: MeteredUsage }> {
   const component = input.component ?? input.operation;
   if (!ID.test(String(input.executionId)) || !ID.test(component)) throw new Error('Metering execution unreadable');
+  const keyUid = input.apiKeyUid ?? null;
+  if (keyUid != null && !ID.test(String(keyUid))) throw new Error('Metering key unreadable');
   if (!integer(input.quoteMicrousd)) throw new Error('Metering quote unreadable');
   const pricing_version = input.pricingVersion ?? METERING_POLICY.version;
   let reported: number | null = null;
@@ -175,8 +191,14 @@ export async function meteredCall<T>(env: Env, input: MeteredCallInput, run: (me
     return { value, usage: { reservation_uid: null, reserved_microusd: 0, charged_microusd: 0, refunded_microusd: 0, pricing_version, review: false } };
   }
 
-  const hold = await reserveAiBudget(env, input.userId, input.quoteMicrousd, input.now ?? new Date(),
-    { idempotencyKey: holdKey(input.executionId, component) });
+  const now = input.now ?? new Date();
+  const key = keyUid ? keyHoldKey(keyUid, input.executionId, component) : holdKey(input.executionId, component);
+  // D849: the key's own cap, before the hold. Its earlier hold for this same call, on a replay, is not counted twice.
+  const keyLimit = keyUid ? await keyMonthlyLimit(env, input.userId, keyUid) : null;
+  if (keyUid && keyLimit != null && overCap(await keyMonthSpend(env, input.userId, keyUid, now, key), input.quoteMicrousd, keyLimit)) {
+    throw new MeteringRefused('key_limit_reached', KEY_LIMIT_SENTENCE);
+  }
+  const hold = await reserveAiBudget(env, input.userId, input.quoteMicrousd, now, { idempotencyKey: key });
   if (!hold.ok) throw refusalFor(hold.refusal);
   // A replay of an execution that already finished never runs again: running it
   // would be free, and charging it would be twice.
@@ -184,6 +206,13 @@ export async function meteredCall<T>(env: Env, input: MeteredCallInput, run: (me
     throw new MeteringRefused('execution_closed', 'This call has already finished. Start a new one.');
   }
   const reservation = hold.reservation;
+  // D849: the re-check, counting this hold. A call racing this one past the cap
+  // is counted too, so both are refused rather than both charged.
+  if (keyUid && keyLimit != null && !('replayed' in hold && hold.replayed)
+    && (await keyMonthSpend(env, input.userId, keyUid, now)) > keyLimit) {
+    await settleAiReservation(env, reservation, 0, true);
+    throw new MeteringRefused('key_limit_reached', KEY_LIMIT_SENTENCE);
+  }
 
   let value: T;
   try {
@@ -211,6 +240,11 @@ export async function meteredCall<T>(env: Env, input: MeteredCallInput, run: (me
       return { value, usage: { reservation_uid: reservation.uid, reserved_microusd: input.quoteMicrousd, charged_microusd: null, refunded_microusd: 0, pricing_version, review: true } };
     }
     throw e;
+  }
+  // D849: a settled charge may pass 80% or 100% of the key's cap. A notice never fails the call.
+  if (keyUid && keyLimit != null && cost > 0) {
+    try { await noteKeyLimitThresholds(env, input.userId, keyUid, now); }
+    catch (notice) { console.warn('[metering] key limit notice failed', (notice as Error)?.message); }
   }
   return { value, usage: { reservation_uid: reservation.uid, reserved_microusd: input.quoteMicrousd,
     charged_microusd: cost, refunded_microusd: input.quoteMicrousd - cost, pricing_version, review: false } };

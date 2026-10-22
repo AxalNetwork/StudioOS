@@ -208,7 +208,9 @@ test('the member reads the thread by side, and an outsider is never the Axal tea
   assert.match(t, /@drive-by Outside the team .*Send me your password\./);
   assert.equal((markup.match(/>Support</g) || []).length, 1, 'one team reply, and the outsider is not drawn as the team');
   assert.match(t, /\? @drive-by Outside the team [^.]*Send me your password\./);
-  assert.match(markup, /href="https:\/\/github\.com\/AxalNetwork\/StudioOS\/issues\/321"/);
+  assert.match(markup, /<span[^>]*>#321<\/span>/, 'the tracker number remains visible as plain text');
+  assert.doesNotMatch(markup, /href="https:\/\/github\.com\//, 'ticket numbers do not open GitHub');
+  assert.doesNotMatch(t, /#321 ↗/, 'plain ticket numbers have no external-link arrow');
   assert.match(t, /Replies go to the Axal team and to the tracker\./);
   assert.doesNotMatch(markup, /id="ticket-reply"[^>]*\sdisabled=""/, 'a mirrored ticket takes replies');
   assert.match(t, /Bounty Under review The team is checking whether this is a bug\./);
@@ -217,7 +219,11 @@ test('the member reads the thread by side, and an outsider is never the Axal tea
 
 test('the admin sees who wrote it, the SLA, the controls and the mirror state', () => {
   const ticket = { ...BUG, user_id: 2, sla: { tier: 'P2', hours: 48, band: 'due_soon', clock: 'running' } };
-  const t = text(view({ ticket, isAdmin: true, user: ADMIN }));
+  const markup = view({ ticket, isAdmin: true, user: ADMIN });
+  const t = text(markup);
+  assert.match(markup, /<span[^>]*>#321<\/span>/, 'admins also see a plain tracker number');
+  assert.doesNotMatch(markup, /href="https:\/\/github\.com\//, 'admin ticket numbers do not open GitHub');
+  assert.doesNotMatch(t, /#321 ↗/);
   assert.match(t, /P2 · Due soon/);
   assert.match(t, /Member Two Member .*Still broken for me\./, 'the admin sees the member by name');
   assert.match(t, /Status Open In progress Resolved Closed/);

@@ -1,8 +1,15 @@
 /**
  * D858 (#2503) — conversation analytics for Record a Session.
- *   GET /api/validate/sessions/:id/analytics                     one session's figures
+ *   GET /api/validate/sessions/:id/analytics?channel             one session's figures
  *   GET /api/validate/conversations/analytics?project_id&from&to&kind  a venture's chats (default), calls (D873) or
- *                                                                      both, aggregates only
+ *                                                                      both, aggregates only;
+ *                                                                      `&channel` (D866) one channel's
+ *
+ * THE CHANNEL FILTER (D866, #2512). `channel` names one channel (`telegram`,
+ * `whatsapp`, `zoom`, `meet`, `upload`, `recorder`, …; `channelOf`). On a
+ * venture it reads that channel's sessions, whatever their kind, so it takes
+ * precedence over `kind`; on a session it answers 404 when the session is of
+ * another channel, as a filtered list would leave it out.
  *
  * WHO READS. A signed-in member who may read the venture's board
  * (`canReadBoard`: the venture's own founder, or HQ staff, the same audience
@@ -18,7 +25,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, type ProjectRef } from './_founder_validate_helpers';
 import {
-  sessionAnalytics, ventureAnalytics, VENTURE_KINDS, type AnalyticsSession, type VentureKind,
+  CHANNEL_NAME, channelOf, sessionAnalytics, ventureAnalytics, VENTURE_KINDS, type AnalyticsSession, type VentureKind,
 } from '../services/conversationAnalytics';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -34,23 +41,33 @@ function day(raw: string | undefined): string | null | false {
   return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === raw ? raw : false;
 }
 
-// GET /api/validate/sessions/:id/analytics
+/** D866: a `channel` filter, null when none is named, false when it names nothing a channel can be. */
+function channelParam(raw: string | undefined): string | null | false {
+  if (raw === undefined || raw === '') return null;
+  return CHANNEL_NAME.test(raw) ? raw : false;
+}
+
+// GET /api/validate/sessions/:id/analytics?channel=
 r.get('/sessions/:id/analytics', async (c) => {
   const raw = c.req.param('id');
   if (!ID.test(raw)) return c.json({ detail: 'Invalid session id' }, 400);
+  const channel = channelParam(c.req.query('channel'));
+  if (channel === false) return c.json({ detail: 'channel is a channel name, such as telegram' }, 400);
   const user = (await requireAuth(c)) as User;
   const row = await c.env.DB.prepare(
     `SELECT s.id, s.interview_id, s.project_id, s.channel, s.submitted_via, s.consent_status, s.active_ms, s.language,
-            s.created_at, s.created_by_user_id, s.final_model, p.founder_id
+            s.created_at, s.created_by_user_id, s.final_model,
+            (SELECT t.provider FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1) AS thread_provider, p.founder_id
        FROM interview_sessions s JOIN projects p ON p.id = s.project_id WHERE s.id = ?`,
   ).bind(Number(raw)).first<AnalyticsSession & { founder_id: number | null }>();
   const project: ProjectRef | null = row ? { id: row.project_id, founder_id: row.founder_id } : null;
   if (!row || !project || !canReadBoard(project, user)) return c.json({ detail: 'Session not found' }, 404);
+  if (channel && channelOf(row) !== channel) return c.json({ detail: 'Session not found' }, 404);
   const { founder_id: _founder, ...session } = row;
   return c.json({ ok: true, ...(await sessionAnalytics(c.env, session)) });
 });
 
-// GET /api/validate/conversations/analytics?project_id=&from=YYYY-MM-DD&to=YYYY-MM-DD&kind=chats|calls|all
+// GET /api/validate/conversations/analytics?project_id=&from=YYYY-MM-DD&to=YYYY-MM-DD&kind=chats|calls|all&channel=
 r.get('/conversations/analytics', async (c) => {
   const raw = c.req.query('project_id') ?? '';
   if (!ID.test(raw)) return c.json({ detail: 'project_id is required' }, 400);
@@ -60,11 +77,13 @@ r.get('/conversations/analytics', async (c) => {
   if (from && to && from > to) return c.json({ detail: 'from is after to' }, 400);
   const kind = (c.req.query('kind') ?? 'chats') as VentureKind;
   if (!VENTURE_KINDS.includes(kind)) return c.json({ detail: 'kind is chats, calls or all' }, 400);
+  const channel = channelParam(c.req.query('channel'));
+  if (channel === false) return c.json({ detail: 'channel is a channel name, such as telegram' }, 400);
   const user = (await requireAuth(c)) as User;
   const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
     .bind(Number(raw)).first<ProjectRef>();
   if (!project || !canReadBoard(project, user)) return c.json({ detail: 'Project not found' }, 404);
-  return c.json({ ok: true, ...(await ventureAnalytics(c.env, project.id, { from, to, kind })) });
+  return c.json({ ok: true, ...(await ventureAnalytics(c.env, project.id, { from, to, kind, channel })) });
 });
 
 export default r;

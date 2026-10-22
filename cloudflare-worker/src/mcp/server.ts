@@ -43,6 +43,7 @@ import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validatio
 import type { Env, User } from '../types';
 import type { SCOPES } from './oauth';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
+import { noteKeyFailures } from '../services/apiKeyLimits';
 import { METERING_POLICY, MeteringRefused, listed, meteredCall, quoteFor, toolOperation, type MeteringPolicy } from '../services/metering';
 import {
   ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, withinUserLimit, type GrantProps, type ToolOutcome,
@@ -259,6 +260,11 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
       errorCategory, durationMs: Date.now() - started, apiKeyUid, grantId, client: props.clientName ?? null, companyId,
     });
     if (user) await logToolCall(env, user, { tool: tool.name, company: companyId, client: props.clientName, outcome, keyUid: apiKeyUid });
+    // D849: a failing key may be failing for many calls; the member hears once an hour.
+    if (apiKeyUid && user && (outcome === 'error' || outcome === 'timeout')) {
+      try { await noteKeyFailures(env, user.id, apiKeyUid); }
+      catch (notice) { console.warn('[mcp] key failure notice failed', (notice as Error)?.message); }
+    }
   };
   try {
     user = await grantUser(env, props);
@@ -412,3 +418,7 @@ registerMcpTools([...BUILD_TOOLS, ...CONNECTION_TOOLS]);
 // D864: the member's customer chats, from Axal's own inbox records.
 import { CHANNEL_TOOLS } from './tools/channels';
 registerMcpTools(CHANNEL_TOOLS);
+
+// D874: the member's recorded calls, from Axal's own meeting records.
+import { MEETING_TOOLS } from './tools/meetings';
+registerMcpTools(MEETING_TOOLS);
