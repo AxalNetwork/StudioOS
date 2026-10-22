@@ -18,6 +18,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import integrations from '../src/routes/integrations.ts';
+import { CONNECTOR_PAGES } from '../src/integrations/connectorPages.ts';
 import crunchbase from '../src/routes/crunchbase.ts';
 import { CATALOG } from '../src/services/onboardingChecklist.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
@@ -48,7 +49,7 @@ const JWT_SECRET = 'y'.repeat(64); // synthetic fixture key
 const KEK = 'fixture-cipher-key-'.repeat(4); // synthetic fixture key
 const ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'operator', 'service_provider', 'exploring'];
 const ALLOWED = ROLES.filter((r) => r !== 'exploring');
-const SIGN_IN = ['oauth', 'oauth_or_key', 'key', 'first_party', 'entity'];
+const SIGN_IN = ['oauth', 'oauth_or_key', 'key', 'first_party']; // D879: no 'entity' page
 const PAGE_FIELDS = ['tagline', 'made_by', 'service', 'sign_in', 'added', 'verified', 'verified_on', 'read_only', 'page_key', 'page_href'];
 const BODY_FIELDS = ['long_description', 'tools', 'prompts', 'links', 'endpoints', 'trust', 'calls'];
 const PRIVATE = ['calls', 'already_connected', 'connection', 'uid', 'api_key_preview', 'credentials', 'entity_roles', 'personal_roles', 'personal_hq_only_roles', 'oauth_scopes', 'unreadable_sources'];
@@ -216,7 +217,7 @@ test('the page read is the catalogue entry, without the connection, plus the bod
 });
 
 // 7 ───────────────────────────────────────────────────────────────────────────
-test('Mercury\'s page follows its audience; the entity variant reads no entity store', async () => {
+test('Mercury\'s page follows its audience; the admin\'s preview (D879) reads no Mercury store', async () => {
   // Mutations checked: dropping the audienceOf check; calling pageDescriptor without the viewer.
   const db = fixture();
   const mercury = getDescriptor('mercury');
@@ -231,7 +232,9 @@ test('Mercury\'s page follows its audience; the entity variant reads no entity s
   assert.equal((await call(db, 'investor', '/directory/mercury', { branch: true })).status, 200);
   const sql: string[] = [];
   const admin = (await call(db, 'admin', '/directory/mercury', { sql })).body.connector;
-  assert.deepEqual([admin.connection_source, admin.has_implementation, admin.sign_in.kind], ['mercury_entity_connections', false, 'entity']);
+  // D879 (#2552): the admin previews the founder's page and connects nothing; no entity page exists.
+  assert.deepEqual([admin.connection_source, admin.has_implementation, admin.sign_in.kind, admin.preview], ['integrations', false, 'oauth_or_key', true]);
+  assert.equal(admin.tagline, CONNECTOR_PAGES.mercury.personal.founder.tagline);
   for (const k of ['connections', 'entities', 'accounts']) assert.ok(!keysDeep(admin).includes(k), k);
   assert.ok(!sql.some((s) => /mercury_|activity_logs/.test(s)), sql.join('\n'));
   assert.equal((await call(db, 'admin', '/directory/mercury', { branch: true })).status, 404);

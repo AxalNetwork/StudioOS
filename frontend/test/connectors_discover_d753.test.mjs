@@ -181,7 +181,7 @@ test('8. types: verified needs a real date, new counts 90 days from the month\'s
   assert.ok(!keys(filterCatalogue(D651, { type: 'available', now: NOW })).includes('carta'), 'a locked row is not available now');
 });
 
-test('9. no Claude-only row, in the facets, the menu or the phone sheet; Community is a section only', () => {
+test('9. no Claude-only row, in the facets, the menu or the phone sheet; Community is absent', () => {
   const f = facetsFor(CAT);
   const labels = [...whereRows(f), ...f.types].map((r) => r.label).join(' | ');
   const menu = routed(h(ConnectorFilterMenu, { facets: f, value: NO_FILTER, onChange() {}, initialOpen: true }));

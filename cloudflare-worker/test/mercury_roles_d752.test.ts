@@ -34,7 +34,7 @@ const mercury = getDescriptor('mercury')!;
 
 // role → [on HQ, on a branch]
 const AUDIENCE: Record<string, [string, string]> = {
-  admin: ['entity', 'none'],
+  admin: ['preview', 'none'], // D879 (#2552): the founder's page, read-only; D710's entity row is gone
   founder: ['personal', 'personal'],
   partner: ['personal', 'personal'],
   investor: ['personal', 'personal'],
@@ -95,7 +95,7 @@ test('publicDescriptor serves the investor\'s variant on HQ and never the audien
   assert.deepEqual(own.permissions, PERSONAL_MERCURY.investor.permissions);
   assert.deepEqual(own.feeds, ['deals_pipeline', 'deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
   assert.equal(own.has_implementation, true);
-  for (const field of ['entity_roles', 'personal_roles', 'personal_hq_only_roles']) assert.ok(!(field in own), field);
+  for (const field of ['preview_roles', 'personal_roles', 'personal_hq_only_roles']) assert.ok(!(field in own), field);
   const founder = publicDescriptor(mercury, { role: 'founder', hq: false }) as any;
   assert.equal(founder.description, FOUNDER_DESCRIPTION);
   assert.deepEqual(founder.feeds, mercuryFedModules('founder'));

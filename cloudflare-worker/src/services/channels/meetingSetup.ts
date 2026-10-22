@@ -219,15 +219,19 @@ export async function upcomingCalls(env: Env, userId: number, now = Date.now()):
   if (!found.length) return { connected: true, calls: [] };
 
   // A call already held for an interview (any member, any state: one row per call) is not offered again.
+  // A Meet call is held under its code when a link was pasted for a recording (D685), and under its
+  // Calendar event id when it was scheduled from Axal (D684) or attached from the Calendar (D871).
+  const keysOf = (f: typeof found[number]) => [`${f.provider}:${f.externalRef}`,
+    ...(f.provider === 'google_meet' && f.item.id ? [`google_meet:${f.item.id}`] : [])];
   const held = new Set(((await env.DB.prepare(
     `SELECT provider, external_ref FROM interview_channel_refs
       WHERE provider || ':' || external_ref IN (SELECT value FROM json_each(?))`,
-  ).bind(JSON.stringify(found.map((f) => `${f.provider}:${f.externalRef}`))).all<{ provider: string; external_ref: string }>()).results ?? [])
+  ).bind(JSON.stringify(found.flatMap(keysOf))).all<{ provider: string; external_ref: string }>()).results ?? [])
     .map((r) => `${r.provider}:${r.external_ref}`));
 
   const calls: UpcomingCall[] = [];
   for (const f of found) {
-    if (held.has(`${f.provider}:${f.externalRef}`)) continue;
+    if (keysOf(f).some((k) => held.has(k))) continue;
     const blocked = f.provider === 'google_meet'
       ? (f.item.organizer?.self === true ? null : 'meet_not_organizer')
       : !zoomUp ? 'zoom_not_set_up' : zoomOn ? null : 'zoom_not_connected';

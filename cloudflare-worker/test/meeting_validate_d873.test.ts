@@ -337,8 +337,9 @@ test("2. a three-speaker call: the founder and the interviewee by name, anyone e
   const meet = await meetCall(f, t);
   const m = (await analytics(f, meet)).body;
   assert.deepEqual(m.speakers.value.map((s: any) => [s.speaker, s.side]), [
-    ['Sam Founder', 'founder'], ['dana ruiz', 'customer'], ['Speaker ?', 'unattributed'],
-  ], 'a participant Meet does not name stays "Speaker ?", not the interviewee');
+    // D871 (#2518) numbers a participant Meet does not name; the side is unchanged.
+    ['Sam Founder', 'founder'], ['dana ruiz', 'customer'], ['Speaker 1', 'unattributed'],
+  ], 'a participant Meet does not name is numbered, unattributed, never the interviewee');
 
   // The suggestion's evidence names who said it: a colleague's line stays the colleague's.
   f.quoteOn(COLLEAGUE_LINE);
