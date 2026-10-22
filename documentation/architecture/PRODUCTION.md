@@ -215,7 +215,7 @@ A grant older than a raised session floor is also refused on every tool call (`g
       - A **General app, User-managed**, so each founder connects their own Zoom with no Zoom admin.
       - Redirect `https://app.axal.vc/api/integrations/oauth/zoom/callback` (`OAUTH_CALLBACK_BASE_URL` + `/api/integrations/oauth/zoom/callback`).
       - Event endpoint `https://axal.vc/api/channels/zoom/webhook`, for three events: `meeting.ended`, `recording.transcript_completed` and `app_deauthorized`. Zoom's validation challenge is answered only when signed with `ZOOM_WEBHOOK_SECRET_TOKEN`, so put the three secrets before pressing Validate.
-      - Scopes, the registry's eight: `meeting:write:meeting`, `meeting:delete:meeting`, `cloud_recording:read:list_recording_files`, `meeting:read:meeting`, `meeting:read:list_past_instances`, `user:read:user`, plus `cloud_recording:read:recording` and `zoomapp:inmeeting`. Zoom grants the last two whatever the Scopes page says (2026-10-22), and Axal calls no endpoint under either. The callback refuses a wider grant (403 `scope_overreach`).
+      - Scopes, the registry's nine: `meeting:write:meeting`, `meeting:delete:meeting`, `cloud_recording:read:list_recording_files`, `meeting:read:meeting`, `meeting:read:list_past_instances`, `user:read:user`, plus `cloud_recording:read:recording` and `zoomapp:inmeeting`, plus `user:read:token` (D886, #2582: the notetaker's OBF join token). Zoom grants `cloud_recording:read:recording` and `zoomapp:inmeeting` whatever the Scopes page says (2026-10-22), and Axal calls no endpoint under either. Add `user:read:token` to the app only after the registry lists it. The callback refuses a wider grant (403 `scope_overreach`).
       - **Distribution is the gate.** Until Zoom approves sharing, only users in Axal's own Zoom account can authorize the app. `ZOOM_APP_AUDIENCE` is a wrangler **var**, not a secret, in both `[vars]` and `[env.production.vars]`: `"own_account"` (shipped; also absent or unknown), `"beta"` once Zoom approves Beta Test sharing (up to 100 users), `"public"` once the app is on the Zoom Marketplace. It sets only what the Zoom page says; Zoom itself refuses accounts the app is not shared with.
       - **What a founder needs** for a transcript: a Zoom Pro plan or higher, cloud recording on, and "Create audio transcript" turned on before the call. There is no audio fallback (D757 §2.14).
     - **GitHub App.** Callback `https://app.axal.vc/api/integrations/oauth/github/callback`. Repository permissions Contents, Issues, Metadata and Pull requests, each Read-only, and nothing else: the callback refuses a wider grant. Webhook inactive. Installable on any account. Setup URL `https://app.axal.vc/account/connectors/github` with Redirect on update; OAuth during installation off; Expire user authorization tokens ticked. No private key is needed. The full steps are in [GITHUB_CONNECTOR_APP.md](../operations/GITHUB_CONNECTOR_APP.md).
@@ -283,3 +283,29 @@ git push
 
 Rollback reverts the worker (and with it the SPA), not D1 — see
 [DEPLOY.md §3](../operations/DEPLOY.md#3-capture-a-rollback-point-first).
+
+## Meeting bot deployment prerequisites (#2586, D886 B8 — partial)
+
+The standalone image workflow is a pipeline skeleton, not a deployed bot.
+It validates commit-scoped image names and builds before registry login.
+PRs build a labelled scratch fixture and, once B2 supplies it, the real
+runtime image. Publication requires an owner-triggered main workflow run;
+it uses the built-in `GITHUB_TOKEN`, scoped to package writes for that job.
+No registry password, PAT or VM credential is introduced by this partial.
+Use the published image digest, rather than a mutable SHA tag, for eventual
+runtime configuration and rollback. Images contain code only: never bake
+meeting links, passcodes, run tokens, participant names or transcripts into
+a build context or a log. B2 must review its ignore file and copy allowlist.
+
+`MEETING_BOT_SECRET` is the callback HMAC secret reserved by #2579/#2586.
+Provision it through the existing Worker/runtime secret mechanisms only
+after B1's signing contract and B0's host are settled. It must never be an
+image build argument, label or logged value. No value is recorded here.
+Any host/registry pull credentials will be named only after the host is chosen.
+
+Remaining release gates: B0 host/instance/cost decision and its D886 file;
+B2 runtime Dockerfile and tests; B1 BotRuntime/callback contract; start,
+stop and heartbeat against a stub; host-specific health checks; binding
+parity in production and preview; and a failed image build stopping both
+`npm run deploy` and the Worker deploy workflow **before migrations**.
+Until then the existing Worker deploy path and meeting-bot flags stay as-is.

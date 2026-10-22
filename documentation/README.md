@@ -35,6 +35,8 @@ nothing here is served.
 | What will bite me? | [architecture/GOTCHAS.md](architecture/GOTCHAS.md) |
 | How do I deploy to production? | [operations/DEPLOY.md](operations/DEPLOY.md) |
 
+The visible meeting bot’s owner steps and rollout checks are in [`MEETING_BOT.md`](operations/MEETING_BOT.md) (D886, #2587).
+
 ## Every folder also explains itself
 
 Beyond this tree, each significant source folder carries its own `README.md`

@@ -71,6 +71,10 @@ export const MEETING_ERRORS = {
   zoom_not_connected: 'Zoom is not connected to your Axal account. Connect it in Account › Connectors, then retry.',
   zoom_reconnect: 'Zoom no longer accepts Axal’s access. Reconnect Zoom in Account › Connectors, then retry.',
   zoom_unreachable: 'Zoom did not answer. Try again in a minute.',
+  // D886 (#2582): the notetaker's Zoom join token.
+  zoom_waiting_for_host: 'Join the call first; the notetaker follows.',
+  zoom_obf_scope_missing: 'Reconnect Zoom in Account › Connectors so the notetaker may join your calls, then retry.',
+  zoom_meeting_invalid: 'That is not a Zoom meeting id.',
   zoom_create_failed: 'Zoom could not create the call. Try again in a minute.',
   zoom_fetch_failed: 'Zoom refused the request for this call’s transcript. Try again later.',
   zoom_no_transcript: 'Zoom has no transcript for this call. Transcripts need a paid Zoom plan with cloud recording and “Audio transcript” turned on, and the call recorded to the cloud. You can still use the recorder or paste the conversation.',

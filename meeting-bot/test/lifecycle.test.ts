@@ -31,6 +31,7 @@ test('1. a whole call: lobby, notice before listening, ~30 s chunks, roster and 
   adapter.arrive('p1', 'Founder');
   await clock.advance(1000);
   assert.equal(adapter.joinedAs, BOT_NAME);
+  assert.equal(BOT_NAME, 'Eadwyn AI', 'the owner\'s choice, from B9\'s notice.mjs');
   assert.deepEqual(cb.statuses.map((s) => s.state), ['joining', 'waiting_room']);
   assert.deepEqual(adapter.chat, [], 'nothing is posted from the waiting room');
   assert.ok(!adapter.calls.includes('audio'), 'nothing is heard from the waiting room');
