@@ -38,7 +38,8 @@ export interface PagePrompt {
   proposes: 'project_id' | 'deal_id' | null;
 }
 
-export type SignInKind = 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'entity' | 'channel';
+/** `mcp` (D847): "Sign in with <Provider>" through its MCP server; no page uses it until a provider issue adds one. */
+export type SignInKind = 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'entity' | 'channel' | 'mcp';
 
 export interface ConnectorPage {
   /** At most 120 characters. */

@@ -13,9 +13,22 @@
  * is always drawn beside it and larger than it.
  */
 
-/** Labels only for the scopes this authorization requested. */
-export const ASSISTANT_SCOPES = { 'validate:read': 'Read your Validate context', 'validate:write': 'Submit interviews for your review' };
-export const scopesOf = (request) => [...new Set(request?.scopes || [])].map((s) => ASSISTANT_SCOPES[s]).filter(Boolean);
+/**
+ * Labels only for the scopes this authorization requested. The Worker sends
+ * its own wording (`scope_labels`, D846); these are the fallback. A scope with
+ * no wording is shown by its name, never dropped, so nothing is approved unseen.
+ */
+export const ASSISTANT_SCOPES = {
+  'validate:read': 'Read your Validate context',
+  'validate:write': 'Submit interviews for your review',
+  'build:read': 'Read your Build progress, from the records your connected tools fed',
+  'raise:read': 'Read your Raise context',
+  'connectors:read': 'See which tools you have connected, their status and last sync. Never their tokens.',
+};
+export const scopesOf = (request) => {
+  const sent = new Map((Array.isArray(request?.scope_labels) ? request.scope_labels : []).map((l) => [l?.scope, l?.label]));
+  return [...new Set(request?.scopes || [])].map((s) => sent.get(s) || ASSISTANT_SCOPES[s] || String(s)).filter(Boolean);
+};
 export const ASSISTANT_LIMITS = 'It cannot change a module, delete anything, or see other companies.';
 
 /**

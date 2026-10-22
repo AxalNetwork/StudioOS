@@ -50,6 +50,8 @@ export const toolOperation = (name: string) => `mcp.tool.${name}`;
 export const METERING_POLICY: MeteringPolicy = Object.freeze({
   version: 'd844-1',
   operations: Object.freeze({
+    [toolOperation('get_build_progress')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('list_connections')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('list_companies')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('get_validate_context')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('get_interview_guide')]: { price_microusd: 0, unit: 'call' },

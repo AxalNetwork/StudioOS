@@ -29,6 +29,7 @@ export * from './api/creditRules.js';
 export * from './api/cycleValidate.js';
 export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
+export * from './api/developerKeys.js';
 export * from './api/eadwyn.js';
 export * from './api/fundAdmin.js';
 export * from './api/fundBooklets.js';

@@ -224,7 +224,7 @@ test('callTool: a free tool holds nothing; a priced tool runs through meteredCal
   try {
     for (const col of ['founder_id INTEGER', 'spinout_lab_active INTEGER', 'jwt_min_iat INTEGER', 'deletion_requested_at TEXT']) f.db.exec(`ALTER TABLE users ADD COLUMN ${col}`);
     const props = { userId: 2, companies: [], clientId: 'c', clientName: 'Claude', redirectHost: null, redirectUri: null, grantedAt: Math.floor(Date.now() / 1000) };
-    const tool = (name: string) => ({ name, requiredScope: 'validate:read' as const, title: name, description: name, inputSchema: {}, company: false, run: async () => ({ ran: name }) });
+    const tool = (name: string) => ({ name, requiredScope: 'validate:read' as const, source: 'axal' as const, version: '1.0.0', title: name, description: name, inputSchema: {}, company: false, run: async () => ({ ran: name }) });
     const priced = { version: 'test-1', operations: { [toolOperation('paid_tool')]: { price_microusd: 300_000, unit: 'call' as const }, [toolOperation('free_tool')]: { price_microusd: 0, unit: 'call' as const } } };
     const json = (r: any) => JSON.parse(r.content[0].text);
     const free = await callTool(f.env, props, null, tool('free_tool'), {}, ['validate:read'], priced);
@@ -244,5 +244,49 @@ test('callTool: a free tool holds nothing; a priced tool runs through meteredCal
     const before = holds(f.db).length;
     await callTool(f.env, props, null, tool('list_companies'), {}, ['validate:read']);
     assert.equal(holds(f.db).length, before);
+  } finally { f.db.close(); }
+});
+
+test('D844 + D846: access is checked before a paid hold, and the checked connection reaches the metered handler', async () => {
+  const f = fixture(800_000);
+  try {
+    for (const col of ['founder_id INTEGER', 'spinout_lab_active INTEGER', 'jwt_min_iat INTEGER', 'deletion_requested_at TEXT']) f.db.exec(`ALTER TABLE users ADD COLUMN ${col}`);
+    f.db.exec(`
+      ALTER TABLE activity_logs ADD COLUMN project_id INTEGER;
+      UPDATE users SET founder_id = 42, subscription_tier = 'studio', subscription_status = 'active' WHERE id = 2;
+      CREATE TABLE projects(id INTEGER PRIMARY KEY, name TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT);
+      CREATE TABLE integrations(id INTEGER PRIMARY KEY, user_id INTEGER, provider_key TEXT, status TEXT);
+      CREATE TABLE integration_companies(integration_id INTEGER, company_id INTEGER, enabled INTEGER);
+      CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
+      INSERT INTO projects VALUES(1, 'Synthetic venture', 42, 100, NULL);
+      INSERT INTO user_company_links VALUES(2, 100);
+      INSERT INTO integrations VALUES(1, 2, 'github', 'active');
+      INSERT INTO integration_companies VALUES(1, 100, 1);
+    `);
+    const props = { userId: 2, companies: [1], clientId: 'test', clientName: 'Synthetic client', redirectHost: null, redirectUri: null, grantedAt: Math.floor(Date.now() / 1000) };
+    const tool = {
+      name: 'priced_connection', requiredScope: 'build:read' as const, source: 'connector' as const, version: '1.0.0',
+      provider: 'github', entitlement: 'studio' as const, requiresConnection: true, company: true,
+      title: 'Synthetic connector', description: 'Test connector', inputSchema: {},
+      run: async ({ connected }: any) => ({ connected }),
+    };
+    const policy = { version: 'test-merge', operations: { [toolOperation(tool.name)]: { price_microusd: 100_000, unit: 'call' as const } } };
+    const json = (r: any) => JSON.parse(r.content[0].text);
+    const refused = async (scope: string[]) => {
+      const result = await callTool(f.env, props, null, tool, { company: 1 }, scope, policy);
+      assert.equal(result.isError, true, 'access denied before running');
+      assert.equal(holds(f.db).length, 0, 'a refused call takes no hold');
+    };
+    await refused([]); // no scope; plan and connection otherwise allow the call
+    f.db.exec("UPDATE users SET subscription_tier = 'free' WHERE id = 2");
+    await refused(['build:read']); // no plan; connection otherwise allows the call
+    f.db.exec("UPDATE users SET subscription_tier = 'studio', subscription_status = 'active' WHERE id = 2");
+    f.db.exec('UPDATE integration_companies SET enabled = 0');
+    await refused(['build:read']); // connection switched off
+    f.db.exec('UPDATE integration_companies SET enabled = 1');
+    const result = await callTool(f.env, props, null, tool, { company: 1 }, ['build:read'], policy);
+    assert.deepEqual(json(result), { connected: [1] }, 'only checked company ids reach the metered handler');
+    assert.deepEqual(holds(f.db).map((h: any) => [h.status, h.charged]), [['settled', 100_000]], 'allowed call charges once');
+    assert.deepEqual(result._meta, { 'vc.axal/version': '1.0.0', 'vc.axal/source': 'connector' });
   } finally { f.db.close(); }
 });

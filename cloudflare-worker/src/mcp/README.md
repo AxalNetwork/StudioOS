@@ -10,12 +10,12 @@ missing, every path answers 404.
 | File | What it holds |
 | --- | --- |
 | `oauth.ts` | The OAuth provider (`@cloudflare/workers-oauth-provider`): the paths, the flag, the authorize endpoint that parks a request for the SPA's consent page, and `routeMcp`, which `../index.ts`'s `fetch` calls first |
-| `server.ts` | The MCP server on the SDK's web-standard Streamable HTTP transport, stateless; the tool registry; `callTool`, which checks the grant, the company and the rate limit and logs every call, and runs a tool `services/metering.ts` prices above 0 inside `meteredCall` (D844) |
+| `server.ts` | The MCP server on the SDK's web-standard Streamable HTTP transport, stateless; the tool registry, listed per member by scope, plan and connection (D846); `callTool` checks the grant, company, plan, connection and rate limit before metering a priced tool through `services/metering.ts` (D844), and logs every call |
 | `grants.ts` | What a grant may reach, re-checked on every call; the companies a person may grant; the per-grant limit; revoking every grant a user holds |
 
 | Folder | What it holds |
 | --- | --- |
-| `tools/` | The tools, one file per group. `context.ts` holds the reads and `interviews.ts` the three interview tools |
+| `tools/` | The tools, one file per group. `context.ts` holds the reads, `interviews.ts` the three interview tools, and `build.ts` and `connections.ts` D846's connector-backed reads |
 
 ## Rules
 
