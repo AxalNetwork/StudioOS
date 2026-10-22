@@ -141,6 +141,29 @@ const scenarios = {
     assert.equal(await session.stop(), false);
     assert.deepEqual(calls, ['send', 'stop']);
   },
+  async 'different pending actions cannot report each other as successful'(m) {
+    const sending = deferred(), stopping = deferred();
+    const calls = [];
+    const session = m.createBotSession({ now: () => at,
+      sendBot: () => { calls.push('send'); return sending.promise; },
+      stopBot: () => { calls.push('stop'); return stopping.promise; },
+    });
+    const send = session.send(options);
+    assert.equal(session.send(options), send);
+    const earlyStop = session.stop();
+    await Promise.resolve();
+    assert.deepEqual(calls, ['send']);
+    sending.resolve(answer('joining'));
+    assert.equal(await send, true);
+    assert.equal(await earlyStop, false);
+    const stop = session.stop();
+    const earlySend = session.send(options);
+    await Promise.resolve();
+    assert.deepEqual(calls, ['send', 'stop']);
+    stopping.resolve(answer('stopped'));
+    assert.equal(await stop, true);
+    assert.equal(await earlySend, false);
+  },
   async 'refusals do not retry or start a device recorder; read errors disable Stop'(m) {
     let writes = 0;
     const session = m.createBotSession({ getBot: async () => { throw Error('private'); },
@@ -237,7 +260,8 @@ const mutations = [
   ['at - now > 7 * 86400000', 'at - now >= 7 * 86400000'],
   ['if (disposed || pending) return false', 'if (disposed) return false'],
   ['ticket !== revision', 'false'],
-  ['if (pending) return pending', 'if (false) return pending'],
+  ["snapshot.busy === 'send'", 'true'],
+  ["snapshot.busy === 'stop'", 'true'],
   ['if (!read?.bot ||', 'if (false ||'],
   ['disposed ? undefined : invoke()', 'invoke()'],
   ['stopBot()', 'getBot()'],

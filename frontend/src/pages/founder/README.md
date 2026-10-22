@@ -52,7 +52,11 @@ It selects Send Eadwyn AI / Record this device for candidate Zoom, Meet and
 Teams links, prepares an immediate or next-seven-days dispatch only after
 saved consent, and makes explicit scheduled-call opt-out produce no dispatch.
 It projects B1's eight statuses, a recording timer from epoch milliseconds,
-and an optional participant count. Missing data says Not recorded; failed or
+and an optional participant count. The timer compares server `started_at` to
+the caller's clock: client clock skew can inflate it or leave it absent until
+that clock catches up. It is an approximate display, never the billing or time
+limit authority. B1 must supply server elapsed time or a server clock anchor
+before a synchronized timer is claimed. Missing data says Not recorded; failed or
 malformed reads say Unreadable. Missing count/time never becomes zero. Failure
 and refusal sentences use allowlisted codes rather than echoing private
 provider messages. No price is calculated here.
@@ -67,6 +71,10 @@ while `botView().poll` is true, ticking the recording timer locally and calling
 `dispose()` on unmount/session change. Writes share duplicate presses and
 invalidate older reads. A failed read disables Stop until a successful refresh.
 Stop affects queued/joining/waiting/recording; processing continues to be polled.
+Only duplicate presses of the same action share a promise. A different action
+while busy returns false and sends nothing; it never reports the other write's
+success. The screen must retain busy state and allow Stop once Send settles.
+No Stop request is silently queued or retried.
 
 Remaining integration is explicit: the approved bot extension to the existing
 Record a Session / Recording View / Interview Session canvases; B1's actual

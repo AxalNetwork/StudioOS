@@ -74,7 +74,11 @@ export function botDispatchPlan({ meetingUrl, consentGiven, scheduledAt = null, 
   return { body, error: null };
 }
 
-/** Missing/failed reads never become a successful run or a zero count. */
+/**
+ * Missing/failed reads never become a successful run or a zero count. Timer
+ * is approximate: it mixes server started_at with the caller's clock. Clock
+ * skew can delay/inflate it; this is never billing or time-limit authority.
+ */
 export function botView(read, { unreadable = false, now = Date.now() } = {}) {
   const empty = (state, label) => ({ state, label, canStop: false, poll: false, timer: null, participantCount: null, failure: null });
   if (unreadable) return empty('unreadable', 'Unreadable');
@@ -117,7 +121,7 @@ export function createBotSession({ getBot, sendBot, stopBot, changed = () => {},
   };
   const run = (kind, invoke) => {
     if (disposed) return Promise.resolve(false);
-    if (pending) return pending;
+    if (pending) return snapshot.busy === kind ? pending : Promise.resolve(false);
     const ticket = ++revision;
     update({ busy: kind, error: null });
     // Defer the adapter so pending is installed even if it throws synchronously.
@@ -159,7 +163,7 @@ export function createBotSession({ getBot, sendBot, stopBot, changed = () => {},
     },
     send(options) {
       if (disposed) return Promise.resolve(false);
-      if (pending) return pending;
+      if (pending) return snapshot.busy === 'send' ? pending : Promise.resolve(false);
       const plan = botDispatchPlan(options, now());
       if (plan.error) { update({ error: plan.error }); return Promise.resolve(false); }
       if (!plan.body) return Promise.resolve(false);
@@ -167,7 +171,7 @@ export function createBotSession({ getBot, sendBot, stopBot, changed = () => {},
     },
     stop() {
       if (disposed) return Promise.resolve(false);
-      if (pending) return pending;
+      if (pending) return snapshot.busy === 'stop' ? pending : Promise.resolve(false);
       if (!botView(snapshot.read, { unreadable: snapshot.unreadable }).canStop) return Promise.resolve(false);
       return run('stop', () => stopBot());
     },
