@@ -29,7 +29,7 @@ import { formatCost, formatSpend, runCost, batchCost } from './assistCost';
  * to say "there is no `eadwyn` AI Gateway yet (Phase 4)". That was false, and
  * false in the way a name makes easy: nothing in the tree is called `eadwyn`,
  * so the gateway looked absent. `cloudflare-worker/src/services/aiRouter.ts` is
- * it — thirty-one task classes (its `TaskClass` union) across Workers AI models, a fallback chain, a
+ * it — thirty-three task classes (its `TaskClass` union) across Workers AI models, a fallback chain, a
  * llama-guard safety pass, content-hash caching, per-user $/day and $/month KV
  * caps, an org kill switch, and a row in `ai_usage_logs` for every call.
  *
