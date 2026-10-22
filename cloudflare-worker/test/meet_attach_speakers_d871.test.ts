@@ -35,6 +35,7 @@ import { MEETING_ERRORS, importMeetingRef, loadRef } from '../src/services/chann
 import { fetchTranscript, participantLabel, sweepMeet } from '../src/services/channels/googleMeet.ts';
 import { upcomingCalls } from '../src/services/channels/meetingSetup.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const GOOGLE_SUB = '10987654321';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -82,7 +83,8 @@ function world() {
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
-    '488_channel_consents.sql']) db.exec(migration(name));
+    '488_channel_consents.sql', '529_meeting_transcript_source.sql']) db.exec(migration(name));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   const jobs: unknown[] = [];
