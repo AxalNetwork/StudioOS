@@ -3,36 +3,19 @@
  * These checks certify code behaviour, not Meta approval, W1/W2 integration,
  * live credentials or an operator's authorization to enable the channel.
  */
-import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import * as whatsapp from '../src/services/channels/whatsapp.ts';
 import * as threads from '../src/services/channels/threads.ts';
 import * as events from '../src/services/channels/events.ts';
 import * as connections from '../src/services/channels/connections.ts';
 import { decryptColumn } from '../src/services/columnCipher.ts';
-import {
-  world, ME, INTERVIEW, sign, mockFetch, noSecretsSeen, seen,
-} from './_channels_fixture.ts';
+import { ME, INTERVIEW, sign } from './_channels_fixture.ts';
+import { AT, readinessFixture as fixture, runReadiness, type Mutation } from './_channel_readiness.ts';
 
-const ENVIRONMENTS = ['development', 'preview', 'production'] as const;
-const AT = new Date('2026-10-22T12:00:00.000Z');
 const TEXT = 'Synthetic readiness message.';
 type Api = { whatsapp: typeof whatsapp; threads: typeof threads; events: typeof events; connections: typeof connections };
 const original: Api = { whatsapp, threads, events, connections };
 
-async function fixture(environment: string, check: (w: any) => Promise<void>) {
-  const w = await world({ seed: true });
-  w.env.ENVIRONMENT = environment;
-  const fetch = mockFetch(() => undefined);
-  try { await check(w); }
-  finally {
-    fetch.restore();
-    w.db.close();
-    noSecretsSeen();
-    seen.length = 0;
-  }
-}
 const message = (over = {}) => ({
   externalChatId: 'd861-chat', externalMessageId: 'd861-message', side: 'contact' as const,
   contactName: null, text: TEXT, kind: 'text' as const, sentAt: AT.toISOString(), ...over,
@@ -143,27 +126,7 @@ async function rollout(environment: string, api = original) {
   });
 }
 
-const cases = { signature, consent, voiceCap, connectionLimit, retention, encryptedText, rollout };
-for (const environment of ENVIRONMENTS) {
-  for (const [name, check] of Object.entries(cases)) test('D861 ' + environment + ': ' + name, () => check(environment));
-}
-
-// Isolated source mutations, as in whatsapp_switch_on_d754. No tracked file
-// is changed. Each mutant must fail the same scenario; restored code must pass.
-let serial = 0;
-async function mutate(path: string, before: string, after: string) {
-  const file = new URL(path, import.meta.url);
-  const source = readFileSync(file, 'utf8');
-  assert.equal(source.split(before).length, 2, 'one mutation target');
-  const { stripTypeScriptTypes } = await import('node:module');
-  let changed = stripTypeScriptTypes(source.replace(before, () => after), { mode: 'strip' });
-  changed = changed.replace(/^((?:import\s+[^'";]+|export\s*\{[^}]*\})\s+from\s*['"])([^'"]+)(['"])/gm,
-    (_m, prefix, spec, quote) => prefix + (spec.startsWith('.')
-      ? new URL(/\.[mc]?[jt]s$/.test(spec) ? spec : spec + '.ts', file).href
-      : import.meta.resolve(spec)) + quote);
-  return import('data:text/javascript;base64,' + Buffer.from(changed + '\n// D861 ' + ++serial).toString('base64'));
-}
-const mutations: Array<[string, keyof Api, string, string, string, (e: string, a: Api) => Promise<void>]> = [
+const mutations: Mutation<Api>[] = [
   ['signature accepts a mismatch', 'whatsapp', 'whatsapp.ts',
     " ? 'ok' : 'mismatch';", " ? 'ok' : 'ok';", signature],
   ['signature rejects valid input', 'whatsapp', 'whatsapp.ts',
@@ -191,10 +154,4 @@ const mutations: Array<[string, keyof Api, string, string, string, (e: string, a
   ['rollout denies everyone', 'connections', 'connections.ts',
     "return mode === 'on' || (mode === 'canary' && isSuperAdmin(user));", 'return false;', rollout],
 ];
-for (const [name, key, file, before, after, check] of mutations) {
-  test('D861 mutation: ' + name, async () => {
-    const module = await mutate('../src/services/channels/' + file, before, after);
-    await assert.rejects(() => check('production', { ...original, [key]: module }), { name: 'AssertionError' });
-    await check('production', original);
-  });
-}
+runReadiness('D861', original, { signature, consent, voiceCap, connectionLimit, retention, encryptedText, rollout }, mutations);
