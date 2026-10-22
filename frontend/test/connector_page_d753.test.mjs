@@ -200,7 +200,7 @@ test('loading, forbidden (no Retry) and unreadable (Retry calls reload)', async 
 
 // ================================================================ the return
 
-test('a Mercury return never reaches the Mercury page; the page\'s own mount is the one entity read', async () => {
+test('a Mercury return never reaches the Mercury page; the page reads nothing of Axal VC\'s accounts', async () => {
   assert.deepEqual(connectorsRedirect({ search: '?oauth=ok&provider=mercury', hash: '' }), { pathname: '/account/connectors', search: '', hash: '' });
   assert.deepEqual(connectorsRedirect({ search: '?oauth=ok&provider=mercury&tab=discover', hash: '' }), { pathname: '/account/connectors', search: '?tab=discover', hash: '' });
   const f = mockFetch();
@@ -213,9 +213,9 @@ test('a Mercury return never reaches the Mercury page; the page\'s own mount is 
   } finally { await hub.unmount(); }
   const m = await mount(page('mercury'), '/account/connectors/mercury?oauth=ok&provider=mercury');
   try {
-    assert.equal(reads(), 1, 'the page\'s mount');
-    // D753 F5 (#1991): the entity connections are the page's own body, not a sheet in the page layout.
-    assert.ok(m.by('mercury-entity-page'), 'drawn on the page');
+    // D880 (#2553): whatever row is served, the member page never draws or reads Axal VC's own accounts.
+    assert.equal(reads(), 0, 'no read of Axal VC\'s accounts');
+    assert.equal(m.by('mercury-entity-page'), undefined, 'no entity body');
     assert.equal(m.by('mercury-entity-sheet'), undefined, 'no sheet');
     assert.equal(m.by('connector-sheet-connected'), undefined, 'no return view');
     assert.equal(seen.search, '', 'the query is stripped');
@@ -243,7 +243,7 @@ test('a crafted return: another key\'s is ignored and stripped; Stripe\'s refusa
     assert.doesNotMatch(bad.text(), /Call_us/);
   } finally { await bad.unmount(); f.restore(); }
   assert.deepEqual(pageReturn('?oauth=ok&provider=hubspot', 'stripe'), { ret: null, strip: ['oauth', 'provider', 'reason'] });
-  // D840 (#2346): a member's Mercury sign-in returns to its page; the entity row drops it on the page itself.
+  // D840 (#2346): a member's Mercury sign-in returns to its page.
   assert.equal(pageReturn('?oauth=ok&provider=mercury', 'mercury').ret.view, 'connected');
   assert.equal(pageReturn('?tab=discover', 'stripe'), null);
 });
@@ -308,7 +308,7 @@ test('every card, row and phone row links its page; nothing on the hub opens a s
   const discover = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/account/connectors'] }, h(ConnectorsView, { data: ready(), initialTab: 'discover' })));
   assert.equal(hrefOf(discover, 'connector-open-calendly'), '/account/connectors/calendly', 'the "+"');
   assert.equal(hrefOf(discover, 'connector-open-stripe'), '/account/connectors/stripe', 'the check');
-  assert.equal(hrefOf(discover, 'connector-open-mercury'), '/account/connectors/mercury', 'the entity Open');
+  assert.equal(hrefOf(discover, 'connector-open-mercury'), '/account/connectors/mercury', 'Mercury\'s card');
   // D753 F6 (#1877): one stretched link per card, `connector-open-<key>`, covers the whole card.
   for (const k of ['calendly', 'stripe', 'salesforce', 'crunchbase']) assert.equal(hrefOf(discover, `connector-open-${k}`), `/account/connectors/${k}`, k);
   assert.match(discover, /data-testid="connector-card-salesforce" data-action="notify"/);

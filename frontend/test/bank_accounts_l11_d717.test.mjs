@@ -26,7 +26,7 @@ import { mountContracts } from './_contracts_dom.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { bankAccountsApi } from '../src/lib/api/bankAccounts.js';
 import { adminMercuryApi } from '../src/lib/api/adminMercury.js';
-import { entityRows } from '../src/pages/account/mercuryModel.js';
+import { entityRows } from '../src/pages/admin/fundAdmin/mercuryEntityModel.js';
 import { AXAL_ENTITIES } from '../src/lib/legalDocFormat.js';
 import BankAccountsPanel, {
   BANK_ACCOUNTS_HOLDER_ONLY, MERCURY_PRESET, REVEAL_MS, NOTICE_REFUSAL_LINES,
