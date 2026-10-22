@@ -1,6 +1,12 @@
 import type { ProviderDescriptor } from './registry';
 import { CONNECTOR_METADATA } from './registry';
 
+/** The granted scopes the descriptor never asked for. Scope names are public, never secrets. */
+export function extraScopes(desc: ProviderDescriptor, granted: readonly string[]): string[] {
+  const requested = new Set((desc.oauth_scopes || []).map((scope) => scope.toLowerCase()));
+  return granted.filter((scope) => !requested.has(scope.toLowerCase()));
+}
+
 /** Empty granted scopes mean the provider gave no verifiable scope list. */
 export function hasScopeOverreach(desc: ProviderDescriptor, granted: readonly string[]): boolean {
   const requested = new Set((desc.oauth_scopes || []).map((scope) => scope.toLowerCase()));
