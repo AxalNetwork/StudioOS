@@ -15,8 +15,7 @@ This is a **different bot** from the news bot behind `TELEGRAM_BOT_TOKEN`
 (GOTCHAS.md, "Telegram broadcaster"). A bot that receives customer
 conversations must be revocable on its own.
 
-**What has shipped.** Every part of D756 this runbook relies on is on `main`
-except #1978, which §3 step 6 waits on:
+**What has shipped.** Every part of D756 this runbook relies on is on `main`:
 
 | Part | PR |
 | --- | --- |
@@ -28,16 +27,15 @@ except #1978, which §3 step 6 waits on:
 | The interviewee's YES, NO and STOP in the chat | #1998 (D756 `S12-consent`, #1977) |
 | The connector page, `/account/connectors/telegram` | #1997 (D756 `S07-page`, #1979) |
 | Consent state and notes in Record a Session and the inbox | #2004 (D756 `S11-validate`, #1981) |
-| Notes stored and transcribed as recorder audio | **#1978 (D756 `S13-audio`), not merged** |
+| Notes stored and transcribed as recorder audio | #2083 (D756 `S13-audio`, #1978), merged 2026-10-19 |
 | Yes/No buttons on the notice | D756's buttons task, not filed: it waits on §3 step 10's probe |
 
 **What a Telegram chat holds for consent.** Unlike WhatsApp, an assigned
 Telegram chat's **text** goes into its session at once, under D684's rule; only
 its **notes** wait. A note is fetched only once the interviewee has said YES. A
 NO keeps the notes held; a STOP stops further downloads; neither sets the chat
-aside. Until #1978 merges, a consented note is transcribed as D684 §4 step 4
-describes, and only its text is kept; after #1978 its audio is stored and
-transcribed as recorder audio. Setting the secrets is safe: `TELEGRAM_CHANNEL`
+aside. A consented note's audio is stored and transcribed as recorder audio
+(#1978). Setting the secrets is safe: `TELEGRAM_CHANNEL`
 ships `canary`, so only Super Admins can link.
 
 ## 1. Owner steps, in order
@@ -121,8 +119,7 @@ Telegram. A hand check from any machine:
 
 Do it in canary, signed in as a Super Admin, from an account **with** Telegram
 Premium (account 1), with a second Telegram account playing the interviewee
-(account 2). Everything but step 6's audio can be checked on `main` today; run
-step 6 once #1978 has merged, or run the whole check then.
+(account 2). Every step can be checked on `main`.
 
 1. **Link.** Account → Connectors → Telegram: press **Link Telegram**. Open the
    `t.me` link on account 1's phone and press Start; send `/confirm` when the
@@ -150,11 +147,10 @@ step 6 once #1978 has merged, or run the whole check then.
    notes start to be fetched.
    - Also try the copy path once on another chat: **Copy the notice**, paste it
      yourself from account 1, and reply YES from account 2. It counts the same.
-6. **Audio and speakers** (needs #1978). On the session's review: the voice
+6. **Audio and speakers** (#1978). On the session's review: the voice
    note and the audio file play; the transcript shows "Me" and the interviewee
    by side, never "Speaker ?". The round video is never fetched and reads
-   "Round video messages can't be transcribed yet." Before #1978, the voice
-   note and the audio file arrive as transcribed text only.
+   "Round video messages can't be transcribed yet."
 7. **STOP.** Reply **STOP** from account 2. See on account 2: "Understood.
    Recording has stopped for this chat. To have what was already recorded
    deleted, just ask me." See in Axal: "Stopped". Send another voice note from
