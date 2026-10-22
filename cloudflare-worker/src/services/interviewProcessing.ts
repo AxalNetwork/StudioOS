@@ -51,6 +51,7 @@ import { DEFAULT_FINAL_MODEL } from './sttModels';
 import { appendSegments } from './interviewIntake';
 import type { ChannelProvider } from './channels/types';
 import type { DigestOutcome } from './validateEngine';
+import { callTranscriptSource } from './conversationAnalytics';
 import { summariseTranscript, toSegments, type DigestSections, type ReceiptLine, type SegmentRow, type SummarySentence } from './interviewStructuring';
 
 export const STAGES = ['uploading', 'transcribing', 'summarising', 'placing', 'done', 'failed'] as const;
@@ -371,7 +372,11 @@ export function summaryOf(session: SessionRow) {
   if (!session.summary) return null;
   let sentences: SummarySentence[] = [];
   try { sentences = JSON.parse(session.summary_citations_json || '[]'); } catch { sentences = []; }
-  return { text: session.summary, sentences, model: session.summary_model ?? null, summarised_at: session.summarised_at ?? null };
+  return {
+    text: session.summary, sentences, model: session.summary_model ?? null, summarised_at: session.summarised_at ?? null,
+    // D873 (#2520): a call's summary says how its text was made, the provider's transcript or speech-to-text, and by what.
+    ...(callTranscriptSource(session) ? { transcript: { source: callTranscriptSource(session), model: session.final_model } } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -54,14 +54,16 @@ export const ALTERNATIVE_KINDS = ['workaround', 'status_quo', 'in_house'] as con
 export const MARKET_TOPICS = ['size', 'trend', 'regulation', 'pricing', 'other'] as const;
 export const URGENCY_LEVELS = ['low', 'medium', 'high'] as const;
 export const OBJECTION_ABOUT = ['price', 'risk', 'fit', 'timing', 'trust', 'other'] as const;
-/** D859 (#2504): what a customer asked for next, or offered. */
-export const FOLLOW_UP_KINDS = ['follow_up', 'intro_offer', 'beta_signup'] as const;
+/** D859 (#2504): what a customer asked for next, or offered. D873 (#2520): a call's action item. */
+export const FOLLOW_UP_KINDS = ['follow_up', 'intro_offer', 'beta_signup', 'action_item'] as const;
 
 export type FindingKind =
   | 'firmographic' | 'job_to_be_done' | 'market_fact' | 'alternative'
   | 'budget' | 'timing' | 'urgency' | 'buying_trigger' | 'objection'
   // D859 (#2504): a conversation's next step, and a feature the customer asked for.
-  | 'follow_up' | 'prototype_ask';
+  | 'follow_up' | 'prototype_ask'
+  // D873 (#2520): what a call decided.
+  | 'decision';
 
 /** The modules `interview_findings.module` admits (its CHECK). */
 export type FindingModule = Extract<ModuleSlug, 'customer-research' | 'ideal-customer-profile' | 'market-intelligence' | 'demand-signals' | 'experiments'>;
@@ -184,8 +186,10 @@ export const FINDING_KINDS: Record<FindingKind, FindingSpec> = {
       const kind = oneOf(p.kind, FOLLOW_UP_KINDS);
       const detail = str(p.detail, 200);
       const due = p.due_hint == null ? null : str(p.due_hint, 80);
-      if (!kind || !detail || (p.due_hint != null && !due)) return null;
-      return { kind, detail, ...(due ? { due_hint: due } : {}) };
+      // D873: who said they would do it, as said; never a guess.
+      const owner = p.owner_hint == null ? null : str(p.owner_hint, 80);
+      if (!kind || !detail || (p.due_hint != null && !due) || (p.owner_hint != null && !owner)) return null;
+      return { kind, detail, ...(due ? { due_hint: due } : {}), ...(owner ? { owner_hint: owner } : {}) };
     },
     key: (p) => `follow_up:${p.kind}:${norm(p.detail)}`,
   },
@@ -204,6 +208,19 @@ export const FINDING_KINDS: Record<FindingKind, FindingSpec> = {
     },
     key: (p) => `prototype:${norm(p.feature)}`,
   },
+  // D873 (#2520): what a call decided, and who owns it when the call said so.
+  // On the interview's own record, beside its follow-ups.
+  decision: {
+    mcpModule: 'customer_research',
+    slug: () => 'customer-research',
+    parse: (p) => {
+      const statement = str(p.statement, 200);
+      const owner = p.owner_hint == null ? null : str(p.owner_hint, 80);
+      if (!statement || (p.owner_hint != null && !owner)) return null;
+      return { statement, ...(owner ? { owner_hint: owner } : {}) };
+    },
+    key: (p) => `decision:${norm(p.statement)}`,
+  },
 };
 
 export function isFindingKind(k: unknown): k is FindingKind {
@@ -214,7 +231,7 @@ const ATTRIBUTE_WORD: Record<string, string> = {
   role: 'Role', company: 'Company', company_size: 'Company size', industry: 'Industry', geography: 'Geography', stage: 'Stage', tools: 'Tools',
 };
 const KIND_WORD: Record<string, string> = { workaround: 'Workaround', status_quo: 'Status quo', in_house: 'Built in-house' };
-const FOLLOW_UP_WORD: Record<string, string> = { follow_up: 'Follow-up', intro_offer: 'Intro offered', beta_signup: 'Beta sign-up' };
+const FOLLOW_UP_WORD: Record<string, string> = { follow_up: 'Follow-up', intro_offer: 'Intro offered', beta_signup: 'Beta sign-up', action_item: 'Action item' };
 const capital = (s: string) => (s ? `${s[0].toUpperCase()}${s.slice(1).replace(/_/g, ' ')}` : s);
 /** "1,200 USD / month", or null when the finding names no amount. */
 export function amountWord(p: Record<string, unknown>): string | null {
@@ -240,8 +257,9 @@ export function findingLine(kind: FindingKind, p: Record<string, unknown>): { wh
     case 'urgency': return { what: `Urgency · ${capital(String(p.level ?? ''))}`, detail: String(p.reason ?? '') };
     case 'buying_trigger': return { what: 'Buying trigger', detail: String(p.trigger ?? '') };
     case 'objection': return { what: `Objection · ${capital(String(p.about ?? 'other'))}`, detail: String(p.detail ?? '') };
-    case 'follow_up': return { what: FOLLOW_UP_WORD[String(p.kind)] ?? 'Follow-up', detail: [p.detail, p.due_hint].filter(Boolean).join(' · ') };
+    case 'follow_up': return { what: FOLLOW_UP_WORD[String(p.kind)] ?? 'Follow-up', detail: [p.detail, p.owner_hint, p.due_hint].filter(Boolean).join(' · ') };
     case 'prototype_ask': return { what: 'Prototype ask', detail: [p.feature, p.workflow].filter(Boolean).join(' · ') };
+    case 'decision': return { what: 'Decision', detail: [p.statement, p.owner_hint].filter(Boolean).join(' · ') };
   }
 }
 

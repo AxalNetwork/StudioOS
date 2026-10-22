@@ -62,6 +62,7 @@ import { quoteFor, segmentsInSpan, structureTranscript, toSegments, type Placeme
 import { readTranslation, translateSession } from './sessionTranslation';
 import { MESSAGING_PROVIDERS, consentRequiredProviders } from './channels/types';
 import { loadStructureContext, recordStructureReceipt, storePlacements } from '../routes/founder_validate_structure';
+import { CALL_CHANNELS } from './conversationAnalytics';
 
 export type StructureTrigger =
   | 'call_imported' | 'chat_assigned' | 'chat_text_added' | 'chat_quiet' | 'recording_processed'
@@ -141,6 +142,8 @@ export async function structureSession(
     projectId: session.project_id, sessionId: session.id, interviewId: session.interview_id, runId,
     userId: opts.userId, model: out.receipt[out.receipt.length - 1]?.model || '', placements: withOriginals(out.placements, segments, originals),
     dedupe: opts.dedupe === true,
+    // D873 (#2520): a call's suggestions say their words were recorded.
+    ...(CALL_CHANNELS.has(String(session.submitted_via ?? '')) ? { sourceLabel: 'Recorded' as const } : {}),
   });
   await env.DB.prepare(
     "UPDATE interview_sessions SET status = 'structured', updated_at = datetime('now') WHERE id = ? AND status = 'transcribed'",

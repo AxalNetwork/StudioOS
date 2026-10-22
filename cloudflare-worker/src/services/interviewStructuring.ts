@@ -225,6 +225,8 @@ export const PLACEMENT_KINDS: Record<PlacementKind, KindSpec> = {
   // D859 (#2504): a conversation's next step, and a prototype ask (`build_candidate`).
   follow_up: finding('follow_up', 'customer-research'),
   prototype_ask: finding('prototype_ask', 'customer-research'),
+  // D873 (#2520): what a call decided.
+  decision: finding('decision', 'customer-research'),
   hypothesis_new: {
     slug: 'experiments',
     module: 'experiments',
@@ -443,7 +445,8 @@ const KIND_LINES: Record<PlacementKind, string> = {
   urgency: '- urgency: {"level": "low" | "medium" | "high", "reason": "<optional>"}',
   buying_trigger: '- buying_trigger: {"trigger": "<the event that would make them buy>"}',
   objection: '- objection: {"about": "price" | "risk" | "fit" | "timing" | "trust" | "other", "detail": "<what they objected to>"}',
-  follow_up: '- follow_up: {"kind": "follow_up" | "intro_offer" | "beta_signup", "detail": "<the next step, or what was offered>", "due_hint": "<optional: when, as they said it>"}',
+  follow_up: '- follow_up: {"kind": "follow_up" | "intro_offer" | "beta_signup" | "action_item", "detail": "<the next step, or what was offered>", "owner_hint": "<optional: who said they would do it, as said>", "due_hint": "<optional: when, as they said it>"}',
+  decision: '- decision: {"statement": "<what was decided, in a sentence>", "owner_hint": "<optional: who owns it, as said>"}',
   prototype_ask: '- prototype_ask: {"feature": "<the feature they asked for>", "workflow": "<optional: the workflow they described>", "pain_ref": "<optional: the pain it answers, in their words>"}',
   evidence: '- evidence: {"hypothesis_id": <id from the list>, "pain_group_id": <optional id from the list>,\n    "direction": "supports" | "refutes", "strength": "anecdote" | "pattern" | "measured"}',
   hypothesis_new: '- hypothesis_new: {"claim": "<a new testable claim the interview suggests>", "disproof": "<optional: what would prove it wrong>"}',
@@ -461,7 +464,9 @@ export const STRUCTURE_PASSES = [
   { name: 'B', reads: 'demand and evidence',
     kinds: ['demand_signal', 'budget', 'timing', 'urgency', 'buying_trigger', 'objection', 'evidence', 'hypothesis_new', 'experiment_idea',
       // D859 (#2504): a structuring run may propose them too; dedupe keeps one.
-      'follow_up', 'prototype_ask'] },
+      'follow_up', 'prototype_ask',
+      // D873 (#2520): a call's decisions; dedupe keeps one with the extraction's.
+      'decision'] },
 ] as const satisfies readonly { name: string; reads: string; kinds: readonly PlacementKind[] }[];
 
 /** Each pass's output budget: raised from one pass's 1500, and the router's reservation follows it. */

@@ -41,9 +41,19 @@
  *   · Chat text is data, never instructions: the prompt says so, and the
  *     transcript is delimited per call (`transcriptData`).
  *
- * TRANSLATION. W2 (#2502, D857) translates chat text and voice transcripts.
- * Until it lands the segments are read as stored; when it does, its translated
- * text is what `finalSegments` reads, and nothing here changes.
+ * TRANSLATION (D857). The run reads each segment's translation into the
+ * founder's working language when it has one (`readSessionSegments`), and an
+ * item cited from translated words keeps the customer's own words beside its
+ * quote (`withOriginals`), as structuring does.
+ *
+ * CALLS (D873, #2520). A Zoom, Meet or uploaded call (`CALL_SOURCES`) is read
+ * the same way, and may also name what the call decided and who will do what:
+ *
+ *   decision     → decision {statement, owner_hint?}                 → the interview (Customer research)
+ *   action_item  → follow_up (kind action_item) {detail, owner_hint?, due_hint?} → the interview's follow-ups
+ *
+ * Both are proposals the founder accepts. An owner or a date is kept only as
+ * the call said it; none is guessed. A call's items are stored as "Recorded".
  */
 import type { Env } from '../types';
 import { run as aiRun, type RailContext } from './aiRouter';
@@ -57,10 +67,17 @@ import {
   type Placement, type PlacementKind, type Segment, type StructureContext,
 } from './interviewStructuring';
 import { FOLLOW_UP_KINDS, PERIODS } from './interviewFindings';
-import { finalSegments, storePlacements } from '../routes/founder_validate_structure';
+import { storePlacements } from '../routes/founder_validate_structure';
+import { readSessionSegments, withOriginals } from './sessionAutoStructure';
+import { CALL_CHANNELS } from './conversationAnalytics';
 
-export const ITEM_TYPES = ['data_point', 'action', 'prototype_ask'] as const;
+export const ITEM_TYPES = ['data_point', 'action', 'prototype_ask', 'decision', 'action_item'] as const;
 export type ItemType = (typeof ITEM_TYPES)[number];
+/** D873: the item types only a call is read for. */
+export const CALL_ITEM_TYPES: readonly ItemType[] = Object.freeze(['decision', 'action_item']);
+/** D873: the sessions that are calls, by `submitted_via`: Zoom, Google Meet, an uploaded recording. */
+export const CALL_SOURCES: readonly string[] = Object.freeze([...CALL_CHANNELS.keys()]);
+export const isCall = (submittedVia: unknown): boolean => CALL_SOURCES.includes(String(submittedVia ?? ''));
 export const DATA_POINT_KINDS = ['price', 'spend', 'frequency', 'current_tool', 'team_size', 'pain'] as const;
 export type DataPointKind = (typeof DATA_POINT_KINDS)[number];
 
@@ -93,6 +110,17 @@ export const EXTRACT_PROMPT = [
   'A money figure is only ever one the customer said. Never estimate, convert or round one.',
   'Reply with ONE JSON object and nothing else:',
   '{"items": [{"type": "...", ..., "cite": {"from": 0, "to": 0}, "quote": "<verbatim passage>"}]}',
+].join('\n');
+
+/** D873: what a call adds to the prompt. A call has more than one voice; each line names its speaker. */
+export const CALL_PROMPT = [
+  EXTRACT_PROMPT,
+  '',
+  'This conversation is a call, and may have more than two people on it. Each line names who spoke.',
+  'Two more item types, for a call only:',
+  '- decision: {"type": "decision", "statement": "<what was decided, in a sentence>", "owner_hint": "<optional: who owns it, as said>"}',
+  '- action_item: {"type": "action_item", "statement": "<what someone will do>", "owner_hint": "<optional: who will do it, as said>", "due_hint": "<optional: when, as said>"}',
+  'An owner or a date is only ever one the call said. Never guess one, and never name the customer as the owner of words someone else said.',
 ].join('\n');
 
 const text = (v: unknown, max: number): string | null => {
@@ -137,8 +165,22 @@ const amountOf = (item: Record<string, unknown>) => ({
  * One typed item as the placement it becomes, before its kind's own parse;
  * null when it maps to nothing. `quote` is the cited passage, for `money_term`.
  */
-export function placementFor(item: Record<string, unknown>, quote: string): { kind: PlacementKind; payload: Record<string, unknown> } | null {
+export function placementFor(
+  item: Record<string, unknown>, quote: string, opts: { call?: boolean } = {},
+): { kind: PlacementKind; payload: Record<string, unknown> } | null {
   const type = oneOf(item.type, ITEM_TYPES);
+  // D873: a decision or an action item is read from a call only.
+  if (type && CALL_ITEM_TYPES.includes(type) && !opts.call) return null;
+  const hints = {
+    ...(item.owner_hint != null ? { owner_hint: item.owner_hint } : {}),
+    ...(item.due_hint != null ? { due_hint: item.due_hint } : {}),
+  };
+  if (type === 'decision') {
+    return { kind: 'decision', payload: { statement: item.statement, ...(item.owner_hint != null ? { owner_hint: item.owner_hint } : {}) } };
+  }
+  if (type === 'action_item') {
+    return { kind: 'follow_up', payload: { kind: 'action_item', detail: item.statement, ...hints } };
+  }
   if (type === 'action') {
     return { kind: 'follow_up', payload: { kind: oneOf(item.kind, FOLLOW_UP_KINDS), detail: item.detail, ...(item.due_hint != null ? { due_hint: item.due_hint } : {}) } };
   }
@@ -178,7 +220,7 @@ export function placementFor(item: Record<string, unknown>, quote: string): { ki
  * own parse and to the citation rule. Returns what survived and how many were
  * dropped, as `parsePlacements` does.
  */
-export function parseItems(output: string, part: readonly Segment[]): { placements: Placement[]; dropped: number } {
+export function parseItems(output: string, part: readonly Segment[], opts: { call?: boolean } = {}): { placements: Placement[]; dropped: number } {
   const obj = firstJsonObject(output);
   const raw = Array.isArray(obj?.items) ? (obj!.items as unknown[]) : [];
   const placements: Placement[] = [];
@@ -189,7 +231,7 @@ export function parseItems(output: string, part: readonly Segment[]): { placemen
     const quote = typeof r?.quote === 'string' ? normaliseWs(r.quote) : '';
     const span = quote && quote.length <= MAX_QUOTE ? quoteSpan(part, quote) : null;
     const cited = cite ? segmentsInSpan(part, cite.from, cite.to) : [];
-    const mapped = r && span ? placementFor(r, quote) : null;
+    const mapped = r && span ? placementFor(r, quote, opts) : null;
     const parsed = mapped ? PLACEMENT_KINDS[mapped.kind].parse(mapped.payload, NO_CONTEXT) : null;
     // THE RULE: no cited span inside this part, no item.
     if (!mapped || !parsed || !span || cited.length === 0 || cited.length > 3 || cite!.from !== span.from || cite!.to !== span.to) {
@@ -226,8 +268,10 @@ export async function extractConversationItems(
   }
   if (await sessionDigestConsentBlocks(env, session)) return { ok: false, reason: 'consent_not_recorded' };
 
-  const segments = await finalSegments(env, session.id);
+  // D857: each segment's translation when it has one; the customer's own words stay beside the quote.
+  const { segments, originals } = await readSessionSegments(env, session.id);
   if (!segments.length) return { ok: false, reason: 'no_final_transcript' };
+  const call = isCall(session.submitted_via);
 
   const parts = chunkSegments(segments, opts.maxChars);
   const limited = transcriptLimit(segments, parts.length);
@@ -243,7 +287,7 @@ export async function extractConversationItems(
       model: opts.model,
       surface: AI_SURFACE.validateInterviews,
       rail: opts.rail ?? { page: DIGEST_PAGE, option: DIGEST_OPTIONS.structure, record: `session:${session.id}` },
-      systemPrompt: EXTRACT_PROMPT,
+      systemPrompt: call ? CALL_PROMPT : EXTRACT_PROMPT,
       messages: [{
         role: 'user',
         content: parts.length > 1
@@ -255,7 +299,7 @@ export async function extractConversationItems(
     });
     if (!r.ok) return { ok: false, reason: 'refused', refusal: r.refusal ?? null };
     model = r.usage?.model || model;
-    const parsed = parseItems(r.output || '', parts[i]);
+    const parsed = parseItems(r.output || '', parts[i], { call });
     lists.push(parsed.placements);
     dropped += parsed.dropped;
   }
@@ -263,7 +307,8 @@ export async function extractConversationItems(
   const runId = newRunId();
   const { stored, deduped } = await storePlacements(env, {
     projectId: session.project_id, sessionId: session.id, interviewId: session.interview_id, runId,
-    userId: opts.userId, model, placements: mergePlacements(lists), dedupe: true, task: 'extract_conversation_items',
+    userId: opts.userId, model, placements: withOriginals(mergePlacements(lists), segments, originals), dedupe: true,
+    task: 'extract_conversation_items', ...(call ? { sourceLabel: 'Recorded' as const } : {}),
   });
   return { ok: true, runId, stored, deduped, dropped, parts: parts.length, model };
 }

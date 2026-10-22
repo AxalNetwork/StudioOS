@@ -29,7 +29,7 @@ together with what the Telegram track (#2508) has merged so far:
 | The interviewee's YES, NO and STOP in the chat | #1998 (D756 `S12-consent`, #1977) |
 | The connector page, `/account/connectors/telegram` | #1997 (D756 `S07-page`, #1979) |
 | Consent state and notes in Record a Session and the inbox | #2004 (D756 `S11-validate`, #1981) |
-| Notes stored and transcribed as recorder audio (Workers AI speech-to-text) | #2083 (D756 `S13-audio`, #1978) |
+| Notes stored and transcribed as recorder audio (Workers AI speech-to-text) | #2083 (D756 `S13-audio`, #1978), merged 2026-10-19 |
 | The customer-chat tools on Axal's MCP server (`list_channel_chats`, `get_session_insights`, `assign_chat_to_interview`), and no MTProto user session | #2527 (D864, #2510) |
 | Conversation analytics for Record a Session, Telegram and WhatsApp chats alike | #2526 (D858, #2503) |
 | A guided setup for Record a Session: six steps (linked, bot added, bot on, replies allowed, a first chat, the notice), each done, to do or blocked, read from stored rows with no Bot API call (`GET /api/channels/telegram/setup`) | #2531 (D863, #2509) |

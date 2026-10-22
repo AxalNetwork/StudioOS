@@ -258,7 +258,7 @@ test('another member, or a session with no final transcript, runs nothing', asyn
   assert.equal(calls.length, 0);
 });
 
-test('the engine: a chat\'s digest also lists its items; a call\'s digest does not', async () => {
+test('the engine: a chat\'s digest also lists its items, and since D873 a call\'s does too, read as a call', async () => {
   const byPrompt = (input: any) => (/You read one customer conversation/.test(String(input.messages?.[0]?.content))
     ? { response: JSON.stringify({ items: ITEMS }) }
     : { response: JSON.stringify({ placements: [] }) });
@@ -266,8 +266,10 @@ test('the engine: a chat\'s digest also lists its items; a call\'s digest does n
   const out = await digestSession(chat.env, { sessionId: SESSION, userId: ME, trigger: 'chat_text_added', stages: ['structure'], force: true });
   assert.equal(out.ok, true, JSON.stringify(out));
   assert.equal(proposals(chat.db).filter((r: any) => r.task === 'extract_conversation_items').length, 7);
+  assert.ok(!chat.calls.some((c) => /This conversation is a call/.test(JSON.stringify(c.input))), 'a chat is not read as a call');
+  // D873 (#2520): a call's digest lists its items too, with the call's prompt.
   const zoom = world(byPrompt, { via: 'zoom' });
   await digestSession(zoom.env, { sessionId: SESSION, userId: ME, trigger: 'call_imported', stages: ['structure'], force: true });
-  assert.equal(proposals(zoom.db).filter((r: any) => r.task === 'extract_conversation_items').length, 0);
-  assert.ok(!zoom.calls.some((c) => /You read one customer conversation/.test(String(c.input.messages?.[0]?.content))), 'no extraction call for a call');
+  assert.equal(proposals(zoom.db).filter((r: any) => r.task === 'extract_conversation_items').length, 7);
+  assert.ok(zoom.calls.some((c) => /This conversation is a call/.test(JSON.stringify(c.input))), 'a call is read as a call');
 });

@@ -291,6 +291,17 @@ function speakers(session: AnalyticsSession, segments: readonly SegmentRow[], na
   return known([...by.values()], [spoken(kind) ? 'Recorded' : 'Typed']);
 }
 
+/**
+ * D873 (#2520): how a call's text was made, from its session alone: the
+ * provider's own transcript (an import writes `<provider>_transcript`,
+ * meetings.ts), or speech-to-text by the model it names. Null when the session
+ * is not a call or names no model: unknown, never guessed.
+ */
+export function callTranscriptSource(s: { submitted_via?: string | null; final_model?: string | null }): 'native' | 'speech_to_text' | null {
+  if (!s.submitted_via || !CALL_CHANNELS.has(s.submitted_via) || !s.final_model) return null;
+  return s.final_model === `${s.submitted_via}_transcript` ? 'native' : 'speech_to_text';
+}
+
 /** How the session's text was made: the provider's own transcript, Workers AI speech-to-text, a chat, or typed. */
 function transcriptSource(session: AnalyticsSession, segments: readonly SegmentRow[]): Figure<TranscriptSource> {
   if (!segments.length) return unknown(REASONS.noTranscript);
@@ -301,8 +312,7 @@ function transcriptSource(session: AnalyticsSession, segments: readonly SegmentR
   if (kind === 'typed') return known({ source: 'typed', channel, model: null }, ['Typed']);
   if (!model) return unknown(REASONS.transcriptModel);
   // An import writes `<provider>_transcript` (meetings.ts); anything else is a speech-to-text model.
-  const native = kind === 'call' && model === `${session.submitted_via}_transcript`;
-  return known({ source: native ? 'native' : 'speech_to_text', channel, model }, ['Recorded']);
+  return known({ source: callTranscriptSource(session) ?? 'speech_to_text', channel, model }, ['Recorded']);
 }
 
 /** How much of the transcript a suggestion cites: segments any proposal's span touches, over all segments. */
