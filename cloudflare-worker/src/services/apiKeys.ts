@@ -37,6 +37,11 @@ export const MAX_EXPIRY_DAYS = 365;
 export const SCOPE_LABELS: Readonly<Record<string, { label: string; write: boolean }>> = Object.freeze({
   'validate:read': { label: 'Read Validate data', write: false },
   'validate:write': { label: 'Add interviews and propose placements in Validate', write: true },
+  // D842 (#2470): D846's read scopes, which reached `SCOPES` after D841; without
+  // these a key page listed them by their raw names, as write scopes.
+  'build:read': { label: 'Read Build progress', write: false },
+  'raise:read': { label: 'Read Raise context', write: false },
+  'connectors:read': { label: 'See connected tools and their status', write: false },
 });
 export const scopeOptions = () => keyScopes().map((name) => ({ name, label: SCOPE_LABELS[name]?.label ?? name, write: SCOPE_LABELS[name]?.write ?? true }));
 

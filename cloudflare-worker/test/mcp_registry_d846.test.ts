@@ -205,7 +205,8 @@ test('callTool re-checks the scope, the plan and the connection on every call', 
   // Connection: switched off since the list was drawn.
   db.exec('UPDATE integration_companies SET enabled = 0 WHERE integration_id = 1');
   const off = await server.callTool(env, grant(FAY, [P]), null, counted, { company: P }, READS);
-  assert.deepEqual(body(off), { error: server.NOT_AVAILABLE });
+  // D842 (#2470): every refusal also carries its structured code.
+  assert.deepEqual(body(off), { error: server.NOT_AVAILABLE, code: 'refused' });
   db.exec('UPDATE integration_companies SET enabled = 1 WHERE integration_id = 1');
   // A granted company the connection is not switched on for.
   const second = await server.callTool(env, grant(FAY, [P, P2]), null, counted, { company: P2 }, READS);
@@ -214,7 +215,7 @@ test('callTool re-checks the scope, the plan and the connection on every call', 
   let studioRan = 0;
   const studio = { ...STUDIO_TOOL, run: async () => { studioRan += 1; return {}; } };
   db.exec(`UPDATE users SET subscription_tier = 'growth' WHERE id = ${FAY}`);
-  assert.deepEqual(body(await server.callTool(env, grant(FAY, [P]), null, studio, {}, READS)), { error: server.NOT_AVAILABLE });
+  assert.deepEqual(body(await server.callTool(env, grant(FAY, [P]), null, studio, {}, READS)), { error: server.NOT_AVAILABLE, code: 'refused' });
   assert.deepEqual([ran, studioRan], [0, 0], 'nothing ran');
   // And with all of it in place, it runs.
   const ok = await server.callTool(env, grant(FAY, [P]), null, counted, { company: P }, READS);
@@ -306,7 +307,10 @@ test('each tool\'s version is reported in _meta, on the listing and on every res
   }
   assert.equal(listed.find((t) => t.name === 'd846_studio_only')!._meta![server.META.version], '2.1.0');
   const r = await client.callTool({ name: 'list_companies', arguments: {} });
-  assert.deepEqual(r._meta, { [server.META.version]: '1.0.0', [server.META.source]: 'axal' });
+  // D842 (#2470): beside the version and source, every result names its call.
+  const { [server.EXECUTION_META]: executionId, ...meta } = r._meta as Record<string, unknown>;
+  assert.deepEqual(meta, { [server.META.version]: '1.0.0', [server.META.source]: 'axal' });
+  assert.match(String(executionId), /^[0-9a-f-]{36}$/);
 });
 
 test('the call gate sits on the SDK\'s own tools/call handler: the server builds, and an empty list still answers', async () => {

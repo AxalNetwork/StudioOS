@@ -40,8 +40,9 @@ import type { Env, User } from '../types';
 import type { SCOPES } from './oauth';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import {
-  ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, type GrantProps,
+  ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, type GrantProps, type ToolOutcome,
 } from './grants';
+import { budgetRefusalMessage } from '../services/aiRouter';
 
 export interface ToolRun {
   env: Env;
@@ -54,6 +55,10 @@ export interface ToolRun {
   args: Record<string, unknown>;
   /** D846: for a tool that needs its provider, the granted company ids it is connected and switched on for. */
   connected: number[];
+  /** D842 (#2470): this call's id, in its result's `_meta` and its activity line; #2465 records it, #2466 keys its hold on it. */
+  executionId: string;
+  /** D842: aborted when the call times out; a tool that holds AI tokens releases them on it (#2466). */
+  signal: AbortSignal;
 }
 
 export type ToolScope = (typeof SCOPES)[number];
@@ -80,7 +85,51 @@ export interface McpTool {
   company: boolean;
   /** Read-only tools are annotated so; a write tool (#1497) sets false. */
   readOnly?: boolean;
+  /** D842: how long a call may run before it answers `timeout`; `TOOL_TIMEOUT_MS` when unset. */
+  timeoutMs?: number;
   run: (r: ToolRun) => Promise<unknown>;
+}
+
+/** D842 (#2470): a tool call's default time limit. */
+export const TOOL_TIMEOUT_MS = 20_000;
+
+/** D842: the `_meta` key a call's execution id is reported under, on every result. */
+export const EXECUTION_META = 'vc.axal/execution_id';
+
+/** Where a member adds AI tokens (D786), for the `insufficient_tokens` body. */
+export const ADD_TOKENS_HREF = '/pricing/products#token-packs';
+
+/**
+ * D842: a tool's own refusal code as `/mcp` names it (plan §3, with #2466's
+ * codes). A member out of AI tokens is `insufficient_tokens`, with the body
+ * #2466 defines: what was needed and what was available are unknown until
+ * #2466's hold reports them, so they are null, never 0. A cap the member set
+ * keeps its own code; an outage on our side is `unavailable`.
+ */
+export function mcpCode(code: string): string {
+  if (code === 'budget_user_day' || code === 'budget_user_month') return 'insufficient_tokens';
+  if (code === 'budget_org_month' || code === 'kill_switch') return 'unavailable';
+  return code;
+}
+
+/** D842: the structured error result every refusal answers with: a sentence, a code, and the call's id. */
+export function errorResult(sentence: string, code: string, executionId: string | null, extra: Record<string, unknown> = {}) {
+  const body: Record<string, unknown> = { error: sentence, code, ...extra };
+  if (code === 'insufficient_tokens') Object.assign(body, { needed_microusd: null, available_microusd: null, add_tokens_href: ADD_TOKENS_HREF });
+  return { ...text(body, true), ...(executionId ? { _meta: { [EXECUTION_META]: executionId } } : {}) };
+}
+
+class ToolTimeout extends Error {}
+
+/** Run `work` with a time limit: past it the signal aborts and the call answers `timeout`. */
+async function withTimeout<T>(ms: number, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    // Reject before aborting, so a tool that answers on the abort cannot win the race.
+    timer = setTimeout(() => { reject(new ToolTimeout()); controller.abort(); }, ms);
+  });
+  try { return await Promise.race([work(controller.signal), expired]); } finally { clearTimeout(timer); }
 }
 
 const REGISTRY: McpTool[] = [];
@@ -155,19 +204,31 @@ export async function listedTools(env: Env, props: GrantProps, scope: readonly s
   return { tools: REGISTRY.filter((_, i) => ok[i]), refusal: null };
 }
 
-/** Run one tool call under the grant's checks. Exported for tests. */
+/**
+ * Run one tool call under the grant's checks. Exported for tests.
+ *
+ * `grantId` is an OAuth grant's id, counted here at 60 calls a minute. A
+ * member API key's requests are counted before the server is built
+ * (`oauth.ts`, at the key's own rate), so a key's calls pass null.
+ */
 export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = []) {
   let user: Awaited<ReturnType<typeof grantUser>> | null = null;
   let companyId: number | null = null;
-  const log = (outcome: 'ok' | 'refused' | 'error' | 'rate_limited') =>
-    user ? logToolCall(env, user, { tool: tool.name, company: companyId, client: props.clientName, outcome }) : Promise.resolve();
+  // D842: one id per call, in the result's `_meta` and the activity line.
+  const executionId = crypto.randomUUID();
+  const log = (outcome: ToolOutcome) =>
+    user ? logToolCall(env, user, { tool: tool.name, company: companyId, client: props.clientName, outcome, keyUid: props.keyUid ?? null }) : Promise.resolve();
   try {
     user = await grantUser(env, props);
-    if (!scope.includes(tool.requiredScope)) throw new ToolRefused(`This token needs ${tool.requiredScope} for ${tool.name}. Reconnect with that permission.`);
+    if (!scope.includes(tool.requiredScope)) {
+      throw new ToolRefused(props.keyUid
+        ? `This key needs ${tool.requiredScope} for ${tool.name}. Create a key with that permission.`
+        : `This token needs ${tool.requiredScope} for ${tool.name}. Reconnect with that permission.`, 'insufficient_scope');
+    }
     if (!(await toolEntitled(env, user, tool.entitlement))) throw new ToolRefused(NOT_AVAILABLE);
     if (grantId && !(await withinGrantLimit(env, grantId))) {
       await log('rate_limited');
-      return text({ error: 'Too many calls from this connection. Wait a minute and try again.' }, true);
+      return errorResult('Too many calls from this connection. Wait a minute and try again.', 'rate_limited', executionId);
     }
     let company: ToolRun['company'] = null;
     if (tool.company) {
@@ -184,21 +245,32 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
         throw new ToolRefused(`That connection is not switched on for ${company.name}. Switch it on from Connect a tool.`);
       }
     }
-    const result = await tool.run({ env, props, user, companies, company, args, connected });
+    const runUser = user;
+    const result = await withTimeout(tool.timeoutMs ?? TOOL_TIMEOUT_MS,
+      (signal) => tool.run({ env, props, user: runUser, companies, company, args, connected, executionId, signal }));
     if (grantId && env.OAUTH_KV) {
       await env.OAUTH_KV.put(lastUsedKey(grantId), new Date().toISOString(), { expirationTtl: 31 * 86_400 }).catch(() => {});
     }
     await log('ok');
-    return { ...text(result), _meta: toolMeta(tool) };
+    return { ...text(result), _meta: { ...toolMeta(tool), [EXECUTION_META]: executionId } };
   } catch (e) {
+    if (e instanceof ToolTimeout) {
+      await log('timeout');
+      return errorResult('That call took too long and was stopped. Try again, or ask for less at once.', 'timeout', executionId);
+    }
     if (e instanceof ToolRefused) {
       await log('refused');
-      return text({ error: e.sentence }, true);
+      return errorResult(e.sentence, e.code, executionId);
     }
-    if (e instanceof ToolError) { await log('refused'); return text({ error: e.sentence, code: e.code, status: e.status }, true); }
+    if (e instanceof ToolError) {
+      await log('refused');
+      const code = mcpCode(e.code);
+      const sentence = code !== e.code ? budgetRefusalMessage(e.code) : e.sentence;
+      return errorResult(sentence, code, executionId, { status: e.status });
+    }
     console.error('[mcp] tool failed:', tool.name, (e as Error)?.message);
     await log('error');
-    return text({ error: 'StudioOS could not complete that call.' }, true);
+    return errorResult('StudioOS could not complete that call.', 'unavailable', executionId);
   }
 }
 
@@ -235,16 +307,21 @@ export async function createServer(env: Env, props: GrantProps, grantId: string 
   return server;
 }
 
+/** A fresh stateless server for one authenticated request, OAuth grant or member API key alike (D842). */
+export async function serveMcp(request: Request, env: Env, props: GrantProps, grantId: string | null, scope: readonly string[]): Promise<Response> {
+  const server = await createServer(env, props, grantId, scope);
+  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+  await server.connect(transport);
+  return transport.handleRequest(request);
+}
+
 /** The provider's `apiHandler`: a fresh stateless server for each authenticated request. */
 export const mcpApiHandler = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     // The provider sets ctx.props to what completeAuthorization stored.
     const props = (ctx as unknown as { props: GrantProps }).props;
     const scope = (ctx as unknown as { auth?: { scope?: string[] } }).auth?.scope ?? [];
-    const server = await createServer(env, props, grantIdOf(request), scope);
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    await server.connect(transport);
-    return transport.handleRequest(request);
+    return serveMcp(request, env, props, grantIdOf(request), scope);
   },
 };
 

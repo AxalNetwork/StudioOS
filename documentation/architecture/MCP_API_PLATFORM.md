@@ -165,13 +165,38 @@ one updates this section in the same PR.
   - `POST /api/developer/keys/:uid/revoke` returns `{ key }`.
   - `POST /api/developer/keys/:uid/rotate` returns `201 { key, secret, replaced: {uid, revoked_at} }`. The new key copies the old one's name, scopes, companies and limit; the old one is revoked.
 - **Create and change refusals** (400 unless noted): `invalid_body`, `invalid_name`, `invalid_scopes` (not grantable), `invalid_companies` (not owned), `invalid_expiry`, `invalid_limit`; `409 too_many_keys` (25 live); `409 not_live`; `403` in a support session; `401 session_required` when a key tries to manage keys.
-- **Errors when a key is used** (short; never say whether a key exists):
-  - `401 invalid_key`, `401 revoked_key`, `401 expired_key`;
-  - `403 insufficient_scope`;
-  - `402 insufficient_tokens`;
-  - `429 rate_limited`, with `Retry-After`.
+- **Errors when a key is used** (short; never say whether a key exists).
+  D842 (#2470) split them by where they happen:
+  - **On the request** (HTTP status, body `{ error: <code>, message }`):
+    - `401 invalid_key`, `401 revoked_key`, `401 expired_key`, each with
+      `WWW-Authenticate: Bearer error="invalid_token", error_description="<code>"`.
+      A wrong secret, an unknown id and a malformed key all answer
+      `invalid_key`. A "sign out everywhere" after the key was made answers
+      `revoked_key`.
+    - `429 rate_limited` with `Retry-After: 60`. It answers past the key's
+      `rate_per_minute`, counted per request. It also answers for an IP that
+      failed 10 key lookups this minute, refused before the lookup, and when
+      that count cannot be read (fail closed).
+  - **On a tool call** (HTTP 200, a JSON-RPC result with `isError: true`).
+    The text is `{ error: <sentence>, code, …extra }`, and `_meta` carries
+    `vc.axal/execution_id`. The codes are:
+    - `insufficient_scope`: the key or token lacks the tool's scope. A tool the
+      principal is not listed answers `NOT_AVAILABLE`, as an unknown name does.
+    - `insufficient_tokens`, with `status: 402`, `needed_microusd`,
+      `available_microusd` and `add_tokens_href: "/pricing/products#token-packs"`.
+      Both amounts are `null` until #2466's hold reports them, never 0.
+    - `spend_limit`, `ai_paused`, `budget_review`: #2466's codes, passed
+      through with their `status`.
+    - `rate_limited`: an OAuth grant past 60 calls a minute.
+    - `timeout`: past the tool's limit, 20 s unless the tool sets `timeoutMs`.
+      The tool's `AbortSignal` aborts, so a hold can be released.
+    - `unavailable`: our failure, an org cap or the kill switch.
+    - `refused`: any other check, such as a company outside the grant.
+  - Every successful call's `_meta` also carries `vc.axal/execution_id`, a
+    UUID per call. The tool receives it as `executionId`.
 - **Flag.** `API_KEYS_ENABLED`. When it is off, every route answers 404 and
-  `/mcp` refuses `axk_` tokens.
+  `/mcp` refuses `axk_` tokens with `401 invalid_key`. An `axk_` bearer is
+  never sent to the OAuth provider.
 
 ### Usage records (D843; S08) and reports (D845; S09)
 
@@ -292,6 +317,16 @@ The tasks are #2464 to #2478 (§6). The UI issues are listed on #2463.
   - Discovery done; this plan written.
   - Tasks #2464–#2478 filed to slots S07–S15, S21–S25 and S27.
   - S21 starts D841 (API keys) on `claude/adoring-knuth-ec95nr-mcp-engine`.
+- **2026-10-22 (S07).** D842 (#2470): `/mcp` accepts member API keys.
+  - **Principal.** A key resolves to the same `GrantProps` principal a grant
+    does, with `clientId` `apikey:<uid>`, so `callTool` re-checks it unchanged.
+  - **Limits.** Per key (`mcp_rl:key:<uid>`, at its `rate_per_minute`) and a
+    per-IP failure throttle (10/min).
+  - **Execution.** An execution id on every call, a per-tool timeout over an
+    `AbortSignal`, and structured `code`s on every tool error (§3).
+  - **Logging.** `last_used_at` is written. The activity line gains
+    `api_key_uid` for key calls only.
+  - **Fix.** `SCOPE_LABELS` gains D846's three read scopes.
 
 ## 9. Known limitations
 
