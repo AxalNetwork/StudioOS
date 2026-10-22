@@ -84,6 +84,9 @@ async function channels() {
   // Typed notes: neither a chat nor a recording.
   session(14, 'manual', null, '2026-10-08 09:00:00');
   line(14, 'Notes', 'They close books by hand.');
+  // A Google Meet call: its channel is D873's `meet`.
+  session(15, 'video', 'google_meet', '2026-10-09 09:00:00');
+  line(15, 'Me', 'Thanks for joining.');
   return w;
 }
 
@@ -94,7 +97,9 @@ test('1. channelOf: the provider, else the chat that points at the session, else
   assert.equal(channelOf({ channel: 'in_person', submitted_via: null }), 'recorder');
   assert.equal(channelOf({ channel: 'phone', submitted_via: null }), 'recorder');
   assert.equal(channelOf({ channel: 'manual', submitted_via: null }), 'manual');
-  assert.equal(channelOf({ channel: 'video', submitted_via: 'zoom' }), 'zoom', 'a meeting is its provider, not a recording');
+  assert.equal(channelOf({ channel: 'video', submitted_via: 'zoom' }), 'zoom', 'a call is its provider, not a recording');
+  assert.equal(channelOf({ channel: 'video', submitted_via: 'google_meet' }), 'meet', "a call keeps D873's name for it");
+  assert.equal(channelOf({ channel: 'in_person', submitted_via: 'upload' }), 'upload');
   assert.equal(channelOf({ channel: '', submitted_via: '  ' }), null, 'unknown is null, never a guess');
 });
 
@@ -110,7 +115,7 @@ test('1. a venture: its chats per channel, each figure counted on its own channe
   const tg = b.by_channel.telegram;
   assert.equal(tg.channel, 'telegram');
   assert.equal(tg.sessions, 1);
-  assert.deepEqual(tg.messages.value, { founder: { typed: 1, recorded: 0 }, customer: { typed: 2, recorded: 0 }, total: 3 });
+  assert.deepEqual(tg.messages.value, { founder: { typed: 1, recorded: 0 }, customer: { typed: 2, recorded: 0 }, unattributed: { typed: 0, recorded: 0 }, total: 3 });
   assert.deepEqual(tg.suggestion_reach.value, { cited: 2, of: 3, share: 0.667 });
   assert.deepEqual(tg.competitor_mentions.value, [{ name: 'Ledgerly', suggested: 1, accepted: 0 }]);
   assert.deepEqual(tg.objections.value, [{ about: 'price', suggested: 1, accepted: 1 }]);
@@ -130,12 +135,17 @@ test('1. the channel filter: a venture reads that channel\'s sessions, recording
 
   const rec = (await get(w.env, ME, `/conversations/analytics?project_id=${PROJECT}&channel=recorder`)).body;
   assert.deepEqual([rec.sessions, rec.sessions_by_channel], [1, { recorder: 1 }], 'a recording is read when its channel is named');
-  assert.deepEqual(rec.messages.value, { founder: { typed: 0, recorded: 1 }, customer: { typed: 0, recorded: 1 }, total: 2 });
+  assert.deepEqual(rec.messages.value, { founder: { typed: 0, recorded: 1 }, customer: { typed: 0, recorded: 1 }, unattributed: { typed: 0, recorded: 0 }, total: 2 });
   assert.deepEqual(rec.voice_minutes.value, 1);
 
   const notes = (await get(w.env, ME, `/conversations/analytics?project_id=${PROJECT}&channel=manual`)).body;
   assert.deepEqual(notes.sessions_by_channel, { manual: 1 });
 
+  const meet = (await get(w.env, ME, `/conversations/analytics?project_id=${PROJECT}&channel=meet`)).body;
+  assert.deepEqual(meet.sessions_by_channel, { meet: 1 }, 'the SQL names a Meet call as channelOf does');
+  assert.equal((await get(w.env, ME, `/conversations/analytics?project_id=${PROJECT}&channel=google_meet`)).body.sessions, 0);
+  const calls = (await get(w.env, ME, `/conversations/analytics?project_id=${PROJECT}&kind=calls`)).body;
+  assert.deepEqual([calls.sessions_by_channel, Object.keys(calls.by_channel)], [{ meet: 1 }, ['meet']], "D873's kinds keep their per-channel figures");
   const none = (await get(w.env, ME, `/conversations/analytics?project_id=${PROJECT}&channel=zoom`)).body;
   assert.deepEqual([none.sessions, none.by_channel], [0, {}]);
 
