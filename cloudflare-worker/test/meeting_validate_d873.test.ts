@@ -1,5 +1,5 @@
 /**
- * D873 (#2520, PR 1) — calls populate Validate like any other session.
+ * D873 (#2520) — calls populate Validate like any other session.
  *
  *   1. Three fixtures, each through its real import path, then the engine on
  *      the founder's press (D765), then D858's analytics:
@@ -15,6 +15,14 @@
  *      interviewee, in the analytics and in the suggestion's evidence.
  *   3. Nothing lands in a module without an Accept.
  *   4. A venture's calls read, and a call with no times reads null minutes.
+ *   5. (PR 2) Each fixture also yields D859's items, read as a call: a decision
+ *      and an action item, proposed with their segment, "Recorded", and
+ *      accepted into the interview only by the founder.
+ *   6. (PR 2) A call not in the working language is translated by D857 first:
+ *      structuring and the items read the translation, and the customer's
+ *      own words stay beside each quote.
+ *   7. (PR 2) The summary says how a call's text was made; a chat is never
+ *      read for decisions or action items.
  *
  * Real SQLite; Workers AI is an in-memory stand-in; every provider request is
  * mocked, and an unmocked one throws, so no test reaches Zoom or Google.
@@ -42,6 +50,9 @@ import { moduleSuggestions } from '../src/services/interviewSuggestions.ts';
 import { openSession, writableInterview } from '../src/services/interviewIntake.ts';
 import { REASONS } from '../src/services/conversationAnalytics.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
+import { TRANSLATION_MODEL } from '../src/services/sessionTranslation.ts';
+import { placementFor } from '../src/services/conversationItems.ts';
+import { summaryOf } from '../src/services/interviewProcessing.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -59,6 +70,13 @@ const WHISPER = '@cf/openai/whisper-large-v3-turbo';
 // Fixture words only: no customer's real words, names or numbers.
 const PAIN_LINE = 'We reconcile invoices by hand every Friday.';
 const COLLEAGUE_LINE = 'I spend two days a month on it.';
+const QUESTION_LINE = 'How do you close the month today?';
+// D857: a Spanish line, and what the stand-in translator makes of it.
+const ES_LINE = 'Lo hacemos a mano cada viernes y lo odiamos.';
+const ES_EN = 'We do it by hand every Friday and we hate it.';
+const PHRASEBOOK: Record<string, string> = { [ES_LINE]: ES_EN };
+const EXTRACT_MARK = 'You read one customer conversation';
+const CALL_MARK = 'This conversation is a call';
 
 const ZOOM_VTT = [
   'WEBVTT', '',
@@ -98,6 +116,8 @@ function world() {
   for (const m of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
+    // D859: an accepted decision or action item lands in interview_findings.
+    '489_interview_findings.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
     // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
     '529_meeting_transcript_source.sql',
@@ -107,6 +127,9 @@ function world() {
   applySessionTranslationColumns(db); // D857: production applies migration 527 before the Worker ships.
   const ai: string[] = [];
   let quote = PAIN_LINE;
+  // D873 PR 2: what the extraction answers, each item with the line it quotes.
+  let items: Array<{ item: Record<string, unknown>; quote: string }> = [];
+  const extracted: string[] = [];
   const env: any = {
     DB, ENVIRONMENT: 'development', JWT_SECRET, KEK_PII: 'k'.repeat(48),
     GOOGLE_CLIENT_ID: 'google-client-id', GOOGLE_CLIENT_SECRET: 'google-client-secret', MEET_TRANSCRIPTS_ENABLED: 'on',
@@ -114,12 +137,22 @@ function world() {
     AI: {
       run: async (model: string, input: unknown) => {
         if (/guard/.test(model)) return { response: 'safe' };
+        // D857: m2m100, from the phrasebook.
+        if (model === TRANSLATION_MODEL) { ai.push('translate'); return { translated_text: PHRASEBOOK[(input as any).text] ?? `[en] ${(input as any).text}` }; }
         const prompt = JSON.stringify(input);
+        // As a model would: cite the span of the line a quote is on, from the prompt's `[from-to] speaker: text`.
+        const citeOf = (q: string) => {
+          const at = new RegExp(`\\[(\\d+)-(\\d+)\\][^\\[]*?${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).exec(prompt);
+          return at ? { from: Number(at[1]), to: Number(at[2]) } : { from: -1, to: -1 };
+        };
+        if (prompt.includes(EXTRACT_MARK)) {
+          ai.push('extract');
+          extracted.push(prompt.includes(CALL_MARK) ? 'call' : 'chat');
+          return { response: JSON.stringify({ items: items.map((i) => ({ ...i.item, cite: citeOf(i.quote), quote: i.quote })) }) };
+        }
         const task = prompt.includes(SUMMARY_MARK) ? 'summary' : 'structure';
         ai.push(task);
-        // As a model would: cite the span of the line the quote is on, from the prompt's `[from-to] speaker: text`.
-        const at = new RegExp(`\\[(\\d+)-(\\d+)\\][^\\[]*?${quote.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).exec(prompt);
-        const cite = at ? { from: Number(at[1]), to: Number(at[2]) } : { from: -1, to: -1 };
+        const cite = citeOf(quote);
         return { response: task === 'summary'
           ? JSON.stringify({ overview: [{ text: 'They reconcile invoices by hand.', cites: [cite] }], key_quotes: [{ quote }] })
           : JSON.stringify({ placements: [
@@ -128,7 +161,11 @@ function world() {
       },
     },
   };
-  return { env, db, ai, quoteOn: (q: string) => { quote = q; } };
+  return {
+    env, db, ai, extracted,
+    quoteOn: (q: string) => { quote = q; },
+    itemsOn: (list: Array<{ item: Record<string, unknown>; quote: string }>) => { items = list; },
+  };
 }
 type World = ReturnType<typeof world>;
 
@@ -418,4 +455,123 @@ test('4. a call whose transcript carries no times reads null minutes, and the ve
 
   f.db.prepare('UPDATE interview_sessions SET final_model = NULL WHERE id = ?').run(sessionId);
   assert.deepEqual((await analytics(f, sessionId)).body.transcript_source, { value: null, sources: [], reason: REASONS.transcriptModel });
+});
+
+// ── 5. (PR 2) D859's items, read as a call ───────────────────────────────────
+
+/** What a call decided, and who said they would do what: each quoting a line all three fixtures have. */
+const CALL_ITEMS = [
+  { item: { type: 'decision', statement: 'Fixing the manual month-end close comes first', owner_hint: 'Dana Ruiz' }, quote: PAIN_LINE },
+  { item: { type: 'action_item', statement: 'Send the month-end checklist', owner_hint: 'Sam Founder', due_hint: 'by Friday' }, quote: QUESTION_LINE },
+];
+const proposals = (f: World, id: number) => f.db.prepare(
+  'SELECT id, kind, status, task, payload_json, cite_from, cite_to, citation_json FROM validate_proposals WHERE session_id = ? ORDER BY id').all(id);
+const items = (f: World, id: number) => proposals(f, id).filter((p: any) => p.task === 'extract_conversation_items');
+
+for (const [name, open] of [
+  ['a Zoom VTT', (f: World) => zoomCall(f)],
+  ['a Google Meet call', (f: World, t: any) => meetCall(f, t)],
+  ['an uploaded call transcribed by Whisper', (f: World) => uploadedCall(f)],
+] as const) {
+  test(`5. ${name}: the press also proposes its decision and action item, each on its segment, "Recorded", read as a call`, async (t) => {
+    // Mutation checked: the engine's call gate removed → no items; isCall false → read as a chat, and no decision or action item.
+    const f = world();
+    f.itemsOn(CALL_ITEMS);
+    const id = await (open as any)(f, t);
+    await press(f, id);
+    assert.deepEqual(f.extracted, ['call'], 'one extraction, with the call\'s prompt');
+    const got = items(f, id);
+    assert.deepEqual(got.map((p: any) => [p.kind, p.status, JSON.parse(p.payload_json)]), [
+      ['decision', 'pending', { statement: 'Fixing the manual month-end close comes first', owner_hint: 'Dana Ruiz' }],
+      ['follow_up', 'pending', { kind: 'action_item', detail: 'Send the month-end checklist', due_hint: 'by Friday', owner_hint: 'Sam Founder' }],
+    ]);
+    for (const [p, q] of [[got[0], PAIN_LINE], [got[1], QUESTION_LINE]] as const) {
+      const line = lineAt(f, id, q);
+      assert.deepEqual([p.cite_from, p.cite_to], [line.start_ms, line.end_ms], `${p.kind} cites its segment`);
+      const cite = JSON.parse(p.citation_json);
+      assert.deepEqual([cite.kind, cite.session_id, cite.quote, cite.source_label], ['transcript', id, q, 'Recorded']);
+    }
+    // Structuring's own suggestion says "Recorded" too.
+    const structured = proposals(f, id).find((p: any) => p.task === 'structure_interview');
+    assert.equal(JSON.parse(structured.citation_json).source_label, 'Recorded');
+  });
+}
+
+test('5. a three-speaker call: an item keeps the speaker of the line it quotes; nothing lands without an Accept, and the Accept writes the interview', async () => {
+  // Mutation checked: owner_hint dropped from either parse → the findings differ; action_item not a follow-up kind → it is not proposed.
+  const f = world();
+  f.itemsOn([
+    { item: { type: 'action_item', statement: 'Share the time log', owner_hint: 'Lee Park' }, quote: COLLEAGUE_LINE },
+    { item: { type: 'decision', statement: 'Try a tool that stops the manual close' }, quote: 'We would try anything that stops it.' },
+  ]);
+  const id = await zoomCall(f);
+  await press(f, id);
+  const findings = () => f.db.prepare('SELECT kind, module, payload_json FROM interview_findings WHERE interview_id = ? ORDER BY id').all(INTERVIEW);
+  assert.deepEqual(findings(), [], 'proposed, not written');
+  const ev = (await moduleSuggestions(f.env, PROJECT, 'customer-research')).filter((s) => s.session_id === id);
+  assert.deepEqual(ev.map((s) => [s.kind, s.speaker, s.interviewee]).sort(), [
+    ['decision', 'Dana Ruiz', 'Dana Ruiz'],
+    ['follow_up', 'Lee Park', 'Dana Ruiz'],
+  ], "the colleague's action item is Lee Park's, never the interviewee's");
+
+  for (const p of items(f, id)) {
+    const a = await call(f.env, 'POST', `/founder/validate/placements/${p.id}/accept`, {});
+    assert.equal(a.status, 200, JSON.stringify(a.body));
+  }
+  assert.deepEqual(findings().map((r: any) => [r.kind, r.module, JSON.parse(r.payload_json)]), [
+    ['follow_up', 'customer-research', { kind: 'action_item', detail: 'Share the time log', owner_hint: 'Lee Park' }],
+    ['decision', 'customer-research', { statement: 'Try a tool that stops the manual close' }],
+  ]);
+});
+
+// ── 6. (PR 2) Translated first ───────────────────────────────────────────────
+
+test('6. a Spanish call: D857 translates it, structuring and the items read the translation, and the Spanish stays beside each quote', async () => {
+  // Mutation checked: the extraction reading finalSegments again, or withOriginals dropped → its item has no Spanish beside it, or none at all.
+  const f = world();
+  f.quoteOn(ES_EN);
+  f.itemsOn([{ item: { type: 'decision', statement: 'Automate the Friday close' }, quote: ES_EN }]);
+  const { sessionId: id, ref } = await callRef(f, 'zoom');
+  const vtt = ['WEBVTT', '', '1', '00:00:00.000 --> 00:00:04.000', `Sam Founder: ${QUESTION_LINE}`, '',
+    '2', '00:00:04.000 --> 00:00:09.000', `Dana Ruiz: ${ES_LINE}`, ''].join('\n');
+  assert.equal((await importMeetingRef(f.env, ref(), async () => ({ kind: 'segments', segments: parseVtt(vtt) }))).status, 'imported');
+  // Structure only: the summary reads the original words, and this stand-in summary quotes the translation.
+  const st = await call(f.env, 'POST', `/founder/validate/sessions/${id}/structure`, {});
+  assert.equal(st.status, 201, JSON.stringify(st.body));
+  assert.equal(f.ai.filter((x) => x === 'translate').length, 1, 'the Spanish line only: the English one is already in the working language');
+  const seg = f.db.prepare('SELECT source_lang, translation_status FROM interview_transcript_segments WHERE session_id = ? AND text = ?').get(id, ES_LINE);
+  assert.deepEqual([seg.source_lang, seg.translation_status], ['es', 'done']);
+  const byTask = (task: string) => proposals(f, id).filter((p: any) => p.task === task).map((p: any) => JSON.parse(p.citation_json));
+  for (const task of ['structure_interview', 'extract_conversation_items']) {
+    const [cite, ...rest] = byTask(task);
+    assert.equal(rest.length, 0, task);
+    assert.deepEqual([cite.quote, cite.quote_original, cite.source_lang, cite.source_label], [ES_EN, ES_LINE, 'es', 'Recorded'], task);
+  }
+});
+
+// ── 7. (PR 2) The summary's source, and a chat ───────────────────────────────
+
+test('7. the summary says how the call was transcribed: Zoom\'s own transcript, or Whisper', async () => {
+  // Mutation checked: summaryOf without its transcript line → both fail.
+  const f = world();
+  const zoom = await zoomCall(f);
+  const upload = uploadedCall(f);
+  for (const id of [zoom, upload]) await press(f, id);
+  const sum = (id: number) => summaryOf(f.db.prepare('SELECT * FROM interview_sessions WHERE id = ?').get(id));
+  assert.deepEqual(sum(zoom)!.transcript, { source: 'native', model: 'zoom_transcript' });
+  assert.deepEqual(sum(upload)!.transcript, { source: 'speech_to_text', model: WHISPER });
+  // The session read the founder's page draws carries it.
+  const s = await call(f.env, 'GET', `/founder/validate/sessions/${zoom}`);
+  assert.equal(s.status, 200, JSON.stringify(s.body));
+  assert.deepEqual(s.body.summary.transcript, { source: 'native', model: 'zoom_transcript' });
+});
+
+test('7. a chat is never read for decisions or action items: only a call is', () => {
+  // Mutation checked: the call-only check removed → the chat's decision maps.
+  const decision = { type: 'decision', statement: 'Ship the export first' };
+  const action = { type: 'action_item', statement: 'Send the deck', owner_hint: 'Sam Founder' };
+  assert.equal(placementFor(decision, 'q'), null);
+  assert.equal(placementFor(action, 'q'), null);
+  assert.deepEqual(placementFor(decision, 'q', { call: true }), { kind: 'decision', payload: { statement: 'Ship the export first' } });
+  assert.deepEqual(placementFor(action, 'q', { call: true }), { kind: 'follow_up', payload: { kind: 'action_item', detail: 'Send the deck', owner_hint: 'Sam Founder' } });
 });
