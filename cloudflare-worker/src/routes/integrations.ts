@@ -60,7 +60,8 @@ import { refuse } from '../util/refusal';
 import { MANAGED_PROVIDERS, PROVIDER_ENV_VARS, type ManagedProviderKey } from '../services/providerOauthKeys';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
-import { hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
+import { extraScopes, hasScopeOverreach, validateConnectorSettings } from '../integrations/connectorRules';
+import { stripTrailingSlashes } from '../util/url';
 import { fedCounts } from '../integrations/fed';
 import { accessToken, accessibleRepositories, checkChoice, grantedPermissions, githubInstallUrl, readProgress } from '../integrations/providers/github';
 
@@ -641,7 +642,7 @@ integrations.post('/connect', async (c) => {
     await logEvent(c.env, {
       integration_id: 0, user_id: user.id, provider_key: key,
       direction: 'internal', event_type: 'overreach', status: 'error',
-      response_summary: 'Provider granted permissions beyond the requested set; connection refused.',
+      response_summary: `Provider granted permissions beyond the requested set (${extraScopes(desc, result.scopes || []).join(', ')}); connection refused.`,
     });
     return c.json({ error: 'scope_overreach', message: 'The provider granted permissions beyond those requested. The connection was refused.' }, 403);
   }
@@ -1510,6 +1511,18 @@ export function returnQuery(extra: Record<string, unknown> | null | undefined, o
   return `${returnBase(extra)}?${outcome}${venture}`;
 }
 
+// The callback answers on OAUTH_CALLBACK_BASE_URL's host (app.axal.vc), but the
+// SPA keeps its signed-in state per origin, on APP_URL's host (axal.vc). A
+// relative return left the member on app.axal.vc with no cached session, so the
+// route guard sent them to /login and the outcome was never shown. Every return
+// goes to APP_URL instead, as Calendar's `destFor` does.
+integrations.use('/oauth/:provider/callback', async (c, next) => {
+  await next();
+  const base = stripTrailingSlashes(c.env.APP_URL || '');
+  const loc = c.res.headers.get('location');
+  if (base && loc && loc.startsWith('/') && !loc.startsWith('//')) c.res.headers.set('location', `${base}${loc}`);
+});
+
 integrations.get('/oauth/:provider/callback', async (c) => {
   await ensureIntegrationsSchema(c.env);
   const user = await requireAuth(c);
@@ -1555,7 +1568,7 @@ integrations.get('/oauth/:provider/callback', async (c) => {
       await logEvent(c.env, {
         integration_id: 0, user_id: user.id, provider_key: provider,
         direction: 'internal', event_type: 'overreach', status: 'error',
-        response_summary: 'Provider granted permissions beyond the requested set; connection refused.',
+        response_summary: `Provider granted permissions beyond the requested set (${extraScopes(desc, result.scopes || []).join(', ')}); connection refused.`,
       });
       return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`));
     }
