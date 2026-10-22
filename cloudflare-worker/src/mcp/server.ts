@@ -401,3 +401,7 @@ registerMcpTools(INTERVIEW_TOOLS);
 import { BUILD_TOOLS } from './tools/build';
 import { CONNECTION_TOOLS } from './tools/connections';
 registerMcpTools([...BUILD_TOOLS, ...CONNECTION_TOOLS]);
+
+// D864: the member's customer chats, from Axal's own inbox records.
+import { CHANNEL_TOOLS } from './tools/channels';
+registerMcpTools(CHANNEL_TOOLS);

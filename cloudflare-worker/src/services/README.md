@@ -217,6 +217,7 @@ on a `structured` chat does not mark it again, so a stage the member set stays,
 and an interview with no stage is left alone: the readers already count it as
 held on its `interview_date`.
 `submitted_via` is unchanged. `channels/` holds the rest.
+`conversationAnalytics.ts` (D858, #2503) reads a session's and a venture's conversation figures for `../routes/validate_conversations.ts`: messages by side and source, voice notes, languages, suggestion reach, pain themes, objections, willingness to pay, competitor mentions and quotes per theme. Each is `{ value, sources, reason }`, null with its reason when no store holds it; quotes only where the interview allows quoting, and counts only in the venture read. It writes nothing and calls no model.
 `sessionAutoStructure.ts` runs D658's Structure without the button: when a
 call's transcript is imported, when a chat is assigned, and when an assigned
 chat goes quiet. Its findings are proposals for the founder to review. It keeps
