@@ -726,6 +726,12 @@ D685 S03-A (#1583, migration 452) adds the Worker half of "Record a session" set
 - `POST /sessions/:id/transcribe` produces the final transcript, chunk by chunk, after a budget hold for the whole job. `PATCH /sessions/:id/segments/:segId` assigns a speaker.
 - `GET /sessions/:id/receipt` returns each job's cost and the budget left. `DELETE /sessions/:id` deletes the session, its R2 audio, and writes an audit row.
 
+D877 (#2524, migration 530) keeps a call's audio apart from its text. A call is a session with a Zoom or Meet ref, or an uploaded recording (D872); the in-person recorder's audio is kept until deleted, as before.
+- `DELETE /sessions/:id/audio` removes the session's R2 chunks and their rows and keeps every segment, mark, receipt, digest and accepted item. The session then carries `audio_removed_at` and `audio_removed_reason` (`deleted`), and `GET /sessions/:id/audio` answers 404 `audio_removed` with the reason. It waits, 409 `transcribing`, while a run is moving, and is behind `scopeSession` like every session route.
+- `GET /sessions/audio-retention` returns the caller's `{ days, chosen, default_days, min_days, max_days }`: `days` is 30 by default (D877, owner question 1, answer A) and `null` keeps the audio until deleted. `PUT /sessions/audio-retention { days: 1..3650 | null }` sets it; anything else is 400 `invalid_retention`, with nothing changed.
+- The daily cron (03:50 UTC, beside the channel purge) runs `purgeExpiredCallAudio` (`services/callAudioRetention.ts`): a call's audio whose newest chunk is older than its founder's retention goes, with reason `retention`, and its text stays. A run that is still moving is left for the next day.
+- `DELETE /sessions/:id` still removes both. An accepted finding stays, as the founder accepted it, and its record line reads "Source deleted" (`findingsFor`'s `source_deleted`).
+
 ### Interview calls and accepted suggestions (D757)
 
 How Zoom and Google Meet transcripts are switched on, and what each refusal means, is in `documentation/operations/ZOOM_AND_MEET_TRANSCRIPTS.md`. These are the routes it names.

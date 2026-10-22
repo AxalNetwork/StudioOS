@@ -290,7 +290,8 @@ test('Zoom\'s metadata: used_by, suggests and feeds, passed through publicDescri
   assert.deepEqual([d.used_by, d.suggests, d.feeds], [used, suggests, ['customer_research']]);
   const page = await call(fixture().env, 'founder', 'GET', '/api/connectors/directory/zoom');
   assert.deepEqual([page.body.connector.used_by, page.body.connector.suggests], [used, suggests]);
-  for (const key of Object.keys(CONNECTOR_METADATA).filter((k) => k !== 'zoom')) {
+  // D879 (#2552): Mercury declares where it is used too, Grow and Raise (`mercury_member_only_d879.test.ts`).
+  for (const key of Object.keys(CONNECTOR_METADATA).filter((k) => k !== 'zoom' && k !== 'mercury')) {
     assert.ok(!('used_by' in CONNECTOR_METADATA[key]) && !('suggests' in CONNECTOR_METADATA[key]), key);
   }
 });

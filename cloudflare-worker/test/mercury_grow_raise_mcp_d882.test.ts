@@ -26,7 +26,7 @@ import { RAISE_PART_FOR } from '../src/services/mercury/raiseFeeds.ts';
 import { GROW_FEED_SLUGS, growFromMercury, FOUNDER_MERCURY_SENTENCES } from '../src/services/mercury/growFeeds.ts';
 import { CONNECT_MERCURY_HREF, MEMBER_MERCURY_SENTENCES, memberMercury } from '../src/services/mercury/memberConnection.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
-import { connectorFeeds } from '../src/integrations/registry.ts';
+import { CONNECTOR_METADATA, connectorFeeds } from '../src/integrations/registry.ts';
 import { signedInFake, FAKE_ACC_A, fakeTx } from './_mercury_mcp_fake.mjs';
 import { fixture, call as raiseCall, sync, mod, accept, withFake } from './_mercury_raise_fixture.ts';
 import {
@@ -117,6 +117,8 @@ test('1c. the founder\'s connector page declares exactly the modules the Grow an
     ...MERCURY_FEEDS.filter((f) => f.role === 'founder' && f.key === 'venture_revenue').map((f) => f.module as string),
   ]);
   assert.deepEqual([...connectorFeeds('mercury', 'founder')].sort(), [...landed].sort());
+  // D879 (C1, #2552): the catalogue row declares the same Grow and Raise modules.
+  assert.deepEqual([...CONNECTOR_METADATA.mercury.feeds].sort(), [...landed].sort());
 });
 
 // ───────────────────────────────────────────── 2. every feed on a sign-in
