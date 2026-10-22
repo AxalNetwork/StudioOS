@@ -20,7 +20,8 @@ import { MODULE_LABELS, moduleHref } from './moduleLabels';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
-export type AuthType = 'api_key' | 'oauth2' | 'webhook';
+/** `oauth_mcp`: a member's sign-in through a provider's MCP server (D840's Mercury, D847's shared client). */
+export type AuthType = 'api_key' | 'oauth2' | 'webhook' | 'oauth_mcp';
 export type IntegrationType = 'crm' | 'scheduling' | 'cap_table' | 'messaging' | 'e_sign' | 'data_feed' | 'custom';
 export type ConnectorCategory = 'CRM' | 'Payments' | 'Calendar' | 'Messaging' | 'Signing' | 'Cap table' | 'Data' | 'Code' | 'Design' | 'Docs' | 'Accounting and banking' | 'Payroll' | 'Calendar and workspace';
 export interface ConnectorMetadata {

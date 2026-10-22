@@ -92,7 +92,8 @@ const NOT_ROWS = new Set(['linkedin', ...CHANNELS]);
 const SOURCES: Record<string, string[]> = {
   github: ['integrations/providers/github.ts', 'integrations/providers/github/roadmap.ts', 'integrations/providers/github/solutionDesign.ts', 'integrations/providers/github/team.ts', 'integrations/providers/github/company.ts', 'integrations/providers/github/mvp.ts'],
   // D840: a member's sign-in reads through the MCP client and its typed reads, and signs in through `oauth.ts`.
-  mercury: ['services/mercury/client.ts', 'services/mercury/mcp.ts', 'services/mercury/reads.ts', 'services/mercury/oauth.ts'],
+  // D847: the transport is the shared client, which `mcp.ts` calls.
+  mercury: ['services/mercury/client.ts', 'services/mercury/mcp.ts', 'integrations/mcpClient.ts', 'services/mercury/reads.ts', 'services/mercury/oauth.ts'],
   slack: ['integrations/providers/slack.ts', 'services/notify.ts'],
   zoom: ['services/channels/zoom.ts'],
   google_calendar: ['services/calendar.ts', 'services/channels/googleMeet.ts'],

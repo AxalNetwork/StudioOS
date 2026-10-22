@@ -24,11 +24,24 @@
  *     with an execution id, the duration and an error category, and the
  *     result's `_meta.execution_id` hands that id to the client.
  * A refusal is an error result in plain words, never an exception's text.
+ *
+ * D846 (#2467) — ONE REGISTRY, LISTED PER MEMBER. Every tool carries where it
+ * comes from (`source`, with its `provider` registry key), a semver `version`
+ * reported in `_meta`, an optional plan (`entitlement`) and whether it needs
+ * its provider connected (`requiresConnection`). `createServer` registers
+ * only the tools this principal may use: the token's scope covers the tool,
+ * the plan is met, and the provider is connected and switched on for at least
+ * one granted company. A tool left out answers a call by name exactly as an
+ * unknown name does (`NOT_AVAILABLE`). Listing is not authorization: `callTool`
+ * asks all of it again on every call. A tool's name is stable; a breaking
+ * change registers `<name>_v2` beside it.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
+import type { SCOPES } from './oauth';
+import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import {
   ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, type GrantProps,
 } from './grants';
@@ -43,11 +56,26 @@ export interface ToolRun {
   /** The checked company, when the tool takes one. */
   company: { id: number; name: string } | null;
   args: Record<string, unknown>;
+  /** D846: for a tool that needs its provider, the granted company ids it is connected and switched on for. */
+  connected: number[];
 }
+
+export type ToolScope = (typeof SCOPES)[number];
+/** D846: where a tool's answer comes from. `connector` reads StudioOS's records of a connection, never the provider live (D713). */
+export type ToolSource = 'axal' | 'connector' | 'remote_mcp';
 
 export interface McpTool {
   name: string;
-  requiredScope: 'validate:read' | 'validate:write';
+  requiredScope: ToolScope;
+  source: ToolSource;
+  /** A key in the connector registry (`integrations/registry.ts`), for a connector or remote tool. */
+  provider?: string;
+  /** Semver, reported in `_meta`. A breaking change registers `<name>_v2` instead of changing this tool. */
+  version: string;
+  /** The founder plan the tool needs (`userMeetsTier`); none means every plan. */
+  entitlement?: Tier;
+  /** True when the tool is listed only while `provider` is connected and switched on for a granted company. */
+  requiresConnection?: boolean;
   title: string;
   description: string;
   /** A zod raw shape; the SDK turns it into the tool's JSON schema. */
@@ -90,6 +118,68 @@ function toolErrorCategory(status: number): UsageErrorCategory {
   return 'invalid_input';
 }
 
+/** What a tool this connection may not use answers, word for word what an unknown name answers. */
+export const NOT_AVAILABLE = 'That tool is not available on this connection.';
+/** The `_meta` keys a tool's listing and results carry. */
+export const META = { version: 'vc.axal/version', source: 'vc.axal/source' } as const;
+const toolMeta = (tool: McpTool) => ({ [META.version]: tool.version, [META.source]: tool.source });
+
+/** The plan check, on the user's stored subscription. A read that fails denies. */
+export async function toolEntitled(env: Env, user: { id: number; role: string | null }, tier: Tier | undefined): Promise<boolean> {
+  if (!tier) return true;
+  try {
+    const sub = await env.DB.prepare('SELECT subscription_tier, subscription_status, subscription_renews_at FROM users WHERE id = ?')
+      .bind(user.id).first<Record<string, string | null>>();
+    return !!sub && userMeetsTier({ ...sub, id: user.id, role: user.role } as unknown as User, tier);
+  } catch { return false; }
+}
+
+/**
+ * The granted company ids (projects.id) for which the user's own `provider`
+ * connection is active and switched on for the project's company (D713:
+ * personal unless switched on). A read that fails connects nothing.
+ */
+export async function connectedCompanies(env: Env, userId: number, provider: string | undefined, companyIds: number[]): Promise<number[]> {
+  if (!provider || !companyIds.length) return [];
+  try {
+    const r = await env.DB.prepare(
+      'SELECT DISTINCT p.id AS id FROM integrations i ' +
+      'JOIN integration_companies ic ON ic.integration_id = i.id AND ic.enabled = 1 ' +
+      'JOIN user_company_links ucl ON ucl.company_id = ic.company_id AND ucl.user_id = i.user_id ' +
+      'JOIN projects p ON p.company_id = ic.company_id AND p.deleted_at IS NULL ' +
+      "WHERE i.user_id = ? AND i.provider_key = ? AND i.status = 'active' AND p.id IN (SELECT value FROM json_each(?)) ORDER BY p.id",
+    ).bind(userId, provider, JSON.stringify(companyIds)).all<{ id: number }>();
+    return (r.results || []).map((row) => Number(row.id));
+  } catch { return []; }
+}
+
+/** Whether the principal may use the tool: its scope, its plan and, when it needs one, its connection. */
+export async function toolAvailable(env: Env, user: { id: number; role: string | null }, scope: readonly string[], companyIds: number[], tool: McpTool): Promise<boolean> {
+  if (!scope.some((granted) => granted === tool.requiredScope)) return false;
+  if (!(await toolEntitled(env, user, tool.entitlement))) return false;
+  if (tool.requiresConnection && !(await connectedCompanies(env, user.id, tool.provider, companyIds)).length) return false;
+  return true;
+}
+
+/** The granted companies the user can still read. */
+async function liveCompanies(env: Env, props: GrantProps, user: Awaited<ReturnType<typeof grantUser>>) {
+  return (await Promise.all(props.companies.map(async (id) => {
+    try { return await grantCompany(env, props, user, id); } catch { return null; }
+  }))).filter((c): c is { id: number; name: string } => c !== null);
+}
+
+/** The tools this principal is listed, or, when the grant no longer stands, none and the sentence why. */
+export async function listedTools(env: Env, props: GrantProps, scope: readonly string[]): Promise<{ tools: McpTool[]; refusal: string | null }> {
+  let principal: Awaited<ReturnType<typeof grantUser>>;
+  try { principal = await grantUser(env, props); } catch (e) {
+    if (e instanceof ToolRefused) return { tools: [], refusal: e.sentence };
+    throw e;
+  }
+  const ids = (await liveCompanies(env, props, principal)).map((c) => c.id);
+  const ok = await Promise.all(REGISTRY.map((t) => toolAvailable(env, principal, scope, ids, t)));
+  return { tools: REGISTRY.filter((_, i) => ok[i]), refusal: null };
+}
+
 /** Run one tool call under the grant's checks. Exported for tests. */
 export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = []) {
   const executionId = newExecutionId();
@@ -112,6 +202,7 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     user = await grantUser(env, props);
     stage = 'scope';
     if (!scope.includes(tool.requiredScope)) throw new ToolRefused(`This token needs ${tool.requiredScope} for ${tool.name}. Reconnect with that permission.`);
+    if (!(await toolEntitled(env, user, tool.entitlement))) throw new ToolRefused(NOT_AVAILABLE);
     if (grantId && !(await withinGrantLimit(env, grantId))) {
       await log('rate_limited', 'rate_limited');
       return text({ error: 'Too many calls from this connection. Wait a minute and try again.' }, true, executionId);
@@ -123,16 +214,22 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
       companyId = company.id;
     }
     // The granted companies that still pass the check; one the user has lost drops out.
-    const companies = (await Promise.all(props.companies.map(async (id) => {
-      try { return await grantCompany(env, props, user!, id); } catch { return null; }
-    }))).filter((c): c is { id: number; name: string } => c !== null);
+    const companies = await liveCompanies(env, props, user);
+    let connected: number[] = [];
+    if (tool.requiresConnection) {
+      connected = await connectedCompanies(env, user.id, tool.provider, companies.map((c) => c.id));
+      if (!connected.length) throw new ToolRefused(NOT_AVAILABLE);
+      if (company && !connected.includes(company.id)) {
+        throw new ToolRefused(`That connection is not switched on for ${company.name}. Switch it on from Connect a tool.`);
+      }
+    }
     stage = 'run';
-    const result = await tool.run({ env, props, user, companies, company, args });
+    const result = await tool.run({ env, props, user, companies, company, args, connected });
     if (grantId && env.OAUTH_KV) {
       await env.OAUTH_KV.put(lastUsedKey(grantId), new Date().toISOString(), { expirationTtl: 31 * 86_400 }).catch(() => {});
     }
     await log('ok');
-    return text(result, false, executionId);
+    return { ...text(result), _meta: { ...toolMeta(tool), execution_id: executionId } };
   } catch (e) {
     if (e instanceof ToolRefused) {
       // A refusal inside a tool is about its access to the company.
@@ -149,16 +246,36 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
   }
 }
 
-export function createServer(env: Env, props: GrantProps, grantId: string | null, scope: readonly string[] = []): McpServer {
+/**
+ * A call to a tool this principal is not listed is answered as an unknown
+ * name is, in our words, before the SDK's handler: the SDK's own answer names
+ * the tool as "not found". The SDK keeps its handlers in `_requestHandlers`;
+ * `mcp_registry_d846.test.ts` fails if that ever moves.
+ */
+function gateCalls(server: McpServer, listed: ReadonlySet<string>, refusal: string | null) {
+  const handlers = (server.server as unknown as { _requestHandlers: Map<string, (req: any, extra: any) => Promise<unknown>> })._requestHandlers;
+  const inner = handlers.get('tools/call');
+  if (!inner) throw new Error('[mcp] the SDK has no tools/call handler to gate');
+  handlers.set('tools/call', (req, extra) => (listed.has(String(req?.params?.name))
+    ? inner(req, extra)
+    : Promise.resolve(text({ error: refusal ?? NOT_AVAILABLE }, true))));
+}
+
+export async function createServer(env: Env, props: GrantProps, grantId: string | null, scope: readonly string[] = []): Promise<McpServer> {
   const server = new McpServer({ name: 'StudioOS', version: '1.0.0' }, { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() });
-  for (const tool of REGISTRY) {
+  const { tools, refusal } = await listedTools(env, props, scope);
+  for (const tool of tools) {
     server.registerTool(tool.name, {
       title: tool.title,
       description: tool.description,
       inputSchema: tool.inputSchema,
       annotations: { readOnlyHint: tool.readOnly !== false, destructiveHint: false, openWorldHint: false },
+      _meta: toolMeta(tool),
     }, (async (args: Record<string, unknown>) => callTool(env, props, grantId, tool, args ?? {}, scope)) as any);
   }
+  // With nothing listed the SDK never installs its tool handlers; install them so tools/list answers [].
+  if (!tools.length) (server as unknown as { setToolRequestHandlers(): void }).setToolRequestHandlers();
+  gateCalls(server, new Set(tools.map((t) => t.name)), refusal);
   return server;
 }
 
@@ -168,7 +285,7 @@ export const mcpApiHandler = {
     // The provider sets ctx.props to what completeAuthorization stored.
     const props = (ctx as unknown as { props: GrantProps }).props;
     const scope = (ctx as unknown as { auth?: { scope?: string[] } }).auth?.scope ?? [];
-    const server = createServer(env, props, grantIdOf(request), scope);
+    const server = await createServer(env, props, grantIdOf(request), scope);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     return transport.handleRequest(request);
@@ -183,3 +300,8 @@ registerMcpTools(READ_TOOLS);
 import { INTERVIEW_TOOLS } from './tools/interviews';
 import { ToolError } from '../services/assistantInterviews';
 registerMcpTools(INTERVIEW_TOOLS);
+
+// D846: the connector-backed reads, over StudioOS's own records (D713).
+import { BUILD_TOOLS } from './tools/build';
+import { CONNECTION_TOOLS } from './tools/connections';
+registerMcpTools([...BUILD_TOOLS, ...CONNECTION_TOOLS]);

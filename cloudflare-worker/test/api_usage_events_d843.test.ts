@@ -53,7 +53,7 @@ const props = (over: Partial<GrantProps> & { apiKeyUid?: string } = {}): GrantPr
 });
 
 const tool = (over: Partial<McpTool> = {}): McpTool => ({
-  name: 'stub_read', requiredScope: 'validate:read', title: 'Stub', description: 'A stub tool.',
+  name: 'stub_read', requiredScope: 'validate:read', source: 'axal', version: '1.0.0', title: 'Stub', description: 'A stub tool.',
   inputSchema: {}, company: true, run: async () => ({ answer: SECRET_RESULT }), ...over,
 });
 

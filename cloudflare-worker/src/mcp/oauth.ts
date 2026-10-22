@@ -33,7 +33,12 @@ export const MCP_PATH = '/mcp';
 /** D784: where the server answered until 2026-10-20; every path under it answers 308 to `MCP_PATH`. */
 export const LEGACY_MCP_PATH = '/api/mcp';
 export const OAUTH_PATHS = { authorize: '/api/oauth/authorize', token: '/api/oauth/token', register: '/api/oauth/register' } as const;
-export const SCOPES = ['validate:read', 'validate:write'] as const;
+/**
+ * D846 (#2467): the three read scopes are granted only by an explicit consent
+ * (or, from #2464 on, a key's own scopes). Each scope's wording on the
+ * consent page is `SCOPE_COPY` in `routes/mcp_consent.ts`.
+ */
+export const SCOPES = ['validate:read', 'validate:write', 'build:read', 'raise:read', 'connectors:read'] as const;
 export const CONSENT_TTL_SECONDS = 600;
 export const CLIENT_REGISTRATION_TTL_SECONDS = 7 * 86_400;
 export const PUBLIC_OAUTH_LIMITS = { register: 10, authorize: 30 } as const;
@@ -81,7 +86,7 @@ async function authorize(request: Request, env: Env, helpers: ReturnType<typeof 
     return Response.json({ error: 'invalid_request', detail: 'PKCE with S256 is required' }, { status: 400 });
   }
   const scopes = requestedScopes(authRequest.scope);
-  if (!scopes.length) return Response.json({ error: 'invalid_scope', detail: 'Request validate:read or validate:write.' }, { status: 400 });
+  if (!scopes.length) return Response.json({ error: 'invalid_scope', detail: `Request at least one of ${SCOPES.join(', ')}.` }, { status: 400 });
   authRequest.scope = scopes;
   const client = await helpers.lookupClient(authRequest.clientId);
   if (!client) return Response.json({ error: 'invalid_client', detail: 'Unknown client' }, { status: 400 });

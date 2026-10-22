@@ -84,6 +84,8 @@ export const READ_TOOLS: McpTool[] = [
   {
     name: 'list_companies',
     requiredScope: 'validate:read',
+    source: 'axal',
+    version: '1.0.0',
     title: 'List companies',
     description: 'List the StudioOS companies this connection was approved for.',
     inputSchema: {},
@@ -93,6 +95,8 @@ export const READ_TOOLS: McpTool[] = [
   {
     name: 'get_validate_context',
     requiredScope: 'validate:read',
+    source: 'axal',
+    version: '1.0.0',
     title: 'Get Validate context',
     description: 'Read one company\'s Validate context: its hypotheses and their status, its pain themes and their severity, its ideal-customer segments, its open questions, and how many interviews are recorded. Interviewees are never named.',
     inputSchema: { company: z.number().int().positive().describe('The company id, from list_companies') },
@@ -102,6 +106,8 @@ export const READ_TOOLS: McpTool[] = [
   {
     name: 'get_interview_guide',
     requiredScope: 'validate:read',
+    source: 'axal',
+    version: '1.0.0',
     title: 'Get an interview guide',
     description: 'Get customer-interview questions for one company, built from its open hypotheses and its strongest pain themes. Optionally narrow to one hypothesis by its code or text.',
     inputSchema: {

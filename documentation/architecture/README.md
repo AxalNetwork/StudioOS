@@ -16,6 +16,7 @@ disagrees with the code, the document is the thing to fix.
 | `DECISIONS.md` | Why is it built this way and not the obvious way? Numbered, D1…D525, each recording what was decided and what it cost. Takes no new entries. |
 | `decisions/` | The same record from D526 on: one file per decision, `D<n>.md`. Its README has the naming rule and what checks it. |
 | `GOTCHAS.md` | What will bite me? |
+| `MCP_API_PLATFORM.md` | The MCP engine, member API keys and AI token metering: what exists, the contracts, the security decisions, and which task builds what (#2463). Updated every session. |
 | `PROFILING_V2.md` | The Profiling v2 spec (D356): trait model, question formats, skills evidence, values across roles, the evolution model and its parameters, and what Sessions 7–15 build. The source of truth for that programme; `cloudflare-worker/test/fixtures/profiling-v2-personas.json` is held to it. |
 | `PRODUCTION.md` | What production actually is, and how a deploy works. |
 | `CLOUDFLARE-CUTOVER.md` | **Superseded record (2026-08).** The plan that retired GitHub Pages at the apex — executed, then overtaken: since 2026-09-01 the Worker serves both hosts (`PRODUCTION.md` has the current topology). Kept for the 5xx baseline table and the OAuth re-registration table, which is still live work. |
