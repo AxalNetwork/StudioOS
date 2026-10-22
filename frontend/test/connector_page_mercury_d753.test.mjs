@@ -1,9 +1,10 @@
 /**
- * D753 (#1991, F5) — Mercury on its own page, `/account/connectors/mercury`,
- * under D715's rules: an admin on HQ gets the four Axal entities' connections
- * as the page's body, with one audited read on mount and no header action; a
- * branch admin gets one sentence and no read; a founder's or a partner's own
- * Mercury draws its groups above the token form, then, once connected, in
+ * D753 (#1991, F5) — Mercury on its own page, `/account/connectors/mercury`.
+ * D880 (#2553): the page is the member's own Mercury only. An admin on HQ
+ * reads one line, linking HQ › Bank accounts, and the page never draws or
+ * reads Axal VC's own accounts (`/api/admin/mercury`), whichever row the
+ * Worker serves; a branch admin gets one sentence; a founder's or a partner's
+ * own Mercury draws its groups above the token form, then, once connected, in
  * "Your connection" (part 2, on F3 #1956), never in the interim panel.
  *
  * Every account ending and token here is invented.
@@ -21,7 +22,7 @@ import { buildCatalogue, connectionStatus } from '../src/pages/account/connector
 import { manageItems } from '../src/pages/account/connectorPageModel.js';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
-import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, ENTITY_FEEDS, MEMBER_GROUPS, MEMBER_REPLACE } from '../src/pages/account/mercuryModel.js';
+import { BRANCH_MANAGED, HQ_ACCOUNTS, MEMBER_GROUPS, MEMBER_REPLACE } from '../src/pages/account/mercuryModel.js';
 import { mercuryPersonalApi } from '../src/lib/api/mercuryPersonal.js';
 
 const h = React.createElement;
@@ -31,7 +32,10 @@ const P = (key, display_name, extra = {}) => ({
   description: `${display_name} description.`, capabilities: [], docs_url: `https://example.test/${key}`,
   has_implementation: false, locked_for_user: false, category: 'Accounting and banking', pulls: [], sends: [], feeds: [], ...extra,
 });
-const ENTITY = P('mercury', 'Mercury', { connection_source: 'mercury_entity_connections' });
+/** The row the Worker served an admin on HQ before D879, kept to show the page draws nothing of it. */
+const LEGACY_ENTITY = P('mercury', 'Mercury', { connection_source: 'mercury_entity_connections' });
+/** D879's admin preview: the member's page, nothing to connect. */
+const PREVIEW = P('mercury', 'Mercury', { connection_source: 'integrations', has_implementation: false });
 const PERSONAL = P('mercury', 'Mercury', { connection_source: 'integrations', has_implementation: true });
 const STRIPE = P('stripe', 'Stripe', { auth_type: 'oauth2', connection_source: 'integrations', has_implementation: true });
 const ready = (providers, items = []) => ({
@@ -95,39 +99,34 @@ const page = (data, extra = {}) => h(ConnectorPageView, { data, connectorKey: 'm
 /** The header band's interactive children: an action would be one. */
 const bandActions = (m) => m.walk(m.by('connector-page-band')).filter((n) => ['BUTTON', 'A'].includes(String(n.tagName || n.nodeName || '').toUpperCase()));
 
-test('an admin on HQ: the entity connections are the page body, after one audited read, with no header action', async () => {
-  const m = await mount(page(ready([ENTITY, STRIPE])), HQ_ADMIN);
-  try {
-    assert.equal(m.reads(), 1, 'the page\'s mount is the one read');
-    assert.equal(m.pr(m.by('connector-page-connect'))['data-mode'], 'entity');
-    const body = m.by('mercury-entity-page');
-    assert.ok(body, 'the entity body is on the page');
-    assert.equal(m.by('mercury-entity-sheet'), undefined, 'no sheet, in any layout');
-    assert.deepEqual(bandActions(m), [], 'the band draws no action for the entity row');
-    const t = m.text(body);
-    for (const words of ['Axal entities', ENTITY_FEEDS, ENTITY_AUDIT_FOOT, ADMIN_ONLY, 'Open Banking']) assert.ok(t.includes(words), words);
-    assert.ok(m.by('mercury-sync-holdings'), 'a plain admin syncs');
-    assert.equal(m.by('mercury-connect-fund'), undefined, 'and connects nothing');
-  } finally { await m.unmount(); }
+/** Nothing of Axal VC's own accounts on the page: no entity body, sheet or control, and no `/admin/mercury` read. */
+function noEntityUi(m) {
+  assert.equal(m.reads(), 0, 'no read of Axal VC\'s accounts');
+  for (const id of ['mercury-entity-page', 'mercury-entity-sheet', 'mercury-entities', 'mercury-sync-holdings', 'mercury-connect-fund', 'mercury-audit-foot', 'mercury-open-banking']) {
+    assert.equal(m.by(id), undefined, id);
+  }
+  assert.notEqual(m.pr(m.by('connector-page-connect') || {})['data-mode'], 'entity');
+}
+
+test('an admin on HQ: the member page as a preview, one line to HQ \u203a Bank accounts, and nothing of Axal VC\'s accounts', async () => {
+  for (const [row, user] of [[PREVIEW, HQ_ADMIN], [PREVIEW, SUPER_ADMIN], [LEGACY_ENTITY, HQ_ADMIN], [LEGACY_ENTITY, SUPER_ADMIN]]) {
+    const m = await mount(page(ready([row, STRIPE])), user);
+    try {
+      noEntityUi(m);
+      const line = m.by('connector-page-hq-accounts');
+      assert.ok(line, 'the line');
+      assert.ok(m.text(line).startsWith(HQ_ACCOUNTS.text));
+      assert.equal(m.pr(m.by('connector-page-hq-accounts-link')).href, '/admin?tab=bank-accounts');
+      assert.equal(m.by('connector-page-connect-button'), undefined, 'nothing to connect');
+    } finally { await m.unmount(); }
+  }
 });
 
-test('the Super Admin connects, replaces and disconnects from the page', async () => {
-  const m = await mount(page(ready([ENTITY])), SUPER_ADMIN);
+test('a branch admin sees "Axal VC\'s own accounts are managed from HQ." and no read, whether or not the row is served', async () => {
+  const served = await mount(page(ready([PREVIEW])), BRANCH_ADMIN);
   try {
-    assert.equal(m.reads(), 1);
-    for (const id of ['mercury-connect-fund', 'mercury-replace-holdings', 'mercury-disconnect-holdings', 'mercury-sync-holdings']) assert.ok(m.by(id), id);
-    assert.equal(m.by('mercury-admin-only'), undefined);
-    assert.deepEqual(bandActions(m), []);
-  } finally { await m.unmount(); }
-});
-
-test('a branch admin sees "Axal\'s entity accounts are managed from HQ." and no read, whether or not the row is served', async () => {
-  const served = await mount(page(ready([ENTITY])), BRANCH_ADMIN);
-  try {
-    assert.equal(served.reads(), 0, 'a branch admin\'s page reads nothing');
-    assert.ok(served.text().includes(BRANCH_MANAGED));
-    assert.equal(served.by('mercury-audit-foot'), undefined, 'nothing read, so nothing recorded');
-    assert.equal(served.by('mercury-open-banking'), undefined);
+    noEntityUi(served);
+    assert.equal(served.by('connector-page-hq-accounts'), undefined, 'the HQ line is HQ\'s');
   } finally { await served.unmount(); }
   const withheld = await mount(page(ready([STRIPE]), { branchAdmin: true }), BRANCH_ADMIN);
   try {
@@ -141,9 +140,8 @@ test('a founder\'s own Mercury: their groups, no entity body and no entity read'
   mercuryPersonalApi.status = async () => ({ connected: false, connection: null, uses: [] });
   const m = await mount(page(ready([PERSONAL])), FOUNDER);
   try {
-    assert.equal(m.reads(), 0, 'a member\'s page never reads the entities');
-    assert.equal(m.by('mercury-entity-page'), undefined);
-    assert.notEqual(m.pr(m.by('connector-page-connect'))['data-mode'], 'entity');
+    noEntityUi(m);
+    assert.equal(m.by('connector-page-hq-accounts'), undefined, 'a founder reads no HQ line');
     const t = m.text(m.by('connector-page-connect'));
     for (const label of [MEMBER_GROUPS.uses, MEMBER_GROUPS.never]) assert.ok(t.includes(label), label);
   } finally { await m.unmount(); mercuryPersonalApi.status = saved; }
@@ -172,8 +170,8 @@ test('a founder\'s connected Mercury: Your connection with its groups, no interi
     assert.ok(m.text(yours).includes('Now fed by Mercury'), 'a founder\'s Mercury says what it feeds');
     assert.equal(st.reads, 1, 'the groups read the status once, on the page');
     assert.equal(m.reads(), 0, 'and never the entities');
-    // D840: Sign in again, or keep a token by replacing it.
-    assert.deepEqual(manageItems(connected(MERC()).catalogue[0]).map((i) => i.label), ['Sync now', 'Sign in again', 'Replace token', 'Disconnect']);
+    // D881 (#2554): no token to replace; a member signs in again.
+    assert.deepEqual(manageItems(connected(MERC()).catalogue[0]).map((i) => i.label), ['Sync now', 'Sign in again', 'Disconnect']);
   } finally { await m.unmount(); st.restore(); }
 });
 

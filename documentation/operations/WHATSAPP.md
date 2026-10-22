@@ -79,15 +79,20 @@ credentials into an issue. See §7 before any general-availability PR.
      required popup version and `extras` with W1 (#2501). Version/deprecation
      claims in the earlier runbook were not verified here.
 5. **Worker secrets, before the webhook.** Meta checks the verify token when the
-   webhook is saved, and without the secrets the Worker answers 503. Run
-   this from the repository root for each:
+   webhook is saved, and without the secrets the Worker answers 503. Set them
+   in HQ › Integration keys › Channels › "WhatsApp · members' own numbers
+   (way A)" (D885: Super Admin, with a recent step-up), or run this from the
+   repository root for each:
    `npx wrangler secret put <NAME> --config wrangler.toml --env production`.
    - `WHATSAPP_APP_ID`;
    - `WHATSAPP_APP_SECRET` (App settings → Basic → App secret);
-   - `WHATSAPP_VERIFY_TOKEN` (a long random string you make up);
+   - `WHATSAPP_VERIFY_TOKEN` (a long random string: in HQ, press **Generate**
+     and copy the value it shows once into Meta's webhook form);
    - `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID` (step 4).
 
-   They are not in HQ → Integration keys. A secret needs no deploy.
+   The same page sets way B's three secrets, under "WhatsApp · through Axal's
+   number (way B)"; `WHATSAPP_AXAL_DISPLAY_NUMBER` and `WHATSAPP_CHANNEL` are
+   vars, changed by a PR. A secret needs no deploy.
 6. **The webhook.** App Dashboard → WhatsApp → Configuration.
    - Callback URL: `https://axal.vc/api/channels/whatsapp/webhook`.
    - Verify token: the same string as `WHATSAPP_VERIFY_TOKEN`.
@@ -225,7 +230,7 @@ both vars blocks of `wrangler.toml`, in one PR. It ships on the next deploy.
 | B, linking | "Send this code to Axal on WhatsApp: `LINK <code>`", **Open WhatsApp**, "Expires in 10 minutes.", then "Is •••• 1234 your number?" **Confirm** | — |
 | B, linked | `•••• 1234`, "Last recording <date>." or "No recording sent yet." (the date moves on any message from the number), then **Unlink** | — |
 | B, a recording waiting | Each waiting capture as "N recordings, <date>" with "Waiting for consent" and **Agreed beforehand** (#2056) | — |
-| Calls line | "Calls: not yet. WhatsApp calls do not reach Axal; record a call with the in-app recorder instead." With a number connected, its own "Calls: not yet, because …" replaces the first sentence. | — |
+| Calls line | "Calls stay closed on numbers connected through the WhatsApp Business app. Axal does not answer or place WhatsApp calls; use the in-app recorder with everyone’s consent instead." With a number connected, its own "Calls: not yet, because …" replaces the first sentence. | — |
 
 On the session page a chat reads "Waiting for <Name> to agree", "Agreed in
 WhatsApp at <time>", "<Name> declined. Nothing from this chat was kept." or
@@ -280,8 +285,10 @@ They are also rows in `documentation/architecture/GOTCHAS.md`.
 
 **Do not change canary to on yet.** This section is a release checklist, not
 an approval. W1 (#2501, setup) and W2 (#2502, translation) must merge first.
-W5 (#2505) determines the connector's Calls wording; no call capture is
-advertised until that outcome is implemented and verified.
+W5 (#2505, merged through #2530 / D860) keeps calls closed on coexistence
+numbers. `WHATSAPP_CALLS` remains `"false"`; API-only calling is future work
+after D860’s official-source, approved-notice, live-spike and all-party-consent
+gates. No live call capture is advertised.
 
 ### Evidence S1 reviews
 
@@ -293,10 +300,10 @@ advertised until that outcome is implemented and verified.
 2. The focused command, from the repository root on the same commit, is:
 
    ```sh
-node --experimental-strip-types --no-warnings \
-  --import ./cloudflare-worker/test/_ts-loader.mjs \
-  --test cloudflare-worker/test/whatsapp_readiness_d861.test.ts
-```
+   node --experimental-strip-types --no-warnings \
+     --import ./cloudflare-worker/test/_ts-loader.mjs \
+     --test cloudflare-worker/test/whatsapp_readiness_d861.test.ts
+   ```
 
    It runs isolated fixtures for development, preview and production, plus
    mutations. No request reaches Meta or production. Passing it proves the

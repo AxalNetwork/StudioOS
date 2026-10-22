@@ -27,6 +27,14 @@
  * a day after the call should have ended, and the ref then says why there is
  * none in plain words.
  *
+ * D870 (#2517): A CALL WITH NO NATIVE TRANSCRIPT. `recording.completed` is
+ * claimed like `recording.transcript_completed`, and both queue the same
+ * import, which picks the source (`meetingAudio.ts` chooseRecordingSource):
+ * the VTT when there is one and the call is in English or an unknown
+ * language, else the audio-only M4A, downloaded with the member's token and
+ * transcribed by Workers AI speech-to-text on the AI token ledger. The audio
+ * path needs the interview's consent recorded before the file is fetched.
+ *
  * The access token is refreshed under a lease held in the connection's own
  * credentials (`accessToken`), so a rotating refresh token is spent once; a
  * disconnect revokes the refresh token, not only the short-lived access token.
@@ -54,10 +62,14 @@ import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../
 import { constantTimeEqual } from '../../rpc/secret';
 import { IntakeError, openSession, writableInterview } from '../interviewIntake';
 import { claimEvent, finishEvent, releaseEvent } from './events';
+import {
+  AudioUnreadable, MAX_AUDIO_BYTES, audioStored, chooseRecordingSource, storeAudioChunks, transcribeStoredChunks,
+} from './meetingAudio';
+import { loadSession } from '../interviewSessions';
 import { enqueueChannelJob, registerChannelJob, registerChannelSweep } from './jobs';
 import { providerAvailable } from './connections';
 import {
-  MEETING_ERRORS, MeetingProviderError, cancelRef, dueRefs, importMeetingRef, markEnded, meetingImportHandler, refByExternal, setRefStatus, touchRef, withinCallSlot,
+  MEETING_ERRORS, MeetingProviderError, cancelRef, destinationSession, dueRefs, importMeetingRef, markEnded, meetingImportHandler, refByExternal, setRefStatus, touchRef, withinCallSlot,
   type ImportOutcome, type MeetingErrorCode, type MeetingRef, type TranscriptFetch, type TranscriptFetcher,
 } from './meetings';
 import type { ImportedSegment } from './types';
@@ -578,7 +590,7 @@ export async function handleZoomWebhook(env: Env, rawBody: string, headers: Head
       return { status: 500, body: { error: 'not_stored', message: 'The connection change could not be stored. Zoom will send it again.' } };
     }
   }
-  if (name !== 'meeting.ended' && name !== 'recording.transcript_completed') {
+  if (name !== 'meeting.ended' && name !== 'recording.transcript_completed' && name !== 'recording.completed') {
     return { status: 200, body: { ok: true, ignored: 'event' } };
   }
 
@@ -730,6 +742,50 @@ function meetingPathId(id: string): string {
   return id.startsWith('/') || id.includes('//') ? encodeURIComponent(encodeURIComponent(id)) : encodeURIComponent(id);
 }
 
+/**
+ * D870: a recording file's bytes, with the same token rule as the transcript
+ * (the member's token to Zoom's host only; its signed redirect without it),
+ * counted as they arrive. Null when the file is over `maxBytes`.
+ */
+async function downloadRecording(env: Env, conn: ZoomConnection, url: URL, maxBytes: number): Promise<Uint8Array | null> {
+  const token = await accessToken(env, conn);
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` }, redirect: 'manual' });
+    if (res.status >= 300 && res.status < 400) {
+      const next = new URL(res.headers.get('location') || '', url);
+      if (next.protocol !== 'https:') throw new MeetingProviderError('zoom_fetch_failed', false);
+      res = await fetch(next.toString(), { redirect: 'follow' });
+    }
+  } catch (e) {
+    if (e instanceof MeetingProviderError) throw e;
+    throw new MeetingProviderError('zoom_unreachable', true);
+  }
+  if (!res.ok) throw zoomFailure(res.status, 'zoom_fetch_failed');
+  if (Number(res.headers.get('content-length') || 0) > maxBytes) {
+    await res.body?.cancel().catch(() => {});
+    return null;
+  }
+  const parts: Uint8Array[] = [];
+  let total = 0;
+  const reader = res.body?.getReader();
+  try {
+    for (;;) {
+      const read = await reader?.read();
+      if (!read || read.done) break;
+      total += read.value.byteLength;
+      if (total > maxBytes) { await reader?.cancel().catch(() => {}); return null; }
+      parts.push(read.value);
+    }
+  } catch {
+    throw new MeetingProviderError('zoom_unreachable', true);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
+}
+
 async function readCapped(res: Response): Promise<string | null> {
   if (Number(res.headers.get('content-length') || 0) > MAX_TRANSCRIPT_BYTES) return null;
   const buf = await res.arrayBuffer();
@@ -803,23 +859,72 @@ async function pastInstances(env: Env, conn: ZoomConnection, meetingId: string):
 }
 
 /**
- * An instance's TRANSCRIPT file (the audio transcript; a CC file, Zoom's live
- * captions, when there is no transcript), downloaded and parsed.
+ * An instance's text: its TRANSCRIPT file (the audio transcript; a CC file,
+ * Zoom's live captions, when there is no transcript), downloaded and parsed —
+ * or, D870, its audio-only recording transcribed (`audioTranscript`), as
+ * `chooseRecordingSource` picks for the call's language. `ref` is the ref the
+ * text is for: its session holds the audio chunks.
  */
-async function transcriptOf(env: Env, conn: ZoomConnection, files: RecordingFile[]): Promise<TranscriptFetch> {
-  const vttFiles = (type: string) => files.filter((f) => String(f.file_type ?? '').toUpperCase() === type);
-  const candidates = vttFiles('TRANSCRIPT').length ? vttFiles('TRANSCRIPT') : vttFiles('CC');
-  const ready = candidates.find((f) => (f.status ?? 'completed') === 'completed' && zoomDownloadUrl(f.download_url));
-  if (!ready) return candidates.length ? { kind: 'waiting' } : { kind: 'none', code: 'zoom_no_transcript' };
-  const vtt = await downloadTranscript(env, conn, zoomDownloadUrl(ready.download_url)!);
+async function transcriptOf(env: Env, conn: ZoomConnection, files: RecordingFile[], ref: MeetingRef): Promise<TranscriptFetch> {
+  const choice = chooseRecordingSource(files, ref.call_lang, (f) => !!zoomDownloadUrl(f.download_url));
+  if (choice.kind === 'waiting') return { kind: 'waiting' };
+  if (choice.kind === 'none') return { kind: 'none', code: 'zoom_no_transcript' };
+  if (choice.kind === 'audio') return audioTranscript(env, conn, ref, choice.file);
+  const vtt = await downloadTranscript(env, conn, zoomDownloadUrl(choice.file.download_url)!);
   if (vtt == null) return { kind: 'none', code: 'transcript_too_large' };
   const segments = parseVtt(vtt);
-  return segments.length ? { kind: 'segments', segments } : { kind: 'none', code: 'transcript_empty' };
+  return segments.length ? { kind: 'segments', segments, source: 'native' } : { kind: 'none', code: 'transcript_empty' };
 }
 
-/** Whether an instance's files hold a transcript at all (made, or still being made). */
+/**
+ * D870: the call's audio-only recording as text. Consent first: nothing is
+ * fetched unless the interview's consent is recorded. The file is fetched
+ * once and stored as chunks under the call's session; each run transcribes
+ * a few chunks not yet transcribed and queues the next, and the last one
+ * hands the whole call's segments to the import. A staged chunk is never
+ * transcribed twice, so a retry or a duplicate event charges once.
+ */
+async function audioTranscript(env: Env, conn: ZoomConnection, ref: MeetingRef, file: RecordingFile): Promise<TranscriptFetch> {
+  let destination: { id: number };
+  try {
+    destination = await destinationSession(env, ref);
+  } catch (e) {
+    if (!(e instanceof IntakeError)) throw e;
+    const code: MeetingErrorCode = e.code === 'consent_not_recorded' ? 'stt_consent_missing' : e.status === 403 ? 'member_inactive' : 'interview_gone';
+    return { kind: 'error', code, retryable: false };
+  }
+  const session = await loadSession(env, destination.id);
+  if (!session || session.consent_status !== 'given') return { kind: 'none', code: 'stt_consent_missing' };
+  if (!(await audioStored(env, destination.id))) {
+    const bytes = await downloadRecording(env, conn, zoomDownloadUrl(file.download_url)!, MAX_AUDIO_BYTES);
+    if (bytes == null) return { kind: 'none', code: 'zoom_audio_too_large' };
+    const run = ref.stt_reservation_uid || crypto.randomUUID();
+    await env.DB.prepare('UPDATE interview_channel_refs SET stt_reservation_uid = COALESCE(stt_reservation_uid, ?) WHERE id = ?')
+      .bind(run, ref.id).run();
+    try {
+      await storeAudioChunks(env, destination.id, Number(ref.user_id), bytes, run);
+    } catch (e) {
+      if (e instanceof AudioUnreadable) return { kind: 'none', code: 'zoom_audio_unreadable' };
+      throw e;
+    }
+  }
+  const run = await transcribeStoredChunks(env, destination.id, Number(ref.user_id), ref.call_lang ?? null);
+  if (run.state === 'more') {
+    await enqueueChannelJob(env, 'meeting_import', 'zoom', `${ref.uid}:stt:${run.done}`, { refUid: ref.uid });
+    return { kind: 'pending' };
+  }
+  if (run.state === 'refused') {
+    const code: MeetingErrorCode = run.refusal === 'ai_paused' ? 'stt_paused'
+      : run.budget ? 'stt_budget'
+        : run.refusal === 'chunk_missing' ? 'zoom_audio_unreadable' : 'stt_failed';
+    return { kind: 'error', code, retryable: code === 'stt_failed' };
+  }
+  return { kind: 'segments', segments: run.segments, source: 'whisper', model: run.model };
+}
+
+/** Whether an instance's files hold text at all: a transcript, or (D870) an audio recording to transcribe, made or being made. */
 const hasTranscriptFile = (files: RecordingFile[]) =>
-  files.some((f) => ['TRANSCRIPT', 'CC'].includes(String(f.file_type ?? '').toUpperCase()));
+  files.some((f) => ['TRANSCRIPT', 'CC', 'M4A'].includes(String(f.file_type ?? '').toUpperCase()));
 
 /**
  * A Zoom call's transcript, through the member's own connection: one
@@ -831,7 +936,7 @@ export async function fetchTranscript(env: Env, ref: MeetingRef, hint: Record<st
   if (!conn) return { kind: 'error', code: 'zoom_not_connected', retryable: false };
   const uuid = typeof hint.meetingUuid === 'string' && hint.meetingUuid ? hint.meetingUuid : '';
   const listed = await listRecordings(env, conn, instanceOf(ref)?.uuid || uuid || ref.external_ref);
-  return listed.kind === 'instance' ? transcriptOf(env, conn, listed.files) : listed;
+  return listed.kind === 'instance' ? transcriptOf(env, conn, listed.files, ref) : listed;
 }
 
 // ───────────────────────────────────────────────────────────── a restarted call
@@ -887,8 +992,8 @@ async function bindInstance(env: Env, call: MeetingRef, uuid: string): Promise<M
   if (found) return found;
   await env.DB.prepare(
     `INSERT OR IGNORE INTO interview_channel_refs
-       (uid, provider, external_ref, session_id, interview_id, user_id, join_url, starts_at, ends_at, status)
-     SELECT ?, 'zoom', ?, c.session_id, c.interview_id, c.user_id, c.join_url, c.starts_at, c.ends_at, 'transcript_ready'
+       (uid, provider, external_ref, session_id, interview_id, user_id, join_url, starts_at, ends_at, status, call_lang)
+     SELECT ?, 'zoom', ?, c.session_id, c.interview_id, c.user_id, c.join_url, c.starts_at, c.ends_at, 'transcript_ready', c.call_lang
        FROM interview_channel_refs c
       WHERE c.id = ? AND c.status NOT IN ('imported', 'cancelled')
         AND NOT EXISTS (SELECT 1 FROM interview_channel_refs o WHERE o.session_id = c.session_id AND o.id <> c.id)`,
@@ -904,8 +1009,8 @@ async function bindInstance(env: Env, call: MeetingRef, uuid: string): Promise<M
     consent?.consent_status === 'given' && consent.consent_method ? { method: consent.consent_method } : null);
   const res = await env.DB.prepare(
     `INSERT OR IGNORE INTO interview_channel_refs
-       (uid, provider, external_ref, session_id, interview_id, user_id, join_url, starts_at, ends_at, status)
-     SELECT ?, 'zoom', ?, ?, c.interview_id, c.user_id, c.join_url, c.starts_at, c.ends_at, 'transcript_ready'
+       (uid, provider, external_ref, session_id, interview_id, user_id, join_url, starts_at, ends_at, status, call_lang)
+     SELECT ?, 'zoom', ?, ?, c.interview_id, c.user_id, c.join_url, c.starts_at, c.ends_at, 'transcript_ready', c.call_lang
        FROM interview_channel_refs c WHERE c.id = ?`,
   ).bind(crypto.randomUUID(), key, session.id, call.id).run();
   if (!Number(res.meta?.changes ?? 0)) {
@@ -1019,7 +1124,7 @@ export async function importZoomRef(env: Env, ref: MeetingRef, hint: Record<stri
   if (listed.kind !== 'instance') return settle(listed);
   const uuid = listed.uuid || named;
   // Zoom named no instance: nothing to keep apart, so the call imports it as before.
-  if (!uuid) return importMeetingRef(env, ref, async () => transcriptOf(env, conn, listed.files));
+  if (!uuid) return importMeetingRef(env, ref, async () => transcriptOf(env, conn, listed.files, ref));
 
   const started = Date.parse(listed.startTime);
   if (Number.isFinite(started) && Number.isFinite(Date.parse(String(ref.starts_at ?? ''))) && !withinCallSlot(started, ref)) {
@@ -1041,7 +1146,7 @@ export async function importZoomRef(env: Env, ref: MeetingRef, hint: Record<stri
     const code: MeetingErrorCode = e.status === 403 ? 'member_inactive' : 'interview_gone';
     return settle({ kind: 'error', code, retryable: false });
   }
-  return importInstance(env, instance, async () => transcriptOf(env, conn, listed.files));
+  return importInstance(env, instance, async () => transcriptOf(env, conn, listed.files, instance));
 }
 
 registerChannelJob('meeting_import', 'zoom', meetingImportHandler('zoom', importZoomRef));

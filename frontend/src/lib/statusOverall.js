@@ -12,6 +12,10 @@
  */
 export function overallStatus(services) {
   if (!Array.isArray(services) || services.length === 0) return 'unknown';
+  // Inventory-only rows are explicit about their missing probes. They are
+  // excluded only while unknown; an incident on one still affects the banner.
+  services = services.filter((s) => !(s?.monitoring === 'not_monitored' && s?.status === 'unknown'));
+  if (services.length === 0) return 'unknown';
   if (services.every((s) => s?.status === 'operational')) return 'operational';
   if (services.some((s) => s?.status === 'down')) return 'down';
   return 'degraded';

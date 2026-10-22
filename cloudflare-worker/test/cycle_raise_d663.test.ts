@@ -579,7 +579,7 @@ test('D686 #1594: Calls history is scoped, newest first, with independent recipi
     assert.deepEqual([calls.items[0].recipients,calls.items[0].committed_cents,calls.items[0].unanswered_questions],[0,0,0]);
     assert.equal(JSON.stringify(calls).includes('rhea@example.test')||JSON.stringify(calls).includes('Quinn Quiet'),false);
     assert.equal((await moduleRead(db,'capital-relationships','',OTHER)).status,403);
-    assert.equal(Object.hasOwn((await moduleRead(db,'use-of-funds')).body,'parts'),false,'only Capital relationships gains Calls');
+    assert.equal((await moduleRead(db,'use-of-funds')).body.parts?.calls,undefined,'only Capital relationships gains Calls');
   } finally {FLAGS={};}
   assert.deepEqual((await moduleRead(db,'capital-relationships')).body.parts.calls,{enabled:false});
 });

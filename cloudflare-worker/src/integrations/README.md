@@ -27,12 +27,17 @@ lives in `providers/`.
 
 ## Who sees a provider
 
-`audienceFor(provider, viewer)` answers `open`, `entity`, `personal` or `none`;
+`audienceFor(provider, viewer)` answers `open`, `preview`, `personal` or `none`;
 a `none` provider is answered everywhere as if its key did not exist (404
 `unknown_provider`). The viewer is `{ role, hq, venture }`, built in one place
 per caller (`viewerOf` in `../routes/integrations.ts`, Mercury's own connect).
 
-- **Roles (D710).** `entity_roles` and `personal_roles` — Mercury.
+- **Roles (D710, D879).** `personal_roles` and `preview_roles` — Mercury. A
+  `preview` role (an admin on HQ) reads the founder's card and page, connects
+  nothing and reads no connection, and is told that Axal VC's own accounts live
+  in HQ › Fund administration › Bank accounts (`HQ_ACCOUNTS_NOTE`). D879
+  (#2552) removed D710's `entity_roles`: Axal VC's accounts are never a
+  connector, only `/api/admin/mercury` (`../services/mercury/`).
 - **The venture audience (D757 §2.11).** `audience_rule: 'venture'` — Zoom —
   makes a provider founder-facing: `personal` for a viewer who can hold a
   venture, `none` for everyone else. `venture` is `canHoldValidateSource` in

@@ -13,6 +13,7 @@ import { tableFromBaseline } from './_baseline.mjs';
 import { applyEngineSchema } from './_engine_schema.mjs';
 import channels from '../src/routes/channels.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 export const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -45,6 +46,8 @@ const CHANNEL_MIGRATIONS = ['106_pain_groups.sql', '211_founder_validate_evidenc
   '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
   '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
   '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
+    '529_meeting_transcript_source.sql',
   '452_record_session_setup.sql', '454_channel_voice_failures.sql', '457_integrations_last_error_at.sql',
   '458_channel_link_consent.sql', '488_channel_consents.sql'];
 
@@ -84,6 +87,7 @@ export function world(opts: { axal?: Partial<typeof AXAL>; upTo492?: boolean } =
   for (const t of ['waitlist_signups', 'metric_targets', 'competitor_analyses', 'competitor_candidates',
     'competitor_sources', 'competitor_signals']) db.exec(tableFromBaseline(BASELINE, t));
   for (const m of CHANNEL_MIGRATIONS) db.exec(mig(m));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   if (opts.upTo492 !== false) {
     db.exec(mig('492_whatsapp_sender_links.sql'));
     db.exec(mig('497_whatsapp_capture_import.sql'));

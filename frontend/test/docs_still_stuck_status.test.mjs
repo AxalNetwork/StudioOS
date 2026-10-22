@@ -86,3 +86,21 @@ test('the contact routes the block offers still exist', () => {
   // The route must actually be mounted, or the link is a dead end.
   assert.match(read('frontend/src/App.jsx'), /path="\/status"/);
 });
+
+
+test('unmonitored inventory does not claim an outage, but its incidents still reach the summary', () => {
+  const op = { status: 'operational' };
+  const inventory = { status: 'unknown', monitoring: 'not_monitored' };
+  assert.equal(overallStatus([op, inventory]), 'operational');
+  assert.equal(overallStatus([inventory]), 'unknown');
+  assert.equal(overallStatus([op, { ...inventory, status: 'degraded' }]), 'degraded');
+  assert.equal(overallStatus([op, { ...inventory, status: 'down' }]), 'down');
+  assert.equal(overallStatus([op, { status: 'unknown' }]), 'degraded', 'an existing monitored unknown is still visible');
+  const page = read('frontend/src/pages/StatusPage.jsx');
+  assert.match(page, /All monitored services operational/);
+  assert.match(read('frontend/src/pages/docs/DocsLayout.jsx'), /All monitored services operational/);
+  assert.match(page, /label: 'Not monitored'/);
+  assert.match(page, /Uptime not measured/);
+  assert.match(page, /s\.availability/);
+  assert.match(page, /s\.note/);
+});

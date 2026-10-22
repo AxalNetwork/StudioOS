@@ -71,7 +71,9 @@ Agents never see any of these values.
    - `/setuserpic`: the Axal mark.
    - Copy the token straight into step 2. Never paste it in a chat, an issue
      or a file.
-2. **The three Worker secrets**, from the repo root:
+2. **The three Worker secrets**, in HQ › Integration keys › Channels ›
+   "Telegram · interview bot" (D885: Super Admin, with a recent step-up; its
+   **Generate** makes the webhook secret), or from the repo root:
    - `npx wrangler secret put TELEGRAM_CHANNEL_BOT_TOKEN --env production`: the
      BotFather token.
    - `npx wrangler secret put TELEGRAM_CHANNEL_BOT_USERNAME --env production`:

@@ -41,7 +41,6 @@ const PROVIDERS = [
   P('github', 'GitHub', { configured: false }),
   P('slack', 'Slack'),
   P('zoom', 'Zoom', { auth_type: 'api_key' }),
-  P('entity', 'Mercury entities', { auth_type: 'api_key', connection_source: 'mercury_entity_connections' }),
 ];
 const ITEMS = [
   { uid: 'u-slack', provider_key: 'slack', status: 'active', last_synced_at: null, last_error: null, config: {}, company_ids: [] },
@@ -61,7 +60,8 @@ test('pageAction: one action per row of decision 6\'s table', () => {
   // D840 (#2346): a member's Mercury signs in with Mercury; its Read Only token is on the chevron.
   const mercury = pageAction(row('mercury'));
   assert.deepEqual([mercury.kind, mercury.label], ['oauth', 'Sign in with Mercury']);
-  assert.deepEqual(pageChoices(row('mercury')).alt, [{ id: 'pat', label: 'Use a Read Only API token' }]);
+  // D881 (#2554): a member's Mercury has no other way in than its sign-in.
+  assert.deepEqual(pageChoices(row('mercury')).alt, []);
   const calendlyOff = buildCatalogue({ providers: [P('calendly', 'Calendly', { supports_pat: true, configured: false })], items: [], firstParty: {} })[0];
   assert.equal(pageAction(calendlyOff).kind, 'key', 'Calendly with no OAuth client connects with its token (D751)');
   assert.equal(pageAction(row('calendly')).kind, 'oauth', 'Calendly signs in; its token is on the chevron');
@@ -82,7 +82,6 @@ test('pageAction: one action per row of decision 6\'s table', () => {
   assert.deepEqual([gh.kind, gh.label], ['unavailable', 'Not set up here']);
   assert.equal(gh.note, "GitHub isn't set up on Axal yet, so it can't be connected.");
   assert.equal(pageAction(row('linkedin')).label, 'Status unreadable');
-  assert.equal(pageAction(row('entity')).kind, 'none', 'the Axal entities\' Mercury has no header action (F5)');
   assert.equal(pageAction(null).kind, 'none');
   assert.equal(keyPath(row('hubspot')), true);
   assert.equal(keyPath(row('stripe')), false);
@@ -265,32 +264,20 @@ test('a key connector opens its form inline, and the form posts through submitKe
   } finally { await m.unmount(); f.restore(); }
 });
 
-test('Mercury\'s Read Only confirm is required, and a refused token clears the field', async () => {
-  const f = stubFetch((c) => (c.path === '/connectors/connect' ? [400, { error: 'mercury_token_refused', message: 'Mercury refused that token.' }] : [200, {}]));
+test('D881: a member\'s Mercury offers no token: no chevron, no key form, and nothing is posted', async () => {
+  const f = stubFetch(() => [200, {}]);
   const m = await mount(page('mercury'), '/account/connectors/mercury');
   try {
-    // D840: the token is the other way in, from the chevron.
-    await m.click('connector-page-choices');
-    await m.click('connector-page-alt-pat');
-    await m.change('connector-key', 'invented-mercury-token');
-    await m.submit('connector-page-key-form');
-    assert.equal(f.calls.filter((c) => c.path === '/connectors/connect').length, 0, 'nothing is posted without the confirm');
-    assert.match(m.text(), /Confirm this is a Read Only token\./);
-    // Tick the confirm: the checkbox is the form's only checkbox.
-    const form = m.by('connector-page-key-form');
-    const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
-    const checkbox = walk(form).find((n) => m.props(n).type === 'checkbox');
-    await act(async () => { m.props(checkbox).onChange({ target: { checked: true } }); });
-    await m.settle();
-    await m.submit('connector-page-key-form');
-    const post = f.calls.find((c) => c.path === '/connectors/connect');
-    assert.deepEqual(post.body.config, { confirm_read_only: true });
-    assert.equal(m.props(m.by('connector-key')).value, '', 'the refused token is cleared');
-    assert.match(m.text(), /Mercury refused that token\./);
+    assert.equal(m.by('connector-page-choices'), undefined, 'no other way in');
+    assert.equal(m.by('connector-page-alt-pat'), undefined);
+    assert.equal(m.by('connector-page-key-form'), undefined);
+    assert.equal(m.by('connector-key'), undefined);
+    assert.doesNotMatch(m.text(), /API token|Read Only token/);
+    assert.equal(f.calls.filter((c) => c.path === '/connectors/connect').length, 0);
   } finally { await m.unmount(); f.restore(); }
 });
 
-test('coming soon, locked, not set up and the entity Mercury each read as decision 6 says', async () => {
+test('coming soon, locked and not set up each read as decision 6 says', async () => {
   const f = stubFetch(() => [200, {}]);
   try {
     let m = await mount(page('affinity'), '/account/connectors/affinity');
@@ -314,8 +301,6 @@ test('coming soon, locked, not set up and the entity Mercury each read as decisi
       assert.match(m.text(), /Not set up here GitHub isn't set up on Axal yet, so it can't be connected\./);
       assert.equal(f.calls.filter((c) => c.path.includes('/oauth/')).length, 0);
     } finally { await m.unmount(); }
-    m = await mount(page('entity'), '/account/connectors/entity');
-    try { assert.equal(m.by('connector-page-action'), undefined, 'no header action'); } finally { await m.unmount(); }
   } finally { f.restore(); }
 });
 
@@ -337,14 +322,14 @@ test('a return names its own key or opens nothing; a refusal at the press is a n
 
 test('the key form draws "Get one at <Service>" from the Worker\'s sign_in.key_help_href', async () => {
   const f = stubFetch(() => [200, {}]);
-  const body = { state: 'ready', connector: { display_name: 'Mercury', sign_in: { kind: 'key', label: 'Read Only API token', key_help_href: 'https://docs.mercury.test/tokens' } } };
-  const m = await mount(page('mercury', { body }), '/account/connectors/mercury');
+  // D881: Mercury's member page takes no token, so a key connector carries this.
+  const body = { state: 'ready', connector: { display_name: 'Crunchbase', sign_in: { kind: 'key', label: 'Crunchbase Basic API key', key_help_href: 'https://data.crunchbase.test/docs' } } };
+  const m = await mount(page('crunchbase', { body }), '/account/connectors/crunchbase');
   try {
-    await m.click('connector-page-choices');
-    await m.click('connector-page-alt-pat');
+    await m.click('connector-page-connect-button');
     const link = m.by('connector-key-help');
-    assert.equal(m.props(link).href, 'https://docs.mercury.test/tokens');
-    assert.match(m.text(), /Get one at Mercury/);
+    assert.equal(m.props(link).href, 'https://data.crunchbase.test/docs');
+    assert.match(m.text(), /Get one at Crunchbase/);
   } finally { await m.unmount(); f.restore(); }
 });
 
@@ -396,9 +381,12 @@ test('D840: Manage on a signed-in Mercury, and "How it reads" names how it conne
   const { manageItems } = await import('../src/pages/account/connectorPageModel.js');
   const { viaRow, signInWords, SIGN_IN_REASONS } = await import('../src/pages/account/mercuryModel.js');
   const signedIn = { ...row('mercury'), connection: { uid: 'u-m', provider_key: 'mercury', status: 'active', auth_type: 'oauth_mcp' } };
-  assert.deepEqual(manageItems(signedIn).map((i) => i.label), ['Sync now', 'Sign in again', 'Use a Read Only API token', 'Disconnect']);
+  // D881 (#2554): no token in Manage; a token row kept from before D881 is offered the sign-in.
+  assert.deepEqual(manageItems(signedIn).map((i) => i.label), ['Sync now', 'Sign in again', 'Disconnect']);
+  const legacy = { ...signedIn, connection: { ...signedIn.connection, auth_type: 'api_key' } };
+  assert.deepEqual(manageItems(legacy).map((i) => [i.id, i.label]), [['sync', 'Sync now'], ['reconnect', 'Sign in with Mercury'], ['disconnect', 'Disconnect']]);
   assert.match(viaRow(signedIn.connection), /^Signed in with Mercury: read access only/);
-  assert.match(viaRow({ auth_type: 'api_key' }), /Read Only API token/);
+  assert.equal(viaRow({ auth_type: 'api_key' }), 'Connected with an API token. Sign in with Mercury to keep it connected after you reconnect.');
   assert.equal(viaRow(null), null);
   assert.equal(viaRow({ auth_type: 'constructor' }), null);
   assert.equal(signInWords('toString'), '');

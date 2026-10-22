@@ -249,6 +249,12 @@ D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
 notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
 one: accept, edit or discard. Deciding writes no record; the page's own Save does.
 
+D885 (#2561): `channelKeys.js` sets, rotates (or generates) and removes the
+interview channels' Worker secrets from HQ › Integration keys › Channels
+(`/api/admin/integration-keys/channels/:channel`, Super Admin behind the write
+bar). The list comes with `GET /admin/integration-keys`; a value is never read
+back, and a generated one is returned once.
+
 D845 (#2471): `developerUsage.js` reads the caller's own usage reports over
 `api_usage_events` (D843): `report` (`GET /api/developer/usage`, grouped by day,
 key, provider, connector, tool or model, or by day and a second way) and `events`

@@ -13,6 +13,8 @@ const q = (params) => {
 export const mercuryInvestorApi = {
   feeds: () => request('/mercury/investor'),
   accounts: () => request('/mercury/investor/accounts'),
+  // D884 (#2557): Deals › Pipeline: the capacity fact beside the cheques intended on live deals.
+  pipeline: () => request('/mercury/investor/pipeline'),
   capacity: () => request('/mercury/investor/commit'),
   setCapacity: (account_ids) => request('/mercury/investor/commit', { method: 'POST', body: JSON.stringify({ account_ids }) }),
   deleteCapacity: () => request('/mercury/investor/commit', { method: 'DELETE' }),

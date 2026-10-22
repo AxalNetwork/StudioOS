@@ -38,6 +38,27 @@
  *   conferenceRecords/{r}/participants           signedinUser / anonymousUser / phoneUser .displayName
  * UNVERIFIED: whether entries of external (not signed-in) participants name
  * them; the fallback is "Speaker ?".
+ *
+ * D871 (#2518):
+ *   - ATTACH FROM CALENDAR. A Meet call the member did not schedule from Axal
+ *     is found in their own primary Calendar (`findCalendarMeet`, the
+ *     `calendar.events` grant they already gave), by event id or by Meet code.
+ *     The route accepts it only when the member's account organises it, since
+ *     Meet's transcript lands in the organiser's Drive.
+ *   - SPEAKERS (`participantLabel`). The founder's own Google account
+ *     (`signedinUser.user` = `users/<google_sub>`) reads "Me", a named
+ *     participant keeps their name, a dial-in reads "Phone participant N"
+ *     (never Meet's partly redacted number), and an unnamed participant reads
+ *     "Speaker N", numbered per call in order of first speech. An entry with no
+ *     participant at all stays "Speaker ?".
+ *   - NO TRANSCRIPT (option A, no new scope). When a call has conference
+ *     records but no transcript, its recordings are listed with the scope Axal
+ *     already holds (`conferenceRecords/{r}/recordings`). A generated one
+ *     settles the ref as `meet_no_transcript_recording`, which tells the
+ *     member to download it from Drive and upload it; `meetRecordingLinks`
+ *     reads the link live, so no Drive URL is stored. Reading the file itself
+ *     would need a Drive scope, which is the owner's call (#2518 question 1B).
+ *     conferenceRecords/{r}/recordings     state FILE_GENERATED; driveDestination.exportUri (a drive.google.com view link)
  */
 import type { Env } from '../../types';
 import {
@@ -61,14 +82,18 @@ const MAX_PARTICIPANT_PAGES = 20;
 
 // ───────────────────────────────────────────────────────────── the member's connection
 
-/** The member's Google connection: that a refresh token is held, and what it was granted. */
-export interface GoogleConnection { userId: number; scope: string }
+/**
+ * The member's Google connection: that a refresh token is held, what it was
+ * granted, and the Google account's id (`google_sub`), which is how Meet names
+ * a signed-in participant (`users/<id>`). NULL on an older row.
+ */
+export interface GoogleConnection { userId: number; scope: string; googleSub?: string | null }
 
 export async function googleConnection(env: Env, userId: number): Promise<GoogleConnection | null> {
   try {
-    const row = await env.DB.prepare('SELECT scope FROM google_oauth_tokens WHERE user_id = ?')
-      .bind(userId).first<{ scope: string | null }>();
-    return row ? { userId, scope: String(row.scope ?? '') } : null;
+    const row = await env.DB.prepare('SELECT scope, google_sub FROM google_oauth_tokens WHERE user_id = ?')
+      .bind(userId).first<{ scope: string | null; google_sub: string | null }>();
+    return row ? { userId, scope: String(row.scope ?? ''), googleSub: row.google_sub ? String(row.google_sub) : null } : null;
   } catch {
     return null; // no calendar table on this database: nobody is connected
   }
@@ -86,7 +111,7 @@ export function transcriptAccess(conn: GoogleConnection | null): 'granted' | 'mi
  * A fresh access token from the member's stored refresh token. Google's 400
  * (`invalid_grant`) or 401 means the grant is gone; anything else may pass later.
  */
-async function accessToken(env: Env, userId: number): Promise<string> {
+export async function accessToken(env: Env, userId: number): Promise<string> {
   const tok = await loadRefreshTokenExport(env, 'google_oauth_tokens', userId);
   if (!tok) throw new MeetingProviderError('meet_not_connected', false);
   let token: string;
@@ -134,7 +159,7 @@ function calendarFailure(status: number): MeetingProviderError {
   return new MeetingProviderError('meet_create_failed', false);
 }
 
-async function calendarFetch(token: string, path: string, init: RequestInit = {}): Promise<Response> {
+export async function calendarFetch(token: string, path: string, init: RequestInit = {}): Promise<Response> {
   try {
     return await fetch(`${CALENDAR_API}${path}`, {
       ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -217,6 +242,92 @@ export async function verifyHostedMeet(env: Env, conn: GoogleConnection, joinUrl
   return false;
 }
 
+// ───────────────────────────────────────────────────────────── attach from Calendar (D871)
+
+/** A Meet call as the member's own Calendar holds it. */
+export interface CalendarMeet {
+  eventId: string; joinUrl: string; meetingCode: string;
+  /** The event's own start and end; NULL for an all-day event, which has no times. */
+  startsAt: string | null; endsAt: string | null;
+  organizerSelf: boolean;
+}
+
+/** What the member named the call by: a Calendar event id, or a Meet code (from a link or typed). */
+export type MeetTarget = { eventId: string } | { meetingCode: string };
+
+export const EVENT_ID = /^[A-Za-z0-9_-]{5,1024}$/;
+const MEET_CODE_ONLY = /^[a-z]{3,4}-[a-z]{4}-[a-z]{3,4}$/;
+/** How far back an attach looks: Meet keeps a call's records 30 days. */
+const ATTACH_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
+const ATTACH_LOOKAHEAD_MS = 366 * 24 * 60 * 60 * 1000;
+
+/** A Meet code typed on its own, normalised, or null. */
+export function bareMeetingCode(raw: unknown): string | null {
+  const code = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return MEET_CODE_ONLY.test(code) ? code : null;
+}
+
+interface CalendarItem extends CalendarEventBody {
+  status?: string; organizer?: { self?: boolean };
+  start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string };
+}
+
+function asCalendarMeet(item: CalendarItem | null): CalendarMeet | null {
+  if (!item || item.status === 'cancelled') return null;
+  const eventId = String(item.id ?? '');
+  const joinUrl = joinOf(item);
+  if (!EVENT_ID.test(eventId) || !joinUrl) return null;
+  const iso = (v: string | undefined) => (v && Number.isFinite(Date.parse(v)) ? new Date(v).toISOString() : null);
+  return {
+    eventId, joinUrl, meetingCode: meetingCodeOf(joinUrl)!,
+    startsAt: iso(item.start?.dateTime), endsAt: iso(item.end?.dateTime),
+    organizerSelf: item.organizer?.self === true,
+  };
+}
+
+/**
+ * The Meet call on the member's own primary Calendar that `target` names, or
+ * null when there is none: no such event, a cancelled one, or one without a
+ * Meet conference. By code, the window is the last 30 days to a year ahead;
+ * a recurring call's code is on every instance, so the instance whose start is
+ * nearest now is the one meant (an event id names one instance exactly).
+ */
+export async function findCalendarMeet(env: Env, conn: GoogleConnection, target: MeetTarget, now = Date.now()): Promise<CalendarMeet | null> {
+  const token = await accessToken(env, conn.userId);
+  if ('eventId' in target) {
+    if (!EVENT_ID.test(target.eventId)) return null;
+    const res = await calendarFetch(token, `/calendars/primary/events/${target.eventId}`);
+    if (res.status === 404 || res.status === 410) return null;
+    if (res.status === 401 || res.status === 403) throw new MeetingProviderError('meet_reconnect', false);
+    if (!res.ok) throw new MeetingProviderError('meet_unreachable', true);
+    return asCalendarMeet(await res.json().catch(() => null) as CalendarItem | null);
+  }
+  const code = bareMeetingCode(target.meetingCode);
+  if (!code) return null;
+  const found: CalendarMeet[] = [];
+  let pageToken = '';
+  for (let page = 0; page < 10; page++) {
+    const q = new URLSearchParams({
+      singleEvents: 'true', showDeleted: 'false', maxResults: '250',
+      timeMin: new Date(now - ATTACH_LOOKBACK_MS).toISOString(),
+      timeMax: new Date(now + ATTACH_LOOKAHEAD_MS).toISOString(),
+      ...(pageToken ? { pageToken } : {}),
+    });
+    const res = await calendarFetch(token, `/calendars/primary/events?${q}`);
+    if (res.status === 401 || res.status === 403) throw new MeetingProviderError('meet_reconnect', false);
+    if (!res.ok) throw new MeetingProviderError('meet_unreachable', true);
+    const body = await res.json().catch(() => null) as { items?: CalendarItem[]; nextPageToken?: string } | null;
+    for (const item of body?.items ?? []) {
+      const meet = asCalendarMeet(item);
+      if (meet && meet.meetingCode === code) found.push(meet);
+    }
+    pageToken = String(body?.nextPageToken || '');
+    if (!pageToken) break;
+  }
+  const distance = (m: CalendarMeet) => (m.startsAt ? Math.abs(Date.parse(m.startsAt) - now) : Number.POSITIVE_INFINITY);
+  return found.sort((a, b) => distance(a) - distance(b))[0] ?? null;
+}
+
 // ───────────────────────────────────────────────────────────── Meet REST
 
 const RECORD_NAME = /^conferenceRecords\/[A-Za-z0-9_-]+$/;
@@ -227,10 +338,11 @@ interface Transcript { name: string; state?: string; startTime?: string }
 interface TranscriptEntry { participant?: string; text?: string; startTime?: string; endTime?: string }
 interface Participant {
   name?: string;
-  signedinUser?: { displayName?: string };
+  signedinUser?: { user?: string; displayName?: string };
   anonymousUser?: { displayName?: string };
   phoneUser?: { displayName?: string };
 }
+interface Recording { name?: string; state?: string; startTime?: string; driveDestination?: { file?: string; exportUri?: string } }
 
 /**
  * GET on Meet. A 403 is read for its reason only: an insufficient scope means
@@ -312,32 +424,67 @@ function settle(found: Found, ref: MeetingRef, now: number): 'ready' | 'wait' | 
   return found.records.length ? 'meet_no_transcript' : 'meet_no_record';
 }
 
-async function speakerNames(token: string, recordName: string): Promise<Map<string, string>> {
-  const names = new Map<string, string>();
+/**
+ * How one Meet participant is labelled (D871): `label` when it has its own,
+ * else `kind` for the per-call numbering. A dial-in's displayName is its
+ * partly redacted phone number, which is never stored.
+ */
+export function participantLabel(p: Participant | null | undefined, ownUser: string | null):
+  { label: string } | { kind: 'phone' | 'unnamed'; key: string } {
+  const key = String(p?.signedinUser?.user || p?.name || '');
+  if (ownUser && p?.signedinUser?.user === ownUser) return { label: 'Me' };
+  if (p?.phoneUser) return { kind: 'phone', key };
+  const name = String(p?.signedinUser?.displayName || p?.anonymousUser?.displayName || '').replace(/\s+/g, ' ').trim();
+  return name ? { label: name.slice(0, 80) } : { kind: 'unnamed', key };
+}
+
+type Labelled = ReturnType<typeof participantLabel>;
+
+async function participantsOf(token: string, recordName: string, ownUser: string | null): Promise<Map<string, Labelled>> {
+  const out = new Map<string, Labelled>();
   let pageToken = '';
   for (let page = 0; page < MAX_PARTICIPANT_PAGES; page++) {
     const q = new URLSearchParams({ pageSize: '100', ...(pageToken ? { pageToken } : {}) });
     const body = await meetGet<{ participants?: Participant[]; nextPageToken?: string }>(token, `/${recordName}/participants?${q.toString()}`);
-    for (const p of body?.participants ?? []) {
-      const name = p?.signedinUser?.displayName || p?.anonymousUser?.displayName || p?.phoneUser?.displayName || '';
-      if (p?.name && name.trim()) names.set(p.name, name.trim().slice(0, 80));
-    }
+    for (const p of body?.participants ?? []) if (p?.name) out.set(p.name, participantLabel(p, ownUser));
     pageToken = String(body?.nextPageToken ?? '');
     if (!pageToken) break;
   }
-  return names;
+  return out;
+}
+
+/** Numbers the call's dial-ins and unnamed participants in order of first speech, across its conference records. */
+class SpeakerBook {
+  private numbers = new Map<string, string>();
+  private counts = { phone: 0, unnamed: 0 };
+  label(entryParticipant: string, known: Map<string, Labelled>): string {
+    const p = known.get(entryParticipant);
+    if (!p) return entryParticipant ? this.numbered('unnamed', `entry:${entryParticipant}`) : 'Speaker ?';
+    if ('label' in p) return p.label;
+    return this.numbered(p.kind, `${p.kind}:${p.key || entryParticipant}`);
+  }
+  private numbered(kind: 'phone' | 'unnamed', key: string): string {
+    let label = this.numbers.get(key);
+    if (!label) {
+      this.counts[kind] += 1;
+      label = kind === 'phone' ? `Phone participant ${this.counts.phone}` : `Speaker ${this.counts.unnamed}`;
+      this.numbers.set(key, label);
+    }
+    return label;
+  }
 }
 
 /**
  * Every entry of the call's generated transcripts, in order, labelled by
  * participant, with offsets from the start of the first conference record.
  */
-async function readEntries(token: string, found: Found): Promise<ImportedSegment[]> {
+async function readEntries(token: string, found: Found, ownUser: string | null): Promise<ImportedSegment[]> {
   const base = Math.min(...found.ready.map((r) => ms(r.record.startTime)).filter(Number.isFinite));
   const out: ImportedSegment[] = [];
-  const named = new Map<string, Map<string, string>>();
+  const named = new Map<string, Map<string, Labelled>>();
+  const book = new SpeakerBook();
   for (const { record, transcript } of found.ready) {
-    if (!named.has(record.name)) named.set(record.name, await speakerNames(token, record.name));
+    if (!named.has(record.name)) named.set(record.name, await participantsOf(token, record.name, ownUser));
     const names = named.get(record.name)!;
     let pageToken = '';
     for (let page = 0; page < MAX_ENTRY_PAGES; page++) {
@@ -351,7 +498,7 @@ async function readEntries(token: string, found: Found): Promise<ImportedSegment
         const start = ms(e.startTime);
         const end = ms(e.endTime);
         out.push({
-          speaker: names.get(String(e.participant ?? '')) || 'Speaker ?',
+          speaker: book.label(String(e.participant ?? ''), names),
           text: text.slice(0, 8000),
           startMs: Number.isFinite(base) && Number.isFinite(start) ? Math.max(0, start - base) : null,
           endMs: Number.isFinite(base) && Number.isFinite(end) ? Math.max(0, end - base) : null,
@@ -364,15 +511,46 @@ async function readEntries(token: string, found: Found): Promise<ImportedSegment
   return out;
 }
 
+/** The call's generated recordings, each with its Drive view link. Listing needs no Drive scope. */
+async function listRecordings(token: string, records: ConferenceRecord[]): Promise<{ url: string; started_at: string | null }[]> {
+  const out: { url: string; started_at: string | null }[] = [];
+  for (const record of records) {
+    const body = await meetGet<{ recordings?: Recording[] }>(token, `/${record.name}/recordings`);
+    for (const r of body?.recordings ?? []) {
+      const url = String(r?.driveDestination?.exportUri ?? '');
+      let ok = false;
+      try { ok = r?.state === 'FILE_GENERATED' && new URL(url).protocol === 'https:' && new URL(url).hostname === 'drive.google.com'; } catch { ok = false; }
+      if (ok) out.push({ url, started_at: Number.isFinite(ms(r.startTime)) ? new Date(ms(r.startTime)).toISOString() : null });
+    }
+  }
+  return out;
+}
+
+/**
+ * Why a call with no transcript settled. With conference records but no
+ * transcript, a generated recording turns `meet_no_transcript` into
+ * `meet_no_transcript_recording` (download it, then upload it). A recording
+ * listing that fails leaves the plain reason: the call is settled either way.
+ */
+async function noTranscriptCode(token: string, found: Found, code: MeetingErrorCode): Promise<MeetingErrorCode> {
+  if (code !== 'meet_no_transcript') return code;
+  try {
+    return (await listRecordings(token, found.records)).length ? 'meet_no_transcript_recording' : code;
+  } catch (e) {
+    if (e instanceof MeetingProviderError) return code;
+    throw e;
+  }
+}
+
 /** The member's connection and a token for Meet, or the reason there is none (no Meet call made). */
-async function meetAccess(env: Env, ref: MeetingRef): Promise<{ token: string; code: string } | { fail: MeetingErrorCode; retryable: boolean }> {
+async function meetAccess(env: Env, ref: MeetingRef): Promise<{ token: string; code: string; ownUser: string | null } | { fail: MeetingErrorCode; retryable: boolean }> {
   const code = meetingCodeOf(ref.join_url);
   if (!code) return { fail: 'meet_no_record', retryable: false };
   const conn = await googleConnection(env, Number(ref.user_id));
   if (!conn) return { fail: 'meet_not_connected', retryable: false };
   if (transcriptAccess(conn) === 'missing') return { fail: 'meet_transcripts_unavailable', retryable: false };
   try {
-    return { token: await accessToken(env, conn.userId), code };
+    return { token: await accessToken(env, conn.userId), code, ownUser: conn.googleSub ? `users/${conn.googleSub}` : null };
   } catch (e) {
     if (e instanceof MeetingProviderError) return { fail: e.code, retryable: e.retryable };
     throw e;
@@ -400,9 +578,26 @@ export async function fetchTranscript(env: Env, ref: MeetingRef, _hint: Record<s
   }
   const state = settle(found, ref, now);
   if (state === 'wait') return { kind: 'waiting' };
-  if (state !== 'ready') return { kind: 'none', code: state };
-  const segments = await readEntries(access.token, found);
+  if (state !== 'ready') return { kind: 'none', code: await noTranscriptCode(access.token, found, state) };
+  const segments = await readEntries(access.token, found, access.ownUser);
   return segments.length ? { kind: 'segments', segments } : { kind: 'none', code: 'transcript_empty' };
+}
+
+/**
+ * The Drive recordings of a member's own Meet call, read live (no link is
+ * stored), for "Download it, then upload it here". Empty when Meet lists none.
+ */
+export async function meetRecordingLinks(env: Env, ref: MeetingRef):
+  Promise<{ recordings: { url: string; started_at: string | null }[] } | { fail: MeetingErrorCode; retryable: boolean }> {
+  const access = await meetAccess(env, ref);
+  if ('fail' in access) return access;
+  try {
+    const found = await findTranscripts(access.token, access.code, ref);
+    return { recordings: await listRecordings(access.token, found.records) };
+  } catch (e) {
+    if (e instanceof MeetingProviderError) return { fail: e.code, retryable: e.retryable };
+    throw e;
+  }
 }
 
 registerChannelJob('meeting_import', 'google_meet',
@@ -437,7 +632,7 @@ async function sweepOne(env: Env, ref: MeetingRef, now: Date): Promise<SweepResu
     return 'waiting';
   }
   if (state !== 'ready') {
-    await setRefStatus(env, ref.id, 'no_transcript', state);
+    await setRefStatus(env, ref.id, 'no_transcript', await noTranscriptCode(access.token, found, state));
     return 'no_transcript';
   }
   await setRefStatus(env, ref.id, 'transcript_ready', null);

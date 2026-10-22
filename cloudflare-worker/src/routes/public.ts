@@ -25,6 +25,9 @@ import { publicModels, type PublicModel } from '../services/ai/publicModels';
 import { sendNotificationEmail } from '../services/email';
 import { CONTACT_MAILBOX, DEFAULT_CONTACT_MAILBOX } from './contact';
 import { isRedirectKey } from '../services/redirectRoutes';
+import { REGISTRY } from '../integrations/registry';
+import { MCP_PROVIDERS } from '../integrations/mcpProviders';
+import { channelRollout } from '../services/channels/connections';
 
 const publicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -641,7 +644,10 @@ type ServiceHealth = {
   name: string;
   match?: string;
   status: 'operational' | 'degraded' | 'down' | 'unknown';
-  uptime_pct?: number;
+  uptime_pct?: number | null;
+  monitoring?: 'not_monitored';
+  availability?: string;
+  note?: string;
   history?: Array<{ day: string; status: string }>;
 };
 
@@ -721,6 +727,37 @@ async function probeServices(c: Parameters<typeof requireAuth>[0]): Promise<Serv
   services.push({ name: 'Published pages', match: 'publications', status: presence('PUBLICATIONS') });
   services.push({ name: 'Backups', match: 'backups', status: presence('BACKUPS') });
   services.push({ name: 'Document rendering', match: 'browser rendering pdf', status: presence('BROWSER') });
+
+  // Public capability coverage, not member connection checks. Never contact a
+  // remote MCP server, read credentials or run a tool on this anonymous GET.
+  const unmonitored = (name: string, match: string, availability: string) => {
+    services.push({ name, match, availability, status: 'unknown', monitoring: 'not_monitored',
+      note: 'Availability reflects platform settings. Live service health is not monitored here.' });
+  };
+  unmonitored('MCP server', 'mcp server assistants',
+    env.MCP_SERVER_ENABLED === 'true' && bound('OAUTH_KV') ? 'Enabled' : 'Not enabled');
+  unmonitored('Member API keys', 'member api keys', env.API_KEYS_ENABLED === 'true' ? 'Enabled' : 'Not enabled');
+  unmonitored('MCP clients', 'mcp clients shared client', 'Available');
+  for (const provider of Object.values(MCP_PROVIDERS)) {
+    const name = REGISTRY.find((entry) => entry.key === provider.key)?.display_name ?? provider.key;
+    unmonitored(`${name} MCP client`, `${provider.key} mcp client`, 'Available');
+  }
+  unmonitored('Custom MCP clients', 'custom mcp clients',
+    String(env.CUSTOM_MCP_ENABLED ?? '').trim().toLowerCase() === 'true' ? 'Enabled' : 'Not enabled');
+  for (const provider of REGISTRY.filter((entry) => entry.status !== 'coming_soon')) {
+    unmonitored(`${provider.display_name} connector`, `${provider.key} connector`,
+      provider.status === 'beta' ? 'Beta' : 'Available');
+  }
+  for (const provider of ['whatsapp', 'telegram'] as const) {
+    const rollout = channelRollout(env, provider);
+    unmonitored(provider === 'whatsapp' ? 'WhatsApp messaging' : 'Telegram messaging', provider,
+      rollout === 'on' ? 'Enabled' : rollout === 'off' ? 'Not enabled' : 'Limited rollout');
+  }
+  unmonitored('Google Meet transcripts', 'google meet transcripts',
+    String(env.MEET_TRANSCRIPTS_ENABLED ?? '').trim().toLowerCase() === 'on' ? 'Enabled' : 'Not enabled');
+  unmonitored('Email delivery', 'email gmail notifications',
+    bound('GMAIL_CLIENT_ID') && bound('GMAIL_CLIENT_SECRET') && bound('GMAIL_REFRESH_TOKEN') ? 'Configured' : 'Not configured');
+  unmonitored('Payments', 'payments billing stripe', bound('STRIPE_SECRET_KEY') ? 'Configured' : 'Not configured');
   return services;
 }
 
@@ -793,7 +830,7 @@ publicRoutes.get('/status', async (c) => {
   const enriched = services.map(({ match, ...svc }) => {
     const slug = `${svc.name} ${match || ''}`.toLowerCase();
     const cells = days.map((day) => {
-      let status: 'operational' | 'degraded' | 'down' = 'operational';
+      let status: ServiceHealth['status'] = svc.monitoring === 'not_monitored' ? 'unknown' : 'operational';
       for (const inc of incidents) {
         const touches = !inc.affected_services?.length
           || inc.affected_services.some((s: string) => slug.includes(String(s).toLowerCase()));
@@ -809,12 +846,20 @@ publicRoutes.get('/status', async (c) => {
         if (day > endDay) continue;
         const sev = (inc.severity || 'minor') as string;
         if (sev === 'critical') status = 'down';
-        else if (status === 'operational') status = 'degraded';
+        else if (status !== 'down') status = 'degraded';
       }
       return { day, status };
     });
     const opCount = cells.filter((c) => c.status === 'operational').length;
-    return { ...svc, history: cells, uptime_pct: (opCount / cells.length) * 100 };
+    // A resolved incident stays in today's history but must not keep today's
+    // live state down after recovery.
+    const activeIncidents = incidents.filter((inc) => inc.status !== 'resolved'
+      && inc.created_at.slice(0, 10) <= today
+      && (!inc.affected_services?.length || inc.affected_services.some((key: string) => slug.includes(String(key).toLowerCase()))));
+    const incidentStatus = activeIncidents.some((inc) => inc.severity === 'critical') ? 'down'
+      : activeIncidents.length ? 'degraded' : null;
+    const status = svc.status === 'down' || incidentStatus === 'down' ? 'down' : incidentStatus ?? svc.status;
+    return { ...svc, status, history: cells, uptime_pct: svc.monitoring === 'not_monitored' ? null : (opCount / cells.length) * 100 };
   });
 
   return c.json({ services: enriched, incidents });

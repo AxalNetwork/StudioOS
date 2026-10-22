@@ -21,7 +21,7 @@ Entry point: `cloudflare-worker/src/index.ts`. This is the live API at
 | `routes/`                |   151 | 150 `.ts` + `routes/README.md`. **25** files match `admin_*.ts`. |
 | `services/`              |   244 | 149 top-level `.ts` plus 8 nested packages: `advisor/`, `calendar/`, `decks/`, `email/`, `market_intel/`, `referrals/`, `signals/`, `wellbeing/`. |
 | `templates/`             |    55 | `templates/email/` (`layout.ts`, `registry.ts`) and `templates/legal/` (53 files: 52 `*_v1.md` contracts + `LEGAL_REVIEW.md`). |
-| `integrations/`          |    16 | `oauth.ts`, `registry.ts`, `secrets.ts`, `autopush.ts` + `mappings/`, `providers/`. |
+| `integrations/`          |    16 | `oauth.ts`, `registry.ts`, `secrets.ts`, `autopush.ts` + `mappings/`, `providers/`. Mercury here is a member's own (Grow and Raise, by Sign in with Mercury); Axal VC's accounts are `routes/admin_mercury.ts` and `services/mercury/` only (D879–D883). |
 | `util/`                  |    14 | `d1Retry.ts`, `paymentMode.ts`, `url.ts`, `cronHistory.ts`, `webauthn.ts`, … |
 | `middleware/`            |    10 | `csrf.ts`, `rateLimit.ts`, `observability.ts`, `securityHeaders.ts`, `cfAccess.ts`, `requireTier.ts`, `requireInvestorTier.ts`, `miAccess.ts`, `lastActive.ts`, `recoveryCoolOff.ts`. |
 | `models/`                |     4 | `funds.ts`, `jobs.ts`, `liquidity.ts`, `distributions.ts`. |

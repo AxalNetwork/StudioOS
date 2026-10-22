@@ -23,6 +23,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { applyEngineSchema } from './_engine_schema.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import sessions from '../src/routes/founder_validate_sessions.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -72,6 +73,7 @@ function fixture({ monthMicro = 500_000_000 } = {}) {
   db.exec(`INSERT INTO projects VALUES (${PROJECT}, 'Venture', 100);
            INSERT INTO discovery_interviews (id, project_id, interviewee_name, stage) VALUES (${INTERVIEW}, ${PROJECT}, 'Dana', 'done');`);
   applyEngineSchema(db);
+  applySessionTranslationColumns(db); // D857: production applies migration 527 before the Worker ships.
   setFixtureAllowance(db, monthMicro);
 
   const objects = new Map<string, Uint8Array>();

@@ -47,8 +47,13 @@ that turns out different is a one-line PR.
    (`cloudflare-worker/src/integrations/registry.ts`) and refuses a wider one.
 4. **Events.** Features → Access → Event subscription:
    - Event notification endpoint: `https://axal.vc/api/channels/zoom/webhook`.
-   - Events: `meeting.ended`, `recording.transcript_completed` and
-     `app_deauthorized`. No others: anything else is acknowledged and ignored.
+   - Events: `meeting.ended`, `recording.transcript_completed`,
+     `recording.completed` (D870: a call with no transcript is transcribed
+     from its audio-only recording) and `app_deauthorized`. No others:
+     anything else is acknowledged and ignored.
+   - For D870, the account's cloud recording must save an **audio-only
+     file** (Settings → Recording → Cloud recording → "Audio only"). Without
+     it, a call with no transcript has nothing to transcribe.
    - Copy the **Secret Token** for step 5. Do not press Validate yet.
 5. **Secrets.** From the repository root, once each:
 
@@ -168,6 +173,17 @@ Then repeat steps 2 to 6 with Google Meet, once §2 is done.
 - 503 `provider_unavailable`, "Zoom calls are not available on Axal yet." or
   the Google Meet sentence: the provider's secrets are unset.
 
+Attaching a Meet call from the founder's Calendar (D871, no `session_id`):
+
+- 404 `meeting_not_in_calendar`: no event with that Meet code or id is on the
+  founder's primary calendar, or it has no Meet conference.
+- 409 `meeting_not_hosted`: another account organises it; its transcript is
+  in that account's Drive.
+- 409 `meeting_no_time` (an all-day event), `meeting_expired` (it ended more
+  than 30 days ago, past Meet's retention), `meeting_link_reused`.
+- The live check (§3) should note what Meet names an external participant:
+  D871 §2 leaves it UNVERIFIED.
+
 A call that cannot be imported keeps its reason on the call, in one of the
 sentences of `MEETING_ERRORS` (`cloudflare-worker/src/services/channels/meetings.ts`).
 The ones the owner is likely to see during setup:
@@ -178,9 +194,13 @@ The ones the owner is likely to see during setup:
 | `zoom_reconnect` | Zoom refused Axal's token (revoked, or the app's credentials changed). Reconnect. |
 | `zoom_no_transcript` | No cloud transcript: the plan, cloud recording or "Create audio transcript" (§1 step 9). |
 | `zoom_fetch_failed` | Zoom refused the recording list. *Unverified* (§3): whether downloading the transcript needs a scope beyond listing. |
+| `stt_consent_missing` | D870: no transcript, and the interview has no consent recorded, so the audio was not fetched. Record consent on the interview, then Retry. |
+| `stt_budget`, `stt_paused` | D870: the member's AI tokens ran out, or their AI is paused. The audio chunks are kept; Retry after a top-up transcribes only what is left. |
+| `zoom_audio_unreadable`, `zoom_audio_too_large` | D870: the audio-only file is not an AAC M4A, or is over 80 MB. |
 | `meet_transcripts_unavailable` | The member's grant lacks `meetings.space.readonly` (§2 step 5). |
 | `meet_api_disabled` | The Meet REST API is off in the Cloud project (§2 step 3). |
 | `meet_no_transcript` | Nobody turned transcription on, or the Workspace edition lacks it. |
+| `meet_no_transcript_recording` | As above, but the call was recorded. The founder downloads it from Drive (`GET …/meetings/:refUid/recording` gives the link) and uploads it; Axal holds no Drive scope (D871). |
 
 ## 5. Rollback
 
@@ -192,3 +212,71 @@ The ones the owner is likely to see during setup:
 - **Meet:** set `MEET_TRANSCRIPTS_ENABLED` back to `"off"` in both vars blocks.
   Grants already made keep the scope; to stop imports too, disable the Meet
   REST API (§2 step 3).
+
+## 6. Call audio: the other paths, retention and deletion (D872, D870, D877)
+
+A call reaches Record a Session as text by one of three paths. Its audio, when
+Axal holds any, is kept apart from its text.
+
+| Path | On `main` | What Axal stores |
+| --- | --- | --- |
+| The provider's transcript: Zoom's VTT, Meet's entries (§1, §2) | Yes (D684, D757) | Text only. No audio. |
+| An uploaded recording (D872, #2519), with the founder's attestation that everyone recorded agreed | The routes and `frontend/src/lib/recordingUpload.js`, yes; the screen is M9 (#2525) | The browser's 16 kHz WAV parts as R2 chunks, then the text from Workers AI speech-to-text, charged in AI tokens. |
+| Zoom with no transcript: the call's audio-only recording, transcribed by Workers AI (M1, D870, #2517) | Yes. It needs `recording.completed` and the account's audio-only file (§1 step 4). | The recording's audio as R2 chunks under the call's session, then the text, charged in AI tokens. |
+
+**Retention (D877, #2524, migration 530).** A call's audio, from an upload or
+from a Zoom recording, is kept for its founder's retention, then removed by
+the daily cron (03:50 UTC, beside the channel purge). The text stays, and the
+session records "audio removed" with the reason.
+- The default is 30 days (owner question 1 on #2524, answer A). Changing the
+  default is one constant, `DEFAULT_CALL_AUDIO_RETENTION_DAYS` in
+  `cloudflare-worker/src/services/callAudioRetention.ts`, by PR.
+- A founder chooses their own: `PUT /api/founder/validate/sessions/audio-retention`
+  with 1 to 3650 days, or `null` to keep audio until they delete it.
+- Age counts from the newest audio chunk's arrival. A transcription still
+  running keeps its audio until the next day's run.
+- The in-person recorder's audio is not a call; it is kept until deleted.
+
+**Deletion.** Both are the founder's, and immediate for the R2 objects.
+- **The audio only:** `DELETE /api/founder/validate/sessions/:id/audio`. The
+  transcript, summary and accepted items stay.
+- **The whole session:** `DELETE /api/founder/validate/sessions/:id` removes the
+  audio and the text. An item the founder accepted stays, as their decision,
+  and its record line reads "Source deleted".
+- Nothing is restored from a backup into a deleted session or a removed
+  recording.
+
+**Reading it in production: aggregates only.** From the repository root:
+
+```sh
+npx wrangler d1 execute studioos-db --remote --env production --command \
+  "SELECT audio_removed_reason AS reason, COUNT(*) AS sessions FROM interview_sessions
+    WHERE audio_removed_at >= datetime('now', '-7 days') GROUP BY reason"
+```
+
+The Worker log prints one line a day when the purge removed anything:
+`[cron] call audio purge sessions=<n> objects=<n>`.
+
+## 7. The switch-on order
+
+Each step is the owner's, in this order; each later step depends on the one
+before.
+
+1. **Zoom, own account** (§1 steps 1 to 6, 9 and 10). `ZOOM_APP_AUDIENCE`
+   stays `"own_account"`: only users in Axal's own Zoom account can connect.
+2. **The live check** (§3) on the test account; an upload (§6) once M9's screen ships.
+3. **Zoom, beta** (§1 step 7): Beta Test sharing, then `ZOOM_APP_AUDIENCE =
+   "beta"` by PR in both vars blocks.
+4. **Google Meet** (§2): the scope, Google's verification, the Meet REST API,
+   then `MEET_TRANSCRIPTS_ENABLED = "on"` by PR.
+5. **Zoom audio** (M1, D870): `recording.completed` in the Zoom app and the
+   account's audio-only file (§1 step 4). Without them a call with no
+   transcript ends at `zoom_no_transcript`.
+6. **Zoom, public** (§1 steps 7 and 8): the deauthorization default recorded,
+   Marketplace publication, then `ZOOM_APP_AUDIENCE = "public"` by PR.
+
+`cloudflare-worker/test/meeting_readiness_d877.test.ts` checks the gates
+these steps rely on: the webhook signature, tenancy from the ref, scope
+overreach, consent and notice, metering and the purge. Each gate is
+mutation-checked. It certifies the code, not the Zoom app or Google's
+verification.

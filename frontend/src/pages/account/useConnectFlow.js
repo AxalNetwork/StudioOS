@@ -66,7 +66,6 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
   const [confirming, setConfirming] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState('');
-  const [confirmReadOnly, setConfirmReadOnly] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [configText, setConfigText] = useState(conn?.config && !conn.first_party ? JSON.stringify(conn.config, null, 2) : '');
@@ -117,10 +116,6 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
     if (configText.trim() && p.key !== 'mercury') {
       try { config = JSON.parse(configText); } catch { setMessage('Settings must be valid JSON.'); return; }
     }
-    if (p.key === 'mercury') {
-      if (!confirmReadOnly) { setMessage('Confirm this is a Read Only token.'); return; }
-      config = { confirm_read_only: true };
-    }
     setBusy(true);
     try {
       await connectorsApi.connect({ provider_key: p.key, display_name: conn?.display_name || name, api_key: apiKey || undefined, webhook_secret: p.key === 'mercury' ? undefined : webhookSecret || undefined, config }, opts);
@@ -129,10 +124,8 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
       onChanged?.();
     } catch (err) {
       setMessage(err?.message || '');
-      // D715 decision 8: a refused Mercury token prints only the Worker's sentence, on the key form, with the token cleared.
-      if (personalMercury && err?.status !== 402) { setApiKey(''); if (!err?.message) setMessage('Mercury could not be connected.'); }
       // The key form's refusal is about the key, so it reads `badkey`, never `refused` (D751 #1881).
-      else setView(connectFailure(err, { ...p, auth_type: 'api_key' }));
+      setView(connectFailure(err, { ...p, auth_type: 'api_key' }));
     } finally { setBusy(false); }
   };
 
@@ -164,6 +157,6 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
     sfSandbox, setSfSandbox, dsDemo, setDsDemo,
     // The key form's fields.
     apiKey, setApiKey, webhookSecret, setWebhookSecret, configText, setConfigText,
-    advanced, setAdvanced, confirmReadOnly, setConfirmReadOnly,
+    advanced, setAdvanced,
   };
 }

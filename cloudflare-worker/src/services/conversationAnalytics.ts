@@ -46,6 +46,15 @@
  * `active_ms` when it kept one (an upload), else its last line's end (an
  * import keeps none), else null. A chat or a typed paste has
  * two parties, the founder's "Me" and the other side, as D858 counts them.
+ *
+ * THE CHANNEL (D866, #2512). Every read names its sessions' channel
+ * (`channelOf`): a call's (`zoom`, `meet`, `upload`, D873); else the
+ * provider a chat came in on (`telegram`, `whatsapp`, from `submitted_via`,
+ * else from the chat that points at the session); else `recorder` for a
+ * recording made in StudioOS; else the session's own channel (`text`,
+ * `manual`). A session with none of these is NULL, never a guess. Both reads
+ * take a `channel` filter, and a venture's read also gives its figures per
+ * channel (`by_channel`), each the same figures as the whole, quotes aside.
  */
 import type { Env } from '../types';
 import { QUOTE_WITHHELD } from './cycleValidate';
@@ -109,13 +118,34 @@ export interface AnalyticsSession {
   created_at: string;
   created_by_user_id: number;
   final_model: string | null;
+  /** D866: the provider of the chat that points at this session, when there is one. */
+  thread_provider?: string | null;
 }
 
 /** A call's channel as the reads name it, by its session's `submitted_via` (D873). */
 export const CALL_CHANNELS: ReadonlyMap<string, 'zoom' | 'meet' | 'upload'> = new Map([
   ['zoom', 'zoom'], ['google_meet', 'meet'], ['upload', 'upload'],
 ]);
-const callChannel = (s: AnalyticsSession) => (s.submitted_via ? CALL_CHANNELS.get(s.submitted_via) ?? null : null);
+const callChannel = (s: Pick<AnalyticsSession, 'submitted_via'>) => (s.submitted_via ? CALL_CHANNELS.get(s.submitted_via) ?? null : null);
+
+/** D866: what a `channel` filter may name. */
+export const CHANNEL_NAME = /^[a-z][a-z0-9_]{0,31}$/;
+
+/**
+ * D866 (#2512): a session's channel. A call's is D873's name for it; else the
+ * provider it came in on, or the provider of the chat that points at it; else
+ * `recorder` for a recording; else the session's own channel. Unknown is null.
+ * `ventureSessions` says the same in SQL.
+ */
+export function channelOf(s: Pick<AnalyticsSession, 'channel' | 'submitted_via' | 'thread_provider'>): string | null {
+  const call = callChannel(s);
+  if (call) return call;
+  const via = String(s.submitted_via ?? '').trim() || String(s.thread_provider ?? '').trim();
+  if (via) return via;
+  if (AUDIO_CHANNELS.has(String(s.channel ?? ''))) return 'recorder';
+  return String(s.channel ?? '').trim() || null;
+}
+const AUDIO_JSON = JSON.stringify([...AUDIO_CHANNELS]);
 
 type Kind = 'chat' | 'call' | 'recording' | 'typed';
 const kindOf = (s: AnalyticsSession): Kind =>
@@ -509,7 +539,7 @@ export async function sessionAnalytics(env: Env, session: AnalyticsSession): Pro
   return {
     session: {
       id: session.id, kind: kindOf(session), provider: session.submitted_via,
-      channel: callChannel(session) ?? (kindOf(session) === 'chat' ? session.submitted_via : null), created_at: session.created_at,
+      channel: channelOf(session), created_at: session.created_at,
     },
     ...shared,
     speakers: speakers(session, segments, names),
@@ -526,32 +556,70 @@ const sourcesOf = (kind: VentureKind): string[] => [
   ...(kind === 'chats' ? [] : [...CALL_CHANNELS.keys()]),
 ];
 
-/** A venture's chat or call sessions in the range, newest first, at most VENTURE_SESSIONS_MAX. */
-export async function ventureSessions(env: Env, projectId: number, from: string | null, to: string | null, kind: VentureKind = 'chats') {
+/**
+ * A venture's chat or call sessions in the range, newest first, at most
+ * VENTURE_SESSIONS_MAX. A named channel (D866) reads that channel's sessions
+ * instead, whatever their kind, recordings and typed notes included.
+ */
+export async function ventureSessions(
+  env: Env, projectId: number, from: string | null, to: string | null, kind: VentureKind = 'chats', channel: string | null = null,
+) {
+  // `channelOf` in SQL, so a named channel narrows the rows before their LIMIT.
+  // Literal SQL: the schema guard reads every column it names. 'google_meet'
+  // is CALL_CHANNELS' one renamed call.
   const rows = (await env.DB.prepare(
-    `SELECT id, interview_id, project_id, channel, submitted_via, consent_status, active_ms, language, created_at,
-            created_by_user_id, final_model
-       FROM interview_sessions
-      WHERE project_id = ? AND submitted_via IN (SELECT value FROM json_each(?))
-        AND (? IS NULL OR datetime(created_at) >= datetime(?))
-        AND (? IS NULL OR datetime(created_at) < datetime(?, '+1 day'))
-      ORDER BY datetime(created_at) DESC, id DESC LIMIT ?`,
-  ).bind(projectId, JSON.stringify(sourcesOf(kind)), from, from, to, to, VENTURE_SESSIONS_MAX + 1).all<AnalyticsSession>()).results ?? [];
+    `SELECT s.id, s.interview_id, s.project_id, s.channel, s.submitted_via, s.consent_status, s.active_ms, s.language, s.created_at,
+            s.created_by_user_id, s.final_model,
+            (SELECT t.provider FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1) AS thread_provider
+       FROM interview_sessions s
+      WHERE s.project_id = ?
+        AND CASE WHEN ? IS NULL THEN s.submitted_via IN (SELECT value FROM json_each(?))
+                 ELSE COALESCE(CASE WHEN TRIM(s.submitted_via) = 'google_meet' THEN 'meet' ELSE NULLIF(TRIM(s.submitted_via), '') END,
+                        (SELECT NULLIF(TRIM(t.provider), '') FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1),
+                        CASE WHEN s.channel IN (SELECT value FROM json_each(?)) THEN 'recorder' ELSE NULLIF(TRIM(s.channel), '') END) = ? END
+        AND (? IS NULL OR datetime(s.created_at) >= datetime(?))
+        AND (? IS NULL OR datetime(s.created_at) < datetime(?, '+1 day'))
+      ORDER BY datetime(s.created_at) DESC, s.id DESC LIMIT ?`,
+  ).bind(projectId, channel, JSON.stringify(sourcesOf(kind)), AUDIO_JSON, channel, from, from, to, to, VENTURE_SESSIONS_MAX + 1)
+    .all<AnalyticsSession>()).results ?? [];
   return { sessions: rows.slice(0, VENTURE_SESSIONS_MAX), truncated: rows.length > VENTURE_SESSIONS_MAX };
 }
 
-/** A venture's chats, calls or both over a range: aggregates only, never a quote's words. */
+type Shared = Awaited<ReturnType<typeof figures>>['shared'];
+
+/** D866: the venture's figures per channel, each group read as a venture of its own. Unknown is the key `unknown`. */
+async function perChannel(env: Env, projectId: number, sessions: readonly AnalyticsSession[]) {
+  const groups = new Map<string, AnalyticsSession[]>();
+  for (const s of sessions) {
+    const key = channelOf(s) ?? 'unknown';
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  const out: Record<string, { channel: string | null; sessions: number } & Shared> = {};
+  for (const [key, group] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
+    const { shared } = await figures(env, projectId, group);
+    out[key] = { channel: key === 'unknown' ? null : key, sessions: group.length, ...shared };
+  }
+  return out;
+}
+
+/** A venture's chats, calls or both (or one channel's sessions, D866) over a range: aggregates only, never a quote's words. */
 export async function ventureAnalytics(
-  env: Env, projectId: number, range: { from: string | null; to: string | null; kind?: VentureKind },
+  env: Env, projectId: number, range: { from: string | null; to: string | null; kind?: VentureKind; channel?: string | null },
 ) {
   const kind = range.kind ?? 'chats';
-  const { sessions, truncated } = await ventureSessions(env, projectId, range.from, range.to, kind);
+  const channel = range.channel ?? null;
+  const { sessions, truncated } = await ventureSessions(env, projectId, range.from, range.to, kind, channel);
   const byProvider: Record<string, number> = {};
   for (const s of sessions) {
     const key = callChannel(s) ?? String(s.submitted_via);
     byProvider[key] = (byProvider[key] ?? 0) + 1;
   }
-  const base = { project_id: projectId, kind, from: range.from, to: range.to, sessions: sessions.length, sessions_by_provider: byProvider, truncated };
+  const byChannel: Record<string, number> = {};
+  for (const s of sessions) byChannel[channelOf(s) ?? 'unknown'] = (byChannel[channelOf(s) ?? 'unknown'] ?? 0) + 1;
+  const base = {
+    project_id: projectId, kind, channel, from: range.from, to: range.to, sessions: sessions.length,
+    sessions_by_provider: byProvider, sessions_by_channel: byChannel, truncated,
+  };
   if (!sessions.length) {
     const none = REASONS.noTranscript;
     return {
@@ -564,6 +632,7 @@ export async function ventureAnalytics(
       pain_themes: known<ThemeCount[]>([], []), objections: known<ObjectionCount[]>([], []),
       wtp_mentions: known<WtpCount>({ suggested: 0, accepted: 0, by_kind: {} }, []), competitor_mentions: known<CompetitorCount[]>([], []),
       quotes_by_theme: known<ThemeQuoteCount[]>([], []),
+      by_channel: {},
     };
   }
   const { props, shared } = await figures(env, projectId, sessions);
@@ -583,5 +652,5 @@ export async function ventureAnalytics(
       return known([...by.values()], shared.messages.sources);
     });
   }
-  return { ...base, ...shared, quotes_by_theme: quotes };
+  return { ...base, ...shared, quotes_by_theme: quotes, by_channel: await perChannel(env, projectId, sessions) };
 }

@@ -39,7 +39,7 @@ export interface PagePrompt {
 }
 
 /** `mcp` (D847): "Sign in with <Provider>" through its MCP server; no page uses it until a provider issue adds one. */
-export type SignInKind = 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'entity' | 'channel' | 'mcp';
+export type SignInKind = 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'channel' | 'mcp';
 
 export interface ConnectorPage {
   /** At most 120 characters. */
@@ -61,9 +61,8 @@ export interface ConnectorPage {
   verified_on: string | null;
 }
 
-/** Mercury's pages, by audience: the HQ entity connection, and a member's own by role. */
+/** Mercury's pages: a member's own, by role (D879: there is no entity page; Axal VC's accounts are HQ's only). */
 export interface VariantPages {
-  entity: ConnectorPage;
   personal: Record<string, ConnectorPage>;
 }
 
@@ -75,14 +74,14 @@ const tool = (name: string, label: string, access: ToolAccess, what: string, lan
 
 const notRead = (name: string) => `Eadwyn does not read ${name} yet.`;
 
-// ── Mercury: one client, two audiences ────────────────────────────────────────
+// ── Mercury: a member's own account, by role (D879) ───────────────────────────
 
 const MERCURY_API = 'https://api.mercury.com/api/v1';
 const MERCURY_DOCS = 'https://docs.mercury.com';
 /** D840 (#2346): Mercury's MCP server, which a member's sign-in reads through (`services/mercury/mcp.ts`). */
 const MERCURY_MCP = 'https://mcp.mercury.com/mcp';
 
-type MercuryVariant = 'entity' | 'founder' | 'partner' | 'investor';
+type MercuryVariant = 'founder' | 'partner' | 'investor';
 
 /**
  * Each tool names the API path a pasted token reads and, for a member, the
@@ -90,9 +89,8 @@ type MercuryVariant = 'entity' | 'founder' | 'partner' | 'investor';
  * holds the MCP names to `integrations/mercuryFeeds.ts`.
  */
 function mercuryTools(variant: MercuryVariant): PageTool[] {
-  const member = variant !== 'entity';
   // Each MCP read is one JSON-RPC POST (`mcp.ts`), named here so the page's write check knows it reads.
-  const mcp = (name: string) => (member ? [`'${name}'`, "jsonrpc: '2.0'"] : []);
+  const mcp = (name: string) => [`'${name}'`, "jsonrpc: '2.0'"];
   const tools = [
     tool('read_organization', 'your organization', 'read', 'Reads the organization’s id and legal name, to match it to the right owner.', null, ["read(token, '/organization'", ...mcp('getOrganization')]),
     tool('list_accounts', 'account names and last four digits', 'read', 'Lists the organization’s accounts by name, kind and last four digits.', null, ["read(token, '/accounts'", ...mcp('getAccounts')]),
@@ -101,14 +99,13 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
   if (variant !== 'investor') {
     tools.push(
       tool('list_transactions', 'transactions', 'read',
-        variant === 'entity' ? 'Reads each account’s transactions every hour, for reconciliation against capital calls and fees.'
-          : variant === 'founder' ? 'Lists the credits in your account. Only the ones you import become revenue rows.'
-            : 'Lists your account’s transactions so you can pick the one that settled an invoice, payout or deal.',
+        variant === 'founder' ? 'Lists the credits in your account. Only the ones you import become revenue rows.'
+          : 'Lists your account’s transactions so you can pick the one that settled an invoice, payout or deal.',
         variant === 'founder' ? 'revenue_and_traction' : null,
         ['`/account/${accountId}/transactions`', ...mcp('listTransactions')]),
     );
   }
-  if (variant !== 'entity' && variant !== 'investor') {
+  if (variant !== 'investor') {
     tools.push(tool('read_transaction', 'the transaction you pick', 'read', 'Reads the one transaction you picked, to confirm it before it is used.', null,
       ['`/account/${accountId}/transaction/${transactionId}`', ...mcp('getTransactionById')]));
   }
@@ -134,6 +131,8 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
   // D840 part 4 (#2349): a signed-in investor's sections, each read through the MCP server only.
   if (variant === 'investor') {
     tools.push(
+      // D884 (#2557): Pipeline shows the capacity Commit read, beside the cheques you intend; it calls no tool of its own.
+      tool('pipeline_capacity', 'your capacity beside your pipeline', 'read', 'Shows the capacity read for Deals › Commit beside the cheques you intend on the live deals in your pipeline. Only you see it.', 'deals_pipeline', [...mcp('getAccounts')]),
       tool('read_capacity', 'available balances of the accounts you pick', 'read', 'Reads the available balance of the accounts you pick, as your capacity beside your own commitments. Only you see it.', 'deals_commit', [...mcp('getAccounts')]),
       tool('list_payments_out', 'outgoing wires and ACH payments', 'read', 'Lists your outgoing payments, to propose the one that funded a commitment. Nothing is recorded until you accept it.', 'deals_closing', [...mcp('listTransactions')]),
       tool('list_payments_in', 'incoming payments', 'read', 'Lists the credits into your fund’s accounts, to propose the capital-call line each one pays. A receipt is recorded only when you accept it.', 'fund_calls', [...mcp('listTransactions')]),
@@ -152,28 +151,20 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
       tool('partner_payments', 'payments to Axal partners', 'read', 'Finds payments to an Axal partner’s company and proposes linking them; nothing is linked until you accept.', 'partner_network', mcp('listTransactions')),
     );
   }
-  if (member) {
-    tools.push(tool('sign_in_with_mercury', 'your sign-in', 'account',
-      'Registers Axal VC with Mercury’s sign-in once, and revokes your sign-in’s tokens when you disconnect. Your sign-in asks only for read access.',
-      null, ['server.registration_endpoint', 'server.revocation_endpoint']));
-  }
+  tools.push(tool('sign_in_with_mercury', 'your sign-in', 'account',
+    'Registers Axal VC with Mercury’s sign-in once, and revokes your sign-in’s tokens when you disconnect. Your sign-in asks only for read access.',
+    null, ['server.registration_endpoint', 'server.revocation_endpoint']));
   return tools;
 }
 
-const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s own MCP server and asks only for read access. It calls only the read tools named below, and refuses any other. A Read Only API token works too.';
+const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s own MCP server and asks only for read access. It calls only the read tools named below, and refuses any other.';
 
 function mercuryPage(variant: MercuryVariant): ConnectorPage {
-  const entity = variant === 'entity';
   return {
-    tagline: entity ? 'Balances and transactions of the Axal entity accounts, for fund administration. Read-only.'
-      : variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
-        : variant === 'investor' ? 'Proof of funds for a commitment you made, shared with Axal’s admins. Read-only, never a balance.'
-          : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
-    long_description: entity ? [
-        'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money.',
-        'A Super Admin adds a Read Only API token for each Axal entity. Axal VC reads the organization, its accounts and their transactions, and proposes matches to capital calls and fees for a person to confirm.',
-      ]
-      : [...(variant === 'founder'
+    tagline: variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
+      : variant === 'investor' ? 'Your capacity in Deals › Pipeline and Commit, and the wire that funded a commitment. Read-only; only you see a balance.'
+        : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
+    long_description: [...(variant === 'founder'
         ? [
           'Your own Mercury account, read-only.',
           'Axal VC lists the credits in your account. Only the credits you choose to import become rows in Revenue and traction. It never sends, transfers or requests money.',
@@ -181,9 +172,9 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
         ]
         : variant === 'investor'
           ? [
-            'Your own Mercury account, read-only, on HQ only (D752).',
-            'Axal VC reads your accounts’ names, kinds and last four digits, so you can pick the ones a proof of funds counts. Axal’s admins see only a dated statement of at least an amount you choose, never a balance. It never sends, transfers or requests money.',
-            'Signed in with Mercury, it also fills your sections (D840): your capacity beside your own commitments, on your page only; and proposals for Deals · Closing, Fund · Calls, Accounting and Reporting, which write nothing until you accept them. Portfolio gets nothing from Mercury.',
+            'Your own Mercury account, read-only, on HQ or in a branch (D884).',
+            'Signed in with Mercury, it fills your Deals sections: in Deals › Pipeline and Deals › Commit, your capacity beside the cheques you intend and the commitments you made, on your page only; in Deals › Closing, the wire that funded a commitment, proposed for you to accept. It also proposes entries for Fund › Calls, Accounting and Reporting, which write nothing until you accept them. Portfolio gets nothing from Mercury. It never sends, transfers or requests money.',
+            'On HQ, a proof of funds: Axal VC reads your accounts’ names, kinds and last four digits so you can pick the ones it counts, and Axal’s admins see only a dated statement of at least an amount you choose, never a balance.',
           ]
           : [
           'Your own Mercury account, read-only.',
@@ -194,11 +185,9 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
     prompts_reason: notRead('Mercury'),
     made_by: AXAL,
     service: { name: 'Mercury', href: null },
-    // D840 (#2346): a member signs in with Mercury (its MCP server, read-only), or pastes a Read Only API token.
-    sign_in: entity
-      ? { kind: 'entity', label: 'Read Only API token, added for each Axal entity by the Super Admin', key_help_href: null }
-      : { kind: 'oauth_or_key', label: 'Sign in with Mercury, or a Read Only API token', key_help_href: MERCURY_DOCS },
-    endpoints: { sign_in: entity ? null : MERCURY_MCP, api: MERCURY_API },
+    // D840 (#2346), D881 (#2554): a member connects only by signing in with Mercury (its MCP server, read-only).
+    sign_in: { kind: 'mcp', label: 'Sign in with Mercury', key_help_href: null },
+    endpoints: { sign_in: MERCURY_MCP, api: MERCURY_API },
     added: '2026-10',
     links: { ...NO_LINKS, developer_docs: MERCURY_DOCS },
     verified_on: null,
@@ -501,6 +490,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Schedule a Zoom call from a Validate interview on your own Zoom account. When the call’s cloud transcript is ready, it is imported into the interview.',
       'Axal VC creates a meeting only when you schedule an interview call, and deletes it when you cancel. It reads a meeting’s recordings only to download its transcript into Customer research.',
+      'A call that ends without a cloud transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
       'When you disconnect, Axal VC revokes its Zoom grant.',
     ],
     tools: [
@@ -530,6 +520,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
+      'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
       'At sign-in, Google also asks for permission to read Gmail. Axal VC does not read your Gmail.',
     ],
     tools: [
@@ -576,7 +567,6 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     verified_on: null,
   },
   mercury: {
-    entity: mercuryPage('entity'),
     personal: { founder: mercuryPage('founder'), partner: mercuryPage('partner'), investor: mercuryPage('investor') },
   },
 };
@@ -634,7 +624,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
     long_description: [
       'Customers’ chats with your business number wait here for 30 days. Add one to an interview, and Axal asks the customer for consent in the chat before anything is recorded.',
       'Axal sends only what you ask it to, and only within 24 hours of the customer’s last message. Messages are billed by Meta to your WhatsApp Business Account after 1,000 a month.',
-      'Calls: not yet. WhatsApp calls do not reach Axal; record a call with the in-app recorder instead.',
+      'Calls stay closed on numbers connected through the WhatsApp Business app. Axal does not answer or place WhatsApp calls; use the in-app recorder with everyone’s consent instead.',
     ],
     tools: [
       tool('list_numbers', 'your business account’s numbers', 'read', 'Lists the numbers in your WhatsApp Business Account, to confirm the one you signed up is yours, and again before you disconnect.', null,
@@ -711,9 +701,9 @@ export interface Trust {
   sentence: string;
 }
 
-const isVariant = (e: ConnectorPage | VariantPages | undefined): e is VariantPages => !!e && 'entity' in e && 'personal' in e;
+const isVariant = (e: ConnectorPage | VariantPages | undefined): e is VariantPages => !!e && 'personal' in e;
 
-/** The page for a key (registry or page key) and an optional Mercury variant: `entity` or a role. */
+/** The page for a key (registry or page key) and an optional Mercury variant: a role. */
 function pageFor(key: string, variant?: string): ConnectorPage | null {
   const k = Object.hasOwn(PAGE_ALIAS, key) ? PAGE_ALIAS[key as keyof typeof PAGE_ALIAS] : key;
   if (k === 'linkedin') return FIRST_PARTY_PAGES.linkedin;
@@ -721,7 +711,6 @@ function pageFor(key: string, variant?: string): ConnectorPage | null {
   if (!Object.hasOwn(CONNECTOR_PAGES, k)) return null;
   const entry = CONNECTOR_PAGES[k];
   if (!isVariant(entry)) return entry;
-  if (variant === 'entity') return entry.entity;
   return variant && Object.hasOwn(entry.personal, variant) ? entry.personal[variant] : null;
 }
 
@@ -734,7 +723,7 @@ function listWords(items: string[]): string {
 const unique = (items: string[]) => [...new Set(items)];
 
 /** The trust notice (D753 decision 5), from the page's tools. */
-export function trustFor(key: string, variant?: 'entity' | string): Trust | null {
+export function trustFor(key: string, variant?: string): Trust | null {
   const page = pageFor(key, variant);
   if (!page) return null;
   const k = Object.hasOwn(PAGE_ALIAS, key) ? PAGE_ALIAS[key as keyof typeof PAGE_ALIAS] : key;
@@ -785,31 +774,32 @@ export type PageDescriptor = ConnectorPage & { key: string; page_key: string; pa
 
 /**
  * One connector's page for this viewer, or null. Mercury's variant follows
- * `audienceFor` (D753 decision 15): an admin on HQ gets `entity`, a founder or
- * partner their `personal` role, anyone else null. It does not merge
+ * `audienceFor` (D753 decision 15): a founder, partner or investor gets their
+ * `personal` role; an admin on HQ (`preview`, D879) the founder's, read-only;
+ * anyone else null. It does not merge
  * `publicDescriptor`; the route's `catalogueEntry` (#1878) joins the two.
  */
 export function pageDescriptor(p: { key: string } & Partial<ProviderDescriptor>, viewer?: DescriptorViewer): PageDescriptor | null {
   const key = p?.key;
   if (typeof key !== 'string') return null;
   let page: ConnectorPage | null = null;
+  let variant: string | undefined;
   if (key === 'linkedin') {
     page = FIRST_PARTY_PAGES.linkedin;
   } else if (Object.hasOwn(CHANNEL_PAGES, key)) {
     page = CHANNEL_PAGES[key as keyof typeof CHANNEL_PAGES];
   } else if (Object.hasOwn(CONNECTOR_PAGES, key)) {
     const entry = CONNECTOR_PAGES[key];
-    const audience = viewer && (p.entity_roles || p.personal_roles || p.audience_rule) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
+    const audience = viewer && (p.preview_roles || p.personal_roles || p.audience_rule) ? audienceFor(p as ProviderDescriptor, viewer) : 'open';
     if (audience === 'none') return null;
     if (isVariant(entry)) {
-      if (audience === 'entity') page = entry.entity;
-      else if (audience === 'personal') page = pageFor(key, String(viewer?.role || '').toLowerCase());
+      variant = audience === 'preview' ? 'founder' : audience === 'personal' ? String(viewer?.role || '').toLowerCase() : undefined;
+      page = variant ? pageFor(key, variant) : null;
     } else {
       page = entry;
     }
   }
   if (!page) return null;
-  const variant = isVariant(CONNECTOR_PAGES[key]) ? (page === (CONNECTOR_PAGES[key] as VariantPages).entity ? 'entity' : String(viewer?.role || '').toLowerCase()) : undefined;
   const page_href = connectorPagePath(key);
   return {
     ...page,

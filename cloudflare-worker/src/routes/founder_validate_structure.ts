@@ -180,7 +180,11 @@ export async function storePlacements(
       WHERE NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined')`,
   ).bind(
     opts.projectId, p.kind, JSON.stringify(p.payload), opts.model, opts.task ?? 'structure_interview', opts.userId,
-    JSON.stringify({ kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote }),
+    JSON.stringify({
+      kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote,
+      // D857: the run read a translation; the customer's own words and their language stay beside it.
+      ...(p.quoteOriginal ? { quote_original: p.quoteOriginal } : {}), ...(p.sourceLang ? { source_lang: p.sourceLang } : {}),
+    }),
     `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId, opts.sessionId,
   )));
   return { stored: written.reduce((n, r) => n + Number(r.meta?.changes ?? 0), 0), deduped };

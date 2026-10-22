@@ -58,7 +58,8 @@ import type { RailContext } from './aiRouter';
 import { DIGEST_OPTIONS, DIGEST_PAGE } from './interviewProcessing';
 import { sessionDigestConsentBlocks } from './interviewSessions';
 import { IntakeError, writableSession } from './interviewIntake';
-import { structureTranscript, toSegments, type ReceiptLine, type SegmentRow } from './interviewStructuring';
+import { quoteFor, segmentsInSpan, structureTranscript, toSegments, type Placement, type ReceiptLine, type Segment, type SegmentRow } from './interviewStructuring';
+import { readTranslation, translateSession } from './sessionTranslation';
 import { MESSAGING_PROVIDERS, consentRequiredProviders } from './channels/types';
 import { loadStructureContext, recordStructureReceipt, storePlacements } from '../routes/founder_validate_structure';
 
@@ -106,11 +107,16 @@ export async function structureSession(
   }
   if (await sessionDigestConsentBlocks(env, session)) return { ok: false, reason: 'consent_not_recorded' };
 
-  const rows = await env.DB.prepare(
-    `SELECT start_ms, end_ms, speaker_label, text FROM interview_transcript_segments
-      WHERE session_id = ? AND source = 'final' ORDER BY COALESCE(start_ms, 0), id`,
-  ).bind(session.id).all<SegmentRow>();
-  const segments = toSegments(rows.results ?? []);
+  // D857 (#2502): the customer's words into the founder's working language
+  // first. A refused or failed translation leaves the original, so the run
+  // goes on; it is retried on the next pass.
+  const rail = opts.rail ?? { page: DIGEST_PAGE, option: DIGEST_OPTIONS.structure, record: `session:${session.id}` };
+  try {
+    await translateSession(env, { sessionId: session.id, userId: opts.userId, rail });
+  } catch (err) {
+    console.warn('[structure] translation pass failed', (err as Error)?.message);
+  }
+  const { segments, originals } = await readSessionSegments(env, session.id);
   if (!segments.length) return { ok: false, reason: 'no_final_transcript' };
 
   const prior = await env.DB.prepare('SELECT COUNT(DISTINCT run_id) AS n FROM validate_proposals WHERE session_id = ?')
@@ -120,7 +126,7 @@ export async function structureSession(
   const out = await structureTranscript(env, {
     userId: opts.userId, model: opts.model, segments, context: await loadStructureContext(env, session.project_id), step,
     // D778 part 8: the press's rail, else the inventory's option on the session it read.
-    rail: opts.rail ?? { page: DIGEST_PAGE, option: DIGEST_OPTIONS.structure, record: `session:${session.id}` },
+    rail,
   });
   // The last receipt line is the refused call: the run's, or pass B's (D757: pass A's placements stand).
   const lastRefusal = !out.ok ? out.refusal ?? null : out.passBRefusal !== undefined ? out.passBRefusal ?? null : undefined;
@@ -133,7 +139,7 @@ export async function structureSession(
 
   const { stored } = await storePlacements(env, {
     projectId: session.project_id, sessionId: session.id, interviewId: session.interview_id, runId,
-    userId: opts.userId, model: out.receipt[out.receipt.length - 1]?.model || '', placements: out.placements,
+    userId: opts.userId, model: out.receipt[out.receipt.length - 1]?.model || '', placements: withOriginals(out.placements, segments, originals),
     dedupe: opts.dedupe === true,
   });
   await env.DB.prepare(
@@ -143,6 +149,44 @@ export async function structureSession(
     ok: true, runId, step, stored, dropped: out.dropped, parts: out.parts, receipt: out.receipt,
     ...(out.passBRefusal !== undefined ? { passBRefusal: out.passBRefusal ?? null } : {}),
   };
+}
+
+/**
+ * D857: a session's final segments as structuring reads them: each one's
+ * translation when it has one, else its own words. `originals` holds, for each
+ * translated segment, its own words and their language.
+ */
+export async function readSessionSegments(env: Env, sessionId: number): Promise<{
+  segments: Segment[]; originals: Map<number, { text: string; lang: string | null }>;
+}> {
+  const rows = (await env.DB.prepare(
+    `SELECT id, start_ms, end_ms, speaker_label, text, source_lang, translated_text, translation_status FROM interview_transcript_segments
+      WHERE session_id = ? AND source = 'final' ORDER BY COALESCE(start_ms, 0), id`,
+  ).bind(sessionId).all<SegmentRow & { id: number; source_lang: string | null; translated_text: string | null; translation_status: string | null }>()).results ?? [];
+  const originals = new Map<number, { text: string; lang: string | null }>();
+  const read: SegmentRow[] = [];
+  for (const r of rows) {
+    const translation = r.translation_status === 'done' ? (await readTranslation(env, r.id, r.translated_text))?.trim() || null : null;
+    if (translation) originals.set(r.id, { text: r.text, lang: r.source_lang ?? null });
+    read.push({ id: r.id, start_ms: r.start_ms, end_ms: r.end_ms, speaker_label: r.speaker_label, text: translation ?? r.text });
+  }
+  return { segments: toSegments(read), originals };
+}
+
+/**
+ * D857: a placement cited from translated segments keeps, beside its quote
+ * (the translation the run read), the cited segments' own words and their
+ * language. A placement from untranslated segments is unchanged.
+ */
+export function withOriginals(placements: readonly Placement[], segments: readonly Segment[], originals: ReadonlyMap<number, { text: string; lang: string | null }>): Placement[] {
+  if (!originals.size) return [...placements];
+  return placements.map((p) => {
+    const cited = segmentsInSpan(segments, p.cite.from, p.cite.to);
+    if (!cited.some((s) => s.id != null && originals.has(s.id))) return p;
+    const own = cited.map((s) => ({ ...s, text: (s.id != null ? originals.get(s.id)?.text : null) ?? s.text }));
+    const lang = cited.map((s) => (s.id != null ? originals.get(s.id)?.lang : null)).find((l) => !!l) ?? null;
+    return { ...p, quoteOriginal: quoteFor(own), ...(lang ? { sourceLang: lang } : {}) };
+  });
 }
 
 /**

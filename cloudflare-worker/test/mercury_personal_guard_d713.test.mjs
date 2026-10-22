@@ -11,7 +11,9 @@ const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPers
   // D840 part 4 (#2349): the investor's sections open the caller's own row (its id and how it connected).
   'routes/mercury_investor.ts',
   // D840 part 3 (#2348): the founder's own Mercury, read on their own sync into their Grow modules.
-  'services/mercury/growFeeds.ts','services/mercury/growPresence.ts']);
+  'services/mercury/growFeeds.ts','services/mercury/growPresence.ts',
+  // D882 (#2555): the founder's own row's state for Grow and Raise (its status and how it connected, never a credential).
+  'services/mercury/memberConnection.ts']);
 const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts','services/capitalAttestations.ts',
   // D840 part 3: the founder's confirmed raise receipts are financing in their Grow months.
   'services/mercury/growFeeds.ts']);

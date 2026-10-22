@@ -4,6 +4,7 @@
  *
  *   GET    /                         what Mercury feeds in each investor section (`mercuryFeeds.ts`)
  *   GET    /accounts                 their checking and savings accounts: id, name, kind, last four; no balance
+ *   GET    /pipeline                 their capacity fact beside the cheques they intend on live deals (Deals · Pipeline, D884)
  *   GET    /commit                   their capacity fact (Deals · Commit), for their own page
  *   POST   /commit                   { account_ids } reads the picked accounts and writes the fact
  *   DELETE /commit                   deletes it; a sync does not bring it back
@@ -15,8 +16,9 @@
  *   DELETE /reporting/cash/:id       deletes one month's cash; a sync does not bring it back
  *   GET    /ledger/map               ?fund_id= their confirmed category map
  *
- * WHO. An investor, on HQ only (D752's `personal_hq_only_roles`), never in a
- * support session. Every read and write is the caller's own: no admin
+ * WHO. An investor, on HQ or in a branch (D884, the owner's answer A; D752
+ * kept them on HQ only), never in a support session. Proof of funds stays
+ * HQ-only in its own route. Every read and write is the caller's own: no admin
  * bypass, because these are the investor's balances. The Fund sections also
  * need the institutional tier, as the Fund bucket does.
  *
@@ -27,7 +29,6 @@
 import { Hono, type Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { branchOf, HQ_ONLY } from '../util/branch';
 import { refuse } from '../util/refusal';
 import { ensureInvestorTier } from '../middleware/requireInvestorTier';
 import type { IntegrationRow } from '../integrations/registry';
@@ -39,7 +40,7 @@ import { MERCURY_AUTH_TYPE, mercuryAccessFor } from '../services/mercury/oauth';
 import { openMercuryReads, scopePermission, type MercuryReads } from '../services/mercury/reads';
 import {
   acceptProposal, adminFunds, callProposalsFor, capacityOf, categoryMap, closingDrafts, deleteCapacity, deleteMonthEndCash,
-  dismissProposal, gpFunds, ledgerDrafts, listProposals, monthEndCash, ownCommitments, ownProposal, readCapacity, readLines,
+  dismissProposal, gpFunds, ledgerDrafts, listProposals, monthEndCash, ownCommitments, ownProposal, pipelineFigures, readCapacity, readLines,
   readMonthEndCash, readStatements, statementDrafts, statementKeyOf, writeCapacity, writeMonthEndCash, writeProposals,
   type InvestorReader, type ProposalKind,
 } from '../services/mercury/investorFeeds';
@@ -72,11 +73,10 @@ function refused(c: C, status: number, code: string, message: string): Response 
   return refuse(c, status, { code, message });
 }
 
-/** Investor, HQ, no support session. Null when allowed. */
+/** Investor, no support session; on HQ or in a branch (D884). Null when allowed. */
 async function policy(c: C, user: User): Promise<Response | null> {
   if (await isSupportSession(c)) return refused(c, 403, 'support_session_refused', 'A support session cannot read or change a member\'s bank account.');
   if (String(user.role || '').toLowerCase() !== 'investor') return refused(c, 403, 'purpose_not_allowed', 'Your Mercury connection cannot be used for this.');
-  if (branchOf(c.env)) return refused(c, 403, 'hq_only', HQ_ONLY);
   return null;
 }
 
@@ -190,6 +190,14 @@ export function createMercuryInvestor(opts: MercuryInvestorOptions = {}) {
       await logRead(c.env, conn.integrationId, user, 'accounts', { accounts: accounts.length });
       return c.json({ accounts: accounts.map((a) => ({ id: a.mercury_account_id, name: a.nickname, kind: a.kind, last_four: a.last_four })) });
     });
+  });
+
+  // D884: Deals › Pipeline reads no Mercury: the Commit capacity fact, beside the cheques the investor intends.
+  app.get('/pipeline', async (c) => {
+    const user = await requireAuth(c);
+    const p = await policy(c, user);
+    if (p) return p;
+    return c.json(await pipelineFigures(c.env, user));
   });
 
   app.get('/commit', async (c) => {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cyclesWrite } from '../../lib/api/cycles';
 import { SECTION_LABELS, isEmptyView, mercuryView } from './mercuryRaise';
+import ConnectMercury from './ConnectMercury';
 
 /**
  * D840 part 2 (#2347) — a Raise module's "From Mercury" part (`id="from-mercury"`),
@@ -14,7 +15,8 @@ import { SECTION_LABELS, isEmptyView, mercuryView } from './mercuryRaise';
  *   - Figures to cite: the narrative's and the deck's, with their source.
  *     They are never typed into the text.
  *
- * Sync reads Mercury again. With no part, nothing is drawn.
+ * Sync reads Mercury again. With no part, nothing is drawn. D882: with no
+ * usable sign-in, the part says so with "Connect Mercury" and offers no Sync.
  */
 export default function MercuryRaiseFeed({ slug, part, projectId, reload }) {
   const [busy, setBusy] = useState(null);
@@ -32,12 +34,14 @@ export default function MercuryRaiseFeed({ slug, part, projectId, reload }) {
     <section id="from-mercury" className="flex min-w-0 scroll-mt-4 flex-col gap-3 rounded-xl border border-axal-hairline bg-white px-[18px] py-4 dark:border-gray-800 dark:bg-gray-900" data-testid="cycle-part-mercury" aria-labelledby="from-mercury-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2.5">
         <h2 id="from-mercury-title" className="m-0 text-[15px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">From Mercury</h2>
-        <button type="button" disabled={busy != null} onClick={() => run('sync', () => w.mercurySync(projectId), 'Mercury could not be read.')} data-testid="mercury-sync"
-          className="rounded-md border border-axal-hairline px-3 py-1 text-[12px] font-bold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:text-gray-200">{busy === 'sync' ? 'Reading…' : 'Sync from Mercury'}</button>
+        {view.state !== 'connect' && !view.connection && <button type="button" disabled={busy != null} onClick={() => run('sync', () => w.mercurySync(projectId), 'Mercury could not be read.')} data-testid="mercury-sync"
+          className="rounded-md border border-axal-hairline px-3 py-1 text-[12px] font-bold text-axal-ink disabled:opacity-50 dark:border-gray-700 dark:text-gray-200">{busy === 'sync' ? 'Reading…' : 'Sync from Mercury'}</button>}
       </div>
       <span className={FAINT}>Your own Mercury, read-only. Only you see this.</span>
       {view.state === 'unreadable' && <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="mercury-unreadable">Unreadable: {view.reason}</p>}
-      {view.state === 'ok' && isEmptyView(view) && <p className={MUTED} data-testid="mercury-empty">Nothing from Mercury yet. Sync to read it.</p>}
+      {view.state === 'connect' && <ConnectMercury reason={view.reason} connection={view.connection} />}
+      {view.state === 'ok' && view.connection && <ConnectMercury reason={view.connection.sentence} connection={view.connection} />}
+      {view.state === 'ok' && !view.connection && isEmptyView(view) && <p className={MUTED} data-testid="mercury-empty">Nothing from Mercury yet. Sync to read it.</p>}
       {view.state === 'ok' && view.facts.length > 0 && (
         <div className="flex flex-col gap-1.5" data-testid="mercury-facts">
           <h3 className={SUB}>Measured</h3>

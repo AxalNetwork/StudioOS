@@ -352,7 +352,6 @@ test('transcript output removes identifiers, phones, credentials and links, pres
 test('D857 nullable translation fields accompany the stored original without a model call or a ciphertext leak', async () => {
   const s = await setup();
   await consentGiven(s.env, null, s.B);
-  s.db.exec('ALTER TABLE interview_transcript_segments ADD COLUMN source_lang TEXT; ALTER TABLE interview_transcript_segments ADD COLUMN translated_text TEXT; ALTER TABLE interview_transcript_segments ADD COLUMN translated_lang TEXT;');
   const g = s.db.prepare('SELECT id FROM interview_transcript_segments WHERE session_id = ?').get(s.sessionB);
   const translated = await encryptColumn(s.env, 'interview_transcript_segments', 'translated_text', g.id, 'TRANSLATED-STORED-LINE');
   s.db.prepare('UPDATE interview_transcript_segments SET source_lang = ?, translated_text = ?, translated_lang = ? WHERE id = ?').run('fr', translated, 'en', g.id);
@@ -416,7 +415,6 @@ test('the same opted-in transcript read works for a consented assigned WhatsApp 
 test('privacy redaction preserves ISO dates and explicit currency amounts in originals and translations', async () => {
   const s = await setup();
   await consentGiven(s.env, null, s.B);
-  s.db.exec('ALTER TABLE interview_transcript_segments ADD COLUMN translated_text TEXT; ALTER TABLE interview_transcript_segments ADD COLUMN translated_lang TEXT;');
   const g = s.db.prepare('SELECT id FROM interview_transcript_segments WHERE session_id = ?').get(s.sessionB);
   const facts = 'On 2026-10-22 revenue was $1,250,000 and USD 125000.50; budget EUR 1 250 000 and £1,250,000.';
   const phone = '+' + '9'.repeat(11);

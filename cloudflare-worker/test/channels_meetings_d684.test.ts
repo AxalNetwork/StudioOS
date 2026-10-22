@@ -60,6 +60,7 @@ import { openSession, writableInterview } from '../src/services/interviewIntake.
 import { CONNECTOR_METADATA, getDescriptor, getProviderImpl } from '../src/integrations/registry.ts';
 import { decryptCredentials, encryptCredentials } from '../src/integrations/secrets.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 /** How the interviewee agreed: a call is scheduled only with consent recorded (#1470's rule). */
 const CONSENT = { status: 'given', method: 'verbal' };
@@ -109,11 +110,14 @@ function world(over: Record<string, unknown> = {}) {
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
+    '529_meeting_transcript_source.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store and channel_threads.consent_state.
     '488_channel_consents.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   const jobs: any[] = [];
@@ -870,7 +874,8 @@ test('the Meet sweep queues a generated transcript; the import labels speakers a
   assert.deepEqual(segs.map((s: any) => [s.speaker_label, s.text, s.start_ms, s.end_ms]), [
     ['Dana Ruiz', 'We lose a day a month.', 5000, 8500],
     ['Sam Founder', 'Who signs off?', 9000, 10000],
-    ['Speaker ?', 'Can you hear me?', 11000, 12000],
+    // D871 (#2518): a participant Meet did not name is numbered per call, not "Speaker ?".
+    ['Speaker 1', 'Can you hear me?', 11000, 12000],
   ]);
   assert.equal(refRow(f, uid).status, 'imported');
   assert.equal(f.db.prepare('SELECT final_model FROM interview_sessions WHERE id = ?').get(sessionId).final_model, 'google_meet_transcript');

@@ -40,6 +40,7 @@ import { tableFromBaseline } from './_baseline.mjs';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 import structure, { storePlacements, loadStructureContext } from '../src/routes/founder_validate_structure.ts';
 import founderValidate from '../src/routes/founder_validate.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const ME = 2, OTHER = 3, LAB = 4, FOUNDER = 9, LAB_FOUNDER = 19;
@@ -88,6 +89,7 @@ function world(reply: (model: string, input: any) => any = () => ({ response: '{
     '453_interview_processing.sql']) {
     db.exec(mig(m));
   }
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   db.exec(`

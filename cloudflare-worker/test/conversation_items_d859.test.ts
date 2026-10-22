@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
 import { applyEngineSchema } from './_engine_schema.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { AI_BUDGET_MIGRATION, AI_LOG_SCHEMA, setFixtureAllowance } from './_ai_budget_fixture.mjs';
@@ -82,6 +83,7 @@ function world(answer: (input: any) => unknown = () => ({ response: JSON.stringi
     .filter((sql) => /CREATE TABLE IF NOT EXISTS channel_threads \(/.test(sql)).map((sql) => `${sql};`).join('\n'));
   db.exec(mig('488_channel_consents.sql'));
   applyEngineSchema(db);
+  applySessionTranslationColumns(db); // D857: production applies migration 527 before the Worker ships.
   db.exec(mig('489_interview_findings.sql'));
   // The AI token ledger: every call holds and settles here (D629, D844).
   db.exec(AI_LOG_SCHEMA + AI_BUDGET_MIGRATION);

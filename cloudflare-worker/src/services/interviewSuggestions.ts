@@ -26,6 +26,10 @@ export interface Suggestion {
   kind: string;
   payload: Record<string, unknown>;
   quote: string | null;
+  /** D857: the customer's own words when `quote` is the translation the run read; null otherwise. */
+  quote_original: string | null;
+  /** D857: the language the customer spoke, when the run read a translation. */
+  source_lang: string | null;
   interviewee: string | null;
   interview_id: number | null;
   session_id: number | null;
@@ -100,12 +104,18 @@ export async function moduleSuggestions(env: Env, projectId: number, slug: Modul
     // The passage's first segment: the one it starts in, else the first after it.
     const segs = sessionId != null ? segments.get(sessionId) ?? [] : [];
     const seg = from == null ? null : segs.find((s) => s.start <= from && from < Math.max(s.end, s.start + 1)) ?? segs.find((s) => s.start >= from) ?? null;
-    const quote = parse(r.citation_json)?.quote;
+    const citation = parse(r.citation_json);
+    const quote = citation?.quote;
+    const original = citation?.quote_original;
+    const sourceLang = citation?.source_lang;
     return {
       id: Number(r.id),
       kind: String(r.kind),
       payload,
       quote: typeof quote === 'string' && quote ? (iv?.consent ? quote : QUOTE_WITHHELD) : null,
+      // The same consent gate as the quote: the original is the same customer's words.
+      quote_original: typeof original === 'string' && original ? (iv?.consent ? original : QUOTE_WITHHELD) : null,
+      source_lang: typeof sourceLang === 'string' && /^[a-z]{2,3}$/.test(sourceLang) ? sourceLang : null,
       interviewee: iv?.name ?? null,
       interview_id: interviewId,
       session_id: sessionId,
@@ -125,6 +135,8 @@ export interface FindingRow {
   quote: string | null;
   interview_id: number;
   interviewee: string | null;
+  /** D877 (#2524): the founder deleted the session this finding came from; the finding stays, as they accepted it. */
+  source_deleted: boolean;
 }
 
 /**
@@ -139,7 +151,8 @@ export async function findingsFor(
   const kinds = opts.kinds.filter((k) => isFindingKind(k));
   if (!kinds.length) return [];
   const res = await env.DB.prepare(
-    `SELECT f.id, f.kind, f.payload_json, f.quote, f.interview_id, i.interviewee_name, i.quote_consent
+    `SELECT f.id, f.kind, f.payload_json, f.quote, f.interview_id, i.interviewee_name, i.quote_consent,
+            (f.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = f.session_id)) AS source_deleted
        FROM interview_findings f JOIN discovery_interviews i ON i.id = f.interview_id AND i.project_id = f.project_id
       WHERE f.project_id = ? AND f.kind IN (${ids(kinds.length)})
         AND (? = 0 OR i.segment_id = ?) AND (? = 0 OR f.interview_id = ?)
@@ -159,6 +172,7 @@ export async function findingsFor(
       id: Number(r.id), kind: r.kind, ...line,
       quote: quote && (opts.writer || Number(r.quote_consent) === 1) ? quote : quote ? QUOTE_WITHHELD : null,
       interview_id: Number(r.interview_id), interviewee: r.interviewee_name ?? null,
+      source_deleted: Number(r.source_deleted) === 1,
     }];
   });
 }
