@@ -59,6 +59,10 @@ export const METERING_POLICY: MeteringPolicy = Object.freeze({
     // D846's connector-backed reads, over StudioOS's own records.
     [toolOperation('get_build_progress')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('list_connections')]: { price_microusd: 0, unit: 'call' },
+    // D864's customer-chat tools, over the inbox's own records.
+    [toolOperation('list_channel_chats')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('get_session_insights')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('assign_chat_to_interview')]: { price_microusd: 0, unit: 'call' },
   }) as Record<string, MeteredOperation>,
 });
 

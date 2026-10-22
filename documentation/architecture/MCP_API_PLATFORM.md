@@ -206,6 +206,26 @@ one updates this section in the same PR.
 | `key_limit_reached` | #2472 (D849) |
 | A support session can buy AI tokens (`routes/orders.ts` has no `impersonated_by` check) | #2472 (D849) |
 
+### Customer-chat tools (D864; S08)
+
+`mcp/tools/channels.ts`, over the inbox's own records (D684). No Telegram or WhatsApp API is called. Every tool runs through `callTool`, so it writes a D843 usage row, and D844 lists all three at price 0.
+
+| Tool | Scope | Input | Output |
+|---|---|---|---|
+| `list_channel_chats` | `validate:read` | `{ provider?: 'telegram'\|'whatsapp', state?: 'pending'\|'assigned'\|'ignored', limit? (1–200, default 50) }` | `{ chats: [ { id, provider, state, consent\|null, language: null, messages, notes_waiting, last_activity_at, company: {id,name}\|null, interview_id\|null, session_id\|null } ] }` |
+| `get_session_insights` | `validate:read` | `{ company, session_id }` | `{ session: { id, interview_id, provider, status, consent, digest }, suggestions: [ { id, kind, state, payload, created_at, decided_at } ], analytics: null }` |
+| `assign_chat_to_interview` | `validate:write` | `{ company, chat, interview_id }` | `{ chat, interview_id, session_id, moved, notes_queued, consent\|null }` |
+
+- `id` and `chat` are Axal's chat uid. A tool never returns:
+  - message text, a transcript, the digest or a citation quote;
+  - a contact's name, a phone number or a provider id.
+- Who sees what:
+  - an assigned chat is listed only while its venture is in the grant and readable;
+  - a pending or ignored chat is the member's own, with `company` null;
+  - insights are read only for a chat session the member made in that company. Any other session is `404 session_not_found`.
+- `language` waits on D857, and `analytics` on D858. Both are `null` until those land.
+- Assignment is the inbox's own `assignThread`, with the route's refusal codes. It records no consent and no quote consent.
+
 ### Metering policy (D844; S10)
 
 - `services/metering.ts`, with `METERING_POLICY = { version: 'm1-2026-10', tools: { [operation]: { price_microusd, unit: 'call'|'token'|'second'|'image', ai: boolean } } }`.
@@ -329,6 +349,12 @@ only when that base does.
     and report steps join as #2470, #2465 and #2466 merge.
   - The switch-on runbook is `documentation/operations/MCP_API_RUNBOOK.md`.
     Keys stay off until #2470 is deployed.
+
+- **2026-10-22 (S08, #2510, D864).** The Telegram MCP connector is Axal's own
+  tools over the inbox: `list_channel_chats`, `get_session_insights` and
+  `assign_chat_to_interview` (§3). No MTProto user session is ever asked for
+  or connected (D864 §1). They return structure only until the owner answers
+  #2510's question 1.
 
 ## 9. Known limitations
 
