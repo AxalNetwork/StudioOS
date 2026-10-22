@@ -32,6 +32,7 @@ together with what the Telegram track (#2508) has merged so far:
 | Notes stored and transcribed as recorder audio (Workers AI speech-to-text) | #2083 (D756 `S13-audio`, #1978) |
 | The customer-chat tools on Axal's MCP server (`list_channel_chats`, `get_session_insights`, `assign_chat_to_interview`), and no MTProto user session | #2527 (D864, #2510) |
 | Conversation analytics for Record a Session, Telegram and WhatsApp chats alike | #2526 (D858, #2503) |
+| A guided setup for Record a Session: six steps (linked, bot added, bot on, replies allowed, a first chat, the notice), each done, to do or blocked, read from stored rows with no Bot API call (`GET /api/channels/telegram/setup`) | #2531 (D863, #2509) |
 | The rollout readiness check (`telegram_readiness_d868.test.ts`) | D868 (#2514) |
 | Yes/No buttons on the notice | D756's buttons task, not filed: it waits on §3 step 10's probe |
 
@@ -39,7 +40,6 @@ together with what the Telegram track (#2508) has merged so far:
 
 | Part | Task |
 | --- | --- |
-| A guided setup and live connection check | D863 (#2509) |
 | Every note to text and translated: round videos, larger notes (translation is D857's, shared with WhatsApp) | D865 (#2511) |
 | Telegram in analytics by channel and in proposals, edits and deletions honoured | D866 (#2512) |
 | Calls by forwarding a recording, and "Send to Axal" (`TELEGRAM_CAPTURE`) | D867 (#2513) |
@@ -109,7 +109,9 @@ Agents never see any of these values.
 5. **Premium check.** Open Telegram › Settings › Telegram Business on an
    account **without** Telegram Premium and report on #1008 whether Chatbots
    needs Premium. Sources disagree on whether that changed in 2026; the card's
-   "Needs Telegram Premium" stays until you report. **Outcome: not reported
+   "Needs Telegram Premium" stays until you report. When you do, the card's
+   line and the setup's Premium constants (`TELEGRAM_PREMIUM_REQUIRED`,
+   `TELEGRAM_PREMIUM_LINE`, D863 §3) change in one PR. **Outcome: not reported
    yet** (D868 records it here when it is).
 6. **The notice.** Approve, with counsel, the in-chat notice and the
    `/privacy/interviews` page (#1894), and name the contact address for

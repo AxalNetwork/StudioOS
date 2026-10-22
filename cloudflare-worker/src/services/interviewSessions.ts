@@ -57,6 +57,61 @@ export const CHUNK_MIME: Record<string, string> = {
   'audio/x-wav': 'wav',
 };
 
+/**
+ * D872 (#2519) — a call recording uploaded as a file (`submitted_via
+ * 'upload'`). The browser decodes the file and re-encodes it as the one
+ * format below; the chunk route refuses anything else for such a session, so
+ * its bytes are its duration and the cap is exact.
+ */
+export const UPLOAD_SOURCE = 'upload';
+export const UPLOAD_SAMPLE_RATE = 16_000;
+/** 16 kHz, mono, 16-bit PCM: 32 000 bytes a second. */
+export const UPLOAD_BYTES_PER_SECOND = UPLOAD_SAMPLE_RATE * 2;
+/** A canonical WAV header (RIFF, fmt, data), the only one an upload chunk may carry. */
+export const WAV_HEADER_BYTES = 44;
+/** The longest upload: 3 hours, about $0.09 on whisper-large-v3-turbo and $0.94 on nova-3 (D872 §3). */
+export const MAX_UPLOAD_MS = 3 * 3600 * 1000;
+/** How the founder attests that everyone recorded agreed, as the session's consent method. */
+export const UPLOAD_ATTESTATIONS = ['verbal', 'written', 'pre_agreed'] as const;
+
+export interface WavInfo { sampleRate: number; channels: number; bitsPerSample: number; dataOffset: number; dataBytes: number; durationMs: number }
+
+/**
+ * A PCM WAV's format and length, read from its header, or null when the bytes
+ * are not one. `dataBytes` is what the bytes actually hold, never more than
+ * the header claims. The duration is what a decoder plays, so it is what
+ * speech-to-text is charged on (`interviewProcessing.chunkAudioMinutes`).
+ */
+export function wavInfo(bytes: Uint8Array): WavInfo | null {
+  if (bytes.byteLength < WAV_HEADER_BYTES) return null;
+  const v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const tag = (at: number) => String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return null;
+  let fmt: { format: number; channels: number; sampleRate: number; bitsPerSample: number } | null = null;
+  for (let at = 12; at + 8 <= bytes.byteLength;) {
+    const id = tag(at);
+    const size = v.getUint32(at + 4, true);
+    const body = at + 8;
+    if (id === 'fmt ' && size >= 16 && body + 16 <= bytes.byteLength) {
+      fmt = { format: v.getUint16(body, true), channels: v.getUint16(body + 2, true), sampleRate: v.getUint32(body + 4, true), bitsPerSample: v.getUint16(body + 14, true) };
+    } else if (id === 'data') {
+      if (!fmt || fmt.format !== 1 || !fmt.channels || !fmt.sampleRate || !fmt.bitsPerSample) return null;
+      const dataBytes = Math.min(size, bytes.byteLength - body);
+      const perSecond = fmt.sampleRate * fmt.channels * (fmt.bitsPerSample / 8);
+      return { ...fmt, dataOffset: body, dataBytes, durationMs: Math.round((dataBytes / perSecond) * 1000) };
+    }
+    at = body + size + (size % 2);
+  }
+  return null;
+}
+
+/** Whether a chunk is the upload format exactly: canonical header, 16 kHz, mono, 16-bit PCM, with samples. */
+export function isUploadWav(bytes: Uint8Array): boolean {
+  const w = wavInfo(bytes);
+  return !!w && w.dataOffset === WAV_HEADER_BYTES && w.sampleRate === UPLOAD_SAMPLE_RATE && w.channels === 1
+    && w.bitsPerSample === 16 && w.dataBytes > 0 && w.dataBytes === bytes.byteLength - WAV_HEADER_BYTES;
+}
+
 export interface SessionRow {
   id: number; uid: string; interview_id: number; project_id: number; created_by_user_id: number;
   channel: Channel; status: string; consent_status: string; consent_method: string | null; consent_at: string | null;
