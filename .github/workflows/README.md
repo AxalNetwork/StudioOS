@@ -94,3 +94,29 @@ change and the digest may not: Semgrep's image is pulled through
 
 Do NOT use floating refs like `@main`, `:latest`, or unreleased majors
 (e.g. `@v5` for `actions/checkout` doesn't exist as of 2026-05-21).
+
+## Meeting bot image skeleton (#2586, D886 B8)
+
+`meeting-bot-image.yml` tests the image helper and builds a clearly labelled
+scratch fixture on relevant pull requests. When B2 supplies a Dockerfile it
+also builds that real image without publishing. A missing runtime is not a
+successful runtime build: only the fixture is certified until B2 lands.
+
+An owner-triggered run on main builds the actual B2 image first, then uses
+the job-scoped `GITHUB_TOKEN` with `packages: write` to publish to GHCR under
+`ghcr.io/axalnetwork/studioos/meeting-bot:sha-<full-commit>`. The digest is
+recorded in the job summary. PR jobs have read permission only and do not
+log into a registry. No new registry credential is needed. The SHA tag is
+a version label, not a claim that a mutable registry tag cannot be replaced;
+future deployments must pin the published digest.
+
+This is the independent pipeline part only. #2578 still owns the host,
+instance measurements and creation of D886; #2580 owns the runtime image;
+#2579 owns BotRuntime. Worker binding/config changes, start/stop/heartbeat,
+and an image-build gate before migrations in **both** deploy paths wait for
+those contracts. The current Worker deploy is deliberately not changed or
+blocked by a missing bot image. Nothing here turns on meeting capture.
+
+Sources read 22 October 2026:
+[GitHub image publishing](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images),
+[Docker build command](https://docs.docker.com/reference/cli/docker/buildx/build/).
