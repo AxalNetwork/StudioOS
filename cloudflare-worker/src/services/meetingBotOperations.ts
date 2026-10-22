@@ -13,7 +13,9 @@ export const BOT_STATUSES = ['queued', 'joining', 'waiting_room', 'recording', '
 export type BotPlatform = typeof BOT_PLATFORMS[number];
 export type BotStatus = typeof BOT_STATUSES[number];
 const TERMINAL = new Set<BotStatus>(['done', 'failed', 'stopped']);
-const HEARTBEAT = new Set<BotStatus>(['joining', 'waiting_room', 'recording', 'processing']);
+// B1 stops the recording runtime at processing; its assembly timeout is a
+// different signal, so processing must not create a runtime-heartbeat alert.
+const HEARTBEAT = new Set<BotStatus>(['joining', 'waiting_room', 'recording']);
 const DAY = 86_400_000;
 
 // An arbitrary provider error string can contain a URL or a person's name.
@@ -21,13 +23,17 @@ const DAY = 86_400_000;
 export const BOT_FAILURE_CODES = [
   'join_timeout', 'waiting_room_timeout', 'heartbeat_timeout', 'runtime_unavailable',
   'runtime_error', 'recording_failed', 'transcription_failed', 'consent_required',
+  'admission_refused', 'meeting_ended', 'runtime_failed', 'notice_failed',
+  'unsupported_platform', 'processing_failed', 'processing_timeout',
   'budget_refused', 'unsupported_link', 'unknown',
 ] as const;
 export type BotFailureCode = typeof BOT_FAILURE_CODES[number];
 
 /** Internal projection contract, not a new database schema. The B1 adapter
  * maps its canonical stores to these fields after checking read completeness.
- * UTC timestamps may be ISO or SQLite UTC. Cost excludes markup; charged is
+ * UTC timestamps may be ISO or SQLite UTC (convert B1 epoch milliseconds in
+ * its adapter). minutes is recorded audio duration, never B1's billed runtime
+ * minutes. heartbeat_due_at includes B1's full heartbeat grace. Cost excludes markup; charged is
  * the settled AI-token ledger amount, never a reservation or estimate.
  */
 export interface BotOperationsRun {
@@ -92,6 +98,41 @@ const total = (values: number[]): number | null => {
 };
 const inWindow = (raw: string | null, from: number, to: number) => { const n = stamp(raw); return n >= from && n <= to; };
 const codeOf = (raw: string | null): BotFailureCode => BOT_FAILURE_CODES.includes(raw as BotFailureCode) ? raw as BotFailureCode : 'unknown';
+
+/** B1's published epoch-ms control-plane projection. Deliberately excludes
+ * its meeting URL, roster, quoted rate and billed-minutes field. The future
+ * canonical reader supplies measured audio/cost and the linked ledger row;
+ * this adapter never estimates missing readings from the price constant.
+ */
+export function projectBotOperationsRun(run: {
+  platform: BotPlatform; status: BotStatus; failure_code: string | null;
+  created_at: number; started_at: number | null; ended_at: number | null; heartbeat_at: number | null;
+}, measurements: {
+  recorded_minutes: number | null; provider_cost_microusd: number | null;
+  reservation: { status: string; actual_included_microusd: number | null; actual_topup_microusd: number | null } | null;
+}, heartbeatGraceMs: number): BotOperationsRun {
+  const iso = (n: number) => {
+    if (!Number.isSafeInteger(n) || n < 0 || !Number.isFinite(new Date(n).getTime())) throw new Error('meeting_bot_timestamp_unreadable');
+    return new Date(n).toISOString();
+  };
+  if (!money(heartbeatGraceMs)) throw new Error('meeting_bot_heartbeat_policy_unreadable');
+  const ledger = measurements.reservation;
+  const charged = ledger && (ledger.status === 'settled' || ledger.status === 'refunded')
+    && money(ledger.actual_included_microusd) && money(ledger.actual_topup_microusd)
+    ? total([ledger.actual_included_microusd, ledger.actual_topup_microusd]) : null;
+  // Validate both clock endpoints before deriving their duration.
+  if (run.started_at !== null) iso(run.started_at);
+  return {
+    platform: run.platform, status: run.status, failure_code: run.failure_code,
+    created_at: iso(run.created_at), ended_at: run.ended_at === null ? null : iso(run.ended_at),
+    runtime_seconds: run.started_at !== null && run.ended_at !== null && run.ended_at >= run.started_at
+      ? (run.ended_at - run.started_at) / 1000 : null,
+    minutes: measured(measurements.recorded_minutes) ? measurements.recorded_minutes : null,
+    provider_cost_microusd: money(measurements.provider_cost_microusd) ? measurements.provider_cost_microusd : null,
+    charged_microusd: charged,
+    heartbeat_due_at: run.heartbeat_at === null ? null : iso(run.heartbeat_at + heartbeatGraceMs),
+  };
+}
 
 /** No partial-cohort margin: a missing bill must not make an alert look safe.
  * Runtime cost/hour uses runtime seconds, not recorded audio minutes.
@@ -204,7 +245,9 @@ export function botAlertNotification(userId: number, alert: BotAlert): NotifyArg
 /** The B1 coordinator calls this only after claiming the alert episode.
  * One existing inbox channel; only active HQ Super Admins, never every admin.
  * Return confirmed inbox count, without claiming email/push delivery. A failed
- * read throws so the coordinator can retry. No runtime dispatch or cron is
+ * read throws so the coordinator can retry; delivery failures are counted as
+ * not recorded and do not abort later recipients or request a whole-episode
+ * retry that could duplicate earlier deliveries. No runtime dispatch or cron is
  * registered here while the B1 interface is unpublished.
  */
 export async function sendMeetingBotAlert(
@@ -219,8 +262,10 @@ export async function sendMeetingBotAlert(
   const send = publish ?? (await import('./notify')).notify;
   let recorded = 0;
   for (const row of result.results) {
-    const id = await send(env, botAlertNotification(row.id, alert));
-    if (id !== null) recorded++;
+    try {
+      const id = await send(env, botAlertNotification(row.id, alert));
+      if (id !== null) recorded++;
+    } catch { /* A failed recipient must not prevent the remaining deliveries. */ }
   }
   return { recipients: result.results.length, recorded };
 }

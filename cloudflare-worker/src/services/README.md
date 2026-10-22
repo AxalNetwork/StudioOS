@@ -26,6 +26,10 @@ markup is a 20% gross margin; positive cost with no charge alerts while the
 undefined margin remains null. Runtime cost per hour uses bot runtime, including
 waiting, rather than audio duration. Missing readings remain null; failed reads
 remain unreadable. Raw failure text is reduced to an allowlisted code or unknown.
+The B1 contract uses epoch milliseconds and bills runtime minutes. Convert its
+timestamps at the adapter boundary; never label its billed minutes as recorded
+audio. The runtime stops at processing, so that stage is excluded from heartbeat
+alerts and keeps B1's separate processing timeout.
 
 The HQ screen, authenticated read/test routes, live stage timings, scheduled
 evaluation and durable alert deduplication still wait on B1 and the approved

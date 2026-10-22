@@ -111,6 +111,8 @@ function heartbeat(api = ops) {
     row({ status: 'joining', ended_at: null, heartbeat_due_at: at(0) }),
     row({ status: 'waiting_room', ended_at: null, heartbeat_due_at: at(1) }),
     row({ status: 'processing', ended_at: null, heartbeat_due_at: null }),
+    row({ status: 'processing', ended_at: at(-1000), heartbeat_due_at: at(-DAY) }),
+    row({ status: 'recording', ended_at: null, heartbeat_due_at: null }),
     row({ status: 'done', heartbeat_due_at: at(-DAY) }),
     row({ status: 'queued', ended_at: null, heartbeat_due_at: at(-DAY) }),
   ];
@@ -125,6 +127,8 @@ function privacy(api = ops) {
   const out = report([run], api);
   assert.deepEqual(out.today.failures, [{ platform: 'zoom', code: 'unknown', runs: 1 }]);
   assert.equal(JSON.stringify(out).includes(marker), false);
+  assert.deepEqual(report([row({ status: 'failed', failure_code: 'notice_failed' })], api).today.failures,
+    [{ platform: 'zoom', code: 'notice_failed', runs: 1 }], 'B1 content-free failure codes remain useful');
   for (const alert of [
     ...out.alerts,
     { kind: 'missed_heartbeat' as const, platform: 'teams' as const, runs: 1, private: marker },
@@ -140,6 +144,30 @@ function privacy(api = ops) {
 }
 
 for (const check of [windows, missing, finance, thresholds, heartbeat, privacy]) test('D886 B10: ' + check.name, () => check());
+
+function controlPlaneAdapter(api = ops) {
+  const control = { platform: 'teams' as const, status: 'done' as const, failure_code: null,
+    created_at: NOW - 500_000, started_at: NOW - 400_000, ended_at: NOW - 100_000, heartbeat_at: NOW - 120_000,
+    minutes: 5, rate_per_minute_microusd: 999, meeting_url_enc: 'SYNTHETIC_PRIVATE_MARKER' };
+  const readings = { recorded_minutes: null, provider_cost_microusd: null,
+    reservation: { status: 'settled', actual_included_microusd: 70, actual_topup_microusd: 30 } };
+  const out = api.projectBotOperationsRun(control, readings, 120_000);
+  assert.equal(out.created_at, at(-500_000));
+  assert.equal(out.heartbeat_due_at, at(0));
+  assert.equal(out.runtime_seconds, 300);
+  assert.equal(out.minutes, null, 'billed runtime is not recorded audio');
+  assert.equal(out.provider_cost_microusd, null, 'a quoted rate is not actual cost');
+  assert.equal(out.charged_microusd, 100);
+  assert.equal(JSON.stringify(out).includes('SYNTHETIC_PRIVATE_MARKER'), false);
+  for (const status of ['pending', 'review']) {
+    assert.equal(api.projectBotOperationsRun(control, { ...readings, reservation: { ...readings.reservation, status } }, 120_000).charged_microusd, null);
+  }
+  const exact = api.projectBotOperationsRun(control, { ...readings, recorded_minutes: 4.5, provider_cost_microusd: 80 }, 120_000);
+  assert.deepEqual([exact.minutes, exact.provider_cost_microusd], [4.5, 80]);
+  assert.throws(() => api.projectBotOperationsRun({ ...control, created_at: NaN }, readings, 120_000), /timestamp_unreadable/);
+  assert.throws(() => api.projectBotOperationsRun(control, readings, -1), /heartbeat_policy_unreadable/);
+}
+test('D886 B10: adapt B1 clocks and settled charges without inventing audio or supplier cost', () => controlPlaneAdapter());
 
 async function recipients(api = ops) {
   const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -165,6 +193,17 @@ async function recipients(api = ops) {
     await assert.rejects(() => api.sendMeetingBotAlert(broken, alert, publish), /synthetic_read_failure/);
     const incomplete = { DB: { prepare: () => ({ all: async () => ({ success: false, results: [] }) }) } } as any;
     await assert.rejects(() => api.sendMeetingBotAlert(incomplete, alert, publish), /meeting_bot_recipients_unreadable/);
+    db.prepare('INSERT INTO super_admins (user_id) VALUES (2)').run();
+    const attempted: number[] = [];
+    await assert.doesNotReject(async () => {
+      const result = await api.sendMeetingBotAlert(env, alert, async (_env, args) => {
+        attempted.push(args.userId);
+        if (args.userId === 1) throw new Error('synthetic_delivery_failure');
+        return 42;
+      });
+      assert.deepEqual(result, { recipients: 2, recorded: 1 });
+    });
+    assert.deepEqual(attempted.sort(), [1, 2]);
   } finally { db.close(); }
 }
 test('D886 B10: only active HQ Super Admins receive alerts; failed reads remain failed', () => recipients());
@@ -211,6 +250,10 @@ for (const [name, before, after, check] of [
   ['heartbeat boundary early', 'stamp(r.heartbeat_due_at) < now', 'stamp(r.heartbeat_due_at) <= now', heartbeat],
   ['terminal heartbeat alerted', "HEARTBEAT.has(r.status) && stamp(r.heartbeat_due_at) < now", "stamp(r.heartbeat_due_at) < now", heartbeat],
   ['raw error code leaks', "BOT_FAILURE_CODES.includes(raw as BotFailureCode) ? raw as BotFailureCode : 'unknown'", "raw as BotFailureCode", privacy],
+  ['processing gets runtime heartbeat alert', "new Set<BotStatus>(['joining', 'waiting_room', 'recording'])", "new Set<BotStatus>(['joining', 'waiting_room', 'recording', 'processing'])", heartbeat],
+  ['adapter omits heartbeat grace', 'iso(run.heartbeat_at + heartbeatGraceMs)', 'iso(run.heartbeat_at)', controlPlaneAdapter],
+  ['adapter bills pending hold', "(ledger.status === 'settled' || ledger.status === 'refunded')", 'true', controlPlaneAdapter],
+  ['adapter substitutes runtime for audio', 'measured(measurements.recorded_minutes) ? measurements.recorded_minutes : null', 'run.ended_at !== null && run.started_at !== null ? (run.ended_at - run.started_at) / 60_000 : null', controlPlaneAdapter],
 ] as const) test('D886 B10 mutation: ' + name, async () => {
   check();
   const changed = await mutant(before, after);
@@ -224,6 +267,7 @@ for (const [name, before, after] of [
   ['non-admin recipient allowed', "u.is_active = 1 AND u.role = 'admin'", 'u.is_active = 1'],
   ['failed delivery counted', 'if (id !== null) recorded++;', 'recorded++;'],
   ['failed recipient read hidden', "success === false || !Array.isArray(result.results)", '!Array.isArray(result.results)'],
+  ['delivery failure aborts fanout', 'catch { /* A failed recipient', 'catch (error) { throw error; /* A failed recipient'],
 ] as const) test('D886 B10 mutation: ' + name, async () => {
   await recipients();
   const changed = await mutant(before, after);
