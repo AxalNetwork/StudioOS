@@ -3,6 +3,7 @@
  * API keys (plan §3):
  *
  *   GET /api/developer/limits  → { window_seconds, member, connection, keys_enabled, keys[] }
+ *     each key: { uid, name, prefix, rate_per_minute, monthly_limit_microusd|null, used_microusd|null }
  *
  * `member` is the cap across every connection and key the member holds;
  * `connection` is each assistant grant's own cap; each live key carries its
@@ -16,6 +17,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { GRANT_CALLS_PER_MINUTE, USER_CALLS_PER_MINUTE } from '../mcp/grants';
 import { KEY_PREFIX, apiKeysEnabled, isLive, listKeys, looksLikeKey } from '../services/apiKeys';
+import { keysMonthSpend } from '../services/apiKeyLimits';
 
 export const developerLimits = new Hono<{ Bindings: Env }>();
 
@@ -26,6 +28,8 @@ developerLimits.get('/', async (c) => {
   try { user = await requireAuth(c); } catch { return c.json({ detail: 'Unauthorized' }, 401); }
   const keysEnabled = apiKeysEnabled(c.env);
   const rows = keysEnabled ? (await listKeys(c.env, user.id)).filter((r) => isLive(r)) : [];
+  // D849 part 2: what each key's own holds took this month; null when it could not be read.
+  const used = await keysMonthSpend(c.env, user.id, rows.map((r) => r.uid));
   return c.json({
     window_seconds: 60,
     member: { calls_per_minute: USER_CALLS_PER_MINUTE },
@@ -34,6 +38,7 @@ developerLimits.get('/', async (c) => {
     keys: rows.map((r) => ({
       uid: r.uid, name: r.name, prefix: `${KEY_PREFIX}${r.key_id}`,
       rate_per_minute: r.rate_per_minute, monthly_limit_microusd: r.monthly_limit_microusd,
+      used_microusd: used.get(r.uid) ?? null,
     })),
   });
 });
