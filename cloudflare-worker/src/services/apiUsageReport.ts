@@ -6,8 +6,8 @@
  * TENANCY. Every statement here starts `WHERE e.user_id = ?` with the
  * session's user, and the hold a row names is joined only when it is the same
  * user's (`r.user_id = e.user_id`). A `key=` from the query string is
- * re-checked by `ownsKey` before it narrows anything, so another member's key
- * reads exactly as a key that does not exist.
+ * re-checked against `member_api_keys` (D841) by `ownsKey` before it narrows
+ * anything, so another member's key reads exactly as a key that does not exist.
  *
  * STATIC SQL. The grouping is chosen by a bound `CASE ?1`, never by splicing a
  * column name, so each statement is one literal with bound parameters.
@@ -19,8 +19,14 @@
  * row is; `metered_calls` says how many rows the sum covers.
  *
  * `provider_cost_microusd` is HQ's (#2481): no member response carries it.
+ *
+ * PER-KEY LIMITS (scope 3). `keyLimits` reads each key's own monthly cap
+ * (`member_api_keys.monthly_limit_microusd`, D841) beside what that key's calls
+ * were charged this UTC month, and flags 80% and 100%. It only reports;
+ * enforcing the cap is #2472's (D849).
  */
 import type { Env } from '../types';
+import { isLive, listKeys, ownKey } from './apiKeys';
 
 export const REPORT_GROUPS = Object.freeze(['day', 'key', 'provider', 'connector', 'tool', 'model'] as const);
 export type ReportGroup = typeof REPORT_GROUPS[number];
@@ -86,17 +92,14 @@ function text(v: string | undefined, name: string): string | null {
   return v;
 }
 
-/** Whether `uid` is a key this member's calls were made with. Another member's key reads as unknown. */
+/** Whether `uid` is one of this member's keys, live or not. Another member's key reads as unknown. */
 export async function ownsKey(env: Env, userId: number, uid: string): Promise<boolean> {
-  const row = await env.DB.prepare(
-    'SELECT 1 AS one FROM api_usage_events WHERE user_id = ? AND api_key_uid = ? LIMIT 1',
-  ).bind(userId, uid).first();
-  return !!row;
+  return !!(await ownKey(env, userId, uid));
 }
 
 async function checkedKey(env: Env, userId: number, v: string | undefined): Promise<string | null> {
   const key = text(v, 'key');
-  if (key !== null && !(await ownsKey(env, userId, key))) throw new ReportInputError('unknown_key', 'No calls were made with that key.');
+  if (key !== null && !(await ownsKey(env, userId, key))) throw new ReportInputError('unknown_key', 'You have no key with that id.');
   return key;
 }
 
@@ -227,6 +230,11 @@ export async function usageReport(env: Env, userId: number, q: ReportQuery, now 
   ]);
   const rows = page.results ?? [];
   const more = rows.length > GROUP_PAGE;
+  // A key's label is its name, from the member's own keys; a group with no key stays NULL.
+  const names = group === 'key' || by === 'key'
+    ? new Map((await listKeys(env, userId)).map((k) => [k.uid, k.name] as [string, string]))
+    : null;
+  const keyLabel = (uid: string | null) => (uid === null ? null : names?.get(uid) ?? null);
   return {
     recorded: !!recorded,
     recorded_since: since,
@@ -236,11 +244,11 @@ export async function usageReport(env: Env, userId: number, q: ReportQuery, now 
     totals: stats(totals.results?.[0] ?? {}),
     groups: rows.slice(0, GROUP_PAGE).map((r) => {
       const g1 = r.g1 === null || r.g1 === undefined ? null : String(r.g1);
-      const out: Group = { key: g1, label: group === 'key' ? null : g1, ...stats(r) };
+      const out: Group = { key: g1, label: group === 'key' ? keyLabel(g1) : g1, ...stats(r) };
       if (by) {
         const g2 = r.g2 === null || r.g2 === undefined ? null : String(r.g2);
         out.by_key = g2;
-        out.by_label = by === 'key' ? null : g2;
+        out.by_label = by === 'key' ? keyLabel(g2) : g2;
       }
       return out;
     }),
@@ -358,5 +366,83 @@ export async function usageEvents(env: Env, userId: number, q: EventsQuery, now 
       refunded_microusd: intOrNull(r.refunded),
     })),
     next_cursor: rows.length > EVENT_PAGE && last ? encodeCursor(String(last.created_at), int(last.id)) : null,
+  };
+}
+
+/** The share of a key's monthly cap at which a key is flagged `near_limit`. */
+export const NEAR_LIMIT_PERCENT = 80;
+
+export interface KeyLimit {
+  uid: string;
+  name: string;
+  key_id: string;
+  live: boolean;
+  expires_at: string | null;
+  revoked_at: string | null;
+  /** The member's own cap for the month; NULL is no per-key cap. */
+  monthly_limit_microusd: number | null;
+  calls: number;
+  /** What this key's calls were charged this month; NULL when none was metered. */
+  charged_microusd: number | null;
+  metered_calls: number;
+  /** Whole percent of the cap used, rounded down; NULL with no cap or no metered charge. */
+  used_percent: number | null;
+  alert: 'near_limit' | 'at_limit' | null;
+}
+
+/** The UTC month `YYYY-MM` (this month by default) as a half-open range. */
+export function parseMonth(v: string | undefined, now = new Date()) {
+  const month = v === undefined || v === '' ? now.toISOString().slice(0, 7) : v;
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(month);
+  if (!m) throw new ReportInputError('invalid_month', 'Give the month as YYYY-MM.');
+  const y = Number(m[1]), mo = Number(m[2]);
+  const next = mo === 12 ? `${y + 1}-01` : `${m[1]}-${String(mo + 1).padStart(2, '0')}`;
+  return { month, fromTs: `${month}-01 00:00:00`, toTs: `${next}-01 00:00:00` };
+}
+
+/** Where a charge stands against a cap. Exact for any two safe integers. */
+export function limitState(charged: number | null, limit: number | null): Pick<KeyLimit, 'used_percent' | 'alert'> {
+  if (charged === null || limit === null || limit <= 0) return { used_percent: null, alert: null };
+  const c = BigInt(charged), l = BigInt(limit);
+  const alert = c >= l ? 'at_limit' : c * 100n >= l * BigInt(NEAR_LIMIT_PERCENT) ? 'near_limit' : null;
+  return { used_percent: Number((c * 100n) / l), alert };
+}
+
+const KEY_MONTH_SQL = `SELECT k.uid, k.name, k.key_id, k.monthly_limit_microusd, k.expires_at, k.revoked_at,
+    used.calls, used.charged_microusd, used.metered_calls
+  FROM member_api_keys k
+  LEFT JOIN (
+    SELECT e.api_key_uid AS key_uid, COUNT(*) AS calls,
+      SUM(CASE WHEN e.reservation_uid IS NULL THEN e.charged_microusd
+        WHEN r.status IN ('settled', 'refunded') THEN r.actual_included_microusd + r.actual_topup_microusd END) AS charged_microusd,
+      COUNT(CASE WHEN e.reservation_uid IS NULL THEN e.charged_microusd
+        WHEN r.status IN ('settled', 'refunded') THEN r.actual_included_microusd + r.actual_topup_microusd END) AS metered_calls
+    FROM api_usage_events e
+    LEFT JOIN ai_budget_reservations r ON r.uid = e.reservation_uid AND r.user_id = e.user_id
+    WHERE e.user_id = ?1 AND e.api_key_uid IS NOT NULL AND e.created_at >= ?2 AND e.created_at < ?3
+    GROUP BY e.api_key_uid
+  ) AS used ON used.key_uid = k.uid
+  WHERE k.user_id = ?1
+  ORDER BY k.created_at DESC, k.uid`;
+
+/** `GET /api/developer/usage/keys`: each of the member's keys, its cap and this month's charge. */
+export async function keyLimits(env: Env, userId: number, q: { month?: string }, now = new Date()) {
+  const range = parseMonth(q.month, now);
+  const res = await env.DB.prepare(KEY_MONTH_SQL).bind(userId, range.fromTs, range.toTs).all<Record<string, unknown>>();
+  return {
+    month: range.month,
+    near_limit_percent: NEAR_LIMIT_PERCENT,
+    keys: (res.results ?? []).map((r): KeyLimit => {
+      const limit = intOrNull(r.monthly_limit_microusd);
+      const charged = intOrNull(r.charged_microusd);
+      const expires = (r.expires_at as string | null) ?? null, revoked = (r.revoked_at as string | null) ?? null;
+      return {
+        uid: String(r.uid), name: String(r.name), key_id: String(r.key_id),
+        live: isLive({ expires_at: expires, revoked_at: revoked }, now),
+        expires_at: expires, revoked_at: revoked,
+        monthly_limit_microusd: limit, calls: int(r.calls), charged_microusd: charged, metered_calls: int(r.metered_calls),
+        ...limitState(charged, limit),
+      };
+    }),
   };
 }

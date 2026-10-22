@@ -252,8 +252,9 @@ one: accept, edit or discard. Deciding writes no record; the page's own Save doe
 D845 (#2471): `developerUsage.js` reads the caller's own usage reports over
 `api_usage_events` (D843): `report` (`GET /api/developer/usage`, grouped by day,
 key, provider, connector, tool or model, or by day and a second way) and `events`
-(`GET /api/developer/usage/events`, the request history, 100 a page). A NULL
-charge means not metered.
+(`GET /api/developer/usage/events`, the request history, 100 a page), and
+`keys` (`GET /api/developer/usage/keys`, each key's cap, this month's charge
+and the 80% / 100% flag). A NULL charge means not metered.
 
 D797 (#2230): `licenceTerms.js` reads and saves a licence's terms schedule
 (`GET`/`PUT /api/admin/licences/:uid/terms`, Super Admin; the save takes a
