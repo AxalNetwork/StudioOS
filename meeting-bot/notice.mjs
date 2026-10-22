@@ -2,9 +2,13 @@
 export const MEETING_BOT_NAME = 'Eadwyn AI';
 export const MEETING_BOT_NOTICE_VERSION = 2;
 export const MEETING_BOT_NOTICE_PATH = '/privacy/interviews';
-// Publish only with B1/B2/B6 consent, retention and deletion verification.
-// The public page reads this same gate; canary alone cannot publish it.
-export const MEETING_BOT_NOTICE_PUBLISHED = false;
+// Set the actual approval date only with B1/B2/B6 safeguard verification.
+// Publication and the public page's date derive from this one setting.
+export const MEETING_BOT_NOTICE_APPROVED_AT = null;
+const approvalMs = typeof MEETING_BOT_NOTICE_APPROVED_AT === 'string'
+  ? Date.parse(`${MEETING_BOT_NOTICE_APPROVED_AT}T00:00:00Z`) : NaN;
+export const MEETING_BOT_NOTICE_PUBLISHED = Number.isFinite(approvalMs)
+  && new Date(approvalMs).toISOString().slice(0, 10) === MEETING_BOT_NOTICE_APPROVED_AT;
 export const MEETING_BOT_DISPATCH_DISCLOSURE = 'Eadwyn AI will join as a visible participant in the call.';
 
 /** A bounded, single-line display label. The caller must send it as plain text. */

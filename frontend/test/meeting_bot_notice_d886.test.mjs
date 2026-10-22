@@ -8,7 +8,7 @@ import { MemoryRouter } from 'react-router-dom';
 import * as notice from '../../meeting-bot/notice.mjs';
 import * as noticePage from '../src/pages/InterviewNoticePage.jsx';
 import MeetingBotConsentNotice from '../src/pages/founder/MeetingBotConsentNotice.jsx';
-import { mutationCheck } from './_record_d696.mjs';
+import { mutationCheck, sourceModule } from './_record_d696.mjs';
 
 const h = React.createElement;
 const read = (path) => readFileSync(new URL('../../' + path, import.meta.url), 'utf8');
@@ -92,7 +92,7 @@ test('notice assertions reject wording, attribution and normalization regression
   await mutationCheck(read('meeting-bot/notice.mjs'), '../../meeting-bot/notice.mjs', checkNotice, [
     ["MEETING_BOT_NAME = 'Eadwyn AI'", "MEETING_BOT_NAME = 'Other bot'"],
     ['MEETING_BOT_NOTICE_VERSION = 2', 'MEETING_BOT_NOTICE_VERSION = 3'],
-    ['MEETING_BOT_NOTICE_PUBLISHED = false', 'MEETING_BOT_NOTICE_PUBLISHED = true'],
+    ['MEETING_BOT_NOTICE_APPROVED_AT = null', "MEETING_BOT_NOTICE_APPROVED_AT = '2000-01-01'"],
     ["if (!MEETING_BOT_NOTICE_PUBLISHED) throw new Error('The meeting bot privacy notice is not published.');", ''],
     ["MEETING_BOT_NOTICE_PATH = '/privacy/interviews'", "MEETING_BOT_NOTICE_PATH = '/privacy'"],
     ['here for ${venture}', 'here for the founder'],
@@ -112,11 +112,26 @@ test('notice assertions reject wording, attribution and normalization regression
 });
 
 test('explicit publication enables the runtime notice; dropping the handoff is caught', async () => {
-  const published = read('meeting-bot/notice.mjs').replace('MEETING_BOT_NOTICE_PUBLISHED = false', 'MEETING_BOT_NOTICE_PUBLISHED = true');
+  const published = read('meeting-bot/notice.mjs').replace('MEETING_BOT_NOTICE_APPROVED_AT = null', "MEETING_BOT_NOTICE_APPROVED_AT = '2000-01-01'");
   await mutationCheck(published, '../../meeting-bot/notice.mjs', (api) => {
     assert.equal(api.MEETING_BOT_NOTICE_PUBLISHED, true);
     assert.equal(api.meetingBotNotice({ ventureName: 'Example venture' }), api.draftMeetingBotNotice({ ventureName: 'Example venture' }));
   }, [['return draftMeetingBotNotice(input);', 'return undefined;']]);
+});
+
+test('missing, malformed and invalid-calendar approval dates cannot publish', async () => {
+  const source = read('meeting-bot/notice.mjs');
+  const unpublished = (api) => {
+    assert.equal(api.MEETING_BOT_NOTICE_PUBLISHED, false);
+    assert.throws(() => api.meetingBotNotice(), /privacy notice is not published/);
+  };
+  for (const value of [null, '', 'not-a-date', '2000-02-30', 42]) {
+    await unpublished(await sourceModule(source.replace('MEETING_BOT_NOTICE_APPROVED_AT = null', `MEETING_BOT_NOTICE_APPROVED_AT = ${JSON.stringify(value)}`), '../../meeting-bot/notice.mjs'));
+  }
+  const impossibleDate = source.replace('MEETING_BOT_NOTICE_APPROVED_AT = null', "MEETING_BOT_NOTICE_APPROVED_AT = '2000-02-30'");
+  await mutationCheck(impossibleDate, '../../meeting-bot/notice.mjs', unpublished, [
+    ['new Date(approvalMs).toISOString().slice(0, 10) === MEETING_BOT_NOTICE_APPROVED_AT', 'true'],
+  ]);
 });
 
 test('page assertions reject missing notice, retention and deletion disclosures', async () => {
@@ -140,8 +155,8 @@ test('the publication guard rejects silently replacing the live notice with the 
 
 test('publishing makes version 2 current, preserves old links and keeps the legacy map immutable', async () => {
   const published = read('frontend/src/pages/InterviewNoticePage.jsx').replace(
-    "import { MEETING_BOT_NOTICE_PUBLISHED, MEETING_BOT_NOTICE_VERSION } from '../../../meeting-bot/notice.mjs';",
-    'const MEETING_BOT_NOTICE_PUBLISHED = true; const MEETING_BOT_NOTICE_VERSION = 2;',
+    "import { MEETING_BOT_NOTICE_APPROVED_AT, MEETING_BOT_NOTICE_PUBLISHED, MEETING_BOT_NOTICE_VERSION } from '../../../meeting-bot/notice.mjs';",
+    "const MEETING_BOT_NOTICE_APPROVED_AT = '2000-01-01'; const MEETING_BOT_NOTICE_PUBLISHED = true; const MEETING_BOT_NOTICE_VERSION = 2;",
   );
   await mutationCheck(published, 'pages/InterviewNoticePage.jsx', (api) => {
     assert.equal(api.CURRENT_INTERVIEW_NOTICE_VERSION, 2);
@@ -151,7 +166,8 @@ test('publishing makes version 2 current, preserves old links and keeps the lega
       const html = plain(renderPage(api.default, {}, url));
       assert.match(html, /Notice version 2/);
       assert.match(html, /Eadwyn AI/);
-      assert.doesNotMatch(html, /The current one is/);
+      assert.doesNotMatch(html, /The current one is|not yet published/);
+      assert.match(html, /Last updated 2000-01-01/);
     }
     const legacy = plain(renderPage(api.default, {}, '/privacy/interviews?n=1'));
     assert.match(legacy, /Notice version 1/);
@@ -160,6 +176,7 @@ test('publishing makes version 2 current, preserves old links and keeps the lega
     ['CURRENT_INTERVIEW_NOTICE_VERSION = MEETING_BOT_NOTICE_PUBLISHED ? MEETING_BOT_NOTICE_VERSION : INTERVIEW_NOTICE_VERSION', 'CURRENT_INTERVIEW_NOTICE_VERSION = INTERVIEW_NOTICE_VERSION'],
     ['? { ...INTERVIEW_NOTICES, [MEETING_BOT_NOTICE_VERSION]: MEETING_BOT_INTERVIEW_NOTICE } : INTERVIEW_NOTICES', '? INTERVIEW_NOTICES : INTERVIEW_NOTICES'],
     ['? { ...INTERVIEW_NOTICES, [MEETING_BOT_NOTICE_VERSION]: MEETING_BOT_INTERVIEW_NOTICE } : INTERVIEW_NOTICES', '? Object.assign(INTERVIEW_NOTICES, { [MEETING_BOT_NOTICE_VERSION]: MEETING_BOT_INTERVIEW_NOTICE }) : INTERVIEW_NOTICES'],
+    ["updated: MEETING_BOT_NOTICE_APPROVED_AT || 'not yet published'", "updated: 'not yet published'"],
   ], true);
 });
 

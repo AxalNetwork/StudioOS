@@ -64,9 +64,11 @@ Phone participants and hidden chat panels need the founder's spoken notice.
 is prepared as `MEETING_BOT_INTERVIEW_NOTICE`, candidate version 2, outside
 the live version map; even `?n=2` cannot publish it. The runtime's gated
 announcement also names version 2 and links with `?n=2`. After the checks above
-pass, publish it through the shared publication switch. That switch adds
-version 2 to the page's version map and makes it current together, retaining
-version 1 for old chat-consent links. The candidate has no
+pass and the notice is approved, set its actual `MEETING_BOT_NOTICE_APPROVED_AT`
+date. Publication derives from that setting: a valid date opens the runtime
+gate, adds version 2 to the page's map, makes it current and supplies its
+update date together. A missing or invalid date keeps it unpublished.
+Version 1 remains available for old chat-consent links. The candidate has no
 invented approval date or contact address. This change creates no
 owner/counsel publication record.
 

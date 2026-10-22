@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import LegalDocument from './site/LegalDocument';
 import { INTERVIEW_CONTACT_EMAIL, INTERVIEW_NOTICE_PATH, INTERVIEW_NOTICE_VERSION, noticeVersionFrom } from '../lib/interviewNotice';
-import { MEETING_BOT_NOTICE_PUBLISHED, MEETING_BOT_NOTICE_VERSION } from '../../../meeting-bot/notice.mjs';
+import { MEETING_BOT_NOTICE_APPROVED_AT, MEETING_BOT_NOTICE_PUBLISHED, MEETING_BOT_NOTICE_VERSION } from '../../../meeting-bot/notice.mjs';
 
 /**
  * `/privacy/interviews` — what a person a founder interviews through Axal VC
@@ -109,7 +109,7 @@ export const INTERVIEW_NOTICES = {
  * Keeping it out also prevents ?n=2 from changing the live disclosure.
  */
 export const MEETING_BOT_INTERVIEW_NOTICE = {
-  updated: 'not yet published',
+  updated: MEETING_BOT_NOTICE_APPROVED_AT || 'not yet published',
   intro: INTERVIEW_NOTICES[1].intro,
   sections: (email) => INTERVIEW_NOTICES[1].sections(email).map((section) => {
     if (section.n === '01') return { ...section, body: <>
