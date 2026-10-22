@@ -333,7 +333,7 @@ test('discover and discoverCat: the filter, sections, corners, the Notify-me sta
   assert.match(out, /data-testid="connector-card-microsoft"/, 'Microsoft, the 8th of 9 Top cards, is shown before Show all');
   assert.doesNotMatch(out, /data-testid="connector-card-linkedin"/, 'the 9th waits for Show all');
   assert.match(out, /data-testid="button-connectors-show-all"[^>]*>Show all →/);
-  assert.match(out, /data-testid="connector-community-telegram"/);
+  assert.doesNotMatch(out, /connector-community-telegram|Telegram · Axal VC channels|>Community<|Request to join/);
   const crm = text(html(h(ConnectorsView, { data: ready(), initialTab: 'discover', initialFilter: { where: 'category:CRM', type: 'all' } })));
   assert.match(crm, /CRM 3/);
   assert.doesNotMatch(crm, /Stripe/);
