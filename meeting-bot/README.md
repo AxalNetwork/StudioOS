@@ -22,8 +22,8 @@ TypeScript directly (type stripping), so there is no build step.
 
 | Folder | What it holds |
 | --- | --- |
-| `src/` | The core: the adapter contract, the lifecycle, audio chunks, events, the callback client, the log rule and the fake adapter. |
-| `test/` | The core's tests, run by `npm run test:meeting-bot` (part of `test:drift`, so CI runs them on every PR), and their fake clock and stub callback (`_harness.ts`). |
+| `src/` | The core: the adapter contract, the lifecycle, audio chunks, events, the callback client, the log rule and the fake adapter. `src/adapters/` holds one adapter per platform (B3–B5). |
+| `test/` | The core's tests, run by `npm run test:meeting-bot` (part of `test:drift`, so CI runs them on every PR), and their fake clock and stub callback (`_harness.ts`). `test/fixtures/` holds the adapters' page fixtures. |
 
 | File | What it owns |
 | --- | --- |
@@ -38,6 +38,11 @@ TypeScript directly (type stripping), so there is no build step.
 | `src/fakeAdapter.ts` | A scripted platform for the tests, and the reference implementation an adapter copies. |
 | `src/index.ts` | The public exports. |
 | `notice.mjs` | B9's notice contract (#2587, #2590): `meetingBotNotice`, `MEETING_BOT_NAME`, the publication gate and the dispatch disclosure. See **The notice** below. |
+| `src/adapters/meet.ts` | B3 (#2581): `MeetAdapter`, Google Meet. It joins as a guest with the microphone and camera off, waits in the waiting room, reads the participant panel and the active-speaker indicator, takes the tab's audio, and detects the end of the call and removal by the host (removal reads as the call ending). It takes a `MeetPage` (`src/adapters/meet/page.ts`), which a Playwright `Page` satisfies, so the core stays dependency-free. |
+| `src/adapters/meet/selectors.ts` | Every Meet page hook, in one place. **UNVERIFIED:** written without access to Meet, and to be measured (#2581 step 1, D886 §8). |
+| `src/adapters/meet/signals.ts` | The Meet adapter's pure rules: the page state from its hooks, the link check, the roster and the active speaker. |
+| `src/adapters/meet/capture.ts` | The in-page audio capture: every remote WebRTC audio track mixed in Web Audio and handed to Node, from admission only. |
+| `test/meet_*.test.ts`, `test/_meet_browser.ts` | The Meet tests. `meet_selectors` has one test per hook, so a changed hook fails one named test. The browser tests run Chromium on `test/fixtures/meet.html`, a **constructed** page (not recorded), and skip by name where there is no Chromium (`CHROMIUM_PATH`). |
 
 ## The run
 
