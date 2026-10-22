@@ -101,7 +101,9 @@ test('the activity line names the key by its uid, and nothing anywhere carries t
   const rows = db.prepare(`SELECT user_id, project_id, details FROM activity_logs WHERE action = 'mcp_tool_call'`).all() as any[];
   assert.equal(rows.length, 1);
   assert.deepEqual(JSON.parse(rows[0].details), { tool: 'get_interview_guide', company_id: P, client: 'CI key', outcome: 'ok', api_key_uid: row.uid });
-  const secretPart = secret.split('_')[2];
+  // The whole secret: it is base64url and may itself hold '_', so split('_') could cut it to '' and match everything.
+  const secretPart = /^axk_[a-z0-9]{12}_(.+)$/.exec(secret)![1];
+  assert.equal(secretPart.length, 43);
   for (const said of [JSON.stringify(db.prepare('SELECT * FROM activity_logs').all()), r.said.join('\n'), JSON.stringify(r.body)]) {
     assert.ok(!said.includes(secretPart), 'the secret never leaves');
   }
