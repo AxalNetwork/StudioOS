@@ -226,7 +226,8 @@ ZOOM_APP_AUDIENCE = "own_account"
 # hides "Allow transcript import" and the connect route answers 503. "on" only
 # after the owner has added the meetings.space.readonly scope to the Calendar
 # OAuth client, passed Google's verification and enabled the Meet REST API.
-MEET_TRANSCRIPTS_ENABLED = "off"
+# Switched on once all three were done (ZOOM_AND_MEET_TRANSCRIPTS.md §2).
+MEET_TRANSCRIPTS_ENABLED = "on"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
 # The lasting switch-off is one PR to main that sets this flag and production's
 # MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
@@ -574,7 +575,7 @@ WHATSAPP_CHANNEL = "canary"
 TELEGRAM_CHANNEL = "canary"
 WHATSAPP_AXAL_DISPLAY_NUMBER = ""
 ZOOM_APP_AUDIENCE = "own_account"
-MEET_TRANSCRIPTS_ENABLED = "off"
+MEET_TRANSCRIPTS_ENABLED = "on"
 # D681 (#1555): StudioOS MCP and OAuth; a missing OAUTH_KV still keeps them off.
 # The lasting switch-off is one PR to main that sets this flag and the top-level
 # MCP_SERVER_ENABLED to "false", and HQ_MCP_FLAG in
