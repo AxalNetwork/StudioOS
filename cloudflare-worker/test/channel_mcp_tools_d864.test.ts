@@ -409,3 +409,18 @@ test('the same opted-in transcript read works for a consented assigned WhatsApp 
   assert.equal(out.session.provider, 'whatsapp');
   assert.deepEqual(out.transcript.segments.map((g: any) => g.text), ['WHATSAPP-STORED-LINE']);
 });
+
+
+test('privacy redaction preserves ISO dates and explicit currency amounts in originals and translations', async () => {
+  const s = await setup();
+  await consentGiven(s.env, null, s.B);
+  s.db.exec('ALTER TABLE interview_transcript_segments ADD COLUMN translated_text TEXT; ALTER TABLE interview_transcript_segments ADD COLUMN translated_lang TEXT;');
+  const g = s.db.prepare('SELECT id FROM interview_transcript_segments WHERE session_id = ?').get(s.sessionB);
+  const facts = 'On 2026-10-22 revenue was $1,250,000 and USD 1250000.50; budget EUR 1 250 000 and £1250000.';
+  const phone = '+' + '9'.repeat(11);
+  const translated = await encryptColumn(s.env, 'interview_transcript_segments', 'translated_text', g.id, facts + ' ' + phone);
+  s.db.prepare('UPDATE interview_transcript_segments SET text = ?, translated_text = ?, translated_lang = ? WHERE id = ?').run(facts + ' ' + phone, translated, 'en', g.id);
+  const out = body(await transcriptRead(s)).transcript.segments[0];
+  assert.equal(out.text, facts + ' [phone removed]');
+  assert.equal(out.translation.text, facts + ' [phone removed]');
+});

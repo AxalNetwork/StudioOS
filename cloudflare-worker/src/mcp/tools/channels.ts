@@ -118,8 +118,12 @@ function exportText(value: string | null, identifiers: readonly string[] = []): 
     .replace(/\b[0-9]{3,}:[A-Za-z0-9_-]{12,}\b/g, '[credential removed]')
     .replace(/\b(?:(?:telegram|whatsapp)[ _-]*)?(?:user|chat|file|media|wa)[ _-]*id\s*[:=]\s*[A-Za-z0-9_:.-]+/gi, '[identifier removed]')
     .replace(/\baxk_[A-Za-z0-9_-]+/g, '[credential removed]')
-    .replace(/(?:\+?[0-9][0-9 ().-]{5,}[0-9])/g, (match) =>
-      match.replace(/\D/g, '').length >= 7 ? '[phone removed]' : match);
+    // Preserve unambiguous dates and explicitly marked currency amounts. Other
+    // long number shapes remain conservative: an unlabeled number can be a phone.
+    .replace(/\b[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])\b|(?:[$€£]\s*|\b(?:USD|EUR|GBP|CAD)\s+)(?:[0-9]{1,3}(?:[ ,][0-9]{3})+|[0-9]+)(?:\.[0-9]{1,2})?|(?:\+?[0-9][0-9 ().-]{5,}[0-9])/g, (match) => {
+      if (/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(match) || /^(?:[$€£]|USD|EUR|GBP|CAD)/.test(match)) return match;
+      return match.replace(/\D/g, '').length >= 7 ? '[phone removed]' : match;
+    });
   for (const id of identifiers.filter((v) => v.length >= 3)) text = text.split(id).join('[identifier removed]');
   return text;
 }
