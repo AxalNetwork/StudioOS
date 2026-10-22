@@ -225,7 +225,7 @@ both vars blocks of `wrangler.toml`, in one PR. It ships on the next deploy.
 | B, linking | "Send this code to Axal on WhatsApp: `LINK <code>`", **Open WhatsApp**, "Expires in 10 minutes.", then "Is •••• 1234 your number?" **Confirm** | — |
 | B, linked | `•••• 1234`, "Last recording <date>." or "No recording sent yet." (the date moves on any message from the number), then **Unlink** | — |
 | B, a recording waiting | Each waiting capture as "N recordings, <date>" with "Waiting for consent" and **Agreed beforehand** (#2056) | — |
-| Calls line | "Calls: not yet. WhatsApp calls do not reach Axal; record a call with the in-app recorder instead." With a number connected, its own "Calls: not yet, because …" replaces the first sentence. | — |
+| Calls line | "Calls stay closed on numbers connected through the WhatsApp Business app. Axal does not answer or place WhatsApp calls; use the in-app recorder with everyone’s consent instead." With a number connected, its own "Calls: not yet, because …" replaces the first sentence. | — |
 
 On the session page a chat reads "Waiting for <Name> to agree", "Agreed in
 WhatsApp at <time>", "<Name> declined. Nothing from this chat was kept." or
@@ -280,8 +280,10 @@ They are also rows in `documentation/architecture/GOTCHAS.md`.
 
 **Do not change canary to on yet.** This section is a release checklist, not
 an approval. W1 (#2501, setup) and W2 (#2502, translation) must merge first.
-W5 (#2505) determines the connector's Calls wording; no call capture is
-advertised until that outcome is implemented and verified.
+W5 (#2505, merged through #2530 / D860) keeps calls closed on coexistence
+numbers. `WHATSAPP_CALLS` remains `"false"`; API-only calling is future work
+after D860’s official-source, approved-notice, live-spike and all-party-consent
+gates. No live call capture is advertised.
 
 ### Evidence S1 reviews
 
@@ -293,10 +295,10 @@ advertised until that outcome is implemented and verified.
 2. The focused command, from the repository root on the same commit, is:
 
    ```sh
-node --experimental-strip-types --no-warnings \
-  --import ./cloudflare-worker/test/_ts-loader.mjs \
-  --test cloudflare-worker/test/whatsapp_readiness_d861.test.ts
-```
+   node --experimental-strip-types --no-warnings \
+     --import ./cloudflare-worker/test/_ts-loader.mjs \
+     --test cloudflare-worker/test/whatsapp_readiness_d861.test.ts
+   ```
 
    It runs isolated fixtures for development, preview and production, plus
    mutations. No request reaches Meta or production. Passing it proves the
