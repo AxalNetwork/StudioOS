@@ -79,6 +79,7 @@ import { investorProfile } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
 import aiBudgetRoutes from './routes/ai_budget';
+import { developerUsage } from './routes/developer_usage';
 // D791 (#2216): HQ › AI usage, Super Admin with step-up.
 import adminAiUsageRoutes from './routes/admin_ai_usage';
 import aiRailProposalsRoutes from './routes/ai_rail_proposals';
@@ -878,6 +879,8 @@ app.route('/api/assistant', assistantRoutes);
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
+// D845 (#2471): the member's own usage reports over api_usage_events.
+app.route('/api/developer/usage', developerUsage);
 app.route('/api/admin/ai-usage', adminAiUsageRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
