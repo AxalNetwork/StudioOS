@@ -1,12 +1,12 @@
 /**
  * D710 (#1775) decision 5 — the catalogue knows who may see Mercury.
  *
- * On HQ, `GET /available` lists `mercury` to an admin as an entity connection
- * and, since D713 (#1778) and D752 (#1886), to a founder, a partner and an
+ * On HQ, `GET /available` lists `mercury` to an admin as a read-only preview
+ * of the founder's card (D879, #2552, which removed D710's entity row) and, since D713 (#1778) and D752 (#1886), to a founder, a partner and an
  * investor as their own, personal one, each in their role's words; on a
  * branch, to the founder and the partner only. Every other provider's row is
  * unchanged for every role `ALLOWED_ROLES` admits. `POST /connect` answers an
- * admin on HQ 409 `entity_connection_only`, hands a founder or partner (either
+ * admin on HQ 403 `purpose_not_allowed` (D879), hands a founder or partner (either
  * host) or an investor (HQ) to the personal provider, answers an investor on a
  * branch 403 `purpose_not_allowed` ("on HQ only"), and answers everyone else
  * 404, as if the key did not exist; so do the waitlist and notify-me routes.
@@ -74,7 +74,7 @@ const OTHERS = REGISTRY.filter((p) => p.key !== 'mercury').map((p) => p.key);
 const PERSONAL = ['founder', 'partner', 'investor'];
 const BRANCH_PERSONAL = ['founder', 'partner'];
 
-test('on HQ, /available lists mercury to an admin as an entity connection and to a founder, a partner and an investor as their own; every other row is unchanged', async () => {
+test('on HQ, /available lists mercury to an admin as a preview of the founder\'s card (D879) and to a founder, a partner and an investor as their own; every other row is unchanged', async () => {
   const db = fixture();
   for (const role of ROLES) {
     const r = await call(db, role, 'GET', '/available');
@@ -86,16 +86,17 @@ test('on HQ, /available lists mercury to an admin as an entity connection and to
     for (const p of r.body.items.filter((x: any) => x.key !== 'mercury')) {
       const desc = REGISTRY.find((d) => d.key === p.key)!;
       assert.equal(p.connection_source, publicDescriptor(desc).connection_source, `${role} ${p.key}`);
-      assert.ok(!('entity_roles' in p) && !('personal_roles' in p), 'the audience fields stay private');
+      assert.ok(!('preview_roles' in p) && !('personal_roles' in p), 'the audience fields stay private');
     }
   }
   const admin = (await call(db, 'admin', 'GET', '/available')).body.items.find((p: any) => p.key === 'mercury');
-  assert.deepEqual([admin.connection_source, admin.already_connected, admin.category, admin.has_implementation, admin.status, admin.auth_type],
-    ['mercury_entity_connections', false, 'Accounting and banking', false, 'beta', 'api_key']);
-  assert.deepEqual(admin.permissions, ['Read balances and transactions of the Axal entity accounts a Super Admin connects.']);
-  assert.ok(!('entity_roles' in admin) && !('personal_roles' in admin) && !('personal_hq_only_roles' in admin));
-  // D752 decision 5: the entity card says where members connect.
-  assert.ok(admin.description.endsWith('Members connect their own Mercury from their own Connectors page; their accounts never appear here.'));
+  // D879 (#2552): the admin previews the founder's card, connects nothing, and is told where Axal VC's own accounts live.
+  assert.deepEqual([admin.connection_source, admin.already_connected, admin.category, admin.has_implementation, admin.status, admin.auth_type, admin.preview],
+    ['integrations', false, 'Accounting and banking', false, 'beta', 'api_key', true]);
+  assert.deepEqual(admin.hq_accounts, { line: 'Axal VC’s own accounts are managed in HQ › Fund administration › Bank accounts.', href: '/admin?tab=bank-accounts' });
+  assert.deepEqual(admin.feeds, mercuryFedModules('founder'));
+  assert.ok(!/Axal entity/.test(JSON.stringify(admin)), 'nothing about Axal VC\'s entity accounts');
+  assert.ok(!('preview_roles' in admin) && !('personal_roles' in admin) && !('personal_hq_only_roles' in admin));
   for (const role of PERSONAL) {
     const own = (await call(db, role, 'GET', '/available')).body.items.find((p: any) => p.key === 'mercury');
     assert.deepEqual([own.connection_source, own.has_implementation, own.status, own.auth_type], ['integrations', true, 'beta', 'api_key'], role);
@@ -117,11 +118,12 @@ test('on HQ, /available lists mercury to an admin as an entity connection and to
       assert.match(own.description, /venture revenue \(founders\)/, role);
     }
     assert.ok(!/Axal entity accounts/.test(own.description), 'the personal card never describes the entity console');
-    assert.ok(!('entity_roles' in own) && !('personal_roles' in own) && !('personal_hq_only_roles' in own));
+    assert.ok(!('preview_roles' in own) && !('personal_roles' in own) && !('personal_hq_only_roles' in own));
+    assert.ok(!('preview' in own) && !('hq_accounts' in own), 'a member reads no preview note');
   }
 });
 
-test('on a branch, only a founder and a partner see mercury, as their own; the entity row and the investor\'s stay HQ only', async () => {
+test('on a branch, only a founder and a partner see mercury, as their own; the admin\'s preview and the investor\'s stay HQ only', async () => {
   const db = fixture();
   for (const role of ROLES) {
     const r = await call(db, role, 'GET', '/available', undefined, true);
@@ -132,10 +134,10 @@ test('on a branch, only a founder and a partner see mercury, as their own; the e
   }
 });
 
-test('connect: an admin on HQ is 409 entity_connection_only; a founder or partner reaches the personal provider on either host and an investor on HQ; an investor on a branch is 403 on HQ only; everyone else, and their waitlist and notify-me, is 404', async () => {
+test('connect: an admin on HQ is 403 purpose_not_allowed (D879); a founder or partner reaches the personal provider on either host and an investor on HQ; an investor on a branch is 403 on HQ only; everyone else, and their waitlist and notify-me, is 404', async () => {
   const db = fixture();
   const admin = await call(db, 'admin', 'POST', '/connect', { provider_key: 'mercury', api_key: 'fixture-not-a-token-1' });
-  assert.deepEqual([admin.status, admin.body.error], [409, 'entity_connection_only']);
+  assert.deepEqual([admin.status, admin.body.error, admin.body.message], [403, 'purpose_not_allowed', 'Your role does not hold a personal Mercury connection.']);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury'").get()!.n, 0);
   // No token: the personal provider refuses before anything reaches Mercury.
   for (const role of PERSONAL) {
