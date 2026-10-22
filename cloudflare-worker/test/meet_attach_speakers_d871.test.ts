@@ -33,7 +33,6 @@ import calendarRouter from '../src/routes/calendar.ts';
 import { GOOGLE_MEET_TRANSCRIPT_SCOPE } from '../src/services/calendar.ts';
 import { MEETING_ERRORS, importMeetingRef, loadRef } from '../src/services/channels/meetings.ts';
 import { fetchTranscript, participantLabel, sweepMeet } from '../src/services/channels/googleMeet.ts';
-import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
 
 const GOOGLE_SUB = '10987654321';
@@ -43,7 +42,7 @@ const SIGNING_KEY = 'test-only-session-signing-material-0123456789';
 // Joined, so no HMAC key sits in the source as one literal (the d690 fixtures do the same).
 const WEBHOOK_KEY = ['test', 'only', 'zoom', 'webhook', 'material'].join('-');
 const ME = 2, OTHER = 3, FOUNDER = 9, INTERVIEW = 101, FOREIGN_INTERVIEW = 501;
-const ZOOM_ID = '85746065432', MEET_CODE = 'abc-mnop-xyz';
+const MEET_CODE = 'abc-mnop-xyz';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status, headers: { 'content-type': 'application/json' },
 });
@@ -117,25 +116,6 @@ async function request(f: World, method: string, path: string, body?: unknown) {
     body: body === undefined ? undefined : JSON.stringify(body),
   }), f.env);
   return { status: res.status, body: await res.json().catch(() => null) as any };
-}
-function recording(f: World, id = INTERVIEW) {
-  const uid = crypto.randomUUID();
-  const row = f.db.prepare(`INSERT INTO interview_sessions
-    (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
-     started_at, submitted_via)
-    VALUES (?, ?, ?, ?, 'video', 'recording', 'given', 'verbal', datetime('now'), datetime('now'), NULL) RETURNING id`)
-    .get(uid, id, id === INTERVIEW ? 7 : 8, ME);
-  return Number(row.id);
-}
-async function zoomConnected(f: World, userId = ME) {
-  const uid = `zoom-test-${userId}`;
-  const encrypted = await encryptCredentials(f.env, uid, {
-    access_token: 'fixture-access', refresh_token: 'fixture-refresh', token_type: 'bearer', expires_at: Date.now() + 3600000,
-  });
-  f.db.prepare(`INSERT INTO integrations
-    (uid, user_id, provider_key, status, auth_type, credentials_enc, external_account_id, config_json)
-    VALUES (?, ?, 'zoom', 'active', 'oauth2', ?, ?, '{"zoom_account_id":"account-1"}')`)
-    .run(uid, userId, encrypted, userId === ME ? 'host-1' : 'host-2');
 }
 async function meetConnected(f: World, scope = `https://www.googleapis.com/auth/calendar.events ${GOOGLE_MEET_TRANSCRIPT_SCOPE}`, userId = ME) {
   f.db.prepare('INSERT INTO google_oauth_tokens (user_id, refresh_token, scope, google_sub) VALUES (?, ?, ?, ?)')
@@ -395,7 +375,7 @@ test('no transcript, but a recording: settled with the download-and-upload messa
   const [ref] = refs(f);
   assert.equal(ref.status, 'no_transcript');
   assert.equal(ref.last_error, MEETING_ERRORS.meet_no_transcript_recording);
-  assert.ok(!JSON.stringify(ref).includes('drive.google.com'), 'no Drive link is stored');
+  assert.ok(!Object.values(ref).some((v) => String(v).includes('fixture-file')), 'no Drive link or file id is stored');
 
   const read = await request(f, 'GET', `/interviews/${INTERVIEW}/meetings/${made.body.meeting.uid}/recording`);
   assert.equal(read.status, 200);
