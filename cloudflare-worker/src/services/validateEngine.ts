@@ -48,6 +48,7 @@ import { enqueueJob } from './queue';
 import { MIN_HOURS_BETWEEN, structureSession, type StructureOutcome, type StructureTrigger } from './sessionAutoStructure';
 import type { Segment } from './interviewStructuring';
 import { finalSegments, refusedBody } from '../routes/founder_validate_structure';
+import { MESSAGING_PROVIDERS } from './channels/types';
 
 export type DigestStage = 'summarise' | 'structure';
 
@@ -81,6 +82,8 @@ export const NOTES = {
   budgetTail: ' The transcript is kept; summarise it when the allowance allows.',
   withdrawn: 'The interviewee withdrew consent, so the summary and its suggestions were removed. Decisions you already made are kept, without the quote.',
   passB: 'Axal suggested what it heard about the problem, the person and the market, but not yet about demand and evidence:',
+  // D859 (#2504): a chat's structure stood, and its actions and data points did not run.
+  extract: 'Axal did not yet list the actions and data points in this conversation:',
 } as const;
 
 /** The sentence a refusal code reads as. Never the code itself. */
@@ -254,6 +257,13 @@ export async function digestSession(env: Env, opts: {
       if (!structure.ok && refusal === undefined) refusal = structure.reason === 'refused' ? structure.refusal ?? null : null;
       // D757 (#1923): pass B refused keeps pass A's suggestions; the note says what is missing and why.
       if (structure.ok && structure.passBRefusal !== undefined) notes.push(`${NOTES.passB} ${refusalNote(structure.passBRefusal)}`);
+      // D859 (#2504): a customer chat's actions, data points and prototype asks, as more
+      // suggestions. A refusal is a note; the structure stands.
+      if (structure.ok && (MESSAGING_PROVIDERS as readonly string[]).includes(String(session.submitted_via))) {
+        const { extractConversationItems } = await import('./conversationItems');
+        const items = await extractConversationItems(env, { sessionId: session.id, userId: opts.userId, model: prefs.models.structure, rail: opts.rails?.structure });
+        if (!items.ok && items.reason === 'refused') notes.push(`${NOTES.extract} ${refusalNote(items.refusal ?? null)}`);
+      }
     }
   } catch (err) {
     // Release the claim so a retry is not told it is busy; the error is the caller's.

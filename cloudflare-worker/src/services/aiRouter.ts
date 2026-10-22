@@ -69,6 +69,8 @@ export type TaskClass =
   | 'competitor_scan'
   | 'research_ask'
   | 'structure_interview'
+  // D859 (#2504) — a conversation's data points, actions and prototype asks, as Validate placements.
+  | 'extract_conversation_items'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
   | 'summarise_interview'
   // D765 (#2090), D720 §6: a queue job no member started (deal scoring,
@@ -808,6 +810,14 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     fallbackChain: [SMALL_LLAMA],
     // DeepSeek last: Compare's "Structure again" takes the first model that is
     // not the last run's (InterviewReview.jsx), and the 8B needs no paid plan.
+    alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast', '@cf/deepseek-ai/deepseek-v4-flash-0731'],
+  },
+  // D859 (#2504) — the same models as structuring: it reads the same transcript
+  // for typed items (a price, a next step, a feature asked for), each cited.
+  extract_conversation_items: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
     alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast', '@cf/deepseek-ai/deepseek-v4-flash-0731'],
   },
   // D685 §5.10 — the same models and prices as structuring: the summary reads
