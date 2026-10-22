@@ -71,7 +71,8 @@ const checks:any = {
 
   async registry(m:any) {
     assert.deepEqual(m.server.registeredTools().map((t:any)=>[t.name,t.requiredScope]).sort(),[
-      ['get_build_progress','build:read'],['get_interview_guide','validate:read'],['get_validate_context','validate:read'],['list_companies','validate:read'],
+      ['assign_chat_to_interview','validate:write'],['get_build_progress','build:read'],['get_interview_guide','validate:read'],['get_session_insights','validate:read'],
+      ['get_validate_context','validate:read'],['list_channel_chats','validate:read'],['list_companies','validate:read'],
       ['list_connections','connectors:read'],['propose_placements','validate:write'],['structure_with_studioos','validate:write'],['submit_interview','validate:write']]);
   },
   async scope(m:any) {

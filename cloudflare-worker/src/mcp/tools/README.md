@@ -6,6 +6,7 @@
 | `interviews.ts` | D669's three interview tools: `submit_interview`, `propose_placements` and `structure_with_studioos` |
 | `build.ts` | D846's `get_build_progress` (`build:read`): Product roadmap and Prototype / MVP from their own tables, and what GitHub fed them from the ledger. Listed only while GitHub is connected and switched on for a granted company |
 | `connections.ts` | D846's `list_connections` (`connectors:read`): each granted company's connections, as provider, status and last sync. Never a token |
+| `channels.ts` | D864's customer-chat tools over the Telegram and WhatsApp inbox (D684): `list_channel_chats` and `get_session_insights` (`validate:read`), `assign_chat_to_interview` (`validate:write`, the inbox's own `assignThread`). State, counts and structured suggestions only: never message text, a quote, a contact's name or a provider id |
 
 ## Rules
 
