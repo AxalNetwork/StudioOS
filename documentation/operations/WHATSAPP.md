@@ -14,8 +14,8 @@ There are two ways in, through one Meta app and one webhook
   in the member's inbox, and the member adds one to an interview.
 - **Way B, Send to Axal.** Axal runs one number of its own. A member links their
   WhatsApp to their account and forwards recordings of interviews they held.
-  Each recording waits until the member confirms everyone agreed; importing it
-  as a draft interview is the rest of #1939, not on `main` yet. Way B exists
+  Each recording waits until the member confirms everyone agreed, then the
+  existing capture job imports it as a draft interview with recorder audio. Way B exists
   only if the owner says yes (step 0a) and its three secrets and the
   `WHATSAPP_AXAL_DISPLAY_NUMBER` var are all set.
 
@@ -29,7 +29,7 @@ still waits is marked here and where it is used:
 | Consent in Record a Session; the WhatsApp connector page | #2001 (#1980) and #1993 (#1959), **on `main`** |
 | Consented voice notes stored as recorder audio in the chat's session, transcribed there, then the engine; **Open recording** plays them | #2063 (#1935, D754 W3), **on `main`** |
 | Way B: linking Axal's number, forwarded recordings waiting for consent, **Agreed beforehand** in Axal, and a Super Admin's unset settings | #2005 (#1937), #2006 (#1938), #2052 and #2056 (#1939 parts 1 and 2), **on `main`** |
-| Way B: a consented recording imported as a draft interview, and the "Saved" reply | The rest of #1939, **not on `main`**: a consented capture waits, and is purged 7 days after its first file |
+| Way B: a consented recording imported as a draft interview, and the "Saved" reply | **On `main`**: `whatsappCapture.importCapture` and `runCaptureFollowup`; a capture not imported by its 7-day fetch deadline is purged |
 | Unsigned webhook refused, checked on every smoke run | #1999 (`scripts/check-spa-live.mjs`), **on `main`** |
 
 #1950 and #1954 are on `main`, so the WhatsApp secrets can be set:
@@ -45,10 +45,10 @@ steps and records approval privately; do not paste app/account identifiers or
 credentials into an issue. See §7 before any general-availability PR.
 
 0. **Three decisions**, answered on #1008 item 16 or to S1:
-   - a. Way B, Send to Axal: yes or no. Axal's account pays Meta for that
-     number's replies past 1,000 a month. Today that is one consent question per
-     forwarded batch, plus one reply to each `LINK` and `STOP`; the "Saved"
-     reply comes with the rest of #1939.
+   - a. Way B, Send to Axal: yes or no. Axal's account is intended to pay Meta for that
+     number's messages; verify current pricing in step 11. The flow sends one
+     consent question per forwarded batch, replies to `LINK` and `STOP`, and a
+     "Saved" reply after a successful consented import.
    - b. Consent before anything from a chat is kept: D754 says yes. Say if you
      disagree.
    - c. WhatsApp Calling: D754 says not now (D754 §3). Say "go" to have S1 check
@@ -118,8 +118,7 @@ credentials into an issue. See §7 before any general-availability PR.
      vars blocks.
 9. **Privacy policy and data deletion page.** Say that WhatsApp chats a member
    adds to an interview, and voice notes and forwarded recordings once consent
-   is given, are stored and transcribed (a forwarded recording's audio once
-   the rest of #1939 lands); that they are kept until the member
+   is given, are stored and transcribed only after consent; that they are kept until the member
    deletes them; and how to delete them. Meta's app settings need the data
    deletion URL.
 10. **The live check**, in canary, on a real device (§3).
@@ -199,9 +198,10 @@ test business number, phone 2 plays the interviewee.
    with **Yes, out loud**, **Yes, in writing** and **No**. In Axal, the
    recording is listed as "Waiting for consent" with **Agreed beforehand**.
    Tap **Yes, out loud** in WhatsApp.
-4. *With the rest of #1939 only:* "Saved to Axal" with a link, and the draft in
-   Customer research as "Imported from WhatsApp", with its transcript. Until
-   then nothing more is sent and the consented recording waits.
+4. After the consented import succeeds, see "Saved to Axal" with a link, and
+   the draft in Customer research as "Imported from WhatsApp", with its
+   transcript. A failed or delayed import keeps a reason and may retry; do
+   not treat consent alone as proof that a recording was imported.
 5. Press **Unlink**. See: "Your WhatsApp is unlinked. Axal no longer saves what
    it sends."
 
