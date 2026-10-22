@@ -490,6 +490,36 @@ export async function verifyHostedMeeting(env: Env, conn: ZoomConnection, meetin
   return hosted;
 }
 
+// ───────────────────────────────────────────────────────────── the notetaker's join token
+
+/**
+ * D886 (#2582): an OBF ("on behalf of") token, so Axal's notetaker can join a
+ * meeting outside Axal's own Zoom account through the Meeting SDK, as Zoom
+ * has required since 2026-03-02. It is minted for the founder whose Zoom
+ * connection this is, with `user:read:token`, and Zoom mints it only while
+ * that founder is in the meeting: until then the notetaker waits
+ * (`zoom_waiting_for_host`, "Join the call first; the notetaker follows").
+ *
+ * THE TOKEN IS THE CALLER'S FOR ONE RUN. It is returned and nothing else:
+ * never stored, never logged, never in an error. Its endpoint and its
+ * refusals are as Zoom documents them, UNVERIFIED until the owner's live
+ * check (D886 "Zoom"): `GET /users/me/token?type=onbehalf&meeting_id=`.
+ */
+export async function mintObfToken(env: Env, conn: ZoomConnection, meetingId: string): Promise<string> {
+  if (!/^\d{6,20}$/.test(meetingId)) throw new MeetingProviderError('zoom_meeting_invalid', false);
+  const res = await zoomApi(env, conn, `/users/me/token?type=onbehalf&meeting_id=${meetingId}`);
+  if (res.status === 401) throw new MeetingProviderError('zoom_reconnect', false);
+  // A grant from before `user:read:token` was added (Zoom 4711, "does not contain scopes").
+  if (res.status === 403) throw new MeetingProviderError('zoom_obf_scope_missing', false);
+  if (res.status === 429 || res.status >= 500) throw new MeetingProviderError('zoom_unreachable', true);
+  // Zoom refuses the mint while the authorizing user is not in the meeting (UNVERIFIED: its exact status).
+  if (!res.ok) throw new MeetingProviderError('zoom_waiting_for_host', true);
+  const body = await res.json().catch(() => null) as { token?: unknown } | null;
+  const token = typeof body?.token === 'string' ? body.token.trim() : '';
+  if (!token) throw new MeetingProviderError('zoom_unreachable', true);
+  return token;
+}
+
 // ───────────────────────────────────────────────────────────── webhook
 
 async function hmacHex(secret: string, message: string): Promise<string> {

@@ -505,6 +505,8 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
         ['`/past_meetings/${meetingPathId(meetingId)}/instances`']),
       tool('receive_events', 'meeting events', 'inbound', 'Zoom tells Axal VC when a transcript is ready or the app is removed.', null, ['export async function handleZoomWebhook(']),
       tool('revoke_grant', 'the grant', 'account', 'Revokes the Zoom grant when you disconnect.', null, ['`${ZOOM_AUTH}/oauth/revoke`']),
+      tool('notetaker_join_token', 'the notetaker’s join', 'read', 'Gets a one-time token for Axal’s notetaker to join your call, only while you are in it. It is never stored.', null,
+        ['`/users/me/token?type=onbehalf&meeting_id=${meetingId}`']),
     ],
     prompts: [],
     prompts_reason: notRead('Zoom'),

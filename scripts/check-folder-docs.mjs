@@ -61,6 +61,7 @@ const DOCUMENTED = new Map([
   ['documentation',                   'every hand-written document'],
   ['design',                          'design sources, tokens, and the intake queue'],
   ['infra',                           'what is provisioned outside the repo, and the registry that declares it'],
+  ['meeting-bot',                     'the meeting bot runtime (D886): the core, its adapter contract and its tests'],
   ['infra/branches',                  'one file per deployed branch — the only place a deployment is declared'],
   ['design/incoming',                 'Claude Design exports waiting to be integrated'],
   ['design/canvases',                 'the 107 canvases, sorted by whether a route exists'],

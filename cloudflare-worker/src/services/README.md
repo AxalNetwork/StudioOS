@@ -9,6 +9,33 @@ runs these directly against an in-process SQLite, with no request at all.
 
 ## The ones worth knowing
 
+`meetingBotOperations.ts` prepares D886 B10 (#2588): a count-only projection,
+strict failure/heartbeat/margin thresholds and alert delivery through the
+existing notification inbox to active HQ Super Admins only. It has no registered
+route, cron or bot-dispatch path yet. B1 (#2579) must supply a complete canonical
+read, heartbeat deadlines, measured runtime seconds/provider cost and settled
+AI-token charges, and claim alert episodes before delivery. Its input type is
+an integration contract, not a migration. Do not treat a truncated read as
+complete, a reservation as a charge, or a quoted supplier rate as measured cost.
+
+Run counts use creation time: UTC today, trailing 7 days and trailing 30 days,
+with inclusive endpoints. Failure alerts use done/failed runs ended in 24 hours;
+stopped and active runs do not dilute the denominator. Margin alerts use all
+terminal runs ended in 7 days and require complete cost/charge coverage. A 25%
+markup is a 20% gross margin; positive cost with no charge alerts while the
+undefined margin remains null. Runtime cost per hour uses bot runtime, including
+waiting, rather than audio duration. Missing readings remain null; failed reads
+remain unreadable. Raw failure text is reduced to an allowlisted code or unknown.
+The B1 contract uses epoch milliseconds and bills runtime minutes. Convert its
+timestamps at the adapter boundary; never label its billed minutes as recorded
+audio. The runtime stops at processing, so that stage is excluded from heartbeat
+alerts and keeps B1's separate processing timeout.
+
+The HQ screen, authenticated read/test routes, live stage timings, scheduled
+evaluation and durable alert deduplication still wait on B1 and the approved
+meeting-bot design. B0 (#2578) owns creation of D886; append the B10 section after
+that decision exists. No live meeting capability is established by these helpers.
+
 | File | Why it matters |
 | --- | --- |
 | `profileEvidenceBlend.ts` | D592's bounded skill-level blend and audited default-off settings read; snapshot versions name the switch state. Only the Super Admin writes through `profile_evidence_blend.ts`; the owner activates it after the synthetic comparison. |

@@ -173,3 +173,13 @@ pull.
 Write the failure first — a guard that cannot fail on the bug it was written for
 is decoration. Several here were rewritten after passing cleanly over the exact
 code that motivated them.
+
+## Meeting bot image pipeline (#2586, D886 B8)
+
+`build-meeting-bot-image.mjs` builds the future B2 runtime context
+(`meeting-bot/`) only when its Dockerfile and ignore file both exist.
+`lib/meetingBotImage.mjs` validates repository/commit metadata and forms
+Docker argument arrays; its test uses a stub runner to check failure ordering.
+The image helper performs no migrations, deployment, login or publication.
+`--fixture` builds a scratch image solely to smoke-test CI plumbing; it emits
+no publishable image output and contains no bot runtime.
