@@ -186,7 +186,7 @@ test('3. refresh: an expired token is refreshed and stored; a refused refresh as
   } finally { off(); }
 });
 
-test('4. disconnect revokes the grant and deletes the row; a pasted token replaces a sign-in and revokes it', async () => {
+test('4. disconnect revokes the grant and deletes the row; a pasted token no longer replaces a sign-in (D881)', async () => {
   const { db, env, fake, off } = await setup();
   try {
     await signIn(env, fake, 20);
@@ -199,20 +199,12 @@ test('4. disconnect revokes the grant and deletes the row; a pasted token replac
 
     await signIn(env, fake, 10);
     const signedUid = row(db, 10).uid;
-    const real = globalThis.fetch;
-    // The token path's banking API, answered here; the MCP host still goes to the fake.
-    globalThis.fetch = (async (input: any, init: any) => {
-      const u = new URL(String(input?.url ?? input));
-      if (u.host === 'api.mercury.com') return u.pathname.endsWith('/organization') ? Response.json({ id: 'org-own', legalBusinessName: 'Own Practice LLC' }) : Response.json({ accounts: [] });
-      return real(input, init);
-    }) as typeof fetch;
-    try {
-      const pasted = await req(env, 10, '/api/integrations/connect', { method: 'POST', body: { provider_key: 'mercury', api_key: 'fixture-not-a-token-9', config: { confirm_read_only: true } } });
-      assert.equal(pasted.status, 200, pasted.text);
-    } finally { globalThis.fetch = real; }
+    // D881 (#2554): a token is refused before anything is read, and the sign-in stands, unrevoked.
+    const pasted = await req(env, 10, '/api/integrations/connect', { method: 'POST', body: { provider_key: 'mercury', api_key: 'fixture-not-a-token-9', config: { confirm_read_only: true } } });
+    assert.deepEqual([pasted.status, pasted.body?.error], [410, 'token_connect_retired'], pasted.text);
     assert.equal(row(db, 10).uid, signedUid, 'the same row');
-    assert.equal(row(db, 10).auth_type, 'api_key');
-    assert.deepEqual(fake.state.revoked, ['refresh_token', 'access_token', 'refresh_token', 'access_token']);
+    assert.equal(row(db, 10).auth_type, 'oauth_mcp');
+    assert.deepEqual(fake.state.revoked, ['refresh_token', 'access_token'], 'only the disconnect revoked');
   } finally { off(); }
 });
 

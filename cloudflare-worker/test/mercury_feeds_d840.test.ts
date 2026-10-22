@@ -65,8 +65,9 @@ test('3. each member page names exactly its role\'s MCP tools, and lands only wh
 test('4. member pages sign in with Mercury through its MCP server, and there is no entity page (D879)', () => {
   for (const role of ROLES) {
     const page = pages.personal[role];
-    assert.equal(page.sign_in.kind, 'oauth_or_key', role);
-    assert.match(page.sign_in.label, /^Sign in with Mercury/, role);
+    // D881 (#2554): Sign in with Mercury only, with no token help and no token line.
+    assert.deepEqual(page.sign_in, { kind: 'mcp', label: 'Sign in with Mercury', key_help_href: null }, role);
+    assert.ok(!page.long_description.some((l: string) => /API token/.test(l)), role);
     assert.equal(page.endpoints.sign_in, MERCURY_MCP_URL, role);
     assert.ok(page.tools.some((t: any) => t.name === 'sign_in_with_mercury' && t.access === 'account'), role);
   }

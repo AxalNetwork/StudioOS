@@ -158,7 +158,7 @@ test('decision 8: the member\'s groups, the three "never" rows, where it lands, 
   assert.equal(landsWords('investor'), 'Only the statements you choose to share with Axal\'s admins');
   for (const role of ['advisor', 'admin', 'constructor']) assert.equal(landsWords(role), null, role);
   assert.equal(READS_ROW, 'Only when you ask. No scheduled sync.');
-  assert.equal(MEMBER_REPLACE, 'Sign in with Mercury again, or replace the token with a Read Only one from your own Mercury organization.');
+  assert.equal(MEMBER_REPLACE, 'Sign in with Mercury again.'); // D881: no token to replace
   const d713Note = 'Revenue rows you imported and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.';
   const founderNote = 'Revenue rows you imported, figures you saved and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.';
   assert.equal(MEMBER_DISCONNECT_NOTE.founder, founderNote);
@@ -182,7 +182,7 @@ test('decision 9: the personal row\'s words, and the attention words matched on 
   assert.equal(personalAttention('401 from Mercury'), 'Token refused');
   assert.equal(personalAttention('timeout'), 'Last read failed');
   assert.equal(personalAttention(null), 'Last read failed');
-  assert.equal(personalToolBanner('write_scope_refused'), 'Mercury needs attention: Token can write. Replace its token from its page.', 'not lower-cased');
+  assert.equal(personalToolBanner('write_scope_refused'), 'Mercury needs attention: Token can write. Sign in with Mercury from its page.', 'not lower-cased');
 });
 
 test('decision 10 (D752): a "mercury" search with no row names each role\'s use, an investor on a branch reads HQ only, and a branch admin the HQ sentence; none is a request', () => {

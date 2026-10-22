@@ -1,31 +1,27 @@
 /**
- * D713 (#1778) — a member's own Mercury connection. READ-ONLY, `connect` ONLY.
+ * D713 (#1778) — a member's own Mercury connection. READ-ONLY.
  *
- * Founders, partners and, on HQ, investors (`personal_roles`, D752) connect
- * their own Mercury organization with a Read Only API token. The row is an ordinary
- * `integrations` row, encrypted by the route (`secrets.ts`, KEK_PII); only its
- * four-character preview is ever shown. It is read on demand, inside a request
- * its owner makes (`services/mercuryPersonal.ts`): this module defines no
- * sync, push, webhook, preview or action, and the route answers a Mercury
- * webhook 404 before it looks anything up.
+ * Founders, partners and, on HQ, investors (`personal_roles`, D752) hold
+ * their own Mercury organization as an ordinary `integrations` row. It is read
+ * on demand, inside a request its owner makes (`services/mercuryPersonal.ts`):
+ * this module defines no sync, push, webhook, preview or action, and the route
+ * answers a Mercury webhook 404 before it looks anything up.
  *
- * Every read goes through #1775's GET-only client and `parse.ts`, which keep
- * the organization's id and name and the accounts' kind and last four, and
- * drop every account, routing and EIN field.
+ * D881 (#2554): a member connects only by Sign in with Mercury
+ * (`routes/mercury_oauth.ts`, Mercury's MCP server). `connect` takes no token:
+ * a new connection and a replace of a stored one are both refused, and nothing
+ * reaches Mercury or is stored. A row a member connected with a Read Only API
+ * token before D881 keeps reading through #1775's GET-only client
+ * (`services/mercury/connection.ts`) until they disconnect or sign in, which
+ * turns the same row into a sign-in. No row is disconnected for them.
  *
  * Each refusal keeps its own status and code (`ConnectRefusal`):
  *   403 support_session_refused    a support session (`impersonated_by`)
  *   403 purpose_not_allowed        a role that holds no personal connection
  *   403 purpose_not_allowed        an HQ-only personal role off HQ (D752; the route answers first)
- *   400 webhook_not_supported      a `webhook_secret` was sent
- *   400 api_key_required           no token
- *   400 token_rejected             Mercury answered 401 or 403
- *   403 write_scope_refused        the API reports a permission above read-only
- *   400 confirm_read_only_required it reports none, and the member did not confirm
- *   409 mercury_entity_account     decision 3: an Axal entity's organization
- *   503 bank_registry_unavailable  decision 3 could not be checked; nothing is stored
+ *   410 token_connect_retired      every token, new or a replace (D881)
  *
- * DECISION 3 lives here, and `mercuryPersonal.ts` calls it again on every read:
+ * DECISION 3 lives here, and the sign-in and `mercuryPersonal.ts` call it on every connect and read:
  * the organization's normalised name against `AXAL_ENTITIES`, its account ids
  * against #1775's `mercury_accounts`, and its checking and savings last fours
  * against #1773's active `entity_bank_accounts` (`entity_key`, `account_last4`
@@ -38,8 +34,6 @@ import { ConnectRefusal, audienceFor, type IntegrationRow, getDescriptor, noPers
 import { selectJwt } from '../../auth';
 import { branchOf } from '../../util/branch';
 import { canHoldValidateSource } from '../../routes/_founder_validate_helpers';
-import { MercuryClientError } from '../../services/mercury/client';
-import { tokenBankReader, type OrganizationRead } from '../../services/mercury/reads';
 import { mcpCredentialsOf, revokeGrant } from '../../services/mercury/oauth';
 import type { ParsedAccount, ParsedOrganization, TokenPermission } from '../../services/mercury/parse';
 import { AXAL_ENTITIES } from '../../services/legalDocFormat';
@@ -118,14 +112,12 @@ export async function isSupportSession(c: C): Promise<boolean> {
   return !!(await selectJwt(c))?.payload.impersonated_by;
 }
 
-export type { OrganizationRead };
+/** D881: the one refusal every token connect reads, new or a replace. */
+export const TOKEN_CONNECT_RETIRED = 'Connect Mercury with Sign in with Mercury.';
+/** D881: what a member connected by token before D881 reads beside their connection. */
+export const LEGACY_TOKEN_NOTICE = 'Connected with an API token. Sign in with Mercury to keep it connected after you reconnect.';
 
-/** The organization and its checking and savings accounts, through the GET-only client. */
-export function readOrganization(token: string): Promise<OrganizationRead> {
-  return tokenBankReader(token).readOrganization();
-}
-
-async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectResult> {
+async function connect(c: C, user: User, _input: ConnectInput): Promise<ConnectResult> {
   if (await isSupportSession(c)) {
     throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot connect a member\'s bank account.');
   }
@@ -139,38 +131,8 @@ async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectRe
   if (!desc || !variant || audienceFor(desc, viewer) !== 'personal') {
     throw new ConnectRefusal(403, 'purpose_not_allowed', noPersonalConnectionSentence('Mercury'));
   }
-  if (input.webhook_secret) {
-    throw new ConnectRefusal(400, 'webhook_not_supported', 'Mercury takes no webhook here. Leave the webhook secret empty.');
-  }
-  const token = typeof input.api_key === 'string' ? input.api_key.trim() : '';
-  if (!token || token.length > 512) {
-    throw new ConnectRefusal(400, 'api_key_required', 'Paste a Read Only API token from your Mercury organization.');
-  }
-  let read: OrganizationRead;
-  try {
-    read = await readOrganization(token);
-  } catch (e) {
-    if (e instanceof MercuryClientError && e.code === 'unauthorized') {
-      throw new ConnectRefusal(400, 'token_rejected', 'Mercury did not accept that token. Check it and try again.');
-    }
-    throw e;
-  }
-  const confirmed = input.config?.confirm_read_only === true;
-  const scope = readOnlyRefusal(read.permission, confirmed);
-  if (scope) throw scope;
-  const entity = await entityAccountRefusal(c.env, read.org, read.accounts);
-  if (entity) throw entity;
-  // D840: a token replaces a sign-in on the same row; the sign-in's grant is revoked first.
-  const prior = await c.env.DB.prepare("SELECT * FROM integrations WHERE user_id = ? AND provider_key = 'mercury'").bind(user.id).first<IntegrationRow>();
-  const priorGrant = prior ? await mcpCredentialsOf(c.env, prior) : null;
-  if (priorGrant) await revokeGrant(c.env, priorGrant);
-  return {
-    credentials: { api_key: token },
-    external_account_id: read.org.id,
-    external_account_name: read.org.legal_name,
-    capabilities: [...variant.capabilities],
-    config: { read_only: read.permission === 'read_only' ? 'reported' : 'confirmed' },
-  };
+  // D881 (#2554): Sign in with Mercury only. A token is never read, checked or stored.
+  throw new ConnectRefusal(410, 'token_connect_retired', TOKEN_CONNECT_RETIRED);
 }
 
 /**

@@ -375,8 +375,8 @@ export function ToolModals({ conn, flow, onChanged }) {
 export function SettingsGroup({ p, onTool, onReplace }) {
   const conn = p.connection;
   const kind = authKind(p);
-  // D840: a member's Mercury connected with a token keeps its token row, though it signs in by default.
-  const token = conn?.uid && (kind !== 'oauth' || (isPersonalMercury(p) && conn.auth_type === 'api_key'));
+  // D881 (#2554): a member's Mercury signs in only, so a token row kept from before D881 has no Replace here.
+  const token = conn?.uid && kind !== 'oauth';
   if (!conn || !(p.key === 'hubspot' || p.key === 'salesforce' || p.key === 'linkedin' || token)) return null;
   return (
     <Group label="Settings">
@@ -538,7 +538,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             <Row a="What StudioOS reads" b="Choose the repositories, and sync them." action={<button type="button" className={BTN.link} onClick={() => go('sync')} data-testid="button-choose-repositories">Choose</button>} />
           </Group>
         )}
-        {personalMercury ? <MercuryReadsGroup /> : (
+        {personalMercury ? <MercuryReadsGroup conn={conn} /> : (
           <Group label="Sync">
             <Row a="How often" b={syncFrequencyLabel(conn)} />
             <Row a="Last sync" b={syncNote || lastSyncLabel(conn)}
@@ -618,12 +618,6 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
         {p.supports_pat && kind === 'oauth' && !tokenOnly && !personalMercury && (
           <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
             Your workspace blocks outside apps? <button type="button" className={BTN.link} onClick={() => go('key')}>Use a personal access token instead</button>
-          </p>
-        )}
-        {/* D840 (#2346): a member signs in with Mercury; the Read Only token is the other way in. */}
-        {personalMercury && (
-          <p className="mx-5 mt-3 text-[12px] text-axal-muted dark:text-gray-400">
-            <button type="button" className={BTN.link} onClick={() => go('key')} data-testid="connector-mercury-token">Use a Read Only API token instead</button>
           </p>
         )}
         {tokenOnly && kind === 'oauth' && (
@@ -768,17 +762,10 @@ export function KeyFields({ p, flow, updating = false, keyHelp = null }) {
   const kind = authKind(p);
   const {
     startOauth, apiKey, setApiKey, webhookSecret, setWebhookSecret, configText, setConfigText,
-    advanced, setAdvanced, confirmReadOnly, setConfirmReadOnly,
+    advanced, setAdvanced,
   } = flow;
   return (
     <>
-      {p.key === 'mercury' && <>
-        <Banner tone="neutral">Create a <strong>Read Only</strong> API token in your own Mercury organization, never Read and Write.</Banner>
-        <label className="mx-5 mt-4 flex items-center gap-2 text-sm">
-          <input type="checkbox" required checked={confirmReadOnly} onChange={(e) => setConfirmReadOnly(e.target.checked)} />
-          This is a Read Only token
-        </label>
-      </>}
       {p.key === 'crunchbase' && !updating && (
         <Banner tone="neutral">
           <span className="font-semibold">Crunchbase Basic user key.</span> Create one at data.crunchbase.com → API and paste the user_key below. Connect runs a live search to check it before saving. Daily Basic quota is 200 calls.

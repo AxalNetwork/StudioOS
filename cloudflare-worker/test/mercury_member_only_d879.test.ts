@@ -101,15 +101,15 @@ function assertMemberOnly(v: unknown, label: string) {
 
 const mercuryOf = (r: any) => r.body?.items?.find((p: any) => p.key === 'mercury') ?? null;
 
-// viewer → [audience, the page served (by role), the connect answer without a token]
+// viewer → [audience, the page served (by role), the connect answer without a token (D881: every member token connect is retired)]
 const VIEWERS: Array<{ role: string; branch: boolean; listed: boolean; page: string | null; connect: [number, string] }> = [
-  { role: 'founder', branch: false, listed: true, page: 'founder', connect: [400, 'api_key_required'] },
-  { role: 'founder', branch: true, listed: true, page: 'founder', connect: [400, 'api_key_required'] },
-  { role: 'partner', branch: false, listed: true, page: 'partner', connect: [400, 'api_key_required'] },
-  { role: 'partner', branch: true, listed: true, page: 'partner', connect: [400, 'api_key_required'] },
-  { role: 'investor', branch: false, listed: true, page: 'investor', connect: [400, 'api_key_required'] },
+  { role: 'founder', branch: false, listed: true, page: 'founder', connect: [410, 'token_connect_retired'] },
+  { role: 'founder', branch: true, listed: true, page: 'founder', connect: [410, 'token_connect_retired'] },
+  { role: 'partner', branch: false, listed: true, page: 'partner', connect: [410, 'token_connect_retired'] },
+  { role: 'partner', branch: true, listed: true, page: 'partner', connect: [410, 'token_connect_retired'] },
+  { role: 'investor', branch: false, listed: true, page: 'investor', connect: [410, 'token_connect_retired'] },
   // D884 (#2557, the owner's answer A): an investor has their own Mercury in a branch too.
-  { role: 'investor', branch: true, listed: true, page: 'investor', connect: [400, 'api_key_required'] },
+  { role: 'investor', branch: true, listed: true, page: 'investor', connect: [410, 'token_connect_retired'] },
   { role: 'admin', branch: false, listed: true, page: 'founder', connect: [403, 'purpose_not_allowed'] },
   { role: 'admin', branch: true, listed: false, page: null, connect: [404, 'unknown_provider'] },
 ];
@@ -126,7 +126,7 @@ test('every viewer: the card, the page and the connect answer; none describes Ax
     if (v.page) {
       assert.equal(page.status, 200, label);
       assert.equal(page.body.connector.tagline, (CONNECTOR_PAGES.mercury as any).personal[v.page].tagline, `${label}: the ${v.page} page`);
-      assert.equal(page.body.connector.sign_in.kind, 'oauth_or_key', label);
+      assert.equal(page.body.connector.sign_in.kind, 'mcp', label); // D881 (#2554): Sign in with Mercury only
       assert.equal(page.body.connector.connection_source, 'integrations', label);
     } else {
       assert.deepEqual([page.status, page.body], [404, { error: 'unknown_provider' }], label);

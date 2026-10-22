@@ -70,14 +70,11 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, zoomHowItWorks, zoomNotices } from
  * the header's line becomes its tagline. Without `body` it draws F1's About
  * and Details from the catalogue row.
  *
- * MERCURY (#1991, F5; D880, #2553). This page is the member's own Mercury
- * only: Axal VC's accounts are HQ's, and an admin on HQ reads one line here,
- * `HQ_ACCOUNTS`, linking HQ › Bank accounts. A member's own Mercury draws
- * its groups (what it is for, where it lands, what it reads) above the token
- * form until it is connected, then in "Your connection" with Manage's Sync
- * now, Replace token and Disconnect: no interim panel. D840 (#2346): the band
- * signs in with Mercury, the chevron opens the token form, and the sign-in
- * returns to this page.
+ * MERCURY (#1991, F5; D880, D881). This page is the member's own Mercury
+ * only: an admin on HQ reads `HQ_ACCOUNTS`, linking HQ › Bank accounts.
+ * Members see their groups above the sign-in band, then in "Your connection"
+ * with Manage's Sync now, Sign in again and Disconnect. Sign in with Mercury
+ * is the only connect path and returns to this page.
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -190,9 +187,9 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   // Connect by key, Reconnect by key, or Manage's Replace key on a connected row.
   const keyOpen = (view === 'key' || view === 'badkey') && ['key', 'oauth', 'reconnect', 'status'].includes(action.kind);
   const role = auth?.user?.role ?? null;
-  // D880 (#2553): an admin on HQ is told where Axal VC's own accounts are; this page never draws them.
+  // D880: Axal VC's own accounts stay in HQ; this page draws only the link.
   const hqAccounts = p.key === 'mercury' && role === 'admin' && !branchOfUser(auth?.user);
-  // A member's own Mercury says what it is for above the token form, as the sheet's first step did; the band connects.
+  // A member's own Mercury says what it is for above the sign-in band.
   const memberMercury = isPersonalMercury(p) && !p.connection;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
@@ -625,7 +622,7 @@ function WaitlistAction({ p, action, onChanged }) {
 
 /** About: what it reads and sends, and what it may do, from today's fields. It makes no read. */
 function About({ p }) {
-  // Mercury's own groups read its status on mount, so they are drawn once: above the token form, then in Your connection.
+  // Mercury's own groups read its status on mount, so they are drawn once: before it is connected, then in Your connection.
   const mercury = p.key === 'mercury';
   return (
     <section data-testid="connector-page-about" className="flex min-w-0 flex-col">

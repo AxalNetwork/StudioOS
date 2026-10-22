@@ -130,7 +130,7 @@ test('the personal row\'s words in Yours and Build; every other row keeps today\
   const failing = catalogue(conn('mercury', { status: 'error', last_error: 'write_scope_refused' }));
   const r = toolRow(row('mercury', failing));
   assert.deepEqual([r.action, r.actionLabel, r.detail], ['reconnect', 'Reconnect', 'Token can write']);
-  assert.equal(toolBanner([row('mercury', failing)]).text, 'Mercury needs attention: Token can write. Replace its token from its page.');
+  assert.equal(toolBanner([row('mercury', failing)]).text, 'Mercury needs attention: Token can write. Sign in with Mercury from its page.');
   assert.match(toolRow(m).detail, /read on request$/);
   // Unchanged: Stripe and Crunchbase.
   const s = row('stripe', cat), c = row('crunchbase', cat);
@@ -220,32 +220,19 @@ test('needs attention: the attention words and the fix, never "sync" and never t
 
 // ------------------------------------------------------------------ the key step
 
-test('the key view: no Advanced, an exact body, a stored config never sent, refusals in the Worker\'s words', async () => {
-  const calls = [];
-  const saved = connectorsApi.connect;
-  let answer = null;
-  connectorsApi.connect = async (b) => { calls.push(b); if (answer) throw answer; return {}; };
-  const base = row('mercury', catalogue());
-  const replacing = { ...base, connection: { ...base.connection, config: { confirm_read_only: false, extra: 'stored' } } };
-  const m = await mount(panel(replacing, 'key'), { user: FOUNDER });
+test('D881: a token row kept from before D881 has no Replace, reads the sign-in notice, and the pre view offers no token', async () => {
+  const base = row('mercury', catalogue(conn('mercury', { auth_type: 'api_key', api_key_preview: 'ab12' })));
+  const m = await mount(panel(base, 'detail'), { user: FOUNDER });
   try {
-    assert.doesNotMatch(m.text(), /Advanced/);
-    assert.equal(m.byId('connector-config'), undefined);
-    assert.equal(m.byId('connector-webhook'), undefined);
-    const box = () => m.nodes().find((n) => m.pr(n).type === 'checkbox');
-    await m.change(m.byId('connector-key'), { value: TOKEN });
-    await m.change(box(), { checked: true });
-    answer = Object.assign(new Error('That token belongs to an Axal entity\'s Mercury organization. Use your own.'), { status: 409, code: 'mercury_entity_account' });
-    await m.submit('connector-key-form');
-    assert.deepEqual(calls[0], { provider_key: 'mercury', display_name: 'Mercury', api_key: TOKEN, webhook_secret: undefined, config: { confirm_read_only: true } });
-    assert.match(m.text(), /That token belongs to an Axal entity's Mercury organization\. Use your own\./);
-    assert.doesNotMatch(m.text(), /refused access|Ask your Mercury admin|not valid/);
-    assert.equal(m.pr(m.byId('connector-key')).value, '', 'the token is cleared after a refusal');
-    answer = Object.assign(new Error('A support session cannot connect on a member\'s behalf.'), { status: 403 });
-    await m.change(m.byId('connector-key'), { value: TOKEN });
-    await m.submit('connector-key-form');
-    assert.match(m.text(), /A support session cannot connect on a member's behalf\./);
-  } finally { await m.unmount(); connectorsApi.connect = saved; }
+    assert.match(m.text(), /Connected with an API token\. Sign in with Mercury to keep it connected after you reconnect\./);
+    assert.doesNotMatch(m.text(), /Read Only token|Replace/);
+  } finally { await m.unmount(); }
+  const pre = await mount(panel({ ...row('mercury', catalogue()), connection: null }, 'pre'), { user: FOUNDER });
+  try {
+    assert.equal(pre.byId('connector-mercury-token'), undefined);
+    assert.equal(pre.by?.('connector-mercury-token'), undefined);
+    assert.doesNotMatch(pre.text(), /Use a Read Only API token/);
+  } finally { await pre.unmount(); }
 });
 
 // ------------------------------------------------------------------ Build
@@ -258,7 +245,7 @@ test('Build: the failing Mercury row reconnects and syncs nothing; its lightbox 
   const cat = catalogue(conn('mercury', { status: 'error', last_error: 'unauthorized' }));
   const m = await mount(h(ConnectToolView, { data: { status: 'ready', catalogue: cat, reload() {} }, onClose() {} }), { user: FOUNDER, url: '/build/connect' });
   try {
-    assert.match(m.text(), /Mercury needs attention: Token refused\. Replace its token from its page\./);
+    assert.match(m.text(), /Mercury needs attention: Token refused\. Sign in with Mercury from its page\./);
     assert.equal(m.text(m.by('tool-action-mercury')), 'Reconnect');
     await m.click('tool-action-mercury');
     assert.deepEqual(calls, [], 'no sync is called');

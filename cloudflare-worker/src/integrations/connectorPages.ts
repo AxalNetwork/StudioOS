@@ -157,7 +157,7 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
   return tools;
 }
 
-const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s own MCP server and asks only for read access. It calls only the read tools named below, and refuses any other. A Read Only API token works too.';
+const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s own MCP server and asks only for read access. It calls only the read tools named below, and refuses any other.';
 
 function mercuryPage(variant: MercuryVariant): ConnectorPage {
   return {
@@ -185,8 +185,8 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
     prompts_reason: notRead('Mercury'),
     made_by: AXAL,
     service: { name: 'Mercury', href: null },
-    // D840 (#2346): a member signs in with Mercury (its MCP server, read-only), or pastes a Read Only API token.
-    sign_in: { kind: 'oauth_or_key', label: 'Sign in with Mercury, or a Read Only API token', key_help_href: MERCURY_DOCS },
+    // D840 (#2346), D881 (#2554): a member connects only by signing in with Mercury (its MCP server, read-only).
+    sign_in: { kind: 'mcp', label: 'Sign in with Mercury', key_help_href: null },
     endpoints: { sign_in: MERCURY_MCP, api: MERCURY_API },
     added: '2026-10',
     links: { ...NO_LINKS, developer_docs: MERCURY_DOCS },

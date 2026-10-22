@@ -381,8 +381,8 @@ test('10. sign-in kinds', () => {
     const kind = e.page.sign_in.kind;
     if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
     else if (['google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
-    // D840: a member signs in with Mercury or pastes a Read Only token.
-    else if (e.key === 'mercury') assert.equal(kind, 'oauth_or_key', e.id);
+    // D881 (#2554): a member connects Mercury only by signing in through its MCP server.
+    else if (e.key === 'mercury') assert.equal(kind, 'mcp', e.id);
     else if (row!.auth_type === 'api_key') assert.equal(kind, 'key', e.id);
     else if (row!.supports_pat) assert.equal(kind, 'oauth_or_key', e.id);
     else assert.equal(kind, 'oauth', e.id);
@@ -448,7 +448,7 @@ test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either
     + "const d = p.pageDescriptor(r.getDescriptor('mercury'), { role: 'admin', hq: true });"
     + "process.stdout.write(d && d.sign_in.kind);";
   const out = execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', '--import', './cloudflare-worker/test/_ts-loader.mjs', '--input-type=module', '-e', script], { cwd: root, encoding: 'utf8' });
-  assert.equal(out, 'oauth_or_key');
+  assert.equal(out, 'mcp'); // D881 (#2554): Sign in with Mercury only
 });
 
 test('13. connectorPagePath', () => {

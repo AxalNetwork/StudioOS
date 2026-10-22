@@ -141,11 +141,11 @@ test('connect: an admin on HQ is 403 purpose_not_allowed (D879); a founder, a pa
   const admin = await call(db, 'admin', 'POST', '/connect', { provider_key: 'mercury', api_key: 'fixture-not-a-token-1' });
   assert.deepEqual([admin.status, admin.body.error, admin.body.message], [403, 'purpose_not_allowed', 'Your role does not hold a personal Mercury connection.']);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury'").get()!.n, 0);
-  // No token: the personal provider refuses before anything reaches Mercury.
+  // The personal provider is reached, and refuses a token connect before anything reaches Mercury (D881).
   for (const role of PERSONAL) {
     for (const branch of [false, true]) {
       const r = await call(db, role, 'POST', '/connect', { provider_key: 'mercury' }, branch);
-      assert.deepEqual([r.status, r.body.error], [400, 'api_key_required'], `${role} branch=${branch}`);
+      assert.deepEqual([r.status, r.body.error], [410, 'token_connect_retired'], `${role} branch=${branch}`);
     }
     assert.equal((await call(db, role, 'GET', '/mercury')).status, 200, `${role} GET /:key`);
     assert.equal((await call(db, role, 'GET', '/mercury', undefined, true)).status, 200, `${role} branch GET /:key`);

@@ -135,17 +135,18 @@ export function landsWords(role) {
 }
 
 export const READS_ROW = 'Only when you ask. No scheduled sync.';
-export const MEMBER_REPLACE = 'Sign in with Mercury again, or replace the token with a Read Only one from your own Mercury organization.';
+export const MEMBER_REPLACE = 'Sign in with Mercury again.';
 
 // ── D840 (#2346): Sign in with Mercury, through Mercury's MCP server ──────────
 
-/** The band's one action for a member's Mercury, and the other way in. */
+/** The band's one action for a member's Mercury: since D881 (#2554), the only way in. */
 export const MCP_SIGN_IN = 'Sign in with Mercury';
-export const TOKEN_ALT = 'Use a Read Only API token';
+/** D881: a token row kept from before D881, in the Worker's words (`LEGACY_TOKEN_NOTICE`, `/api/mercury/personal/status`). */
+export const LEGACY_TOKEN_NOTICE = 'Connected with an API token. Sign in with Mercury to keep it connected after you reconnect.';
 /** How the connection reads, in "How it reads". */
 export const VIA_ROWS = Object.freeze({
   oauth_mcp: 'Signed in with Mercury: read access only, through Mercury’s own MCP server.',
-  api_key: 'A Read Only API token you pasted.',
+  api_key: LEGACY_TOKEN_NOTICE,
 });
 
 /** "How it reads"'s second row, from the connection's `auth_type`; null when there is no connection. */
@@ -164,12 +165,12 @@ export const SIGN_IN_REASONS = Object.freeze({
   csrf_mismatch: 'That sign-in was started in another browser or tab. Nothing was connected. Sign in with Mercury again from here.',
   missing_code: 'Mercury did not finish the sign-in. Nothing was connected. Try again.',
   not_allowed: 'Your profile cannot connect its own Mercury. Nothing was connected.',
-  token_exchange_failed: 'Mercury did not complete the sign-in. Nothing was connected. Try again, or use a Read Only API token.',
+  token_exchange_failed: 'Mercury did not complete the sign-in. Nothing was connected. Try again.',
   scope_refused: 'That sign-in granted more than read access, so it was refused and revoked. Nothing was connected.',
   mercury_entity_account: 'This Mercury organization is one of Axal VC\'s own. Sign in to your own organization; Axal VC\'s accounts are managed only on HQ.',
   bank_registry_unavailable: 'Axal\'s account registry could not be read, so the sign-in could not be checked. Nothing was saved; try again later.',
   mercury_unreadable: 'Your Mercury account could not be read after you signed in. Nothing was saved; try again.',
-  discovery_failed: 'Mercury\'s sign-in could not be reached. Nothing was connected. Try again, or use a Read Only API token.',
+  discovery_failed: 'Mercury\'s sign-in could not be reached. Nothing was connected. Try again.',
   callback_failed: 'The sign-in did not complete. Nothing was connected. Try again.',
 });
 
@@ -210,9 +211,9 @@ export function personalAttention(lastError) {
   return 'Last read failed';
 }
 
-/** Build's failing-row banner, the attention words as written (not lower-cased). */
+/** Build's failing-row banner, the attention words as written (not lower-cased). D881: the fix is the sign-in. */
 export function personalToolBanner(lastError) {
-  return `Mercury needs attention: ${personalAttention(lastError)}. Replace its token from its page.`;
+  return `Mercury needs attention: ${personalAttention(lastError)}. Sign in with Mercury from its page.`;
 }
 
 // ── Not offered (decision 10) ─────────────────────────────────────────────────

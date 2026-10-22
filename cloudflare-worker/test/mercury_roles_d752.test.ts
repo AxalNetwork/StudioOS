@@ -111,10 +111,10 @@ test('D884: /connect takes an investor on a branch to the provider, as on HQ; pr
   try {
     const r = await req(env, 30, 'POST', '/api/connectors/connect',
       { provider_key: 'mercury', api_key: TOKEN, config: { confirm_read_only: true } }, { branch: true });
-    assert.equal(r.status, 200, r.text);
+    assert.deepEqual([r.status, r.body.error], [410, 'token_connect_retired'], r.text);
     assert.notEqual(r.body.error, 'purpose_not_allowed');
-    assert.ok(b.calls.length > 0, 'the provider was reached');
-    assert.equal(count(db, "SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury' AND user_id = 30"), 1);
+    assert.equal(b.calls.length, 0, 'D881: a token is never checked against Mercury');
+    assert.equal(count(db, "SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury' AND user_id = 30"), 0);
   } finally { b.restore(); }
 });
 

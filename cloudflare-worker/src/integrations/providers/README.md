@@ -68,6 +68,13 @@ call runs at boot.
   `purpose_not_allowed` before the provider, which refuses again. Connect
   stores the capabilities of the caller's role's variant
   (`personalMercuryFor`, `registry.ts`).
+- D881 (#2554) — members connect only by Sign in with Mercury
+  (`cloudflare-worker/src/routes/mercury_oauth.ts`). `connect` takes no token: after the support-session
+  and role refusals, every token, new or a replace, is 410
+  `token_connect_retired` ("Connect Mercury with Sign in with Mercury."),
+  and nothing reaches Mercury or is stored. A token row kept from before D881
+  keeps reading until the member signs in or disconnects;
+  `/api/mercury/personal/status` gives it `LEGACY_TOKEN_NOTICE`.
 
 ## Credential handling
 
