@@ -237,6 +237,8 @@ MEET_TRANSCRIPTS_ENABLED = "off"
 # finish before the hand deploy; re-enable it so the PR's merge deploys
 # (PRODUCTION.md, "MCP enablement").
 MCP_SERVER_ENABLED = "true"
+# D841 (#2464): member API keys for /mcp; off until the owner switches them on (MCP_API_RUNBOOK, #2473).
+API_KEYS_ENABLED = "false"
 # Feature flag for the Queues migration. While "true" the worker enqueues
 # new jobs onto the native CF Queue (`JOB_QUEUE`); the legacy D1
 # `queue_jobs` cron drain stays alive in parallel so any in-flight legacy
@@ -581,6 +583,8 @@ MEET_TRANSCRIPTS_ENABLED = "off"
 # finish before the hand deploy; re-enable it so the PR's merge deploys
 # (PRODUCTION.md, "MCP enablement").
 MCP_SERVER_ENABLED = "true"
+# D841 (#2464): member API keys for /mcp; off until the owner switches them on (MCP_API_RUNBOOK, #2473).
+API_KEYS_ENABLED = "false"
 USE_CF_QUEUE      = "true"
 # Set at deploy time by cloudflare-worker-deploy.yml (--var WORKER_DEPLOY_VERSION).
 # branchOps health returns it so HQ can persist licence_deployments.last_version.
@@ -747,6 +751,8 @@ ENVIRONMENT       = "preview"
 ROUND_CALLS_ENABLED = "false"
 # D681 (#1555): MCP stays off in preview, whatever HQ's two flags say.
 MCP_SERVER_ENABLED = "false"
+# D841 (#2464): member API keys for /mcp; off until the owner switches them on (MCP_API_RUNBOOK, #2473).
+API_KEYS_ENABLED = "false"
 USE_CF_QUEUE      = "true"
 # Task #4 (CG) — preview env can use a separate gateway slug (e.g.
 # `advisor-ongoing-preview`) created in the dashboard. Defaults to the

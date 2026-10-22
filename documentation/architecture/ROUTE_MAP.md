@@ -87,6 +87,14 @@ New routes:
 
 Every admin act leaves one `fund_admin.<act>` row in `admin_audit_log`. `COOL_OFF_ROUTES` gains the three routes that are wholly Super Admin acts. See `decisions/D714.md`.
 
+### Connector health Worker contract (D848, #2469)
+
+Every adapted connector implements one contract, `ConnectorAdapter` in `integrations/contract.ts`; GitHub and Stripe adopt it, Mercury once #2468 merges. See `decisions/D848.md`.
+
+| Method and path | Who | Worker | What |
+| --- | --- | --- | --- |
+| `GET /api/connectors/health` | a signed-in member whose role may manage connections (`ensureRole`) | `routes/connectors_health.ts`, mounted before the connector router | The caller's own connections: `uid`, `provider_key`, `contract` (whether it has an adapter), `pattern`, `company_ids` (enabled `integration_companies` rows for companies the member still belongs to), `health` `{ state, checked_at, error_category }` and `checks`, its last ten, newest first. `companies` groups the connections by company. `state` is `ok`, `degraded`, `expired`, `disconnected` or `error`; `error_category` is `auth`, `rate_limited`, `not_found`, `invalid_input`, `provider_down` or `unknown`. A row that is not `active` or `error`, or holds no credentials, is `disconnected`; one without an adapter answers a null state. A check younger than 15 minutes is answered as kept; an older one is run again, at most five per request, and kept as one `integration_logs` row (`event_type` `health`, its state and category only). Never a token or a provider's message. |
+
 ### GitHub connector and "now fed by" (D655, #1467)
 
 The `github` provider is a GitHub App's read-only user authorization. `GET /:uid/repositories` lists what its installations reach and what is chosen; it also answers `needs_install` (no installation on the live re-read) and `install_url` (the App’s install page from `GITHUB_APP_SLUG`, or `null`); `PUT /:uid/repositories` saves a choice and a project, after re-reading the grant and refusing any permission beyond the registry's four read scopes (`write_scope_refused`). Both need the active company enabled for the connection, and the project must be in it. `POST /:uid/sync` lands issues on `roadmap_okrs` and pull requests on `mvp_features`, linked through `connector_fed_items` (migration 445) so a re-sync updates; releases are recorded with no store. `GET /:uid/sync-status` returns the running sync's percentage and what it is reading. `GET /:uid/fed` returns, for every connector, a count per module it feeds; a connector that does not record deliveries says Not recorded, never 0.

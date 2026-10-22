@@ -145,6 +145,24 @@ export const billedMicro = (model: string, units: RunUnits, multiplier: number):
   ceilMicro(mul(costUsd(model, units), decOf(multiplier)));
 
 /**
+ * D851 (#2474): what a member pays for a run on a provider that prices in USD
+ * rather than neurons (`ai/providers/`), in micro-USD, rounded up once. `rates`
+ * are USD per 1M of each unit, as decimal strings exactly as the provider
+ * prints them; `counts` are the provider's own reported counts. A counted unit
+ * with no rate is refused rather than billed as free.
+ */
+export function usdRatesBilledMicro(rates: Readonly<Record<string, string>>, counts: Readonly<Record<string, number>>, multiplier: number): number {
+  let total: Dec = { n: 0n, e: 0 };
+  for (const [unit, count] of Object.entries(counts)) {
+    if (count == null || count === 0) continue;
+    const raw = rates[unit];
+    if (raw == null) throw new Error(`provider_unpriced: no ${unit} price`);
+    total = add(total, div(mul(dec(raw), decOf(count)), 1_000_000));
+  }
+  return ceilMicro(mul(total, decOf(multiplier)));
+}
+
+/**
  * The unit price the Worker serves for an exact decimal price (`unitPrice`):
  * the exact product as a number. 0.293348 × 1.25 is served as 0.366685, where
  * float arithmetic can land a digit off (0.293 × 1.25 is 0.36624999999999996).

@@ -39,8 +39,8 @@ export interface MeteringPolicy {
 export const toolOperation = (name: string) => `mcp.tool.${name}`;
 
 /**
- * v1: every registered MCP tool, free. They are reads and the Validate
- * interview tools, and `structure_with_studioos` pays for its model through its
+ * v1: every registered MCP tool, free. They are reads (D846's connector reads
+ * among them) and the Validate interview tools, and `structure_with_studioos` pays for its model through its
  * own `aiRouter` hold. A new tool is added here when it is registered: the
  * test `metering_d844.test.ts` fails on a registered tool the policy does not
  * list. `quoteFor` refuses an unlisted operation; `callTool` runs an unlisted
@@ -56,6 +56,9 @@ export const METERING_POLICY: MeteringPolicy = Object.freeze({
     [toolOperation('submit_interview')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('propose_placements')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('structure_with_studioos')]: { price_microusd: 0, unit: 'call' },
+    // D846's connector-backed reads, over StudioOS's own records.
+    [toolOperation('get_build_progress')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('list_connections')]: { price_microusd: 0, unit: 'call' },
   }) as Record<string, MeteredOperation>,
 });
 
