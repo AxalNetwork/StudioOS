@@ -9,11 +9,17 @@
  *     the recording (the chunk's offset already added, as D870's
  *     `transcribeStoredChunks` does).
  *   - The runtime's events (B2, #2580), on the same clock:
- *       join / leave / rename  — the roster, by the platform's participant id;
+ *       join / leave / rename  — the roster, by the platform's participant id
+ *                                (a second join under a key already in the
+ *                                call is a rename: B2 reports no rename);
  *       active_speaker         — the platform's own indicator: from `at_ms` the
  *                                participant named is speaking, until the next
  *                                active_speaker event (`participant_id: null`
  *                                is silence).
+ *
+ * ZOOM. Zoom's per-participant streams carry their participant's key, so a
+ * passage with `participant_key` takes that participant's name directly; an
+ * unknown key is "Speaker N", one number per key across the call.
  *
  * WHY PER CHUNK. Nova-3 numbers speakers within one request: its speaker 0 in
  * one chunk need not be speaker 0 in the next. So a speaker is a (chunk,
@@ -23,8 +29,9 @@
  * THE RULE. A pair is named after the participant whose active-speaker time
  * overlaps its passages most, when:
  *   - that overlap is more than zero,
- *   - it is strictly more than any other participant's (a tie names no one),
- *   - and it covers at least MIN_SHARE of the pair's own speaking time.
+ *   - and it covers at least MIN_SHARE (60%, D886 §4) of the pair's own
+ *     speaking time. The platform shows one speaker at a time, so above half
+ *     no two participants can tie: a tie names no one.
  * Otherwise the pair keeps a neutral label, "Speaker N", numbered across the
  * call in order of first speech, never a guess. Two unnamed pairs in different
  * chunks may be one person; they are numbered apart, because nothing says so.
@@ -38,12 +45,17 @@
  */
 import type { SttSegment } from '../sttFormats';
 
-/** The share of a speaker's own talk that the chosen participant's indicator must cover. */
-export const MIN_SHARE = 0.25;
+/** The share of a speaker's own talk that the chosen participant's indicator must cover (D886 §4: 60%). */
+export const MIN_SHARE = 0.6;
 /** The bot's display name (#2577, owner decision 1). */
 export const BOT_NAME = 'Eadwyn AI';
 
-export interface BotPassage extends SttSegment { chunk: number }
+/**
+ * One transcribed passage. `participant_key` is set on Zoom, where the bot
+ * records one stream per participant (D886 §4): the stream names its speaker,
+ * and no diarized number is mapped.
+ */
+export interface BotPassage extends SttSegment { chunk: number; participant_key?: string | null }
 
 export type BotEvent =
   | { type: 'join'; participant_id: string; name: string; at_ms: number; is_bot?: boolean }
@@ -75,7 +87,8 @@ function rosterOf(events: readonly BotEvent[]): Map<string, Person> {
       const p = people.get(e.participant_id) ?? { id: e.participant_id, name: e.name, joins: [], bot: false };
       p.name = e.name || p.name;
       p.bot = p.bot || e.is_bot === true || norm(e.name) === norm(BOT_NAME);
-      p.joins.push([e.at_ms, null]);
+      // A join while already in the call is a rename (B2 reports no rename of its own).
+      if (!p.joins.some((j) => j[1] === null)) p.joins.push([e.at_ms, null]);
       people.set(e.participant_id, p);
     } else if (e.type === 'leave') {
       const open = people.get(e.participant_id)?.joins.find((j) => j[1] === null);
@@ -119,8 +132,8 @@ export function matchSpeaker(
   }
   const ranked = [...by.entries()].sort((a, b) => b[1] - a[1]);
   if (!ranked.length) return null;
-  const [[id, best], second] = [ranked[0], ranked[1]];
-  if (second && second[1] === best) return null;
+  // Indicator spans never overlap, so above half a speaker's talk no two participants can tie.
+  const [id, best] = ranked[0];
   return best / talk >= MIN_SHARE ? id : null;
 }
 
@@ -151,8 +164,9 @@ export function assembleBotTranscript(
   // Each (chunk, speaker) pair, in order of first speech.
   const ordered = [...passages].sort((a, b) => (a.start_ms ?? 0) - (b.start_ms ?? 0));
   const pairs = new Map<string, BotPassage[]>();
+  const keyOf = (p: BotPassage) => (p.participant_key ? `key:${p.participant_key}` : `${p.chunk}:${p.speaker ?? 'none'}`);
   for (const p of ordered) {
-    const key = `${p.chunk}:${p.speaker ?? 'none'}`;
+    const key = keyOf(p);
     if (!pairs.has(key)) pairs.set(key, []);
     pairs.get(key)!.push(p);
   }
@@ -160,7 +174,9 @@ export function assembleBotTranscript(
   let unnamed = 0;
   let named = 0;
   for (const [key, list] of pairs) {
-    const id = list[0].speaker === null ? null : matchSpeaker(list, intervals);
+    const first = list[0];
+    // An unknown or bot key has no shown name, so it falls to "Speaker N" below.
+    const id = first.participant_key ? first.participant_key : first.speaker === null ? null : matchSpeaker(list, intervals);
     const name = id !== null ? shown.get(id) : undefined;
     if (name) { named += 1; label.set(key, name); } else { unnamed += 1; label.set(key, `Speaker ${unnamed}`); }
   }
@@ -172,7 +188,7 @@ export function assembleBotTranscript(
   }));
 
   return {
-    passages: ordered.map((p) => ({ start_ms: p.start_ms, end_ms: p.end_ms, text: p.text, speaker: label.get(`${p.chunk}:${p.speaker ?? 'none'}`)! })),
+    passages: ordered.map((p) => ({ start_ms: p.start_ms, end_ms: p.end_ms, text: p.text, speaker: label.get(keyOf(p))! })),
     participants,
     stats: { speakers: pairs.size, named, unnamed, participants: participants.length },
   };
