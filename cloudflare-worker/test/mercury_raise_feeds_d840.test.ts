@@ -29,135 +29,16 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import { Hono } from 'hono';
-import { SignJWT } from 'jose';
 import raise from '../src/routes/cycle_raise.ts';
 import { MERCURY_READ_TOOLS } from '../src/services/mercury/mcp.ts';
 import {
-  MIN_INVESTMENT_CENTS, STATEMENT_ACCESS, fullMonths, looksLikeInvestment, matchProspect, revenueByMonth, revenueGrowth,
-  runwayFact, spendByCategory, suggestSection, type RaiseLine,
+  MIN_INVESTMENT_CENTS, STATEMENT_ACCESS, fullMonths, looksLikeInvestment, matchProspect, revenueByMonth, revenueGrowth, runwayFact, spendByCategory, suggestSection, type RaiseLine,
 } from '../src/services/mercury/raiseFeeds.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
-import { addColumnsFrom, tableFromBaseline } from './_baseline.mjs';
-import { d1Over } from './_d1_sqlite.mjs';
-import { personalMatchTables } from './_mercury_d713.ts';
-import { memR2 } from './_channels_fixture.ts';
-import { FAKE_ACC_A, FAKE_PDF, ISSUER, fakeTx, signedInFake } from './_mercury_mcp_fake.mjs';
-
-const JWT_SECRET = 'x'.repeat(64); // synthetic test fixture
-const TODAY = '2026-10-21';
-const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
-const mig = (n: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${n}`), 'utf8');
-
-// ───────────────────────────────────────────── invented Mercury data
-
-const tx = (n: number, amount: number, postedAt: string, o: Record<string, unknown> = {}) => ({
-  id: fakeTx(n), accountId: FAKE_ACC_A, amount, createdAt: `${postedAt}T09:00:00Z`, postedAt: `${postedAt}T10:00:00Z`,
-  status: 'sent', kind: 'externalTransfer', counterpartyName: 'Customer Co', ...o,
-});
-const LINES = [
-  tx(1, -500, '2026-09-03', { kind: 'debitCardTransaction', mercuryCategory: 'Software', counterpartyName: 'Cloud Host' }),
-  tx(2, -1200, '2026-05-10', { kind: 'debitCardTransaction', mercuryCategory: 'Advertising', counterpartyName: 'Ad Network' }),
-  tx(3, -300, '2026-01-10', { kind: 'debitCardTransaction', mercuryCategory: 'Gardening', counterpartyName: 'Plants' }),
-  tx(4, 2000, '2026-08-12'),
-  tx(5, 3000, '2026-09-12'),
-  tx(6, 50000, '2026-09-20', { kind: 'incomingDomesticWire', counterpartyName: 'Harbour Angels LLC' }),
-  tx(7, 25000, '2026-09-25', { kind: 'incomingDomesticWire', counterpartyName: 'New Fund LP' }),
-  tx(8, -9999, '2026-09-26', { kind: 'internalTransfer', counterpartyName: 'Reserve' }),
-  tx(9, 40000, '2026-09-27', { kind: 'incomingDomesticWire', counterpartyName: 'Already Revenue Inc' }),
-];
-const STATEMENTS = { statements: [
-  { id: 'stmt-2026-09', startDate: '2026-09-01', endDate: '2026-09-30', endingBalance: 1200.5, transactionCount: 3, downloadUrl: `${ISSUER}/fake-statements/stmt-2026-09.pdf` },
-  // Mercury lists it but gives no link: nothing to store.
-  { id: 'stmt-2026-08', startDate: '2026-08-01', endDate: '2026-08-31', endingBalance: 900, transactionCount: 2 },
-] };
-const CASHFLOW = { months: ['2026-07', '2026-08', '2026-09'].map((month) => ({ month, incomingCents: 100000, outgoingCents: -200000, cashflowCents: -100000 })), truncated: false };
-
-function mercury() {
-  const { fake, accessToken } = signedInFake();
-  fake.state.data.transactions = LINES;
-  fake.state.data.cashflow = CASHFLOW;
-  fake.state.data.statements = STATEMENTS;
-  return { fake, accessToken };
-}
-
-// ───────────────────────────────────────────── the database
-
-async function fixture() {
-  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'projects', 'activity_logs', 'cap_table_scenarios', 'cap_table_holders', 'cap_table_vesting', 'raise_prospects', 'data_room_files',
-    'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'deck_share_views', 'dd_cases', 'dd_requests', 'raise_rounds']) {
-    db.exec(tableFromBaseline(BASELINE, t));
-  }
-  db.exec(mig('129_captable_one_canonical_per_project.sql'));
-  db.exec(mig('249_project_metrics.sql'));
-  db.exec(mig('410_safe_issuances.sql'));
-  db.exec(mig('442_raise_cycle_stores.sql'));
-  db.exec(mig('463_raise_record_stores.sql'));
-  addColumnsFrom(db, mig('441_build_cycle_stores.sql'), 'cap_table_holders');
-  db.exec(`
-    CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT UNIQUE, user_id INTEGER, provider_key TEXT, status TEXT DEFAULT 'active', auth_type TEXT, credentials_enc TEXT,
-      config_json TEXT, last_error TEXT, last_error_at TEXT, updated_at TEXT);
-    CREATE TABLE integration_logs(id INTEGER PRIMARY KEY, integration_id INTEGER, user_id INTEGER, provider_key TEXT, direction TEXT, event_type TEXT, status TEXT, response_summary TEXT);
-    CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
-    CREATE TABLE revenue_entries(id INTEGER PRIMARY KEY, project_id INTEGER, source TEXT, source_ref TEXT);
-    CREATE TABLE contacts(id INTEGER PRIMARY KEY);
-  `);
-  personalMatchTables(db);
-  for (const m of ['445_connector_fed_items.sql', '520_mercury_raise_feeds.sql']) db.exec(mig(m));
-  db.exec(`
-    INSERT INTO users (id, role, founder_id, name, email, is_active, subscription_tier) VALUES
-      (1, 'founder', 11, 'One', 'one@example.test', 1, 'studio'), (2, 'founder', 22, 'Two', 'two@example.test', 1, 'studio'),
-      (30, 'admin', NULL, 'Admin', 'admin@example.test', 1, 'studio');
-    INSERT INTO projects (id, uid, name, founder_id, company_id) VALUES (101, 'p-101', 'Own Venture', 11, 10), (202, 'p-202', 'Other Venture', 22, 20);
-    INSERT INTO user_company_links VALUES (1, 10), (2, 20), (1, 99);
-    INSERT INTO raise_prospects (id, uid, project_id, name, firm, stage, amount) VALUES
-      (501, 'rp-1', 101, 'Harbour Angels', 'Harbour Angels', 'diligence', 50000), (502, 'rp-2', 202, 'New Fund', 'New Fund', 'meeting', 25000);
-    INSERT INTO revenue_entries (project_id, source, source_ref) VALUES (101, 'mercury', '${fakeTx(9)}');
-  `);
-  const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', KEK_PII: 'k'.repeat(48), FILES: memR2() };
-  const { fake, accessToken } = mercury();
-  // A sign-in's credentials as part 1's callback stores them (`oauth.ts` McpCredentials); invented.
-  const signIn = { access_token: accessToken, token_type: 'Bearer', expires_at: null, scopes: ['read', 'offline_access'], issuer: 'https://mcp.mercury.com', client_key: 'fixture-client' };
-  const creds = await encryptCredentials(env, 'mc-one', signIn);
-  const creds2 = await encryptCredentials(env, 'mc-two', signIn);
-  db.prepare(`INSERT INTO integrations (id, uid, user_id, provider_key, auth_type, credentials_enc) VALUES (41, 'mc-one', 1, 'mercury', 'oauth_mcp', ?), (42, 'mc-two', 2, 'mercury', 'oauth_mcp', ?)`)
-    .run(creds, creds2);
-  const one = (sql: string, ...a: any[]) => db.prepare(sql).get(...a) as any;
-  const all = (sql: string, ...a: any[]) => db.prepare(sql).all(...a).map((r: any) => ({ ...r }));
-  return { db, env, fake, accessToken, one, all };
-}
-
-const app = (() => {
-  const a = new Hono<any>();
-  a.route('/api/cycles/raise', raise);
-  a.onError((e, c) => c.json({ error: e.message }, 500));
-  return a;
-})();
-async function call(env: any, path: string, who = 1, method = 'GET', body?: unknown, company?: string) {
-  const role = who === 30 ? 'admin' : 'founder';
-  const token = await new SignJWT({ user_id: who, role }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
-  const r = await app.request(path, { method, headers: { Authorization: 'Bearer ' + token, 'X-Company-Id': company ?? (who === 2 ? '20' : '10'), 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body) }, env);
-  const text = await r.text();
-  let json: any = null;
-  try { json = JSON.parse(text); } catch { json = null; }
-  return { status: r.status, body: json, text };
-}
-const sync = (env: any, who = 1) => call(env, '/api/cycles/raise/mercury/sync?project=101', who, 'POST');
-const mod = async (env: any, slug: string, who = 1) => (await call(env, `/api/cycles/raise/modules/${slug}?project=101`, who)).body;
-const accept = (env: any, id: number, body?: unknown, who = 1) => call(env, `/api/cycles/raise/mercury/proposals/${id}/accept?project=101`, who, 'POST', body);
-const dismiss = (env: any, id: number, who = 1) => call(env, `/api/cycles/raise/mercury/proposals/${id}/dismiss?project=101`, who, 'POST');
-const proposal = (f: any, kind: string, key: string) => f.one('SELECT * FROM mercury_raise_proposals WHERE kind = ? AND source_key = ?', kind, key);
-
-/** A sync through the fake, with the global fetch answering mcp.mercury.com. */
-async function withFake<T>(f: { fake: any }, run: () => Promise<T>): Promise<T> {
-  const off = f.fake.install();
-  try { return await run(); } finally { off(); }
-}
+import { FAKE_PDF, fakeTx } from './_mercury_mcp_fake.mjs';
+import {
+  TODAY, tx, LINES, CASHFLOW, mercury, fixture, call, sync, mod, accept, dismiss, proposal, withFake,
+} from './_mercury_raise_fixture.ts';
 
 // ───────────────────────────────────────────── 1. the rules
 
@@ -444,7 +325,11 @@ test('5. only the founder sees Mercury, in their own company, from their own con
 
   // No connection, no part.
   f.db.prepare(`UPDATE integrations SET status = 'revoked' WHERE id = 41`).run();
-  assert.equal((await mod(f.env, 'use-of-funds')).parts?.mercury, undefined);
+  // D882 (#2555): a connection no longer active reads "Connect Mercury", with no figure from it.
+  const gone = (await mod(f.env, 'use-of-funds')).parts?.mercury;
+  assert.equal(gone.state, 'not_connected');
+  assert.equal(gone.connection.connect_href, '/account/connectors/mercury');
+  assert.deepEqual(Object.keys(gone).sort(), ['connection', 'reason', 'state']);
 
   const figures = await (async () => { f.db.prepare(`UPDATE integrations SET status = 'active' WHERE id = 41`).run(); return (await mod(f.env, 'pitch-deck')).parts.mercury.figures; })();
   assert.deepEqual(figures.map((x: any) => x.key), ['revenue_last_month', 'revenue_growth', 'net_burn', 'runway']);
