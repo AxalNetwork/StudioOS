@@ -283,6 +283,7 @@ import cycleVerdict from './routes/cycle_verdict';
 import cycleRaise from './routes/cycle_raise';
 import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
+import meetingBotCallbacks from './routes/meeting_bot_callbacks';
 import validateConversations from './routes/validate_conversations';
 // D684 (#1575) — interview channels: business Telegram and WhatsApp
 // conversations (S19), Zoom and Google Meet calls from an interview (S18).
@@ -1407,6 +1408,7 @@ app.route('/api/admin/testing', adminTesting);
 app.route('/api/partner/delivery', partnerDelivery);
 // D657 — interview sessions: recording, live and final speech-to-text.
 app.route('/api/founder/validate', founderValidateSessions);
+app.route('/api/meeting-bots', meetingBotCallbacks);
 // D858 (#2503): what a session's and a venture's conversations show, read only.
 app.route('/api/validate', validateConversations);
 app.route('/api/founder/validate', founderValidate);
@@ -2794,3 +2796,5 @@ export { OnboardingChat } from './durable-objects/onboarding-chat';
 // in their own files. Both ship on every deploy — one codebase — and each
 // method refuses on the tier it does not belong to.
 export { HqEntrypoint, BranchEntrypoint } from './rpc';
+
+export { MeetingBotRun } from './durable-objects/meeting-bot-run';
