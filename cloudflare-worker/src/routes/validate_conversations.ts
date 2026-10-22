@@ -22,7 +22,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, type ProjectRef } from './_founder_validate_helpers';
 import {
-  CHANNEL_NAME, THREAD_PROVIDER_SQL, channelOf, sessionAnalytics, ventureAnalytics, type AnalyticsSession,
+  CHANNEL_NAME, channelOf, sessionAnalytics, ventureAnalytics, type AnalyticsSession,
 } from '../services/conversationAnalytics';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -53,7 +53,8 @@ r.get('/sessions/:id/analytics', async (c) => {
   const user = (await requireAuth(c)) as User;
   const row = await c.env.DB.prepare(
     `SELECT s.id, s.interview_id, s.project_id, s.channel, s.submitted_via, s.consent_status, s.active_ms, s.language,
-            s.created_at, ${THREAD_PROVIDER_SQL}, p.founder_id
+            s.created_at,
+            (SELECT t.provider FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1) AS thread_provider, p.founder_id
        FROM interview_sessions s JOIN projects p ON p.id = s.project_id WHERE s.id = ?`,
   ).bind(Number(raw)).first<AnalyticsSession & { founder_id: number | null }>();
   const project: ProjectRef | null = row ? { id: row.project_id, founder_id: row.founder_id } : null;

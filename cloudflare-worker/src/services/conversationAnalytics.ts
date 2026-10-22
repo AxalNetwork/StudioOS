@@ -120,16 +120,6 @@ export function channelOf(s: Pick<AnalyticsSession, 'channel' | 'submitted_via' 
   return String(s.channel ?? '').trim() || null;
 }
 
-/**
- * `channelOf` in SQL, over `interview_sessions s` and the `?` that binds
- * AUDIO_CHANNELS as JSON, so a filter narrows the rows before their LIMIT.
- */
-export const CHANNEL_SQL = `COALESCE(NULLIF(TRIM(s.submitted_via), ''),
-  (SELECT NULLIF(TRIM(t.provider), '') FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1),
-  CASE WHEN s.channel IN (SELECT value FROM json_each(?)) THEN 'recorder' ELSE NULLIF(TRIM(s.channel), '') END)`;
-
-/** The `thread_provider` column a session read selects alongside the session. */
-export const THREAD_PROVIDER_SQL = '(SELECT t.provider FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1) AS thread_provider';
 const AUDIO_JSON = JSON.stringify([...AUDIO_CHANNELS]);
 
 type Kind = 'chat' | 'recording' | 'typed';
@@ -431,18 +421,22 @@ export async function sessionAnalytics(env: Env, session: AnalyticsSession): Pro
  * (D866), recordings and typed notes included.
  */
 export async function ventureChatSessions(env: Env, projectId: number, from: string | null, to: string | null, channel: string | null = null) {
-  const which = channel == null
-    ? { sql: 's.submitted_via IN (SELECT value FROM json_each(?))', args: [JSON.stringify(MESSAGING_PROVIDERS)] }
-    : { sql: `${CHANNEL_SQL} = ?`, args: [AUDIO_JSON, channel] };
+  // `channelOf` in SQL, so a named channel narrows the rows before their LIMIT.
+  // Literal SQL: the schema guard reads every column it names.
   const rows = (await env.DB.prepare(
     `SELECT s.id, s.interview_id, s.project_id, s.channel, s.submitted_via, s.consent_status, s.active_ms, s.language, s.created_at,
-            ${THREAD_PROVIDER_SQL}
+            (SELECT t.provider FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1) AS thread_provider
        FROM interview_sessions s
-      WHERE s.project_id = ? AND ${which.sql}
+      WHERE s.project_id = ?
+        AND CASE WHEN ? IS NULL THEN s.submitted_via IN (SELECT value FROM json_each(?))
+                 ELSE COALESCE(NULLIF(TRIM(s.submitted_via), ''),
+                        (SELECT NULLIF(TRIM(t.provider), '') FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1),
+                        CASE WHEN s.channel IN (SELECT value FROM json_each(?)) THEN 'recorder' ELSE NULLIF(TRIM(s.channel), '') END) = ? END
         AND (? IS NULL OR datetime(s.created_at) >= datetime(?))
         AND (? IS NULL OR datetime(s.created_at) < datetime(?, '+1 day'))
       ORDER BY datetime(s.created_at) DESC, s.id DESC LIMIT ?`,
-  ).bind(projectId, ...which.args, from, from, to, to, VENTURE_SESSIONS_MAX + 1).all<AnalyticsSession>()).results ?? [];
+  ).bind(projectId, channel, JSON.stringify(MESSAGING_PROVIDERS), AUDIO_JSON, channel, from, from, to, to, VENTURE_SESSIONS_MAX + 1)
+    .all<AnalyticsSession>()).results ?? [];
   return { sessions: rows.slice(0, VENTURE_SESSIONS_MAX), truncated: rows.length > VENTURE_SESSIONS_MAX };
 }
 
