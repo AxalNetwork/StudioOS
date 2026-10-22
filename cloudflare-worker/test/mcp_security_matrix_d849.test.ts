@@ -112,6 +112,35 @@ test('every tool that takes a company refuses every company outside the caller\'
   assert.ok(ran.every((x) => (x.company === PA) === (x.companies[0] === PA) && x.companies.length === 1), 'each run saw its own company only');
 });
 
+test('the key rows: a key on every principal\'s own ventures refuses every company tool on any other, before it runs', async () => {
+  const { env, db } = fixture();
+  const grants = await issuedGrants(env, db);
+  const { ran, tools } = recorded();
+  const companyTools = tools.filter((t) => t.company);
+  // A key carries exactly what its creator could grant (D841): the same companies consent gives.
+  const keyProps = (label: string, p: GrantProps): GrantProps => ({ ...p, clientId: `apikey:k-${label}`, clientName: `${label} key`, keyUid: `k-${label}` });
+  for (const [label, props] of Object.entries(grants)) {
+    for (const company of [PA, PB].filter((c) => !props.companies.includes(c))) {
+      for (const tool of companyTools) {
+        const r = await callTool(env, keyProps(label, props), null, tool as any, { company }, SCOPES);
+        assert.equal(errorOf(r), 'That company is not one this connection was approved for.', `${label} key ${tool.name} on ${company}`);
+      }
+    }
+  }
+  assert.deepEqual(ran, [], 'no refused key call reached a tool');
+  for (const [label, company] of [['A', PA], ['B', PB]] as const) {
+    for (const tool of companyTools) {
+      const r = await callTool(env, keyProps(label, grants[label]), null, tool as any, { company }, SCOPES);
+      assert.notEqual(r.isError, true, `${label} key ${tool.name} on own company: ${errorOf(r)}`);
+    }
+  }
+  assert.equal(ran.length, companyTools.length * 2);
+  // A key whose creator later lost the venture reaches it no more.
+  db.exec(`UPDATE projects SET founder_id = 1002 WHERE id = ${PA}`);
+  const lost = await callTool(env, keyProps('A', grants.A), null, companyTools[0] as any, { company: PA }, SCOPES);
+  assert.match(errorOf(lost)!, /^You can no longer (read|write to) that company/);
+});
+
 test('a tool with no company argument sees only the caller\'s own live companies', async () => {
   const { env, db } = fixture();
   const grants = await issuedGrants(env, db);
@@ -320,7 +349,9 @@ test('the limits read: the member and connection caps the server enforces, and e
     member: { calls_per_minute: USER_CALLS_PER_MINUTE },
     connection: { calls_per_minute: GRANT_CALLS_PER_MINUTE },
     keys_enabled: true,
-    keys: [{ uid: aKey, name: 'CI agent', prefix: patched.body.key.prefix, rate_per_minute: 60, monthly_limit_microusd: 5_000_000 }],
+    // This fixture has no AI token ledger, so the key's month spend cannot be read: unknown is null, never 0.
+    // The figure itself is api_key_limits_d849.test.ts's.
+    keys: [{ uid: aKey, name: 'CI agent', prefix: patched.body.key.prefix, rate_per_minute: 60, monthly_limit_microusd: 5_000_000, used_microusd: null }],
   });
   assert.equal(USER_CALLS_PER_MINUTE, 120); assert.equal(GRANT_CALLS_PER_MINUTE, 60);
   assert.ok(!JSON.stringify(r.body).includes('secret'), 'no secret or hash');
