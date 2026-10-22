@@ -79,6 +79,7 @@ operational gotchas previously inline in `replit.md` now live in `documentation/
 | `cloudflare-worker/`  | Hono on CF Workers → axal.vc/api/* (production)           |
 | `cloudflare-worker/sql/` | D1 schema + migrations (canonical)                     |
 | `backend/`            | FastAPI for Replit dev only — **never deployed**          |
+| `meeting-bot/`        | The meeting bot runtime (D886, #2577) — **not deployed yet**; B8 packages it for the host B0 chooses |
 | `attached_assets/`    | Design specs, methodology PDFs, legal templates           |
 | `documentation/`      | **Every hand-written document.** Start at `documentation/README.md` |
 | `design/`             | Design sources. `design/incoming/` is where NEW Claude Design exports land |
