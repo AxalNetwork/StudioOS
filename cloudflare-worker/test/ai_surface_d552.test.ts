@@ -210,6 +210,7 @@ const EXPECTED: Record<string, string[]> = {
   'services/updateShare.ts': ['AI_SURFACE.growUpdate'],
   'services/fills/citations.ts': ['AI_SURFACE.validate'],
   'services/interviewStructuring.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D658: structure, ask; D685: summarise
+  'services/sessionTranslation.ts': ['AI_SURFACE.validateInterviews', 'AI_SURFACE.validateInterviews'], // D857: detect a language, translate a segment
   'services/advisor/rerank.ts': ['AI_SURFACE.studio'],
   'routes/profiling.ts': ['AI_SURFACE.onboardingChat', 'AI_SURFACE.onboardingChat'],
   'routes/advisor.ts': ['AI_SURFACE.studio', 'AI_SURFACE.studio', 'AI_SURFACE.studio'],

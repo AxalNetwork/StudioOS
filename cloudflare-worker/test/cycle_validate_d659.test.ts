@@ -26,6 +26,7 @@ import { daysBefore } from '../src/services/cycleValidate.ts';
 import { labDiscoveryCounts } from '../../frontend/src/lib/labDiscovery.js';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -67,6 +68,7 @@ function fixture() {
 /** D690 decision 9: the interview log reads each interview's latest session, so its tests carry the real store. */
 function withSessionStore(db: any) {
   db.exec(sqlOf('438_interview_sessions.sql'));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec(sqlOf('447_assistant_interviews.sql').replace(/ALTER TABLE validate_proposals[^;]*;/, ''));
   db.exec(sqlOf('453_interview_processing.sql'));
   return db;

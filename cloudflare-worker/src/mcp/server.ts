@@ -412,3 +412,7 @@ registerMcpTools([...BUILD_TOOLS, ...CONNECTION_TOOLS]);
 // D864: the member's customer chats, from Axal's own inbox records.
 import { CHANNEL_TOOLS } from './tools/channels';
 registerMcpTools(CHANNEL_TOOLS);
+
+// D874: the member's recorded calls, from Axal's own meeting records.
+import { MEETING_TOOLS } from './tools/meetings';
+registerMcpTools(MEETING_TOOLS);

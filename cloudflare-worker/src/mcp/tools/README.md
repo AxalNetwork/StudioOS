@@ -7,6 +7,7 @@
 | `build.ts` | D846's `get_build_progress` (`build:read`): Product roadmap and Prototype / MVP from their own tables, and what GitHub fed them from the ledger. Listed only while GitHub is connected and switched on for a granted company |
 | `connections.ts` | D846's `list_connections` (`connectors:read`): each granted company's connections, as provider, status and last sync. Never a token |
 | `channels.ts` | D864's customer-chat tools over the Telegram and WhatsApp inbox (D684): `list_channel_chats` and `get_session_insights` (`validate:read`), `assign_chat_to_interview` (`validate:write`, the inbox's own `assignThread`). State, counts, suggestions and D858 analytics by default. `get_session_insights` 1.1.0 optionally pages stored final transcript segments only for a consented, assigned chat, with speaker labels and available D857 translations. Provider identifiers, phone numbers, credentials and links are redacted; held notes are never fetched |
+| `meetings.ts` | D874's call tools over D684's Zoom and Meet refs: `list_meetings` and `get_meeting_transcript` (`validate:read`; a consented, imported call's stored lines, paged, links and meeting ids removed), `summarize_meeting` (`validate:write`; the engine's summary, run once through `aiRouter`'s AI tokens). Never a join URL, meeting id or passcode |
 
 ## Rules
 

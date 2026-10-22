@@ -63,6 +63,11 @@ export const METERING_POLICY: MeteringPolicy = Object.freeze({
     [toolOperation('list_channel_chats')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('get_session_insights')]: { price_microusd: 0, unit: 'call' },
     [toolOperation('assign_chat_to_interview')]: { price_microusd: 0, unit: 'call' },
+    // D874's call tools. summarize_meeting's model run holds and settles its
+    // own AI tokens through aiRouter, so its tool fee is 0 (the composite rule).
+    [toolOperation('list_meetings')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('get_meeting_transcript')]: { price_microusd: 0, unit: 'call' },
+    [toolOperation('summarize_meeting')]: { price_microusd: 0, unit: 'call' },
   }) as Record<string, MeteredOperation>,
 });
 
