@@ -24,6 +24,8 @@ TypeScript directly (type stripping), so there is no build step.
 | --- | --- |
 | `src/` | The core: the adapter contract, the lifecycle, audio chunks, events, the callback client, the log rule and the fake adapter. |
 | `test/` | The core's tests, run by `npm run test:meeting-bot` (part of `test:drift`, so CI runs them on every PR), and their fake clock and stub callback (`_harness.ts`). |
+| `src/adapters/` | One platform adapter per file, each implementing `MeetingAdapter` (B3 Meet, B4 Zoom, B5 Teams). |
+| `test/fixtures/` | Each adapter's page screens, the input its tests play (`teamsScreens.ts`: built from published reports until the live check records them). |
 
 | File | What it owns |
 | --- | --- |
@@ -36,6 +38,8 @@ TypeScript directly (type stripping), so there is no build step.
 | `src/callback.ts` | `httpTransport`: signed POSTs to the run's callback and the one-time chunk URL, with deadlines and no redirects. **Provisional:** its paths (`CALLBACK_PATHS`) and signature (`signRequest`) follow B1's contract once #2579 publishes it. |
 | `src/log.ts` | The only way a log line is written: codes and counts, nothing else (`safeFields`). |
 | `src/fakeAdapter.ts` | A scripted platform for the tests, and the reference implementation an adapter copies. |
+| `src/adapters/teams.ts` | B5 (#2583): Microsoft Teams as a browser guest, over a `TeamsPage` driver (attributes only, so a caption's or a message's words never reach it). Launcher → pre-join (mic and camera off) → lobby, including Teams' "Suspected threats" bot approval; the notice in the meeting chat; the People pane as the roster; live captions' speaker names as the speaker timeline. A captcha, anonymous join turned off or a blocked bot is `platform_blocked`. |
+| `src/adapters/teamsSelectors.ts` | B5: every Teams selector and the link rule (work or school, and Teams free; https only). **Provisional**, from published reports, until the live check records Teams' screens. |
 | `src/index.ts` | The public exports. |
 
 ## The run
