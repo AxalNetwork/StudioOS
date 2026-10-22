@@ -29,7 +29,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import raise from '../src/routes/cycle_raise.ts';
+import '../src/routes/cycle_raise.ts';
 import { MERCURY_READ_TOOLS } from '../src/services/mercury/mcp.ts';
 import {
   MIN_INVESTMENT_CENTS, STATEMENT_ACCESS, fullMonths, looksLikeInvestment, matchProspect, revenueByMonth, revenueGrowth, runwayFact, spendByCategory, suggestSection, type RaiseLine,

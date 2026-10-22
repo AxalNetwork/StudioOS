@@ -96,8 +96,6 @@ async function mount(el, user) {
   };
 }
 const page = (data, extra = {}) => h(ConnectorPageView, { data, connectorKey: 'mercury', ...extra });
-/** The header band's interactive children: an action would be one. */
-const bandActions = (m) => m.walk(m.by('connector-page-band')).filter((n) => ['BUTTON', 'A'].includes(String(n.tagName || n.nodeName || '').toUpperCase()));
 
 /** Nothing of Axal VC's own accounts on the page: no entity body, sheet or control, and no `/admin/mercury` read. */
 function noEntityUi(m) {
