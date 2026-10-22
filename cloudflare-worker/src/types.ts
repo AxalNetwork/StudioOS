@@ -382,6 +382,13 @@ export interface Env {
   // demoted by default (D764 applies it). See services/ai/catalogue.ts.
   AI_PARTNER_MODELS?: string;
   AI_PAID_MODELS?: string;
+  // D851 (#2474) — model providers on their own APIs (services/aiProviders.ts).
+  // AI_PROVIDER_ANTHROPIC offers the Anthropic rows of PROVIDER_MODELS only
+  // when exactly 'on'. AI_PROVIDER_ANTHROPIC_KEY is the platform's key, a
+  // Worker secret: never in D1, never a member's key, and not ANTHROPIC_API_KEY
+  // above, which is dev-only (Task #31).
+  AI_PROVIDER_ANTHROPIC?: string;
+  AI_PROVIDER_ANTHROPIC_KEY?: string;
   // R2 bucket for KYC documents and other large/private blobs.
   // Optional so unit-test envs without R2 bindings still type-check.
   FILES?: R2Bucket;
