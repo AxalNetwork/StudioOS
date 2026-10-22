@@ -469,3 +469,13 @@ only when that base does.
 - **Model-provider adapters (D851) need provider accounts and keys,** which
   the owner supplies. Until then, only the groundwork and stubbed tests can be
   built.
+
+## Public status coverage (#2549, 22 October 2026)
+
+`GET /api/public/status` and `/status` include the MCP server, shared clients,
+each registered MCP provider and custom clients, alongside the connector
+catalogue and remaining service categories. Availability is separate from
+health. Without a live health probe the entry says “Not monitored” and has no
+measured uptime; recorded incidents still apply. No anonymous request opens
+a provider session or exposes member connection details. See D847’s public
+status inventory record.

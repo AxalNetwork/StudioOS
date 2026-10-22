@@ -5,12 +5,11 @@
  *     connection, a known module (or none), and only tools on
  *     `MERCURY_READ_TOOLS`; each D713/D752 use is listed once.
  *  2. Each role's registry `feeds` are exactly the modules its entries land in,
- *     and the catalogue's own Mercury row claims no pull and no feed.
+ *     and the catalogue's own Mercury row (D879) claims the founder's: Grow and Raise.
  *  3. Each member page's tools name exactly the MCP tools that role's entries
- *     call, every tool's `lands_in` is one of that role's modules, and the
- *     entity page names no MCP tool.
+ *     call, and every tool's `lands_in` is one of that role's modules.
  *  4. Each member page signs in with Mercury (`oauth_or_key`) and names the MCP
- *     server; the entity page stays on the Super Admin's tokens.
+ *     server. D879 (#2552) removed the entity page.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
  *     --test cloudflare-worker/test/mercury_feeds_d840.test.ts
@@ -45,12 +44,12 @@ test('1. every feed names a personal role, a known module or none, and only allo
   }
 });
 
-test('2. each role\'s registry feeds are its feeds\' modules; the catalogue row claims none', () => {
+test('2. each role\'s registry feeds are its feeds\' modules; the catalogue row claims the founder\'s (D879)', () => {
   for (const role of ROLES) {
     assert.deepEqual([...(PERSONAL_MERCURY as any)[role].feeds], mercuryFedModules(role), role);
   }
-  assert.deepEqual(CONNECTOR_METADATA.mercury.pulls, []);
-  assert.deepEqual(CONNECTOR_METADATA.mercury.feeds, []);
+  assert.deepEqual(CONNECTOR_METADATA.mercury.feeds, mercuryFedModules('founder'));
+  assert.deepEqual(CONNECTOR_METADATA.mercury.pulls.map((p) => p.module), MERCURY_FEEDS.filter((f) => f.role === 'founder' && f.module).map((f) => f.module));
 });
 
 test('3. each member page names exactly its role\'s MCP tools, and lands only where its feeds land', () => {
@@ -61,10 +60,9 @@ test('3. each member page names exactly its role\'s MCP tools, and lands only wh
     for (const t of page.tools) assert.ok(t.lands_in === null || modules.includes(t.lands_in), `${role}.${t.name} lands in ${t.lands_in}`);
     for (const m of modules) assert.ok(page.tools.some((t: any) => t.lands_in === m), `${role}: nothing on the page lands in ${m}`);
   }
-  assert.deepEqual(mcpTools(pages.entity), [], 'the entity page reads through tokens only');
 });
 
-test('4. member pages sign in with Mercury through its MCP server; the entity page does not', () => {
+test('4. member pages sign in with Mercury through its MCP server, and there is no entity page (D879)', () => {
   for (const role of ROLES) {
     const page = pages.personal[role];
     assert.equal(page.sign_in.kind, 'oauth_or_key', role);
@@ -72,6 +70,5 @@ test('4. member pages sign in with Mercury through its MCP server; the entity pa
     assert.equal(page.endpoints.sign_in, MERCURY_MCP_URL, role);
     assert.ok(page.tools.some((t: any) => t.name === 'sign_in_with_mercury' && t.access === 'account'), role);
   }
-  assert.equal(pages.entity.sign_in.kind, 'entity');
-  assert.equal(pages.entity.endpoints.sign_in, null);
+  assert.equal('entity' in pages, false);
 });

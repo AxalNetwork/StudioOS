@@ -30,6 +30,8 @@
 //   cancelMeeting    DELETE /founder/validate/interviews/:id/meetings/:refUid
 //   importMeeting    POST   /founder/validate/interviews/:id/meetings/:refUid/import
 //   attachMeeting    POST   /founder/validate/interviews/:id/meetings  { attach: { join_url }, session_id, provider } (D685 §5.3.2, #1588)
+//   attachCalendarMeet POST /founder/validate/interviews/:id/meetings  { attach: { event_id | meeting_code | join_url }, consent } (D871)
+//   meetingRecording GET    /founder/validate/interviews/:id/meetings/:refUid/recording  → { recordings: [{ url, started_at }] } (D871)
 //   googleStatus     GET    /calendar/google/status        → { connected, meet_transcripts: 'granted' | 'available' | 'not_set_up', … } (D757, #1926)
 //   allowMeetTranscripts POST /calendar/google/meet-transcripts/connect?return_to=  then the page goes to Google's consent (D757, #1926)
 //
@@ -165,6 +167,19 @@ export const channelsApi = {
       method: 'POST', body: JSON.stringify({ attach: { join_url }, session_id: Number(session_id), provider: p }),
     });
   },
+  /**
+   * D871: attach a Google Meet call from the member's own Calendar, by event id, Meet code or link. It opens its
+   * own session, with the interviewee's consent as scheduling takes it, and imports after the call.
+   */
+  attachCalendarMeet: (interviewId, { event_id, meeting_code, join_url, consent }) => {
+    const attach = event_id ? { event_id } : meeting_code ? { meeting_code } : { join_url };
+    return request(`/founder/validate/interviews/${enc(interviewId)}/meetings`, {
+      method: 'POST', body: JSON.stringify({ attach, consent, provider: 'google_meet' }),
+    });
+  },
+  /** D871: a Meet call's Drive recordings, for "Download it, then upload it here". Never the file itself. */
+  meetingRecording: (interviewId, refUid) =>
+    request(`/founder/validate/interviews/${enc(interviewId)}/meetings/${enc(refUid)}/recording`),
 };
 
 /** The Telegram Business interview bot, for Super Admins (D756): its health, and registering its webhook. */

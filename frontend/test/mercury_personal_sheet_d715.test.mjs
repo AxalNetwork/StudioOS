@@ -109,7 +109,8 @@ test('the personal row\'s words in Yours and Build; every other row keeps today\
   const cat = catalogue();
   const m = row('mercury', cat);
   assert.equal(isPersonalMercury(m), true);
-  assert.equal(isPersonalMercury({ ...m, connection_source: 'mercury_entity_connections' }), false, 'the entity row is not the member\'s');
+  // D880: every `mercury` row a member page draws is the member's own; Axal VC's accounts are HQ's.
+  assert.equal(isPersonalMercury({ ...m, connection_source: 'mercury_entity_connections' }), true);
   assert.equal(doesLabel(m), 'Reads on request');
   assert.equal(lastSyncLabel(m.connection), 'Read on request');
   assert.equal(yoursFeedsLabel(m), 'Your own payments', 'a partner\'s Mercury names no feeds');
@@ -119,7 +120,7 @@ test('the personal row\'s words in Yours and Build; every other row keeps today\
   assert.equal(yoursFeedsLabel(m, 'investor'), 'Statements you share');
   assert.equal(yoursFeedsLabel(m, 'partner'), 'Your own payments');
   const err = (last_error) => attentionReason(conn('mercury', { status: 'error', last_error }));
-  assert.equal(err('mercury_entity_account: org is an Axal entity'), 'An Axal entity\'s Mercury');
+  assert.equal(err('mercury_entity_account: org is Axal VC\'s'), 'Axal VC\'s own Mercury');
   assert.equal(err('write_scope_refused'), 'Token can write');
   assert.equal(err('unauthorized'), 'Token refused');
   assert.equal(err('401 from Mercury'), 'Token refused');
@@ -147,7 +148,7 @@ test('Yours draws Reads on request, Read on request, You and the feeds; the atte
   const line = out.slice(out.indexOf('Mercury'), out.indexOf('Stripe', out.indexOf('Mercury')));
   // Does, Feeds, Companies and Last sync, in the table's order.
   assert.match(line, /Reads on request Your own payments You Read on request/);
-  assert.ok(line.includes('An Axal entity\'s Mercury'));
+  assert.ok(line.includes('Axal VC\'s own Mercury'));
   assert.doesNotMatch(line, /Not recorded|never ran|Last sync failed/);
 });
 

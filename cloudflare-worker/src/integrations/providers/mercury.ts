@@ -34,7 +34,7 @@
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../../types';
-import { ConnectRefusal, audienceFor, type IntegrationRow, getDescriptor, personalHqOnlyOffHq, personalHqOnlySentence, personalMercuryFor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
+import { ConnectRefusal, audienceFor, type IntegrationRow, getDescriptor, noPersonalConnectionSentence, personalHqOnlyOffHq, personalHqOnlySentence, personalMercuryFor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
 import { selectJwt } from '../../auth';
 import { branchOf } from '../../util/branch';
 import { canHoldValidateSource } from '../../routes/_founder_validate_helpers';
@@ -137,7 +137,7 @@ async function connect(c: C, user: User, input: ConnectInput): Promise<ConnectRe
   }
   const variant = personalMercuryFor(user.role);
   if (!desc || !variant || audienceFor(desc, viewer) !== 'personal') {
-    throw new ConnectRefusal(403, 'purpose_not_allowed', 'Your role does not hold a personal Mercury connection.');
+    throw new ConnectRefusal(403, 'purpose_not_allowed', noPersonalConnectionSentence('Mercury'));
   }
   if (input.webhook_secret) {
     throw new ConnectRefusal(400, 'webhook_not_supported', 'Mercury takes no webhook here. Leave the webhook secret empty.');
