@@ -312,18 +312,49 @@ export async function loadAiBudget(env:Env,userId:number,now=new Date()) {
       held_microusd:amount(amount(r.included_microusd)+amount(r.topup_microusd)),
       recorded_cost_microusd:amount(r.recorded_cost_microusd)})) };
 }
-export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number,now=new Date()) {
-  amount(quoteMicrousd);
-  // D791: a paused member's run is refused at the hold, before anything is held or charged.
-  if (await aiPaused(env,userId)) return {ok:false as const,refusal:'ai_paused' as const};
-  const report=await loadAiBudget(env,userId,now);
-  if (report.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
-  const uid=crypto.randomUUID(), t=clock(now),expires=clock(new Date(now.getTime()+300000)).at;
-  // Compute the split from current counters inside the write transaction, never from a stale read.
-  // D788: the member's own monthly limit is the insert's last clause (`aiSpendLimit.ts`), so two holds
-  // racing cannot both pass a limit that only one fits: the second insert counts the first hold.
-  const results=await batch(env,[
-    env.DB.prepare(`INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at)
+/**
+ * D844: the hold a member already took under `key`, or null. A database before
+ * migration 525 has no keys, so there is none; any other failure throws.
+ */
+async function heldUnder(env:Env,userId:number,key:string) {
+  try {
+    const row=await env.DB.prepare('SELECT uid,status FROM ai_budget_reservations WHERE user_id=? AND idempotency_key=?').bind(userId,key).first<{uid:string;status:string}>();
+    return row ? {uid:row.uid,userId,status:row.status} : null;
+  } catch(e) {
+    if (/no such column/i.test(String((e as Error)?.message ?? e))) return null;
+    throw e;
+  }
+}
+const idempotencyKey=(opts?:{idempotencyKey?:string|null}) => {
+  const k=opts?.idempotencyKey;
+  if (k==null) return null;
+  if (typeof k!=='string' || !k || k.length>200) throw new Error('AI hold key unreadable');
+  return k;
+};
+/**
+ * The hold's insert, in two literal forms so neither splices SQL. Both split the
+ * quote between the allowance and the bought balance from the counters inside
+ * the write, never from a stale read, and both end with D788's limit, so two
+ * holds racing cannot both pass a limit only one fits. The keyed form (D844)
+ * also writes the key, and a hold that reached the key first makes it a no-op
+ * (`ON CONFLICT DO NOTHING`). The unkeyed form is the statement every caller
+ * used before D844, unchanged. `values` bind up to the expiry, `where` after it.
+ */
+function holdStatement(env:Env,key:string|null,values:unknown[],where:unknown[]) {
+  return key ? env.DB.prepare(`INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at,idempotency_key)
+      SELECT ?,a.user_id,?,?,MIN(?,MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))),
+        ?-MIN(?,MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))),?,?
+      FROM ai_topup_accounts a JOIN ai_included_spend d ON d.user_id=a.user_id AND d.period_kind='day' AND d.period_key=?
+        JOIN ai_included_spend m ON m.user_id=a.user_id AND m.period_kind='month' AND m.period_key=?
+      WHERE a.user_id=? AND ?<=MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))+a.balance_microusd
+        AND NOT EXISTS(SELECT 1 FROM ai_budget_reservations WHERE user_id=a.user_id AND status='review')
+        AND (NOT EXISTS(SELECT 1 FROM member_ai_spend_limits WHERE user_id=a.user_id)
+          OR ?+(SELECT COALESCE(SUM(CASE WHEN status IN ('pending','review') THEN included_microusd+topup_microusd
+                ELSE COALESCE(actual_included_microusd,0)+COALESCE(actual_topup_microusd,0) END),0)
+              FROM ai_budget_reservations WHERE user_id=a.user_id AND month_key=?)
+            <=(SELECT monthly_limit_microusd FROM member_ai_spend_limits WHERE user_id=a.user_id))
+      ON CONFLICT DO NOTHING`).bind(...values,key,...where)
+    : env.DB.prepare(`INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at)
       SELECT ?,a.user_id,?,?,MIN(?,MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))),
         ?-MIN(?,MAX(0,MIN(?-d.spend_microusd,?-m.spend_microusd))),?
       FROM ai_topup_accounts a JOIN ai_included_spend d ON d.user_id=a.user_id AND d.period_kind='day' AND d.period_key=?
@@ -334,10 +365,33 @@ export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number
           OR ?+(SELECT COALESCE(SUM(CASE WHEN status IN ('pending','review') THEN included_microusd+topup_microusd
                 ELSE COALESCE(actual_included_microusd,0)+COALESCE(actual_topup_microusd,0) END),0)
               FROM ai_budget_reservations WHERE user_id=a.user_id AND month_key=?)
-            <=(SELECT monthly_limit_microusd FROM member_ai_spend_limits WHERE user_id=a.user_id))`)
-      .bind(uid,t.day,t.month,quoteMicrousd,report.daily_microusd,report.monthly_microusd,
-        quoteMicrousd,quoteMicrousd,report.daily_microusd,report.monthly_microusd,expires,t.day,t.month,userId,
-        quoteMicrousd,report.daily_microusd,report.monthly_microusd,quoteMicrousd,t.month),
+            <=(SELECT monthly_limit_microusd FROM member_ai_spend_limits WHERE user_id=a.user_id))`).bind(...values,...where);
+}
+/**
+ * D844: with `idempotencyKey`, a second call for the same key returns the hold
+ * the first one took, whatever its status since, and takes no other
+ * (`replayed: true`, with that hold's `status`). Without one, every call takes
+ * its own hold, as before.
+ */
+export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number,now=new Date(),opts?:{idempotencyKey?:string|null}) {
+  amount(quoteMicrousd);
+  const key=idempotencyKey(opts);
+  if (key) {
+    const held=await heldUnder(env,userId,key);
+    if (held) return {ok:true as const,reservation:{uid:held.uid,userId},replayed:true as const,status:held.status};
+  }
+  // D791: a paused member's run is refused at the hold, before anything is held or charged.
+  if (await aiPaused(env,userId)) return {ok:false as const,refusal:'ai_paused' as const};
+  const report=await loadAiBudget(env,userId,now);
+  if (report.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
+  const uid=crypto.randomUUID(), t=clock(now),expires=clock(new Date(now.getTime()+300000)).at;
+  // Compute the split from current counters inside the write transaction, never from a stale read.
+  // D788: the member's own monthly limit is the insert's last clause (`aiSpendLimit.ts`), so two holds
+  // racing cannot both pass a limit that only one fits: the second insert counts the first hold.
+  const results=await batch(env,[
+    holdStatement(env,key,[uid,t.day,t.month,quoteMicrousd,report.daily_microusd,report.monthly_microusd,
+        quoteMicrousd,quoteMicrousd,report.daily_microusd,report.monthly_microusd,expires],
+      [t.day,t.month,userId,quoteMicrousd,report.daily_microusd,report.monthly_microusd,quoteMicrousd,t.month]),
     env.DB.prepare(`UPDATE ai_included_spend SET spend_microusd=spend_microusd+(SELECT included_microusd FROM ai_budget_reservations WHERE uid=?),updated_at=datetime('now')
       WHERE user_id=? AND ((period_kind='day' AND period_key=?) OR (period_kind='month' AND period_key=?)) AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=?)`)
       .bind(uid,userId,t.day,t.month,uid),
@@ -345,6 +399,11 @@ export async function reserveAiBudget(env:Env,userId:number,quoteMicrousd:number
       WHERE user_id=? AND EXISTS(SELECT 1 FROM ai_budget_reservations WHERE uid=?)`).bind(uid,userId,uid),
   ]);
   if (!results[0].meta.changes) {
+    // D844: a concurrent call with the same key took the hold first; this call is that hold.
+    if (key) {
+      const held=await heldUnder(env,userId,key);
+      if (held) return {ok:true as const,reservation:{uid:held.uid,userId},replayed:true as const,status:held.status};
+    }
     const current=await loadAiBudget(env,userId,now);
     if (current.held_for_review.length) return {ok:false as const,refusal:'budget_review' as const};
     // D788: the member's own limit refused it, whatever the allowance and tokens could cover.

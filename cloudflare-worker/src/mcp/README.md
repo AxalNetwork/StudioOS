@@ -10,7 +10,7 @@ missing, every path answers 404.
 | File | What it holds |
 | --- | --- |
 | `oauth.ts` | The OAuth provider (`@cloudflare/workers-oauth-provider`): the paths, the flag, the authorize endpoint that parks a request for the SPA's consent page, and `routeMcp`, which `../index.ts`'s `fetch` calls first |
-| `server.ts` | The MCP server on the SDK's web-standard Streamable HTTP transport, stateless; the tool registry, listed per member by scope, plan and connection (D846); `callTool`, which checks the grant, the company, the plan, the connection and the rate limit and logs every call |
+| `server.ts` | The MCP server on the SDK's web-standard Streamable HTTP transport, stateless; the tool registry, listed per member by scope, plan and connection (D846); `callTool`, which checks the grant, the company, the plan, the connection and the rate limit and logs every call, and runs a tool `services/metering.ts` prices above 0 inside `meteredCall` (D844) |
 | `grants.ts` | What a grant may reach, re-checked on every call; the companies a person may grant; the per-grant limit; revoking every grant a user holds |
 
 | Folder | What it holds |
