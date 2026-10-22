@@ -53,18 +53,18 @@ test('a founder and a partner connect a Read Only token: GETs only, the token en
   } finally { b.restore(); }
 });
 
-test('D752: an investor connects on HQ with the investor\'s capabilities; on a branch it is 403 on HQ only, reaches no bank and stores nothing', async () => {
+test('D752, D884: an investor connects with the investor\'s capabilities, on HQ and (since D884) on a branch', async () => {
   const { db, env } = await personalFixture();
   const b = bank({ ...defaultBank(), org: { id: 'org-own', legalBusinessName: 'Own Holdings LLC', permissions: ['read-only'] } });
   try {
     const off = await connect(env, 30, {}, { branch: true });
-    assert.deepEqual([off.status, off.body.error, off.body.message], [403, 'purpose_not_allowed', 'Mercury is offered to your profile on HQ only.'], off.text);
-    assert.equal(b.calls.length, 0, 'nothing reached Mercury');
-    assert.equal(stored(db), 0);
+    assert.equal(off.status, 200, off.text);
+    assert.equal(stored(db), 1);
+    db.prepare("DELETE FROM integrations WHERE user_id = 30 AND provider_key = 'mercury'").run();
     const hq = await connect(env, 30);
     assert.equal(hq.status, 200, hq.text);
     const row: any = db.prepare("SELECT * FROM integrations WHERE user_id = 30 AND provider_key = 'mercury'").get();
-    assert.deepEqual(JSON.parse(row.capabilities_json), ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals']); // D840 part 4 adds the sections
+    assert.deepEqual(JSON.parse(row.capabilities_json), ['Capacity', 'Closing proposals', 'Fund calls, accounting and reporting proposals', 'Proof of funds']); // D840 part 4, D884
     assert.equal(row.external_account_name, 'Own Holdings LLC');
     for (const c of b.calls) assert.equal(c.method, 'GET');
   } finally { b.restore(); }

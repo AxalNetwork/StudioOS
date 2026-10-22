@@ -131,6 +131,8 @@ function mercuryTools(variant: MercuryVariant): PageTool[] {
   // D840 part 4 (#2349): a signed-in investor's sections, each read through the MCP server only.
   if (variant === 'investor') {
     tools.push(
+      // D884 (#2557): Pipeline shows the capacity Commit read, beside the cheques you intend; it calls no tool of its own.
+      tool('pipeline_capacity', 'your capacity beside your pipeline', 'read', 'Shows the capacity read for Deals › Commit beside the cheques you intend on the live deals in your pipeline. Only you see it.', 'deals_pipeline', [...mcp('getAccounts')]),
       tool('read_capacity', 'available balances of the accounts you pick', 'read', 'Reads the available balance of the accounts you pick, as your capacity beside your own commitments. Only you see it.', 'deals_commit', [...mcp('getAccounts')]),
       tool('list_payments_out', 'outgoing wires and ACH payments', 'read', 'Lists your outgoing payments, to propose the one that funded a commitment. Nothing is recorded until you accept it.', 'deals_closing', [...mcp('listTransactions')]),
       tool('list_payments_in', 'incoming payments', 'read', 'Lists the credits into your fund’s accounts, to propose the capital-call line each one pays. A receipt is recorded only when you accept it.', 'fund_calls', [...mcp('listTransactions')]),
@@ -160,7 +162,7 @@ const MERCURY_SIGN_IN = 'Sign in with Mercury: Axal VC reads through Mercury’s
 function mercuryPage(variant: MercuryVariant): ConnectorPage {
   return {
     tagline: variant === 'founder' ? 'Credits from your own Mercury account, imported as venture revenue. Read-only.'
-      : variant === 'investor' ? 'Proof of funds for a commitment you made, shared with Axal’s admins. Read-only, never a balance.'
+      : variant === 'investor' ? 'Your capacity in Deals › Pipeline and Commit, and the wire that funded a commitment. Read-only; only you see a balance.'
         : 'Your invoices, payouts and settlements matched to your own Mercury lines. Read-only.',
     long_description: [...(variant === 'founder'
         ? [
@@ -170,9 +172,9 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
         ]
         : variant === 'investor'
           ? [
-            'Your own Mercury account, read-only, on HQ only (D752).',
-            'Axal VC reads your accounts’ names, kinds and last four digits, so you can pick the ones a proof of funds counts. Axal’s admins see only a dated statement of at least an amount you choose, never a balance. It never sends, transfers or requests money.',
-            'Signed in with Mercury, it also fills your sections (D840): your capacity beside your own commitments, on your page only; and proposals for Deals · Closing, Fund · Calls, Accounting and Reporting, which write nothing until you accept them. Portfolio gets nothing from Mercury.',
+            'Your own Mercury account, read-only, on HQ or in a branch (D884).',
+            'Signed in with Mercury, it fills your Deals sections: in Deals › Pipeline and Deals › Commit, your capacity beside the cheques you intend and the commitments you made, on your page only; in Deals › Closing, the wire that funded a commitment, proposed for you to accept. It also proposes entries for Fund › Calls, Accounting and Reporting, which write nothing until you accept them. Portfolio gets nothing from Mercury. It never sends, transfers or requests money.',
+            'On HQ, a proof of funds: Axal VC reads your accounts’ names, kinds and last four digits so you can pick the ones it counts, and Axal’s admins see only a dated statement of at least an amount you choose, never a balance.',
           ]
           : [
           'Your own Mercury account, read-only.',

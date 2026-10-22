@@ -6,6 +6,7 @@
  * FACTS ARE WRITTEN; JUDGEMENT IS PROPOSED (D782).
  *
  *   section            from Mercury                        lands as
+ *   Deals · Pipeline   the Commit capacity fact, read      nothing: shown beside the intended cheques (D884)
  *   Deals · Commit     available balances, picked accounts FACT  mercury_investor_capacity
  *   Deals · Closing    outgoing wires and ACH payments     PROPOSAL → the investor's own commitment
  *   Fund · Calls       incoming credits                    PROPOSAL → an open line; Accept records the receipt
@@ -195,6 +196,49 @@ export async function deleteCapacity(env: Env, user: User): Promise<boolean> {
     "UPDATE connector_fed_items SET local_id = NULL WHERE external_id = ? AND local_table = 'mercury_investor_capacity'",
   ).bind(`capacity:${user.id}`).run();
   return Number(r.meta?.changes ?? 0) > 0;
+}
+
+// ─────────────────────────────────────────────────────────── Deals · Pipeline (read)
+
+/** D884: a deal still in the investor's pipeline: neither funded nor rejected. */
+export const PIPELINE_DEAL_STATUSES: readonly string[] = Object.freeze(['applied', 'scored', 'active']);
+
+/**
+ * The cheques the investor intends on the live deals in their pipeline: their
+ * own commitments, not withdrawn, on deals not yet funded or rejected. A
+ * commitment whose amount is unreadable is counted apart, never as 0.
+ */
+export async function intendedCheques(env: Env, user: User): Promise<{ total_cents: number; deals: number; commitments: number; unrecorded: number }> {
+  const r = await env.DB.prepare(
+    `SELECT c.deal_id, c.amount FROM commitments c JOIN deals d ON d.id = c.deal_id
+      WHERE c.investor_user_id = ? AND c.status <> 'withdrawn' AND d.status IN (SELECT value FROM json_each(?))`,
+  ).bind(user.id, JSON.stringify(PIPELINE_DEAL_STATUSES)).all<{ deal_id: number; amount: number | null }>();
+  let total = 0, commitments = 0, unrecorded = 0;
+  const deals = new Set<number>();
+  for (const row of r.results || []) {
+    const cents = row.amount == null ? NaN : Math.round(Number(row.amount) * 100);
+    if (!Number.isSafeInteger(cents) || cents <= 0) { unrecorded += 1; continue; }
+    total += cents;
+    commitments += 1;
+    deals.add(Number(row.deal_id));
+  }
+  return { total_cents: total, deals: deals.size, commitments, unrecorded };
+}
+
+/**
+ * Deals › Pipeline: the capacity fact Deals › Commit wrote from Mercury, beside
+ * the cheques intended in the pipeline, for the investor's own page only. No
+ * Mercury read and no write: the capacity is the stored fact, dated as Mercury
+ * gave it. With no fact, capacity and headroom are null, never 0.
+ */
+export async function pipelineFigures(env: Env, user: User) {
+  const capacity = await readCapacity(env, user);
+  const intended = await intendedCheques(env, user);
+  return {
+    capacity,
+    intended,
+    headroom_cents: capacity ? capacity.available_cents - intended.total_cents : null,
+  };
 }
 
 // ─────────────────────────────────────────────────────────── proposals

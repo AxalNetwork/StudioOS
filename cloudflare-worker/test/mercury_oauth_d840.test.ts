@@ -268,18 +268,15 @@ test('6. the grant: a scope beyond read, or an Axal entity\'s organization, is r
   } finally { off(); }
 });
 
-test('7. who: an admin is answered 404, an investor off HQ and a support session 403, and nothing reaches Mercury', async () => {
+test('7. who: an admin is answered 404 and a support session 403, and nothing reaches Mercury; an investor signs in on a branch too (D884)', async () => {
   const { env, fake, off } = await setup();
   try {
     assert.equal((await req(env, 1, '/api/integrations/mercury/oauth/start')).status, 404);
-    const branch = await req(env, 30, '/api/integrations/mercury/oauth/start', { branch: true });
-    assert.equal(branch.status, 403);
-    assert.equal(branch.body.code ?? branch.body.error, 'purpose_not_allowed');
     const support = await req(env, 10, '/api/integrations/mercury/oauth/start', { impersonated: true });
     assert.equal(support.status, 403);
     assert.equal(support.body.code ?? support.body.error, 'support_session_refused');
     assert.equal(fake.calls.length, 0);
-    for (const who of [10, 20]) assert.equal((await req(env, who, '/api/integrations/mercury/oauth/start', { branch: true })).status, 200, `role ${who} on a branch`);
+    for (const who of [10, 20, 30]) assert.equal((await req(env, who, '/api/integrations/mercury/oauth/start', { branch: true })).status, 200, `role ${who} on a branch`);
     assert.equal((await req(env, 30, '/api/integrations/mercury/oauth/start')).status, 200);
   } finally { off(); }
 });

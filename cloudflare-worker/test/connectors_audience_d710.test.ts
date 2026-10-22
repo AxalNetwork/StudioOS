@@ -4,12 +4,12 @@
  * On HQ, `GET /available` lists `mercury` to an admin as a read-only preview
  * of the founder's card (D879, #2552, which removed D710's entity row) and, since D713 (#1778) and D752 (#1886), to a founder, a partner and an
  * investor as their own, personal one, each in their role's words; on a
- * branch, to the founder and the partner only. Every other provider's row is
+ * branch, to the founder, the partner and (D884) the investor. Every other provider's row is
  * unchanged for every role `ALLOWED_ROLES` admits. `POST /connect` answers an
  * admin on HQ 403 `purpose_not_allowed` (D879), hands a founder or partner (either
- * host) or an investor (HQ) to the personal provider, answers an investor on a
- * branch 403 `purpose_not_allowed` ("on HQ only"), and answers everyone else
- * 404, as if the key did not exist; so do the waitlist and notify-me routes.
+ * host) or an investor (either host since D884) to the personal provider, and
+ * answers everyone else 404, as if the key did not exist; so do the waitlist and
+ * notify-me routes.
  * `logEvent` masks bank numbers and an EIN, and leaves `protein` alone.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs \
@@ -72,7 +72,8 @@ async function call(db: DatabaseSync, role: string, method: string, path: string
 
 const OTHERS = REGISTRY.filter((p) => p.key !== 'mercury').map((p) => p.key);
 const PERSONAL = ['founder', 'partner', 'investor'];
-const BRANCH_PERSONAL = ['founder', 'partner'];
+// D884 (#2557): an investor sees their own Mercury on a branch too.
+const BRANCH_PERSONAL = ['founder', 'partner', 'investor'];
 
 test('on HQ, /available lists mercury to an admin as a preview of the founder\'s card (D879) and to a founder, a partner and an investor as their own; every other row is unchanged', async () => {
   const db = fixture();
@@ -100,18 +101,19 @@ test('on HQ, /available lists mercury to an admin as a preview of the founder\'s
   for (const role of PERSONAL) {
     const own = (await call(db, role, 'GET', '/available')).body.items.find((p: any) => p.key === 'mercury');
     assert.deepEqual([own.connection_source, own.has_implementation, own.status, own.auth_type], ['integrations', true, 'beta', 'api_key'], role);
-    assert.deepEqual(own.capabilities, role === 'investor' ? ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals'] /* D840 part 4 */ : role === 'founder' ? ['Revenue import', 'Payment matching', 'Spending and runway'] : ['Revenue import', 'Payment matching'], role);
+    assert.deepEqual(own.capabilities, role === 'investor' ? ['Capacity', 'Closing proposals', 'Fund calls, accounting and reporting proposals', 'Proof of funds'] /* D840 part 4, D884 */ : role === 'founder' ? ['Revenue import', 'Payment matching', 'Spending and runway'] : ['Revenue import', 'Payment matching'], role);
     assert.equal(own.permissions.length, 1, role);
     assert.match(own.permissions[0], /never sends, transfers or requests money/);
     // D840: a role's feeds are `MERCURY_FEEDS`' modules for it (D713's revenue, then part 2's Raise modules; part 4's investor sections).
     assert.deepEqual(own.feeds, role === 'founder' || role === 'investor' ? mercuryFedModules(role) : []);
     if (role === 'founder') assert.equal(own.feeds[0], 'revenue_and_traction');
-    if (role === 'investor') assert.deepEqual(own.feeds, ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
+    if (role === 'investor') assert.deepEqual(own.feeds, ['deals_pipeline', 'deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
     if (role === 'investor') {
-      assert.match(own.description, /^Your own Mercury account, read-only: show Axal's admins/);
+      // D884: the Deals sections lead; proof of funds is on HQ only.
+      assert.match(own.description, /^Your own Mercury account, read-only: your capacity in Deals › Pipeline and Deals › Commit/);
       // D840 part 4: the investor's capacity is their own balance, shown to them alone; D752's admins still see none.
       assert.match(own.permissions[0], /only you see a balance/);
-      assert.match(own.description, /Axal's admins never see your balance\./);
+      assert.match(own.description, /On HQ, also a dated proof of funds for Axal's admins, who never see your balance\./);
     } else if (role === 'founder') {
       assert.match(own.description, /venture revenue, and see each month's spending, burn, cash on hand and runway/);
     } else {
@@ -123,7 +125,7 @@ test('on HQ, /available lists mercury to an admin as a preview of the founder\'s
   }
 });
 
-test('on a branch, only a founder and a partner see mercury, as their own; the admin\'s preview and the investor\'s stay HQ only', async () => {
+test('on a branch, a founder, a partner and (D884) an investor see mercury, as their own; the admin\'s preview stays HQ only', async () => {
   const db = fixture();
   for (const role of ROLES) {
     const r = await call(db, role, 'GET', '/available', undefined, true);
@@ -134,26 +136,20 @@ test('on a branch, only a founder and a partner see mercury, as their own; the a
   }
 });
 
-test('connect: an admin on HQ is 403 purpose_not_allowed (D879); a founder or partner reaches the personal provider on either host and an investor on HQ; an investor on a branch is 403 on HQ only; everyone else, and their waitlist and notify-me, is 404', async () => {
+test('connect: an admin on HQ is 403 purpose_not_allowed (D879); a founder, a partner and (D884) an investor reach the personal provider on either host; everyone else, and their waitlist and notify-me, is 404', async () => {
   const db = fixture();
   const admin = await call(db, 'admin', 'POST', '/connect', { provider_key: 'mercury', api_key: 'fixture-not-a-token-1' });
   assert.deepEqual([admin.status, admin.body.error, admin.body.message], [403, 'purpose_not_allowed', 'Your role does not hold a personal Mercury connection.']);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury'").get()!.n, 0);
   // No token: the personal provider refuses before anything reaches Mercury.
   for (const role of PERSONAL) {
-    for (const branch of role === 'investor' ? [false] : [false, true]) {
+    for (const branch of [false, true]) {
       const r = await call(db, role, 'POST', '/connect', { provider_key: 'mercury' }, branch);
       assert.deepEqual([r.status, r.body.error], [400, 'api_key_required'], `${role} branch=${branch}`);
     }
     assert.equal((await call(db, role, 'GET', '/mercury')).status, 200, `${role} GET /:key`);
+    assert.equal((await call(db, role, 'GET', '/mercury', undefined, true)).status, 200, `${role} branch GET /:key`);
   }
-  // D752: an investor on a branch learns why at connect; its other routes stay 404.
-  const off = await call(db, 'investor', 'POST', '/connect', { provider_key: 'mercury', api_key: 'fixture-not-a-token-1' }, true);
-  assert.deepEqual([off.status, off.body.error, off.body.message], [403, 'purpose_not_allowed', 'Mercury is offered to your profile on HQ only.']);
-  assert.equal((await call(db, 'investor', 'GET', '/mercury', undefined, true)).status, 404, 'investor branch GET /:key');
-  assert.equal((await call(db, 'investor', 'POST', '/waitlist', { provider_key: 'mercury' }, true)).status, 404, 'investor branch waitlist');
-  assert.equal((await call(db, 'investor', 'POST', '/notify-me', { provider_key: 'mercury' }, true)).status, 404, 'investor branch notify-me');
-  assert.equal((await call(db, 'investor', 'POST', '/mercury/notify-me', {}, true)).status, 404, 'investor branch /:provider/notify-me');
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury'").get()!.n, 0);
   for (const role of ROLES.filter((r) => r !== 'admin' && !PERSONAL.includes(r))) {
     const r = await call(db, role, 'POST', '/connect', { provider_key: 'mercury', api_key: 'fixture-not-a-token-1' });
