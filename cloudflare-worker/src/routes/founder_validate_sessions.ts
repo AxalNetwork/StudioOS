@@ -15,6 +15,14 @@
  *   PATCH  /sessions/:id/consent            record consent to record
  *   POST   /sessions/:id/{start,pause,resume,stop}
  *   PUT    /sessions/:id/chunks/:seq        one audio chunk, idempotent by seq
+ *
+ * D872 (#2519) — a call recording uploaded as a file. Both opening routes take
+ * `{ source: 'upload', attestation: { agreed: true, method }, duration_ms }`:
+ * the founder's word that everyone recorded agreed (verbal | written |
+ * pre_agreed) is the session's consent, with its method and time; the session
+ * opens `stopped` (`submitted_via 'upload'`, nothing live), takes the
+ * uploader's 16 kHz mono WAV parts on the chunk route up to 3 hours, and
+ * `/finish` runs the recorder's pipeline. `frontend/src/lib/recordingUpload.js`.
  *   GET    /sessions/active                 D685: the caller's recordings in flight
  *   POST   /sessions/:id/marks              mark a moment (D685: gated, client_key, capped)
  *   GET    /sessions/:id/live               WebSocket: the live transcript
@@ -35,12 +43,13 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canWrite, type ProjectRef } from './_founder_validate_helpers';
-import { audioMinutesFromBytes, budgetRefusalMessage, estimateCostUsd } from '../services/aiRouter';
+import { budgetRefusalMessage, estimateCostUsd } from '../services/aiRouter';
 import * as aiBudget from '../services/aiBudget';
 import {
-  AUDIO_CHANNELS, AUDIO_PREFIX, CHANNELS, CHUNK_MIME, CONSENT, CONSENT_METHODS, MAX_CHUNK_BYTES, MAX_CHUNKS,
-  TRANSITIONS, consentBlocks, deleteSession, listChunks, loadSession, putChunk, recordReceipt, sessionHasAudio,
-  replaceWithFinal, transition, type SessionRow, type StoredSegment,
+  AUDIO_CHANNELS, AUDIO_PREFIX, CHANNELS, CHUNK_MIME, CONSENT, CONSENT_METHODS, MAX_CHUNK_BYTES, MAX_CHUNKS, MAX_UPLOAD_MS,
+  TRANSITIONS, UPLOAD_ATTESTATIONS, UPLOAD_BYTES_PER_SECOND, UPLOAD_SOURCE, WAV_HEADER_BYTES, consentBlocks, deleteSession,
+  isUploadWav, listChunks, loadSession, putChunk, recordReceipt, sessionHasAudio, replaceWithFinal, transition,
+  type SessionRow, type StoredSegment,
 } from '../services/interviewSessions';
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, isChoosable, listSttModels } from '../services/sttModels';
 import { WHISPER_TURBO } from '../services/sttFormats';
@@ -52,7 +61,7 @@ import {
 } from '../services/sessionSetup';
 import { setInterviewStage } from '../services/validateWriters';
 import {
-  CUSTOMER_RESEARCH_PAGE, DIGEST_OPTIONS, DIGEST_PAGE, TRANSCRIBE_OPTIONS, afterChunkStored, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
+  CUSTOMER_RESEARCH_PAGE, DIGEST_OPTIONS, DIGEST_PAGE, TRANSCRIBE_OPTIONS, afterChunkStored, chunkAudioMinutes, finishSession, isStale, processingOf, recoverSession, summaryOf, transcribeChunk,
 } from '../services/interviewProcessing';
 import { consentRefusal, digestConsentRefusal, modelFrom, processingBusy, refusedBody, refusedStatus } from './founder_validate_structure';
 import { digestSession, withdrawDigest } from '../services/validateEngine';
@@ -160,13 +169,53 @@ type OpenPlan = {
   channel: string; audio: boolean; consent: string; method: string; liveModel: string | null; finalModel: string | null;
   language: string | null; callProvider: string | null; meetingUrl: string | null; clientKey: string | null;
   messages: StoredSegment[] | null; quoteConsent: boolean;
+  /** D872: a call recording uploaded as a file, and its declared length. */
+  upload: { durationMs: number } | null;
 };
+
+/** D872 (#2519): the attestation an upload needs, in the founder's words. */
+const ATTESTATION_SENTENCE = 'Confirm that everyone recorded agreed (out loud, in writing, or beforehand) before uploading.';
+
+/**
+ * D872 — an upload's own checks, before anything is written: an audio
+ * channel, the founder's attestation, and a length within the cap. The
+ * attestation is the session's recording consent, with its method and time,
+ * as a member's word is on a forwarded recording (D754 way B).
+ */
+function planUpload(body: any, audio: boolean): { method: string; durationMs: number } | Response {
+  if (!audio) return json({ detail: 'upload_needs_audio_channel', accepted: [...AUDIO_CHANNELS] }, 400);
+  const method = String(body?.attestation?.method || '');
+  if (body?.attestation?.agreed !== true || !(UPLOAD_ATTESTATIONS as readonly string[]).includes(method)) {
+    return json({ detail: 'attestation_required', message: ATTESTATION_SENTENCE, accepted: UPLOAD_ATTESTATIONS }, 400);
+  }
+  const durationMs = Number(body?.duration_ms);
+  if (!Number.isSafeInteger(durationMs) || durationMs <= 0) return json({ detail: 'duration_required', message: 'The recording\'s length could not be read.' }, 400);
+  if (durationMs > MAX_UPLOAD_MS) {
+    return json({ detail: 'upload_too_long', message: 'A recording can be at most 3 hours long. Trim it, or upload it in parts.', max_ms: MAX_UPLOAD_MS }, 413);
+  }
+  return { method, durationMs };
+}
 
 function planSession(body: any, legacy: boolean): OpenPlan | Response {
   const channel = String(body?.channel || '');
   const offered: readonly string[] = legacy ? CHANNELS : SETUP_CHANNELS;
   if (!offered.includes(channel)) return json({ detail: 'invalid_channel', accepted: offered }, 400);
   const audio = AUDIO_CHANNELS.has(channel);
+
+  if (body?.source != null && body.source !== UPLOAD_SOURCE) return json({ detail: 'invalid_source', accepted: [UPLOAD_SOURCE] }, 400);
+  if (body?.source === UPLOAD_SOURCE) {
+    const up = planUpload(body, audio);
+    if (up instanceof Response) return up;
+    const finalModel = String(body?.final_model || DEFAULT_FINAL_MODEL);
+    if (!isChoosable(finalModel, 'final')) return json({ detail: 'model_not_offered', model: finalModel, kind: 'final' }, 400);
+    const lang = languageFor(body?.language, null);
+    if (!lang.ok) return json({ detail: 'invalid_language', message: lang.message }, 400);
+    return {
+      channel, audio, consent: 'given', method: up.method, liveModel: null, finalModel, language: lang.language,
+      callProvider: null, meetingUrl: null, clientKey: text(body?.client_key, 100), messages: null, quoteConsent: false,
+      upload: { durationMs: up.durationMs },
+    };
+  }
 
   const consent = audio ? String(body?.consent?.status || 'not_recorded') : 'not_recorded';
   if (!(CONSENT as readonly string[]).includes(consent)) return json({ detail: 'invalid_consent', accepted: CONSENT }, 400);
@@ -198,6 +247,7 @@ function planSession(body: any, legacy: boolean): OpenPlan | Response {
   return {
     channel, audio, consent, method, liveModel, finalModel, language: lang.language, callProvider,
     meetingUrl, clientKey: text(body?.client_key, 100), messages: audio ? null : messagesToSegments(body?.messages), quoteConsent,
+    upload: null,
   };
 }
 
@@ -224,13 +274,18 @@ async function sessionBody(env: Env, session: SessionRow) {
 async function openOn(env: Env, user: User, interview: { id: number | null; project_id: number }, plan: OpenPlan, body: any,
   create: D1PreparedStatement | null = null): Promise<SessionRow> {
   const uid = crypto.randomUUID();
+  // D872: an upload records nothing live. It opens stopped, its length the file's, and takes chunks at once.
+  const up = plan.upload;
   const insert = env.DB.prepare(
     `INSERT INTO interview_sessions
        (uid, interview_id, project_id, created_by_user_id, channel, status, consent_status, consent_method, consent_at,
-        live_model, final_model, language, call_provider, meeting_url, client_key)
-     VALUES (?, COALESCE(?, last_insert_rowid()), ?, ?, ?, 'draft', ?, ?, CASE WHEN ? = 'given' THEN datetime('now') END, ?, ?, ?, ?, ?, ?)`,
-  ).bind(uid, interview.id, interview.project_id, user.id, plan.channel, plan.consent, plan.method || null, plan.consent,
-    plan.liveModel, plan.finalModel, plan.language, plan.callProvider, plan.meetingUrl, plan.clientKey);
+        live_model, final_model, language, call_provider, meeting_url, client_key,
+        submitted_via, active_ms, started_at, stopped_at)
+     VALUES (?, COALESCE(?, last_insert_rowid()), ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'given' THEN datetime('now') END, ?, ?, ?, ?, ?, ?,
+             ?, ?, CASE WHEN ? = 1 THEN datetime('now') END, CASE WHEN ? = 1 THEN datetime('now') END)`,
+  ).bind(uid, interview.id, interview.project_id, user.id, plan.channel, up ? 'stopped' : 'draft', plan.consent, plan.method || null, plan.consent,
+    plan.liveModel, plan.finalModel, plan.language, plan.callProvider, plan.meetingUrl, plan.clientKey,
+    up ? UPLOAD_SOURCE : null, up ? up.durationMs : 0, up ? 1 : 0, up ? 1 : 0);
   const ins = create ? (await env.DB.batch([create, insert]))[1] : await insert.run();
   const session = (await loadSession(env, Number(ins.meta?.last_row_id)))!;
   interview = { id: session.interview_id, project_id: interview.project_id };
@@ -241,10 +296,15 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
     env.DB.prepare('UPDATE discovery_interviews SET channel = COALESCE(channel, ?) WHERE id = ?').bind(plan.channel, interview.id),
     ...(plan.quoteConsent ? [env.DB.prepare('UPDATE discovery_interviews SET quote_consent = 1 WHERE id = ?').bind(interview.id)] : []),
     env.DB.prepare(`INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`)
-      .bind('interview_session_created', JSON.stringify({ session_uid: uid, interview_id: interview.id, channel: plan.channel, consent: plan.consent }),
-        `user:${user.id}`, user.id, interview.project_id),
+      .bind('interview_session_created', JSON.stringify({
+        session_uid: uid, interview_id: interview.id, channel: plan.channel, consent: plan.consent,
+        // D872: the attestation, with its method; its time is the session's consent_at.
+        ...(up ? { source: UPLOAD_SOURCE, attested: plan.method } : {}),
+      }), `user:${user.id}`, user.id, interview.project_id),
   ];
   await env.DB.batch(stmts);
+  // An uploaded call has been held.
+  if (up) await markInterviewHeld(env, session, user.id);
 
   if (plan.messages && plan.messages.length) {
     await replaceWithFinal(env, session, plan.messages, plan.channel === 'text' ? 'text_chat' : 'manual_entry', null);
@@ -265,7 +325,8 @@ async function openOn(env: Env, user: User, interview: { id: number | null; proj
  * second session, and the page could not offer the live one in its place.
  */
 async function liveRefusal(env: Env, userId: number, plan: OpenPlan): Promise<Response | null> {
-  if (!plan.audio) return null;
+  // D872: an upload records nothing live, so it is never refused for a recording in flight.
+  if (!plan.audio || plan.upload) return null;
   const live = await activeSessionOf(env, userId);
   return live ? json({ error: 'session_active', session_id: live.id, message: 'You are already recording another session. Stop it, or return to it, first.' }, 409) : null;
 }
@@ -314,10 +375,11 @@ sessions.post('/sessions', async (c) => {
     const picked = await c.env.DB.prepare('SELECT id, project_id, stage FROM discovery_interviews WHERE id = ?')
       .bind(pickedId).first<{ id: number; project_id: number; stage: string | null }>();
     if (!picked || picked.project_id !== projectId) return notFound('Interview');
-    if (!['lead', 'invited', 'booked'].includes(String(picked.stage))) {
+    // D872: a recording of a call already held can be uploaded onto its interview.
+    if (!plan.upload && !['lead', 'invited', 'booked'].includes(String(picked.stage))) {
       return json({ detail: 'interview_not_in_pipeline', message: 'That interview has already been held. Pick one still to come, or name someone new.' }, 409);
     }
-    if (picked.stage !== 'booked') {
+    if (!plan.upload && picked.stage !== 'booked') {
       await setInterviewStage(c.env, { projectId, userId: user.id, interviewId: picked.id, stage: 'booked' });
     }
     interview = picked;
@@ -655,6 +717,26 @@ for (const action of Object.keys(TRANSITIONS) as (keyof typeof TRANSITIONS)[]) {
   });
 }
 
+/**
+ * D872 — an uploaded recording's chunk: the uploader's format only, so its
+ * bytes are its duration, and never past the cap. A repeated `seq` is not
+ * counted twice: `putChunk` answers it as a duplicate.
+ */
+async function uploadChunkRefusal(env: Env, sessionId: number, seq: number, mime: string, bytes: Uint8Array): Promise<Response | null> {
+  if (CHUNK_MIME[mime] !== 'wav' || !isUploadWav(bytes)) {
+    return json({ detail: 'upload_format', message: 'An uploaded recording arrives as 16 kHz mono WAV parts from StudioOS\'s uploader.' }, 415);
+  }
+  const stored = await env.DB.prepare(
+    'SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS b, COALESCE(MAX(seq = ?), 0) AS dup FROM interview_session_chunks WHERE session_id = ?',
+  ).bind(seq, sessionId).first<{ n: number; b: number; dup: number }>();
+  if (stored?.dup) return null;
+  const audioBytes = Number(stored?.b ?? 0) - WAV_HEADER_BYTES * Number(stored?.n ?? 0) + (bytes.byteLength - WAV_HEADER_BYTES);
+  if (audioBytes > (MAX_UPLOAD_MS / 1000) * UPLOAD_BYTES_PER_SECOND) {
+    return json({ detail: 'upload_too_long', message: 'A recording can be at most 3 hours long. Trim it, or upload it in parts.', max_ms: MAX_UPLOAD_MS }, 413);
+  }
+  return null;
+}
+
 sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
@@ -676,6 +758,10 @@ sessions.put('/sessions/:id/chunks/:seq', async (c) => {
   const bytes = await c.req.arrayBuffer();
   if (!bytes.byteLength) return json({ detail: 'empty_chunk' }, 400);
   if (bytes.byteLength > MAX_CHUNK_BYTES) return json({ detail: 'too_large', max_bytes: MAX_CHUNK_BYTES }, 413);
+  if (s.session.submitted_via === UPLOAD_SOURCE) {
+    const refused = await uploadChunkRefusal(c.env, s.session.id, seq, mime, new Uint8Array(bytes));
+    if (refused) return refused;
+  }
   // For placing passages on the timeline only; never billed on.
   const rawStart = Number(c.req.header('x-chunk-start-ms'));
   const startMs = Number.isSafeInteger(rawStart) && rawStart >= 0 ? Math.min(rawStart, 24 * 3600 * 1000) : null;
@@ -857,7 +943,7 @@ sessions.post('/sessions/:id/transcribe', async (c) => {
   // nothing: the job is quoted at its dearest (the chosen model, or the
   // default it may fall back to) and held, then the hold is released and each
   // chunk is billed through the router as it runs.
-  const minutesPer = chunks.map((ch) => audioMinutesFromBytes(ch.size_bytes));
+  const minutesPer = chunks.map((ch) => chunkAudioMinutes(ch, s.session));
   const totalMinutes = minutesPer.reduce((a, b) => a + b, 0);
   const quote = Math.max(estimateCostUsd(model, 0, 0, totalMinutes), estimateCostUsd(WHISPER_TURBO, 0, 0, totalMinutes));
   if (s.user.id > 0) {

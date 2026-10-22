@@ -52,6 +52,8 @@ export interface Env {
   // D754 / D756 — wrangler vars, not secrets: "on", "canary" (Super Admins
   // only) or "off" per chat channel. Absent or unknown reads as "canary".
   WHATSAPP_CHANNEL?: string;
+  /** D860 (#2505): WhatsApp calls groundwork, on only when exactly "true". */
+  WHATSAPP_CALLS?: string;
   TELEGRAM_CHANNEL?: string;
   // D754 — Axal's own WhatsApp number and its WhatsApp Business Account. Ids,
   // not secrets; once set, Embedded Signup refuses them, so no member can

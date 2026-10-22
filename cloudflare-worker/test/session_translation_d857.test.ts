@@ -17,7 +17,7 @@ import { AI_FIXTURE_PLANS, aiBudgetFixture, setFixtureAllowance } from './_ai_bu
 import { applyEngineSchema } from './_engine_schema.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import { createJWT } from '../src/auth.ts';
-import structure from '../src/routes/founder_validate_structure.ts';
+import structure, { storePlacements } from '../src/routes/founder_validate_structure.ts';
 import sessionsApp from '../src/routes/founder_validate_sessions.ts';
 import { moduleSuggestions } from '../src/services/interviewSuggestions.ts';
 import { structureSession } from '../src/services/sessionAutoStructure.ts';
@@ -224,6 +224,28 @@ test('structuring reads the translation, and each quote keeps the customer\'s ow
   const withheld = (await moduleSuggestions(env, PROJECT, 'problem-discovery'))[0];
   assert.equal(withheld.quote, withheld.quote_original);
   assert.notEqual(withheld.quote_original, ES);
+});
+
+test('translated citations keep their originals with both extraction and default structuring task attribution', async () => {
+  const { env, db } = world(translator());
+  for (const task of ['extract_conversation_items', undefined] as const) {
+    await storePlacements(env, {
+      projectId: PROJECT, sessionId: SESSION, interviewId: IV, runId: `translated-${task ?? 'default'}`,
+      userId: ME, model: MID, task,
+      placements: [{
+        kind: 'pain_severity', payload: { phrase: 'Reconcile by hand', severity: 'severe' },
+        cite: { from: 0, to: 4000 }, quote: PHRASEBOOK[ES], quoteOriginal: ES, sourceLang: 'es',
+      }],
+    });
+  }
+  const rows = db.prepare('SELECT task, citation_json FROM validate_proposals ORDER BY id').all();
+  assert.deepEqual(rows.map((row: any) => {
+    const citation = JSON.parse(row.citation_json);
+    return [row.task, citation.quote, citation.quote_original, citation.source_lang];
+  }), [
+    ['extract_conversation_items', PHRASEBOOK[ES], ES, 'es'],
+    ['structure_interview', PHRASEBOOK[ES], ES, 'es'],
+  ]);
 });
 
 test('the session page shows each segment\'s own words and, beside them, its translation', async () => {

@@ -20,6 +20,7 @@
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
 import { developerKeys } from './routes/developer_keys';
+import { developerLimits } from './routes/developer_limits';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, JobMessage } from './types';
@@ -282,6 +283,7 @@ import cycleVerdict from './routes/cycle_verdict';
 import cycleRaise from './routes/cycle_raise';
 import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
+import validateConversations from './routes/validate_conversations';
 // D684 (#1575) — interview channels: business Telegram and WhatsApp
 // conversations (S19), Zoom and Google Meet calls from an interview (S18).
 import channels, { channelsAdmin } from './routes/channels';
@@ -1246,6 +1248,8 @@ app.route('/api/connectors/custom', connectorsCustomRoutes);
 app.route('/api/mcp/consent', mcpConsent);
 // D841 (#2464): a member's own API keys for /mcp, behind API_KEYS_ENABLED.
 app.route('/api/developer/keys', developerKeys);
+// D849 (#2472): the limits in force on the member's connections and keys.
+app.route('/api/developer/limits', developerLimits);
 // D840 (#2346): Sign in with Mercury, ahead of the integrations router.
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
 app.route('/api/connectors', integrations);
@@ -1403,6 +1407,8 @@ app.route('/api/admin/testing', adminTesting);
 app.route('/api/partner/delivery', partnerDelivery);
 // D657 — interview sessions: recording, live and final speech-to-text.
 app.route('/api/founder/validate', founderValidateSessions);
+// D858 (#2503): what a session's and a venture's conversations show, read only.
+app.route('/api/validate', validateConversations);
 app.route('/api/founder/validate', founderValidate);
 // D684 — Zoom and Meet calls scheduled from an interview (S18). The Zoom
 // webhook mounts before the channels router, which owns the rest of

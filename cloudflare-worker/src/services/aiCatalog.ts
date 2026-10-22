@@ -44,6 +44,7 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   competitor_scan: 'Find competitors',
   research_ask: 'Answer from your documents',
   structure_interview: 'Structure an interview',
+  extract_conversation_items: 'Find actions and data points in a conversation',
   summarise_interview: 'Summarise an interview',
   translate_segment: 'Translate a session segment',
   detect_language: 'Detect a segment\'s language',
