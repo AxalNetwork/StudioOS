@@ -33,8 +33,9 @@ that turns out different is a one-line PR.
      `https://app.axal.vc/api/integrations/oauth/zoom/callback`. It is
      `OAUTH_CALLBACK_BASE_URL` (`wrangler.toml`) + `/api/integrations/oauth/zoom/callback`.
    - Copy the Client ID and Client Secret for step 5.
-3. **Scopes, exactly these six** (*unverified*: the names as a General app
-   lists them):
+3. **Scopes, these eight.** The names below are as a General app lists them,
+   confirmed on 2026-10-22.
+   Six are the ones Axal uses:
    - `meeting:write:meeting`: create the call;
    - `meeting:delete:meeting`: delete it when the founder cancels;
    - `cloud_recording:read:list_recording_files`: list the recording files
@@ -43,7 +44,12 @@ that turns out different is a one-line PR.
    - `meeting:read:list_past_instances`: recover a call ended and restarted;
    - `user:read:user`: identify the connection on disconnect.
 
-   Add none beyond these. The callback compares the grant with the registry
+   Zoom also grants two that Axal accepts but never calls. On 2026-10-22 they
+   stayed in the grant after they were removed from the Scopes page:
+   - `cloud_recording:read:recording`: comes with the transcript event;
+   - `zoomapp:inmeeting`: comes with a General app.
+
+   Add none beyond these eight. The callback compares the grant with the registry
    (`cloudflare-worker/src/integrations/registry.ts`) and refuses a wider one.
 4. **Events.** Features → Access → Event subscription:
    - Event notification endpoint: `https://axal.vc/api/channels/zoom/webhook`.
