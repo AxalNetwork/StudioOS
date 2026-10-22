@@ -13,8 +13,10 @@
  * (D886 §4: B6 names speakers from the speaking timeline). The audio never
  * leaves the process except as B2's chunks, and is never logged.
  *
- * Chromium feeds a remote WebRTC track into Web Audio only while a media
- * element also plays it, so each track is also attached to a muted `<audio>`.
+ * Each track is also attached to a muted `<audio>`: some Chromium builds feed
+ * a remote WebRTC track into Web Audio only while a media element plays it.
+ * UNVERIFIED for Meet: the Chromium the tests run (1194) does not need it on a
+ * local loopback, so no test proves it; measuring Meet does.
  */
 
 export const CAPTURE_BINDING = '__eadwynAudio';

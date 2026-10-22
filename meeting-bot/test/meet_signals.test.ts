@@ -29,7 +29,7 @@ test('removal and the end win over a stale Leave button; a block needs its reaso
 test('only an https link on meet.google.com itself, with a meeting code', () => {
   assert.equal(isMeetLink('https://meet.google.com/abc-defg-hij'), true);
   for (const bad of ['http://meet.google.com/abc-defg-hij', 'https://meet.google.com/', 'https://meet.google.com.evil.test/abc',
-    'https://evil.test/meet.google.com/abc', 'https://user@meet.google.com/abc', 'meet.google.com/abc', '', 'https://[bad']) {
+    'https://evil.test/meet.google.com/abc', 'https://user@meet.google.com/abc', 'https://evil.meet.google.com/abc', 'https://notmeet.google.com/abc', 'meet.google.com/abc', '', 'https://[bad']) {
     assert.equal(isMeetLink(bad), false, bad);
   }
 });

@@ -26,6 +26,8 @@ const LINK = 'https://meet.google.com/prejoin-abcd-efg';
 const OPEN = 'https://meet.google.com/prejoin_open-abcd-efg';
 const fast = { pollMs: 25, stepTimeoutMs: 5000 };
 const never = new AbortController().signal;
+// A wait that cannot end would hang the run instead of failing it: every admission wait in these tests has a deadline.
+const soon = () => AbortSignal.timeout(15_000);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function until(ok: () => boolean, ms = 4000): Promise<void> {
@@ -43,7 +45,7 @@ test('a guest join: the name, microphone and camera off, then the waiting room; 
     assert.deepEqual([asked.name, asked.mic, asked.camera, asked.asked], [BOT_NAME, 'off', 'off', 'ask']);
     assert.equal(await bot.state(), 'lobby');
 
-    const admitted = bot.admitted(never);
+    const admitted = bot.admitted(soon());
     await raw.evaluate(() => { const m = (globalThis as any).__meet; m.admit(); m.join('me', 'Eadwyn AI', true); m.join('p1', 'Participant A'); });
     await admitted;
     assert.equal((await raw.evaluate(() => (globalThis as any).__meet.log)).panelOpened, true, 'the participant panel is opened');
@@ -87,6 +89,8 @@ test('audio: a remote WebRTC track arrives as 16 kHz mono frames, and none befor
     bot.audio((f) => frames.push(f));
     await bot.join({ url: LINK, botName: BOT_NAME, signal: never });
     await raw.evaluate(() => (globalThis as any).__meet.tone(440));
+    // Even a block that reaches Node before admission is dropped there.
+    await raw.evaluate(() => (globalThis as any).__eadwynAudio(48000, btoa(String.fromCharCode(...new Uint8Array(new Float32Array(480).fill(0.5).buffer)))));
     await wait(1500);
     assert.equal(frames.length, 0, 'no audio in the waiting room');
     await bot.leave();
@@ -116,7 +120,7 @@ test('refusals carry D886\'s codes', { skip }, async () => {
     const bot = new MeetAdapter(page, fast);
     await bot.join({ url: LINK, botName: BOT_NAME, signal: never });
     const ctl = new AbortController();
-    const pending = code(() => bot.admitted(ctl.signal));
+    const pending = code(() => bot.admitted(AbortSignal.any([ctl.signal, soon()])));
     if (act) await raw.evaluate((a) => (globalThis as any).__meet[a](), act);
     else ctl.abort();
     return pending;
@@ -172,7 +176,7 @@ test('a page that has gone ends a wait as platform_blocked, and ends the call fo
   const waiting = await withMeetPage(async (page, raw) => {
     const bot = new MeetAdapter(page, fast);
     await bot.join({ url: LINK, botName: BOT_NAME, signal: never });
-    const pending = bot.admitted(never).then(() => 'admitted', (e) => (e instanceof AdapterFailure ? e.code : 'other'));
+    const pending = bot.admitted(soon()).then(() => 'admitted', (e) => (e instanceof AdapterFailure ? e.code : 'other'));
     await raw.close();
     return pending;
   });
