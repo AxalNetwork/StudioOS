@@ -1,8 +1,9 @@
 # Telegram Business: switch on, check, rotate, switch off
 
 The owner's runbook for the Telegram Business interview bot (D756, which amends
-D684). It is everything needed to set the bot up, run the real-device check,
-rotate its secrets and switch it off. Secret and variable names only: no value
+D684; brought up to date by D868). It is everything needed to set the bot up,
+run the real-device check, switch it on for every Founder, rotate its secrets,
+handle an incident and switch it off. Secret and variable names only: no value
 belongs in this file, in the repo, or in an issue.
 
 A member links their Telegram account to Axal, then adds Axal's bot as a
@@ -15,7 +16,8 @@ This is a **different bot** from the news bot behind `TELEGRAM_BOT_TOKEN`
 (GOTCHAS.md, "Telegram broadcaster"). A bot that receives customer
 conversations must be revocable on its own.
 
-**What has shipped.** Every part of D756 this runbook relies on is on `main`:
+**What has shipped.** Every part of D756 this runbook relies on is on `main`,
+together with what the Telegram track (#2508) has merged so far:
 
 | Part | PR |
 | --- | --- |
@@ -27,15 +29,29 @@ conversations must be revocable on its own.
 | The interviewee's YES, NO and STOP in the chat | #1998 (D756 `S12-consent`, #1977) |
 | The connector page, `/account/connectors/telegram` | #1997 (D756 `S07-page`, #1979) |
 | Consent state and notes in Record a Session and the inbox | #2004 (D756 `S11-validate`, #1981) |
-| Notes stored and transcribed as recorder audio | #2083 (D756 `S13-audio`, #1978), merged 2026-10-19 |
+| Notes stored and transcribed as recorder audio (Workers AI speech-to-text) | #2083 (D756 `S13-audio`, #1978), merged 2026-10-19 |
+| The customer-chat tools on Axal's MCP server (`list_channel_chats`, `get_session_insights`, `assign_chat_to_interview`), and no MTProto user session | #2527 (D864, #2510) |
+| Conversation analytics for Record a Session, Telegram and WhatsApp chats alike | #2526 (D858, #2503) |
+| A guided setup for Record a Session: six steps (linked, bot added, bot on, replies allowed, a first chat, the notice), each done, to do or blocked, read from stored rows with no Bot API call (`GET /api/channels/telegram/setup`) | #2531 (D863, #2509) |
+| The channel in the conversation analytics (each session's channel, figures per channel), and a Telegram chat's text and consented notes proven end to end into Validate's proposals | #2548 (D866, #2512) |
+| The rollout readiness check (`telegram_readiness_d868.test.ts`) | D868 (#2514) |
 | Yes/No buttons on the notice | D756's buttons task, not filed: it waits on §3 step 10's probe |
+
+**Not yet on `main`.** Each row is added above when its PR merges:
+
+| Part | Task |
+| --- | --- |
+| Every note to text and translated: round videos, larger notes (translation is D857's, shared with WhatsApp) | D865 (#2511) |
+| Edits and deletions of a Telegram message honoured at the source (D866 §4, waiting on S1's ruling) | D866 (#2512) |
+| Calls by forwarding a recording, and "Send to Axal" (`TELEGRAM_CAPTURE`) | D867 (#2513) |
+| The Record a Session › Telegram screens | D869 (#2515) |
 
 **What a Telegram chat holds for consent.** Unlike WhatsApp, an assigned
 Telegram chat's **text** goes into its session at once, under D684's rule; only
 its **notes** wait. A note is fetched only once the interviewee has said YES. A
 NO keeps the notes held; a STOP stops further downloads; neither sets the chat
 aside. A consented note's audio is stored and transcribed as recorder audio
-(#1978). Setting the secrets is safe: `TELEGRAM_CHANNEL`
+(#2083). Setting the secrets is safe: `TELEGRAM_CHANNEL`
 ships `canary`, so only Super Admins can link.
 
 ## 1. Owner steps, in order
@@ -96,21 +112,39 @@ Agents never see any of these values.
 5. **Premium check.** Open Telegram › Settings › Telegram Business on an
    account **without** Telegram Premium and report on #1008 whether Chatbots
    needs Premium. Sources disagree on whether that changed in 2026; the card's
-   "Needs Telegram Premium" stays until you report.
+   "Needs Telegram Premium" stays until you report. When you do, the card's
+   line and the setup's Premium constants (`TELEGRAM_PREMIUM_REQUIRED`,
+   `TELEGRAM_PREMIUM_LINE`, D863 §3) change in one PR. **Outcome: not reported
+   yet** (D868 records it here when it is).
 6. **The notice.** Approve, with counsel, the in-chat notice and the
    `/privacy/interviews` page (#1894), and name the contact address for
    deletion requests.
 7. **The live check**, in canary, on a real device (§3).
-8. **Ask S1 to switch it on:** `TELEGRAM_CHANNEL = "on"` in both vars blocks
-   of `wrangler.toml`, in one PR (§4).
+8. **Switch it on** by its own PR, which the owner merges (§4).
 
 ## 2. The automatic check
 
-The webhook refuses any update without the right secret header before it reads
-the body: 503 `not_configured` while the secret is unset, 401 when the header is
-missing or wrong. This is tested on fixtures in
-`cloudflare-worker/test/channels_messaging_d684.test.ts`; no CI job calls
-Telegram. A hand check from any machine:
+`cloudflare-worker/test/telegram_readiness_d868.test.ts` holds the rollout
+gates, on the same harness as WhatsApp's (`_channel_readiness.ts`, D861). Each
+gate runs on an isolated fixture for development, preview and production, and
+each has a source mutation that must make it fail:
+
+- the webhook's secret header is checked before one byte of the body is read:
+  503 `not_configured` while the secret is unset, 401 when it is missing or
+  wrong;
+- an assigned chat's text flows, but no note is queued before the contact's YES;
+- a note over 5 MB is refused, on its declared size before any call and on
+  `getFile`'s size before any download;
+- round videos are refused while `TELEGRAM_VIDEO_NOTES` is off;
+- at most 50 notes a day per connection are transcribed, and a counter that
+  cannot be read refuses;
+- pending chats are purged after 30 days;
+- message text is stored encrypted;
+- `TELEGRAM_CHANNEL`: `canary` (and anything unknown) admits Super Admins only,
+  `off` admits nobody, `on` admits everyone.
+
+It runs in `npm run test:drift` on every PR; no CI job calls Telegram. A hand
+check from any machine:
 
 - an unsigned `POST https://axal.vc/api/channels/telegram/webhook` answers 401
   (503 before the secrets);
@@ -121,7 +155,7 @@ Telegram. A hand check from any machine:
 
 Do it in canary, signed in as a Super Admin, from an account **with** Telegram
 Premium (account 1), with a second Telegram account playing the interviewee
-(account 2). Every step can be checked on `main`.
+(account 2). Every step can be checked on `main` today.
 
 1. **Link.** Account → Connectors → Telegram: press **Link Telegram**. Open the
    `t.me` link on account 1's phone and press Start; send `/confirm` when the
@@ -149,10 +183,10 @@ Premium (account 1), with a second Telegram account playing the interviewee
    notes start to be fetched.
    - Also try the copy path once on another chat: **Copy the notice**, paste it
      yourself from account 1, and reply YES from account 2. It counts the same.
-6. **Audio and speakers** (#1978). On the session's review: the voice
-   note and the audio file play; the transcript shows "Me" and the interviewee
-   by side, never "Speaker ?". The round video is never fetched and reads
-   "Round video messages can't be transcribed yet."
+6. **Audio and speakers.** On the session's review: the voice note and the
+   audio file play; the transcript shows "Me" and the interviewee by side,
+   never "Speaker ?". The round video is never fetched and reads "Round video
+   messages can't be transcribed yet." (D865 changes this line when it merges.)
 7. **STOP.** Reply **STOP** from account 2. See on account 2: "Understood.
    Recording has stopped for this chat. To have what was already recorded
    deleted, just ask me." See in Axal: "Stopped". Send another voice note from
@@ -174,8 +208,24 @@ should, do §1 step 8.
 **Rollout.** `TELEGRAM_CHANNEL` is a wrangler **var**, not a secret, in both
 `[vars]` and `[env.production.vars]`: `"off"`, `"canary"` or `"on"`; absent or
 anything else means `"canary"` (#1950). It ships `"canary"`: only Super Admins
-can link or connect, and members see "Not available yet". After §3 passes, set
-both blocks to `"on"` in one PR; it ships on the next deploy.
+can link or connect, and members see "Not available yet".
+
+**Switching on for every Founder.** Only after §3 has passed and the readiness
+check (§2) is green on `main`:
+
+1. One PR, its own, that changes `TELEGRAM_CHANNEL = "canary"` to `"on"` in
+   both vars blocks of `wrangler.toml` and nothing else. The owner merges it;
+   no task flips it as part of other work.
+2. It ships on the deploy that follows the merge (`documentation/operations/DEPLOY.md`).
+3. **The read-only production check,** within the hour:
+   - the health section on `/admin/telegram` still says ready, with no new
+     delivery error;
+   - signed in as a Founder who is not a Super Admin, Account › Connectors ›
+     Telegram offers **Link Telegram** instead of "Not available yet";
+   - aggregates only, never a chat:
+     `npx wrangler d1 execute studioos-db --remote --env production --command
+     "SELECT provider, status, COUNT(*) AS n FROM channel_threads WHERE provider = 'telegram' GROUP BY provider, status"`.
+4. If any of it is wrong, roll back (below).
 
 **Rolling back.**
 
@@ -189,6 +239,24 @@ both blocks to `"on"` in one PR; it ships on the next deploy.
   `npx wrangler secret delete TELEGRAM_CHANNEL_WEBHOOK_SECRET --env production`.
   The webhook then answers 503 and Telegram retries for a while; to stop the
   retries too, revoke the token in BotFather (`/revoke`).
+
+**An incident** (a leaked token or secret, or a bot acting on chats it should
+not):
+
+1. **Stop deliveries:** `/revoke` the token in BotFather. Nothing new arrives,
+   and every outbound call (`getFile`, replies) fails, so no further note is
+   downloaded.
+2. **Stop the webhook:** `npx wrangler secret delete
+   TELEGRAM_CHANNEL_WEBHOOK_SECRET --env production`. It answers 503 at once.
+3. **Close it to members:** `TELEGRAM_CHANNEL = "off"` by PR and deploy.
+4. **Purge:** pending chats are purged after 30 days by the daily job (03:50
+   UTC, `purgeExpired`). A member's **Disconnect** forgets their pending chats
+   at once. What a member added to an interview stays until the member deletes
+   it, as their own record.
+5. Record what happened on the issue the owner names, with names and counts
+   only: no token, chat id, phone number or message.
+6. To recover: a new bot token and webhook secret (§1 step 2), **Register
+   webhook** (§1 step 3), then `canary` and §3 before `on` again.
 
 **Rotating the webhook secret.** Put the new
 `TELEGRAM_CHANNEL_WEBHOOK_SECRET`, then press **Register webhook** at once.
