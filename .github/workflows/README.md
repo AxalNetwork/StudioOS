@@ -13,6 +13,7 @@ Task #48.
 | `mcp-worker-contracts.yml` | Focused D666/D669 MCP OAuth, real local request/mutation and D681 deployment/branch-isolation contracts; supplements root build and full drift | PR to `main` touching MCP or deployment contracts | none (`contents: read`; local SQLite/KV fixtures) |
 | `record-page-contracts.yml` | D696 renderer, action dispatch and persona export with mutation/restoration, static guards, root build then full drift with explicit exit code | PR to `main` touching record/persona contracts | none (`contents: read`) |
 | `form-lightbox-contracts.yml` | D695 canonical/legacy form and responsive page contracts with modal effects and mutation/restoration; guards, root build then full drift | PR to `main` touching form/lightbox contracts | none (`contents: read`) |
+| `meeting-bot-image.yml` | D886 B8 (#2586): tests the meeting-bot image helper and builds the scratch fixture, plus B2's real image once its Dockerfile exists, without publishing; an owner-triggered run on `main` publishes to GHCR (see "Meeting bot image skeleton" below) | PR to `main` touching the meeting bot or its helper; manual dispatch | none (`GITHUB_TOKEN` with `packages: write` on the manual run only) |
 | `ci.yml` | Frontend build, worker typecheck, API↔Worker drift, dev-backend import smoke, npm + pip audits | push/PR to `main` | none (uses `GITHUB_TOKEN` only) |
 | `meeting-worker-contracts.yml` | Mocked meeting reliability, mutation/restoration and hosted-attach contracts, alongside the full drift gate | PR to `main` touching meeting Worker code or tests | none (`contents: read`) |
 | `build-worker-contracts.yml` | Focused D686 connector, Workspace mapping and local Wrangler D1 tests with mocked provider I/O; supplements the root build and full drift gate | PR to `main` touching the Build Worker contracts | none (`contents: read`; local scratch D1 only) |
@@ -94,3 +95,29 @@ change and the digest may not: Semgrep's image is pulled through
 
 Do NOT use floating refs like `@main`, `:latest`, or unreleased majors
 (e.g. `@v5` for `actions/checkout` doesn't exist as of 2026-05-21).
+
+## Meeting bot image skeleton (#2586, D886 B8)
+
+`meeting-bot-image.yml` tests the image helper and builds a clearly labelled
+scratch fixture on relevant pull requests. When B2 supplies a Dockerfile it
+also builds that real image without publishing. A missing runtime is not a
+successful runtime build: only the fixture is certified until B2 lands.
+
+An owner-triggered run on main builds the actual B2 image first, then uses
+the job-scoped `GITHUB_TOKEN` with `packages: write` to publish to GHCR under
+`ghcr.io/axalnetwork/studioos/meeting-bot:sha-<full-commit>`. The digest is
+recorded in the job summary. PR jobs have read permission only and do not
+log into a registry. No new registry credential is needed. The SHA tag is
+a version label, not a claim that a mutable registry tag cannot be replaced;
+future deployments must pin the published digest.
+
+This is the independent pipeline part only. #2578 still owns the host,
+instance measurements and creation of D886; #2580 owns the runtime image;
+#2579 owns BotRuntime. Worker binding/config changes, start/stop/heartbeat,
+and an image-build gate before migrations in **both** deploy paths wait for
+those contracts. The current Worker deploy is deliberately not changed or
+blocked by a missing bot image. Nothing here turns on meeting capture.
+
+Sources read 22 October 2026:
+[GitHub image publishing](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images),
+[Docker build command](https://docs.docker.com/reference/cli/docker/buildx/build/).
