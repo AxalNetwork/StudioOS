@@ -26,11 +26,25 @@ export function figureText(f) {
   return String(f.value);
 }
 
+/** D882: the states in which the founder's Mercury cannot fill Raise, each said with "Connect Mercury". */
+export const CONNECT_STATES = ['not_connected', 'sign_in_required', 'reconnect'];
+
+/** D882: the part's `connection`, cleaned; the link is kept only when it opens a Connectors page. Null once connected. */
+export function connectionOf(c) {
+  if (!c || typeof c !== 'object' || !CONNECT_STATES.includes(c.state)) return null;
+  const href = typeof c.connect_href === 'string' && c.connect_href.startsWith('/account/connectors/') ? c.connect_href : null;
+  return { state: c.state, sentence: c.sentence || null, link: href ? { href, label: c.connect_label || 'Connect Mercury' } : null };
+}
+
 /** The view a module's part draws: what to list, and whether anything arrived. */
 export function mercuryView(slug, part) {
   if (!part) return { empty: true };
   if (part.state === 'unreadable') return { empty: false, state: 'unreadable', reason: part.reason || 'Unreadable' };
-  const base = { empty: false, state: 'ok', facts: [], proposals: [], figures: [] };
+  if (CONNECT_STATES.includes(part.state)) {
+    const connection = connectionOf(part.connection) ?? { state: part.state, sentence: null, link: null };
+    return { empty: false, state: 'connect', reason: part.reason || connection.sentence || 'Not recorded', connection };
+  }
+  const base = { empty: false, state: 'ok', facts: [], proposals: [], figures: [], connection: connectionOf(part.connection) };
   switch (slug) {
     case 'fundraising-readiness':
       return { ...base, facts: part.runway ? [{ id: part.runway.fact_id, text: part.runway.label, source: part.runway.source, evidence: 'Measured', replaces: part.runway.replaces || null }] : [] };

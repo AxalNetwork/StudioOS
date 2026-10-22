@@ -67,6 +67,7 @@ import {
   AcceptError, RAISE_PART_FOR, acceptRaiseProposal, deleteRaiseFact, dismissRaiseProposal, syncRaise,
 } from '../services/mercury/raiseFeeds';
 import { founderRaiseReads, founderMercuryConnection } from '../services/mercury/raiseAccess';
+import { memberMercury } from '../services/mercury/memberConnection';
 import { isSupportSession } from '../integrations/providers/mercury';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
@@ -144,10 +145,16 @@ cycleRaise.get('/modules/:slug', async (c) => {
   }
   const parts: Record<string, unknown> = slug === 'capital-relationships' ? { calls: await callsHistory(ctx) } : {};
   // The Mercury part fails on its own: an owner check that cannot be read shows no part, never a failed module.
-  const own = await mercuryOwner(c, s).catch(() => null);
-  if (own && !(own instanceof Response)) {
-    try { parts.mercury = { integration_uid: own.uid, ...(await RAISE_PART_FOR[slug](c.env, own.integrationId, s.projectId) as object) }; }
-    catch { parts.mercury = { state: 'unreadable', reason: 'What Mercury fed this module could not be read' }; }
+  // D882: the founder with no usable sign-in reads how to connect, never an empty figure.
+  const founderOnly = await mercuryFounderOnly(c, s).catch(() => undefined);
+  if (founderOnly === null && Object.hasOwn(RAISE_PART_FOR, slug)) {
+    try {
+      const connection = await memberMercury(c.env, Number(s.user.id));
+      const conn = await founderMercuryConnection(c.env, s.user);
+      parts.mercury = !conn
+        ? { state: connection.state, reason: connection.sentence, connection }
+        : { integration_uid: String(conn.uid), connection, ...(await RAISE_PART_FOR[slug](c.env, Number(conn.id), s.projectId) as object) };
+    } catch { parts.mercury = { state: 'unreadable', reason: 'What Mercury fed this module could not be read' }; }
   }
   return c.json({ module: { slug: mod.slug, name: mod.name, records_title: mod.records_title }, card, records,
     ...(Object.keys(parts).length ? { parts } : {}) });
@@ -301,8 +308,8 @@ cycleRaise.put('/prospects/:id/next-step', async (c) => {
 // D840 part 2 — the founder's own Mercury
 // ---------------------------------------------------------------------------
 
-/** The project's own founder, in their active company, outside a support session, with their own connection. */
-async function mercuryOwner(c: any, s: { user: User; projectId: number }): Promise<{ integrationId: number; uid: string } | Response> {
+/** The project's own founder, in their active company, outside a support session: null, or the refusal. */
+async function mercuryFounderOnly(c: any, s: { user: User; projectId: number }): Promise<Response | null> {
   const p = await c.env.DB.prepare('SELECT founder_id, company_id FROM projects WHERE id = ?').bind(s.projectId)
     .first() as { founder_id: number | null; company_id: number | null } | null;
   if (!p || p.founder_id == null || s.user.founder_id == null || Number(s.user.founder_id) !== Number(p.founder_id)) {
@@ -311,6 +318,13 @@ async function mercuryOwner(c: any, s: { user: User; projectId: number }): Promi
   const company = await resolveActiveCompany(c.env, s.user, c.req.header(ACTIVE_COMPANY_HEADER));
   if (!projectInActiveCompany(company, p)) return c.json({ error: 'mercury_owner_only', detail: 'Switch to this startup’s company first.' }, 403);
   if (await isSupportSession(c)) return c.json({ error: 'support_session_refused', detail: 'A support session cannot read a member’s bank account.' }, 403);
+  return null;
+}
+
+/** The project's own founder, as `mercuryFounderOnly`, with their own connection. */
+async function mercuryOwner(c: any, s: { user: User; projectId: number }): Promise<{ integrationId: number; uid: string } | Response> {
+  const refused = await mercuryFounderOnly(c, s);
+  if (refused) return refused;
   const conn = await founderMercuryConnection(c.env, s.user);
   if (!conn) return c.json({ error: 'mercury_not_connected', detail: 'Sign in with Mercury first.' }, 409);
   return { integrationId: Number(conn.id), uid: String(conn.uid) };

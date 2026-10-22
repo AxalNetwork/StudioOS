@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cyclesWrite } from '../../lib/api/cycles';
 import { mercuryView, monthLabel } from './growFromMercury';
+import ConnectMercury from './ConnectMercury';
 
 /**
  * D840 part 3 (#2348) — a Grow module's "From Mercury" part (`id="from-mercury"`),
@@ -49,6 +50,8 @@ export default function GrowFromMercury({ slug, part, projectId, reload }) {
       </div>
       {view.state === 'unreadable' && <p className="m-0 text-[12.5px] text-red-700 dark:text-red-300" data-testid="mercury-unreadable">{view.reason}</p>}
       {(view.state === 'team_only' || view.state === 'not_recorded') && <p className={MUTED} data-testid={`mercury-${view.state}`}>{view.reason}</p>}
+      {view.state === 'connect' && <ConnectMercury reason={view.reason} connection={view.connection} />}
+      {view.state !== 'connect' && view.connection && <ConnectMercury reason={view.connection.sentence} connection={view.connection} />}
       {view.state === 'ok' && slug === 'revenue-and-traction' && (
         <>
           <Rows title="Money in and net burn by month" testid="mercury-months" rows={view.months.map((m) => ({ key: m.id, label: monthLabel(m.month), value: `In ${m.cash_in} · Net burn ${m.net_burn}` }))} />

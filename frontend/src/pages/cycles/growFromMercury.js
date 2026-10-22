@@ -34,15 +34,33 @@ export function runwayText(r) {
   return `${r.months} ${r.months === 1 ? 'month' : 'months'}`;
 }
 
+/** D882: the states in which the founder's Mercury cannot fill Grow, each said with "Connect Mercury". */
+export const CONNECT_STATES = ['not_connected', 'sign_in_required', 'reconnect'];
+
+/**
+ * D882: the part's `connection`, cleaned. `link` is the Connectors page, kept
+ * only when it is one (the founder's own); a teammate gets the sentence alone.
+ * Null once connected.
+ */
+export function connectionOf(c) {
+  if (!c || typeof c !== 'object' || !CONNECT_STATES.includes(c.state)) return null;
+  const href = typeof c.connect_href === 'string' && c.connect_href.startsWith('/account/connectors/') ? c.connect_href : null;
+  return { state: c.state, sentence: c.sentence || null, link: href ? { href, label: c.connect_label || 'Connect Mercury' } : null };
+}
+
 /** The part, cleaned to what the page draws. `empty` is true when there is nothing to draw at all. */
 export function mercuryView(part) {
   if (!part || typeof part !== 'object') return { state: 'none', empty: true };
+  if (CONNECT_STATES.includes(part.state)) {
+    const connection = connectionOf(part.connection) ?? { state: part.state, sentence: null, link: null };
+    return { state: 'connect', empty: false, reason: part.reason || connection.sentence || 'Not recorded', connection };
+  }
   if (part.state === 'unreadable') return { state: 'unreadable', empty: false, reason: part.reason || 'The Mercury figures could not be read.' };
   if (part.state === 'team_only') return { state: 'team_only', empty: false, reason: part.reason || 'Only the venture’s team sees these figures.' };
-  if (part.state === 'not_recorded') return { state: 'not_recorded', empty: false, reason: part.reason || 'Not recorded', canSync: part.can_sync === true };
+  if (part.state === 'not_recorded') return { state: 'not_recorded', empty: false, reason: part.reason || 'Not recorded', canSync: part.can_sync === true, connection: connectionOf(part.connection) };
   if (part.state !== 'ok') return { state: 'none', empty: true };
   return {
-    state: 'ok', empty: false, source: part.source || null, canSync: part.can_sync === true,
+    state: 'ok', empty: false, source: part.source || null, canSync: part.can_sync === true, connection: connectionOf(part.connection),
     months: list(part.months).map((m) => ({ id: m.id, month: m.month, cash_in: money(m.cash_in_cents), net_burn: money(m.net_burn_cents) })),
     invoices: list(part.invoices).map((i) => ({ id: i.id, state: i.state, count: Number.isSafeInteger(i.count) ? i.count : 0, amount: money(i.amount_cents) })),
     invoicesReason: part.invoices_reason || null,
