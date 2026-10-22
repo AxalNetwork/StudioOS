@@ -371,6 +371,10 @@ export type AudioRemovedReason = 'retention' | 'deleted';
  * whatever a row says. `actorUserId` is null for the retention purge.
  */
 export async function deleteSessionAudio(env: Env, session: SessionRow, actorUserId: number | null, reason: AudioRemovedReason): Promise<{ keys: string[] }> {
+  if (env.MEETING_BOT_RUN) {
+    const { stopSessionBot } = await import('./meetingBots');
+    await stopSessionBot(env, session.id, session.created_by_user_id);
+  }
   const keys = (await listChunks(env, session.id)).map((c) => c.r2_key).filter((k) => k.startsWith(AUDIO_PREFIX));
   if (keys.length && env.FILES) {
     for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
@@ -396,6 +400,10 @@ export async function deleteSessionAudio(env: Env, session: SessionRow, actorUse
  * are never deleted, whatever a row says.
  */
 export async function deleteSession(env: Env, session: SessionRow, actorUserId: number): Promise<{ keys: string[] }> {
+  if (env.MEETING_BOT_RUN) {
+    const { stopSessionBot } = await import('./meetingBots');
+    await stopSessionBot(env, session.id, session.created_by_user_id);
+  }
   const keys = (await listChunks(env, session.id)).map((c) => c.r2_key).filter((k) => k.startsWith(AUDIO_PREFIX));
   if (keys.length && env.FILES) {
     for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
@@ -410,7 +418,10 @@ export async function deleteSession(env: Env, session: SessionRow, actorUserId: 
   const findings = (await presentTables(env, ['interview_findings'])).has('interview_findings')
     ? [env.DB.prepare('UPDATE interview_findings SET quote = NULL, cite_from = NULL, cite_to = NULL WHERE session_id = ?').bind(session.id)]
     : [];
+  const botTables = await presentTables(env, ['meeting_bots', 'meeting_bot_events']);
   await env.DB.batch([
+    ...(botTables.has('meeting_bots') && botTables.has('meeting_bot_events') ? [env.DB.prepare('DELETE FROM meeting_bot_events WHERE run_uid IN (SELECT uid FROM meeting_bots WHERE session_id = ?)').bind(session.id)] : []),
+    ...(botTables.has('meeting_bots') ? [env.DB.prepare('DELETE FROM meeting_bots WHERE session_id = ?').bind(session.id)] : []),
     ...findings,
     // D667 — the session's PENDING proposals go with it, whoever proposed
     // them (StudioOS or an assistant): each carries a quote of a transcript

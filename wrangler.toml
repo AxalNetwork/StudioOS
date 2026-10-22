@@ -377,12 +377,20 @@ class_name = "PipelineRoom"
 name       = "ONBOARDING_CHAT"
 class_name = "OnboardingChat"
 
+[[durable_objects.bindings]]
+name       = "MEETING_BOT_RUN"
+class_name = "MeetingBotRun"
+
 [[migrations]]
 tag                = "v1-realtime"
 # Cloudflare requires `new_sqlite_classes` for all newly created Durable
 # Object namespaces (the legacy `new_classes` is no longer accepted).
 # SQLite-backed storage is the default and only supported mode going forward.
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[migrations]]
+tag = "v2-meeting-bot"
+new_sqlite_classes = ["MeetingBotRun"]
 
 # ---------- Vectorize (semantic search) ----------
 # Index `axal-search` (768-dim, cosine) backs the global search bar on the
@@ -665,9 +673,17 @@ class_name = "PipelineRoom"
 name       = "ONBOARDING_CHAT"
 class_name = "OnboardingChat"
 
+[[env.production.durable_objects.bindings]]
+name       = "MEETING_BOT_RUN"
+class_name = "MeetingBotRun"
+
 [[env.production.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[env.production.migrations]]
+tag = "v2-meeting-bot"
+new_sqlite_classes = ["MeetingBotRun"]
 
 [[env.production.vectorize]]
 binding    = "VECTORIZE"
@@ -825,9 +841,17 @@ class_name = "PipelineRoom"
 name       = "ONBOARDING_CHAT"
 class_name = "OnboardingChat"
 
+[[env.preview.durable_objects.bindings]]
+name       = "MEETING_BOT_RUN"
+class_name = "MeetingBotRun"
+
 [[env.preview.migrations]]
 tag                = "v1-realtime"
 new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
+
+[[env.preview.migrations]]
+tag = "v2-meeting-bot"
+new_sqlite_classes = ["MeetingBotRun"]
 
 [[env.preview.r2_buckets]]
 binding     = "FILES"

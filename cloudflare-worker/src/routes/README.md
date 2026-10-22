@@ -241,3 +241,10 @@ D691 (#1696): Grow obligation routes use the production `compliance_events`
 columns (`due_date`, `completion_status`), translate the existing API keys in
 TypeScript, require a due date and record manual provenance and the entity’s
 jurisdiction. Duplicate event/date writes return 409.
+
+D886 B1 (#2579): `meeting_bot_callbacks.ts`, mounted at `/api/meeting-bots`,
+accepts bounded HMAC-authenticated events and one-use audio uploads, then forwards
+them to `MeetingBotRun`. It uses no member session or provider credential.
+`founder_validate_sessions.ts` supplies the authenticated creator-only dispatch,
+status and stop routes; consent withdrawal and deletion stop the bot too.
+See D886 §12 for the concrete contract and feature gates.
