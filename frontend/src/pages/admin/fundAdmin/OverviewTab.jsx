@@ -1,6 +1,6 @@
 import { Pill, Unrecorded, Unreadable } from '../../../ui';
 import { BTN, LoadingRows } from '../../account/AccountCenter';
-import { entityErrorWords, entityState } from '../../account/mercuryModel';
+import { entityErrorWords, entityState } from './mercuryEntityModel';
 import { ending, money } from './fundAdminModel';
 import { Line, NUM, Note, Panel, Section, TH, Table } from './parts';
 
