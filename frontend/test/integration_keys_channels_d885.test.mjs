@@ -75,7 +75,7 @@ test('the section: each channel with its secrets\' state, webhook, rollout and r
   assert.match(html, /data-testid="channel-key-secret-WHATSAPP_APP_ID".*?>Set</);
   assert.match(html, /data-testid="channel-key-secret-WHATSAPP_APP_SECRET".*?>Not set</);
   assert.match(html, /WHATSAPP_AXAL_DISPLAY_NUMBER<\/code><span[^>]*>Not set · set in wrangler.toml by a PR/);
-  assert.ok(html.includes('https://axal.vc/api/channels/whatsapp/webhook'));
+  assert.match(html, /data-testid="channel-key-webhook-whatsapp".*?<code[^>]*>https:\/\/axal\.vc\/api\/channels\/whatsapp\/webhook<\/code>/);
   assert.match(html, /The public base URL is not set, so there is no webhook address to register\./);
   assert.match(html, /href="\/admin\/telegram"/);
   assert.match(html, /href="https:\/\/github.com\/AxalNetwork\/StudioOS\/blob\/main\/documentation\/operations\/WHATSAPP.md"/);
