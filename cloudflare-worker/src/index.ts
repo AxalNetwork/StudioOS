@@ -340,6 +340,7 @@ import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 import connectorsHealth from './routes/connectors_health';
+import connectorsCustomRoutes from './routes/connectors_custom';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
 import adminFundStructure from './routes/admin_fund_structure';
@@ -1237,6 +1238,8 @@ app.route('/api/settings', settings);
 app.route('/api/connectors/assistants', assistantGrants);
 // D848 (#2469): the member's connections and their health, ahead of `/:key`.
 app.route('/api/connectors/health', connectorsHealth);
+// D852 (#2475): a member's own remote MCP servers, behind CUSTOM_MCP_ENABLED; ahead of the connectors router.
+app.route('/api/connectors/custom', connectorsCustomRoutes);
 app.route('/api/mcp/consent', mcpConsent);
 // D841 (#2464): a member's own API keys for /mcp, behind API_KEYS_ENABLED.
 app.route('/api/developer/keys', developerKeys);
