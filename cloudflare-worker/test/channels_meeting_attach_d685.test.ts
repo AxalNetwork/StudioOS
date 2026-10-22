@@ -60,7 +60,7 @@ function world() {
   for (const name of ['106_pain_groups.sql', '211_founder_validate_evidence.sql', '214_validate_proposals.sql',
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
-    '449_interview_channels.sql', '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
+    '449_interview_channels.sql', '529_meeting_transcript_source.sql', '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     '488_channel_consents.sql']) db.exec(migration(name));
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
