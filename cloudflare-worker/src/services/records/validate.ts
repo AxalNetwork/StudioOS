@@ -629,6 +629,9 @@ const customerResearch: ModuleSpec = {
         };
       },
     },
+    // D859 (#2504): the follow-ups and prototype asks accepted from this conversation.
+    findingsSection('findings', 'From this conversation', findingKindsOf('customer-research'), 'No follow-up or prototype ask accepted from this interview yet.',
+      async (ctx, id) => ({ interviewId: Number((await loadInterview(ctx, id)).iv.id) })),
     {
       key: 'cost', title: 'Cost', side: true, gate: 'write',
       read: async (ctx, id) => {

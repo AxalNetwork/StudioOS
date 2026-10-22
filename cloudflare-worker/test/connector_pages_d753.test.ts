@@ -482,3 +482,28 @@ test('15. the module imports only ./registry and fetches nothing', () => {
   const exported = [...src.matchAll(/^export (?:const|function|type|interface) (\w+)/gm)].map((m) => m[1]).sort();
   assert.deepEqual(named, exported, 'registry.ts re-exports a different list than connectorPages.ts exports');
 });
+
+// D861 / D860: the public description follows the shipped closed calling path.
+test('16. WhatsApp Calls copy keeps coexistence closed and recorder consent explicit', () => {
+  const check = (description: string[]) => {
+    const lines = description.filter((line) => line.startsWith('Calls'));
+    assert.equal(lines.length, 1, 'one Calls statement');
+    assert.match(lines[0], /Calls stay closed on numbers connected through the WhatsApp Business app\./);
+    assert.match(lines[0], /Axal does not answer or place WhatsApp calls/);
+    assert.match(lines[0], /in-app recorder with everyone’s consent/);
+  };
+  const description = CHANNEL_PAGES.whatsapp.long_description;
+  check(description);
+  // Isolated copy mutations: each promise must fail if removed or inverted.
+  for (const [before, after] of [
+    ['Calls stay closed', 'Calls are available'],
+    ['Axal does not answer or place', 'Axal answers and places'],
+    ['with everyone’s consent', 'automatically'],
+  ]) {
+    const changed = description.map((line) => line.replace(before, after));
+    assert.throws(() => check(changed), assert.AssertionError);
+  }
+  assert.throws(() => check(description.filter((line) => !line.startsWith('Calls'))), assert.AssertionError);
+  assert.throws(() => check([...description, description.find((line) => line.startsWith('Calls'))!]), assert.AssertionError);
+  check(description);
+});

@@ -32,6 +32,7 @@ import { Jobs } from '../src/models/jobs.ts';
 import { PROCESS_JOB } from '../src/services/interviewProcessing.ts';
 
 import { withGuard } from './_guard_stub.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 const FOUNDER = 2;
@@ -52,6 +53,7 @@ function world() {
     INSERT INTO discovery_interviews (id, project_id, interviewee_name) VALUES (1, 10, 'Dana');
   `);
   db.exec(mig('438_interview_sessions.sql'));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   db.exec('ALTER TABLE interview_sessions ADD COLUMN submitted_via TEXT');
   db.exec(mig('452_record_session_setup.sql'));
   db.exec(mig('453_interview_processing.sql'));

@@ -502,7 +502,8 @@ test('15 · all models: the canvas\'s groups in order, only the non-empty ones, 
   const answer = railAnswer('Founder · Validate · Problem discovery');
   const v = railView({ reading: { loading: false, data: answer }, page: answer.page });
   const titles = v.groups.map((g) => g.title);
-  assert.deepEqual(titles, ['Conversation and writing', 'Reasoning', 'Code', 'Reading images and files', 'Search and ranking', 'Speech to text', 'Images', 'Safety']);
+  // D857: Languages has rows now, m2m100 and IndicTrans2 being translate_segment's models.
+  assert.deepEqual(titles, ['Conversation and writing', 'Reasoning', 'Code', 'Reading images and files', 'Search and ranking', 'Languages', 'Speech to text', 'Images', 'Safety']);
   const chips = v.groups.flatMap((g) => g.chips);
   const guard = chips.filter((c) => c.id === GUARD);
   assert.equal(guard.length, 1, 'Llama Guard is not listed once, under Safety');

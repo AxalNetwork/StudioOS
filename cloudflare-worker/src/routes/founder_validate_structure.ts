@@ -151,6 +151,8 @@ export async function storePlacements(
     model: string;
     placements: readonly Placement[];
     dedupe?: boolean;
+    /** The router task that proposed them (D859's extraction names its own); structuring's when absent. */
+    task?: 'structure_interview' | 'extract_conversation_items';
   },
 ): Promise<{ stored: number; deduped: number }> {
   let placements = opts.placements;
@@ -174,11 +176,15 @@ export async function storePlacements(
     `INSERT INTO validate_proposals
        (project_id, kind, payload_json, model, task, created_by, surface, fill_class,
         citation_json, target_ref, session_id, cite_from, cite_to, run_id)
-     SELECT ?, ?, ?, ?, 'structure_interview', ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?
+     SELECT ?, ?, ?, ?, ?, ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?
       WHERE NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined')`,
   ).bind(
-    opts.projectId, p.kind, JSON.stringify(p.payload), opts.model, opts.userId,
-    JSON.stringify({ kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote }),
+    opts.projectId, p.kind, JSON.stringify(p.payload), opts.model, opts.task ?? 'structure_interview', opts.userId,
+    JSON.stringify({
+      kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote,
+      // D857: the run read a translation; the customer's own words and their language stay beside it.
+      ...(p.quoteOriginal ? { quote_original: p.quoteOriginal } : {}), ...(p.sourceLang ? { source_lang: p.sourceLang } : {}),
+    }),
     `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId, opts.sessionId,
   )));
   return { stored: written.reduce((n, r) => n + Number(r.meta?.changes ?? 0), 0), deduped };
