@@ -16,20 +16,22 @@ const renderPage = (Page, props = {}, url = '/privacy/interviews') => renderToSt
 const plain = (html) => html.replace(/<[^>]*>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
 function checkNotice(api) {
-  assert.deepEqual([api.MEETING_BOT_NAME, api.MEETING_BOT_NOTICE_VERSION, api.MEETING_BOT_NOTICE_PATH], ['Eadwyn AI', 1, '/privacy/interviews']);
-  const message = api.meetingBotNotice({ ventureName: 'Example venture' });
+  assert.deepEqual([api.MEETING_BOT_NAME, api.MEETING_BOT_NOTICE_VERSION, api.MEETING_BOT_NOTICE_PATH], ['Eadwyn AI', 2, '/privacy/interviews']);
+  assert.equal(api.MEETING_BOT_NOTICE_PUBLISHED, false);
+  assert.throws(() => api.meetingBotNotice({ get ventureName() { throw new Error('synthetic private data'); } }), /privacy notice is not published/);
+  const message = api.draftMeetingBotNotice({ ventureName: 'Example venture' });
   assert.equal(message, 'I’m Eadwyn AI, Axal’s meeting bot, here for the venture "Example venture". '
     + 'This call is being recorded and transcribed for customer research, including participant display names and who spoke when. '
     + 'Tell the founder if you want recording to stop or ask them to delete the recording and transcript. '
-    + 'How it works: https://axal.vc/privacy/interviews');
-  assert.equal(api.meetingBotNotice(), api.meetingBotNotice({ ventureName: null }));
-  assert.match(api.meetingBotNotice({ ventureName: {} }), /here for the venture that invited me\./);
-  assert.match(api.meetingBotNotice({ ventureName: '  Example\n   venture\u202e  ' }), /here for the venture "Example venture"\./);
-  assert.match(api.meetingBotNotice({ ventureName: 'x'.repeat(200) }), /here for the venture "x{80}"\./);
-  assert.match(api.meetingBotNotice({ ventureName: 'x'.repeat(79) + '😀Y' }), /x{79}😀"\./);
-  assert.ok(api.meetingBotNotice({ ventureName: '\ud800' }).includes('\ufffd'));
-  assert.match(api.meetingBotNotice({ ventureName: 'Example\u061c\u200b\u200f\ufeff venture' }), /the venture "Example venture"\./);
-  assert.ok(api.meetingBotNotice({ ventureName: 'Example "venture"' }).includes('the venture "Example \\"venture\\"".'));
+    + 'How it works: https://axal.vc/privacy/interviews?n=2');
+  assert.equal(api.draftMeetingBotNotice(), api.draftMeetingBotNotice({ ventureName: null }));
+  assert.match(api.draftMeetingBotNotice({ ventureName: {} }), /here for the venture that invited me\./);
+  assert.match(api.draftMeetingBotNotice({ ventureName: '  Example\n   venture\u202e  ' }), /here for the venture "Example venture"\./);
+  assert.match(api.draftMeetingBotNotice({ ventureName: 'x'.repeat(200) }), /here for the venture "x{80}"\./);
+  assert.match(api.draftMeetingBotNotice({ ventureName: 'x'.repeat(79) + '😀Y' }), /x{79}😀"\./);
+  assert.ok(api.draftMeetingBotNotice({ ventureName: '\ud800' }).includes('\ufffd'));
+  assert.match(api.draftMeetingBotNotice({ ventureName: 'Example\u061c\u200b\u200f\ufeff venture' }), /the venture "Example venture"\./);
+  assert.ok(api.draftMeetingBotNotice({ ventureName: 'Example "venture"' }).includes('the venture "Example \\"venture\\"".'));
   assert.equal(api.MEETING_BOT_DISPATCH_DISCLOSURE, 'Eadwyn AI will join as a visible participant in the call.');
 }
 
@@ -89,7 +91,9 @@ test('the documented audio default matches D877; the bot switch is explicit in e
 test('notice assertions reject wording, attribution and normalization regressions in isolation', async () => {
   await mutationCheck(read('meeting-bot/notice.mjs'), '../../meeting-bot/notice.mjs', checkNotice, [
     ["MEETING_BOT_NAME = 'Eadwyn AI'", "MEETING_BOT_NAME = 'Other bot'"],
-    ['MEETING_BOT_NOTICE_VERSION = 1', 'MEETING_BOT_NOTICE_VERSION = 2'],
+    ['MEETING_BOT_NOTICE_VERSION = 2', 'MEETING_BOT_NOTICE_VERSION = 3'],
+    ['MEETING_BOT_NOTICE_PUBLISHED = false', 'MEETING_BOT_NOTICE_PUBLISHED = true'],
+    ["if (!MEETING_BOT_NOTICE_PUBLISHED) throw new Error('The meeting bot privacy notice is not published.');", ''],
     ["MEETING_BOT_NOTICE_PATH = '/privacy/interviews'", "MEETING_BOT_NOTICE_PATH = '/privacy'"],
     ['here for ${venture}', 'here for the founder'],
     ['recorded and transcribed', 'recorded'],
@@ -105,6 +109,14 @@ test('notice assertions reject wording, attribution and normalization regression
     ['.slice(0, 80)', '.slice(0, 200)'],
     ['will join as a visible participant', 'might work in the background'],
   ]);
+});
+
+test('explicit publication enables the runtime notice; dropping the handoff is caught', async () => {
+  const published = read('meeting-bot/notice.mjs').replace('MEETING_BOT_NOTICE_PUBLISHED = false', 'MEETING_BOT_NOTICE_PUBLISHED = true');
+  await mutationCheck(published, '../../meeting-bot/notice.mjs', (api) => {
+    assert.equal(api.MEETING_BOT_NOTICE_PUBLISHED, true);
+    assert.equal(api.meetingBotNotice({ ventureName: 'Example venture' }), api.draftMeetingBotNotice({ ventureName: 'Example venture' }));
+  }, [['return draftMeetingBotNotice(input);', 'return undefined;']]);
 });
 
 test('page assertions reject missing notice, retention and deletion disclosures', async () => {

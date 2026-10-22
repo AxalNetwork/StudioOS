@@ -8,8 +8,16 @@ choosing a host before that study lands.
 `notice.mjs` is B9's dependency-free notice contract. Import `meetingBotNotice`
 and `MEETING_BOT_NAME` from it. The caller supplies the authorized venture's
 display name, never a meeting link, passcode or instructions from chat.
-The notice returns plain text. B2 posts it once after admission and before
-capturing audio. B2 owns the durable once-only record, failure handling and
+The gated function refuses while `MEETING_BOT_NOTICE_PUBLISHED` is false.
+The public page uses that same publication gate. The announcement links to
+the matching notice version, not the default legacy page. B1 must refuse
+dispatch and scheduled starts while this gate is false, even in canary.
+`draftMeetingBotNotice` is for tests and approval previews only; it is never
+the runtime entry. Publishing requires B1/B2/B6 safeguards and the page's
+notice-version contract to be verified together.
+
+After publication the notice returns plain text. B2 posts it once after
+admission and before capturing audio. B2 owns the durable once-only record, failure handling and
 the stop/leave behavior; importing this module implements none of those.
 
 The founder has already confirmed recording consent before dispatch. The

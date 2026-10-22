@@ -18,6 +18,10 @@ of a roster, transcript, credential or signed callback.
 B1 (#2579) owns these checks on both immediate and scheduled runs. Changing
 the var alone does not install the control plane or runtime. It also does
 not prove that an already running bot has left; §6 requires Stop separately.
+`canary` is the issue's configured default, not permission to skip readiness:
+B1 must also refuse dispatch and scheduled starts while the shared
+`MEETING_BOT_NOTICE_PUBLISHED` gate is false. B2's `meetingBotNotice` refuses
+to supply an announcement in that state, before any audio is captured.
 
 Before expanding access, confirm B0's runtime choice and cost measurement,
 B1's dispatch/callback enforcement, B2's lifecycle and notice, all three
@@ -58,9 +62,10 @@ Phone participants and hidden chat panels need the founder's spoken notice.
 
 `/privacy/interviews` keeps its current version 1 unchanged. The bot text
 is prepared as `MEETING_BOT_INTERVIEW_NOTICE`, candidate version 2, outside
-the live version map; even `?n=2` cannot publish it. After the checks above
-pass, publish version 2 by updating the version map and the notice version
-contract, retaining version 1 for old consent links. The candidate has no
+the live version map; even `?n=2` cannot publish it. The runtime's gated
+announcement also names version 2 and links with `?n=2`. After the checks above
+pass, publish it through the shared publication switch and update the page's
+notice-version contract, retaining version 1 for old consent links. The candidate has no
 invented approval date or contact address. This change creates no
 owner/counsel publication record.
 

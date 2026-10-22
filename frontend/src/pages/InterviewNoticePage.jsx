@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import LegalDocument from './site/LegalDocument';
 import { INTERVIEW_CONTACT_EMAIL, INTERVIEW_NOTICE_PATH, INTERVIEW_NOTICE_VERSION, noticeVersionFrom } from '../lib/interviewNotice';
+import { MEETING_BOT_NOTICE_PUBLISHED, MEETING_BOT_NOTICE_VERSION } from '../../../meeting-bot/notice.mjs';
 
 /**
  * `/privacy/interviews` — what a person a founder interviews through Axal VC
@@ -136,6 +137,9 @@ export const MEETING_BOT_INTERVIEW_NOTICE = {
     return section;
   }),
 };
+
+// One publication switch for both the runtime announcement and its linked page.
+if (MEETING_BOT_NOTICE_PUBLISHED) INTERVIEW_NOTICES[MEETING_BOT_NOTICE_VERSION] = MEETING_BOT_INTERVIEW_NOTICE;
 
 export default function InterviewNoticePage({ contactEmail = INTERVIEW_CONTACT_EMAIL, notices = INTERVIEW_NOTICES, current = INTERVIEW_NOTICE_VERSION }) {
   const [params] = useSearchParams();
