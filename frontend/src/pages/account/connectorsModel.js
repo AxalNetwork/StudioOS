@@ -26,7 +26,7 @@ export const PAGE_SIZE = 10;
 
 /**
  * D715 (#1780) decision 9: a member's own Mercury, the `mercury` row the
- * Worker serves a founder, a partner or, on HQ, an investor. It reads only
+ * Worker serves a founder, a partner or (D884, on HQ or in a branch) an investor. It reads only
  * when asked and never syncs, so its words differ from every other
  * connector's. D880 (#2553): it is the only Mercury row a member page draws;
  * Axal VC's own accounts are HQ's.

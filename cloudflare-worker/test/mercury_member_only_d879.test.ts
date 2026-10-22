@@ -178,11 +178,12 @@ test('a founder\'s card and page declare Grow and Raise: used_by, feeds and pull
     assert.deepEqual(entry.feed_modules.map((f: any) => f.href.split('/')[1]).filter((x: string, i: number, a: string[]) => a.indexOf(x) === i).sort(), ['grow', 'raise'], path);
     assert.equal(entry.pulls.length, founderFeeds.length, path);
   }
-  // A partner's and an investor's cards claim neither Grow nor Raise.
-  for (const role of ['partner', 'investor']) {
-    const own = mercuryOf(await call(db, role, 'GET', '/available'));
-    assert.deepEqual([own.used_by, own.pulls], [[], []], role);
-  }
+  // A partner's card claims neither Grow nor Raise. D884 (#2557): an investor's claims its own Deals and Fund sections, never Grow or Raise.
+  const partner = mercuryOf(await call(db, 'partner', 'GET', '/available'));
+  assert.deepEqual([partner.used_by, partner.pulls], [[], []], 'partner');
+  const investor = mercuryOf(await call(db, 'investor', 'GET', '/available'));
+  assert.ok(investor.used_by.length > 0 && investor.used_by.every((u: any) => /^\/(deals|funds)\//.test(u.href)), JSON.stringify(investor.used_by));
+  assert.ok(!investor.used_by.some((u: any) => u.href === '/grow' || u.href === '/raise'), 'never Grow or Raise');
   // The registry row describes a member's own Mercury, read through its sign-in.
   const row = getDescriptor('mercury')!;
   assert.match(row.description, /^Your own Mercury account, read-only, through Mercury’s own sign-in/);

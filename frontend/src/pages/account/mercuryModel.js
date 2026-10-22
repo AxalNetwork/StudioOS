@@ -184,7 +184,8 @@ const FOUNDER_PARTNER_DISCONNECT = 'Revenue rows you imported and matches you co
 export const MEMBER_DISCONNECT_NOTE = Object.freeze({
   founder: 'Revenue rows you imported, figures you saved and matches you confirmed stay. The stored token is deleted. Delete it in Mercury too.',
   partner: FOUNDER_PARTNER_DISCONNECT,
-  investor: 'Statements you shared stay with Axal\'s admins until you revoke them: disconnecting does not revoke them. The stored token is deleted. Delete it in Mercury too.',
+  // D884 (#2557): an investor connects by signing in with Mercury, so it is the sign-in that is revoked.
+  investor: 'Statements you shared stay with Axal\'s admins until you revoke them: disconnecting does not revoke them. Capacity, proposals and entries you accepted stay. Your Mercury sign-in is revoked.',
 });
 
 /** The role's disconnect note, else the founder's. */

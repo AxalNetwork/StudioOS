@@ -509,6 +509,24 @@ export interface PersonalMercuryVariant {
   /** Exactly one sentence, as every `api_key` row has (`connectors_d650.test.ts`). */
   permissions: string[];
   feeds: string[];
+  /** D884 (#2557): what the card says it pulls, and the sections it links to. Absent, the card claims none. */
+  pulls?: Array<{ what: string; module: string }>;
+  used_by?: Array<{ label: string; href: string }>;
+}
+
+/**
+ * D884 (#2557): a role's Mercury sections as the card names them, from
+ * `MERCURY_FEEDS` itself and in its order: what each pulls, and a link to each
+ * section that has a page. Proof of funds has no module, so it is neither.
+ */
+export function mercuryPulls(role: string): Array<{ what: string; module: string }> {
+  return MERCURY_FEEDS.filter((f) => f.role === role && f.module !== null).map((f) => ({ what: f.what, module: f.module! }));
+}
+export function mercuryUsedBy(role: string): Array<{ label: string; href: string }> {
+  return mercuryFedModules(role).flatMap((m) => {
+    const href = moduleHref(m);
+    return href ? [{ label: MODULE_LABELS[m] ?? m, href }] : [];
+  });
 }
 
 export type PersonalMercuryRole = 'founder' | 'partner' | 'investor';
@@ -544,6 +562,9 @@ export const PERSONAL_MERCURY: Readonly<Record<PersonalMercuryRole, Readonly<Per
     permissions: ['Read your Mercury account names, last four digits, available balances, transactions and statements for your own sections; only you see a balance, and it never sends, transfers or requests money.'],
     // D840 part 4 (#2349), D884 (#2557): the investor's sections, read from `mercuryFeeds.ts` itself.
     feeds: mercuryFedModules('investor'),
+    // D884 PR 2: Deals first, then Fund, each a link to its section.
+    pulls: mercuryPulls('investor'),
+    used_by: mercuryUsedBy('investor'),
   }),
 });
 
@@ -738,8 +759,9 @@ export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewe
     has_implementation: PROVIDER_IMPLS.has(p.key) && !(p.key === 'mercury' && audience !== 'personal'),
     ...CONNECTOR_METADATA[p.key],
     ...(variant ? { permissions: [...variant.permissions] } : {}),
-    // D879: the catalogue's pulls and `used_by` are the founder's Grow and Raise; a partner's or investor's card claims neither.
-    ...(variant && variant !== PERSONAL_MERCURY.founder ? { pulls: [], used_by: [] } : {}),
+    // D879: the catalogue's pulls and `used_by` are the founder's Grow and Raise; a partner's card claims neither.
+    // D884 (#2557): an investor's card claims its own sections, from `MERCURY_FEEDS`.
+    ...(variant && variant !== PERSONAL_MERCURY.founder ? { pulls: [...(variant.pulls ?? [])], used_by: [...(variant.used_by ?? [])] } : {}),
     ...(p.key === 'zoom' ? { distribution: zoomDistribution(env?.ZOOM_APP_AUDIENCE) } : {}),
     feeds,
     feed_modules: feeds.map(key => ({ key, label: MODULE_LABELS[key] ?? key, href: moduleHref(key) })),

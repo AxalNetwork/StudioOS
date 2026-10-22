@@ -24,8 +24,8 @@ import { Hono } from 'hono';
 import { tableFromBaseline } from './_baseline.mjs';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { createMercuryInvestor, type OpenInvestorMercury } from '../src/routes/mercury_investor.ts';
-import { INVESTOR_LANDS, mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
-import { PERSONAL_MERCURY, audienceFor, connectorFeeds, getDescriptor } from '../src/integrations/registry.ts';
+import { INVESTOR_LANDS, MERCURY_FEEDS, mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
+import { PERSONAL_MERCURY, audienceFor, connectorFeeds, getDescriptor, publicDescriptor } from '../src/integrations/registry.ts';
 import { pageDescriptor } from '../src/integrations/connectorPages.ts';
 import { HQ_ONLY_USES, PERSONAL_USES } from '../src/services/mercuryPersonal.ts';
 import { PIPELINE_DEAL_STATUSES } from '../src/services/mercury/investorFeeds.ts';
@@ -140,4 +140,38 @@ test('availability A: an investor has their own Mercury and its page on HQ and i
   }
   assert.ok(PERSONAL_USES.investor.length > 0 && PERSONAL_USES.investor.every((u) => HQ_ONLY_USES.includes(u)), 'every investor proof-of-funds use is HQ-only');
   assert.ok(HQ_ONLY_USES.includes('capital_attestation'));
+});
+
+test('PR 2: the investor card links each section it fills, Deals first, all from MERCURY_FEEDS; a partner card links none', () => {
+  // Mutation checked: used_by back to [] for the investor → the first deepEqual fails; pulls not filtered by module → the pulls deepEqual fails.
+  const mercury = getDescriptor('mercury')!;
+  for (const hq of [true, false]) {
+    const card: any = publicDescriptor(mercury, { role: 'investor', hq, venture: false });
+    assert.deepEqual(card.used_by, [
+      { label: 'Deals · Pipeline', href: '/deals/pipeline' },
+      { label: 'Deals · Commit', href: '/deals/commit' },
+      { label: 'Deals · Closing', href: '/deals/closing' },
+      { label: 'Fund · Calls', href: '/funds/calls' },
+      { label: 'Fund · Accounting', href: '/funds/ledger' },
+      { label: 'Fund · Reporting', href: '/funds/reporting' },
+    ], `hq=${hq}`);
+    assert.deepEqual(card.pulls, MERCURY_FEEDS.filter((f) => f.role === 'investor' && f.module).map((f) => ({ what: f.what, module: f.module })));
+    assert.deepEqual(card.used_by.map((u: any) => u.href.split('/').pop()), card.feeds.map((m: string) => m.split('_')[1]),
+      'one link per fed section, in the same order');
+  }
+  const partner: any = publicDescriptor(mercury, { role: 'partner', hq: true, venture: false });
+  assert.deepEqual([partner.used_by, partner.pulls], [[], []]);
+});
+
+test('PR 2: the investor page signs in with Mercury only, says what it reads, leads with Deals and lists proof of funds last', () => {
+  // Mutation checked: the Deals paragraph without its lead → the order assertion fails; a token line put back → the token assertion fails.
+  const page = pageDescriptor(getDescriptor('mercury')!, { role: 'investor', hq: false, venture: false } as any)!;
+  assert.deepEqual(page.sign_in, { kind: 'mcp', label: 'Sign in with Mercury', key_help_href: null });
+  const [reads, deals, fund] = page.long_description;
+  assert.match(reads, /names, kinds and last four digits/);
+  assert.match(reads, /A balance is shown to you alone/);
+  assert.match(deals, /^Deals first\. Deals › Pipeline .* Deals › Commit .* Deals › Closing /);
+  assert.match(fund, /^Then Fund › Calls, Accounting and Reporting/);
+  assert.match(fund, /proof of funds: Axal’s admins see only a dated statement .* never a balance\.$/);
+  assert.ok(!/token/i.test(JSON.stringify(page.long_description)), 'no token is offered to a member (D881)');
 });
