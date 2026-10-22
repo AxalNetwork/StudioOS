@@ -191,12 +191,25 @@ one updates this section in the same PR.
   - result: `outcome('ok'|'refused'|'error'|'rate_limited'|'insufficient_tokens'), http_status|null, error_category|null, duration_ms`;
   - money: `reservation_uid|null, reserved_microusd|null, charged_microusd|null, refunded_microusd|null, provider_cost_microusd|null`;
   - units: `input_tokens|null, output_tokens|null, units_json|null, pricing_version|null, created_at`.
-- **`GET /api/developer/usage`** takes
-  `?from&to&group=day|key|provider|connector|tool|model&key=&cursor=` and
-  returns `{ recorded, totals: { calls, ok, errors, charged_microusd|null }, groups: [ { key, label, calls, errors, charged_microusd|null, p50_ms|null } ], next_cursor }`.
-- **`GET /api/developer/usage/events`** takes `?key=&cursor=` and returns a
-  page of rows, without arguments or results. Org reports wait on the admin
-  scope decision (#2459 decision 3).
+  - As built by D843 (migration 524), the row has `id, execution_id, user_id, api_key_uid, grant_id, client, company_id, surface, operation, outcome('ok'|'refused'|'error'|'rate_limited'), error_category, duration_ms, reservation_uid, held_microusd, charged_microusd, model, provider, connector, created_at`. `insufficient_tokens` is an `error_category`, and the reports read it as a result of its own. The other columns above are not built, and the reports take refunds from the hold.
+- **The reports** (D845; `routes/developer_usage.ts`, client `frontend/src/lib/api/developerUsage.js`). They read the session's own rows only. Ranges are UTC days, both ends included, at most 92, and the last 30 by default.
+  - `Stats = { calls, ok, errors, refused, rate_limited, insufficient_tokens, error, charged_microusd|null, refunded_microusd|null, metered_calls, p50_ms|null }`.
+    - `errors` is the sum of the four failure counts.
+    - A charge is the settled hold's, else the row's own, and NULL when neither is known.
+    - `p50_ms` is NULL under 5 calls.
+  - **`GET /api/developer/usage`** takes `?from&to&group=day|key|provider|connector|tool|model&by=key|provider|connector|tool&key=&cursor=`. `by` works with `group=day` only.
+    - It returns `{ recorded, recorded_since, range: {from,to}, group, by, key, totals: Stats, groups: [ { key, label, by_key?, by_label?, ...Stats } ], next_cursor }`.
+    - Totals cover the whole range and equal the sum of the groups.
+    - Groups come 100 a page.
+    - A key's label is its name.
+  - **`GET /api/developer/usage/events`** takes `?from&to&key&outcome&surface&operation&provider&connector&company&cursor`.
+    - It returns `{ range, events: [ { execution_id, created_at, surface, operation, outcome, error_category, duration_ms, api_key_uid, grant_id, client, company_id, model, provider, connector, reservation_uid, reserved_microusd|null, charged_microusd|null, refunded_microusd|null } ], next_cursor }`.
+    - Events are newest first, 100 a page, on an opaque `(created_at, id)` cursor.
+    - No event carries an argument or a result.
+  - **`GET /api/developer/usage/keys`** takes `?month=YYYY-MM` and returns `{ month, near_limit_percent: 80, keys: [ { uid, name, key_id, live, expires_at, revoked_at, monthly_limit_microusd|null, calls, charged_microusd|null, metered_calls, used_percent|null, alert: 'near_limit'|'at_limit'|null } ] }`. It reports only; #2472 enforces.
+  - **Refusals:** `400` with `invalid_from`, `invalid_to`, `invalid_range`, `range_too_long`, `invalid_group`, `invalid_by`, `invalid_outcome`, `invalid_surface`, `invalid_company`, `invalid_cursor` or `invalid_month`. A `key=` that is not one of the member's keys gets `404 unknown_key`.
+  - **No `provider_cost_microusd`** in any member response.
+  - **Org reports** wait on the admin scope decision (#2459 decision 3).
 
 ### Contract additions from the UI issues (#2479–#2482), and who builds each
 
@@ -207,7 +220,7 @@ one updates this section in the same PR.
 | Assistant grants list gains `scopes[]`, `companies[].still_owned` and `last_call_at` | #2467 (D846) |
 | Key `PATCH`, `still_owned`, scope labels, refusal codes, the 25-key cap | #2464 (D841), done |
 | `/usage/events` filters `from, to, outcome, surface, operation, provider, connector, company`; `grant_id`; the fixed `error_category` list | #2465 (D843) and #2471 (D845) |
-| Report totals split `refused / rate_limited / insufficient_tokens / error`; `refunded_microusd`; `group=day&by=key` two-way grouping; `recorded_since`; `provider_cost_microusd` hidden from members | #2471 (D845) |
+| Report totals split `refused / rate_limited / insufficient_tokens / error`; `refunded_microusd`; `group=day&by=key` two-way grouping; `recorded_since`; `provider_cost_microusd` hidden from members | #2471 (D845), done |
 | A read of the limits in force (per key, per member) | #2472 (D849), done: `GET /api/developer/limits` |
 | Per-key and failure alerts: store, route, notification type | #2472 (D849): named above, built in PR 2 |
 | `GET /api/ai-budget/holds` (operation, surface, key, execution per hold; columns on `ai_budget_reservations` in migration 525) | #2466 (D844) |
@@ -215,6 +228,26 @@ one updates this section in the same PR.
 | The `402 insufficient_tokens` body `{ code, needed_microusd, available_microusd, add_tokens_href }`; `spend_limit`, `ai_paused`, `budget_review` codes on `/mcp` | #2466 (D844) and #2470 (D842) |
 | `key_limit_reached` | #2472 (D849): named above, built in PR 2 |
 | A support session can buy AI tokens (`routes/orders.ts` has no `impersonated_by` check) | #2472 (D849), done: `403 support_session_refused` |
+
+### Customer-chat tools (D864; S08)
+
+`mcp/tools/channels.ts`, over the inbox's own records (D684). No Telegram or WhatsApp API is called. Every tool runs through `callTool`, so it writes a D843 usage row, and D844 lists all three at price 0.
+
+| Tool | Scope | Input | Output |
+|---|---|---|---|
+| `list_channel_chats` | `validate:read` | `{ provider?: 'telegram'\|'whatsapp', state?: 'pending'\|'assigned'\|'ignored', limit? (1–200, default 50) }` | `{ chats: [ { id, provider, state, consent\|null, language: null, messages, notes_waiting, last_activity_at, company: {id,name}\|null, interview_id\|null, session_id\|null } ] }` |
+| `get_session_insights` | `validate:read` | `{ company, session_id }` | `{ session: { id, interview_id, provider, status, consent, digest }, suggestions: [ { id, kind, state, payload, created_at, decided_at } ], analytics: null }` |
+| `assign_chat_to_interview` | `validate:write` | `{ company, chat, interview_id }` | `{ chat, interview_id, session_id, moved, notes_queued, consent\|null }` |
+
+- `id` and `chat` are Axal's chat uid. A tool never returns:
+  - message text, a transcript, the digest or a citation quote;
+  - a contact's name, a phone number or a provider id.
+- Who sees what:
+  - an assigned chat is listed only while its venture is in the grant and readable;
+  - a pending or ignored chat is the member's own, with `company` null;
+  - insights are read only for a chat session the member made in that company. Any other session is `404 session_not_found`.
+- `language` waits on D857, and `analytics` on D858. Both are `null` until those land.
+- Assignment is the inbox's own `assignThread`, with the route's refusal codes. It records no consent and no quote consent.
 
 ### Metering policy (D844; S10)
 
@@ -343,6 +376,17 @@ only when that base does.
     and report steps join as #2470, #2465 and #2466 merge.
   - The switch-on runbook is `documentation/operations/MCP_API_RUNBOOK.md`.
     Keys stay off until #2470 is deployed.
+- **2026-10-22 (S09).** D845 (#2471):
+  - The usage reports and the request history are on `main` with #2489 (they merged into its branch as #2494).
+  - Scope 3 adds `GET /api/developer/usage/keys`: each key's cap, this month's charge, and the 80% and 100% flags. Key names label the key groups, and `key=` is checked against `member_api_keys`.
+  - §3's usage lines now give the built shapes.
+
+- **2026-10-22 (S08, #2510, D864).** The Telegram MCP connector is Axal's own
+  tools over the inbox: `list_channel_chats`, `get_session_insights` and
+  `assign_chat_to_interview` (§3). No MTProto user session is ever asked for
+  or connected (D864 §1). They return structure only until the owner answers
+  #2510's question 1.
+
 - **2026-10-22 (S14).** #2472 PR 1 (D849): the per-member limit across
   grants, `GET /api/developer/limits`, the support-session refusal on token
   packs, `check-secret-logging`, and the cross-tenant matrix with the

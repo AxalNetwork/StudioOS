@@ -14,8 +14,8 @@ There are two ways in, through one Meta app and one webhook
   in the member's inbox, and the member adds one to an interview.
 - **Way B, Send to Axal.** Axal runs one number of its own. A member links their
   WhatsApp to their account and forwards recordings of interviews they held.
-  Each recording waits until the member confirms everyone agreed; importing it
-  as a draft interview is the rest of #1939, not on `main` yet. Way B exists
+  Each recording waits until the member confirms everyone agreed, then the
+  existing capture job imports it as a draft interview with recorder audio. Way B exists
   only if the owner says yes (step 0a) and its three secrets and the
   `WHATSAPP_AXAL_DISPLAY_NUMBER` var are all set.
 
@@ -29,7 +29,7 @@ still waits is marked here and where it is used:
 | Consent in Record a Session; the WhatsApp connector page | #2001 (#1980) and #1993 (#1959), **on `main`** |
 | Consented voice notes stored as recorder audio in the chat's session, transcribed there, then the engine; **Open recording** plays them | #2063 (#1935, D754 W3), **on `main`** |
 | Way B: linking Axal's number, forwarded recordings waiting for consent, **Agreed beforehand** in Axal, and a Super Admin's unset settings | #2005 (#1937), #2006 (#1938), #2052 and #2056 (#1939 parts 1 and 2), **on `main`** |
-| Way B: a consented recording imported as a draft interview, and the "Saved" reply | The rest of #1939, **not on `main`**: a consented capture waits, and is purged 7 days after its first file |
+| Way B: a consented recording imported as a draft interview, and the "Saved" reply | **On `main`**: `whatsappCapture.importCapture` and `runCaptureFollowup`; a capture not imported by its 7-day fetch deadline is purged |
 | Unsigned webhook refused, checked on every smoke run | #1999 (`scripts/check-spa-live.mjs`), **on `main`** |
 
 #1950 and #1954 are on `main`, so the WhatsApp secrets can be set:
@@ -39,14 +39,16 @@ interviewee's consent.
 
 ## 1. Owner steps, in order
 
-Agent sessions cannot open `developers.facebook.com` or `business.facebook.com`;
-every step here is done from the owner's machine.
+Meta requirements and dashboard labels below are **UNVERIFIED** until read
+on Meta's current official pages (D861). The owner completes the dashboard
+steps and records approval privately; do not paste app/account identifiers or
+credentials into an issue. See §7 before any general-availability PR.
 
 0. **Three decisions**, answered on #1008 item 16 or to S1:
-   - a. Way B, Send to Axal: yes or no. Axal's account pays Meta for that
-     number's replies past 1,000 a month. Today that is one consent question per
-     forwarded batch, plus one reply to each `LINK` and `STOP`; the "Saved"
-     reply comes with the rest of #1939.
+   - a. Way B, Send to Axal: yes or no. Axal's account is intended to pay Meta for that
+     number's messages; verify current pricing in step 11. The flow sends one
+     consent question per forwarded batch, replies to `LINK` and `STOP`, and a
+     "Saved" reply after a successful consented import.
    - b. Consent before anything from a chat is kept: D754 says yes. Say if you
      disagree.
    - c. WhatsApp Calling: D754 says not now (D754 §3). Say "go" to have S1 check
@@ -73,9 +75,9 @@ every step here is done from the owner's machine.
      offered there.
    - Allowed SDK domains: `https://axal.vc` and `https://app.axal.vc`.
    - Keep the configuration id.
-   - Before building it, read Meta's Embedded Signup v4 implementation page and
-     tell S1 what the popup's `extras` should be: the launcher still sends
-     `sessionInfoVersion: '3'`, and v2 and v3 were deprecated on 2026-10-15.
+   - Read Meta's current Embedded Signup implementation page and reconcile the
+     required popup version and `extras` with W1 (#2501). Version/deprecation
+     claims in the earlier runbook were not verified here.
 5. **Worker secrets, before the webhook.** Meta checks the verify token when the
    webhook is saved, and without the secrets the Worker answers 503. Run
    this from the repository root for each:
@@ -116,16 +118,15 @@ every step here is done from the owner's machine.
      vars blocks.
 9. **Privacy policy and data deletion page.** Say that WhatsApp chats a member
    adds to an interview, and voice notes and forwarded recordings once consent
-   is given, are stored and transcribed (a forwarded recording's audio once
-   the rest of #1939 lands); that they are kept until the member
+   is given, are stored and transcribed only after consent; that they are kept until the member
    deletes them; and how to delete them. Meta's app settings need the data
    deletion URL.
 10. **The live check**, in canary, on a real device (§3).
-11. **Billing check**, on Meta's pages: the October 2026 price of service
-    messages (reported as free up to 1,000 a month per number, then the
-    utility rate), and how Meta bills a Tech Provider's clients. D754 assumes
-    each member's own WhatsApp Business Account pays for its replies, and Axal
-    pays only for way B's number.
+11. **Billing and tier check**, on Meta's current official pages and the
+    app's dashboard: record the current message categories, prices, tier
+    definitions and account/number limits. The earlier 1,000-message allowance
+    is UNVERIFIED; do not use it for a cost estimate or a rollout decision.
+    Confirm who is billed for member numbers and for Axal's own number.
 
 ## 2. The automatic check
 
@@ -197,9 +198,10 @@ test business number, phone 2 plays the interviewee.
    with **Yes, out loud**, **Yes, in writing** and **No**. In Axal, the
    recording is listed as "Waiting for consent" with **Agreed beforehand**.
    Tap **Yes, out loud** in WhatsApp.
-4. *With the rest of #1939 only:* "Saved to Axal" with a link, and the draft in
-   Customer research as "Imported from WhatsApp", with its transcript. Until
-   then nothing more is sent and the consented recording waits.
+4. After the consented import succeeds, see "Saved to Axal" with a link, and
+   the draft in Customer research as "Imported from WhatsApp", with its
+   transcript. A failed or delayed import keeps a reason and may retry; do
+   not treat consent alone as proof that a recording was imported.
 5. Press **Unlink**. See: "Your WhatsApp is unlinked. Axal no longer saves what
    it sends."
 
@@ -272,3 +274,131 @@ They are also rows in `documentation/architecture/GOTCHAS.md`.
 - A **consent reply counts only from the contact**, on that chat, answering that
   chat's open request. A message from the member's side, or an echo from the
   WhatsApp Business app, never counts.
+
+
+## 7. General-availability release gates (D861, #2506)
+
+**Do not change canary to on yet.** This section is a release checklist, not
+an approval. W1 (#2501, setup) and W2 (#2502, translation) must merge first.
+W5 (#2505) determines the connector's Calls wording; no call capture is
+advertised until that outcome is implemented and verified.
+
+### Evidence S1 reviews
+
+1. Run the root build, then the full drift suite:
+   `npm run build`, then
+   `npm run test:drift > drift.log 2>&1; echo EXIT=$?`.
+   Record the exit code and exact commit in the draft PR. The full suite
+   includes the D861 readiness test and decision-id guard.
+2. The focused command, from the repository root on the same commit, is:
+
+   ```sh
+node --experimental-strip-types --no-warnings \
+  --import ./cloudflare-worker/test/_ts-loader.mjs \
+  --test cloudflare-worker/test/whatsapp_readiness_d861.test.ts
+```
+
+   It runs isolated fixtures for development, preview and production, plus
+   mutations. No request reaches Meta or production. Passing it proves the
+   code gates; it does not prove a deployment has its secrets or approvals.
+   Run the existing `whatsapp_switch_on_d754`,
+   `channel_consent_d754` and `whatsapp_voice_audio_d754`
+   suites as well; they cover webhook/late-job consent ordering and recorder
+   integration. They are already in the full suite.
+3. Review the limits: 120 webhook events per connection per minute, and 50
+   transcriptions per connection per UTC day. The event counter fails open
+   on a D1 fault to avoid losing incoming messages; the voice counter fails
+   closed. A passing test does not make the event counter a hard outage quota.
+4. Pending copies are swept after 30 days, at the next daily purge (03:50 UTC).
+   A media lookup can expire earlier (7 days). An imported, consented
+   transcript/recording stays until the member deletes the session; the
+   pending-copy purge is not deletion of an interview.
+5. Pending text and media references use the column cipher. Production needs
+   its encryption key provisioned. Never use a fixture test's key, print a
+   decrypted message, or export rows to prove this.
+6. Repeat the real-device canary exercise after W1/W2 merge, including a
+   declined/withdrawn consent, a waiting voice note, the shipped translation
+   behaviour and one accepted proposal. Nothing populates Validate without
+   the founder's Accept.
+7. S1 records runbook review and the remaining decisions on #2506. The owner
+   verifies the four Meta requirements in D861 §3 from official pages and
+   confirms the app's actual approval state. Every UNVERIFIED requirement is
+   a remaining release gate.
+
+### The rollout PR
+
+After all evidence is reviewed, the owner requests one PR changing
+`WHATSAPP_CHANNEL` from `"canary"` to
+`"on"` in both `[vars]` and
+`[env.production.vars]` of `wrangler.toml`.
+Review preview separately: its variables are not inherited and an absent
+switch defaults to canary. Do not enable it incidentally. Generated branch
+configs must be reviewed for their own intended audience before rollout.
+
+The PR cites the verified Meta requirements, S1's review and the passing
+commit's CI. It uses the normal build/migration/deploy workflow; the owner
+merges. A missing approval, failed check or unreadable production check keeps
+the rollout in canary.
+
+### Read-only production verification
+
+Use the successful deployment's status/log and the public health GET on
+each host to establish that the expected build is serving. The existing
+unsigned-webhook smoke (§2) checks rejection; do not send a fabricated signed
+customer event to production.
+
+An authorized operator may read these aggregates only, through the established
+D1 read tooling. A failed read means **Unreadable**, never zero. Do not select
+message text, ciphertext, contact names, phone numbers, identifiers or tokens.
+
+```sql
+SELECT status, COUNT(*) AS events
+FROM channel_events
+WHERE provider = 'whatsapp'
+  AND datetime(created_at) >= datetime('now', '-1 day')
+GROUP BY status;
+
+SELECT COUNT(*) AS overdue_pending_messages
+FROM channel_thread_messages m
+JOIN channel_threads t ON t.id = m.thread_id
+WHERE t.provider = 'whatsapp'
+  AND datetime(m.sent_at) < datetime('now', '-30 days');
+
+SELECT COUNT(*) AS pending_text_without_cipher_envelope
+FROM channel_thread_messages m
+JOIN channel_threads t ON t.id = m.thread_id
+WHERE t.provider = 'whatsapp' AND m.kind = 'text'
+  AND m.text_enc IS NOT NULL AND m.text_enc <> ''
+  AND m.text_enc NOT LIKE 'v1.%';
+```
+
+A zero count is not evidence of consent or successful decryption. Correlate
+the aggregate with the deployed CI evidence and purge completion. Overdue
+pending rows can exist between the 30-day boundary and the next purge; if
+they remain after its successful completion, investigate. No traffic means
+"no events recorded", not a successful end-to-end exercise.
+
+### Incident handling and rollback
+
+- For consent, encryption or cross-member access concerns, stop intake first:
+  the owner makes an urgent PR setting the switch to `"off"`
+  in the affected deployed configurations. Use §5's off acknowledgement
+  rather than deleting the app secret as the first response. Review already
+  queued work too: rollout gates stop new downloads; they do not erase
+  recordings already imported.
+- For a compromised member connection, the member uses Disconnect. It stops
+  further connection intake and removes pending thread copies; imported
+  interviews remain. Verify Meta-side access revocation/unsubscription in
+  the owner's dashboard. Do not describe a local disconnect as proof that a
+  provider token was revoked.
+- For a platform credential incident, the owner rotates/revokes access in
+  Meta and provisions replacement secrets through the existing secret
+  workflow. Never place the old or new value in a ticket, log or command
+  argument.
+- For purge failures, keep the rollout closed and restore the existing
+  scheduled purge. Confirm completion with aggregate counts. Do not issue
+  ad-hoc production DELETE/UPDATE statements from an agent session.
+  A member removes an imported recording through the existing session
+  deletion flow; the 30-day pending purge does not remove that session.
+- Resume in canary, repeat the failed gate's checks and the real-device
+  exercise, obtain S1's review, then use another owner-reviewed rollout PR.
