@@ -97,7 +97,10 @@ test('a created key is returned once; the row stores only the id and the hash of
   const listed = JSON.stringify(list.body);
   assert.ok(!listed.includes(secretPart) && !listed.includes(row.secret_sha256));
   assert.equal(list.body.keys.length, 1);
-  assert.deepEqual(list.body.scopes_available.map((o: any) => [o.name, o.write]), [['validate:read', false], ['validate:write', true], ['build:read', false], ['raise:read', false], ['connectors:read', false]]);
+  // Every scope the MCP server defines is offered, each labelled; only validate:write changes data.
+  assert.deepEqual(list.body.scopes_available.map((o: any) => [o.name, o.write]),
+    [['validate:read', false], ['validate:write', true], ['build:read', false], ['raise:read', false], ['connectors:read', false]]);
+  assert.ok(list.body.scopes_available.every((o: any) => o.label !== o.name), 'every scope has a label of its own');
   assert.ok(list.body.scopes_available.every((o: any) => typeof o.label === 'string' && o.label.length > 0));
   // Nothing printed or logged carries the secret.
   const logs = JSON.stringify(db.prepare('SELECT * FROM activity_logs').all());
