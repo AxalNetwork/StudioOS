@@ -125,6 +125,8 @@ export interface FindingRow {
   quote: string | null;
   interview_id: number;
   interviewee: string | null;
+  /** D877 (#2524): the founder deleted the session this finding came from; the finding stays, as they accepted it. */
+  source_deleted: boolean;
 }
 
 /**
@@ -139,7 +141,8 @@ export async function findingsFor(
   const kinds = opts.kinds.filter((k) => isFindingKind(k));
   if (!kinds.length) return [];
   const res = await env.DB.prepare(
-    `SELECT f.id, f.kind, f.payload_json, f.quote, f.interview_id, i.interviewee_name, i.quote_consent
+    `SELECT f.id, f.kind, f.payload_json, f.quote, f.interview_id, i.interviewee_name, i.quote_consent,
+            (f.session_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = f.session_id)) AS source_deleted
        FROM interview_findings f JOIN discovery_interviews i ON i.id = f.interview_id AND i.project_id = f.project_id
       WHERE f.project_id = ? AND f.kind IN (${ids(kinds.length)})
         AND (? = 0 OR i.segment_id = ?) AND (? = 0 OR f.interview_id = ?)
@@ -159,6 +162,7 @@ export async function findingsFor(
       id: Number(r.id), kind: r.kind, ...line,
       quote: quote && (opts.writer || Number(r.quote_consent) === 1) ? quote : quote ? QUOTE_WITHHELD : null,
       interview_id: Number(r.interview_id), interviewee: r.interviewee_name ?? null,
+      source_deleted: Number(r.source_deleted) === 1,
     }];
   });
 }

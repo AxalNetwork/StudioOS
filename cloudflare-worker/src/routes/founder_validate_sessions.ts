@@ -31,6 +31,9 @@
  *   GET    /sessions/:id/receipt            what each job cost, and the budget left
  *   GET    /sessions/:id/audio              one signed download per recorded chunk (D690)
  *   DELETE /sessions/:id                    the session, its audio and its transcript
+ *   DELETE /sessions/:id/audio              D877: the audio only; the transcript stays
+ *   GET    /sessions/audio-retention        D877: how long the caller's call audio is kept
+ *   PUT    /sessions/audio-retention        D877: { days: 1..3650 | null } (null keeps it until deleted)
  *
  * A session belongs to a `discovery_interviews` row, so a Spin-Out Lab
  * venture's interviews (ordinary `projects` rows) get sessions with no
@@ -46,11 +49,14 @@ import { budgetRefusalMessage, estimateCostUsd } from '../services/aiRouter';
 import * as aiBudget from '../services/aiBudget';
 import {
   AUDIO_CHANNELS, AUDIO_PREFIX, CHANNELS, CHUNK_MIME, CONSENT, CONSENT_METHODS, MAX_CHUNK_BYTES, MAX_CHUNKS, MAX_UPLOAD_MS,
-  TRANSITIONS, UPLOAD_ATTESTATIONS, UPLOAD_BYTES_PER_SECOND, UPLOAD_SOURCE, WAV_HEADER_BYTES, consentBlocks, deleteSession,
+  TRANSITIONS, UPLOAD_ATTESTATIONS, UPLOAD_BYTES_PER_SECOND, UPLOAD_SOURCE, WAV_HEADER_BYTES, consentBlocks, deleteSession, deleteSessionAudio,
   isUploadWav, listChunks, loadSession, putChunk, recordReceipt, sessionHasAudio, replaceWithFinal, transition,
   type SessionRow, type StoredSegment,
 } from '../services/interviewSessions';
 import { DEFAULT_FINAL_MODEL, DEFAULT_LIVE_MODEL, isChoosable, listSttModels } from '../services/sttModels';
+import {
+  DEFAULT_CALL_AUDIO_RETENTION_DAYS, MAX_RETENTION_DAYS, MIN_RETENTION_DAYS, retentionFor, setRetention, validRetention,
+} from '../services/callAudioRetention';
 import { WHISPER_TURBO } from '../services/sttFormats';
 import { holdBlock, openLiveRelay } from '../services/liveTranscription';
 import { railFor } from '../util/railContext';
@@ -130,6 +136,24 @@ sessions.get('/sessions/models', async (c) => {
 sessions.get('/sessions/active', async (c) => {
   const user = (await requireAuth(c)) as User;
   return json({ items: await activeSessionsOf(c.env, user.id) });
+});
+
+// D877 (#2524) — how long the caller's call audio is kept. Declared above
+// `/sessions/:id` so "audio-retention" is never read as an id. The member's
+// own setting; `days: null` keeps the audio until they delete it.
+sessions.get('/sessions/audio-retention', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  const r = await retentionFor(c.env, user.id);
+  return json({ ...r, default_days: DEFAULT_CALL_AUDIO_RETENTION_DAYS, min_days: MIN_RETENTION_DAYS, max_days: MAX_RETENTION_DAYS });
+});
+
+sessions.put('/sessions/audio-retention', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  const body = await c.req.json().catch(() => null) as { days?: unknown } | null;
+  if (!body || !('days' in body) || !validRetention(body.days)) {
+    return json({ detail: 'invalid_retention', message: `Choose a number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, or keep the audio until you delete it.` }, 400);
+  }
+  return json(await setRetention(c.env, user.id, body.days));
 });
 
 // ---------------------------------------------------------------------------
@@ -1108,6 +1132,13 @@ sessions.get('/sessions/:id/audio', async (c) => {
   if (blocked) return blocked;
   try {
     const parts = await sessionAudioParts(c.env, s.session, Number(s.user.id));
+    // D877: audio removed while the text stayed says so, and why.
+    if (!parts && s.session.audio_removed_at) {
+      return json({ detail: 'audio_removed', reason: s.session.audio_removed_reason ?? null, removed_at: s.session.audio_removed_at,
+        message: s.session.audio_removed_reason === 'retention'
+          ? 'This call\'s audio was removed after your retention period. Its transcript is kept.'
+          : 'You deleted this session\'s audio. Its transcript is kept.' }, 404);
+    }
     if (!parts) return json({ detail: 'This session has no recorded audio.' }, 404);
     return json({ parts });
   } catch (e) {
@@ -1116,16 +1147,36 @@ sessions.get('/sessions/:id/audio', async (c) => {
   }
 });
 
+/**
+ * D685 §5.9 — a run that is moving is waited for; a failed or stale one
+ * (including a row the old synchronous route left in `transcribing`) is not.
+ */
+function runMoving(session: SessionRow): boolean {
+  const moving = session.processing_stage && !['done', 'failed'].includes(session.processing_stage) && !isStale(session);
+  const legacyStuck = !session.processing_stage && session.status === 'transcribing';
+  return Boolean(moving || (legacyStuck && !isStale({ ...session, processing_stage: 'transcribing', processing_updated_at: session.updated_at })));
+}
+
+// D877 (#2524) — remove the session's audio and keep its text. The same
+// wait as deleting the session: a run that is moving still reads the chunks.
+sessions.delete('/sessions/:id/audio', async (c) => {
+  const s = await scopeSession(c);
+  if (s instanceof Response) return s;
+  if (runMoving(s.session)) return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
+  try {
+    const r = await deleteSessionAudio(c.env, s.session, s.user.id, 'deleted');
+    const after = await loadSession(c.env, s.session.id);
+    return json({ ok: true, audio_chunks_deleted: r.keys.length, audio_removed_at: after?.audio_removed_at ?? null, audio_removed_reason: after?.audio_removed_reason ?? null });
+  } catch (e) {
+    console.error('[sessions] audio delete failed:', (e as Error).message);
+    return json({ detail: 'delete_failed' }, 502);
+  }
+});
+
 sessions.delete('/sessions/:id', async (c) => {
   const s = await scopeSession(c);
   if (s instanceof Response) return s;
-  // D685 §5.9 — a run that is moving is waited for; a failed or stale one
-  // (including a row the old synchronous route left in `transcribing`) is not.
-  const moving = s.session.processing_stage && !['done', 'failed'].includes(s.session.processing_stage) && !isStale(s.session);
-  const legacyStuck = !s.session.processing_stage && s.session.status === 'transcribing';
-  if (moving || (legacyStuck && !isStale({ ...s.session, processing_stage: 'transcribing', processing_updated_at: s.session.updated_at }))) {
-    return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
-  }
+  if (runMoving(s.session)) return json({ detail: 'transcribing', message: 'Wait for the transcript to finish.' }, 409);
   try {
     const r = await deleteSession(c.env, s.session, s.user.id);
     return json({ ok: true, audio_chunks_deleted: r.keys.length });
