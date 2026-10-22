@@ -421,10 +421,12 @@ test('privacy redaction preserves ISO dates and explicit currency amounts in ori
   const facts = 'On 2026-10-22 revenue was $1,250,000 and USD 125000.50; budget EUR 1 250 000 and £1,250,000.';
   const phone = '+' + '9'.repeat(11);
   const disguised = '$' + '9'.repeat(11) + ' USD ' + '8'.repeat(10);
-  const content = facts + ' ' + phone + ' ' + disguised;
+  const content = facts + ' @fixture_handle ' + phone + ' ' + disguised;
+  s.db.prepare('UPDATE interview_transcript_segments SET speaker_label = ? WHERE id = ?').run('@fixture_handle', g.id);
   const translated = await encryptColumn(s.env, 'interview_transcript_segments', 'translated_text', g.id, content);
   s.db.prepare('UPDATE interview_transcript_segments SET text = ?, translated_text = ?, translated_lang = ? WHERE id = ?').run(content, translated, 'en', g.id);
   const out = body(await transcriptRead(s)).transcript.segments[0];
-  assert.equal(out.text, facts + ' [phone removed] [phone removed] [phone removed]');
+  assert.equal(out.text, facts + ' [identifier removed] [phone removed] [phone removed] [phone removed]');
+  assert.equal(out.speaker, '[identifier removed]');
   assert.equal(out.translation.text, out.text);
 });
