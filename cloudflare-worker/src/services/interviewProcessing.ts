@@ -44,8 +44,8 @@ import { AI_SURFACE } from './aiSurfaces';
 import * as aiBudget from './aiBudget';
 import { enqueueJob } from './queue';
 import {
-  AUDIO_CHANNELS, AUDIO_PREFIX, consentBlocks, labelSegments, sessionHasAudio, listChunks, loadSession, recordReceipt, replaceWithFinal,
-  type ChunkRow, type SessionRow, type StoredSegment,
+  AUDIO_CHANNELS, AUDIO_PREFIX, CHUNK_MIME, UPLOAD_BYTES_PER_SECOND, UPLOAD_SOURCE, WAV_HEADER_BYTES, consentBlocks, labelSegments,
+  sessionHasAudio, listChunks, loadSession, recordReceipt, replaceWithFinal, type ChunkRow, type SessionRow, type StoredSegment,
 } from './interviewSessions';
 import { DEFAULT_FINAL_MODEL } from './sttModels';
 import { appendSegments } from './interviewIntake';
@@ -131,6 +131,20 @@ export const TRANSCRIBE_OPTIONS = { recording: 'transcribe:recording', session: 
 export const DIGEST_PAGE = 'validate';
 export const DIGEST_OPTIONS = { summarise: 'summarise:session', structure: 'structure:transcript', ask: 'ask:transcript' } as const;
 
+/**
+ * D872 (#2519): the minutes a chunk is held and charged on. An upload's chunk
+ * is 16 kHz mono 16-bit PCM behind a 44-byte header, which the chunk route
+ * enforces, so its bytes are its duration exactly. Any other chunk keeps the
+ * router's 32 kbps estimate (`audioMinutesFromBytes`).
+ */
+export function chunkAudioMinutes(chunk: Pick<ChunkRow, 'mime' | 'size_bytes'>, session: Pick<SessionRow, 'submitted_via'>): number {
+  if (session.submitted_via === UPLOAD_SOURCE && CHUNK_MIME[chunk.mime] === 'wav') {
+    const seconds = Math.max(0, Number(chunk.size_bytes) - WAV_HEADER_BYTES) / UPLOAD_BYTES_PER_SECOND;
+    return seconds > 0 ? Math.max(1, Math.ceil(seconds / 60)) : 0;
+  }
+  return audioMinutesFromBytes(chunk.size_bytes);
+}
+
 export type ChunkTranscript =
   | { ok: true; segments: StoredSegment[]; language: string | null; model: string; fallback: boolean; costMicro: number }
   | { ok: false; refusal: string; message: string; budget: boolean };
@@ -140,7 +154,7 @@ export type ChunkTranscript =
  * at `offsetMs`. Language and the model's fallback are the router's.
  */
 export async function transcribeChunk(env: Env, opts: {
-  session: Pick<SessionRow, 'language'>; userId: number; chunk: ChunkRow; model: string; intervieweeName: string | null; offsetMs: number;
+  session: Pick<SessionRow, 'language' | 'submitted_via'>; userId: number; chunk: ChunkRow; model: string; intervieweeName: string | null; offsetMs: number;
   /** The run's rail context; a chat's voice note (D754) keeps the default. */
   rail?: RailContext;
 }): Promise<ChunkTranscript> {
@@ -155,7 +169,7 @@ export async function transcribeChunk(env: Env, opts: {
     model: opts.model,
     audio: new Uint8Array(await obj.arrayBuffer()),
     audioMime: opts.chunk.mime,
-    audioMinutes: audioMinutesFromBytes(opts.chunk.size_bytes),
+    audioMinutes: chunkAudioMinutes(opts.chunk, opts.session),
     language: opts.session.language,
   });
   if (!r.ok) {
@@ -218,7 +232,7 @@ export async function transcribeVoiceNote(env: Env, opts: {
   if (!r.ok) {
     await recordReceipt(env, session.id, {
       kind: 'final', model, requested_model: model, fallback_used: false,
-      audio_minutes: audioMinutesFromBytes(chunk.size_bytes), cost_microusd: 0,
+      audio_minutes: chunkAudioMinutes(chunk, session), cost_microusd: 0,
       outcome: r.budget ? 'refused' : 'failed', refusal: r.refusal,
     });
     return r;
@@ -240,7 +254,7 @@ export async function transcribeVoiceNote(env: Env, opts: {
   }
   await recordReceipt(env, session.id, {
     kind: 'final', model: r.model, requested_model: model, fallback_used: r.fallback,
-    audio_minutes: audioMinutesFromBytes(chunk.size_bytes), cost_microusd: r.costMicro, outcome: 'ok',
+    audio_minutes: chunkAudioMinutes(chunk, session), cost_microusd: r.costMicro, outcome: 'ok',
   });
   return { ok: true, appended, already: false };
 }
@@ -439,7 +453,7 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
     if (!r.ok) {
       await recordReceipt(env, session.id, {
         kind: 'final', model, requested_model: model, fallback_used: false,
-        audio_minutes: audioMinutesFromBytes(ch.size_bytes), cost_microusd: 0,
+        audio_minutes: chunkAudioMinutes(ch, session), cost_microusd: 0,
         outcome: r.budget ? 'refused' : 'failed', refusal: r.refusal,
       });
       await failProcessing(env, session, r.message);
@@ -485,7 +499,7 @@ async function assemble(env: Env, session: SessionRow) {
   await replaceWithFinal(env, session, segments, model, language);
   await recordReceipt(env, session.id, {
     kind: 'final', model, requested_model: session.final_model, fallback_used: fallback,
-    audio_minutes: chunks.reduce((m, c) => m + audioMinutesFromBytes(c.size_bytes), 0), cost_microusd: cost, outcome: 'ok',
+    audio_minutes: chunks.reduce((m, c) => m + chunkAudioMinutes(c, session), 0), cost_microusd: cost, outcome: 'ok',
   });
 }
 
