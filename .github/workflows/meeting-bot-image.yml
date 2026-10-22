@@ -1,0 +1,75 @@
+name: Meeting bot image
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/meeting-bot-image.yml'
+      - 'scripts/build-meeting-bot-image.mjs'
+      - 'scripts/lib/meetingBotImage*'
+      - 'meeting-bot/**'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Test image pipeline contracts
+        run: node --test scripts/lib/meetingBotImage.test.mjs
+      - name: Build fixture image (pipeline smoke only, no runtime or registry access)
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/build-meeting-bot-image.mjs --fixture
+      - name: Build B2 runtime image when supplied (never publish from a PR)
+        if: hashFiles('meeting-bot/Dockerfile') != ''
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/build-meeting-bot-image.mjs
+
+  publish:
+    # No PR code ever receives package-write permission or registry credentials.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        with:
+          node-version: '22'
+      - name: Build actual runtime before registry login
+        id: build
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: node scripts/build-meeting-bot-image.mjs >> "$GITHUB_OUTPUT"
+      - name: Sign in to GHCR using the workflow token
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GH_ACTOR" --password-stdin
+      - name: Publish commit-tagged image
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          docker push "$IMAGE"
+          docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE" >> "$GITHUB_STEP_SUMMARY"
+      - name: Clear registry login
+        if: always()
+        run: docker logout ghcr.io
