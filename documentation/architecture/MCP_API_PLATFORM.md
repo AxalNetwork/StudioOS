@@ -286,12 +286,49 @@ nothing is dropped in production.
 
 The tasks are #2464 to #2478 (§6). The UI issues are listed on #2463.
 
+Where each task's work is, on 2026-10-22 (S15, for #2473). "Into #N's branch"
+means a stacked PR merged into its base branch, so its work reaches `main`
+only when that base does.
+
+| Task | Decision | PR | Where it is |
+|---|---|---|---|
+| #2464 member API keys | D841 | #2484 | `main` (`05dbe728`) |
+| #2465 usage events | D843 | #2489 | open, conflicts with `main` |
+| #2466 metering | D844 | #2490 | open, conflicts with `main` |
+| #2467 tool registry | D846 | #2483 | `main` (`f11e729a`) |
+| #2468 shared MCP client | D847 | #2487 | `main` (`d2a63090`) |
+| #2469 connector contract | D848 | #2485 | `main` (`7bd7b04a`) |
+| #2470 `/mcp` accepts keys | D842 | none yet | S07, in progress |
+| #2471 usage reports | D845 | #2494 | into #2489's branch |
+| #2472 security and limits | D849 | none yet | S14 |
+| #2473 end to end, runbook | D850 | this one | in progress |
+| #2474 model providers | D851 | #2491 | `main` (`87b87a48`) |
+| #2475 remote MCP servers | D852 | #2492 | into #2487's branch **after** #2487 merged: not on `main` |
+| #2476 multi-connector flows | D853 | #2493 | into #2490's branch |
+| #2477 Eadwyn uses registry tools | D854 | #2486 | `main` (`d0a59a69`) |
+| #2478 connector roadmap check | D855 | #2488 | `main` (`7bb619de`) |
+
 ## 8. Progress log
 
 - **2026-10-21 (S21).**
   - Discovery done; this plan written.
   - Tasks #2464–#2478 filed to slots S07–S15, S21–S25 and S27.
   - S21 starts D841 (API keys) on `claude/adoring-knuth-ec95nr-mcp-engine`.
+- **2026-10-22 (S15, #2473, D850).**
+  - Eight of the fifteen tasks are on `main` (§7). D842 (#2470) has no PR
+    yet, and D843 and D844 (#2489, #2490) conflict with `main`. D845 and
+    D853 travel inside them.
+  - **D852 is stranded.** #2492 merged into `agent/claude-s12/2468-mcp-client`
+    a minute after #2487 had merged that branch into `main`, so commit
+    `96694409` is on no branch that will merge. It needs its own PR from that
+    commit to `main`.
+  - `cloudflare-worker/test/mcp_platform_e2e_d850.test.ts` runs the flow
+    through the real Worker. On `main` it covers creating a key, revoking it,
+    no secret in anything printed or stored, and the rollback (flag off: the
+    key routes 404, `/mcp` refuses the key): 2/2. The `/mcp`, metering, usage
+    and report steps join as #2470, #2465 and #2466 merge.
+  - The switch-on runbook is `documentation/operations/MCP_API_RUNBOOK.md`.
+    Keys stay off until #2470 is deployed.
 
 ## 9. Known limitations
 
