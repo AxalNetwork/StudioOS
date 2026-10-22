@@ -18,7 +18,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
-import { callTool, registeredTools, mcpApiHandler } from '../src/mcp/server.ts';
+import { callTool, registeredTools, mcpApiHandler, EXECUTION_META } from '../src/mcp/server.ts';
 import { grantableCompanies, GRANT_CALLS_PER_MINUTE, USER_CALLS_PER_MINUTE, type GrantProps } from '../src/mcp/grants.ts';
 import { SCOPES } from '../src/mcp/oauth.ts';
 import { developerKeys } from '../src/routes/developer_keys.ts';
@@ -185,6 +185,29 @@ test('the member limit fails closed: a KV that cannot be read refuses the call',
   const r = await callTool(env, propsFor(A, [PA]), 'grant-a', tools.find((t) => !t.company) as any, {}, SCOPES);
   assert.equal(errorOf(r), 'Too many calls from your account across its connections. Wait a minute and try again.');
   assert.deepEqual(ran, []);
+});
+
+test('API keys and OAuth grants share the member cap and return a structured rate-limit result', async (t) => {
+  t.mock.method(Date, 'now', () => Date.parse('2026-10-22T12:00:00Z'));
+  const { env, db } = fixture();
+  try {
+    const { ran, tools } = recorded();
+    const tool = tools.find((item) => !item.company)!;
+    const principal = propsFor(A, [PA]);
+    const keyed = { ...principal, keyUid: 'synthetic-key-one' };
+    const counter = `mcp_rl:user:${A}:${Math.floor(Date.now() / 60_000)}`;
+    await env.RATE_LIMITS.put(counter, String(USER_CALLS_PER_MINUTE - 1));
+    const allowed = await callTool(env, keyed, null, tool, {}, SCOPES);
+    assert.notEqual(allowed.isError, true, 'the final permitted key call runs');
+    assert.equal(await env.RATE_LIMITS.get(counter), String(USER_CALLS_PER_MINUTE), 'the key consumes the shared member quota');
+    for (const [props, grant] of [[principal, 'synthetic-grant'], [{ ...principal, keyUid: 'synthetic-key-two' }, null]] as const) {
+      const denied = await callTool(env, props, grant, tool, {}, SCOPES);
+      assert.equal(denied.isError, true, 'a different connection cannot bypass the member cap');
+      assert.equal(JSON.parse(denied.content[0].text).code, 'rate_limited');
+      assert.match(denied._meta?.[EXECUTION_META] as string, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    }
+    assert.equal(ran.length, 1, 'refused calls never run the handler');
+  } finally { db.close(); }
 });
 
 test('an in-app call (Eadwyn, no grant) is not a connection: it is neither counted nor refused by the member limit', async () => {
