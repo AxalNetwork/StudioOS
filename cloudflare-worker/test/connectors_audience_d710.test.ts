@@ -137,11 +137,11 @@ test('connect: an admin on HQ is 409 entity_connection_only; a founder or partne
   const admin = await call(db, 'admin', 'POST', '/connect', { provider_key: 'mercury', api_key: 'fixture-not-a-token-1' });
   assert.deepEqual([admin.status, admin.body.error], [409, 'entity_connection_only']);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury'").get()!.n, 0);
-  // No token: the personal provider refuses before anything reaches Mercury.
+  // The personal provider is reached, and refuses a token connect before anything reaches Mercury (D881).
   for (const role of PERSONAL) {
     for (const branch of role === 'investor' ? [false] : [false, true]) {
       const r = await call(db, role, 'POST', '/connect', { provider_key: 'mercury' }, branch);
-      assert.deepEqual([r.status, r.body.error], [400, 'api_key_required'], `${role} branch=${branch}`);
+      assert.deepEqual([r.status, r.body.error], [410, 'token_connect_retired'], `${role} branch=${branch}`);
     }
     assert.equal((await call(db, role, 'GET', '/mercury')).status, 200, `${role} GET /:key`);
   }

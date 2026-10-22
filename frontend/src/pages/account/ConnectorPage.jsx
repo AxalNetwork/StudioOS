@@ -74,11 +74,11 @@ import { ZOOM_DISCONNECT_NOTE, ZOOM_SECTIONS, zoomHowItWorks, zoomNotices } from
  * draws `MercuryEntityPageBody` in "Connect and manage": the entity
  * connections, what they feed, Open Banking and the audit foot, with the one
  * audited read on mount and no header action. A member's own Mercury draws
- * its groups (what it is for, where it lands, what it reads) above the token
- * form until it is connected, then in "Your connection" with Manage's Sync
- * now, Replace token and Disconnect: no interim panel. D840 (#2346): the band
- * signs in with Mercury, the chevron opens the token form, and the sign-in
- * returns to this page.
+ * its groups (what it is for, where it lands, what it reads) above the band
+ * until it is connected, then in "Your connection" with Manage's Sync now,
+ * Sign in again and Disconnect: no interim panel. D840 (#2346), D881 (#2554):
+ * the band signs in with Mercury, the only way in, and the sign-in returns to
+ * this page.
  *
  * THE READ (#1955, part 2). Handed `readPage` (`connectorsApi.page`), the view
  * reads `GET /api/connectors/directory/<page_key>` once the connector is known,
@@ -195,7 +195,7 @@ function ReadyPage({ p, back, phone, ret, moved, onChanged, children, connector 
   // D753 F5 (#1991): the Axal entities' Mercury is drawn on the page itself.
   const entity = isEntityRow(p);
   const role = auth?.user?.role ?? null;
-  // A member's own Mercury says what it is for above the token form, as the sheet's first step did; the band connects.
+  // A member's own Mercury says what it is for above the band, as the sheet's first step did; the band connects.
   const memberMercury = isPersonalMercury(p) && !p.connection;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid="connector-page" data-state="ready" data-key={p.key}>
@@ -628,7 +628,7 @@ function WaitlistAction({ p, action, onChanged }) {
 
 /** About: what it reads and sends, and what it may do, from today's fields. It makes no read. */
 function About({ p }) {
-  // Mercury's own groups read its status on mount, so they are drawn once: above the token form, then in Your connection.
+  // Mercury's own groups read its status on mount, so they are drawn once: before it is connected, then in Your connection.
   const mercury = p.key === 'mercury';
   return (
     <section data-testid="connector-page-about" className="flex min-w-0 flex-col">

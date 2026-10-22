@@ -380,8 +380,8 @@ test('10. sign-in kinds', () => {
     if (e.variant === 'entity') assert.equal(kind, 'entity', e.id);
     else if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
     else if (['google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
-    // D840: a member signs in with Mercury or pastes a Read Only token.
-    else if (e.key === 'mercury') assert.equal(kind, 'oauth_or_key', e.id);
+    // D881 (#2554): a member connects Mercury only by signing in through its MCP server.
+    else if (e.key === 'mercury') assert.equal(kind, 'mcp', e.id);
     else if (row!.auth_type === 'api_key') assert.equal(kind, 'key', e.id);
     else if (row!.supports_pat) assert.equal(kind, 'oauth_or_key', e.id);
     else assert.equal(kind, 'oauth', e.id);

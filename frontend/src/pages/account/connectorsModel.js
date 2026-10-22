@@ -635,7 +635,7 @@ export function stripReturn(search, keys) {
  */
 export function authKind(p) {
   if (p?.first_party) return 'first_party';
-  // D840 (#2346): a member signs in with Mercury first; the Read Only token is the other way in.
+  // D840 (#2346), D881 (#2554): a member connects Mercury only by signing in.
   if (isPersonalMercury(p)) return 'oauth';
   if (p?.auth_type === 'api_key') return 'key';
   if (p?.key === 'hubspot' && p?.supports_pat) return 'token_first';

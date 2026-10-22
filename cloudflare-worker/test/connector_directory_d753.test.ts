@@ -48,7 +48,7 @@ const JWT_SECRET = 'y'.repeat(64); // synthetic fixture key
 const KEK = 'fixture-cipher-key-'.repeat(4); // synthetic fixture key
 const ROLES = ['admin', 'founder', 'partner', 'investor', 'advisor', 'operator', 'service_provider', 'exploring'];
 const ALLOWED = ROLES.filter((r) => r !== 'exploring');
-const SIGN_IN = ['oauth', 'oauth_or_key', 'key', 'first_party', 'entity'];
+const SIGN_IN = ['oauth', 'oauth_or_key', 'key', 'first_party', 'entity', 'mcp'];
 const PAGE_FIELDS = ['tagline', 'made_by', 'service', 'sign_in', 'added', 'verified', 'verified_on', 'read_only', 'page_key', 'page_href'];
 const BODY_FIELDS = ['long_description', 'tools', 'prompts', 'links', 'endpoints', 'trust', 'calls'];
 const PRIVATE = ['calls', 'already_connected', 'connection', 'uid', 'api_key_preview', 'credentials', 'entity_roles', 'personal_roles', 'personal_hq_only_roles', 'oauth_scopes', 'unreadable_sources'];
@@ -236,8 +236,8 @@ test('Mercury\'s page follows its audience; the entity variant reads no entity s
   assert.ok(!sql.some((s) => /mercury_|activity_logs/.test(s)), sql.join('\n'));
   assert.equal((await call(db, 'admin', '/directory/mercury', { branch: true })).status, 404);
   const founder = (await call(db, 'founder', '/directory/mercury')).body.connector;
-  // D840 (#2346): a member signs in with Mercury, or pastes a Read Only token.
-  assert.deepEqual([founder.connection_source, founder.sign_in.kind], ['integrations', 'oauth_or_key']);
+  // D881 (#2554): a member signs in with Mercury only; no token help is offered.
+  assert.deepEqual([founder.connection_source, founder.sign_in.kind, founder.sign_in.key_help_href], ['integrations', 'mcp', null]);
   // D752 (#1886): PERSONAL_MERCURY is keyed by role.
   assert.equal(founder.description, PERSONAL_MERCURY.founder.description);
   assert.equal((await call(db, 'investor', '/directory/mercury')).body.connector.description, PERSONAL_MERCURY.investor.description);

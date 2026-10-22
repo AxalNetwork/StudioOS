@@ -26,6 +26,7 @@ export const SIGN_IN_LABEL = {
   key: 'API key or token',
   first_party: 'Google, Microsoft or LinkedIn sign-in',
   entity: 'Connected by a Super Admin',
+  mcp: 'Sign in through the service’s MCP server',
 };
 export const TYPES = [
   ['all', 'All'], ['suggested', SUGGESTED], ['connected', 'Connected'], ['available', 'Available now'], ['read_only', 'Read-only'],

@@ -172,8 +172,8 @@ test('a founder\'s connected Mercury: Your connection with its groups, no interi
     assert.ok(m.text(yours).includes('Now fed by Mercury'), 'a founder\'s Mercury says what it feeds');
     assert.equal(st.reads, 1, 'the groups read the status once, on the page');
     assert.equal(m.reads(), 0, 'and never the entities');
-    // D840: Sign in again, or keep a token by replacing it.
-    assert.deepEqual(manageItems(connected(MERC()).catalogue[0]).map((i) => i.label), ['Sync now', 'Sign in again', 'Replace token', 'Disconnect']);
+    // D881 (#2554): no token to replace; a member signs in again.
+    assert.deepEqual(manageItems(connected(MERC()).catalogue[0]).map((i) => i.label), ['Sync now', 'Sign in again', 'Disconnect']);
   } finally { await m.unmount(); st.restore(); }
 });
 
