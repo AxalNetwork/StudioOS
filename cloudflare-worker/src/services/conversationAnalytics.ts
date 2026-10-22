@@ -36,13 +36,25 @@
  * carries aggregates only: per theme, how many quotes could be shown and how
  * many are withheld, never their words.
  *
- * THE CHANNEL (D866, #2512). Every read names its sessions' channel:
- * `telegram`, `whatsapp`, `zoom`, `google_meet` (the session's `submitted_via`,
- * else the provider of the chat that points at it), `recorder` (a recording
- * made in StudioOS), or the session's own channel (`text`, `manual`); a
- * session with none of these is NULL, never a guess. Both reads take a
- * `channel` filter, and a venture's read also gives its figures per channel
- * (`by_channel`), each the same figures as the whole, quotes aside.
+ * CALLS (D873, #2520). A Zoom or Google Meet call imported with its provider's
+ * transcript, or a recording uploaded (#2519), is a `call`, its `channel`
+ * `zoom`, `meet` or `upload` from `submitted_via`. A call can hold more than
+ * two people, so a line is the founder's only when its speaker is "Me" or the
+ * founder's own name, and the customer's only when it is the interviewee's
+ * name; anyone else ("Speaker ?", a colleague, a second customer) is
+ * `unattributed`, never the interviewee. A call's length is the recorder's
+ * `active_ms` when it kept one (an upload), else its last line's end (an
+ * import keeps none), else null. A chat or a typed paste has
+ * two parties, the founder's "Me" and the other side, as D858 counts them.
+ *
+ * THE CHANNEL (D866, #2512). Every read names its sessions' channel
+ * (`channelOf`): a call's (`zoom`, `meet`, `upload`, D873); else the
+ * provider a chat came in on (`telegram`, `whatsapp`, from `submitted_via`,
+ * else from the chat that points at the session); else `recorder` for a
+ * recording made in StudioOS; else the session's own channel (`text`,
+ * `manual`). A session with none of these is NULL, never a guess. Both reads
+ * take a `channel` filter, and a venture's read also gives its figures per
+ * channel (`by_channel`), each the same figures as the whole, quotes aside.
  */
 import type { Env } from '../types';
 import { QUOTE_WITHHELD } from './cycleValidate';
@@ -66,6 +78,9 @@ export const REASONS = {
   textLanguage: 'Not recorded: chat text carries no language until translation (W2, #2502) lands.',
   recordingLanguage: 'Not recorded: the recorder did not record a language for this session.',
   notChat: 'Not recorded: this session is not a chat, so it has no voice notes.',
+  callMinutes: "Not recorded: this call's transcript carries no times, so its length is unknown.",
+  callLanguage: "Not recorded: the call's transcript did not record a language.",
+  transcriptModel: 'Not recorded: this transcript does not say how it was made.',
   noTranscript: 'Not recorded: this conversation has no transcript yet.',
   unreadable: (store: string) => `Not recorded: the ${store} could not be read.`,
 } as const;
@@ -101,34 +116,68 @@ export interface AnalyticsSession {
   active_ms: number | null;
   language: string | null;
   created_at: string;
+  created_by_user_id: number;
+  final_model: string | null;
   /** D866: the provider of the chat that points at this session, when there is one. */
   thread_provider?: string | null;
 }
+
+/** A call's channel as the reads name it, by its session's `submitted_via` (D873). */
+export const CALL_CHANNELS: ReadonlyMap<string, 'zoom' | 'meet' | 'upload'> = new Map([
+  ['zoom', 'zoom'], ['google_meet', 'meet'], ['upload', 'upload'],
+]);
+const callChannel = (s: Pick<AnalyticsSession, 'submitted_via'>) => (s.submitted_via ? CALL_CHANNELS.get(s.submitted_via) ?? null : null);
 
 /** D866: what a `channel` filter may name. */
 export const CHANNEL_NAME = /^[a-z][a-z0-9_]{0,31}$/;
 
 /**
- * D866 (#2512): a session's channel, the same order as the digest's `source`
- * (`interviewProcessing.ts`): the provider it came in on, else `recorder` for a
- * recording, else the session's own channel. Unknown is null.
+ * D866 (#2512): a session's channel. A call's is D873's name for it; else the
+ * provider it came in on, or the provider of the chat that points at it; else
+ * `recorder` for a recording; else the session's own channel. Unknown is null.
+ * `ventureSessions` says the same in SQL.
  */
 export function channelOf(s: Pick<AnalyticsSession, 'channel' | 'submitted_via' | 'thread_provider'>): string | null {
+  const call = callChannel(s);
+  if (call) return call;
   const via = String(s.submitted_via ?? '').trim() || String(s.thread_provider ?? '').trim();
   if (via) return via;
   if (AUDIO_CHANNELS.has(String(s.channel ?? ''))) return 'recorder';
   return String(s.channel ?? '').trim() || null;
 }
-
 const AUDIO_JSON = JSON.stringify([...AUDIO_CHANNELS]);
 
-type Kind = 'chat' | 'recording' | 'typed';
+type Kind = 'chat' | 'call' | 'recording' | 'typed';
 const kindOf = (s: AnalyticsSession): Kind =>
-  AUDIO_CHANNELS.has(s.channel) ? 'recording'
-    : s.submitted_via && (MESSAGING_PROVIDERS as readonly string[]).includes(s.submitted_via) ? 'chat' : 'typed';
+  callChannel(s) ? 'call'
+    : AUDIO_CHANNELS.has(s.channel) ? 'recording'
+      : s.submitted_via && (MESSAGING_PROVIDERS as readonly string[]).includes(s.submitted_via) ? 'chat' : 'typed';
+const spoken = (k: Kind | undefined) => k === 'recording' || k === 'call';
+
+type Side = 'founder' | 'customer' | 'unattributed';
+interface Names { interviewee: string; founder: string }
+const normName = (v: unknown) => String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * Whose line it is. A chat or a paste has two parties, so any speaker but "Me"
+ * is the customer. A recording or a call may hold more: a line is the
+ * founder's or the interviewee's only by their name, and anyone else is
+ * unattributed, never the interviewee.
+ */
+function sideOf(kind: Kind | undefined, label: string | null, names: Names | undefined): Side {
+  const l = normName(label);
+  if (l === normName(ME)) return 'founder';
+  if (!spoken(kind)) return 'customer';
+  if (!l) return 'unattributed';
+  if (names && l === names.founder) return 'founder';
+  if (l === 'interviewee' || (names && l === names.interviewee)) return 'customer';
+  return 'unattributed';
+}
 
 interface SideCounts { typed: number; recorded: number }
-export interface MessageCounts { founder: SideCounts; customer: SideCounts; total: number }
+export interface MessageCounts { founder: SideCounts; customer: SideCounts; unattributed: SideCounts; total: number }
+export interface SpeakerCount { speaker: string; side: Side; lines: number }
+export interface TranscriptSource { source: 'native' | 'speech_to_text' | 'chat' | 'typed'; channel: string | null; model: string | null }
 export interface Reach { cited: number; of: number; share: number }
 export interface ThemeCount { group_id: number | null; title: string | null; suggested: number; accepted: number }
 export interface ObjectionCount { about: string; suggested: number; accepted: number }
@@ -165,6 +214,19 @@ async function voiceNotes(env: Env, sessions: readonly AnalyticsSession[]) {
   ).bind(ids(chats)).all<{ session_id: number; language: string | null; segments_json: string | null }>()).results ?? [];
 }
 
+/** Each spoken session's interviewee and founder names, to tell a call's sides apart. */
+async function namesOf(env: Env, sessions: readonly AnalyticsSession[]): Promise<Map<number, Names>> {
+  const spokenOnes = sessions.filter((s) => spoken(kindOf(s)));
+  if (!spokenOnes.length) return new Map();
+  const rows = (await env.DB.prepare(
+    `SELECT s.id, i.interviewee_name, u.name FROM interview_sessions s
+       LEFT JOIN discovery_interviews i ON i.id = s.interview_id
+       LEFT JOIN users u ON u.id = s.created_by_user_id
+      WHERE s.id IN (SELECT value FROM json_each(?))`,
+  ).bind(ids(spokenOnes)).all<{ id: number; interviewee_name: string | null; name: string | null }>()).results ?? [];
+  return new Map(rows.map((r) => [Number(r.id), { interviewee: normName(r.interviewee_name), founder: normName(r.name) }]));
+}
+
 async function proposals(env: Env, sessionIds: string): Promise<Proposal[]> {
   return (await env.DB.prepare(
     `SELECT session_id, kind, status, COALESCE(edited_payload_json, payload_json) AS payload,
@@ -182,16 +244,21 @@ function noteSide(segmentsJson: string | null): 'founder' | 'customer' | null {
   return (first as { speaker_label?: unknown }).speaker_label === ME ? 'founder' : 'customer';
 }
 
+const noMessages = (): MessageCounts => ({
+  founder: { typed: 0, recorded: 0 }, customer: { typed: 0, recorded: 0 }, unattributed: { typed: 0, recorded: 0 }, total: 0,
+});
+
 function messageCounts(
   sessions: readonly AnalyticsSession[], segments: readonly (SegmentRow & { session_id: number })[],
-  notes: readonly { session_id: number; segments_json: string | null }[],
+  notes: readonly { session_id: number; segments_json: string | null }[], names: ReadonlyMap<number, Names>,
 ): Figure<MessageCounts> {
-  const counts: MessageCounts = { founder: { typed: 0, recorded: 0 }, customer: { typed: 0, recorded: 0 }, total: 0 };
+  const counts = noMessages();
   const kinds = new Map(sessions.map((s) => [s.id, kindOf(s)]));
   for (const seg of segments) {
     if (!String(seg.text ?? '').trim()) continue;
-    const side = seg.speaker_label === ME ? 'founder' : 'customer';
-    if (kinds.get(seg.session_id) === 'recording') counts[side].recorded += 1;
+    const kind = kinds.get(seg.session_id);
+    const side = sideOf(kind, seg.speaker_label, names.get(seg.session_id));
+    if (spoken(kind)) counts[side].recorded += 1;
     else counts[side].typed += 1;
     counts.total += 1;
   }
@@ -202,10 +269,40 @@ function messageCounts(
     counts[side].typed -= 1;
     counts[side].recorded += 1;
   }
+  const sides = [counts.founder, counts.customer, counts.unattributed];
   const sources: SourceLabel[] = [];
-  if (counts.founder.recorded + counts.customer.recorded > 0) sources.push('Recorded');
-  if (counts.founder.typed + counts.customer.typed > 0) sources.push('Typed');
+  if (sides.some((x) => x.recorded > 0)) sources.push('Recorded');
+  if (sides.some((x) => x.typed > 0)) sources.push('Typed');
   return known(counts, sources);
+}
+
+/** One session's speakers, in the order they first speak, each with its side and its lines. */
+function speakers(session: AnalyticsSession, segments: readonly SegmentRow[], names: ReadonlyMap<number, Names>): Figure<SpeakerCount[]> {
+  const kind = kindOf(session);
+  const by = new Map<string, SpeakerCount>();
+  for (const seg of segments) {
+    if (!String(seg.text ?? '').trim()) continue;
+    const speaker = String(seg.speaker_label ?? '').trim() || 'Speaker ?';
+    const row = by.get(speaker) ?? { speaker, side: sideOf(kind, speaker, names.get(session.id)), lines: 0 };
+    row.lines += 1;
+    by.set(speaker, row);
+  }
+  if (!by.size) return unknown(REASONS.noTranscript);
+  return known([...by.values()], [spoken(kind) ? 'Recorded' : 'Typed']);
+}
+
+/** How the session's text was made: the provider's own transcript, Workers AI speech-to-text, a chat, or typed. */
+function transcriptSource(session: AnalyticsSession, segments: readonly SegmentRow[]): Figure<TranscriptSource> {
+  if (!segments.length) return unknown(REASONS.noTranscript);
+  const kind = kindOf(session);
+  const channel = callChannel(session) ?? (kind === 'chat' ? session.submitted_via : null);
+  const model = session.final_model ? String(session.final_model) : null;
+  if (kind === 'chat') return known({ source: 'chat', channel, model: null }, ['Typed']);
+  if (kind === 'typed') return known({ source: 'typed', channel, model: null }, ['Typed']);
+  if (!model) return unknown(REASONS.transcriptModel);
+  // An import writes `<provider>_transcript` (meetings.ts); anything else is a speech-to-text model.
+  const native = kind === 'call' && model === `${session.submitted_via}_transcript`;
+  return known({ source: native ? 'native' : 'speech_to_text', channel, model }, ['Recorded']);
 }
 
 /** How much of the transcript a suggestion cites: segments any proposal's span touches, over all segments. */
@@ -313,24 +410,52 @@ const quoteOf = (p: Proposal): string | null => {
 /** Each language and its count: a chat's voice notes, as speech-to-text detected it, or the recording itself. */
 function languages(sessions: readonly AnalyticsSession[], notes: readonly { language: string | null }[]): Figure<{ language: string; count: number }[]> {
   const kinds = new Set(sessions.map(kindOf));
-  if (kinds.has('recording') && sessions.length === 1) {
+  if (sessions.length === 1 && spoken(kindOf(sessions[0]))) {
     const lang = sessions[0].language;
-    return lang ? known([{ language: lang, count: 1 }], ['Recorded']) : unknown(REASONS.recordingLanguage);
+    if (lang) return known([{ language: lang, count: 1 }], ['Recorded']);
+    return unknown(kinds.has('call') ? REASONS.callLanguage : REASONS.recordingLanguage);
   }
-  if (!kinds.has('chat')) return unknown(REASONS.notChat);
+  if (!kinds.has('chat') && !kinds.has('call')) return unknown(REASONS.notChat);
   const by = new Map<string, number>();
-  for (const n of notes) if (n.language) by.set(n.language, (by.get(n.language) ?? 0) + 1);
-  return known([...by].map(([language, count]) => ({ language, count })).sort((a, b) => b.count - a.count || a.language.localeCompare(b.language)), notes.length ? ['Recorded'] : []);
+  const add = (lang: string | null) => { if (lang) by.set(lang, (by.get(lang) ?? 0) + 1); };
+  for (const n of notes) add(n.language);
+  const calls = sessions.filter((s) => kindOf(s) === 'call');
+  for (const s of calls) add(s.language);
+  // Calls with no language among them read unknown; a chat without voice notes has none to count.
+  if (!kinds.has('chat') && !by.size) return unknown(REASONS.callLanguage);
+  return known([...by].map(([language, count]) => ({ language, count })).sort((a, b) => b.count - a.count || a.language.localeCompare(b.language)),
+    notes.length || calls.some((s) => s.language) ? ['Recorded'] : []);
 }
 
-function voice(sessions: readonly AnalyticsSession[], notes: readonly unknown[]) {
+/** A call's length: the recorder's active time when it kept one, else its last line's end, else unknown. */
+function callMs(session: AnalyticsSession, segments: readonly (SegmentRow & { session_id: number })[]): number | null {
+  if (Number(session.active_ms) > 0) return Number(session.active_ms);
+  let end: number | null = null;
+  for (const seg of segments) {
+    if (seg.session_id !== session.id) continue;
+    const at = seg.end_ms ?? seg.start_ms;
+    if (at != null && Number.isFinite(Number(at))) end = Math.max(end ?? 0, Number(at));
+  }
+  return end;
+}
+
+function voice(sessions: readonly AnalyticsSession[], notes: readonly unknown[], segments: readonly (SegmentRow & { session_id: number })[]) {
   const kinds = new Set(sessions.map(kindOf));
   const notesFig: Figure<number> = kinds.has('chat') ? known(notes.length, notes.length ? ['Recorded'] : []) : unknown(REASONS.notChat);
   let minutes: Figure<number>;
   if (kinds.has('chat')) minutes = unknown(REASONS.chatVoiceMinutes);
-  else if (kinds.has('recording')) {
-    const ms = sessions.reduce((n, s) => n + Number(s.active_ms || 0), 0);
-    minutes = known(Math.round(ms / 6_000) / 10, ['Recorded']);
+  else if (kinds.has('recording') || kinds.has('call')) {
+    let ms = 0;
+    let missing = false;
+    for (const s of sessions) {
+      const kind = kindOf(s);
+      if (kind === 'recording') ms += Number(s.active_ms || 0);
+      else if (kind === 'call') {
+        const len = callMs(s, segments);
+        if (len == null) missing = true; else ms += len;
+      }
+    }
+    minutes = missing ? unknown(REASONS.callMinutes) : known(Math.round(ms / 6_000) / 10, ['Recorded']);
   } else minutes = known(0, ['Typed']);
   return { notes: notesFig, minutes };
 }
@@ -338,6 +463,8 @@ function voice(sessions: readonly AnalyticsSession[], notes: readonly unknown[])
 export interface SessionAnalytics {
   session: { id: number; kind: Kind; provider: string | null; channel: string | null; created_at: string };
   messages: Figure<MessageCounts>;
+  speakers: Figure<SpeakerCount[]>;
+  transcript_source: Figure<TranscriptSource>;
   voice_notes: Figure<number>;
   voice_minutes: Figure<number>;
   languages: Figure<{ language: string; count: number }[]>;
@@ -358,7 +485,8 @@ async function figures(env: Env, projectId: number, sessions: readonly Analytics
     if (/no such (table|column)/i.test(String(e?.message ?? e))) return null;
     throw e;
   });
-  const messages = notes ? messageCounts(sessions, segments, notes) : unknown<MessageCounts>(REASONS.unreadable('voice-note store'));
+  const names = await namesOf(env, sessions);
+  const messages = notes ? messageCounts(sessions, segments, notes, names) : unknown<MessageCounts>(REASONS.unreadable('voice-note store'));
   const sources = messages.sources;
   const props = await proposals(env, sessionIds).catch((e) => {
     if (/no such (table|column)/i.test(String(e?.message ?? e))) return null;
@@ -366,9 +494,9 @@ async function figures(env: Env, projectId: number, sessions: readonly Analytics
   });
   const suggestionsMissing = REASONS.unreadable('suggestion store');
   const anyChat = sessions.some((s) => kindOf(s) === 'chat');
-  const v = notes ? voice(sessions, notes) : { notes: unknown<number>(REASONS.unreadable('voice-note store')), minutes: unknown<number>(REASONS.unreadable('voice-note store')) };
+  const v = notes ? voice(sessions, notes, segments) : { notes: unknown<number>(REASONS.unreadable('voice-note store')), minutes: unknown<number>(REASONS.unreadable('voice-note store')) };
   return {
-    segments, notes, props,
+    segments, notes, props, names,
     shared: {
       messages,
       voice_notes: v.notes,
@@ -389,7 +517,7 @@ async function figures(env: Env, projectId: number, sessions: readonly Analytics
 
 /** One session's analytics, its quotes per theme included where consent allows. */
 export async function sessionAnalytics(env: Env, session: AnalyticsSession): Promise<SessionAnalytics & { quotes_by_theme: Figure<ThemeQuotes[]> }> {
-  const { props, shared } = await figures(env, session.project_id, [session]);
+  const { segments, props, names, shared } = await figures(env, session.project_id, [session]);
   let quotes: Figure<ThemeQuotes[]>;
   if (!props) quotes = unknown(REASONS.unreadable('suggestion store'));
   else if (!(await quotable(env, [session])).has(session.id)) quotes = unknown(QUOTE_WITHHELD);
@@ -409,33 +537,50 @@ export async function sessionAnalytics(env: Env, session: AnalyticsSession): Pro
     });
   }
   return {
-    session: { id: session.id, kind: kindOf(session), provider: session.submitted_via, channel: channelOf(session), created_at: session.created_at },
+    session: {
+      id: session.id, kind: kindOf(session), provider: session.submitted_via,
+      channel: channelOf(session), created_at: session.created_at,
+    },
     ...shared,
+    speakers: speakers(session, segments, names),
+    transcript_source: transcriptSource(session, segments),
     quotes_by_theme: quotes,
   };
 }
 
+/** Which of a venture's conversations a venture read takes: its chats (D858's default), its calls (D873), or both. */
+export const VENTURE_KINDS = ['chats', 'calls', 'all'] as const;
+export type VentureKind = (typeof VENTURE_KINDS)[number];
+const sourcesOf = (kind: VentureKind): string[] => [
+  ...(kind === 'calls' ? [] : MESSAGING_PROVIDERS),
+  ...(kind === 'chats' ? [] : [...CALL_CHANNELS.keys()]),
+];
+
 /**
- * A venture's sessions in the range, newest first, at most VENTURE_SESSIONS_MAX:
- * its chats (D858) when no channel is named, else the sessions of that channel
- * (D866), recordings and typed notes included.
+ * A venture's chat or call sessions in the range, newest first, at most
+ * VENTURE_SESSIONS_MAX. A named channel (D866) reads that channel's sessions
+ * instead, whatever their kind, recordings and typed notes included.
  */
-export async function ventureChatSessions(env: Env, projectId: number, from: string | null, to: string | null, channel: string | null = null) {
+export async function ventureSessions(
+  env: Env, projectId: number, from: string | null, to: string | null, kind: VentureKind = 'chats', channel: string | null = null,
+) {
   // `channelOf` in SQL, so a named channel narrows the rows before their LIMIT.
-  // Literal SQL: the schema guard reads every column it names.
+  // Literal SQL: the schema guard reads every column it names. 'google_meet'
+  // is CALL_CHANNELS' one renamed call.
   const rows = (await env.DB.prepare(
     `SELECT s.id, s.interview_id, s.project_id, s.channel, s.submitted_via, s.consent_status, s.active_ms, s.language, s.created_at,
+            s.created_by_user_id, s.final_model,
             (SELECT t.provider FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1) AS thread_provider
        FROM interview_sessions s
       WHERE s.project_id = ?
         AND CASE WHEN ? IS NULL THEN s.submitted_via IN (SELECT value FROM json_each(?))
-                 ELSE COALESCE(NULLIF(TRIM(s.submitted_via), ''),
+                 ELSE COALESCE(CASE WHEN TRIM(s.submitted_via) = 'google_meet' THEN 'meet' ELSE NULLIF(TRIM(s.submitted_via), '') END,
                         (SELECT NULLIF(TRIM(t.provider), '') FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1),
                         CASE WHEN s.channel IN (SELECT value FROM json_each(?)) THEN 'recorder' ELSE NULLIF(TRIM(s.channel), '') END) = ? END
         AND (? IS NULL OR datetime(s.created_at) >= datetime(?))
         AND (? IS NULL OR datetime(s.created_at) < datetime(?, '+1 day'))
       ORDER BY datetime(s.created_at) DESC, s.id DESC LIMIT ?`,
-  ).bind(projectId, channel, JSON.stringify(MESSAGING_PROVIDERS), AUDIO_JSON, channel, from, from, to, to, VENTURE_SESSIONS_MAX + 1)
+  ).bind(projectId, channel, JSON.stringify(sourcesOf(kind)), AUDIO_JSON, channel, from, from, to, to, VENTURE_SESSIONS_MAX + 1)
     .all<AnalyticsSession>()).results ?? [];
   return { sessions: rows.slice(0, VENTURE_SESSIONS_MAX), truncated: rows.length > VENTURE_SESSIONS_MAX };
 }
@@ -457,26 +602,33 @@ async function perChannel(env: Env, projectId: number, sessions: readonly Analyt
   return out;
 }
 
-/** A venture's chats (or one channel's sessions) over a range: aggregates only, never a quote's words. */
-export async function ventureAnalytics(env: Env, projectId: number, range: { from: string | null; to: string | null; channel?: string | null }) {
+/** A venture's chats, calls or both (or one channel's sessions, D866) over a range: aggregates only, never a quote's words. */
+export async function ventureAnalytics(
+  env: Env, projectId: number, range: { from: string | null; to: string | null; kind?: VentureKind; channel?: string | null },
+) {
+  const kind = range.kind ?? 'chats';
   const channel = range.channel ?? null;
-  const { sessions, truncated } = await ventureChatSessions(env, projectId, range.from, range.to, channel);
+  const { sessions, truncated } = await ventureSessions(env, projectId, range.from, range.to, kind, channel);
   const byProvider: Record<string, number> = {};
-  for (const s of sessions) byProvider[String(s.submitted_via)] = (byProvider[String(s.submitted_via)] ?? 0) + 1;
+  for (const s of sessions) {
+    const key = callChannel(s) ?? String(s.submitted_via);
+    byProvider[key] = (byProvider[key] ?? 0) + 1;
+  }
   const byChannel: Record<string, number> = {};
   for (const s of sessions) byChannel[channelOf(s) ?? 'unknown'] = (byChannel[channelOf(s) ?? 'unknown'] ?? 0) + 1;
   const base = {
-    project_id: projectId, from: range.from, to: range.to, channel, sessions: sessions.length,
+    project_id: projectId, kind, channel, from: range.from, to: range.to, sessions: sessions.length,
     sessions_by_provider: byProvider, sessions_by_channel: byChannel, truncated,
   };
   if (!sessions.length) {
     const none = REASONS.noTranscript;
     return {
       ...base,
-      messages: known<MessageCounts>({ founder: { typed: 0, recorded: 0 }, customer: { typed: 0, recorded: 0 }, total: 0 }, []),
-      voice_notes: known(0, []), voice_minutes: unknown<number>(REASONS.chatVoiceMinutes),
+      messages: known<MessageCounts>(noMessages(), []),
+      voice_notes: kind === 'calls' ? unknown<number>(REASONS.notChat) : known(0, []),
+      voice_minutes: kind === 'calls' ? known(0, []) : unknown<number>(REASONS.chatVoiceMinutes),
       languages: known<{ language: string; count: number }[]>([], []), text_languages: unknown<{ language: string; messages: number }[]>(REASONS.textLanguage),
-      median_reply_seconds: unknown<number>(REASONS.replyTime), suggestion_reach: unknown<Reach>(none),
+      median_reply_seconds: unknown<number>(kind === 'calls' ? REASONS.replyTimeNotChat : REASONS.replyTime), suggestion_reach: unknown<Reach>(none),
       pain_themes: known<ThemeCount[]>([], []), objections: known<ObjectionCount[]>([], []),
       wtp_mentions: known<WtpCount>({ suggested: 0, accepted: 0, by_kind: {} }, []), competitor_mentions: known<CompetitorCount[]>([], []),
       quotes_by_theme: known<ThemeQuoteCount[]>([], []),

@@ -125,7 +125,7 @@ test('1. a WhatsApp session: every figure equals the hand count, with its source
   const b = r.body;
   assert.deepEqual(b.session, { id: 1, kind: 'chat', provider: 'whatsapp', channel: 'whatsapp', created_at: '2026-10-10 09:00:00' });
   assert.deepEqual(b.messages, {
-    value: { founder: { typed: 1, recorded: 1 }, customer: { typed: 2, recorded: 1 }, total: 5 }, sources: ['Recorded', 'Typed'], reason: null,
+    value: { founder: { typed: 1, recorded: 1 }, customer: { typed: 2, recorded: 1 }, unattributed: { typed: 0, recorded: 0 }, total: 5 }, sources: ['Recorded', 'Typed'], reason: null,
   });
   assert.deepEqual(b.voice_notes, { value: 2, sources: ['Recorded'], reason: null });
   assert.deepEqual(b.languages.value, [{ language: 'en', count: 1 }, { language: 'es', count: 1 }]);
@@ -145,7 +145,7 @@ test('1. the venture over a range: aggregates of its chats only, and the range n
   const b = r.body;
   assert.equal(b.sessions, 2, 'the recording and the other venture are not its chats');
   assert.deepEqual(b.sessions_by_provider, { whatsapp: 1, telegram: 1 });
-  assert.deepEqual(b.messages.value, { founder: { typed: 1, recorded: 1 }, customer: { typed: 3, recorded: 1 }, total: 6 });
+  assert.deepEqual(b.messages.value, { founder: { typed: 1, recorded: 1 }, customer: { typed: 3, recorded: 1 }, unattributed: { typed: 0, recorded: 0 }, total: 6 });
   assert.equal(b.voice_notes.value, 2);
   assert.deepEqual(b.suggestion_reach.value, { cited: 5, of: 6, share: 0.833 });
   assert.deepEqual(b.pain_themes.value, [
@@ -188,7 +188,7 @@ test('2. what no store holds reads null with its reason, never 0', async () => {
   assert.deepEqual(rec.voice_minutes, { value: 1.5, sources: ['Recorded'], reason: null }, 'a recording knows its minutes');
   assert.deepEqual(rec.voice_notes, { value: null, sources: [], reason: REASONS.notChat });
   assert.deepEqual(rec.languages.value, [{ language: 'fr', count: 1 }]);
-  assert.deepEqual(rec.messages.value, { founder: { typed: 0, recorded: 1 }, customer: { typed: 0, recorded: 1 }, total: 2 });
+  assert.deepEqual(rec.messages.value, { founder: { typed: 0, recorded: 1 }, customer: { typed: 0, recorded: 1 }, unattributed: { typed: 0, recorded: 0 }, total: 2 });
   assert.deepEqual(rec.median_reply_seconds.reason, REASONS.replyTimeNotChat);
 
   assert.deepEqual(rec.suggestion_reach.value, { cited: 0, of: 2, share: 0 });

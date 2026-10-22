@@ -1,12 +1,15 @@
 /**
  * D858 (#2503) — conversation analytics for Record a Session.
- *   GET /api/validate/sessions/:id/analytics?channel                     one session's figures
- *   GET /api/validate/conversations/analytics?project_id&from&to&channel  a venture's chats, aggregates only
+ *   GET /api/validate/sessions/:id/analytics?channel             one session's figures
+ *   GET /api/validate/conversations/analytics?project_id&from&to&kind  a venture's chats (default), calls (D873) or
+ *                                                                      both, aggregates only;
+ *                                                                      `&channel` (D866) one channel's
  *
  * THE CHANNEL FILTER (D866, #2512). `channel` names one channel (`telegram`,
- * `whatsapp`, `recorder`, …; `channelOf`). On a venture it reads that
- * channel's sessions instead of its chats; on a session it answers 404 when
- * the session is of another channel, as a filtered list would leave it out.
+ * `whatsapp`, `zoom`, `meet`, `upload`, `recorder`, …; `channelOf`). On a
+ * venture it reads that channel's sessions, whatever their kind, so it takes
+ * precedence over `kind`; on a session it answers 404 when the session is of
+ * another channel, as a filtered list would leave it out.
  *
  * WHO READS. A signed-in member who may read the venture's board
  * (`canReadBoard`: the venture's own founder, or HQ staff, the same audience
@@ -22,7 +25,7 @@ import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, type ProjectRef } from './_founder_validate_helpers';
 import {
-  CHANNEL_NAME, channelOf, sessionAnalytics, ventureAnalytics, type AnalyticsSession,
+  CHANNEL_NAME, channelOf, sessionAnalytics, ventureAnalytics, VENTURE_KINDS, type AnalyticsSession, type VentureKind,
 } from '../services/conversationAnalytics';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -53,7 +56,7 @@ r.get('/sessions/:id/analytics', async (c) => {
   const user = (await requireAuth(c)) as User;
   const row = await c.env.DB.prepare(
     `SELECT s.id, s.interview_id, s.project_id, s.channel, s.submitted_via, s.consent_status, s.active_ms, s.language,
-            s.created_at,
+            s.created_at, s.created_by_user_id, s.final_model,
             (SELECT t.provider FROM channel_threads t WHERE t.session_id = s.id ORDER BY t.id LIMIT 1) AS thread_provider, p.founder_id
        FROM interview_sessions s JOIN projects p ON p.id = s.project_id WHERE s.id = ?`,
   ).bind(Number(raw)).first<AnalyticsSession & { founder_id: number | null }>();
@@ -64,7 +67,7 @@ r.get('/sessions/:id/analytics', async (c) => {
   return c.json({ ok: true, ...(await sessionAnalytics(c.env, session)) });
 });
 
-// GET /api/validate/conversations/analytics?project_id=&from=YYYY-MM-DD&to=YYYY-MM-DD&channel=
+// GET /api/validate/conversations/analytics?project_id=&from=YYYY-MM-DD&to=YYYY-MM-DD&kind=chats|calls|all&channel=
 r.get('/conversations/analytics', async (c) => {
   const raw = c.req.query('project_id') ?? '';
   if (!ID.test(raw)) return c.json({ detail: 'project_id is required' }, 400);
@@ -72,13 +75,15 @@ r.get('/conversations/analytics', async (c) => {
   const to = day(c.req.query('to'));
   if (from === false || to === false) return c.json({ detail: 'from and to are dates, YYYY-MM-DD' }, 400);
   if (from && to && from > to) return c.json({ detail: 'from is after to' }, 400);
+  const kind = (c.req.query('kind') ?? 'chats') as VentureKind;
+  if (!VENTURE_KINDS.includes(kind)) return c.json({ detail: 'kind is chats, calls or all' }, 400);
   const channel = channelParam(c.req.query('channel'));
   if (channel === false) return c.json({ detail: 'channel is a channel name, such as telegram' }, 400);
   const user = (await requireAuth(c)) as User;
   const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
     .bind(Number(raw)).first<ProjectRef>();
   if (!project || !canReadBoard(project, user)) return c.json({ detail: 'Project not found' }, 404);
-  return c.json({ ok: true, ...(await ventureAnalytics(c.env, project.id, { from, to, channel })) });
+  return c.json({ ok: true, ...(await ventureAnalytics(c.env, project.id, { from, to, kind, channel })) });
 });
 
 export default r;
