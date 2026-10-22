@@ -171,10 +171,11 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
           'When you sync Grow, it fills Revenue and traction, Durable company-building, Team expansion, Distribution and Partner network: facts are written, a partner match is proposed for you to accept, and cash, treasury, runway, payroll and spend are shown to your team only.',
         ]
         : variant === 'investor'
+          // D884 (#2557): what it reads, then Deals and Pipeline first, then Fund, then proof of funds.
           ? [
-            'Your own Mercury account, read-only, on HQ or in a branch (D884).',
-            'Signed in with Mercury, it fills your Deals sections: in Deals › Pipeline and Deals › Commit, your capacity beside the cheques you intend and the commitments you made, on your page only; in Deals › Closing, the wire that funded a commitment, proposed for you to accept. It also proposes entries for Fund › Calls, Accounting and Reporting, which write nothing until you accept them. Portfolio gets nothing from Mercury. It never sends, transfers or requests money.',
-            'On HQ, a proof of funds: Axal VC reads your accounts’ names, kinds and last four digits so you can pick the ones it counts, and Axal’s admins see only a dated statement of at least an amount you choose, never a balance.',
+            'Your own Mercury account, read-only, on HQ or in a branch. Axal VC reads your accounts’ names, kinds and last four digits, their available balances, your transactions and your statements. A balance is shown to you alone, and it never sends, transfers or requests money.',
+            'Deals first. Deals › Pipeline shows your capacity beside the cheques you intend on your live deals. Deals › Commit reads that capacity from the accounts you pick, beside your commitments. Deals › Closing proposes the wire that funded a commitment, for you to accept.',
+            'Then Fund › Calls, Accounting and Reporting, whose proposals write nothing until you accept them. Portfolio gets nothing from Mercury. On HQ, a proof of funds: Axal’s admins see only a dated statement of at least an amount you choose, never a balance.',
           ]
           : [
           'Your own Mercury account, read-only.',
