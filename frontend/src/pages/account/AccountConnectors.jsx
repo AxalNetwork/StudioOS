@@ -10,14 +10,14 @@ import { AssistantsSection } from './AssistantsGroup';
 import { ChannelsSection } from './ChannelsGroup';
 import {
   MOVED_SEEN_KEY, YOURS_FILTERS, YOURS_SORTS, cardAction, cardPill, companiesLabel, connectorPagePath,
-  discoverSections, doesLabel, isEntityRow, isPersonalMercury, keysHref, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
+  discoverSections, doesLabel, isPersonalMercury, keysHref, lastSyncLabel, matchesQuery, oauthReturn, pageOf, stripReturn, yoursFeedsLabel, yoursRows,
   SUGGESTED,
 } from './connectorsModel';
 import { ACCOUNT_PHONE_COPY, ACCOUNT_PHONE_PAGES } from './accountPhone';
 import { hubSearchFor, hubTabFor } from './connectorPageModel';
 import { NO_FILTER, activeFilters, discoverFacets, discoverGrid, filterCatalogue, isVerified, makerLine, topSlice } from './discoverModel';
 import { ActiveFilters, ConnectorFilterMenu } from './ConnectorFilterMenu';
-import { FUND_ADMIN_GROUP, isMercurySearch, notOfferedSentence } from './mercuryModel';
+import { isMercurySearch, notOfferedSentence } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { branchOfUser, isSuperAdminUser } from '../../lib/shellRole';
 
@@ -101,26 +101,6 @@ export function YoursTable({ rows, role = null }) {
 }
 
 /**
- * #1780 decision 2 — the "Fund administration" group: one Mercury card for the
- * four Axal entities' connections, drawn only when the catalogue holds the
- * entity row (the Worker serves it to an admin on HQ alone). The card opens
- * Mercury's page (D753 F5, #1991), whose mount is the one audited read; the
- * group itself reads nothing.
- */
-export function FundAdminSection({ catalogue }) {
-  const p = (catalogue || []).find((x) => isEntityRow(x));
-  if (!p) return null;
-  return (
-    <section className="flex min-w-0 flex-col gap-2.5" data-testid="fund-admin-group" aria-label={FUND_ADMIN_GROUP.title}>
-      <h2 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">{FUND_ADMIN_GROUP.title}</h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="fund-admin-mercury">
-        <ConnectorCard p={p} />
-      </div>
-    </section>
-  );
-}
-
-/**
  * D753 F6 decision 9: a Discover card is a link to its connector's page. One
  * stretched link on the name covers the card, so "+" opens the page and never
  * starts a sign-in from the grid. The corner tiles are decoration (the link
@@ -138,8 +118,6 @@ export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = 
   if (act === 'notify') corner = <button type="button" disabled={busy} onClick={() => onNotify(p)} className={`${BTN.link} relative z-10 max-sm:inline-flex max-sm:min-h-[44px] max-sm:items-center`}>Notify me</button>;
   if (act === 'joined') corner = <button type="button" disabled={busy} onClick={() => onUnnotify(p)} className={`${BTN.link} relative z-10`} title="Click to stop the notice">We&apos;ll tell you</button>;
   if (act === 'unavailable') corner = <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{p.unreadable ? 'Status unreadable' : 'Not set up here'}</span>;
-  // D715: the Axal entities' Mercury opens its page, whatever else the row says.
-  if (act === 'entity') corner = <span aria-hidden="true" className={BTN.link}>Open</span>;
   return (
     <article className={`${TONE_CLS} relative flex h-full flex-col gap-2 p-3.5 focus-within:ring-2 focus-within:ring-axal-violet/40`} data-testid={`connector-card-${p.key}`} data-action={act}>
       <div className="flex items-start justify-between"><BrandIcon provider={p.key} name={p.display_name} />{corner}</div>
@@ -153,8 +131,6 @@ export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = 
       <div className="mt-auto flex items-center justify-between gap-1.5">
         {maker ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{maker}</span> : <span />}
         {pill && <Pill tone={pill.tone}>{pill.label}</Pill>}
-        {/* #1780 decision 2: the entity row's badge, from the row the catalogue serves; drawing it reads nothing. */}
-        {act === 'entity' && <span data-testid="connector-entity-badge"><Pill tone="info">{FUND_ADMIN_GROUP.badge}</Pill></span>}
       </div>
       {p.why && <span className="text-[11.5px] leading-snug text-axal-violet-deep dark:text-violet-300">{p.why}</span>}
       {keys && <Link to={keys} className={`${BTN.link} relative z-10 self-start text-[11.5px]`} data-testid={`connector-keys-link-${p.key}`}>Add its keys in Integration keys</Link>}
@@ -255,7 +231,6 @@ function actionPill(p, act) {
   if (act === 'connected') return { label: 'Connected', tone: 'ok' };
   if (act === 'notify') return { label: 'Notify me', tone: 'info' };
   if (act === 'joined') return { label: "We'll tell you", tone: 'neutral' };
-  if (act === 'entity') return { label: 'Open', tone: 'info' };
   return { label: p.unreadable ? 'Status unreadable' : 'Not set up here', tone: 'neutral' };
 }
 
@@ -362,7 +337,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
   const [ret] = useState(() => oauthReturn(location.search));
   useEffect(() => {
     if (!ret) return;
-    // Mercury has no sign-in: a return naming it is crafted, and must not cause the entity sheet's audited read (D715).
+    // Mercury's sign-in returns to its own page (D840), so a return naming it here is crafted: strip it, open nothing.
     if (ret.key === 'mercury') {
       navigate({ pathname: location.pathname, search: stripReturn(location.search, ret.strip), hash: location.hash }, { replace: true, state: location.state });
     } else {
@@ -389,8 +364,7 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
   const anyConnected = data.catalogue.some((p) => p.connection);
   // One search rule (`matchesQuery`) for the lists and for "No connector
   // called…": on Yours the question is your connectors, on Discover the catalogue.
-  // #1780 decision 2: the Fund administration group draws the entity row on both tabs, so Yours' search counts it too.
-  const anyMatch = data.catalogue.some((p) => (tab === 'yours' ? !!p.connection || isEntityRow(p) : true) && matchesQuery(p, q));
+  const anyMatch = data.catalogue.some((p) => (tab === 'yours' ? !!p.connection : true) && matchesQuery(p, q));
   // D715 decision 10: a search for Mercury when the Worker serves this profile no Mercury row says why, and offers no request.
   const mercuryWithheld = isMercurySearch(q) && !data.catalogue.some((p) => p.key === 'mercury');
   const notOffered = <span data-testid="connectors-mercury-not-offered">{notOfferedSentence({ branchAdmin, role, onBranch })}</span>;
@@ -536,9 +510,6 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
   );
   const extras = (
     <>
-      {/* #1780 decision 2: the Axal entities' Mercury, on both tabs and on a phone. */}
-      <FundAdminSection catalogue={data.catalogue} />
-
       {/* D684 (#1578): business Telegram and WhatsApp, Zoom and Google Meet, on
           both tabs. Zoom and Google connect on their own pages (D753). */}
       <ChannelsSection catalogue={data.catalogue} onOpenConnector={(key) => { if (data.catalogue.some((x) => x.key === key)) navigate(connectorPagePath(key)); }} />

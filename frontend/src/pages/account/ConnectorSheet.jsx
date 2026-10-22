@@ -8,7 +8,7 @@ import { BrandIcon, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, INPUT, LoadingRows } from './AccountCenter';
 import { HubspotConfigModal, LinkedInCsvImportModal, SalesforceConfigModal } from './connectorTools';
 import GithubSyncSheet from './GithubSyncSheet';
-import { MercuryEntityPanel, MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
+import { MercuryLandsGroup, MercuryReadsGroup, MercuryUsesGroups } from './MercurySheet';
 import { MEMBER_REPLACE } from './mercuryModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
@@ -16,7 +16,7 @@ import { disconnect, startFirstParty, useConnectFlow } from './useConnectFlow';
 import {
   TIER_LABEL, agoLabel, authKind, buildCatalogue, companiesLabel, connectionStatus,
   disconnectNote, feedsLabel, flowBanner, lastSyncLabel, moduleLabel,
-  coreSystemOffer, isEntityRow, isPersonalMercury,
+  coreSystemOffer, isPersonalMercury,
   FREE_KEEPS_CONNECTORS, connectorPagePath, patOnly,
 } from './connectorsModel';
 import { cyclesWrite } from '../../lib/api/cycles';
@@ -120,7 +120,7 @@ export const SheetFrame = createContext(null);
 /** A centred dialog of its own; inside a `SheetFrame`, the frame's content. `action` sits in the head, before its ×. */
 export function Sheet({ eyebrow, title, sub, onClose, children, footer, provider = null, providerName = '', action = null, 'data-testid': testId }) {
   const frame = useContext(SheetFrame);
-  // With no frame (the Bank accounts console's entity sheet), open Build's one:
+  // With no frame (a sheet opened on its own, as HQ's Bank accounts console does), open Build's one:
   // a centred Lightbox, whose Escape stack a nested dialog shares.
   if (!frame) {
     return (
@@ -732,10 +732,6 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
     footer = <button type="button" className={BTN.primary} onClick={() => go(p.locked ? 'pro' : 'pre')}>Connect</button>;
   }
 
-  // D715 (#1780): the Axal entities' Mercury is its own sheet, never this flow. Its one
-  // audited read happens there, on open; nothing above fetches for it (`openingView` is `entity`).
-  if (isEntityRow(p)) return <MercuryEntityPanel p={p} onClose={onClose} eyebrow={eyebrow} />;
-
   // GitHub's choice of repositories is its own sheet (D686 §5.4).
   if (syncView) {
     return <GithubSyncSheet p={p} conn={conn} projectId={projectId} companyId={companyId} eyebrow={eyebrow} onClose={onClose} onChanged={onChanged} back={() => go('detail')} />;
@@ -841,8 +837,6 @@ const CONNECT_VIEWS = new Set(['pre', 'signin', 'key', 'badkey', 'cancelled', 'r
  * cannot connect, D751 #1881); the plan when locked; else the flow's first step.
  */
 export function openingView(p) {
-  // The entity row opens the entity sheet, so the `pre` view's teammate read never fires for it (D715).
-  if (isEntityRow(p)) return 'entity';
   if (p.connection) return 'detail';
   if (p.oauthOff && !p.supports_pat) return 'unconfigured';
   if (p.locked) return 'pro';
