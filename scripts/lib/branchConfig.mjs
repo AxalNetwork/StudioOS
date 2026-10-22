@@ -488,11 +488,15 @@ export function checkRendered(tomlSrc, entry, rendered) {
   }
 
   // Durable Objects need their migration tag, or a new script has no DO bindings at all.
-  const mig = byName('migrations')[0];
-  const hqMig = prodTables.get('migrations')?.[0];
-  if (!mig) bad.push('the DO migration tag is missing — a new Worker script would have no Durable Object bindings');
-  else if (hqMig && mig.kv.get('new_sqlite_classes') !== hqMig.kv.get('new_sqlite_classes')) {
-    bad.push('the DO migration classes differ from HQ\'s');
+  const migrations = byName('migrations');
+  const hqMigrations = prodTables.get('migrations') || [];
+  for (const expected of hqMigrations) {
+    const tag = expected.kv.get('tag');
+    const found = migrations.find(m => m.kv.get('tag') === tag);
+    if (!found) bad.push(`Durable Object migration ${tag} is missing`);
+    else for (const [key, value] of expected.kv) {
+      if (found.kv.get(key) !== value) bad.push(`Durable Object migration ${tag}: ${key} differs from HQ's`);
+    }
   }
 
   const assets = byName('assets')[0];
