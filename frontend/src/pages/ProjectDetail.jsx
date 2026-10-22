@@ -774,9 +774,10 @@ function DataRoomSection({ project, onSaved, onError }) {
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
-        {valid && safeExternalUrl(url) && (
+        {/* The saved URL, not the field: Open goes where the room is, and hides while an edit is unsaved. */}
+        {!dirty && safeExternalUrl(project.data_room_url) && (
           <a
-            href={safeExternalUrl(url)}
+            href={safeExternalUrl(project.data_room_url)}
             target="_blank"
             rel="noreferrer noopener"
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
@@ -913,9 +914,10 @@ function ProductDemoSection({ project, onSaved, onError }) {
         >
           {saving ? 'Saving…' : 'Save'}
         </button>
-        {liveValid && safeExternalUrl(liveUrl) && (
+        {/* The saved URL, not the field: Open goes where the demo is, and hides while an edit is unsaved. */}
+        {!dirty && safeExternalUrl(project.product_demo_live_url) && (
           <a
-            href={safeExternalUrl(liveUrl)}
+            href={safeExternalUrl(project.product_demo_live_url)}
             target="_blank"
             rel="noreferrer noopener"
             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
