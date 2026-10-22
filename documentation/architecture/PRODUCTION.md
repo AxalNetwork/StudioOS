@@ -283,3 +283,29 @@ git push
 
 Rollback reverts the worker (and with it the SPA), not D1 — see
 [DEPLOY.md §3](../operations/DEPLOY.md#3-capture-a-rollback-point-first).
+
+## Meeting bot deployment prerequisites (#2586, D886 B8 — partial)
+
+The standalone image workflow is a pipeline skeleton, not a deployed bot.
+It validates commit-scoped image names and builds before registry login.
+PRs build a labelled scratch fixture and, once B2 supplies it, the real
+runtime image. Publication requires an owner-triggered main workflow run;
+it uses the built-in `GITHUB_TOKEN`, scoped to package writes for that job.
+No registry password, PAT or VM credential is introduced by this partial.
+Use the published image digest, rather than a mutable SHA tag, for eventual
+runtime configuration and rollback. Images contain code only: never bake
+meeting links, passcodes, run tokens, participant names or transcripts into
+a build context or a log. B2 must review its ignore file and copy allowlist.
+
+`MEETING_BOT_SECRET` is the callback HMAC secret reserved by #2579/#2586.
+Provision it through the existing Worker/runtime secret mechanisms only
+after B1's signing contract and B0's host are settled. It must never be an
+image build argument, label or logged value. No value is recorded here.
+Any host/registry pull credentials will be named only after the host is chosen.
+
+Remaining release gates: B0 host/instance/cost decision and its D886 file;
+B2 runtime Dockerfile and tests; B1 BotRuntime/callback contract; start,
+stop and heartbeat against a stub; host-specific health checks; binding
+parity in production and preview; and a failed image build stopping both
+`npm run deploy` and the Worker deploy workflow **before migrations**.
+Until then the existing Worker deploy path and meeting-bot flags stay as-is.
