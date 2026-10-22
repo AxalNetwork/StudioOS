@@ -3,8 +3,10 @@
  * fix the name and the plan limits; D872 fixes the audio format.
  */
 
-/** The owner's choice (#2577, 2026-10-22). */
-export const BOT_NAME = 'Eadwyn AI';
+import { MEETING_BOT_NAME } from '../notice.mjs';
+
+/** The owner's choice (#2577, 2026-10-22), from B9's notice contract so the name lives in one place. */
+export const BOT_NAME: string = MEETING_BOT_NAME;
 
 /** D872's chunk format: 16 kHz, mono, 16-bit PCM behind a canonical 44-byte header. */
 export const SAMPLE_RATE = 16000;

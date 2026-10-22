@@ -37,6 +37,7 @@ TypeScript directly (type stripping), so there is no build step.
 | `src/log.ts` | The only way a log line is written: codes and counts, nothing else (`safeFields`). |
 | `src/fakeAdapter.ts` | A scripted platform for the tests, and the reference implementation an adapter copies. |
 | `src/index.ts` | The public exports. |
+| `notice.mjs` | B9's notice contract (#2587, #2590): `meetingBotNotice`, `MEETING_BOT_NAME`, the publication gate and the dispatch disclosure. See **The notice** below. |
 | `src/adapters/meet.ts` | B3 (#2581): `MeetAdapter`, Google Meet. It joins as a guest with the microphone and camera off, waits in the waiting room, reads the participant panel and the active-speaker indicator, takes the tab's audio, and detects the end of the call and removal by the host (removal reads as the call ending). It takes a `MeetPage` (`src/adapters/meet/page.ts`), which a Playwright `Page` satisfies, so the core stays dependency-free. |
 | `src/adapters/meet/selectors.ts` | Every Meet page hook, in one place. **UNVERIFIED:** written without access to Meet, and to be measured (#2581 step 1, D886 §8). |
 | `src/adapters/meet/signals.ts` | The Meet adapter's pure rules: the page state from its hooks, the link check, the roster and the active speaker. |
@@ -71,6 +72,38 @@ TypeScript directly (type stripping), so there is no build step.
 `platform_blocked`, `obf_unavailable` (Zoom). An adapter raises one as an
 `AdapterFailure`; any other error reads as `platform_blocked`, and the
 adapter's own message is never kept.
+
+## The notice (B9, #2590)
+
+`notice.mjs` is B9's dependency-free notice contract. Import `meetingBotNotice`
+and `MEETING_BOT_NAME` from it. The caller supplies the authorized venture's
+display name, never a meeting link, passcode or instructions from chat.
+The gated function refuses while `MEETING_BOT_NOTICE_PUBLISHED` is false.
+The public page uses that same publication gate. The announcement links to
+the matching notice version, not the default legacy page. B1 must refuse
+dispatch and scheduled starts while this gate is false, even in canary.
+`draftMeetingBotNotice` is for tests and approval previews only; it is never
+the runtime entry. Publishing requires B1/B2/B6 safeguards to be verified.
+Set the actual `MEETING_BOT_NOTICE_APPROVED_AT` date after approval and those
+checks. A valid date derives the shared publication gate, publishes version 2,
+makes it current and supplies the page's update date together. A missing or
+invalid date cannot publish. Legacy chat-consent links retain version 1.
+
+After publication the notice returns plain text. B2 posts it once after
+admission and before capturing audio. B2 owns the durable once-only record, failure handling and
+the stop/leave behavior; importing this module implements none of those.
+
+The founder has already confirmed recording consent before dispatch. The
+announcement does not obtain that agreement. B7 imports the same module's
+`MEETING_BOT_DISPATCH_DISCLOSURE` beside D757's existing consent control;
+`MeetingBotConsentNotice.jsx` is its presentational wrapper.
+
+Owner steps, failure codes and live checks are in
+`documentation/operations/MEETING_BOT.md`. Never print meeting URLs,
+credentials, display names, roster contents or transcript text in logs or
+GitHub reports. Report counts and states only.
+
+**How B2 uses it.** `runBot` takes the notice as text in `RunConfig.notice` and posts it once, after admission and before it subscribes to any audio, roster or speaker (`src/lifecycle.ts`). The run's entry point (B8) builds that text with `meetingBotNotice`, so while the gate is false there is no text and no run. `BOT_NAME` in `src/constants.ts` is `MEETING_BOT_NAME`, so the name lives in one place.
 
 ## Writing an adapter (B3–B5)
 

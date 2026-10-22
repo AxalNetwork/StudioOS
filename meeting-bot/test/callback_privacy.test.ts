@@ -4,7 +4,7 @@
  * log line, whatever the adapter throws.
  */
 import { test } from 'node:test';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { CALLBACK_PATHS, TransportError, httpTransport, signRequest } from '../src/callback.ts';
 import { logLine, safeFields } from '../src/log.ts';
@@ -15,7 +15,8 @@ import { AdapterFailure } from '../src/types.ts';
 import { FakeClock, StubCallback, tone } from './_harness.ts';
 
 const BASE = 'https://axal.vc/api/meeting-bot/runs/run_9/';
-const KEY = 'test-key-not-a-secret';
+// A fresh key each run: the test checks the signature's shape, not a stored value.
+const KEY = randomBytes(16).toString('hex');
 
 type Seen = { url: string; init: RequestInit };
 function stubFetch(answer: (url: string, init: RequestInit) => Response) {
@@ -45,7 +46,7 @@ test('1. status and events are signed POSTs to the run\'s callback, with redirec
     assert.equal(h['x-axal-bot-ts'], '1700000000');
     assert.equal(h['x-axal-bot-run'], 'run_9');
   }
-  const other = await signRequest('another-key', 'run_9', String(seen[0].init.body), 1_700_000_000_000);
+  const other = await signRequest(randomBytes(16).toString('hex'), 'run_9', String(seen[0].init.body), 1_700_000_000_000);
   assert.notEqual(other['x-axal-bot-signature'], (seen[0].init.headers as Record<string, string>)['x-axal-bot-signature']);
   assert.deepEqual(JSON.parse(String(seen[1].init.body)), { events: [{ n: 1, type: 'speaker', key: 'p1', at_ms: 5 }] });
 });
