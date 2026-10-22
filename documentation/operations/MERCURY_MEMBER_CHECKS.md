@@ -4,6 +4,11 @@ D752 lets members connect their own Mercury account with a **Read Only** token:
 - investors on HQ prove capital to Axal's admins;
 - founders read their spending and match investors' wires to their raise.
 
+> **Since 2026-10-22 (D879–D883, #2551), the walk-through's way in has changed.**
+> - **Members sign in.** A new connection is made only by **Sign in with Mercury**, through Mercury's MCP server (D840, D881). Where a step below says to connect a Read Only token, sign in with the test member's own Mercury instead. A token sent to `POST /connect` now answers 410 `token_connect_retired`.
+> - **Axal VC's accounts are not on the connector.** Their four entity accounts are never on `/account/connectors/mercury`, for anyone. They are managed only in HQ › Fund administration › Bank accounts (`/api/admin/mercury`).
+> - **What still holds.** The field-name checks and the refusals still apply, including a sign-in to an Axal entity's organization being refused (`mercury_entity_account`).
+
 Every test in the repo stubs Mercury, so four field names and the full flow
 have never met a real account. This runbook is for the people who can check
 them. It changes nothing. Its only writes are the ones the flow itself makes

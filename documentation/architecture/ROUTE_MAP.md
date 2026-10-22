@@ -42,10 +42,18 @@ and pages activity. Every company ID supplied by a request is checked against
 implementation also carries `configured` — `true` when Axal holds its client,
 `false` when it does not, `null` when the key store could not be read — and no
 other row carries the field.
-Mercury (D710, #1775; D713, #1778; D752, #1886): an admin on HQ gets the
-entity row, read from `/api/admin/mercury`, and `POST /connect` answers 409
-`entity_connection_only`. A founder or partner, on either host, and an investor
-on HQ get their own row, in their role's words, and connect a Read Only token.
+Mercury (D710, #1775; D713, #1778; D752, #1886; D879–D883, #2551): the member
+connector is a member's **own** Mercury, for a founder's Grow and Raise. Axal
+VC's own entity accounts are never a connector: they live only in HQ › Fund
+administration › Bank accounts, over `/api/admin/mercury`, and
+`scripts/check-mercury-member-surfaces.mjs` (D883) fails the build if a member
+surface names them again. An admin on HQ gets a read-only preview of the
+founder's page (D879: no connect, no connection read), and `POST /connect`
+answers them 403 `purpose_not_allowed`. A founder or partner, on either host,
+and an investor on HQ get their own row, in their role's words, and connect by
+Sign in with Mercury (D840, D881): a token sent to `POST /connect` answers 410
+`token_connect_retired`, and a token row kept from before D881 keeps reading
+until the member signs in or disconnects.
 An investor on a branch gets no row, and `POST /connect` answers 403
 `purpose_not_allowed` ("Mercury is offered to your profile on HQ only.").
 Everyone else, and an admin on a branch, is answered as before: `GET
