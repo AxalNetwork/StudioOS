@@ -49,6 +49,7 @@ import { MIN_HOURS_BETWEEN, structureSession, type StructureOutcome, type Struct
 import type { Segment } from './interviewStructuring';
 import { finalSegments, refusedBody } from '../routes/founder_validate_structure';
 import { MESSAGING_PROVIDERS } from './channels/types';
+import { CALL_CHANNELS } from './conversationAnalytics';
 
 export type DigestStage = 'summarise' | 'structure';
 
@@ -258,8 +259,9 @@ export async function digestSession(env: Env, opts: {
       // D757 (#1923): pass B refused keeps pass A's suggestions; the note says what is missing and why.
       if (structure.ok && structure.passBRefusal !== undefined) notes.push(`${NOTES.passB} ${refusalNote(structure.passBRefusal)}`);
       // D859 (#2504): a customer chat's actions, data points and prototype asks, as more
-      // suggestions. A refusal is a note; the structure stands.
-      if (structure.ok && (MESSAGING_PROVIDERS as readonly string[]).includes(String(session.submitted_via))) {
+      // suggestions. D873 (#2520): a call's too, with its decisions and action items.
+      // A refusal is a note; the structure stands.
+      if (structure.ok && ((MESSAGING_PROVIDERS as readonly string[]).includes(String(session.submitted_via)) || CALL_CHANNELS.has(String(session.submitted_via ?? '')))) {
         const { extractConversationItems } = await import('./conversationItems');
         const items = await extractConversationItems(env, { sessionId: session.id, userId: opts.userId, model: prefs.models.structure, rail: opts.rails?.structure });
         if (!items.ok && items.reason === 'refused') notes.push(`${NOTES.extract} ${refusalNote(items.refusal ?? null)}`);

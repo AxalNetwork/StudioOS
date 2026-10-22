@@ -153,6 +153,8 @@ export async function storePlacements(
     dedupe?: boolean;
     /** The router task that proposed them (D859's extraction names its own); structuring's when absent. */
     task?: 'structure_interview' | 'extract_conversation_items';
+    /** D873 (#2520): how the cited words were made; a call's are 'Recorded'. Absent, nothing is said. */
+    sourceLabel?: 'Recorded';
   },
 ): Promise<{ stored: number; deduped: number }> {
   let placements = opts.placements;
@@ -184,6 +186,7 @@ export async function storePlacements(
       kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote,
       // D857: the run read a translation; the customer's own words and their language stay beside it.
       ...(p.quoteOriginal ? { quote_original: p.quoteOriginal } : {}), ...(p.sourceLang ? { source_lang: p.sourceLang } : {}),
+      ...(opts.sourceLabel ? { source_label: opts.sourceLabel } : {}),
     }),
     `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId, opts.sessionId,
   )));
