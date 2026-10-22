@@ -123,7 +123,7 @@ test('1. a WhatsApp session: every figure equals the hand count, with its source
   const r = await get(w.env, ME, '/sessions/1/analytics');
   assert.equal(r.status, 200, r.text);
   const b = r.body;
-  assert.deepEqual(b.session, { id: 1, kind: 'chat', provider: 'whatsapp', created_at: '2026-10-10 09:00:00' });
+  assert.deepEqual(b.session, { id: 1, kind: 'chat', provider: 'whatsapp', channel: 'whatsapp', created_at: '2026-10-10 09:00:00' });
   assert.deepEqual(b.messages, {
     value: { founder: { typed: 1, recorded: 1 }, customer: { typed: 2, recorded: 1 }, total: 5 }, sources: ['Recorded', 'Typed'], reason: null,
   });

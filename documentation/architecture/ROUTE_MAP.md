@@ -485,6 +485,8 @@ assistant's `submitted_via_name`. See `decisions/D667.md`.
 
 `validate_conversations.ts`, mounted on `/api/validate`, is read only. `GET /sessions/:id/analytics` returns one session's figures; `GET /conversations/analytics?project_id&from&to` returns a venture's WhatsApp and Telegram chats in the range (`YYYY-MM-DD`, both days inclusive), aggregates only, with `sessions`, `sessions_by_provider` and `truncated` past 500 sessions. Each figure is `{ value, sources, reason }`: `Recorded`/`Typed` sources, and null with a reason, never 0, when no store holds it (reply time, a voice note's length, text language) or the store is missing. Messages by side and source, voice notes and minutes, languages, suggestion reach, pain themes, objections, willingness to pay, competitor mentions, and quotes per theme (the session read's quotes only where the interview allows quoting; the venture read's counts). `canReadBoard` decides who reads; anyone else gets 404, a malformed id or date 400. The client is `conversationAnalyticsApi` (`frontend/src/lib/api/conversationAnalytics.js`); no screen reads it yet. See `decisions/D858.md`.
 
+D866 (#2512) adds `channel` to both reads (`telegram`, `whatsapp`, `recorder`, `zoom`, `google_meet`, `text`, `manual`; NULL when unknown). A named channel narrows a venture to that channel's sessions, recordings and typed notes included, and answers 404 for a session of another channel. A venture's read also carries `sessions_by_channel` and `by_channel`, the same figures per channel, quotes aside.
+
 ### Validate cycle Worker read (D659, #1472)
 
 `cycle_validate.ts`, mounted at `/api/cycles/validate`, is the Worker half of
