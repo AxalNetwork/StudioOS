@@ -19,6 +19,7 @@
 
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
+import { developerKeys } from './routes/developer_keys';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, JobMessage } from './types';
@@ -1234,6 +1235,8 @@ app.route('/api/settings', settings);
 // router so `/api/connectors/assistants` never reaches its `/:key` routes.
 app.route('/api/connectors/assistants', assistantGrants);
 app.route('/api/mcp/consent', mcpConsent);
+// D841 (#2464): a member's own API keys for /mcp, behind API_KEYS_ENABLED.
+app.route('/api/developer/keys', developerKeys);
 // D840 (#2346): Sign in with Mercury, ahead of the integrations router.
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
 app.route('/api/connectors', integrations);
