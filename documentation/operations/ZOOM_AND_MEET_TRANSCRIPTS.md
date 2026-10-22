@@ -111,7 +111,7 @@ today; only reading its transcript needs these steps.
    `meet_api_disabled`.
 4. **S01's flag.** Set the wrangler **var** `MEET_TRANSCRIPTS_ENABLED` to
    `"on"` in both `[vars]` and `[env.production.vars]`, in one PR, after
-   steps 1 to 3. It ships `"off"`: members see no "Allow transcript import"
+   steps 1 to 3. While it is `"off"`, members see no "Allow transcript import"
    button and `POST /api/calendar/google/meet-transcripts/connect` answers 503.
 5. **Existing grants.** A member's Google grant made before the scope was
    added does not carry it. They press **Allow transcript import** once
