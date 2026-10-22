@@ -338,6 +338,7 @@ import { adminPartnerSettlements, partnerSettlements } from './routes/partner_se
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
+import connectorsCustomRoutes from './routes/connectors_custom';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
 import adminFundStructure from './routes/admin_fund_structure';
@@ -1233,6 +1234,8 @@ app.route('/api/settings', settings);
 // D666: an AI assistant's grants (#1496). Mounted before the connector
 // router so `/api/connectors/assistants` never reaches its `/:key` routes.
 app.route('/api/connectors/assistants', assistantGrants);
+// D852 (#2475): a member's own remote MCP servers, behind CUSTOM_MCP_ENABLED; ahead of the connectors router.
+app.route('/api/connectors/custom', connectorsCustomRoutes);
 app.route('/api/mcp/consent', mcpConsent);
 // D840 (#2346): Sign in with Mercury, ahead of the integrations router.
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
