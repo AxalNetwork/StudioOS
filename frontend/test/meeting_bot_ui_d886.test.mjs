@@ -90,3 +90,16 @@ test('B7 a failed status read is Unreadable, offers no Stop, and does not leave 
   try{await m.flush();assert.match(m.text(),/Unreadable/);assert.doesNotMatch(m.text(),/Reading participants|SYNTHETIC-PRIVATE/);assert.equal(by(m,'bot-stop'),undefined);}finally{await m.unmount();}
   const out=renderToStaticMarkup(h(MeetingBotStatus,{snapshot:{read:{bot:{status:'stopped',failure_code:'tokens'}}},participants:null}));assert.match(renderedText(out),/not enough AI tokens to continue/);
 });
+
+test('B7 real API client uses mounted bot paths and POST Stop, without a device action',async()=>{
+  const {interviewSessionsApi}=await import('../src/lib/api/interviewSessions.js');
+  const previous={fetch:globalThis.fetch,document:globalThis.document,localStorage:globalThis.localStorage};
+  const calls=[];
+  globalThis.document={cookie:''};globalThis.localStorage={getItem:()=>null,setItem(){},removeItem(){}};
+  globalThis.fetch=async(url,opts={})=>{calls.push({path:new URL(String(url),'https://unit.invalid').pathname,method:opts.method||'GET',body:opts.body});return new Response(JSON.stringify(bot('recording')),{headers:{'content-type':'application/json'}});};
+  try{
+    await interviewSessionsApi.getBot(15);await interviewSessionsApi.sendBot(15,{meeting_url:link});await interviewSessionsApi.stopBot(15);await interviewSessionsApi.botParticipants(15);
+    assert.deepEqual(calls.map(c=>[c.method,c.path]),[['GET','/api/founder/validate/sessions/15/bot'],['POST','/api/founder/validate/sessions/15/bot'],['POST','/api/founder/validate/sessions/15/bot/stop'],['GET','/api/founder/validate/sessions/15/bot/participants']]);
+    assert.equal(JSON.parse(calls[1].body).meeting_url,link);
+  }finally{Object.assign(globalThis,previous);}
+});

@@ -478,6 +478,7 @@ export function underSlug(path, cycle = 'validate', action = 'record') {
  */
 export function finishPath(session, where, projectId) {
   if (where === 'live') return `/validate/record/live?session=${encodeURIComponent(session?.id)}`;
+  if (session?.submitted_via === 'meeting_bot') return `/validate/session/${encodeURIComponent(session?.id)}`;
   if (openingStep(session) === 'channel') return `/validate/session/${encodeURIComponent(session?.id)}`;
   return reviewPath({ ...session, project_id: session?.project_id ?? projectId });
 }
