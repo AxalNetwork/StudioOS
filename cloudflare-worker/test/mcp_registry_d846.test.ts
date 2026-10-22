@@ -306,7 +306,9 @@ test('each tool\'s version is reported in _meta, on the listing and on every res
   }
   assert.equal(listed.find((t) => t.name === 'd846_studio_only')!._meta![server.META.version], '2.1.0');
   const r = await client.callTool({ name: 'list_companies', arguments: {} });
-  assert.deepEqual(r._meta, { [server.META.version]: '1.0.0', [server.META.source]: 'axal' });
+  // D843 adds the per-call execution id beside D846's tool metadata.
+  const { execution_id: _executionId, ...toolMetadata } = r._meta ?? {};
+  assert.deepEqual(toolMetadata, { [server.META.version]: '1.0.0', [server.META.source]: 'axal' });
 });
 
 test('the call gate sits on the SDK\'s own tools/call handler: the server builds, and an empty list still answers', async () => {
