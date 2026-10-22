@@ -98,6 +98,7 @@ test('unmonitored inventory does not claim an outage, but its incidents still re
   assert.equal(overallStatus([op, { status: 'unknown' }]), 'degraded', 'an existing monitored unknown is still visible');
   const page = read('frontend/src/pages/StatusPage.jsx');
   assert.match(page, /All monitored services operational/);
+  assert.match(read('frontend/src/pages/docs/DocsLayout.jsx'), /All monitored services operational/);
   assert.match(page, /label: 'Not monitored'/);
   assert.match(page, /Uptime not measured/);
   assert.match(page, /s\.availability/);
