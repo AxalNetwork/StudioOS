@@ -1,0 +1,25 @@
+/** D886 B9 (#2587): provider-independent wording, shared by B2 and B7. */
+export const MEETING_BOT_NAME = 'Eadwyn AI';
+export const MEETING_BOT_NOTICE_VERSION = 1;
+export const MEETING_BOT_NOTICE_PATH = '/privacy/interviews';
+export const MEETING_BOT_DISPATCH_DISCLOSURE = 'Eadwyn AI will join as a visible participant in the call.';
+
+/** A bounded, single-line display label. The caller must send it as plain text. */
+function ventureLabel(value) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/\s+/g, ' ').trim().slice(0, 80).trim();
+}
+
+/**
+ * The venture is selected from the run's authorized company on the server.
+ * B2 sends the returned string as plain chat text once on admission, before
+ * capture. A successful notice is disclosure, never a substitute for consent.
+ */
+export function meetingBotNotice({ ventureName } = {}) {
+  const venture = ventureLabel(ventureName) || 'the venture that invited me';
+  return `I’m ${MEETING_BOT_NAME}, Axal’s meeting bot, here for ${venture}. `
+    + 'This call is being recorded and transcribed for customer research, including participant display names and who spoke when. '
+    + 'Tell the founder if you want recording to stop or ask them to delete the recording and transcript. '
+    + `How it works: https://axal.vc${MEETING_BOT_NOTICE_PATH}`;
+}

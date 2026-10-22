@@ -1,5 +1,7 @@
 # Founder workspaces
 
+`MeetingBotConsentNotice.jsx` (D886 B9) supplies the visible-bot sentence beside B7’s existing recording-consent control. The wording comes from the shared `meeting-bot/notice.mjs` module. It does not dispatch a bot or replace the server consent gate.
+
 This folder contains the founder-specific workspace shell and the dedicated canvas landing pages that replace generic route wrappers for active Founder View.
 
 - `FounderWorkspacePage.jsx` provides the shared founder workspace frame used by routes that have not graduated to a dedicated canvas landing.
