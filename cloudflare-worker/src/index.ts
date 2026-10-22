@@ -282,6 +282,7 @@ import cycleVerdict from './routes/cycle_verdict';
 import cycleRaise from './routes/cycle_raise';
 import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
+import validateConversations from './routes/validate_conversations';
 // D684 (#1575) — interview channels: business Telegram and WhatsApp
 // conversations (S19), Zoom and Google Meet calls from an interview (S18).
 import channels, { channelsAdmin } from './routes/channels';
@@ -1403,6 +1404,8 @@ app.route('/api/admin/testing', adminTesting);
 app.route('/api/partner/delivery', partnerDelivery);
 // D657 — interview sessions: recording, live and final speech-to-text.
 app.route('/api/founder/validate', founderValidateSessions);
+// D858 (#2503): what a session's and a venture's conversations show, read only.
+app.route('/api/validate', validateConversations);
 app.route('/api/founder/validate', founderValidate);
 // D684 — Zoom and Meet calls scheduled from an interview (S18). The Zoom
 // webhook mounts before the channels router, which owns the rest of

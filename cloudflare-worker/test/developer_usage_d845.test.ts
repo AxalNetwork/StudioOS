@@ -20,7 +20,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import { developerUsage } from '../src/routes/developer_usage.ts';
-import { MAX_RANGE_DAYS, P50_MIN_CALLS, parseRange } from '../src/services/apiUsageReport.ts';
+import { MAX_RANGE_DAYS, P50_MIN_CALLS, limitState, parseMonth, parseRange } from '../src/services/apiUsageReport.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
@@ -29,6 +29,7 @@ const ROOT = resolve(process.cwd());
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const M419 = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/419_ai_caps_topups.sql'), 'utf8');
 const M524 = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/524_api_usage_events.sql'), 'utf8');
+const M523 = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/523_member_api_keys.sql'), 'utf8');
 
 const A = 10, B = 20;
 const KEY_A = 'key-a-1', KEY_A2 = 'key-a-2', KEY_B = 'key-b-1';
@@ -40,14 +41,26 @@ function fixture() {
   db.exec(tableFromBaseline(BASELINE, 'users'));
   db.exec(tableFromBaseline(M419, 'ai_budget_reservations'));
   db.exec(M524);
+  db.exec(M523);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(A, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(B, 'founder', 'Bo Other', 'bo@example.test', 1002);
+  key(db, KEY_A, A, 'CI agent', 1000, '2026-09-01 00:00:00');
+  key(db, KEY_A2, A, 'Laptop', null, '2026-09-02 00:00:00');
+  key(db, KEY_B, B, 'Bo key', 500, '2026-09-03 00:00:00');
   const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
   return { db, env };
 }
 
 let seq = 0;
+/** A key row as D841 stores it. The hash is a fake fixture value; no secret exists. */
+function key(db: InstanceType<typeof DatabaseSync>, uid: string, user: number, name: string, limit: number | null,
+  createdAt: string, { revoked = null as string | null, expires = null as string | null } = {}) {
+  seq += 1;
+  db.prepare(`INSERT INTO member_api_keys (uid, user_id, key_id, secret_sha256, name, scopes_json, companies_json,
+      monthly_limit_microusd, expires_at, revoked_at, revoked_reason, created_at) VALUES (?, ?, ?, ?, ?, '["validate:read"]', '[]', ?, ?, ?, ?, ?)`)
+    .run(uid, user, `kid${String(seq).padStart(9, '0')}`, '0'.repeat(64), name, limit, expires, revoked, revoked ? 'revoked' : null, createdAt);
+}
 interface Ev {
   user?: number; key?: string | null; grant?: string | null; at?: string; operation?: string; outcome?: string;
   category?: string | null; ms?: number; provider?: string | null; connector?: string | null; model?: string | null;
@@ -130,7 +143,8 @@ test('every grouping: totals equal the sum of the groups, and the split adds up 
   assert.deepEqual(byTool.groups.map((g: any) => [g.key, g.label, g.calls]), [['write', 'write', 3], ['search', 'search', 2]]);
   const byKey = (await get(env, `/api/developer/usage?${RANGE}&group=key`)).body;
   assert.deepEqual(byKey.groups.map((g: any) => [g.key, g.calls]).sort(), [[KEY_A, 3], [KEY_A2, 1], [null, 1]].sort());
-  assert.ok(byKey.groups.every((g: any) => g.label === null), 'a key\'s uid is not its name: the label waits for the keys table');
+  assert.deepEqual(Object.fromEntries(byKey.groups.map((g: any) => [String(g.key), g.label])),
+    { [KEY_A]: 'CI agent', [KEY_A2]: 'Laptop', null: null }, 'a key\'s label is its name; calls with no key have none');
 });
 
 test('group=day&by=…: a two-way report whose cells add up to the totals', async () => {
@@ -316,4 +330,73 @@ test('a request with no session is refused', async () => {
   const { env } = fixture();
   const res = await app.request(`/api/developer/usage?${RANGE}`, {}, env);
   assert.equal(res.status, 401);
+});
+
+test('scope 3: key labels in two-way cells, and a key is checked against the member\'s own keys', async () => {
+  const { db, env } = fixture();
+  key(db, 'key-a-new', A, 'Fresh', null, '2026-10-05 00:00:00');
+  key(db, 'key-a-old', A, 'Retired', null, '2026-08-01 00:00:00', { revoked: '2026-10-03 00:00:00' });
+  ev(db, { key: KEY_A, at: `${DAY1} 01:00:00` });
+  ev(db, { key: 'key-a-old', at: `${DAY1} 02:00:00` });
+  const grid = (await get(env, `/api/developer/usage?${RANGE}&group=day&by=key`)).body;
+  assert.deepEqual(grid.groups.map((g: any) => [g.by_key, g.by_label]).sort(), [[KEY_A, 'CI agent'], ['key-a-old', 'Retired']].sort());
+  const fresh = await get(env, `/api/developer/usage?${RANGE}&key=key-a-new`);
+  assert.equal(fresh.status, 200, 'a new key with no calls yet is the member\'s own: an empty report, not a 404');
+  assert.equal(fresh.body.totals.calls, 0);
+  assert.equal((await get(env, `/api/developer/usage/events?${RANGE}&key=key-a-old`)).body.events.length, 1, 'a revoked key still reads');
+  assert.equal((await get(env, `/api/developer/usage?${RANGE}&key=${KEY_B}`)).status, 404, 'another member\'s key is still unknown');
+});
+
+test('scope 3: each key\'s cap, this month\'s charge and the 80% / 100% flags', async () => {
+  const { db, env } = fixture();
+  key(db, 'key-a-80', A, 'Eighty', 1000, '2026-09-04 00:00:00');
+  key(db, 'key-a-79', A, 'Seventy-nine', 1000, '2026-09-05 00:00:00');
+  key(db, 'key-a-dark', A, 'Unmetered', 1000, '2026-09-06 00:00:00');
+  key(db, 'key-a-gone', A, 'Gone', 1000, '2026-09-07 00:00:00', { revoked: '2026-10-02 00:00:00' });
+  hold(db, 'h-full', A, 1500, 1200);
+  ev(db, { key: KEY_A, reservation: 'h-full', at: '2026-10-03 10:00:00' });
+  ev(db, { key: KEY_A, charged: 600, at: '2026-09-30 23:59:59' });
+  ev(db, { key: 'key-a-80', charged: 500, at: '2026-10-01 00:00:00' });
+  ev(db, { key: 'key-a-80', charged: 300, at: '2026-10-31 23:59:59' });
+  ev(db, { key: 'key-a-79', charged: 799, at: '2026-10-10 00:00:00' });
+  ev(db, { key: 'key-a-79', charged: 900, at: '2026-11-01 00:00:00' });
+  hold(db, 'h-bo', B, 5000, 5000);
+  ev(db, { key: 'key-a-dark', reservation: 'h-bo', at: '2026-10-11 00:00:00' });
+  ev(db, { key: 'key-a-dark', at: '2026-10-10 00:00:00' });
+  ev(db, { key: KEY_A2, charged: 10_000, at: '2026-10-10 00:00:00' });
+  ev(db, { user: B, key: KEY_B, charged: 500, at: '2026-10-10 00:00:00' });
+  ev(db, { user: B, key: 'key-a-80', charged: 900, at: '2026-10-10 00:00:00' });
+
+  const r = await get(env, '/api/developer/usage/keys?month=2026-10');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.month, '2026-10');
+  assert.equal(r.body.near_limit_percent, 80);
+  const by = Object.fromEntries(r.body.keys.map((k: any) => [k.uid, k]));
+  assert.deepEqual(Object.keys(by).sort(), [KEY_A, KEY_A2, 'key-a-79', 'key-a-80', 'key-a-dark', 'key-a-gone'].sort(), 'only A\'s keys');
+  const pick = (k: any) => [k.monthly_limit_microusd, k.calls, k.charged_microusd, k.metered_calls, k.used_percent, k.alert];
+  assert.deepEqual(pick(by[KEY_A]), [1000, 1, 1200, 1, 120, 'at_limit'], 'the settled hold, and September left out');
+  assert.deepEqual(pick(by['key-a-80']), [1000, 2, 800, 2, 80, 'near_limit'], 'both month edges in; B\'s row naming this uid out');
+  assert.deepEqual(pick(by['key-a-79']), [1000, 1, 799, 1, 79, null], 'November\'s first second is not October');
+  assert.deepEqual(pick(by['key-a-dark']), [1000, 2, null, 0, null, null], 'unmetered is NULL, never 0 percent, and B\'s hold is never A\'s charge');
+  assert.deepEqual(pick(by[KEY_A2]), [null, 1, 10_000, 1, null, null], 'no cap, no flag');
+  assert.deepEqual(pick(by['key-a-gone']), [1000, 0, null, 0, null, null]);
+  assert.equal(by['key-a-gone'].live, false);
+  assert.equal(by[KEY_A].live, true);
+  for (const k of r.body.keys) assert.ok(!('secret_sha256' in k) && !('scopes_json' in k), 'no hash in a usage read');
+  assert.equal((await get(env, '/api/developer/usage/keys?month=2026-13')).status, 400);
+  assert.equal((await get(env, '/api/developer/usage/keys?month=2026-1')).body.error, 'invalid_month');
+});
+
+test('scope 3: the month defaults to this UTC month, December rolls over, and the flags are exact at any size', () => {
+  assert.deepEqual(parseMonth(undefined, new Date('2026-10-31T23:59:59Z')),
+    { month: '2026-10', fromTs: '2026-10-01 00:00:00', toTs: '2026-11-01 00:00:00' });
+  assert.equal(parseMonth('2026-12').toTs, '2027-01-01 00:00:00');
+  const big = 9_007_199_254_740_991;
+  assert.deepEqual(limitState(big - 1, big), { used_percent: 99, alert: 'near_limit' });
+  // One micro-USD under 80% of the largest cap: float arithmetic rounds it up to 80%; integers do not.
+  assert.deepEqual(limitState(7_205_759_403_792_792, big), { used_percent: 79, alert: null });
+  assert.deepEqual(limitState(big, big), { used_percent: 100, alert: 'at_limit' });
+  assert.deepEqual(limitState(0, 5), { used_percent: 0, alert: null });
+  assert.deepEqual(limitState(4, 5), { used_percent: 80, alert: 'near_limit' });
+  assert.deepEqual(limitState(null, 5), { used_percent: null, alert: null });
 });
