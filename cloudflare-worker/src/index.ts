@@ -20,6 +20,7 @@
 import { isMcpPath, routeMcp } from './mcp/oauth';
 import { assistantGrants, mcpConsent } from './routes/mcp_consent';
 import { developerKeys } from './routes/developer_keys';
+import { developerLimits } from './routes/developer_limits';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env, JobMessage } from './types';
@@ -1240,6 +1241,8 @@ app.route('/api/connectors/health', connectorsHealth);
 app.route('/api/mcp/consent', mcpConsent);
 // D841 (#2464): a member's own API keys for /mcp, behind API_KEYS_ENABLED.
 app.route('/api/developer/keys', developerKeys);
+// D849 (#2472): the limits in force on the member's connections and keys.
+app.route('/api/developer/limits', developerLimits);
 // D840 (#2346): Sign in with Mercury, ahead of the integrations router.
 app.route('/api/integrations/mercury/oauth', mercuryOauthRoutes);
 app.route('/api/connectors', integrations);

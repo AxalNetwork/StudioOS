@@ -17,7 +17,8 @@
  *     request or a later "sign out everywhere" refuses the call;
  *   - a tool that takes a company re-checks it (`grantCompany`): in the grant,
  *     and still writable by the user;
- *   - the grant's per-minute limit is counted;
+ *   - the grant's per-minute limit is counted, then the member's across every
+ *     grant and key they hold (D849, `USER_CALLS_PER_MINUTE`);
  *   - one activity_logs line is written: tool, company, client, outcome.
  *     Never the arguments, never the result.
  * A refusal is an error result in plain words, never an exception's text.
@@ -40,7 +41,7 @@ import type { Env, User } from '../types';
 import type { SCOPES } from './oauth';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import {
-  ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, type GrantProps,
+  ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, withinUserLimit, type GrantProps,
 } from './grants';
 
 export interface ToolRun {
@@ -168,6 +169,11 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     if (grantId && !(await withinGrantLimit(env, grantId))) {
       await log('rate_limited');
       return text({ error: 'Too many calls from this connection. Wait a minute and try again.' }, true);
+    }
+    // D849: the member's own limit, across every connection and key they hold.
+    if (!(await withinUserLimit(env, user.id))) {
+      await log('rate_limited');
+      return text({ error: 'Too many calls from your account across its connections. Wait a minute and try again.' }, true);
     }
     let company: ToolRun['company'] = null;
     if (tool.company) {

@@ -82,17 +82,32 @@ export const lastUsedKey = (grantId: string) => `mcp_used:${grantId}`;
 
 /** Per-grant limit: calls a minute. */
 export const GRANT_CALLS_PER_MINUTE = 60;
+/**
+ * D849 (#2472): per-member limit, calls a minute across EVERY grant and key the
+ * member holds. Without it, ten connections are ten times one connection's limit.
+ */
+export const USER_CALLS_PER_MINUTE = 120;
 
-/** Count one call against the grant; false once it is over the minute's limit. */
-export async function withinGrantLimit(env: Env, grantId: string, now = Date.now()): Promise<boolean> {
-  const key = `mcp_rl:${grantId}:${Math.floor(now / 60_000)}`;
+/** Count one call in this minute's window under `prefix`; false once past `limit`, and on any KV failure. */
+async function withinMinute(env: Env, prefix: string, limit: number, now: number): Promise<boolean> {
+  const key = `${prefix}:${Math.floor(now / 60_000)}`;
   try {
     const n = Number((await env.RATE_LIMITS.get(key)) || 0) + 1;
     await env.RATE_LIMITS.put(key, String(n), { expirationTtl: 120 });
-    return n <= GRANT_CALLS_PER_MINUTE;
+    return n <= limit;
   } catch {
     return false; // fail closed: an assistant's calls are not worth an unmetered window
   }
+}
+
+/** Count one call against the grant; false once it is over the minute's limit. */
+export async function withinGrantLimit(env: Env, grantId: string, now = Date.now()): Promise<boolean> {
+  return withinMinute(env, `mcp_rl:${grantId}`, GRANT_CALLS_PER_MINUTE, now);
+}
+
+/** D849: count one call against the member, whichever grant or key made it; false once over the limit. */
+export async function withinUserLimit(env: Env, userId: number, now = Date.now()): Promise<boolean> {
+  return withinMinute(env, `mcp_rl:user:${Number(userId)}`, USER_CALLS_PER_MINUTE, now);
 }
 
 /** One activity_logs line per call: tool, company, client, outcome. Never an argument or a result. */
