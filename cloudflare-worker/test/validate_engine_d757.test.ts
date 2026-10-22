@@ -28,6 +28,7 @@ import { IntakeError, appendSegments, importTranscript, openSession, writableInt
 import { JOB_TRIGGERS, runSessionStructureJob, sweepQuietChats } from '../src/services/sessionAutoStructure.ts';
 import { NOTES, digestSession, transcriptHash } from '../src/services/validateEngine.ts';
 import { FREE_TIER_LIMITS } from '../src/middleware/requireTier.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
@@ -87,6 +88,7 @@ function world() {
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store, which assign and the voice job now read.
     '488_channel_consents.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   applyEngineSchema(db);
   db.exec(`INSERT INTO telegram_business_connections (uid, business_connection_id, telegram_user_id, user_id, is_enabled, can_reply)
            VALUES ('bc-1', 'BC-ME', '555001', ${ME}, 1, 1)`);

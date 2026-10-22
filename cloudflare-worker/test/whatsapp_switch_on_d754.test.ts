@@ -19,6 +19,7 @@ import { callingEligibility, callingRecord, GRAPH_VERSION, unsubscribeApp } from
 import { memberConnection, channelOpenToMember } from '../src/services/channels/connections.ts';
 
 import { withGuard } from './_guard_stub.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const mig = (name: string) => readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8');
 
@@ -84,6 +85,7 @@ async function world(opts: { seed?: boolean; budget?: number } = {}) {
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store, which assign and the voice job read.
     '488_channel_consents.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   db.exec(mig('492_whatsapp_sender_links.sql'));

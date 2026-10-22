@@ -293,7 +293,8 @@ test('refusals: model_unpriced, and model_not_offered for a beta model', async (
   assert.equal(refusalFor('@cf/deepgram/aura-1', GATE_OFF), 'model_not_offered');
   assert.equal(refusalFor('@cf/deepgram/aura-1', GATE_ON), null);
   // Offered by the catalogue, but in none of the router's price views: unpriced here.
-  assert.equal(modelRefusal(GATE_ON, '@cf/meta/m2m100-1.2b'), 'model_unpriced');
+  // (D857 priced m2m100 for translate_segment; bge-m3 is still in no view.)
+  assert.equal(modelRefusal(GATE_ON, '@cf/baai/bge-m3'), 'model_unpriced');
   // D761 PR 3 put Aura in the router's character view, so with the gate on it may run.
   assert.equal(modelRefusal(GATE_ON, '@cf/deepgram/aura-1'), null);
 

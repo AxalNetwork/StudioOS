@@ -60,6 +60,7 @@ import { openSession, writableInterview } from '../src/services/interviewIntake.
 import { CONNECTOR_METADATA, getDescriptor, getProviderImpl } from '../src/integrations/registry.ts';
 import { decryptCredentials, encryptCredentials } from '../src/integrations/secrets.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 /** How the interviewee agreed: a call is scheduled only with consent recorded (#1470's rule). */
 const CONSENT = { status: 'given', method: 'verbal' };
@@ -114,6 +115,7 @@ function world(over: Record<string, unknown> = {}) {
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store and channel_threads.consent_state.
     '488_channel_consents.sql']) db.exec(mig(m));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   const jobs: any[] = [];

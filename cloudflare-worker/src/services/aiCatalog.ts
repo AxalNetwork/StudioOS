@@ -45,6 +45,8 @@ export const TASK_LABELS: Record<TaskClass, string> = {
   research_ask: 'Answer from your documents',
   structure_interview: 'Structure an interview',
   summarise_interview: 'Summarise an interview',
+  translate_segment: 'Translate a session segment',
+  detect_language: 'Detect a segment\'s language',
   system_job: 'Background job (no member)',
   ops_summary: 'Summarise the site metrics',
   image_screen: 'Screen an image',
@@ -90,6 +92,9 @@ export const MODEL_NAMES: Record<string, string> = {
   '@cf/deepseek-ai/deepseek-v4-flash-0731': 'DeepSeek V4 Flash',
   '@cf/qwen/qwen2.5-coder-32b-instruct': 'Qwen 2.5 Coder 32B Instruct',
   '@cf/baai/bge-base-en-v1.5': 'BGE Base EN v1.5 (embeddings)',
+  // D857 (#2502): translate_segment's models.
+  '@cf/meta/m2m100-1.2b': 'M2M100 1.2B (translation)',
+  '@cf/ai4bharat/indictrans2-en-indic-1B': 'IndicTrans2 English to Indic 1B (translation)',
   '@cf/openai/whisper': 'Whisper',
   '@cf/openai/whisper-large-v3-turbo': 'Whisper Large v3 Turbo',
   '@cf/deepgram/nova-3': 'Nova-3',

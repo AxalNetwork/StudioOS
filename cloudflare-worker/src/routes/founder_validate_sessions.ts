@@ -30,6 +30,7 @@
  * the venture's own founder or an admin: a session holds a recording of
  * someone else's voice, so nobody reads it who could not write it.
  */
+import { readTranslation } from '../services/sessionTranslation';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -372,7 +373,8 @@ sessions.get('/sessions/:id', async (c) => {
   const [segments, marks, chunks] = await Promise.all([
     c.env.DB.prepare(
       // D757 (#1927): `created_at` is a chat message's time, for "Heard in".
-      `SELECT id, source, start_ms, end_ms, speaker_label, text, model, created_at FROM interview_transcript_segments
+      `SELECT id, source, start_ms, end_ms, speaker_label, text, model, created_at,
+              source_lang, translated_text, translated_lang, translation_status FROM interview_transcript_segments
         WHERE session_id = ? ORDER BY source, COALESCE(start_ms, 0), id`,
     ).bind(s.session.id).all(),
     c.env.DB.prepare('SELECT id, offset_ms, label, created_at FROM interview_session_marks WHERE session_id = ? ORDER BY offset_ms')
@@ -390,7 +392,11 @@ sessions.get('/sessions/:id', async (c) => {
     summary: summaryOf(s.session),
     // D757 (#1924): this route admits writers only (scopeInterview), so it always reads the draft.
     digest: await sessionDigest(c.env, s.session, { writer: true, quoteConsent: quoteConsent?.quote_consent === 1 }),
-    segments: segments.results || [],
+    // D857 (#2502): each segment keeps its own words in `text`; its translation, decrypted for this writer, sits beside it.
+    segments: await Promise.all(((segments.results || []) as Array<Record<string, any>>).map(async ({ translated_text, ...seg }) => ({
+      ...seg,
+      translation: seg.translation_status === 'done' ? await readTranslation(c.env, Number(seg.id), translated_text) : null,
+    }))),
     marks: marks.results || [],
     chunks: chunks.map((ch) => ({ seq: ch.seq, size_bytes: ch.size_bytes, start_ms: ch.start_ms })),
   });

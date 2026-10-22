@@ -69,6 +69,9 @@ export interface Placement {
   payload: Record<string, unknown>;
   cite: { from: number; to: number };
   quote: string;
+  /** D857: when the run read a translation, the cited segments' original words and their language. */
+  quoteOriginal?: string;
+  sourceLang?: string;
 }
 
 const str = (v: unknown, max: number): string | null => {

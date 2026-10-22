@@ -17,6 +17,7 @@ import { closeAttachedRefs, importMeetingRef, loadRef } from '../src/services/ch
 import { googleConnection, transcriptAccess } from '../src/services/channels/googleMeet.ts';
 import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { encryptString } from '../src/services/cryptoBox.ts';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const migration = (n: string) => readFileSync(new URL(`../sql/migrations/${n}`, import.meta.url), 'utf8');
@@ -62,6 +63,7 @@ function world() {
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     '488_channel_consents.sql']) db.exec(migration(name));
+    applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   const jobs: unknown[] = [];
