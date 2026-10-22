@@ -17,6 +17,7 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import type { Tier } from '../middleware/requireTier';
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
+import { mercuryFedModules } from './mercuryFeeds';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export type ProviderStatus = 'live' | 'beta' | 'coming_soon';
@@ -465,7 +466,9 @@ export const REGISTRY: ProviderDescriptor[] = [
     description: 'Read balances and transactions of the Axal entity accounts for fund administration. Read-only: nothing here can move money. Members connect their own Mercury from their own Connectors page; their accounts never appear here.',
     status: 'beta', tier: 'growth', auth_type: 'api_key', capabilities: ['Balances', 'Transactions', 'Reconciliation'],
     docs_url: 'https://docs.mercury.com', icon: 'Landmark',
-    entity_roles: ['admin'], personal_roles: ['founder', 'partner', 'investor'], personal_hq_only_roles: ['investor'],
+    // D884 (#2557, the owner's answer A): an investor connects their own Mercury on HQ or in a branch.
+    // Proof of funds stays HQ-only by its use (`HQ_ONLY_USES`), not by hiding the connector.
+    entity_roles: ['admin'], personal_roles: ['founder', 'partner', 'investor'],
   },
 ];
 
@@ -526,11 +529,11 @@ export const PERSONAL_MERCURY: Readonly<Record<PersonalMercuryRole, Readonly<Per
     permissions: FOUNDER_PARTNER_PERMISSIONS, feeds: [],
   }),
   investor: Object.freeze({
-    description: "Your own Mercury account, read-only: show Axal's admins that you can fund a commitment you made, with a dated statement of at least an amount you choose, and fill your Deals and Fund sections. Axal's admins never see your balance.",
-    capabilities: ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals'],
+    description: "Your own Mercury account, read-only: your capacity in Deals › Pipeline and Deals › Commit, the wire that funded a commitment in Deals › Closing, and proposals for your Fund sections. On HQ, also a dated proof of funds for Axal's admins, who never see your balance.",
+    capabilities: ['Capacity', 'Closing proposals', 'Fund calls, accounting and reporting proposals', 'Proof of funds'],
     permissions: ['Read your Mercury account names, last four digits, available balances, transactions and statements for your own sections; only you see a balance, and it never sends, transfers or requests money.'],
-    // D840 part 4 (#2349): the investor's sections, held to `mercuryFeeds.ts`.
-    feeds: ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting'],
+    // D840 part 4 (#2349), D884 (#2557): the investor's sections, read from `mercuryFeeds.ts` itself.
+    feeds: mercuryFedModules('investor'),
   }),
 });
 

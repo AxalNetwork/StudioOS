@@ -57,6 +57,8 @@ export const MERCURY_FEEDS: readonly MercuryFeed[] = Object.freeze([
   { key: 'capital_attestation', role: 'investor', what: 'A dated proof of funds of at least an amount you choose', module: null, tools: ['getOrganization', 'getAccounts'], decision: 'D752' },
   // D840 part 4 (#2349): a signed-in investor's sections (`services/mercury/investorFeeds.ts`).
   // Facts are written; the rest are proposals the investor accepts.
+  // D884 (#2557): Deals › Pipeline reads the same capacity fact, beside the cheques you intend on live deals.
+  { key: 'investor_pipeline', role: 'investor', what: 'Your capacity beside the cheques you intend on the live deals in your pipeline', module: 'deals_pipeline', tools: ['getOrganization', 'getAccounts'], decision: 'D884' },
   { key: 'investor_capacity', role: 'investor', what: 'Your capacity: available cash across the accounts you pick, beside your own commitments', module: 'deals_commit', tools: ['getOrganization', 'getAccounts'], decision: 'D840' },
   { key: 'investor_closing', role: 'investor', what: 'An outgoing wire or ACH payment proposed as funding your commitment', module: 'deals_closing', tools: ['getOrganization', 'getAccounts', 'listTransactions'], decision: 'D840' },
   { key: 'investor_calls', role: 'investor', what: 'An LP’s payment proposed against an open capital call', module: 'fund_calls', tools: ['getOrganization', 'getAccounts', 'listTransactions'], decision: 'D840' },
@@ -64,14 +66,19 @@ export const MERCURY_FEEDS: readonly MercuryFeed[] = Object.freeze([
   { key: 'investor_reporting', role: 'investor', what: 'Month-end cash for the period report, and that month’s statement proposed for it', module: 'fund_reporting', tools: ['getOrganization', 'getAccounts', 'getAccountStatements'], decision: 'D840' },
 ] as const);
 
-/** D840 part 4: how each investor landing lands. A fact is written by a sync; a proposal only on Accept. */
-export const INVESTOR_LANDS: Readonly<Record<string, 'statement' | 'fact' | 'proposal'>> = Object.freeze({
+/**
+ * D840 part 4: how each investor landing lands. A fact is written by a sync; a
+ * proposal only on Accept. D884: `shown` is a stored fact shown again
+ * elsewhere, which writes nothing of its own (Pipeline shows Commit's capacity).
+ */
+export const INVESTOR_LANDS: Readonly<Record<string, 'statement' | 'fact' | 'proposal' | 'shown'>> = Object.freeze({
   capital_attestation: 'statement',
   investor_capacity: 'fact',
   investor_closing: 'proposal',
   investor_calls: 'proposal',
   investor_ledger: 'proposal',
   investor_reporting: 'fact',
+  investor_pipeline: 'shown',
 });
 
 /** Portfolio data belongs to the companies: Mercury feeds nothing there, and the page says so. */

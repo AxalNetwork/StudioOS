@@ -5,6 +5,9 @@ import { mercuryInvestorApi } from '../../lib/api/mercuryInvestor';
  * D840 part 4 (#2349) — "From Mercury", the investor's own Mercury in one of
  * their sections, as D782's "From GitHub" part sits in a founder's module.
  *
+ *   pipeline   SHOWN (D884). Commit's capacity fact beside the cheques the
+ *              investor intends on the live deals in their pipeline, and the
+ *              headroom between them. Writes nothing; on this page only.
  *   commit     FACT. "Capacity: $N available as of <date>", the accounts it
  *              counts by last four; Read and Delete. Shown on this page only.
  *   closing    PROPOSAL. "This $N wire to <counterparty> on <date> funded <deal>?"
@@ -14,7 +17,7 @@ import { mercuryInvestorApi } from '../../lib/api/mercuryInvestor';
  *   reporting  FACT month-end cash; PROPOSAL attach that month's statement.
  *   portfolio  Nothing: Mercury feeds nothing here, and the part says so.
  *
- * Nothing is written without Accept. A refusal (no Mercury, a branch, the
+ * Nothing is written without Accept. A refusal (no Mercury, a support session, the
  * wrong role) reads "Not recorded" with the reason; a failed read reads
  * "Unreadable", never zero.
  */
@@ -29,6 +32,25 @@ const BTN2 = 'rounded-md border border-axal-hairline px-3 py-1 text-[12px] font-
 export const money = (cents) => (Number.isSafeInteger(cents)
   ? (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })
   : 'Not recorded');
+
+/**
+ * D884: the Pipeline section's lines. Unknown is "Not recorded", never $0: no
+ * capacity fact means no capacity and no headroom; a cheque with no readable
+ * amount is counted apart, not as 0.
+ */
+export function pipelineLines(fig) {
+  const intended = fig?.intended ?? { total_cents: 0, deals: 0, commitments: 0, unrecorded: 0 };
+  const deals = `${intended.deals} live deal${intended.deals === 1 ? '' : 's'}`;
+  const cap = fig?.capacity;
+  return {
+    capacity: cap ? `Capacity: ${money(cap.available_cents)} available as of ${cap.as_of}, from Mercury` : 'Capacity: Not recorded. Pick the accounts that count in Deals › Commit.',
+    intended: `Intended cheques: ${money(intended.total_cents)} across ${deals}`
+      + (intended.unrecorded ? ` · ${intended.unrecorded} without an amount, not counted` : ''),
+    headroom: Number.isSafeInteger(fig?.headroom_cents)
+      ? (fig.headroom_cents >= 0 ? `Headroom: ${money(fig.headroom_cents)}` : `Over capacity by ${money(-fig.headroom_cents)}`)
+      : 'Headroom: Not recorded',
+  };
+}
 
 /** What a proposal asks, in the issue's words. */
 export function proposalText(section, p) {
@@ -48,9 +70,11 @@ export default function FromMercury({ section, fundId = null }) {
 
   const load = useCallback(async () => {
     if (section === 'portfolio') { setState({ loading: false }); return; }
-    if (section !== 'commit' && section !== 'closing' && !fundId) { setState({ loading: false, empty: 'Pick a fund to see what Mercury brings to it.' }); return; }
+    if (section !== 'commit' && section !== 'closing' && section !== 'pipeline' && !fundId) { setState({ loading: false, empty: 'Pick a fund to see what Mercury brings to it.' }); return; }
     try {
-      if (section === 'commit') {
+      if (section === 'pipeline') {
+        setState({ loading: false, pipeline: await mercuryInvestorApi.pipeline() });
+      } else if (section === 'commit') {
         const r = await mercuryInvestorApi.capacity();
         setState({ loading: false, capacity: r?.capacity ?? null });
       } else if (section === 'reporting') {
@@ -86,15 +110,30 @@ export default function FromMercury({ section, fundId = null }) {
         <p className={LINE} data-testid="from-mercury-reason">{state.refused ? `Not recorded: ${state.reason || 'your Mercury is not connected here.'}` : `Unreadable: ${state.reason || 'your Mercury could not be read. Nothing changed.'}`}</p>
       ) : (
         <>
+          {section === 'pipeline' && <Pipeline figures={state.pipeline} />}
           {section === 'commit' && <Capacity capacity={state.capacity} busy={busy} picks={picks} setPicks={setPicks} act={act} />}
           {section === 'reporting' && <MonthEndCash cash={state.cash} busy={busy} act={act} />}
-          {section !== 'commit' && (
+          {section !== 'commit' && section !== 'pipeline' && (
             <Proposals section={section} proposals={state.proposals} map={state.map} busy={busy} act={act} fundId={fundId} />
           )}
           {error && <p role="alert" className="m-0 text-[12px] text-red-700 dark:text-red-300" data-testid="from-mercury-error">{error}</p>}
         </>
       )}
     </section>
+  );
+}
+
+/** D884: Deals › Pipeline. Read-only: the capacity is Commit's fact; nothing here writes. */
+function Pipeline({ figures }) {
+  const lines = pipelineLines(figures);
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="from-mercury-pipeline">
+      <h3 className={SUB}>Capacity beside your pipeline</h3>
+      <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="from-mercury-pipeline-capacity">{lines.capacity}</p>
+      <p className={LINE} data-testid="from-mercury-pipeline-intended">{lines.intended}</p>
+      <p className={LINE} data-testid="from-mercury-pipeline-headroom">{lines.headroom}</p>
+      <span className={FAINT}>Only you see this. <a className="underline" href="/deals/commit">Change the accounts in Deals › Commit</a></span>
+    </div>
   );
 }
 

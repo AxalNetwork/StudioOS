@@ -406,9 +406,9 @@ test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either
   assert.equal(pageDescriptor(mercury, v('admin', true))!.tagline, (CONNECTOR_PAGES.mercury as any).entity.tagline);
   assert.equal(pageDescriptor(mercury, v('founder', true))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.founder.tagline);
   assert.equal(pageDescriptor(mercury, v('partner', false))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.partner.tagline);
-  // D752: an investor reads their own page on HQ, and none on a branch.
-  assert.equal(pageDescriptor(mercury, v('investor', true))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.investor.tagline);
-  for (const viewer of [v('admin', false), v('investor', false), v('advisor', true)]) assert.equal(pageDescriptor(mercury, viewer), null, JSON.stringify(viewer));
+  // D884 (#2557): an investor reads their own page on HQ and on a branch (D752 kept it on HQ only).
+  for (const hq of [true, false]) assert.equal(pageDescriptor(mercury, v('investor', hq))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.investor.tagline);
+  for (const viewer of [v('admin', false), v('advisor', true)]) assert.equal(pageDescriptor(mercury, viewer), null, JSON.stringify(viewer));
   const gh = pageDescriptor(getDescriptor('github')!, v('investor', false))!;
   assert.equal(gh.key, 'github');
   assert.equal(gh.page_href, '/account/connectors/github');
