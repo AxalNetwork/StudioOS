@@ -23,7 +23,7 @@ import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { logActorAct } from '../services/actorLog';
-import { CONSENT_TTL_SECONDS, requestedScopes, consentKey, mcpEnabled, oauthHelpers, type ParkedRequest } from '../mcp/oauth';
+import { CONSENT_TTL_SECONDS, SCOPES, requestedScopes, consentKey, mcpEnabled, oauthHelpers, type ParkedRequest } from '../mcp/oauth';
 import { assistantIdentity } from '../mcp/assistantIdentity';
 import { grantableCompanies, lastUsedKey, type GrantProps } from '../mcp/grants';
 
@@ -32,6 +32,20 @@ const usedKey = (id: string) => `mcp_consent_used:${id}`;
 const ID = /^[a-f0-9]{32}$/;
 
 const notFound = (c: C) => c.json({ detail: 'Not found' }, 404);
+
+/**
+ * D846 (#2467): what each scope lets the assistant do, as the consent page
+ * shows it. Server-written, so a scope this page does not know is never
+ * approved unseen. The connector-backed reads are StudioOS's own records of a
+ * connection, never a live call to the provider (D713).
+ */
+export const SCOPE_COPY: Record<(typeof SCOPES)[number], string> = {
+  'validate:read': 'Read your Validate context',
+  'validate:write': 'Submit interviews for your review',
+  'build:read': 'Read your Build progress, from the records your connected tools fed',
+  'raise:read': 'Read your Raise context',
+  'connectors:read': 'See which tools you have connected, their status and last sync. Never their tokens.',
+};
 
 async function signedIn(c: C): Promise<User | Response> {
   if (!mcpEnabled(c.env)) return notFound(c);
@@ -69,6 +83,7 @@ mcpConsent.get('/:id', async (c) => {
     redirect_uri: p.authRequest.redirectUri,
     ...assistantIdentity(p.authRequest.redirectUri),
     scopes: requestedScopes(p.authRequest.scope),
+    scope_labels: requestedScopes(p.authRequest.scope).map((scope) => ({ scope, label: SCOPE_COPY[scope as keyof typeof SCOPE_COPY] })),
     companies: await grantableCompanies(c.env, user),
     expires_at: new Date(p.createdAt + CONSENT_TTL_SECONDS * 1000).toISOString(),
   });
@@ -89,7 +104,7 @@ mcpConsent.post('/:id/approve', async (c) => {
   const client = await helpers.lookupClient(p.authRequest.clientId);
   if (!client) return c.json({ detail: 'This assistant is no longer registered. Start again from your assistant.' }, 410);
   const scope = requestedScopes(p.authRequest.scope);
-  if (!scope.length) return c.json({ detail: 'Request validate:read or validate:write.' }, 400);
+  if (!scope.length) return c.json({ detail: `Request at least one of ${SCOPES.join(', ')}.` }, 400);
   await spend(c, id);
   const companies = [...new Set(asked)];
   const props: GrantProps = {

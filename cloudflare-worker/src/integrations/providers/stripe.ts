@@ -43,6 +43,7 @@ import { oauthCallbackUrl } from '../../util/url';
 import { projectEnabled, scheduledConnectorEnabled } from '../companyScope';
 import type { Env, User } from '../../types';
 import {
+  getDescriptor,
   registerProvider,
   type ProviderImpl,
   type ConnectInput,
@@ -50,6 +51,22 @@ import {
   type IntegrationRow,
   type SyncResult,
 } from '../registry';
+import {
+  ConnectorError,
+  categoryOfStatus,
+  checkToolInput,
+  classifyWith,
+  healthOfCategory,
+  oneCall,
+  registerConnectorAdapter,
+  toolOf,
+  type ConnectorAdapter,
+  type ConnectorContext,
+  type ConnectorTool,
+  type ErrorCategory,
+  type ExecuteResult,
+  type HealthResult,
+} from '../contract';
 import {
   decryptCredentials,
   type CredentialBlob,
@@ -599,6 +616,68 @@ const impl: ProviderImpl = {
   postConnect,
 };
 registerProvider(impl);
+
+// ───────────────────────────────────────────────────────────── D848 contract
+
+/**
+ * D848 (#2469): Stripe as a `ConnectorAdapter`. The same connect, disconnect
+ * and revoke as the routes, and one read tool, the account `connect` reads.
+ * It returns the account's id and name only: never its email, its keys or any
+ * customer. Nothing it runs writes to Stripe.
+ */
+const STRIPE_TOOLS: readonly ConnectorTool[] = Object.freeze([
+  { name: 'read_account', input_schema: { type: 'object', properties: {}, additionalProperties: false }, access: 'read', unit: 'call' },
+] as const);
+
+const STRIPE_API_STATUS = /^stripe_api_failed [^:\s]*: (\d{3})\b/;
+
+/** A Stripe call's error as a category. Only the status and our own codes are read, never the body. */
+export function classifyStripeError(e: unknown): ErrorCategory {
+  return classifyWith(e, (message) => {
+    const status = STRIPE_API_STATUS.exec(message);
+    return status ? categoryOfStatus(Number(status[1])) : null;
+  });
+}
+
+async function stripeToken(ctx: ConnectorContext): Promise<string> {
+  const creds = await decryptCredentials(ctx.env, ctx.row.uid, ctx.row.credentials_enc);
+  const token = typeof creds?.access_token === 'string' ? creds.access_token : '';
+  if (!token) throw new ConnectorError('auth', 'stripe_credentials_missing');
+  return token;
+}
+
+async function executeStripe(name: string, input: unknown, ctx: ConnectorContext): Promise<ExecuteResult> {
+  const tool = toolOf(stripeAdapter, name);
+  checkToolInput(tool.input_schema, input);
+  const account = await fetchAccount(await stripeToken(ctx));
+  const named = account.business_profile?.name || account.display_name || null;
+  return { result: { id: typeof account.id === 'string' ? account.id : null, name: named }, usage: oneCall() };
+}
+
+/** Whether the connection's token still reads its account. */
+async function stripeHealth(ctx: ConnectorContext): Promise<HealthResult> {
+  try {
+    await fetchAccount(await stripeToken(ctx));
+    return { state: 'ok', error_category: null };
+  } catch (e) {
+    const category = classifyStripeError(e);
+    return { state: healthOfCategory(category), error_category: category };
+  }
+}
+
+export const stripeAdapter: ConnectorAdapter = {
+  key: PROVIDER_KEY,
+  pattern: 'api',
+  capabilities: () => getDescriptor(PROVIDER_KEY)?.capabilities ?? [],
+  tools: () => STRIPE_TOOLS,
+  connect,
+  disconnect,
+  revoke: revokeGranted,
+  execute: executeStripe,
+  health: stripeHealth,
+  classifyError: classifyStripeError,
+};
+registerConnectorAdapter(stripeAdapter);
 
 /** Public sync entry-point used by /api/progress/metrics/:projectId/import-stripe. */
 export async function syncStripeForUser(env: Env, userId: number, projectId: number): Promise<{
