@@ -62,6 +62,7 @@ export interface BotFinancials {
   runtime_seconds: number | null;
   cost_per_bot_hour_microusd: number | null;
   realised_margin_bps: number | null;
+  realised_markup_bps: number | null;
   target_markup_bps: 2500;
   target_gross_margin_bps: 2000;
 }
@@ -72,6 +73,8 @@ export interface BotPeriod {
   platforms: { platform: BotPlatform; statuses: Record<BotStatus, number>; runs: number }[];
   failures: { platform: BotPlatform; code: BotFailureCode; runs: number }[];
   recorded_minutes: number | null;
+  bot_minutes: number | null;
+  measured_runtime_runs: number;
   measured_minutes_runs: number;
   financials: BotFinancials;
 }
@@ -82,7 +85,7 @@ export type BotOperationsReport =
 export type BotAlert =
   | { kind: 'failure_rate'; platform: BotPlatform; failed: number; completed: number; rate_bps: number }
   | { kind: 'missed_heartbeat'; platform: BotPlatform; runs: number }
-  | { kind: 'low_margin'; provider_cost_microusd: number; charged_microusd: number; margin_bps: number | null };
+  | { kind: 'low_markup'; provider_cost_microusd: number; charged_microusd: number; markup_bps: number | null };
 
 const stamp = (raw: string | null): number => {
   if (!raw) return NaN;
@@ -150,6 +153,7 @@ export function botFinancials(runs: readonly BotOperationsRun[]): BotFinancials 
     provider_cost_microusd: cost, charged_microusd: charged, runtime_seconds: seconds,
     cost_per_bot_hour_microusd: cost !== null && seconds !== null && seconds > 0 ? cost * 3600 / seconds : null,
     realised_margin_bps: cost !== null && charged !== null && charged > 0 ? (charged - cost) / charged * 10_000 : null,
+    realised_markup_bps: cost !== null && charged !== null && cost > 0 ? (charged - cost) / cost * 10_000 : null,
     target_markup_bps: 2500, target_gross_margin_bps: 2000,
   };
 }
@@ -170,12 +174,14 @@ function period(runs: readonly BotOperationsRun[], from: number, to: number): Bo
   return {
     from: new Date(from).toISOString(), to: new Date(to).toISOString(), runs: cohort.length,
     platforms, failures, recorded_minutes: minutes.length === cohort.length ? total(minutes.map(r => r.minutes!)) : null,
+    bot_minutes: cohort.every(r => measured(r.runtime_seconds)) ? total(cohort.map(r => r.runtime_seconds! / 60)) : null,
+    measured_runtime_runs: cohort.filter(r => measured(r.runtime_seconds)).length,
     measured_minutes_runs: minutes.length, financials: botFinancials(cohort),
   };
 }
 
 /** Alert denominators: done+failed runs ended in the last 24 hours. User
- * stops and active runs cannot dilute failures. Margin uses all terminal runs
+ * stops and active runs cannot dilute failures. Markup uses all terminal runs
  * ended in 7 days, with complete measured cost and settled-charge coverage.
  */
 export function evaluateBotAlerts(runs: readonly BotOperationsRun[], now: number): BotAlert[] {
@@ -193,10 +199,9 @@ export function evaluateBotAlerts(runs: readonly BotOperationsRun[], now: number
   const financials = botFinancials(runs.filter(r => inWindow(r.ended_at, now - 7 * DAY, now)));
   const { provider_cost_microusd: cost, charged_microusd: charged } = financials;
   // BigInt keeps the strict 15% boundary correct for large ledger amounts.
-  if (cost !== null && charged !== null && ((charged === 0 && cost > 0)
-    || (charged > 0 && (BigInt(charged) - BigInt(cost)) * 100n < BigInt(charged) * 15n))) {
-    alerts.push({ kind: 'low_margin', provider_cost_microusd: cost, charged_microusd: charged,
-      margin_bps: financials.realised_margin_bps });
+  if (cost !== null && charged !== null && (cost > 0 && (BigInt(charged) - BigInt(cost)) * 100n < BigInt(cost) * 15n)) {
+    alerts.push({ kind: 'low_markup', provider_cost_microusd: cost, charged_microusd: charged,
+      markup_bps: financials.realised_markup_bps });
   }
   return alerts;
 }
@@ -236,9 +241,9 @@ export function botAlertNotification(userId: number, alert: BotAlert): NotifyArg
       payload: { kind: alert.kind, platform: alert.platform, failed: alert.failed, completed: alert.completed, rate_bps: alert.rate_bps } };
     case 'missed_heartbeat': return { ...shared, title: 'Meeting bot heartbeat missed',
       body: `${alert.runs} active runs missed their heartbeat deadline.`, payload: { kind: alert.kind, platform: alert.platform, runs: alert.runs } };
-    case 'low_margin': return { ...shared, title: 'Meeting bot margin below 15%',
-      body: 'Measured cost against settled AI tokens over seven days is below the margin threshold.',
-      payload: { kind: alert.kind, provider_cost_microusd: alert.provider_cost_microusd, charged_microusd: alert.charged_microusd, margin_bps: alert.margin_bps } };
+    case 'low_markup': return { ...shared, title: 'Meeting bot markup below 15%',
+      body: 'Measured cost against settled AI tokens over seven days is below the 15% markup threshold.',
+      payload: { kind: alert.kind, provider_cost_microusd: alert.provider_cost_microusd, charged_microusd: alert.charged_microusd, markup_bps: alert.markup_bps } };
   }
 }
 

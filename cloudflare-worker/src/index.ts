@@ -1849,6 +1849,15 @@ export default {
         // remediation, notification flushes and the score audits all act on
         // this deployment's own rows and would be wrong to centralise.
         const hqCadences = branchOf(env) === null;
+        // D886 B10: counts-only alerts in the existing HQ notification inbox.
+        if (hqCadences && now.getUTCMinutes() % 5 === 3) {
+          try {
+            const { sweepMeetingBotOperations } = await import('./services/meetingBotOperationsAlerts');
+            await sweepMeetingBotOperations(env, now.getTime());
+          } catch {
+            console.error('[cron] meeting bot operations unreadable');
+          }
+        }
         if (now.getUTCHours() === 3 && now.getUTCMinutes() === 0) {
           await Jobs.cleanup(env);
         }
