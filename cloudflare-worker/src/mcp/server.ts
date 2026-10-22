@@ -20,6 +20,9 @@
  *   - the grant's per-minute limit is counted;
  *   - one activity_logs line is written: tool, company, client, outcome.
  *     Never the arguments, never the result.
+ *   - D843 (#2465): one `api_usage_events` row is written for every outcome,
+ *     with an execution id, the duration and an error category, and the
+ *     result's `_meta.execution_id` hands that id to the client.
  * A refusal is an error result in plain words, never an exception's text.
  *
  * D846 (#2467) — ONE REGISTRY, LISTED PER MEMBER. Every tool carries where it
@@ -39,9 +42,11 @@ import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validatio
 import type { Env, User } from '../types';
 import type { SCOPES } from './oauth';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
+import { METERING_POLICY, MeteringRefused, listed, meteredCall, quoteFor, toolOperation, type MeteringPolicy } from '../services/metering';
 import {
   ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, type GrantProps, type ToolOutcome,
 } from './grants';
+import { newExecutionId, recordUsage, type UsageErrorCategory } from '../services/apiUsage';
 import { budgetRefusalMessage } from '../services/aiRouter';
 
 export interface ToolRun {
@@ -116,7 +121,7 @@ export function mcpCode(code: string): string {
 export function errorResult(sentence: string, code: string, executionId: string | null, extra: Record<string, unknown> = {}) {
   const body: Record<string, unknown> = { error: sentence, code, ...extra };
   if (code === 'insufficient_tokens') Object.assign(body, { needed_microusd: null, available_microusd: null, add_tokens_href: ADD_TOKENS_HREF });
-  return { ...text(body, true), ...(executionId ? { _meta: { [EXECUTION_META]: executionId } } : {}) };
+  return text(body, true, executionId ?? undefined);
 }
 
 class ToolTimeout extends Error {}
@@ -140,7 +145,28 @@ export function registerMcpTools(tools: McpTool[]) {
 }
 export const registeredTools = () => [...REGISTRY];
 
-const text = (value: unknown, isError = false) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }], ...(isError ? { isError: true } : {}) });
+const text = (value: unknown, isError = false, executionId?: string) => ({
+  content: [{ type: 'text' as const, text: JSON.stringify(value) }],
+  ...(isError ? { isError: true } : {}),
+  ...(executionId ? { _meta: { execution_id: executionId, [EXECUTION_META]: executionId } } : {}),
+});
+
+/**
+ * D843 — where a call stopped, for its error category: the account check,
+ * the scope check, the company check, or the tool itself.
+ */
+type CallStage = 'auth' | 'scope' | 'company' | 'run';
+
+/** A ToolError's category, from its HTTP-like status. */
+function toolErrorCategory(status: number): UsageErrorCategory {
+  if (status === 401) return 'auth';
+  if (status === 402) return 'scope';
+  if (status === 403 || status === 404) return 'company';
+  if (status === 408 || status === 504) return 'timeout';
+  if (status === 429) return 'rate_limited';
+  if (status >= 500) return 'internal';
+  return 'invalid_input';
+}
 
 /** What a tool this connection may not use answers, word for word what an unknown name answers. */
 export const NOT_AVAILABLE = 'That tool is not available on this connection.';
@@ -207,19 +233,35 @@ export async function listedTools(env: Env, props: GrantProps, scope: readonly s
 /**
  * Run one tool call under the grant's checks. Exported for tests.
  *
- * `grantId` is an OAuth grant's id, counted here at 60 calls a minute. A
- * member API key's requests are counted before the server is built
- * (`oauth.ts`, at the key's own rate), so a key's calls pass null.
+ * OAuth grants are counted here; API-key requests are counted in oauth.ts
+ * before the server is built, at the key's own rate.
+ *
+ * D844: a tool the metering policy prices above 0 runs inside `meteredCall`,
+ * after every check above it passed, so a refused call holds nothing. Its
+ * price is the policy's, never the arguments'. v1 prices every tool at 0, so
+ * no member's call changes; `policy` is the server's own, and only tests pass
+ * another.
  */
-export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = []) {
+export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = [], policy: MeteringPolicy = METERING_POLICY) {
+  const executionId = newExecutionId();
+  const started = Date.now();
   let user: Awaited<ReturnType<typeof grantUser>> | null = null;
   let companyId: number | null = null;
-  // D842: one id per call, in the result's `_meta` and the activity line.
-  const executionId = crypto.randomUUID();
-  const log = (outcome: ToolOutcome) =>
-    user ? logToolCall(env, user, { tool: tool.name, company: companyId, client: props.clientName, outcome, keyUid: props.keyUid ?? null }) : Promise.resolve();
+  let stage: CallStage = 'auth';
+  // D842 keys use keyUid; retain D843's earlier principal field for callers.
+  const apiKeyUid = props.keyUid ?? (props as GrantProps & { apiKeyUid?: string | null }).apiKeyUid ?? null;
+  // The usage row first, so a failing activity line cannot skip it; its UNIQUE
+  // execution_id keeps a second write for the same call out.
+  const log = async (outcome: ToolOutcome, errorCategory: UsageErrorCategory | null = null) => {
+    await recordUsage(env, {
+      executionId, userId: user?.id ?? Number(props.userId), surface: 'mcp', operation: tool.name, outcome: outcome === 'timeout' ? 'error' : outcome,
+      errorCategory, durationMs: Date.now() - started, apiKeyUid, grantId, client: props.clientName ?? null, companyId,
+    });
+    if (user) await logToolCall(env, user, { tool: tool.name, company: companyId, client: props.clientName, outcome, keyUid: apiKeyUid });
+  };
   try {
     user = await grantUser(env, props);
+    stage = 'scope';
     if (!scope.includes(tool.requiredScope)) {
       throw new ToolRefused(props.keyUid
         ? `This key needs ${tool.requiredScope} for ${tool.name}. Create a key with that permission.`
@@ -227,9 +269,10 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     }
     if (!(await toolEntitled(env, user, tool.entitlement))) throw new ToolRefused(NOT_AVAILABLE);
     if (grantId && !(await withinGrantLimit(env, grantId))) {
-      await log('rate_limited');
+      await log('rate_limited', 'rate_limited');
       return errorResult('Too many calls from this connection. Wait a minute and try again.', 'rate_limited', executionId);
     }
+    stage = 'company';
     let company: ToolRun['company'] = null;
     if (tool.company) {
       company = await grantCompany(env, props, user, args.company, tool.requiredScope === 'validate:write');
@@ -245,31 +288,51 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
         throw new ToolRefused(`That connection is not switched on for ${company.name}. Switch it on from Connect a tool.`);
       }
     }
+    stage = 'run';
+    const operation = toolOperation(tool.name);
+    const priced = listed(operation, policy);
+    if (!priced) console.warn('[mcp] tool has no metering price:', tool.name);
+    const quote = priced ? quoteFor(operation, 1, policy) : 0;
     const runUser = user;
-    const result = await withTimeout(tool.timeoutMs ?? TOOL_TIMEOUT_MS,
-      (signal) => tool.run({ env, props, user: runUser, companies, company, args, connected, executionId, signal }));
+    // One id and abort signal connect D842's timeout to D843 usage and D844's hold.
+    const result = await withTimeout(tool.timeoutMs ?? TOOL_TIMEOUT_MS, async (signal) => {
+      const runTool = async () => {
+        signal.throwIfAborted();
+        return tool.run({ env, props, user: runUser, companies, company, args, connected, executionId, signal });
+      };
+      return quote > 0
+        ? (await meteredCall(env, { userId: runUser.id, executionId, operation, quoteMicrousd: quote,
+          pricingVersion: policy.version, apiKeyUid, signal }, runTool)).value
+        : await runTool();
+    });
     if (grantId && env.OAUTH_KV) {
       await env.OAUTH_KV.put(lastUsedKey(grantId), new Date().toISOString(), { expirationTtl: 31 * 86_400 }).catch(() => {});
     }
     await log('ok');
-    return { ...text(result), _meta: { ...toolMeta(tool), [EXECUTION_META]: executionId } };
+    return { ...text(result), _meta: { ...toolMeta(tool), execution_id: executionId, [EXECUTION_META]: executionId } };
   } catch (e) {
     if (e instanceof ToolTimeout) {
-      await log('timeout');
+      await log('timeout', 'timeout');
       return errorResult('That call took too long and was stopped. Try again, or ask for less at once.', 'timeout', executionId);
     }
     if (e instanceof ToolRefused) {
-      await log('refused');
+      // A refusal inside a tool is about its access to the company.
+      await log('refused', stage === 'run' ? 'company' : stage);
       return errorResult(e.sentence, e.code, executionId);
     }
     if (e instanceof ToolError) {
-      await log('refused');
       const code = mcpCode(e.code);
+      await log('refused', code === 'insufficient_tokens' ? 'insufficient_tokens' : toolErrorCategory(e.status));
       const sentence = code !== e.code ? budgetRefusalMessage(e.code) : e.sentence;
       return errorResult(sentence, code, executionId, { status: e.status });
     }
+    if (e instanceof MeteringRefused) {
+      // Every metering refusal is the AI token ledger's (no tokens, the member's limit, a pause or a hold in review): one category.
+      await log('refused', 'insufficient_tokens');
+      return errorResult(e.sentence, e.code, executionId);
+    }
     console.error('[mcp] tool failed:', tool.name, (e as Error)?.message);
-    await log('error');
+    await log('error', 'internal');
     return errorResult('StudioOS could not complete that call.', 'unavailable', executionId);
   }
 }

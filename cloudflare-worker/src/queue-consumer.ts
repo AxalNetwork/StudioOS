@@ -21,6 +21,7 @@
  */
 import type { Env, JobMessage } from './types';
 import { handleJob } from './services/queueWorker';
+import { FLOW_STEP_JOB, runFlowStep } from './services/flows';
 
 // Mirrors AI_JOB_TYPES in services/queueWorker.ts, which says why
 // `interview_process` is not in it: a deferral below spends one of the
@@ -128,6 +129,23 @@ export async function queueConsumer(
   for (const message of batch.messages) {
     const body = message.body || ({} as JobMessage);
     const t0 = Date.now();
+
+    // D853: a connector flow step dedupes on its own row's lease, not on
+    // `job_idempotency`, and schedules its own retries; the runner says
+    // whether to ack or redeliver (a step still leased, a settlement pending).
+    if (body.job_type === FLOW_STEP_JOB) {
+      try {
+        const d = await runFlowStep(env, body.payload);
+        if (d.kind === 'retry') message.retry({ delaySeconds: d.delaySeconds });
+        else message.ack();
+        await meter(env, body.job_type, d.kind === 'retry' ? 'deferred' : 'completed', Date.now() - t0);
+      } catch (e: any) {
+        console.error('[queue-consumer] flow step failed', { attempt: message.attempts }, e?.message || e);
+        await meter(env, body.job_type, 'failed', Date.now() - t0);
+        message.retry();
+      }
+      continue;
+    }
 
     // Defensive: a producer that bypassed `enqueueJob()` could ship a
     // message without an idempotency_key. Such a message can't be deduped
