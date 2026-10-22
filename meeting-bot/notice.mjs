@@ -7,8 +7,9 @@ export const MEETING_BOT_DISPATCH_DISCLOSURE = 'Eadwyn AI will join as a visible
 /** A bounded, single-line display label. The caller must send it as plain text. */
 function ventureLabel(value) {
   if (typeof value !== 'string') return '';
-  return value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, ' ')
-    .replace(/\s+/g, ' ').trim().slice(0, 80).trim();
+  const line = value.toWellFormed().replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+  return Array.from(line).slice(0, 80).join('').trim();
 }
 
 /**
@@ -17,7 +18,8 @@ function ventureLabel(value) {
  * capture. A successful notice is disclosure, never a substitute for consent.
  */
 export function meetingBotNotice({ ventureName } = {}) {
-  const venture = ventureLabel(ventureName) || 'the venture that invited me';
+  const label = ventureLabel(ventureName);
+  const venture = label ? `the venture ${JSON.stringify(label)}` : 'the venture that invited me';
   return `I’m ${MEETING_BOT_NAME}, Axal’s meeting bot, here for ${venture}. `
     + 'This call is being recorded and transcribed for customer research, including participant display names and who spoke when. '
     + 'Tell the founder if you want recording to stop or ask them to delete the recording and transcript. '

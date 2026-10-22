@@ -6,31 +6,36 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import * as notice from '../../meeting-bot/notice.mjs';
-import InterviewNoticePage from '../src/pages/InterviewNoticePage.jsx';
+import * as noticePage from '../src/pages/InterviewNoticePage.jsx';
 import MeetingBotConsentNotice from '../src/pages/founder/MeetingBotConsentNotice.jsx';
 import { mutationCheck } from './_record_d696.mjs';
 
 const h = React.createElement;
 const read = (path) => readFileSync(new URL('../../' + path, import.meta.url), 'utf8');
-const renderPage = (Page) => renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/privacy/interviews'] }, h(Page)));
+const renderPage = (Page, props = {}, url = '/privacy/interviews') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [url] }, h(Page, props)));
 const plain = (html) => html.replace(/<[^>]*>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
 
 function checkNotice(api) {
   assert.deepEqual([api.MEETING_BOT_NAME, api.MEETING_BOT_NOTICE_VERSION, api.MEETING_BOT_NOTICE_PATH], ['Eadwyn AI', 1, '/privacy/interviews']);
   const message = api.meetingBotNotice({ ventureName: 'Example venture' });
-  assert.equal(message, 'I’m Eadwyn AI, Axal’s meeting bot, here for Example venture. '
+  assert.equal(message, 'I’m Eadwyn AI, Axal’s meeting bot, here for the venture "Example venture". '
     + 'This call is being recorded and transcribed for customer research, including participant display names and who spoke when. '
     + 'Tell the founder if you want recording to stop or ask them to delete the recording and transcript. '
     + 'How it works: https://axal.vc/privacy/interviews');
   assert.equal(api.meetingBotNotice(), api.meetingBotNotice({ ventureName: null }));
   assert.match(api.meetingBotNotice({ ventureName: {} }), /here for the venture that invited me\./);
-  assert.match(api.meetingBotNotice({ ventureName: '  Example\n   venture\u202e  ' }), /here for Example venture\./);
-  assert.match(api.meetingBotNotice({ ventureName: 'x'.repeat(200) }), /here for x{80}\./);
+  assert.match(api.meetingBotNotice({ ventureName: '  Example\n   venture\u202e  ' }), /here for the venture "Example venture"\./);
+  assert.match(api.meetingBotNotice({ ventureName: 'x'.repeat(200) }), /here for the venture "x{80}"\./);
+  assert.match(api.meetingBotNotice({ ventureName: 'x'.repeat(79) + '😀Y' }), /x{79}😀"\./);
+  assert.ok(api.meetingBotNotice({ ventureName: '\ud800' }).includes('\ufffd'));
+  assert.match(api.meetingBotNotice({ ventureName: 'Example\u061c\u200b\u200f\ufeff venture' }), /the venture "Example venture"\./);
+  assert.ok(api.meetingBotNotice({ ventureName: 'Example "venture"' }).includes('the venture "Example \\"venture\\"".'));
   assert.equal(api.MEETING_BOT_DISPATCH_DISCLOSURE, 'Eadwyn AI will join as a visible participant in the call.');
 }
 
 function checkPage(api) {
-  const body = plain(renderPage(api.default));
+  const props = { notices: { ...api.INTERVIEW_NOTICES, 2: api.MEETING_BOT_INTERVIEW_NOTICE }, current: 2 };
+  const body = plain(renderPage(api.default, props));
   for (const wording of [
     "Eadwyn AI, Axal's meeting bot", 'Zoom, Google Meet or Microsoft Teams',
     'visible participant', "founder's venture", 'announces recording in the meeting chat',
@@ -44,7 +49,9 @@ function checkPage(api) {
     'Findings the founder already accepted into their research may remain',
     'not yet published',
   ]) assert.ok(body.includes(wording), wording);
-  assert.doesNotMatch(renderPage(api.default), /mailto:|<script|onerror=/);
+  assert.doesNotMatch(renderPage(api.default, props), /mailto:|<script|onerror=/);
+  assert.ok(body.includes('retention rules above unless the founder deletes it sooner'));
+  assert.ok(!body.includes('What was already recorded stays until the founder deletes it'));
 }
 
 function checkDisclosure(api) {
@@ -52,6 +59,14 @@ function checkDisclosure(api) {
   assert.match(html, /data-testid="meeting-bot-consent-notice"/);
   assert.ok(html.includes(notice.MEETING_BOT_DISPATCH_DISCLOSURE));
   assert.doesNotMatch(html, /<input|checked|onChange/);
+}
+
+function checkLivePage(api) {
+  for (const url of ['/privacy/interviews', '/privacy/interviews?n=1', '/privacy/interviews?n=2']) {
+    const body = plain(renderPage(api.default, {}, url));
+    assert.match(body, /Notice version 1/);
+    assert.doesNotMatch(body, /Eadwyn AI|meeting bot/);
+  }
 }
 
 function checkConfig(config) {
@@ -62,7 +77,8 @@ function checkConfig(config) {
 }
 
 test('the shared runtime announcement and dispatch disclosure are pinned, with a bounded venture label', () => checkNotice(notice));
-test('the public page explains visible recording, retention, stopping and deletion', () => checkPage({ default: InterviewNoticePage }));
+test('the candidate page explains visible recording, retention, stopping and deletion', () => checkPage(noticePage));
+test('the live page preserves version 1; a query cannot publish the bot candidate', () => checkLivePage(noticePage));
 test('the consent disclosure renders beside the existing control without selecting agreement', () => checkDisclosure({ default: MeetingBotConsentNotice }));
 test('the documented audio default matches D877; the bot switch is explicit in each environment', () => {
   const retention = read('cloudflare-worker/src/services/callAudioRetention.ts');
@@ -82,7 +98,10 @@ test('notice assertions reject wording, attribution and normalization regression
     ["'the venture that invited me'", "'another account'"],
     ["if (typeof value !== 'string') return '';", "if (typeof value !== 'string') return 'object';"],
     [".replace(/\\s+/g, ' ')", ".replace(/never-match/g, ' ')"],
-    ["value.replace(/[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029\\u202a-\\u202e\\u2066-\\u2069]/g, ' ')", 'value'],
+    ["value.toWellFormed().replace(/[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\ufeff]/g, ' ')", 'value'],
+    ['value.toWellFormed()', 'value'],
+    ['`the venture ${JSON.stringify(label)}`', '`the venture ${label}`'],
+    ["Array.from(line).slice(0, 80).join('')", 'line.slice(0, 80)'],
     ['.slice(0, 80)', '.slice(0, 200)'],
     ['will join as a visible participant', 'might work in the background'],
   ]);
@@ -97,6 +116,13 @@ test('page assertions reject missing notice, retention and deletion disclosures'
     ['tell the founder to stop recording', 'wait for the meeting to end'],
     ['whole session and its transcript to be deleted', 'audio alone to be deleted'],
     ['Findings the founder already accepted into their research may remain', 'All findings always disappear'],
+    ['What was already recorded is kept under the retention rules above unless the founder deletes it sooner.', 'What was already recorded stays until the founder deletes it.'],
+  ], true);
+});
+
+test('the publication guard rejects silently replacing the live notice with the bot candidate', async () => {
+  await mutationCheck(read('frontend/src/pages/InterviewNoticePage.jsx'), 'pages/InterviewNoticePage.jsx', checkLivePage, [
+    ['notices = INTERVIEW_NOTICES, current = INTERVIEW_NOTICE_VERSION', 'notices = { 2: MEETING_BOT_INTERVIEW_NOTICE }, current = 2'],
   ], true);
 });
 

@@ -41,12 +41,6 @@ export const INTERVIEW_NOTICES = {
           <>
             <p>The founder can record an interview with you from a chat or a call.</p>
             <p>That can include messages, voice notes, audio files, round videos and call recordings.</p>
-            <p>
-              Eadwyn AI, Axal&apos;s meeting bot, may join a Zoom, Google Meet or Microsoft Teams call as a
-              visible participant for the founder&apos;s venture. It announces recording in the meeting chat.
-              The founder must confirm that the interviewee agreed before sending it.
-            </p>
-            <p>The meeting bot records the call&apos;s audio, participant display names, and who spoke when. Display names are labels, not proof of identity.</p>
             <p>Axal VC never messages you first. The founder does.</p>
             <p>
               Nothing from a chat is recorded until you agree in the chat, or until the founder confirms that you
@@ -83,13 +77,7 @@ export const INTERVIEW_NOTICES = {
         h: 'How long it is kept',
         body: (
           <>
-            <p>
-              Call audio, including a meeting bot&apos;s recording, is kept for 30 days by default.
-              The founder can choose a different period or keep it until they delete it, and can delete
-              the audio sooner. Deleting audio does not delete the transcript.
-            </p>
-            <p>The transcript, participant display names and who spoke when stay with the session until the founder deletes it.</p>
-            <p>An in-person recording is kept until the founder deletes it.</p>
+            <p>A recording is kept until the founder deletes it.</p>
             <p>A chat the founder never adds to an interview is deleted after 30 days.</p>
           </>
         ),
@@ -100,7 +88,6 @@ export const INTERVIEW_NOTICES = {
         body: (
           <>
             <p>Reply NO or STOP in the chat, or tell the founder.</p>
-            <p>In a call with Eadwyn AI, tell the founder to stop recording. The founder can stop the bot or ask the meeting host to remove it.</p>
             <p>Before you agree, NO deletes what was waiting to be recorded.</p>
             <p>After you agree, STOP means nothing new is recorded.</p>
             <p>What was already recorded stays until the founder deletes it, so ask them to.</p>
@@ -110,10 +97,44 @@ export const INTERVIEW_NOTICES = {
       {
         n: '06',
         h: 'How to ask for deletion',
-        body: <>{deletion(email)}<p>Ask for the audio only to be deleted, or for the whole session and its transcript to be deleted. Findings the founder already accepted into their research may remain after the source session is deleted.</p></>,
+        body: deletion(email),
       },
     ],
   },
+};
+
+/** D886 B9: candidate version 2. Not in INTERVIEW_NOTICES until B1/B6/B2
+ * verify consent, notice-once, bot audio retention and whole-session cleanup.
+ * Keeping it out also prevents ?n=2 from changing the live disclosure.
+ */
+export const MEETING_BOT_INTERVIEW_NOTICE = {
+  updated: 'not yet published',
+  intro: INTERVIEW_NOTICES[1].intro,
+  sections: (email) => INTERVIEW_NOTICES[1].sections(email).map((section) => {
+    if (section.n === '01') return { ...section, body: <>
+      {section.body}
+      <p>Eadwyn AI, Axal&apos;s meeting bot, may join a Zoom, Google Meet or Microsoft Teams call as a visible participant for the founder&apos;s venture. It announces recording in the meeting chat. The founder must confirm that the interviewee agreed before sending it.</p>
+      <p>The meeting bot records the call&apos;s audio, participant display names, and who spoke when. Display names are labels, not proof of identity.</p>
+    </> };
+    if (section.n === '04') return { ...section, body: <>
+      <p>Call audio, including a meeting bot&apos;s recording, is kept for 30 days by default. The founder can choose a different period or keep it until they delete it, and can delete the audio sooner. Deleting audio does not delete the transcript.</p>
+      <p>The transcript, participant display names and who spoke when stay with the session until the founder deletes it.</p>
+      <p>An in-person recording is kept until the founder deletes it.</p>
+      <p>A chat the founder never adds to an interview is deleted after 30 days.</p>
+    </> };
+    if (section.n === '05') return { ...section, body: <>
+      <p>Reply NO or STOP in the chat, or tell the founder.</p>
+      <p>In a call with Eadwyn AI, tell the founder to stop recording. The founder can stop the bot or ask the meeting host to remove it.</p>
+      <p>Before you agree, NO deletes what was waiting to be recorded.</p>
+      <p>After you agree, STOP means nothing new is recorded.</p>
+      <p>What was already recorded is kept under the retention rules above unless the founder deletes it sooner.</p>
+    </> };
+    if (section.n === '06') return { ...section, body: <>
+      {section.body}
+      <p>Ask for the audio only to be deleted, or for the whole session and its transcript to be deleted. Findings the founder already accepted into their research may remain after the source session is deleted.</p>
+    </> };
+    return section;
+  }),
 };
 
 export default function InterviewNoticePage({ contactEmail = INTERVIEW_CONTACT_EMAIL, notices = INTERVIEW_NOTICES, current = INTERVIEW_NOTICE_VERSION }) {

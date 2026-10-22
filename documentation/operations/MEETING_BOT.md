@@ -56,10 +56,13 @@ objects, the founder presses Stop or the host removes the bot. A new or
 late participant must be informed and agreement checked before continuing.
 Phone participants and hidden chat panels need the founder's spoken notice.
 
-`/privacy/interviews` keeps the existing public legal-page layout. Its
-wording remains a draft, with no invented approval date or contact address.
-The owner/counsel publication record from D756 has not been manufactured by
-this change.
+`/privacy/interviews` keeps its current version 1 unchanged. The bot text
+is prepared as `MEETING_BOT_INTERVIEW_NOTICE`, candidate version 2, outside
+the live version map; even `?n=2` cannot publish it. After the checks above
+pass, publish version 2 by updating the version map and the notice version
+contract, retaining version 1 for old consent links. The candidate has no
+invented approval date or contact address. This change creates no
+owner/counsel publication record.
 
 ## 3. Owner setup by platform
 

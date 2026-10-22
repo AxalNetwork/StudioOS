@@ -23,8 +23,7 @@ const article = (html) => text(html.slice(html.indexOf('<article'), html.indexOf
 // The SHA-256 of version 1's rendered article text, with no contact address.
 // Each wording change in review updates it, and the owner's approval comment
 // quotes it. AFTER APPROVAL never change it: change the words in a version 2.
-// D886 B9 updates the still-unpublished draft; this is not an approval record.
-const V1_SHA256 = 'c39fb742f16e2bb5e25a1dff5e8abf3e55da5844ce2905cee234706acfc3b675';
+const V1_SHA256 = 'd7ad21752ac018ca1611fc7f69156ae9e616e86007f1591a62091a1776a5b70f';
 
 test('D756 the page renders signed out, reads no API, and is public to the 401 handler', () => {
   const html = page(INTERVIEW_NOTICE_PATH);
