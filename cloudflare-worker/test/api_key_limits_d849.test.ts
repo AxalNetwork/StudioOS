@@ -136,9 +136,9 @@ test('a replay of a call in flight is not counted twice against its own key', as
   // and that first hold together pass a cap the replay's own quote fits.
   const g = fixture({ limit: 300_000 });
   try {
-    g.db.prepare(`INSERT INTO ai_budget_reservations(uid,user_id,day_key,month_key,included_microusd,topup_microusd,expires_at,idempotency_key)
-      VALUES('other',2,'2026-10-21','2026-10',150000,0,'2099-01-01 00:00:00',?)`).run(keyHoldKey(KEY, 'other', 'x'));
-    const first = await reserveAiBudget(g.env, 2, 150_000, NOW, { idempotencyKey: keyHoldKey(KEY, 'same', 'mcp.tool.paid') });
+    assert.ok((await reserveAiBudget(g.env, 2, 150_000, NOW, { idempotencyKey: keyHoldKey(KEY, 'other', 'x') })).ok);
+    // 150000 other + 100000 replay fits 300000; with the first attempt's 200000 the key holds 350000.
+    const first = await reserveAiBudget(g.env, 2, 200_000, NOW, { idempotencyKey: keyHoldKey(KEY, 'same', 'mcp.tool.paid') });
     assert.ok(first.ok);
     const r = await meteredCall(g.env, { userId: 2, executionId: 'same', operation: 'mcp.tool.paid', quoteMicrousd: 100_000, apiKeyUid: KEY, now: NOW }, async () => 'ran');
     assert.equal(r.value, 'ran');
