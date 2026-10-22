@@ -86,22 +86,32 @@ export const lastUsedKey = (grantId: string) => `mcp_used:${grantId}`;
 
 /** Per-grant limit: calls a minute. */
 export const GRANT_CALLS_PER_MINUTE = 60;
-
 /**
- * Count one call against `limitId`; false once it is over the minute's limit.
- * An OAuth grant is counted by its grant id, 60 a minute; a member API key
- * (D842) by `key:<uid>`, at the key's own `rate_per_minute`, so its counter is
- * `mcp_rl:key:<uid>:<minute>`.
+ * D849 (#2472): per-member limit, calls a minute across EVERY grant and key the
+ * member holds. Without it, ten connections are ten times one connection's limit.
  */
-export async function withinGrantLimit(env: Env, limitId: string, now = Date.now(), perMinute = GRANT_CALLS_PER_MINUTE): Promise<boolean> {
-  const key = `mcp_rl:${limitId}:${Math.floor(now / 60_000)}`;
+export const USER_CALLS_PER_MINUTE = 120;
+
+/** Count one call in this minute's window under `prefix`; false once past `limit`, and on any KV failure. */
+async function withinMinute(env: Env, prefix: string, limit: number, now: number): Promise<boolean> {
+  const key = `${prefix}:${Math.floor(now / 60_000)}`;
   try {
     const n = Number((await env.RATE_LIMITS.get(key)) || 0) + 1;
     await env.RATE_LIMITS.put(key, String(n), { expirationTtl: 120 });
-    return n <= perMinute;
+    return n <= limit;
   } catch {
     return false; // fail closed: an assistant's calls are not worth an unmetered window
   }
+}
+
+/** Count a grant at its default rate or an API key at its configured rate (D842). */
+export async function withinGrantLimit(env: Env, limitId: string, now = Date.now(), perMinute = GRANT_CALLS_PER_MINUTE): Promise<boolean> {
+  return withinMinute(env, `mcp_rl:${limitId}`, perMinute, now);
+}
+
+/** D849: count one call against the member, whichever grant or key made it; false once over the limit. */
+export async function withinUserLimit(env: Env, userId: number, now = Date.now()): Promise<boolean> {
+  return withinMinute(env, `mcp_rl:user:${Number(userId)}`, USER_CALLS_PER_MINUTE, now);
 }
 
 /** D842: the key a member API key's requests are counted under. */
