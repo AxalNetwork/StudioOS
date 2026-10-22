@@ -244,9 +244,10 @@ async function call(env: any, user: number, method: string, path: string, body?:
   const res = await app.fetch(new Request(`http://x/api/founder/validate${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }), env);
   return { status: res.status, body: await res.json().catch(() => null) as any };
 }
-function signed(body: string) {
+const hmac = (secret: string, msg: string) => createHmac('sha256', secret).update(msg).digest('hex');
+function signed(body: string, secret = WEBHOOK_SECRET) {
   const ts = Math.floor(Date.now() / 1000);
-  return { 'x-zm-signature': `v0=${createHmac('sha256', WEBHOOK_SECRET).update(`v0:${ts}:${body}`).digest('hex')}`, 'x-zm-request-timestamp': String(ts), 'content-type': 'application/json' };
+  return { 'x-zm-signature': `v0=${hmac(secret, `v0:${ts}:${body}`)}`, 'x-zm-request-timestamp': String(ts), 'content-type': 'application/json' };
 }
 async function zoomPost(env: any, payload: unknown) {
   const body = JSON.stringify(payload);
