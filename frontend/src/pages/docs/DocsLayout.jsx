@@ -401,7 +401,7 @@ function YourTicketsCard({ isAdmin }) {
 // nothing at all until the probe answers — an unreachable status endpoint must
 // not read as "all good".
 const STATUS_LINE = {
-  operational: { text: 'All systems operational', dot: 'bg-emerald-500' },
+  operational: { text: 'All monitored services operational', dot: 'bg-emerald-500' },
   degraded: { text: 'Some systems degraded', dot: 'bg-amber-500' },
   down: { text: 'Active outage', dot: 'bg-red-500' },
   // D332 — a failed probe says so, rather than vanishing: silence reads as
