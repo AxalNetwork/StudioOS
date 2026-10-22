@@ -164,7 +164,9 @@ A grant older than a raised session floor is also refused on every tool call (`g
       leaves every encrypted value unreadable; each bank account then reads
       `account_unreadable` until it is retired and added again.
       D710's Mercury entity tokens are stored under it too, and read
-      `token_unreadable` after a change until the Super Admin enters them again.
+      `token_unreadable` after a change until the Super Admin enters them again
+      in HQ › Fund administration › Bank accounts (`/api/admin/mercury`), the
+      only place they are managed: never the member connector (D879, D883).
 
 ### Cloudflare Worker (optional, per feature)
 - [ ] `GITHUB_ACCESS_TOKEN` – ticket → GitHub-issue sync.
