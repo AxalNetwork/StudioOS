@@ -271,7 +271,8 @@ test('7b. the surfaces this test cannot mount pass the key to BrandIcon at the a
   has('frontend/src/pages/admin/consoles/IntegrationKeysConsole.jsx', /<BrandIcon provider=\{row\.provider_key\} name=\{label\} size=\{24\} \/>/, 'a 24px tile by each label');
   has('frontend/src/pages/hq/PlatformPage.jsx', /<BrandIcon provider=\{k\.provider_key\} name=\{PROVIDER_LABEL\[k\.provider_key\] \|\| k\.provider_key\} size=\{24\} \/>/, 'a 24px tile by each label');
   has('frontend/src/pages/admin/consoles/GithubSyncConsole.jsx', /<BrandIcon provider="github" name="GitHub" size=\{18\} variant="bare" tone="current" className="text-gray-800 dark:text-gray-100" \/>/, 'the GitHub mark in GitHub\'s documented monochrome, as the console drew it, not lucide\'s GitBranch');
-  has('frontend/src/pages/account/AccountConnectors.jsx', /<BrandIcon provider="telegram" name="Telegram" \/>\s*<span className="text-sm font-bold[^"]*">Telegram · Axal VC channels/, 'the Telegram card\'s tile');
+  // The owner removed the Community "Telegram · Axal VC channels" card from Connectors (#2559).
+  assert.doesNotMatch(read('frontend/src/pages/account/AccountConnectors.jsx'), /Telegram · Axal VC channels/, 'the Community card is gone');
   has('frontend/src/pages/account/AccountConnectors.jsx', /<VerifiedBadge on=\{p\.verified_on\} \/>/, 'the Verified mark is the one primitive');
   has('frontend/src/ui/VerifiedBadge.jsx', /role="img" aria-label="Verified"/, 'the Verified mark is an image');
   assert.doesNotMatch(read('frontend/src/pages/account/AccountConnectors.jsx'), /title="Built and verified by Axal"/, 'the unrecorded ✓ is gone');

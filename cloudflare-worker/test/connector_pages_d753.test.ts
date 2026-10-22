@@ -74,8 +74,8 @@ interface Entry { id: string; key: string; variant?: string; page: Page }
 
 const ENTRIES: Entry[] = [];
 for (const [key, entry] of Object.entries(CONNECTOR_PAGES)) {
-  if ('entity' in entry) {
-    ENTRIES.push({ id: `${key}.entity`, key, variant: 'entity', page: entry.entity });
+  // D879 (#2552): Mercury's variants are a member's own, by role; there is no entity page.
+  if ('personal' in entry) {
     for (const [role, page] of Object.entries(entry.personal)) ENTRIES.push({ id: `${key}.personal.${role}`, key, variant: role, page });
   } else {
     ENTRIES.push({ id: key, key, page: entry });
@@ -162,12 +162,14 @@ test('1. every registry row, LinkedIn and each Mercury variant has a page, and n
   assert.deepEqual([...providers![1].matchAll(/'(\w+)'/g)].map((m) => m[1]).sort(), [...CHANNELS].sort(), 'the channel pages are not the messaging providers');
   for (const row of REGISTRY) {
     const entry = CONNECTOR_PAGES[row.key];
-    if (!row.entity_roles && !row.personal_roles) {
-      assert.equal('entity' in entry, false, `${row.key} has variants with no audience fields`);
+    if (!row.preview_roles && !row.personal_roles) {
+      assert.equal('personal' in entry, false, `${row.key} has variants with no audience fields`);
       continue;
     }
-    assert.ok('entity' in entry, `${row.key} has audience fields but no variants`);
-    if (row.entity_roles?.length) assert.ok(entry.entity, `${row.key} has no entity page`);
+    assert.ok('personal' in entry, `${row.key} has audience fields but no variants`);
+    assert.equal('entity' in entry, false, `${row.key}: no entity page (D879)`);
+    // D879: a previewing role reads the founder's page, so there must be one.
+    if (row.preview_roles?.length) assert.ok(entry.personal.founder, `${row.key} has no founder page to preview`);
     assert.deepEqual(Object.keys(entry.personal).sort(), [...(row.personal_roles ?? [])].sort(), `${row.key}: a personal variant per role in personal_roles`);
   }
   const front = FRONT('pages/account/connectorsModel.js');
@@ -341,7 +343,7 @@ const ENDPOINTS: Record<string, { file: string; sign_in: [string, string] | null
 test('9. endpoints equal the providers\' own constants', () => {
   for (const e of ENTRIES) {
     const spec = ENDPOINTS[e.key];
-    if (e.key === 'mercury' && e.variant !== 'entity') {
+    if (e.key === 'mercury') {
       const mcp = ENDPOINTS.mercury_personal;
       assert.equal(e.page.endpoints.sign_in, constant(SRC(mcp.file), mcp.sign_in![0]), `${e.id}: sign_in`);
       assert.equal(e.page.endpoints.api, constant(SRC(spec.file), spec.api!), `${e.id}: api`);
@@ -377,8 +379,7 @@ test('10. sign-in kinds', () => {
   for (const e of ENTRIES) {
     const row = getDescriptor(e.key);
     const kind = e.page.sign_in.kind;
-    if (e.variant === 'entity') assert.equal(kind, 'entity', e.id);
-    else if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
+    if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
     else if (['google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
     // D881 (#2554): a member connects Mercury only by signing in through its MCP server.
     else if (e.key === 'mercury') assert.equal(kind, 'mcp', e.id);
@@ -403,7 +404,9 @@ test('11. CATEGORY_ORDER holds every category once, with the Connectors page\'s 
 test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either import order', async () => {
   const mercury = getDescriptor('mercury')!;
   const v = (role: string, hq: boolean) => ({ role, hq });
-  assert.equal(pageDescriptor(mercury, v('admin', true))!.tagline, (CONNECTOR_PAGES.mercury as any).entity.tagline);
+  // D879 (#2552): an admin on HQ previews the founder's page; there is no entity page.
+  assert.equal(pageDescriptor(mercury, v('admin', true))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.founder.tagline);
+  assert.deepEqual(pageDescriptor(mercury, v('admin', true))!.trust, pageDescriptor(mercury, v('founder', true))!.trust);
   assert.equal(pageDescriptor(mercury, v('founder', true))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.founder.tagline);
   assert.equal(pageDescriptor(mercury, v('partner', false))!.tagline, (CONNECTOR_PAGES.mercury as any).personal.partner.tagline);
   // D752: an investor reads their own page on HQ, and none on a branch.
@@ -445,7 +448,7 @@ test('12. pageDescriptor picks Mercury\'s variant by viewer, and works in either
     + "const d = p.pageDescriptor(r.getDescriptor('mercury'), { role: 'admin', hq: true });"
     + "process.stdout.write(d && d.sign_in.kind);";
   const out = execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', '--import', './cloudflare-worker/test/_ts-loader.mjs', '--input-type=module', '-e', script], { cwd: root, encoding: 'utf8' });
-  assert.equal(out, 'entity');
+  assert.equal(out, 'mcp'); // D881 (#2554): Sign in with Mercury only
 });
 
 test('13. connectorPagePath', () => {

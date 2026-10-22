@@ -1899,6 +1899,14 @@ export default {
           } catch (e) {
             console.error('[cron] channel purge failed', e instanceof Error ? e.message : 'error');
           }
+          // D877 (#2524) — a call's audio past its founder's retention; the text stays.
+          try {
+            const { purgeExpiredCallAudio } = await import('./services/callAudioRetention');
+            const r = await purgeExpiredCallAudio(env, now);
+            if (r.sessions) console.info(`[cron] call audio purge sessions=${r.sessions} objects=${r.objects}`);
+          } catch (e) {
+            console.error('[cron] call audio purge failed', e instanceof Error ? e.message : 'error');
+          }
         }
         // D572 part 3b — the partner leaderboard's daily standings, so the
         // board's "change" has an earlier standing to compare with. Every

@@ -86,13 +86,13 @@ export default function StatusPage() {
         <header className="mb-8 flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">System status</h1>
-            <p className="text-sm text-gray-600 mt-1">Live health of Axal VC StudioOS services.</p>
+            <p className="text-sm text-gray-600 mt-1">Service health and availability across Axal VC StudioOS.</p>
           </div>
           {!loading && !error && (
             <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${STATUS_PILL[overall].bg}`}>
               <OverallIcon className={STATUS_PILL[overall].color} size={18} aria-hidden="true" />
               <span className={`font-semibold ${STATUS_PILL[overall].color}`}>
-                {overall === 'operational' ? 'All systems operational' : STATUS_PILL[overall].label}
+                {overall === 'operational' ? 'All monitored services operational' : STATUS_PILL[overall].label}
               </span>
             </div>
           )}
@@ -109,14 +109,20 @@ export default function StatusPage() {
           <>
             <section aria-labelledby="services" className="mb-10">
               <h2 id="services" className="text-lg font-semibold text-gray-900 mb-3 dark:text-gray-100">Services</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">The summary covers monitored services. Other entries show availability separately; “Not monitored” is not a health check. History is based on recorded incidents.</p>
               <div className="rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100 dark:border-gray-800 dark:bg-gray-900" data-card>
                 {services.map((s) => {
-                  const pill = STATUS_PILL[s.status] || STATUS_PILL.unknown;
+                  const pill = s.monitoring === 'not_monitored' && s.status === 'unknown'
+                    ? { ...STATUS_PILL.unknown, label: 'Not monitored' }
+                    : STATUS_PILL[s.status] || STATUS_PILL.unknown;
                   const Icon = pill.icon;
                   return (
                     <div key={s.name} className="p-4 flex items-center justify-between gap-4 flex-wrap">
                       <div className="flex-1 min-w-[180px]">
                         <div className="font-medium text-gray-900 dark:text-gray-100">{s.name}</div>
+                        {s.availability && <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{s.availability}</div>}
+                        {s.note && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{s.note}</p>}
+                        {s.monitoring === 'not_monitored' && <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Uptime not measured</div>}
                         {typeof s.uptime_pct === 'number' && (
                           <div className="text-xs text-gray-500 mt-0.5">{s.uptime_pct.toFixed(2)}% uptime · 90 days</div>
                         )}

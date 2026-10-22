@@ -9,6 +9,15 @@
  *   POST   /interviews/:id/meetings                     schedule one: { provider, starts_at, duration_min?, topic?, auto_record? }
  *   DELETE /interviews/:id/meetings/:refUid             cancel it (at the provider too, while it is still to come)
  *   POST   /interviews/:id/meetings/:refUid/import      fetch and import its transcript now
+ *   GET    /interviews/:id/meetings/:refUid/recording   a Meet call's Drive recordings, read live (D871)
+ *
+ * D871 (#2518): a Meet call the member did not schedule from Axal is attached
+ * with `POST /interviews/:id/meetings` and `{ attach: { event_id | meeting_code
+ * | join_url }, consent }`, with no `session_id`. The call is found in the
+ * member's own Google Calendar and accepted only when their account organises
+ * it; it opens its own session, as scheduling does, and keeps the event's start
+ * and end so the sweep imports it after the call. With a `session_id`, attach
+ * is D685's: a link pasted for the recording in progress.
  *
  * And, separately, `zoomWebhook`: the public receiver for Axal's one Zoom app,
  * `POST /zoom/webhook`, mounted on `/api/channels` outside `requireAuth`. It
@@ -32,7 +41,7 @@ import { IntakeError, openSession, writableInterview, writableSession, type Scop
 import { providerAvailable } from '../services/channels/connections';
 import { MEETING_PROVIDERS, PROVIDER_LABEL, type MeetingProvider } from '../services/channels/types';
 import {
-  MEETING_ERRORS, MeetingProviderError, cancelRef, importMeetingRef, loadRef, meetingView, memberRef,
+  MEETING_ERRORS, MeetingProviderError, cancelRef, importMeetingRef, loadRef, meetingView, memberRef, withinCallSlot,
   type MeetingErrorCode, type MeetingImporter, type MeetingRef,
 } from '../services/channels/meetings';
 import { readCappedBody } from '../services/channels/events';
@@ -155,8 +164,105 @@ function attachedLink(raw: unknown): { provider: MeetingProvider; joinUrl: strin
   return null;
 }
 
+/** The interviewee's consent as scheduling takes it, or null. */
+function consentOf(body: Record<string, unknown> | null): string | null {
+  const consent = body?.consent && typeof body.consent === 'object' ? body.consent as Record<string, unknown> : null;
+  const method = String(consent?.method ?? '');
+  return consent?.status === 'given' && (CONSENT_METHODS as readonly string[]).includes(method) ? method : null;
+}
+
+/** The Meet call an attach without a session names: a Calendar event id, a typed code, or a Meet link. */
+function meetTarget(attach: Record<string, unknown> | null): meet.MeetTarget | null {
+  if (typeof attach?.event_id === 'string') return meet.EVENT_ID.test(attach.event_id) ? { eventId: attach.event_id } : null;
+  const code = meet.bareMeetingCode(attach?.meeting_code);
+  if (code) return { meetingCode: code };
+  const link = attachedLink(attach?.join_url);
+  return link?.provider === 'google_meet' ? { meetingCode: link.externalRef } : null;
+}
+
+/**
+ * D871: attach a Meet call from the member's own Calendar. Nothing is stored
+ * unless the event is on their primary calendar, has that Meet conference, has
+ * times, is organised by their account, ended no more than 30 days ago (Meet's
+ * retention), and is not already a call on an interview.
+ */
+async function attachCalendarMeet(c: C, s: { user: User; scoped: ScopedInterview }, body: Record<string, unknown>, target: meet.MeetTarget) {
+  const consentMethod = consentOf(body);
+  if (!consentMethod) {
+    return refuse(c, 400, { code: 'consent_required',
+      message: 'Record how the interviewee agreed to be recorded and transcribed before you attach the call.',
+      extra: { accepted: CONSENT_METHODS } });
+  }
+  if (!available(c.env, 'google_meet')) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE.google_meet });
+  const googleConn = await meet.googleConnection(c.env, s.user.id);
+  if (!googleConn) return refuse(c, 409, { code: 'connect_first', message: 'Connect Google in Account › Connectors first, then attach the call.' });
+  let call: meet.CalendarMeet | null;
+  try {
+    call = await meet.findCalendarMeet(c.env, googleConn, target);
+  } catch (e) {
+    if (e instanceof MeetingProviderError) return providerRefusal(c, e);
+    throw e;
+  }
+  if (!call) {
+    return refuse(c, 404, { code: 'meeting_not_in_calendar',
+      message: 'No Google Meet call with that link or event is in your Google Calendar. Attach a call from your own calendar.' });
+  }
+  if (!call.organizerSelf) {
+    return refuse(c, 409, { code: 'meeting_not_hosted',
+      message: 'Axal can import only a call hosted by the account you connected. Record this call in-app instead.' });
+  }
+  if (!call.startsAt || !call.endsAt) {
+    return refuse(c, 409, { code: 'meeting_no_time', message: 'That Calendar event has no start and end time. Attach a timed Meet call.' });
+  }
+  if (Date.parse(call.endsAt) < Date.now() - 30 * 24 * 60 * 60 * 1000) {
+    return refuse(c, 409, { code: 'meeting_expired',
+      message: 'Google Meet keeps a call’s transcript for 30 days, and this call ended before that. Paste the conversation instead.' });
+  }
+  // One call, one interview: the event itself, or the same link pasted for a
+  // recording during it. Both start in this call's slot; an event whose time
+  // moved since is still refused, by the table's UNIQUE (provider, external_ref).
+  const taken = (await c.env.DB.prepare(
+    `SELECT starts_at, ends_at FROM interview_channel_refs
+      WHERE provider = 'google_meet' AND status <> 'cancelled' AND external_ref IN (?, ?)`,
+  ).bind(call.eventId, call.meetingCode).all<Pick<MeetingRef, 'starts_at' | 'ends_at'>>()).results ?? [];
+  if (taken.some((r) => withinCallSlot(Date.parse(call!.startsAt!), r))) {
+    return refuse(c, 409, { code: 'meeting_link_reused', message: 'This call is already attached to an interview.' });
+  }
+  const notice: MeetingErrorCode | null = meet.transcriptAccess(googleConn) === 'missing' ? 'meet_transcripts_unavailable' : null;
+  let sessionId: number | null = null;
+  try {
+    const session = await openSession(c.env, s.scoped, 'google_meet', 'video', { method: consentMethod });
+    sessionId = session.id;
+    const uid = crypto.randomUUID();
+    await c.env.DB.prepare(
+      `INSERT INTO interview_channel_refs
+         (uid, provider, external_ref, session_id, interview_id, user_id, join_url, starts_at, ends_at, status, last_error)
+       VALUES (?, 'google_meet', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(uid, call.eventId, session.id, s.scoped.interview.id, s.user.id, call.joinUrl, call.startsAt, call.endsAt,
+      Date.parse(call.endsAt) > Date.now() ? 'scheduled' : 'ended', notice ? MEETING_ERRORS[notice] : null).run();
+    const ref = await loadRef(c.env, uid);
+    return c.json({ meeting: ref ? view(ref) : null, session_id: session.id,
+      notice: notice ? { code: notice, message: MEETING_ERRORS[notice] } : null }, 201);
+  } catch (x) {
+    if (sessionId) {
+      await c.env.DB.prepare(
+        `DELETE FROM interview_sessions WHERE id = ? AND NOT EXISTS (SELECT 1 FROM interview_transcript_segments WHERE session_id = ?)`,
+      ).bind(sessionId, sessionId).run();
+    }
+    if (x instanceof IntakeError) return intakeRefusal(c, x);
+    if (/UNIQUE constraint/i.test(x instanceof Error ? x.message : '')) {
+      return refuse(c, 409, { code: 'meeting_link_reused', message: 'This call is already attached to an interview.' });
+    }
+    throw x;
+  }
+}
+
 async function attachCall(c: C, s: { user: User; scoped: ScopedInterview }, body: Record<string, unknown>) {
   const attach = body.attach && typeof body.attach === 'object' ? body.attach as Record<string, unknown> : null;
+  if (body.session_id == null && (body.provider == null || body.provider === 'google_meet')) {
+    const target = meetTarget(attach);
+    if (target) return attachCalendarMeet(c, s, body, target);
+  }
   const link = attachedLink(attach?.join_url);
   if (!link || (body.provider != null && body.provider !== link.provider)) {
     return refuse(c, 400, { code: 'meeting_link_invalid', message: 'Paste a Zoom or Google Meet join link for the call you host.' });
@@ -367,6 +473,27 @@ meetings.post('/interviews/:id/meetings/:refUid/import', async (c) => {
   const fresh = await loadRef(c.env, ref.uid);
   if (!fresh) return refuse(c, 404, { code: 'meeting_not_found', message: 'That call no longer exists.' });
   return c.json({ meeting: view(fresh), outcome: outcome.status, segments: outcome.segments });
+});
+
+// ---------------------------------------------------------------------------
+// A Meet call's recording (D871)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Drive recordings of the member's own Meet call, read live from Meet with
+ * their grant, for "Download it, then upload it here". Axal never fetches the
+ * file: that would need a Drive scope (#2518, question 1).
+ */
+meetings.get('/interviews/:id/meetings/:refUid/recording', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const ref = await memberRef(c.env, s.user.id, s.scoped.interview.id, c.req.param('refUid'));
+  if (!ref || ref.provider !== 'google_meet') return refuse(c, 404, { code: 'meeting_not_found', message: 'That call no longer exists.' });
+  if (ref.status === 'cancelled') return refuse(c, 409, { code: 'meeting_cancelled', message: 'This call was cancelled.' });
+  if (!available(c.env, 'google_meet')) return refuse(c, 503, { code: 'provider_unavailable', message: UNAVAILABLE.google_meet });
+  const got = await meet.meetRecordingLinks(c.env, ref);
+  if ('fail' in got) return providerRefusal(c, new MeetingProviderError(got.fail, got.retryable));
+  return c.json({ recordings: got.recordings });
 });
 
 export default meetings;

@@ -4,7 +4,9 @@ D710 (#1775). Mercury for fund administration, **read-only**: one connection
 per Axal entity (Holdings, Management, the GP, the Fund), which only a Super
 Admin adds; an hourly sync of balances and transactions; and matches that
 reconcile a bank credit against a capital-call line or a management-fee
-period, which a person confirms. Read
+period, which a person confirms. These accounts are HQ's only, through
+`/api/admin/mercury`: since D879 (#2552) the member Connectors catalogue and
+`/account/connectors/mercury` never show them to anyone. Read
 [D710](../../../../documentation/architecture/decisions/D710.md) first.
 
 **Nothing here can move money.** `client.ts` is the only file that names

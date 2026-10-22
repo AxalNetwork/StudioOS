@@ -30,7 +30,7 @@
  */
 import type { Context } from 'hono';
 import type { Env, User } from '../../types';
-import { ConnectRefusal, audienceFor, type IntegrationRow, getDescriptor, personalHqOnlyOffHq, personalHqOnlySentence, personalMercuryFor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
+import { ConnectRefusal, audienceFor, type IntegrationRow, getDescriptor, noPersonalConnectionSentence, personalHqOnlyOffHq, personalHqOnlySentence, personalMercuryFor, registerProvider, type ConnectInput, type ConnectResult } from '../registry';
 import { selectJwt } from '../../auth';
 import { branchOf } from '../../util/branch';
 import { canHoldValidateSource } from '../../routes/_founder_validate_helpers';
@@ -129,7 +129,7 @@ async function connect(c: C, user: User, _input: ConnectInput): Promise<ConnectR
   }
   const variant = personalMercuryFor(user.role);
   if (!desc || !variant || audienceFor(desc, viewer) !== 'personal') {
-    throw new ConnectRefusal(403, 'purpose_not_allowed', 'Your role does not hold a personal Mercury connection.');
+    throw new ConnectRefusal(403, 'purpose_not_allowed', noPersonalConnectionSentence('Mercury'));
   }
   // D881 (#2554): Sign in with Mercury only. A token is never read, checked or stored.
   throw new ConnectRefusal(410, 'token_connect_retired', TOKEN_CONNECT_RETIRED);

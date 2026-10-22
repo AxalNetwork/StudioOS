@@ -44,15 +44,15 @@ test('D881: a founder, a partner and an investor on HQ who post a token read tok
   } finally { b.restore(); }
 });
 
-test('the refusals before it keep their status and code: a support session, and an admin\'s entity connection', async () => {
+test('the refusals before it keep their status and code: a support session, and an admin (D879)', async () => {
   const { db, env } = await personalFixture();
   const b = bank();
   try {
     const support = await connect(env, 10, {}, { impersonated: true });
     assert.deepEqual([support.status, support.body.error], [403, 'support_session_refused'], support.text);
-    // An admin keeps #1775's entity console.
+    // D879 (#2552): an admin connects nothing here; Axal VC's own accounts are HQ's (#1775's console).
     const admin = await connect(env, 2);
-    assert.deepEqual([admin.status, admin.body.error], [409, 'entity_connection_only']);
+    assert.deepEqual([admin.status, admin.body.error], [403, 'purpose_not_allowed']);
     // Whatever else rides along, a token is not read: no webhook, no confirmation, no token at all.
     for (const extra of [{ webhook_secret: 'fixture-secret' }, { config: {} }, { api_key: '  ' }]) {
       const r = await connect(env, 10, extra);

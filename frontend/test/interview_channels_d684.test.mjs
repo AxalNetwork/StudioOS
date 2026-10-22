@@ -162,6 +162,8 @@ test('every request in the module is written as a literal path the drift check c
     // D757 (#1926): the Calendar status read for meet_transcripts, and the Meet transcript consent.
     'GET /calendar/google/status',
     'GET /channels', 'GET /channels/telegram/link', 'GET /channels/telegram/setup', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /channels/whatsapp/captures', 'GET /channels/whatsapp/link', 'GET /founder/validate/interviews/:p/meetings',
+    // D871 (#2518): a Meet call's Drive recordings.
+    'GET /founder/validate/interviews/:p/meetings/:p/recording',
     'POST /admin/channels/telegram/webhook',
     'POST /calendar/google/meet-transcripts/connect',
     'POST /channels/:p/test', 'POST /channels/telegram/link', 'POST /channels/telegram/link/:p/confirm', 'POST /channels/threads/:p/assign',
@@ -169,6 +171,8 @@ test('every request in the module is written as a literal path the drift check c
     'POST /channels/threads/:p/consent', 'POST /channels/threads/:p/consent-request', 'POST /channels/threads/:p/ignore',
     'POST /channels/threads/:p/reply', 'POST /channels/threads/:p/voice/:p/retry', 'POST /channels/whatsapp/captures/:p/consent', 'POST /channels/whatsapp/connect', 'POST /channels/whatsapp/link', 'POST /channels/whatsapp/link/:p/confirm', 'POST /founder/validate/interviews/:p/meetings',
     // #1588: attach by link posts to the same route as scheduling (D685 §5.3.2).
+    'POST /founder/validate/interviews/:p/meetings',
+    // D871 (#2518): attach a Meet call from the member's Calendar posts to the same route again.
     'POST /founder/validate/interviews/:p/meetings',
     'POST /founder/validate/interviews/:p/meetings/:p/import',
     'PUT /channels/whatsapp/link/venture',

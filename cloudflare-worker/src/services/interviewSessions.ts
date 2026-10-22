@@ -128,6 +128,8 @@ export interface SessionRow {
   digest_status?: 'queued' | 'running' | 'done' | 'refused' | 'skipped' | null; digest_note?: string | null;
   digest_hash?: string | null; digest_trigger?: string | null; digest_run_id?: string | null; digested_at?: string | null;
   digest_json?: string | null; digest_kept_at?: string | null; digest_kept_by?: number | null;
+  // D877 (migration 530): the audio went, the text stayed.
+  audio_removed_at?: string | null; audio_removed_reason?: AudioRemovedReason | null;
 }
 
 export async function loadSession(env: Env, id: number): Promise<SessionRow | null> {
@@ -356,6 +358,36 @@ export async function recordReceipt(env: Env, sessionId: number, r: {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(sessionId, r.kind, r.model, r.requested_model, r.fallback_used ? 1 : 0, r.audio_minutes,
     Math.max(0, Math.round(r.cost_microusd)), r.outcome, r.refusal ?? null).run();
+}
+
+/** D877 (#2524) — why a session's audio went while its text stayed. */
+export type AudioRemovedReason = 'retention' | 'deleted';
+
+/**
+ * D877 (#2524) — remove a session's audio and keep its text: the R2 chunks
+ * first, then their rows, then `audio_removed_at` and its reason on the
+ * session, and one audit row. The segments, marks, receipts, digest and every
+ * accepted item stay. Keys outside the feature's prefix are never deleted,
+ * whatever a row says. `actorUserId` is null for the retention purge.
+ */
+export async function deleteSessionAudio(env: Env, session: SessionRow, actorUserId: number | null, reason: AudioRemovedReason): Promise<{ keys: string[] }> {
+  const keys = (await listChunks(env, session.id)).map((c) => c.r2_key).filter((k) => k.startsWith(AUDIO_PREFIX));
+  if (keys.length && env.FILES) {
+    for (let i = 0; i < keys.length; i += 1000) await env.FILES.delete(keys.slice(i, i + 1000));
+  }
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM interview_session_chunks WHERE session_id = ?').bind(session.id),
+    env.DB.prepare(
+      `UPDATE interview_sessions SET audio_removed_at = COALESCE(audio_removed_at, datetime('now')),
+              audio_removed_reason = COALESCE(audio_removed_reason, ?), updated_at = datetime('now') WHERE id = ?`,
+    ).bind(reason, session.id),
+    env.DB.prepare(
+      `INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)`,
+    ).bind('interview_session_audio_deleted', JSON.stringify({
+      session_uid: session.uid, interview_id: session.interview_id, reason, audio_chunks: keys.length,
+    }), actorUserId ? `user:${actorUserId}` : 'system:call_audio_retention', actorUserId ?? session.created_by_user_id, session.project_id),
+  ]);
+  return { keys };
 }
 
 /**
