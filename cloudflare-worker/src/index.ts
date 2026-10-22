@@ -80,6 +80,7 @@ import { investorProfile } from './routes/investor_signals';
 import assistantRoutes, { sweepExpiredConversations } from './routes/assistant';
 import aiRoutes from './routes/ai';
 import aiBudgetRoutes from './routes/ai_budget';
+import { developerUsage } from './routes/developer_usage';
 // D791 (#2216): HQ › AI usage, Super Admin with step-up.
 import adminAiUsageRoutes from './routes/admin_ai_usage';
 import aiRailProposalsRoutes from './routes/ai_rail_proposals';
@@ -282,6 +283,7 @@ import cycleVerdict from './routes/cycle_verdict';
 import cycleRaise from './routes/cycle_raise';
 import founderValidateStructure from './routes/founder_validate_structure';
 import founderValidateSessions from './routes/founder_validate_sessions';
+import validateConversations from './routes/validate_conversations';
 // D684 (#1575) — interview channels: business Telegram and WhatsApp
 // conversations (S19), Zoom and Google Meet calls from an interview (S18).
 import channels, { channelsAdmin } from './routes/channels';
@@ -341,6 +343,7 @@ import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 import connectorsHealth from './routes/connectors_health';
+import connectorsCustomRoutes from './routes/connectors_custom';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
 import adminFundStructure from './routes/admin_fund_structure';
@@ -879,6 +882,8 @@ app.route('/api/assistant', assistantRoutes);
 app.route('/api/ai/rail/proposals', aiRailProposalsRoutes);
 app.route('/api/ai', aiRoutes);
 app.route('/api/ai-budget', aiBudgetRoutes);
+// D845 (#2471): the member's own usage reports over api_usage_events.
+app.route('/api/developer/usage', developerUsage);
 app.route('/api/admin/ai-usage', adminAiUsageRoutes);
 app.route('/api/advisory', advisory);
 app.route('/api/activity', activity);
@@ -1238,6 +1243,8 @@ app.route('/api/settings', settings);
 app.route('/api/connectors/assistants', assistantGrants);
 // D848 (#2469): the member's connections and their health, ahead of `/:key`.
 app.route('/api/connectors/health', connectorsHealth);
+// D852 (#2475): a member's own remote MCP servers, behind CUSTOM_MCP_ENABLED; ahead of the connectors router.
+app.route('/api/connectors/custom', connectorsCustomRoutes);
 app.route('/api/mcp/consent', mcpConsent);
 // D841 (#2464): a member's own API keys for /mcp, behind API_KEYS_ENABLED.
 app.route('/api/developer/keys', developerKeys);
@@ -1400,6 +1407,8 @@ app.route('/api/admin/testing', adminTesting);
 app.route('/api/partner/delivery', partnerDelivery);
 // D657 — interview sessions: recording, live and final speech-to-text.
 app.route('/api/founder/validate', founderValidateSessions);
+// D858 (#2503): what a session's and a venture's conversations show, read only.
+app.route('/api/validate', validateConversations);
 app.route('/api/founder/validate', founderValidate);
 // D684 — Zoom and Meet calls scheduled from an interview (S18). The Zoom
 // webhook mounts before the channels router, which owns the rest of

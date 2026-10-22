@@ -324,6 +324,8 @@ export interface Env {
   //   `npx wrangler secret put KEK_R2  --env=production`
   // Dev/preview workers fall back to JWT_SECRET (with one-shot warning).
   KEK_PII?: string;
+  /** D852 (#2475): `true` turns on remote MCP servers a member adds; anything else leaves them off. */
+  CUSTOM_MCP_ENABLED?: string;
   KEK_R2?: string;
   // Symmetric secret used by `services/cryptoBox.ts` for wellbeing data.
   // Kept distinct from KEK_PII so a key rotation on PII columns never

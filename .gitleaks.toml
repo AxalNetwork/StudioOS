@@ -86,6 +86,12 @@ regexes = [
   # sets as an env value and then proves never appears in /api/health. Not
   # a credential; pinned to the exact literal so nothing looser rides on it.
   '''\bd751-health-fixture-secret\b''',
+  # D850 (#2473): the placeholder bearer in MCP_API_RUNBOOK.md's read-only
+  # `curl` check, which shows the owner that a malformed key is refused. A
+  # real key's id is 12 random [a-z0-9] and its secret 43 base64url
+  # characters; this is twelve zeros and a word, and verifyKey refuses its
+  # shape. Pinned to the exact literal so nothing looser rides on it.
+  '''\baxk_000000000000_placeholder\b''',
   '''dG9rZW4tMjAxNw''',
   '''webgate\.ec\.europa\.eu/fsd/fsf/public/files/jsonFullSanctionsList[^'"\s]+''',
 ]
