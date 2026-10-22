@@ -33,6 +33,7 @@ together with what the Telegram track (#2508) has merged so far:
 | The customer-chat tools on Axal's MCP server (`list_channel_chats`, `get_session_insights`, `assign_chat_to_interview`), and no MTProto user session | #2527 (D864, #2510) |
 | Conversation analytics for Record a Session, Telegram and WhatsApp chats alike | #2526 (D858, #2503) |
 | A guided setup for Record a Session: six steps (linked, bot added, bot on, replies allowed, a first chat, the notice), each done, to do or blocked, read from stored rows with no Bot API call (`GET /api/channels/telegram/setup`) | #2531 (D863, #2509) |
+| The channel in the conversation analytics (each session's channel, figures per channel), and a Telegram chat's text and consented notes proven end to end into Validate's proposals | #2548 (D866, #2512) |
 | The rollout readiness check (`telegram_readiness_d868.test.ts`) | D868 (#2514) |
 | Yes/No buttons on the notice | D756's buttons task, not filed: it waits on §3 step 10's probe |
 
@@ -41,7 +42,7 @@ together with what the Telegram track (#2508) has merged so far:
 | Part | Task |
 | --- | --- |
 | Every note to text and translated: round videos, larger notes (translation is D857's, shared with WhatsApp) | D865 (#2511) |
-| Telegram in analytics by channel and in proposals, edits and deletions honoured | D866 (#2512) |
+| Edits and deletions of a Telegram message honoured at the source (D866 §4, waiting on S1's ruling) | D866 (#2512) |
 | Calls by forwarding a recording, and "Send to Axal" (`TELEGRAM_CAPTURE`) | D867 (#2513) |
 | The Record a Session › Telegram screens | D869 (#2515) |
 
