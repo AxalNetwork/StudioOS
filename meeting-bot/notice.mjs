@@ -10,7 +10,8 @@ export const MEETING_BOT_DISPATCH_DISCLOSURE = 'Eadwyn AI will join as a visible
 /** A bounded, single-line display label. The caller must send it as plain text. */
 function ventureLabel(value) {
   if (typeof value !== 'string') return '';
-  const line = value.toWellFormed().replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, ' ')
+  const clean = Array.from(value, (char) => /^[\ud800-\udfff]$/.test(char) ? '\ufffd' : char).join('');
+  const line = clean.replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/g, ' ')
     .replace(/\s+/g, ' ').trim();
   return Array.from(line).slice(0, 80).join('').trim();
 }

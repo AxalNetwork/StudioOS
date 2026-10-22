@@ -13,8 +13,9 @@ The public page uses that same publication gate. The announcement links to
 the matching notice version, not the default legacy page. B1 must refuse
 dispatch and scheduled starts while this gate is false, even in canary.
 `draftMeetingBotNotice` is for tests and approval previews only; it is never
-the runtime entry. Publishing requires B1/B2/B6 safeguards and the page's
-notice-version contract to be verified together.
+the runtime entry. Publishing requires B1/B2/B6 safeguards to be verified.
+The shared switch publishes version 2 and makes it the page's current version
+together; legacy chat-consent links retain version 1.
 
 After publication the notice returns plain text. B2 posts it once after
 admission and before capturing audio. B2 owns the durable once-only record, failure handling and

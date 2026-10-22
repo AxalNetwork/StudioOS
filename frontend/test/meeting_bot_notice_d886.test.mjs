@@ -102,8 +102,8 @@ test('notice assertions reject wording, attribution and normalization regression
     ["'the venture that invited me'", "'another account'"],
     ["if (typeof value !== 'string') return '';", "if (typeof value !== 'string') return 'object';"],
     [".replace(/\\s+/g, ' ')", ".replace(/never-match/g, ' ')"],
-    ["value.toWellFormed().replace(/[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\ufeff]/g, ' ')", 'value'],
-    ['value.toWellFormed()', 'value'],
+    ["clean.replace(/[\\u0000-\\u001f\\u007f-\\u009f\\u061c\\u200b-\\u200f\\u2028-\\u202e\\u2060-\\u206f\\ufeff]/g, ' ')", 'clean'],
+    ["Array.from(value, (char) => /^[\\ud800-\\udfff]$/.test(char) ? '\\ufffd' : char).join('')", 'value'],
     ['`the venture ${JSON.stringify(label)}`', '`the venture ${label}`'],
     ["Array.from(line).slice(0, 80).join('')", 'line.slice(0, 80)'],
     ['.slice(0, 80)', '.slice(0, 200)'],
@@ -134,7 +134,32 @@ test('page assertions reject missing notice, retention and deletion disclosures'
 
 test('the publication guard rejects silently replacing the live notice with the bot candidate', async () => {
   await mutationCheck(read('frontend/src/pages/InterviewNoticePage.jsx'), 'pages/InterviewNoticePage.jsx', checkLivePage, [
-    ['notices = INTERVIEW_NOTICES, current = INTERVIEW_NOTICE_VERSION', 'notices = { 2: MEETING_BOT_INTERVIEW_NOTICE }, current = 2'],
+    ['notices = PUBLISHED_INTERVIEW_NOTICES, current = CURRENT_INTERVIEW_NOTICE_VERSION', 'notices = { 2: MEETING_BOT_INTERVIEW_NOTICE }, current = 2'],
+  ], true);
+});
+
+test('publishing makes version 2 current, preserves old links and keeps the legacy map immutable', async () => {
+  const published = read('frontend/src/pages/InterviewNoticePage.jsx').replace(
+    "import { MEETING_BOT_NOTICE_PUBLISHED, MEETING_BOT_NOTICE_VERSION } from '../../../meeting-bot/notice.mjs';",
+    'const MEETING_BOT_NOTICE_PUBLISHED = true; const MEETING_BOT_NOTICE_VERSION = 2;',
+  );
+  await mutationCheck(published, 'pages/InterviewNoticePage.jsx', (api) => {
+    assert.equal(api.CURRENT_INTERVIEW_NOTICE_VERSION, 2);
+    assert.ok(api.PUBLISHED_INTERVIEW_NOTICES[2]);
+    assert.deepEqual(Object.keys(api.INTERVIEW_NOTICES), ['1']);
+    for (const url of ['/privacy/interviews', '/privacy/interviews?n=2']) {
+      const html = plain(renderPage(api.default, {}, url));
+      assert.match(html, /Notice version 2/);
+      assert.match(html, /Eadwyn AI/);
+      assert.doesNotMatch(html, /The current one is/);
+    }
+    const legacy = plain(renderPage(api.default, {}, '/privacy/interviews?n=1'));
+    assert.match(legacy, /Notice version 1/);
+    assert.match(legacy, /The current one is version 2/);
+  }, [
+    ['CURRENT_INTERVIEW_NOTICE_VERSION = MEETING_BOT_NOTICE_PUBLISHED ? MEETING_BOT_NOTICE_VERSION : INTERVIEW_NOTICE_VERSION', 'CURRENT_INTERVIEW_NOTICE_VERSION = INTERVIEW_NOTICE_VERSION'],
+    ['? { ...INTERVIEW_NOTICES, [MEETING_BOT_NOTICE_VERSION]: MEETING_BOT_INTERVIEW_NOTICE } : INTERVIEW_NOTICES', '? INTERVIEW_NOTICES : INTERVIEW_NOTICES'],
+    ['? { ...INTERVIEW_NOTICES, [MEETING_BOT_NOTICE_VERSION]: MEETING_BOT_INTERVIEW_NOTICE } : INTERVIEW_NOTICES', '? Object.assign(INTERVIEW_NOTICES, { [MEETING_BOT_NOTICE_VERSION]: MEETING_BOT_INTERVIEW_NOTICE }) : INTERVIEW_NOTICES'],
   ], true);
 });
 

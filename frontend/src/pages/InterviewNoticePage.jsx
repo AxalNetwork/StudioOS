@@ -138,10 +138,13 @@ export const MEETING_BOT_INTERVIEW_NOTICE = {
   }),
 };
 
-// One publication switch for both the runtime announcement and its linked page.
-if (MEETING_BOT_NOTICE_PUBLISHED) INTERVIEW_NOTICES[MEETING_BOT_NOTICE_VERSION] = MEETING_BOT_INTERVIEW_NOTICE;
+// One switch publishes the bot's page and makes it current. Keep the legacy
+// map immutable so existing chat notice versions remain independent.
+export const PUBLISHED_INTERVIEW_NOTICES = MEETING_BOT_NOTICE_PUBLISHED
+  ? { ...INTERVIEW_NOTICES, [MEETING_BOT_NOTICE_VERSION]: MEETING_BOT_INTERVIEW_NOTICE } : INTERVIEW_NOTICES;
+export const CURRENT_INTERVIEW_NOTICE_VERSION = MEETING_BOT_NOTICE_PUBLISHED ? MEETING_BOT_NOTICE_VERSION : INTERVIEW_NOTICE_VERSION;
 
-export default function InterviewNoticePage({ contactEmail = INTERVIEW_CONTACT_EMAIL, notices = INTERVIEW_NOTICES, current = INTERVIEW_NOTICE_VERSION }) {
+export default function InterviewNoticePage({ contactEmail = INTERVIEW_CONTACT_EMAIL, notices = PUBLISHED_INTERVIEW_NOTICES, current = CURRENT_INTERVIEW_NOTICE_VERSION }) {
   const [params] = useSearchParams();
   const { shown, asked } = noticeVersionFrom(params.toString(), Object.keys(notices).map(Number), current);
   const notice = notices[shown];
