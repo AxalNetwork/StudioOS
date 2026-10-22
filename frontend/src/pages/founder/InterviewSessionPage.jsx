@@ -115,7 +115,7 @@ export function SessionRail({ session, models, receipt }) {
   return (
     <aside className="space-y-4 text-[12px]" data-testid="session-rail">
       {/* D684: a Zoom or Meet session's words are the provider's transcript; no model of ours made them. */}
-      {AUDIO.has(session.channel) && !channelOf(session) && (
+      {AUDIO.has(session.channel) && !channelOf(session) && session.submitted_via !== 'meeting_bot' && (
         <section>
           <h3 className="mb-1 text-[11px] font-bold uppercase text-axal-faint">Speech to text</h3>
           <p>Live: <strong>{session.live_model ? (live?.label || session.live_model) : 'Off'}</strong></p>

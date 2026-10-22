@@ -48,7 +48,7 @@ test('B7 StrictMode status loads; rendered Stop uses its route exactly once and 
 
 test('B7 supported link sends the bot after saved consent without preparing a device or storing a plain link',async()=>{
   const s=setup(),m=await mountContracts(h(RecordLightbox,s.props));
-  try{await press(m,'record-provider-google_meet');await change(m,'record-link',link);assert.match(m.text(),/Send Eadwyn AI/);assert.ok(by(m,'meeting-bot-consent-notice'));assert.ok(by(m,'record-device'));await press(m,'record-start');assert.equal(s.sent.length,1,m.text());assert.equal(s.sent[0].id,15);assert.equal(s.sent[0].body.meeting_url,link);assert.equal(s.opened[0].meeting_url,undefined);assert.equal(s.opened[0].consent.status,'given');assert.deepEqual(s.device,[]);assert.equal(s.started[0][0].submitted_via,'meeting_bot');}finally{await m.unmount();}
+  try{await press(m,'record-provider-google_meet');await change(m,'record-link',link);assert.match(m.text(),/Send Eadwyn AI/);assert.ok(by(m,'meeting-bot-consent-notice'));assert.ok(by(m,'record-device'));assert.match(m.text(),/Device recording options/);assert.match(m.text(),/bot time and transcription/);await press(m,'record-start');assert.equal(s.sent.length,1,m.text());assert.equal(s.sent[0].id,15);assert.equal(s.sent[0].body.meeting_url,link);assert.equal(s.opened[0].meeting_url,undefined);assert.equal(s.opened[0].consent.status,'given');assert.equal(s.opened[0].final_model,'@cf/deepgram/nova-3');assert.equal(s.opened[0].live_model,null);assert.deepEqual(s.device,[]);assert.equal(s.started[0][0].submitted_via,'meeting_bot');}finally{await m.unmount();}
 });
 
 test('B7 secondary device choice stays explicit; refusal never falls back to microphone or echoes provider text',async()=>{
@@ -64,7 +64,7 @@ test('B7 scheduled-call auto-send defaults on and explicit opt-out reaches the s
   const api={meetings:async()=>({meetings:[],providers:[{provider:'zoom',available:true,connected:true}]}),scheduleMeeting:async(id,body)=>{sent.push(body);return{meeting:{},bot_error:{code:'bot_unavailable'}};}};
   const date=new Date(now+3600000);const form={provider:'zoom',date:`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`,time:`${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`,duration:30,topic:'',consent:'written',record:false};
   const m=await mountContracts(h(SchedulePanel,{interview:{id:1},api,initialForm:form}));
-  try{assert.equal(m.props(by(m,'meeting-auto-send')).checked,true);await press(m,'button-schedule-meeting');assert.equal(sent[0].auto_send_bot,true);assert.match(m.text(),/not available on this deployment/);await change(m,'meeting-auto-send','',false);await press(m,'button-schedule-meeting');assert.equal(sent[1].auto_send_bot,false);}finally{await m.unmount();}
+  try{assert.equal(m.props(by(m,'meeting-auto-send')).checked,true);assert.match(m.text(),/does not need a paid recording or transcription plan/);await press(m,'button-schedule-meeting');assert.equal(sent[0].auto_send_bot,true);assert.match(m.text(),/not available on this deployment/);await change(m,'meeting-auto-send','',false);await press(m,'button-schedule-meeting');assert.equal(sent[1].auto_send_bot,false);}finally{await m.unmount();}
 });
 
 test('B7 per-call opt-out cancels the persisted queued run; re-enable uses its original start time',async()=>{

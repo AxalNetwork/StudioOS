@@ -364,7 +364,7 @@ export default function RecordLightbox({
         setBusy(false); sending.current = false;
         return;
       }
-      const setup = { mode, consent, live, final, language, conversation, provider, link, points: chosenPoints.map((p) => p.id), name, company };
+      const setup = { mode, consent, live: useBot ? null : live, final: useBot ? '@cf/deepgram/nova-3' : final, language, conversation, provider, link, points: chosenPoints.map((p) => p.id), name, company };
       // An interview it was opened on (a row's "Record a session") may already
       // be held, which the setup call refuses: it opens on that interview's own
       // route, with the same fields. A pick from the pipeline, or a new person,
@@ -503,7 +503,7 @@ export default function RecordLightbox({
                 : linkProblem ? <span role="alert" className="font-normal text-red-700 dark:text-red-400">{linkProblem}</span> : null}
             </label>
           )}
-          {botReady && <MeetingBotConsentNotice />}
+          {botReady && <><MeetingBotConsentNotice /><p className="m-0 text-[12px] text-axal-faint" data-testid="bot-billing-note">Eadwyn AI uses your AI tokens for bot time and transcription. Your balance is checked before sending. The call limit is 30 minutes on a free plan and two hours on a paid plan.</p></>}
           {mode === 'text' && provider === 'paste' && (
             <label className="flex flex-col gap-1 text-[11.5px] font-semibold text-axal-muted dark:text-gray-400">The conversation
               <textarea className={FIELD} rows={6} value={conversation} onChange={(e) => setConversation(e.target.value)} data-testid="record-conversation" />
@@ -563,7 +563,7 @@ export default function RecordLightbox({
         </Section>
 
         {m.audio && (
-          <Section title="Transcript" testId="record-transcript">
+          <Section title={botReady ? "Device recording options" : "Transcript"} testId="record-transcript">
             {models === undefined ? <p className="m-0 text-[12px] text-axal-faint">Reading models…</p>
               : models === null ? <p className="m-0 text-[12px] text-axal-faint" data-testid="record-models-unreadable">Unreadable: the model list could not be read.</p>
                 : (
@@ -583,7 +583,7 @@ export default function RecordLightbox({
                     </div>
                     {!fields.language && <p className="m-0 text-[11.5px] text-axal-faint" data-testid="record-language-note">{NOT_STORED}</p>}
                     <div className="flex items-center justify-between gap-2 rounded-[9px] bg-axal-lavender px-3 py-2 text-[12.5px] text-axal-violet-deep dark:bg-violet-900/30 dark:text-violet-200" data-testid="record-estimate">
-                      <span>{eta.text}</span>
+                      <span>{botReady ? `Record this device · ${eta.text}` : eta.text}</span>
                       <label className="flex items-center gap-1.5 text-[11.5px]"><span className="sr-only">Estimated length</span>
                         <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} className="rounded-md border border-axal-lavender-edge bg-white px-1.5 py-0.5 text-[11.5px] dark:border-violet-800 dark:bg-gray-900" data-testid="record-minutes">
                           {DURATIONS.map((d) => <option key={d} value={d}>{d} min</option>)}

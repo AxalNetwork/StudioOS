@@ -634,7 +634,7 @@ test('Schedule a call: Zoom’s transcript is promised only with Record in the c
     meetings: async () => ({ meetings: [], providers: [{ provider: 'zoom', available: true, connected: true }, { provider: 'google_meet', available: true, connected: true }] }),
     scheduleMeeting: async (id, body) => { sent.push(body); return { meeting: { uid: 'r9' }, session_id: 50, notice: null }; },
   };
-  const form = { provider: 'zoom', date: '2099-01-05', time: '10:00', duration: 30, topic: '', consent: 'verbal', record: false };
+  const form = { provider: 'zoom', date: '2099-01-05', time: '10:00', duration: 30, topic: '', consent: 'verbal', record: false, autoSend: false };
   const m = await mount(h(SchedulePanel, { interview: { id: 7 }, api, initialForm: form }));
   try {
     await m.flush();

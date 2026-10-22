@@ -264,7 +264,7 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
 
   return (
     <div className="space-y-3" data-testid="interview-schedule">
-      <p className="text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="schedule-intro">Axal creates the call and a session for it. {transcriptNote(form.provider, form.record)} Calls over Telegram or WhatsApp cannot be recorded this way; use the in-app recorder for those.</p>
+      <p className="text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="schedule-intro">Axal creates the call and a session for it. {form.autoSend !== false ? 'Eadwyn AI records the call after admission; it does not need a paid recording or transcription plan on the meeting platform.' : transcriptNote(form.provider, form.record)} Calls over Telegram or WhatsApp cannot be recorded this way; use the in-app recorder for those.</p>
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Call on">
         {MEETING_PROVIDERS.map((p) => (
           <button key={p.key} type="button" role="radio" aria-checked={form.provider === p.key} disabled={!available(p.key)} data-testid={`meeting-provider-${p.key}`}
@@ -308,7 +308,7 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
           <label className="flex items-center gap-2 text-[12.5px] font-semibold text-gray-800 dark:text-gray-200">
             <input type="checkbox" className="h-4 w-4 accent-violet-700" checked={form.record === true}
               onChange={(e) => setForm((f) => ({ ...f, record: !!e.target.checked }))} data-testid="input-meeting-record" />
-            Record in the cloud (needed for the transcript)
+            {form.autoSend !== false ? 'Also record in the Zoom cloud (optional)' : 'Record in the cloud (needed for the transcript)'}
           </label>
           <p className={NOTE}>Zoom starts recording to your Zoom cloud when the call starts, and Zoom’s own recording notice tells everyone on the call that it is being recorded. Cloud recording needs a paid Zoom plan.</p>
         </div>
