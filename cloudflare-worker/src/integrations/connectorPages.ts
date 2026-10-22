@@ -501,6 +501,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Schedule a Zoom call from a Validate interview on your own Zoom account. When the call’s cloud transcript is ready, it is imported into the interview.',
       'Axal VC creates a meeting only when you schedule an interview call, and deletes it when you cancel. It reads a meeting’s recordings only to download its transcript into Customer research.',
+      'A call that ends without a cloud transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
       'When you disconnect, Axal VC revokes its Zoom grant.',
     ],
     tools: [
@@ -530,6 +531,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     long_description: [
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
+      'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
       'At sign-in, Google also asks for permission to read Gmail. Axal VC does not read your Gmail.',
     ],
     tools: [

@@ -86,7 +86,7 @@ export function transcriptAccess(conn: GoogleConnection | null): 'granted' | 'mi
  * A fresh access token from the member's stored refresh token. Google's 400
  * (`invalid_grant`) or 401 means the grant is gone; anything else may pass later.
  */
-async function accessToken(env: Env, userId: number): Promise<string> {
+export async function accessToken(env: Env, userId: number): Promise<string> {
   const tok = await loadRefreshTokenExport(env, 'google_oauth_tokens', userId);
   if (!tok) throw new MeetingProviderError('meet_not_connected', false);
   let token: string;
@@ -134,7 +134,7 @@ function calendarFailure(status: number): MeetingProviderError {
   return new MeetingProviderError('meet_create_failed', false);
 }
 
-async function calendarFetch(token: string, path: string, init: RequestInit = {}): Promise<Response> {
+export async function calendarFetch(token: string, path: string, init: RequestInit = {}): Promise<Response> {
   try {
     return await fetch(`${CALENDAR_API}${path}`, {
       ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
