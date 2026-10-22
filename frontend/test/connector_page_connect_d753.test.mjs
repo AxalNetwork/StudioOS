@@ -41,7 +41,6 @@ const PROVIDERS = [
   P('github', 'GitHub', { configured: false }),
   P('slack', 'Slack'),
   P('zoom', 'Zoom', { auth_type: 'api_key' }),
-  P('entity', 'Mercury entities', { auth_type: 'api_key', connection_source: 'mercury_entity_connections' }),
 ];
 const ITEMS = [
   { uid: 'u-slack', provider_key: 'slack', status: 'active', last_synced_at: null, last_error: null, config: {}, company_ids: [] },
@@ -83,7 +82,6 @@ test('pageAction: one action per row of decision 6\'s table', () => {
   assert.deepEqual([gh.kind, gh.label], ['unavailable', 'Not set up here']);
   assert.equal(gh.note, "GitHub isn't set up on Axal yet, so it can't be connected.");
   assert.equal(pageAction(row('linkedin')).label, 'Status unreadable');
-  assert.equal(pageAction(row('entity')).kind, 'none', 'the Axal entities\' Mercury has no header action (F5)');
   assert.equal(pageAction(null).kind, 'none');
   assert.equal(keyPath(row('hubspot')), true);
   assert.equal(keyPath(row('stripe')), false);
@@ -279,7 +277,7 @@ test('D881: a member\'s Mercury offers no token: no chevron, no key form, and no
   } finally { await m.unmount(); f.restore(); }
 });
 
-test('coming soon, locked, not set up and the entity Mercury each read as decision 6 says', async () => {
+test('coming soon, locked and not set up each read as decision 6 says', async () => {
   const f = stubFetch(() => [200, {}]);
   try {
     let m = await mount(page('affinity'), '/account/connectors/affinity');
@@ -303,8 +301,6 @@ test('coming soon, locked, not set up and the entity Mercury each read as decisi
       assert.match(m.text(), /Not set up here GitHub isn't set up on Axal yet, so it can't be connected\./);
       assert.equal(f.calls.filter((c) => c.path.includes('/oauth/')).length, 0);
     } finally { await m.unmount(); }
-    m = await mount(page('entity'), '/account/connectors/entity');
-    try { assert.equal(m.by('connector-page-action'), undefined, 'no header action'); } finally { await m.unmount(); }
   } finally { f.restore(); }
 });
 

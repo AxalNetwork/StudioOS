@@ -36,9 +36,9 @@ test('D881: a founder, a partner and an investor on HQ who post a token read tok
       assert.deepEqual([r.status, r.body.error, r.body.message], [410, 'token_connect_retired', TOKEN_CONNECT_RETIRED], `${who}: ${r.text}`);
       assert.ok(!r.text.includes(TOKEN), 'the token is never echoed');
     }
-    // D752: off HQ, an investor reads the HQ-only sentence before the retirement.
+    // D884: an investor can connect on a branch too; token connects remain retired (D881).
     const off = await connect(env, 30, {}, { branch: true });
-    assert.deepEqual([off.status, off.body.error, off.body.message], [403, 'purpose_not_allowed', 'Mercury is offered to your profile on HQ only.'], off.text);
+    assert.deepEqual([off.status, off.body.error, off.body.message], [410, 'token_connect_retired', TOKEN_CONNECT_RETIRED], off.text);
     assert.equal(b.calls.length, 0, 'nothing reached Mercury');
     assert.equal(stored(db), 0);
   } finally { b.restore(); }

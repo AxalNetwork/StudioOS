@@ -158,7 +158,6 @@ test('6. cycle: the first path segment of each feed href, once per connector', (
 
 test('7. sign-in: sign_in.kind wins, then each fallback', () => {
   assert.equal(signInKind({ sign_in: { kind: 'key' }, auth_type: 'oauth2' }), 'key');
-  assert.equal(signInKind({ connection_source: 'mercury_entity_connections', key: 'mercury' }), 'entity');
   assert.equal(signInKind({ first_party: true }), 'first_party');
   assert.equal(signInKind({ auth_type: 'api_key' }), 'key');
   assert.equal(signInKind({ key: 'hubspot', supports_pat: true }), 'oauth_or_key', 'token_first');

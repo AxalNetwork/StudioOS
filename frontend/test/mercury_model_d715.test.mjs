@@ -13,9 +13,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  ENTITY_KEYS, entityRow, entityRows, entityState, entityErrorWords, accountLine, UNREGISTERED_NOTE, FUND_NOTE,
-  orgNameDiffersSentence, ENTITY_FEEDS, ENTITY_AUDIT_FOOT, ENTITY_SHEET_AUDIT_FOOT, ADMIN_ONLY, BRANCH_MANAGED, TOKEN_HELP, OPEN_BANKING,
+  ENTITY_KEYS, entityRow, entityRows, entityState, entityErrorWords, FUND_NOTE,
+  orgNameDiffersSentence, ENTITY_FEEDS, ENTITY_SHEET_AUDIT_FOOT, ADMIN_ONLY, ENTITY_BRANCH_MANAGED, TOKEN_HELP, OPEN_BANKING,
   confirmReadOnlyLabel, DISCONNECT_REASON_MIN, ENTITY_DISCONNECT_NOTE, retryAfterSentence,
+} from '../src/pages/admin/fundAdmin/mercuryEntityModel.js';
+import {
+  accountLine, UNREGISTERED_NOTE, BRANCH_MANAGED, HQ_ACCOUNTS,
   MEMBER_GROUPS, NEVER_ROWS, neverRows, landsWords, READS_ROW, MEMBER_REPLACE, MEMBER_DISCONNECT_NOTE, memberDisconnectNote,
   PERSONAL_DOES, PERSONAL_LAST_SYNC, PERSONAL_COMPANIES, personalFeedsFallback, personalAttention, personalToolBanner,
   NOT_OFFERED, NOT_OFFERED_HQ_ONLY, notOfferedSentence, USE_WORDS,
@@ -108,10 +111,12 @@ test('decision 4 and 6: the Fund\'s note, the org-name sentence, and the fixed s
   assert.equal(orgNameDiffersSentence('Fixture Org', 'Axal VC GP LLC'), 'Mercury names this organization Fixture Org. StudioOS matched it to Axal VC GP LLC by its account endings.');
   assert.equal(entityRow('gp', conn()).orgNameDiffers, null);
   assert.equal(ENTITY_FEEDS, 'What it feeds: balances and transactions for reconciliation, and the monthly cash and reconciliation drafts. Drafts wait in the review queue. Nothing reaches an LP from here.');
-  assert.equal(ENTITY_AUDIT_FOOT, 'Opening this page is recorded in the admin audit log.');
   assert.equal(ENTITY_SHEET_AUDIT_FOOT, 'Opening this sheet is recorded in the admin audit log.');
   assert.equal(ADMIN_ONLY, 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.');
-  assert.equal(BRANCH_MANAGED, 'Axal\'s entity accounts are managed from HQ.');
+  assert.equal(ENTITY_BRANCH_MANAGED, 'Axal\'s entity accounts are managed from HQ.');
+  // D880: the member side names Axal VC's accounts, never an entity, and points to HQ.
+  assert.equal(BRANCH_MANAGED, 'Axal VC\'s own accounts are managed from HQ.');
+  assert.deepEqual(HQ_ACCOUNTS, { text: 'Axal VC\'s own accounts are managed in HQ › Bank accounts.', link: 'Open Bank accounts', href: '/admin?tab=bank-accounts' });
   assert.equal(TOKEN_HELP, 'How to create a Read Only token');
   assert.deepEqual(OPEN_BANKING, { text: 'Open Banking', href: '/admin/fund-admin?tab=banking' });
   assert.equal(confirmReadOnlyLabel('Axal VC Holdings LLC'), 'This is a Read Only token from Axal VC Holdings LLC\'s Mercury organization.');
@@ -130,7 +135,7 @@ test('decision 8: the member\'s groups, the three "never" rows, where it lands, 
   assert.deepEqual(MEMBER_GROUPS, { uses: 'What StudioOS uses it for', never: 'What it never does', lands: 'Where it lands', reads: 'How it reads' });
   const d713Never = [
     'It never sends, transfers or requests money, and never changes anything in Mercury.',
-    'It is never used for fund administration and never shows an Axal entity\'s accounts. StudioOS refuses a token from an Axal entity\'s Mercury organization.',
+    'It is never used for fund administration and never shows Axal VC\'s own accounts. StudioOS refuses a token from Axal VC\'s own Mercury organizations.',
     'It reads your Mercury only when you connect it and while you open an import or a match. It keeps only the lines you import or match, never your balance, memos or counterparty names.',
   ];
   assert.deepEqual(Object.keys(NEVER_ROWS).sort(), ['founder', 'investor', 'partner']);
@@ -142,7 +147,7 @@ test('decision 8: the member\'s groups, the three "never" rows, where it lands, 
   // D752: the investor's three rows.
   assert.deepEqual(NEVER_ROWS.investor, [
     'It never sends, transfers or requests money, and never changes anything in Mercury.',
-    'It never shows Axal\'s own accounts. StudioOS refuses a token from an Axal entity\'s Mercury organization.',
+    'It never shows Axal VC\'s own accounts. StudioOS refuses a token from Axal VC\'s own Mercury organizations.',
     'It reads your accounts only when you connect it and while you prepare a statement. It keeps only the statements you share: an amount you choose, the date and your organization\'s name. Never a balance, an account number, a transaction or a counterparty.',
   ]);
   assert.deepEqual(neverRows('investor'), NEVER_ROWS.investor);
@@ -171,7 +176,7 @@ test('decision 9: the personal row\'s words, and the attention words matched on 
   assert.equal(personalFeedsFallback('partner'), 'Your own payments');
   assert.equal(personalFeedsFallback(null), 'Your own payments');
   assert.equal(personalFeedsFallback('investor'), 'Statements you share');
-  assert.equal(personalAttention('mercury_entity_account: org belongs to an entity'), 'An Axal entity\'s Mercury');
+  assert.equal(personalAttention('mercury_entity_account: org is Axal VC\'s'), 'Axal VC\'s own Mercury');
   assert.equal(personalAttention('write_scope_refused'), 'Token can write');
   assert.equal(personalAttention('unauthorized'), 'Token refused');
   assert.equal(personalAttention('401 from Mercury'), 'Token refused');
@@ -181,7 +186,7 @@ test('decision 9: the personal row\'s words, and the attention words matched on 
 });
 
 test('decision 10 (D752): a "mercury" search with no row names each role\'s use, an investor on a branch reads HQ only, and a branch admin the HQ sentence; none is a request', () => {
-  assert.equal(NOT_OFFERED, 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, founders for their venture\'s revenue and spending, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.');
+  assert.equal(NOT_OFFERED, 'Mercury is not offered to your profile. Founders use it for their venture\'s revenue and spending, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.');
   assert.equal(NOT_OFFERED_HQ_ONLY, 'Investors connect Mercury on HQ only, where Axal\'s admins review commitments.');
   assert.equal(notOfferedSentence(), NOT_OFFERED);
   assert.equal(notOfferedSentence({ role: 'investor' }), NOT_OFFERED);

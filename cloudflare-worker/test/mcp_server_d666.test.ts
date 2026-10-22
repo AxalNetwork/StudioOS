@@ -235,7 +235,7 @@ test('tools: list_companies is the grant; get_validate_context never names an in
   const { token } = await connect(env, [P]);
   const list = await mcp(env, token, 'tools/list');
   assert.equal(list.status, 200, JSON.stringify(list.body));
-  assert.deepEqual(list.body.result.tools.map((t: any) => t.name).sort(), ['assign_chat_to_interview', 'get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_meetings', 'propose_placements', 'structure_with_studioos', 'submit_interview', 'summarize_meeting']);
+  assert.deepEqual(list.body.result.tools.map((t: any) => t.name).sort(), ['assign_chat_to_interview', 'extract_action_items', 'get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_meetings', 'propose_placements', 'structure_with_studioos', 'submit_interview', 'summarize_meeting']);
   for (const t of list.body.result.tools) assert.ok(t.description.length > 20 && t.inputSchema?.type === 'object', t.name);
   assert.deepEqual(toolJson(await callTool(env, token, 'list_companies')).companies, [{ id: P, name: 'Acme' }]);
   const ctxRes = await callTool(env, token, 'get_validate_context', { company: P });

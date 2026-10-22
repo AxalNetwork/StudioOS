@@ -9,7 +9,7 @@
  * unknown keys.
  */
 import {
-  REGISTRY_ALIAS, TIER_LABEL, authKind, cardAction, categoryOf, connectionStatus, connectorPagePath, flowBanner, isEntityRow, isPersonalMercury, oauthReturn, patOnly,
+  REGISTRY_ALIAS, TIER_LABEL, authKind, cardAction, categoryOf, connectionStatus, connectorPagePath, flowBanner, isPersonalMercury, oauthReturn, patOnly,
 } from './connectorsModel.js';
 import { MCP_SIGN_IN } from './mercuryModel.js';
 import { channelEntry, isChannelKey } from './channelPageModel.js';
@@ -42,8 +42,7 @@ export function pageEntry({ data, key, channels } = {}) {
  * The sign-in return the page reads: only one naming its own key.
  * `{ ret, strip }`; `{ ret: null, strip }` for any other return, which is
  * stripped and ignored; null when there is none. D840 (#2346): a member's
- * Mercury sign-in returns here, so Mercury's is read too; the page drops it
- * for the Axal entities' row (D715 decision 3), which has no sign-in.
+ * Mercury sign-in returns here, so Mercury's is read too.
  */
 export function pageReturn(search, key) {
   const ret = oauthReturn(search);
@@ -85,7 +84,7 @@ export function keyPath(p) {
 /**
  * The header's one action (D753 decision 6), from the row and the flow's
  * `view`. `kind` is what the band draws:
- *   `none`        — the Axal entities' Mercury (F5 draws its body);
+ *   `none`        — no row;
  *   `status`      — connected: its status pill (F3's "Manage" takes the slot beside it);
  *   `reconnect`   — connected but needing attention: "Reconnect", by key or by sign-in (`via`);
  *   `waitlist`    — coming soon: "Notify me", then "We'll tell you";
@@ -96,7 +95,7 @@ export function keyPath(p) {
  *   `oauth`       — "Connect to Axal VC", sending the browser to the service.
  */
 export function pageAction(p, { view = 'idle' } = {}) {
-  if (!p || isEntityRow(p)) return { kind: 'none' };
+  if (!p) return { kind: 'none' };
   const name = p.display_name || 'this connector';
   if (p.connection) {
     const pill = connectionStatus(p.connection, p);
@@ -129,7 +128,7 @@ export function pageAction(p, { view = 'idle' } = {}) {
  */
 export function manageItems(p) {
   const conn = p?.connection;
-  if (!conn || isEntityRow(p)) return [];
+  if (!conn) return [];
   const attention = !!connectionStatus(conn, p).why;
   const items = [];
   if (conn.uid) items.push({ id: 'sync', label: 'Sync now' });

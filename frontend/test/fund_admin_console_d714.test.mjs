@@ -394,9 +394,9 @@ test('a branch admin sees the HQ-only notice and the console makes no read', asy
   assert.deepEqual(s.calls, [], 'no read at all');
 });
 
-test('#1780 decision 12: the entity sheet on Connectors opens this console\'s Banking tab; a branch admin\'s does not', async () => {
+test('#1780 decision 12: the entity sheet opens this console\'s Banking tab; a branch admin\'s does not', async () => {
   const { renderToStaticMarkup } = await import('react-dom/server');
-  const { MercuryEntitySheet } = await import('../src/pages/account/MercurySheet.jsx');
+  const { MercuryEntitySheet } = await import('../src/pages/admin/fundAdmin/MercuryEntitySheet.jsx');
   const api = { connections: async () => CONNECTIONS() };
   const p = { key: 'mercury', display_name: 'Mercury' };
   const page = renderToStaticMarkup(h(MemoryRouter, null, h(MercuryEntitySheet, { p, api, onClose() {} })));

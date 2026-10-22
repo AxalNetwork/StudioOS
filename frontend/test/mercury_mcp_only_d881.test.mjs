@@ -15,6 +15,7 @@ import { readFileSync } from 'node:fs';
 import { bodyDetailsRows, manageItems, pageAction, pageChoices, signInLabel } from '../src/pages/account/connectorPageModel.js';
 import { SIGN_IN_LABEL } from '../src/pages/account/discoverModel.js';
 import * as mercury from '../src/pages/account/mercuryModel.js';
+import * as entityMercury from '../src/pages/admin/fundAdmin/mercuryEntityModel.js';
 
 const member = (connection = null) => ({ key: 'mercury', display_name: 'Mercury', auth_type: 'api_key', status: 'beta', tier: 'growth', available: true, has_implementation: true, connection_source: 'integrations', connection });
 const PAGE = {
@@ -50,8 +51,8 @@ test('member words name no token; HQ\'s entity token words stay', () => {
   const worker = readFileSync('cloudflare-worker/src/integrations/providers/mercury.ts', 'utf8');
   assert.ok(worker.includes(`LEGACY_TOKEN_NOTICE = '${mercury.LEGACY_TOKEN_NOTICE}'`), 'one sentence, the Worker\'s');
   // HQ's entity form (C2 moves it) keeps its token help and its confirm label.
-  assert.equal(mercury.TOKEN_HELP, 'How to create a Read Only token');
-  assert.equal(mercury.confirmReadOnlyLabel('Axal VC GP LLC'), 'This is a Read Only token from Axal VC GP LLC\'s Mercury organization.');
+  assert.equal(entityMercury.TOKEN_HELP, 'How to create a Read Only token');
+  assert.equal(entityMercury.confirmReadOnlyLabel('Axal VC GP LLC'), 'This is a Read Only token from Axal VC GP LLC\'s Mercury organization.');
   // The member flow sends no read-only confirmation of its own.
   assert.doesNotMatch(readFileSync('frontend/src/pages/account/useConnectFlow.js', 'utf8'), /confirm_read_only|confirmReadOnly/);
 });

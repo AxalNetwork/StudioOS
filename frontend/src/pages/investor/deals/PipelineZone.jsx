@@ -10,6 +10,7 @@ import {
   ZoneBody, NothingYet, StatedLimit,
 } from '../../advisor/expertise/kit';
 import { SearchInput } from '../../advisor/network/kit';
+import FromMercury from '../FromMercury';
 import {
   DEAL_STAGE_LABEL, dealStage, dealMoneyExact,
   passReasonLabel, slaBand, slaPreset, DEFAULT_SLA,
@@ -373,6 +374,8 @@ export default function InvestorPipelineZone() {
             </p>
           </StatedLimit>
         </div>
+        {/* D884 (#2557): your capacity beside the cheques you intend, read from your own Mercury, on this page only. */}
+        <FromMercury section="pipeline" />
       </ZoneBody>
     </>
   );

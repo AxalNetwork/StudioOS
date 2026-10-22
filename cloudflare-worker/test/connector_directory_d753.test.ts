@@ -227,9 +227,9 @@ test('Mercury\'s page follows its audience; the admin\'s preview (D879) reads no
     if (none) assert.deepEqual([r.status, r.body], [404, { error: 'unknown_provider' }], `${role} ${branch}`);
     else assert.equal(r.status, 200, `${role} ${branch}`);
   }
-  // D752 (#1886): an investor holds a personal Mercury on HQ only (`personal_hq_only_roles`).
+  // D884 (#2557): an investor holds a personal Mercury on HQ and on a branch (D752 kept it on HQ only).
   assert.equal((await call(db, 'investor', '/directory/mercury')).status, 200);
-  assert.equal((await call(db, 'investor', '/directory/mercury', { branch: true })).status, 404);
+  assert.equal((await call(db, 'investor', '/directory/mercury', { branch: true })).status, 200);
   const sql: string[] = [];
   const admin = (await call(db, 'admin', '/directory/mercury', { sql })).body.connector;
   // D879 (#2552): the admin previews the founder's page and connects nothing; no entity page exists.

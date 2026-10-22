@@ -1,22 +1,15 @@
 /**
- * D715 (#1780) — Mercury on Connectors: the words and rows every Mercury
- * surface draws, for the four Axal entity connections (D710, #1775) and for a
- * founder's, partner's or, on HQ, investor's own connection (D713, #1778;
- * D752, #1886). No React, no fetch.
+ * D715 (#1780) — Mercury on Connectors: the words and rows a member's own
+ * Mercury draws, for a founder's, partner's or, on HQ, investor's connection
+ * (D713, #1778; D752, #1886). No React, no fetch.
  *
- * It imports nothing from `connectorsModel.js`, so that file can import this
- * one without a cycle; `codeWord`'s test is copied below for that reason.
- *
- * WHAT IT NEVER READS. An entity row is built from the five columns of
- * migration 474 that `GET /api/admin/mercury/connections` serves (`status`,
- * `mercury_org_name`, `last_synced_at`, `last_error`, `token_preview`) and the
- * accounts' kind, last four, nickname and `registered`. A balance, a
- * transaction, a Mercury account id or a token beyond the preview is never
- * read, so no caller can draw one from here.
- *
- * A missing value is null with a reason ("Not recorded"), never 0
- * (`D686.md:554`). `last_synced_at` is returned raw so the sheet formats it
- * with `agoLabel`.
+ * D880 (#2553): Axal VC's own accounts are not here. Their rows, words and
+ * sheet live under HQ, in `../admin/fundAdmin/`, and no member page imports
+ * them. A member page names them in one place only: `HQ_ACCOUNTS`, the line
+ * an admin reads on this connector's page, linking HQ's Bank accounts. The
+ * Worker's refusal code for a token or sign-in from Axal VC's own Mercury
+ * organization (`mercury_entity_account`) is matched below, because a member
+ * can meet it.
  *
  * The member's use words are keyed exactly as `GET /api/mercury/personal/status`
  * names its uses (`routes/mercury_personal.ts`, D713): `venture_revenue`, `raise_receipts` and `venture_spend` (D752),
@@ -24,47 +17,6 @@
  * (D752). The member words below are keyed by role (D752): a role without its
  * own entry reads the founder's.
  */
-import { AXAL_ENTITIES } from '../../lib/legalDocFormat.js';
-import { NOT_RECORDED } from '../../lib/absence.js';
-
-/** Decision 4's order: Holdings, Management, GP, Fund. */
-export const ENTITY_KEYS = ['holdings', 'management', 'gp', 'fund'];
-
-const WORD = /^[a-z0-9_]+$/;
-
-/** A Worker code safe to print, else ''. `connectorsModel.js`'s `codeWord`, copied. */
-function codeWord(v) {
-  const s = String(v || '');
-  return WORD.test(s) ? s : '';
-}
-
-const STATE_WORDS = {
-  active: { text: 'Connected', tone: 'ok' },
-  error: { text: 'Needs attention', tone: 'warn' },
-  disconnected: { text: 'Disconnected', tone: 'neutral' },
-};
-
-/** A connection's state in words: null is "Not connected"; a status #1775 does not write is Not recorded. */
-export function entityState(connection) {
-  if (!connection) return { text: 'Not connected', tone: 'neutral', reason: null };
-  const known = Object.hasOwn(STATE_WORDS, connection.status) ? STATE_WORDS[connection.status] : null;
-  return known ? { ...known, reason: null } : { text: NOT_RECORDED, tone: 'neutral', reason: 'The connection reported no state StudioOS knows.' };
-}
-
-/** The codes D710 writes to `last_error` (`services/mercury/client.ts`). */
-export const ENTITY_ERROR_WORDS = {
-  unauthorized: 'Mercury refused the token. Only the Super Admin can replace it.',
-  rate_limited: 'Mercury did not answer the last sync. The next hourly sync tries again.',
-  timeout: 'Mercury did not answer the last sync. The next hourly sync tries again.',
-};
-
-/** The last sync's error in words, or null when there is none. A sentence is never printed. */
-export function entityErrorWords(lastError) {
-  if (lastError == null || lastError === '') return null;
-  const code = codeWord(lastError);
-  if (code && Object.hasOwn(ENTITY_ERROR_WORDS, code)) return ENTITY_ERROR_WORDS[code];
-  return code ? `The last sync failed (${code}).` : 'The last sync failed.';
-}
 
 const KIND_WORDS = { checking: 'Checking', savings: 'Savings' };
 export const UNREGISTERED_NOTE = 'Not in the bank-account registry, so it feeds no match.';
@@ -81,57 +33,11 @@ export function accountLine(account) {
   };
 }
 
-export const FUND_NOTE = 'Connect the Fund once its own Mercury account is open. Until then, nothing on the GP\'s or Management\'s accounts is booked as Fund cash.';
+/** D880: an admin's line on this connector's page; the accounts themselves are HQ's. */
+export const HQ_ACCOUNTS = { text: 'Axal VC\'s own accounts are managed in HQ › Bank accounts.', link: 'Open Bank accounts', href: '/admin?tab=bank-accounts' };
+/** A branch admin's search for Mercury. */
+export const BRANCH_MANAGED = 'Axal VC\'s own accounts are managed from HQ.';
 
-/** "Mercury names this organization <name>. StudioOS matched it to <entity> by its account endings." */
-export function orgNameDiffersSentence(orgName, entityName) {
-  return `Mercury names this organization ${orgName}. StudioOS matched it to ${entityName} by its account endings.`;
-}
-
-/**
- * One entity's row from its connection (or null). Only the columns the module
- * header names are read. `accounts` is null with its reason until the
- * connections read carries them (D715 decision 4).
- */
-export function entityRow(key, connection = null) {
-  const entity = Object.hasOwn(AXAL_ENTITIES, key) ? AXAL_ENTITIES[key] : null;
-  if (!entity || !ENTITY_KEYS.includes(key)) return null;
-  const c = connection && typeof connection === 'object' ? connection : null;
-  const orgName = typeof c?.mercury_org_name === 'string' && c.mercury_org_name.trim() ? c.mercury_org_name : null;
-  const accounts = Array.isArray(c?.accounts) ? c.accounts.map(accountLine) : null;
-  return {
-    key,
-    name: entity.name,
-    connected: !!c && c.status !== 'disconnected',
-    state: entityState(c),
-    orgName,
-    orgNameReason: c && !orgName ? NOT_RECORDED : null,
-    orgNameDiffers: c?.org_name_differs === true && orgName ? orgNameDiffersSentence(orgName, entity.name) : null,
-    accounts,
-    accountsReason: c && !accounts ? NOT_RECORDED : null,
-    lastSyncedAt: typeof c?.last_synced_at === 'string' && c.last_synced_at ? c.last_synced_at : null,
-    error: c ? entityErrorWords(c.last_error) : null,
-    tokenPreview: typeof c?.token_preview === 'string' && c.token_preview ? c.token_preview : null,
-    note: key === 'fund' ? FUND_NOTE : null,
-  };
-}
-
-/** The four rows, in decision 4's order, from `GET /connections`'s `entities`. */
-export function entityRows(read) {
-  const byKey = new Map((Array.isArray(read?.entities) ? read.entities : []).map((e) => [e?.entity_key, e?.connection ?? null]));
-  return ENTITY_KEYS.map((k) => entityRow(k, byKey.get(k) ?? null));
-}
-
-// ── The entity sheet's fixed sentences (decisions 4 to 7, 12) ─────────────────
-
-export const ENTITY_FEEDS = 'What it feeds: balances and transactions for reconciliation, and the monthly cash and reconciliation drafts. Drafts wait in the review queue. Nothing reaches an LP from here.';
-export const ENTITY_AUDIT_FOOT = 'Opening this page is recorded in the admin audit log.';
-/** The same record, where the rows still open in a sheet (the Bank accounts console, Build's lightbox). */
-export const ENTITY_SHEET_AUDIT_FOOT = 'Opening this sheet is recorded in the admin audit log.';
-export const ADMIN_ONLY = 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.';
-export const BRANCH_MANAGED = 'Axal\'s entity accounts are managed from HQ.';
-export const TOKEN_HELP = 'How to create a Read Only token';
-export const OPEN_BANKING = { text: 'Open Banking', href: '/admin/fund-admin?tab=banking' };
 /** D752 (#1891): the `capital_attestation` use's door, to the LP workspace's proof of funds. */
 export const ATTESTATION_DOOR = { text: 'Show Axal you can fund this', href: '/spinout-lab/investor-workspace#proof-of-funds' };
 
@@ -148,25 +54,6 @@ export const USE_DOORS = {
   partner_deals: { text: 'Match a payout or settlement', href: '/partner/earnings' },
   capital_attestation: ATTESTATION_DOOR,
 };
-
-/** #1780 decision 2: the hub's group for the Axal entities' Mercury, and its Discover badge. */
-export const FUND_ADMIN_GROUP = { title: 'Fund administration', badge: 'Entity connections' };
-
-/** The Connect box's label: "This is a Read Only token from <entity>'s Mercury organization." */
-export function confirmReadOnlyLabel(entityName) {
-  return `This is a Read Only token from ${entityName}'s Mercury organization.`;
-}
-
-export const DISCONNECT_REASON_MIN = 10;
-export const ENTITY_DISCONNECT_NOTE = 'Transactions already read stay. The stored token is erased. Delete the token in Mercury too: StudioOS never calls Mercury\'s token endpoints.';
-
-/** Sync now's 429: "Try again in N minutes.", N from `Retry-After` (seconds), at least 1; '' when unknown. */
-export function retryAfterSentence(seconds) {
-  const s = Number(seconds);
-  if (!Number.isFinite(s) || s <= 0) return '';
-  const n = Math.max(1, Math.ceil(s / 60));
-  return `Try again in ${n} ${n === 1 ? 'minute' : 'minutes'}.`;
-}
 
 // ── A member's own Mercury (decision 8) ───────────────────────────────────────
 
@@ -212,7 +99,7 @@ export function usesRows(status) {
 
 const FOUNDER_PARTNER_NEVER = Object.freeze([
   'It never sends, transfers or requests money, and never changes anything in Mercury.',
-  'It is never used for fund administration and never shows an Axal entity\'s accounts. StudioOS refuses a token from an Axal entity\'s Mercury organization.',
+  'It is never used for fund administration and never shows Axal VC\'s own accounts. StudioOS refuses a token from Axal VC\'s own Mercury organizations.',
   'It reads your Mercury only when you connect it and while you open an import or a match. It keeps only the lines you import or match, never your balance, memos or counterparty names.',
 ]);
 
@@ -226,7 +113,7 @@ export const NEVER_ROWS = Object.freeze({
   partner: FOUNDER_PARTNER_NEVER,
   investor: Object.freeze([
     'It never sends, transfers or requests money, and never changes anything in Mercury.',
-    'It never shows Axal\'s own accounts. StudioOS refuses a token from an Axal entity\'s Mercury organization.',
+    'It never shows Axal VC\'s own accounts. StudioOS refuses a token from Axal VC\'s own Mercury organizations.',
     'It reads your accounts only when you connect it and while you prepare a statement. It keeps only the statements you share: an amount you choose, the date and your organization\'s name. Never a balance, an account number, a transaction or a counterparty.',
   ]),
 });
@@ -280,7 +167,7 @@ export const SIGN_IN_REASONS = Object.freeze({
   not_allowed: 'Your profile cannot connect its own Mercury. Nothing was connected.',
   token_exchange_failed: 'Mercury did not complete the sign-in. Nothing was connected. Try again.',
   scope_refused: 'That sign-in granted more than read access, so it was refused and revoked. Nothing was connected.',
-  mercury_entity_account: 'This Mercury organization belongs to an Axal entity. Sign in to your own organization; Axal\'s accounts are connected only for fund administration.',
+  mercury_entity_account: 'This Mercury organization is one of Axal VC\'s own. Sign in to your own organization; Axal VC\'s accounts are managed only on HQ.',
   bank_registry_unavailable: 'Axal\'s account registry could not be read, so the sign-in could not be checked. Nothing was saved; try again later.',
   mercury_unreadable: 'Your Mercury account could not be read after you signed in. Nothing was saved; try again.',
   discovery_failed: 'Mercury\'s sign-in could not be reached. Nothing was connected. Try again.',
@@ -318,7 +205,7 @@ export function personalFeedsFallback(role) {
 /** Decision 9's attention words, matched on the code `last_error` starts with. */
 export function personalAttention(lastError) {
   const s = String(lastError || '');
-  if (/^mercury_entity_account\b/.test(s)) return 'An Axal entity\'s Mercury';
+  if (/^mercury_entity_account\b/.test(s)) return 'Axal VC\'s own Mercury';
   if (/^write_scope_refused\b/.test(s)) return 'Token can write';
   if (/^(unauthorized|401)\b/.test(s)) return 'Token refused';
   return 'Last read failed';
@@ -331,7 +218,7 @@ export function personalToolBanner(lastError) {
 
 // ── Not offered (decision 10) ─────────────────────────────────────────────────
 
-export const NOT_OFFERED = 'Mercury is not offered to your profile. Axal\'s admins use it for fund administration, founders for their venture\'s revenue and spending, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.';
+export const NOT_OFFERED = 'Mercury is not offered to your profile. Founders use it for their venture\'s revenue and spending, partners for their invoices and partner deals, and investors on HQ to show Axal\'s admins they can fund a commitment.';
 /** D752: an investor on a branch. */
 export const NOT_OFFERED_HQ_ONLY = 'Investors connect Mercury on HQ only, where Axal\'s admins review commitments.';
 

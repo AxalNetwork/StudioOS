@@ -1,7 +1,11 @@
 /**
- * D715 (#1780) PR 2a — the Axal entities' Mercury on Connectors: the entity
- * row's rules, the one audited read on open, who sees which act, what is
- * never drawn, the connect and disconnect forms, and the not-offered search.
+ * D715 (#1780) PR 2a — the Axal entities' Mercury: the one audited read on
+ * open, who sees which act, what is never drawn, the connect and disconnect
+ * forms, and the not-offered search.
+ *
+ * D880 (#2553): the entity sheet is HQ's (`pages/admin/fundAdmin/`), opened
+ * from the Bank accounts console; Connectors draws none of it, whichever
+ * Mercury row the Worker serves, and reads nothing of Axal VC's accounts.
  *
  * Every account ending and token here is invented.
  *
@@ -17,12 +21,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 
-import { buildCatalogue, cardAction, isEntityRow, toolDeepLink, toolGroups } from '../src/pages/account/connectorsModel.js';
+import { buildCatalogue, cardAction, toolDeepLink, toolGroups } from '../src/pages/account/connectorsModel.js';
 import { ConnectorsView } from '../src/pages/account/AccountConnectors.jsx';
 import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
 import { openingView } from '../src/pages/account/ConnectorSheet.jsx';
-import { MercuryEntitySheet } from '../src/pages/account/MercurySheet.jsx';
-import { ADMIN_ONLY, BRANCH_MANAGED, ENTITY_AUDIT_FOOT, ENTITY_SHEET_AUDIT_FOOT, FUND_NOTE, NOT_OFFERED, NOT_OFFERED_HQ_ONLY, isMercurySearch } from '../src/pages/account/mercuryModel.js';
+import { MercuryEntitySheet } from '../src/pages/admin/fundAdmin/MercuryEntitySheet.jsx';
+import { ADMIN_ONLY, ENTITY_BRANCH_MANAGED, ENTITY_SHEET_AUDIT_FOOT, FUND_NOTE } from '../src/pages/admin/fundAdmin/mercuryEntityModel.js';
+import { BRANCH_MANAGED, NOT_OFFERED, NOT_OFFERED_HQ_ONLY, isMercurySearch } from '../src/pages/account/mercuryModel.js';
 
 const h = React.createElement;
 const html = (el, entry = '/account/connectors') => renderToStaticMarkup(h(MemoryRouter, { initialEntries: [entry] }, el));
@@ -36,7 +41,11 @@ const P = (key, display_name, extra = {}) => ({
   description: `${display_name} description.`, capabilities: [], docs_url: `https://example.test/${key}`,
   has_implementation: true, locked_for_user: false, connection_source: 'integrations', ...extra,
 });
+/** The row the Worker served an admin on HQ before D879; D880's member pages draw nothing of it. */
 const MERCURY = P('mercury', 'Mercury', { auth_type: 'api_key', has_implementation: false, category: 'Accounting and banking', connection_source: 'mercury_entity_connections' });
+/** D879's admin preview: the member's own Mercury, nothing to connect. */
+const PREVIEW = P('mercury', 'Mercury', { auth_type: 'api_key', has_implementation: false, category: 'Accounting and banking' });
+const PREVIEW_CAT = buildCatalogue({ providers: [P('stripe', 'Stripe', { category: 'Accounting and banking' }), P('calendly', 'Calendly'), PREVIEW], items: [], firstParty: {} });
 const PROVIDERS = [P('stripe', 'Stripe', { category: 'Accounting and banking' }), P('calendly', 'Calendly'), MERCURY];
 const CAT = buildCatalogue({ providers: PROVIDERS, items: [], firstParty: {} });
 const NO_MERCURY = buildCatalogue({ providers: PROVIDERS.filter((p) => p.key !== 'mercury'), items: [], firstParty: {} });
@@ -110,53 +119,40 @@ const sheet = (props) => h(MercuryEntitySheet, { p: byKey('mercury'), onClose() 
 
 // ------------------------------------------------------------------ the row's rules
 
-test('the entity row opens its own sheet, is never in Build, and a return naming mercury opens nothing', () => {
-  const m = byKey('mercury');
-  assert.equal(isEntityRow(m), true);
-  assert.equal(cardAction(m), 'entity');
-  assert.equal(openingView(m), 'entity');
-  assert.equal(cardAction({ ...m, available: false, status: 'coming_soon' }), 'entity', 'whatever the row says');
-  assert.ok(!toolGroups(CAT).groups.flatMap((g) => g.rows).some((p) => p.key === 'mercury'), 'Build never lists it');
-  assert.ok(!toolGroups(CAT, { q: 'mercury' }).groups.flatMap((g) => g.rows).length, 'not even searched for');
-  assert.equal(toolDeepLink('?tool=mercury', CAT).panel ?? null, null);
-  assert.equal(toolDeepLink('?oauth=ok&provider=mercury', CAT).panel, null);
-  const own = buildCatalogue({ providers: [{ ...MERCURY, connection_source: 'integrations' }], items: [], firstParty: {} });
-  assert.equal(toolDeepLink('?oauth=ok&provider=mercury', own).panel, null, 'Mercury has no sign-in, so a member\'s own row opens nothing from a return either');
-  // Every other row is unchanged.
+test('D880: no Mercury row opens an entity sheet on a member surface; every other row is unchanged', () => {
+  for (const cat of [CAT, PREVIEW_CAT]) {
+    const m = byKey('mercury', cat);
+    assert.notEqual(cardAction(m), 'entity');
+    assert.notEqual(openingView(m), 'entity');
+    assert.equal(toolDeepLink('?oauth=ok&provider=mercury', cat).panel, null, 'Mercury\'s sign-in returns to its own page');
+  }
   const s = byKey('stripe');
-  assert.equal(isEntityRow(s), false);
   assert.equal(cardAction(s), 'add');
   assert.equal(openingView(s), 'pre');
   assert.ok(toolGroups(CAT).groups.flatMap((g) => g.rows).some((p) => p.key === 'stripe'));
   assert.equal(toolDeepLink('?oauth=ok&provider=stripe', CAT).panel.key, 'stripe');
-  assert.equal(isEntityRow({ ...m, connection_source: 'integrations' }), false, 'a member\'s own Mercury is not the entity row');
 });
 
 // ------------------------------------------------------------------ the page's reads
 
-test('Connectors makes no entity read on load or on a sign-in return; one when the card is opened (D715 decision 3, on D753\'s page)', async () => {
+test('D880: Connectors reads nothing of Axal VC\'s accounts: not on load, on a sign-in return, or on Mercury\'s page', async () => {
   const f = mockFetch();
-  const hub = await mount(h(ConnectorsView, { data: ready(), initialTab: 'discover' }));
-  try {
-    assert.equal(f.reads(), 0, 'a visit reads nothing');
-    const open = hub.by('connector-open-mercury');
-    assert.ok(open, 'the card shows Open');
-    assert.equal(hub.pr(open).href, '/account/connectors/mercury', 'Open links the Mercury page');
-    await hub.click('connector-open-mercury');
-    assert.equal(f.reads(), 0, 'following the link is not a read on the hub');
-  } finally { await hub.unmount(); }
-  const back = await mount(h(ConnectorsView, { data: ready() }), '/account/connectors?oauth=ok&provider=mercury');
-  try {
-    assert.equal(f.reads(), 0, 'a crafted return on the hub reads nothing');
-    assert.equal(back.by('mercury-entity-sheet'), undefined);
-  } finally { await back.unmount(); }
-  const page = await mount(h(ConnectorPageView, { data: ready(), connectorKey: 'mercury' }), '/account/connectors/mercury');
-  try {
-    assert.equal(f.reads(), 1, 'mounting the Mercury page is the one read');
-    // D753 F5 (#1991): drawn on the page itself, not as a sheet.
-    assert.ok(page.by('mercury-entity-page'));
-    assert.equal(page.by('mercury-entity-sheet'), undefined);
-  } finally { await page.unmount(); f.restore(); }
+  for (const cat of [CAT, PREVIEW_CAT]) {
+    const hub = await mount(h(ConnectorsView, { data: ready(cat), initialTab: 'discover' }));
+    try {
+      assert.equal(hub.pr(hub.by('connector-open-mercury')).href, '/account/connectors/mercury', 'Mercury\'s card links its page');
+      await hub.click('connector-open-mercury');
+    } finally { await hub.unmount(); }
+    const back = await mount(h(ConnectorsView, { data: ready(cat) }), '/account/connectors?oauth=ok&provider=mercury');
+    try { assert.equal(back.by('mercury-entity-sheet'), undefined); } finally { await back.unmount(); }
+    const page = await mount(h(ConnectorPageView, { data: ready(cat), connectorKey: 'mercury' }), '/account/connectors/mercury');
+    try {
+      assert.equal(page.by('mercury-entity-page'), undefined);
+      assert.equal(page.by('mercury-entity-sheet'), undefined);
+    } finally { await page.unmount(); }
+  }
+  assert.equal(f.reads(), 0, 'no read of /api/admin/mercury/connections, anywhere');
+  f.restore();
 });
 
 // ------------------------------------------------------------------ who sees what
@@ -175,7 +171,7 @@ test('the Super Admin: four entities in order, endings, the Fund note, the previ
     assert.ok(t.includes(FUND_NOTE));
     assert.match(t, /Token …f1x2/);
     assert.ok(t.includes(ENTITY_SHEET_AUDIT_FOOT), 'the sheet says "sheet" (S1 on #1991)');
-    assert.ok(!t.includes(ENTITY_AUDIT_FOOT), 'never the page\'s sentence inside a sheet');
+    assert.ok(!t.includes('Opening this page is recorded'), 'never a page\'s sentence inside a sheet');
     for (const id of ['mercury-sync-holdings', 'mercury-replace-holdings', 'mercury-disconnect-holdings', 'mercury-connect-fund']) assert.ok(m.by(id), id);
     assert.equal(m.by('mercury-sync-fund'), undefined, 'no sync for an entity that is not connected');
     assert.equal(m.by('mercury-admin-only'), undefined);
@@ -213,7 +209,7 @@ test('a branch admin makes no read; a refused read is Unreadable and the sheet s
   const b = await mount(sheet({ superAdmin: false, branch: 'EU', api }));
   try {
     assert.equal(api.calls.length, 0);
-    assert.ok(b.text().includes(BRANCH_MANAGED));
+    assert.ok(b.text().includes(ENTITY_BRANCH_MANAGED));
     assert.equal(b.by('mercury-feeds'), undefined);
   } finally { await b.unmount(); }
   const down = stubApi({ connections: async () => { throw refusal(503, 'mercury_unavailable', 'Unavailable.'); } });
@@ -310,8 +306,9 @@ test('no Mercury method names a money path, and no frontend file names Mercury\'
   const paths = [...src.matchAll(/request\(\s*`([^`]*)`|request\(\s*'([^']*)'/g)].map((x) => x[1] || x[2]);
   assert.ok(paths.length > 0);
   for (const p of paths) assert.doesNotMatch(p, /send|transfer|pay|wire/i, p);
-  const sheetSrc = readFileSync(resolve(process.cwd(), 'frontend/src/pages/account/MercurySheet.jsx'), 'utf8');
-  assert.doesNotMatch(sheetSrc, /dangerouslySetInnerHTML/);
+  for (const f of ['frontend/src/pages/account/MercurySheet.jsx', 'frontend/src/pages/admin/fundAdmin/MercuryEntitySheet.jsx']) {
+    assert.doesNotMatch(readFileSync(resolve(process.cwd(), f), 'utf8'), /dangerouslySetInnerHTML/, f);
+  }
   const files = [];
   const walk = (d) => { for (const n of readdirSync(d)) { const f = join(d, n); if (statSync(f).isDirectory()) walk(f); else if (/\.(jsx?|tsx?)$/.test(n)) files.push(f); } };
   walk(resolve(process.cwd(), 'frontend/src'));
@@ -323,35 +320,11 @@ test('no Mercury method names a money path, and no frontend file names Mercury\'
 
 // ------------------------------------------------------------------ #1780's canvas PR: the hub
 
-test('#1780: the Fund administration group draws the entity row on Yours, on Discover and on a phone, with no read', async () => {
-  const f = mockFetch();
-  try {
+test('D880: Connectors draws no Fund administration group and no entity badge, on Yours, Discover or a phone, whichever row is served', () => {
+  for (const cat of [CAT, PREVIEW_CAT]) {
     for (const props of [{ initialTab: 'yours' }, { initialTab: 'discover' }, { phone: true }]) {
-      const page = html(h(ConnectorsView, { data: ready(), ...props }));
-      assert.match(page, /data-testid="fund-admin-group"/, JSON.stringify(props));
-      const group = page.slice(page.indexOf('data-testid="fund-admin-group"'));
-      assert.match(group, /Fund administration/);
-      assert.match(group, /data-testid="fund-admin-mercury"/);
-      assert.match(group, /href="\/account\/connectors\/mercury"/, 'the card opens Mercury\'s page');
-      const none = html(h(ConnectorsView, { data: ready(NO_MERCURY), ...props }));
-      assert.doesNotMatch(none, /fund-admin-group/, 'no entity row, no group');
+      const page = html(h(ConnectorsView, { data: ready(cat), ...props }));
+      assert.doesNotMatch(page, /fund-admin-group|fund-admin-mercury|connector-entity-badge|Entity connections|Fund administration/, JSON.stringify(props));
     }
-    const m = await mount(h(ConnectorsView, { data: ready(), initialTab: 'yours' }));
-    try { assert.equal(f.reads(), 0, 'the group reads nothing'); } finally { await m.unmount(); }
-  } finally { f.restore(); }
-});
-
-test('#1780: on Discover the entity card is badged "Entity connections"; no other card is', () => {
-  const page = html(h(ConnectorsView, { data: ready(), initialTab: 'discover' }));
-  const card = (key) => { const at = page.indexOf(`data-testid="connector-card-${key}"`); return page.slice(at, page.indexOf('</article>', at)); };
-  assert.match(card('mercury'), /data-testid="connector-entity-badge"[^]*Entity connections/);
-  assert.doesNotMatch(card('stripe'), /connector-entity-badge|Entity connections/);
-});
-
-test('#1780: a Yours search for "mercury" finds the entity row, so it never says "No connector called"', () => {
-  const page = flat(html(h(ConnectorsView, { data: ready(), initialTab: 'yours', initialQuery: 'mercury' })));
-  assert.doesNotMatch(page, /No connector called/);
-  assert.match(page, /Fund administration/);
-  const other = flat(html(h(ConnectorsView, { data: ready(), initialTab: 'yours', initialQuery: 'calendly' })));
-  assert.match(other, /No connector called .calendly./, 'a search for a connector you do not have still says so');
+  }
 });

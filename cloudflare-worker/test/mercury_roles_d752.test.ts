@@ -2,7 +2,8 @@
  * D752 (#1886) sections 1 and 2 — who sees which Mercury card, in whose words.
  *
  *  - `audienceFor` for every role, on HQ and on a branch, against the table
- *    written here: an investor is `personal` on HQ and `none` on a branch.
+ *    written here. D884 (#2557, the owner's answer A): an investor is
+ *    `personal` on HQ and on a branch; proof of funds stays HQ-only by its use.
  *  - The registry, the uses and the variants agree: `personal_roles`,
  *    `PERSONAL_USES` and `PERSONAL_MERCURY` hold the same roles, and
  *    `personal_hq_only_roles` is exactly the roles whose every use is in
@@ -36,7 +37,7 @@ const AUDIENCE: Record<string, [string, string]> = {
   admin: ['preview', 'none'], // D879 (#2552): the founder's page, read-only; D710's entity row is gone
   founder: ['personal', 'personal'],
   partner: ['personal', 'personal'],
-  investor: ['personal', 'none'],
+  investor: ['personal', 'personal'],
   advisor: ['none', 'none'],
   mentor: ['none', 'none'],
   operator: ['none', 'none'],
@@ -56,18 +57,20 @@ test('audienceFor: every role on HQ and on a branch, as D752 section 1\'s table 
   for (const [role, [hq, branch]] of Object.entries(AUDIENCE)) {
     assert.equal(audienceFor(mercury, { role, hq: true }), hq, `${role} on HQ`);
     assert.equal(audienceFor(mercury, { role, hq: false }), branch, `${role} on a branch`);
-    assert.equal(personalHqOnlyOffHq(mercury, { role, hq: false }), role === 'investor', `${role} HQ-only off HQ`);
+    // D884: no role is hidden off HQ any more; an HQ-only use is refused by its use (personalPolicy, below).
+    assert.equal(personalHqOnlyOffHq(mercury, { role, hq: false }), false, `${role} is never HQ-only off HQ`);
     assert.equal(personalHqOnlyOffHq(mercury, { role, hq: true }), false, `${role} on HQ is never refused as HQ-only`);
   }
-  assert.equal(audienceFor(mercury, { role: 'INVESTOR', hq: false }), 'none', 'the role is compared lower-cased');
+  assert.equal(audienceFor(mercury, { role: 'INVESTOR', hq: false }), 'personal', 'the role is compared lower-cased');
 });
 
 test('the registry, the uses and the variants agree; the partner keeps D713\'s words and the founder has D752\'s', () => {
   assert.deepEqual(sorted(mercury.personal_roles!), sorted(Object.keys(PERSONAL_USES)));
   assert.deepEqual(sorted(mercury.personal_roles!), sorted(Object.keys(PERSONAL_MERCURY)));
-  const hqOnly = Object.entries(PERSONAL_USES).filter(([, uses]) => uses.every((u) => HQ_ONLY_USES.includes(u))).map(([r]) => r);
-  assert.deepEqual(sorted(mercury.personal_hq_only_roles!), sorted(hqOnly));
-  assert.ok(hqOnly.length > 0, 'the list is not empty');
+  // D884: the investor's only D752 use is HQ-only, but its D840 sections are not, so the connector is offered everywhere.
+  assert.deepEqual(mercury.personal_hq_only_roles ?? [], []);
+  assert.ok(PERSONAL_USES.investor.every((u) => HQ_ONLY_USES.includes(u)), 'proof of funds stays an HQ-only use');
+  assert.ok(mercuryFedModules('investor').length > 0, 'the investor\'s sections are offered on every host');
   for (const [role, v] of Object.entries(PERSONAL_MERCURY)) {
     assert.equal(v.permissions.length, 1, `${role}: one permission sentence`);
     assert.match(v.permissions[0], /never sends, transfers or requests money/, role);
@@ -79,8 +82,8 @@ test('the registry, the uses and the variants agree; the partner keeps D713\'s w
   assert.equal(PERSONAL_MERCURY.founder.description, FOUNDER_DESCRIPTION);
   assert.deepEqual(PERSONAL_MERCURY.founder.capabilities, ['Revenue import', 'Payment matching', 'Spending and runway']);
   assert.deepEqual(PERSONAL_MERCURY.founder.permissions, [FOUNDER_PERMISSION]);
-  // D840 part 4 (#2349): the investor's sections joined proof of funds.
-  assert.deepEqual(PERSONAL_MERCURY.investor.capabilities, ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals']);
+  // D840 part 4 (#2349), D884 (#2557): the investor's Deals sections lead; proof of funds is last, on HQ.
+  assert.deepEqual(PERSONAL_MERCURY.investor.capabilities, ['Capacity', 'Closing proposals', 'Fund calls, accounting and reporting proposals', 'Proof of funds']);
   assert.equal(personalMercuryFor('advisor'), null);
   assert.equal(personalMercuryFor('Investor'), PERSONAL_MERCURY.investor);
 });
@@ -88,32 +91,30 @@ test('the registry, the uses and the variants agree; the partner keeps D713\'s w
 test('publicDescriptor serves the investor\'s variant on HQ and never the audience fields; connectorFeeds goes by role', () => {
   const own = publicDescriptor(mercury, { role: 'investor', hq: true }) as any;
   assert.equal(own.description, PERSONAL_MERCURY.investor.description);
-  assert.deepEqual(own.capabilities, ['Proof of funds', 'Capacity', 'Closing, calls, accounting and reporting proposals']);
+  assert.deepEqual(own.capabilities, ['Capacity', 'Closing proposals', 'Fund calls, accounting and reporting proposals', 'Proof of funds']);
   assert.deepEqual(own.permissions, PERSONAL_MERCURY.investor.permissions);
-  assert.deepEqual(own.feeds, ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
+  assert.deepEqual(own.feeds, ['deals_pipeline', 'deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
   assert.equal(own.has_implementation, true);
   for (const field of ['preview_roles', 'personal_roles', 'personal_hq_only_roles']) assert.ok(!(field in own), field);
   const founder = publicDescriptor(mercury, { role: 'founder', hq: false }) as any;
   assert.equal(founder.description, FOUNDER_DESCRIPTION);
   assert.deepEqual(founder.feeds, mercuryFedModules('founder'));
-  assert.deepEqual(connectorFeeds('mercury', 'investor'), ['deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
+  assert.deepEqual(connectorFeeds('mercury', 'investor'), ['deals_pipeline', 'deals_commit', 'deals_closing', 'fund_calls', 'fund_ledger', 'fund_reporting']);
   assert.deepEqual(connectorFeeds('mercury', 'founder'), mercuryFedModules('founder'));
   assert.ok(connectorFeeds('mercury', 'founder').includes('revenue_and_traction'));
   assert.deepEqual(connectorFeeds('mercury', 'partner'), []);
 });
 
-test('/connect answers an investor on a branch 403 before its 404 and the provider; nothing reaches Mercury and nothing is stored', async () => {
+test('D884: /connect takes an investor on a branch to the provider, as on HQ; proof of funds still refuses off HQ (personalPolicy, below)', async () => {
   const { db, env } = await personalFixture();
   const b = bank();
   try {
     const r = await req(env, 30, 'POST', '/api/connectors/connect',
       { provider_key: 'mercury', api_key: TOKEN, config: { confirm_read_only: true } }, { branch: true });
-    assert.deepEqual([r.status, r.body.error, r.body.message], [403, 'purpose_not_allowed', 'Mercury is offered to your profile on HQ only.'], r.text);
-    assert.equal(b.calls.length, 0);
-    assert.equal(count(db, "SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury'"), 0);
-    assert.equal(count(db, 'SELECT COUNT(*) AS n FROM integration_logs'), 0);
-    const other = await req(env, 30, 'GET', '/api/connectors/mercury', undefined, { branch: true });
-    assert.equal(other.status, 404, 'every other route stays 404');
+    assert.deepEqual([r.status, r.body.error], [410, 'token_connect_retired'], r.text);
+    assert.notEqual(r.body.error, 'purpose_not_allowed');
+    assert.equal(b.calls.length, 0, 'D881: a token is never checked against Mercury');
+    assert.equal(count(db, "SELECT COUNT(*) AS n FROM integrations WHERE provider_key = 'mercury' AND user_id = 30"), 0);
   } finally { b.restore(); }
 });
 

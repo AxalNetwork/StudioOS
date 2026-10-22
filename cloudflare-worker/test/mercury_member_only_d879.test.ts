@@ -108,7 +108,8 @@ const VIEWERS: Array<{ role: string; branch: boolean; listed: boolean; page: str
   { role: 'partner', branch: false, listed: true, page: 'partner', connect: [410, 'token_connect_retired'] },
   { role: 'partner', branch: true, listed: true, page: 'partner', connect: [410, 'token_connect_retired'] },
   { role: 'investor', branch: false, listed: true, page: 'investor', connect: [410, 'token_connect_retired'] },
-  { role: 'investor', branch: true, listed: false, page: null, connect: [403, 'purpose_not_allowed'] },
+  // D884 (#2557, the owner's answer A): an investor has their own Mercury in a branch too.
+  { role: 'investor', branch: true, listed: true, page: 'investor', connect: [410, 'token_connect_retired'] },
   { role: 'admin', branch: false, listed: true, page: 'founder', connect: [403, 'purpose_not_allowed'] },
   { role: 'admin', branch: true, listed: false, page: null, connect: [404, 'unknown_provider'] },
 ];

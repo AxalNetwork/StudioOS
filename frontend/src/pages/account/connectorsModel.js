@@ -26,12 +26,12 @@ export const PAGE_SIZE = 10;
 
 /**
  * D715 (#1780) decision 9: a member's own Mercury, the `mercury` row the
- * Worker serves a founder or a partner (`connection_source: 'integrations'`).
- * It reads only when asked and never syncs, so its words differ from every
- * other connector's. The connection-only rules test `provider_key`, because
- * the entity row never carries a member's connection.
+ * Worker serves a founder, a partner or, on HQ, an investor. It reads only
+ * when asked and never syncs, so its words differ from every other
+ * connector's. D880 (#2553): it is the only Mercury row a member page draws;
+ * Axal VC's own accounts are HQ's.
  */
-export const isPersonalMercury = (p) => p?.key === 'mercury' && !isEntityRow(p);
+export const isPersonalMercury = (p) => p?.key === 'mercury';
 const isMercuryConn = (conn) => conn?.provider_key === 'mercury';
 
 export const CATEGORY_ORDER = ['CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];
@@ -369,18 +369,9 @@ export function pageOf(rows, page) {
 
 export const SUGGESTED = 'Suggested for you';
 
-/**
- * D715 (#1780): the Axal entities' Mercury row, which the Worker serves an
- * admin on HQ only (`connection_source`, #1775). It is never a member's own
- * connector: it opens the entity sheet, and Build never shows it.
- */
-export const ENTITY_SOURCE = 'mercury_entity_connections';
-export const isEntityRow = (p) => p?.connection_source === ENTITY_SOURCE;
 
-/** The button in a card's corner: "+", a check mark, "Notify me" or "We'll tell you"; Open for the entity row. */
+/** The button in a card's corner: "+", a check mark, "Notify me" or "We'll tell you". */
 export function cardAction(p) {
-  // The entity row opens its sheet whatever `available`, `status` or `locked` say (D715 decision 2).
-  if (isEntityRow(p)) return 'entity';
   if (!p.available && p.status === 'coming_soon') return p.joined ? 'joined' : 'notify';
   if (p.connection) return 'connected';
   if (!p.available) return 'unavailable';
@@ -570,8 +561,7 @@ export function takeBuildProject(store = sess()) {
  */
 export function toolDeepLink(search, catalogue) {
   const ret = oauthReturn(search);
-  // A venture has no use for Axal's own accounts (D715 decision 2).
-  const list = (Array.isArray(catalogue) ? catalogue : []).filter((p) => !isEntityRow(p));
+  const list = Array.isArray(catalogue) ? catalogue : [];
   if (ret) {
     // Mercury's sign-in returns to its own page (D840), so a return here that names it is crafted, and opens nothing (D715 decision 3).
     const known = ret.key !== 'mercury' && list.some((p) => p.key === ret.key);
@@ -662,11 +652,11 @@ export const patOnly = (p) => !!(p?.oauthOff && p?.supports_pat);
 /**
  * D751 (#1881): the way to a connector's keys, for the one person who can set
  * them. A fixed same-app path, never a value from the Worker; null for anyone
- * who is not a Super Admin, a connector Axal is not missing a client for, a
- * coming-soon one, or the Axal entities' Mercury row.
+ * who is not a Super Admin, a connector Axal is not missing a client for, or
+ * a coming-soon one.
  */
 export function keysHref(p, { superAdmin = false } = {}) {
-  if (!superAdmin || !p?.oauthOff || p.status === 'coming_soon' || isEntityRow(p)) return null;
+  if (!superAdmin || !p?.oauthOff || p.status === 'coming_soon') return null;
   return INTEGRATION_KEYS_HREF;
 }
 
@@ -765,7 +755,7 @@ export function toolGroups(catalogue, { q = '', filter = 'All', pin = null } = {
     if (filter === 'Failing') return s === 'failing';
     return true;
   };
-  const list = (catalogue || []).filter((p) => !isEntityRow(p) && matches(p, q) && keep(p));
+  const list = (catalogue || []).filter((p) => matches(p, q) && keep(p));
   const groups = [];
   for (const cat of [...BUILD_CATEGORY_ORDER, null]) {
     const rows = list.filter((p) => (cat === null ? !BUILD_CATEGORY_ORDER.includes(p.category) : p.category === cat))
