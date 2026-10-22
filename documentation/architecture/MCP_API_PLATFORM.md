@@ -198,6 +198,16 @@ one updates this section in the same PR.
   `/mcp` refuses `axk_` tokens with `401 invalid_key`. An `axk_` bearer is
   never sent to the OAuth provider.
 
+### Limits (D849; S14)
+
+- **`GET /api/developer/limits`** (`routes/developer_limits.ts`, client `developerKeysApi.limits()`; signed-in session only, `401 session_required` for an `axk_` bearer) returns
+  `{ window_seconds: 60, member: { calls_per_minute: 120 }, connection: { calls_per_minute: 60 }, keys_enabled, keys: [ { uid, name, prefix, rate_per_minute, monthly_limit_microusd|null } ] }`.
+  Only live keys are listed; with `API_KEYS_ENABLED` off `keys` is empty and the caps still read.
+- **The member limit** answers an MCP call over 120 a minute, across every connection and key (an in-app Eadwyn call with no grant is not counted), with the tool error *"Too many calls from your account across its connections. Wait a minute and try again."* and logs `rate_limited`.
+- **`key_limit_reached`** (PR 2 of #2472): `402 { code: 'key_limit_reached', limit_microusd, used_microusd }` when a metered call would pass a key's monthly cap.
+- **Alerts** (PR 2 of #2472), on D788's `notify()` path: type `api_key_limit` at 80% and 100% of a key's monthly cap, and type `api_key_failures` when more than 20% of at least 50 calls on a key fail within an hour.
+- **A support session cannot buy AI tokens:** `POST /api/orders/intent` with a token pack under an impersonation token answers `403 { error: 'support_session_refused', message }`.
+
 ### Usage records (D843; S08) and reports (D845; S09)
 
 - **`api_usage_events` row:**
@@ -236,13 +246,13 @@ one updates this section in the same PR.
 | Key `PATCH`, `still_owned`, scope labels, refusal codes, the 25-key cap | #2464 (D841), done |
 | `/usage/events` filters `from, to, outcome, surface, operation, provider, connector, company`; `grant_id`; the fixed `error_category` list | #2465 (D843) and #2471 (D845) |
 | Report totals split `refused / rate_limited / insufficient_tokens / error`; `refunded_microusd`; `group=day&by=key` two-way grouping; `recorded_since`; `provider_cost_microusd` hidden from members | #2471 (D845), done |
-| A read of the limits in force (per key, per member) | #2472 (D849) |
-| Per-key and failure alerts: store, route, notification type | #2472 (D849) |
+| A read of the limits in force (per key, per member) | #2472 (D849), done: `GET /api/developer/limits` |
+| Per-key and failure alerts: store, route, notification type | #2472 (D849): named above, built in PR 2 |
 | `GET /api/ai-budget/holds` (operation, surface, key, execution per hold; columns on `ai_budget_reservations` in migration 525) | #2466 (D844) |
 | `GET /api/ai-budget/prices` (the metering policy as members read it) | #2466 (D844) |
 | The `402 insufficient_tokens` body `{ code, needed_microusd, available_microusd, add_tokens_href }`; `spend_limit`, `ai_paused`, `budget_review` codes on `/mcp` | #2466 (D844) and #2470 (D842) |
-| `key_limit_reached` | #2472 (D849) |
-| A support session can buy AI tokens (`routes/orders.ts` has no `impersonated_by` check) | #2472 (D849) |
+| `key_limit_reached` | #2472 (D849): named above, built in PR 2 |
+| A support session can buy AI tokens (`routes/orders.ts` has no `impersonated_by` check) | #2472 (D849), done: `403 support_session_refused` |
 
 ### Customer-chat tools (D864; S08)
 
@@ -307,12 +317,16 @@ one updates this section in the same PR.
   it, as it ends grants. Revocation is immediate, because there is a D1 read
   on each call and no cache.
 - **Limits.** Per key (default 60 a minute) and per user across keys and
-  grants (default 120 a minute), both in `RATE_LIMITS` and fail-closed.
+  grants (default 120 a minute), both in `RATE_LIMITS` and fail-closed. The
+  per-user limit is `withinUserLimit` (D849), counted under
+  `mcp_rl:user:<id>` by every grant and key.
   Failed key lookups are throttled per IP (10 a minute), so keys cannot be
   enumerated.
 - **Secrets stay out of everything.** No secret reaches a log, trace,
   analytics event, error message, activity line or AI prompt. A test asserts
-  this for `console` and `activity_logs`.
+  this for `console` and `activity_logs`, and `scripts/check-secret-logging.mjs`
+  (D849, in `test:guards`) fails any `console.*`, `logActorAct` or
+  `activity_logs` write that names a bearer, a secret or an `axk_` value.
 - **Tool output is data.** It cannot change scopes, companies or prices.
   Authorization and metering run on the server before and after the tool,
   never inside it.
@@ -428,6 +442,12 @@ only when that base does.
   owner ruling recorded below.
 
 - **2026-10-22 (S08, D864 owner follow-up).** #2510 Q1 B / Q2 A: `get_session_insights` 1.1.0 adds an explicit, paged transcript read for consented assigned chats, speaker labels, nullable stored translations, and privacy redaction. Reads D858 analytics through its existing service. Third-party MTProto user sessions remain excluded.
+
+- **2026-10-22 (S14).** #2472 PR 1 (D849): the per-member limit across
+  grants, `GET /api/developer/limits`, the support-session refusal on token
+  packs, `check-secret-logging`, and the cross-tenant matrix with the
+  prompt-injection check. PR 2 (`key_limit_reached`, the alerts, the key rows
+  of the matrix) waits on #2470 and #2466.
 
 - **2026-10-22 (S13, #2521, D874).** The call tools: `list_meetings`, `get_meeting_transcript` and `summarize_meeting` (§3), priced 0 in `METERING_POLICY`; the summary's model run pays through its own `aiRouter` hold. `extract_action_items` waits on M4.
 
