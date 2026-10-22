@@ -6,9 +6,12 @@
  *   list_meetings           validate:read   each call as state, source, provider, time and interview
  *   get_meeting_transcript  validate:read   a call's stored transcript, paged
  *   summarize_meeting       validate:write  the engine's summary, read or run (AI tokens)
+ *   extract_action_items    validate:write  D859's extraction over the call, as proposals (AI tokens)
  *
- * `extract_action_items` follows with M4's extraction (#2520 PR 2), which it
- * runs; until then it is not registered (D874 §3).
+ * `extract_action_items` runs D859's `extractConversationItems`, whose kinds
+ * M4 (#2520 PR 2, D873) extends with `decision` and `action_item`; the tool
+ * returns whatever kinds the run stored, so it needs no change when they land.
+ * It stores proposals only: the founder accepts each in StudioOS (D874 §3).
  *
  * TENANCY COMES FROM THE REF (`interview_channel_refs`, migration 449): its
  * member, interview and session were set when the member scheduled or
@@ -37,6 +40,7 @@ import { summaryOf } from '../../services/interviewProcessing';
 import { digestSession } from '../../services/validateEngine';
 import { REFUSAL_WORDS, refusalFor } from '../../services/metering';
 import { sessionDigest } from '../../routes/founder_validate_sessions';
+import { extractConversationItems } from '../../services/conversationItems';
 
 const PROVIDERS = ['zoom', 'google_meet'] as const;
 const STATES = ['scheduled', 'ended', 'transcript_ready', 'imported', 'no_transcript', 'failed', 'cancelled'] as const;
@@ -269,6 +273,86 @@ export async function summarizeMeeting(env: Env, userId: number, companyId: numb
   };
 }
 
+// ── The items ────────────────────────────────────────────────────────────────
+
+interface ProposalRow {
+  id: number; kind: string; status: string; payload_json: string | null; edited_payload_json: string | null;
+  citation_json: string | null; cite_from: number | null; cite_to: number | null; created_at: string;
+}
+
+const EXTRACTION_TASK = 'extract_conversation_items';
+const ITEM_LIMIT = 200;
+
+/** Why the extraction stored nothing, in Axal's words: the transcript's own size limits (`transcriptLimit`). */
+const TOO_LONG: Record<string, string> = {
+  transcript_too_large: 'This call is too long to read for items in one run.',
+  structure_call_limit: 'This call is too long to read for items in one run.',
+};
+
+const parsedJson = (raw: string | null): unknown => {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+};
+
+/** The call's extraction proposals, each with its cited passage; one run's when `runId` is given. */
+async function itemProposals(env: Env, sessionId: number, companyId: number, runId: string | null) {
+  const rows = (await env.DB.prepare(
+    `SELECT id, kind, status, payload_json, edited_payload_json, citation_json, cite_from, cite_to, created_at
+       FROM validate_proposals
+      WHERE session_id = ? AND project_id = ? AND task = ? AND (? IS NULL OR run_id = ?)
+      ORDER BY id LIMIT ?`,
+  ).bind(sessionId, companyId, EXTRACTION_TASK, runId, runId, ITEM_LIMIT).all<ProposalRow>()).results ?? [];
+  return rows.map((r) => {
+    const citation = parsedJson(r.citation_json) as { quote?: unknown } | null;
+    return {
+      id: r.id, kind: r.kind, state: r.status,
+      payload: parsedJson(r.edited_payload_json) ?? parsedJson(r.payload_json),
+      cite: { from: r.cite_from, to: r.cite_to, quote: typeof citation?.quote === 'string' ? citation.quote : null },
+      created_at: r.created_at,
+    };
+  });
+}
+
+/**
+ * D859's extraction over a call's transcript: the actions, data points and
+ * asks in it (and M4's decisions and action items once #2520 lands), stored
+ * as pending proposals the founder accepts or discards in StudioOS. Nothing is
+ * accepted here. A call already read returns its proposals and runs nothing
+ * unless `rerun` asks; a rerun proposes only what is new (`storePlacements`'
+ * dedupe). The run holds and settles its own AI tokens through `aiRouter`, so
+ * the tool adds no fee (D844's composite rule).
+ */
+export async function extractMeetingItems(env: Env, userId: number, companyId: number, uid: string, rerun = false) {
+  const ref = await memberMeeting(env, userId, companyId, uid);
+  if (ref.status !== 'imported' || ref.transcript_session_id == null) {
+    throw new ToolError(409, 'no_transcript', "This call's transcript is not in StudioOS yet, so there is nothing to read.");
+  }
+  const sessionId = Number(ref.transcript_session_id);
+  const session = await loadSession(env, sessionId);
+  if (!session || Number(session.project_id) !== companyId) throw new ToolError(404, 'meeting_not_found', 'That call is not one of yours in this company.');
+  const meeting = { id: ref.uid, provider: ref.provider, session_id: sessionId };
+  const ids = identifiersOf(ref);
+
+  if (!rerun) {
+    const earlier = await itemProposals(env, sessionId, companyId, null);
+    if (earlier.length) return { meeting, ran: false, stored: 0, items: exportDeep(earlier, ids) };
+  }
+  const out = await extractConversationItems(env, { sessionId, userId });
+  if (!out.ok) {
+    if (out.reason === 'not_writable') throw new ToolError(404, 'meeting_not_found', 'That call is not one of yours in this company.');
+    if (out.reason === 'consent_not_recorded') throw new ToolError(409, 'consent_not_recorded', 'This call has no recorded consent, so it is not read.');
+    if (out.reason === 'no_final_transcript') throw new ToolError(409, 'no_final_transcript', 'This call has no final transcript to read yet.');
+    if (out.refusal && TOO_LONG[out.refusal]) throw new ToolError(422, out.refusal, TOO_LONG[out.refusal]);
+    // The ledger's own refusal (no AI tokens, a limit, a pause): its words, never an amount.
+    if (out.refusal && Object.prototype.hasOwnProperty.call(REFUSAL_WORDS, out.refusal)) throw refusalFor(out.refusal);
+    throw new ToolError(409, 'refused', 'StudioOS could not read this call for items just now. Try again later.');
+  }
+  return {
+    meeting, ran: true, stored: out.stored,
+    items: exportDeep(await itemProposals(env, sessionId, companyId, out.runId), ids),
+  };
+}
+
 // ── The tools ────────────────────────────────────────────────────────────────
 
 export const MEETING_TOOLS: McpTool[] = [
@@ -318,5 +402,17 @@ export const MEETING_TOOLS: McpTool[] = [
     company: true,
     readOnly: false,
     run: async ({ env, user, company, args }) => summarizeMeeting(env, Number(user.id), company!.id, String(args.meeting), args.rerun === true),
+  },
+  {
+    name: 'extract_action_items',
+    requiredScope: 'validate:write',
+    source: 'axal',
+    version: '1.0.0',
+    title: 'Find the items in a call',
+    description: 'Read one of your imported calls in a company for what you can act on: follow-ups, decisions and action items, data points such as prices, spend and tools, and feature asks, each with the passage it comes from. Each is stored in StudioOS as a proposal for you to accept or discard there; nothing is accepted here. A call already read returns its proposals; rerun reads it again for anything new. Reading uses AI tokens.',
+    inputSchema: { company: z.number().int().positive(), meeting: MEETING, rerun: z.boolean().optional() },
+    company: true,
+    readOnly: false,
+    run: async ({ env, user, company, args }) => extractMeetingItems(env, Number(user.id), company!.id, String(args.meeting), args.rerun === true),
   },
 ];

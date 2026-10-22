@@ -288,13 +288,17 @@ one updates this section in the same PR.
 | `list_meetings` | `validate:read` | `{ provider?: 'zoom'\|'google_meet', state?: <ref status>, limit? (1–200, default 50) }` | `{ meetings: [ { id, provider, state, source: 'scheduled'\|'attached', error_code\|null, error\|null, starts_at, ends_at, company: {id,name}, interview_id, session_id\|null } ] }` |
 | `get_meeting_transcript` | `validate:read` | `{ company, meeting, after_id?, limit? (1–200, default 100) }` | `{ meeting: { id, provider, state, session_id }, transcript: { segments: [{ id, speaker, text, start_ms, end_ms, source_lang, translation: {text, language}\|null }], next_after_id, complete }\|null, reason\|null }` |
 | `summarize_meeting` | `validate:write` | `{ company, meeting, rerun?: boolean }` | `{ meeting: { id, provider, session_id }, ran, summary, digest }` |
+| `extract_action_items` | `validate:write` | `{ company, meeting, rerun?: boolean }` | `{ meeting: { id, provider, session_id }, ran, stored, items: [ { id, kind, state, payload, cite: { from, to, quote }, created_at } ] }` |
 
 - `id` and `meeting` are Axal's ref uid. No join URL, meeting id, Meet code, passcode or provider token is ever a field.
 - **Tenancy is the ref's:** the member's own call, on an interview in a company the grant still reaches. Anything else is `404 meeting_not_found`.
 - **The transcript follows #2510's ruling B.** The stored final segments of an imported call whose session consent is `given`, both re-checked inside the segment query. Otherwise `transcript` is `null` with `reason`. A cursor from another call is refused.
 - **Redaction.** Links, phone numbers, credential-shaped values, passcodes and the call's own meeting id and Meet code are removed from the transcript text and from the summary.
 - **The summary.** `summarize_meeting` returns the stored draft summary. With none stored, or with `rerun`, it runs `digestSession` as the session page's Summarise button does, which holds and settles AI tokens through `aiRouter` once. A second read runs nothing.
-- **`extract_action_items` is not registered yet.** It runs M4's extraction (#2520, after D859), which has not landed.
+- **The items.** `extract_action_items` runs D859's `extractConversationItems` over the call and returns the pending proposals it stored, each with its passage. Nothing is accepted: the founder accepts each in StudioOS.
+  - It holds and settles AI tokens through `aiRouter` once.
+  - A call already read returns its proposals and runs nothing. `rerun` proposes only what is new.
+  - M4's `decision` and `action_item` kinds (#2520, D873) arrive through the same extraction.
 
 ### Metering policy (D844; S10)
 
@@ -460,6 +464,8 @@ only when that base does.
   - the key rows of the matrix.
 
 - **2026-10-22 (S13, #2521, D874).** The call tools: `list_meetings`, `get_meeting_transcript` and `summarize_meeting` (§3), priced 0 in `METERING_POLICY`; the summary's model run pays through its own `aiRouter` hold. `extract_action_items` waits on M4.
+
+- **2026-10-22 (S12, #2521 PR 2, D874).** `extract_action_items` (§3), priced 0; its extraction pays through its own `aiRouter` hold. It runs D859's extraction, so M4's kinds need no change here. The same PR drops the call tools' test's own `ALTER` of D857's columns, which the channel fixture now applies (migration 527), and which had turned `main` red.
 
 ## 9. Known limitations
 
