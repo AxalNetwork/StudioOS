@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Lightbox, Pill, Unrecorded, Unreadable } from '../../../ui';
 import { FundActControl } from '../../../lib/fundActs';
 import { BTN, INPUT, LoadingRows } from '../../account/AccountCenter';
-import { MercuryEntityConnections } from '../../account/MercurySheet';
+import { MercuryEntityConnections } from './MercuryEntitySheet';
 import {
   NOT_OURS_NOTE_MAX, NOT_OURS_REASONS, PAYMENT_INSTRUCTIONS_ADMIN, PAYMENT_INSTRUCTIONS_LINK, REJECT_REASON_MIN, actRow, balanceText, ending,
   money, notOursText, refusalText,

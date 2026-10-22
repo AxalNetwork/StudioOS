@@ -158,7 +158,6 @@ test('6. cycle: the first path segment of each feed href, once per connector', (
 
 test('7. sign-in: sign_in.kind wins, then each fallback', () => {
   assert.equal(signInKind({ sign_in: { kind: 'key' }, auth_type: 'oauth2' }), 'key');
-  assert.equal(signInKind({ connection_source: 'mercury_entity_connections', key: 'mercury' }), 'entity');
   assert.equal(signInKind({ first_party: true }), 'first_party');
   assert.equal(signInKind({ auth_type: 'api_key' }), 'key');
   assert.equal(signInKind({ key: 'hubspot', supports_pat: true }), 'oauth_or_key', 'token_first');
@@ -181,7 +180,7 @@ test('8. types: verified needs a real date, new counts 90 days from the month\'s
   assert.ok(!keys(filterCatalogue(D651, { type: 'available', now: NOW })).includes('carta'), 'a locked row is not available now');
 });
 
-test('9. no Claude-only row, in the facets, the menu or the phone sheet; Community is a section only', () => {
+test('9. no Claude-only row, in the facets, the menu or the phone sheet; Community is absent', () => {
   const f = facetsFor(CAT);
   const labels = [...whereRows(f), ...f.types].map((r) => r.label).join(' | ');
   const menu = routed(h(ConnectorFilterMenu, { facets: f, value: NO_FILTER, onChange() {}, initialOpen: true }));

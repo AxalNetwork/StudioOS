@@ -93,9 +93,9 @@ test('decision 2: each refusal keeps its status and code, and nothing is stored'
     const rejected = await connect(env, 10);
     assert.deepEqual([rejected.status, rejected.body.error], [400, 'token_rejected']);
     assert.equal(stored(db), 0);
-    // An admin keeps #1775's entity console.
+    // D879 (#2552): an admin connects nothing here; Axal VC's own accounts are HQ's (#1775's console).
     const admin = await connect(env, 2);
-    assert.deepEqual([admin.status, admin.body.error], [409, 'entity_connection_only']);
+    assert.deepEqual([admin.status, admin.body.error], [403, 'purpose_not_allowed']);
     assert.equal(stored(db), 0);
   } finally { b.restore(); }
 });

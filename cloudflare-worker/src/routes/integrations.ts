@@ -79,11 +79,12 @@ export function ensureRole(c: Context<{ Bindings: Env }>, user: User) {
 
 /**
  * D710 (#1775): how this caller may see a provider. A provider with no
- * audience fields is `open`, as before. Mercury is an `entity` connection for
- * an admin on HQ, `personal` for a founder or partner on either host and an
- * investor on HQ (D713, D752), and `none` for everyone else, who is answered
- * as if the key did not exist. An investor off HQ is `none` too, but
- * `/connect` tells them it is HQ only (403 `purpose_not_allowed`, D752).
+ * audience fields is `open`, as before. Mercury is `personal` for a founder or
+ * partner on either host and an investor on HQ (D713, D752), a read-only
+ * `preview` of the founder's page for an admin on HQ (D879), and `none` for
+ * everyone else, who is answered as if the key did not exist. An investor off
+ * HQ is `none` too, but `/connect` tells them it is HQ only (403
+ * `purpose_not_allowed`, D752).
  */
 function audienceOf(c: Context<{ Bindings: Env }>, user: User, desc: ProviderDescriptor) {
   return audienceFor(desc, viewerOf(c, user));
@@ -325,11 +326,11 @@ integrations.get('/available', async (c) => {
   const viewer = viewerOf(c, user);
   const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none');
   const providers = await Promise.all(listed.map(async (p) => {
-    const entityOnly = audienceOf(c, user, p) === 'entity';
+    // D879: a preview reads no connection, the caller's own included.
+    const preview = audienceOf(c, user, p) === 'preview';
     return {
       ...(await catalogueEntry(c, user, p, viewer)),
-      // An entity connection is read from its own store, never the caller's rows.
-      already_connected: entityOnly ? false : p.key === 'google_calendar' || p.key === 'microsoft_365'
+      already_connected: preview ? false : p.key === 'google_calendar' || p.key === 'microsoft_365'
         ? unreadableSources.includes(p.key) ? null : connectedSet.has(p.key)
         : connectionsReadable ? connectedSet.has(p.key) : null,
     };
@@ -593,10 +594,7 @@ integrations.post('/connect', async (c) => {
     return refuse(c, 403, { code: 'purpose_not_allowed', message: personalHqOnlySentence(desc.display_name) });
   }
   if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider', provider_key: key }, 404);
-  // D710: an entity connection is added in its own console, never here.
-  if (audienceOf(c, user, desc) === 'entity') {
-    return c.json({ error: 'entity_connection_only', message: `${desc.display_name} is connected per Axal entity by the Super Admin, not from here.` }, 409);
-  }
+  // D879: a preview connects nothing; Mercury's own connect answers it 403 `purpose_not_allowed` (no personal connection).
   const activeCompanyId = await activeCompanyFor(c, user);
   if (!activeCompanyId && writesProjectData(key)) return c.json({ error: 'active_company_required' }, 400);
 
