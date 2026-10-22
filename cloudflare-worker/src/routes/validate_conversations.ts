@@ -1,0 +1,70 @@
+/**
+ * D858 (#2503) — conversation analytics for Record a Session.
+ *   GET /api/validate/sessions/:id/analytics                     one session's figures
+ *   GET /api/validate/conversations/analytics?project_id&from&to&kind  a venture's chats (default), calls (D873) or
+ *                                                                      both, aggregates only
+ *
+ * WHO READS. A signed-in member who may read the venture's board
+ * (`canReadBoard`: the venture's own founder, or HQ staff, the same audience
+ * as the interviews these figures come from). Anyone else gets a 404, as the
+ * session routes answer (D685): another member learns nothing, not even that
+ * the session or the venture exists.
+ *
+ * WHAT IS READ. `services/conversationAnalytics.ts` reads the stores; this file
+ * checks the caller and the query. Nothing here calls a model or writes a row.
+ */
+import { Hono } from 'hono';
+import type { Env, User } from '../types';
+import { requireAuth } from '../auth';
+import { canReadBoard, type ProjectRef } from './_founder_validate_helpers';
+import {
+  sessionAnalytics, ventureAnalytics, VENTURE_KINDS, type AnalyticsSession, type VentureKind,
+} from '../services/conversationAnalytics';
+
+const r = new Hono<{ Bindings: Env }>();
+
+const ID = /^[1-9][0-9]{0,9}$/;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A `YYYY-MM-DD` that is a real calendar day, else null. */
+function day(raw: string | undefined): string | null | false {
+  if (raw === undefined || raw === '') return null;
+  if (!DAY.test(raw)) return false;
+  const d = new Date(`${raw}T00:00:00Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === raw ? raw : false;
+}
+
+// GET /api/validate/sessions/:id/analytics
+r.get('/sessions/:id/analytics', async (c) => {
+  const raw = c.req.param('id');
+  if (!ID.test(raw)) return c.json({ detail: 'Invalid session id' }, 400);
+  const user = (await requireAuth(c)) as User;
+  const row = await c.env.DB.prepare(
+    `SELECT s.id, s.interview_id, s.project_id, s.channel, s.submitted_via, s.consent_status, s.active_ms, s.language,
+            s.created_at, s.created_by_user_id, s.final_model, p.founder_id
+       FROM interview_sessions s JOIN projects p ON p.id = s.project_id WHERE s.id = ?`,
+  ).bind(Number(raw)).first<AnalyticsSession & { founder_id: number | null }>();
+  const project: ProjectRef | null = row ? { id: row.project_id, founder_id: row.founder_id } : null;
+  if (!row || !project || !canReadBoard(project, user)) return c.json({ detail: 'Session not found' }, 404);
+  const { founder_id: _founder, ...session } = row;
+  return c.json({ ok: true, ...(await sessionAnalytics(c.env, session)) });
+});
+
+// GET /api/validate/conversations/analytics?project_id=&from=YYYY-MM-DD&to=YYYY-MM-DD&kind=chats|calls|all
+r.get('/conversations/analytics', async (c) => {
+  const raw = c.req.query('project_id') ?? '';
+  if (!ID.test(raw)) return c.json({ detail: 'project_id is required' }, 400);
+  const from = day(c.req.query('from'));
+  const to = day(c.req.query('to'));
+  if (from === false || to === false) return c.json({ detail: 'from and to are dates, YYYY-MM-DD' }, 400);
+  if (from && to && from > to) return c.json({ detail: 'from is after to' }, 400);
+  const kind = (c.req.query('kind') ?? 'chats') as VentureKind;
+  if (!VENTURE_KINDS.includes(kind)) return c.json({ detail: 'kind is chats, calls or all' }, 400);
+  const user = (await requireAuth(c)) as User;
+  const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+    .bind(Number(raw)).first<ProjectRef>();
+  if (!project || !canReadBoard(project, user)) return c.json({ detail: 'Project not found' }, 404);
+  return c.json({ ok: true, ...(await ventureAnalytics(c.env, project.id, { from, to, kind })) });
+});
+
+export default r;

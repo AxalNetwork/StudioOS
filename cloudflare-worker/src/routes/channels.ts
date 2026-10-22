@@ -10,6 +10,7 @@
  * Signed in (requireAuth in every handler):
  *   GET    /                        availability per provider, the member's connections, pending counts
  *   POST   /telegram/link           a one-time code and its t.me link (rollout gated)
+ *   GET    /telegram/setup          D863: the six setup steps, each done, todo or blocked, from stored rows (rollout gated)
  *   POST   /whatsapp/connect        finish Embedded Signup: { code, waba_id, phone_number_id }
  *   POST   /whatsapp/link           D754 way B (#1937): a one-time code, and the wa.me link that
  *                                   sends `LINK <code>` to Axal's own number
@@ -146,6 +147,7 @@ import {
   type InboundManageChat, type InboundMessage, type MessagingProvider, type SendResult,
 } from '../services/channels/types';
 import * as telegram from '../services/channels/telegram';
+import { telegramSetup } from '../services/channels/telegramSetup';
 import * as whatsapp from '../services/channels/whatsapp';
 import * as waLink from '../services/channels/whatsappLink';
 import * as capture from '../services/channels/whatsappCapture';
@@ -357,6 +359,16 @@ channels.post('/telegram/link', venture(async (c, user) => {
 channels.get('/telegram/link', venture(async (c, user) => {
   await activeMember(c.env, user.id);
   return c.json({ claim: await pendingLinkView(c.env, user.id) });
+}));
+
+/**
+ * D863 (#2509): the Telegram setup, step by step, from stored rows only (no
+ * Telegram call). Open to the members `POST /telegram/link` is, and refused as it is.
+ */
+channels.get('/telegram/setup', venture(async (c, user) => {
+  if (!providerAvailable(c.env, 'telegram') || !channelOpenTo(c.env, 'telegram', user)) return no(c, 503, 'not_available');
+  await activeMember(c.env, user.id);
+  return c.json(await telegramSetup(c.env, user.id));
 }));
 
 channels.post('/telegram/link/:uid/confirm', venture(async (c, user) => {

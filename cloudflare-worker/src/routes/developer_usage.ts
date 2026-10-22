@@ -5,17 +5,20 @@
  *                                      → { recorded, recorded_since, range, group, by, key, totals, groups[], next_cursor }
  *   GET /api/developer/usage/events   ?from&to&key&outcome&surface&operation&provider&connector&company&cursor=
  *                                      → { range, events[], next_cursor }: newest first, 100 a page
+ *   GET /api/developer/usage/keys     ?month=YYYY-MM
+ *                                      → { month, near_limit_percent, keys[] }: each key's cap, this month's
+ *                                        charge and the 80% / 100% flag (reads only; #2472 enforces)
  *
  * Signed in with a session (`requireAuth`). Every read is the caller's own
  * rows (`services/apiUsageReport.ts`); a `key=` that is not theirs answers 404
  * `unknown_key`, the same as a key that does not exist. Reads only, so a
- * support session may read them. No argument, result or provider cost is in
- * any response.
+ * support session may read them. No argument, result, provider cost or key
+ * secret is in any response.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { ReportInputError, usageEvents, usageReport } from '../services/apiUsageReport';
+import { ReportInputError, keyLimits, usageEvents, usageReport } from '../services/apiUsageReport';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 
@@ -45,4 +48,9 @@ developerUsage.get('/events', async (c) => {
     from: q.from, to: q.to, key: q.key, outcome: q.outcome, surface: q.surface, operation: q.operation,
     provider: q.provider, connector: q.connector, company: q.company, cursor: q.cursor,
   }));
+});
+
+developerUsage.get('/keys', async (c) => {
+  const user = await requireAuth(c);
+  return c.json(await keyLimits(c.env, user.id, { month: c.req.query('month') }));
 });
