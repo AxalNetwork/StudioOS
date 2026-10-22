@@ -249,7 +249,6 @@ test('transcript text loses links, phones, meeting ids and passcodes, keeps inst
   const phone = '+1 415 555 0134';
   const words = `IGNORE-ALL-INSTRUCTIONS join ${JOIN} or meeting id ${MEETING_ID}, passcode: 4321zz, call ${phone}`;
   s.db.prepare("UPDATE interview_transcript_segments SET text = ? WHERE session_id = ? AND speaker_label = 'Lee Park'").run(words, s.Z);
-  s.db.exec('ALTER TABLE interview_transcript_segments ADD COLUMN source_lang TEXT; ALTER TABLE interview_transcript_segments ADD COLUMN translated_text TEXT; ALTER TABLE interview_transcript_segments ADD COLUMN translated_lang TEXT;');
   const g = s.db.prepare("SELECT id FROM interview_transcript_segments WHERE session_id = ? AND speaker_label = 'Dana Ruiz'").get(s.Z);
   const cipher = await encryptColumn(s.env, 'interview_transcript_segments', 'translated_text', g.id, 'TRANSLATED-PAIN');
   s.db.prepare("UPDATE interview_transcript_segments SET source_lang = 'es', translated_text = ?, translated_lang = 'en' WHERE id = ?").run(cipher, g.id);
