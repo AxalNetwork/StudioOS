@@ -42,6 +42,7 @@ import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validatio
 import type { Env, User } from '../types';
 import type { SCOPES } from './oauth';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
+import { METERING_POLICY, MeteringRefused, listed, meteredCall, quoteFor, toolOperation, type MeteringPolicy } from '../services/metering';
 import {
   ToolRefused, grantCompany, grantIdOf, grantUser, lastUsedKey, logToolCall, withinGrantLimit, type GrantProps,
 } from './grants';
@@ -180,8 +181,16 @@ export async function listedTools(env: Env, props: GrantProps, scope: readonly s
   return { tools: REGISTRY.filter((_, i) => ok[i]), refusal: null };
 }
 
-/** Run one tool call under the grant's checks. Exported for tests. */
-export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = []) {
+/**
+ * Run one tool call under the grant's checks. Exported for tests.
+ *
+ * D844: a tool the metering policy prices above 0 runs inside `meteredCall`,
+ * after every check above it passed, so a refused call holds nothing. Its
+ * price is the policy's, never the arguments'. v1 prices every tool at 0, so
+ * no member's call changes; `policy` is the server's own, and only tests pass
+ * another.
+ */
+export async function callTool(env: Env, props: GrantProps, grantId: string | null, tool: McpTool, args: Record<string, unknown>, scope: readonly string[] = [], policy: MeteringPolicy = METERING_POLICY) {
   const executionId = newExecutionId();
   const started = Date.now();
   let user: Awaited<ReturnType<typeof grantUser>> | null = null;
@@ -224,7 +233,15 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
       }
     }
     stage = 'run';
-    const result = await tool.run({ env, props, user, companies, company, args, connected });
+    const operation = toolOperation(tool.name);
+    const priced = listed(operation, policy);
+    if (!priced) console.warn('[mcp] tool has no metering price:', tool.name);
+    const quote = priced ? quoteFor(operation, 1, policy) : 0;
+    const runTool = () => tool.run({ env, props, user: user!, companies, company, args, connected });
+    // D843 + D844: the hold is keyed by this call's execution id, the same id its usage row carries.
+    const result = quote > 0
+      ? (await meteredCall(env, { userId: user.id, executionId, operation, quoteMicrousd: quote, pricingVersion: policy.version }, runTool)).value
+      : await runTool();
     if (grantId && env.OAUTH_KV) {
       await env.OAUTH_KV.put(lastUsedKey(grantId), new Date().toISOString(), { expirationTtl: 31 * 86_400 }).catch(() => {});
     }
@@ -239,6 +256,11 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
     if (e instanceof ToolError) {
       await log('refused', toolErrorCategory(e.status));
       return text({ error: e.sentence, code: e.code, status: e.status }, true, executionId);
+    }
+    if (e instanceof MeteringRefused) {
+      // Every metering refusal is the AI token ledger's (no tokens, the member's limit, a pause or a hold in review): one category.
+      await log('refused', 'insufficient_tokens');
+      return text({ error: e.sentence, code: e.code }, true, executionId);
     }
     console.error('[mcp] tool failed:', tool.name, (e as Error)?.message);
     await log('error', 'internal');
