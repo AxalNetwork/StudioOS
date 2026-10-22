@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Check, ChevronDown, Plus } from 'lucide-react';
-import { api } from '../../lib/api';
 import { connectorsApi } from '../../lib/api/connectors';
 import { BrandIcon, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, VerifiedBadge, usePhoneWidth } from '../../ui';
 import { BTN, INPUT } from './AccountCenter';
@@ -160,43 +159,6 @@ export function ConnectorCard({ p, onNotify, onUnnotify, busy, keysHref: keys = 
       {p.why && <span className="text-[11.5px] leading-snug text-axal-violet-deep dark:text-violet-300">{p.why}</span>}
       {keys && <Link to={keys} className={`${BTN.link} relative z-10 self-start text-[11.5px]`} data-testid={`connector-keys-link-${p.key}`}>Add its keys in Integration keys</Link>}
     </article>
-  );
-}
-
-function TelegramCard() {
-  const [channels, setChannels] = useState(null);
-  const [state, setState] = useState({ requested: false, error: '' });
-  useEffect(() => {
-    let live = true;
-    api.telegramJoinChannels().then((r) => { if (live) setChannels(r || { channels: [] }); }, () => { if (live) setChannels({ channels: [], failed: true }); });
-    return () => { live = false; };
-  }, []);
-  const def = (channels?.channels || []).find((c) => c.slug === channels?.default_slug) || (channels?.channels || [])[0];
-  const request = async () => {
-    setState({ requested: false, error: '' });
-    try {
-      await api.telegramJoinRequest({ channel_slug: def.slug });
-      setState({ requested: true, error: '' });
-    } catch (e) {
-      setState({ requested: false, error: e?.code === 'slack_webhook_unconfigured' ? "The studio's Slack inbox is not set up on this deployment yet. Ask an admin directly." : (e?.message || 'The request could not be sent.') });
-    }
-  };
-  return (
-    <div className={`${TONE_CLS} flex flex-col gap-2 p-3.5`} data-testid="connector-community-telegram">
-      <span className="flex items-center gap-2.5">
-        <BrandIcon provider="telegram" name="Telegram" />
-        <span className="text-sm font-bold text-axal-ink dark:text-gray-100">Telegram · Axal VC channels</span>
-      </span>
-      <span className="text-[12.5px] leading-snug text-axal-ink/80 dark:text-gray-300">
-        Ask for the invite link to your role&apos;s private channel{def ? <> (<b>{def.label}</b>)</> : ''}. An admin sends it to you.
-      </span>
-      {state.error && <span role="alert" className="text-[12px] text-red-700 dark:text-red-300">{state.error}</span>}
-      <div className="mt-auto">
-        {state.requested
-          ? <span className="text-[12px] text-emerald-700 dark:text-emerald-300">Requested. An admin will message you the link.</span>
-          : <button type="button" className={BTN.ghost} disabled={!def} onClick={request} title={def ? undefined : 'No channel is open to your role.'}>Request to join</button>}
-      </div>
-    </div>
   );
 }
 
@@ -481,12 +443,6 @@ export function ConnectorsView({ data, initialTab = 'yours', initialFilter = NO_
           </section>
         );
       })}
-      {noFilter && (
-        <section className="flex flex-col gap-2.5">
-          <h3 className="text-[15px] font-bold text-axal-ink dark:text-gray-100">Community</h3>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"><TelegramCard /></div>
-        </section>
-      )}
     </>
   );
 
