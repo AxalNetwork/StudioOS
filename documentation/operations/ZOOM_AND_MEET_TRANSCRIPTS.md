@@ -49,8 +49,28 @@ that turns out different is a one-line PR.
    - `cloud_recording:read:recording`: comes with the transcript event;
    - `zoomapp:inmeeting`: comes with a General app.
 
-   Add none beyond these eight. The callback compares the grant with the registry
-   (`cloudflare-worker/src/integrations/registry.ts`) and refuses a wider one.
+   Add none beyond these eight, and the ninth below. The callback compares the
+   grant with the registry (`cloudflare-worker/src/integrations/registry.ts`)
+   and refuses a wider one.
+
+   **The notetaker (D886, #2582): one more scope and one feature.**
+   - **The order matters.** Add them only **after** the PR that lists
+     `user:read:token` in the registry has deployed. A grant carrying a scope
+     the registry does not list is refused (`scope_overreach`) for every
+     founder. A grant without it still connects; the notetaker then asks the
+     founder to reconnect Zoom (`zoom_obf_scope_missing`).
+   - **Scope** `user:read:token`: mint the notetaker's OBF ("on behalf of")
+     join token. Zoom requires it since 2026-03-02 for a Meeting SDK app
+     joining a meeting outside Axal's Zoom account. Zoom mints it only while
+     the founder is in the call, so the notetaker says "Join the call first;
+     the notetaker follows."
+   - **Feature**: Features → Embed → **Meeting SDK**, on the same General app.
+     *Unverified*: whether Zoom gives the SDK its own key and secret, or the
+     app's Client ID and Secret sign the SDK's JWT. If separate, they are
+     stored as `ZOOM_SDK_KEY` and `ZOOM_SDK_SECRET` (step 5) with the B2
+     runtime (#2580).
+   - **Founders reconnect once.** A grant made before the scope was added does
+     not carry it.
 4. **Events.** Features → Access → Event subscription:
    - Event notification endpoint: `https://axal.vc/api/channels/zoom/webhook`.
    - Events: `meeting.ended`, `recording.transcript_completed`,

@@ -1237,7 +1237,7 @@ test('Zoom is a Connectors provider: PKCE on the authorize URL, Basic auth on th
   assert.equal(desc.tier, 'free');
   assert.deepEqual(desc.oauth_scopes, ['meeting:write:meeting', 'meeting:delete:meeting',
     'cloud_recording:read:list_recording_files', 'meeting:read:meeting', 'meeting:read:list_past_instances', 'user:read:user',
-    'cloud_recording:read:recording', 'zoomapp:inmeeting']);
+    'cloud_recording:read:recording', 'zoomapp:inmeeting', 'user:read:token']);
   assert.equal(CONNECTOR_METADATA.zoom.permissions.length, desc.oauth_scopes!.length, 'one plain sentence per scope');
   assert.equal(CONNECTOR_METADATA.zoom.category, 'Messaging');
 
