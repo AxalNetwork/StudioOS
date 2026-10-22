@@ -164,7 +164,7 @@ export async function findingsFor(
 }
 
 /** Every finding kind whose module is `slug`, by its payload-free slug. */
-export function findingKindsOf(slug: 'ideal-customer-profile' | 'market-intelligence' | 'demand-signals'): FindingKind[] {
+export function findingKindsOf(slug: 'ideal-customer-profile' | 'market-intelligence' | 'demand-signals' | 'customer-research'): FindingKind[] {
   return (Object.keys(FINDING_KINDS) as FindingKind[]).filter((k) => FINDING_KINDS[k].slug({}) === slug);
 }
 
