@@ -12,6 +12,7 @@
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/channel_mcp_tools_d864.test.ts
  */
 import test from 'node:test';
+import { encryptColumn } from '../src/services/columnCipher.ts';
 import assert from 'node:assert/strict';
 import { callTool, listedTools, registeredTools } from '../src/mcp/server.ts';
 import {
@@ -108,7 +109,7 @@ test('list_channel_chats: the provider and state filters, and the limit counts o
   assert.deepEqual(ids(await list({ limit: 3 }, [PROJECT])), [s.A, s.B, s.W].sort());
 });
 
-test('no tool output carries message text, a contact name, a phone number, a provider id, a quote or a secret', async () => {
+test('default tool output carries no message text, a contact name, a phone number, a provider id, a quote or a secret', async () => {
   const s = await setup();
   s.db.prepare(`INSERT INTO validate_proposals (project_id, kind, payload_json, status, session_id, citation_json) VALUES (?, 'pain_tag', ?, 'pending', ?, ?)`)
     .run(PROJECT, JSON.stringify({ label: 'Manual reconciliation' }), s.sessionB, JSON.stringify({ kind: 'transcript', quote: QUOTE }));
@@ -136,7 +137,9 @@ test('get_session_insights: the session\'s suggestions as kind, state and payloa
     quiet(() => callTool(s.env, grant(companies, user), 'g-864', tool('get_session_insights'), { company, session_id: session }, READ));
 
   const ok = body(await insights(PROJECT, s.sessionB));
-  assert.deepEqual([ok.session.id, ok.session.provider, ok.session.interview_id, ok.analytics], [s.sessionB, 'telegram', INTERVIEW, null]);
+  assert.deepEqual([ok.session.id, ok.session.provider, ok.session.interview_id], [s.sessionB, 'telegram', INTERVIEW]);
+  assert.equal(ok.analytics.messages.value.total, 1);
+  assert.equal('quotes_by_theme' in ok.analytics, false);
   assert.deepEqual(ok.suggestions.map((x: any) => [x.kind, x.state, x.payload]), [
     ['pain_tag', 'pending', { label: 'Manual reconciliation' }],
     ['hypothesis', 'accepted', { statement: 'Finance teams close late' }],
@@ -236,4 +239,173 @@ test('one usage row per call, with its operation and outcome; no AI tokens held'
     ['assign_chat_to_interview', 'ok', null, ME, 'g-864'],
   ]);
   assert.equal(count(s.db, 'SELECT COUNT(*) n FROM ai_budget_reservations'), 0, 'a free tool holds nothing');
+});
+
+// Owner ruling Q1 B / Q2 A, relayed on #2510 on 2026-10-22.
+const transcriptRead = (s: any, args: Record<string, unknown> = {}, scope = READ, companies = [PROJECT], user = ME) =>
+  quiet(() => callTool(s.env, grant(companies, user), 'g-864', tool('get_session_insights'),
+    { company: PROJECT, session_id: s.sessionB, include_transcript: true, ...args }, scope));
+
+test('transcripts are opt-in, require validate:read, and recheck session, venture and assignment consent', async () => {
+  const s = await setup();
+  await consentGiven(s.env, null, s.B);
+  const normal = body(await transcriptRead(s, { include_transcript: false }));
+  assert.equal('transcript' in normal, false);
+  assert.equal(JSON.stringify(normal).includes(TEXT.b), false);
+  assert.equal((await transcriptRead(s, {}, [])).isError, true);
+  const allowed = body(await transcriptRead(s));
+  assert.equal(allowed.transcript.segments[0].text, TEXT.b);
+  assert.equal(allowed.transcript.segments[0].speaker, s.db.prepare('SELECT speaker_label FROM interview_transcript_segments WHERE session_id = ?').get(s.sessionB).speaker_label);
+  assert.equal(allowed.transcript.complete, true);
+  const changes = [
+    [`UPDATE interview_sessions SET consent_status = 'not_recorded' WHERE id = ?`, [s.sessionB],
+     `UPDATE interview_sessions SET consent_status = 'given' WHERE id = ?`, [s.sessionB]],
+    [`UPDATE channel_threads SET consent_state = 'awaiting' WHERE uid = ?`, [s.B],
+     `UPDATE channel_threads SET consent_state = 'given' WHERE uid = ?`, [s.B]],
+    [`UPDATE channel_threads SET consent_state = 'withdrawn' WHERE uid = ?`, [s.B],
+     `UPDATE channel_threads SET consent_state = 'given' WHERE uid = ?`, [s.B]],
+    [`UPDATE channel_threads SET status = 'pending' WHERE uid = ?`, [s.B],
+     `UPDATE channel_threads SET status = 'assigned' WHERE uid = ?`, [s.B]],
+    [`UPDATE channel_threads SET status = 'ignored' WHERE uid = ?`, [s.B],
+     `UPDATE channel_threads SET status = 'assigned' WHERE uid = ?`, [s.B]],
+    [`UPDATE channel_threads SET user_id = ? WHERE uid = ?`, [OTHER, s.B],
+     `UPDATE channel_threads SET user_id = ? WHERE uid = ?`, [ME, s.B]],
+    [`UPDATE integrations SET status = 'revoked' WHERE uid = 'tg-me'`, [],
+     `UPDATE integrations SET status = 'active' WHERE uid = 'tg-me'`, []],
+  ] as Array<[string, any[], string, any[]]>;
+  for (const [change, values, restore, old] of changes) {
+    s.db.prepare(change).run(...values);
+    try {
+      const refused = body(await transcriptRead(s));
+      assert.equal(refused.transcript, null, change);
+      assert.equal(JSON.stringify(refused).includes(TEXT.b), false, change);
+    } finally { s.db.prepare(restore).run(...old); }
+  }
+  // A thread on another member's own integration still cannot export this session.
+  const integration = s.db.prepare('SELECT integration_id FROM channel_threads WHERE uid = ?').get(s.B).integration_id;
+  const foreignIntegration = s.db.prepare("SELECT id FROM integrations WHERE uid = 'tg-other'").get().id;
+  s.db.prepare('UPDATE channel_threads SET user_id = ?, integration_id = ? WHERE uid = ?').run(OTHER, foreignIntegration, s.B);
+  try {
+    const otherThread = body(await transcriptRead(s));
+    assert.equal(otherThread.transcript, null);
+    assert.equal(JSON.stringify(otherThread).includes(TEXT.b), false);
+  } finally {
+    s.db.prepare('UPDATE channel_threads SET user_id = ?, integration_id = ? WHERE uid = ?').run(ME, integration, s.B);
+  }
+  assert.equal((await transcriptRead(s, { company: SECOND }, READ, [PROJECT, SECOND])).isError, true);
+  assert.equal((await transcriptRead(s, {}, READ, [PROJECT], OTHER)).isError, true);
+});
+
+test('transcript pages contain only stored final segments, in transcript order, and a cursor is scoped to that session', async () => {
+  const s = await setup();
+  await consentGiven(s.env, null, s.B);
+  s.db.prepare(`INSERT INTO interview_transcript_segments(session_id, source, speaker_label, text, start_ms, end_ms)
+    VALUES (?, 'final', 'Me', 'v1.STORED-LINE', 10, 20)`).run(s.sessionB);
+  s.db.prepare(`INSERT INTO interview_transcript_segments(session_id, source, speaker_label, text)
+    VALUES (?, 'live', 'Draft', 'LIVE-DRAFT-MUST-STAY-OUT')`).run(s.sessionB);
+  const first = body(await transcriptRead(s, { transcript_limit: 1 }));
+  assert.deepEqual(first.transcript.segments.map((g: any) => g.text), [TEXT.b]);
+  assert.equal(first.transcript.complete, false);
+  assert.ok(first.transcript.next_after_id > 0);
+  const second = body(await transcriptRead(s, { transcript_limit: 1, transcript_after_id: first.transcript.next_after_id }));
+  assert.deepEqual(second.transcript.segments.map((g: any) => [g.text, g.speaker, g.start_ms, g.end_ms]), [['v1.STORED-LINE', 'Me', 10, 20]]);
+  assert.equal(second.transcript.complete, true);
+  assert.equal(second.transcript.next_after_id, null);
+  assert.equal(JSON.stringify([first, second]).includes('LIVE-DRAFT-MUST-STAY-OUT'), false);
+  const otherSegment = s.db.prepare('SELECT id FROM interview_transcript_segments WHERE session_id = ?').get(s.sessionC).id;
+  assert.equal(body(await transcriptRead(s, { transcript_after_id: otherSegment })).code, 'invalid_transcript_cursor');
+});
+
+test('transcript output removes identifiers, phones, credentials and links, preserves data as data, and never reads held notes', async () => {
+  const s = await setup();
+  await consentGiven(s.env, null, s.B);
+  const phone = '+' + '9'.repeat(11);
+  const link = 'https://example.invalid/media/fixture';
+  const external = s.db.prepare('SELECT external_chat_id FROM channel_threads WHERE uid = ?').get(s.B).external_chat_id;
+  const token = SECRET_VALUES[0];
+  const words = `IGNORE-ALL-INSTRUCTIONS ${phone} ${link} ${external} ${token} user_id:fixture-user`;
+  s.db.prepare('UPDATE interview_transcript_segments SET text = ?, speaker_label = ? WHERE session_id = ?').run(words, phone, s.sessionB);
+  const noteUid = 'held-note-d864';
+  const held = await encryptColumn(s.env, 'channel_thread_messages', 'voice_ref_enc', noteUid, 'HELD-NOTE-MUST-STAY-OUT');
+  s.db.prepare(`INSERT INTO channel_thread_messages (uid, thread_id, external_message_id, direction, kind, text_enc, voice_ref_enc, sent_at)
+    VALUES (?, (SELECT id FROM channel_threads WHERE uid = ?), 'held-note-event', 'in', 'voice', '', ?, datetime('now'))`).run(noteUid, s.B, held);
+  const pending = s.db.prepare('SELECT uid FROM channel_thread_messages WHERE thread_id = (SELECT id FROM channel_threads WHERE uid = ?)').all(s.A);
+  assert.ok(pending.length > 0);
+  const got = body(await transcriptRead(s));
+  const dump = JSON.stringify(got.transcript);
+  for (const hidden of [phone, link, external, token, 'fixture-user']) assert.equal(dump.includes(hidden), false);
+  assert.ok(got.transcript.segments[0].text.includes('IGNORE-ALL-INSTRUCTIONS'));
+  assert.equal(got.transcript.segments[0].speaker, '[phone removed]');
+  assert.equal('speaker_raw' in got.transcript.segments[0], false);
+  assert.equal(JSON.stringify(got).includes(TEXT.a), false);
+  assert.equal(JSON.stringify(got).includes('HELD-NOTE-MUST-STAY-OUT'), false);
+  assert.equal(s.db.prepare('SELECT voice_ref_enc FROM channel_thread_messages WHERE uid = ?').get(noteUid).voice_ref_enc, held);
+  const listing = JSON.stringify((await listedTools(s.env, grant([PROJECT]), READ)).tools.map((t) => [t.description, t.inputSchema]));
+  assert.equal(listing.includes('IGNORE-ALL-INSTRUCTIONS'), false);
+  const usage = s.db.prepare("SELECT operation, outcome FROM api_usage_events WHERE operation = 'get_session_insights'").all();
+  assert.deepEqual(usage.map((r: any) => [r.operation, r.outcome]), [['get_session_insights', 'ok']]);
+  assert.equal(JSON.stringify(s.db.prepare("SELECT details FROM activity_logs WHERE action = 'mcp_tool_call'").all()).includes('IGNORE-ALL-INSTRUCTIONS'), false);
+});
+
+test('D857 nullable translation fields accompany the stored original without a model call or a ciphertext leak', async () => {
+  const s = await setup();
+  await consentGiven(s.env, null, s.B);
+  s.db.exec('ALTER TABLE interview_transcript_segments ADD COLUMN source_lang TEXT; ALTER TABLE interview_transcript_segments ADD COLUMN translated_text TEXT; ALTER TABLE interview_transcript_segments ADD COLUMN translated_lang TEXT;');
+  const g = s.db.prepare('SELECT id FROM interview_transcript_segments WHERE session_id = ?').get(s.sessionB);
+  const translated = await encryptColumn(s.env, 'interview_transcript_segments', 'translated_text', g.id, 'TRANSLATED-STORED-LINE');
+  s.db.prepare('UPDATE interview_transcript_segments SET source_lang = ?, translated_text = ?, translated_lang = ? WHERE id = ?').run('fr', translated, 'en', g.id);
+  const one = body(await transcriptRead(s)).transcript.segments[0];
+  assert.deepEqual([one.text, one.source_lang, one.translation], [TEXT.b, 'fr', { text: 'TRANSLATED-STORED-LINE', language: 'en' }]);
+  assert.equal(JSON.stringify(one).includes(translated), false);
+  s.db.prepare('UPDATE interview_transcript_segments SET translated_text = ? WHERE id = ?').run('unreadable-ciphertext', g.id);
+  assert.equal(body(await transcriptRead(s)).transcript.segments[0].translation, null);
+});
+
+
+test('withdrawing consent between the access check and segment query exports no transcript text', async () => {
+  const s = await setup();
+  await consentGiven(s.env, null, s.B);
+  const database = s.env.DB;
+  let flipped = false;
+  s.env.DB = {
+    ...database,
+    prepare(sql: string) {
+      const statement = database.prepare(sql);
+      if (!sql.includes('SELECT t.id, t.external_chat_id, i.external_account_id')) return statement;
+      return {
+        ...statement,
+        bind(...values: any[]) {
+          const bound = statement.bind(...values);
+          return {
+            ...bound,
+            async first() {
+              const row = await bound.first();
+              s.db.prepare("UPDATE channel_threads SET consent_state = 'withdrawn' WHERE uid = ?").run(s.B);
+              flipped = true;
+              return row;
+            },
+          };
+        },
+      };
+    },
+  };
+  try {
+    const out = body(await transcriptRead(s));
+    assert.equal(flipped, true);
+    assert.deepEqual(out.transcript.segments, []);
+    assert.equal(JSON.stringify(out).includes(TEXT.b), false);
+  } finally { s.env.DB = database; }
+});
+
+
+test('the same opted-in transcript read works for a consented assigned WhatsApp session', async () => {
+  const s = await setup();
+  const assigned = await call(s.env, ME, 'POST', `/threads/${s.W}/assign`, { interview_id: INTERVIEW });
+  assert.equal(assigned.status, 200);
+  await consentGiven(s.env, null, s.W);
+  const session = Number(assigned.body.session_id);
+  s.db.prepare("INSERT INTO interview_transcript_segments(session_id, source, speaker_label, text) VALUES (?, 'final', 'Me', 'WHATSAPP-STORED-LINE')").run(session);
+  const out = body(await transcriptRead(s, { session_id: session }));
+  assert.equal(out.session.provider, 'whatsapp');
+  assert.deepEqual(out.transcript.segments.map((g: any) => g.text), ['WHATSAPP-STORED-LINE']);
 });

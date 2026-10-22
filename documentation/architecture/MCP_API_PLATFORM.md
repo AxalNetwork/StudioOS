@@ -226,17 +226,18 @@ one updates this section in the same PR.
 | Tool | Scope | Input | Output |
 |---|---|---|---|
 | `list_channel_chats` | `validate:read` | `{ provider?: 'telegram'\|'whatsapp', state?: 'pending'\|'assigned'\|'ignored', limit? (1–200, default 50) }` | `{ chats: [ { id, provider, state, consent\|null, language: null, messages, notes_waiting, last_activity_at, company: {id,name}\|null, interview_id\|null, session_id\|null } ] }` |
-| `get_session_insights` | `validate:read` | `{ company, session_id }` | `{ session: { id, interview_id, provider, status, consent, digest }, suggestions: [ { id, kind, state, payload, created_at, decided_at } ], analytics: null }` |
+| `get_session_insights` | `validate:read` | `{ company, session_id, include_transcript?: boolean, transcript_limit?: 1–200 (default 100), transcript_after_id?: number }` | `{ session: { id, interview_id, provider, status, consent, digest }, suggestions: [ { id, kind, state, payload, created_at, decided_at } ], analytics, transcript?: { segments: [{ id, speaker, text, start_ms, end_ms, source_lang, translation: {text, language}\|null }], next_after_id, complete }\|null }` |
 | `assign_chat_to_interview` | `validate:write` | `{ company, chat, interview_id }` | `{ chat, interview_id, session_id, moved, notes_queued, consent\|null }` |
 
-- `id` and `chat` are Axal's chat uid. A tool never returns:
-  - message text, a transcript, the digest or a citation quote;
-  - a contact's name, a phone number or a provider id.
+- `id` and `chat` are Axal's chat uid. The default read returns no message text, transcript, digest or citation quote.
+- Owner ruling Q1 B / Q2 A (2026-10-22): `include_transcript: true` returns only stored final segments while both the session and its assigned thread have current consent, on an active connection. Otherwise `transcript` is `null`. It never reads pending messages or fetches held notes.
+- Speaker labels accompany the original text; phone numbers, provider identifiers, credentials and links are removed from both. Only explicit segment fields leave the Worker, never provider references or media URLs. Follow `next_after_id` until `complete` is true; a cursor from another session is refused.
+- No MTProto user-session server is connected. Text is tool-result data and never changes a tool description or an instruction field.
 - Who sees what:
   - an assigned chat is listed only while its venture is in the grant and readable;
   - a pending or ignored chat is the member's own, with `company` null;
   - insights are read only for a chat session the member made in that company. Any other session is `404 session_not_found`.
-- `language` waits on D857, and `analytics` on D858. Both are `null` until those land.
+- Chat `language` waits on D857. D858 analytics are read through the shared service, without citation quotes. Optional transcript translations use D857’s nullable `source_lang`, `translated_text` and `translated_lang` fields when present; unreadable or absent translations are `null`, never ciphertext.
 - Assignment is the inbox's own `assignThread`, with the route's refusal codes. It records no consent and no quote consent.
 
 ### Metering policy (D844; S10)
@@ -370,8 +371,10 @@ only when that base does.
 - **2026-10-22 (S08, #2510, D864).** The Telegram MCP connector is Axal's own
   tools over the inbox: `list_channel_chats`, `get_session_insights` and
   `assign_chat_to_interview` (§3). No MTProto user session is ever asked for
-  or connected (D864 §1). They return structure only until the owner answers
-  #2510's question 1.
+  or connected (D864 §1). The initial read was structured only, pending the
+  owner ruling recorded below.
+
+- **2026-10-22 (S08, D864 owner follow-up).** #2510 Q1 B / Q2 A: `get_session_insights` 1.1.0 adds an explicit, paged transcript read for consented assigned chats, speaker labels, nullable stored translations, and privacy redaction. Reads D858 analytics through its existing service. Third-party MTProto user sessions remain excluded.
 
 ## 9. Known limitations
 
