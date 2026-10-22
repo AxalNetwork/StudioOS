@@ -25,11 +25,15 @@ export interface GrantProps {
   redirectUri: string | null;
   /** Seconds since the epoch: a session floor (`jwt_min_iat`) raised after this ends the grant. */
   grantedAt: number;
+  /** D842 (#2470): set when the principal is a member API key (`clientId` is `apikey:<uid>`), never for an OAuth grant. */
+  keyUid?: string;
 }
 
 export class ToolRefused extends Error {
   sentence: string;
-  constructor(sentence: string) { super(sentence); this.sentence = sentence; }
+  /** D842: the structured code a caller can branch on (plan §3); `refused` when none more exact applies. */
+  code: string;
+  constructor(sentence: string, code = 'refused') { super(sentence); this.sentence = sentence; this.code = code; }
 }
 
 type UserRow = Pick<User, 'id' | 'role' | 'founder_id' | 'spinout_lab_active'> & { email: string | null; is_active: number | null; jwt_min_iat: number | null; deletion_requested_at: string | null };
@@ -83,21 +87,53 @@ export const lastUsedKey = (grantId: string) => `mcp_used:${grantId}`;
 /** Per-grant limit: calls a minute. */
 export const GRANT_CALLS_PER_MINUTE = 60;
 
-/** Count one call against the grant; false once it is over the minute's limit. */
-export async function withinGrantLimit(env: Env, grantId: string, now = Date.now()): Promise<boolean> {
-  const key = `mcp_rl:${grantId}:${Math.floor(now / 60_000)}`;
+/**
+ * Count one call against `limitId`; false once it is over the minute's limit.
+ * An OAuth grant is counted by its grant id, 60 a minute; a member API key
+ * (D842) by `key:<uid>`, at the key's own `rate_per_minute`, so its counter is
+ * `mcp_rl:key:<uid>:<minute>`.
+ */
+export async function withinGrantLimit(env: Env, limitId: string, now = Date.now(), perMinute = GRANT_CALLS_PER_MINUTE): Promise<boolean> {
+  const key = `mcp_rl:${limitId}:${Math.floor(now / 60_000)}`;
   try {
     const n = Number((await env.RATE_LIMITS.get(key)) || 0) + 1;
     await env.RATE_LIMITS.put(key, String(n), { expirationTtl: 120 });
-    return n <= GRANT_CALLS_PER_MINUTE;
+    return n <= perMinute;
   } catch {
     return false; // fail closed: an assistant's calls are not worth an unmetered window
   }
 }
 
+/** D842: the key a member API key's requests are counted under. */
+export const keyLimitId = (uid: string) => `key:${uid}`;
+
+/** D842: failed key lookups an IP may make in a minute before every key it sends is refused. */
+export const KEY_FAILURES_PER_MINUTE = 10;
+const keyFailureKey = (ip: string, now: number) => `mcp_keyfail:${ip}:${Math.floor(now / 60_000)}`;
+
+/** True once this IP has failed `KEY_FAILURES_PER_MINUTE` key lookups this minute. Fails closed. */
+export async function keyFailuresExceeded(env: Env, ip: string, now = Date.now()): Promise<boolean> {
+  try { return Number((await env.RATE_LIMITS.get(keyFailureKey(ip, now))) || 0) >= KEY_FAILURES_PER_MINUTE; } catch { return true; }
+}
+
+/** Count one failed key lookup against the IP. Best effort: the check above fails closed. */
+export async function recordKeyFailure(env: Env, ip: string, now = Date.now()): Promise<void> {
+  const key = keyFailureKey(ip, now);
+  try {
+    const n = Number((await env.RATE_LIMITS.get(key)) || 0) + 1;
+    await env.RATE_LIMITS.put(key, String(n), { expirationTtl: 120 });
+  } catch { /* the check fails closed */ }
+}
+
 /** One activity_logs line per call: tool, company, client, outcome. Never an argument or a result. */
-export async function logToolCall(env: Env, user: { id: number; email?: string | null }, entry: { tool: string; company: number | null; client: string | null; outcome: 'ok' | 'refused' | 'error' | 'rate_limited' }) {
-  await logActorAct(env, user, 'mcp_tool_call', { tool: entry.tool, company_id: entry.company, client: entry.client, outcome: entry.outcome }, entry.company);
+export type ToolOutcome = 'ok' | 'refused' | 'error' | 'rate_limited' | 'timeout';
+export async function logToolCall(env: Env, user: { id: number; email?: string | null }, entry: { tool: string; company: number | null; client: string | null; outcome: ToolOutcome; keyUid?: string | null }) {
+  await logActorAct(env, user, 'mcp_tool_call', {
+    tool: entry.tool, company_id: entry.company, client: entry.client, outcome: entry.outcome,
+    // D842: a key's call names the key's uid, never the key itself. The call's
+    // execution id is in its result's `_meta`; #2465's usage row records it.
+    ...(entry.keyUid ? { api_key_uid: entry.keyUid } : {}),
+  }, entry.company);
 }
 
 /** Revoke every assistant grant a user holds: on "sign out everywhere", re-pairing, or a deletion request. Best effort. */

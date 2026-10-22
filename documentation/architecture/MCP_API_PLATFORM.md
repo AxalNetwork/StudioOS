@@ -165,13 +165,38 @@ one updates this section in the same PR.
   - `POST /api/developer/keys/:uid/revoke` returns `{ key }`.
   - `POST /api/developer/keys/:uid/rotate` returns `201 { key, secret, replaced: {uid, revoked_at} }`. The new key copies the old one's name, scopes, companies and limit; the old one is revoked.
 - **Create and change refusals** (400 unless noted): `invalid_body`, `invalid_name`, `invalid_scopes` (not grantable), `invalid_companies` (not owned), `invalid_expiry`, `invalid_limit`; `409 too_many_keys` (25 live); `409 not_live`; `403` in a support session; `401 session_required` when a key tries to manage keys.
-- **Errors when a key is used** (short; never say whether a key exists):
-  - `401 invalid_key`, `401 revoked_key`, `401 expired_key`;
-  - `403 insufficient_scope`;
-  - `402 insufficient_tokens`;
-  - `429 rate_limited`, with `Retry-After`.
+- **Errors when a key is used** (short; never say whether a key exists).
+  D842 (#2470) split them by where they happen:
+  - **On the request** (HTTP status, body `{ error: <code>, message }`):
+    - `401 invalid_key`, `401 revoked_key`, `401 expired_key`, each with
+      `WWW-Authenticate: Bearer error="invalid_token", error_description="<code>"`.
+      A wrong secret, an unknown id and a malformed key all answer
+      `invalid_key`. A "sign out everywhere" after the key was made answers
+      `revoked_key`.
+    - `429 rate_limited` with `Retry-After: 60`. It answers past the key's
+      `rate_per_minute`, counted per request. It also answers for an IP that
+      failed 10 key lookups this minute, refused before the lookup, and when
+      that count cannot be read (fail closed).
+  - **On a tool call** (HTTP 200, a JSON-RPC result with `isError: true`).
+    The text is `{ error: <sentence>, code, …extra }`, and `_meta` carries
+    `vc.axal/execution_id`. The codes are:
+    - `insufficient_scope`: the key or token lacks the tool's scope. A tool the
+      principal is not listed answers `NOT_AVAILABLE`, as an unknown name does.
+    - `insufficient_tokens`, with `status: 402`, `needed_microusd`,
+      `available_microusd` and `add_tokens_href: "/pricing/products#token-packs"`.
+      Both amounts are `null` until #2466's hold reports them, never 0.
+    - `spend_limit`, `ai_paused`, `budget_review`: #2466's codes, passed
+      through with their `status`.
+    - `rate_limited`: an OAuth grant past 60 calls a minute.
+    - `timeout`: past the tool's limit, 20 s unless the tool sets `timeoutMs`.
+      The tool's `AbortSignal` aborts, so a hold can be released.
+    - `unavailable`: our failure, an org cap or the kill switch.
+    - `refused`: any other check, such as a company outside the grant.
+  - Every successful call's `_meta` also carries `vc.axal/execution_id`, a
+    UUID per call. The tool receives it as `executionId`.
 - **Flag.** `API_KEYS_ENABLED`. When it is off, every route answers 404 and
-  `/mcp` refuses `axk_` tokens.
+  `/mcp` refuses `axk_` tokens with `401 invalid_key`. An `axk_` bearer is
+  never sent to the OAuth provider.
 
 ### Usage records (D843; S08) and reports (D845; S09)
 
@@ -226,17 +251,18 @@ one updates this section in the same PR.
 | Tool | Scope | Input | Output |
 |---|---|---|---|
 | `list_channel_chats` | `validate:read` | `{ provider?: 'telegram'\|'whatsapp', state?: 'pending'\|'assigned'\|'ignored', limit? (1–200, default 50) }` | `{ chats: [ { id, provider, state, consent\|null, language: null, messages, notes_waiting, last_activity_at, company: {id,name}\|null, interview_id\|null, session_id\|null } ] }` |
-| `get_session_insights` | `validate:read` | `{ company, session_id }` | `{ session: { id, interview_id, provider, status, consent, digest }, suggestions: [ { id, kind, state, payload, created_at, decided_at } ], analytics: null }` |
+| `get_session_insights` | `validate:read` | `{ company, session_id, include_transcript?: boolean, transcript_limit?: 1–200 (default 100), transcript_after_id?: number }` | `{ session: { id, interview_id, provider, status, consent, digest }, suggestions: [ { id, kind, state, payload, created_at, decided_at } ], analytics, transcript?: { segments: [{ id, speaker, text, start_ms, end_ms, source_lang, translation: {text, language}\|null }], next_after_id, complete }\|null }` |
 | `assign_chat_to_interview` | `validate:write` | `{ company, chat, interview_id }` | `{ chat, interview_id, session_id, moved, notes_queued, consent\|null }` |
 
-- `id` and `chat` are Axal's chat uid. A tool never returns:
-  - message text, a transcript, the digest or a citation quote;
-  - a contact's name, a phone number or a provider id.
+- `id` and `chat` are Axal's chat uid. The default read returns no message text, transcript, digest or citation quote.
+- Owner ruling Q1 B / Q2 A (2026-10-22): `include_transcript: true` returns only stored final segments while both the session and its assigned thread have current consent, on an active connection. Otherwise `transcript` is `null`. It never reads pending messages or fetches held notes.
+- Speaker labels accompany the original text; phone numbers, provider identifiers, credentials and links are removed from both. Only explicit segment fields leave the Worker, never provider references or media URLs. Follow `next_after_id` until `complete` is true; a cursor from another session is refused.
+- No MTProto user-session server is connected. Text is tool-result data and never changes a tool description or an instruction field.
 - Who sees what:
   - an assigned chat is listed only while its venture is in the grant and readable;
   - a pending or ignored chat is the member's own, with `company` null;
   - insights are read only for a chat session the member made in that company. Any other session is `404 session_not_found`.
-- `language` waits on D857, and `analytics` on D858. Both are `null` until those land.
+- Chat `language` waits on D857. D858 analytics are read through the shared service, without citation quotes. Optional transcript translations use D857’s nullable `source_lang`, `translated_text` and `translated_lang` fields when present; unreadable or absent translations are `null`, never ciphertext.
 - Assignment is the inbox's own `assignThread`, with the route's refusal codes. It records no consent and no quote consent.
 
 ### Call tools (D874; S13)
@@ -379,6 +405,17 @@ only when that base does.
     and report steps join as #2470, #2465 and #2466 merge.
   - The switch-on runbook is `documentation/operations/MCP_API_RUNBOOK.md`.
     Keys stay off until #2470 is deployed.
+- **2026-10-22 (S07).** D842 (#2470): `/mcp` accepts member API keys.
+  - **Principal.** A key resolves to the same `GrantProps` principal a grant
+    does, with `clientId` `apikey:<uid>`, so `callTool` re-checks it unchanged.
+  - **Limits.** Per key (`mcp_rl:key:<uid>`, at its `rate_per_minute`) and a
+    per-IP failure throttle (10/min).
+  - **Execution.** An execution id on every call, a per-tool timeout over an
+    `AbortSignal`, and structured `code`s on every tool error (§3).
+  - **Logging.** `last_used_at` is written. The activity line gains
+    `api_key_uid` for key calls only.
+  - **Fix.** `SCOPE_LABELS` gains D846's three read scopes.
+
 - **2026-10-22 (S09).** D845 (#2471):
   - The usage reports and the request history are on `main` with #2489 (they merged into its branch as #2494).
   - Scope 3 adds `GET /api/developer/usage/keys`: each key's cap, this month's charge, and the 80% and 100% flags. Key names label the key groups, and `key=` is checked against `member_api_keys`.
@@ -387,8 +424,10 @@ only when that base does.
 - **2026-10-22 (S08, #2510, D864).** The Telegram MCP connector is Axal's own
   tools over the inbox: `list_channel_chats`, `get_session_insights` and
   `assign_chat_to_interview` (§3). No MTProto user session is ever asked for
-  or connected (D864 §1). They return structure only until the owner answers
-  #2510's question 1.
+  or connected (D864 §1). The initial read was structured only, pending the
+  owner ruling recorded below.
+
+- **2026-10-22 (S08, D864 owner follow-up).** #2510 Q1 B / Q2 A: `get_session_insights` 1.1.0 adds an explicit, paged transcript read for consented assigned chats, speaker labels, nullable stored translations, and privacy redaction. Reads D858 analytics through its existing service. Third-party MTProto user sessions remain excluded.
 
 - **2026-10-22 (S13, #2521, D874).** The call tools: `list_meetings`, `get_meeting_transcript` and `summarize_meeting` (§3), priced 0 in `METERING_POLICY`; the summary's model run pays through its own `aiRouter` hold. `extract_action_items` waits on M4.
 
