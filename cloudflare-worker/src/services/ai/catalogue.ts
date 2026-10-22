@@ -220,3 +220,59 @@ export function refusalFor(model: string, env: CatalogueSwitches): 'model_unpric
 
 /** True unless the owner sets `AI_PAID_MODELS = 'on'`. D764 applies it to the paid-only models; this task only exports it. */
 export const defaultDemoted = (env: CatalogueSwitches): boolean => env.AI_PAID_MODELS !== 'on';
+
+// ─────────────────────────────────────────────────────── D851: model providers
+
+/**
+ * D851 (#2474): models served by a provider's own API rather than Workers AI
+ * (pattern C, a native adapter in `providers/`). They are NOT in `CATALOGUE`,
+ * which is Cloudflare's list and is held equal to its fixture. A provider
+ * prices in USD per 1M tokens, not neurons, so each row carries its rates as
+ * the provider prints them, with the page and the date they were read.
+ *
+ * OFF BY DEFAULT. A row is offered only while its provider's switch is exactly
+ * 'on' (`AI_PROVIDER_ANTHROPIC`); unset or any other value is off, so a typo
+ * never sends a member's text to a provider. The platform key is a Worker
+ * secret, never in D1 and never a member's key (`aiProviders.ts`).
+ */
+export type ProviderId = 'anthropic';
+
+/** The units a provider reports, each priced per 1M. `tokens_in` is uncached input only. */
+export type ProviderUnit = 'tokens_in' | 'tokens_cache_write' | 'tokens_cached' | 'tokens_out';
+
+export interface ProviderModel {
+  /** The id the platform uses: `<provider>/<provider's model id>`. */
+  id: string;
+  provider: ProviderId;
+  /** The model id the provider's API takes. */
+  apiModel: string;
+  name: string;
+  /** USD per 1M of each unit, exactly as printed. */
+  rates: Readonly<Record<ProviderUnit, string>>;
+  source: string;
+  read: string;
+}
+
+/** The provider switch each row needs, and the version a settlement records. */
+export const PROVIDER_SWITCH: Readonly<Record<ProviderId, 'AI_PROVIDER_ANTHROPIC'>> = Object.freeze({ anthropic: 'AI_PROVIDER_ANTHROPIC' });
+export const PROVIDER_PRICING_VERSION = 'p1-2026-10-21';
+
+export const PROVIDER_MODELS: readonly ProviderModel[] = Object.freeze([
+  {
+    id: 'anthropic/claude-sonnet-5-5',
+    provider: 'anthropic',
+    apiModel: 'claude-sonnet-5-5',
+    name: 'Claude Sonnet 5.5',
+    // Input, 5-minute cache write, cache hit, output (D851.md §1.8).
+    rates: Object.freeze({ tokens_in: '2', tokens_cache_write: '2.50', tokens_cached: '0.10', tokens_out: '10' }),
+    source: 'https://platform.claude.com/docs/en/about-claude/pricing',
+    read: '2026-10-21',
+  },
+]);
+
+export type ProviderSwitches = Partial<Record<'AI_PROVIDER_ANTHROPIC', string>>;
+
+export const providerModelById = (id: string): ProviderModel | null => PROVIDER_MODELS.find((m) => m.id === id) ?? null;
+
+/** Offered only while its provider's switch is exactly 'on'. */
+export const providerOffered = (m: ProviderModel, env: ProviderSwitches): boolean => env[PROVIDER_SWITCH[m.provider]] === 'on';
