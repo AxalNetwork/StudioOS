@@ -161,7 +161,7 @@ test('every request in the module is written as a literal path the drift check c
     'GET /admin/channels/telegram/webhook',
     // D757 (#1926): the Calendar status read for meet_transcripts, and the Meet transcript consent.
     'GET /calendar/google/status',
-    'GET /channels', 'GET /channels/telegram/link', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /channels/whatsapp/captures', 'GET /channels/whatsapp/link', 'GET /founder/validate/interviews/:p/meetings',
+    'GET /channels', 'GET /channels/telegram/link', 'GET /channels/telegram/setup', 'GET /channels/threads', 'GET /channels/threads/:p', 'GET /channels/whatsapp/captures', 'GET /channels/whatsapp/link', 'GET /founder/validate/interviews/:p/meetings',
     // D871 (#2518): a Meet call's Drive recordings.
     'GET /founder/validate/interviews/:p/meetings/:p/recording',
     'POST /admin/channels/telegram/webhook',
@@ -359,10 +359,11 @@ test('#1625 the claim and Axal\'s confirm are the Worker\'s routes', async () =>
   try {
     const { channelsApi } = await import('../src/lib/api/channels.js');
     await channelsApi.telegramClaim();
+    await channelsApi.telegramSetup();
     await channelsApi.confirmTelegram('lc 1');
   } finally { f.restore(); }
-  assert.deepEqual(f.calls.map((c) => `${c.method} ${c.path}`), ['GET /channels/telegram/link', 'POST /channels/telegram/link/lc%201/confirm']);
-  assert.deepEqual(f.calls[1].body, {});
+  assert.deepEqual(f.calls.map((c) => `${c.method} ${c.path}`), ['GET /channels/telegram/link', 'GET /channels/telegram/setup', 'POST /channels/telegram/link/lc%201/confirm']);
+  assert.deepEqual(f.calls[2].body, {});
 });
 
 // ------------------------------------------------------------------ WhatsApp: Embedded Signup

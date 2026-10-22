@@ -5,6 +5,7 @@
 //   overview         GET    /channels                      availability, the member's connections, pending counts
 //   linkTelegram     POST   /channels/telegram/link        → { code, url, expires_at }
 //   telegramClaim    GET    /channels/telegram/link        → { claim }: the member's latest code and who claimed it (#1625)
+//   telegramSetup    GET    /channels/telegram/setup       D863 (#2509): → { account, prerequisites, steps, next, ready }
 //   confirmTelegram  POST   /channels/telegram/link/:uid/confirm  Axal's half of the two-sided confirm → { linked, claim }
 //   whatsappLink     POST   /channels/whatsapp/link        D754 way B (#1937): → { code, wa_link, expires_at }
 //   whatsappLinkView GET    /channels/whatsapp/link        → { claim, link }: the newest claim and the member's own WhatsApp
@@ -110,6 +111,7 @@ export const channelsApi = {
   overview: () => request('/channels'),
   linkTelegram: () => request('/channels/telegram/link', { method: 'POST', body: JSON.stringify({}) }),
   telegramClaim: () => request('/channels/telegram/link'),
+  telegramSetup: () => request('/channels/telegram/setup'),
   confirmTelegram: (uid) => request(`/channels/telegram/link/${enc(uid)}/confirm`, { method: 'POST', body: JSON.stringify({}) }),
   whatsappLink: () => request('/channels/whatsapp/link', { method: 'POST', body: JSON.stringify({}) }),
   whatsappLinkView: () => request('/channels/whatsapp/link'),
