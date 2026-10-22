@@ -26,6 +26,10 @@ export interface Suggestion {
   kind: string;
   payload: Record<string, unknown>;
   quote: string | null;
+  /** D857: the customer's own words when `quote` is the translation the run read; null otherwise. */
+  quote_original: string | null;
+  /** D857: the language the customer spoke, when the run read a translation. */
+  source_lang: string | null;
   interviewee: string | null;
   interview_id: number | null;
   session_id: number | null;
@@ -100,12 +104,18 @@ export async function moduleSuggestions(env: Env, projectId: number, slug: Modul
     // The passage's first segment: the one it starts in, else the first after it.
     const segs = sessionId != null ? segments.get(sessionId) ?? [] : [];
     const seg = from == null ? null : segs.find((s) => s.start <= from && from < Math.max(s.end, s.start + 1)) ?? segs.find((s) => s.start >= from) ?? null;
-    const quote = parse(r.citation_json)?.quote;
+    const citation = parse(r.citation_json);
+    const quote = citation?.quote;
+    const original = citation?.quote_original;
+    const sourceLang = citation?.source_lang;
     return {
       id: Number(r.id),
       kind: String(r.kind),
       payload,
       quote: typeof quote === 'string' && quote ? (iv?.consent ? quote : QUOTE_WITHHELD) : null,
+      // The same consent gate as the quote: the original is the same customer's words.
+      quote_original: typeof original === 'string' && original ? (iv?.consent ? original : QUOTE_WITHHELD) : null,
+      source_lang: typeof sourceLang === 'string' && /^[a-z]{2,3}$/.test(sourceLang) ? sourceLang : null,
       interviewee: iv?.name ?? null,
       interview_id: interviewId,
       session_id: sessionId,
@@ -168,7 +178,7 @@ export async function findingsFor(
 }
 
 /** Every finding kind whose module is `slug`, by its payload-free slug. */
-export function findingKindsOf(slug: 'ideal-customer-profile' | 'market-intelligence' | 'demand-signals'): FindingKind[] {
+export function findingKindsOf(slug: 'ideal-customer-profile' | 'market-intelligence' | 'demand-signals' | 'customer-research'): FindingKind[] {
   return (Object.keys(FINDING_KINDS) as FindingKind[]).filter((k) => FINDING_KINDS[k].slug({}) === slug);
 }
 

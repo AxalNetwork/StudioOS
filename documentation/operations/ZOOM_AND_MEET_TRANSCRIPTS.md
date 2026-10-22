@@ -47,8 +47,13 @@ that turns out different is a one-line PR.
    (`cloudflare-worker/src/integrations/registry.ts`) and refuses a wider one.
 4. **Events.** Features → Access → Event subscription:
    - Event notification endpoint: `https://axal.vc/api/channels/zoom/webhook`.
-   - Events: `meeting.ended`, `recording.transcript_completed` and
-     `app_deauthorized`. No others: anything else is acknowledged and ignored.
+   - Events: `meeting.ended`, `recording.transcript_completed`,
+     `recording.completed` (D870: a call with no transcript is transcribed
+     from its audio-only recording) and `app_deauthorized`. No others:
+     anything else is acknowledged and ignored.
+   - For D870, the account's cloud recording must save an **audio-only
+     file** (Settings → Recording → Cloud recording → "Audio only"). Without
+     it, a call with no transcript has nothing to transcribe.
    - Copy the **Secret Token** for step 5. Do not press Validate yet.
 5. **Secrets.** From the repository root, once each:
 
@@ -178,6 +183,9 @@ The ones the owner is likely to see during setup:
 | `zoom_reconnect` | Zoom refused Axal's token (revoked, or the app's credentials changed). Reconnect. |
 | `zoom_no_transcript` | No cloud transcript: the plan, cloud recording or "Create audio transcript" (§1 step 9). |
 | `zoom_fetch_failed` | Zoom refused the recording list. *Unverified* (§3): whether downloading the transcript needs a scope beyond listing. |
+| `stt_consent_missing` | D870: no transcript, and the interview has no consent recorded, so the audio was not fetched. Record consent on the interview, then Retry. |
+| `stt_budget`, `stt_paused` | D870: the member's AI tokens ran out, or their AI is paused. The audio chunks are kept; Retry after a top-up transcribes only what is left. |
+| `zoom_audio_unreadable`, `zoom_audio_too_large` | D870: the audio-only file is not an AAC M4A, or is over 80 MB. |
 | `meet_transcripts_unavailable` | The member's grant lacks `meetings.space.readonly` (§2 step 5). |
 | `meet_api_disabled` | The Meet REST API is off in the Cloud project (§2 step 3). |
 | `meet_no_transcript` | Nobody turned transcription on, or the Workspace edition lacks it. |
@@ -202,7 +210,7 @@ Axal holds any, is kept apart from its text.
 | --- | --- | --- |
 | The provider's transcript: Zoom's VTT, Meet's entries (§1, §2) | Yes (D684, D757) | Text only. No audio. |
 | An uploaded recording (D872, #2519), with the founder's attestation that everyone recorded agreed | The routes and `frontend/src/lib/recordingUpload.js`, yes; the screen is M9 (#2525) | The browser's 16 kHz WAV parts as R2 chunks, then the text from Workers AI speech-to-text, charged in AI tokens. |
-| Zoom with no transcript: the call's audio recording, transcribed by Workers AI (M1, D870, #2517) | **Not yet.** It adds `recording.completed` to §1 step 4's events, and the owner adds that event in the Zoom app when it merges. | The recording's audio as R2 chunks, then the text. |
+| Zoom with no transcript: the call's audio-only recording, transcribed by Workers AI (M1, D870, #2517) | Yes. It needs `recording.completed` and the account's audio-only file (§1 step 4). | The recording's audio as R2 chunks under the call's session, then the text, charged in AI tokens. |
 
 **Retention (D877, #2524, migration 530).** A call's audio, from an upload or
 from a Zoom recording, is kept for its founder's retention, then removed by
@@ -249,8 +257,9 @@ before.
    "beta"` by PR in both vars blocks.
 4. **Google Meet** (§2): the scope, Google's verification, the Meet REST API,
    then `MEET_TRANSCRIPTS_ENABLED = "on"` by PR.
-5. **Zoom audio** (M1, D870), once it merges: add `recording.completed` in the
-   Zoom app (§1 step 4).
+5. **Zoom audio** (M1, D870): `recording.completed` in the Zoom app and the
+   account's audio-only file (§1 step 4). Without them a call with no
+   transcript ends at `zoom_no_transcript`.
 6. **Zoom, public** (§1 steps 7 and 8): the deauthorization default recorded,
    Marketplace publication, then `ZOOM_APP_AUDIENCE = "public"` by PR.
 

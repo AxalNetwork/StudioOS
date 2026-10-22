@@ -143,9 +143,9 @@ test('three principals list three different tool sets: by scope, by plan, and by
   const bo = await names(await session(env, grant(BO, [P_BO]), READS));
   // Fay again, with only validate:read.
   const narrow = await names(await session(env, grant(FAY, [P, P2]), ['validate:read']));
-  assert.deepEqual(fay, ['d846_studio_only', 'get_build_progress', 'get_interview_guide', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_connections']);
-  assert.deepEqual(bo, ['get_interview_guide', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_connections'], 'no plan, no switched-on GitHub');
-  assert.deepEqual(narrow, ['get_interview_guide', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies'], 'scope decides');
+  assert.deepEqual(fay, ['d846_studio_only', 'get_build_progress', 'get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_connections', 'list_meetings']);
+  assert.deepEqual(bo, ['get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_connections', 'list_meetings'], 'no plan, no switched-on GitHub');
+  assert.deepEqual(narrow, ['get_interview_guide', 'get_meeting_transcript', 'get_session_insights', 'get_validate_context', 'list_channel_chats', 'list_companies', 'list_meetings'], 'scope decides');
   assert.ok(!fay.includes('submit_interview'), 'a write tool needs validate:write');
 });
 

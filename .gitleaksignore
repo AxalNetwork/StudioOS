@@ -71,3 +71,9 @@ fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources
 # credential. The next commit uses a lower-entropy placeholder, so no later
 # commit carries it. Scoped to the one finding, as D334's entry is.
 96ce08bedd1d010c3a33accd3786343872b7df40:frontend/test/newsletter_pages_d813.test.mjs:generic-api-key:226
+
+# D849 (#2472): synthetic in-memory signing value in the support-session order
+# fixture's first commit; no provider or deployed environment used it. The
+# fixture now uses the low-entropy test value. Only this historical finding
+# is ignored; the file and all secret-scanning rules remain covered.
+774e90f7030ec634e23591e8e33d1d70b134423f:cloudflare-worker/test/orders_support_session_d849.test.ts:generic-api-key:31

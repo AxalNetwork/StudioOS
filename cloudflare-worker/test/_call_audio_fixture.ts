@@ -10,6 +10,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { aiBudgetFixture, setFixtureAllowance } from './_ai_budget_fixture.mjs';
 import { applyEngineSchema } from './_engine_schema.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import sessions from '../src/routes/founder_validate_sessions.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -61,6 +62,8 @@ export function fixture({ monthMicro = 500_000_000 } = {}) {
   db.exec(`INSERT INTO projects VALUES (${PROJECT}, 'Venture', 100);
            INSERT INTO discovery_interviews (id, project_id, interviewee_name, stage, quote_consent) VALUES (${INTERVIEW}, ${PROJECT}, 'Dana', 'done', 1);`);
   applyEngineSchema(db);
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns, as production has them.
+  db.exec(mig('529_meeting_transcript_source.sql')); // D870: the ref's transcript source.
   setFixtureAllowance(db, monthMicro);
 
   const objects = new Map<string, Uint8Array>();

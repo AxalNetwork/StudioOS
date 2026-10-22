@@ -69,8 +69,14 @@ export type TaskClass =
   | 'competitor_scan'
   | 'research_ask'
   | 'structure_interview'
+  // D859 (#2504) — a conversation's data points, actions and prototype asks, as Validate placements.
+  | 'extract_conversation_items'
   // D685 §5.10 — StudioOS's own summary of a session, every sentence cited.
   | 'summarise_interview'
+  // D857 (#2502) — a session segment into the founder's working language, and
+  // the language check behind it when the script and words cannot tell.
+  | 'translate_segment'
+  | 'detect_language'
   // D765 (#2090), D720 §6: a queue job no member started (deal scoring,
   // traction review, valuation, buyer matching, LPA drafting, equity), run as
   // a system call (userId 0): logged at cost and charged to no member.
@@ -490,6 +496,9 @@ export const PRICE_USD_PER_1M_TOKENS: Record<string, { in: number; out: number }
   '@cf/qwen/qwen2.5-coder-32b-instruct',
   // D760: moved from 0.05 to its neuron price, 6058 neurons: 0.066638.
   '@cf/baai/bge-base-en-v1.5',
+  // D857 (#2502) — translate_segment's models, $0.342 per M tokens in and out on their pages.
+  '@cf/meta/m2m100-1.2b',
+  '@cf/ai4bharat/indictrans2-en-indic-1B',
   // D764 (#2089): the models the rail_<kind> tasks route to. Their prices are the catalogue's, as every row here.
   '@cf/zai-org/glm-4.7-flash',
   '@cf/openai/gpt-oss-120b',
@@ -810,6 +819,14 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     // not the last run's (InterviewReview.jsx), and the 8B needs no paid plan.
     alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast', '@cf/deepseek-ai/deepseek-v4-flash-0731'],
   },
+  // D859 (#2504) — the same models as structuring: it reads the same transcript
+  // for typed items (a price, a next step, a feature asked for), each cited.
+  extract_conversation_items: {
+    provider: 'workers-ai',
+    model: MID_LLAMA,
+    fallbackChain: [SMALL_LLAMA],
+    alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast', '@cf/deepseek-ai/deepseek-v4-flash-0731'],
+  },
   // D685 §5.10 — the same models and prices as structuring: the summary reads
   // the same transcript the same way, and the rail offers one list for both.
   summarise_interview: {
@@ -818,6 +835,16 @@ export const ROUTE: Record<TaskClass, RouteEntry> = {
     fallbackChain: [SMALL_LLAMA],
     alternates: [MID_LLAMA, '@cf/meta/llama-3.1-8b-instruct-fp8-fast', '@cf/deepseek-ai/deepseek-v4-flash-0731'],
   },
+  // D857 (#2502) — m2m100 for every pair; IndicTrans2 (English into an Indic
+  // language only) is offered for that direction, picked by sessionTranslation.ts.
+  // No cache: a segment is customer content, translated once and stored encrypted.
+  translate_segment: {
+    provider: 'workers-ai',
+    model: '@cf/meta/m2m100-1.2b',
+    alternates: ['@cf/meta/m2m100-1.2b', '@cf/ai4bharat/indictrans2-en-indic-1B'],
+  },
+  // D857 — one ISO 639-1 code for a passage the script and word checks could not place.
+  detect_language: { provider: 'workers-ai', model: SMALL_LLAMA },
   sentiment:    { provider: 'workers-ai', model: MID_LLAMA, fallbackChain: [SMALL_LLAMA], cacheTtlSec: 30 * 86400 },
   embed:        { provider: 'workers-ai', model: '@cf/baai/bge-base-en-v1.5', isEmbed: true,  cacheTtlSec: 30 * 86400 },
   // D766 (#2094) — system calls (userId 0): logged at cost, charged to no member.
@@ -1341,7 +1368,7 @@ async function callWorkersAI(env: Env, model: string, opts: RunOptions, isEmbed:
     }
     if (opts.translate) {
       const source = opts.text ?? '';
-      const out = await ai.run(model, shapes.translateRequest(source, opts.translate), runOpt);
+      const out = await ai.run(model, shapes.translateRequest(source, opts.translate, model), runOpt);
       const { text, units } = shapes.parseTranslate(out, source);
       if (text == null) return { ok: false, status: 502, error: 'unexpected translation response', units };
       return { ok: true, output: text, prompt_tokens: units.tokens_in ?? 0, completion_tokens: units.tokens_out ?? 0, units };

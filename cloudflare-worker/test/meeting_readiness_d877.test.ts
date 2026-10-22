@@ -19,7 +19,8 @@
  *
  * These certify code behaviour, not the Zoom app, Google's verification or an
  * operator's switch-on (`documentation/operations/ZOOM_AND_MEET_TRANSCRIPTS.md`).
- * M1's Zoom audio (#2517, D870) adds its gates here when it merges.
+ * M1's Zoom audio (#2517, D870) is on these gates too: its `recording.completed`
+ * obeys tenancy, and its audio is a call's audio the purge removes.
  *
  * Run with:
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/meeting_readiness_d877.test.ts
@@ -86,14 +87,16 @@ async function tenancy(api = original) {
     const sid = Number((w.db.prepare(`SELECT id FROM interview_sessions WHERE uid = 'd877-call'`).get() as any).id);
     w.db.prepare(`INSERT INTO interview_channel_refs (uid, provider, external_ref, session_id, interview_id, user_id, status)
                   VALUES ('d877-ref', 'zoom', '8800001', ?, ?, ?, 'ended')`).run(sid, W_INTERVIEW, ME);
-    const hook = (id: string, extra: Record<string, unknown> = {}) => {
-      const body = JSON.stringify({ event: 'recording.transcript_completed', event_ts: 1, payload: { account_id: 'someone-else', ...extra, object: { id, uuid: `u-${id}` } } });
+    const hook = (id: string, extra: Record<string, unknown> = {}, event = 'recording.transcript_completed') => {
+      const body = JSON.stringify({ event, event_ts: 1, payload: { account_id: 'someone-else', ...extra, object: { id, uuid: `u-${id}` } } });
       return quiet(() => api.zoom.handleZoomWebhook(env, body, signed(body)));
     };
     const events = () => Number((w.db.prepare('SELECT COUNT(*) AS n FROM channel_events').get() as any).n);
     // A meeting Axal did not schedule: ignored, nothing claimed, nothing queued.
     const unknown = await hook('9999999');
     assert.deepEqual(unknown, { status: 200, body: { ok: true, ignored: 'unknown_meeting' } });
+    // M1 (D870): the audio recording's event obeys the same rule.
+    assert.deepEqual(await hook('9999998', {}, 'recording.completed'), { status: 200, body: { ok: true, ignored: 'unknown_meeting' } });
     assert.equal(events(), 0);
     assert.equal(w.queued.length, 0);
     // A known meeting: the import is queued by the ref alone, whoever the payload names.
@@ -181,6 +184,7 @@ async function metering(api = original) {
 
 async function purge(api = original) {
   const w = fixture();
+  // A Zoom call's audio: M1's (D870) recording, stored as session chunks under the ref.
   const old = seed(w, { kind: 'zoom', ageDays: 31 });
   const young = seed(w, { kind: 'upload', ageDays: 29 });
   const recorder = seed(w, { kind: 'recorder', ageDays: 400 });

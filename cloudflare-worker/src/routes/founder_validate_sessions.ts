@@ -24,6 +24,8 @@
  * uploader's 16 kHz mono WAV parts on the chunk route up to 3 hours, and
  * `/finish` runs the recorder's pipeline. `frontend/src/lib/recordingUpload.js`.
  *   GET    /sessions/active                 D685: the caller's recordings in flight
+ *   GET    /meetings/setup                  D875: the Zoom and Google Meet setup, step by step, from stored rows
+ *   GET    /meetings/upcoming               D875: the caller's calendar calls in the next 14 days, not yet attached
  *   POST   /sessions/:id/marks              mark a moment (D685: gated, client_key, capped)
  *   GET    /sessions/:id/live               WebSocket: the live transcript
  *   POST   /sessions/:id/transcribe         the final transcript
@@ -41,6 +43,7 @@
  * the venture's own founder or an admin: a session holds a recording of
  * someone else's voice, so nobody reads it who could not write it.
  */
+import { readTranslation } from '../services/sessionTranslation';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
@@ -76,6 +79,8 @@ import { logCycleWriteStatement } from '../services/cycleActivity';
 import { QUOTE_WITHHELD } from '../services/cycleValidate';
 import { mintDownloadToken } from '../services/signedDownload';
 import { consentForSession } from '../services/channels/consent';
+import { meetingSetup, upcomingCalls } from '../services/channels/meetingSetup';
+import { MEETING_ERRORS, MeetingProviderError } from '../services/channels/meetings';
 
 const sessions = new Hono<{ Bindings: Env }>();
 
@@ -154,6 +159,26 @@ sessions.put('/sessions/audio-retention', async (c) => {
     return json({ detail: 'invalid_retention', message: `Choose a number of days from ${MIN_RETENTION_DAYS} to ${MAX_RETENTION_DAYS}, or keep the audio until you delete it.` }, 400);
   }
   return json(await setRetention(c.env, user.id, body.days));
+});
+
+// D875 (#2522) — Meeting Capture: is the caller set up for Zoom and Google
+// Meet, and which of their own upcoming calls can be attached to an interview.
+// The setup read calls no provider; the upcoming read reads only the caller's
+// own primary calendar, and answers title, time, provider and link.
+sessions.get('/meetings/setup', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  return json(await meetingSetup(c.env, user.id));
+});
+
+sessions.get('/meetings/upcoming', async (c) => {
+  const user = (await requireAuth(c)) as User;
+  try {
+    return json(await upcomingCalls(c.env, user.id));
+  } catch (e) {
+    if (!(e instanceof MeetingProviderError)) throw e;
+    const status = e.retryable ? 503 : /_(not_connected|reconnect)$/.test(e.code) ? 409 : 502;
+    return json({ detail: e.code, message: MEETING_ERRORS[e.code] }, status);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -458,7 +483,8 @@ sessions.get('/sessions/:id', async (c) => {
   const [segments, marks, chunks] = await Promise.all([
     c.env.DB.prepare(
       // D757 (#1927): `created_at` is a chat message's time, for "Heard in".
-      `SELECT id, source, start_ms, end_ms, speaker_label, text, model, created_at FROM interview_transcript_segments
+      `SELECT id, source, start_ms, end_ms, speaker_label, text, model, created_at,
+              source_lang, translated_text, translated_lang, translation_status FROM interview_transcript_segments
         WHERE session_id = ? ORDER BY source, COALESCE(start_ms, 0), id`,
     ).bind(s.session.id).all(),
     c.env.DB.prepare('SELECT id, offset_ms, label, created_at FROM interview_session_marks WHERE session_id = ? ORDER BY offset_ms')
@@ -476,7 +502,11 @@ sessions.get('/sessions/:id', async (c) => {
     summary: summaryOf(s.session),
     // D757 (#1924): this route admits writers only (scopeInterview), so it always reads the draft.
     digest: await sessionDigest(c.env, s.session, { writer: true, quoteConsent: quoteConsent?.quote_consent === 1 }),
-    segments: segments.results || [],
+    // D857 (#2502): each segment keeps its own words in `text`; its translation, decrypted for this writer, sits beside it.
+    segments: await Promise.all(((segments.results || []) as Array<Record<string, any>>).map(async ({ translated_text, ...seg }) => ({
+      ...seg,
+      translation: seg.translation_status === 'done' ? await readTranslation(c.env, Number(seg.id), translated_text) : null,
+    }))),
     marks: marks.results || [],
     chunks: chunks.map((ch) => ({ seq: ch.seq, size_bytes: ch.size_bytes, start_ms: ch.start_ms })),
   });

@@ -25,6 +25,7 @@ import { encryptCredentials } from '../src/integrations/secrets.ts';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
 
 import { withGuard } from './_guard_stub.mjs';
+import { applySessionTranslationColumns } from './_session_translation_columns.mjs';
 /** Provider ids are stored hashed (events.ts `refKey`); the tests look them up the same way. */
 export const refCode = (code: string) => createHash('sha256').update(code).digest('hex');
 export const ref = (provider: string, id: string) => createHash('sha256').update(`${provider}:${id}`).digest('hex');
@@ -91,11 +92,14 @@ export async function world(opts: { seed?: boolean; budget?: number } = {}) {
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
+    '529_meeting_transcript_source.sql',
     // D685: openSession stores the call (call_provider), as production's 452 lets it.
     '452_record_session_setup.sql', '454_channel_voice_failures.sql',
     '457_integrations_last_error_at.sql', '458_channel_link_consent.sql',
     // D754 (#1893): the consent store and channel_threads.consent_state.
     '488_channel_consents.sql', '492_whatsapp_sender_links.sql', '504_whatsapp_link_settings.sql']) db.exec(mig(m));
+  applySessionTranslationColumns(db); // D857: migration 527's segment columns
   // D757: the Validate engine's schema (487, 465, 453 and the re-scope's columns).
   applyEngineSchema(db);
   // D783: a member's allowance is what their plans give; `budget` sets every fixture member's monthly figure.
