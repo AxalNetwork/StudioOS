@@ -465,7 +465,7 @@ only when that base does.
 
 - **2026-10-22 (S13, #2521, D874).** The call tools: `list_meetings`, `get_meeting_transcript` and `summarize_meeting` (§3), priced 0 in `METERING_POLICY`; the summary's model run pays through its own `aiRouter` hold. `extract_action_items` waits on M4.
 
-- **2026-10-22 (S12, #2521 PR 2, D874).** `extract_action_items` (§3), priced 0; its extraction pays through its own `aiRouter` hold. It runs D859's extraction, so M4's kinds need no change here. The same PR drops the call tools' test's own `ALTER` of D857's columns, which the channel fixture now applies (migration 527), and which had turned `main` red.
+- **2026-10-22 (S12, #2521 PR 2, D874).** `extract_action_items` (§3), priced 0; its extraction pays through its own `aiRouter` hold. It runs D859's extraction, so M4's kinds need no change here.
 
 ## 9. Known limitations
 
@@ -475,3 +475,13 @@ only when that base does.
 - **Model-provider adapters (D851) need provider accounts and keys,** which
   the owner supplies. Until then, only the groundwork and stubbed tests can be
   built.
+
+## Public status coverage (#2549, 22 October 2026)
+
+`GET /api/public/status` and `/status` include the MCP server, shared clients,
+each registered MCP provider and custom clients, alongside the connector
+catalogue and remaining service categories. Availability is separate from
+health. Without a live health probe the entry says “Not monitored” and has no
+measured uptime; recorded incidents still apply. No anonymous request opens
+a provider session or exposes member connection details. See D847’s public
+status inventory record.

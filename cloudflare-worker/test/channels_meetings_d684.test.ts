@@ -874,7 +874,8 @@ test('the Meet sweep queues a generated transcript; the import labels speakers a
   assert.deepEqual(segs.map((s: any) => [s.speaker_label, s.text, s.start_ms, s.end_ms]), [
     ['Dana Ruiz', 'We lose a day a month.', 5000, 8500],
     ['Sam Founder', 'Who signs off?', 9000, 10000],
-    ['Speaker ?', 'Can you hear me?', 11000, 12000],
+    // D871 (#2518): a participant Meet did not name is numbered per call, not "Speaker ?".
+    ['Speaker 1', 'Can you hear me?', 11000, 12000],
   ]);
   assert.equal(refRow(f, uid).status, 'imported');
   assert.equal(f.db.prepare('SELECT final_model FROM interview_sessions WHERE id = ?').get(sessionId).final_model, 'google_meet_transcript');

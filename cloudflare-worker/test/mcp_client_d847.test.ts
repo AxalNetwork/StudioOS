@@ -150,7 +150,9 @@ test('2. Mercury\'s mcp.ts is the only caller; the client, the records and src/m
   const importers = (mod: RegExp) => files.filter((f) => mod.test(f.text)).map((f) => f.path).sort();
   // D852 (#2475): a member's custom servers are the client's second caller.
   assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/services/mercury/mcp.ts']);
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/services/mercury/mcp.ts']);
+  // #2549: public status reads provider metadata only. The transport importer
+  // assertion above still permits only the two actual client callers.
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/mercury/mcp.ts']);
   const client = files.find((f) => f.path.endsWith('integrations/mcpClient.ts'))!.text;
   const records = files.find((f) => f.path.endsWith('integrations/mcpProviders.ts'))!.text;
   assert.doesNotMatch(client, /from\s+['"][^'"]*\/mcp\/|from\s+['"]\.\.\/mcp['"]/, 'the client imports StudioOS\'s own MCP server');
