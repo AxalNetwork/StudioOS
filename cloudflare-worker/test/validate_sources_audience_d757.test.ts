@@ -111,6 +111,8 @@ function fixture(extraEnv: Record<string, string> = {}) {
     '246_fills_the_blanks_everywhere.sql', '438_interview_sessions.sql', '439_validate_proposals_structuring.sql',
     '440_validate_cycle_stores.sql', '446_interview_structure_receipts.sql', '447_assistant_interviews.sql',
     '449_interview_channels.sql', '450_channel_events_delete_kind.sql', '451_channel_review_fixes.sql',
+    // D870: interview_channel_refs.transcript_source, call_lang and stt_reservation_uid.
+    '529_meeting_transcript_source.sql',
     '452_record_session_setup.sql', '454_channel_voice_failures.sql', '458_channel_link_consent.sql',
     '488_channel_consents.sql', '492_whatsapp_sender_links.sql', '504_whatsapp_link_settings.sql']) db.exec(mig(m));
     applySessionTranslationColumns(db); // D857: migration 527's segment columns
