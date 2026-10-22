@@ -210,7 +210,7 @@ export function verdictInterviewLine(data) {
 // text of its own: the module read sends its payload.
 const ATTRIBUTE_WORD = { role: 'Role', company: 'Company', company_size: 'Company size', industry: 'Industry', geography: 'Geography', stage: 'Stage', tools: 'Tools' };
 const KIND_WORD = { workaround: 'Workaround', status_quo: 'Status quo', in_house: 'Built in-house' };
-const FOLLOW_UP_WORD = { follow_up: 'Follow-up', intro_offer: 'Intro offered', beta_signup: 'Beta sign-up' };
+const FOLLOW_UP_WORD = { follow_up: 'Follow-up', intro_offer: 'Intro offered', beta_signup: 'Beta sign-up', action_item: 'Action item' };
 const capital = (s) => (s ? `${s[0].toUpperCase()}${s.slice(1).replace(/_/g, ' ')}` : s);
 const posInt = (v) => (Number.isInteger(v) && v > 0 ? v : null);
 
@@ -234,8 +234,9 @@ export function findingLine(kind, p = {}) {
     case 'urgency': return { what: `Urgency · ${capital(String(p.level ?? ''))}`, detail: String(p.reason ?? '') };
     case 'buying_trigger': return { what: 'Buying trigger', detail: String(p.trigger ?? '') };
     case 'objection': return { what: `Objection · ${capital(String(p.about ?? 'other'))}`, detail: String(p.detail ?? '') };
-    case 'follow_up': return { what: FOLLOW_UP_WORD[String(p.kind)] ?? 'Follow-up', detail: [p.detail, p.due_hint].filter(Boolean).join(' · ') };
+    case 'follow_up': return { what: FOLLOW_UP_WORD[String(p.kind)] ?? 'Follow-up', detail: [p.detail, p.owner_hint, p.due_hint].filter(Boolean).join(' · ') };
     case 'prototype_ask': return { what: 'Prototype ask', detail: [p.feature, p.workflow].filter(Boolean).join(' · ') };
+    case 'decision': return { what: 'Decision', detail: [p.statement, p.owner_hint].filter(Boolean).join(' · ') };
     default: return null;
   }
 }

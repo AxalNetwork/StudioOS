@@ -112,7 +112,7 @@ test('1: every finding kind reads in the Worker\'s own words (findingLine read b
   const body = (text, start) => text.slice(text.indexOf(start), text.indexOf('\n}\n', text.indexOf(start)));
   const theirs = caseLines(body(w, 'export function findingLine('));
   const ours = caseLines(body(src('pages/cycles/validatePhone.js'), 'export function findingLine('));
-  assert.equal(theirs.length, 11);
+  assert.equal(theirs.length, 12, 'D873 (#2520) added decision');
   assert.deepEqual(ours, theirs);
   for (const map of ['ATTRIBUTE_WORD', 'KIND_WORD', 'FOLLOW_UP_WORD']) {
     const line = (text) => text.split('\n').find((l) => l.startsWith(`const ${map}`))?.replace(/: Record<string, string>/, '').trim();
@@ -123,6 +123,9 @@ test('1: every finding kind reads in the Worker\'s own words (findingLine read b
   assert.deepEqual(findingLine('budget', { detail: 'Team budget', amount_cents: 120000, currency: 'usd', period: 'month' }), { what: 'Budget', detail: 'Team budget · 1,200 USD / month' });
   assert.equal(findingLine('pain_severity', {}), null);
   assert.equal(suggestionText({ kind: 'follow_up', payload: { kind: 'intro_offer', detail: 'Intro to their CFO' } }), 'Intro offered · Intro to their CFO');
+  // D873 (#2520): a call's decision and action item read in the Worker's words.
+  assert.equal(suggestionText({ kind: 'decision', payload: { statement: 'Fix the close first', owner_hint: 'Dana Ruiz' } }), 'Decision · Fix the close first · Dana Ruiz');
+  assert.equal(suggestionText({ kind: 'follow_up', payload: { kind: 'action_item', detail: 'Send the checklist', owner_hint: 'Sam', due_hint: 'by Friday' } }), 'Action item · Send the checklist · Sam · by Friday');
   assert.equal(suggestionText({ kind: 'objection', payload: { about: 'price', detail: 'Too dear for one seat' } }), 'Objection · Price · Too dear for one seat');
   assert.equal(suggestionText({ kind: 'hypothesis_new', payload: { claim: 'Controllers buy it' } }), 'New hypothesis · Controllers buy it');
   assert.equal(suggestionText({ kind: 'segment', payload: { name: 'Solo controllers' } }), 'Segment: Solo controllers');
