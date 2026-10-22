@@ -104,7 +104,7 @@ test('every tool that takes a company refuses every company outside the caller\'
   // The control: each founder's own company reaches every tool.
   for (const [props, company] of [[grants.A, PA], [grants.B, PB]] as const) {
     for (const tool of companyTools) {
-      const r = await callTool(env, props, null, tool as any, { company }, SCOPES);
+      const r = await callTool(env, props, `g-${props.userId}`, tool as any, { company }, SCOPES);
       assert.notEqual(r.isError, true, `${props.userId} ${tool.name} on own company: ${errorOf(r)}`);
     }
   }
@@ -178,11 +178,23 @@ test(`the member limit counts every connection: ${USER_CALLS_PER_MINUTE} calls a
 
 test('the member limit fails closed: a KV that cannot be read refuses the call', async () => {
   const { env } = fixture();
-  env.RATE_LIMITS = { get: async () => { throw new Error('kv down'); }, put: async () => { throw new Error('kv down'); } };
+  // Only the member's counter fails, so the grant limit before it passes and the member limit is what answers.
+  const kv = memKV();
+  env.RATE_LIMITS = { ...kv, get: async (k: string, o?: any) => { if (k.includes(':user:')) throw new Error('kv down'); return kv.get(k, o); } };
   const { ran, tools } = recorded();
-  const r = await callTool(env, propsFor(A, [PA]), null, tools.find((t) => !t.company) as any, {}, SCOPES);
+  const r = await callTool(env, propsFor(A, [PA]), 'grant-a', tools.find((t) => !t.company) as any, {}, SCOPES);
   assert.equal(errorOf(r), 'Too many calls from your account across its connections. Wait a minute and try again.');
   assert.deepEqual(ran, []);
+});
+
+test('an in-app call (Eadwyn, no grant) is not a connection: it is neither counted nor refused by the member limit', async () => {
+  const { env } = fixture();
+  const { ran, tools } = recorded();
+  const tool = tools.find((t) => !t.company) as any;
+  const r = await callTool(env, propsFor(A, [PA]), null, tool, {}, SCOPES);
+  assert.notEqual(r.isError, true);
+  assert.equal(await env.RATE_LIMITS.get(`mcp_rl:user:${A}:${Math.floor(Date.now() / 60_000)}`), null, 'nothing counted');
+  assert.equal(ran.length, 1);
 });
 
 // ── Developer routes ─────────────────────────────────────────────────────────

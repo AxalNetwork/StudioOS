@@ -171,7 +171,8 @@ export async function callTool(env: Env, props: GrantProps, grantId: string | nu
       return text({ error: 'Too many calls from this connection. Wait a minute and try again.' }, true);
     }
     // D849: the member's own limit, across every connection and key they hold.
-    if (!(await withinUserLimit(env, user.id))) {
+    // An in-app call (Eadwyn, no grant) is not a connection: it has its own turn caps.
+    if (grantId && !(await withinUserLimit(env, user.id))) {
       await log('rate_limited');
       return text({ error: 'Too many calls from your account across its connections. Wait a minute and try again.' }, true);
     }

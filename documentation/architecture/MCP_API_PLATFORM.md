@@ -178,7 +178,7 @@ one updates this section in the same PR.
 - **`GET /api/developer/limits`** (`routes/developer_limits.ts`, client `developerKeysApi.limits()`; signed-in session only, `401 session_required` for an `axk_` bearer) returns
   `{ window_seconds: 60, member: { calls_per_minute: 120 }, connection: { calls_per_minute: 60 }, keys_enabled, keys: [ { uid, name, prefix, rate_per_minute, monthly_limit_microusd|null } ] }`.
   Only live keys are listed; with `API_KEYS_ENABLED` off `keys` is empty and the caps still read.
-- **The member limit** answers an MCP call over 120 a minute, across every connection and key, with the tool error *"Too many calls from your account across its connections. Wait a minute and try again."* and logs `rate_limited`.
+- **The member limit** answers an MCP call over 120 a minute, across every connection and key (an in-app Eadwyn call with no grant is not counted), with the tool error *"Too many calls from your account across its connections. Wait a minute and try again."* and logs `rate_limited`.
 - **`key_limit_reached`** (PR 2 of #2472): `402 { code: 'key_limit_reached', limit_microusd, used_microusd }` when a metered call would pass a key's monthly cap.
 - **Alerts** (PR 2 of #2472), on D788's `notify()` path: type `api_key_limit` at 80% and 100% of a key's monthly cap, and type `api_key_failures` when more than 20% of at least 50 calls on a key fail within an hour.
 - **A support session cannot buy AI tokens:** `POST /api/orders/intent` with a token pack under an impersonation token answers `403 { error: 'support_session_refused', message }`.
