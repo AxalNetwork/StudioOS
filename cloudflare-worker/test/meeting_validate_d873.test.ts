@@ -141,8 +141,10 @@ function world() {
         if (model === TRANSLATION_MODEL) { ai.push('translate'); return { translated_text: PHRASEBOOK[(input as any).text] ?? `[en] ${(input as any).text}` }; }
         const prompt = JSON.stringify(input);
         // As a model would: cite the span of the line a quote is on, from the prompt's `[from-to] speaker: text`.
+        // The span is the last `[from-to]` before the quote's first place in the prompt; no regex is built from the quote.
         const citeOf = (q: string) => {
-          const at = new RegExp(`\\[(\\d+)-(\\d+)\\][^\\[]*?${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).exec(prompt);
+          const i = prompt.indexOf(q);
+          const at = i < 0 ? null : /\[(\d+)-(\d+)\][^[]*$/.exec(prompt.slice(0, i));
           return at ? { from: Number(at[1]), to: Number(at[2]) } : { from: -1, to: -1 };
         };
         if (prompt.includes(EXTRACT_MARK)) {
