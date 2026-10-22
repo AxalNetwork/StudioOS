@@ -339,6 +339,7 @@ import { adminPartnerSettlements, partnerSettlements } from './routes/partner_se
 import mercuryPersonalRoutes from './routes/mercury_personal';
 import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
+import connectorsHealth from './routes/connectors_health';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
 import adminFundStructure from './routes/admin_fund_structure';
@@ -1234,6 +1235,8 @@ app.route('/api/settings', settings);
 // D666: an AI assistant's grants (#1496). Mounted before the connector
 // router so `/api/connectors/assistants` never reaches its `/:key` routes.
 app.route('/api/connectors/assistants', assistantGrants);
+// D848 (#2469): the member's connections and their health, ahead of `/:key`.
+app.route('/api/connectors/health', connectorsHealth);
 app.route('/api/mcp/consent', mcpConsent);
 // D841 (#2464): a member's own API keys for /mcp, behind API_KEYS_ENABLED.
 app.route('/api/developer/keys', developerKeys);
