@@ -17,7 +17,7 @@ import * as threads from '../src/services/channels/threads.ts';
 import * as events from '../src/services/channels/events.ts';
 import * as connections from '../src/services/channels/connections.ts';
 import { decryptColumn } from '../src/services/columnCipher.ts';
-import { ME, INTERVIEW, SECRETS, send } from './_channels_fixture.ts';
+import { ME, INTERVIEW, SECRETS, AUDIO, send } from './_channels_fixture.ts';
 import { AT, readinessFixture as fixture, runReadiness, type Mutation } from './_channel_readiness.ts';
 
 const TEXT = 'Synthetic readiness message.';
@@ -67,12 +67,16 @@ async function notesConsent(environment: string, api = original) {
   });
 }
 
-/** Every Bot API call the voice fetch makes; getFile answers with `fileSize`. */
-function botApi(fileSize: number) {
+/** Every Bot API call the voice fetch makes; optional generated audio, never a real download. */
+function botApi(fileSize: number | null, bodySize?: number) {
   const calls: string[] = [];
   const route = (url: URL) => {
     calls.push(url.pathname.replace(/bot[^/]+/, 'bot<token>'));
     if (url.pathname.endsWith('/getFile')) return { json: { ok: true, result: { file_id: 'f', file_size: fileSize, file_path: 'voice/file.ogg' } } };
+    if (bodySize !== undefined) {
+      const bytes = new Uint8Array(bodySize); bytes.set(AUDIO.OGG);
+      return { body: bytes, headers: { 'content-type': 'application/octet-stream' } };
+    }
     return { status: 500, json: { ok: false } };
   };
   return { calls, route };
@@ -94,10 +98,27 @@ async function voiceSize(environment: string, api = original) {
     assert.deepEqual([r.ok, (r as any).code], [false, 'too_large']);
   }, late.route);
   assert.deepEqual(late.calls.map((c) => c.split('/').pop()), ['getFile'], 'a file over 5 MB was downloaded');
+  // D865 keeps the 5 MiB cap inclusive, including at the streamed-body boundary.
+  const exact = botApi(FIVE_MB, FIVE_MB);
+  await fixture(environment, async ({ env }) => {
+    const r = await api.telegram.fetchTelegramVoice(env, note(FIVE_MB));
+    assert.equal(r.ok, true, 'an exact-limit audio file must remain admitted');
+    if (r.ok) { assert.equal(r.bytes.byteLength, FIVE_MB); assert.equal(r.mime, 'audio/ogg'); }
+  }, exact.route);
+  assert.equal(exact.calls.length, 2);
+  // Neither the message nor getFile declares the size: the download still has a bound.
+  const streamed = botApi(null, FIVE_MB + 1);
+  await fixture(environment, async ({ env, aiCalls }) => {
+    const r = await api.telegram.fetchTelegramVoice(env, note(null));
+    assert.equal(r.ok, false, 'an undeclared oversize download must be refused');
+    assert.deepEqual(r, { ok: false, code: 'too_large', retryable: false });
+    assert.equal(aiCalls.length, 0);
+  }, streamed.route);
+  assert.equal(streamed.calls.length, 2);
 }
 
 async function videoNotes(environment: string, api = original) {
-  assert.equal(api.telegram.TELEGRAM_VIDEO_NOTES, false, 'round videos are on before T3 switches them');
+  assert.equal(api.telegram.TELEGRAM_VIDEO_NOTES, false, 'D865 keeps round videos off until support is verified');
   const bot = botApi(10);
   await fixture(environment, async ({ env }) => {
     const r = await api.telegram.fetchTelegramVoice(env, { file: 'd868-video', mime: 'video/mp4', media: 'video_note', size: 10 });
@@ -170,6 +191,12 @@ const mutations: Mutation<Api>[] = [
     "  if (note.size != null && note.size > CHANNEL_AUDIO_MAX_BYTES) return refused('too_large');\n", '', voiceSize],
   ['getFile size cap removed', 'telegram', 'telegram.ts',
     "  if (Number.isFinite(size) && size > CHANNEL_AUDIO_MAX_BYTES) return refused('too_large');\n", '', voiceSize],
+  ['exact-limit declared audio refused', 'telegram', 'telegram.ts',
+    'note.size > CHANNEL_AUDIO_MAX_BYTES', 'note.size >= CHANNEL_AUDIO_MAX_BYTES', voiceSize],
+  ['exact-limit getFile audio refused', 'telegram', 'telegram.ts',
+    'Number.isFinite(size) && size > CHANNEL_AUDIO_MAX_BYTES', 'Number.isFinite(size) && size >= CHANNEL_AUDIO_MAX_BYTES', voiceSize],
+  ['streamed download bound raised', 'telegram', 'telegram.ts',
+    'maxBytes: CHANNEL_AUDIO_MAX_BYTES', 'maxBytes: CHANNEL_AUDIO_MAX_BYTES * 2', voiceSize],
   ['round videos switched on', 'telegram', 'telegram.ts', 'export const TELEGRAM_VIDEO_NOTES = false;', 'export const TELEGRAM_VIDEO_NOTES = true;', videoNotes],
   ['voice cap bypassed', 'events', 'events.ts', '  return !!row;', '  return true;', voiceCap],
   ['voice cap denies all', 'events', 'events.ts', '  return !!row;', '  return false;', voiceCap],
