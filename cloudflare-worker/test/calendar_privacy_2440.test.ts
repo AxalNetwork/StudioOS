@@ -15,7 +15,7 @@ const END = new Date(Date.now() + 90_000_000).toISOString();
 const FROM = new Date(Date.now() - 86_400_000).toISOString();
 const TO = new Date(Date.now() + 30 * 86_400_000).toISOString();
 const roles = ['admin', 'founder', 'partner', 'exploring', 'advisor', 'investor'] as const;
-function fixture(route = calendar) {
+function fixture(route = calendar, failAudit = false) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   // Canonical production baseline, followed by the real additive migration.
   db.exec(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'));
@@ -37,7 +37,7 @@ function fixture(route = calendar) {
     bind(...values: any[]) { args = values.map(v => v ?? null); return statement; },
     async first() { return db.prepare(sql).get(...args) || null; },
     async all() { return { results: db.prepare(sql).all(...args) }; },
-    async run() { const r = db.prepare(sql).run(...args); return { meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) } }; },
+    async run() { if (failAudit && /INSERT INTO (activity_logs|admin_audit_log)/.test(sql)) throw new Error('synthetic audit outage'); const r = db.prepare(sql).run(...args); return { meta: { changes: Number(r.changes), last_row_id: Number(r.lastInsertRowid) } }; },
   }; return statement; }, async exec(sql: string) { db.exec(sql); } };
   const env: any = { DB, ENVIRONMENT: 'production', JWT_SECRET: SECRET, APP_URL: 'https://example.test',
     GOOGLE_CAL_CLIENT_ID: 'synthetic-client', GOOGLE_CAL_CLIENT_SECRET: 'synthetic-secret',
@@ -261,4 +261,30 @@ test('#2440: feed and push entry points cannot substitute another member', async
     await assert.rejects(() => personal(service, route), { name: 'AssertionError' }, before);
     await personal();
   }
+});
+
+async function auditFailure(route = calendar) {
+  const f = fixture(route, true);
+  try {
+    const response = await f.request('/ic-meetings', 4, ic());
+    assert.equal(response.status, 200, 'audit outages must not interrupt meeting creation');
+    const body = await response.json();
+    assert.deepEqual(f.db.prepare('SELECT user_id FROM ic_meeting_attendees WHERE meeting_id=? ORDER BY user_id').all(body.id).map((r: any) => r.user_id), [2,4,6]);
+  } finally { await f.close(); }
+}
+test('#2440: actual audit write failures leave a complete successful meeting; throwing audit mutation is rejected', async () => {
+  const auditUrl = new URL('../src/services/adminAudit.ts', import.meta.url);
+  const audit = readFileSync(auditUrl, 'utf8');
+  const before = 'catch (e) {';
+  assert.ok(audit.includes(before));
+  const mutated = moduleUrl(audit.replace(before, before + ' throw e;'), auditUrl);
+  const route = (await import(moduleUrl(routeSource, routeUrl, { '../services/adminAudit': mutated }))).default;
+  // Expected outage diagnostics are noise here; assertions check the outcome.
+  const warn = console.warn, error = console.error;
+  console.warn = () => {}; console.error = () => {};
+  try {
+    await auditFailure();
+    await assert.rejects(() => auditFailure(route), { name: 'AssertionError' });
+    await auditFailure();
+  } finally { console.warn = warn; console.error = error; }
 });
