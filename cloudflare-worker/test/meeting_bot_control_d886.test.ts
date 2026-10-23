@@ -1,9 +1,11 @@
 /** D886 B1. All meeting/participant values below are synthetic and never logged. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { stripTypeScriptTypes } from 'node:module';
 import { Hono } from 'hono';
 import { fixture, seed, call, mig, FOUNDER, OTHER } from './_call_audio_fixture.ts';
-import { MeetingBotRun, botHmac, BOT_CALLBACK_WINDOW_MS } from '../src/durable-objects/meeting-bot-run.ts';
+import { MeetingBotRun as UnpublishedMeetingBotRun, botHmac, BOT_CALLBACK_WINDOW_MS } from '../src/durable-objects/meeting-bot-run.ts';
 import callbacks from '../src/routes/meeting_bot_callbacks.ts';
 import { BOT_COMMISSION_MULTIPLIER, botRate, botLimit, botPlatform, botRow, botSession } from '../src/services/meetingBots.ts';
 import { decryptColumn } from '../src/services/columnCipher.ts';
@@ -14,7 +16,26 @@ const syntheticLink = (p='zoom') => p==='zoom' ? ['https:/','unit.zoom.us','j',S
   : p==='google_meet' ? ['https:/','meet.google.com','abc-defg-hij'].join('/')
     : ['https:/','teams.microsoft.com','meet','synthetic'].join('/');
 const hmacSecret = 'd886-'+'x'.repeat(40);
-function world(monthMicro=500_000_000) {
+// Positive contract tests use the real shared wording with only its approval date
+// changed in memory. Production remains unpublished; no env bypass is introduced.
+let variantSerial = 0;
+async function supervisorVariant(before = '', after = '', published = true) {
+  const file = new URL('../src/durable-objects/meeting-bot-run.ts', import.meta.url);
+  let source = readFileSync(file, 'utf8');
+  if (before) { assert.ok(source.includes(before)); source = source.replace(before, () => after); }
+  const notice = readFileSync(new URL('../../meeting-bot/notice.mjs', import.meta.url), 'utf8')
+    .replace('MEETING_BOT_NOTICE_APPROVED_AT = null', published ? "MEETING_BOT_NOTICE_APPROVED_AT = '2026-10-23'" : 'MEETING_BOT_NOTICE_APPROVED_AT = null');
+  const noticeUrl = 'data:text/javascript;base64,' + Buffer.from(notice).toString('base64');
+  let changed = stripTypeScriptTypes(source, {mode:'strip'});
+  changed = changed.replace(/(from\s*['"])(\.[^'"]+)(['"])/g, (_m, a, spec, b) =>
+    a + (spec.endsWith('notice.mjs') ? noticeUrl : new URL(/\.[mc]?[jt]s$/.test(spec) ? spec : spec+'.ts', file).href) + b);
+  // Main's assembly path uses lazy imports too; resolve them from the original module.
+  changed = changed.replace(/(import\(['"])(\.[^'"]+)(['"]\))/g, (_m, a, spec, b) =>
+    a + new URL(/\.[mc]?[jt]s$/.test(spec) ? spec : spec+'.ts', file).href + b);
+  return import('data:text/javascript;base64,' + Buffer.from(changed+'\n// test variant '+ ++variantSerial).toString('base64'));
+}
+const {MeetingBotRun} = await supervisorVariant();
+function world(monthMicro=500_000_000, Supervisor=MeetingBotRun) {
   const w=fixture({monthMicro});
   if (!w.db.prepare('PRAGMA table_info(users)').all().some((c:any)=>c.name==='display_name')) w.db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
   w.db.exec(mig('525_ai_reservation_idempotency.sql'));
@@ -31,7 +52,7 @@ function world(monthMicro=500_000_000) {
       const data=new Map<string,any>(); let alarm:number|null=null; let tail=Promise.resolve();
       const state:any={storage:{async get(k:string){return structuredClone(data.get(k));},async put(k:string,v:any){data.set(k,structuredClone(v));},async list({prefix}:any){return new Map([...data].filter(([k])=>k.startsWith(prefix)));},async delete(keys:any){for(const k of [keys].flat())data.delete(k);},async getAlarm(){return alarm;},async setAlarm(t:number){alarm=t;},async deleteAlarm(){alarm=null;}},
         blockConcurrencyWhile(fn:any){const next=tail.then(fn);tail=next.catch(()=>{});return next;}};
-      const object=new MeetingBotRun(state,w.env);objects.set(uid,{object,state,data,get alarm(){return alarm;}});
+      const object=new Supervisor(state,w.env);objects.set(uid,{object,state,data,get alarm(){return alarm;}});
     }
     return {fetch:(r:Request)=>objects.get(uid).object.fetch(r)};
   }};
@@ -39,6 +60,10 @@ function world(monthMicro=500_000_000) {
 }
 const post = (w:any,args:any={meeting_url:syntheticLink()})=>call(w.env,FOUNDER,'POST',`/sessions/${w.session}/bot`,args);
 async function event(w:any,uid:string,data:any,{timestamp=Date.now(),signature}:any={}) {
+  // B1 follow-up completion declaration, as the aligned runtime sends it.
+  if (data.type==='status' && ['processing','done'].includes(data.status) && !('chunks' in data)) {
+    data={...data,chunks:w.db.prepare('SELECT COUNT(*) AS n FROM interview_session_chunks WHERE session_id=?').get(w.session).n,chunks_failed:0};
+  }
   const path=`/api/meeting-bots/${uid}/events`,raw=JSON.stringify(data),ts=String(timestamp);
   const sig=signature??await botHmac(hmacSecret,`v1:${ts}:POST:${path}:${raw}`);
   const app=new Hono();app.route('/api/meeting-bots',callbacks as any);
@@ -368,7 +393,7 @@ test('D886 interrupted dispatch is recovered by GET, but a missed schedule canno
 });
 
 
-test('D886 Stop flushes the captured tail during a bounded drain; withdrawal still blocks it immediately',async()=>{
+test('D886 Stop bounds the captured tail; a rejected part prevents completion',async()=>{
   const w=world(),r=await post(w),uid=r.body.bot.uid,run=(await botRow(w.env,uid))!,clock=Date.now;
   await event(w,uid,{seq:1,type:'status',status:'recording'});
   try {
@@ -378,10 +403,175 @@ test('D886 Stop flushes the captured tail during a bounded drain; withdrawal sti
     assert.equal((await upload(w,ticket.body.upload_path)).status,200);
     const beyond=await event(w,uid,{seq:3,type:'chunk',chunk_seq:1,size_bytes:wav().byteLength,start_ms:2000});
     assert.equal((await upload(w,beyond.body.upload_path)).status,413);
-    assert.equal((await event(w,uid,{seq:4,type:'status',status:'done'})).body.bot.status,'stopped');
+    assert.equal((await event(w,uid,{seq:4,type:'status',status:'done'})).body.bot.failure_code,'processing_failed');
     assert.equal(w.stops.length,1);
   }finally{Date.now=clock;}
 });
+
+async function renewal(Supervisor=MeetingBotRun) {
+  const w=world(500_000_000,Supervisor),r=await post(w),uid=r.body.bot.uid,row=(await botRow(w.env,uid))!,clock=Date.now;
+  const base=row.started_at!;
+  try {
+    Date.now=()=>base+99_999;
+    const before=await event(w,uid,{seq:1,type:'heartbeat'});
+    assert.equal(before.body.budget_deadline_at,base+120_000);
+    assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n,1);
+    await w.supervisors.get(uid).object.alarm();
+    assert.equal(w.supervisors.get(uid).alarm,base+100_000,'alarm reaches the renewal lead');
+    Date.now=()=>base+100_000;
+    const renewed=await event(w,uid,{seq:2,type:'heartbeat'});
+    assert.equal(renewed.body.budget_deadline_at,base+240_000,'lease is extended before the old one expires');
+    assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n,2);
+    assert.equal(w.db.prepare('SELECT status FROM ai_budget_reservations WHERE uid=?').get(row.reservation_uid).status,'pending','the current part is not charged early');
+    const duplicate=await event(w,uid,{seq:2,type:'heartbeat'});
+    assert.equal(duplicate.body.budget_deadline_at,base+240_000,'a lost renewal response can be retried');
+    assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n,2);
+    Date.now=()=>base+120_000; await event(w,uid,{seq:3,type:'heartbeat'});
+    assert.equal(w.db.prepare('SELECT status FROM ai_budget_reservations WHERE uid=?').get(row.reservation_uid).status,'settled');
+    assert.equal(w.starts.length,1);
+  }finally{Date.now=clock;}
+}
+async function noticeOff(Supervisor=UnpublishedMeetingBotRun) {
+  const w=world(500_000_000,Supervisor),r=await post(w);
+  assert.equal(r.status,202);assert.equal(r.body.bot.status,'failed'); assert.equal(r.body.bot.failure_code,'notice_unpublished');
+  assert.equal(w.starts.length,0);assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n,0);
+}
+async function noticeCompany(Supervisor=MeetingBotRun) {
+  const w=world(500_000_000,Supervisor);
+  const {tableFromBaseline}=await import('./_baseline.mjs');
+  w.db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8'),'company_profiles'));
+  w.db.prepare('INSERT INTO company_profiles(id,uid,company_name) VALUES(?,?,?)').run(11,'synthetic-company','Synthetic Venture');
+  w.db.prepare('UPDATE projects SET company_id=11 WHERE id=10').run();
+  const r=await post(w,{meeting_url:syntheticLink(),venture_name:'untrusted-label',notice:'untrusted-notice'});
+  assert.equal(r.body.bot.status,'joining');assert.equal(w.starts.length,1);
+  assert.equal(w.starts[0].venture_name,'Synthetic Venture');
+  const {draftMeetingBotNotice}=await import('../../meeting-bot/notice.mjs');
+  assert.equal(w.starts[0].notice,draftMeetingBotNotice({ventureName:'Synthetic Venture'}));
+  assert.equal(JSON.stringify(r.body).includes('Synthetic Venture'),false);
+  assert.equal(JSON.stringify(w.db.prepare('SELECT details FROM activity_logs').all()).includes('Synthetic Venture'),false);
+}
+async function complete(Supervisor=MeetingBotRun) {
+  const w=world(500_000_000,Supervisor),r=await post(w),uid=r.body.bot.uid;
+  const messages:any[]=[];
+  w.env.USE_CF_QUEUE='true';w.env.JOB_QUEUE={send:async(body:any)=>{messages.push(body);}} as any;
+  await event(w,uid,{seq:1,type:'status',status:'recording'});
+  const ticket=await event(w,uid,{seq:2,type:'chunk',chunk_seq:0,size_bytes:wav().byteLength,start_ms:0});
+  assert.equal((await upload(w,ticket.body.upload_path)).status,200);
+  assert.equal((await event(w,uid,{seq:3,type:'status',status:'processing',chunks:1,chunks_failed:0})).body.bot.status,'processing');
+  assert.equal((await upload(w,ticket.body.upload_path)).status,401);
+  // Upload verification is necessary, but B6 must assemble the transcript before done.
+  assert.equal((await event(w,uid,{seq:4,type:'status',status:'done',chunks:1,chunks_failed:0})).body.code,'bot_processing');
+  w.db.prepare('INSERT INTO interview_chunk_transcripts(session_id,seq,model,segments_json) VALUES(?,0,?,?)')
+    .run(w.session,'@cf/deepgram/nova-3',JSON.stringify([{start_ms:0,end_ms:1000,text:'Fixture.',speaker_raw:'0'}]));
+  await call(w.env,FOUNDER,'GET',`/sessions/${w.session}/bot`);
+  assert.equal(messages.length,1);
+  assert.equal(await runInterviewProcessJob(w.env,messages[0].payload),'done');
+  assert.equal((await event(w,uid,{seq:4,type:'status',status:'done',chunks:1,chunks_failed:0})).body.bot.status,'done');
+  assert.equal((await event(w,uid,{seq:4,type:'status',status:'done',chunks:1,chunks_failed:0})).body.budget_deadline_at,null,'a terminal replay cannot renew recording');
+  assert.equal(w.stops.length,1);
+}
+async function incomplete(Supervisor=MeetingBotRun) {
+  for(const kind of ['pending','unannounced','failed','unknown','gap','missing_row','uncommitted_ticket','extra_ticket','extra_row','shifted_row','premature_stop']) {
+    const w=world(500_000_000,Supervisor),r=await post(w),uid=r.body.bot.uid;
+    await event(w,uid,{seq:1,type:'status',status:'recording'});
+    if(['pending','missing_row','gap','uncommitted_ticket','extra_ticket','extra_row','shifted_row','premature_stop'].includes(kind)) {
+      const ticket=await event(w,uid,{seq:2,type:'chunk',chunk_seq:kind==='gap'?1:0,size_bytes:wav().byteLength,start_ms:0});
+      if(!['pending','extra_ticket','premature_stop'].includes(kind)) assert.equal((await upload(w,ticket.body.upload_path)).status,200);
+      if(kind==='uncommitted_ticket') {const data=w.supervisors.get(uid).data;data.set('chunk:0',{...data.get('chunk:0'),used:false});}
+      if(kind==='extra_row')w.db.prepare("INSERT INTO interview_session_chunks(session_id,seq,r2_key,mime,size_bytes) VALUES(?,99,'synthetic-extra','audio/wav',32044)").run(w.session);
+      if(kind==='shifted_row')w.db.prepare('UPDATE interview_session_chunks SET seq=1 WHERE session_id=?').run(w.session);
+      if(kind==='missing_row')w.db.prepare('DELETE FROM interview_session_chunks WHERE session_id=?').run(w.session);
+    }
+    const chunks=['failed','extra_ticket'].includes(kind)?0:kind==='unknown'?null:1;
+    const done=await event(w,uid,{seq:3,type:'status',status:kind==='premature_stop'?'stopped':'processing',chunks,chunks_failed:kind==='failed'?1:0});
+    assert.equal(done.status,200,kind);assert.equal(done.body.bot.status,'failed',kind); assert.equal(done.body.bot.failure_code,'processing_failed',kind);
+    assert.equal((await botRow(w.env,uid))!.status,'failed');
+  }
+}
+async function stopDrain(Supervisor=MeetingBotRun) {
+  for(const expired of [false,true,'repeat_stop']) {
+    const w=world(500_000_000,Supervisor),r=await post(w),uid=r.body.bot.uid,row=(await botRow(w.env,uid))!,clock=Date.now;
+    await event(w,uid,{seq:1,type:'status',status:'recording'});
+    try {
+      Date.now=()=>row.started_at!+2000;
+      await call(w.env,FOUNDER,'POST',`/sessions/${w.session}/bot/stop`,{});
+      const ticket=await event(w,uid,{seq:2,type:'chunk',chunk_seq:0,size_bytes:wav().byteLength,start_ms:0});
+      if(!expired) {
+        assert.equal((await upload(w,ticket.body.upload_path)).status,200);
+        assert.equal((await event(w,uid,{seq:3,type:'status',status:'done',chunks:1,chunks_failed:0})).body.bot.status,'stopped');
+      }else {
+        Date.now=()=>row.started_at!+32_000;
+        if(expired==='repeat_stop') await call(w.env,FOUNDER,'POST',`/sessions/${w.session}/bot/stop`,{});
+        else await w.supervisors.get(uid).object.alarm();
+        assert.equal((await botRow(w.env,uid))!.failure_code,'processing_failed');
+        assert.ok((await upload(w,ticket.body.upload_path)).status>=400);
+      }
+    }finally{Date.now=clock;}
+  }
+}
+test('B1 follow-up: lease renews exactly 20 seconds early, without early settlement or duplicate holds',()=>renewal());
+test('B1 follow-up: unpublished notice refuses start without spending',()=>noticeOff());
+test('B1 follow-up: approved notice names the run-authorized company',()=>noticeCompany());
+test('B1 follow-up: normal completion uploads before processing',()=>complete());
+test('B1 follow-up: incomplete, failed or unknown uploads never become a complete recording',()=>incomplete());
+test('B1 follow-up: Stop drains for 30 seconds and an incomplete drain fails',()=>stopDrain());
+
+async function finalLease(Supervisor=MeetingBotRun) {
+  const w=world(500_000_000,Supervisor),r=await post(w),uid=r.body.bot.uid,row=(await botRow(w.env,uid))!,clock=Date.now;
+  try {
+    for(let minute=1;minute<=28;minute++) {Date.now=()=>row.started_at!+minute*60_000;await event(w,uid,{seq:minute,type:'heartbeat'});}
+    const count=w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n;
+    assert.equal(count,15);
+    Date.now=()=>row.started_at!+30*60_000-20_000;
+    assert.equal((await event(w,uid,{seq:29,type:'heartbeat'})).body.budget_deadline_at,row.started_at!+30*60_000);
+    await w.supervisors.get(uid).object.alarm();
+    assert.equal(w.db.prepare('SELECT COUNT(*) AS n FROM ai_budget_reservations').get().n,count);
+    assert.equal(w.supervisors.get(uid).alarm,row.started_at!+30*60_000);
+  }finally{Date.now=clock;}
+}
+async function renewalRefusal(Supervisor=MeetingBotRun) {
+  const w=world(500_000_000,Supervisor),r=await post(w),uid=r.body.bot.uid,row=(await botRow(w.env,uid))!,clock=Date.now;
+  await event(w,uid,{seq:1,type:'status',status:'recording'});
+  w.db.prepare('UPDATE ai_included_spend SET spend_microusd=500000000').run();
+  try {
+    Date.now=()=>row.started_at!+100_000;
+    assert.equal((await event(w,uid,{seq:2,type:'heartbeat'})).status,402);
+    assert.equal((await botRow(w.env,uid))!.failure_code,'tokens');
+    assert.equal(w.stops.length,1);assert.equal(w.db.prepare("SELECT COUNT(*) AS n FROM ai_budget_reservations WHERE status='pending'").get().n,0);
+  }finally{Date.now=clock;}
+}
+test('B1 follow-up: the plan limit never creates a zero-length extra block',()=>finalLease());
+test('B1 follow-up: a refused advance hold still stops with tokens',()=>renewalRefusal());
+
+for(const [name,before,after,check,published] of [
+  ['renewal lead removed','export const BOT_RENEWAL_LEAD_MS = 20_000','export const BOT_RENEWAL_LEAD_MS = 0',renewal,true],
+  ['renewal boundary delayed','now < last.end - BOT_RENEWAL_LEAD_MS','now <= last.end - BOT_RENEWAL_LEAD_MS',renewal,true],
+  ['current block charged early','elapsedOnly && block.end > end','false',renewal,true],
+  ['alarm waits until expiry','lease-BOT_RENEWAL_LEAD_MS','lease',renewal,true],
+  ['assembly completion guard removed',"if (status==='done' && !await this.state.storage.get('drain_until'))",'if (false)',complete,true],
+  ['assembly queue skipped','await this.queueAssembly(run);','',complete,true],
+  ['duplicate loses renewed lease',"duplicate:true,bot:botView(run),budget_deadline_at:terminal(run.status) || run.status==='processing' ? null : await this.lease()",'duplicate:true,bot:botView(run)',renewal,true],
+  ['terminal replay renews recording',"terminal(run.status) || run.status==='processing' ? null : await this.lease()",'await this.lease()',complete,true],
+  ['unpublished gate ignored','if (!MEETING_BOT_NOTICE_PUBLISHED)','if (false)',noticeOff,false],
+  ['venture attribution omitted','await botVentureName(this.env,run)','null',noticeCompany,true],
+  ['notice omitted from start','!,notice,venture_name:ventureName','!,venture_name:ventureName',noticeCompany,true],
+  ['upload checks skipped',"if ((status==='processing' || status==='done' || status==='stopped' && ['recording','processing'].includes(run.status)) && !await this.uploadsComplete(run,event))",'if (false)',incomplete,true],
+  ['runtime failure count ignored',"if (!int(count,3600) || (event.chunks_failed === undefined ? (prior === undefined ? null : 0) : event.chunks_failed) !== 0)",'if (false)',incomplete,true],
+  ['extra ticket ignored','tickets.size !== count || rows.length !== count','rows.length !== count',incomplete,true],
+  ['extra durable row ignored','tickets.size !== count || rows.length !== count','tickets.size !== count',incomplete,true],
+  ['unused ticket accepted','!tickets.get(`chunk:${seq}`)?.used','false',incomplete,true],
+  ['shifted sequence accepted','rows[seq].seq !== seq','false',incomplete,true],
+  ['expired incomplete drain accepted',"if (!await this.state.storage.get('uploads_complete')) return this.finish(run,'failed','processing_failed');",'',stopDrain,true],
+  ['repeat Stop bypasses upload checks',"if (run.status==='processing' && !await this.state.storage.get('uploads_complete')) return this.finish(run,'failed','processing_failed');",'',stopDrain,true],
+  ['extra final block funded','if (last && last.end >= (run.started_at ?? blocks[0].start) + run.limit_minutes*60_000)','if (false)',finalLease,true],
+  ['refused advance hold ignored',"if (!held.ok || held.replayed && held.status!=='pending') return false;","if (!held.ok || held.replayed && held.status!=='pending') return true;",renewalRefusal,true],
+] as const) test('B1 follow-up mutation: '+name,async()=>{
+  await check(published?MeetingBotRun:UnpublishedMeetingBotRun);
+  const variant=await supervisorVariant(before,after,published);
+  await assert.rejects(()=>check(variant.MeetingBotRun),{name:'AssertionError'});
+  await check(published?MeetingBotRun:UnpublishedMeetingBotRun);
+});
+
 
 test('B7 participants read is creator-only, decrypts the latest roster, excludes bot/IDs and distinguishes missing/corrupt data',async()=>{
   const w=world(),r=await post(w),uid=r.body.bot.uid;
