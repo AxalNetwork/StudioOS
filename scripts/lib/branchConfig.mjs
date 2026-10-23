@@ -360,11 +360,6 @@ export function renderBranchConfig(tomlSrc, entry) {
       case 'triggers':
         kv.set('crons', arr(BRANCH_CRONS));
         break;
-      case 'containers':
-      case 'containers.images.runtime':
-        // B8: class/image configuration is shared code. Wrangler derives the
-        // application from this branch's Worker; no HQ application id is copied.
-        break;
       default:
         break; // analytics_engine_datasets, ai, browser, assets, DOs, migrations, tail_consumers
     }
@@ -442,8 +437,6 @@ export function checkRendered(tomlSrc, entry, rendered) {
     'queues.consumers': 'queue',
     'durable_objects.bindings': 'name',
     migrations: 'tag',
-    containers: 'class_name',
-    'containers.images.runtime': 'dockerfile',
     tail_consumers: 'service',
   };
   const prodTables = new Map();
@@ -474,13 +467,6 @@ export function checkRendered(tomlSrc, entry, rendered) {
     const got = here.map((s) => s.kv.get(key)).sort();
     if (JSON.stringify(want) !== JSON.stringify(got)) {
       bad.push(`table ${table}: expected identities ${want.join(', ')}, found ${got.join(', ')}`);
-    }
-    if (table==='containers' || table==='containers.images.runtime') {
-      for (const expected of list) {
-        const found=here.find(s=>s.kv.get(key)===expected.kv.get(key));
-        for (const [field,value] of expected.kv) if (found?.kv.get(field)!==value)
-          bad.push(`table ${table}.${field}: container configuration differs from the reviewed source`);
-      }
     }
   }
 

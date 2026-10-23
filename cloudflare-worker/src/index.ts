@@ -2798,4 +2798,3 @@ export { OnboardingChat } from './durable-objects/onboarding-chat';
 export { HqEntrypoint, BranchEntrypoint } from './rpc';
 
 export { MeetingBotRun } from './durable-objects/meeting-bot-run';
-export { MeetingBotContainer } from './durable-objects/meeting-bot-container';

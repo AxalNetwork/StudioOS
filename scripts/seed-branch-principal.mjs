@@ -31,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { BRANCH_CODE_RE } from './lib/branchConfig.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const WRANGLER = 'wrangler@4.149.0';
+const WRANGLER = 'wrangler@4.131.0';
 
 const die = (msg) => { console.error(`✗ seed-branch-principal: ${msg}`); process.exit(1); };
 
