@@ -1,3 +1,4 @@
+import { getVerifiedLatestSnapshots } from '../services/scoreIntegrity';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
@@ -6,7 +7,6 @@ import { investorActiveCompany } from './_investorProjectScope';
 import { openConditionsOnDeal } from './ic';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { requireAuth, requireRole, requireAdmin, canAccessFounderResource } from '../auth';
-import { buildZip } from '../util/zip';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
 import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
@@ -52,6 +52,18 @@ function enrichDeal(row: any): any {
 
 const isPrivilegedRole = (role: string) =>
   role === 'admin' || role === 'partner' || role === 'investor';
+
+/** Internal deal-team fields never leave staff responses. */
+export function serializeDeal(row: any, role: string): any {
+  const result = enrichDeal(row);
+  if (role !== 'admin' && role !== 'partner') {
+    delete result.notes;
+    delete result.pass_reason;
+    delete result.pass_note;
+    delete result.passed_by_user_id;
+  }
+  return result;
+}
 
 deals.get('/', async (c) => {
   const user = await requireAuth(c);
@@ -123,7 +135,7 @@ deals.get('/', async (c) => {
         : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`);
   }
   await sql.end();
-  return c.json((rows as any[]).map(enrichDeal));
+  return c.json((rows as any[]).map(row => serializeDeal(row, user.role)));
 });
 
 // ---------------------------------------------------------------------------
@@ -305,7 +317,7 @@ deals.get('/stage-analytics', async (c) => {
  */
 deals.get('/screening', async (c) => {
   const user = await requireAuth(c);
-  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ detail: 'Forbidden' }, 403);
   const sql = getSQL(c.env);
 
   /** The six the scorer writes, in the order it writes them. */
@@ -321,7 +333,7 @@ deals.get('/screening', async (c) => {
   let scored: unknown;
   let flags: unknown;
   try {
-    const rows = await sql`
+    const rows = user.role === 'admin' ? await sql`
       SELECT d.id AS deal_id, d.status AS deal_status,
              p.name AS company, p.sector AS sector,
              s.total_score, s.tier, s.created_at AS scored_at,
@@ -341,7 +353,20 @@ deals.get('/screening', async (c) => {
              ) s ON s.project_id = d.project_id
        WHERE (p.id IS NULL OR p.deleted_at IS NULL)
        ORDER BY s.created_at DESC, d.created_at DESC
-       LIMIT 200`;
+       LIMIT 200` : await sql`
+      SELECT d.id AS deal_id, d.status AS deal_status, d.project_id,
+             p.name AS company, p.sector
+        FROM deals d JOIN projects p ON p.id = d.project_id
+       WHERE p.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 200`;
+    if (user.role !== 'admin') {
+      const verified = await getVerifiedLatestSnapshots(c.env, (rows as any[]).map(row => Number(row.project_id)), {
+        role: user.role, userId: user.id,
+      });
+      for (const row of rows as any[]) {
+        const snapshot = verified.get(Number(row.project_id));
+        if (snapshot) Object.assign(row, snapshot.row, { scored_at: snapshot.row.created_at });
+      }
+    }
 
     const list = (rows as any[]).map((r) => {
       // `anomaly_flags` is JSON written by detectAnomalies: [{type, severity}].
@@ -357,8 +382,10 @@ deals.get('/screening', async (c) => {
         total_score: r.total_score === null || r.total_score === undefined ? null : Number(r.total_score),
         tier: r.tier ?? null,
         scored_at: r.scored_at ?? null,
-        review_status: r.admin_review_status ?? null,
-        flags: Array.isArray(parsed) ? parsed : [],
+        ...(user.role === 'admin' ? {
+          review_status: r.admin_review_status ?? null,
+          flags: Array.isArray(parsed) ? parsed : [],
+        } : {}),
         // The six, in the rubric's order, so the page never re-derives it.
         dimensions: RUBRIC.map((dim) => ({
           key: dim.key,
@@ -383,12 +410,12 @@ deals.get('/screening', async (c) => {
     const flagged = withScore.filter((r) => r.review_status === 'flagged');
     const bySeverity: Record<string, number> = {};
     for (const r of flagged) {
-      for (const f of r.flags) {
+      for (const f of r.flags || []) {
         const key = String(f?.severity || 'unrecorded');
         bySeverity[key] = (bySeverity[key] || 0) + 1;
       }
     }
-    flags = {
+    flags = user.role !== 'admin' ? { available: false, reason: 'Administrator access required.' } : {
       available: true,
       open: flagged.length,
       by_severity: bySeverity,
@@ -640,7 +667,7 @@ deals.get('/:id', async (c) => {
     return c.json({ detail: 'Forbidden: you do not own this deal' }, 403);
   }
   await sql.end();
-  return c.json(enrichDeal(rows[0]));
+  return c.json(serializeDeal(rows[0], user.role));
 });
 
 deals.put('/:id', async (c) => {
@@ -1008,6 +1035,27 @@ export async function userMayReadDeal(env: Env, user: User, dealId: number): Pro
   }
 }
 
+/** Bulk deal authorization for admin/partner/investor score readers.
+ * Same staff and invited-or-committed rule as userMayReadDeal; other roles
+ * retain the single-deal ownership path and are refused by this bulk surface.
+ */
+export async function userReadableDealIds(env: Env, user: User, dealIds: number[]): Promise<Set<number>> {
+  const ids = [...new Set(dealIds.filter(id => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return new Set();
+  if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') return new Set();
+  const rows = await env.DB.prepare(`
+    SELECT d.id FROM deals d
+     WHERE d.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+       AND (? IN ('admin','partner') OR (
+         ? = 'investor' AND (
+           EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
+           OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?)
+         )
+       ))
+  `).bind(JSON.stringify(ids), user.role, user.role, user.id, user.id).all<{ id: number }>();
+  return new Set((rows.results || []).map(row => Number(row.id)));
+}
+
 async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
@@ -1032,47 +1080,23 @@ deals.get('/:id/documents', async (c) => {
 });
 
 deals.get('/:id/data-room', async (c) => {
-  const id = parseInt(c.req.param('id'));
-  const ctx = await loadDealForRead(c, id);
-  if (ctx.error) return ctx.error;
-  const { sql, deal } = ctx;
-  const docs = deal.project_id
-    ? await sql`SELECT id, title, content FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`
-    : [];
-  await sql.end();
-  const entries = [{
-    name: 'README.txt',
-    content: [
-      `Data Room — ${deal.project_name || 'Deal #' + id}`,
-      `Stage: ${deal.status}`,
-      `Documents: ${docs.length}`,
-      `Exported: ${new Date().toISOString()}`,
-    ].join('\n'),
-  }];
-  const seen = new Set<string>();
-  for (const d of docs as any[]) {
-    const base = String(d.title || `document_${d.id}`).replace(/[^a-zA-Z0-9 \-_.]/g, '_');
-    let name = `${base}.txt`;
-    let i = 1;
-    while (seen.has(name)) { name = `${base}_${i++}.txt`; }
-    seen.add(name);
-    entries.push({ name, content: d.content || '(document stored externally — no inline content)' });
-  }
-  const zip = buildZip(entries);
-  return new Response(zip, {
-    headers: {
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="data-room-deal-${id}.zip"`,
-    },
-  });
+  await requireAuth(c);
+  return c.json({ detail: 'This export is retired. Use the shared data room with its grants and NDA checks.' }, 410);
 });
 
 deals.get('/:id/commitments', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql } = ctx;
-  const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+  const { sql, user } = ctx;
+  if (user.role !== 'admin' && user.role !== 'founder' && user.role !== 'investor') {
+    const rows = await sql`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ${id}`;
+    await sql.end();
+    return c.json({ total: Number(rows[0]?.total ?? 0) });
+  }
+  const rows = user.role === 'investor'
+    ? await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} ORDER BY c.created_at DESC`
+    : await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
   await sql.end();
   return c.json(rows);
 });

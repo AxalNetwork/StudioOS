@@ -102,7 +102,7 @@ const SOURCES: Record<string, string[]> = {
   hubspot: ['integrations/providers/hubspot.ts'],
   calendly: ['integrations/providers/calendly.ts'],
   salesforce: ['integrations/providers/salesforce.ts'],
-  carta: ['integrations/providers/carta.ts'],
+  carta: ['integrations/providers/carta.ts', 'routes/carta_investor.ts'],
   docusign: ['integrations/providers/docusign.ts'],
   stripe: ['integrations/providers/stripe.ts'],
   crunchbase: ['integrations/providers/crunchbase.ts'],

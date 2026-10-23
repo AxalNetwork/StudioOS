@@ -19,7 +19,7 @@ for (const isDemo of [true, false]) {
     const api = isDemo ? 'https://api.playground.carta.team' : 'https://api.carta.com';
     db.prepare('INSERT INTO oauth_state_tokens VALUES (?, ?)').run('state-fixture', JSON.stringify({ is_demo: isDemo, challenge: 'challenge-fixture' }));
     const impl = getProviderImpl('carta')!;
-    const c = { env } as any, user = { id: 17, role: 'founder' } as any;
+    const c = { env, req: { header: () => undefined } } as any, user = { id: 17, role: 'founder' } as any;
     const url = new URL(await impl.buildAuthorizeUrl!(c, user, 'state-fixture'));
     assert.equal(url.origin + url.pathname, `${auth}/o/authorize/`);
     assert.deepEqual(url.searchParams.get('scope')?.split(' '), scopes);

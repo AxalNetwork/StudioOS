@@ -94,3 +94,17 @@ Carta (#2634 part 1) defaults new OAuth connections to Playground. The chosen
 refresh, issuer reads and revocation all use that environment. Legacy rows
 without the flag retain their original production environment. The account
 choice reuses DocuSign's existing selector.
+
+Carta investor grants (#2634) request only `read_investor_*` scopes and save
+`config.audience = investor`; founder/legacy rows remain issuer grants.
+Investor reads go through `../cartaInvestor.ts` and
+`../../routes/carta_investor.ts`, one page at a time. They are live, read-only,
+and never enter founder cap-table stores or the six-hour issuer cron.
+An expanded refresh grant is revoked before any API retry or persistence.
+`audience` and environment cannot be changed through settings; reconnect.
+
+A refused expanded Carta refresh marks its row `error` with a static code,
+then revokes the refused token; future reads ask to reconnect. Legacy Carta
+rows held by other roles keep their own Disconnect path but never enter the
+issuer scheduler or manual sync. A failed local read-log write has its own
+503 code, separate from a Carta read failure.

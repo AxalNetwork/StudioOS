@@ -14,6 +14,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { SignJWT } from 'jose';
+import { readFileSync } from 'node:fs';
+import { tableFromBaseline } from './_baseline.mjs';
 
 import pipeline from '../src/routes/pipeline.ts';
 
@@ -81,16 +83,12 @@ function freshDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, deal_id INTEGER NOT NULL,
       status TEXT, ai_recommendation TEXT, final_decision TEXT, created_at TEXT
     );
-    CREATE TABLE score_snapshots (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER NOT NULL,
-      total_score REAL, tier TEXT, is_sandbox INTEGER DEFAULT 0,
-      admin_review_status TEXT, integrity_hash TEXT, integrity_version INTEGER,
-      created_at TEXT
-    );
     CREATE TABLE mi_pro_subscriptions (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, status TEXT
     );
   `);
+  // #2439: verified score reads select component fields; use the production schema.
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'), 'score_snapshots'));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, email) VALUES (?,?,?,?)');
   u.run(FOUNDER.user, 'founder', FOUNDER.founder_id, 'f@example.com');
   u.run(ADMIN, 'admin', null, 'a@example.com');

@@ -228,6 +228,9 @@ scoring.post('/score', async (c) => {
     inputs: pickInputs(body) as Record<string, number>,
     qualitativeText,
   });
+  if (!effectiveSandbox && result.total_score < 70) {
+    flags.push({ type: 'low_score_review', detail: 'A low score requires a human decision; project status is unchanged.', severity: 'low' });
+  }
   const reviewStatus: 'auto_approved' | 'flagged' =
     !effectiveSandbox && flags.length > 0 ? 'flagged' : 'auto_approved';
   const flagsJson = flags.length > 0 ? JSON.stringify(flags) : null;
@@ -315,8 +318,8 @@ scoring.post('/score', async (c) => {
   // Status only flips for auto-approved official runs. Flagged runs hold
   // the project at its current status until admin signs off (LP guarantee).
   let newStatus = project.status;
-  if (!effectiveSandbox && reviewStatus === 'auto_approved') {
-    newStatus = result.total_score >= 85 ? 'tier_1' : result.total_score >= 70 ? 'tier_2' : 'rejected';
+  if (!effectiveSandbox && reviewStatus === 'auto_approved' && result.total_score >= 70) {
+    newStatus = result.total_score >= 85 ? 'tier_1' : 'tier_2';
     if (newStatus !== project.status) {
       await sql`UPDATE projects SET status = ${newStatus}, updated_at = CURRENT_TIMESTAMP WHERE id = ${projectId}`;
     }

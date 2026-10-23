@@ -13,6 +13,7 @@
  *   - the capability list shown as chips on each card,
  *   - the auth flow (api_key | oauth2 | webhook) the connect modal renders.
  */
+import { cartaAudience, cartaScopesFor } from './cartaScopes';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import type { Tier } from '../middleware/requireTier';
@@ -310,6 +311,7 @@ export const REGISTRY: ProviderDescriptor[] = [
   },
   {
     key: 'carta',
+    personal_roles: ['founder', 'investor'],
     display_name: 'Carta',
     integration_type: 'cap_table',
     description: 'Mirror your Carta cap table (issuer, stakeholders, securities) into the Capital module on a 6-hour sync.',
@@ -583,6 +585,7 @@ export function personalMercuryFor(role: string | null | undefined): Readonly<Pe
 
 /** The modules a connector feeds for this viewer: Mercury's personal variant by role, else the catalogue's. */
 export function connectorFeeds(providerKey: string, role?: string | null): string[] {
+  if (providerKey === 'carta' && role === 'investor') return ['deals_pipeline', 'investor_portfolio'];
   if (providerKey === 'mercury' && role != null && String(role).toLowerCase() !== 'admin') return [...(personalMercuryFor(role)?.feeds ?? [])];
   return CONNECTOR_METADATA[providerKey]?.feeds ?? [];
 }
@@ -744,27 +747,38 @@ export function personalHqOnlySentence(name: string): string {
   return `${name} is offered to your profile on HQ only.`;
 }
 
+/** The allowlist is selected from the authenticated member, never a request parameter. */
+export function descriptorForRole(p: ProviderDescriptor, role: string): ProviderDescriptor {
+  const audience = cartaAudience(role);
+  return p.key === 'carta' && audience ? { ...p, oauth_scopes: cartaScopesFor(audience) } : p;
+}
+
 export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewer, env?: Pick<Env, 'ZOOM_APP_AUDIENCE'>) {
   const audience = viewer ? audienceFor(p, viewer) : 'open';
   // D713, D752: a founder, partner or investor reads their role's Mercury variant; D879: a previewing admin reads the founder's.
   const variant = p.key !== 'mercury' ? null
     : audience === 'personal' ? personalMercuryFor(viewer!.role) : audience === 'preview' ? PERSONAL_MERCURY.founder : null;
-  const feeds = variant ? [...variant.feeds] : CONNECTOR_METADATA[p.key]?.feeds ?? [];
+  const cartaInvestor = p.key === 'carta' && viewer?.role === 'investor';
+  const metadata = cartaInvestor ? { ...CONNECTOR_METADATA.carta, feeds: ['deals_pipeline', 'investor_portfolio'],
+    pulls: [{ what: 'Your firms, funds, portfolio investments, securities and cap tables', module: 'investor_portfolio' }],
+    permissions: ['Read your Carta firms.', 'Read funds in those firms.', 'Read their portfolio investments.', 'Read their investment securities.', 'Read their portfolio companies’ capitalization tables.'],
+    used_by: [{ label: 'Deals · Pipeline', href: '/deals/pipeline' }, { label: 'Portfolio', href: '/portfolio' }] } : CONNECTOR_METADATA[p.key];
+  const feeds = variant ? [...variant.feeds] : metadata?.feeds ?? [];
   return {
     key: p.key,
     display_name: p.display_name,
     integration_type: p.integration_type,
-    description: variant ? variant.description : p.description,
+    description: cartaInvestor ? 'Read your own Carta firms, funds, investments, securities and cap tables. Read-only.' : variant ? variant.description : p.description,
     status: p.status,
     tier: p.tier,
     auth_type: p.auth_type,
-    capabilities: variant ? [...variant.capabilities] : p.capabilities,
+    capabilities: cartaInvestor ? ['Firm and fund reads', 'Portfolio investments', 'Securities and cap tables'] : variant ? [...variant.capabilities] : p.capabilities,
     docs_url: p.docs_url,
     icon: p.icon ?? null,
     supports_pat: !!p.supports_pat,
     // Only a member's own connection is made here: a preview has no implementation (D879).
     has_implementation: PROVIDER_IMPLS.has(p.key) && !(p.key === 'mercury' && audience !== 'personal'),
-    ...CONNECTOR_METADATA[p.key],
+    ...metadata,
     ...(variant ? { permissions: [...variant.permissions] } : {}),
     // D879: the catalogue's pulls and `used_by` are the founder's Grow and Raise; a partner's card claims neither.
     // D884 (#2557): an investor's card claims its own sections, from `MERCURY_FEEDS`.
