@@ -217,13 +217,20 @@ networkfx.get('/syndicates', async (c) => {
 });
 
 networkfx.get('/syndicates/:id', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.id = ${id}`;
   if (!rows.length) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
-  const members = await sql`SELECT m.*, u.name, u.email FROM syndicate_members m JOIN users u ON u.id = m.user_id WHERE syndicate_id = ${id} ORDER BY joined_at`;
+  const memberRows = await sql`SELECT m.*, u.name, u.email FROM syndicate_members m JOIN users u ON u.id = m.user_id WHERE syndicate_id = ${id} ORDER BY joined_at`;
+  const mayReadMembers = user.role === 'admin' || Number(rows[0].created_by) === user.id
+    || memberRows.some(member => Number(member.user_id) === user.id);
+  const members = mayReadMembers ? memberRows.map(member => {
+    const projected = { ...member };
+    if (user.role !== 'admin') delete projected.email;
+    return projected;
+  }) : [];
   let project = null;
   if ((rows[0] as any).deal_id) {
     const p = await sql`SELECT id, name, sector, stage, status FROM projects WHERE id = ${(rows[0] as any).deal_id}`;
@@ -318,7 +325,7 @@ networkfx.post('/syndicates/:id/recommendations', async (c) => {
   let recs: any[] = [];
   if (synd.deal_id) {
     recs = await sql`
-      SELECT u.id, u.name, u.email, u.role, ms.score, ms.explanation
+      SELECT u.id, u.name, u.role, ms.score, ms.explanation
       FROM match_scores ms JOIN users u ON u.id = ms.user_id
       WHERE ms.deal_id = ${synd.deal_id} AND ms.score_type = 'deal_flow'
         AND u.kyc_status = 'approved'
@@ -328,7 +335,7 @@ networkfx.post('/syndicates/:id/recommendations', async (c) => {
     `;
   } else {
     recs = await sql`
-      SELECT u.id, u.name, u.email, u.role, NULL as score, NULL as explanation
+      SELECT u.id, u.name, u.role, NULL as score, NULL as explanation
       FROM users u
       WHERE u.kyc_status = 'approved' AND u.role IN ('partner', 'investor', 'admin')
         AND u.id != ${synd.created_by}
