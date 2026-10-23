@@ -1208,7 +1208,9 @@ test('#1586 voice: the failure read is the member\'s own, and a note on a pendin
   } finally { f.restore(); }
 });
 
-test('#1586 Calling eligibility: recorded at signup and on Test, read honestly, and no number is kept', async () => {
+test('#1586 Calling eligibility: recorded at signup and on Test, read honestly, and no number is kept', async (t) => {
+  // A legitimate checked_at timestamp containing 555 must not look like a phone leak.
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-23T12:00:00.555Z') });
   const { env, db } = await world({ seed: true });
   let read = await call(env, ME, 'GET', '');
   let calls = read.body.connections.whatsapp.calls;
@@ -1233,7 +1235,7 @@ test('#1586 Calling eligibility: recorded at signup and on Test, read honestly, 
   assert.equal(calls.sentence,
     'Calls: not yet, because Axal does not answer or place WhatsApp calls yet; this number can start 1,000 conversations a day, and WhatsApp Calling needs at least 2,000; Meta does not offer business-initiated calls for numbers in the US or Canada (+1).');
   assert.equal(calls.tier, 'TIER_1K');
-  assert.equal(JSON.stringify(read.body).includes('555'), false, 'no number on the read');
+  assert.equal(/555-?000-?1234|5550001234/.test(JSON.stringify(read.body)), false, 'no complete phone number on the read');
   assert.equal(read.body.connections.telegram?.calls, undefined, 'Telegram has no calls block');
 
   const g = mockFetch((url) => (url.pathname === `/v23.0/${PNID}` ? { json: { messaging_limit_tier: 'TIER_10K', display_phone_number: '+44 7700 900999' } } : undefined));

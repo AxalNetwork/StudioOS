@@ -144,9 +144,6 @@ const env = (db: any): any => ({ JWT_SECRET, ENVIRONMENT: 'development', DB: mak
 
 type Who = { user: number; role: string };
 const founder: Who = { user: FOUNDER.user, role: 'founder' };
-const partner: Who = { user: PARTNER.user, role: 'partner' };
-const investor: Who = { user: INVESTOR.user, role: 'investor' };
-const admin: Who = { user: ADMIN.user, role: 'admin' };
 
 async function get(router: any, path: string, who: Who, company?: number | string, db = freshDb()) {
   const headers: Record<string, string> = { Authorization: `Bearer ${await token(who.user, who.role)}` };
