@@ -88,3 +88,9 @@ Use `cloudflare-worker/src/integrations/oauth.ts` `buildPkce()` inside your
 `buildAuthorizeUrl` so the verifier is bound to the signed state. The
 callback handler in `cloudflare-worker/src/routes/integrations.ts` will hand the verifier back
 to your `connect()` via `input.config.pkce_verifier`.
+
+Carta (#2634 part 1) defaults new OAuth connections to Playground. The chosen
+`is_demo` flag rides in signed state and the saved connection config; exchange,
+refresh, issuer reads and revocation all use that environment. Legacy rows
+without the flag retain their original production environment. The account
+choice reuses DocuSign's existing selector.

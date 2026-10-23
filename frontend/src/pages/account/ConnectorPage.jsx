@@ -505,10 +505,10 @@ function ManageRows({ p, items, flow }) {
 
 /** Pick an account kind on the flow, or take the other way in. */
 function useChoices(p, flow) {
-  const envValue = p.key === 'salesforce' ? (flow.sfSandbox ? 'sandbox' : 'production') : p.key === 'docusign' ? (flow.dsDemo ? 'demo' : 'production') : null;
+  const envValue = p.key === 'salesforce' ? (flow.sfSandbox ? 'sandbox' : 'production') : (p.key === 'docusign' || p.key === 'carta') ? (flow.dsDemo ? 'demo' : 'production') : null;
   const pickEnv = (v) => {
     if (p.key === 'salesforce') flow.setSfSandbox(v === 'sandbox');
-    if (p.key === 'docusign') flow.setDsDemo(v === 'demo');
+    if (p.key === 'docusign' || p.key === 'carta') flow.setDsDemo(v === 'demo');
   };
   const takeAlt = (id) => (id === 'pat' ? flow.go('key') : flow.startOauth());
   return { envValue, pickEnv, takeAlt };

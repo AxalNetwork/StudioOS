@@ -1466,8 +1466,9 @@ integrations.get('/oauth/:provider/start', async (c) => {
     const sb = c.req.query('sandbox');
     extra.is_sandbox = sb === '1' || sb === 'true';
   }
-  if (provider === 'docusign') {
-    // DocuSign has separate demo (account-d.docusign.com) and prod
+  if (provider === 'docusign' || provider === 'carta') {
+    // Carta and DocuSign each have separate test and production hosts.
+    // DocuSign uses demo (account-d.docusign.com) and prod
     // (account.docusign.com) auth hosts. The frontend passes ?demo=1
     // for sandbox connects. The callback recovers this from state.extra
     // and feeds it into connect()'s config so we never trust the query
