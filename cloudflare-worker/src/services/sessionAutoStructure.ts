@@ -117,7 +117,7 @@ export async function structureSession(
   } catch (err) {
     console.warn('[structure] translation pass failed', (err as Error)?.message);
   }
-  const { segments, originals } = await readSessionSegments(env, session.id);
+  const { segments, originals, sourceSnapshot } = await readSessionSegments(env, session.id);
   if (!segments.length) return { ok: false, reason: 'no_final_transcript' };
 
   const prior = await env.DB.prepare('SELECT COUNT(DISTINCT run_id) AS n FROM validate_proposals WHERE session_id = ?')
@@ -141,7 +141,7 @@ export async function structureSession(
   const { stored } = await storePlacements(env, {
     projectId: session.project_id, sessionId: session.id, interviewId: session.interview_id, runId,
     userId: opts.userId, model: out.receipt[out.receipt.length - 1]?.model || '', placements: withOriginals(out.placements, segments, originals),
-    dedupe: opts.dedupe === true,
+    dedupe: opts.dedupe === true, sourceSnapshot,
     // D873 (#2520): a call's suggestions say their words were recorded.
     ...(CALL_CHANNELS.has(String(session.submitted_via ?? '')) ? { sourceLabel: 'Recorded' as const } : {}),
   });
@@ -161,6 +161,7 @@ export async function structureSession(
  */
 export async function readSessionSegments(env: Env, sessionId: number): Promise<{
   segments: Segment[]; originals: Map<number, { text: string; lang: string | null }>;
+  sourceSnapshot: Array<{ id: number; text: string }>;
 }> {
   const rows = (await env.DB.prepare(
     `SELECT id, start_ms, end_ms, speaker_label, text, source_lang, translated_text, translation_status FROM interview_transcript_segments
@@ -173,7 +174,7 @@ export async function readSessionSegments(env: Env, sessionId: number): Promise<
     if (translation) originals.set(r.id, { text: r.text, lang: r.source_lang ?? null });
     read.push({ id: r.id, start_ms: r.start_ms, end_ms: r.end_ms, speaker_label: r.speaker_label, text: translation ?? r.text });
   }
-  return { segments: toSegments(read), originals };
+  return { segments: toSegments(read), originals, sourceSnapshot: rows.map((r) => ({ id: r.id, text: r.text })) };
 }
 
 /**

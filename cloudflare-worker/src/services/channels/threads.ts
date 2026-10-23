@@ -24,8 +24,10 @@
  * connection's daily cap and the member's AI budget. A stranger who writes in
  * can therefore never run the model on the member's account.
  *
- * Edits and deletions at the source change a PENDING message. Once a message
- * is in an interview the transcript is the member's record: they edit it there.
+ * Edits and deletions at the source change a PENDING message. D866 §4 is
+ * Telegram's exception for assigned chats: a proven source_ref follows edits
+ * and deletions into the transcript, withdrawing only undecided proposals.
+ * Decided proposals stay; deletion marks their citation as deleted at source.
  *
  * A CHAT WAITS FOR CONSENT WHERE ITS PROVIDER ASKS FOR IT (D754 §4, #1893;
  * `consentRequired`, WhatsApp today). Assigning such a chat links it to its
@@ -313,6 +315,7 @@ export async function storeMessage(env: Env, conn: ChannelConnection, m: ThreadM
       const { interview } = await writableInterview(env, conn.userId, Number(thread.interview_id));
       const seg: StoredSegment = {
         start_ms: null, end_ms: null, speaker_raw: null, text,
+        source_ref: conn.provider === 'telegram' ? await refKey('telegram', m.externalMessageId) : null,
         speaker_label: speaker(m.side, interview.interviewee_name, m.contactName ?? (await contactName(env, thread))),
       };
       await appendSegments(env, conn.userId, Number(thread.session_id), [seg], conn.provider, [bumpStatement(env, thread.id, m.side)]);
@@ -486,8 +489,8 @@ export async function noteVoiceTry(env: Env, messageUid: string, job: string, er
 export async function storeVoiceTranscript(
   env: Env, conn: ChannelConnection, note: VoiceJobNote, transcript: string, alongside: D1PreparedStatement[] = [],
 ): Promise<'session' | 'pending' | 'empty' | 'gone'> {
-  const still = await env.DB.prepare(`SELECT thread_id FROM channel_thread_messages WHERE id = ? AND uid = ? AND voice_ref_enc IS NOT NULL`)
-    .bind(note.id, note.uid).first<{ thread_id: number }>();
+  const still = await env.DB.prepare(`SELECT thread_id, external_message_id FROM channel_thread_messages WHERE id = ? AND uid = ? AND voice_ref_enc IS NOT NULL`)
+    .bind(note.id, note.uid).first<{ thread_id: number; external_message_id: string }>();
   const thread = still ? await env.DB.prepare('SELECT * FROM channel_threads WHERE id = ?').bind(still.thread_id).first<ThreadRow>() : null;
   if (!thread || keepsNothing(thread)) return 'gone';
   const drop = env.DB.prepare(`DELETE FROM channel_thread_messages WHERE id = ?`).bind(note.id);
@@ -501,6 +504,7 @@ export async function storeVoiceTranscript(
       const { interview } = await writableInterview(env, conn.userId, Number(thread.interview_id));
       const seg: StoredSegment = {
         start_ms: null, end_ms: null, speaker_raw: null, text,
+        source_ref: conn.provider === 'telegram' ? still?.external_message_id : null,
         speaker_label: speaker(note.side, interview.interviewee_name, await contactName(env, thread)),
       };
       await appendSegments(env, conn.userId, Number(thread.session_id), [seg], conn.provider, [drop, ...alongside]);
@@ -534,6 +538,10 @@ export async function threadForChat(env: Env, conn: ChannelConnection, externalC
 /** An edit at the source replaces a pending message's text. False when there is no pending copy. */
 export async function applyEdit(env: Env, conn: ChannelConnection, edit: InboundEdit): Promise<boolean> {
   const thread = await threadForChat(env, conn, edit.externalChatId);
+  if (thread?.status === 'assigned' && conn.provider === 'telegram') {
+    const { changeTelegramSource } = await import('./telegramSource');
+    return (await changeTelegramSource(env, conn, thread, [edit.externalMessageId], clip(edit.text, CHANNEL_LIMITS.maxTextChars))) > 0;
+  }
   if (!thread || thread.status !== 'pending') return false;
   // A voice note's placeholder has no text to replace.
   const row = await env.DB.prepare(
@@ -555,7 +563,9 @@ export async function applyEdit(env: Env, conn: ChannelConnection, edit: Inbound
 export async function applyDelete(env: Env, conn: ChannelConnection, del: InboundDelete): Promise<number> {
   const thread = await threadForChat(env, conn, del.externalChatId);
   if (!thread) return 0;
-  let removed = 0;
+  const { changeTelegramSource } = await import('./telegramSource');
+  let removed = conn.provider === 'telegram' && thread.status === 'assigned'
+    ? await changeTelegramSource(env, conn, thread, del.externalMessageIds.slice(0, 100), null) : 0;
   for (const id of del.externalMessageIds.slice(0, 100)) {
     const res = await env.DB.prepare(`DELETE FROM channel_thread_messages WHERE thread_id = ? AND external_message_id = ?`)
       .bind(thread.id, await refKey(thread.provider, id)).run();
@@ -648,6 +658,7 @@ async function movePending(
       if (!text) continue;
       segments.push({
         start_ms: null, end_ms: null, speaker_raw: null, text,
+        source_ref: thread.provider === 'telegram' ? r.external_message_id : null,
         speaker_label: speaker(r.direction, scoped.interview.interviewee_name, name),
       });
     }
