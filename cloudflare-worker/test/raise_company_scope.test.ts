@@ -11,8 +11,8 @@
  * What is NEW in this stage, and what these tests exist to pin:
  *
  *   1. The exemption set is WIDER than progress.ts's. compliance's
- *      `isPrivilegedReader` and captable's `canReadProject` both admit
- *      INVESTORS to any project. An investor's active company is their fund;
+ *      `isPrivilegedReader` admits INVESTORS to any project (captable's
+ *      `canReadProject` did too until #2436 refused them by role). An investor's active company is their fund;
  *      `projects.company_id` can never equal it. The stage-1 trap (partner)
  *      has an investor twin here, and both are pinned.
  *
@@ -209,10 +209,14 @@ test('captable: by-project and compare narrow to the active company', async () =
   }
 });
 
-test('captable: THE TRAP — canReadProject admits partner AND investor; neither may be narrowed', async () => {
+test('captable: THE TRAP — partner and investor are never narrowed by their own company', async () => {
+  // #2436 refuses both on the cap table by ROLE: investors always, partners
+  // without a recorded project membership (none is seeded here). That is a
+  // 403. A 404 would mean the active-company narrowing hid the project from
+  // them, which is the trap this test exists for.
   const path = `/scenarios/by-project/${PROJECT_A}/compare`;
-  assert.equal((await get(captable, path, partner, AGENCY)).status, 200);
-  assert.equal((await get(captable, path, investor, FUND)).status, 200);
+  assert.equal((await get(captable, path, partner, AGENCY)).status, 403);
+  assert.equal((await get(captable, path, investor, FUND)).status, 403);
 });
 
 // ---------- the leak the stage-1 pattern would NOT have closed ----------
@@ -258,12 +262,13 @@ test('captable: an UNBOUND scenario is unaffected by the active company', async 
   }
 });
 
-test('captable: a bound scenario whose project row is GONE still falls through to the owner path', async () => {
-  // Unchanged behaviour, pinned so the new 404 cannot swallow it. A deleted
-  // project is not "another company's data" — it is no data — and the owner
-  // has always been able to read their orphaned scenario.
+test('captable: a bound scenario whose project row is GONE fails closed, not as another company\'s', async () => {
+  // #2436: a missing project never turns a bound scenario into a private
+  // ownership bypass; the owner is refused (403) and an admin recovers it
+  // (captable_privacy_2436.test.ts). A deleted project is still not "another
+  // company's data", so this is not the out-of-company 404.
   const db = freshDb();
   seedScenario(db, 'sc-orphan', FOUNDER.user, 4242);   // no such project row
   const res = await get(captable, '/scenarios/sc-orphan', founder, COMPANY_A, db);
-  assert.equal(res.status, 200, 'an orphaned scenario is still its owner\'s');
+  assert.equal(res.status, 403, 'an orphaned bound scenario fails closed for its owner');
 });
