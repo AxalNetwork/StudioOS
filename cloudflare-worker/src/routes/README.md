@@ -258,3 +258,8 @@ D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 `/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
 operator's own consented session; status events supply content-free timings.
+
+D886 B8: `meeting_bot_callbacks.ts` also mounts signed per-run
+`…/zoom-credentials`. The empty command cannot choose a user or meeting;
+B1 checks current run access/consent, phase, paid lease and mint throttling.
+Responses are `no-store`; app/OAuth secrets are never returned.

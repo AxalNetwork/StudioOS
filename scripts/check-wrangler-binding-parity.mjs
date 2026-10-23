@@ -67,6 +67,8 @@ const IDENTITY = {
   'durable_objects.bindings': 'name',
   tail_consumers: 'service',
   migrations: 'tag',
+  containers: 'class_name',
+  'containers.images.runtime': 'dockerfile',
   triggers: 'crons',
   hyperdrive: 'binding',
   send_email: 'name',

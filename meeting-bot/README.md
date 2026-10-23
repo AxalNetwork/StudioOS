@@ -232,7 +232,7 @@ not permission for the runtime to extend an unfunded interval.
 
 ## Container control
 
-The container uses `MEETING_BOT_SECRET` (the existing shared secret),
+The container uses `MEETING_BOT_SECRET` (a key derived for this run by B8),
 `MEETING_BOT_CALLBACK_ORIGIN` (an HTTPS Worker origin) and optional `PORT`
 (default 8080). B8 keeps this port private. POST `/start` and `/stop` use the
 same signed-header format, signing their actual path. The five-minute command
@@ -249,10 +249,11 @@ Neither command waits for the callback of the same serialized supervisor.
 
 `GET /healthz` is a content-free process check; `ready` states the notice
 publication gate. Readiness is not a live platform verification. The image
-runs as the `node` user. Chromium's sandbox is enabled; B8 must verify the
+runs as the `node` user. Chromium's sandbox is enabled; The owner's live gate verifies the
 container host's namespace/seccomp compatibility, rather than disabling it.
-Python is the sidecar host only: this image does not claim the Zoom SDK native
-bridge has been packaged or measured. The switch and notice remain gated.
+Python hosts the Zoom sidecar. B8 packages the pinned native binding, GLib,
+Xvfb and PulseAudio; image CI verifies import and process startup. The switch,
+notice and live measurement remain gated.
 
 Run `npm ci --prefix meeting-bot`, then `npm run test:meeting-bot` from the
 repository root. `CHROMIUM_PATH` can select an installed test browser for the
@@ -270,6 +271,10 @@ real Python protocol peer. Linux SDK import and live meeting behavior remain
 UNVERIFIED. The existing ZoomAdapter accepts it as its `sdk` dependency.
 
 
-The merged B4 Python sidecar source and pinned requirement file are copied into
-the image. Its native SDK binding/GLib/PulseAudio installation and live loading
-remain B8's verification gate; the factory does not activate it prematurely.
+B8 selects the merged Meet, Teams and Zoom adapters in `src/runtimeAdapters.ts`.
+The Zoom factory obtains short-lived SDK/OBF tokens from the signed Worker
+bootstrap for this run; it sends no member or meeting selector. OAuth/app
+credentials stay in the Worker. `container-entry.sh` starts local audio/display
+services and then execs Node so SIGTERM reaches the existing drain handler.
+Image CI uses no provider network or live credentials. SDK import and HTTP
+health do not certify a real Zoom meeting or host sandbox compatibility.
