@@ -281,15 +281,7 @@ networkfx.post('/syndicates/:id/join', async (c) => {
   }
   await logAction(c.env, 'syndicate_joined', user.id, { syndicate_id: id, commitment_cents: commitmentCents });
 
-  // Auto-close if target reached
-  if (sRow.target_cents) {
-    const totals: any = await c.env.DB.prepare(`SELECT COALESCE(SUM(commitment_cents), 0) as c FROM syndicate_members WHERE syndicate_id = ?`).bind(id).first();
-    if ((totals?.c || 0) >= sRow.target_cents) {
-      await c.env.DB.prepare(`UPDATE syndicates SET status = 'funded', closed_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'`).bind(id).run();
-      await logAction(c.env, 'syndicate_funded', user.id, { syndicate_id: id, total_cents: totals.c });
-    }
-  }
-
+  // Pledges are not receipts. Reaching the target does not fund a syndicate.
   return c.json({ ok: true });
 });
 
@@ -306,8 +298,7 @@ networkfx.post('/syndicates/:id/close', async (c) => {
   if (s.status === 'closed') {
     return c.json({ error: 'syndicate_already_closed', detail: 'This syndicate is already closed. Nothing changed.' }, 409);
   }
-  // Funded keeps the time the target was reached in `closed_at`; closing
-  // stamps the close over it, as it always has.
+  // Closing ends pledging; it makes no claim that any money was received.
   await c.env.DB.prepare(`UPDATE syndicates SET status = 'closed', closed_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'closed'`).bind(id).run();
   await logAction(c.env, 'syndicate_closed', user.id, { syndicate_id: id });
   await logDealRoomAction(c.env, user, 'syndicate_closed', id, { from_status: s.status, project_id: s.deal_id }, 'syndicate');

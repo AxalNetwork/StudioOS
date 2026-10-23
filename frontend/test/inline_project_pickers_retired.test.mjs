@@ -16,9 +16,9 @@
  * file asserts the two things a count cannot see:
  *
  *   1. DELETING A PICKER MUST NOT STRAND A PROJECT. Each page still has a way to
- *      be pointed at a startup. Twenty-two read `?project_id=`; the two that
- *      never did resolve the first project from their own fetch. The table below
- *      says which, per file, so a page that silently loses its URL read fails
+ *      be pointed at a startup. Each reads `?project_id=`; #2443 removed the
+ *      legacy pipeline's first-fetched fallback. The table below names each
+ *      file, so a page that silently loses its URL read fails
  *      here rather than quietly showing project #1 forever.
  *   2. REMOVING THE "NEW STARTUP" BUTTON MUST NOT REMOVE CREATING A STARTUP.
  *      `CreateStartupForm` is rendered, both ways, and the closed case must be
@@ -70,18 +70,10 @@ const FROM_URL = [
   'pages/founder/FounderRaisePitch.jsx',
   'pages/founder/FounderRaiseStatus.jsx',
   'pages/raise/DataRoomPage.jsx',
+  // #2443: an explicit venture replaces the legacy first-fetched fallback.
+  'pages/RaisePipelinePage.jsx',
   // The cycle pages that replaced the four desks (D661, #1474).
   'pages/cycles/CycleRoute.jsx',
-];
-
-/**
- * The two that never read the URL. They resolve the first project their own
- * fetch returns — which is exactly what they did on every account where the
- * picker was hidden, so removing it changed nothing for them.
- */
-const FROM_FIRST_FETCHED = [
-  // pages/MarketIntelPage.jsx stood here; D670 retired it.
-  ['pages/RaisePipelinePage.jsx', /if \(safe\.length > 0\) setProjectId\(safe\[0\]\.id\)/],
 ];
 
 test('every page that lost a picker can still be pointed at a startup', () => {
@@ -91,13 +83,7 @@ test('every page that lost a picker can still be pointed at a startup', () => {
       `${rel} lost its startup picker in #181, so \`?project_id=\` is now the ONLY way to `
       + 'aim it at a startup — it must still read the param');
   }
-  for (const [rel, shape] of FROM_FIRST_FETCHED) {
-    const src = code(`frontend/src/${rel}`);
-    assert.match(src, shape,
-      `${rel} never read ?project_id=, so the first project of its own fetch is all it has left`);
-    assert.doesNotMatch(src, /\bprojects\s*\.\s*length\s*>\s*1/,
-      `${rel} must not re-grow a picker`);
-  }
+
 });
 
 test('the create-a-startup form has no button of its own, and still opens', () => {
