@@ -95,14 +95,14 @@ test('internal deal fields are staff-only and zip is retired', async () => {
 test('commitments: investor own rows, founder/admin all, partner total only',async()=>{
   const db=freshDb();
   try {
-    db.exec("INSERT INTO commitments(deal_id,investor_user_id,amount) VALUES(1,2,2000)");
+    db.exec("INSERT INTO commitments(deal_id,investor_user_id,amount,status) VALUES(1,2,2000,'confirmed')");
     for(const who of [INV_INVITED,INV_COMMITTED]) {
       const r=await call(db,who,'GET','@/api/deals/1/commitments');
       assert.equal(r.status,200,r.text);assert.equal(r.body.length,1);
       assert.equal(r.body[0].investor_user_id,who);
     }
     for(const who of [ADMIN,FOUNDER]) assert.equal((await call(db,who,'GET','@/api/deals/1/commitments')).body.length,2);
-    assert.deepEqual((await call(db,PARTNER,'GET','@/api/deals/1/commitments')).body,{total:3000});
+    assert.deepEqual((await call(db,PARTNER,'GET','@/api/deals/1/commitments')).body,{total:2000});
   } finally {db.close();}
 });
 test('reference edits/deletion require author or admin even on a readable deal',async()=>{

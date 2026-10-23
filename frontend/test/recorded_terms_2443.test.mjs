@@ -14,6 +14,7 @@ async function mounted() {
   replace('raiseUpdates',async()=>({items:[],shared_updates:[]}));
   replace('raiseProspectCreate',async body=>{calls.push(['add',body]);return {id:8,...body};});
   replace('raiseProspectsImport',async body=>{calls.push(['import',body]);return {created:body.rows.length,skipped:[]};});
+  replace('raiseProspectGet',async()=>({contact:null}));
   replace('raiseProspectUpdate',async(id,body)=>{calls.push(['update',id,body]);return {id,...body};});
   const ui=await mountForm(React.createElement(RaisePipelinePage));await ui.flush();
   const change=async(node,value)=>act(async()=>propsOf(node).onChange({target:{value}}));
@@ -92,4 +93,15 @@ test('deal-pack reconciliation stays open until every requested e-signature is c
     }
     signed=[1,2];await click('Record completed e-signatures');assert.match(textOf(ui.body),/Thank you.*Completed signatures are recorded/);
   }finally{await ui.unmount();for(const[key,value]of old)api[key]=value;}
+});
+
+test('the drawer closes before asking for a Committed status so its overlay cannot cover the choice',async()=>{
+  const m=await mounted();try {
+    await m.choose();const card=m.ui.nodes().find(n=>n.tagName==='BUTTON'&&textOf(n).startsWith('Synthetic investor'));assert.ok(card);await act(async()=>propsOf(card).onClick());await m.ui.flush();
+    const stage=m.ui.nodes().find(n=>n.tagName==='SELECT'&&propsOf(n).value==='meeting');assert.ok(stage);
+    await m.change(stage,'committed');
+    assert.equal(m.ui.nodes().some(n=>propsOf(n)['aria-label']==='Close'),false);
+    assert.match(m.ui.text(),/Record the commitment status/);await m.ui.click('wired');
+    assert.deepEqual(m.calls.find(c=>c[0]==='update'),['update',7,{stage:'committed',commit_status:'wired'}]);
+  }finally{await m.close();}
 });

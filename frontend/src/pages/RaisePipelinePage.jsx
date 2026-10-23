@@ -167,6 +167,7 @@ export default function RaisePipelinePage({ embedded = false }) {
   const update = async (id, patch) => {
     if (patch.stage === 'committed' && !patch.commit_status) {
       setCommitPrompt({ id, patch });
+      setDrawerId(null);
       return null;
     }
     setBusyId(id); setErr(null);

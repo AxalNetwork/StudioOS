@@ -1053,7 +1053,7 @@ deals.get('/:id/commitments', async (c) => {
   if (ctx.error) return ctx.error;
   const { sql, user } = ctx;
   if (user.role !== 'admin' && user.role !== 'founder' && user.role !== 'investor') {
-    const rows = await sql`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ${id}`;
+    const rows = await sql`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ${id} AND status = 'confirmed'`;
     await sql.end();
     return c.json({ total: Number(rows[0]?.total ?? 0) });
   }
