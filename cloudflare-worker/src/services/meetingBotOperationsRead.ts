@@ -32,8 +32,8 @@ export async function readMeetingBotOperations(env: Env, now = Date.now()) {
         CASE WHEN sc.runs=1 THEN
           (SELECT CASE WHEN COUNT(*)>0 AND SUM(CASE WHEN l.charged_microusd IS NOT NULL AND (
               (l.charged_microusd=0 AND l.reservation_uid IS NULL) OR
-              (sr.status IN ('settled','refunded') AND sr.actual_included_microusd+sr.actual_topup_microusd=l.charged_microusd)) THEN 1 ELSE 0 END)=COUNT(*)
-            AND COUNT(sr.uid)=COUNT(DISTINCT sr.uid) THEN SUM(l.charged_microusd) ELSE NULL END
+              (sr.status IN ('settled','refunded') AND sr.actual_included_microusd+sr.actual_topup_microusd>=l.charged_microusd)) THEN 1 ELSE 0 END)=COUNT(*)
+            AND COUNT(sr.uid)=COUNT(DISTINCT sr.uid) THEN SUM(CASE WHEN l.reservation_uid IS NULL THEN l.charged_microusd ELSE sr.actual_included_microusd+sr.actual_topup_microusd END) ELSE NULL END
           FROM ai_usage_logs l LEFT JOIN ai_budget_reservations sr ON sr.uid=l.reservation_uid AND sr.user_id=b.user_id
           WHERE l.user_id=b.user_id AND l.task='transcribe' AND l.record_ref='session:' || b.session_id
             AND l.created_at>=datetime(b.created_at/1000,'unixepoch')) ELSE NULL END AS audio_charged_microusd,

@@ -12,6 +12,9 @@ import { readMeetingBotOperations } from '../src/services/meetingBotOperationsRe
 import { ownBotTest, dispatchBotTest } from '../src/services/meetingBotOperationsTest.ts';
 import platform from '../src/routes/admin_platform.ts';
 import { sweepMeetingBotOperations, recordMeetingBotAlert } from '../src/services/meetingBotOperationsAlerts.ts';
+import { transcribeChunk } from '../src/services/interviewProcessing.ts';
+import { recordReceipt, AUDIO_PREFIX } from '../src/services/interviewSessions.ts';
+import { NOVA_3 } from '../src/services/sttFormats.ts';
 
 const now = Date.parse('2026-10-23T12:00:00Z');
 const uid = '00000000-0000-0000-0000-000000000001';
@@ -51,7 +54,11 @@ async function aggregation(read=readMeetingBotOperations) {
     w.db.prepare(`INSERT INTO interview_session_receipts(session_id,kind,model,audio_minutes,outcome,created_at)
       VALUES(?,'final','synthetic',99,'failed',?)`).run(w.session,'2026-10-23 11:59:30');
     w.db.prepare(`INSERT INTO ai_usage_logs(user_id,task,model,charged_microusd,reservation_uid,record_ref,created_at)
-      VALUES(2,'transcribe','synthetic',700,?,?,?)`).run(stt,`session:${w.session}`,'2026-10-23 11:59:00');
+      VALUES(2,'transcribe','synthetic',600,?,?,?)`).run(stt,`session:${w.session}`,'2026-10-23 11:59:00');
+    // The reservation includes the transcription's safety checks too, while
+    // the transcribe row records only the model's share.
+    w.db.prepare(`INSERT INTO ai_usage_logs(user_id,task,model,charged_microusd,reservation_uid,guard_for,record_ref,created_at)
+      VALUES(2,'safety','synthetic',100,?,1,?,?)`).run(stt,`session:${w.session}`,'2026-10-23 11:59:00');
     w.db.prepare(`INSERT INTO ai_usage_logs(user_id,task,model,charged_microusd,record_ref,created_at)
       VALUES(3,'transcribe','synthetic',99999,?,?)`).run(`session:${w.session}`,'2026-10-23 11:59:00');
     const result=await read(w.env,now);
@@ -80,6 +87,36 @@ async function aggregation(read=readMeetingBotOperations) {
   } finally {w.db.close();}
 }
 test('D886 canonical billing separates rounded bot minutes, audio, settled charges and unmeasured cost',()=>aggregation());
+
+test('D886 canonical audio reads the actual aiRouter settlement and final transcription receipt',async()=>{
+  const w=world();
+  try {
+    w.insert();w.env.AI_BILLING='charged';
+    const clock=Date.now();
+    w.db.prepare('UPDATE meeting_bots SET created_at=?,started_at=?,ended_at=?,heartbeat_at=? WHERE uid=?')
+      .run(clock-120_000,clock-120_000,clock-30_000,clock-10_000,uid);
+    const bytes=new Uint8Array(32044),view=new DataView(bytes.buffer);
+    for(const [offset,text] of [[0,'RIFF'],[8,'WAVE'],[12,'fmt '],[36,'data']] as const)
+      for(let i=0;i<text.length;i++) bytes[offset+i]=text.charCodeAt(i);
+    view.setUint32(4,32036,true);view.setUint32(16,16,true);view.setUint16(20,1,true);
+    view.setUint16(22,1,true);view.setUint32(24,16000,true);view.setUint32(28,32000,true);
+    view.setUint16(32,2,true);view.setUint16(34,16,true);view.setUint32(40,32000,true);
+    const key=`${AUDIO_PREFIX}${FOUNDER}/synthetic/0.wav`;w.objects.set(key,bytes);
+    const result=await transcribeChunk(w.env,{session:{language:'en',submitted_via:'meeting_bot'},userId:FOUNDER,
+      chunk:{session_id:w.session,seq:0,r2_key:key,mime:'audio/wav',size_bytes:bytes.length,start_ms:0} as any,
+      model:NOVA_3,intervieweeName:null,offsetMs:0,rail:{page:'validate',option:'transcribe:interview',record:`session:${w.session}`}});
+    assert.equal(result.ok,true);if(!result.ok) throw new Error('fixture_transcription');
+    await recordReceipt(w.env,w.session,{kind:'final',model:NOVA_3,audio_minutes:1/60,cost_microusd:result.costMicro,outcome:'ok'});
+    const charge=w.db.prepare(`SELECT r.actual_included_microusd+r.actual_topup_microusd AS amount
+      FROM ai_usage_logs l JOIN ai_budget_reservations r ON r.uid=l.reservation_uid WHERE l.task='transcribe'`).get();
+    assert.ok(Number(charge!.amount)>0);
+    const report=await readMeetingBotOperations(w.env,Date.now()+1000);
+    assert.equal(report.state,'ok');if(report.state!=='ok') throw new Error('fixture_read');
+    assert.equal(report.today.audio_charged_microusd,charge!.amount);
+    assert.equal(report.today.recorded_minutes,1/60);
+    assert.equal(JSON.stringify(report).includes('Synthetic transcript'),false);
+  } finally {w.db.close();}
+});
 
 async function pages(read=readMeetingBotOperations) {
   const w=world();
@@ -222,6 +259,7 @@ for(const [name,file,before,after,scenario,fn] of [
   ['audio attribution','meetingBotOperationsRead.ts',"a.outcome='ok'","1=1",aggregation,'readMeetingBotOperations'],
   ['ambiguous session','meetingBotOperationsRead.ts','sc.runs=1','sc.runs>=1',aggregation,'readMeetingBotOperations'],
   ['wrong STT user','meetingBotOperationsRead.ts',"l.user_id=b.user_id AND l.task='transcribe'","l.task='transcribe'",aggregation,'readMeetingBotOperations'],
+  ['STT safety charge omitted','meetingBotOperationsRead.ts','THEN SUM(CASE WHEN l.reservation_uid IS NULL THEN l.charged_microusd ELSE sr.actual_included_microusd+sr.actual_topup_microusd END)','THEN SUM(l.charged_microusd)',aggregation,'readMeetingBotOperations'],
   ['rounded bot minutes','meetingBotOperationsRead.ts','b.minutes AS billed_bot_minutes','(b.ended_at-b.started_at)/60000.0 AS billed_bot_minutes',aggregation,'readMeetingBotOperations'],
   ['truncated snapshot','meetingBotOperationsRead.ts','if (result.results.length < PAGE) break;','break;',pages,'readMeetingBotOperations'],
   ['test owner','meetingBotOperationsTest.ts','WHERE uid=? AND user_id=?','WHERE uid=? AND ? IS NOT NULL',timings,'ownBotTest'],
