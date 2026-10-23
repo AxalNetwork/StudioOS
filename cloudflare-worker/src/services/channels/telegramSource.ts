@@ -74,16 +74,25 @@ export async function changeTelegramSource(
              status = CASE WHEN status = 'structured' THEN 'transcribed' ELSE status END, updated_at = datetime('now')
             WHERE id = ? AND EXISTS (SELECT 1 FROM interview_transcript_segments WHERE id = ? AND model = ?)`,
         ).bind(session.id, row.id, token),
-        // The mirror may also contain pasted/legacy text with no segment.
-        // Replace the changed words in place; never reconstruct that content
-        // from the session tables. If the edit cannot fit, omit its mirrored
-        // words (the full new text remains in the segment).
+        // Pasted/legacy text may have no segment. Match a unique complete
+        // passage (including its line boundaries); never replace substrings
+        // or guess between identical occurrences in this flattened mirror.
         env.DB.prepare(
-          `UPDATE discovery_interviews SET transcript = CASE
-              WHEN length(CAST(replace(transcript, ?, ?) AS BLOB)) <= ? THEN replace(transcript, ?, ?)
-              ELSE replace(transcript, ?, '') END, updated_at = datetime('now')
-            WHERE id = ? AND EXISTS (SELECT 1 FROM interview_transcript_segments WHERE id = ? AND model = ?)`,
-        ).bind(row.text, replacement, TRANSCRIPT_MIRROR_MAX_BYTES, row.text, replacement, row.text, session.interview_id, row.id, token),
+          `WITH parts AS (
+            SELECT substr(transcript, 1, pos - 1) AS prefix, substr(transcript, pos + old_length) AS suffix
+              FROM (
+                SELECT transcript, instr(char(10) || transcript || char(10), char(10) || ? || char(10)) AS pos,
+                       length(?) AS old_length FROM discovery_interviews WHERE id = ?
+              ) WHERE pos > 0
+                AND instr(substr(char(10) || transcript || char(10), pos + 1), char(10) || ? || char(10)) = 0
+          )
+          UPDATE discovery_interviews SET transcript = (
+            SELECT prefix || CASE WHEN length(CAST(prefix || ? || suffix AS BLOB)) <= ? THEN ? ELSE '' END || suffix FROM parts
+          ), updated_at = datetime('now')
+            WHERE id = ? AND EXISTS (SELECT 1 FROM parts)
+              AND EXISTS (SELECT 1 FROM interview_transcript_segments WHERE id = ? AND model = ?)`,
+        ).bind(row.text, row.text, session.interview_id, row.text, replacement, TRANSCRIPT_MIRROR_MAX_BYTES,
+          replacement, session.interview_id, row.id, token),
         env.DB.prepare('UPDATE interview_transcript_segments SET model = ? WHERE id = ? AND model = ?')
           .bind(text === null ? 'channel:telegram:deleted' : 'channel:telegram', row.id, token),
       ]);

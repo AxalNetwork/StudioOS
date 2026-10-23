@@ -468,3 +468,29 @@ test('a voice append racing the deletion lookup is either suppressed or found an
   assert.deepEqual(chunks.map((c: any) => JSON.parse(c.segments_json)), [[]]);
   assert.equal(w.db.prepare("SELECT COUNT(*) AS n FROM interview_session_receipts WHERE session_id = ? AND kind = 'final'").get(w.sid).n, 1);
 });
+
+
+test('short and multiline source passages replace only unique full mirror passages', async () => {
+  const w = await assigned();
+  const row = lines(w, w.sid)[0];
+  for (const word of ['no', 'a', '1', 'first\nsecond']) {
+    const prefix = 'Synthetic history: not, know, enough, a note, 11 and first\nsecondhand.\n';
+    w.db.prepare("UPDATE interview_transcript_segments SET text = ?, model = 'channel:telegram' WHERE id = ?").run(word, row.id);
+    w.db.prepare('UPDATE discovery_interviews SET transcript = ? WHERE id = ?').run(prefix + word + '\n' + OTHER_LINE, INTERVIEW);
+    await hook(w, edit(w.first, NEW));
+    assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, prefix + NEW + '\n' + OTHER_LINE);
+    w.db.prepare("UPDATE interview_transcript_segments SET text = ?, model = 'channel:telegram' WHERE id = ?").run(word, row.id);
+    w.db.prepare('UPDATE discovery_interviews SET transcript = ? WHERE id = ?').run(prefix + word, INTERVIEW);
+    await hook(w, deleted([w.first]));
+    assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, prefix + SOURCE_DELETED_TEXT);
+  }
+  w.db.prepare("UPDATE interview_transcript_segments SET text = 'no', model = 'channel:telegram' WHERE id = ?").run(row.id);
+  w.db.prepare("UPDATE discovery_interviews SET transcript = 'no\nno' WHERE id = ?").run(INTERVIEW);
+  await hook(w, deleted([w.first]));
+  assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, 'no\nno', 'an ambiguous mirror has no source mapping to guess');
+  assert.equal(lines(w, w.sid)[0].text, SOURCE_DELETED_TEXT);
+  w.db.prepare("UPDATE interview_transcript_segments SET text = 'no', model = 'channel:telegram' WHERE id = ?").run(row.id);
+  w.db.prepare("UPDATE discovery_interviews SET transcript = 'no' WHERE id = ?").run(INTERVIEW);
+  await hook(w, edit(w.first));
+  assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, NEW, 'first and last line may be the same passage');
+});
