@@ -397,6 +397,10 @@ function waterfallPreRound(ledger: Holder[], safes: SafeIn[], exitValue: number,
   }
   const common = ledger.filter(h => h.type !== 'option_pool');
   const baseShares = ledgerTotal(common);
+  if (!(baseShares > 0) || !Number.isFinite(baseShares)) {
+    warnings.push('Pre-round exit is not calculated: no finite positive issued share total is recorded.');
+    return null;
+  }
   const purchase = safes.reduce((n, s) => n + Number(s.amount), 0);
   // A discount is a financing term. Without a cap or a recorded liquidity
   // price, do not invent a pre-round conversion valuation.

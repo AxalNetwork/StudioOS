@@ -71,6 +71,11 @@ function limitations(run = simulate, validate = validateInputs) {
     assert.ok(r.warnings.some((s: string) => s.includes('Pre-round exit is not calculated')));
   }
   for (const exit_value of [-1, Infinity, NaN]) assert.ok(validate({ ...base, exit_value }).some(s => /Exit value/.test(s)));
+  for (const shares of [0.1, Infinity]) {
+    const r = result({ founders: [{ name: 'No issued shares', shares }], exit_value: 1_000 }, run);
+    assert.equal(r.waterfall, null, 'rounded-zero or non-finite shares cannot receive exit proceeds');
+    assert.ok(r.warnings.some((s: string) => s.includes('issued share total')));
+  }
   const inputs = { ...base, safes: [post()], exit_value: 2_000_000 };
   const before = JSON.stringify(inputs); result(inputs, run); assert.equal(JSON.stringify(inputs), before);
 }
@@ -123,7 +128,7 @@ test('#2446: liquidity, pool and limitation assertions reject mutations and pass
       ['paid[order[i].i] += 1', 'paid[order[i].i] += 0'],
     ]],
     [pool, [["h.type !== 'option_pool'", 'true'], ['      POOL_EXIT_ASSUMPTION,', '']]],
-    [limitations, [["s.instrument === 'note'", 'false'], ["!(Number(s.cap) > 0)", 'false'], ['if (postFraction >= 1)', 'if (false)'], ['Number(inputs.exit_value) < 0', 'false']]],
+    [limitations, [["s.instrument === 'note'", 'false'], ["!(Number(s.cap) > 0)", 'false'], ['if (postFraction >= 1)', 'if (false)'], ['Number(inputs.exit_value) < 0', 'false'], ['if (!(baseShares > 0) || !Number.isFinite(baseShares))', 'if (false)']]],
   ];
   for (const [verify, mutants] of groups) {
     const check = async (source: string) => { const m = (await load(paths.cap, source)).module; verify(m.simulate,m.validateInputs); };
