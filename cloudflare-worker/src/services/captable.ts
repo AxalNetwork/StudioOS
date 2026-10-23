@@ -3,13 +3,13 @@
  * backend/app/services/captable.py. No I/O, no DB, fully deterministic
  * so the route handler can call this in any order it likes.
  *
- * Conventions match the FastAPI source verbatim so the saved
- * `result_json` blobs and CSV exports stay byte-identical:
+ * Financing share issuance preserves the original FastAPI conventions.
+ * Exit payouts correct the legacy reserve/SAFE treatment (#2446):
  *   - Shares are integers; round at every issuance step.
  *   - Pre-money SAFE convention (YC v1).
  *   - Option-pool top-ups are pre-money.
  *   - Waterfall = 1× non-participating preferred for SAFE +
- *     priced-round investors; founders / option pool = common.
+ *     priced-round investors; issued common participates, unallocated pool does not.
  */
 
 import {
@@ -23,7 +23,7 @@ type Founder = { name: string; shares: number };
  * Build queue #120 — `basis`, `instrument`, `interest_rate` and
  * `issue_date` are OPTIONAL additions. A SAFE that omits them is a
  * pre-money (YC v1) SAFE and takes the original inline code path, so
- * every saved `result_json` blob stays byte-identical.
+ * financing share counts remain unchanged. Exit payouts exclude unallocated reserves.
  */
 type SafeIn = {
   name: string; amount: number; cap?: number; discount?: number;
@@ -106,6 +106,9 @@ export function validateInputs(inputs: Inputs): string[] {
     if (Number(r?.investment || 0) <= 0) errs.push(`Round '${r?.name ?? '?'}' needs investment > 0.`);
     const pa = Number(r?.post_round_pool_pct || 0);
     if (pa && (pa < 0 || pa > 80)) errs.push(`Round '${r?.name ?? '?'}' pool % must be 0..80.`);
+  }
+  if (inputs.exit_value != null && (!Number.isFinite(Number(inputs.exit_value)) || Number(inputs.exit_value) < 0)) {
+    errs.push('Exit value must be a finite non-negative amount.');
   }
   return errs;
 }
@@ -199,8 +202,7 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
     //
     // The legacy inline path below is preserved EXACTLY for scenarios
     // that use only plain pre-money SAFEs, because saved result_json
-    // blobs and CSV exports are contractually byte-identical with the
-    // FastAPI engine. Post-money SAFEs and notes need a fixed-point
+    // financing share counts match the original FastAPI engine. Post-money SAFEs and notes need a fixed-point
     // solve that path cannot express, so they route to
     // services/safeConversion.ts instead.
     const safePrefs: Record<string, number> = {};
@@ -289,7 +291,7 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
   let wf: any = null;
   const exit = inputs.exit_value;
   if (exit != null && roundsOut.length) wf = waterfall(roundsOut, Number(exit));
-  else if (exit != null) wf = waterfallPreRound(snapshot(ledger), Number(exit));
+  else if (exit != null) wf = waterfallPreRound(snapshot(ledger), pendingSafes, Number(exit), warnings);
 
   return {
     founding,
@@ -302,7 +304,7 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
 }
 
 function waterfall(roundsOut: RoundOut[], exitValue: number) {
-  const final = roundsOut[roundsOut.length - 1].ledger;
+  const final = snapshot(roundsOut[roundsOut.length - 1].ledger.filter(h => h.type !== 'option_pool'));
   const totalShares = final.reduce((s, h) => s + h.shares, 0);
   if (totalShares <= 0) {
     return {
@@ -366,23 +368,99 @@ function waterfall(roundsOut: RoundOut[], exitValue: number) {
       '1× non-participating preferred for SAFE + priced-round investors.',
       'No participation, no multiple, no seniority stack.',
       'Pro-rata across common when residual is distributed.',
+      POOL_EXIT_ASSUMPTION,
     ],
   };
 }
 
-function waterfallPreRound(ledger: Holder[], exitValue: number) {
-  const total = ledger.reduce((s, h) => s + h.shares, 0);
-  const rows = ledger.map((h) => ({
-    holder: h.holder, type: h.type, shares: h.shares, pct: h.pct ?? 0,
-    preference: 0,
-    payout: total ? bankersRound((exitValue * h.shares) / total, 2) : 0,
-    source: 'pro-rata (common)',
+const POOL_EXIT_ASSUMPTION = 'Unallocated option pool excluded from exit proceeds. Individual option grants are not recorded in scenario inputs.';
+
+/** Allocate integer cents without creating or losing money on rounding. */
+function allocateProceeds(amount: number, weights: number[]): number[] {
+  const cents = Math.round(bankersRound(amount, 2) * 100);
+  const total = weights.reduce((n, w) => n + w, 0);
+  if (total <= 0) return weights.map(() => 0);
+  const exact = weights.map(w => cents * w / total);
+  const paid = exact.map(Math.floor);
+  const remainder = cents - paid.reduce((n, v) => n + v, 0);
+  const order = exact.map((v, i) => ({ i, fraction: v - paid[i] }))
+    .sort((a, b) => b.fraction - a.fraction || a.i - b.i);
+  for (let i = 0; i < remainder; i++) paid[order[i].i] += 1;
+  return paid.map(v => v / 100);
+}
+
+function waterfallPreRound(ledger: Holder[], safes: SafeIn[], exitValue: number, warnings: string[]) {
+  // No note maturity, exit-repayment or interest date is recorded here.
+  if (safes.some(s => s.instrument === 'note')) {
+    warnings.push('Pre-round exit is not calculated: outstanding note repayment terms are not recorded.');
+    return null;
+  }
+  const common = ledger.filter(h => h.type !== 'option_pool');
+  const baseShares = ledgerTotal(common);
+  const purchase = safes.reduce((n, s) => n + Number(s.amount), 0);
+  // A discount is a financing term. Without a cap or a recorded liquidity
+  // price, do not invent a pre-round conversion valuation.
+  if (exitValue > purchase && safes.some(s => !(Number(s.cap) > 0))) {
+    warnings.push('Pre-round exit is not calculated: an outstanding SAFE has no recorded liquidity cap or price.');
+    return null;
+  }
+  const cash = new Set<number>();
+  safes.forEach((s, i) => {
+    if (exitValue <= purchase || exitValue <= Number(s.cap)) cash.add(i);
+  });
+  let equityShares = safes.map(() => 0);
+  // A cash-out SAFE is excluded from liquidity capitalization. Recompute
+  // after each election; every pass adds a cash-out, so this is bounded.
+  for (let pass = 0; pass <= safes.length; pass++) {
+    const cashClaims = safes.reduce((n, s, i) => n + (cash.has(i) ? Number(s.amount) : 0), 0);
+    const residual = Math.max(0, exitValue - cashClaims);
+    const fractions = safes.map((s, i) => cash.has(i) ? 0 : Number(s.amount) / Number(s.cap));
+    const postFraction = safes.reduce((n, s, i) => n + (s.basis === 'post_money' ? fractions[i] : 0), 0);
+    if (postFraction >= 1) {
+      warnings.push('Pre-round exit is not calculated: converting post-money SAFE caps promise 100% or more of the company.');
+      return null;
+    }
+    const preShares = safes.reduce((n, s, i) => n + (s.basis !== 'post_money' ? fractions[i] * baseShares : 0), 0);
+    const total = (baseShares + preShares) / (1 - postFraction);
+    equityShares = safes.map((s, i) => fractions[i] * (s.basis === 'post_money' ? total : baseShares));
+    let changed = false;
+    safes.forEach((s, i) => {
+      if (!cash.has(i) && residual * safeDiv(equityShares[i], total) < Number(s.amount)) {
+        cash.add(i); changed = true;
+      }
+    });
+    if (!changed) break;
+  }
+  const cashIndexes = safes.map((_, i) => i).filter(i => cash.has(i));
+  const cashClaims = cashIndexes.reduce((n, i) => n + Number(safes[i].amount), 0);
+  const prefPaid = bankersRound(Math.min(exitValue, cashClaims), 2);
+  const cashPayouts = allocateProceeds(prefPaid, cashIndexes.map(i => Number(safes[i].amount)));
+  const rows = cashIndexes.map((i, at) => ({
+    holder: safes[i].name, type: 'safe', shares: 0, pct: 0,
+    preference: bankersRound(Number(safes[i].amount), 2), payout: cashPayouts[at],
+    source: 'purchase amount (SAFE liquidity)',
+  }));
+  const converted = safes.flatMap((s, i) => cash.has(i) ? [] : [{ holder: s.name, type: 'safe', shares: equityShares[i], amount: Number(s.amount) }]);
+  const equity = [...common.map(h => ({ ...h, amount: 0 })), ...converted];
+  const residual = bankersRound(exitValue - prefPaid, 2);
+  const payouts = allocateProceeds(residual, equity.map(h => h.shares));
+  const total = ledgerTotal(equity);
+  equity.forEach((h, i) => rows.push({
+    holder: h.holder, type: h.type, shares: roundShares(h.shares),
+    pct: bankersRound(100 * safeDiv(h.shares, total), 4),
+    preference: bankersRound(h.amount, 2), payout: payouts[i],
+    source: h.type === 'safe' ? 'as-converted (SAFE liquidity)' : 'pro-rata (common)',
   }));
   rows.sort((a, b) => b.payout - a.payout);
   return {
     exit_value: exitValue, rows,
-    totals: { preference_paid: 0, common_pool: exitValue, total_distributed: exitValue },
-    assumptions: ['Pre-round exit — all common, pro-rata.'],
+    totals: { preference_paid: prefPaid, common_pool: residual, total_distributed: bankersRound(prefPaid + residual, 2) },
+    assumptions: [
+      'Pre-round SAFEs receive the greater of purchase amount or as-converted proceeds, without participation.',
+      'Cash-out SAFEs share insufficient proceeds pro-rata, ahead of common; cash-out securities are excluded from liquidity capitalization.',
+      'Liquidity conversion uses the recorded cap and basis; discounts apply only to priced financing. No debt or seniority stack is modeled.',
+      POOL_EXIT_ASSUMPTION,
+    ],
   };
 }
 
