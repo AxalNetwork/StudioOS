@@ -344,6 +344,7 @@ export default function CalendarPage() {
   const [google, setGoogle] = useState(null);
   const [microsoft, setMicrosoft] = useState(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [gmailRemovalBusy, setGmailRemovalBusy] = useState(false);
   const [msSyncBusy, setMsSyncBusy] = useState(false);
   const [googleResult, setGoogleResult] = useState(null);
   const [microsoftResult, setMicrosoftResult] = useState(null);
@@ -516,6 +517,18 @@ export default function CalendarPage() {
     await api.googleCalDisconnect();
     await loadGoogle();
     setGoogleResult({ kind: 'success', text: 'Google disconnected.' });
+  }
+  async function removeGmailAccess() {
+    if (!window.confirm('Remove Gmail access? Google will revoke this app’s current grant, briefly disconnect Calendar, then ask you to reconnect without Gmail access.')) return;
+    setGmailRemovalBusy(true);
+    setGoogleResult(null);
+    try {
+      const r = await api.googleCalRemoveGmailAccess();
+      window.location.assign(r.redirect_url || r.auth_url);
+    } catch (e) {
+      setGoogleResult({ kind: 'error', text: e.message || 'Gmail access could not be removed.' });
+      setGmailRemovalBusy(false);
+    }
   }
   async function runSync() {
     setSyncBusy(true); setGoogleResult(null);
@@ -734,8 +747,10 @@ export default function CalendarPage() {
           <div className="cal-providers">
             <ProviderCard
               provider="google_calendar" name="Google Calendar" state={gState} status={google} result={googleResult}
-              busy={syncBusy} envVars="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET"
-              onConnect={connectGoogle} onSync={runSync} onDisconnect={disconnectGoogle} onRetry={loadGoogle}
+              busy={syncBusy || gmailRemovalBusy} gmailRemovalBusy={gmailRemovalBusy}
+              envVars="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET"
+              onConnect={connectGoogle} onSync={runSync} onDisconnect={disconnectGoogle}
+              onRemoveGmail={removeGmailAccess} onRetry={loadGoogle}
             />
             <ProviderCard
               provider="microsoft_365" name="Microsoft Outlook" state={mState} status={microsoft} result={microsoftResult}
@@ -965,7 +980,7 @@ function providerState(status, result) {
   return 'connected';
 }
 
-function ProviderCard({ provider, name, state, status, result, busy, envVars, onConnect, onSync, onDisconnect, onRetry }) {
+function ProviderCard({ provider, name, state, status, result, busy, gmailRemovalBusy, envVars, onConnect, onSync, onDisconnect, onRemoveGmail, onRetry }) {
   const last = status?.last_synced_at ? new Date(status.last_synced_at) : null;
   const lastText = last && !Number.isNaN(last.getTime()) ? last.toLocaleString() : null;
   const account = status?.google_email || status?.microsoft_email || null;
@@ -1011,6 +1026,8 @@ function ProviderCard({ provider, name, state, status, result, busy, envVars, on
     },
   };
   const s = SPEC[state] || SPEC.reading;
+  const gmailStillGranted = provider === 'google_calendar' && status?.connected === true
+    && String(status?.scope || '').split(/[\s,]+/).includes('https://www.googleapis.com/auth/gmail.readonly');
 
   return (
     <div className="cal-card" data-testid={`calendar-provider-${state}`}>
@@ -1024,7 +1041,7 @@ function ProviderCard({ provider, name, state, status, result, busy, envVars, on
       </div>
       {!lastText && <p className="cal-prov-why">{s.whyNoSync}</p>}
       <p className="cal-prov-why">{s.why}</p>
-      {s.actions.length > 0 && (
+      {(s.actions.length > 0 || gmailStillGranted) && (
         <div className="cal-prov-actions">
           {s.actions.map(([text, cls, fn]) => (
             <button key={text} type="button" className={`cal-btn ${cls} cal-btn-sm`}
@@ -1032,6 +1049,10 @@ function ProviderCard({ provider, name, state, status, result, busy, envVars, on
               {busy && text === 'Sync now' ? 'Syncing…' : text}
             </button>
           ))}
+          {gmailStillGranted && <button type="button" className="cal-btn cal-btn-o cal-btn-sm"
+            onClick={onRemoveGmail} disabled={busy} data-testid="calendar-remove-gmail-access">
+            {gmailRemovalBusy ? 'Removing Gmail access…' : 'Remove Gmail access'}
+          </button>}
         </div>
       )}
       {result && <p className="cal-prov-said">{result.text}</p>}

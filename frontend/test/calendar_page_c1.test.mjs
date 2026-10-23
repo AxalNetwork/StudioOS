@@ -418,3 +418,12 @@ test('every value read out of the canvas is escaped before it becomes a pattern'
 test('the page prints none of the canvas fixture', () => {
   assert.doesNotMatch(pageRaw, /Halyard Security|Meridian Robotics|Priya Nair|Perkins Coie|Thornbury Capital|Kelp Bio|LoopSense|Ashurst|Marcus Chen|Verity Health|7 – 13 Sep 2026|2 min ago|4 hrs ago/);
 });
+
+test('members with a legacy Gmail grant can remove it and reconnect Google without Gmail', () => {
+  assert.match(pageRaw, /provider === 'google_calendar'[\s\S]*?gmail\.readonly/,
+    'the removal action must be limited to a Google connection that still has the Gmail scope');
+  assert.match(pageRaw, /data-testid="calendar-remove-gmail-access"[\s\S]*?>\s*\{gmailRemovalBusy \? 'Removing Gmail access…' : 'Remove Gmail access'\}/,
+    'the quiet removal action is missing from the Google Calendar card');
+  assert.match(pageRaw, /api\.googleCalRemoveGmailAccess\(\)[\s\S]*?window\.location\.assign\(r\.redirect_url \|\| r\.auth_url\)/,
+    "removing Gmail access must continue into Google's fresh consent");
+});

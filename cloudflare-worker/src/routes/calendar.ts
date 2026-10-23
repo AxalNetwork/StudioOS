@@ -20,6 +20,7 @@ import { requireAuth } from '../auth';
 import {
   googleOAuthAvailable, microsoftOAuthAvailable,
   buildGoogleAuthUrl, buildMicrosoftAuthUrl, GOOGLE_MEET_TRANSCRIPT_SCOPE,
+  revokeGoogleOAuthGrant, loadRefreshTokenExport,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs,
@@ -706,6 +707,51 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
   });
 }));
 
+/** Revoke Google's grant before dropping the only locally stored refresh token. */
+export async function revokeAndDisconnectGoogle(
+  env: Env, userId: number, fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const token = await loadRefreshTokenExport(env, 'google_oauth_tokens', userId);
+  if (token) await revokeGoogleOAuthGrant(token.raw, fetcher);
+
+  const sql = getSQL(env);
+  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${userId}`;
+  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
+  // The Google link table was added after older deployments. Disconnect must
+  // still work there while removing the sign-in link where the table exists.
+  try {
+    await sql`DELETE FROM user_google_links WHERE user_id = ${userId}`;
+  } catch (e: any) {
+    if (!/no such table/i.test(String(e?.message || e))) throw e;
+  }
+}
+
+export function googleGrantHasGmailScope(scope: unknown): boolean {
+  return String(scope || '').split(/[\s,]+/)
+    .includes('https://www.googleapis.com/auth/gmail.readonly');
+}
+
+calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not remove Gmail access', async (c) => {
+  const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
+  const sql = getSQL(c.env);
+  const row = (await sql`
+    SELECT scope FROM google_oauth_tokens WHERE user_id = ${user.id}
+  ` as any[])[0];
+  if (!row) return c.json({ error: { code: 'google_not_connected' } }, 409);
+  if (!googleGrantHasGmailScope(row.scope)) {
+    return c.json({ error: { code: 'gmail_scope_not_granted' } }, 409);
+  }
+
+  // Prepare the new consent before revoking the existing grant so a missing
+  // OAuth configuration cannot leave the member disconnected.
+  const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
+  const next = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint);
+  if (next.status !== 200) return c.json(next.body, next.status);
+  await revokeAndDisconnectGoogle(c.env, user.id);
+  return c.json({ ...next.body, gmail_access_removed: true });
+}));
+
 /**
  * Task #35 — pure helper exposed for testing. Returns the JSON body +
  * HTTP status that `/google/start` should send. Side effect: persists the
@@ -1069,20 +1115,7 @@ calendar.get('/google/callback', async (c) => {
 calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
-  // Task #70 — the Integrations Google tile bundles Calendar + Gmail +
-  // "Continue with Google" sign-in behind a single consent. Disconnect
-  // therefore cascades the sign-in link too so the tile flips fully to
-  // "Not connected" instead of leaving a stale identity binding that
-  // the user can't see or revoke from the UI. Guarded so it doesn't
-  // fail on legacy deployments missing the side table.
-  try {
-    await sql`DELETE FROM user_google_links WHERE user_id = ${user.id}`;
-  } catch (e: any) {
-    if (!/no such table/i.test(String(e?.message || e))) throw e;
-  }
+  await revokeAndDisconnectGoogle(c.env, user.id);
   return c.json({ ok: true });
 }));
 
@@ -1297,9 +1330,7 @@ calendar.delete('/events/:id', async (c) => {
 calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconnect Google', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
+  await revokeAndDisconnectGoogle(c.env, user.id);
   return c.json({ ok: true });
 }));
 calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', async (c) => {

@@ -19,11 +19,14 @@ import {
   preflightOAuthSecrets,
   buildGoogleAuthUrl,
   buildMicrosoftAuthUrl,
+  revokeGoogleOAuthGrant,
 } from '../src/services/calendar.ts';
 import {
   buildGoogleOAuthStartResponse,
   buildMicrosoftOAuthStartResponse,
   persistGoogleCallbackTokens,
+  revokeAndDisconnectGoogle,
+  googleGrantHasGmailScope,
 } from '../src/routes/calendar.ts';
 
 type EnvShape = Record<string, string | undefined>;
@@ -128,6 +131,89 @@ test('buildGoogleAuthUrl attaches login_hint when an email is provided', () => {
   const url = new URL(buildGoogleAuthUrl(FULL_GOOGLE as any, 'nonce.sig', 'founder@axal.vc'));
   assert.equal(url.searchParams.get('prompt'), 'select_account consent');
   assert.equal(url.searchParams.get('login_hint'), 'founder@axal.vc');
+});
+
+test('Google Calendar consent excludes Gmail and does not inherit old grants', () => {
+  const url = new URL(buildGoogleAuthUrl(FULL_GOOGLE as any, 'nonce.sig'));
+  const scopes = url.searchParams.get('scope') || '';
+  assert.doesNotMatch(scopes, /gmail\.readonly/);
+  assert.equal(url.searchParams.get('include_granted_scopes'), 'false');
+});
+
+test('legacy Gmail grants are detected in stored Google scopes', () => {
+  assert.equal(googleGrantHasGmailScope('openid https://www.googleapis.com/auth/gmail.readonly'), true);
+  assert.equal(googleGrantHasGmailScope('openid,https://www.googleapis.com/auth/gmail.readonly'), true);
+  assert.equal(googleGrantHasGmailScope('openid https://www.googleapis.com/auth/calendar.readonly'), false);
+});
+
+test('Google OAuth revocation posts the refresh token as form data', async () => {
+  let request: { url: string; init?: RequestInit } | null = null;
+  await revokeGoogleOAuthGrant('refresh-token-for-test', async (input, init) => {
+    request = { url: String(input), init };
+    return new Response('', { status: 200 });
+  });
+  assert.equal(request?.url, 'https://oauth2.googleapis.com/revoke');
+  assert.equal(request?.init?.method, 'POST');
+  assert.equal(new Headers(request?.init?.headers).get('content-type'), 'application/x-www-form-urlencoded');
+  assert.equal(new URLSearchParams(String(request?.init?.body)).get('token'), 'refresh-token-for-test');
+});
+
+test('Google OAuth revocation treats an already-revoked grant as complete', async () => {
+  await revokeGoogleOAuthGrant('expired-refresh-token', async () =>
+    new Response(JSON.stringify({ error: 'invalid_token' }), { status: 400 }),
+  );
+});
+
+test('Google OAuth revocation preserves retryability when Google rejects the grant', async () => {
+  await assert.rejects(
+    () => revokeGoogleOAuthGrant('refresh-token-for-test', async () =>
+      new Response(JSON.stringify({ error: 'invalid_request' }), { status: 400 }),
+    ),
+    /google_revoke_failed:400:invalid_request/,
+  );
+});
+
+test('Google disconnect revokes before deleting its saved connection', async () => {
+  const order: string[] = [];
+  const DB = {
+    prepare(sql: string) {
+      return { bind() { return { async all() {
+        if (/SELECT refresh_token FROM google_oauth_tokens/.test(sql)) return { results: [{ refresh_token: 'plain-refresh-token' }] };
+        order.push(`db:${sql.trim().split(/\s+/).slice(0, 2).join(' ')}`);
+        return { results: [] };
+      } }; } };
+    },
+  };
+  await revokeAndDisconnectGoogle({ ...FULL_GOOGLE, DB } as any, 42, async () => {
+    order.push('google:revoke');
+    return new Response('', { status: 200 });
+  });
+  assert.deepEqual(order, [
+    'google:revoke',
+    'db:DELETE FROM',
+    'db:DELETE FROM',
+    'db:DELETE FROM',
+  ]);
+});
+
+test('Google disconnect keeps the saved connection when revocation fails', async () => {
+  const writes: string[] = [];
+  const DB = {
+    prepare(sql: string) {
+      return { bind() { return { async all() {
+        if (/SELECT refresh_token FROM google_oauth_tokens/.test(sql)) return { results: [{ refresh_token: 'plain-refresh-token' }] };
+        writes.push(sql);
+        return { results: [] };
+      } }; } };
+    },
+  };
+  await assert.rejects(
+    () => revokeAndDisconnectGoogle({ ...FULL_GOOGLE, DB } as any, 42, async () =>
+      new Response(JSON.stringify({ error: 'temporarily_unavailable' }), { status: 503 }),
+    ),
+    /google_revoke_failed:503/,
+  );
+  assert.deepEqual(writes, [], 'local credentials must remain available for a later revoke retry');
 });
 
 test('buildMicrosoftAuthUrl produces a well-formed login.microsoftonline.com URL', () => {
