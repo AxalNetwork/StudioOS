@@ -132,7 +132,7 @@ async function loadProjectRow(env: Env, projectId: number): Promise<ProjectRow |
 function isCompanyExempt(user: AuthUser, project: ProjectRow): boolean {
   return !(user.role.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id);
 }
-async function projectPermissions(env: Env, user: AuthUser, project: ProjectRow): Promise<ProjectRow> {
+async function computeProjectPermissions(env: Env, user: AuthUser, project: ProjectRow): Promise<ProjectRow> {
   const principal = { ...user, role: user.role.toLowerCase() } as any;
   if (principal.role === 'admin') return { ...project, capRead: true, capWrite: true };
   if (principal.role === 'investor') return { ...project, capRead: false, capWrite: false };
@@ -145,6 +145,15 @@ async function projectPermissions(env: Env, user: AuthUser, project: ProjectRow)
     capRead: await canAccessProject(env, principal, project),
     capWrite: (owner || member !== 'advisor') && await canAccessProject(env, principal, project, { write: true }),
   };
+}
+
+async function projectPermissions(c: Ctx, user: AuthUser, project: ProjectRow): Promise<ProjectRow> {
+  const key = `captable_permissions:${project.id}`;
+  const cached = c.get(key as never) as ProjectRow | undefined;
+  if (cached) return cached;
+  const answer = await computeProjectPermissions(c.env, user, project);
+  c.set(key as never, answer as never);
+  return answer;
 }
 
 /** The caller's active company for this request, verified once and memoised. */
@@ -167,8 +176,13 @@ const ACTIVE_COMPANY_KEY = '__activeCompanyId';
 async function loadProject(c: Ctx, projectId: number, user: AuthUser): Promise<ProjectRow | null> {
   const row = await loadProjectRow(c.env, projectId);
   if (!row) return null;
-  if (isCompanyExempt(user, row)) return projectPermissions(c.env, user, row);
-  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? projectPermissions(c.env, user, row) : null;
+  if (isCompanyExempt(user, row)) {
+    const answer = await projectPermissions(c, user, row);
+    if (!answer.capRead && user.role.toLowerCase() === 'founder'
+      && !projectInActiveCompany(await activeCompanyFor(c, user), row)) return null;
+    return answer;
+  }
+  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? projectPermissions(c, user, row) : null;
 }
 
 /** Project-bound scenarios inherit current membership and owner-company gates.
@@ -178,11 +192,16 @@ async function projectForScenario(c: Ctx, row: ScenarioRow, user: AuthUser): Pro
   if (row.project_id == null) return null;
   const proj = await loadProjectRow(c.env, row.project_id);
   if (!proj) return null;
-  if (isCompanyExempt(user, proj)) return projectPermissions(c.env, user, proj);
+  if (isCompanyExempt(user, proj)) {
+    const answer = await projectPermissions(c, user, proj);
+    if (!answer.capRead && user.role.toLowerCase() === 'founder'
+      && !projectInActiveCompany(await activeCompanyFor(c, user), proj)) throw new HttpError(404, 'Scenario not found');
+    return answer;
+  }
   if (!projectInActiveCompany(await activeCompanyFor(c, user), proj)) {
     throw new HttpError(404, 'Scenario not found');
   }
-  return projectPermissions(c.env, user, proj);
+  return projectPermissions(c, user, proj);
 }
 
 /** Read-gate a scenario by uid: owner / admin / (project-bound → project read). */

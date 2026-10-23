@@ -19,9 +19,9 @@ function fixture(){
  db.prepare("INSERT INTO cap_table_scenarios(uid,owner_user_id,project_id,name,inputs_json,result_json) VALUES('main',4,10,'Synthetic',?,?)").run(JSON.stringify(inputs),JSON.stringify(simulate(inputs)));
  return {db,env:{DB:d1Over(db),JWT_SECRET:secret,ENVIRONMENT:'development'} as any};
 }
-async function call(f:any,id:number,path:string,method='GET',body?:any){
+async function call(f:any,id:number,path:string,method='GET',body?:any,headers:Record<string,string>={}){
  const token=await new SignJWT({user_id:id}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
- const res=await captable.request(path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})},f.env);
+ const res=await captable.request(path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...headers},...(body?{body:JSON.stringify(body)}:{})},f.env);
  return {status:res.status,body:await res.json().catch(()=>null)};
 }
 const paths=['/10','/scenarios/by-project/10','/scenarios/by-project/10/compare','/scenarios/main','/scenarios/main/export.csv','/409a/10'];
@@ -73,5 +73,26 @@ test('unattributed member write is refused before modifying the scenario',async(
   const r=await call(f,5,'/scenarios','POST',{project_id:10,name:'changed',inputs});
   assert.equal(r.status,500);
   assert.equal((f.db.prepare("SELECT name FROM cap_table_scenarios WHERE uid='main'").get() as any).name,'Synthetic');
+ }finally{f.db.close();}
+});
+
+test('accepted members cross their own company selection; unrelated founders keep hidden-project responses',async()=>{
+ const f=fixture();try{
+  f.db.exec("UPDATE projects SET company_id=200 WHERE id=10; INSERT INTO user_company_links(uid,company_id,user_id) VALUES('synthetic-link',100,5)");
+  const headers={'X-Company-Id':'100'};
+  assert.equal((await call(f,5,'/10','GET',undefined,headers)).status,200);
+  f.db.exec("UPDATE project_members SET status='removed' WHERE user_id=5");
+  assert.equal((await call(f,5,'/10','GET',undefined,headers)).status,404);
+  assert.equal((await call(f,5,'/scenarios/main','GET',undefined,headers)).status,404);
+ }finally{f.db.close();}
+});
+
+test('a write that gates the same project twice reuses its membership answer and attribution',async()=>{
+ const f=fixture();try{
+  let reads=0;const prepare=f.env.DB.prepare.bind(f.env.DB);
+  f.env.DB.prepare=(sql:string)=>{if(sql.includes('SELECT role FROM project_members'))reads++;return prepare(sql);};
+  const r=await call(f,5,'/scenarios/main','PUT',{project_id:10,name:'Synthetic',inputs});
+  assert.equal(r.status,200);assert.equal(reads,3);
+  assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='captable_member_write_authorized'").get() as any).n,1);
  }finally{f.db.close();}
 });
