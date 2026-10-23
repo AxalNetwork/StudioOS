@@ -283,5 +283,3 @@ test('the rebuilt legacy mirror is bounded in UTF-8 bytes without changing later
   assert.ok(mirror.startsWith(NEW + '\n' + OTHER_LINE));
   assert.equal(lines(w, w.sid).at(-1).text, large);
 });
-
-
