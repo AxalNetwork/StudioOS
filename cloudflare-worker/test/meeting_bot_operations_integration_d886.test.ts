@@ -106,7 +106,7 @@ test('D886 canonical audio reads the actual aiRouter settlement and final transc
       chunk:{session_id:w.session,seq:0,r2_key:key,mime:'audio/wav',size_bytes:bytes.length,start_ms:0} as any,
       model:NOVA_3,intervieweeName:null,offsetMs:0,rail:{page:'validate',option:'transcribe:interview',record:`session:${w.session}`}});
     assert.equal(result.ok,true);if(!result.ok) throw new Error('fixture_transcription');
-    await recordReceipt(w.env,w.session,{kind:'final',model:NOVA_3,audio_minutes:1/60,cost_microusd:result.costMicro,outcome:'ok'});
+    await recordReceipt(w.env,w.session,{kind:'final',model:NOVA_3,requested_model:NOVA_3,fallback_used:false,audio_minutes:1/60,cost_microusd:result.costMicro,outcome:'ok'});
     const charge=w.db.prepare(`SELECT r.actual_included_microusd+r.actual_topup_microusd AS amount
       FROM ai_usage_logs l JOIN ai_budget_reservations r ON r.uid=l.reservation_uid WHERE l.task='transcribe'`).get();
     assert.ok(Number(charge!.amount)>0);
@@ -207,7 +207,7 @@ test('D886 mounted HQ action requires a fresh TOTP session and audits successful
     const response=await send();assert.equal(response.status,200);
     const result=await response.json();assert.equal(result.test.status,'queued');
     const actions=w.db.prepare("SELECT * FROM activity_logs WHERE action='meeting_bot_test_dispatched'").all();
-    assert.equal(actions.length,1);assert.equal(JSON.stringify(actions).includes('meet.google.com'),false);
+    assert.equal(actions.length,1);assert.deepEqual(JSON.parse(String(actions[0].details)),{target_user_id:FOUNDER});
   } finally {w.db.close();}
 });
 
