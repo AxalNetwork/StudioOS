@@ -1391,13 +1391,15 @@ brand.get('/landing/by-project/:pid/waitlist', async (c) => {
 brand.get('/landing/by-project/:pid/preview-url', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c, user, pid, { write: true }); }
+  try { await projectOwned(c, user, pid, { write: true, audit: false }); }
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare('SELECT id, preview_token FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
   if (!row) return c.json({ error: 'no preview token' }, 404);
   let token = row.preview_token;
   if (!token) {
+    try { await projectOwned(c, user, pid, { write: true }); }
+    catch { return c.json({ error: 'forbidden' }, 403); }
     token = newPreviewToken();
     await c.env.DB.prepare('UPDATE landing_pages SET preview_token = ? WHERE id = ?').bind(token, row.id).run();
   }
@@ -1435,12 +1437,16 @@ export const SITE_ADDRESS_REFUSALS = {
 brand.get('/site/by-project/:pid', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c, user, pid, { write: true }); }
+  try { await projectOwned(c, user, pid); }
   catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
     return c.json({ error: 'forbidden' }, 403);
   }
   await ensureSchema(c.env);
+  const existing = await c.env.DB.prepare('SELECT slug FROM brand_sites WHERE project_id = ?').bind(pid).first<any>();
+  if (existing) return c.json({ slug: existing.slug, path: `/p/${existing.slug}` });
+  try { await projectOwned(c, user, pid, { write: true }); }
+  catch { return c.json({ error: 'forbidden' }, 403); }
   const proj = await c.env.DB.prepare('SELECT name FROM projects WHERE id = ?').bind(pid).first<any>();
   try {
     const site = await ensureSite(c.env, pid, String(proj?.name || ''));
@@ -1770,10 +1776,12 @@ brand.get('/landing/pages/:id/preview-url', async (c) => {
   await ensureSchema(c.env);
   const row = await c.env.DB.prepare('SELECT id, project_id, preview_token FROM landing_pages WHERE id = ?').bind(id).first<any>();
   if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c, user, row.project_id, { write: true }); }
+  try { await projectOwned(c, user, row.project_id, { write: true, audit: false }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   let token = row.preview_token;
   if (!token) {
+    try { await projectOwned(c, user, row.project_id, { write: true }); }
+    catch { return c.json({ error: 'forbidden' }, 403); }
     token = newPreviewToken();
     await c.env.DB.prepare('UPDATE landing_pages SET preview_token = ? WHERE id = ?').bind(token, id).run();
   }

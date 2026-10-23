@@ -12,7 +12,7 @@ import { findableBy } from '../services/investorFindable';
 type Project = { id: number; founder_id: number | null; company_id: number | null };
 type Context = { env: Env; req: { header: (name: string) => string | undefined } };
 
-export async function projectOwned(c: Context, user: User, projectId: number, opts: { write?: boolean } = {}): Promise<Project> {
+export async function projectOwned(c: Context, user: User, projectId: number, opts: { write?: boolean; audit?: boolean } = {}): Promise<Project> {
   user = { ...user, role: String(user.role || '').toLowerCase() } as User;
   const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ?')
     .bind(projectId).first<Project>();
@@ -35,7 +35,8 @@ export async function projectOwned(c: Context, user: User, projectId: number, op
   if (!await canAccessProject(c.env, user, project, opts)) throw new Error('Forbidden');
   if (owner
     && !projectInActiveCompany(await activeCompanyFor(c, user), project)) throw new Error('NotFound');
-  if (opts.write && !owner) {
+  if (opts.write && !owner && opts.audit !== false) {
+    // Read-mostly GETs defer this audit until they need to allocate a value.
     // Newly admitted project members act on another founder's venture. Record
     // who was authorized before a write; an unavailable audit store refuses
     // the operation rather than admitting an unattributed editor.

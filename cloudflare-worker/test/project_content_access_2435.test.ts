@@ -97,9 +97,10 @@ const otherWrites = (): Array<[string, string, any?]> => [
   ['PUT', '/api/brand/landing/pages/1/address', { page_slug: 'synthetic-new-page' }],
   ['POST', '/api/brand/landing/pages/1/archive', { archived: true }],
   ['POST', '/api/brand/landing/by-project/1/pages', { name: 'Synthetic new page', page_slug: 'synthetic-page' }],
-  ['GET', '/api/brand/landing/by-project/1/preview-url'], ['GET', '/api/brand/landing/pages/1/preview-url'], ['GET', '/api/brand/site/by-project/1'],
+  ['GET', '/api/brand/landing/by-project/1/preview-url'], ['GET', '/api/brand/landing/pages/1/preview-url'],
 ];
 const reads: Array<[string, string]> = [
+  ['GET', '/api/brand/site/by-project/1'],
   ['GET', '/api/decks/10'], ['GET', '/api/decks/by-project/1'], ['GET', '/api/decks/10/engagement'], ['GET', '/api/decks/recommend?project_id=1'],
   ['GET', '/api/brand/landing/by-project/1'], ['GET', '/api/brand/landing/by-project/1/waitlist'],
   ['GET', '/api/brand/landing/pages/1/public-url'],
@@ -181,7 +182,7 @@ for (const empty of [false, true]) test('positioning uses recorded team only; em
 });
 test('an unreadable team store sends no names and reports unreadable rather than no team', async () => {
   const f = await fixture(); const prepare = f.env.DB.prepare.bind(f.env.DB);
-  f.env.DB.prepare = (sql: string) => { if (sql.includes('SELECT u.id, u.name FROM users')) throw new Error('synthetic store unavailable'); return prepare(sql); };
+  f.env.DB.prepare = (sql: string) => { if (sql.includes('WITH target AS')) throw new Error('synthetic store unavailable'); return prepare(sql); };
   try {
     const r = await request(f, 2, 'POST', '/api/decks/positioning', { project_id: 1 });
     assert.equal(r.status, 200); assert.deepEqual(f.prompts[0].team, []);
@@ -207,5 +208,51 @@ test('an investor membership and role casing do not create management access', a
       assert.equal((await request(f, 3, 'PUT', '/api/decks/10', { slides: SLIDES })).status, 403);
       assert.equal((await request(f, 3, 'PUT', '/api/brand/landing/by-project/1', { name: 'Synthetic denied' })).status, 403);
     }
+  } finally { f.db.close(); }
+});
+
+const allocatingReads = [
+  { path: '/api/brand/site/by-project/1', clear: 'DELETE FROM brand_sites WHERE project_id = 1' },
+  { path: '/api/brand/landing/by-project/1/preview-url', clear: 'UPDATE landing_pages SET preview_token = NULL WHERE id = 1' },
+  { path: '/api/brand/landing/pages/1/preview-url', clear: 'UPDATE landing_pages SET preview_token = NULL WHERE id = 1' },
+];
+for (const { path, clear } of allocatingReads) {
+  test('existing allocation reads without an audit write: ' + path, async () => {
+    const f = await fixture();
+    try {
+      const before = Number(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE action = 'project_content_write_authorized'").get().n);
+      assert.equal((await request(f, 6, 'GET', path)).status, 200);
+      assert.equal(Number(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE action = 'project_content_write_authorized'").get().n), before);
+      f.db.exec('DROP TABLE activity_logs');
+      assert.equal((await request(f, 6, 'GET', path)).status, 200);
+    } finally { f.db.close(); }
+  });
+  test('new allocation records the member actor: ' + path, async () => {
+    const f = await fixture();
+    try {
+      f.db.exec(clear);
+      assert.equal((await request(f, 6, 'GET', path)).status, 200);
+      const rows = f.db.prepare("SELECT actor, user_id, project_id FROM activity_logs WHERE action = 'project_content_write_authorized'").all();
+      assert.deepEqual(rows.map((r: any) => ({ ...r })), [{ actor: 'user:6', user_id: 6, project_id: 1 }]);
+    } finally { f.db.close(); }
+  });
+  test('new allocation refuses an unavailable audit store: ' + path, async () => {
+    const f = await fixture();
+    try {
+      f.db.exec(clear); const before = snapshot(f);
+      f.db.exec('DROP TABLE activity_logs');
+      assert.equal((await request(f, 6, 'GET', path)).status, 403);
+      assert.equal(snapshot(f), before);
+    } finally { f.db.close(); }
+  });
+}
+
+for (const who of [11, 12]) test('accepted advisor '+who+' can read an existing address but cannot allocate one', async () => {
+  const f = await fixture();
+  try {
+    assert.equal((await request(f, who, 'GET', '/api/brand/site/by-project/1')).status, 200);
+    f.db.exec('DELETE FROM brand_sites WHERE project_id = 1'); const before = snapshot(f);
+    assert.equal((await request(f, who, 'GET', '/api/brand/site/by-project/1')).status, 403);
+    assert.equal(snapshot(f), before);
   } finally { f.db.close(); }
 });
