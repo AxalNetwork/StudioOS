@@ -83,3 +83,8 @@ fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources
 # commit replaces the literal. Ignore only this already-pushed historical
 # finding, retaining coverage for every other commit, file and secret rule.
 86bb4cb3819f07a4555f31f8850b3011e7dff3cd:cloudflare-worker/test/dd_external_evidence.test.ts:generic-api-key:13
+
+# #2634: synthetic signing value used only by the in-memory Carta fixture.
+# The next commit replaces it with a generated test value; pin the already
+# pushed finding only, retaining all other file/commit/rule coverage.
+57b1626b52f079eb204c8a296c6085daa1b1e49d:cloudflare-worker/test/carta_oauth_2634.test.ts:generic-api-key:17

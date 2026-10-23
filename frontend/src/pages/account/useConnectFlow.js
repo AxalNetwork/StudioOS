@@ -71,7 +71,7 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
   const [configText, setConfigText] = useState(conn?.config && !conn.first_party ? JSON.stringify(conn.config, null, 2) : '');
   const [advanced, setAdvanced] = useState(false);
   const [sfSandbox, setSfSandbox] = useState(false);
-  const [dsDemo, setDsDemo] = useState(true);
+  const [dsDemo, setDsDemo] = useState(() => p.key === 'carta' && conn ? conn.config?.is_demo === true : true);
   const [tool, setTool] = useState(null);
 
   const go = (v) => { setMessage(''); setView(v); };
@@ -93,7 +93,7 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
         const params = returnTo === 'build' ? { return_to: 'build', ...(Number(projectId) > 0 ? { project_id: String(Number(projectId)) } : {}) } : {};
         if (p.key === 'salesforce') params.sandbox = sfSandbox ? '1' : '';
         // Always demo=0|1: a missing query makes the Worker default to demo.
-        if (p.key === 'docusign') params.demo = dsDemo ? '1' : '0';
+        if (p.key === 'docusign' || p.key === 'carta') params.demo = dsDemo ? '1' : '0';
         const r = await connectorsApi.oauthStart(p.key, params, opts);
         url = r?.authorize_url;
       }

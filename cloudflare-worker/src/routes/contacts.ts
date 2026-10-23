@@ -12,6 +12,7 @@
  * is applied; the migration is the canonical record.
  */
 import { Hono } from 'hono';
+import { logCycleWriteStatement } from '../services/cycleActivity';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import type { Context } from 'hono';
@@ -457,7 +458,7 @@ function resolveProjectId(scope: 'all' | number[], pidRaw: string | undefined | 
 export async function createProspect(
   env: Env,
   projectId: number,
-  input: { name?: unknown; email?: unknown; firm?: unknown; amount?: unknown; stage?: unknown; notes?: unknown },
+  input: { name?: unknown; email?: unknown; firm?: unknown; amount?: unknown; stage?: unknown; notes?: unknown; commit_status?: unknown },
 ): Promise<{ prospect: any } | 'duplicate' | 'invalid'> {
   const name = input.name ? String(input.name).trim().slice(0, 200) : null;
   const email = input.email ? String(input.email).trim().toLowerCase() : null;
@@ -475,9 +476,9 @@ export async function createProspect(
   }
 
   const res = await env.DB.prepare(
-    `INSERT INTO raise_prospects (uid, project_id, contact_id, name, email, firm, stage, amount, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(newUid(), projectId, null, name, email, firm, stage, amount, notes, nowIso(), nowIso()).run();
+    `INSERT INTO raise_prospects (uid, project_id, contact_id, name, email, firm, stage, amount, notes, commit_status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(newUid(), projectId, null, name, email, firm, stage, amount, notes, stage === 'committed' && COMMIT_STATUSES.includes(String(input.commit_status)) ? String(input.commit_status) : null, nowIso(), nowIso()).run();
   const prospectId = lastInsertId(res);
   let contactId: number | null = null;
 
@@ -696,9 +697,11 @@ r.put('/raise-prospects/:id', async (c) => {
       ).bind(closeId, Number(row.project_id)).first();
       if (!own) return c.json({ detail: 'close_id does not belong to this project' }, 400);
     }
-    await c.env.DB.prepare(
+    await c.env.DB.batch([c.env.DB.prepare(
       `UPDATE raise_prospects SET stage=?, notes=?, firm=?, name=?, amount=?, commit_status=?, instrument=?, close_id=?, updated_at=? WHERE id=?`,
-    ).bind(stage, notes, firm, name, amount, commitStatus, instrument, closeId, nowIso(), id).run();
+    ).bind(stage, notes, firm, name, amount, commitStatus, instrument, closeId, nowIso(), id),
+      logCycleWriteStatement(c.env, { projectId: Number(row.project_id), userId: user.id, cycle: 'raise', module: 'capital-relationships', entityId: id, action: 'prospect_updated', summary: 'Investor prospect updated' }),
+    ]);
     const fresh = await c.env.DB.prepare('SELECT * FROM raise_prospects WHERE id = ?').bind(id).first<any>();
     return c.json(fresh);
   } catch (e) { return mapError(c, e); }
@@ -786,13 +789,10 @@ r.get('/raise-round', async (c) => {
       `SELECT * FROM raise_rounds WHERE project_id = ? AND status = 'active'`,
     ).bind(pid).first<any>();
     const agg = await c.env.DB.prepare(
-      `SELECT COALESCE(SUM(amount), 0) AS raised, COUNT(*) AS n FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
+      `SELECT COALESCE(SUM(amount), 0) AS raised, COUNT(*) AS n FROM raise_prospects WHERE project_id = ? AND stage = 'committed' AND commit_status IN ('signed','wired')`,
     ).bind(pid).first<{ raised: number; n: number }>();
-    // Round Manager (#129) — the funnel split alongside the legacy
-    // `raised` total. `progress.committed` equals `raised` until a
-    // founder starts marking rows soft/wired, so nothing moves on the
-    // deploy that ships this (see migration 169's note on commit_status).
-    const allocations = await loadAllocations(c.env, pid).catch(() => []);
+    // The legacy header and round funnel both count explicitly signed/wired allocations.
+    const allocations = await loadAllocations(c.env, pid);
     return c.json({
       round: round || null,
       raised: Number(agg?.raised || 0),
@@ -870,20 +870,19 @@ function ymd(v: unknown): string | null {
 
 /**
  * Allocations for the round funnel. A prospect at stage='committed' IS
- * an allocation; `commit_status` refines it. NULL maps to 'signed' so
- * the new committed total exactly reproduces the legacy `raised` figure
- * on the deploy that introduces this — no number moves under founders.
+ * an allocation; only an explicitly recorded status contributes to totals.
+ * Missing amounts remain null and are reported separately from zero.
  */
 async function loadAllocations(env: Env, projectId: number): Promise<Array<{
-  amount: number; status: 'soft' | 'signed' | 'wired'; close_id: number | null;
+  amount: number | null; status: 'soft' | 'signed' | 'wired' | null; close_id: number | null;
 }>> {
   const rows = await env.DB.prepare(
     `SELECT amount, commit_status, close_id FROM raise_prospects
       WHERE project_id = ? AND stage = 'committed'`,
   ).bind(projectId).all<any>();
   return (rows.results || []).map((x: any) => ({
-    amount: Number(x.amount) || 0,
-    status: (COMMIT_STATUSES.includes(String(x.commit_status)) ? x.commit_status : 'signed') as 'soft' | 'signed' | 'wired',
+    amount: x.amount == null ? null : Number(x.amount),
+    status: (COMMIT_STATUSES.includes(String(x.commit_status)) ? x.commit_status : null) as 'soft' | 'signed' | 'wired' | null,
     close_id: x.close_id == null ? null : Number(x.close_id),
   }));
 }

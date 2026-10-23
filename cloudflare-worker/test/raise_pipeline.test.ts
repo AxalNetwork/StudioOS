@@ -24,6 +24,8 @@
  *     --test cloudflare-worker/test/raise_pipeline.test.ts
  */
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { tableFromBaseline } from './_baseline.mjs';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { personalMatchTables } from './_mercury_d713.ts';
@@ -89,6 +91,7 @@ db.exec(`
   INSERT INTO projects (id, founder_id, name) VALUES (100, 11, 'Alpha');
   INSERT INTO projects (id, founder_id, name) VALUES (200, 22, 'Beta');
 `);
+db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'), 'activity_logs'));
 const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) };
 
 async function mintToken(userId: number, role = 'founder'): Promise<string> {
@@ -202,7 +205,7 @@ test('GET /raise-round aggregates raised from committed prospects only', async (
   const alice = await mintToken(1);
 
   const jane = db.prepare(`SELECT id FROM raise_prospects WHERE email = 'jane@fund.vc'`).get() as any;
-  const commit = await call(alice, 'PUT', `/raise-prospects/${jane.id}`, { stage: 'committed', amount: 300000 });
+  const commit = await call(alice, 'PUT', `/raise-prospects/${jane.id}`, { stage: 'committed', amount: 300000, commit_status: 'signed' });
   assert.equal(commit.status, 200);
   const committed: any = await commit.json();
   assert.equal(committed.stage, 'committed');

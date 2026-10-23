@@ -1446,6 +1446,7 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   dealCommitments: (id) => request(`/deals/${id}/commitments`),
+  dealCommitmentWithdraw: (id, uid) => request(`/deals/${id}/commitments/${encodeURIComponent(uid)}/withdraw`, { method: 'POST' }),
   createCommitment: (id, data) => request(`/deals/${id}/commitments`, { method: 'POST', body: JSON.stringify(data) }),
   dealActivity: (id) => request(`/deals/${id}/activity`),
   dealInvitations: (id) => request(`/deals/${id}/invitations`),
@@ -1469,7 +1470,6 @@ export const api = {
 
   matchPartnersLegacy: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
   generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),
-  capitalCall: (data) => request('/capital/capitalCall', { method: 'POST', body: JSON.stringify(data) }),
 
   founderSubmit: (data) => request('/projects/submit', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -1917,7 +1917,6 @@ export const api = {
 
   activityLog: (params) => request(`/activity${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),
-  activitySyncGithub: () => request('/activity/sync-github', { method: 'POST' }),
 
   // D128 — `q` searches name and email; `envelope: 1` adds the per-role TOTALS
   // over the whole table. Called with no argument this is byte-for-byte the
@@ -5410,6 +5409,9 @@ export const adminX = {
       method: 'POST',
       body: JSON.stringify(override_reason ? { override_reason } : {}),
     }),
+  resolvePost: (id, outcome) => request(`/admin/x/posts/${id}/resolve`, {
+    method: 'POST', body: JSON.stringify(outcome),
+  }),
   schedulePost: (id, scheduled_for) =>
     request(`/admin/x/posts/${id}/schedule`, {
       method: 'POST', body: JSON.stringify({ scheduled_for }),

@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, select, func
 from backend.app.database import get_session
 from backend.app.models.entities import ActivityLog, User, UserRole
 from backend.app.api.routes.auth import get_current_user
-from backend.app.services.github_service import sync_activity_logs_to_github
 from typing import Optional
 
 router = APIRouter(prefix="/activity", tags=["Activity Log"])
@@ -66,35 +65,3 @@ async def activity_summary(
         "recent": recent,
         "action_breakdown": action_counts,
     }
-
-
-@router.post("/sync-github")
-async def sync_to_github(
-    session: Session = Depends(get_session),
-    user: User = Depends(get_current_user),
-):
-    base = select(ActivityLog)
-    if user.role != UserRole.ADMIN:
-        base = base.where(ActivityLog.actor == user.email)
-
-    logs = session.exec(
-        base.order_by(ActivityLog.created_at.desc()).limit(500)
-    ).all()
-
-    log_data = [
-        {
-            "id": log.id,
-            "uid": log.uid,
-            "action": log.action,
-            "details": log.details,
-            "actor": log.actor,
-            "project_id": log.project_id,
-            "created_at": log.created_at.isoformat() if log.created_at else None,
-        }
-        for log in logs
-    ]
-
-    result = await sync_activity_logs_to_github(log_data, user.email)
-    if result:
-        return {"status": "synced", "github_url": result.get("url"), "entries": len(log_data)}
-    raise HTTPException(status_code=502, detail="Could not sync to GitHub. Check GitHub configuration.")

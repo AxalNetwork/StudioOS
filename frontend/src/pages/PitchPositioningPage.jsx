@@ -13,7 +13,7 @@ import { railPageHeaders } from '../lib/railPage.js';
  * Task #10 — Pitch Positioning Generator.
  *
  * "One-click positioning": pick a startup → the Worker pulls its team
- * (cap-table founders), traction (project columns + financial model +
+ * (recorded founder and accepted members), traction (project columns + financial model +
  * latest score) and recent updates, then the AI writes a punchy one-liner,
  * a short elevator pitch and 3-5 alternate positioning lines.
  *
@@ -321,13 +321,14 @@ function ResultCard({ label, children, onCopy, copyKey, copiedKey }) {
   );
 }
 
-function SourcedFrom({ sourced }) {
+export function SourcedFrom({ sourced }) {
   if (!sourced) return null;
   const chips = [
     {
       key: 'team',
       icon: Users,
-      label: sourced.team ? `${sourced.team} founder${sourced.team === 1 ? '' : 's'}` : 'No team data',
+      label: sourced.team_status === 'unreadable' || sourced.team === null ? 'Team unreadable'
+        : sourced.team ? `${sourced.team} team member${sourced.team === 1 ? '' : 's'}` : 'No team recorded',
       on: !!sourced.team,
     },
     { key: 'traction', icon: TrendingUp, label: sourced.traction ? 'Traction' : 'No traction data', on: !!sourced.traction },

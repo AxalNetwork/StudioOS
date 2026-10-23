@@ -7,6 +7,12 @@ node --experimental-strip-types --no-warnings \
 ```
 Usually you just want `npm run test:drift`, which runs this plus everything else.
 
+`financial_access_2460.test.ts` mounts the financial, revenue and legal routers
+over the real SQLite schema. It checks every outside role, residual founder
+ids, company boundaries, unchanged models after refused writes, and owner/admin
+access. It also pins the separate deal-room partner reader and the recompute
+edit gate so future read-only relationships cannot acquire writes accidentally.
+
 Tests run **in process against a real SQLite database** (`node:sqlite`) loaded
 from the actual schema or a specific migration file — not against mocks. A
 handler that would fail on D1 because of an unknown column fails here too,
