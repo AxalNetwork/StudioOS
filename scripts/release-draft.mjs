@@ -5,11 +5,11 @@
  *
  * - The last release is the newest published one (drafts excluded).
  * - The draft's tag is the next one, by `nextReleaseTag` (frontend/src/lib/release.js):
- *   v0.1.0-alpha first, then a minor bump per release at the current stage.
+ *   cumulative active release months, weeks and days (UTC).
  * - Its notes are GitHub's own generated notes since the last release (merged
  *   PRs and their authors), so nothing is hand-written and CHANGELOG.md is
  *   untouched.
- * - Alpha, beta and rc drafts are marked pre-release.
+ * - Calendar counter tags are plain versions, without a stage suffix.
  *
  * Publishing is the owner's: it creates the tag on main and starts
  * release-published.yml, which redeploys so the logo's badge shows it.
@@ -17,7 +17,7 @@
  * Env: GITHUB_TOKEN (contents: write), GITHUB_REPOSITORY (owner/name).
  * `--dry-run` prints what it would write and changes nothing.
  */
-import { FIRST_RELEASE, nextReleaseTag, parseRelease, RELEASE_STAGE } from '../frontend/src/lib/release.js';
+import { nextReleaseTag, parseRelease, releaseDays } from '../frontend/src/lib/release.js';
 
 const API = 'https://api.github.com';
 // GitHub refuses a release body over 125,000 characters. The first release
@@ -39,8 +39,9 @@ export function pickReleases(releases) {
 }
 
 /** The draft to write, from the last release's tag and the generated notes. */
-export function draftPayload({ lastTag, notes, stage = RELEASE_STAGE, target = 'main' }) {
-  const tag = lastTag ? nextReleaseTag(lastTag, stage) : FIRST_RELEASE;
+export function draftPayload({ releases = [], notes, now = new Date(), target = 'main' }) {
+  const lastTag = pickReleases(releases).last?.tag_name;
+  const tag = nextReleaseTag(releases, now);
   const intro = lastTag
     ? `Changes since ${lastTag}. Publishing this draft tags \`${target}\` and updates the version beside the logo.\n\n`
     : 'The first tagged release. Earlier history is in CHANGELOG.md. Publishing this draft tags `main` and updates the version beside the logo.\n\n';
@@ -50,7 +51,7 @@ export function draftPayload({ lastTag, notes, stage = RELEASE_STAGE, target = '
     name: tag,
     body: trimBody(intro + (notes || '')),
     draft: true,
-    prerelease: stage !== 'stable',
+    prerelease: false,
   };
 }
 
@@ -69,24 +70,43 @@ async function gh(path, { method = 'GET', body } = {}) {
   return r.status === 204 ? null : r.json();
 }
 
+/** Read every page: counting only the newest 100 releases would reset versions. */
+export async function readReleases(api, repo) {
+  const releases = [];
+  for (let page = 1; ; page++) {
+    const batch = await api(`/repos/${repo}/releases?per_page=100&page=${page}`);
+    releases.push(...batch);
+    if (batch.length < 100) return releases;
+  }
+}
+
+export async function updateDraft({ api = gh, repo, now = new Date(), dryRun = false }) {
+  const releases = await readReleases(api, repo);
+  // Publishing freezes the day's release. Never update a published release or tag.
+  if (releaseDays(releases).includes(now.toISOString().slice(0, 10))) {
+    return { skipped: true, reason: 'A release is already published today; its version and tag stay fixed.' };
+  }
+  const { last, draft } = pickReleases(releases);
+  const lastTag = last?.tag_name || null;
+  const tag = nextReleaseTag(releases, now);
+  const generated = await api(`/repos/${repo}/releases/generate-notes`, {
+    method: 'POST',
+    body: { tag_name: tag, target_commitish: 'main', ...(lastTag ? { previous_tag_name: lastTag } : {}) },
+  });
+  const payload = draftPayload({ releases, now, notes: generated.body });
+  if (!dryRun) {
+    if (draft) await api(`/repos/${repo}/releases/${draft.id}`, { method: 'PATCH', body: payload });
+    else await api(`/repos/${repo}/releases`, { method: 'POST', body: payload });
+  }
+  return { skipped: false, payload };
+}
+
 async function main() {
   const repo = process.env.GITHUB_REPOSITORY;
   const dryRun = process.argv.includes('--dry-run');
   if (!repo || !process.env.GITHUB_TOKEN) throw new Error('GITHUB_REPOSITORY and GITHUB_TOKEN are required.');
-
-  const { last, draft } = pickReleases(await gh(`/repos/${repo}/releases?per_page=100`));
-  const lastTag = last?.tag_name || null;
-  const tag = lastTag ? nextReleaseTag(lastTag) : FIRST_RELEASE;
-  const generated = await gh(`/repos/${repo}/releases/generate-notes`, {
-    method: 'POST',
-    body: { tag_name: tag, target_commitish: 'main', ...(lastTag ? { previous_tag_name: lastTag } : {}) },
-  });
-  const payload = draftPayload({ lastTag, notes: generated.body });
-
-  console.log(`last published: ${lastTag || 'none'}; draft: ${payload.tag_name} (${draft ? 'update' : 'create'}); body ${payload.body.length} chars`);
-  if (dryRun) return;
-  if (draft) await gh(`/repos/${repo}/releases/${draft.id}`, { method: 'PATCH', body: payload });
-  else await gh(`/repos/${repo}/releases`, { method: 'POST', body: payload });
+  const result = await updateDraft({ repo, dryRun });
+  console.log(result.skipped ? result.reason : `draft: ${result.payload.tag_name}; body ${result.payload.body.length} chars`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
