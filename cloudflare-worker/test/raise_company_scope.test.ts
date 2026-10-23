@@ -168,8 +168,8 @@ test('financials: no company, forged company, admin — none of them narrow', as
   assert.equal((await get(financials, `/${PROJECT_A}`, admin, COMPANY_B)).status, 200, 'admin unscoped');
 });
 
-test('financials: THE TRAP — a partner under their own agency still reads every project', async () => {
-  assert.equal((await get(financials, `/${PROJECT_A}`, partner, AGENCY)).status, 200);
+test('financials: a partner under their own agency cannot read another venture', async () => {
+  assert.equal((await get(financials, `/${PROJECT_A}`, partner, AGENCY)).status, 404);
 });
 
 // ---------- compliance: the exemption follows the READ privilege ----------

@@ -88,3 +88,23 @@ Use `cloudflare-worker/src/integrations/oauth.ts` `buildPkce()` inside your
 `buildAuthorizeUrl` so the verifier is bound to the signed state. The
 callback handler in `cloudflare-worker/src/routes/integrations.ts` will hand the verifier back
 to your `connect()` via `input.config.pkce_verifier`.
+
+Carta (#2634 part 1) defaults new OAuth connections to Playground. The chosen
+`is_demo` flag rides in signed state and the saved connection config; exchange,
+refresh, issuer reads and revocation all use that environment. Legacy rows
+without the flag retain their original production environment. The account
+choice reuses DocuSign's existing selector.
+
+Carta investor grants (#2634) request only `read_investor_*` scopes and save
+`config.audience = investor`; founder/legacy rows remain issuer grants.
+Investor reads go through `../cartaInvestor.ts` and
+`../../routes/carta_investor.ts`, one page at a time. They are live, read-only,
+and never enter founder cap-table stores or the six-hour issuer cron.
+An expanded refresh grant is revoked before any API retry or persistence.
+`audience` and environment cannot be changed through settings; reconnect.
+
+A refused expanded Carta refresh marks its row `error` with a static code,
+then revokes the refused token; future reads ask to reconnect. Legacy Carta
+rows held by other roles keep their own Disconnect path but never enter the
+issuer scheduler or manual sync. A failed local read-log write has its own
+503 code, separate from a Carta read failure.

@@ -15,8 +15,8 @@ export type AllocationStatus = 'soft' | 'signed' | 'wired';
 export type CloseState = 'planned' | 'open' | 'closed';
 
 export interface Allocation {
-  amount: number;
-  status: AllocationStatus;
+  amount: number | null;
+  status: AllocationStatus | null;
   close_id?: number | null;
 }
 
@@ -37,6 +37,8 @@ export interface RoundProgress {
   /** Target minus committed; null without a target, never negative. */
   remaining: number | null;
   oversubscribed: boolean;
+  amount_not_recorded_count: number;
+  status_not_set_count: number;
 }
 
 function pos(n: unknown): number {
@@ -66,6 +68,8 @@ export function computeRoundProgress(allocations: Allocation[], target: number |
   const tgt = target != null && Number.isFinite(Number(target)) && Number(target) > 0 ? Number(target) : null;
   return {
     target: tgt,
+    amount_not_recorded_count: allocations.filter(a => a.amount == null).length,
+    status_not_set_count: allocations.filter(a => a.status == null).length,
     wired: round2(wired),
     signed: round2(signed),
     soft: round2(soft),
