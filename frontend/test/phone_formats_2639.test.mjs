@@ -166,7 +166,7 @@ test('#2639: legacy identity editor also previews and sends canonical phone',asy
     ["We'll save {normalizedPhone.international}.", ''],
   ]);
   await mutationCheck(legacySource,'pages/SettingsPage.jsx',module=>verifyLegacy(module,true),[
-    ['if (!normalizedPhone) { setFieldErrors({ phone_e164: PHONE_ERROR }); return; }', 'if (!normalizedPhone) { save({ phone_e164: phoneInput }); return; }'],
+    ['if (!normalizedPhone) { setFieldErrors(previous => ({ ...previous, phone_e164: PHONE_ERROR })); return; }', 'if (!normalizedPhone) { save({ phone_e164: phoneInput }); return; }'],
   ]);
 });
 
@@ -195,5 +195,39 @@ test('#2639: legacy and unsupported profile countries stay visible and cannot be
   await mutationCheck(profileSource,'pages/account/AccountProfile.jsx',verifyStoredCountry,[
     ["{...ed.upper('country')}","{...ed.upper('country')} value=\"US\""],
     ['normalizePhoneInput(patch.phone_e164, ed.draft.country ?? det.country)',"normalizePhoneInput(patch.phone_e164, 'US')"],
+  ]);
+});
+
+async function verifyOtherFieldErrors(module) {
+  module.api.updatePersonalProfile = async () => { throw { data: { errors: { tax_residency_country: 'Synthetic tax residency refusal' } } }; };
+  const f=await mountForm(h(module.PersonalIdentityCard,{flash(){}}));
+  try {
+    const tax=f.nodes().find(n=>n.tagName==='INPUT' && f.props(n).maxLength===2 && f.props(n).value==='');
+    await act(async()=>f.props(tax).onBlur());
+    assert.ok(f.text().includes('Synthetic tax residency refusal'));
+    await act(async()=>f.props(f.by('identity-phone-input')).onChange({target:{value:'123'}}));
+    await act(async()=>f.props(f.by('identity-phone-save')).onClick());
+    assert.ok(f.text().includes(PHONE_ERROR));
+    assert.ok(f.text().includes('Synthetic tax residency refusal'),'phone refusal preserves other field errors');
+  } finally {await f.unmount();}
+}
+test('#2639: local phone refusal retains unrelated identity errors',async()=>{
+  await mutationCheck(legacySource,'pages/SettingsPage.jsx',verifyOtherFieldErrors,[
+    ['setFieldErrors(previous => ({ ...previous, phone_e164: PHONE_ERROR }))','setFieldErrors({ phone_e164: PHONE_ERROR })'],
+  ]);
+});
+async function verifySavedMask(module) {
+  const f=await mountForm(h(module.PersonalDetailsCard,{account:{name:'Fixture'},identity:{status:'ready',data:{}},details:{status:'ready',data:{country:'CH',has_phone:true,phone_last4:'0000'}},onSave:async()=>({})}));
+  try {
+    await f.click('Edit');
+    const input=f.nodes().find(n=>f.props(n).id==='ac-phone');
+    assert.ok(f.props(input).placeholder.includes('0000'),'keep the saved-number mask while replacing it');
+    assert.equal(f.props(input).value,'','never load the stored full phone');
+  } finally {await f.unmount();}
+}
+test('#2639: saved profile phone remains masked in the replacement editor',async()=>{
+  await mutationCheck(profileSource,'pages/account/AccountProfile.jsx',verifySavedMask,[
+    ['det.has_phone ? phoneLabel(det) : phonePlaceholder(ed.draft.country ?? det.country)','phonePlaceholder(ed.draft.country ?? det.country)'],
+    ["phone_e164: '', city:","phone_e164: 'exposed-number', city:"],
   ]);
 });

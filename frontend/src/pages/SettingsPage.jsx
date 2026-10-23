@@ -786,7 +786,7 @@ function PersonalIdentityCard({ flash, onPctChange }) {
           <div className="flex gap-2">
             <input data-testid="identity-phone-input" type="tel" value={phoneInput} onChange={e => setPhoneInput(e.target.value)}
               disabled={busy} className={inputCls} placeholder={phonePlaceholder(r.country)} />
-            <button data-testid="identity-phone-save" onClick={() => { if (!normalizedPhone) { setFieldErrors({ phone_e164: PHONE_ERROR }); return; } save({ phone_e164: normalizedPhone.e164 }); }}
+            <button data-testid="identity-phone-save" onClick={() => { if (!normalizedPhone) { setFieldErrors(previous => ({ ...previous, phone_e164: PHONE_ERROR })); return; } save({ phone_e164: normalizedPhone.e164 }); }}
               disabled={busy || !phoneInput}
               className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">Save</button>
             {r.has_phone && (

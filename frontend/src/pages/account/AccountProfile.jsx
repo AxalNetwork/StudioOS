@@ -153,7 +153,7 @@ export function PersonalDetailsCard({ account, identity, details, onSave }) {
           </FieldRow>
           <FieldRow label="Phone" htmlFor="ac-phone" control error={ed.errors.phone_e164}
             hint={det.has_phone ? 'A number is saved. Type a new one to replace it, or leave this empty to keep it.' : 'Your mobile number, any country.'}>
-            <input id="ac-phone" className={`${INPUT} font-mono`} inputMode="tel" {...ed.field('phone_e164')} placeholder={phonePlaceholder(ed.draft.country ?? det.country)} />
+            <input id="ac-phone" className={`${INPUT} font-mono`} inputMode="tel" {...ed.field('phone_e164')} placeholder={det.has_phone ? phoneLabel(det) : phonePlaceholder(ed.draft.country ?? det.country)} />
             {normalizedPhone && <p className="text-xs text-gray-500" role="status">We'll save {normalizedPhone.international}.</p>}
           </FieldRow>
           <FieldRow label="City" htmlFor="ac-city" control error={ed.errors.city}>
