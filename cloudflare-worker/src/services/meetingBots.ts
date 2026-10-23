@@ -21,6 +21,7 @@ export type BotStatus = typeof BOT_STATUSES[number];
 export type BotPlatform = 'zoom' | 'google_meet' | 'teams';
 export const terminal = (s: BotStatus) => ['done','failed','stopped'].includes(s);
 export interface BotRun {
+  participants_enc: string | null;
   uid: string; user_id: number; project_id: number; session_id: number; platform: BotPlatform; meeting_url_enc: string;
   status: BotStatus; failure_code: string | null; scheduled_at: number; started_at: number | null; ended_at: number | null;
   minutes: number | null; participant_count: number | null; heartbeat_at: number | null; limit_minutes: number;
