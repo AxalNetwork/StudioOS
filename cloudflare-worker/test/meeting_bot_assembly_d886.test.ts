@@ -14,6 +14,7 @@ import { withGuard } from './_guard_stub.mjs';
 type Module = typeof assembly;
 async function world(platform = 'google_meet') {
   const w = fixture();
+  if (!w.db.prepare('PRAGMA table_info(users)').all().some((c:any)=>c.name==='display_name')) w.db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
   w.db.exec(mig('531_meeting_bots.sql'));
   w.db.exec(mig('532_meeting_bot_participants.sql'));
   const session = seed(w, { chunks: 0, ageDays: 0 });
@@ -69,6 +70,11 @@ const scenarios: Record<string, (m: Module) => Promise<void>> = {
     assert.equal(result.segments[1].speaker_label,'Renamed fixture');
     assert.equal(result.participants[0].left_at_ms,null);
   },
+  async 'the founder display name takes precedence over the account name'(m) {
+    const w=await world();w.db.prepare('UPDATE users SET display_name=? WHERE id=?').run('Alternate fixture',FOUNDER);
+    await w.event('roster',{participants:[{...w.people[0],name:'Alternate fixture'}]});
+    assert.equal((await m.prepareBotAssembly(w.env,w.uid)).segments[0].speaker_label,'Me');
+  },
   async 'Zoom names per-participant streams without a diarized number or speaker indicator'(m) {
     const w=await world('zoom');
     w.db.prepare("DELETE FROM meeting_bot_events WHERE kind='speaker'").run();
@@ -119,7 +125,7 @@ const scenarios: Record<string, (m: Module) => Promise<void>> = {
     const w=await world(); const original=w.env.DB.prepare.bind(w.env.DB);
     w.env.DB.prepare=((sql:string)=>{
       const statement=original(sql);
-      if (sql==='SELECT name FROM users WHERE id = ?') {
+      if (sql==='SELECT name, display_name FROM users WHERE id = ?') {
         const bind=statement.bind.bind(statement);
         statement.bind=((...args:unknown[])=>{const bound=bind(...args);const first=bound.first.bind(bound);
           bound.first=async()=>{const value=await first();w.db.prepare("UPDATE interview_sessions SET consent_status='declined'").run();return value;};return bound;}) as any;
@@ -268,7 +274,7 @@ const mutations=[
   ['manifest.start !== chunk.start_ms','false'],
   ['!chunk.r2_key.startsWith(AUDIO_PREFIX)','false'],
   ['participant_key: participant','participant_key: null'],
-  ['founderName: founder?.name','founderName: null'],
+  ['founderName: founder?.display_name?.trim() || founder?.name','founderName: null'],
   ['await botSession(env, run);\n  return','return'],
   ["AND s.consent_status = 'given'",''],
   ['AND participants_enc IS NULL','AND 1 = 1'],

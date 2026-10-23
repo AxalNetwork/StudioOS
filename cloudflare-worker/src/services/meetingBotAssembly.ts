@@ -121,8 +121,8 @@ export async function prepareBotAssembly(env: Env, uid: string) {
     language ||= stage.language;
     if (stage.fallback_used) { fallback = true; model = stage.model; }
   }
-  const founder = await env.DB.prepare('SELECT name FROM users WHERE id = ?').bind(run.user_id).first<{ name: string }>();
-  const assembled = assembleBotTranscript(passages, events, { founderName: founder?.name, endMs });
+  const founder = await env.DB.prepare('SELECT name, display_name FROM users WHERE id = ?').bind(run.user_id).first<{ name: string; display_name: string | null }>();
+  const assembled = assembleBotTranscript(passages, events, { founderName: founder?.display_name?.trim() || founder?.name, endMs });
   const segments: StoredSegment[] = assembled.passages.map(p => ({ start_ms: p.start_ms, end_ms: p.end_ms,
     text: p.text, speaker_label: p.speaker, speaker_raw: null }));
   // Recheck after decryption and reads: revoked/removed sessions cannot be prepared.
@@ -201,11 +201,12 @@ export async function stageBotChunk(env: Env, uid: string, seq: number, result: 
   const { scoped } = await writableSession(env,run.user_id,session.id);
   const written = await env.DB.prepare(`INSERT OR IGNORE INTO interview_chunk_transcripts(session_id,seq,model,language,segments_json,cost_microusd,fallback_used)
     SELECT ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM interview_sessions s JOIN users u ON u.id = s.created_by_user_id JOIN projects p ON p.id = s.project_id
-      WHERE s.id = ? AND s.created_by_user_id = ? AND s.submitted_via = 'meeting_bot' AND s.consent_status = 'given' AND s.audio_removed_at IS NULL
+      WHERE s.id = ? AND s.created_by_user_id = ? AND s.project_id = ? AND s.interview_id = ?
+      AND s.submitted_via = 'meeting_bot' AND s.consent_status = 'given' AND s.audio_removed_at IS NULL
       AND u.is_active != 0 AND u.deletion_requested_at IS NULL AND u.role = ? AND u.founder_id IS ? AND u.jwt_min_iat IS ?
       AND p.deleted_at IS NULL AND p.founder_id IS ?)`)
     .bind(session.id,seq,result.model,result.language,JSON.stringify(result.segments),result.costMicro,result.fallback?1:0,
-      session.id,run.user_id,scoped.member.role,scoped.member.founder_id,scoped.member.jwt_min_iat,scoped.project.founder_id).run();
+      session.id,run.user_id,session.project_id,session.interview_id,scoped.member.role,scoped.member.founder_id,scoped.member.jwt_min_iat,scoped.project.founder_id).run();
   await botSession(env,run);
   if (!written.meta.changes && !await env.DB.prepare('SELECT seq FROM interview_chunk_transcripts WHERE session_id = ? AND seq = ?').bind(session.id,seq).first()) return fail('bot_assembly_revoked');
 }

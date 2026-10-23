@@ -16,6 +16,7 @@ const syntheticLink = (p='zoom') => p==='zoom' ? ['https:/','unit.zoom.us','j',S
 const hmacSecret = 'd886-'+'x'.repeat(40);
 function world(monthMicro=500_000_000) {
   const w=fixture({monthMicro});
+  if (!w.db.prepare('PRAGMA table_info(users)').all().some((c:any)=>c.name==='display_name')) w.db.exec('ALTER TABLE users ADD COLUMN display_name TEXT');
   w.db.exec(mig('525_ai_reservation_idempotency.sql'));
   w.db.exec(mig('531_meeting_bots.sql'));
   w.db.exec(mig('532_meeting_bot_participants.sql'));
