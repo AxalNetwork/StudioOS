@@ -65,6 +65,7 @@ export default function EventEditorPage() {
   const [rules, setRules] = useState({});
   const [status, setStatus] = useState('draft');
   const [loading, setLoading] = useState(isEdit);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -72,10 +73,14 @@ export default function EventEditorPage() {
   useEffect(() => {
     if (!isEdit) return;
     let alive = true;
+    setLoading(true);
+    setLoadError('');
     (async () => {
       try {
-        const ev = await eventsApi.get(id);
+        const reply = await eventsApi.get(id);
         if (!alive) return;
+        if (!reply?.event || !Array.isArray(reply.agenda)) throw new Error('Event response is incomplete.');
+        const ev = reply.event;
         setForm({
           title: ev.title || '', type: ev.type || 'meetup',
           summary: ev.summary || '', description: ev.description || '',
@@ -90,14 +95,9 @@ export default function EventEditorPage() {
           visibility: ev.visibility || 'private',
         });
         setStatus(ev.status || 'draft');
-        try {
-          const parsed = typeof ev.audience_rules_json === 'string'
-            ? JSON.parse(ev.audience_rules_json || '{}')
-            : (ev.audience_rules_json || {});
-          setRules(parsed && typeof parsed === 'object' ? parsed : {});
-        } catch { setRules({}); }
+        setRules(ev.audience_rules || {});
       } catch (e) {
-        showToast({ kind: 'error', msg: e?.message || 'Could not load this event.' });
+        if (alive) setLoadError(e?.message || 'Could not load this event.');
       } finally {
         if (alive) setLoading(false);
       }
@@ -162,6 +162,10 @@ export default function EventEditorPage() {
 
   if (loading) {
     return <p className="py-12 text-center text-gray-500 dark:text-gray-400">Loading…</p>;
+  }
+
+  if (loadError) {
+    return <p role="alert" className="py-12 text-center text-gray-500 dark:text-gray-400">Unreadable — {loadError}</p>;
   }
 
   return (
