@@ -6,6 +6,10 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceL
 import { Save, Download, RefreshCw, AlertCircle, TrendingUp, Target, Wallet, Activity, FolderPlus, Plus } from 'lucide-react';
 import { api } from '../lib/api';
 
+export function driverValue(raw) {
+  return raw === '' ? '' : Number(raw);
+}
+
 const DRIVER_LABELS = {
   starting_cash: { label: 'Starting cash', unit: '$', step: 1000 },
   price_per_unit: { label: 'Price per unit', unit: '$', step: 1 },
@@ -97,12 +101,14 @@ export default function FinancialsPage({ embedded = false }) {
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setModel(null);
+      setAssumptions(null);
       setError(null);
       try {
         const data = await api.getFinancialModel(projectId);
         if (cancelled) return;
-        setModel(data);
-        setAssumptions(data.assumptions);
+        setModel({ ...data, computed: data.computed || {} });
+        setAssumptions(data.assumptions || Object.fromEntries(Object.keys(DRIVER_LABELS).map(k => [k, ''])));
       } catch (e) {
         if (cancelled) return;
         const msg = (e?.message || '').toLowerCase();
@@ -126,14 +132,16 @@ export default function FinancialsPage({ embedded = false }) {
     return JSON.stringify(model.assumptions) !== JSON.stringify(assumptions);
   }, [model, assumptions]);
 
+  const missingDriver = Object.keys(DRIVER_LABELS).find(k => assumptions?.[k] === '' || assumptions?.[k] == null);
+
   async function handleSave() {
-    if (!projectId || !assumptions) return;
+    if (!projectId || !assumptions || missingDriver) return;
     setSaving(true);
     setError(null);
     try {
       const data = await api.saveFinancialModel(projectId, assumptions);
-      setModel(data);
-      setAssumptions(data.assumptions);
+      setModel({ ...data, computed: data.computed || {} });
+      setAssumptions(data.assumptions || Object.fromEntries(Object.keys(DRIVER_LABELS).map(k => [k, ''])));
     } catch (e) {
       const msg = (e?.message || '').toLowerCase();
       if (e?.status === 404 || msg.includes('not found')) {
@@ -149,7 +157,7 @@ export default function FinancialsPage({ embedded = false }) {
   }
 
   function handleReset() {
-    if (model) setAssumptions(model.assumptions);
+    if (model) setAssumptions(model.assumptions || Object.fromEntries(Object.keys(DRIVER_LABELS).map(k => [k, ''])));
   }
 
   async function handleExport() {
@@ -170,8 +178,8 @@ export default function FinancialsPage({ embedded = false }) {
   }
 
   function setDriver(key, raw) {
-    const num = raw === '' ? 0 : Number(raw);
-    setAssumptions((prev) => ({ ...prev, [key]: isNaN(num) ? 0 : num }));
+    const num = driverValue(raw);
+    setAssumptions((prev) => ({ ...prev, [key]: isNaN(num) ? '' : num }));
   }
 
   const hasProjects = projects.length > 0;
@@ -240,13 +248,15 @@ export default function FinancialsPage({ embedded = false }) {
 
       {!loading && assumptions && model && (
         <>
+          {!model.exists && <p>No model saved yet</p>}
+          {missingDriver && <p role="status">{DRIVER_LABELS[missingDriver].label} is required.</p>}
           {/* Top metrics */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard
               icon={Wallet}
               label="Runway"
               value={`${model.computed.runway_months ?? '—'} mo`}
-              sub={model.computed.runway_capped ? 'Cash hits zero within horizon' : 'Estimated, ample cash'}
+              sub={!model.exists ? 'Not recorded' : model.computed.runway_capped ? 'Cash hits zero within horizon' : 'Estimated, ample cash'}
               tone={model.computed.runway_capped ? 'rose' : 'emerald'}
             />
             <StatCard
@@ -258,7 +268,7 @@ export default function FinancialsPage({ embedded = false }) {
             <StatCard
               icon={Target}
               label="Breakeven"
-              value={model.computed.breakeven_month ? `Month ${model.computed.breakeven_month}` : 'Not in horizon'}
+              value={model.computed.breakeven_month ? `Month ${model.computed.breakeven_month}` : model.exists ? 'Not in horizon' : 'Not recorded'}
               tone={model.computed.breakeven_month ? 'emerald' : 'rose'}
             />
             <StatCard
@@ -284,7 +294,7 @@ export default function FinancialsPage({ embedded = false }) {
                     <input
                       type="number"
                       step={meta.step}
-                      value={assumptions[key]}
+                      value={assumptions[key] ?? ''}
                       onChange={(e) => setDriver(key, e.target.value)}
                       className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-400 dark:border-gray-700"
                     />
@@ -294,7 +304,7 @@ export default function FinancialsPage({ embedded = false }) {
               <div className="flex items-center gap-2 mt-5 pt-4 border-t border-gray-100">
                 <button
                   onClick={handleSave}
-                  disabled={!dirty || saving}
+                  disabled={!dirty || saving || !!missingDriver}
                   className="flex-1 flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-300 text-white rounded-lg px-3 py-2 text-sm font-medium"
                 >
                   <Save size={14} /> {saving ? 'Saving…' : dirty ? 'Save & recompute' : 'Saved'}
