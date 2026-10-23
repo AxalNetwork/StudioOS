@@ -164,6 +164,7 @@ export class MeetingBotRun implements DurableObject {
   private async draining(run: BotRun) { return !await this.state.storage.get('uploads_complete') && run.status==='processing' && (await this.state.storage.get<number>('drain_until')??0)>Date.now(); }
   private async drain(run: BotRun, reason: string) {
     if (await this.draining(run)) return;
+    if (run.status==='processing' && !await this.state.storage.get('uploads_complete')) return this.finish(run,'failed','processing_failed');
     if (run.status!=='recording') return this.finish(run,'stopped',reason==='stopped'?null:reason);
     // Capture ends now. The runtime asynchronously flushes only audio captured before this boundary.
     const until=Date.now()+30_000;
@@ -279,7 +280,7 @@ export class MeetingBotRun implements DurableObject {
     if (event.type === 'status') {
       if (typeof event.status !== 'string' || event.status !== run.status && !NEXT[run.status].includes(event.status as BotStatus)) throw new BotError(409,'invalid_bot_transition','That bot status change is not available.');
       const status=event.status as BotStatus;
-      if ((status==='processing' || status==='done') && !await this.uploadsComplete(run,event)) {
+      if ((status==='processing' || status==='done' || status==='stopped' && ['recording','processing'].includes(run.status)) && !await this.uploadsComplete(run,event)) {
         await this.finish(run,'failed','processing_failed');
         return json({bot:botView(run)});
       }

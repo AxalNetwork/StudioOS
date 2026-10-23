@@ -385,25 +385,25 @@ async function complete(Supervisor=MeetingBotRun) {
   assert.equal(w.stops.length,1);
 }
 async function incomplete(Supervisor=MeetingBotRun) {
-  for(const kind of ['pending','unannounced','failed','unknown','gap','missing_row','uncommitted_ticket','extra_ticket','extra_row','shifted_row']) {
+  for(const kind of ['pending','unannounced','failed','unknown','gap','missing_row','uncommitted_ticket','extra_ticket','extra_row','shifted_row','premature_stop']) {
     const w=world(500_000_000,Supervisor),r=await post(w),uid=r.body.bot.uid;
     await event(w,uid,{seq:1,type:'status',status:'recording'});
-    if(['pending','missing_row','gap','uncommitted_ticket','extra_ticket','extra_row','shifted_row'].includes(kind)) {
+    if(['pending','missing_row','gap','uncommitted_ticket','extra_ticket','extra_row','shifted_row','premature_stop'].includes(kind)) {
       const ticket=await event(w,uid,{seq:2,type:'chunk',chunk_seq:kind==='gap'?1:0,size_bytes:wav().byteLength,start_ms:0});
-      if(!['pending','extra_ticket'].includes(kind)) assert.equal((await upload(w,ticket.body.upload_path)).status,200);
+      if(!['pending','extra_ticket','premature_stop'].includes(kind)) assert.equal((await upload(w,ticket.body.upload_path)).status,200);
       if(kind==='uncommitted_ticket') {const data=w.supervisors.get(uid).data;data.set('chunk:0',{...data.get('chunk:0'),used:false});}
       if(kind==='extra_row')w.db.prepare("INSERT INTO interview_session_chunks(session_id,seq,r2_key,mime,size_bytes) VALUES(?,99,'synthetic-extra','audio/wav',32044)").run(w.session);
       if(kind==='shifted_row')w.db.prepare('UPDATE interview_session_chunks SET seq=1 WHERE session_id=?').run(w.session);
       if(kind==='missing_row')w.db.prepare('DELETE FROM interview_session_chunks WHERE session_id=?').run(w.session);
     }
     const chunks=['failed','extra_ticket'].includes(kind)?0:kind==='unknown'?null:1;
-    const done=await event(w,uid,{seq:3,type:'status',status:'processing',chunks,chunks_failed:kind==='failed'?1:0});
+    const done=await event(w,uid,{seq:3,type:'status',status:kind==='premature_stop'?'stopped':'processing',chunks,chunks_failed:kind==='failed'?1:0});
     assert.equal(done.status,200,kind);assert.equal(done.body.bot.status,'failed',kind); assert.equal(done.body.bot.failure_code,'processing_failed',kind);
     assert.equal((await botRow(w.env,uid))!.status,'failed');
   }
 }
 async function stopDrain(Supervisor=MeetingBotRun) {
-  for(const expired of [false,true]) {
+  for(const expired of [false,true,'repeat_stop']) {
     const w=world(500_000_000,Supervisor),r=await post(w),uid=r.body.bot.uid,row=(await botRow(w.env,uid))!,clock=Date.now;
     await event(w,uid,{seq:1,type:'status',status:'recording'});
     try {
@@ -415,7 +415,8 @@ async function stopDrain(Supervisor=MeetingBotRun) {
         assert.equal((await event(w,uid,{seq:3,type:'status',status:'done',chunks:1,chunks_failed:0})).body.bot.status,'stopped');
       }else {
         Date.now=()=>row.started_at!+32_000;
-        await w.supervisors.get(uid).object.alarm();
+        if(expired==='repeat_stop') await call(w.env,FOUNDER,'POST',`/sessions/${w.session}/bot/stop`,{});
+        else await w.supervisors.get(uid).object.alarm();
         assert.equal((await botRow(w.env,uid))!.failure_code,'processing_failed');
         assert.ok((await upload(w,ticket.body.upload_path)).status>=400);
       }
@@ -466,13 +467,14 @@ for(const [name,before,after,check,published] of [
   ['unpublished gate ignored','if (!MEETING_BOT_NOTICE_PUBLISHED)','if (false)',noticeOff,false],
   ['venture attribution omitted','await botVentureName(this.env,run)','null',noticeCompany,true],
   ['notice omitted from start','!,notice,venture_name:ventureName','!,venture_name:ventureName',noticeCompany,true],
-  ['upload checks skipped',"if ((status==='processing' || status==='done') && !await this.uploadsComplete(run,event))",'if (false)',incomplete,true],
+  ['upload checks skipped',"if ((status==='processing' || status==='done' || status==='stopped' && ['recording','processing'].includes(run.status)) && !await this.uploadsComplete(run,event))",'if (false)',incomplete,true],
   ['runtime failure count ignored',"if (!int(count,3600) || (event.chunks_failed === undefined ? (prior === undefined ? null : 0) : event.chunks_failed) !== 0)",'if (false)',incomplete,true],
   ['extra ticket ignored','tickets.size !== count || rows.length !== count','rows.length !== count',incomplete,true],
   ['extra durable row ignored','tickets.size !== count || rows.length !== count','tickets.size !== count',incomplete,true],
   ['unused ticket accepted','!tickets.get(`chunk:${seq}`)?.used','false',incomplete,true],
   ['shifted sequence accepted','rows[seq].seq !== seq','false',incomplete,true],
   ['expired incomplete drain accepted',"if (!await this.state.storage.get('uploads_complete')) return this.finish(run,'failed','processing_failed');",'',stopDrain,true],
+  ['repeat Stop bypasses upload checks',"if (run.status==='processing' && !await this.state.storage.get('uploads_complete')) return this.finish(run,'failed','processing_failed');",'',stopDrain,true],
   ['extra final block funded','if (last && last.end >= (run.started_at ?? blocks[0].start) + run.limit_minutes*60_000)','if (false)',finalLease,true],
   ['refused advance hold ignored',"if (!held.ok || held.replayed && held.status!=='pending') return false;","if (!held.ok || held.replayed && held.status!=='pending') return true;",renewalRefusal,true],
 ] as const) test('B1 follow-up mutation: '+name,async()=>{
