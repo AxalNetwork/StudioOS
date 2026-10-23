@@ -51,6 +51,9 @@ function liquidity(run = simulate) {
   w = result({ ...base, safes: [post('A', 1), post('B', 1), post('C', 1)], exit_value: 0.01 }, run).waterfall;
   conserved(w);
   w = result({ ...base, safes: [post()], exit_value: 0 }, run).waterfall; conserved(w);
+  // A representable large exit and huge, finite share weights cannot overflow
+  // the allocation's intermediate products.
+  w = result({ founders: [{name:'A',shares:1e300},{name:'B',shares:2e300},{name:'C',shares:7e299}], exit_value: 1e12 }, run).waterfall; conserved(w);
 }
 function pool(run = simulate) {
   for (const rounds of [[], [{ name: 'Seed', pre_money: 1_000_000, investment: 1_000_000 }]]) {
@@ -70,7 +73,9 @@ function limitations(run = simulate, validate = validateInputs) {
     assert.equal(r.waterfall, null);
     assert.ok(r.warnings.some((s: string) => s.includes('Pre-round exit is not calculated')));
   }
-  for (const exit_value of [-1, Infinity, NaN]) assert.ok(validate({ ...base, exit_value }).some(s => /Exit value/.test(s)));
+  for (const exit_value of [-1, Infinity, NaN, 1e18]) assert.ok(validate({ ...base, exit_value }).some(s => /Exit value/.test(s)));
+  for (const amount of [Infinity, 'invalid' as any]) assert.ok(validate({ ...base, safes: [{ ...post(), amount }] }).some(s => /finite amount/.test(s)));
+  for (const cap of [Infinity, 'invalid' as any]) assert.ok(validate({ ...base, safes: [{ ...post(), cap }] }).some(s => /cap must be finite/.test(s)));
   for (const shares of [0.1, Infinity]) {
     const r = result({ founders: [{ name: 'No issued shares', shares }], exit_value: 1_000 }, run);
     assert.equal(r.waterfall, null, 'rounded-zero or non-finite shares cannot receive exit proceeds');
@@ -125,10 +130,10 @@ test('#2446: liquidity, pool and limitation assertions reject mutations and pass
       ['exitValue <= Number(s.cap)', 'true'],
       ['if (!changed) break;', 'break;'],
       ['Math.min(exitValue, cashClaims)', 'cashClaims'],
-      ['paid[order[i].i] += 1', 'paid[order[i].i] += 0'],
+      ['paid[order[i].i] += 1n', 'paid[order[i].i] += 0n'],
     ]],
     [pool, [["h.type !== 'option_pool'", 'true'], ['      POOL_EXIT_ASSUMPTION,', '']]],
-    [limitations, [["s.instrument === 'note'", 'false'], ["!(Number(s.cap) > 0)", 'false'], ['if (postFraction >= 1)', 'if (false)'], ['Number(inputs.exit_value) < 0', 'false'], ['if (!(baseShares > 0) || !Number.isFinite(baseShares))', 'if (false)']]],
+    [limitations, [["s.instrument === 'note'", 'false'], ["!(Number(s.cap) > 0)", 'false'], ['if (postFraction >= 1)', 'if (false)'], ['Number(inputs.exit_value) < 0', 'false'], [' || !Number.isSafeInteger(Math.round(Number(inputs.exit_value) * 100))', ''], ['if (!(baseShares > 0) || !Number.isFinite(baseShares))', 'if (false)'], ['!Number.isFinite(Number(s?.amount)) || ', ''], ['s?.cap != null && !Number.isFinite(Number(s.cap))', 'false']]],
   ];
   for (const [verify, mutants] of groups) {
     const check = async (source: string) => { const m = (await load(paths.cap, source)).module; verify(m.simulate,m.validateInputs); };

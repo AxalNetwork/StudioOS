@@ -76,7 +76,8 @@ export function validateInputs(inputs: Inputs): string[] {
   const pool = Number(inputs.option_pool_pct || 0);
   if (pool < 0 || pool > 80) errs.push('Option pool % must be between 0 and 80.');
   for (const s of inputs.safes || []) {
-    if (Number(s?.amount || 0) <= 0) errs.push(`SAFE '${s?.name ?? '?'}' needs amount > 0.`);
+    if (!Number.isFinite(Number(s?.amount)) || Number(s?.amount || 0) <= 0) errs.push(`SAFE '${s?.name ?? '?'}' needs a finite amount > 0.`);
+    if (s?.cap != null && !Number.isFinite(Number(s.cap))) errs.push(`SAFE '${s?.name ?? '?'}' cap must be finite.`);
     if (Number(s?.cap || 0) <= 0 && Number(s?.discount || 0) <= 0) {
       errs.push(`SAFE '${s?.name ?? '?'}' needs a cap or a discount.`);
     }
@@ -107,8 +108,8 @@ export function validateInputs(inputs: Inputs): string[] {
     const pa = Number(r?.post_round_pool_pct || 0);
     if (pa && (pa < 0 || pa > 80)) errs.push(`Round '${r?.name ?? '?'}' pool % must be 0..80.`);
   }
-  if (inputs.exit_value != null && (!Number.isFinite(Number(inputs.exit_value)) || Number(inputs.exit_value) < 0)) {
-    errs.push('Exit value must be a finite non-negative amount.');
+  if (inputs.exit_value != null && (!Number.isFinite(Number(inputs.exit_value)) || Number(inputs.exit_value) < 0 || !Number.isSafeInteger(Math.round(Number(inputs.exit_value) * 100)))) {
+    errs.push('Exit value must be a finite non-negative amount representable in safe integer cents.');
   }
   return errs;
 }
@@ -377,16 +378,26 @@ const POOL_EXIT_ASSUMPTION = 'Unallocated option pool excluded from exit proceed
 
 /** Allocate integer cents without creating or losing money on rounding. */
 function allocateProceeds(amount: number, weights: number[]): number[] {
-  const cents = Math.round(bankersRound(amount, 2) * 100);
-  const total = weights.reduce((n, w) => n + w, 0);
-  if (total <= 0) return weights.map(() => 0);
-  const exact = weights.map(w => cents * w / total);
-  const paid = exact.map(Math.floor);
-  const remainder = cents - paid.reduce((n, v) => n + v, 0);
-  const order = exact.map((v, i) => ({ i, fraction: v - paid[i] }))
-    .sort((a, b) => b.fraction - a.fraction || a.i - b.i);
-  for (let i = 0; i < remainder; i++) paid[order[i].i] += 1;
-  return paid.map(v => v / 100);
+  const cents = BigInt(Math.round(bankersRound(amount, 2) * 100));
+  // Convert each finite share weight's decimal representation into integers
+  // at one common scale, including exponent notation. Products and remainders
+  // then stay exact even when a large share count would overflow a float.
+  const parts = weights.map(w => {
+    const [mantissa, exponent = '0'] = w.toString().split('e');
+    const [whole, fraction = ''] = mantissa.split('.');
+    return { digits: BigInt(whole + fraction), scale: fraction.length - Number(exponent) };
+  });
+  const scale = parts.reduce((n, p) => Math.max(n, p.scale), 0);
+  const units = parts.map(p => p.digits * 10n ** BigInt(scale - p.scale));
+  const total = units.reduce((n, w) => n + w, 0n);
+  if (total <= 0n) return weights.map(() => 0);
+  const products = units.map(w => cents * w);
+  const paid = products.map(v => v / total);
+  let remainder = cents - paid.reduce((n, v) => n + v, 0n);
+  const order = products.map((v, i) => ({ i, fraction: v % total }))
+    .sort((a, b) => a.fraction === b.fraction ? a.i - b.i : a.fraction > b.fraction ? -1 : 1);
+  for (let i = 0; remainder > 0n; i++, remainder--) paid[order[i].i] += 1n;
+  return paid.map(v => Number(v) / 100);
 }
 
 function waterfallPreRound(ledger: Holder[], safes: SafeIn[], exitValue: number, warnings: string[]) {
