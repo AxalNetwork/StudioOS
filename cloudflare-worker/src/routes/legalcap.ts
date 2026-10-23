@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { logDealRoomAction } from '../services/dealRoomAudit';
 import { lpMembershipScope, fundGpScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import type { Env } from '../types';
@@ -311,34 +312,14 @@ function fillTemplate(template: string, vars: Record<string, any>): string {
   });
 }
 
-function defaultDocVars(project: any, user: any): Record<string, any> {
-  const today = new Date().toISOString().slice(0, 10);
-  return {
-    company_name: project?.name || 'NewCo',
-    investor_name: 'Axal Studio Fund I, L.P.',
-    amount: '250,000',
-    valuation_cap: '5,000,000',
-    discount_rate: '20',
-    date: today,
-    founder_title: 'CEO',
-    founder_names: project?.name ? `Founders of ${project.name}` : 'Founders',
-    founder_name: 'Founder',
-    holding_equity_pct: '15',
-    founder_equity_pct: '70',
-    option_pool_pct: '15',
-    holding_shares: '1,500,000',
-    founder_shares: '7,000,000',
-    option_pool_shares: '1,500,000',
-    founder_breakdown: '— TBD by cap table',
-    initial_directors: 'Axal Studio Partners, Founder',
-    ceo_name: 'Founder',
-    shares: '1,000,000',
-    fmv_per_share: '0.0001',
-    total_fmv: '100',
-    amount_paid: '0.0001',
-  };
+function defaultDocVars(project: any, _user: any): Record<string, any> {
+  return { company_name: project?.name || null, date: new Date().toISOString().slice(0, 10) };
 }
 
+function missingDocFields(template: string, vars: Record<string, any>): string[] {
+  return [...new Set([...template.matchAll(/\{\{(\w+)\}\}/g)].map(m => m[1]))]
+    .filter(k => vars[k] == null || String(vars[k]).trim() === '');
+}
 // ============================================================
 // LEGAL ENGINE
 // ============================================================
@@ -350,8 +331,6 @@ legalcap.post('/legal/generate', async (c) => {
   const user = await requireAuth(c);
   if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
   await ensureSchema(c.env);
-  const gate = await aiQuotaGate(c.env, user.id, { limit: AI_RATE_LIMIT });
-  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
 
   let data: any;
   try { data = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON' }, 400); }
@@ -366,6 +345,10 @@ legalcap.post('/legal/generate', async (c) => {
 
   const userVars = data?.variables && typeof data.variables === 'object' ? data.variables : {};
   const vars = { ...defaultDocVars(project, user), ...userVars };
+  const missing = missingDocFields(TEMPLATES[type], vars);
+  if (missing.length) return c.json({ error: 'Missing document fields', missing_fields: missing }, 400);
+  const gate = await aiQuotaGate(c.env, user.id, { limit: AI_RATE_LIMIT });
+  if (!gate.ok) return c.json({ error: gate.error }, gate.status);
   let body = fillTemplate(TEMPLATES[type], vars);
 
   // Eadwyn's notes on the draft (D780, `draft:legal/notes`): a few points for
@@ -449,9 +432,26 @@ legalcap.patch('/legal/docs/:id/sign', async (c) => {
   if (!ADVANCE_ROLES.has(user.role)) return c.json({ error: 'Operators/admins only' }, 403);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
-  const upd = await c.env.DB.prepare(`UPDATE legal_documents SET status = 'signed', signed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('draft', 'generated')`)
-    .bind(user.id, id).run();
+  const doc = await c.env.DB.prepare('SELECT * FROM legal_documents WHERE id = ? AND generated_by = ?')
+    .bind(id, user.id).first<any>();
+  if (!doc) return c.json({ error: 'Document not found' }, 404);
+  const body = safeJson<any>(doc.content, {}).body;
+  if (typeof body !== 'string' || !body) return c.json({ error: 'Document body not recorded' }, 409);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
+  const hash = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+  const envelope = await c.env.DB.prepare(`SELECT id FROM esign_envelopes
+    WHERE deal_id = ? AND document_type = ? AND body_sha256 = ? AND created_by = ?
+      AND status = 'completed' AND completed_at IS NOT NULL AND signed_r2_key IS NOT NULL LIMIT 1`)
+    .bind(doc.deal_id, doc.type, hash, user.id).first<{ id: number }>();
+  if (!envelope) return c.json({ error: 'A completed e-sign envelope for this document is required' }, 409);
+  const upd = await c.env.DB.prepare(`UPDATE legal_documents SET status = 'signed', signed_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND generated_by = ? AND content = ? AND status IN ('draft', 'generated')
+      AND EXISTS (SELECT 1 FROM esign_envelopes e WHERE e.id = ? AND e.status = 'completed'
+        AND e.completed_at IS NOT NULL AND e.signed_r2_key IS NOT NULL
+        AND e.deal_id = legal_documents.deal_id AND e.document_type = legal_documents.type
+        AND e.body_sha256 = ? AND e.created_by = ?)` )
+    .bind(user.id, id, user.id, doc.content, envelope.id, hash, user.id).run();
   if (!upd.meta?.changes) return c.json({ error: 'Doc not found or already signed/filed' }, 409);
+  await logDealRoomAction(c.env, user, 'legal_doc_signed', id, {}, 'legal_doc');
   return c.json({ ok: true });
 });
 
@@ -674,6 +674,9 @@ legalcap.post('/subsidiary/spinout', async (c) => {
   const sql = getSQL(c.env);
   const [project] = await sql`SELECT * FROM projects WHERE id = ${dealId}`;
   if (!project) { await sql.end(); return c.json({ error: 'Deal not found' }, 404); }
+  const suppliedVars = { ...defaultDocVars(project, user), ...(data.variables || {}) };
+  const missing = [...new Set(['SAFE', 'IP_license', 'equity_allocation'].flatMap(t => missingDocFields(TEMPLATES[t], suppliedVars)))];
+  if (missing.length) { await sql.end(); return c.json({ error: 'Missing document fields', missing_fields: missing }, 400); }
   // Verify the deal has a passed decision_gate (spinout_ready) — soft check
   const gateRow: any = await c.env.DB.prepare(`SELECT id, final_decision FROM decision_gates WHERE deal_id = ? AND final_decision = 'passed' ORDER BY id DESC LIMIT 1`).bind(dealId).first().catch(() => null);
   await sql.end();
@@ -685,8 +688,7 @@ legalcap.post('/subsidiary/spinout', async (c) => {
 
   const subName = String(data?.subsidiary_name || `${project.name}, Inc.`).slice(0, 200);
   const jurisdiction = data?.jurisdiction === 'global' ? 'global' : 'Delaware_CCorp';
-  const equityAlloc = data?.equity_allocated && typeof data.equity_allocated === 'object'
-    ? data.equity_allocated : { holding_pct: 15, founders_pct: 70, option_pool_pct: 15 };
+  const equityAlloc = { holding_pct: suppliedVars.holding_equity_pct, founders_pct: suppliedVars.founder_equity_pct, option_pool_pct: suppliedVars.option_pool_pct };
 
   // === Stripe Atlas placeholder ===
   // Real integration would call Atlas API with env.STRIPE_ATLAS_API_KEY here.
@@ -699,7 +701,7 @@ legalcap.post('/subsidiary/spinout', async (c) => {
     .bind(dealId, subName, jurisdiction, stripeStatus, stripeRef, JSON.stringify(equityAlloc)).first();
 
   // Auto-generate the 3 standard docs (template-only, no AI to keep this orchestration cheap)
-  const docVars = { ...defaultDocVars(project, user), holding_equity_pct: equityAlloc.holding_pct, founder_equity_pct: equityAlloc.founders_pct, option_pool_pct: equityAlloc.option_pool_pct };
+  const docVars = { ...suppliedVars, holding_equity_pct: equityAlloc.holding_pct, founder_equity_pct: equityAlloc.founders_pct, option_pool_pct: equityAlloc.option_pool_pct };
   const docResults: any[] = [];
   for (const docType of ['SAFE', 'IP_license', 'equity_allocation']) {
     const body = fillTemplate(TEMPLATES[docType], docVars);
@@ -717,17 +719,7 @@ legalcap.post('/subsidiary/spinout', async (c) => {
       .bind(dealId, sub.id, JSON.stringify({ subsidiary_name: subName }), user.id).run();
   }
 
-  // Auto capital call — best-effort, find the most recent open syndicate for this deal
-  let capitalCall: any = null;
-  try {
-    const syn: any = await c.env.DB.prepare(`SELECT id FROM syndicates WHERE deal_id = ? AND status IN ('open', 'closed') ORDER BY id DESC LIMIT 1`).bind(dealId).first();
-    if (syn) {
-      const amountCents = Math.round(Number(data?.capital_call_amount_cents || 25000000)); // $250k default
-      capitalCall = await c.env.DB.prepare(`INSERT INTO capital_calls (deal_id, syndicate_id, amount_cents, currency, status, due_date, notes, created_by) VALUES (?, ?, ?, 'USD', 'sent', datetime('now', '+30 days'), 'Auto-generated on spin-out', ?) RETURNING id, amount_cents, syndicate_id`)
-        .bind(dealId, syn.id, amountCents, user.id).first();
-    }
-  } catch (e: any) { console.error('spinout capital call:', e?.message); }
-
+  // Capital calls require an explicit fund-scoped instruction, never a spin-out side effect.
   // Workflow task for human follow-up.
   try {
     let wf: any = await c.env.DB.prepare(`SELECT id FROM workflows WHERE template_key = 'spinout.coordination' AND project_id = ? LIMIT 1`).bind(dealId).first();
@@ -740,7 +732,6 @@ legalcap.post('/subsidiary/spinout', async (c) => {
       'Review and sign IP License + equity allocation',
       'Confirm Stripe Atlas incorporation',
       'File 83(b) elections within 30 days',
-      'Capital call: track LP responses',
     ];
     for (const t of tasks) {
       await c.env.DB.prepare(`INSERT INTO workflow_tasks (workflow_id, title, status, priority, ai_assisted, metadata) VALUES (?, ?, 'todo', 'high', 0, ?)`)
@@ -752,9 +743,9 @@ legalcap.post('/subsidiary/spinout', async (c) => {
   return c.json({
     subsidiary: { ...sub, equity_allocated: safeJson(sub.equity_allocated, {}) },
     legal_docs: docResults,
-    capital_call: capitalCall,
+    capital_call: null,
     stripe_atlas: { status: stripeStatus, ref: stripeRef, real_api: !!stripeKey },
-    next_steps: ['Sign legal documents', 'Confirm Atlas incorporation', 'File 83(b) elections', 'Send capital call to LPs'],
+    next_steps: ['Sign legal documents', 'Confirm Atlas incorporation', 'File 83(b) elections'],
   }, 201);
 });
 

@@ -17,7 +17,7 @@ import { assertAdminAct, auditFundAct } from '../services/fundAdminAccess';
 import { refuse } from '../util/refusal';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import { requireAuth, canViewLpData } from '../auth';
-import { insertCapitalCall, insertCapitalCalls } from './_capital_call_writes';
+import { insertCapitalCall } from './_capital_call_writes';
 import { recordReceipt } from '../services/fundCallLedger';
 import { assertFundCallPayable } from '../services/payInstructions';
 import { logActivity } from './partnernet';
@@ -382,68 +382,6 @@ capital.post('/calls/:id/pay', async (c) => {
   } catch (e) { console.warn('[capital] notify capital_call_paid failed', e); }
 
   return c.json({ status: 'paid', call: callDto(updated) });
-});
-
-capital.post('/capitalCall', async (c) => {
-  const __u = await requireAuth(c);
-  // Task #9 — issuing a capital call to all active investors at once is a
-  // fund/GP operation. Admin-only; investors keep read access (recording a
-  // payment is the GP's, D370).
-  if (__u.role !== 'admin') return c.json({ error: "Forbidden: admin access required" }, 403);
-  // D714: issuing is a Super Admin act, here as on the fund routes.
-  await assertAdminAct(c, __u, 'capital_call.issue');
-  const data = await c.req.json();
-  const sql = getSQL(c.env);
-  const projects = await sql`SELECT * FROM projects WHERE id = ${data.startup_id}`;
-  if (projects.length === 0) { await sql.end(); return c.json({ error: 'Startup/project not found' }, 404); }
-
-  const investors = await sql`SELECT * FROM limited_partners WHERE status = 'active'`;
-  if (investors.length === 0) { await sql.end(); return c.json({ error: 'No active investors found' }, 404); }
-  // D708 decision 9: this bills every active LP, Fund I's among them, so it
-  // writes nothing while the Fund has no payable account.
-  const heldAll = await assertFundCallPayable(c.env, investors.map((inv: any) => Number(inv.fund_id)));
-  if (heldAll) { await sql.end(); return refuse(c, 409, { code: heldAll.code, message: heldAll.message }); }
-
-  const perInvestor = Math.round((data.amount / investors.length) * 100) / 100;
-  // Batch all inserts into a single D1 round-trip instead of one INSERT per
-  // active investor (was N+1). Task #197 moved the statement itself into
-  // `_capital_call_writes.ts` so this route and the queue job write the same
-  // row; `insertCapitalCalls` keeps the single round-trip this comment is about.
-  //
-  // NO `uid` HERE, DELIBERATELY. An explicit uid is what makes a write
-  // repeatable, and this route is a request rather than a retried job — a GP who
-  // presses it twice means two calls. The queue job is the caller that needs the
-  // uid, because it is the one that gets re-run.
-  await insertCapitalCalls(c.env, investors.map((inv: any) => ({
-    limitedPartnerId: inv.id,
-    projectId: data.startup_id,
-    amount: perInvestor,
-  })));
-  const callsCreated = investors.map((inv: any) => ({
-    investor_id: inv.id, investor_name: inv.name, amount: perInvestor,
-  }));
-
-  const allPartners = await sql`SELECT * FROM partners WHERE status = 'active'`;
-  await sql.end();
-
-  const participating = allPartners.filter((p: any) =>
-    p.specialization && projects[0].sector &&
-    projects[0].sector.toLowerCase().includes(p.specialization.toLowerCase().split(',')[0]?.trim())
-  );
-  await auditFundAct(c.env, __u, 'capital_call.issue', {
-    route: 'POST /api/capital/capitalCall', startup_id: data.startup_id,
-    amount_cents: Math.round(Number(data.amount) * 100), lines: callsCreated.length,
-  });
-
-  return c.json({
-    startup_id: data.startup_id,
-    startup_name: projects[0].name,
-    total_amount: data.amount,
-    calls_created: callsCreated,
-    participating_partners: participating.map((p: any) => ({
-      partner_id: p.id, name: p.name, company: p.company, specialization: p.specialization,
-    })),
-  });
 });
 
 capital.get('/portfolio', async (c) => {
