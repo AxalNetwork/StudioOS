@@ -250,6 +250,7 @@ const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
 const HqRevenuePage = lazy(() => import('./pages/hq/RevenuePage'));
 const HqDisputePage = lazy(() => import('./pages/hq/DisputePage'));
 const HqContentPage = lazy(() => import('./pages/hq/ContentPage'));
+const HqMeetingBotsPage = lazy(() => import('./pages/hq/MeetingBotsPage'));
 const HqPlatformPage = lazy(() => import('./pages/hq/PlatformPage'));
 const HqPlatformSwitchesPage = lazy(() => import('./pages/hq/PlatformSwitchesPage'));
 // D642 (#1435) — U7, each plan's AI allowance and the runs held for a check.
@@ -2783,6 +2784,7 @@ function AppInner() {
           rows by design, and this page is reached from Platform's Feature flags
           zone by a literal link, which the reachability walk counts. */}
       <Route path="/admin/platform/switches" element={guard(['admin'], hqOnly(<HqPlatformSwitchesPage />))} />
+      <Route path="/admin/platform/meeting-bots" element={guard(['admin'], hqOnly(<HqMeetingBotsPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
       <Route path="/admin/platform/ai-usage" element={guard(['admin'], hqOnly(<HqAiUsagePage />))} />

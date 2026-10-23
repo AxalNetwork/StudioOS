@@ -253,3 +253,8 @@ D886 B7: the sessions router adds creator-only `…/bot/participants` for the sa
 roster. The meetings router accepts `auto_send_bot:false`, otherwise queues B1
 for the consented session at the scheduled start. Bot refusal is separate from
 successful call creation; cancellation stops the bot before the provider call.
+
+D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
+`/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
+Dispatch requires TOTP plus recent step-up and calls B1's service with the
+operator's own consented session; status events supply content-free timings.
