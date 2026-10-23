@@ -22,6 +22,7 @@ const cases=[
   ['failed upload looks complete','lifecycle.ts','const incomplete=timedOut||uploader.failedCount>0||events.droppedCount+events.pendingCount>0;','const incomplete=false;'],
   ['notice skipped','lifecycle.ts','()=>adapter.sendChat(cfg.notice)','async()=>{}'],
   ['invalid command signature accepted','runtime.ts','if(!timingSafeEqual(Buffer.from(expected),Buffer.from(signature)))','if(false)'],
+  ['late factory adapter leaked','runtime.ts','if(adapter){let timer:', 'if(false&&adapter){let timer:'],
   ['start waits on callback','runtime.ts','return reply({accepted:true},202);','await active.done;return reply({accepted:true},202);'],
 ] as const;
 

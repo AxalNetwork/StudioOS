@@ -254,4 +254,4 @@ bridge has been packaged or measured. The switch and notice remain gated.
 Run `npm ci --prefix meeting-bot`, then `npm run test:meeting-bot` from the
 repository root. `CHROMIUM_PATH` can select an installed test browser for the
 constructed Meet fixture. The new callback/recovery/container scenarios and
-12 isolated source mutations use no real meetings, credentials or providers.
+13 isolated source mutations use no real meetings, credentials or providers.

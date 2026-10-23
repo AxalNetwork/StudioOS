@@ -43,3 +43,15 @@ test('container refuses unpublished notice, invalid lease, stale signatures and 
   const allowed=new RuntimeHost({secret:SECRET,callbackOrigin:'https://axal.vc',notice:()=> 'Synthetic notice',adapter:async()=>{calls++;return new FakeAdapter();}});
   assert.equal((await command(allowed,'/start',{...run(),budget_deadline_at:Date.now()-1})).status,503);assert.equal(calls,0);
 });
+
+
+test('factory completed after lease expiry still releases its adapter without joining',async()=>{
+  let release:(adapter:FakeAdapter)=>void=()=>{};
+  const adapter=new FakeAdapter({openDoor:true});
+  const transport:CallbackTransport={async status(){},async heartbeat(){return Date.now()+120_000;},async events(){},async putChunk(){}};
+  const host=new RuntimeHost({secret:SECRET,callbackOrigin:'https://axal.vc',notice:()=> 'Synthetic notice',transport:()=>transport,
+    adapter:async()=>new Promise(resolve=>{release=resolve;})});
+  assert.equal((await command(host,'/start',{...run(),budget_deadline_at:Date.now()+50})).status,202);
+  await new Promise(resolve=>setTimeout(resolve,60));release(adapter);await host.shutdown();
+  assert.equal(adapter.joinedAs,null);assert.equal(adapter.leaveCalls,1);assert.equal(host.running,false);
+});

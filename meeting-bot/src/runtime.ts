@@ -65,13 +65,21 @@ export class RuntimeHost {
     // Scheduling, not awaiting: a start/stop RPC may be called by the same
     // serialized DO that must receive the callback. Awaiting would deadlock.
     active.done=Promise.resolve().then(async()=>{
+      let adapter:MeetingAdapter|undefined;
       try{
-        const adapter=await this.options.adapter(cfg.platform);
+        adapter=await this.options.adapter(cfg.platform);
+        // The factory may finish after Stop or lease expiry. Own the resource
+        // even if runBot rejects its config before entering its cleanup scope.
+        const originalLeave=adapter.leave.bind(adapter);let leaving:Promise<void>|null=null;
+        adapter.leave=()=>leaving??(leaving=Promise.resolve().then(originalLeave));
         await runBot(cfg,{adapter,transport,stop:stop.signal,shutdown:this.shutdownController.signal,log:this.options.log});
       }catch{
         logLine(this.options.log??(()=>{}),'runtime_failed');
         try{await transport.status({state:'failed',code:'platform_blocked'});}catch{/* no raw exception */}
-      }finally{active.ended=true;}
+      }finally{
+        if(adapter){let timer:ReturnType<typeof setTimeout>|undefined;await Promise.race([adapter.leave().catch(()=>{}),new Promise<void>(resolve=>{timer=setTimeout(resolve,5000);})]);if(timer)clearTimeout(timer);}
+        active.ended=true;
+      }
     });
     return reply({accepted:true},202);
   }

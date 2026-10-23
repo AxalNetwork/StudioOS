@@ -12,7 +12,7 @@ export async function runtimeAdapter(platform:Platform):Promise<MeetingAdapter>{
     const page=await browser.newPage();
     const adapter=new MeetAdapter(page as unknown as MeetPage);
     const leave=adapter.leave.bind(adapter);let leaving:Promise<void>|null=null;
-    adapter.leave=()=>leaving??(leaving=(async()=>{try{await leave();}finally{await browser.close();}})());
+    adapter.leave=()=>leaving??(leaving=(async()=>{await Promise.allSettled([Promise.resolve().then(leave),Promise.resolve().then(()=>browser.close())]);})());
     return adapter;
   }catch{await browser.close();throw new AdapterFailure('platform_blocked');}
 }
