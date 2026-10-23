@@ -19,12 +19,17 @@ function decode(raw: string | null): any {
   try { return JSON.parse(raw); } catch { return fail('bot_assembly_unreadable'); }
 }
 
-/** B1 snapshots include explicit stays; absence never invents a leave time. */
-export function botSnapshotEvents(rows: readonly { kind: string; payload: unknown }[], limitMs: number): {
-  events: BotEvent[]; manifests: Map<number, { start: number; size: number; participant: string | null }>;
-} {
-  const events: BotEvent[] = [];
-  const manifests = new Map<number, { start: number; size: number; participant: string | null }>();
+interface SnapshotState {
+  marks: BotEvent[];
+  manifests: Map<number, { start: number; size: number; participant: string | null }>;
+  stays: Map<string, Map<number, number | null>>;
+  names: Map<string, string>;
+  count: number;
+}
+/** B1 snapshots include explicit stays; repeated snapshots do not multiply them. */
+export function botSnapshotEvents(rows: readonly { kind: string; payload: unknown }[], limitMs: number, previous?: SnapshotState) {
+  const state: SnapshotState = previous ?? { marks: [], manifests: new Map(), stays: new Map(), names: new Map(), count: 0 };
+  const { manifests } = state;
   for (const row of rows) {
     if (!['roster', 'speaker', 'chunk'].includes(row.kind)) continue;
     if (!object(row.payload)) return fail('bot_manifest_invalid');
@@ -37,13 +42,17 @@ export function botSnapshotEvents(rows: readonly { kind: string; payload: unknow
           || typeof person.name !== 'string' || person.name.length > 160 || !integer(person.joined_ms, limitMs)
           || person.left_ms !== null && (!integer(person.left_ms, limitMs) || person.left_ms < person.joined_ms)) return fail('bot_manifest_invalid');
         ids.add(person.id);
-        events.push({ type: 'join', participant_id: person.id, name: person.name, at_ms: person.joined_ms });
-        if (person.left_ms !== null) events.push({ type: 'leave', participant_id: person.id, at_ms: person.left_ms });
+        const stays = state.stays.get(person.id) ?? new Map<number, number | null>();
+        if (!stays.has(person.joined_ms)) state.count++;
+        if (state.count > 5000) return fail('bot_manifest_limit');
+        stays.set(person.joined_ms,person.left_ms);
+        state.stays.set(person.id,stays);
+        state.names.set(person.id,person.name);
       }
     } else if (row.kind === 'speaker') {
       if (p.participant_id !== null && (typeof p.participant_id !== 'string' || !p.participant_id || p.participant_id.length > 128)
         || !integer(p.at_ms, limitMs)) return fail('bot_manifest_invalid');
-      events.push({ type: 'active_speaker', participant_id: p.participant_id as string | null, at_ms: p.at_ms });
+      state.marks.push({ type: 'active_speaker', participant_id: p.participant_id as string | null, at_ms: p.at_ms });
     } else {
       if (!integer(p.chunk_seq, 3599) || !integer(p.start_ms, limitMs) || !integer(p.size_bytes, MAX_CHUNK_BYTES)
         || p.size_bytes <= WAV_HEADER_BYTES || (p.size_bytes - WAV_HEADER_BYTES) % 2 !== 0
@@ -54,7 +63,12 @@ export function botSnapshotEvents(rows: readonly { kind: string; payload: unknow
       manifests.set(p.chunk_seq, manifest);
     }
   }
-  return { events, manifests };
+  const events: BotEvent[] = [...state.marks];
+  for (const [id,stays] of state.stays) for (const [joined,left] of stays) {
+    events.push({type:'join',participant_id:id,name:state.names.get(id)!,at_ms:joined});
+    if (left !== null) events.push({type:'leave',participant_id:id,at_ms:left});
+  }
+  return { events, manifests, state };
 }
 
 /** speaker_raw already preserves Nova's number in the shared recorder stage. */
@@ -80,15 +94,24 @@ export async function botAssemblyInputs(env: Env, uid: string) {
   const { scoped } = await writableSession(env,run.user_id,session.id);
   if (['access_revoked','session_deleted'].includes(run.failure_code ?? '') || Number(scoped.member.jwt_min_iat ?? 0)*1000 > run.created_at) return fail('bot_authority_revoked');
   if (session.submitted_via !== 'meeting_bot' || (await sessionBot(env, session.id, run.user_id))?.uid !== uid) return fail('bot_run_mismatch');
-  const encrypted = await env.DB.prepare('SELECT seq, kind, payload_enc FROM meeting_bot_events WHERE run_uid = ? ORDER BY seq LIMIT 20001')
-    .bind(uid).all<{ seq: number; kind: string; payload_enc: string }>();
-  if ((encrypted.results?.length ?? 0) > 20000) return fail('bot_manifest_limit');
-  const rows: Array<{ kind: string; payload: unknown }> = [];
-  for (const event of encrypted.results ?? []) {
-    if (!['roster', 'speaker', 'chunk'].includes(event.kind)) continue;
-    rows.push({ kind: event.kind, payload: decode(await decryptColumn(env, 'meeting_bot_events', 'payload_enc', `${uid}:${event.seq}`, event.payload_enc)) });
+  let projection = botSnapshotEvents([],run.limit_minutes*60000);
+  let last = -1, count = 0;
+  for (;;) {
+    const encrypted = await env.DB.prepare('SELECT seq, kind, payload_enc FROM meeting_bot_events WHERE run_uid = ? AND seq > ? ORDER BY seq LIMIT 100')
+      .bind(uid,last).all<{ seq: number; kind: string; payload_enc: string }>();
+    const page = encrypted.results ?? [];
+    count += page.length;
+    if (count > 20000) return fail('bot_manifest_limit');
+    const rows: Array<{ kind: string; payload: unknown }> = [];
+    for (const event of page) {
+      last = event.seq;
+      if (!['roster', 'speaker', 'chunk'].includes(event.kind)) continue;
+      rows.push({ kind: event.kind, payload: decode(await decryptColumn(env, 'meeting_bot_events', 'payload_enc', `${uid}:${event.seq}`, event.payload_enc)) });
+    }
+    projection = botSnapshotEvents(rows,run.limit_minutes*60000,projection.state);
+    if (page.length < 100) break;
   }
-  const { events, manifests } = botSnapshotEvents(rows, run.limit_minutes * 60000);
+  const { events, manifests } = projection;
   const chunks = await listChunks(env, session.id);
   if (!chunks.length || chunks.length !== manifests.size) return fail('bot_audio_incomplete');
   for (const [index, chunk] of chunks.entries()) {

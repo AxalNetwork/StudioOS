@@ -75,6 +75,16 @@ const scenarios: Record<string, (m: Module) => Promise<void>> = {
     await w.event('roster',{participants:[{...w.people[0],name:'Alternate fixture'}]});
     assert.equal((await m.prepareBotAssembly(w.env,w.uid)).segments[0].speaker_label,'Me');
   },
+  async 'repeated snapshots stay compact and event reads span bounded pages'(m) {
+    const row={kind:'roster',payload:{participants:[{id:'p',name:'Fixture',joined_ms:0,left_ms:null}]}};
+    assert.equal(m.botSnapshotEvents(Array(1000).fill(row),1000).events.length,1);
+    const w=await world();
+    for(let seq=100;seq<220;seq++) w.db.prepare("INSERT INTO meeting_bot_events(run_uid,seq,kind,payload_enc,received_at) VALUES(?,?,'heartbeat','ignored',0)").run(w.uid,seq);
+    let pages=0;const prepare=w.env.DB.prepare.bind(w.env.DB);
+    w.env.DB.prepare=((sql:string)=>{if(sql.includes('FROM meeting_bot_events') && sql.includes('LIMIT 100')) pages++;return prepare(sql);}) as any;
+    assert.equal((await m.prepareBotAssembly(w.env,w.uid)).segments.length,3);
+    assert.equal(pages,2);
+  },
   async 'Zoom names per-participant streams without a diarized number or speaker indicator'(m) {
     const w=await world('zoom');
     w.db.prepare("DELETE FROM meeting_bot_events WHERE kind='speaker'").run();
@@ -278,6 +288,8 @@ const mutations=[
   ['await botSession(env, run);\n  return','return'],
   ["AND s.consent_status = 'given'",''],
   ['AND participants_enc IS NULL','AND 1 = 1'],
+  ['return { events, manifests, state };','return { events: [...events,...events], manifests, state };'],
+  ['if (page.length < 100) break;','break;'],
 ];
 for(const [index,[before,after]] of mutations.entries()) test(`storage adapter mutation ${index+1} is caught`,async()=>{
   assert.equal(source.includes(before),true);
