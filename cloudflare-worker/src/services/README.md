@@ -169,6 +169,18 @@ vesting row, on the same `user_id` and `holder_id`) and returns `h-<id>`;
 Investors · SAFE or note adds a `safes[]` entry and returns its `e-<n>`. Both
 refuse a caller below `studio` with `ensureTier`'s 402, recompute through
 `saveScenario()`, and log nothing themselves.
+`captable.ts` keeps financing reserves in dilution but excludes unallocated
+option-pool shares from exit payouts (#2446). Pre-round capped SAFEs choose
+purchase amount or cap/basis-based conversion; cash-out SAFEs leave liquidity
+capitalization and insufficient cash is prorated, with exact integer-cent
+allocation. Exit values must fit safe integer cents; SAFE amounts and caps must
+be finite. A pre-round ledger with no positive finite issued shares is withheld.
+Unrecorded note or uncapped liquidity terms produce no waterfall plus a warning.
+Scenario inputs do not record individual option grants, which the payout
+assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through
+`capTableWrites.ts`; manual missing basis retains the legacy pre-money default.
+The [YC post-money user guide](https://bookface-static.ycombinator.com/assets/ycdc/Website%20User%20Guide%20Feb%202023%20-%20final-28acf9a3b938e643cc270b7da514194d5c271359be25b631b025605673fa9f95.pdf)
+explains exclusion of cash-outs and the unissued pool from liquidity capitalization.
 `dataRoomAccess.ts` (D691 decision 6, #1700) is the data room's one access
 predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
 `nobody`) and `access_expires_at`, with `investorCommitted()` (a committed
