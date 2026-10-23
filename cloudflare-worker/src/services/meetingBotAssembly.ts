@@ -3,7 +3,7 @@ import type { Env } from '../types';
 import { decryptColumn, encryptColumn } from './columnCipher';
 import { botRow, botSession, sessionBot } from './meetingBots';
 import { AUDIO_PREFIX, MAX_CHUNK_BYTES, UPLOAD_BYTES_PER_SECOND, WAV_HEADER_BYTES, listChunks, type StoredSegment } from './interviewSessions';
-import { assembleBotTranscript, type BotEvent, type BotPassage } from './channels/botTranscript';
+import { assembleBotTranscript, BOT_NAME, type BotEvent, type BotPassage } from './channels/botTranscript';
 import { NOVA_3 } from './sttFormats';
 import { writableSession } from './interviewIntake';
 
@@ -24,11 +24,12 @@ interface SnapshotState {
   manifests: Map<number, { start: number; size: number; participant: string | null }>;
   stays: Map<string, Map<number, number | null>>;
   names: Map<string, string>;
+  bots: Set<string>;
   count: number;
 }
 /** B1 snapshots include explicit stays; repeated snapshots do not multiply them. */
 export function botSnapshotEvents(rows: readonly { kind: string; payload: unknown }[], limitMs: number, previous?: SnapshotState) {
-  const state: SnapshotState = previous ?? { marks: [], manifests: new Map(), stays: new Map(), names: new Map(), count: 0 };
+  const state: SnapshotState = previous ?? { marks: [], manifests: new Map(), stays: new Map(), names: new Map(), bots: new Set(), count: 0 };
   const { manifests } = state;
   for (const row of rows) {
     if (!['roster', 'speaker', 'chunk'].includes(row.kind)) continue;
@@ -48,6 +49,7 @@ export function botSnapshotEvents(rows: readonly { kind: string; payload: unknow
         stays.set(person.joined_ms,person.left_ms);
         state.stays.set(person.id,stays);
         state.names.set(person.id,person.name);
+        if (person.name.trim().replace(/\s+/g,' ').toLowerCase() === BOT_NAME.toLowerCase()) state.bots.add(person.id);
       }
     } else if (row.kind === 'speaker') {
       if (p.participant_id !== null && (typeof p.participant_id !== 'string' || !p.participant_id || p.participant_id.length > 128)
@@ -65,7 +67,7 @@ export function botSnapshotEvents(rows: readonly { kind: string; payload: unknow
   }
   const events: BotEvent[] = [...state.marks];
   for (const [id,stays] of state.stays) for (const [joined,left] of stays) {
-    events.push({type:'join',participant_id:id,name:state.names.get(id)!,at_ms:joined});
+    events.push({type:'join',participant_id:id,name:state.names.get(id)!,at_ms:joined,is_bot:state.bots.has(id)});
     if (left !== null) events.push({type:'leave',participant_id:id,at_ms:left});
   }
   return { events, manifests, state };

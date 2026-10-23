@@ -75,6 +75,14 @@ const scenarios: Record<string, (m: Module) => Promise<void>> = {
     await w.event('roster',{participants:[{...w.people[0],name:'Alternate fixture'}]});
     assert.equal((await m.prepareBotAssembly(w.env,w.uid)).segments[0].speaker_label,'Me');
   },
+  async 'snapshot compaction retains rejoins and excludes a renamed bot'(m) {
+    const w=await world();
+    await w.event('roster',{participants:[{...w.people[1],joined_ms:2500,left_ms:null,name:'Renamed fixture'},
+      {...w.people[3],name:'Alternate bot fixture'}]});
+    const result=await m.prepareBotAssembly(w.env,w.uid);
+    assert.deepEqual(result.participants.map(p=>[p.name,p.joined_at_ms,p.left_at_ms]),
+      [['Me',0,null],['Renamed fixture',0,null],['Participant 1',2000,null]]);
+  },
   async 'repeated snapshots stay compact and event reads span bounded pages'(m) {
     const row={kind:'roster',payload:{participants:[{id:'p',name:'Fixture',joined_ms:0,left_ms:null}]}};
     assert.equal(m.botSnapshotEvents(Array(1000).fill(row),1000).events.length,1);
@@ -290,6 +298,7 @@ const mutations=[
   ['AND participants_enc IS NULL','AND 1 = 1'],
   ['return { events, manifests, state };','return { events: [...events,...events], manifests, state };'],
   ['if (page.length < 100) break;','break;'],
+  ['is_bot:state.bots.has(id)','is_bot:false'],
 ];
 for(const [index,[before,after]] of mutations.entries()) test(`storage adapter mutation ${index+1} is caught`,async()=>{
   assert.equal(source.includes(before),true);
