@@ -1065,7 +1065,7 @@ function SanctionsTab() {
       setInfo(`Screening complete · severity: ${r?.severity || 'unknown'} · ${hitCount} hit(s).`);
       setUserId(''); setFullName(''); setDob(''); setNationality('');
       await reload();
-    } catch (e2) { setErr(e2?.message || 'Screening failed'); }
+    } catch (e2) { setErr(`Screening not completed. ${e2?.message || 'Try again when all sanctions lists are available.'}`); }
     finally { setBusy(false); }
   }
 
