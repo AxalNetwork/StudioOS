@@ -76,6 +76,12 @@ const X_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const xPostLocked = (post: {status: string; tweet_id?: string | null}) =>
   !!post.tweet_id || ['sent', 'sending', 'unknown', 'failed'].includes(post.status);
 
+/** An exact claim identity that SQLite datetime() can still age for recovery. */
+function xClaimStamp(): string {
+  const suffix = Array.from(crypto.getRandomValues(new Uint32Array(2)), n => String(n).padStart(10, '0')).join('');
+  return new Date().toISOString().replace('Z', `${suffix}Z`);
+}
+
 // ---------------- helpers ----------------
 
 /** The admin's own open caption proposal `uid` for this post, and the image it is for, or null. */
@@ -1041,8 +1047,7 @@ export async function sendXPost(
   // The exact timestamp is also the claim identity. Extra fractional digits
   // add a random suffix while remaining readable by SQLite datetime() and JS
   // Date. A late invocation must never mutate a later claim of the same row.
-  const suffix = Array.from(crypto.getRandomValues(new Uint32Array(2)), n => String(n).padStart(10, '0')).join('');
-  const claimStamp = new Date().toISOString().replace('Z', `${suffix}Z`);
+  const claimStamp = xClaimStamp();
   const claim = mode === 'clock'
     ? await env.DB.prepare(
       `UPDATE x_posts SET status = 'sending', updated_at = ?
@@ -1167,6 +1172,7 @@ export async function sendXPost(
     // Never publish a child that already has an external receipt.
     if (row.tweet_id) { parentId = row.tweet_id; continue; }
     let attempted = false;
+    let rowClaimStamp = claimStamp;
     let accepted: Receipt | undefined;
     try {
       const mediaIds: string[] = [];
@@ -1178,11 +1184,14 @@ export async function sendXPost(
         mediaIds.push(uploaded.media_id_string);
       }
       // A slow preflight cannot continue after the stale-send sweep or an
-      // operator has changed the row. The claim check and provider call are bounded.
+      // operator has changed the row. Renew its lease immediately before the
+      // bounded POST so the stale sweep cannot quarantine an active request.
+      const renewedStamp = xClaimStamp();
       const fence = await withDeadline(env.DB.prepare(
-        `UPDATE x_posts SET updated_at = updated_at WHERE id = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
-      ).bind(row.id, claimStamp).run(), 5000, 'X send claim');
+        `UPDATE x_posts SET updated_at = ? WHERE id = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
+      ).bind(renewedStamp, row.id, claimStamp).run(), 5000, 'X send claim');
       if (fence.meta?.changes !== 1) throw new XError('x_send_state_changed', 'The post changed before sending. Reload it.');
+      rowClaimStamp = renewedStamp;
       attempted = true;
       const out = await createTweet({ accessToken, text: row.body, inReplyToTweetId: parentId, mediaIds });
       if (typeof out?.data?.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(out.data.id)) throw new Error('invalid_post_receipt');
@@ -1193,7 +1202,7 @@ export async function sendXPost(
         `UPDATE x_posts SET tweet_id = ?, tweet_link = ?, in_reply_to_tweet_id = ?,
           status = 'sent', sent_at = datetime('now'), send_error = NULL, updated_at = datetime('now')
           WHERE id = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
-      ).bind(accepted.tweet_id, accepted.link, parentId ?? null, row.id, claimStamp).run(), 5000, 'X post receipt');
+      ).bind(accepted.tweet_id, accepted.link, parentId ?? null, row.id, rowClaimStamp).run(), 5000, 'X post receipt');
       if (saved.meta?.changes !== 1) throw new Error('receipt_not_saved');
       receipts.push(accepted);
       parentId = accepted.tweet_id;
@@ -1220,15 +1229,15 @@ export async function sendXPost(
           await withDeadline(env.DB.prepare(`UPDATE x_posts SET status = 'unknown', send_error = ?,
             tweet_id = COALESCE(tweet_id, ?), tweet_link = COALESCE(tweet_link, ?), updated_at = updated_at
             WHERE id = ? AND status = 'sending' AND updated_at = ?`)
-            .bind(message, accepted?.tweet_id ?? null, accepted?.link ?? null, row.id, claimStamp).run(), 5000, 'X uncertain outcome');
+            .bind(message, accepted?.tweet_id ?? null, accepted?.link ?? null, row.id, rowClaimStamp).run(), 5000, 'X uncertain outcome');
         } catch { /* Response and content-free log preserve any accepted ID. */ }
       }
       // Only untouched reservations can be released. Never reset this row if
       // it may have arrived, even if recording the unknown outcome failed.
       try {
         await env.DB.prepare(`UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
-          WHERE (id = ? OR thread_continuation_of = ?) AND status = 'sending' AND tweet_id IS NULL AND id <> ? AND updated_at = ?`)
-          .bind(unknown ? 'The thread stopped before this post was sent.' : message, id, id, unknown ? row.id : -1, claimStamp).run();
+          WHERE (id = ? OR thread_continuation_of = ?) AND status = 'sending' AND tweet_id IS NULL AND id <> ? AND updated_at IN (?, ?)`)
+          .bind(unknown ? 'The thread stopped before this post was sent.' : message, id, id, unknown ? row.id : -1, claimStamp, rowClaimStamp).run();
       } catch {}
       const code = accepted ? 'x_sent_not_saved' : unknown ? 'x_outcome_unknown' : String(xErrorPayload(e).body.code || 'x_send_failed');
       await writeAudit(env, { adminId: actor.id, adminEmail: actor.email, action: unknown ? 'x_post_outcome_unknown' : 'x_post_send_failed',

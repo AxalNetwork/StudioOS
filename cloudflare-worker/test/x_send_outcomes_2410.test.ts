@@ -411,3 +411,28 @@ test('#2410 unresolved capacity names the old uncertain posts on click and clock
     assert.equal((await w.send(click)).status, 200); assert.equal(p.calls.length, 1);
   } finally { p.restore(); w.db.close(); }
 });
+
+
+test('#2410 a long preflight renews its claim before X, so the stale sweep leaves the active request alone', async () => {
+  const w = await world(), p = provider(), id = w.post('scheduled', { media: ['x/fixture.png'] });
+  w.db.prepare("UPDATE x_posts SET scheduled_for='2020-01-01' WHERE id=?").run(id);
+  const RealDate = Date, now = RealDate.now(); let afterPreflight = false;
+  globalThis.Date = class extends RealDate {
+    constructor(value?: any) { super(value === undefined ? afterPreflight ? now : now - 40 * 60_000 : value); }
+    static now() { return now; }
+  } as DateConstructor;
+  w.env.FILES.get = async () => { afterPreflight = true; return { arrayBuffer: async () => new Uint8Array([1]).buffer }; };
+  const stub = globalThis.fetch; let checked = false;
+  globalThis.fetch = (async (input: any, init: any) => {
+    if (String(input).endsWith('/2/tweets')) {
+      const swept = await sweepScheduledPosts(w.env, new RealDate(now));
+      assert.equal(swept.stale_unknown, 0); assert.equal(w.row(id).status, 'sending');
+      assert.ok(Math.abs(RealDate.parse(w.row(id).updated_at) - now) < 1000); checked = true;
+    }
+    return stub(input, init);
+  }) as typeof fetch;
+  try {
+    assert.equal((await w.send(id, 'clock')).status, 200); assert.equal(checked, true);
+    assert.equal(w.row(id).status, 'sent'); assert.equal(w.row(id).tweet_id, '100001'); assert.equal(p.calls.length, 1);
+  } finally { globalThis.Date = RealDate; p.restore(); w.db.close(); }
+});
