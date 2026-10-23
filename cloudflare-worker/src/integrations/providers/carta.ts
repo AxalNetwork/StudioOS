@@ -5,7 +5,7 @@
  * (issuer / stakeholders / securities) into local D1 tables
  * `cap_table_holders` + `cap_table_securities` with `source='carta'`.
  *
- * Scopes: `read:cap_table read:stakeholders read:securities`.
+ * Scopes: `read_issuer_info read_issuer_stakeholders read_issuer_securities`.
  * Cron cadence: every 6 hours (gated in index.ts).
  *
  * Disconnect flips Carta-sourced rows to `source='manual'` (rows preserved,
@@ -34,7 +34,7 @@ import { acquireRefreshLease } from '../refreshLease';
 const PROVIDER_KEY = 'carta';
 const AUTH_HOST = 'https://login.carta.com';
 const API_BASE = 'https://api.carta.com/v1alpha1';
-const SCOPES = ['read:cap_table', 'read:stakeholders', 'read:securities'];
+const SCOPES = ['read_issuer_info', 'read_issuer_stakeholders', 'read_issuer_securities'];
 
 /** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {

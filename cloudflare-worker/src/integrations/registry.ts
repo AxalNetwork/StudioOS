@@ -323,7 +323,7 @@ export const REGISTRY: ProviderDescriptor[] = [
     capabilities: ['Cap-table sync', 'Stakeholder import', 'Securities import'],
     docs_url: 'https://carta.com/api/',
     icon: 'PieChart',
-    oauth_scopes: ['read:cap_table', 'read:stakeholders', 'read:securities'],
+    oauth_scopes: ['read_issuer_info', 'read_issuer_stakeholders', 'read_issuer_securities'],
   },
   {
     key: 'slack',
