@@ -14,7 +14,7 @@ for (const isDemo of [true, false]) {
     db.exec(`CREATE TABLE oauth_state_tokens(state TEXT, extra_json TEXT);
       CREATE TABLE integrations(id INTEGER PRIMARY KEY, credentials_enc TEXT, last_error TEXT, last_error_at TEXT, updated_at TEXT);`);
     const env: any = { DB: d1Over(db), RATE_LIMITS: memKV(), ENVIRONMENT: 'development',
-      JWT_SECRET: 'carta-test-secret-0123456789-0123456789', CARTA_CLIENT_ID: 'test-client', CARTA_CLIENT_SECRET: 'test-secret' };
+      JWT_SECRET: 'test'.repeat(10), CARTA_CLIENT_ID: 'test-client', CARTA_CLIENT_SECRET: 'test-secret' };
     const auth = isDemo ? 'https://login.playground.carta.team' : 'https://login.app.carta.com';
     const api = isDemo ? 'https://api.playground.carta.team' : 'https://api.carta.com';
     db.prepare('INSERT INTO oauth_state_tokens VALUES (?, ?)').run('state-fixture', JSON.stringify({ is_demo: isDemo, challenge: 'challenge-fixture' }));
