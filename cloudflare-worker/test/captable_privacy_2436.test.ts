@@ -96,3 +96,14 @@ test('a write that gates the same project twice reuses its membership answer and
   assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='captable_member_write_authorized'").get() as any).n,1);
  }finally{f.db.close();}
 });
+
+test('orphaned bound scenarios fail closed for owners and remain recoverable by admin',async()=>{
+ const f=fixture();try{
+  f.db.exec('DELETE FROM projects WHERE id=10');
+  assert.deepEqual((await call(f,4,'/scenarios')).body.items,[]);
+  assert.equal((await call(f,4,'/scenarios/main')).status,403);
+  assert.equal((await call(f,4,'/scenarios/main','DELETE')).status,403);
+  assert.equal((await call(f,1,'/scenarios/main')).status,200);
+  assert.equal((await call(f,1,'/scenarios/main','DELETE')).status,200);
+ }finally{f.db.close();}
+});

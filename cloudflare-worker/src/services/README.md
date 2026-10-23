@@ -11,7 +11,9 @@ runs these directly against an in-process SQLite, with no request at all.
 router (#2436). Investors receive no project-bound cap-table access; accepted
 cofounders may write and accepted advisors may read without holder emails.
 Partners require recorded membership. Scenario ownership cannot bypass project
-permissions; list responses are owner-scoped, including for admins.
+permissions; list responses are owner-scoped, including for admins. Bound
+scenarios whose project is missing fail closed for non-admins; admin can recover
+or delete them. They are never silently detached into private scenarios.
 
 ## The ones worth knowing
 
