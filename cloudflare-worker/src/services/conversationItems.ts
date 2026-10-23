@@ -269,7 +269,7 @@ export async function extractConversationItems(
   if (await sessionDigestConsentBlocks(env, session)) return { ok: false, reason: 'consent_not_recorded' };
 
   // D857: each segment's translation when it has one; the customer's own words stay beside the quote.
-  const { segments, originals } = await readSessionSegments(env, session.id);
+  const { segments, originals, sourceSnapshot } = await readSessionSegments(env, session.id);
   if (!segments.length) return { ok: false, reason: 'no_final_transcript' };
   const call = isCall(session.submitted_via);
 
@@ -308,7 +308,7 @@ export async function extractConversationItems(
   const { stored, deduped } = await storePlacements(env, {
     projectId: session.project_id, sessionId: session.id, interviewId: session.interview_id, runId,
     userId: opts.userId, model, placements: withOriginals(mergePlacements(lists), segments, originals), dedupe: true,
-    task: 'extract_conversation_items', ...(call ? { sourceLabel: 'Recorded' as const } : {}),
+    task: 'extract_conversation_items', sourceSnapshot, ...(call ? { sourceLabel: 'Recorded' as const } : {}),
   });
   return { ok: true, runId, stored, deduped, dropped, parts: parts.length, model };
 }
