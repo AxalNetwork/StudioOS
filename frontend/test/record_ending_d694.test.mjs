@@ -67,6 +67,7 @@ test('the three breadcrumbs and review delete return to Customer research', () =
 
 function assertFinishes(finish) {
   const research = '/validate/customer-research?project_id=3';
+  assert.equal(finish({ id: 12, project_id: 3, status: 'draft', submitted_via: 'meeting_bot' }, undefined, 3), '/validate/session/12', 'Send opens the bot status page');
   assert.equal(finish({ id: 5, project_id: 3, status: 'transcribed' }, 'session', 3), research, 'a pasted chat');
   assert.equal(finish({ id: 6 }, 'session', 3), research, "an imported thread takes the page's venture");
   assert.equal(finish({ id: 5, project_id: 3 }, 'session', 9), research, "the session's venture wins over the page's");
@@ -88,6 +89,7 @@ test('finishPath: every finish lands on Customer research in the session\'s vent
   assertFinishes(build(fn));
   for (const [before, after] of [
     ["where === 'live'", "where === 'record'"],
+    ["session?.submitted_via === 'meeting_bot'", 'false'],
     ["openingStep(session) === 'channel'", "openingStep(session) === 'transcript'"],
     ['project_id: session?.project_id ?? projectId', 'project_id: projectId ?? session?.project_id'],
     ['project_id: session?.project_id ?? projectId', 'project_id: session?.project_id'],

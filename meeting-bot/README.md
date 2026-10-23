@@ -36,6 +36,8 @@ TypeScript directly (type stripping), so there is no build step.
 | `src/callback.ts` | `httpTransport`: signed POSTs to the run's callback and the one-time chunk URL, with deadlines and no redirects. **Provisional:** its paths (`CALLBACK_PATHS`) and signature (`signRequest`) follow B1's contract once #2579 publishes it. |
 | `src/log.ts` | The only way a log line is written: codes and counts, nothing else (`safeFields`). |
 | `src/fakeAdapter.ts` | A scripted platform for the tests, and the reference implementation an adapter copies. |
+| `src/adapters/teams.ts` | B5 (#2583): Microsoft Teams as a browser guest, over a `TeamsPage` driver (attributes only, so a caption's or a message's words never reach it). Launcher → pre-join (mic and camera off) → lobby, including Teams' "Suspected threats" bot approval; the notice in the meeting chat; the People pane as the roster; live captions' speaker names as the speaker timeline. A captcha, anonymous join turned off or a blocked bot is `platform_blocked`. |
+| `src/adapters/teamsSelectors.ts` | B5: every Teams selector and the link rule (work or school, and Teams free; https only). **Provisional**, from published reports, until the live check records Teams' screens. |
 | `src/index.ts` | The public exports. |
 | `notice.mjs` | B9's notice contract (#2587, #2590): `meetingBotNotice`, `MEETING_BOT_NAME`, the publication gate and the dispatch disclosure. See **The notice** below. |
 | `src/adapters/meet.ts` | B3 (#2581): `MeetAdapter`, Google Meet. It joins as a guest with the microphone and camera off, waits in the waiting room, reads the participant panel and the active-speaker indicator, takes the tab's audio, and detects the end of the call and removal by the host (removal reads as the call ending). It takes a `MeetPage` (`src/adapters/meet/page.ts`), which a Playwright `Page` satisfies, so the core stays dependency-free. |
@@ -184,3 +186,13 @@ capture plus the platform indicator is the explicitly limited fake-tested path.
 M3/M4/M6 on a free Zoom account, native SDK packaging/version selection, the
 owner's app feature and credentials, and B1 wiring remain outstanding. This
 library is not enabled for live dispatch by this change.
+
+### Python sidecar continuation (B4)
+
+`src/zoomSidecar.ts` implements `ZoomSdkBridge` over a private local pipe to
+`zoom/sidecar.py`; `zoom/native.py` maps the SDK calls and callbacks.
+See `zoom/README.md` for dependencies, protocol/privacy rules, tests, 32-to-16 kHz
+conversion and outstanding B1/B2/B8 wiring. This replaces the unimplemented
+native bridge boundary with code tested against synthetic SDK objects and a
+real Python protocol peer. Linux SDK import and live meeting behavior remain
+UNVERIFIED. The existing ZoomAdapter accepts it as its `sdk` dependency.

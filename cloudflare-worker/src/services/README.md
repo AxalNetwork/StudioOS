@@ -318,3 +318,7 @@ content-free status projection, the runtime interface and the full-call budget
 check. `MeetingBotRun` serializes state and renews two-minute bot-fee holds on
 the existing ledger. Transcription remains B6's `aiRouter` charge. See D886 §12
 for the callback, runtime lease, privacy and release contracts.
+
+D886 B7: `meetingBotParticipants.ts` decrypts the latest roster for the separate
+creator-only participants read. It projects display names/times only, excludes
+the bot and emails, and never turns a failed read into an empty list.
