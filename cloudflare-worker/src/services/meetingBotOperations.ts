@@ -44,6 +44,8 @@ export interface BotOperationsRun {
   failure_code: string | null;
   minutes: number | null;
   runtime_seconds: number | null;
+  billed_bot_minutes?: number | null;
+  audio_charged_microusd?: number | null;
   provider_cost_microusd: number | null;
   charged_microusd: number | null;
   heartbeat_due_at: string | null;
@@ -76,6 +78,8 @@ export interface BotPeriod {
   bot_minutes: number | null;
   measured_runtime_runs: number;
   measured_minutes_runs: number;
+  audio_charged_microusd: number | null;
+  measured_audio_charge_runs: number;
   financials: BotFinancials;
 }
 export type BotOperationsReport =
@@ -171,11 +175,15 @@ function period(runs: readonly BotOperationsRun[], from: number, to: number): Bo
     return { platform, statuses, runs: subset.length };
   });
   const minutes = cohort.filter(r => measured(r.minutes));
+  const botMinutes = (r: BotOperationsRun) => r.billed_bot_minutes === undefined ? (r.runtime_seconds === null ? null : r.runtime_seconds / 60) : r.billed_bot_minutes;
+  const audioCharges = cohort.filter(r => money(r.audio_charged_microusd));
   return {
     from: new Date(from).toISOString(), to: new Date(to).toISOString(), runs: cohort.length,
     platforms, failures, recorded_minutes: minutes.length === cohort.length ? total(minutes.map(r => r.minutes!)) : null,
-    bot_minutes: cohort.every(r => measured(r.runtime_seconds)) ? total(cohort.map(r => r.runtime_seconds! / 60)) : null,
-    measured_runtime_runs: cohort.filter(r => measured(r.runtime_seconds)).length,
+    bot_minutes: cohort.every(r => measured(botMinutes(r))) ? total(cohort.map(r => botMinutes(r)!)) : null,
+    measured_runtime_runs: cohort.filter(r => measured(botMinutes(r))).length,
+    audio_charged_microusd: audioCharges.length === cohort.length ? total(audioCharges.map(r => r.audio_charged_microusd!)) : null,
+    measured_audio_charge_runs: audioCharges.length,
     measured_minutes_runs: minutes.length, financials: botFinancials(cohort),
   };
 }

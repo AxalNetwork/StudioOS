@@ -1,6 +1,7 @@
 /** D886 B10 live check: reuse B1's member dispatch, consent and billing path. */
-import type { Env } from '../types';
-import type { ExecutionContext } from 'hono';
+import type { Env, User } from '../types';
+import { dispatchBot, BotError } from './meetingBots';
+import { loadSession } from './interviewSessions';
 import { decryptColumn } from './columnCipher';
 import { BOT_PLATFORMS, BOT_STATUSES, BOT_FAILURE_CODES, type BotStatus } from './meetingBotOperations';
 
@@ -8,10 +9,10 @@ export const validBotTestId = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0
 
 export async function ownBotTest(env: Env, userId: number, uid: string, now = Date.now()) {
   if (!validBotTestId(uid)) return null;
-  const run = await env.DB.prepare(`SELECT uid,platform,status,failure_code,created_at,started_at,ended_at
+  const run = await env.DB.prepare(`SELECT uid,platform,status,failure_code,created_at,started_at,ended_at,heartbeat_at
     FROM meeting_bots WHERE uid=? AND user_id=?`).bind(uid,userId).first<{
       uid: string; platform: string; status: BotStatus; failure_code: string | null;
-      created_at: number; started_at: number | null; ended_at: number | null;
+      created_at: number; started_at: number | null; ended_at: number | null; heartbeat_at: number | null;
     }>();
   if (!run) return null;
   if (!BOT_PLATFORMS.includes(run.platform as any) || !BOT_STATUSES.includes(run.status)) throw new Error('meeting_bot_test_unreadable');
@@ -29,7 +30,7 @@ export async function ownBotTest(env: Env, userId: number, uid: string, now = Da
     if (!times.has(payload.status)) times.set(payload.status,event.received_at);
   }
   // DO-generated terminal transitions need not have a runtime callback event.
-  if (['done','failed','stopped'].includes(run.status) && !times.has(run.status) && run.ended_at !== null) times.set(run.status,run.ended_at);
+  if (['done','failed','stopped'].includes(run.status) && !times.has(run.status) && run.heartbeat_at !== null) times.set(run.status,run.heartbeat_at);
   const reached = [...times.entries()].sort((a,b) => a[1]-b[1]);
   if (reached.some(([,at]) => !Number.isSafeInteger(at) || at < run.created_at || at > now)) throw new Error('meeting_bot_test_unreadable');
   return {
@@ -41,14 +42,15 @@ export async function ownBotTest(env: Env, userId: number, uid: string, now = Da
   };
 }
 
-/** Authentication is checked again by the existing mounted member router.
- * No alternate runtime or charging path. Before B1 lands this returns 404,
- * which the HQ route maps to a fixed unavailable response.
- */
-export async function dispatchBotTest(env: Env, headers: Headers, sessionId: number, meetingUrl: unknown, executionCtx: ExecutionContext) {
-  const sessions = (await import('../routes/founder_validate_sessions')).default;
-  const forward = new Headers(headers); forward.set('content-type','application/json');
-  return sessions.fetch(new Request(`https://meeting-bot.internal/sessions/${sessionId}/bot`, {
-    method: 'POST', headers: forward, body: JSON.stringify({ meeting_url: meetingUrl }),
-  }), env, executionCtx);
+/** Reuse B1's service with the authenticated actor; all consent, rollout and
+ * billing gates remain in dispatchBot. No second router or runtime path. */
+export async function dispatchBotTest(env: Env, actor: User, sessionId: number, meetingUrl: unknown) {
+  const session = await loadSession(env, sessionId);
+  if (!session || session.created_by_user_id !== actor.id) throw new BotError(404,'session_not_found','That test session is not available.');
+  try {
+    return Response.json({ bot: await dispatchBot(env, actor, session, { meeting_url: meetingUrl }) }, { status: 202 });
+  } catch (e) {
+    if (e instanceof BotError) return Response.json({ code: e.code }, { status: e.status });
+    throw e;
+  }
 }

@@ -13,7 +13,8 @@ runs these directly against an in-process SQLite, with no request at all.
 complete-measurement financials, strict failure/heartbeat/markup thresholds and
 fixed notification copy. `meetingBotOperationsRead.ts` reads B1's canonical
 state in complete keyset pages and sums its settled per-block bot fee ledger.
-Unattributed audio/STT or measured supplier cost stays Not recorded; canary
+Audio uses final session receipts; STT uses attributed settled aiRouter reservations.
+Reused-session audio and unmeasured supplier cost stay Not recorded; canary
 prices are ceilings, never measurements. Bot runtime includes waiting and is
 separate from transcribed audio. A 25% markup is a 20% gross margin; the alert
 fires below 15% markup over seven days, only with complete measurements.
@@ -23,8 +24,8 @@ writes a dedupe receipt plus the existing in-app inbox item. Active HQ Super
 Admins only; their notification opt-outs apply. Repeated/concurrent sweeps
 share daily failure/markup receipts and per-run heartbeat receipts. Processing
 is excluded from runtime heartbeat alerts. `meetingBotOperationsTest.ts`
-delegates the step-up-protected live check to B1's existing session dispatch
-route and reads only the operator's own status-event timings. It never reads
+delegates the step-up-protected live check to B1's existing dispatch
+service with the authenticated actor and reads only the operator's own status-event timings. It never reads
 roster, speaker or transcript content. The routes are on `admin_platform.ts`;
 no new schema, runtime or billing path is introduced.
 

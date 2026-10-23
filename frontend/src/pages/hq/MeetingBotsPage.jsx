@@ -25,9 +25,10 @@ export function BotOperationsPanel({ report, pricing, range, setRange }) {
     {report?.state !== 'ok' ? <Card><h2 className="font-bold">{report?.state === 'not_recorded' ? 'Not recorded' : 'Unreadable'}</h2><p className="mt-2 text-sm text-axal-muted dark:text-gray-300">{report?.reason || 'Meeting bot operations could not be read.'}</p></Card> : <>
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric title="Runs" value={number(period.runs)} />
-        <Metric title="Bot minutes" value={number(period.bot_minutes)} note={`${period.measured_runtime_runs} of ${period.runs} runs have a complete runtime; includes waiting rooms.`} />
+        <Metric title="Bot minutes" value={number(period.bot_minutes)} note={`${period.measured_runtime_runs} of ${period.runs} runs have settled bot minutes; includes waiting rooms.`} />
         <Metric title="Audio minutes" value={number(period.recorded_minutes)} note={`${period.measured_minutes_runs} of ${period.runs} runs have transcribed audio attributed.`} />
         <Metric title="Bot AI tokens charged" value={usd(period.financials.charged_microusd)} note="Settled ledger charges only. Transcription is separate." />
+      <Metric title="Audio AI tokens charged" value={usd(period.audio_charged_microusd)} note={`${period.measured_audio_charge_runs ?? 0} of ${period.runs} runs have settled transcription charges attributed.`} />
       </dl>
       <Card><h2 className="font-bold">Runs by platform and status</h2>{period.runs === 0 && <p className="mt-2 text-sm text-axal-muted dark:text-gray-300">No runs recorded in this window.</p>}
         <div className="mt-3 grid gap-3 lg:grid-cols-3">{period.platforms.map(p => <section key={p.platform} className="rounded-lg border border-axal-hairline p-3"><h3 className="text-sm font-bold">{platforms[p.platform]} · {number(p.runs)}</h3><dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">{Object.entries(p.statuses).map(([status,count]) => <React.Fragment key={status}><dt className="capitalize text-axal-muted dark:text-gray-300">{label(status)}</dt><dd className="text-right tabular-nums">{number(count)}</dd></React.Fragment>)}</dl></section>)}</div>

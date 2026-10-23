@@ -803,7 +803,7 @@ r.post('/meeting-bots/test', async (c) => {
   const own = await c.env.DB.prepare('SELECT id FROM interview_sessions WHERE id=? AND created_by_user_id=?').bind(id,actor.id).first();
   if (!own) return c.json({ code: 'session_not_found', message: 'That test session is not available.' }, 404);
   try {
-    const response = await dispatchBotTest(c.env,c.req.raw.headers,id,body.meeting_url,c.executionCtx);
+    const response = await dispatchBotTest(c.env,actor,id,body.meeting_url);
     const result: any = await response.json().catch(() => null);
     if (!response.ok) {
       // Fixed errors: never echo a link, provider text or member data.
@@ -813,7 +813,12 @@ r.post('/meeting-bots/test', async (c) => {
         bot_already_running: 'A bot is already running for this session.',
         session_in_use: 'Choose a fresh audio session for this check.',
         bot_price_unavailable: 'The bot price is not configured.',
-        insufficient_balance: 'The session owner needs enough AI tokens for the plan limit.',
+        tokens: 'There are not enough AI tokens to continue.',
+        budget_user_day: 'The daily AI-token budget is exhausted.',
+        budget_user_month: 'There are not enough AI tokens for this check.',
+        budget_review: 'An AI-token charge needs review before this check.',
+        spend_limit: 'The AI-token spend limit prevents this check.',
+        ai_paused: 'AI is paused for this account.',
         bot_needs_audio: 'Choose an audio recording session.',
       };
       const code = typeof result?.code === 'string' && codes[result.code] ? result.code : 'bot_unavailable';
