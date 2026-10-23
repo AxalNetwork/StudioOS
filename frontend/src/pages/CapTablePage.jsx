@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import PageExplainer from '../components/PageExplainer';
 import { api } from '../lib/api';
@@ -91,6 +91,8 @@ export default function CapTablePage({ embedded = false }) {
   // `selectedProjectId` drives load/save. Deep-linkable via ?project=<id>.
   const [projects, setProjects] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [readProjectId, setReadProjectId] = useState('');
+  const projectRead = useRef(0);
   const [searchParams, setSearchParams] = useSearchParams();
   // T19 — toast hook auto-clears on unmount. Replaces the inline
   // `setTimeout(() => setSavedFlash(''), 1500)` that leaked on quick navigation.
@@ -201,6 +203,8 @@ export default function CapTablePage({ embedded = false }) {
   // Optional scenList/projList overrides avoid stale state during bootstrap.
   async function selectProject(pid, scenList = scenarios, projList = projects) {
     const id = pid ? String(pid) : '';
+    const request = ++projectRead.current;
+    setReadProjectId('');
     setSelectedProjectId(id);
     setApiError(null);
     // Task #29 — compare is project-scoped; drop any stale comparison.
@@ -218,14 +222,16 @@ export default function CapTablePage({ embedded = false }) {
     let scen = null;
     try {
       const r = await api.getCapTableByProject(id);
+      if (request !== projectRead.current) return;
       scen = r?.scenario || null;
     } catch (e) {
-      if (e?.status === 403) {
-        setApiError("You don't have access to that project's cap table.");
-      } else if (e?.status && e.status !== 404) {
-        setApiError("Couldn't load that startup's cap table. Please retry.");
-      }
+      if (request !== projectRead.current) return;
+      setApiError(e?.status === 403
+        ? "You don't have access to that project's cap table."
+        : "Couldn't load that startup's cap table. Please retry.");
+      return;
     }
+    setReadProjectId(id);
     if (scen) {
       setInputs(scen.inputs);
       setResult(scen.result);
@@ -241,6 +247,10 @@ export default function CapTablePage({ embedded = false }) {
   }
 
   async function saveScenario() {
+    if (!selectedProjectId || readProjectId !== selectedProjectId) {
+      setApiError('Load the cap table successfully before saving.');
+      return;
+    }
     setSavedFlash(''); setApiError(null);
     if (!selectedProjectId) {
       setApiError('Select a startup first — each cap table belongs to a startup.');
@@ -276,12 +286,20 @@ export default function CapTablePage({ embedded = false }) {
   }
 
   async function loadScenario(uid) {
-    const s = await api.getCapTableScenario(uid);
+    const request = ++projectRead.current;
+    setReadProjectId('');
+    let s;
+    try { s = await api.getCapTableScenario(uid); } catch {
+      if (request === projectRead.current) setApiError('Could not load this scenario. Please retry.');
+      return;
+    }
+    if (request !== projectRead.current) return;
     setInputs(s.inputs);
     setResult(s.result);
     setActiveUid(uid);
     setScenarioName(s.name);
-    if (s.project_id != null) setSelectedProjectId(String(s.project_id));
+    setSelectedProjectId(s.project_id != null ? String(s.project_id) : '');
+    setReadProjectId(s.project_id != null ? String(s.project_id) : '');
   }
 
   async function delScenario(uid) {
@@ -307,6 +325,9 @@ export default function CapTablePage({ embedded = false }) {
   // project. Variants never touch the canonical cap table (the deck + project
   // load only ever read canonical), so this is always an INSERT, never an upsert.
   async function saveAsVariant() {
+    if (!selectedProjectId || readProjectId !== selectedProjectId) {
+      setApiError('Load the cap table successfully before saving.'); return;
+    }
     setApiError(null); setErrors([]);
     if (!selectedProjectId) {
       setApiError('Select a startup first — variants belong to a startup.');
@@ -336,6 +357,8 @@ export default function CapTablePage({ embedded = false }) {
   // Task #29 — load the read-only ownership/dilution comparison for a project.
   async function loadCompare(pid = selectedProjectId, open = false) {
     const id = pid ? String(pid) : '';
+    const request = ++projectRead.current;
+    setReadProjectId('');
     if (!id) { setApiError('Select a startup to compare scenarios.'); return; }
     setCompareLoading(true); setCompareError(null);
     if (open) setCompareOpen(true);
@@ -416,13 +439,13 @@ export default function CapTablePage({ embedded = false }) {
             className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
             <Plus size={14} /> New
           </button>
-          <button onClick={saveScenario}
+          <button onClick={saveScenario} disabled={!selectedProjectId || readProjectId !== selectedProjectId}
             className="px-3 py-1.5 text-sm bg-violet-600 text-white rounded hover:bg-violet-700 flex items-center gap-1">
             <Save size={14} /> {activeUid ? 'Update' : 'Save'}
           </button>
           {selectedProjectId && (
             <>
-              <button onClick={saveAsVariant}
+              <button onClick={saveAsVariant} disabled={readProjectId !== selectedProjectId}
                 title="Save the current inputs as a named draft variant to compare"
                 className="px-3 py-1.5 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center gap-1 dark:bg-gray-900 dark:border-gray-700">
                 <Copy size={14} /> Save as variant

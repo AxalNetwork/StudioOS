@@ -82,7 +82,7 @@ export function inputsFromDraft(d) {
     errors,
     inputs: {
       founders,
-      option_pool_pct: pool ?? 0,
+      ...(pool == null ? {} : { option_pool_pct: pool }),
       safes,
       rounds,
       exit_value: exit,
@@ -356,10 +356,11 @@ export default function CapTableVariantsPage({ client = api }) {
 
   const createVariant = async () => {
     if (read.kind !== 'ready') return;
+    if (!read.canonical?.inputs) { setNewError('Record the cap table first'); return; }
     setCreating(true); setNewError('');
     try {
       // A new variant starts from the main table, so it begins as a copy to change.
-      const inputs = read.canonical?.inputs || { founders: [{ name: 'Founder', shares: 1000000 }], option_pool_pct: 10 };
+      const inputs = read.canonical.inputs;
       const made = await client.createCapTableVariant(read.projectId, { name: `Draft variant ${read.variants.length + 1}`, inputs });
       navigate(variantHref(made.uid));
     } catch (e) {
