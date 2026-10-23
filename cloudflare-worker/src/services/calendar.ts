@@ -75,16 +75,11 @@ const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 // (follow-up #58) can list external events via sync_token without a
 // second consent screen. `userinfo.profile` is included so the consent
 // screen names the connecting user.
-// Task #70 — single Google consent screen now covers Calendar AND Gmail
-// AND "Continue with Google" sign-in. Gmail is read-only metadata so the
-// app can show event invites/threads adjacent to calendar items without
-// asking for a second consent. Adding `gmail.readonly` will force any
-// pre-Task-#70 connection to re-consent on its next OAuth round-trip,
-// which is the intended behaviour for the consolidated Google tile.
+// Task #2413 — the Calendar connector does not read Gmail, so its consent
+// stays limited to Calendar and the identity scopes used to link the account.
 const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
-  'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
   'openid',
@@ -254,10 +249,35 @@ export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string, 
     access_type: 'offline',
     prompt: 'select_account consent',
     state,
-    include_granted_scopes: 'true',
+    // Do not carry forward a previously granted scope that this consent no
+    // longer requests (notably Gmail on existing connections).
+    include_granted_scopes: 'false',
   });
   if (loginHint) p.set('login_hint', loginHint);
   return `${GOOGLE_AUTH_URL}?${p.toString()}`;
+}
+
+/** Revoke every Google OAuth scope attached to this refresh token. */
+export async function revokeGoogleOAuthGrant(
+  refreshToken: string,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  const body = new URLSearchParams({ token: refreshToken });
+  const response = await fetchWithTimeout('https://oauth2.googleapis.com/revoke', {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+  }, 10_000, fetcher);
+  if (response.ok) return;
+
+  let providerError = '';
+  try {
+    const data = await response.json() as { error?: string };
+    providerError = String(data?.error || '');
+  } catch { /* Google's error body is optional. */ }
+  // Google documents invalid_token as an already expired or revoked grant.
+  if (providerError === 'invalid_token') return;
+  throw new Error(`google_revoke_failed:${response.status}:${providerError || 'unknown'}`);
 }
 
 export function buildMicrosoftAuthUrl(env: Env, state: string): string {
@@ -277,11 +297,13 @@ export function buildMicrosoftAuthUrl(env: Env, state: string): string {
 // Token exchange / refresh — fetch with explicit timeout, fail with thrown
 // Error so callers can map to a HTTP status.
 // ===========================================================================
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 10_000): Promise<Response> {
+async function fetchWithTimeout(
+  url: string, init: RequestInit, timeoutMs = 10_000, fetcher: typeof fetch = fetch,
+): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
+    return await fetcher(url, { ...init, signal: ctrl.signal });
   } finally {
     clearTimeout(t);
   }
