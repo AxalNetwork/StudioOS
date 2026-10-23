@@ -74,6 +74,8 @@
  * Mounted at /api/admin/platform BEFORE the catch-all /api/admin in index.ts.
  */
 import { Hono } from 'hono';
+import { ownBotTest, dispatchBotTest, validBotTestId } from '../services/meetingBotOperationsTest';
+import { readMeetingBotOperations, meetingBotPricePolicy } from '../services/meetingBotOperationsRead';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { DERIVED_UNAVAILABLE } from './licence';
@@ -782,6 +784,59 @@ r.put('/take-rate', async (c) => {
     applies_from: 'Sessions priced after this change. Lines already recorded keep the rate '
       + 'they were stamped with.',
   });
+});
+
+// D886 B10: aggregated HQ operations, never customer content.
+r.get('/meeting-bots', async (c) => {
+  await requireSuperAdmin(c);
+  return c.json({ operations: await readMeetingBotOperations(c.env), pricing: meetingBotPricePolicy() });
+});
+
+// A test uses a fresh, consented session owned by the operator. It cannot
+// dispatch on another member's behalf or skip B1's consent/token checks.
+r.post('/meeting-bots/test', async (c) => {
+  const actor = await requireSuperAdminWriteBar(c);
+  const body = await c.req.json().catch(() => null);
+  const id = body?.session_id;
+  if (!Number.isSafeInteger(id) || id <= 0 || typeof body?.meeting_url !== 'string' || body.meeting_url.length > 2048)
+    return c.json({ code: 'invalid_bot_test', message: 'Choose your consented audio session and enter a meeting link.' }, 400);
+  const own = await c.env.DB.prepare('SELECT id FROM interview_sessions WHERE id=? AND created_by_user_id=?').bind(id,actor.id).first();
+  if (!own) return c.json({ code: 'session_not_found', message: 'That test session is not available.' }, 404);
+  try {
+    const response = await dispatchBotTest(c.env,actor,id,body.meeting_url);
+    const result: any = await response.json().catch(() => null);
+    if (!response.ok) {
+      // Fixed errors: never echo a link, provider text or member data.
+      const codes: Record<string,string> = {
+        consent_required: 'Record consent in the session before sending Eadwyn AI.',
+        unsupported_link: 'Use a Zoom, Google Meet or Microsoft Teams meeting link.',
+        bot_already_running: 'A bot is already running for this session.',
+        session_in_use: 'Choose a fresh audio session for this check.',
+        bot_price_unavailable: 'The bot price is not configured.',
+        tokens: 'There are not enough AI tokens to continue.',
+        budget_user_day: 'The daily AI-token budget is exhausted.',
+        budget_user_month: 'There are not enough AI tokens for this check.',
+        budget_review: 'An AI-token charge needs review before this check.',
+        spend_limit: 'The AI-token spend limit prevents this check.',
+        ai_paused: 'AI is paused for this account.',
+        bot_needs_audio: 'Choose an audio recording session.',
+      };
+      const code = typeof result?.code === 'string' && codes[result.code] ? result.code : 'bot_unavailable';
+      return c.json({ code, message: codes[code] || 'The meeting bot is not available for this check yet.' },
+        [400,402,403,409].includes(response.status) ? response.status as 400 | 402 | 403 | 409 : 503);
+    }
+    const uid = result?.bot?.uid;
+    if (typeof uid !== 'string' || !validBotTestId(uid)) throw new Error('invalid_bot_test_response');
+    await logAdminAction(c.env,actor.id,actor.email,'meeting_bot_test_dispatched',{ target_user_id: actor.id });
+    return c.json({ test: await ownBotTest(c.env,actor.id,uid) });
+  } catch { return c.json({ code: 'bot_test_unreadable', message: 'The check could not be read. Check the session before trying again.' }, 503); }
+});
+r.get('/meeting-bots/test/:uid', async (c) => {
+  const actor = await requireSuperAdmin(c);
+  try {
+    const result = await ownBotTest(c.env,actor.id,c.req.param('uid'));
+    return result ? c.json({ test: result }) : c.json({ code: 'bot_test_not_found', message: 'That check is not available.' },404);
+  } catch { return c.json({ code: 'bot_test_unreadable', message: 'The check timings could not be read.' },503); }
 });
 
 export default r;
