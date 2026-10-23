@@ -29,7 +29,7 @@ export interface BotRun {
 }
 /** B2/B8 provide an idempotent runtime: start/stop use uid as their idempotency key. Never log the input. */
 export interface BotRuntime {
-  start(run: { uid: string; platform: BotPlatform; meeting_url: string; limit_minutes: number; deadline_at: number; budget_deadline_at: number }): Promise<void>;
+  start(run: { uid: string; platform: BotPlatform; meeting_url: string; limit_minutes: number; deadline_at: number; budget_deadline_at: number; notice: string; venture_name: string | null }): Promise<void>;
   stop(run: { uid: string }): Promise<void>;
 }
 export class BotError extends Error {
@@ -97,6 +97,16 @@ export async function botSession(env: Env, run: Pick<BotRun, 'user_id'|'session_
   if (session.consent_status !== 'given') throw new BotError(409, 'consent_required', 'Record the interviewee’s agreement before sending the meeting bot.');
   if (session.audio_removed_at) throw new BotError(409, 'audio_removed', 'The audio for this session was removed.');
   return session;
+}
+/** The label belongs to the run's currently authorized company, never a request parameter. */
+export async function botVentureName(env: Env, run: BotRun): Promise<string | null> {
+  const { scoped } = await writableSession(env, run.user_id, run.session_id);
+  if (scoped.project.id !== run.project_id) throw new BotError(404, 'session_not_found', 'That session is not available.');
+  if (scoped.project.company_id === null) return null;
+  const company = await env.DB.prepare('SELECT company_name FROM company_profiles WHERE id = ?')
+    .bind(scoped.project.company_id).first<{ company_name: string }>();
+  if (!company) throw new BotError(503, 'bot_company_unavailable', 'The venture label could not be read.');
+  return company.company_name;
 }
 export async function botControl(env: Env, uid: string, action: string, init?: RequestInit): Promise<Response> {
   if (!env.MEETING_BOT_RUN) throw new BotError(503, 'bot_unavailable', 'The meeting bot is not set up here.');
