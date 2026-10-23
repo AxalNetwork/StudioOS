@@ -403,20 +403,21 @@ deckShareActions.post('/share/:token/nda', async (c) => {
       `NDA — ${ctx.project_name || ('Deck ' + tok.deckId)}`,
       ndaBody,
       DECK_SHARE_NDA_SLUG,
-      signedBy,
+      user.name || user.email,
     ).run();
     docId = Number((ins as any)?.meta?.last_row_id || 0) || null;
   } catch (e) {
     console.error('[deck_share] nda doc insert failed', (e as Error).message);
   }
 
+  if (!docId) return c.json({ error: 'NDA acceptance could not be recorded. Try again.' }, 503);
   await logConversion(c.env, {
     deckId: tok.deckId, tokenId: tok.tokenId, viewId,
     projectId: ctx.project_id, userId,
     type: 'nda_signed', refId: docId ? String(docId) : null,
   });
 
-  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG });
+  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG, data_room_access_granted: false, message: 'NDA acceptance recorded. This does not grant data-room access; a separate founder grant and the data room NDA checks still apply.' });
 });
 
 // ─────────────────────────────────────────────────────────────────────

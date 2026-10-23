@@ -177,3 +177,18 @@ test('a valid spin-out creates only supplied papers and never attempts a capital
     for(const paper of papers){const content=JSON.parse(String(paper.content));assert.equal(content.vars.amount,'123');assert.equal(content.vars.holding_equity_pct,'10');}
   }finally{f.db.close();}
 });
+
+test('deck NDA acceptance explicitly grants no data-room access and is not successful if persistence fails',async()=>{
+  const f=fixture();try {
+    const path=await share(f);
+    const {ensureLegalTemplatesSchema}=await import('../src/services/legalTemplateStore.ts');
+    await ensureLegalTemplatesSchema(f.env);
+    f.db.prepare("INSERT INTO legal_templates(slug,title,category,body_md,is_stub) VALUES('investor_nda_axal','Synthetic NDA','portfolio','Synthetic NDA for {{recipient_name}} with {{counterparty_name}}',0)").run();
+    const r=await call(f,1,`${path}/nda`,{signed_by:'Untrusted supplied name'});
+    assert.equal(r.status,200,JSON.stringify(r.body));assert.equal(r.body.data_room_access_granted,false);assert.match(r.body.message,/does not grant data-room access/);
+    assert.ok(r.body.document_id);assert.equal(f.db.prepare('SELECT signed_by FROM documents WHERE id=?').get(r.body.document_id)?.signed_by,'Synthetic member');
+    const base=f.env.DB;
+    f.env.DB={...base,prepare(sql:string){if(/INSERT INTO documents/.test(sql))throw new Error('Synthetic write failure');return base.prepare(sql);}};
+    const failed=await call(f,1,`${path}/nda`,{signed_by:'Synthetic'});assert.equal(failed.status,503);
+  }finally{f.db.close();}
+});
