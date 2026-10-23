@@ -200,13 +200,13 @@ test('Zoom\'s page is null for a non-venture viewer, as its audience is', () => 
 });
 
 // 3b ──────────────────────────────────────────────────────────────────────────
-test('the venture rule touches no other provider', async () => {
+test('the venture rule leaves other providers and Carta’s own audience rule intact', async () => {
   // Mutation checked: `audienceFor` answering `none` for every non-venture
   // viewer whatever the rule (the investor's list shrinks to Mercury-less nothing).
   const f = fixture();
   const keysFor = async (who: string) => (await call(f.env, who, 'GET', '/api/connectors/available')).body.items.map((p: any) => p.key).filter((k: string) => k !== 'mercury');
   const founder = await keysFor('founder');
-  for (const who of CONNECTORS_NOT_VENTURE) assert.deepEqual(await keysFor(who), founder.filter((k: string) => k !== 'zoom'), who);
+  for (const who of CONNECTORS_NOT_VENTURE) assert.deepEqual(await keysFor(who), founder.filter((k: string) => k !== 'zoom' && (k !== 'carta' || who === 'investor')), who);
 });
 
 // 4 ───────────────────────────────────────────────────────────────────────────

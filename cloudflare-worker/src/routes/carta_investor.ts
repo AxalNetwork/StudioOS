@@ -43,15 +43,23 @@ for (const resource of resources) app.get(resource.path, async c => {
     return refuse(c, 409, { code: 'carta_reconnect_required', message: 'Connect Carta again with investor read permissions.' });
   }
   const path = '/investors' + resource.path.replace(/:([A-Za-z]+)/g, (_all, key) => encodeURIComponent(c.req.param(key)!));
+  let data: Awaited<ReturnType<typeof readCartaInvestor>>;
   try {
-    const data = await readCartaInvestor(path => cartaFetch(c.env, row, path), path, resource.kind, pageToken);
-    // Counts and a static resource name only; no firms, securities, names or figures.
-    const count = 'items' in data ? data.items.length : 1;
-    await c.env.DB.prepare("INSERT INTO integration_logs (integration_id, user_id, provider_key, direction, event_type, status, response_summary) VALUES (?, ?, 'carta', 'outbound', ?, 'ok', ?)")
-      .bind(row.id, user.id, `investor_${resource.kind}`, `read=${resource.kind} count=${count}`).run();
-    return c.json(data);
-  } catch {
+    data = await readCartaInvestor(path => cartaFetch(c.env, row, path), path, resource.kind, pageToken);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'carta_scope_overreach') {
+      return refuse(c, 409, { code: 'carta_reconnect_required', message: 'Carta returned different permissions. Connect again with investor read permissions.' });
+    }
     return refuse(c, 502, { code: 'carta_unreadable', message: 'Your Carta data is unreadable. Check the permissions in Carta and try again. Nothing changed.' });
   }
+  // Counts and a static resource name only; no firms, securities, names or figures.
+  const count = 'items' in data ? data.items.length : 1;
+  try {
+    await c.env.DB.prepare("INSERT INTO integration_logs (integration_id, user_id, provider_key, direction, event_type, status, response_summary) VALUES (?, ?, 'carta', 'outbound', ?, 'ok', ?)")
+      .bind(row.id, user.id, `investor_${resource.kind}`, `read=${resource.kind} count=${count}`).run();
+  } catch {
+    return refuse(c, 503, { code: 'carta_read_log_unavailable', message: 'Axal could not record this read. Try again in a moment.' });
+  }
+  return c.json(data);
 });
 export default app;

@@ -245,7 +245,11 @@ test('an investor refresh refuses an expanded grant before an API retry', async 
   }) as any;
   try {
     const original = (f.db.prepare('SELECT credentials_enc FROM integrations').get() as any).credentials_enc;
-    const r = await f.call(root+'/firms'); assert.equal(r.status, 502);
+    const r = await f.call(root+'/firms'); assert.equal(r.status, 409);
+    assert.equal((await r.json() as any).error, 'carta_reconnect_required');
+    const row = f.db.prepare('SELECT status, last_error FROM integrations').get() as any;
+    assert.deepEqual([row.status, row.last_error], ['error', 'carta_scope_overreach']);
+    assert.equal((await f.call(root+'/firms')).status, 409);
     assert.equal(reads, 1); assert.equal(revokes, 1);
     assert.equal((f.db.prepare('SELECT credentials_enc FROM integrations').get() as any).credentials_enc, original);
   } finally { globalThis.fetch = before; f.db.close(); }
@@ -284,4 +288,60 @@ test('connector pages and cards describe each audience without mixing grants', a
 test('the Carta scope contract uses exactly the documented audience lists', () => {
   assert.deepEqual(cartaScopesFor('founder'), expectedScopes('founder'));
   assert.deepEqual(cartaScopesFor('investor'), expectedScopes('investor'));
+});
+
+for (const role of ['admin', 'partner', 'advisor']) test(`an existing ${role} Carta grant keeps only its management/disconnect path`, async () => {
+  const f = await fixture(role); await f.seed(1, 'founder', false); const before = globalThis.fetch;
+  f.db.prepare("UPDATE integrations SET config_json='{}'").run();
+  for (const table of ['holders', 'securities', 'vesting', 'option_pools']) f.db.exec(`CREATE TABLE cap_table_${table}(user_id INTEGER, source TEXT, updated_at TEXT)`);
+  const calls: string[] = [];
+  globalThis.fetch = (async (input: any) => { calls.push(String(input)); return new Response('{}'); }) as any;
+  try {
+    const available = await f.call('/api/integrations/available');
+    const p = (await available.json() as any).items.find((p: any) => p.key === 'carta');
+    assert.equal(p.legacy_only, true); assert.equal(p.has_implementation, false); assert.equal(p.already_connected, true);
+    const page = await f.call('/api/integrations/directory/carta'); assert.equal(page.status, 200);
+    assert.equal((await page.json() as any).connector.legacy_only, true);
+    assert.equal((await f.call('/api/integrations/oauth/carta/start')).status, 404);
+    assert.deepEqual(await syncAllCartaIntegrations(f.env), { scanned: 0, ok: 0, failed: 0 });
+    const manual = await f.call('/api/integrations/fixture-1/sync', { method: 'POST' });
+    assert.equal(manual.status, 403);
+    const deleted = await f.call('/api/integrations/fixture-1', { method: 'DELETE' }); assert.equal(deleted.status, 200);
+    assert.equal((f.db.prepare('SELECT count(*) AS n FROM integrations WHERE user_id=1').get() as any).n, 0);
+    assert.deepEqual(calls, ['https://login.app.carta.com/o/revoke_token/']);
+    assert.equal((await f.call('/api/integrations/directory/carta')).status, 404);
+  } finally { globalThis.fetch = before; f.db.close(); }
+});
+
+test('a local audit failure is distinct from a failed Carta read', async () => {
+  const f = await fixture(); await f.seed(); const before = globalThis.fetch;
+  globalThis.fetch = (async () => new Response(JSON.stringify({ firms: [{ id: 'firm-fixture', name: 'Synthetic firm' }] }))) as any;
+  const prepare = f.env.DB.prepare.bind(f.env.DB);
+  f.env.DB.prepare = (sql: string) => { if (sql.includes('INSERT INTO integration_logs')) throw new Error('local-fixture-failure'); return prepare(sql); };
+  try {
+    const r = await f.call(root+'/firms'); assert.equal(r.status, 503);
+    const b = await r.json() as any; assert.equal(b.error, 'carta_read_log_unavailable');
+    assert.equal(JSON.stringify(b).includes('Synthetic firm'), false);
+    assert.equal(JSON.stringify(b).includes('local-fixture-failure'), false);
+  } finally { globalThis.fetch = before; f.db.close(); }
+});
+
+test('a legacy Carta directory never appears because another member has a grant', async () => {
+  const f = await fixture('admin'); await f.seed(2, 'founder');
+  try {
+    const r = await f.call('/api/integrations/available');
+    assert.equal((await r.json() as any).items.some((p: any) => p.key === 'carta'), false);
+    assert.equal((await f.call('/api/integrations/directory/carta')).status, 404);
+  } finally { f.db.close(); }
+});
+
+test('an investor who kept a founder grant cannot import issuer data', async () => {
+  const f = await fixture(); await f.seed(1, 'founder'); const before = globalThis.fetch;
+  let reads = 0;
+  globalThis.fetch = (async () => { reads++; return new Response('{}'); }) as any;
+  try {
+    const row = f.db.prepare('SELECT * FROM integrations').get() as any;
+    await assert.rejects(getProviderImpl('carta')!.sync!({ env: f.env } as any, { id: 1, role: 'investor' } as any, row), /carta_reconnect_required/);
+    assert.equal(reads, 0);
+  } finally { globalThis.fetch = before; f.db.close(); }
 });

@@ -227,6 +227,12 @@ async function catalogueEntry(c: Context<{ Bindings: Env }>, user: User, p: Prov
   };
 }
 
+/** Existing Carta grants owned by a former audience keep their Disconnect path. */
+const LEGACY_CARTA_NOTICE = 'Your current role cannot create or sync a Carta connection. You can disconnect this existing connection.';
+function legacyCartaFields() {
+  return { legacy_only: true, legacy_notice: LEGACY_CARTA_NOTICE, description: LEGACY_CARTA_NOTICE, tagline: LEGACY_CARTA_NOTICE, long_description: [LEGACY_CARTA_NOTICE], has_implementation: false };
+}
+
 /** LinkedIn's card: its facts (`FIRST_PARTY_CARDS`) and its page fields. Never in `items`. */
 function linkedinCard(viewer: Viewer) {
   const page = pageDescriptor({ key: 'linkedin' }, viewer);
@@ -327,12 +333,14 @@ integrations.get('/available', async (c) => {
     if (await c.env.DB.prepare('SELECT 1 AS connected FROM microsoft_oauth_tokens WHERE user_id = ?').bind(user.id).first()) connectedSet.add('microsoft_365');
   } catch { unreadableSources.push('microsoft_365'); }
   const viewer = viewerOf(c, user);
-  const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none');
+  const listed = REGISTRY.filter(p => audienceOf(c, user, p) !== 'none' || (p.key === 'carta' && connectedSet.has('carta')));
   const providers = await Promise.all(listed.map(async (p) => {
     // D879: a preview reads no connection, the caller's own included.
     const preview = audienceOf(c, user, p) === 'preview';
+    const legacyCarta = p.key === 'carta' && audienceOf(c, user, p) === 'none';
     return {
-      ...(await catalogueEntry(c, user, p, viewer)),
+      ...(await catalogueEntry(c, user, p, legacyCarta ? { ...viewer, role: 'founder' } : viewer)),
+      ...(legacyCarta ? legacyCartaFields() : {}),
       already_connected: preview ? false : p.key === 'google_calendar' || p.key === 'microsoft_365'
         ? unreadableSources.includes(p.key) ? null : connectedSet.has(p.key)
         : connectionsReadable ? connectedSet.has(p.key) : null,
@@ -444,10 +452,14 @@ integrations.get('/directory/:key', async (c) => {
     return c.json({ ok: true, connector: { key: k.key, ...pageFields(channel), ...pageBody(channel) } });
   }
   const p = getDescriptor(k.key);
-  if (!p || audienceOf(c, user, p) === 'none') return c.json({ error: 'unknown_provider' }, 404);
-  const page = pageDescriptor(p, viewer);
+  if (!p) return c.json({ error: 'unknown_provider' }, 404);
+  const legacyCarta = p.key === 'carta' && audienceOf(c, user, p) === 'none' &&
+    !!await c.env.DB.prepare("SELECT 1 FROM integrations WHERE user_id = ? AND provider_key = 'carta'").bind(user.id).first();
+  if (audienceOf(c, user, p) === 'none' && !legacyCarta) return c.json({ error: 'unknown_provider' }, 404);
+  const pageViewer = legacyCarta ? { ...viewer, role: 'founder' } : viewer;
+  const page = pageDescriptor(p, pageViewer);
   if (!page) return c.json({ error: 'unknown_provider' }, 404);
-  return c.json({ ok: true, connector: { ...(await catalogueEntry(c, user, p, viewer)), ...pageBody(page) } });
+  return c.json({ ok: true, connector: { ...(await catalogueEntry(c, user, p, pageViewer)), ...pageBody(page), ...(legacyCarta ? legacyCartaFields() : {}) } });
 });
 
 integrations.post('/requests', async (c) => {
@@ -784,6 +796,7 @@ integrations.post('/:uid/sync', async (c) => {
   const uid = c.req.param('uid');
   const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
+  if (row.provider_key === 'carta' && !cartaAudience(user.role)) return refuse(c, 403, { code: 'purpose_not_allowed', message: LEGACY_CARTA_NOTICE });
   if (writesProjectData(row.provider_key)) {
     const selectedCompany = await activeCompanyFor(c, user);
     if (!selectedCompany || !(await companyEnabled(c.env, row.id, selectedCompany))) {

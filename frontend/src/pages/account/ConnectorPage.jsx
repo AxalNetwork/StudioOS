@@ -275,7 +275,7 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false 
           <div className="text-[10.5px] font-bold uppercase tracking-axal-label text-axal-muted dark:text-gray-400">Last sync</div>
           <div data-testid="connector-page-last-sync">{flow.syncNote || lastSyncLabel(conn)}</div>
         </div>
-        {conn.uid && (
+        {conn.uid && !p.legacy_only && (
           <button type="button" className={`${BTN.ghost} sm:ml-auto`} disabled={flow.syncing} onClick={flow.syncNow} data-testid="connector-page-sync">
             {flow.syncing ? 'Syncing…' : 'Sync now'}
           </button>
@@ -294,7 +294,7 @@ function YourConnection({ p, flow, role = null, onChanged, repositories = false 
         ) : <CompaniesGroup conn={conn} onChanged={onChanged} />}
         {/* Decision 8: a partner's Mercury feeds no module. */}
         {(!mercury || role === 'founder') && <FedGroup conn={conn} name={p.display_name} />}
-        <SettingsGroup p={p} onTool={flow.setTool} onReplace={() => flow.go('key')} />
+        {p.legacy_only ? <Group label="Connection"><Row a={p.legacy_notice} /></Group> : <SettingsGroup p={p} onTool={flow.setTool} onReplace={() => flow.go('key')} />}
         {conn.uid
           ? <ActivityGroup conn={conn} />
           : <Group label="Activity"><Row a={<Unrecorded reason={`${p.display_name} keeps no activity log in StudioOS.`}>Not recorded</Unrecorded>} /></Group>}

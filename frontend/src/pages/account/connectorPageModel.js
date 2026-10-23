@@ -99,6 +99,7 @@ export function pageAction(p, { view = 'idle' } = {}) {
   const name = p.display_name || 'this connector';
   if (p.connection) {
     const pill = connectionStatus(p.connection, p);
+    if (p.legacy_only) return { kind: 'status', pill };
     if (pill.why) return { kind: 'reconnect', label: 'Reconnect', aria: `Reconnect ${name}`, pill, via: keyPath(p) ? 'key' : 'oauth' };
     return { kind: 'status', pill };
   }
@@ -129,6 +130,7 @@ export function pageAction(p, { view = 'idle' } = {}) {
 export function manageItems(p) {
   const conn = p?.connection;
   if (!conn) return [];
+  if (p.legacy_only) return [{ id: 'disconnect', label: 'Disconnect' }];
   const attention = !!connectionStatus(conn, p).why;
   const items = [];
   if (conn.uid) items.push({ id: 'sync', label: 'Sync now' });
@@ -147,7 +149,7 @@ export function manageItems(p) {
  * HubSpot's sign-in beside its Private App token). Empty when there is none.
  */
 export function pageChoices(p) {
-  if (!p) return { env: null, alt: [] };
+  if (!p || p.legacy_only) return { env: null, alt: [] };
   const env = p.key === 'salesforce'
     ? { name: 'sf_env', label: 'Org type', options: [{ value: 'production', label: 'Production' }, { value: 'sandbox', label: 'Sandbox' }] }
     : (p.key === 'docusign' || p.key === 'carta')

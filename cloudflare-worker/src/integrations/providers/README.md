@@ -102,3 +102,9 @@ Investor reads go through `../cartaInvestor.ts` and
 and never enter founder cap-table stores or the six-hour issuer cron.
 An expanded refresh grant is revoked before any API retry or persistence.
 `audience` and environment cannot be changed through settings; reconnect.
+
+A refused expanded Carta refresh marks its row `error` with a static code,
+then revokes the refused token; future reads ask to reconnect. Legacy Carta
+rows held by other roles keep their own Disconnect path but never enter the
+issuer scheduler or manual sync. A failed local read-log write has its own
+503 code, separate from a Carta read failure.

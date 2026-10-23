@@ -147,7 +147,8 @@ export async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<
     const refreshed = await refreshAccessToken(env, refreshToken, storedDemo(row));
     const audience = safeParse(row.config_json || '{}').audience === 'investor' ? 'investor' : 'founder';
     if (refreshed.scope && cartaExtraScopes(audience, refreshed.scope.split(/\s+/).filter(Boolean)).length) {
-      await revokeGranted(env, { credentials: { refresh_token: refreshed.refresh_token || refreshToken }, config: { is_demo: storedDemo(row) } });
+      await env.DB.prepare("UPDATE integrations SET status = 'error', last_error = 'carta_scope_overreach', last_error_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(row.id).run();
+      try { await revokeGranted(env, { credentials: { refresh_token: refreshed.refresh_token || refreshToken }, config: { is_demo: storedDemo(row) } }); } catch { /* the refused grant stays unusable */ }
       throw new Error('carta_scope_overreach');
     }
     const newCreds: CredentialBlob = {
@@ -376,6 +377,7 @@ async function ensureIssuer(env: Env, row: IntegrationRow): Promise<{ id: string
 
 async function sync(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<SyncResult> {
   if (safeParse(row.config_json || '{}').audience === 'investor') return { summary: 'Investor Carta is read live in Deals and Portfolio; no founder records imported.', counts: { pulled: 0 } };
+  if (_user.role && _user.role !== 'founder') throw new Error('carta_reconnect_required');
   const counts = { pulled: 0, holders: 0, securities: 0, vesting: 0, option_pools: 0, errors: 0 };
   const issuer = await ensureIssuer(c.env, row);
 
@@ -757,7 +759,7 @@ export async function syncAllCartaIntegrations(env: Env): Promise<{ scanned: num
   let rows: { results: IntegrationRow[] };
   try {
     rows = await env.DB.prepare(
-      "SELECT * FROM integrations WHERE provider_key = 'carta' AND status = 'active' LIMIT 200",
+      "SELECT i.* FROM integrations i JOIN users u ON u.id = i.user_id WHERE i.provider_key = 'carta' AND i.status = 'active' AND u.role = 'founder' LIMIT 200",
     ).all<IntegrationRow>() as unknown as { results: IntegrationRow[] };
   } catch {
     return { scanned: 0, ok: 0, failed: 0 };
@@ -768,7 +770,7 @@ export async function syncAllCartaIntegrations(env: Env): Promise<{ scanned: num
     scanned++;
     try {
       const stubCtx = { env } as unknown as Context<{ Bindings: Env }>;
-      const stubUser = { id: row.user_id } as User;
+      const stubUser = { id: row.user_id, role: 'founder' } as User;
       const out = await sync(stubCtx, stubUser, row);
       await env.DB.prepare(
         'UPDATE integrations SET last_synced_at = CURRENT_TIMESTAMP, last_error = NULL, last_error_at = NULL WHERE id = ?',
