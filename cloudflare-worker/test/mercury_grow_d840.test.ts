@@ -9,7 +9,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import cycleGrow from '../src/routes/cycle_grow.ts';
+import '../src/routes/cycle_grow.ts';
 import { DURABILITY_ITEMS, checklist } from '../src/services/growCycle.ts';
 import { GROW_FEED_KINDS, MERCURY_FEEDS, mercuryFedModules } from '../src/integrations/mercuryFeeds.ts';
 import { fedCounts } from '../src/integrations/fed.ts';

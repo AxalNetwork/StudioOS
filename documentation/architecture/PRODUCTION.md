@@ -284,6 +284,26 @@ git push
 Rollback reverts the worker (and with it the SPA), not D1 — see
 [DEPLOY.md §3](../operations/DEPLOY.md#3-capture-a-rollback-point-first).
 
+## Meeting bot control plane (D886 B1, #2579)
+
+Before any canary, apply migration 531 and the appended `v2-meeting-bot` Durable
+Object migration. Keep the existing `v1-realtime` migration. `MEETING_BOT_RUN`
+binds class `MeetingBotRun` in default, production and preview environments.
+B8 supplies the `MEETING_BOT_RUNTIME` start/stop binding; runtime must enforce
+the budget lease locally and acknowledge commands without awaiting callbacks.
+Provision a distinct `MEETING_BOT_SECRET` (32+ random characters) in each
+environment; never put its value in configuration, logs or review material.
+The existing column cipher and FILES binding are also required.
+
+Absent/off `MEETING_BOT` refuses dispatch. B9 owns switching to `canary` (hydrated
+Super Admins only, D886 ceiling cost) and then `on`. Public `on` additionally
+requires `MEETING_BOT_COST_MICROUSD_PER_MINUTE`, a measured bot-only cost from
+D886 §7; no unmeasured fallback is allowed there. Existing AI_BILLING/admin
+pricing applies. Dispatch checks the whole plan limit including transcription;
+only rolling two-minute bot-fee holds are taken. B6 charges Nova through aiRouter.
+See D886 §12 for the HMAC protocol, final-part drain and recovery. No live call,
+price measurement, switch change or deployment is performed by B1.
+
 ## Meeting bot deployment prerequisites (#2586, D886 B8 — partial)
 
 The standalone image workflow is a pipeline skeleton, not a deployed bot.
