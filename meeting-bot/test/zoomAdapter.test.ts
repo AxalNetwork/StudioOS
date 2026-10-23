@@ -142,3 +142,34 @@ test('Zoom mutation: end must stop late PCM immediately', async () => {
   await assert.rejects(() => throughCore(variant.ZoomAdapter), { name: 'AssertionError' });
   await throughCore();
 });
+
+async function deadline(Adapter = ZoomAdapter) {
+  const original = AbortSignal.timeout;
+  const expiry = new AbortController(), stop = new AbortController();
+  let configured = 0;
+  AbortSignal.timeout = (ms: number) => { assert.equal(ms, 360_000); configured++; return expiry.signal; };
+  const s = sdk();
+  const a = new Adapter({ sdk: s.bridge, mintObf: (_id: string, signal: AbortSignal) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('synthetic abort')), { once: true });
+  }), async waitingForHost() {} });
+  const run = a.join({ ...request(), signal: stop.signal });
+  run.catch(() => {});
+  try {
+    assert.equal(configured, 1);
+    expiry.abort();
+    await assert.rejects(run, { message: 'obf_unavailable' });
+    assert.deepEqual(s.calls, []);
+  } finally { stop.abort(); AbortSignal.timeout = original; }
+}
+test('Zoom: six-minute wall clock also cancels a pending mint', () => deadline());
+test('Zoom mutation: retry count alone is not a wall-clock bound', async () => {
+  await deadline();
+  const url = new globalThis.URL('../src/zoomAdapter.ts', import.meta.url);
+  const source = readFileSync(url, 'utf8');
+  const before = 'AbortSignal.any([req.signal, AbortSignal.timeout(360_000)])';
+  assert.ok(source.includes(before));
+  const stripped = stripTypeScriptTypes(source.replace(before, 'req.signal'), { mode: 'strip' }).replaceAll("'./types.ts'", JSON.stringify(new globalThis.URL('../src/types.ts', import.meta.url).href));
+  const variant = await import('data:text/javascript;base64,' + Buffer.from(stripped).toString('base64'));
+  await assert.rejects(() => deadline(variant.ZoomAdapter), { name: 'AssertionError' });
+  await deadline();
+});

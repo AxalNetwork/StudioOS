@@ -76,15 +76,16 @@ export class ZoomAdapter implements MeetingAdapter {
     this.signal = req.signal;
     this.joined = true;
     // At most six minutes; fresh single-use OBF on every retry. No token on this instance.
+    const joinSignal = AbortSignal.any([req.signal, AbortSignal.timeout(360_000)]);
     for (let attempt = 0; attempt < 120; attempt++) {
-      stopped(this.signal);
+      stopped(joinSignal);
       try {
-        const result = await this.deps.mintObf(meeting.meetingId, this.signal);
-        stopped(this.signal);
+        const result = await this.deps.mintObf(meeting.meetingId, joinSignal);
+        stopped(joinSignal);
         if ('token' in result) {
           if (!result.token.trim()) throw new AdapterFailure('obf_unavailable');
-          await this.deps.sdk.join({ ...meeting, botName: req.botName, obfToken: result.token, signal: this.signal });
-          stopped(this.signal);
+          await this.deps.sdk.join({ ...meeting, botName: req.botName, obfToken: result.token, signal: joinSignal });
+          stopped(joinSignal);
           return;
         }
       } catch (e) {
@@ -94,7 +95,7 @@ export class ZoomAdapter implements MeetingAdapter {
         }
       }
       await this.deps.waitingForHost();
-      await (this.deps.wait ?? pause)(this.signal);
+      await (this.deps.wait ?? pause)(joinSignal);
     }
     throw new AdapterFailure('obf_unavailable');
   }
