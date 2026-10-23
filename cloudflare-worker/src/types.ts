@@ -55,6 +55,8 @@ export interface Env {
   /** D860 (#2505): WhatsApp calls groundwork, on only when exactly "true". */
   WHATSAPP_CALLS?: string;
   TELEGRAM_CHANNEL?: string;
+  // D867: private forwarded recordings; absent/unknown is off.
+  TELEGRAM_CAPTURE?: string;
   // D754 — Axal's own WhatsApp number and its WhatsApp Business Account. Ids,
   // not secrets; once set, Embedded Signup refuses them, so no member can
   // claim Axal's number. Unset, the guard does nothing.

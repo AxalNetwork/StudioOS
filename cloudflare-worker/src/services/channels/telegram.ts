@@ -240,7 +240,20 @@ export function normaliseTelegramUpdate(update: unknown, ownerTelegramUserId: st
     if (tgUser && chatId && /^\/confirm(?:@[A-Za-z0-9_]+)?$/.test(text)) {
       return { kind: 'link_confirm', provider: 'telegram', eventId, telegramUserId: tgUser, chatId, displayName: displayName(from) };
     }
-    if (!start || !tgUser || !chatId) return ignored('not_a_link');
+    if (!start || !tgUser || !chatId) {
+      const messageId = idStr(pm.message_id);
+      // Private media is attributed later through the D684 integration, never
+      // through a forwarded origin, display name or username.
+      if (!tgUser || chatId !== tgUser || !messageId) return ignored('not_a_link');
+      const voice = noteFrom(pm);
+      const replyId = idStr(obj(pm.reply_to_message)?.message_id);
+      return {
+        kind: 'telegram_capture', provider: 'telegram', eventId, telegramUserId: tgUser, chatId,
+        externalMessageId: telegramMessageRef(chatId, messageId),
+        contextMessageId: replyId ? telegramMessageRef(chatId, replyId) : null,
+        text: text || null, voice: voice?.media === 'video_note' ? null : voice, sentAt: isoFromUnix(pm.date),
+      };
+    }
     return {
       kind: 'link', provider: 'telegram', eventId, telegramUserId: tgUser, chatId,
       displayName: displayName(from),
@@ -664,8 +677,10 @@ export async function sendConsentNotice(env: Env, userId: number, chatId: string
 }
 
 /** A message in the member's own private chat with the bot (link prompts, confirmations, the test). */
-export async function sendPrivateMessage(env: Env, chatId: string, text: string): Promise<SendResult> {
-  const r = await call(env, 'sendMessage', { chat_id: chatId, text, link_preview_options: { is_disabled: true } });
+export async function sendPrivateMessage(env: Env, chatId: string, text: string, replyMarkup?: Record<string, unknown>): Promise<SendResult> {
+  const r = await call(env, 'sendMessage', { chat_id: chatId, text, link_preview_options: { is_disabled: true },
+    ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+  });
   return sendResult(r, chatId);
 }
 

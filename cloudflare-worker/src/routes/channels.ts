@@ -151,6 +151,7 @@ import { telegramSetup } from '../services/channels/telegramSetup';
 import * as whatsapp from '../services/channels/whatsapp';
 import * as waLink from '../services/channels/whatsappLink';
 import * as capture from '../services/channels/whatsappCapture';
+import * as telegramCapture from '../services/channels/telegramCapture';
 
 const channels = new Hono<{ Bindings: Env }>();
 export const channelsAdmin = new Hono<{ Bindings: Env }>();
@@ -913,6 +914,7 @@ function eventKind(ev: InboundEvent): EventKind {
     case 'status': return 'status';
     case 'link': case 'link_confirm': return 'link';
     case 'manage_chat': return 'command';
+    case 'telegram_capture': return ev.voice ? 'voice' : 'command';
     case 'connection': return 'connection';
     case 'consent_reply': return 'command';
     case 'axal_message': return ev.button ? 'command' : ev.media ? 'voice' : 'message';
@@ -1213,6 +1215,13 @@ async function processEvent(env: Env, ev: InboundEvent): Promise<'ok' | 'retry'>
     await finishEvent(env, claim, status, fields);
   };
   try {
+    if (ev.kind === 'telegram_capture') {
+      // The capture service is replay-safe, including a queue send that failed
+      // after consent was stored. Release this event on any partial failure.
+      await telegramCapture.handleCapture(env, ev);
+      await finish('done');
+      return 'ok';
+    }
     if (ev.kind === 'link' || ev.kind === 'link_confirm') {
       // A link code (and its confirmation) is spent by its first attempt, so a
       // failure here is not retried (a retry could only say "expired"): the
@@ -1549,7 +1558,8 @@ export async function runCaptureFollowup(env: Env, p: ChannelJobPayload): Promis
 /** One `channel_followup` handler for both providers, by the payload's kind. */
 export async function runChannelFollowup(env: Env, p: ChannelJobPayload): Promise<void> {
   if (p.kind === 'consent') return runConsentFollowup(env, p);
-  if (p.kind === 'capture') return runCaptureFollowup(env, p);
+  if (p.kind === 'capture') return p.provider === 'telegram'
+    ? telegramCapture.runCaptureFollowup(env, p) : runCaptureFollowup(env, p);
   return runVoiceFollowup(env, p);
 }
 

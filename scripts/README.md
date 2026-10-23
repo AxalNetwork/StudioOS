@@ -191,3 +191,16 @@ Containers configuration in temporary scratch-image/assets copies only; it
 never deploys. `lib/meetingBotDeploy.test.mjs` runs isolated subprocesses to
 prove that a failed image build cannot reach migrations and checks all three
 binding/image declarations. Docker is required for real image/dry-run checks.
+
+## Release drafts (the version beside the logo)
+
+`release-draft.mjs` keeps one draft GitHub release ready for the owner to
+publish (`.github/workflows/release-draft.yml`, on every push to `main`). It
+reads the newest published release, names the next tag with
+`frontend/src/lib/release.js`'s rule (v0.1.0-alpha first, then a minor bump per
+release at the current stage), asks GitHub to generate the notes since that
+release, and creates or updates the single draft as a pre-release while the
+stage is alpha or beta. `--dry-run` prints the plan and writes nothing.
+`lib/releaseDraft.test.mjs` pins the rules. Publishing stays the owner's:
+`release-published.yml` then redeploys `main`, and the deploy builds the new tag
+into `VITE_AXAL_RELEASE` for the badge.

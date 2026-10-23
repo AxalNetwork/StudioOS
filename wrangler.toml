@@ -214,6 +214,8 @@ AI_BILLING = "charged"
 # these until D754 w1 (#1892) merges.
 WHATSAPP_CHANNEL = "canary"
 TELEGRAM_CHANNEL = "canary"
+# D867: private forwarded audio waits for member attestation.
+TELEGRAM_CAPTURE = "off"
 # D754 way B — Axal's own WhatsApp number in E.164, for the wa.me link a member
 # opens to link their WhatsApp and send recordings. Empty until the owner has
 # set up the number (#1008 item 31); S01 then sets it in BOTH vars blocks.
@@ -603,6 +605,8 @@ AI_BILLING = "charged"
 # don't inherit.
 WHATSAPP_CHANNEL = "canary"
 TELEGRAM_CHANNEL = "canary"
+# D867: private forwarded audio waits for member attestation.
+TELEGRAM_CAPTURE = "off"
 WHATSAPP_AXAL_DISPLAY_NUMBER = ""
 ZOOM_APP_AUDIENCE = "own_account"
 MEET_TRANSCRIPTS_ENABLED = "on"
@@ -808,6 +812,8 @@ workers_dev = true
 [env.preview.vars]
 # D886: preview needs its own explicit enablement.
 MEETING_BOT = "off"
+# D867: private captures require explicit enablement in each environment.
+TELEGRAM_CAPTURE = "off"
 APP_URL           = "https://studioos-preview.workers.dev"
 ENVIRONMENT       = "preview"
 # D653: owner and counsel must authorize enablement (#1008).

@@ -92,6 +92,7 @@ export function world(opts: { axal?: Partial<typeof AXAL>; upTo492?: boolean } =
     db.exec(mig('492_whatsapp_sender_links.sql'));
     db.exec(mig('497_whatsapp_capture_import.sql'));
     db.exec(mig('504_whatsapp_link_settings.sql'));
+    db.exec(mig('528_telegram_captures.sql'));
   }
   // #1938: the import opens a recorder session, which reaches the pipeline and the engine.
   applyEngineSchema(db);

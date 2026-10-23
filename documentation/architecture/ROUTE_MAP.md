@@ -1498,3 +1498,9 @@ its session page polls status/Stop plus GET `…/sessions/:id/bot/participants`
 (creator-only saved display names/times). Scheduled-call POST accepts
 `auto_send_bot:false`; GET includes `bot`; DELETE stops the queued bot first.
 No new public endpoint, runtime wiring or switch change.
+
+D867 (#2513): the existing Telegram webhook's private `message` branch accepts
+linked-member audio forwards and ordinary keyboard attestations only behind
+`TELEGRAM_CAPTURE`. Its existing `channel_followup` dispatcher imports the
+consented capture as recorder audio; no public route or callback subscription
+is added. See `services/channels/telegramCapture.ts` and D867.
