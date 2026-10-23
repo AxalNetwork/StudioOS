@@ -87,6 +87,7 @@ quiet-window and AI-token rules. An unassigned chat keeps D684's pending-copy
 behavior. In the canary live check, edit and delete a synthetic text after
 assignment, and verify those outcomes, including accepted/discarded proposals.
 No real-device result is claimed by the automated tests.
+
 **Send to Axal after D867 (#2615).** Private forwarded recordings are built,
 but `TELEGRAM_CAPTURE = "off"` in all three vars blocks (development, preview
 and production). They do not arrive while it is off. `TELEGRAM_CHANNEL` stays
