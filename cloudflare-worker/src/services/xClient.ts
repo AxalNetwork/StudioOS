@@ -22,16 +22,12 @@ import type { Env } from '../types';
 const AUTH_BASE = 'https://twitter.com/i/oauth2/authorize';
 const TOKEN_URL = 'https://api.twitter.com/2/oauth2/token';
 const API_BASE = 'https://api.twitter.com/2';
-const MEDIA_UPLOAD_URL = 'https://upload.twitter.com/1.1/media/upload.json';
-// X v2 has its own media-upload endpoint behind the v2 user-context too —
-// the v1.1 endpoint above stays the more universally available path under
-// the current developer-portal tiers.
+const MEDIA_UPLOAD_URL = 'https://api.x.com/2/media/upload';
 
-// In-isolate circuit breaker — same shape as telegramClient.ts.
+// In-isolate circuit breakers are isolated by the account whose token is in use.
 const BREAKER_THRESHOLD = 5;
 const RECOVERY_MS = 60_000;
-let _consecutiveFailures = 0;
-let _openedAt = 0;
+const breakers = new Map<string, { consecutiveFailures: number; openedAt: number }>();
 
 export class XError extends Error {
   code: string;
@@ -62,18 +58,34 @@ export function xClientConfigured(env: Env): boolean {
   return !!(env.X_CLIENT_ID && env.X_CLIENT_SECRET);
 }
 
-function breakerOpen(): boolean {
-  if (_consecutiveFailures < BREAKER_THRESHOLD) return false;
-  if (Date.now() - _openedAt > RECOVERY_MS) {
-    _consecutiveFailures = BREAKER_THRESHOLD - 1;
+function breakerState(accountId: string | number) {
+  const key = String(accountId);
+  let state = breakers.get(key);
+  if (!state) {
+    state = { consecutiveFailures: 0, openedAt: 0 };
+    breakers.set(key, state);
+  }
+  return state;
+}
+function breakerOpen(accountId: string | number): boolean {
+  const state = breakerState(accountId);
+  if (state.consecutiveFailures < BREAKER_THRESHOLD) return false;
+  if (Date.now() - state.openedAt > RECOVERY_MS) {
+    state.consecutiveFailures = BREAKER_THRESHOLD - 1;
+    state.openedAt = 0;
     return false;
   }
   return true;
 }
-function recordSuccess() { _consecutiveFailures = 0; _openedAt = 0; }
-function recordFailure() {
-  _consecutiveFailures += 1;
-  if (_consecutiveFailures === BREAKER_THRESHOLD) _openedAt = Date.now();
+function recordSuccess(accountId: string | number) {
+  const state = breakerState(accountId);
+  state.consecutiveFailures = 0;
+  state.openedAt = 0;
+}
+function recordFailure(accountId: string | number) {
+  const state = breakerState(accountId);
+  state.consecutiveFailures += 1;
+  if (state.consecutiveFailures === BREAKER_THRESHOLD) state.openedAt = Date.now();
 }
 
 // ---------- PKCE helpers ----------
@@ -106,7 +118,7 @@ export function buildAuthorizeUrl(opts: {
 }): string {
   const scope = (opts.scopes && opts.scopes.length
     ? opts.scopes
-    : ['tweet.read', 'tweet.write', 'users.read', 'offline.access']
+    : ['tweet.read', 'tweet.write', 'users.read', 'media.write', 'offline.access']
   ).join(' ');
   const params = new URLSearchParams({
     response_type: 'code',
@@ -211,9 +223,10 @@ async function authJsonCall<T>(opts: {
   method: 'GET' | 'POST' | 'DELETE';
   url: string;
   accessToken: string;
+  accountId: string | number;
   json?: unknown;
 }): Promise<T> {
-  if (breakerOpen()) throw new XError('x_breaker_open', 'X API circuit breaker is open after repeated failures.');
+  if (breakerOpen(opts.accountId)) throw new XError('x_breaker_open', 'X API circuit breaker is open after repeated failures.');
   let res: Response;
   try {
     res = await fetch(opts.url, {
@@ -225,11 +238,11 @@ async function authJsonCall<T>(opts: {
       body: opts.json ? JSON.stringify(opts.json) : undefined,
     });
   } catch (e) {
-    recordFailure();
+    recordFailure(opts.accountId);
     throw new XError('x_network', `X network error: ${(e as Error).message}`);
   }
   if (res.status === 429) {
-    recordFailure();
+    recordFailure(opts.accountId);
     const retryAfter = parseRetryAfter(res);
     throw new XError('rate_limited', `X rate-limited; retry in ${retryAfter}s`, {
       status: 429,
@@ -241,7 +254,7 @@ async function authJsonCall<T>(opts: {
     throw new XError('x_unauthorized', 'X access token unauthorized (refresh needed).', { status: 401 });
   }
   if (res.status >= 500) {
-    recordFailure();
+    recordFailure(opts.accountId);
     throw new XError('x_upstream', `X upstream ${res.status}`, { status: res.status });
   }
   if (!res.ok) {
@@ -252,7 +265,7 @@ async function authJsonCall<T>(opts: {
     else if (/forbidden/i.test(t)) code = 'x_forbidden';
     throw new XError(code, `X ${res.status}: ${t.slice(0, 200)}`, { status: res.status });
   }
-  recordSuccess();
+  recordSuccess(opts.accountId);
   return (await res.json()) as T;
 }
 
@@ -262,6 +275,7 @@ export interface XCreateTweetResponse {
 
 export async function createTweet(opts: {
   accessToken: string;
+  accountId: string | number;
   text: string;
   inReplyToTweetId?: string;
   mediaIds?: string[];
@@ -273,15 +287,17 @@ export async function createTweet(opts: {
     method: 'POST',
     url: `${API_BASE}/tweets`,
     accessToken: opts.accessToken,
+    accountId: opts.accountId,
     json: body,
   });
 }
 
-export async function deleteTweet(opts: { accessToken: string; tweetId: string }): Promise<void> {
+export async function deleteTweet(opts: { accessToken: string; accountId: string | number; tweetId: string }): Promise<void> {
   await authJsonCall<{ data: { deleted: boolean } }>({
     method: 'DELETE',
     url: `${API_BASE}/tweets/${encodeURIComponent(opts.tweetId)}`,
     accessToken: opts.accessToken,
+    accountId: opts.accountId,
   });
 }
 
@@ -289,56 +305,66 @@ export interface XMeResponse {
   data: { id: string; name: string; username: string };
 }
 
-export async function getMe(accessToken: string): Promise<XMeResponse> {
+export async function getMe(accessToken: string, accountId: string | number): Promise<XMeResponse> {
   return authJsonCall<XMeResponse>({
     method: 'GET',
     url: `${API_BASE}/users/me`,
     accessToken,
+    accountId,
   });
 }
 
-// ---------- Media upload (v1.1 simple upload) ----------
+// ---------- Media upload (v2 simple upload) ----------
 
 export interface MediaUploadResult {
   media_id_string: string;
   size: number;
 }
 
+function base64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
 export async function uploadMedia(opts: {
   accessToken: string;
+  accountId: string | number;
   bytes: Uint8Array;
-  mimeType: string;
 }): Promise<MediaUploadResult> {
-  if (breakerOpen()) throw new XError('x_breaker_open', 'X API circuit breaker is open.');
-  const form = new FormData();
-  form.append('media', new Blob([opts.bytes], { type: opts.mimeType }));
-  form.append('media_category', opts.mimeType.startsWith('video/') ? 'tweet_video' : 'tweet_image');
+  if (breakerOpen(opts.accountId)) throw new XError('x_breaker_open', 'X API circuit breaker is open.');
   let res: Response;
   try {
     res = await fetch(MEDIA_UPLOAD_URL, {
       method: 'POST',
-      headers: { authorization: `Bearer ${opts.accessToken}` },
-      body: form,
+      headers: { authorization: `Bearer ${opts.accessToken}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ media: base64(opts.bytes), media_category: 'tweet_image' }),
     });
   } catch (e) {
-    recordFailure();
+    recordFailure(opts.accountId);
     throw new XError('x_network', `X media network error: ${(e as Error).message}`);
   }
   if (res.status === 429) {
-    recordFailure();
+    recordFailure(opts.accountId);
     throw new XError('rate_limited', 'X media rate-limited', { status: 429, retryAfter: parseRetryAfter(res) });
   }
   if (res.status === 401) throw new XError('x_unauthorized', 'X media upload unauthorized.', { status: 401 });
   if (res.status >= 500) {
-    recordFailure();
+    recordFailure(opts.accountId);
     throw new XError('x_upstream', `X media upstream ${res.status}`, { status: res.status });
   }
   if (!res.ok) {
     const t = await res.text().catch(() => '');
     throw new XError('x_media_error', `X media upload failed: ${res.status} ${t.slice(0, 200)}`, { status: res.status });
   }
-  recordSuccess();
-  return (await res.json()) as MediaUploadResult;
+  recordSuccess(opts.accountId);
+  const body = await res.json() as { data?: { id?: string; size?: number }; media_id_string?: string; size?: number };
+  const mediaId = body.data?.id ?? body.media_id_string;
+  if (!mediaId) throw new XError('x_media_error', 'X media upload response did not include a media id.');
+  return { media_id_string: mediaId, size: Number(body.data?.size ?? body.size ?? opts.bytes.length) };
 }
 
 // ---------- Char counting ----------
