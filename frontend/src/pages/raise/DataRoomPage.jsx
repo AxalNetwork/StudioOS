@@ -9,7 +9,7 @@ import { api } from '../../lib/api';
 import { reportError } from '../../lib/log';
 import AdvisorGrantSection from './AdvisorGrantSection';
 import {
-  ACCESS_TIERS, AUDIT_FILTERS, accessNow, auditLine, auditMatches, downloadsLabel,
+  ACCESS_TIERS, AUDIT_FILTERS, accessNow, auditLine, auditMatches, downloadsLabel, grantAttribution,
   filesUnder, folderTree, noAccessReason, queueRefusal, roomStats, tierOf,
 } from './dataRoomRead';
 
@@ -375,7 +375,8 @@ function Settings({ item, kind, node, grants, busy, onGate, onDelete }) {
           {who.map((g) => (
             <li key={g.uid} className="flex items-center justify-between gap-2 text-sm">
               <span className="min-w-0 truncate text-gray-900 dark:text-gray-100">{g.investor_name || g.investor_email}</span>
-              <span className="text-[11px] text-gray-500">{g.nda_signed ? 'NDA signed' : 'no NDA on file'}</span>
+              <span className="text-[11px] text-gray-500">{g.nda_signed ? 'NDA signed' : 'no NDA on file'}
+                      {' · '}{grantAttribution(g)}</span>
             </li>
           ))}
         </ul>
@@ -621,7 +622,7 @@ function FounderRoom({ projects, initialProjectUid }) {
             </button>
           </div>
           <p className="text-xs text-gray-500 mb-3">
-            This links an <strong>existing</strong> Axal account — it does not send an invitation.
+            If this address has an account, it now has access. No invitation is sent.
             NDA-marked files stay hidden until that person has a signed NDA on file.
           </p>
           {grants.length === 0 ? (
@@ -637,6 +638,7 @@ function FounderRoom({ projects, initialProjectUid }) {
                       {g.status === 'active' ? `shared ${fmtWhen(g.created_at) || 'on a date not recorded'}` : 'access revoked'}
                       {' · '}
                       {g.nda_signed ? 'NDA signed' : 'no NDA on file'}
+                      {' · '}{grantAttribution(g)}
                     </div>
                   </div>
                   {g.status === 'active' && (

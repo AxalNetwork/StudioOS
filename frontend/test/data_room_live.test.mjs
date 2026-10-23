@@ -52,7 +52,8 @@ test('the NDA gate reads pairwise_ndas, not a second NDA notion', () => {
 test('the gate is re-checked at download, not inherited from the listing', () => {
   const w = read(ROUTE);
   const dl = w.slice(w.indexOf("r.post('/shared/:projectUid/files/:uid/download'"));
-  assert.match(dl, /file\.visibility === 'nda' && !\(await ndaActive\(/,
+  // #2461: the NDA is the venture founder's, whoever issued the grant.
+  assert.match(dl, /file\.visibility === 'nda' && !\(await projectNdaActive\(c\.env, project\.id, user\.id\)\)/,
     'a uid captured while an NDA was live must stop working when it lapses');
 });
 
@@ -119,7 +120,10 @@ test('sharing does not promise an invitation', () => {
   const s = read(PAGE);
   assert.match(s, /does not send an invitation/i);
   const w = read(ROUTE);
-  assert.match(w, /No account with that address/, 'the worker 404s an unknown address');
+  // #2461: an unknown address gets the same answer as a known one, so the
+  // form cannot be used to learn who has an account. No row, no invitation.
+  assert.doesNotMatch(w, /No account with that address/, 'the worker must not say whether an address has an account');
+  assert.match(w, /if \(!investor\) return c\.json\(\{ ok: true \}, 201\)/, 'an unknown address is answered like a known one');
 });
 
 test('the page is routed, role-branched, and never a second root', () => {
