@@ -299,6 +299,7 @@ export async function listChunks(env: Env, sessionId: number): Promise<ChunkRow[
 /** A passage ready to store: its offsets, speaker label and text. */
 /** D866 §4: a content-free tombstone keeps the passage's position stable. */
 export const SOURCE_DELETED_TEXT = '[Deleted at the source]';
+export const SOURCE_DELETED_NOTE = 'The source message was deleted in Telegram.';
 export interface StoredSegment { start_ms: number | null; end_ms: number | null; speaker_label: string; speaker_raw: string | null; text: string; source_ref?: string | null }
 
 export function labelSegments(segments: SttSegment[], intervieweeName: string | null, offsetMs = 0): StoredSegment[] {

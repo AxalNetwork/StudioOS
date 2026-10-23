@@ -7,11 +7,9 @@ import type { ChannelConnection } from './connections';
 import type { ThreadRow } from './threads';
 import { refKey } from './events';
 import { IntakeError, writableSession, TRANSCRIPT_MIRROR_MAX_BYTES } from '../interviewIntake';
-import { SOURCE_DELETED_TEXT } from '../interviewSessions';
+import { SOURCE_DELETED_TEXT, SOURCE_DELETED_NOTE } from '../interviewSessions';
 import { toSegments, type SegmentRow } from '../interviewStructuring';
 import { enqueueDigest } from '../validateEngine';
-
-export const SOURCE_DELETED_NOTE = 'The source message was deleted in Telegram.';
 
 export async function changeTelegramSource(
   env: Env, conn: ChannelConnection, thread: ThreadRow, messageIds: readonly string[], text: string | null,

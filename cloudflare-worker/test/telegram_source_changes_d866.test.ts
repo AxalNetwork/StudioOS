@@ -1,16 +1,19 @@
 /** D866 §4 (#2618): synthetic source messages only; real SQLite/webhook/engine. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changeTelegramSource, SOURCE_DELETED_NOTE } from '../src/services/channels/telegramSource.ts';
+import { Hono } from 'hono';
+import { SignJWT } from 'jose';
+import structureRoutes from '../src/routes/founder_validate_structure.ts';
+import { changeTelegramSource } from '../src/services/channels/telegramSource.ts';
 import { extractConversationItems } from '../src/services/conversationItems.ts';
-import { loadSession, SOURCE_DELETED_TEXT } from '../src/services/interviewSessions.ts';
+import { loadSession, SOURCE_DELETED_TEXT, SOURCE_DELETED_NOTE } from '../src/services/interviewSessions.ts';
 import { summariseSession } from '../src/services/interviewProcessing.ts';
 import { translateSession } from '../src/services/sessionTranslation.ts';
 import { digestSession } from '../src/services/validateEngine.ts';
 import { toSegments } from '../src/services/interviewStructuring.ts';
 import { runChannelJob } from '../src/services/channels/jobs.ts';
 import {
-  INTERVIEW, ME, PROJECT, businessMessage, call, ids, mockFetch, noSecretsSeen, ref, seen, telegramApi, tgHook, world,
+  INTERVIEW, ME, PROJECT, JWT_SECRET, businessMessage, call, ids, mockFetch, noSecretsSeen, ref, seen, telegramApi, tgHook, world,
 } from './_channels_fixture.ts';
 
 const OLD = 'We use Ledgerly every day.';
@@ -148,6 +151,15 @@ test('deletion leaves a neutral stable-span marker, withdraws pending and annota
   const mirror = w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript;
   assert.equal(mirror.includes(OLD), false); assert.ok(mirror.includes(OTHER_LINE));
   const snapshot = proposals(w, w.sid);
+  const api = new Hono().route('/api/validate', structureRoutes);
+  const token = await new SignJWT({ user_id: ME }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    .sign(new TextEncoder().encode(JWT_SECRET));
+  const response = await api.fetch(new Request('https://axal.vc/api/validate/sessions/' + w.sid + '/placements', { headers: { authorization: 'Bearer ' + token } }), w.env);
+  assert.equal(response.status, 200);
+  const body = await response.json() as any;
+  const apiDecisions = body.runs.flatMap((r: any) => r.placements).filter((p: any) => decidedIds.includes(p.id));
+  assert.equal(apiDecisions.length, decidedIds.length);
+  assert.ok(apiDecisions.every((p: any) => p.cite.source_deleted === true && p.cite.source_note === SOURCE_DELETED_NOTE && p.cite.quote === null));
   await hook(w, deleted([w.first]));
   await hook(w, edit(w.first));
   assert.deepEqual(proposals(w, w.sid), snapshot);

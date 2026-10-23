@@ -66,7 +66,7 @@ import { addInterviewPain, updateInterviewDetails } from '../services/interviewW
 import { INTERVIEW_FIELDS, isFindingKind } from '../services/interviewFindings';
 import { ASSIST_OFF_MESSAGE, budgetRefusalMessage } from '../services/aiRouter';
 import { MODULES } from '../services/cycleValidate';
-import { consentBlocks, loadSession, sessionHasAudio, sessionDigestConsentBlocks, type SessionRow } from '../services/interviewSessions';
+import { consentBlocks, loadSession, sessionHasAudio, sessionDigestConsentBlocks, SOURCE_DELETED_NOTE, type SessionRow } from '../services/interviewSessions';
 import { railFor } from '../util/railContext';
 import { DIGEST_OPTIONS, DIGEST_PAGE } from '../services/interviewProcessing';
 import {
@@ -705,7 +705,10 @@ structure.get('/sessions/:id/placements', async (c) => {
     run_id: r.run_id,
     source: r.source === 'assistant' ? 'assistant' : 'studioos',
     submitted_via_name: r.source === 'assistant' ? submittedVia : null,
-    cite: { from: r.cite_from, to: r.cite_to, quote: parse(r.citation_json)?.quote ?? null },
+    cite: {
+      from: r.cite_from, to: r.cite_to, quote: parse(r.citation_json)?.quote ?? null,
+      ...(parse(r.citation_json)?.source_deleted === true ? { source_deleted: true, source_note: SOURCE_DELETED_NOTE } : {}),
+    },
     created_at: r.created_at,
   }));
   const runs: { run_id: string; model: string; source: string; submitted_via_name: string | null; placements: typeof placements }[] = [];
