@@ -8,7 +8,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import risk from '../src/routes/venture_risk.ts';
 import trust from '../src/routes/trust.ts';
 import decks from '../src/routes/decks.ts';
-import deals from '../src/routes/deals.ts';
+import deals, { userMayReadDeal, userReadableDealIds } from '../src/routes/deals.ts';
 import { signScore, getVerifiedLatestSnapshots } from '../src/services/scoreIntegrity.ts';
 import { mayReadTrustScores } from '../src/services/scoreAccess.ts';
 
@@ -112,6 +112,7 @@ test('trust: related venture members get bare scores; self/admin retain missing 
       assert.ok(body.scores.every((row: any) => !('missing' in row) && !('required_total' in row)));
     }
     assert.equal((await request(trust, f.env, 3, '/score/5')).status, 403);
+    assert.equal((await request(trust, f.env, 3, '/score/7')).status, 403);
     assert.equal((await request(trust, f.env, 3, '/score/batch', { user_ids: [4, 5] })).status, 403);
     assert.equal((await request(trust, f.env, 4, '/score/5')).status, 403);
     for (const id of [6, 7]) assert.equal((await request(trust, f.env, id, '/score/4')).status, 403);
@@ -184,5 +185,47 @@ test('bulk score reads: deduplicate deals and batch audit without weakening visi
     assert.equal(visible.get(10)?.row.total_score, 91);
     f.db.exec("UPDATE score_snapshots SET total_score=99");
     assert.equal((await getVerifiedLatestSnapshots(f.env, [10], { role: 'investor', userId: 3 })).size, 0);
+  } finally { f.db.close(); }
+});
+
+
+test('trust bulk permissions: bounded queries match single-deal invitations and commitments', async () => {
+  const f = fixture();
+  try {
+    f.db.exec('INSERT INTO commitments(deal_id,investor_user_id,amount) VALUES(200,3,1)');
+    for (const [id, role] of [[1, 'admin'], [2, 'partner'], [3, 'investor']] as const) {
+      const user: any = { id, role };
+      const bulk = await userReadableDealIds(f.env, user, [100, 200, 999]);
+      for (const dealId of [100, 200, 999]) {
+        assert.equal(bulk.has(dealId), await userMayReadDeal(f.env, user, dealId));
+      }
+    }
+    for (const role of ['founder', 'advisor', 'exploring']) {
+      assert.equal((await userReadableDealIds(f.env, { id: 4, role } as any, [100])).size, 0);
+    }
+    let queries = 0;
+    const prepare = f.env.DB.prepare.bind(f.env.DB);
+    f.env.DB.prepare = (sql: string) => { queries++; return prepare(sql); };
+    assert.equal(await mayReadTrustScores(f.env, { id: 3, role: 'investor' } as any, [4, 5, 6]), true);
+    assert.equal(queries, 2, 'one indexed membership query and one bulk authorization query');
+  } finally { f.db.close(); }
+});
+
+test('risk: unavailable score storage preserves project-data assessment without score disclosure', async () => {
+  const f = fixture();
+  try {
+    await snapshot(f);
+    const prepare = f.env.DB.prepare.bind(f.env.DB);
+    f.env.DB.prepare = (sql: string) => {
+      if (sql.includes('FROM score_snapshots')) throw new Error('synthetic unavailable store');
+      return prepare(sql);
+    };
+    for (const id of [2, 3]) {
+      const response = await request(risk, f.env, id, '/by-project/10');
+      assert.equal(response.status, 200);
+      const body: any = await response.json();
+      assert.equal(body.layers.find((l: any) => l.key === 'founder').auto_has_data, false);
+    }
+    assert.equal((await request(risk, f.env, 2, '/matrix')).status, 200);
   } finally { f.db.close(); }
 });

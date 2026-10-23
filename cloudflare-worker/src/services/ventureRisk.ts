@@ -507,7 +507,7 @@ export async function loadProject(env: Env, projectId: number): Promise<ProjectR
 
 export async function loadSnapshot(env: Env, projectId: number, ctx?: ReadContext): Promise<SnapshotInputs | null> {
   if (ctx && ctx.role !== 'admin') {
-    return (await getVerifiedLatestSnapshot(env, projectId, ctx))?.row ?? null;
+    return (await getVerifiedLatestSnapshot(env, projectId, ctx).catch(() => null))?.row ?? null;
   }
   return env.DB.prepare(
     `SELECT market_total, team_total, product_total, capital_total, fit_total,
@@ -650,7 +650,7 @@ export async function buildMatrix(env: Env, limit = 200, ctx?: ReadContext): Pro
     .catch(() => null);
   const projects = res?.results ?? [];
   const verified = ctx && ctx.role !== 'admin'
-    ? await getVerifiedLatestSnapshots(env, projects.map(project => project.id), ctx) : null;
+    ? await getVerifiedLatestSnapshots(env, projects.map(project => project.id), ctx).catch(() => new Map()) : null;
   const rows: MatrixRow[] = [];
   for (const p of projects) {
     const [snapshot, overrides] = await Promise.all([

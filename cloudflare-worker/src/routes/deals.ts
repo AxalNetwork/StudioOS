@@ -1024,6 +1024,27 @@ export async function userMayReadDeal(env: Env, user: User, dealId: number): Pro
   }
 }
 
+/** Bulk deal authorization for admin/partner/investor score readers.
+ * Same staff and invited-or-committed rule as userMayReadDeal; other roles
+ * retain the single-deal ownership path and are refused by this bulk surface.
+ */
+export async function userReadableDealIds(env: Env, user: User, dealIds: number[]): Promise<Set<number>> {
+  const ids = [...new Set(dealIds.filter(id => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return new Set();
+  if (user.role !== 'admin' && user.role !== 'partner' && user.role !== 'investor') return new Set();
+  const rows = await env.DB.prepare(`
+    SELECT d.id FROM deals d
+     WHERE d.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+       AND (? IN ('admin','partner') OR (
+         ? = 'investor' AND (
+           EXISTS (SELECT 1 FROM deal_invitations i WHERE i.deal_id = d.id AND i.investor_user_id = ?)
+           OR EXISTS (SELECT 1 FROM commitments k WHERE k.deal_id = d.id AND k.investor_user_id = ?)
+         )
+       ))
+  `).bind(JSON.stringify(ids), user.role, user.role, user.id, user.id).all<{ id: number }>();
+  return new Set((rows.results || []).map(row => Number(row.id)));
+}
+
 async function loadDealForRead(c: any, id: number): Promise<ReadCtx> {
   const user = await requireAuth(c);
   const sql = getSQL(c.env);
