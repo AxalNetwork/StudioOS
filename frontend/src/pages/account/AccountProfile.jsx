@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { normalizePhoneInput, phonePlaceholder, PHONE_ERROR } from '../../lib/phoneNumber';
 import { Link } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { useActiveCompany } from '../../contexts/ActiveCompanyContext';
@@ -116,6 +117,15 @@ export function PersonalDetailsCard({ account, identity, details, onSave }) {
   const current = { name: account?.name || '', profile_slug: id.profile_slug || '', locale: id.locale || '', phone_e164: '', city: det.city || '', country: det.country || '' };
   const shownAs = String(id.display_name || '').trim();
   const locales = LOCALES.some(([k]) => k === ed.draft.locale) || !ed.draft.locale ? LOCALES : [[ed.draft.locale, ed.draft.locale], ...LOCALES];
+  const normalizedPhone = normalizePhoneInput(ed.draft.phone_e164, ed.draft.country ?? det.country);
+  const save = async (patch) => {
+    if (patch.phone_e164) {
+      const parsed = normalizePhoneInput(patch.phone_e164, ed.draft.country ?? det.country);
+      if (!parsed) return { phone_e164: PHONE_ERROR };
+      patch = { ...patch, phone_e164: parsed.e164 };
+    }
+    return onSave(patch);
+  };
   return (
     <PanelCard
       title="Personal details"
@@ -142,8 +152,9 @@ export function PersonalDetailsCard({ account, identity, details, onSave }) {
             {account?.email || <Unrecorded>Not recorded</Unrecorded>}
           </FieldRow>
           <FieldRow label="Phone" htmlFor="ac-phone" control error={ed.errors.phone_e164}
-            hint={det.has_phone ? 'A number is saved. Type a new one to replace it, or leave this empty to keep it.' : 'International format, e.g. +41791234567.'}>
-            <input id="ac-phone" className={`${INPUT} font-mono`} inputMode="tel" {...ed.field('phone_e164')} placeholder={det.has_phone ? phoneLabel(det) : '+41…'} />
+            hint={det.has_phone ? 'A number is saved. Type a new one to replace it, or leave this empty to keep it.' : 'Your mobile number, any country.'}>
+            <input id="ac-phone" className={`${INPUT} font-mono`} inputMode="tel" {...ed.field('phone_e164')} placeholder={det.has_phone ? phoneLabel(det) : phonePlaceholder(ed.draft.country ?? det.country)} />
+            {normalizedPhone && <p className="text-xs text-gray-500" role="status">We'll save {normalizedPhone.international}.</p>}
           </FieldRow>
           <FieldRow label="City" htmlFor="ac-city" control error={ed.errors.city}>
             <input id="ac-city" className={INPUT} maxLength={100} {...ed.field('city')} />
@@ -158,7 +169,7 @@ export function PersonalDetailsCard({ account, identity, details, onSave }) {
             </select>
           </FieldRow>
           <Outcome outcome={ed.outcome} />
-          <EditActions ed={ed} onSave={() => ed.commit(changedFields(current, ed.draft, PERSONAL_KEYS), onSave)} />
+          <EditActions ed={ed} onSave={() => ed.commit(changedFields(current, ed.draft, PERSONAL_KEYS), save)} />
         </div>
       ) : (
         <div>

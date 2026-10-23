@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useStat
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { api, refusalError } from '../lib/api';
 import { EXPLAINERS } from '../lib/explainers';
+import { normalizePhoneInput, phoneCountry, phonePlaceholder, PHONE_COUNTRIES, PHONE_ERROR } from '../lib/phoneNumber';
 import { useToast } from '../components/useToast';
 import {
   User, ShieldCheck,
@@ -727,6 +728,7 @@ function PersonalIdentityCard({ flash, onPctChange }) {
   if (!row) return <Card title="Identity"><div className="text-sm text-gray-500">Loading…</div></Card>;
 
   const r = row;
+  const normalizedPhone = normalizePhoneInput(phoneInput, r.country);
   const set = (k, v) => setRow({ ...r, [k]: v });
   const onBlurSave = (k) => {
     const v = r[k] ?? null;
@@ -780,11 +782,11 @@ function PersonalIdentityCard({ flash, onPctChange }) {
           {fe('tax_id_number')}
         </Field>
         <Field label={`Phone${r.has_phone ? ' (saved · ••••' + (r.phone_last4 || '••••') + ')' : ''}`}
-          hint="E.164 format, e.g. +14155551234.">
+          hint="Your mobile number, any country. National numbers use your Country below.">
           <div className="flex gap-2">
-            <input value={phoneInput} onChange={e => setPhoneInput(e.target.value)}
-              disabled={busy} className={inputCls} placeholder={r.has_phone ? 'Replace…' : '+1…'} />
-            <button onClick={() => phoneInput && save({ phone_e164: phoneInput })}
+            <input data-testid="identity-phone-input" type="tel" value={phoneInput} onChange={e => setPhoneInput(e.target.value)}
+              disabled={busy} className={inputCls} placeholder={phonePlaceholder(r.country)} />
+            <button data-testid="identity-phone-save" onClick={() => { if (!normalizedPhone) { setFieldErrors(previous => ({ ...previous, phone_e164: PHONE_ERROR })); return; } save({ phone_e164: normalizedPhone.e164 }); }}
               disabled={busy || !phoneInput}
               className="px-3 py-2 text-xs bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg">Save</button>
             {r.has_phone && (
@@ -792,6 +794,7 @@ function PersonalIdentityCard({ flash, onPctChange }) {
                 className="px-3 py-2 text-xs border border-gray-300 dark:border-gray-600 rounded-lg">Clear</button>
             )}
           </div>
+          {normalizedPhone && <p className="text-xs text-gray-500 mt-1" role="status">We'll save {normalizedPhone.international}.</p>}
           {fe('phone_e164')}
         </Field>
       </div>
@@ -2135,6 +2138,8 @@ function SmsPanel({ data, flash, onChanged }) {
   const [status, setStatus] = useState(null);
   const [step, setStep] = useState('idle');           // idle | enroll | verify
   const [country, setCountry] = useState('US');
+  const [countryReady, setCountryReady] = useState(false);
+  const [countryReadError, setCountryReadError] = useState(false);
   const [phone, setPhone] = useState('');
   const [session, setSession] = useState(null);
   const [code, setCode] = useState('');
@@ -2146,13 +2151,22 @@ function SmsPanel({ data, flash, onChanged }) {
   };
   useEffect(() => { refresh(); }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    api.getPersonalProfile().then(profile => {
+      if (!cancelled) setCountry(phoneCountry(profile?.country));
+    }).catch(() => { if (!cancelled) setCountryReadError(true); })
+      .finally(() => { if (!cancelled) setCountryReady(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const normalizedPhone = normalizePhoneInput(phone, country);
   const start = async () => {
-    if (!/^\+[1-9]\d{6,14}$/.test(phone)) {
-      flash('Phone must be E.164 format, e.g. +14155551234.', 'error'); return;
-    }
+    if (!countryReady) return;
+    if (!normalizedPhone) { flash(PHONE_ERROR, 'error'); return; }
     setBusy(true);
     try {
-      const res = await api.smsStartEnrollment(phone, country, null);
+      const res = await api.smsStartEnrollment(normalizedPhone.e164, normalizedPhone.country, null);
       setSession(res.session_info);
       setStep('verify');
       flash('Verification code sent.');
@@ -2251,16 +2265,20 @@ function SmsPanel({ data, flash, onChanged }) {
 
       {step === 'enroll' && (
         <div className="space-y-3">
-          <Field label="Country (ISO 2-letter, e.g. US, GB, CA)">
-            <input value={country} onChange={e => setCountry(e.target.value.toUpperCase().slice(0, 2))}
-              className={inputCls} maxLength={2} />
+          <Field label="Country">
+            <select value={country} onChange={e => setCountry(e.target.value)} disabled={busy || !countryReady}
+              className={inputCls} data-testid="sms-phone-country">
+              {PHONE_COUNTRIES.map(option => <option key={option.country} value={option.country}>{option.label}</option>)}
+            </select>
+            {countryReadError && <p className="text-xs text-amber-700">Profile country unreadable. Choose the country for this number.</p>}
           </Field>
-          <Field label="Phone (E.164 format, including +)">
-            <input value={phone} onChange={e => setPhone(e.target.value.replace(/[^\d+]/g, '').slice(0, 16))}
-              placeholder="+14155551234" className={`${inputCls} font-mono`} />
+          <Field label="Phone" hint="Your mobile number, any country">
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={busy || !countryReady}
+              placeholder={phonePlaceholder(country)} className={`${inputCls} font-mono`} data-testid="sms-phone-input" />
+            {normalizedPhone && <p className="text-xs text-gray-500 mt-1" role="status">We'll text {normalizedPhone.international}.</p>}
           </Field>
           <div className="flex gap-2">
-            <button onClick={start} disabled={busy || !phone || country.length !== 2}
+            <button onClick={start} disabled={busy || !phone || !countryReady}
               className="px-4 py-2 bg-violet-600 hover:bg-violet-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium">
               {busy ? 'Sending…' : 'Send verification code'}
             </button>
