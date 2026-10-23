@@ -170,7 +170,8 @@ test('D886 mounted HQ action requires a fresh TOTP session and audits successful
     const response=await send();assert.equal(response.status,200);
     const result=await response.json();assert.equal(result.test.status,'queued');
     const actions=w.db.prepare("SELECT * FROM activity_logs WHERE action='meeting_bot_test_dispatched'").all();
-    assert.equal(actions.length,1);assert.equal(JSON.stringify(actions).includes('meet.google.com'),false);
+    assert.equal(actions.length,1);
+    assert.deepEqual(JSON.parse(String(actions[0].details)),{target_user_id:2});
   } finally {w.db.close();}
 });
 
