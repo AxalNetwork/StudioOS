@@ -75,6 +75,7 @@ test('the new company becomes the active one', () => {
  * should feel like a decision rather than a formality.
  */
 const WIDE_ON_PURPOSE = {
+  'calendar.ts': 'the personal calendar spans the member’s companies; project ownership validates a named founder’s venture before scheduling, while event reads and exports require the member to be a party (#2440)',
   'capital.ts': 'the project read sits inside an admin-only handler',
   'founder_risk.ts': "keys its payload on founder_id — a risk profile belongs to the person, not to one of their companies; the projects join is only a lookup from a deal to its owner",
   'public.ts': 'the unauthenticated public profile facade — there is no active company to scope by, and the profile is the person\'s',
