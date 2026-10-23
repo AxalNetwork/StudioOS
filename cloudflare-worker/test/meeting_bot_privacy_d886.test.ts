@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
+import { setTimeout as pause } from 'node:timers/promises';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import { world, post, syntheticLink, hmacSecret } from './_meeting_bot_fixture.ts';
@@ -18,7 +19,7 @@ import { RuntimeHost } from '../../meeting-bot/src/runtime.ts';
 import { runBot } from '../../meeting-bot/src/lifecycle.ts';
 import { httpTransport, signRequest } from '../../meeting-bot/src/callback.ts';
 import { FakeAdapter } from '../../meeting-bot/src/fakeAdapter.ts';
-import { FakeClock, StubCallback, settle, tone } from '../../meeting-bot/test/_harness.ts';
+import { FakeClock, StubCallback, tone } from '../../meeting-bot/test/_harness.ts';
 import { MEETING_BOT_NOTICE_PUBLISHED } from '../../meeting-bot/notice.mjs';
 
 let serial=0;
@@ -42,6 +43,13 @@ const approvedRuntime=await variant('meeting-bot/src/runtime.ts',[],publishedImp
 const defaults={Supervisor:approved.module.MeetingBotRun,Unpublished:MeetingBotRun,Runtime:RuntimeHost,PublishedRuntime:approvedRuntime.module.RuntimeHost,runBot,purge:purgeExpiredCallAudio,call};
 type Modules=typeof defaults;
 const platforms=['zoom','google_meet','teams'];
+// Signing uses the real crypto thread pool. A fixed number of event-loop turns
+// is not a completion signal when the full CI suite shares a busy machine.
+async function ready(predicate:()=>boolean,label='runtime reaches capture'){
+  const until=performance.now()+10_000;
+  while(!predicate() && performance.now()<until)await pause(2);
+  assert.equal(predicate(),true,label+' before the bounded deadline');
+}
 function company(w:any){
   w.db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8'),'company_profiles'));
   w.db.prepare('INSERT INTO company_profiles(id,uid,company_name) VALUES(11,?,?)').run('b9-fixture','Synthetic Venture');
@@ -84,10 +92,10 @@ async function startNotice(m:Modules){
       const adapter=new FakeAdapter({platform:platform as any,openDoor:true}),cb=new StubCallback();
       const host=new m.PublishedRuntime({secret:hmacSecret,callbackOrigin:'https://unit.invalid',adapter:async()=>adapter,transport:()=>cb});
       try{
-        assert.equal((await command(host,w.starts[0])).status,202);await settle(100);
+        assert.equal((await command(host,w.starts[0])).status,202);await ready(()=>adapter.calls.includes('audio'));
         assert.deepEqual(adapter.chat,[w.starts[0].notice]);
         assert.ok(adapter.calls.indexOf('chat')<adapter.calls.indexOf('audio'));
-        assert.equal((await command(host,w.starts[0])).status,200);await settle();assert.equal(adapter.chat.length,1);
+        assert.equal((await command(host,w.starts[0])).status,200);await host.shutdown();assert.equal(adapter.chat.length,1);
       }finally{await host.shutdown();}
     }
   }
@@ -121,12 +129,17 @@ async function capture(m:Modules,platform='teams',withdraw=false){
     w.env.MEETING_BOT_RUNTIME.stop=async()=>{w.stops.push(uid);stop.abort();};
     const app=new Hono();app.route('/api/meeting-bots',callbacks as any);
     const transport=httpTransport({baseUrl:`https://unit.invalid/api/meeting-bots/${uid}/`,runId:uid,key:hmacSecret,now:()=>clock.now(),fetch:async(input:any,init:any)=>{
-      if(init.method==='POST')wire.push(JSON.parse(init.body));else puts.push(String(input));
+      if(init.method==='POST'){
+        wire.push(JSON.parse(init.body));
+        // Deterministic async signature/callback delay: readiness cannot rely
+        // on a lucky number of microtasks or on this machine being idle.
+        if(wire.length===1)await pause(25);
+      }else puts.push(String(input));
       return app.fetch(new Request(input,init),w.env);
     }});
     const payload=w.starts[0];adapter.arrive('fixture-p','Synthetic Participant');
     run=m.runBot({runId:uid,platform:payload.platform,meetingUrl:payload.meeting_url,notice:payload.notice,limitMs:payload.limit_minutes*60000,deadlineAt:payload.deadline_at,budgetDeadlineAt:payload.budget_deadline_at},{adapter,transport,clock,stop:stop.signal,log:(e:any,f:any)=>logs.push(JSON.stringify({e,...f}))});
-    await clock.advance(100);
+    await ready(()=>adapter.calls.includes('audio'));await clock.advance(100);
     assert.equal((await botRow(w.env,uid))!.status,'recording');
     assert.deepEqual(adapter.chat,[published.module.meetingBotNotice()]);assert.ok(adapter.calls.indexOf('chat')<adapter.calls.indexOf('audio'));
     adapter.speak('fixture-p');adapter.say(tone(16000));await clock.advance(1000);
@@ -135,7 +148,15 @@ async function capture(m:Modules,platform='teams',withdraw=false){
       assert.equal(stop.signal.aborted,true,'withdrawal acknowledges only after runtime Stop');
       assert.equal((await botRow(w.env,uid))!.status,'stopped');
     }else adapter.end();
-    const result=await clock.until(run);
+    // Healthy callbacks complete on real async I/O; do not fast-forward the
+    // synthetic drain deadline while waiting for the crypto thread pool.
+    let result:any;
+    if(withdraw)result=await clock.until(run);
+    else{
+      let done=false,error:unknown;
+      run.then(value=>{result=value;done=true;},reason=>{error=reason;done=true;});
+      await ready(()=>done,'runtime finishes authenticated uploads');if(error)throw error;
+    }
     assert.equal(adapter.listening,0);assert.equal(adapter.chat.length,1);
     const unique=new Map<number,unknown>();
     for(const e of wire){if(unique.has(e.seq))assert.deepEqual(e,unique.get(e.seq));else unique.set(e.seq,e);}
