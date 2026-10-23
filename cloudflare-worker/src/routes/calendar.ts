@@ -740,6 +740,21 @@ export function googleGrantHasScope(scope: unknown, wanted: string): boolean {
     .includes(wanted);
 }
 
+/** Opaque, signed marker lets the Gmail-reset callback identify the account that owns retained event mappings. */
+export async function makeGoogleSyncIdentityStateMarker(env: Env, googleSub: string | null | undefined): Promise<string> {
+  if (!googleSub) return '';
+  return `gs${await hmacSign(env.JWT_SECRET, `calendar-sync:${googleSub}`)}_`;
+}
+
+export async function googleSyncIdentityMatchesState(
+  env: Env, nonce: string, googleSub: string | null | undefined,
+): Promise<boolean | null> {
+  const marker = /(?:^|_)gs([A-Za-z0-9_-]{43})_/.exec(nonce)?.[1];
+  if (!marker) return null;
+  if (!googleSub) return false;
+  return marker === await hmacSign(env.JWT_SECRET, `calendar-sync:${googleSub}`);
+}
+
 async function storedGoogleGrantHasScope(env: Env, userId: number, wanted: string): Promise<boolean> {
   await ensureCalendarOAuthSchema(env);
   const sql = getSQL(env);
@@ -764,8 +779,12 @@ calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not r
   // Prepare the new consent before revoking the existing grant so a missing
   // OAuth configuration cannot leave the member disconnected.
   const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
-  const keepMeetTranscripts = googleGrantHasScope(row.scope, GOOGLE_MEET_TRANSCRIPT_SCOPE);
-  const next = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint, keepMeetTranscripts);
+  const keepMeetTranscripts = meetTranscriptsEnabled(c.env)
+    && googleGrantHasScope(row.scope, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+  const identityMarker = await makeGoogleSyncIdentityStateMarker(c.env, row.google_sub);
+  const next = await buildGoogleOAuthStartResponse(
+    c.env, user.id, loginHint, keepMeetTranscripts, '', keepMeetTranscripts, identityMarker,
+  );
   if (next.status !== 200) return c.json(next.body, next.status);
   await revokeAndDisconnectGoogle(c.env, user.id, undefined, { preserveCalendarSync: true });
   return c.json({ ...next.body, gmail_access_removed: true });
@@ -784,6 +803,8 @@ export async function buildGoogleOAuthStartResponse(
   loginHint?: string,
   meetTranscripts = false,
   tag = '',
+  meetTranscriptsPreserved = false,
+  stateMarker = '',
 ): Promise<{ status: 200 | 500; body: any }> {
   const missing = preflightOAuthSecrets(env, 'google');
   if (missing.length > 0) {
@@ -798,7 +819,7 @@ export async function buildGoogleOAuthStartResponse(
       },
     };
   }
-  const nonce = `${meetTranscripts ? 'gm_' : ''}${tag}${crypto.randomUUID().replace(/-/g, '')}`;
+  const nonce = `${meetTranscriptsPreserved ? 'mp_' : meetTranscripts ? 'gm_' : ''}${tag}${stateMarker}${crypto.randomUUID().replace(/-/g, '')}`;
   try {
     await persistState(env, nonce, userId, 'google');
     const state = await makeState(env, nonce);
@@ -876,10 +897,11 @@ async function startGoogleOAuth(c: any, meetTranscripts = false) {
   // With incremental scope carry-forward disabled, include an already granted
   // optional Meet scope explicitly during ordinary reconnects.
   const preserveMeetTranscripts = !meetTranscripts
+    && meetTranscriptsEnabled(c.env)
     && await storedGoogleGrantHasScope(c.env, user.id, GOOGLE_MEET_TRANSCRIPT_SCOPE);
   const { status, body } = await buildGoogleOAuthStartResponse(
     c.env, user.id, loginHint, meetTranscripts || preserveMeetTranscripts,
-    returnTag(returnTo, c.req.query('project_id')),
+    returnTag(returnTo, c.req.query('project_id')), preserveMeetTranscripts,
   );
   if (status === 200 && (returnTo === 'integrations' || returnTo === 'build' || returnTo === 'record')) {
     c.header(
@@ -1063,7 +1085,8 @@ calendar.get('/google/callback', async (c) => {
     if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state', returnTo);
     const nonce = signed;
     if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
-    const meetTranscripts = nonce.startsWith('gm_');
+    const meetTranscripts = nonce.startsWith('gm_') || nonce.startsWith('mp_');
+    const newMeetGrant = nonce.startsWith('gm_');
     const userId = await consumeState(c.env, nonce, 'google');
     if (!userId) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
 
@@ -1110,6 +1133,8 @@ calendar.get('/google/callback', async (c) => {
       });
     }
 
+    const retainedIdentityMatches = await googleSyncIdentityMatchesState(c.env, nonce, googleSub);
+
     const refreshEnc = await encryptString(c.env, refreshToken);
     const persist = await persistGoogleCallbackTokens(c.env, {
       userId,
@@ -1123,9 +1148,15 @@ calendar.get('/google/callback', async (c) => {
     if (!persist.ok) {
       return failureRedirect(c.env, 'google', persist.reason, returnTo);
     }
+    if (retainedIdentityMatches === false) {
+      // Gmail removal retained Calendar event mappings so reconnecting the
+      // same account remains idempotent. A different selected account must
+      // start with fresh mappings to avoid applying another account's IDs.
+      await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId}`;
+    }
     const extra: Record<string, string> = {};
     // The return banner tells a transcript grant from an ordinary connect (#1926).
-    if (meetTranscripts) extra.meet = 'granted';
+    if (newMeetGrant) extra.meet = 'granted';
     if (persist.warn) {
       extra.warn = persist.warn;
       if (persist.warnEmail) extra.google_email = persist.warnEmail;

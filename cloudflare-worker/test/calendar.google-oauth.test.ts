@@ -27,7 +27,10 @@ import {
   persistGoogleCallbackTokens,
   revokeAndDisconnectGoogle,
   googleGrantHasScope,
+  makeGoogleSyncIdentityStateMarker,
+  googleSyncIdentityMatchesState,
 } from '../src/routes/calendar.ts';
+import { returnFromNonce } from '../src/util/oauthReturn.ts';
 
 type EnvShape = Record<string, string | undefined>;
 
@@ -145,6 +148,21 @@ test('legacy Gmail grants are detected in stored Google scopes', () => {
   assert.equal(googleGrantHasScope('openid,https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.readonly'), true);
   assert.equal(googleGrantHasScope('openid https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/gmail.readonly'), false);
   assert.equal(googleGrantHasScope('openid https://www.googleapis.com/auth/meetings.space.readonly', 'https://www.googleapis.com/auth/meetings.space.readonly'), true);
+});
+
+test('retained Calendar mappings are bound to the original Google identity', async () => {
+  const env = FULL_GOOGLE as any;
+  const marker = await makeGoogleSyncIdentityStateMarker(env, 'google-sub-1');
+  assert.match(marker, /^gs[A-Za-z0-9_-]{43}_$/);
+  assert.equal(await googleSyncIdentityMatchesState(env, `mp_rb42_${marker}nonce`, 'google-sub-1'), true);
+  assert.equal(await googleSyncIdentityMatchesState(env, `mp_rb42_${marker}nonce`, 'google-sub-2'), false);
+  assert.equal(await googleSyncIdentityMatchesState(env, `mp_rb42_${marker}nonce`, ''), false);
+  assert.equal(await googleSyncIdentityMatchesState(env, 'gm_nonce', 'google-sub-1'), null);
+});
+
+test('preserved Meet OAuth state keeps Build return routing without showing a new-grant banner', () => {
+  assert.equal(returnFromNonce('mp_rb42_nonce'), 'build:42');
+  assert.equal(returnFromNonce('gm_rb_nonce'), 'build');
 });
 
 test('Google reconnect can explicitly retain a previously granted Meet transcript scope', () => {
