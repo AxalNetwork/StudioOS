@@ -1,4 +1,5 @@
 /** D886 B1. One serialized supervisor per run. Runtime events are data, never commands. */
+import { meetingBotNotice, MEETING_BOT_NOTICE_PUBLISHED } from '../../../meeting-bot/notice.mjs';
 import type { Env } from '../types';
 import { decryptColumn, encryptColumn } from '../services/columnCipher';
 import { settleAiReservation, reserveAiBudget, aiPaused } from '../services/aiBudget';
@@ -6,10 +7,11 @@ import { constantTimeEqual } from '../rpc/secret';
 import { withDeadline } from '../util/deadline';
 import { putChunk, isUploadWav, MAX_CHUNK_BYTES, WAV_HEADER_BYTES, UPLOAD_BYTES_PER_SECOND } from '../services/interviewSessions';
 import {
-  BOT_HEARTBEAT_MS, BOT_PROCESSING_MAX_MS, BotError, botRow, botSession, botView, botConfigured, botMemberEnabled, terminal,
+  BOT_HEARTBEAT_MS, BOT_PROCESSING_MAX_MS, BotError, botRow, botSession, botView, botConfigured, botMemberEnabled, botVentureName, terminal,
   type BotRun, type BotStatus,
 } from '../services/meetingBots';
 
+export const BOT_RENEWAL_LEAD_MS = 20_000;
 export const BOT_CALLBACK_WINDOW_MS = 5 * 60_000;
 const NEXT: Record<BotStatus, readonly BotStatus[]> = {
   queued: ['joining','failed','stopped'], joining: ['waiting_room','recording','failed','stopped'],
@@ -106,10 +108,10 @@ export class MeetingBotRun implements DurableObject {
       await this.state.storage.put('runtime_stopped',true);
     } catch { await this.state.storage.setAlarm(Date.now()+BOT_HEARTBEAT_MS); }
   }
-  private async settleBlocks(run: BotRun, end: number) {
+  private async settleBlocks(run: BotRun, end: number, elapsedOnly = false) {
     const blocks=await this.state.storage.get<BillingBlock[]>('billing')??[];
     for (const block of blocks) {
-      if (block.settled) continue;
+      if (block.settled || elapsedOnly && block.end > end) continue;
       block.minutes=Math.min(2,Math.ceil(Math.max(0,Math.min(end,block.end)-block.start)/60_000));
       await settleAiReservation(this.env,{uid:block.uid,userId:run.user_id},block.minutes*run.rate_per_minute_microusd,block.minutes===0);
       block.settled=true;
@@ -121,9 +123,10 @@ export class MeetingBotRun implements DurableObject {
   private async fundBlock(run: BotRun, now: number): Promise<boolean> {
     const blocks=await this.state.storage.get<BillingBlock[]>('billing')??[];
     const last=blocks.at(-1);
-    if (last && now<last.end) return true;
+    if (last) await this.settleBlocks(run,now,true);
+    if (last && last.end >= (run.started_at ?? blocks[0].start) + run.limit_minutes*60_000) return now < last.end;
+    if (last && now < last.end - BOT_RENEWAL_LEAD_MS) return true;
     if (last) {
-      await this.settleBlocks(run,last.end);
       // An alarm that missed its boundary must not silently bill an unfunded gap.
       if (now-last.end>5000) return false;
     }
@@ -158,7 +161,7 @@ export class MeetingBotRun implements DurableObject {
     }
     await this.settle(run);
   }
-  private async draining(run: BotRun) { return run.status==='processing' && (await this.state.storage.get<number>('drain_until')??0)>Date.now(); }
+  private async draining(run: BotRun) { return !await this.state.storage.get('uploads_complete') && run.status==='processing' && (await this.state.storage.get<number>('drain_until')??0)>Date.now(); }
   private async drain(run: BotRun, reason: string) {
     if (await this.draining(run)) return;
     if (run.status!=='recording') return this.finish(run,'stopped',reason==='stopped'?null:reason);
@@ -193,6 +196,9 @@ export class MeetingBotRun implements DurableObject {
     if (run.status === 'queued') {
       if (Date.now()<run.scheduled_at) { await this.state.storage.setAlarm(run.scheduled_at); return; }
       if (Date.now()-run.scheduled_at>60_000) return this.finish(run,'failed','schedule_missed');
+      if (!MEETING_BOT_NOTICE_PUBLISHED) return this.finish(run,'failed','notice_unpublished');
+      const ventureName = await botVentureName(this.env,run);
+      const notice = meetingBotNotice({ventureName});
       if (!await this.fundBlock(run,Date.now())) return this.drain(run,'tokens');
       const link=await decryptColumn(this.env,'meeting_bots','meeting_url_enc',run.uid,run.meeting_url_enc);
       if (!link) return this.finish(run,'failed','runtime_unavailable');
@@ -200,13 +206,16 @@ export class MeetingBotRun implements DurableObject {
       await this.env.DB.prepare('UPDATE meeting_bots SET started_at = ? WHERE uid = ? AND started_at IS NULL').bind(run.started_at,run.uid).run();
       await this.update(run,'joining');
       try {
-        await withDeadline(this.env.MEETING_BOT_RUNTIME!.start({uid:run.uid,platform:run.platform,meeting_url:link,limit_minutes:run.limit_minutes,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!}),10_000,'bot start');
+        await withDeadline(this.env.MEETING_BOT_RUNTIME!.start({uid:run.uid,platform:run.platform,meeting_url:link,limit_minutes:run.limit_minutes,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!,notice,venture_name:ventureName}),10_000,'bot start');
       } catch { return this.finish(run,'failed','runtime_unavailable'); }
     }
     const now=Date.now();
     if (run.status === 'processing') {
       const until=await this.state.storage.get<number>('drain_until');
-      if (until && now>=until) return this.finish(run,'stopped',(await this.state.storage.get<string>('drain_reason'))??null);
+      if (until && now>=until) {
+        if (!await this.state.storage.get('uploads_complete')) return this.finish(run,'failed','processing_failed');
+        return this.finish(run,'stopped',(await this.state.storage.get<string>('drain_reason'))??null);
+      }
       if (until) await this.state.storage.setAlarm(Math.min(now+BOT_HEARTBEAT_MS,until));
       if (!await this.state.storage.get('runtime_stopped')) await this.stopRuntime(run);
       if (run.ended_at !== null && now-run.ended_at>=BOT_PROCESSING_MAX_MS) return this.finish(run,'failed','processing_timeout');
@@ -214,7 +223,10 @@ export class MeetingBotRun implements DurableObject {
     else if (run.heartbeat_at !== null && now-run.heartbeat_at>2*BOT_HEARTBEAT_MS) return this.finish(run,'failed','heartbeat_timeout');
     else if (run.started_at !== null && !await this.fundBlock(run,now)) return this.drain(run,'tokens');
     const lease=await this.lease();
-    if (!terminal(run.status) && run.status!=='processing' && lease) await this.state.storage.setAlarm(Math.min(now+BOT_HEARTBEAT_MS,lease));
+    if (!terminal(run.status) && run.status!=='processing' && lease) {
+      const boundary = lease < run.started_at!+run.limit_minutes*60_000 ? lease-BOT_RENEWAL_LEAD_MS : lease;
+      await this.state.storage.setAlarm(Math.min(now+BOT_HEARTBEAT_MS,boundary));
+    }
   }
   async alarm() {
     return this.state.blockConcurrencyWhile(async () => {
@@ -227,6 +239,20 @@ export class MeetingBotRun implements DurableObject {
       }
       try { await this.tick(run); } catch { await this.state.storage.setAlarm(Date.now()+BOT_HEARTBEAT_MS); }
     });
+  }
+  /** A processing acknowledgement closes intake only after every declared chunk is durable. */
+  private async uploadsComplete(run: BotRun, event: Record<string, unknown>): Promise<boolean> {
+    const prior = await this.state.storage.get<number>('upload_count');
+    const count = event.chunks === undefined ? prior : event.chunks;
+    if (!int(count,3600) || (event.chunks_failed === undefined ? (prior === undefined ? null : 0) : event.chunks_failed) !== 0) return false;
+    const tickets = await this.state.storage.list<UploadTicket>({prefix:'chunk:'});
+    const rows = (await this.env.DB.prepare('SELECT seq FROM interview_session_chunks WHERE session_id = ? ORDER BY seq')
+      .bind(run.session_id).all<{seq:number}>()).results ?? [];
+    if (tickets.size !== count || rows.length !== count) return false;
+    for (let seq=0;seq<Number(count);seq++) if (!tickets.get(`chunk:${seq}`)?.used || rows[seq].seq !== seq) return false;
+    await this.state.storage.put('upload_count',count);
+    await this.state.storage.put('uploads_complete',true);
+    return true;
   }
   private async event(req: Request, run: BotRun) {
     if (!await this.allowed(run)) { await this.finish(run,'stopped','access_revoked'); throw new BotError(409,'consent_required','This bot run no longer has permission.'); }
@@ -242,7 +268,7 @@ export class MeetingBotRun implements DurableObject {
         if (!stored) throw new BotError(503,'bot_unavailable','The audio manifest could not be read.');
         return this.ticket(run,{...JSON.parse(stored),seq:event.seq},false);
       }
-      return json({duplicate:true,bot:botView(run)});
+      return json({duplicate:true,bot:botView(run),budget_deadline_at:await this.lease()});
     }
     if (terminal(run.status)) throw new BotError(409,'bot_finished','This bot run has ended.');
     if (run.started_at !== null && run.status !== 'processing' && Date.now() >= run.started_at + run.limit_minutes*60_000) { await this.finish(run,'stopped','time_limit'); throw new BotError(409,'bot_time_limit','The bot reached its time limit.'); }
@@ -253,6 +279,10 @@ export class MeetingBotRun implements DurableObject {
     if (event.type === 'status') {
       if (typeof event.status !== 'string' || event.status !== run.status && !NEXT[run.status].includes(event.status as BotStatus)) throw new BotError(409,'invalid_bot_transition','That bot status change is not available.');
       const status=event.status as BotStatus;
+      if ((status==='processing' || status==='done') && !await this.uploadsComplete(run,event)) {
+        await this.finish(run,'failed','processing_failed');
+        return json({bot:botView(run)});
+      }
       const failure=typeof event.failure_code==='string' && FAILED_CODES.has(event.failure_code) ? event.failure_code : status==='failed'?'runtime_failed':null;
       if (status==='done' || status==='failed' || status==='stopped') {
         const draining=await this.state.storage.get<number>('drain_until');
