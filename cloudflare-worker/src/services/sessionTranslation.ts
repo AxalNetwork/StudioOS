@@ -190,13 +190,13 @@ export async function translateSession(env: Env, opts: { sessionId: number; user
       lang = seen.lang ?? (seen.ambiguous ? await detectByModel(env, opts.userId, text, opts.rail) : null);
     }
     if (!lang) {
-      await env.DB.prepare(`UPDATE interview_transcript_segments SET translation_status = 'undetected' WHERE id = ?`).bind(row.id).run();
-      out.undetected += 1;
+      const written = await env.DB.prepare(`UPDATE interview_transcript_segments SET translation_status = 'undetected' WHERE id = ? AND text = ?`).bind(row.id, row.text).run();
+      out.undetected += Number(written.meta?.changes ?? 0);
       continue;
     }
     if (lang === target) {
-      await env.DB.prepare(`UPDATE interview_transcript_segments SET source_lang = ?, translation_status = 'same' WHERE id = ?`).bind(lang, row.id).run();
-      out.same += 1;
+      const written = await env.DB.prepare(`UPDATE interview_transcript_segments SET source_lang = ?, translation_status = 'same' WHERE id = ? AND text = ?`).bind(lang, row.id, row.text).run();
+      out.same += Number(written.meta?.changes ?? 0);
       continue;
     }
     const model = modelFor(lang, target);
@@ -206,23 +206,23 @@ export async function translateSession(env: Env, opts: { sessionId: number; user
     });
     const translated = r.ok ? String(r.output ?? '').trim() : '';
     if (!translated) {
-      await env.DB.prepare(
-        `UPDATE interview_transcript_segments SET source_lang = ?, translation_status = 'pending', translation_attempts = translation_attempts + 1 WHERE id = ?`,
-      ).bind(lang, row.id).run();
-      out.pending += 1;
+      const written = await env.DB.prepare(
+        `UPDATE interview_transcript_segments SET source_lang = ?, translation_status = 'pending', translation_attempts = translation_attempts + 1 WHERE id = ? AND text = ?`,
+      ).bind(lang, row.id, row.text).run();
+      out.pending += Number(written.meta?.changes ?? 0);
       if (r.refusal && STOPS_THE_PASS.has(r.refusal)) { out.stopped = r.refusal; break; }
       continue;
     }
     const reservation = r.usageLogId
       ? (await env.DB.prepare('SELECT reservation_uid FROM ai_usage_logs WHERE id = ?').bind(r.usageLogId).first<{ reservation_uid: string | null }>())?.reservation_uid ?? null
       : null;
-    await env.DB.prepare(
+    const written = await env.DB.prepare(
       `UPDATE interview_transcript_segments
           SET source_lang = ?, translated_text = ?, translated_lang = ?, translation_model = ?,
               translation_reservation_uid = ?, translation_status = 'done'
-        WHERE id = ?`,
-    ).bind(lang, await encryptColumn(env, SEGMENT_TABLE, 'translated_text', row.id, translated), target, r.usage?.model || model, reservation, row.id).run();
-    out.translated += 1;
+        WHERE id = ? AND text = ?`,
+    ).bind(lang, await encryptColumn(env, SEGMENT_TABLE, 'translated_text', row.id, translated), target, r.usage?.model || model, reservation, row.id, row.text).run();
+    out.translated += Number(written.meta?.changes ?? 0);
   }
   return out;
 }

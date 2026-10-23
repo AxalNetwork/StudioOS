@@ -35,6 +35,7 @@ together with what the Telegram track (#2508) has merged so far:
 | A guided setup for Record a Session: six steps (linked, bot added, bot on, replies allowed, a first chat, the notice), each done, to do or blocked, read from stored rows with no Bot API call (`GET /api/channels/telegram/setup`) | #2531 (D863, #2509) |
 | The channel in the conversation analytics (each session's channel, figures per channel), and a Telegram chat's text and consented notes proven end to end into Validate's proposals | #2548 (D866, #2512) |
 | Shared working-language translation for assigned text and transcribed notes, preserving originals; the 5 MiB cap and round-video refusal retained until direct-container and larger-note support are measured | #2611 (D865, #2511), merged 2026-10-23; uses D857 (#2536, #2502) |
+| Source edits/deletions in assigned Business chats, with hashed passage references and preserved decisions | D866 §4 (#2618), migration 533 |
 | Private forwarded recordings (Send to Axal), held for the linked member’s attestation; built with `TELEGRAM_CAPTURE` off | #2615 (D867, #2513), merged 2026-10-23 |
 | The rollout readiness check (`telegram_readiness_d868.test.ts`) | D868 (#2514) |
 | Yes/No buttons on the notice | D756's buttons task, not filed: it waits on §3 step 10's probe |
@@ -43,7 +44,6 @@ together with what the Telegram track (#2508) has merged so far:
 
 | Part | Task |
 | --- | --- |
-| Edits and deletions of a Telegram message honoured at the source (D866 §4, waiting on S1's ruling) | D866 (#2512) |
 | The Record a Session › Telegram screens | D869 (#2515) |
 
 **What a Telegram chat holds for consent.** Unlike WhatsApp, an assigned
@@ -74,6 +74,19 @@ translation model call or AI-token hold; a refused/failed translation leaves
 the original usable and translation pending for bounded retries. Telegram's
 app-language preference is not a detected source language. Speech-to-text and
 translation both use the existing AI-token ledger, not a separate translator.
+
+**Source changes after D866 §4 (#2618).** Apply migration 533 before deploying
+this code. Edits in an assigned Business chat replace the matching passage
+and withdraw only its undecided proposals. Deletions replace its words with a
+neutral “Deleted at the source” marker; pending proposals go, while decisions
+stay with a source-deletion note and without the deleted quote. Other cited
+passages stay. Existing passages with no provable source hash cannot be
+matched and are not guessed. Summary/translation copies are invalidated and
+queued processing uses current words under the normal consent, manual-mode,
+quiet-window and AI-token rules. An unassigned chat keeps D684's pending-copy
+behavior. In the canary live check, edit and delete a synthetic text after
+assignment, and verify those outcomes, including accepted/discarded proposals.
+No real-device result is claimed by the automated tests.
 
 **Send to Axal after D867 (#2615).** Private forwarded recordings are built,
 but `TELEGRAM_CAPTURE = "off"` in all three vars blocks (development, preview
