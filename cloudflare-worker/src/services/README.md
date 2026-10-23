@@ -7,6 +7,14 @@ not return a `Response`.
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
 
+`captableAccess.ts` consumes verified project permissions from the cap-table
+router (#2436). Investors receive no project-bound cap-table access; accepted
+cofounders may write and accepted advisors may read without holder emails.
+Partners require recorded membership. Scenario ownership cannot bypass project
+permissions; list responses are owner-scoped, including for admins. Bound
+scenarios whose project is missing fail closed for non-admins; admin can recover
+or delete them. They are never silently detached into private scenarios.
+
 `scoreAccess.ts` scopes #2439 project risk and external trust-score reads through
 existing deal permissions. Self/admin trust reads retain obligation details;
 related external readers receive only the bare score. Non-admin risk and
