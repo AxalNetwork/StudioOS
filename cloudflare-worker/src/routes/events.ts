@@ -176,6 +176,7 @@ events.get('/', async (c) => {
        FROM events e
        JOIN event_registrations r ON r.event_id = e.id
        LEFT JOIN event_checkins ch ON ch.event_id = e.id AND ch.registration_id = r.id
+         AND r.status != 'waitlisted' AND r.payment_status != 'pending'
       WHERE r.user_id = ? AND r.status IN ('registered','confirmed','attended','waitlisted')
       ORDER BY e.starts_at ASC`,
   ).bind(u.id).all();

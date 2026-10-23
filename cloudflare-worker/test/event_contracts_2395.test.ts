@@ -18,7 +18,7 @@ function fixture(route = events) {
              (2,'private-talk',1,'Private fixture','2099-02-01T12:00:00Z','draft','private',0,'{}');
     INSERT INTO event_agenda_items (id,event_id,title) VALUES (1,1,'Fixture agenda');
     INSERT INTO event_registrations (id,event_id,user_id,email,status,comp,payment_status,waitlist_position)
-      VALUES (10,1,2,'a@example.test','confirmed',1,'comp',NULL), (11,1,3,'b@example.test','confirmed',0,'paid',NULL);
+      VALUES (10,1,2,'a@example.test','confirmed',1,'none',NULL), (11,1,3,'b@example.test','confirmed',0,'paid',NULL);
     INSERT INTO event_checkins (event_id,registration_id,code) VALUES (1,10,'fixture-a-code'), (1,11,'fixture-b-code');`);
   const DB = { prepare(sql: string) { let args: any[] = []; const statement: any = {
     bind(...values: any[]) { args = values.map(v => v ?? null); return statement; },
@@ -49,6 +49,12 @@ async function ownTickets(route = events) {
     assert.equal(host.attending.length, 0);
     assert.equal(JSON.stringify(host).includes('fixture-a-code'), false);
     assert.equal((await f.request('/', null)).status, 401);
+    // A cancelled seat can be registered again on the waitlist, retaining its
+    // historical check-in row. Listing must mirror registration's no-code rule.
+    f.db.exec("UPDATE event_registrations SET status='waitlisted' WHERE id=10");
+    assert.equal((await (await f.request('/')).json() as any).attending[0]?.checkin_code, null);
+    f.db.exec("UPDATE event_registrations SET status='confirmed',payment_status='pending' WHERE id=10");
+    assert.equal((await (await f.request('/')).json() as any).attending[0]?.checkin_code, null);
     f.db.exec("DELETE FROM event_checkins WHERE registration_id=10; UPDATE event_registrations SET status='waitlisted',waitlist_position=4,comp=0 WHERE id=10");
     const waiting: any = await (await f.request('/')).json();
     assert.equal(waiting.attending.length, 1);
@@ -97,6 +103,8 @@ test('#2395: list assertions reject projection and ownership mutations, then pas
     ['reg_status: r.reg_status', 'reg_status: r.status'],
     ['WHERE r.user_id = ?', 'WHERE r.user_id != ?'],
     ['ch.registration_id = r.id', 'ch.registration_id != r.id'],
+    ["AND r.status != 'waitlisted'", ''],
+    ["AND r.payment_status != 'pending'", ''],
     ["'registered','confirmed','attended','waitlisted'", "'registered','confirmed','attended','cancelled'"],
   ];
   await ownTickets(await load(original));
