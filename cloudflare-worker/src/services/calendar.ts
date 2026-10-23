@@ -263,11 +263,11 @@ export async function revokeGoogleOAuthGrant(
   fetcher: typeof fetch = fetch,
 ): Promise<void> {
   const body = new URLSearchParams({ token: refreshToken });
-  const response = await fetcher('https://oauth2.googleapis.com/revoke', {
+  const response = await fetchWithTimeout('https://oauth2.googleapis.com/revoke', {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body,
-  });
+  }, 10_000, fetcher);
   if (response.ok) return;
 
   let providerError = '';
@@ -297,11 +297,13 @@ export function buildMicrosoftAuthUrl(env: Env, state: string): string {
 // Token exchange / refresh — fetch with explicit timeout, fail with thrown
 // Error so callers can map to a HTTP status.
 // ===========================================================================
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 10_000): Promise<Response> {
+async function fetchWithTimeout(
+  url: string, init: RequestInit, timeoutMs = 10_000, fetcher: typeof fetch = fetch,
+): Promise<Response> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
+    return await fetcher(url, { ...init, signal: ctrl.signal });
   } finally {
     clearTimeout(t);
   }

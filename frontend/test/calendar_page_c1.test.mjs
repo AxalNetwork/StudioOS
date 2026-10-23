@@ -427,3 +427,12 @@ test('members with a legacy Gmail grant can remove it and reconnect Google witho
   assert.match(pageRaw, /api\.googleCalRemoveGmailAccess\(\)[\s\S]*?window\.location\.assign\(r\.redirect_url \|\| r\.auth_url\)/,
     "removing Gmail access must continue into Google's fresh consent");
 });
+
+test('Google offers an explicit local-only disconnect after revocation fails', () => {
+  assert.match(pageRaw, /forceDisconnectAvailable: true/,
+    'a revocation failure must leave a local disconnect option');
+  assert.match(pageRaw, /data-testid="calendar-force-disconnect"[\s\S]*?Disconnect locally/,
+    'the fallback action must be labeled so it does not imply Google revocation');
+  assert.match(pageRaw, /googleCalForceDisconnect\(\)[\s\S]*?Google Account/,
+    'the fallback must warn the member about any remaining Google grant');
+});

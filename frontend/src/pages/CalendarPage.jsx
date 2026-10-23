@@ -514,9 +514,23 @@ export default function CalendarPage() {
   }
   async function disconnectGoogle() {
     if (!window.confirm('Disconnect Google Calendar? Already-pushed events stay on Google.')) return;
-    await api.googleCalDisconnect();
-    await loadGoogle();
-    setGoogleResult({ kind: 'success', text: 'Google disconnected.' });
+    try {
+      await api.googleCalDisconnect();
+      await loadGoogle();
+      setGoogleResult({ kind: 'success', text: 'Google disconnected.' });
+    } catch (e) {
+      setGoogleResult({ kind: 'error', text: `${e.message || 'Google could not confirm revocation.'} Your connection is still saved.`, forceDisconnectAvailable: true });
+    }
+  }
+  async function forceDisconnectGoogle() {
+    if (!window.confirm('Disconnect from Axal VC even though Google did not confirm revocation? Calendar credentials will be removed here. If Axal VC still appears in your Google Account, remove its access there too.')) return;
+    try {
+      const r = await api.googleCalForceDisconnect();
+      await loadGoogle();
+      setGoogleResult({ kind: 'success', text: r.warning || 'Disconnected from Axal VC. Check your Google Account access settings.' });
+    } catch (e) {
+      setGoogleResult({ kind: 'error', text: e.message || 'Google could not be disconnected locally.' });
+    }
   }
   async function removeGmailAccess() {
     if (!window.confirm('Remove Gmail access? Google will revoke this app’s current grant, briefly disconnect Calendar, then ask you to reconnect without Gmail access.')) return;
@@ -750,7 +764,7 @@ export default function CalendarPage() {
               busy={syncBusy || gmailRemovalBusy} gmailRemovalBusy={gmailRemovalBusy}
               envVars="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET"
               onConnect={connectGoogle} onSync={runSync} onDisconnect={disconnectGoogle}
-              onRemoveGmail={removeGmailAccess} onRetry={loadGoogle}
+              onRemoveGmail={removeGmailAccess} onForceDisconnect={forceDisconnectGoogle} onRetry={loadGoogle}
             />
             <ProviderCard
               provider="microsoft_365" name="Microsoft Outlook" state={mState} status={microsoft} result={microsoftResult}
@@ -980,7 +994,7 @@ function providerState(status, result) {
   return 'connected';
 }
 
-function ProviderCard({ provider, name, state, status, result, busy, gmailRemovalBusy, envVars, onConnect, onSync, onDisconnect, onRemoveGmail, onRetry }) {
+function ProviderCard({ provider, name, state, status, result, busy, gmailRemovalBusy, envVars, onConnect, onSync, onDisconnect, onRemoveGmail, onForceDisconnect, onRetry }) {
   const last = status?.last_synced_at ? new Date(status.last_synced_at) : null;
   const lastText = last && !Number.isNaN(last.getTime()) ? last.toLocaleString() : null;
   const account = status?.google_email || status?.microsoft_email || null;
@@ -1041,7 +1055,7 @@ function ProviderCard({ provider, name, state, status, result, busy, gmailRemova
       </div>
       {!lastText && <p className="cal-prov-why">{s.whyNoSync}</p>}
       <p className="cal-prov-why">{s.why}</p>
-      {(s.actions.length > 0 || gmailStillGranted) && (
+      {(s.actions.length > 0 || gmailStillGranted || result?.forceDisconnectAvailable) && (
         <div className="cal-prov-actions">
           {s.actions.map(([text, cls, fn]) => (
             <button key={text} type="button" className={`cal-btn ${cls} cal-btn-sm`}
@@ -1052,6 +1066,10 @@ function ProviderCard({ provider, name, state, status, result, busy, gmailRemova
           {gmailStillGranted && <button type="button" className="cal-btn cal-btn-o cal-btn-sm"
             onClick={onRemoveGmail} disabled={busy} data-testid="calendar-remove-gmail-access">
             {gmailRemovalBusy ? 'Removing Gmail access…' : 'Remove Gmail access'}
+          </button>}
+          {result?.forceDisconnectAvailable && <button type="button" className="cal-btn cal-btn-q cal-btn-sm"
+            onClick={onForceDisconnect} disabled={busy} data-testid="calendar-force-disconnect">
+            Disconnect locally
           </button>}
         </div>
       )}

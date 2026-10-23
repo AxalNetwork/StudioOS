@@ -26,7 +26,7 @@ import {
   buildMicrosoftOAuthStartResponse,
   persistGoogleCallbackTokens,
   revokeAndDisconnectGoogle,
-  googleGrantHasGmailScope,
+  googleGrantHasScope,
 } from '../src/routes/calendar.ts';
 
 type EnvShape = Record<string, string | undefined>;
@@ -141,15 +141,23 @@ test('Google Calendar consent excludes Gmail and does not inherit old grants', (
 });
 
 test('legacy Gmail grants are detected in stored Google scopes', () => {
-  assert.equal(googleGrantHasGmailScope('openid https://www.googleapis.com/auth/gmail.readonly'), true);
-  assert.equal(googleGrantHasGmailScope('openid,https://www.googleapis.com/auth/gmail.readonly'), true);
-  assert.equal(googleGrantHasGmailScope('openid https://www.googleapis.com/auth/calendar.readonly'), false);
+  assert.equal(googleGrantHasScope('openid https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.readonly'), true);
+  assert.equal(googleGrantHasScope('openid,https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.readonly'), true);
+  assert.equal(googleGrantHasScope('openid https://www.googleapis.com/auth/calendar.readonly', 'https://www.googleapis.com/auth/gmail.readonly'), false);
+  assert.equal(googleGrantHasScope('openid https://www.googleapis.com/auth/meetings.space.readonly', 'https://www.googleapis.com/auth/meetings.space.readonly'), true);
+});
+
+test('Google reconnect can explicitly retain a previously granted Meet transcript scope', () => {
+  const url = new URL(buildGoogleAuthUrl(FULL_GOOGLE as any, 'nonce.sig', undefined, true));
+  assert.ok((url.searchParams.get('scope') || '').includes('https://www.googleapis.com/auth/meetings.space.readonly'));
+  assert.equal(url.searchParams.get('include_granted_scopes'), 'false');
 });
 
 test('Google OAuth revocation posts the refresh token as form data', async () => {
   let request: { url: string; init?: RequestInit } | null = null;
   await revokeGoogleOAuthGrant('refresh-token-for-test', async (input, init) => {
     request = { url: String(input), init };
+    assert.ok(init?.signal, 'revocation request must carry the timeout abort signal');
     return new Response('', { status: 200 });
   });
   assert.equal(request?.url, 'https://oauth2.googleapis.com/revoke');

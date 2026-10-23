@@ -714,6 +714,10 @@ export async function revokeAndDisconnectGoogle(
   const token = await loadRefreshTokenExport(env, 'google_oauth_tokens', userId);
   if (token) await revokeGoogleOAuthGrant(token.raw, fetcher);
 
+  await clearGoogleLocalConnection(env, userId);
+}
+
+async function clearGoogleLocalConnection(env: Env, userId: number): Promise<void> {
   const sql = getSQL(env);
   await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${userId}`;
   await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
@@ -726,9 +730,18 @@ export async function revokeAndDisconnectGoogle(
   }
 }
 
-export function googleGrantHasGmailScope(scope: unknown): boolean {
+export function googleGrantHasScope(scope: unknown, wanted: string): boolean {
   return String(scope || '').split(/[\s,]+/)
-    .includes('https://www.googleapis.com/auth/gmail.readonly');
+    .includes(wanted);
+}
+
+async function storedGoogleGrantHasScope(env: Env, userId: number, wanted: string): Promise<boolean> {
+  await ensureCalendarOAuthSchema(env);
+  const sql = getSQL(env);
+  const row = (await sql`
+    SELECT scope FROM google_oauth_tokens WHERE user_id = ${userId}
+  ` as any[])[0];
+  return googleGrantHasScope(row?.scope, wanted);
 }
 
 calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not remove Gmail access', async (c) => {
@@ -739,14 +752,15 @@ calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not r
     SELECT scope FROM google_oauth_tokens WHERE user_id = ${user.id}
   ` as any[])[0];
   if (!row) return c.json({ error: { code: 'google_not_connected' } }, 409);
-  if (!googleGrantHasGmailScope(row.scope)) {
+  if (!googleGrantHasScope(row.scope, 'https://www.googleapis.com/auth/gmail.readonly')) {
     return c.json({ error: { code: 'gmail_scope_not_granted' } }, 409);
   }
 
   // Prepare the new consent before revoking the existing grant so a missing
   // OAuth configuration cannot leave the member disconnected.
   const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
-  const next = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint);
+  const keepMeetTranscripts = googleGrantHasScope(row.scope, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+  const next = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint, keepMeetTranscripts);
   if (next.status !== 200) return c.json(next.body, next.status);
   await revokeAndDisconnectGoogle(c.env, user.id);
   return c.json({ ...next.body, gmail_access_removed: true });
@@ -854,7 +868,14 @@ async function startGoogleOAuth(c: any, meetTranscripts = false) {
   // across the Google round-trip via a short-lived, scoped cookie. Build's
   // return also rides in the signed nonce, with its venture (#1597).
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
-  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint, meetTranscripts, returnTag(returnTo, c.req.query('project_id')));
+  // With incremental scope carry-forward disabled, include an already granted
+  // optional Meet scope explicitly during ordinary reconnects.
+  const preserveMeetTranscripts = !meetTranscripts
+    && await storedGoogleGrantHasScope(c.env, user.id, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+  const { status, body } = await buildGoogleOAuthStartResponse(
+    c.env, user.id, loginHint, meetTranscripts || preserveMeetTranscripts,
+    returnTag(returnTo, c.req.query('project_id')),
+  );
   if (status === 200 && (returnTo === 'integrations' || returnTo === 'build' || returnTo === 'record')) {
     c.header(
       'Set-Cookie',
@@ -1332,6 +1353,16 @@ calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconn
   await ensureCalendarOAuthSchema(c.env);
   await revokeAndDisconnectGoogle(c.env, user.id);
   return c.json({ ok: true });
+}));
+calendar.post('/google/force-disconnect', safe('g_force_disconnect', 'Could not disconnect Google locally', async (c) => {
+  const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
+  await clearGoogleLocalConnection(c.env, user.id);
+  return c.json({
+    ok: true,
+    revoked: false,
+    warning: 'Google did not confirm revocation. Remove Axal VC from your Google Account access settings if it still appears there.',
+  });
 }));
 calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', async (c) => {
   const user = await requireAuth(c);
