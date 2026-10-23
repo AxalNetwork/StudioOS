@@ -48,7 +48,7 @@ test('admin list is own-only; removed members and investor owners cannot bypass 
   assert.deepEqual((await call(f,1,'/scenarios')).body.items,[]);
   f.db.prepare("INSERT INTO cap_table_scenarios(uid,owner_user_id,name,inputs_json) VALUES('admin-own',1,'Synthetic',?)").run(JSON.stringify(inputs));
   assert.deepEqual((await call(f,1,'/scenarios')).body.items.map((r:any)=>r.uid),['admin-own']);
-  f.db.exec("UPDATE cap_table_scenarios SET owner_user_id=3");
+  f.db.exec("UPDATE cap_table_scenarios SET owner_user_id=3 WHERE uid='main'");
   assert.deepEqual((await call(f,3,'/scenarios')).body.items,[]);
   assert.equal((await call(f,3,'/scenarios/main')).status,403);
   f.db.exec("UPDATE project_members SET status='removed' WHERE user_id=5");
