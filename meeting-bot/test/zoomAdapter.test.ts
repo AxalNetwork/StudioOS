@@ -101,7 +101,7 @@ test('Zoom: permission denied never starts raw recording or permits a listener',
 async function throughCore(Adapter = ZoomAdapter) {
   const s = sdk(); const clock = new FakeClock(), cb = new StubCallback();
   const a = new Adapter({ sdk: s.bridge, async mintObf() { return { token: 'synthetic-token' }; }, async waitingForHost() {} });
-  const run = runBot({ runId: 'synthetic', platform: 'zoom', meetingUrl: URL, notice: 'Synthetic notice', limitMs: 1800000 }, { adapter: a, transport: cb, clock });
+  const run = runBot({ runId: 'synthetic', platform: 'zoom', meetingUrl: URL, notice: 'Synthetic notice', limitMs: 1800000, deadlineAt: clock.now()+1800000, budgetDeadlineAt: clock.now()+120_000 }, { adapter: a, transport: cb, clock });
   await settle(); s.say(new Int16Array(16000)); s.speak('p1'); s.end(); s.say(new Int16Array(16000));
   const result = await clock.until(run);
   assert.equal(result.state, 'left'); assert.equal(result.participants, 1); assert.equal(result.chunks, 1);
@@ -131,14 +131,23 @@ for (const [name, before, after] of mutations) test('Zoom mutation: ' + name, as
   await scenario();
 });
 
+// The core now also stops late PCM. Check the adapter boundary directly so
+// that defence does not mask a broken SDK callback guard in this mutation.
+async function latePcm(Adapter = ZoomAdapter) {
+  const s=sdk(),adapter=new Adapter({sdk:s.bridge,async mintObf(){return {token:'synthetic-token'};},async waitingForHost(){}});
+  const req=request();await adapter.join(req);await adapter.admitted(req.signal);await adapter.sendChat('Synthetic notice');
+  const frames:Int16Array[]=[];adapter.ended(()=>{});adapter.audio(frame=>frames.push(frame.samples));
+  s.say(new Int16Array(8));s.end();s.say(new Int16Array(8));
+  assert.equal(frames.length,1);await adapter.leave();
+}
 test('Zoom mutation: end must stop late PCM immediately', async () => {
-  await throughCore();
+  await latePcm();
   const url = new globalThis.URL('../src/zoomAdapter.ts', import.meta.url);
   const source = readFileSync(url, 'utf8');
   const before = 'this.ready = false; // No late PCM';
   assert.ok(source.includes(before));
   const stripped = stripTypeScriptTypes(source.replace(before, '// No late PCM'), { mode: 'strip' }).replaceAll("'./types.ts'", JSON.stringify(new globalThis.URL('../src/types.ts', import.meta.url).href));
   const variant = await import('data:text/javascript;base64,' + Buffer.from(stripped).toString('base64'));
-  await assert.rejects(() => throughCore(variant.ZoomAdapter), { name: 'AssertionError' });
-  await throughCore();
+  await assert.rejects(() => latePcm(variant.ZoomAdapter), { name: 'AssertionError' });
+  await latePcm();
 });

@@ -11,13 +11,14 @@
 import { EVENT_BATCH_MAX, EVENT_QUEUE_MAX } from './constants.ts';
 import { logLine } from './log.ts';
 import { withRetry } from './uploader.ts';
-import type { BotEvent, CallbackTransport, Clock, LogSink, RosterChange, SpeakerChange } from './types.ts';
+import type { BotEvent, CallbackTransport, Clock, LogSink, RosterChange, SpeakerChange, RosterParticipant } from './types.ts';
 
 type Pending = BotEvent;
 
 export class EventBatcher {
   private queue: Pending[] = [];
   private n = 0;
+  private readonly participants = new Map<string, RosterParticipant>();
   private sent = 0;
   private dropped = 0;
   private lastSpeaker: string | null | undefined = undefined;
@@ -26,23 +27,30 @@ export class EventBatcher {
   private readonly clock: Clock;
   private readonly log: LogSink;
   private readonly origin: number;
+  private readonly signal?: AbortSignal;
 
-  constructor(transport: CallbackTransport, clock: Clock, log: LogSink, origin: number) {
+  constructor(transport: CallbackTransport, clock: Clock, log: LogSink, origin: number, signal?: AbortSignal) {
     this.transport = transport;
     this.clock = clock;
     this.log = log;
     this.origin = origin;
+    this.signal = signal;
   }
 
   roster(change: RosterChange): void {
-    this.push({ n: ++this.n, type: 'roster', kind: change.kind, key: change.key, name: change.name, at_ms: this.at() });
+    if (!change.key || change.key.length > 128 || !change.name || change.name.length > 160) return;
+    const old = this.participants.get(change.key);
+    if (!old && this.participants.size >= 500) { this.dropped++; return; }
+    this.participants.set(change.key, { id: change.key, name: change.name,
+      joined_ms: old?.joined_ms ?? this.at(), left_ms: change.kind === 'leave' ? this.at() : null });
+    this.push({ n: ++this.n, type: 'roster', participants: [...this.participants.values()].map(p => ({...p})) });
   }
 
   /** One event per change of active speaker; a repeat of the current speaker is not an event. */
   speaker(change: SpeakerChange): void {
     if (change.key === this.lastSpeaker) return;
     this.lastSpeaker = change.key;
-    this.push({ n: ++this.n, type: 'speaker', key: change.key, at_ms: this.at() });
+    this.push({ n: ++this.n, type: 'speaker', participant_id: change.key, at_ms: this.at() });
   }
 
   get sentCount(): number { return this.sent; }
@@ -71,9 +79,9 @@ export class EventBatcher {
   }
 
   private async run(tries?: number): Promise<void> {
-    while (this.queue.length) {
+    while (this.queue.length && !this.signal?.aborted) {
       const batch = this.queue.slice(0, EVENT_BATCH_MAX);
-      const ok = await withRetry(() => this.transport.events(batch), this.clock, tries);
+      const ok = await withRetry(() => this.transport.events(batch), this.clock, tries,this.signal);
       if (!ok) {
         logLine(this.log, 'events_retry_later', { count: batch.length });
         return;

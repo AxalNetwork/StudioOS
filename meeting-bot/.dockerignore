@@ -1,0 +1,9 @@
+*
+!Dockerfile
+!package.json
+!package-lock.json
+!notice.mjs
+!src/
+!src/**
+!test/
+!test/container_smoke.test.ts

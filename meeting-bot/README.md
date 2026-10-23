@@ -10,15 +10,19 @@ This folder is the bot **runtime**, the part that sits in the call. The
 Worker's control plane (the routes, the `MeetingBotRun` Durable Object, the
 callback, consent and metering) is B1's (#2579), under `cloudflare-worker/`.
 
-**Not deployed yet.** B0 (#2578) chooses the host (Cloudflare Containers or a
-VM) and whether the runtime builds on Attendee. B8 (#2586) packages this
-folder as that host's image and deploys it. Until then this is a library with
-tests, and nothing here runs in production.
+**Not deployed yet.** D886 selects Cloudflare Containers. The owner kept the
+TypeScript/Node core on 2026-10-22: Meet/Teams use Playwright for Node, and
+Zoom uses a Python SDK sidecar behind the adapter. `Dockerfile` packages the
+core, Chromium and Python; B8 builds/publishes it through its existing image
+pipeline. Zoom's native bridge and Teams' packaged adapter are separate
+integration work and fail closed in this entry. No live platform has been
+verified by these fixture tests.
 
 ## What is here (B2, #2580)
 
-The platform-independent core, with no dependencies. Node 22 runs the
-TypeScript directly (type stripping), so there is no build step.
+The platform-independent core uses Node built-ins. Node 22.18+ runs the
+TypeScript directly; the packaged browser adapter pins Playwright in this
+folder's lockfile. No TypeScript compilation step is needed in the image.
 
 | Folder | What it holds |
 | --- | --- |
@@ -29,14 +33,19 @@ TypeScript directly (type stripping), so there is no build step.
 | --- | --- |
 | `src/types.ts` | `MeetingAdapter`, the contract B3 (Meet), B4 (Zoom) and B5 (Teams) each implement: `join`, `admitted`, `sendChat`, `audio`, `roster`, `speakers`, `ended`, `leave`. Also `RunConfig` (what B1's Durable Object hands the runtime), the event and status shapes, `CallbackTransport` and D886's failure codes. |
 | `src/constants.ts` | The bot's name, D872's audio format, ~30-second chunks, two minutes alone, the plan limits (30 minutes free, 2 hours paid), the admission wait, batching and retry. |
-| `src/lifecycle.ts` | `runBot`: joining → waiting room → notice → recording → left, or failed with a code. |
+| `src/lifecycle.ts` | `runBot`: joining → waiting room → notice → recording → local completion, reported to B1 as processing; B6 alone reports done. |
 | `src/wav.ts` | `encodeWav` (D872's canonical 44-byte header, byte for byte), `Chunker` (~30 s parts with `seq` and `start_ms`) and `toPcm16k` for browser audio. |
 | `src/uploader.ts` | `ChunkUploader`: chunks sent as they complete, in order, retried with backoff, idempotent by `seq`; `drain` at the end. |
-| `src/events.ts` | `EventBatcher`: roster and speaker events numbered `n`, timed `at_ms` from recording start, batched to the callback. |
-| `src/callback.ts` | `httpTransport`: signed POSTs to the run's callback and the one-time chunk URL, with deadlines and no redirects. **Provisional:** its paths (`CALLBACK_PATHS`) and signature (`signRequest`) follow B1's contract once #2579 publishes it. |
+| `src/events.ts` | `EventBatcher`: roster changes turned into snapshots and explicit speaker/silence events. Internal `n` dedupes a retried batch; the callback owns the global wire `seq`. |
+| `src/callback.ts` | `httpTransport`: B1's single signed `events` route, shared monotonic sequence, and same-origin one-use chunk PUT. Retries replay the same payload/seq before later events. Status, roster, speaker, chunk manifests and heartbeats share the queue. Errors contain a status only. |
 | `src/log.ts` | The only way a log line is written: codes and counts, nothing else (`safeFields`). |
 | `src/fakeAdapter.ts` | A scripted platform for the tests, and the reference implementation an adapter copies. |
-| `src/index.ts` | The public exports. |
+| `src/index.ts` | The public library exports. |
+| `src/runtime.ts` | One authenticated, idempotent run per container; start/stop acknowledge without waiting on callbacks. |
+| `src/runtimeAdapters.ts` | Packaged adapter factory: Chromium/Meet now, explicit failure while Zoom native bridge and Teams wiring are absent. |
+| `src/entry.ts` | Private HTTP entry, bounded command bodies, fixed logs, SIGTERM/SIGINT shutdown and a hard 28-second exit bound. |
+| `Dockerfile`, `.dockerignore` | Linux image; its build runs the fake-adapter command smoke test before producing the runtime stage. |
+| `package.json`, `package-lock.json` | Pinned browser dependency and isolated runtime install. |
 | `notice.mjs` | B9's notice contract (#2587, #2590): `meetingBotNotice`, `MEETING_BOT_NAME`, the publication gate and the dispatch disclosure. See **The notice** below. |
 | `src/adapters/meet.ts` | B3 (#2581): `MeetAdapter`, Google Meet. It joins as a guest with the microphone and camera off, waits in the waiting room, reads the participant panel and the active-speaker indicator, takes the tab's audio, and detects the end of the call and removal by the host (removal reads as the call ending). It takes a `MeetPage` (`src/adapters/meet/page.ts`), which a Playwright `Page` satisfies, so the core stays dependency-free. |
 | `src/adapters/meet/selectors.ts` | Every Meet page hook, in one place. **UNVERIFIED:** written without access to Meet, and to be measured (#2581 step 1, D886 §8). |
@@ -57,7 +66,7 @@ TypeScript directly (type stripping), so there is no build step.
 3. **Notice first.** Once admitted, the bot posts the notice in the meeting
    chat **before** it subscribes to audio, the roster or the speakers. The
    notice's words are D886's, sent by the Worker in `RunConfig.notice`. If the
-   chat refuses the notice three times, the run fails as `platform_blocked`
+   chat refuses the notice three times, the run fails as `notice_failed`
    and nothing is heard.
 4. **Record.** Audio arrives from the adapter as 16 kHz mono 16-bit PCM. It
    is cut into ~30-second WAV chunks (960,044 bytes) and uploaded as each one
@@ -66,7 +75,7 @@ TypeScript directly (type stripping), so there is no build step.
 5. **Leave.** The bot leaves when the call ends (`call_ended`), after two
    minutes as the only one there (`alone`), on Stop (`stopped`), or at the plan
    limit (`time_limit`). Then it sends the last partial chunk, retries anything
-   unsent, flushes the events and reports `left` with counts.
+   unsent, flushes the events within 20 seconds and reports `processing` through B1, with local counts. Any remaining upload/event is `processing_failed`, never a complete recording.
 
 **Failure codes** (D886): `not_admitted`, `meeting_ended`, `link_invalid`,
 `platform_blocked`, `obf_unavailable` (Zoom). An adapter raises one as an
@@ -111,7 +120,7 @@ Implement `MeetingAdapter` in `src/adapters/<platform>.ts` and keep the
 contract `fakeAdapter.ts` shows:
 
 - `roster` reports everyone already in the call as a `join` when subscribed,
-  then each change. It never reports the bot. `key` is the platform's id for
+  then each change. The core sends B1 snapshots of those changes, preserving the join clock through renames. It never reports the bot. `key` is the platform's id for
   that participant in this call; `name` is their display label, which is
   never proof of who they are (D876 §3).
 - `speakers` reports the platform's own active-speaker indicator. The core
@@ -134,9 +143,9 @@ does.
 - **Idempotent by design.** A chunk's `seq` and an event's `n` let the Worker
   drop a repeat. So the bot always resends when it is unsure, and never skips
   something it does not know was stored.
-- **No dependencies** in the core. An adapter may need a browser (Playwright
+- **Node built-ins only** in the core. An adapter may need a browser (Playwright
   and Chromium for Meet and Teams) or the Zoom Meeting SDK. Those belong to
-  the adapter and the image (B8), not here.
+  the packaged adapter; its Playwright version is locked here and B8 builds the image.
 - **The Worker decides.** The Durable Object is the only writer of a run's
   status. The bot reports what happened; it never decides what the founder
   sees.
@@ -184,3 +193,65 @@ capture plus the platform indicator is the explicitly limited fake-tested path.
 M3/M4/M6 on a free Zoom account, native SDK packaging/version selection, the
 owner's app feature and credentials, and B1 wiring remain outstanding. This
 library is not enabled for live dispatch by this change.
+
+
+## B1 contract and funded runtime (#2580 follow-up)
+
+`httpTransport` takes the exact HTTPS `/api/meeting-bots/<uuid>/` Worker base
+and the existing `MEETING_BOT_SECRET`. Every callback is one POST to `events`
+with a global `seq`, signed HMAC-SHA256 over
+`v1:<epoch milliseconds>:POST:<pathname>:<raw JSON>`. The headers are
+`x-meeting-bot-timestamp` and `x-meeting-bot-signature`. No redirects are
+followed. Chunk manifests carry `chunk_seq`, `size_bytes`, `start_ms`; only the
+Worker's same-origin, exact-run/chunk `upload_path` may receive the WAV.
+After a lost PUT response, the original manifest is replayed; only B1's
+explicit `chunk_already_uploaded` acknowledgement counts as already stored.
+
+B1 snapshots are `participants: [{id,name,joined_ms,left_ms}]`. Speaker changes
+use `participant_id`, including `null` for silence. Names remain display
+labels, never account identity. The adapter's legacy failure codes are mapped
+to B1's published allowlist: `not_admitted` → `admission_refused`,
+`meeting_ended` unchanged, notice/processing failures keep their matching
+codes, and other platform/OBF/link failures use `runtime_failed`. SIGTERM is
+locally `interrupted`, mapped to `failed/runtime_failed` in the current B1
+protocol. B1/B8 recovery and part-number continuation across replacement
+containers are not established by an in-memory client; they need a persisted
+resume cursor and an agreed restart transition before being enabled.
+
+`RunConfig` requires absolute `deadlineAt` and `budgetDeadlineAt`. Runtime
+includes lobby and notice time; admission never resets the plan clock.
+Heartbeats run every 15 seconds. An unrenewed lease stops capture and join
+immediately, even during an unresponsive adapter call. Expired/malformed
+replies never grant time. B1 must fund and return the next lease before the
+current interval expires: funding only at its boundary cannot guarantee an
+uninterrupted run across a network round trip. This is an integration gate,
+not permission for the runtime to extend an unfunded interval.
+
+## Container control
+
+The container uses `MEETING_BOT_SECRET` (the existing shared secret),
+`MEETING_BOT_CALLBACK_ORIGIN` (an HTTPS Worker origin) and optional `PORT`
+(default 8080). B8 keeps this port private. POST `/start` and `/stop` use the
+same signed-header format, signing their actual path. The five-minute command
+window and 16 KiB body bound are enforced before a command is acted on.
+
+`/start` takes B1's `{uid,platform,meeting_url,limit_minutes,deadline_at,
+budget_deadline_at}`. An optional server-selected `venture_name` personalises
+B9's shared notice; its generic authorised-venture fallback is otherwise used.
+The runtime itself calls the gated `meetingBotNotice`, so an unpublished
+notice refuses before constructing an adapter. There is no environment bypass.
+A repeated identical start returns an acknowledgement and creates no second
+adapter; a conflicting run/payload is refused. `/stop` takes `{uid}`.
+Neither command waits for the callback of the same serialized supervisor.
+
+`GET /healthz` is a content-free process check; `ready` states the notice
+publication gate. Readiness is not a live platform verification. The image
+runs as the `node` user. Chromium's sandbox is enabled; B8 must verify the
+container host's namespace/seccomp compatibility, rather than disabling it.
+Python is the sidecar host only: this image does not claim the Zoom SDK native
+bridge has been packaged or measured. The switch and notice remain gated.
+
+Run `npm ci --prefix meeting-bot`, then `npm run test:meeting-bot` from the
+repository root. `CHROMIUM_PATH` can select an installed test browser for the
+constructed Meet fixture. The new callback/recovery/container scenarios and
+12 isolated source mutations use no real meetings, credentials or providers.

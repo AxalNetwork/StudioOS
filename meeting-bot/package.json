@@ -1,7 +1,19 @@
 {
   "name": "@axal/meeting-bot",
   "private": true,
-  "description": "D886 B2 (#2580): Axal's meeting bot, the host-independent core. No dependencies; Node 22 runs the TypeScript directly.",
+  "description": "D886: Node runtime core and container entry; browser dependency belongs to the packaged adapter.",
   "type": "module",
-  "engines": { "node": ">=22.6" }
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --no-warnings --test 'test/*.test.ts'",
+    "start": "node --experimental-strip-types src/entry.ts"
+  },
+  "dependencies": {
+    "playwright": "1.64.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0"
+  }
 }

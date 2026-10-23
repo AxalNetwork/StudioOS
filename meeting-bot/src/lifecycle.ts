@@ -1,24 +1,5 @@
-/**
- * D886 B2 (#2580): one bot run, from join to leave, on any platform.
- *
- *   joining → waiting_room → recording → left
- *                    ↘           ↘
- *                     failed (one of D886's codes)
- *
- * - The bot joins as "Eadwyn AI" and waits in the lobby or waiting room until
- *   the host admits it, for at most `ADMIT_TIMEOUT_MS` (`not_admitted`).
- * - Once in, it posts the recording notice in the meeting chat **before** it
- *   listens to anything. A notice that cannot be posted ends the run as
- *   `platform_blocked`, with no audio taken.
- * - It records until the call ends, it has been alone for `ALONE_MS`, the
- *   founder presses Stop (the `stop` signal), or the plan's limit passes.
- * - Audio goes out as ~30 s WAV chunks as they complete, events in batches;
- *   both are drained after the bot leaves, then the final status is sent.
- *
- * The Worker's Durable Object (B1) is the only writer of the run's status;
- * the bot reports, it does not decide what the founder sees.
- */
-import { ADMIT_TIMEOUT_MS, ALONE_MS, BOT_NAME, EVENT_FLUSH_MS, NOTICE_TRIES, PAID_LIMIT_MS } from './constants.ts';
+/** D886 B2: notice before capture, Worker-funded runtime, bounded cleanup. */
+import { ADMIT_TIMEOUT_MS, ALONE_MS, BOT_NAME, EVENT_FLUSH_MS, HEARTBEAT_MS, NOTICE_TRIES, PAID_LIMIT_MS } from './constants.ts';
 import { EventBatcher } from './events.ts';
 import { logLine } from './log.ts';
 import { ChunkUploader, withRetry } from './uploader.ts';
@@ -27,189 +8,147 @@ import { AdapterFailure } from './types.ts';
 import type { CallbackTransport, Clock, FailureCode, LeaveReason, LogSink, MeetingAdapter, RunConfig, StatusReport, Unsubscribe } from './types.ts';
 
 export interface RunDeps {
-  readonly adapter: MeetingAdapter;
-  readonly transport: CallbackTransport;
-  readonly clock?: Clock;
-  readonly log?: LogSink;
-  /** Aborted when the founder presses Stop. */
+  readonly adapter: MeetingAdapter; readonly transport: CallbackTransport; readonly clock?: Clock; readonly log?: LogSink;
   readonly stop?: AbortSignal;
+  /** SIGTERM/SIGINT: finish one bounded flush, then exit. */
+  readonly shutdown?: AbortSignal;
 }
-
-export interface RunResult extends StatusReport {
-  readonly state: 'left' | 'failed';
-}
-
-/** Real timers. */
+export interface RunResult extends StatusReport { readonly state: 'left'|'failed' }
 export const realClock: Clock = {
-  now: () => Date.now(),
-  setTimeout: (fn, ms) => { const t = setTimeout(fn, ms); return () => clearTimeout(t); },
-  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  now:()=>Date.now(), setTimeout:(fn,ms)=>{const t=setTimeout(fn,ms);return()=>clearTimeout(t);},
+  sleep:ms=>new Promise(r=>setTimeout(r,ms)),
 };
-
-const silent: LogSink = () => {};
-
-/** The run's config is the Worker's; a bad one is a bug there, refused before anything is joined. */
-export function checkConfig(cfg: RunConfig): void {
-  if (!cfg.notice || !cfg.notice.trim()) throw new Error('notice_required');
-  if (!Number.isFinite(cfg.limitMs) || cfg.limitMs <= 0 || cfg.limitMs > PAID_LIMIT_MS) throw new Error('limit_out_of_range');
+export function checkConfig(cfg: RunConfig, now=Date.now()): void {
+  if (!cfg.notice?.trim()) throw new Error('notice_required');
+  if (!Number.isFinite(cfg.limitMs)||cfg.limitMs<=0||cfg.limitMs>PAID_LIMIT_MS) throw new Error('limit_out_of_range');
+  if (!Number.isSafeInteger(cfg.deadlineAt)||cfg.deadlineAt<=now||cfg.deadlineAt>now+cfg.limitMs
+    ||!Number.isSafeInteger(cfg.budgetDeadlineAt)||cfg.budgetDeadlineAt<=now||cfg.budgetDeadlineAt>cfg.deadlineAt) throw new Error('lease_required');
 }
-
-function meetingUrlOk(raw: string): boolean {
+const codeOf=(e:unknown):FailureCode=>e instanceof AdapterFailure?e.code:'platform_blocked';
+export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
+  const clock=deps.clock??realClock,log=deps.log??(()=>{}),{adapter,transport}=deps;
+  checkConfig(cfg,clock.now());
+  const control=new AbortController();
+  let fundedUntil=0,dataStop:AbortController|null=null,leaving:Promise<void>|null=null;
+  let reason: LeaveReason='stopped', finished=false, heartbeatCancel=()=>{},leaseCancel=()=>{};
+  const end=(r:LeaveReason)=>{if(!control.signal.aborted){reason=r;control.abort();void leave();}};
+  const onStop=()=>end('stopped'),onShutdown=()=>end('interrupted');
+  deps.stop?.addEventListener('abort',onStop);deps.shutdown?.addEventListener('abort',onShutdown);
+  const planCancel=clock.setTimeout(()=>end('time_limit'),cfg.deadlineAt-clock.now());
+  const renew=(deadline:number)=>{
+    // Stale or malformed replies never extend a funded interval.
+    if(!Number.isSafeInteger(deadline)||deadline<=clock.now()) return;
+    fundedUntil=Math.min(deadline,cfg.deadlineAt);
+    leaseCancel();leaseCancel=clock.setTimeout(()=>end('tokens'),Math.min(deadline,cfg.deadlineAt)-clock.now());
+  };
+  renew(cfg.budgetDeadlineAt);
+  const heartbeat=async()=>{
+    if(finished||control.signal.aborted)return;
+    try{renew(await transport.heartbeat());}catch{logLine(log,'heartbeat_unsent');}
+    if(!finished&&!control.signal.aborted)heartbeatCancel=clock.setTimeout(()=>{void heartbeat();},HEARTBEAT_MS);
+  };
+  heartbeatCancel=clock.setTimeout(()=>{void heartbeat();},HEARTBEAT_MS);
+  const report=async(r:StatusReport,tries?:number)=>{
+    const terminal=r.state==='failed'||r.state==='left';
+    logLine(log,'status',{platform:cfg.platform,state:r.state,reason:r.reason,code:r.code});
+    const ok=await withRetry(async()=>{const lease=await transport.status(r);if(typeof lease==='number')renew(lease);},clock,tries??(terminal?1:3),terminal?undefined:control.signal);
+    if(!ok)logLine(log,'status_unsent',{state:r.state});
+    return ok;
+  };
+  const leave=()=>leaving??(leaving=(async()=>{
+    let cancel=()=>{};
+    await Promise.race([adapter.leave().catch(()=>{}),new Promise<void>(resolve=>{cancel=clock.setTimeout(resolve,5000);})]);cancel();
+  })());
+  const failure=async(code:FailureCode):Promise<RunResult>=>{
+    await leave();const result:RunResult={state:'failed',code};await report(result);return result;
+  };
+  const early=async():Promise<RunResult>=>{
+    await leave();const result:RunResult={state:'left',reason,chunks:0,last_seq:-1,chunks_failed:0,events:0,events_dropped:0};await report(result);return result;
+  };
+  const interrupted=new Promise<'stopped'>(resolve=>control.signal.addEventListener('abort',()=>resolve('stopped'),{once:true}));
+  const attempt=async<T>(work:Promise<T>):Promise<T|'stopped'>=>{
+    work.catch(()=>{});
+    return control.signal.aborted?'stopped':Promise.race([work,interrupted]);
+  };
   try {
-    const u = new URL(raw);
-    return u.protocol === 'https:' && !u.username && !u.password;
-  } catch {
-    return false;
-  }
-}
-
-const codeOf = (err: unknown): FailureCode => (err instanceof AdapterFailure ? err.code : 'platform_blocked');
-
-export async function runBot(cfg: RunConfig, deps: RunDeps): Promise<RunResult> {
-  checkConfig(cfg);
-  const { adapter, transport } = deps;
-  const clock = deps.clock ?? realClock;
-  const log = deps.log ?? silent;
-  const stop = deps.stop ?? new AbortController().signal;
-  const platform = cfg.platform;
-
-  const report = async (r: StatusReport) => {
-    logLine(log, 'status', { platform, state: r.state, reason: r.reason, code: r.code });
-    if (!(await withRetry(() => transport.status(r), clock))) logLine(log, 'status_unsent', { state: r.state });
-  };
-
-  const fail = async (code: FailureCode): Promise<RunResult> => {
-    await adapter.leave().catch(() => {});
-    const r: RunResult = { state: 'failed', code };
-    await report(r);
-    return r;
-  };
-
-  if (!meetingUrlOk(cfg.meetingUrl)) return fail('link_invalid');
-
-  // Stop before admission leaves without recording; the run still ends as `stopped`.
-  const leftEarly = async (): Promise<RunResult> => {
-    await adapter.leave().catch(() => {});
-    const r: RunResult = { state: 'left', reason: 'stopped', chunks: 0, last_seq: -1, chunks_failed: 0, events: 0, events_dropped: 0 };
-    await report(r);
-    return r;
-  };
-
-  await report({ state: 'joining' });
-  const waiting = new AbortController();
-  const onStop = () => waiting.abort();
-  stop.addEventListener('abort', onStop);
-  try {
-    if (stop.aborted) return await leftEarly();
+    if(deps.stop?.aborted)onStop();if(deps.shutdown?.aborted)onShutdown();
+    let valid=false;
+    try{const url=new URL(cfg.meetingUrl);valid=url.protocol==='https:'&&!url.username&&!url.password;}catch{/* fail below */}
+    if(!valid)return await failure('link_invalid');
+    if(control.signal.aborted)return await early();
+    if(!await report({state:'joining'}))return await failure('platform_blocked');
     try {
-      await adapter.join({ url: cfg.meetingUrl, botName: BOT_NAME, signal: waiting.signal });
-    } catch (err) {
-      if (stop.aborted) return await leftEarly();
-      return await fail(codeOf(err));
-    }
-    await report({ state: 'waiting_room' });
-    let cancelAdmit: () => void = () => {};
-    const admitTimeout = new Promise<'timeout'>((r) => { cancelAdmit = clock.setTimeout(() => r('timeout'), ADMIT_TIMEOUT_MS); });
-    const stopped = new Promise<'stopped'>((r) => {
-      if (stop.aborted) r('stopped');
-      else stop.addEventListener('abort', () => r('stopped'), { once: true });
-    });
-    const admitted = adapter.admitted(waiting.signal).then(() => 'admitted' as const);
-    admitted.catch(() => {}); // a refusal after the timeout or a Stop has nothing left to fail
-    let outcome: 'admitted' | 'timeout' | 'stopped';
+      if(await attempt(adapter.join({url:cfg.meetingUrl,botName:BOT_NAME,signal:control.signal}))==='stopped')return await early();
+      if(!await report({state:'waiting_room'}))return await failure('platform_blocked');
+      let cancel=()=>{};
+      const timeout=new Promise<'timeout'>(resolve=>{cancel=clock.setTimeout(()=>resolve('timeout'),ADMIT_TIMEOUT_MS);});
+      try {
+        const admission=await Promise.race([attempt(adapter.admitted(control.signal)),timeout]);
+        if(admission==='stopped')return await early();
+        if(admission==='timeout'){control.abort();return await failure('not_admitted');}
+      }finally{cancel();}
+    }catch(e){return control.signal.aborted?await early():await failure(codeOf(e));}
+    const announced=await attempt(withRetry(()=>adapter.sendChat(cfg.notice),clock,NOTICE_TRIES));
+    if(announced==='stopped'||control.signal.aborted)return await early();
+    if(!announced)return await failure('notice_failed');
+    logLine(log,'notice_posted',{platform:cfg.platform});
+    if(!await report({state:'recording'}))return await failure('platform_blocked');
+    if(control.signal.aborted)return await early();
+    dataStop=new AbortController();
+    const origin=clock.now(),chunker=new Chunker(),uploader=new ChunkUploader(transport,clock,log,dataStop.signal),events=new EventBatcher(transport,clock,log,origin,dataStop.signal);
+    const present=new Set<string>(),seen=new Set<string>(),subs:Unsubscribe[]=[];
+    let aloneCancel:(()=>void)|null=null,flushCancel=()=>{},finish:(why:LeaveReason)=>void=()=>{};
+    let capturing=true;
+    const done=new Promise<LeaveReason>(resolve=>{finish=why=>{capturing=false;resolve(why);};});
+    const stopRecording=()=>finish(reason);
+    control.signal.addEventListener('abort',stopRecording,{once:true});
+    const checkAlone=()=>{
+      if(!present.size&&!aloneCancel)aloneCancel=clock.setTimeout(()=>finish('alone'),ALONE_MS);
+      if(present.size&&aloneCancel){aloneCancel();aloneCancel=null;}
+    };
+    const authorised=()=>{
+      if(clock.now()>=cfg.deadlineAt)end('time_limit');
+      else if(clock.now()>=fundedUntil)end('tokens');
+      return capturing&&!control.signal.aborted;
+    };
+    const tick=()=>{void events.flush();flushCancel=clock.setTimeout(tick,EVENT_FLUSH_MS);};
+    let ended:LeaveReason;
     try {
-      outcome = await Promise.race([admitted, admitTimeout, stopped]);
-    } catch (err) {
-      cancelAdmit();
-      if (stop.aborted) return await leftEarly();
-      return await fail(codeOf(err));
+      subs.push(adapter.ended(()=>finish('call_ended')));
+      subs.push(adapter.roster(c=>{
+        if(!authorised())return;
+        if(c.kind==='join'){present.add(c.key);seen.add(c.key);}else present.delete(c.key);
+        events.roster(c);checkAlone();
+      }));
+      subs.push(adapter.speakers(c=>{if(authorised())events.speaker(c);}));
+      subs.push(adapter.audio(f=>{if(authorised())for(const chunk of chunker.push(f.samples))uploader.add(chunk);}));
+      tick();checkAlone();if(control.signal.aborted)stopRecording();
+      ended=await done;
+    } catch(e) {return await failure(codeOf(e));}
+    finally {
+      capturing=false;
+      for(const off of subs){try{off();}catch{/* continue cleanup */}}
+      flushCancel();if(aloneCancel)(aloneCancel as ()=>void)();control.signal.removeEventListener('abort',stopRecording);
     }
-    cancelAdmit();
-    if (outcome === 'stopped') return await leftEarly();
-    if (outcome === 'timeout') { waiting.abort(); return await fail('not_admitted'); }
+    // Capture and timers stop before leave or any potentially slow upload.
+    await leave();
+    finished=true;heartbeatCancel();leaseCancel();
+    events.speaker({key:null});
+    const partial=chunker.flush();if(partial)uploader.add(partial);
+    // B1's Stop drain is 30s; finish before it, even when a network stays down.
+    let drainCancel=()=>{},timedOut=false;
+    await Promise.race([
+      Promise.all([uploader.drain(),events.flush()]),
+      new Promise<void>(resolve=>{drainCancel=clock.setTimeout(()=>{timedOut=true;resolve();},20_000);}),
+    ]);drainCancel();
+    const incomplete=timedOut||uploader.failedCount>0||events.droppedCount+events.pendingCount>0;
+    const result:RunResult={state:incomplete?'failed':'left',...(incomplete?{code:'processing_failed' as const}:{reason:ended}),
+      chunks:uploader.storedCount,last_seq:uploader.lastSeq,chunks_failed:uploader.failedCount,events:events.sentCount,
+      events_dropped:events.droppedCount+events.pendingCount,participants:seen.size};
+    dataStop.abort();
+    await report(result,1);return result;
   } finally {
-    stop.removeEventListener('abort', onStop);
+    finished=true;dataStop?.abort();planCancel();leaseCancel();heartbeatCancel();control.abort();transport.close?.();
+    deps.stop?.removeEventListener('abort',onStop);deps.shutdown?.removeEventListener('abort',onShutdown);
   }
-
-  // The notice goes up before the bot listens to anything.
-  if (!(await withRetry(() => adapter.sendChat(cfg.notice), clock, NOTICE_TRIES))) {
-    logLine(log, 'notice_unsent', { platform });
-    return fail('platform_blocked');
-  }
-  logLine(log, 'notice_posted', { platform });
-
-  return record(cfg, adapter, transport, clock, log, stop, report);
-}
-
-async function record(
-  cfg: RunConfig,
-  adapter: MeetingAdapter,
-  transport: CallbackTransport,
-  clock: Clock,
-  log: LogSink,
-  stop: AbortSignal,
-  report: (r: StatusReport) => Promise<void>,
-): Promise<RunResult> {
-  const origin = clock.now();
-  const chunker = new Chunker();
-  const uploader = new ChunkUploader(transport, clock, log);
-  const events = new EventBatcher(transport, clock, log, origin);
-  const present = new Set<string>();
-  const seen = new Set<string>();
-  const subs: Unsubscribe[] = [];
-  const timers: Array<() => void> = [];
-
-  let finish: (reason: LeaveReason) => void = () => {};
-  const done = new Promise<LeaveReason>((r) => { finish = r; });
-
-  let cancelAlone: (() => void) | null = null;
-  const checkAlone = () => {
-    if (present.size === 0 && !cancelAlone) cancelAlone = clock.setTimeout(() => finish('alone'), ALONE_MS);
-    if (present.size > 0 && cancelAlone) { cancelAlone(); cancelAlone = null; }
-  };
-
-  const tick = () => {
-    void events.flush();
-    timers.push(clock.setTimeout(tick, EVENT_FLUSH_MS));
-  };
-
-  await report({ state: 'recording' });
-  subs.push(adapter.ended(() => finish('call_ended')));
-  subs.push(adapter.roster((c) => {
-    if (c.kind === 'join') { present.add(c.key); seen.add(c.key); } else present.delete(c.key);
-    events.roster(c);
-    checkAlone();
-  }));
-  subs.push(adapter.speakers((c) => events.speaker(c)));
-  subs.push(adapter.audio((f) => { for (const chunk of chunker.push(f.samples)) uploader.add(chunk); }));
-  if (stop.aborted) finish('stopped');
-  else stop.addEventListener('abort', () => finish('stopped'), { once: true });
-  timers.push(clock.setTimeout(() => finish('time_limit'), cfg.limitMs));
-  timers.push(clock.setTimeout(tick, EVENT_FLUSH_MS));
-  checkAlone();
-
-  const reason = await done;
-  for (const u of subs) u();
-  for (const t of timers) t();
-  if (cancelAlone) (cancelAlone as () => void)();
-  await adapter.leave().catch(() => {});
-  logLine(log, 'left', { platform: cfg.platform, reason });
-
-  const tail = chunker.flush();
-  if (tail) uploader.add(tail);
-  await uploader.drain();
-  await events.flush();
-
-  const r: RunResult = {
-    state: 'left',
-    reason,
-    chunks: uploader.storedCount,
-    last_seq: uploader.lastSeq,
-    chunks_failed: uploader.failedCount,
-    events: events.sentCount,
-    events_dropped: events.droppedCount + events.pendingCount,
-    participants: seen.size,
-  };
-  await report(r);
-  return r;
 }

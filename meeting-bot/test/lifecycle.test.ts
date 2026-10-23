@@ -13,7 +13,7 @@ import { FakeClock, StubCallback, settle, tone } from './_harness.ts';
 
 const NOTICE = 'Eadwyn AI is recording this call for the host. [notice v1]';
 const cfg = (over: Partial<RunConfig> = {}): RunConfig => ({
-  runId: 'run_1', platform: 'google_meet', meetingUrl: 'https://meet.google.com/aaa-bbbb-ccc', notice: NOTICE, limitMs: FREE_LIMIT_MS, ...over,
+  runId: 'run_1', platform: 'google_meet', meetingUrl: 'https://meet.google.com/aaa-bbbb-ccc', notice: NOTICE, limitMs: FREE_LIMIT_MS, deadlineAt: 1_000_000 + (over.limitMs ?? FREE_LIMIT_MS), budgetDeadlineAt: 1_120_000, ...over,
 });
 
 function start(over: { cfg?: Partial<RunConfig>; adapter?: FakeAdapter; stop?: AbortController } = {}) {
@@ -61,9 +61,9 @@ test('1. a whole call: lobby, notice before listening, ~30 s chunks, roster and 
 
   const ev = cb.allEvents;
   assert.deepEqual(ev.map((e) => e.n), [1, 2, 3, 4, 5, 6], 'events numbered in order, none lost');
-  assert.deepEqual(ev.filter((e) => e.type === 'roster').map((e) => e.type === 'roster' && `${e.kind}:${e.key}:${e.name}`), ['join:p1:Founder', 'join:p2:Interviewee', 'leave:p2:Interviewee']);
-  assert.deepEqual(ev.filter((e) => e.type === 'speaker').map((e) => e.type === 'speaker' && e.key), ['p1', 'p2', null], 'one event per change of speaker');
-  assert.ok(ev.every((e) => e.at_ms >= 0 && e.at_ms < 60_000));
+  assert.deepEqual(ev.filter((e) => e.type === 'roster').map((e) => e.type === 'roster' && e.participants.map(p => `${p.id}:${p.name}:${p.left_ms === null ? 'in' : 'out'}`).join(',')), ['p1:Founder:in', 'p1:Founder:in,p2:Interviewee:in', 'p1:Founder:in,p2:Interviewee:out']);
+  assert.deepEqual(ev.filter((e) => e.type === 'speaker').map((e) => e.type === 'speaker' && e.participant_id), ['p1', 'p2', null], 'one event per change of speaker');
+  assert.ok(ev.filter(e=>e.type==='speaker').every(e=>e.at_ms>=0&&e.at_ms<60_000));
   assert.equal(r.events, 6); assert.equal(r.participants, 2);
 
   assert.deepEqual(cb.statuses.map((s) => s.state), ['joining', 'waiting_room', 'recording', 'left']);
@@ -168,7 +168,7 @@ test('6. failure codes: refused, never admitted, a bad link, and each code an ad
 
 test('7. a notice that cannot be posted ends the run with nothing heard; one that works on a retry goes on', async () => {
   const blocked = start({ adapter: new FakeAdapter({ openDoor: true, chatFailures: 3 }) });
-  assert.deepEqual(await blocked.clock.until(blocked.run), { state: 'failed', code: 'platform_blocked' });
+  assert.deepEqual(await blocked.clock.until(blocked.run), { state: 'failed', code: 'notice_failed' });
   assert.ok(!blocked.adapter.calls.includes('audio') && !blocked.adapter.calls.includes('roster'));
   assert.ok(!blocked.cb.statuses.some((s) => s.state === 'recording'));
 

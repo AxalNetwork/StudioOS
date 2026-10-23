@@ -18,13 +18,18 @@ export function backoffMs(i: number): number {
 }
 
 /** Run `send` until it resolves or `tries` are spent. True when it went through. */
-export async function withRetry(send: () => Promise<void>, clock: Clock, tries: number = RETRY_TRIES): Promise<boolean> {
+export async function withRetry(send: () => Promise<void>, clock: Clock, tries: number = RETRY_TRIES, signal?: AbortSignal): Promise<boolean> {
   for (let i = 0; i < tries; i += 1) {
+    if(signal?.aborted)return false;
     try {
       await send();
       return true;
     } catch {
-      if (i < tries - 1) await clock.sleep(backoffMs(i));
+      if (i < tries - 1) {
+        let onAbort=()=>{};
+        await Promise.race([clock.sleep(backoffMs(i)),new Promise<void>(resolve=>{onAbort=resolve;if(signal?.aborted)resolve();else signal?.addEventListener('abort',onAbort,{once:true});})]);
+        signal?.removeEventListener('abort',onAbort);
+      }
     }
   }
   return false;
@@ -37,11 +42,13 @@ export class ChunkUploader {
   private readonly transport: CallbackTransport;
   private readonly clock: Clock;
   private readonly log: LogSink;
+  private readonly signal?: AbortSignal;
 
-  constructor(transport: CallbackTransport, clock: Clock, log: LogSink) {
+  constructor(transport: CallbackTransport, clock: Clock, log: LogSink, signal?: AbortSignal) {
     this.transport = transport;
     this.clock = clock;
     this.log = log;
+    this.signal = signal;
   }
 
   /** Queue a chunk and start sending if nothing is. */
@@ -70,7 +77,7 @@ export class ChunkUploader {
     const kept: Chunk[] = [];
     while (this.queue.length) {
       const chunk = this.queue.shift()!;
-      const ok = await withRetry(() => this.transport.putChunk(chunk.seq, chunk.wav), this.clock);
+      const ok = await withRetry(() => this.transport.putChunk(chunk.seq, chunk.wav, chunk.start_ms), this.clock,undefined,this.signal);
       if (ok) {
         this.stored.add(chunk.seq);
         logLine(this.log, 'chunk_stored', { seq: chunk.seq, bytes: chunk.wav.byteLength });
