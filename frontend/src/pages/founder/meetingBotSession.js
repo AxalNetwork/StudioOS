@@ -1,5 +1,5 @@
 // D886 B7 (#2585): layout-independent contract for the founder's bot controls.
-// Not mounted until B1's routes and the approved canvas exist. The adapter is
+// Mounted by MeetingBotPanel in the existing Record a Session look (S1 ruling). The adapter is
 // injected: this module neither fetches a route nor starts a device recorder.
 
 const WORDS = Object.freeze({
@@ -14,6 +14,10 @@ const WORDS = Object.freeze({
 });
 const STOPPABLE = new Set(['queued', 'joining', 'waiting_room', 'recording']);
 const FAILURES = Object.freeze({
+  runtime_unavailable: 'Eadwyn AI is temporarily unavailable. Check the session before trying again.',
+  heartbeat_timeout: 'The connection to Eadwyn AI was interrupted.',
+  schedule_missed: 'The scheduled start was missed. Schedule the call again.',
+  admission_refused: 'Eadwyn AI was not admitted. Ask the host to check the waiting room.',
   not_admitted: 'Eadwyn AI was not admitted. Ask the host to check the waiting room.',
   meeting_ended: 'The meeting ended before Eadwyn AI could finish recording.',
   link_invalid: 'Eadwyn AI could not use this meeting link. Check it and try again.',
@@ -21,6 +25,14 @@ const FAILURES = Object.freeze({
   obf_unavailable: 'Zoom authorization is required. Reconnect Zoom and join the meeting before sending Eadwyn AI.',
 });
 const REFUSALS = Object.freeze({
+  bot_unavailable: 'Eadwyn AI is not available on this deployment yet. You can choose Record this device.',
+  bot_price_unavailable: 'Eadwyn AI is not available until its price has been measured.',
+  ai_paused: 'AI is paused on this account. Contact support.',
+  budget_review: 'An earlier AI charge needs review before another call can start.',
+  invalid_schedule: 'Choose a call time in the next seven days.',
+  session_in_use: 'Create a fresh session for Eadwyn AI.',
+  audio_removed: 'This session’s recording was removed. Create a new session.',
+  bot_stop_pending: 'Eadwyn AI is still stopping. Read its status before trying again.',
   consent_required: 'Record the interviewee’s agreement before sending Eadwyn AI.',
   unsupported_link: 'Use a Zoom, Google Meet or Microsoft Teams meeting link.',
   bot_already_running: 'Eadwyn AI is already assigned to this session. Check its status before trying again.',
@@ -37,7 +49,7 @@ export function botPlatform(raw) {
   const host = url.hostname.toLowerCase();
   if (host === 'zoom.us' || host.endsWith('.zoom.us')) return 'zoom';
   if (host === 'meet.google.com') return 'google_meet';
-  if (host === 'teams.microsoft.com' || host === 'teams.live.com') return 'teams';
+  if (host === 'teams.microsoft.com' || host === 'teams.live.com' || host === 'teams.cloud.microsoft') return 'teams';
   return null;
 }
 
@@ -50,7 +62,7 @@ export function botActions(meetingUrl) {
 /** Never echo server/provider messages: they may contain a private link. */
 export function botRefusal(error) {
   if (own(REFUSALS, error?.code)) return REFUSALS[error.code];
-  if (error?.status === 402) return 'There are not enough AI tokens for this call’s time limit. Add tokens before sending Eadwyn AI.';
+  if (error?.status === 402 || ['budget_user_day', 'budget_user_month', 'spend_limit', 'tokens'].includes(error?.code)) return 'There are not enough AI tokens for this call’s time limit. Add tokens before sending Eadwyn AI.';
   return 'Eadwyn AI could not complete that request. Check the status before trying again.';
 }
 
@@ -98,14 +110,16 @@ export function botView(read, { unreadable = false, now = Date.now() } = {}) {
     poll: STOPPABLE.has(bot.status) || bot.status === 'processing',
     timer,
     participantCount: Number.isSafeInteger(bot.participant_count) && bot.participant_count >= 0 ? bot.participant_count : null,
-    failure: bot.status === 'failed'
+    failure: bot.status === 'stopped' && ['tokens','time_limit','access_revoked'].includes(bot.failure_code)
+      ? ({ tokens:'Eadwyn AI stopped because there are not enough AI tokens to continue.',time_limit:'Eadwyn AI stopped at this plan’s call time limit.',access_revoked:'Eadwyn AI stopped because recording permission ended.' }[bot.failure_code])
+      : bot.status === 'failed'
       ? (own(FAILURES, bot.failure_code) ? FAILURES[bot.failure_code] : 'Eadwyn AI could not record this call. Check the meeting before trying again.')
       : null,
   };
 }
 
 /**
- * The future screen supplies B1's get/send/stop methods bound to ONE session.
+ * The screen supplies B1's get/send/stop methods bound to ONE session.
  * Explicit reads only: the screen owns its poll lifecycle. Actions invalidate
  * older reads, duplicate presses share one write, and disposal ignores late
  * responses. A refusal never retries a dispatch or falls back to microphone.

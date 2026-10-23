@@ -318,6 +318,7 @@ content-free status projection, the runtime interface and the full-call budget
 check. `MeetingBotRun` serializes state and renews two-minute bot-fee holds on
 the existing ledger. Transcription remains B6's `aiRouter` charge. See D886 §12
 for the callback, runtime lease, privacy and release contracts.
+
 D886 B6 (#2584): `meetingBotAssembly.ts` reads B1's authenticated encrypted
 event store, projects roster snapshots and null speaker marks into the pure
 mapper in `channels/botTranscript.ts`, and validates the complete uploaded
@@ -341,3 +342,7 @@ text and labels; session deletion removes the run and events.
 shape (null before assembly); corrupt encrypted data fails as unreadable. B7
 owns mounting this final read alongside its live roster. There is no new route,
 feature-switch change, live-runtime validation or production deployment here.
+
+D886 B7: `meetingBotParticipants.ts` decrypts the latest roster for the separate
+creator-only participants read. It projects display names/times only, excludes
+the bot and emails, and never turns a failed read into an empty list.

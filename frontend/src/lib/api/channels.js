@@ -146,12 +146,12 @@ export const channelsApi = {
     method: 'POST', body: JSON.stringify({}),
   }),
   meetings: (interviewId) => request(`/founder/validate/interviews/${enc(interviewId)}/meetings`),
-  scheduleMeeting: (interviewId, { provider: p, starts_at, duration_min, topic, consent, auto_record }) => {
+  scheduleMeeting: (interviewId, { provider: p, starts_at, duration_min, topic, consent, auto_record, auto_send_bot }) => {
     if (!MEETING_PROVIDERS.has(p)) throw new Error(`Unknown meeting provider: ${p}`);
     return request(`/founder/validate/interviews/${enc(interviewId)}/meetings`, {
       method: 'POST',
       body: JSON.stringify({
-        provider: p, starts_at, duration_min: Number(duration_min), ...(topic ? { topic } : {}), consent,
+        provider: p, starts_at, auto_send_bot: auto_send_bot !== false, duration_min: Number(duration_min), ...(topic ? { topic } : {}), consent,
         ...(auto_record === true ? { auto_record: true } : {}),
       }),
     });

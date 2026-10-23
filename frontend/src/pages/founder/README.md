@@ -47,47 +47,27 @@ D653: `RoundCallSheet.jsx` is Raise’s Call for Capital, five steps (D686 §5.6
 - `InterviewReviewPage.jsx` is Customer research's record (D697, #1659; its default export is `InterviewRecord`), drawn by `../cycles/CycleRoute.jsx` in record mode at `/validate/customer-research/:id`, inside the cycle. It draws what the record read sends (#1692): the facts, What it fed, Session and Activity for every reader, and for a writer only, Transcript (the session switcher, `?session=`, the summary, the passages with their start times, Search, the player), Eadwyn's placements (`InterviewSessionPage`'s `ReviewStep`), Cost (the chosen session's receipt lines) and the interview's tools. Edit details writes only the name and company through the record's `edit-details`; Delete keeps its confirm. The session routes are called only when the read sends Transcript, and every dialog goes through `CycleRoute`'s `openDialog`. Its rules are `interviewReviewModel.js`, `recordParts` among them. `SessionSummary.jsx` is the summary (§5.10): StudioOS's own, each sentence linked to the passages it cites, the model named, "Not recorded" with none, and Summarise when there is a transcript and no summary. Since D757 (#1927) it also holds the digest (`DigestView`: a writer's draft, "Draft · written by <model>", with Keep and Edit, which removes a key quote but never rewrites one; a kept digest for anyone else), the engine's state in the Worker's words (`EngineLine`, Add tokens on a budget refusal) and the source badge. `InterviewReview.jsx`'s `ModuleSuggestions` lists the session's suggestions under all seven Validate modules, each with "Heard in <name> · time · speaker" linking its line, and Accept all for a module. Their rules are `sessionDigestModel.js`; the Record finish line ("Summary drafted · n suggestions to review", linking to the session) is `../../lib/activeRecording.js`'s `finishLine`. An assigned chat's Inbox row says the same ("Summary drafted · n suggestions", `channelThreads.js`'s `threadEngineLine`), from the thread read's `digest_status` and `pending_suggestions` (#1930).
 - `InterviewReview.jsx` is the review step of `/validate/session/:id` (D660 part 2): placements by module with accept, edit and discard, compare, "Ask the transcript" with citations, and the structuring receipt. It takes data as props; `InterviewSessionPage`'s `ReviewStep` mounts it once a session is transcribed, on #1494's routes (D660 part 3).
 
-### Meeting bot controls — D886 B7 groundwork (#2585)
+### Meeting bot controls — D886 B7 (#2585)
 
-`meetingBotSession.js` is the unmounted, layout-independent state/action layer.
-It selects Send Eadwyn AI / Record this device for candidate Zoom, Meet and
-Teams links, prepares an immediate or next-seven-days dispatch only after
-saved consent, and makes explicit scheduled-call opt-out produce no dispatch.
-It projects B1's eight statuses, a recording timer from epoch milliseconds,
-and an optional participant count. The timer compares server `started_at` to
-the caller's clock: client clock skew can inflate it or leave it absent until
-that clock catches up. It is an approximate display, never the billing or time
-limit authority. B1 must supply server elapsed time or a server clock anchor
-before a synchronized timer is claimed. Missing data says Not recorded; failed or
-malformed reads say Unreadable. Missing count/time never becomes zero. Failure
-and refusal sentences use allowlisted codes rather than echoing private
-provider messages. No price is calculated here.
+`RecordLightbox.jsx` makes Send Eadwyn AI the primary action for a supported
+call link, alongside an explicit Record this device action. Consent is saved
+before dispatch; B9's `MeetingBotConsentNotice.jsx` is shown before the press.
+A refusal neither retries nor opens a microphone. The bot's setup excludes the
+plain meeting URL; B1 stores it encrypted. Device and bot setup use distinct
+idempotency keys so an explicit fallback creates its own recording.
 
-`createBotSession` takes `getBot()`, `sendBot(body)` and `stopBot()` bound to
-one session by the future screen. They return B1's `{ bot: ... }` envelope;
-`{ bot: null }` is a successful empty status read. Wire them to B1's mounted
-GET/POST `/api/founder/validate/sessions/:id/bot` and POST `…/bot/stop` only
-after #2579 lands or its PR is stacked. This module has no network client,
-polling timer, device capture or automatic retry. The screen owns polling
-while `botView().poll` is true, ticking the recording timer locally and calling
-`dispose()` on unmount/session change. Writes share duplicate presses and
-invalidate older reads. A failed read disables Stop until a successful refresh.
-Stop affects queued/joining/waiting/recording; processing continues to be polled.
-Only duplicate presses of the same action share a promise. A different action
-while busy returns false and sends nothing; it never reports the other write's
-success. The screen must retain busy state and allow Stop once Send settles.
-No Stop request is silently queued or retried.
+`meetingBotSession.js` supplies the state/actions, with authored refusal and
+failure sentences. `MeetingBotPanel.jsx` binds it to the real session API,
+polls while moving, stops polling on completion/unmount, and draws status,
+approximate run time, Stop and the latest saved participants. `InterviewSessionPage.jsx`
+keeps bot sessions out of device recovery and preserves named transcript labels.
+`InterviewChannels.jsx` defaults auto-send on when scheduling; the Worker queues
+it after creating the call. Each scheduled row can cancel/re-enable that send.
+Call cancellation stops the bot's alarm first. A queued run is the stored choice;
+no browser timer or local-only preference dispatches a call.
 
-Remaining integration is explicit: the approved bot extension to the existing
-Record a Session / Recording View / Interview Session canvases; B1's actual
-routes, schedule persistence/updates and cancellation (opting out in the plan
-alone does not cancel an already queued bot); B6's roster/display-label shape;
-B9's dispatch disclosure; and the B7 section in B0's canonical D886 file when
-available. No participant names or speaker identities are inferred from a
-count. No default auto-send, schedule preference, screen, dark/phone behavior
-or end-to-end Stop route is shipped by this foundation. The future screen must
-save consent before dispatch and never start the device recorder on a bot
-refusal. B1 must recheck consent, ownership, rollout, budget, URL and time.
-
-The behavioral and isolated mutation checks live in
-`frontend/test/meeting_bot_session_d886.test.mjs` (run with `node --test`).
+The participants read is separate from status: creator-only, latest encrypted
+roster, display names and offsets without platform IDs. Missing is Not recorded;
+failed reads are Unreadable. B6 still owns final speaker mapping/transcription;
+B7 reads the stored speaker labels as they arrive. Runtime wiring and rollout
+remain B8/B9's gates. S1 authorized the existing screen look without a new canvas.
