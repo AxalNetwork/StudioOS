@@ -964,8 +964,8 @@ r.post('/posts/:id/resolve', async (c) => {
     c.env.DB.prepare(`UPDATE x_posts SET status = ?, tweet_id = ?, tweet_link = ?,
         sent_at = CASE WHEN ? IS NOT NULL THEN COALESCE(sent_at, datetime('now')) ELSE NULL END,
         scheduled_for = NULL, scheduled_by = NULL, send_error = NULL, updated_at = datetime('now')
-        WHERE id = ? AND status = ? AND tweet_id IS ?`)
-      .bind(tweetId ? 'sent' : 'draft', tweetId, link, tweetId, id, post.status, post.tweet_id ?? null),
+        WHERE id = ? AND status = ? AND tweet_id IS ? AND updated_at IS ?`)
+      .bind(tweetId ? 'sent' : 'draft', tweetId, link, tweetId, id, post.status, post.tweet_id ?? null, post.updated_at ?? null),
     audit,
   ]);
   if (!result[0].meta?.changes) return c.json({ error: 'outcome_changed', message: 'The post changed. Reload it before recording the result.' }, 409);
@@ -1038,16 +1038,21 @@ export async function sendXPost(
   // Compare-and-set: atomically transition the head row to 'sending'.
   // We CAS BEFORE the cap check so the head's own reservation is visible to
   // any concurrent send racing the same account (see reservedTodayWithInflight).
+  // The exact timestamp is also the claim identity. Extra fractional digits
+  // add a random suffix while remaining readable by SQLite datetime() and JS
+  // Date. A late invocation must never mutate a later claim of the same row.
+  const suffix = Array.from(crypto.getRandomValues(new Uint32Array(2)), n => String(n).padStart(10, '0')).join('');
+  const claimStamp = new Date().toISOString().replace('Z', `${suffix}Z`);
   const claim = mode === 'clock'
     ? await env.DB.prepare(
-      `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
+      `UPDATE x_posts SET status = 'sending', updated_at = ?
          WHERE id = ? AND status = 'scheduled' AND tweet_id IS NULL
            AND datetime(scheduled_for) <= datetime(?)`,
-    ).bind(id, opts.dueBy ?? '').run()
+    ).bind(claimStamp, id, opts.dueBy ?? '').run()
     : await env.DB.prepare(
-      `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
+      `UPDATE x_posts SET status = 'sending', updated_at = ?
          WHERE id = ? AND status IN ('draft', 'approved', 'scheduled') AND tweet_id IS NULL`,
-    ).bind(id).run();
+    ).bind(claimStamp, id).run();
   if (!claim.meta || (claim.meta as { changes?: number }).changes !== 1) {
     return { status: 409, body: { error: 'already_sending_or_sent' } };
   }
@@ -1056,10 +1061,10 @@ export async function sendXPost(
   // the full thread's reservation footprint atomically. Children that have
   // already been sent stay 'sent' and are skipped at send time.
   await env.DB.prepare(
-    `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
+    `UPDATE x_posts SET status = 'sending', updated_at = ?
        WHERE thread_continuation_of = ?
          AND status IN ('draft', 'approved', 'scheduled') AND tweet_id IS NULL`,
-  ).bind(id).run();
+  ).bind(claimStamp, id).run();
 
   // Release helper — flips the head AND any children we reserved back to a
   // recoverable state. Idempotent: only touches rows we left in 'sending'.
@@ -1069,12 +1074,12 @@ export async function sendXPost(
     try {
       await env.DB.prepare(
         `UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
-           WHERE id = ? AND status = 'sending' AND tweet_id IS NULL`,
-      ).bind(errMsg ? errMsg.slice(0, 500) : null, id).run();
+           WHERE id = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
+      ).bind(errMsg ? errMsg.slice(0, 500) : null, id, claimStamp).run();
       await env.DB.prepare(
         `UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
-           WHERE thread_continuation_of = ? AND status = 'sending' AND tweet_id IS NULL`,
-      ).bind(errMsg ? errMsg.slice(0, 500) : null, id).run();
+           WHERE thread_continuation_of = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
+      ).bind(errMsg ? errMsg.slice(0, 500) : null, id, claimStamp).run();
     } catch {}
   };
 
@@ -1123,8 +1128,8 @@ export async function sendXPost(
       };
     }
     await env.DB.prepare(
-      `UPDATE x_posts SET override_reason = ?, override_findings = ?, updated_at = datetime('now') WHERE id = ?`,
-    ).bind(overrideReason.slice(0, 1000), JSON.stringify(lint.findings), id).run();
+      `UPDATE x_posts SET override_reason = ?, override_findings = ? WHERE id = ? AND status = 'sending' AND updated_at = ?`,
+    ).bind(overrideReason.slice(0, 1000), JSON.stringify(lint.findings), id, claimStamp).run();
     await writeAudit(env, {
       adminId: actor.id, adminEmail: actor.email, action: 'x_pii_override',
       postId: id, accountId: post.account_id,
@@ -1168,10 +1173,10 @@ export async function sendXPost(
         mediaIds.push(uploaded.media_id_string);
       }
       // A slow preflight cannot continue after the stale-send sweep or an
-      // operator has changed the row. The refresh and provider call are bounded.
+      // operator has changed the row. The claim check and provider call are bounded.
       const fence = await withDeadline(env.DB.prepare(
-        `UPDATE x_posts SET updated_at = datetime('now') WHERE id = ? AND status = 'sending' AND tweet_id IS NULL`,
-      ).bind(row.id).run(), 5000, 'X send claim');
+        `UPDATE x_posts SET updated_at = updated_at WHERE id = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
+      ).bind(row.id, claimStamp).run(), 5000, 'X send claim');
       if (fence.meta?.changes !== 1) throw new XError('x_send_state_changed', 'The post changed before sending. Reload it.');
       attempted = true;
       const out = await createTweet({ accessToken, text: row.body, inReplyToTweetId: parentId, mediaIds });
@@ -1182,8 +1187,8 @@ export async function sendXPost(
       const saved = await withDeadline(env.DB.prepare(
         `UPDATE x_posts SET tweet_id = ?, tweet_link = ?, in_reply_to_tweet_id = ?,
           status = 'sent', sent_at = datetime('now'), send_error = NULL, updated_at = datetime('now')
-          WHERE id = ? AND status = 'sending' AND tweet_id IS NULL`,
-      ).bind(accepted.tweet_id, accepted.link, parentId ?? null, row.id).run(), 5000, 'X post receipt');
+          WHERE id = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
+      ).bind(accepted.tweet_id, accepted.link, parentId ?? null, row.id, claimStamp).run(), 5000, 'X post receipt');
       if (saved.meta?.changes !== 1) throw new Error('receipt_not_saved');
       receipts.push(accepted);
       parentId = accepted.tweet_id;
@@ -1208,17 +1213,17 @@ export async function sendXPost(
         // stale sweep turns it into unknown, never a retryable failed row.
         try {
           await withDeadline(env.DB.prepare(`UPDATE x_posts SET status = 'unknown', send_error = ?,
-            tweet_id = COALESCE(tweet_id, ?), tweet_link = COALESCE(tweet_link, ?), updated_at = datetime('now')
-            WHERE id = ? AND status = 'sending'`)
-            .bind(message, accepted?.tweet_id ?? null, accepted?.link ?? null, row.id).run(), 5000, 'X uncertain outcome');
+            tweet_id = COALESCE(tweet_id, ?), tweet_link = COALESCE(tweet_link, ?), updated_at = updated_at
+            WHERE id = ? AND status = 'sending' AND updated_at = ?`)
+            .bind(message, accepted?.tweet_id ?? null, accepted?.link ?? null, row.id, claimStamp).run(), 5000, 'X uncertain outcome');
         } catch { /* Response and content-free log preserve any accepted ID. */ }
       }
       // Only untouched reservations can be released. Never reset this row if
       // it may have arrived, even if recording the unknown outcome failed.
       try {
         await env.DB.prepare(`UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
-          WHERE (id = ? OR thread_continuation_of = ?) AND status = 'sending' AND tweet_id IS NULL AND id <> ?`)
-          .bind(unknown ? 'The thread stopped before this post was sent.' : message, id, id, unknown ? row.id : -1).run();
+          WHERE (id = ? OR thread_continuation_of = ?) AND status = 'sending' AND tweet_id IS NULL AND id <> ? AND updated_at = ?`)
+          .bind(unknown ? 'The thread stopped before this post was sent.' : message, id, id, unknown ? row.id : -1, claimStamp).run();
       } catch {}
       const code = accepted ? 'x_sent_not_saved' : unknown ? 'x_outcome_unknown' : String(xErrorPayload(e).body.code || 'x_send_failed');
       await writeAudit(env, { adminId: actor.id, adminEmail: actor.email, action: unknown ? 'x_post_outcome_unknown' : 'x_post_send_failed',

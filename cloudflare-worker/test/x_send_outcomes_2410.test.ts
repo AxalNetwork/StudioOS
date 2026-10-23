@@ -191,7 +191,7 @@ test('#2410 reconciliation requires the Super Admin, a checked reason and valid 
 
 test('#2410 a thread stops at an uncertain child, preserving head and child receipts without reposting', async () => {
   const w = await world(), p = provider(), head = w.post(), child = w.post('draft', { parent: head }), last = w.post('draft', { parent: head });
-  w.fail((sql, args) => sql.includes('SET tweet_id = ?') && args.at(-1) === child);
+  w.fail((sql, args) => sql.includes('SET tweet_id = ?') && args[3] === child);
   try {
     const out = await w.send(head);
     assert.equal(out.body.code, 'x_sent_not_saved'); assert.equal(p.calls.length, 2);
@@ -323,5 +323,73 @@ test('#2410 a preclaim clock refusal cannot release an active Send reservation',
     assert.equal((await w.send(id, 'clock')).status, 409);
     assert.equal(w.row(id).status, 'sending'); assert.equal(p.calls.length, 0);
     w.beforeWrite(); assert.equal((await w.send(id)).status, 409); assert.equal(w.row(id).status, 'sending');
+  } finally { p.restore(); w.db.close(); }
+});
+
+
+test('#2410 a stale media request cannot publish against or release a later Send claim', async () => {
+  const w = await world(), p = provider(), id = w.post('draft', { media: ['x/fixture.png'] });
+  let releaseMedia!: (value: any) => void, enteredMedia!: () => void;
+  const mediaWaiting = new Promise<void>(resolve => { enteredMedia = resolve; });
+  w.env.FILES.get = async () => { enteredMedia(); return new Promise(resolve => { releaseMedia = resolve; }); };
+  const object = { arrayBuffer: async () => new Uint8Array([1]).buffer };
+  let releasePost!: () => void, enteredPost!: () => void;
+  const postWaiting = new Promise<void>(resolve => { enteredPost = resolve; });
+  const postGate = new Promise<void>(resolve => { releasePost = resolve; });
+  const stub = globalThis.fetch; let hold = true;
+  globalThis.fetch = (async (input: any, init: any) => {
+    if (String(input).endsWith('/2/tweets') && hold) { hold = false; enteredPost(); await postGate; }
+    return stub(input, init);
+  }) as typeof fetch;
+  try {
+    const oldSend = w.send(id); await mediaWaiting;
+    const firstClaim = w.row(id).updated_at;
+    assert.ok(Number.isFinite(Date.parse(firstClaim)));
+    assert.ok(w.db.prepare('SELECT datetime(updated_at) AS stamp FROM x_posts WHERE id=?').get(id)!.stamp);
+    w.db.prepare("UPDATE x_posts SET updated_at=datetime('now','-40 minutes') WHERE id=?").run(id);
+    await sweepScheduledPosts(w.env, new Date());
+    assert.equal((await w.request('POST', `/posts/${id}/resolve`, checked('not_sent'))).status, 200);
+    w.env.FILES.get = async () => object;
+    const newSend = w.send(id); await postWaiting;
+    const secondClaim = w.row(id).updated_at; assert.notEqual(firstClaim, secondClaim);
+    releaseMedia(object); await oldSend;
+    assert.equal(w.row(id).status, 'sending', 'an old request cannot release the newer reservation');
+    assert.equal(w.row(id).updated_at, secondClaim); assert.equal(p.calls.length, 0);
+    releasePost(); assert.equal((await newSend).status, 200);
+    assert.equal(w.row(id).status, 'sent'); assert.equal(p.calls.length, 1); assert.equal(p.created.length, 1);
+  } finally { releasePost?.(); p.restore(); w.db.close(); }
+});
+
+test('#2410 a late token failure cannot release another invocation’s head or child claim', async () => {
+  const w = await world(), p = provider(), head = w.post(), child = w.post('draft', { parent: head });
+  const newer = '2099-01-01T00:00:00.123456789Z';
+  try {
+    w.db.prepare("UPDATE x_accounts SET access_token_ct='broken' WHERE id=1").run();
+    w.beforeWrite(sql => { if (sql.includes("SET status = 'draft'")) w.db.prepare('UPDATE x_posts SET updated_at=? WHERE id=? OR id=?').run(newer, head, child); });
+    await w.send(head);
+    assert.equal(w.row(head).status, 'sending'); assert.equal(w.row(child).status, 'sending');
+    assert.equal(w.row(head).updated_at, newer); assert.equal(w.row(child).updated_at, newer); assert.equal(p.calls.length, 0);
+  } finally { p.restore(); w.db.close(); }
+});
+
+test('#2410 a delayed receipt or quarantine cannot overwrite a different sending claim', async () => {
+  const w = await world(), p = provider(), id = w.post(), newer = '2099-01-01T00:00:00.123456789Z';
+  try {
+    w.beforeWrite(sql => { if (sql.includes('SET tweet_id = ?')) w.db.prepare('UPDATE x_posts SET updated_at=? WHERE id=?').run(newer, id); });
+    const out = await w.send(id);
+    assert.equal(out.body.code, 'x_sent_not_saved'); assert.equal(out.body.tweet_id, '100001');
+    assert.equal(w.row(id).status, 'sending'); assert.equal(w.row(id).updated_at, newer); assert.equal(w.row(id).tweet_id, null);
+    assert.equal(p.calls.length, 1); assert.equal((await w.send(id)).status, 409);
+  } finally { p.restore(); w.db.close(); }
+});
+
+test('#2410 a checked outcome cannot resolve a newer unknown attempt read after the operator’s check', async () => {
+  const w = await world(), p = provider(), id = w.post('unknown'), newer = '2099-01-01T00:00:00.123456789Z';
+  try {
+    w.beforeWrite(sql => { if (sql.includes('SET status = ?, tweet_id = ?')) w.db.prepare('UPDATE x_posts SET updated_at=? WHERE id=?').run(newer, id); });
+    assert.equal((await w.request('POST', `/posts/${id}/resolve`, checked('not_sent'))).status, 409);
+    assert.equal(w.row(id).status, 'unknown'); assert.equal(w.row(id).updated_at, newer);
+    assert.equal(w.db.prepare("SELECT COUNT(*) AS n FROM admin_audit_log WHERE action='x_post_outcome_checked'").get()!.n, 0);
+    assert.equal(p.calls.length, 0);
   } finally { p.restore(); w.db.close(); }
 });
