@@ -31,6 +31,8 @@ async function protocol(Sidecar = ZoomSidecar) {
   assert.equal(JSON.stringify(f.launch()).includes('synthetic'), false);
   assert.deepEqual((f.launch() as any).options.stdio, ['pipe', 'ignore', 'ignore', 'pipe']);
   assert.equal((f.launch() as any).options.shell, false);
+  const allowed = new Set(['PATH', 'HOME', 'TMPDIR', 'DISPLAY', 'XDG_RUNTIME_DIR', 'PULSE_SERVER', 'LANG', 'LC_ALL', 'LD_LIBRARY_PATH', 'GI_TYPELIB_PATH']);
+  assert.ok(Object.keys((f.launch() as any).options.env).every(key => allowed.has(key)), 'no inherited credentials');
   assert.equal(f.commands[0].args.jwt, 'synthetic-jwt'); assert.equal(f.commands[1].args.obfToken, 'synthetic-obf');
   assert.equal('signal' in f.commands[1].args, false);
   const signal = new AbortController().signal;
@@ -75,6 +77,7 @@ test('Python native contract and mutations (no SDK import or network)', () => {
 });
 const mutants = [
   ['shell enabled', 'shell: false', 'shell: true'],
+  ['inherited credentials', 'env: privateEnvironment()', 'env: process.env'],
   ['native logs exposed', "['pipe', 'ignore', 'ignore', 'pipe']", "['pipe', 'inherit', 'inherit', 'pipe']"],
   ['PCM endian', 'b.readInt16LE(i * 2)', 'b.readInt16BE(i * 2)'],
   ['roster replay removed', "if (topic === 'roster') for", "if (false) for"],

@@ -15,7 +15,8 @@ image loading still require B8 verification before enabling dispatch.
 
 Node's `ZoomSidecar` starts one Python process per run. It passes a short-lived
 SDK JWT on stdin, then the founder's fresh OBF on each join. No credentials in
-argv. stdout/stderr are discarded; fd 3 alone carries JSON lines. Native SDK
+argv. Only display/audio/library/path environment variables are inherited;
+Worker callback secrets and OAuth credentials are excluded. stdout/stderr are discarded; fd 3 alone carries JSON lines. Native SDK
 logging and crash dumps are disabled. Protocol messages are private data,
 never logs. EOF kills an orphan immediately. Node bounds commands, response
 lines and deadlines, rejects malformed data and kills a crashed/stalled child.

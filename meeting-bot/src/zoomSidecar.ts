@@ -8,6 +8,8 @@ import { ZoomJoinFailure } from './zoomAdapter.ts';
 import type { ZoomSdkBridge } from './zoomAdapter.ts';
 import type { RosterChange, SpeakerChange, Unsubscribe } from './types.ts';
 type Pending = { resolve: (v: any) => void; reject: (e: Error) => void; done: () => void };
+const CHILD_ENV = ['PATH', 'HOME', 'TMPDIR', 'DISPLAY', 'XDG_RUNTIME_DIR', 'PULSE_SERVER', 'LANG', 'LC_ALL', 'LD_LIBRARY_PATH', 'GI_TYPELIB_PATH'] as const;
+const privateEnvironment = () => Object.fromEntries(CHILD_ENV.flatMap(key => process.env[key] === undefined ? [] : [[key, process.env[key]!]]));
 type Start = (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
 export class ZoomSidecar implements ZoomSdkBridge {
   private readonly child: ChildProcess;
@@ -22,7 +24,7 @@ export class ZoomSidecar implements ZoomSdkBridge {
   private readonly timeout: number;
   constructor(jwt: string, options: { python?: string; start?: Start; timeoutMs?: number } = {}) {
     this.timeout = options.timeoutMs ?? 30_000;
-    this.child = (options.start ?? spawn)(options.python ?? 'python3', [fileURLToPath(new URL('../zoom/sidecar.py', import.meta.url))], { stdio: ['pipe', 'ignore', 'ignore', 'pipe'], shell: false });
+    this.child = (options.start ?? spawn)(options.python ?? 'python3', [fileURLToPath(new URL('../zoom/sidecar.py', import.meta.url))], { stdio: ['pipe', 'ignore', 'ignore', 'pipe'], shell: false, env: privateEnvironment() });
     this.input = this.child.stdin!;
     const output = this.child.stdio[3] as Readable;
     output.setEncoding('utf8');
