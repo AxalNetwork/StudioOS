@@ -81,3 +81,7 @@ Account and all `/account/` subsections fill the app's content column without
 the shared 1280px cap. Shell padding remains, since phone frames cancel that
 padding themselves. `AccountPhonePage` accepts an optional `header` render function for the
 Learning home's image hero around its existing phone bar; other sections retain their default phone bar.
+
+Carta grants kept from a previous role (#2634) use the existing connection
+page and panel with `legacy_only`: Disconnect stays visible, while sync,
+replace and reconnect are absent. The Worker returns its static reason.

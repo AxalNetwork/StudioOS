@@ -148,7 +148,7 @@ async function consent(api = original) {
   };
   for (const bad of [undefined, { agreed: false, method: 'written' }, { agreed: true, method: 'assumed' }]) {
     const r = await open(bad);
-    assert.equal(r.status, 400, JSON.stringify(bad));
+    assert.equal(r.status, 400, JSON.stringify(bad) ?? 'missing attestation');
     assert.equal(r.body.detail, 'attestation_required');
   }
   const ok = await open({ agreed: true, method: 'written' });
@@ -230,7 +230,7 @@ const mutations: Array<[string, keyof Api, string, string, string, (a: Api) => P
   ['the payload rides on the job', 'zoom', 'services/channels/zoom.ts',
     'refUid: ref.uid, meetingUuid: uuid || null,', 'refUid: ref.uid, meetingUuid: uuid || null, accountId: event.payload?.account_id,', tenancy],
   ['a wider grant is accepted', 'connectorRules', 'integrations/connectorRules.ts',
-    'return granted.some((scope) => !requested.has(scope.toLowerCase()));', 'return false;', scope],
+    "return granted.some((scope) => !requested.has(desc.key === 'carta' ? scope : scope.toLowerCase()));", 'return false;', scope],
   ['Meet transcripts without the scope', 'googleMeet', 'services/channels/googleMeet.ts',
     "return scopes.includes(MEET_TRANSCRIPT_SCOPE) ? 'granted' : 'missing';", "return 'granted';", scope],
   ['audio work without consent', 'interviewSessions', 'services/interviewSessions.ts',

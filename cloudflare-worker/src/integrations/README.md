@@ -18,6 +18,8 @@ lives in `providers/`.
 | `secrets.ts` | Credential encryption over `../services/columnCipher.ts`, with the row's uid in the AAD, and the masked previews the list endpoints show. Never logs plaintext. |
 | `oauth.ts` | PKCE pairs, signed state tokens and `consumeOauthState`. The state's `extra` carries per-connect values (the selected company, a Salesforce sandbox flag, the literal `build` return token) so the callback never trusts its query string. |
 | `companyScope.ts` | Which providers write project-backed data, and whether a connection is enabled for a company or project. A missing scope row denies the write. |
+| `cartaScopes.ts` | #2634: separate founder issuer and investor read scopes, selected by the authenticated role; never a union. |
+| `cartaInvestor.ts` | #2634: one-page, bounded Carta investor reads and explicit field projections; no stakeholder names/emails, provider payload storage or derived money totals. Missing values stay null. |
 | `connectorRules.ts` | `hasScopeOverreach` (a grant wider than the request is refused), `extraScopes` (the scopes named in that refusal's log line) and the validation of a connector's settings patch. |
 | `autopush.ts` | Background pushes started outside the connector routes (a deal's stage change, a new project), logged to `integration_logs` like a user's own push. |
 | `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
