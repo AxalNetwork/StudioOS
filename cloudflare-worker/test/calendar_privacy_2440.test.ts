@@ -29,7 +29,7 @@ function fixture(route = calendar) {
     INSERT INTO project_members (project_id,user_id,role,status) VALUES (20,7,'cofounder','accepted'),(20,8,'advisor','removed');
     UPDATE users SET role='founder' WHERE id=7;
     UPDATE users SET role='advisor' WHERE id IN (8,9);
-    UPDATE users SET role='partner' WHERE id=11;
+    UPDATE users SET role='partner' WHERE id IN (11,12);
     UPDATE deals SET lead_partner_id=11 WHERE id=200;
     INSERT INTO advisor_client_grants (uid,project_id,advisor_user_id,granted_by_user_id,scope_sessions)
       VALUES ('fixture-grant',20,9,2,1);`);
@@ -115,7 +115,8 @@ test('#2440: every unrelated role is refused regardless of the named counterpart
 async function allowedCheckins(route = calendar) {
   const f = fixture(route);
   try {
-    for (const user of [2,4,6,7,9]) assert.equal((await f.request('/founder-checkins', user, checkin())).status, 200, `related ${user}`);
+    for (const user of [2,4,6,7,9,11]) assert.equal((await f.request('/founder-checkins', user, checkin())).status, 200, `related ${user}`);
+    assert.equal((await f.request('/founder-checkins', 2, checkin({ counterpart_user_id: 11 }))).status, 200, 'assigned lead counterpart');
     assert.equal((await f.request('/founder-checkins', 4, checkin({ project_id: null }))).status, 200, 'related without explicit project');
     assert.equal((await f.request('/founder-checkins', 10, checkin({ founder_user_id: 10, project_id: null }))).status, 403, 'non-founder self');
     assert.equal((await f.request('/founder-checkins', 2, checkin({ project_id: 30 }))).status, 403, 'another founder project');
@@ -132,7 +133,7 @@ async function allowedCheckins(route = calendar) {
     assert.equal((await f.request('/founder-checkins', 9, checkin())).status, 403, 'revoked advisor');
     f.db.exec("UPDATE advisor_client_grants SET status='active',expires_at='2000-01-01'");
     assert.equal((await f.request('/founder-checkins', 9, checkin())).status, 403, 'expired advisor');
-    assert.deepEqual(f.db.prepare("SELECT user_id FROM activity_logs WHERE action='calendar_checkin_created' ORDER BY id").all().map((r: any) => r.user_id), [2,4,6,7,9,4]);
+    assert.deepEqual(f.db.prepare("SELECT user_id FROM activity_logs WHERE action='calendar_checkin_created' ORDER BY id").all().map((r: any) => r.user_id), [2,4,6,7,9,11,2,4]);
   } finally { await f.close(); }
 }
 test('#2440: self, accepted project members, deal investors and assigned advisors work; foreign projects and revoked ties fail', () => allowedCheckins());
@@ -142,7 +143,8 @@ async function icGuards(route = calendar) {
   try {
     assert.equal((await f.request('/ic-meetings', 4, ic({ deal_id: null }))).status, 400);
     assert.equal((await f.request('/ic-meetings', 4, ic({ deal_id: 300, attendee_user_ids: [3] }))).status, 403);
-    f.db.exec('INSERT INTO deals (id,project_id) VALUES (201,20)');
+    f.db.exec('INSERT INTO deals (id,project_id,lead_partner_id) VALUES (201,20,12)');
+    assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [12] }))).status, 403, 'lead on a different deal of the same venture');
     assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [5] }))).status, 403, 'foreign-deal investor');
     f.db.exec('INSERT INTO deal_invitations (deal_id,investor_user_id) VALUES (201,5)');
     assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [5] }))).status, 403, 'same venture, different deal');
@@ -198,6 +200,8 @@ test('#2440: scheduling assertions reject each removed relationship/ownership gu
     ["if (!Number.isSafeInteger(attendeeId) || attendeeId <= 0)", 'if (false)', icGuards],
     ["WHERE id = ${attendeeId} AND is_active = 1", 'WHERE id = ${attendeeId}', icGuards],
     ["if (deal.lead_partner_id === user.id) return true;", '', icGuards],
+    ["if (lead.length) return true;", '', allowedCheckins],
+    ['isProjectParty(env, user, deal, false)', 'isProjectParty(env, user, deal)', icGuards],
     ["WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} LIMIT 1", "WHERE deal_id != ${dealId} AND investor_user_id = ${user.id} LIMIT 1", icGuards],
     ["if (!isSelf && !(await related(user)))", 'if (false)', deniedCheckins],
     ["if (founder.role !== 'founder')", 'if (false)', allowedCheckins],

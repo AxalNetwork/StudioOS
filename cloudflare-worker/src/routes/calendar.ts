@@ -246,11 +246,15 @@ async function serializeIc(env: Env, m: any): Promise<any> {
 // Calendar invitations need an actual venture tie, not staff's global read
 // permission. Investor access follows the deal invitation/commitment stores;
 // advisor access follows the founder's live, unexpired session grant.
-async function isProjectParty(env: Env, user: User, project: { id: number; founder_id: number | null }): Promise<boolean> {
+async function isProjectParty(env: Env, user: User, project: { id: number; founder_id: number | null }, allowVentureLead = true): Promise<boolean> {
   if (user.role === 'founder' && user.founder_id && user.founder_id === project.founder_id) return true;
   const member = await getProjectMembershipRole(env, project.id, user.id);
   if (member && await canAccessProject(env, user, project)) return true;
   const sql = getSQL(env);
+  if (allowVentureLead) {
+    const lead = await sql`SELECT 1 FROM deals WHERE project_id = ${project.id} AND lead_partner_id = ${user.id} LIMIT 1`;
+    if (lead.length) return true;
+  }
   if (user.role === 'investor') {
     const invited = await sql`SELECT 1 FROM deal_invitations i JOIN deals d ON d.id = i.deal_id
       WHERE d.project_id = ${project.id} AND i.investor_user_id = ${user.id} LIMIT 1`;
@@ -283,7 +287,7 @@ async function isDealParty(env: Env, user: User, dealId: number): Promise<boolea
     const committed = await sql`SELECT 1 FROM commitments WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} LIMIT 1`;
     return committed.length > 0;
   }
-  return isProjectParty(env, user, deal);
+  return isProjectParty(env, user, deal, false);
 }
 
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
