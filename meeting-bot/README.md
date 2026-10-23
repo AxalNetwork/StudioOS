@@ -22,8 +22,8 @@ TypeScript directly (type stripping), so there is no build step.
 
 | Folder | What it holds |
 | --- | --- |
-| `src/` | The core: the adapter contract, the lifecycle, audio chunks, events, the callback client, the log rule and the fake adapter. |
-| `test/` | The core's tests, run by `npm run test:meeting-bot` (part of `test:drift`, so CI runs them on every PR), and their fake clock and stub callback (`_harness.ts`). |
+| `src/` | The core: the adapter contract, the lifecycle, audio chunks, events, the callback client, the log rule and the fake adapter. `src/adapters/` holds one adapter per platform (B3–B5). |
+| `test/` | The core's tests, run by `npm run test:meeting-bot` (part of `test:drift`, so CI runs them on every PR), and their fake clock and stub callback (`_harness.ts`). `test/fixtures/` holds the adapters' page fixtures. |
 
 | File | What it owns |
 | --- | --- |
@@ -38,6 +38,11 @@ TypeScript directly (type stripping), so there is no build step.
 | `src/fakeAdapter.ts` | A scripted platform for the tests, and the reference implementation an adapter copies. |
 | `src/index.ts` | The public exports. |
 | `notice.mjs` | B9's notice contract (#2587, #2590): `meetingBotNotice`, `MEETING_BOT_NAME`, the publication gate and the dispatch disclosure. See **The notice** below. |
+| `src/adapters/meet.ts` | B3 (#2581): `MeetAdapter`, Google Meet. It joins as a guest with the microphone and camera off, waits in the waiting room, reads the participant panel and the active-speaker indicator, takes the tab's audio, and detects the end of the call and removal by the host (removal reads as the call ending). It takes a `MeetPage` (`src/adapters/meet/page.ts`), which a Playwright `Page` satisfies, so the core stays dependency-free. |
+| `src/adapters/meet/selectors.ts` | Every Meet page hook, in one place. **UNVERIFIED:** written without access to Meet, and to be measured (#2581 step 1, D886 §8). |
+| `src/adapters/meet/signals.ts` | The Meet adapter's pure rules: the page state from its hooks, the link check, the roster and the active speaker. |
+| `src/adapters/meet/capture.ts` | The in-page audio capture: every remote WebRTC audio track mixed in Web Audio and handed to Node, from admission only. |
+| `test/meet_*.test.ts`, `test/_meet_browser.ts` | The Meet tests. `meet_selectors` has one test per hook, so a changed hook fails one named test. The browser tests run Chromium on `test/fixtures/meet.html`, a **constructed** page (not recorded), and skip by name where there is no Chromium (`CHROMIUM_PATH`). |
 
 ## The run
 
@@ -135,3 +140,47 @@ does.
 - **The Worker decides.** The Durable Object is the only writer of a run's
   status. The bot reports what happened; it never decides what the founder
   sees.
+
+## Zoom adapter boundary (B4, #2582)
+
+`src/zoomAdapter.ts` implements `MeetingAdapter` with an injected
+`ZoomSdkBridge`. Import it directly; the core's shared exports are unchanged.
+This is orchestration tested against fakes, **not a packaged Linux SDK client**.
+B8 must supply the native bridge and B1 must supply a founder-scoped OBF mint
+through the existing Worker helper. Neither SDK JWT signing keys nor OAuth
+access tokens belong in this adapter. OBF tokens exist only as local join
+arguments; the native bridge must discard them after each attempt.
+
+The bridge contract maps Linux SDK join/admission, chat, audio join,
+`CanStartRawRecording`, host recording privilege, `StartRawRecording`, mixed
+raw audio, participant/active-speaker callbacks and meeting end. It must:
+
+- honor every AbortSignal, including a Stop during a pending mint or join;
+- emit current roster on subscription, updates and renames under stable keys;
+- deliver only 16 kHz mono PCM, without replaying media buffered before notice;
+- signal end immediately on recording privilege loss or the authorizing user's
+  departure; do not silently reconnect with another user's token;
+- translate native failures into `ZoomJoinFailure` codes and suppress native
+  debug logs that contain URLs, names, passcodes or credentials;
+- release every callback and SDK object on leave, including failed joins.
+
+The adapter requests a fresh single-use OBF on every join attempt. Only the
+explicit authorizing-user-absent error retries, every 3 seconds, at most 120
+attempts. `waitingForHost` is an explicit B1 integration hook, for the sentence
+"Join the call first; Eadwyn AI follows." It must report that state through the
+control plane. B2's current `BotState` does not yet contain it.
+
+After admission the core posts the notice. Only then does the adapter join
+audio, check/request the host's recording permission and start raw recording.
+Refusal prevents audio subscriptions. The adapter copies borrowed PCM memory,
+filters the bot's own roster entry, maps its speaker indicator to silence and
+makes leave idempotent.
+
+**Mixed audio only in this revision.** B2's `AudioFrame`/`putChunk` has no
+participant key. Do not feed individual participant streams into it: sequential
+concatenation would corrupt time and attribution. B2/B6 must add an agreed
+stream-key contract before Zoom per-participant audio can be supported. Mixed
+capture plus the platform indicator is the explicitly limited fake-tested path.
+M3/M4/M6 on a free Zoom account, native SDK packaging/version selection, the
+owner's app feature and credentials, and B1 wiring remain outstanding. This
+library is not enabled for live dispatch by this change.

@@ -45,7 +45,6 @@ function guard(path) {
   assert.ok(m, `${path} has no guard list`);
   return { roles: m[2].match(/'([^']+)'/g).map((s) => s.slice(1, -1)), lab: Boolean(m[1]) };
 }
-const guardRoles = (path) => guard(path).roles;
 
 /** Every sidebar row of a profile. */
 const rowsOf = (role) => SIDEBAR_GROUPS[role].flatMap((g) => g.items || []);
