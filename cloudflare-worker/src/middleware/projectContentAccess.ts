@@ -10,7 +10,7 @@ import { canAccessProject, getProjectMembershipRole } from '../services/projectA
 import { findableBy } from '../services/investorFindable';
 
 type Project = { id: number; founder_id: number | null; company_id: number | null };
-type Context = { env: Env; req: { header: (name: string) => string | undefined } };
+type Context = { env: Env; req: { method?: string; routePath?: string; header: (name: string) => string | undefined } };
 
 export async function projectOwned(c: Context, user: User, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}): Promise<Project> {
   user = { ...user, role: String(user.role || '').toLowerCase() } as User;
@@ -41,7 +41,7 @@ export async function projectOwned(c: Context, user: User, projectId: number, op
     // who was authorized before a write; an unavailable audit store refuses
     // the operation rather than admitting an unattributed editor.
     await c.env.DB.prepare('INSERT INTO activity_logs (action, details, actor, user_id, project_id) VALUES (?, ?, ?, ?, ?)')
-      .bind('project_content_write_authorized', JSON.stringify({ permission: 'write' }), `user:${user.id}`, user.id, project.id).run();
+      .bind('project_content_write_authorized', JSON.stringify({ permission: 'write', phase: 'authorization', method: c.req.method ?? null, route: c.req.routePath ?? null }), `user:${user.id}`, user.id, project.id).run();
   }
   return project;
 }

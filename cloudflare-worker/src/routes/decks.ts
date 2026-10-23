@@ -601,21 +601,27 @@ decks.post('/positioning', async (c) => {
   // --- Gather grounding data (each source degrades to empty on failure). ---
   // Only the venture's recorded team. Share ownership is never a team record.
   let team: string[] = [];
+  let advisors: string[] = [];
   let teamReadable = true;
   try {
     await ensureProjectMembershipSchema(c.env);
     const rows = await c.env.DB.prepare(
       `WITH target AS (SELECT id, founder_id FROM projects WHERE id = ?)
-        SELECT u.id, u.name FROM users u JOIN (
+        SELECT u.id, u.name,
+          CASE WHEN u.role = 'founder' AND u.founder_id = p.founder_id THEN 'founder' ELSE pm.role END AS member_role
+        FROM users u JOIN (
           SELECT u.id FROM users u JOIN target p ON u.founder_id = p.founder_id WHERE u.role = 'founder'
           UNION
           SELECT pm.user_id FROM project_members pm JOIN target p ON pm.project_id = p.id
             WHERE pm.status = 'accepted' AND pm.role IN ('owner', 'cofounder', 'advisor')
         ) t ON u.id = t.id CROSS JOIN target p
+        LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = u.id
         WHERE u.is_active = 1 AND trim(COALESCE(u.name, '')) <> ''
-        ORDER BY CASE WHEN u.role = 'founder' AND u.founder_id = p.founder_id THEN 0 ELSE 1 END, u.id LIMIT 6`,
-    ).bind(pid).all<{ id: number; name: string }>();
-    team = (rows.results ?? []).map((u) => String(u.name ?? '').trim()).filter(Boolean);
+        ORDER BY CASE WHEN u.role = 'founder' AND u.founder_id = p.founder_id THEN 0 WHEN pm.role = 'advisor' THEN 2 ELSE 1 END, u.id LIMIT 6`,
+    ).bind(pid).all<{ id: number; name: string; member_role: string }>();
+    const recorded = rows.results ?? [];
+    team = recorded.filter((u) => u.member_role !== 'advisor').map((u) => String(u.name ?? '').trim()).filter(Boolean);
+    advisors = recorded.filter((u) => u.member_role === 'advisor').map((u) => String(u.name ?? '').trim()).filter(Boolean);
   } catch { teamReadable = false; }
   const teamStatus = !teamReadable ? 'unreadable' : team.length ? 'recorded' : 'not_recorded';
 
@@ -647,6 +653,7 @@ decks.post('/positioning', async (c) => {
   );
   const sourced_from = {
     team: teamReadable ? team.length : null,
+    advisors: teamReadable ? advisors.length : null,
     team_status: teamStatus,
     traction: hasTraction,
     updates: updates.length,
@@ -662,7 +669,7 @@ decks.post('/positioning', async (c) => {
     users: p.users_count, revenue: p.revenue,
     traction_summary: p.traction_summary,
     growth_signals: p.growth_signals, funding_needed: p.funding_needed,
-    team, team_status: teamStatus,
+    team, advisors, team_status: teamStatus,
     runway_months: fin?.runway_months, ltv_cac_ratio: fin?.ltv_cac_ratio,
     avg_monthly_burn: fin?.avg_monthly_burn,
     score_tier: snap?.tier,
@@ -687,6 +694,7 @@ Rules:
   (customer value, market wedge, why-now, outcome).
 - Concrete and specific to THIS startup — never generic filler.
 - Never invent metrics, customers, or funding not present in the data.
+- The advisors field contains advisors only. Never describe them as founders or members of the operating team.
 - An empty team contains no recorded names. Do not infer a team from share ownership or invent team members.`;
 
   const result = await aiRouterRun(c.env, {
