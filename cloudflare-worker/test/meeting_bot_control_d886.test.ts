@@ -7,6 +7,8 @@ import { MeetingBotRun, botHmac, BOT_CALLBACK_WINDOW_MS } from '../src/durable-o
 import callbacks from '../src/routes/meeting_bot_callbacks.ts';
 import { BOT_COMMISSION_MULTIPLIER, botRate, botLimit, botPlatform, botRow, botSession } from '../src/services/meetingBots.ts';
 import { decryptColumn } from '../src/services/columnCipher.ts';
+import { runInterviewProcessJob } from '../src/services/interviewProcessing.ts';
+import { withGuard } from './_guard_stub.mjs';
 
 const syntheticLink = (p='zoom') => p==='zoom' ? ['https:/','unit.zoom.us','j',String(111111111)].join('/')
   : p==='google_meet' ? ['https:/','meet.google.com','abc-defg-hij'].join('/')
@@ -16,6 +18,7 @@ function world(monthMicro=500_000_000) {
   const w=fixture({monthMicro});
   w.db.exec(mig('525_ai_reservation_idempotency.sql'));
   w.db.exec(mig('531_meeting_bots.sql'));
+  w.db.exec(mig('532_meeting_bot_participants.sql'));
   const session=seed(w,{kind:'recorder',chunks:0,ageDays:0});
   w.db.prepare("UPDATE interview_sessions SET status='draft', processing_stage=NULL, consent_method='written', consent_at=datetime('now') WHERE id=?").run(session);
   w.db.prepare('DELETE FROM interview_transcript_segments WHERE session_id=?').run(session);
@@ -226,9 +229,60 @@ test('D886 scheduled events cannot bypass alarm, expired authority stops a run, 
   const p=world(),pp=await post(p),id=pp.body.bot.uid;
   await event(p,id,{seq:1,type:'status',status:'recording'});
   assert.equal((await event(p,id,{seq:2,type:'status',status:'processing'})).status,200);
-  assert.equal((await event(p,id,{seq:3,type:'status',status:'done'})).body.bot.status,'done');
-  assert.equal((await event(p,id,{seq:3,type:'status',status:'done'})).body.duplicate,true);
+  assert.equal((await event(p,id,{seq:3,type:'status',status:'done'})).body.code,'bot_processing');
+  assert.equal((await botRow(p.env,id))!.status,'processing');
   assert.equal(p.stops.length,1);
+});
+
+test('D886 signed upload to recorder job to named final transcript completes only after assembly',async()=>{
+  const w=world(),r=await post(w),uid=r.body.bot.uid;
+  const messages:any[]=[];let transcriptions=0;
+  w.env.USE_CF_QUEUE='true';w.env.JOB_QUEUE={send:async(body:any)=>{messages.push(body);}} as any;
+  w.env.AI=withGuard({run:async(model:string)=>{assert.equal(model,'@cf/deepgram/nova-3');transcriptions++;
+    return {results:{channels:[{detected_language:'en',alternatives:[{transcript:'Fixture.',words:[{word:'Fixture.',start:0,end:1,speaker:0}]}]}]}};}}) as any;
+  await event(w,uid,{seq:1,type:'status',status:'recording'});
+  await event(w,uid,{seq:2,type:'roster',participants:[{id:'p',name:'Fixture speaker',joined_ms:0,left_ms:null}]});
+  await event(w,uid,{seq:3,type:'speaker',participant_id:'p',at_ms:0});
+  const ticket=await event(w,uid,{seq:4,type:'chunk',chunk_seq:0,start_ms:0,size_bytes:wav().byteLength});
+  assert.equal((await upload(w,ticket.body.upload_path)).status,200);
+  assert.equal((await event(w,uid,{seq:5,type:'speaker',participant_id:null,at_ms:1000})).status,200);
+  assert.equal((await event(w,uid,{seq:6,type:'status',status:'processing'})).status,200);
+  assert.equal((await event(w,uid,{seq:7,type:'status',status:'done'})).body.code,'bot_processing');
+  assert.equal((await event(w,uid,{seq:7,type:'speaker',participant_id:'p',at_ms:1000})).body.code,'bot_processing');
+  await call(w.env,FOUNDER,'GET',`/sessions/${w.session}/bot`);
+  await call(w.env,FOUNDER,'GET',`/sessions/${w.session}/bot`);
+  assert.equal(messages.length,1);assert.equal(messages[0].job_type,'interview_process');
+  assert.equal(await runInterviewProcessJob(w.env,messages[0].payload),'done');
+  assert.equal(transcriptions,1);
+  const finished=await call(w.env,FOUNDER,'GET',`/sessions/${w.session}/bot`);
+  assert.equal(finished.body.bot.status,'done');
+  assert.equal(w.db.prepare('SELECT speaker_label FROM interview_transcript_segments WHERE session_id=?').get(w.session).speaker_label,'Fixture speaker');
+  const row=(await botRow(w.env,uid))!;
+  const participants=JSON.parse((await decryptColumn(w.env,'meeting_bots','participants_enc',uid,row.participants_enc!))!);
+  assert.equal(participants.length,1);assert.equal(participants[0].joined_ms,0);
+  assert.equal(await runInterviewProcessJob(w.env,messages[0].payload),null);
+  assert.equal(transcriptions,1);
+});
+
+test('D886 moving processing progress keeps assembly alive without extending runtime billing',async()=>{
+  const w=world(),r=await post(w),uid=r.body.bot.uid;
+  await event(w,uid,{seq:1,type:'status',status:'recording'});
+  await event(w,uid,{seq:2,type:'status',status:'processing'});
+  w.supervisors.get(uid).data.set('assembly_queued',true);
+  const run=(await botRow(w.env,uid))!,clock=Date.now;
+  const later=run.ended_at!+360000;
+  Date.now=()=>later;
+  try {
+    const fresh=new Date(later-1000).toISOString().replace('T',' ').slice(0,19);
+    w.db.prepare("UPDATE interview_sessions SET processing_stage='transcribing',processing_updated_at=? WHERE id=?").run(fresh,w.session);
+    await w.supervisors.get(uid).object.alarm();
+    assert.equal((await botRow(w.env,uid))!.status,'processing');
+    assert.equal((await botRow(w.env,uid))!.ended_at,run.ended_at);
+    const stale=new Date(later-360000).toISOString().replace('T',' ').slice(0,19);
+    w.db.prepare('UPDATE interview_sessions SET processing_updated_at=? WHERE id=?').run(stale,w.session);
+    await w.supervisors.get(uid).object.alarm();
+    assert.equal((await botRow(w.env,uid))!.failure_code,'processing_timeout');
+  }finally{Date.now=clock;}
 });
 
 

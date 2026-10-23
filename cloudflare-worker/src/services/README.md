@@ -318,3 +318,26 @@ content-free status projection, the runtime interface and the full-call budget
 check. `MeetingBotRun` serializes state and renews two-minute bot-fee holds on
 the existing ledger. Transcription remains B6's `aiRouter` charge. See D886 §12
 for the callback, runtime lease, privacy and release contracts.
+D886 B6 (#2584): `meetingBotAssembly.ts` reads B1's authenticated encrypted
+event store, projects roster snapshots and null speaker marks into the pure
+mapper in `channels/botTranscript.ts`, and validates the complete uploaded
+manifest before using the existing recorder job. The job forces Nova-3 for bot
+chunks and reuses their staged `speaker_raw` numbers and paid results. It keeps
+the existing `processing_auto` choice: summary/structure are manual unless that
+choice was recorded. No second STT or billing path is introduced.
+
+Migration 532 supplies `meeting_bots.participants_enc` (531 stays immutable).
+Final participant labels/times, transcript, legacy transcript mirror and receipt
+commit in one batch guarded by current consent, audio retention, account and
+project access. Per-run ciphertext is the batch marker; a refused guard makes
+all later writes no-ops. Retries reuse the staged chunks and cannot duplicate
+final receipts. B1 alone writes bot status, after the session reaches done and
+the final encrypted participants exist. Processing activity keeps its timeout
+alive without extending capture or billing. Stop drains at most 30 seconds;
+incomplete manifests fail explicitly. Audio-only deletion retains the final
+text and labels; session deletion removes the run and events.
+
+`readBotFinalParticipants` is creator-scoped and returns B7's display-name/time
+shape (null before assembly); corrupt encrypted data fails as unreadable. B7
+owns mounting this final read alongside its live roster. There is no new route,
+feature-switch change, live-runtime validation or production deployment here.
