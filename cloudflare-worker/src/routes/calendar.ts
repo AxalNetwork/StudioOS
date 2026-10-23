@@ -1152,7 +1152,7 @@ calendar.get('/google/callback', async (c) => {
       // Gmail removal retained Calendar event mappings so reconnecting the
       // same account remains idempotent. A different selected account must
       // start with fresh mappings to avoid applying another account's IDs.
-      await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId}`;
+      await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
     }
     const extra: Record<string, string> = {};
     // The return banner tells a transcript grant from an ordinary connect (#1926).
