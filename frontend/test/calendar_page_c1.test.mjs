@@ -429,8 +429,8 @@ test('members with a legacy Gmail grant can remove it and reconnect Google witho
 });
 
 test('Google offers an explicit local-only disconnect after revocation fails', () => {
-  assert.match(pageRaw, /forceDisconnectAvailable: true/,
-    'a revocation failure must leave a local disconnect option');
+  assert.match(pageRaw, /e\?\.code === 'google_revocation_failed'[\s\S]*?forceDisconnectAvailable: revocationFailed/,
+    'only a confirmed Google revocation failure must leave a local disconnect option');
   assert.match(pageRaw, /data-testid="calendar-force-disconnect"[\s\S]*?Disconnect locally/,
     'the fallback action must be labeled so it does not imply Google revocation');
   assert.match(pageRaw, /googleCalForceDisconnect\(\)[\s\S]*?Google Account/,

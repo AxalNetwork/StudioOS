@@ -30,6 +30,7 @@ import {
   makeGoogleSyncIdentityStateMarker,
   googleSyncIdentityMatchesState,
   shouldResetGoogleSyncMappings,
+  callbackGoogleScopes,
 } from '../src/routes/calendar.ts';
 import { returnFromNonce } from '../src/util/oauthReturn.ts';
 
@@ -163,6 +164,9 @@ test('retained Calendar mappings are bound to the original Google identity', asy
   assert.equal(shouldResetGoogleSyncMappings(false, true), true);
   assert.equal(shouldResetGoogleSyncMappings(null, true), false);
   assert.equal(shouldResetGoogleSyncMappings(null, false), true);
+  const gmailScope = 'https://www.googleapis.com/auth/gmail.readonly';
+  assert.ok(callbackGoogleScopes('openid calendar.readonly', `openid ${gmailScope}`, false).includes(gmailScope));
+  assert.ok(!callbackGoogleScopes('openid calendar.readonly', `openid ${gmailScope}`, true).includes(gmailScope));
 });
 
 test('preserved Meet OAuth state keeps Build return routing without showing a new-grant banner', () => {
@@ -244,6 +248,12 @@ test('Google disconnect keeps the saved connection when revocation fails', async
     ),
     /google_revoke_failed:503/,
   );
+  await assert.rejects(
+    () => revokeAndDisconnectGoogle({ ...FULL_GOOGLE, DB } as any, 42, async () =>
+      new Response(JSON.stringify({ error: 'temporarily_unavailable' }), { status: 503 }),
+    ),
+    (error: any) => error.code === 'google_revocation_failed',
+  );
   assert.deepEqual(writes, [], 'local credentials must remain available for a later revoke retry');
 });
 
@@ -259,11 +269,11 @@ test('removing Gmail preserves Google event mappings for the immediate reconnect
     },
   };
   await revokeAndDisconnectGoogle({ ...FULL_GOOGLE, DB } as any, 42, async () =>
-    new Response('', { status: 200 }), { preserveCalendarSync: true },
+    new Response('', { status: 200 }), { preserveCalendarSync: true, preserveGoogleIdentity: true },
   );
   assert.equal(deletes.some(sql => /DELETE FROM calendar_sync_records/.test(sql)), false);
   assert.ok(deletes.some(sql => /DELETE FROM google_oauth_tokens/.test(sql)));
-  assert.ok(deletes.some(sql => /DELETE FROM user_google_links/.test(sql)));
+  assert.equal(deletes.some(sql => /DELETE FROM user_google_links/.test(sql)), false);
 });
 
 test('buildMicrosoftAuthUrl produces a well-formed login.microsoftonline.com URL', () => {

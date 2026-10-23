@@ -519,7 +519,14 @@ export default function CalendarPage() {
       await loadGoogle();
       setGoogleResult({ kind: 'success', text: 'Google disconnected.' });
     } catch (e) {
-      setGoogleResult({ kind: 'error', text: `${e.message || 'Google could not confirm revocation.'} Your connection is still saved.`, forceDisconnectAvailable: true });
+      const revocationFailed = e?.code === 'google_revocation_failed';
+      setGoogleResult({
+        kind: 'error',
+        text: revocationFailed
+          ? `${e.message || 'Google could not confirm revocation.'} Your connection is still saved.`
+          : `Google could not be disconnected: ${e.message || 'please try again.'}`,
+        forceDisconnectAvailable: revocationFailed,
+      });
     }
   }
   async function forceDisconnectGoogle() {
