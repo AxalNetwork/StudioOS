@@ -1107,7 +1107,11 @@ function IcMeetingModal({ me, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
+  const dealId = Number(form.deal_id);
+  const validDeal = Number.isSafeInteger(dealId) && dealId > 0;
+
   async function submit() {
+    if (!validDeal) { setErr('Enter a valid deal id.'); return; }
     setBusy(true); setErr(null);
     try {
       const ids = form.attendee_user_ids.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isFinite(n));
@@ -1116,7 +1120,7 @@ function IcMeetingModal({ me, onClose, onSaved }) {
         agenda: form.agenda || null,
         start_at: new Date(form.start_at).toISOString(),
         duration_min: parseInt(form.duration_min, 10) || 60,
-        deal_id: form.deal_id ? parseInt(form.deal_id, 10) : null,
+        deal_id: dealId,
         location_uri: form.location_uri || null,
         attendee_user_ids: ids,
       });
@@ -1142,8 +1146,8 @@ function IcMeetingModal({ me, onClose, onSaved }) {
             <input type="number" min={10} max={600} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
                    value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: e.target.value })} />
           </Field>
-          <Field label="Deal id (optional)">
-            <input className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
+          <Field label="Deal id (required)">
+            <input type="number" min={1} step={1} required className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
                    value={form.deal_id} onChange={(e) => setForm({ ...form, deal_id: e.target.value })} />
           </Field>
         </div>
@@ -1163,7 +1167,7 @@ function IcMeetingModal({ me, onClose, onSaved }) {
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onClose} className="text-sm px-3 py-1.5 border border-slate-300 rounded">Cancel</button>
-          <button onClick={submit} disabled={busy || !form.title || !form.start_at}
+          <button onClick={submit} disabled={busy || !form.title || !form.start_at || !validDeal}
                   className="text-sm px-3 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">
             {busy ? 'Saving…' : 'Schedule'}
           </button>

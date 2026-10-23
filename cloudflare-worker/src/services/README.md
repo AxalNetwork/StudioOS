@@ -362,3 +362,14 @@ the bot and emails, and never turns a failed read into an empty list.
 Event responses use `eventsCommon.ts` to withhold online and hybrid join URLs
 unless a manager or a confirmed seat with settled payment reads them. Public
 calendar exports and invitation attachments use the same public projection.
+
+#2440: `calendar.ts` reads only events the member owns, organises or attends,
+including for admins. The same boundary feeds the page, calendar downloads,
+Google/Outlook sync and individual pushes; staff-wide typed lists stay separate.
+`../routes/calendar.ts` checks a founder's project and the caller/counterpart's
+recorded membership, deal relationship, assigned deal lead or live advisor session grant before
+creating a check-in. IC creation requires a readable deal and validates named
+attendees against that exact deal (venture owner/member/advisor, invited or
+committed investor, or assigned lead); the organiser explicitly opts themselves in. Passed investor invitations and
+withdrawn commitments confer no scheduling rights; investor organisers need a
+current relationship too, beyond the legacy deal-reader gate.

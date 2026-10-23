@@ -6,11 +6,10 @@
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
 import { Hono } from 'hono';
-import { findableBy } from '../services/investorFindable';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { activeCompanyFor } from '../middleware/activeCompany';
-import { projectInActiveCompany } from '../services/tenancyScope';
+import { projectOwned } from '../middleware/projectContentAccess';
+import { ensureProjectMembershipSchema } from '../services/projectAccess';
 import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
@@ -481,41 +480,7 @@ export function sanitizeImageUrl(input: string | null | undefined): string | nul
   return u.toString();
 }
 
-/**
- * The project behind a deck, or a throw. The single gate this file has, which
- * is why the company clause belongs here and not at its thirteen call sites.
- *
- * COMPANY SCOPING, and read THIS file's exemption set rather than a sibling's:
- * admin, partner AND investor are all exempt here, because a deck is shown to
- * people who do not own the project. Only the founder branch narrows, and only
- * after ownership is established — this throws Forbidden, so a company that
- * could grant rather than narrow would be a hole.
- *
- * Takes the context rather than the env because the active company is a
- * property of the REQUEST. Passing the env would have meant resolving the
- * header at every call site, which is the arrangement that lets one of them
- * quietly forget.
- */
-async function projectOwned(
-  c: { env: Env; req: { header: (n: string) => string | undefined } },
-  user: any,
-  projectId: number,
-): Promise<any> {
-  const row = await c.env.DB.prepare(
-    'SELECT id, founder_id, company_id FROM projects WHERE id = ?',
-  ).bind(projectId).first<any>();
-  if (!row) throw new Error('NotFound');
-  const role = String(user?.role || '').toLowerCase();
-  // D702 — an investor opening a venture its founder keeps to introductions,
-  // without one, finds nothing, exactly as for a venture that does not exist.
-  if (role === 'investor' && !(await findableBy(c.env, user, row.id))) throw new Error('NotFound');
-  if (role === 'admin' || role === 'partner' || role === 'investor') return row;
-  if (role === 'founder' && user.founder_id && row.founder_id === user.founder_id) {
-    if (!projectInActiveCompany(await activeCompanyFor(c, user), row)) throw new Error('NotFound');
-    return row;
-  }
-  throw new Error('Forbidden');
-}
+
 
 /** D767 — a "Fill from project" proposal as the editor shows it beside the current version. */
 function rowToProposal(row: any): any {
@@ -567,7 +532,7 @@ decks.post('/generate', async (c) => {
   if (!pid) return c.json({ error: 'project_id required' }, 400);
   let p: any;
   try {
-    await projectOwned(c, user, pid);
+    await projectOwned(c, user, pid, { write: true });
     p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
   } catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
@@ -589,7 +554,7 @@ decks.post('/generate', async (c) => {
 });
 
 // Task #10 — One-liner & Elevator pitch generator ("one-click positioning").
-// Pulls the selected project's TEAM (cap-table founders), TRACTION (project
+// Pulls the selected project's TEAM (recorded founder and accepted members), TRACTION (project
 // columns + financial model) and recent UPDATES (submitted
 // portfolio updates), then asks the AI for a punchy one-liner, a short
 // elevator pitch and 3-5 alternate positioning lines. Growth-tier, owner-
@@ -604,7 +569,7 @@ decks.post('/positioning', async (c) => {
 
   let p: any;
   try {
-    await projectOwned(c, user, pid);
+    await projectOwned(c, user, pid, { write: true });
     p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
   } catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
@@ -613,17 +578,31 @@ decks.post('/positioning', async (c) => {
   if (!p) return c.json({ error: 'not found' }, 404);
 
   // --- Gather grounding data (each source degrades to empty on failure). ---
-  // Team = cap-table founders (fall back to all holders if none tagged).
+  // Only the venture's recorded team. Share ownership is never a team record.
   let team: string[] = [];
+  let advisors: string[] = [];
+  let teamReadable = true;
   try {
-    const hr = await c.env.DB.prepare(
-      'SELECT name, kind FROM cap_table_holders WHERE project_id = ?',
-    ).bind(pid).all<{ name: string; kind: string }>();
-    const rows = hr.results || [];
-    const founders = rows.filter((h) => /founder/i.test(h.kind || ''));
-    team = (founders.length ? founders : rows)
-      .map((h) => String(h.name || '').trim()).filter(Boolean).slice(0, 6);
-  } catch { /* table may not exist in dev */ }
+    await ensureProjectMembershipSchema(c.env);
+    const rows = await c.env.DB.prepare(
+      `WITH target AS (SELECT id, founder_id FROM projects WHERE id = ?)
+        SELECT u.id, u.name,
+          CASE WHEN u.role = 'founder' AND u.founder_id = p.founder_id THEN 'founder' ELSE pm.role END AS member_role
+        FROM users u JOIN (
+          SELECT u.id FROM users u JOIN target p ON u.founder_id = p.founder_id WHERE u.role = 'founder'
+          UNION
+          SELECT pm.user_id FROM project_members pm JOIN target p ON pm.project_id = p.id
+            WHERE pm.status = 'accepted' AND pm.role IN ('owner', 'cofounder', 'advisor')
+        ) t ON u.id = t.id CROSS JOIN target p
+        LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = u.id
+        WHERE u.is_active = 1 AND trim(COALESCE(u.name, '')) <> ''
+        ORDER BY CASE WHEN u.role = 'founder' AND u.founder_id = p.founder_id THEN 0 WHEN pm.role = 'advisor' THEN 2 ELSE 1 END, u.id LIMIT 6`,
+    ).bind(pid).all<{ id: number; name: string; member_role: string }>();
+    const recorded = rows.results ?? [];
+    team = recorded.filter((u) => u.member_role !== 'advisor').map((u) => String(u.name ?? '').trim()).filter(Boolean);
+    advisors = recorded.filter((u) => u.member_role === 'advisor').map((u) => String(u.name ?? '').trim()).filter(Boolean);
+  } catch { teamReadable = false; }
+  const teamStatus = !teamReadable ? 'unreadable' : team.length ? 'recorded' : 'not_recorded';
 
   // Financials — runway / burn / LTV:CAC add credible traction color.
   let fin: any = null;
@@ -651,7 +630,9 @@ decks.post('/positioning', async (c) => {
     p.traction_summary || p.growth_signals || p.users_count || p.revenue
   );
   const sourced_from = {
-    team: team.length,
+    team: teamReadable ? team.length : null,
+    advisors: teamReadable ? advisors.length : null,
+    team_status: teamStatus,
     traction: hasTraction,
     updates: updates.length,
     financials: !!fin,
@@ -666,7 +647,7 @@ decks.post('/positioning', async (c) => {
     users: p.users_count, revenue: p.revenue,
     traction_summary: p.traction_summary,
     growth_signals: p.growth_signals, funding_needed: p.funding_needed,
-    team,
+    team, advisors, team_status: teamStatus,
     runway_months: fin?.runway_months, ltv_cac_ratio: fin?.ltv_cac_ratio,
     avg_monthly_burn: fin?.avg_monthly_burn,
     recent_updates: updates.map((u) => (u.period ? `${u.period}: ${u.title}` : u.title)),
@@ -689,7 +670,9 @@ Rules:
 - 3 to 5 positioning_lines, each <= 18 words, each a DISTINCT angle
   (customer value, market wedge, why-now, outcome).
 - Concrete and specific to THIS startup — never generic filler.
-- Never invent metrics, customers, or funding not present in the data.`;
+- Never invent metrics, customers, or funding not present in the data.
+- The advisors field contains advisors only. Never describe them as founders or members of the operating team.
+- An empty team contains no recorded names. Do not infer a team from share ownership or invent team members.`;
 
   const result = await aiRouterRun(c.env, {
     task: 'rail_write',
@@ -724,6 +707,24 @@ Rules:
     positioning_lines,
     sourced_from,
   });
+});
+
+/** GET /api/decks/recommend?project_id=... — suggested method for project. */
+decks.get('/recommend', async (c) => {
+  const user = await requireAuth(c);
+  const pid = parseInt(c.req.query('project_id') || '');
+  if (!pid) return c.json({ error: 'project_id required' }, 400);
+  let proj: any;
+  try {
+    await projectOwned(c, user, pid);
+    proj = await c.env.DB.prepare('SELECT id, name, sector, stage FROM projects WHERE id = ?')
+      .bind(pid).first<any>();
+  } catch (e: any) {
+    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
+    return c.json({ error: 'forbidden' }, 403);
+  }
+  const rec = await recommendMethod(c.env, proj || {});
+  return c.json(rec);
 });
 
 decks.get('/by-project/:pid', async (c) => {
@@ -1072,7 +1073,7 @@ decks.put('/:id', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const persistedMethod = extractDeckMethodId(row);
   if (persistedMethod && PREMIUM_METHOD_IDS.includes(persistedMethod as any)) {
@@ -1183,7 +1184,7 @@ decks.post('/:id/restore', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   let slides: any[] = [];
   try { slides = sanitizeSlides(JSON.parse(row.slides || '[]')); } catch {}
@@ -1198,7 +1199,7 @@ decks.post('/:id/share', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const ttlHours = Math.min(
@@ -1268,7 +1269,7 @@ decks.delete('/:id/shares/:shareId', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
 
   const out = await revokeShareLink(c.env, id, shareId);
@@ -1542,24 +1543,6 @@ decks.get('/methods', async (c) => {
   });
 });
 
-/** GET /api/decks/recommend?project_id=... — suggested method for project. */
-decks.get('/recommend', async (c) => {
-  const user = await requireAuth(c);
-  const pid = parseInt(c.req.query('project_id') || '');
-  if (!pid) return c.json({ error: 'project_id required' }, 400);
-  let proj: any;
-  try {
-    await projectOwned(c, user, pid);
-    proj = await c.env.DB.prepare('SELECT id, name, sector, stage FROM projects WHERE id = ?')
-      .bind(pid).first<any>();
-  } catch (e: any) {
-    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
-    return c.json({ error: 'forbidden' }, 403);
-  }
-  const rec = await recommendMethod(c.env, proj || {});
-  return c.json(rec);
-});
-
 /**
  * D778 part 5 (#2103): the page and option D771's inventory gives the two deck
  * form fills (`railOptions/founder.js`). A press's own headers win (`railFor`);
@@ -1601,7 +1584,7 @@ decks.post('/apply-method', async (c) => {
   }
   let proj: any;
   try {
-    await projectOwned(c, user, pid);
+    await projectOwned(c, user, pid, { write: true });
     proj = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
   } catch (e: any) {
     if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
@@ -1704,7 +1687,7 @@ async function ownedProposal(c: any, user: any, id: number): Promise<any | Respo
   const env = c.env as Env;
   const row = id ? await env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>() : null;
   if (!row) return c.json({ error: 'not found' }, 404);
-  try { await projectOwned(c, user, Number(row.project_id)); } catch { return c.json({ error: 'forbidden' }, 403); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); } catch { return c.json({ error: 'forbidden' }, 403); }
   return row;
 }
 
@@ -1760,7 +1743,7 @@ decks.post('/:id/autofill', async (c) => {
   let row: any;
   try { row = await getDeckRow(c.env, id); }
   catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
 
   // Extract method_id from the persisted slides. /apply-method stamps
@@ -1868,7 +1851,7 @@ decks.post('/:id/export', async (c) => {
   await ensureSchema(c.env);
   let row: any;
   try { row = await getDeckRow(c.env, id); } catch { return c.json({ error: 'not found' }, 404); }
-  try { await projectOwned(c, user, Number(row.project_id)); }
+  try { await projectOwned(c, user, Number(row.project_id), { write: true }); }
   catch { return c.json({ error: 'forbidden' }, 403); }
   const body = await c.req.json().catch(() => ({} as any));
   const format = String(body?.format || 'pdf').toLowerCase();
