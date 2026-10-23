@@ -184,24 +184,28 @@ The image helper performs no migrations, deployment, login or publication.
 `--fixture` builds a scratch image solely to smoke-test CI plumbing; it emits
 no publishable image output and contains no bot runtime.
 
-## Release drafts (the version beside the logo)
+## Daily release drafts (the version beside the logo)
 
-`release-draft.mjs` keeps one draft GitHub release ready for the owner to
-publish (`.github/workflows/release-draft.yml`, on every push to `main`). It
-generates GitHub's notes since the newest published release and creates or
-refreshes the draft, without publishing. `--dry-run` prints the plan and
-writes nothing. `lib/releaseDraft.test.mjs` pins the rules. Publishing stays
-the owner's: `release-published.yml` then redeploys `main`, and the deploy
-builds the new tag into `VITE_AXAL_RELEASE` for the badge.
+`release-draft.mjs` reads the complete first-parent commit history of
+`origin/main`, using UTC committer dates to identify when changes landed on
+main. Each active day gets one release draft targeting that day's final main
+commit. Titles show the version alone, without dates or descriptions.
+The version counts active months since the start; week/day counters reset
+each month. Active seven-day blocks within the month (1–7, 8–14, etc.)
+produce a zero-based week counter, 0–4. Active days count 1–31. Empty
+blocks/days add nothing. October 23 with activity every day is v8.3.23. Publication dates
+are not used to date historical releases.
 
-`release-draft.mjs` reads all pages of published GitHub releases and uses
-`frontend/src/lib/release.js` to count distinct UTC months, Monday-start weeks
-and days with releases, including the current draft day. Empty periods add
-nothing; counts accumulate across years. Tags are plain `v1.4.15` values.
-Multiple historic publications on one day count once. The draft refreshes
-until publication; after publication that UTC day is frozen and subsequent
-runs make no release or tag writes. Later changes wait for another release
-day. Publishing remains manual; refresh an old draft before publishing it.
-`--dry-run` generates notes without writing a release. Legacy tags still
-parse for the badge and publication history. The generator fails on invalid
-publication dates instead of silently losing history.
+All release pages are read before writing. A daily marker associates the
+release with its commit day. Only matching drafts refresh; unchanged drafts
+need no write. Published daily releases and tags are frozen. Existing legacy
+releases and unrelated drafts are untouched. A conflicting unrelated tag
+fails rather than being overwritten. Writes are paced for GitHub's secondary
+content-creation limit. `--dry-run` plans without writes or waits.
+
+The workflow checks out full history (`fetch-depth: 0`). Publishing stays
+manual; no publishing or deploy is performed by this generator. Notes link
+the exact comparison from the previous active day's final commit to this
+one. Publishing still triggers `release-published.yml` for the logo badge.
+`lib/releaseDraft.test.mjs` covers the date counters, historical backfill,
+pagination, fixed published versions and idempotent draft updates.

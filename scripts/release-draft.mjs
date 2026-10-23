@@ -1,23 +1,10 @@
 #!/usr/bin/env node
-/**
- * Keep ONE draft GitHub release ready for the owner to publish
- * (.github/workflows/release-draft.yml, on every push to main).
- *
- * - The last release is the newest published one (drafts excluded).
- * - The draft's tag is the next one, by `nextReleaseTag` (frontend/src/lib/release.js):
- *   cumulative active release months, weeks and days (UTC).
- * - Its notes are GitHub's own generated notes since the last release (merged
- *   PRs and their authors), so nothing is hand-written and CHANGELOG.md is
- *   untouched.
- * - Calendar counter tags are plain versions, without a stage suffix.
- *
- * Publishing is the owner's: it creates the tag on main and starts
- * release-published.yml, which redeploys so the logo's badge shows it.
- *
- * Env: GITHUB_TOKEN (contents: write), GITHUB_REPOSITORY (owner/name).
- * `--dry-run` prints what it would write and changes nothing.
+/** Daily release drafts from the full first-parent history of main.
+ * Published releases/tags are immutable. Only matching daily drafts refresh.
+ * Publishing remains manual. --dry-run performs no release writes.
  */
-import { nextReleaseTag, parseRelease, releaseDays } from '../frontend/src/lib/release.js';
+import { execFileSync } from 'node:child_process';
+import { nextReleaseTag } from '../frontend/src/lib/release.js';
 
 const API = 'https://api.github.com';
 // GitHub refuses a release body over 125,000 characters. The first release
@@ -30,26 +17,33 @@ export function trimBody(body, limit = BODY_LIMIT) {
   return `${cut.slice(0, cut.lastIndexOf('\n'))}\n\n…and more, cut to fit GitHub's size limit for a release.\n`;
 }
 
-/** The newest published release, and the existing draft (if any), from a releases page. */
-export function pickReleases(releases) {
-  const published = releases.filter((r) => !r.draft && parseRelease(r.tag_name));
-  published.sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
-  const draft = releases.find((r) => r.draft) || null;
-  return { last: published[0] || null, draft };
+/** First-parent commits represent when changes landed on main, in UTC. */
+export function dailyReleasePlan(commits) {
+  const grouped = new Map();
+  for (const commit of commits) {
+    if (!/^[a-f0-9]{40}$/.test(commit.sha)) throw new Error('Invalid commit SHA.');
+    const date = new Date(commit.date);
+    if (!Number.isFinite(date.getTime())) throw new Error('Invalid commit date.');
+    const day = date.toISOString().slice(0, 10);
+    const previous = grouped.get(day);
+    grouped.set(day, { date: day, target: commit.sha, count: (previous?.count || 0) + 1 });
+  }
+  const days = [...grouped.keys()].sort();
+  return days.map((day, i) => ({ ...grouped.get(day), tag: nextReleaseTag(days.slice(0, i + 1)), previous: i ? grouped.get(days[i - 1]).target : null }));
 }
 
-/** The draft to write, from the last release's tag and the generated notes. */
-export function draftPayload({ releases = [], notes, now = new Date(), target = 'main' }) {
-  const lastTag = pickReleases(releases).last?.tag_name;
-  const tag = nextReleaseTag(releases, now);
-  const intro = lastTag
-    ? `Changes since ${lastTag}. Publishing this draft tags \`${target}\` and updates the version beside the logo.\n\n`
-    : 'The first tagged release. Earlier history is in CHANGELOG.md. Publishing this draft tags `main` and updates the version beside the logo.\n\n';
+export function readMainCommits(run = execFileSync) {
+  return run('git', ['log', 'origin/main', '--first-parent', '--reverse', '--format=%H%x09%cI'], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })
+    .trim().split('\n').filter(Boolean).map((line) => { const [sha, date] = line.split('\t'); return { sha, date }; });
+}
+
+export function draftPayload(row, repo) {
+  const link = row.previous ? `https://github.com/${repo}/compare/${row.previous}...${row.target}` : `https://github.com/${repo}/commits/${row.target}`;
   return {
-    tag_name: tag,
-    target_commitish: target,
-    name: tag,
-    body: trimBody(intro + (notes || '')),
+    tag_name: row.tag,
+    target_commitish: row.target,
+    name: row.tag,
+    body: trimBody(`Daily release for **${row.date} (UTC)**.\n\n${row.count} commits on main.\n\n[Changes for this release](${link})\n\nVersion counts active months since the start; the zero-based active week counter and active commit-day count reset each month (weeks 0–4, days 1–31).\n\n<!-- studioos-daily-release:${row.date} -->\n`),
     draft: true,
     prerelease: false,
   };
@@ -70,7 +64,7 @@ async function gh(path, { method = 'GET', body } = {}) {
   return r.status === 204 ? null : r.json();
 }
 
-/** Read every page: counting only the newest 100 releases would reset versions. */
+/** Read every page so older daily releases are matched rather than recreated. */
 export async function readReleases(api, repo) {
   const releases = [];
   for (let page = 1; ; page++) {
@@ -80,25 +74,38 @@ export async function readReleases(api, repo) {
   }
 }
 
-export async function updateDraft({ api = gh, repo, now = new Date(), dryRun = false }) {
-  const releases = await readReleases(api, repo);
-  // Publishing freezes the day's release. Never update a published release or tag.
-  if (releaseDays(releases).includes(now.toISOString().slice(0, 10))) {
-    return { skipped: true, reason: 'A release is already published today; its version and tag stay fixed.' };
+export async function updateDraft({ api = gh, repo, commits = readMainCommits(), dryRun = false, pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
+  const releases = (await readReleases(api, repo)).map((release) => ({ ...release }));
+  const plan = dailyReleasePlan(commits);
+  let written = 0, frozen = 0, previous = null;
+  for (const row of plan) {
+    const marker = `<!-- studioos-daily-release:${row.date} -->`;
+    const sameTag = releases.find((r) => r.tag_name === row.tag);
+    const sameDay = releases.find((r) => (r.body || '').includes(marker));
+    if (sameTag && !(sameTag.body || '').includes(marker)) throw new Error(`Version already belongs to another release: ${row.tag}`);
+    const published = [sameTag, sameDay].find((r) => r && !r.draft);
+    if (published) {
+      if (!/^[a-f0-9]{40}$/.test(published.target_commitish || '')) throw new Error('Published daily release must pin its commit.');
+      previous = published.target_commitish;
+      frozen++;
+      continue;
+    }
+    const draft = sameTag || sameDay;
+    const payload = draftPayload({ ...row, previous }, repo);
+    previous = row.target;
+    if (draft && Object.entries(payload).every(([key, value]) => draft[key] === value)) continue;
+    let saved;
+    if (!dryRun) {
+      saved = await api(`/repos/${repo}/releases${draft ? `/${draft.id}` : ''}`, { method: draft ? 'PATCH' : 'POST', body: payload });
+      // Stay below GitHub's secondary content-creation limit during backfills.
+      await pause(1100);
+    }
+    // Simulate renames in dry runs too, without mutating the API snapshot.
+    if (draft) Object.assign(draft, payload);
+    else releases.push({ ...payload, id: saved?.id });
+    written++;
   }
-  const { last, draft } = pickReleases(releases);
-  const lastTag = last?.tag_name || null;
-  const tag = nextReleaseTag(releases, now);
-  const generated = await api(`/repos/${repo}/releases/generate-notes`, {
-    method: 'POST',
-    body: { tag_name: tag, target_commitish: 'main', ...(lastTag ? { previous_tag_name: lastTag } : {}) },
-  });
-  const payload = draftPayload({ releases, now, notes: generated.body });
-  if (!dryRun) {
-    if (draft) await api(`/repos/${repo}/releases/${draft.id}`, { method: 'PATCH', body: payload });
-    else await api(`/repos/${repo}/releases`, { method: 'POST', body: payload });
-  }
-  return { skipped: false, payload };
+  return { days: plan.length, written, frozen, latest: plan.at(-1)?.tag || null };
 }
 
 async function main() {
@@ -106,7 +113,7 @@ async function main() {
   const dryRun = process.argv.includes('--dry-run');
   if (!repo || !process.env.GITHUB_TOKEN) throw new Error('GITHUB_REPOSITORY and GITHUB_TOKEN are required.');
   const result = await updateDraft({ repo, dryRun });
-  console.log(result.skipped ? result.reason : `draft: ${result.payload.tag_name}; body ${result.payload.body.length} chars`);
+  console.log(JSON.stringify(result));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
