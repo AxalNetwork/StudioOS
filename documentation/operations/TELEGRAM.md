@@ -34,6 +34,7 @@ together with what the Telegram track (#2508) has merged so far:
 | Conversation analytics for Record a Session, Telegram and WhatsApp chats alike | #2526 (D858, #2503) |
 | A guided setup for Record a Session: six steps (linked, bot added, bot on, replies allowed, a first chat, the notice), each done, to do or blocked, read from stored rows with no Bot API call (`GET /api/channels/telegram/setup`) | #2531 (D863, #2509) |
 | The channel in the conversation analytics (each session's channel, figures per channel), and a Telegram chat's text and consented notes proven end to end into Validate's proposals | #2548 (D866, #2512) |
+| Shared working-language translation for assigned text and transcribed notes, preserving originals; the 5 MiB cap and round-video refusal retained until direct-container and larger-note support are measured | #2611 (D865, #2511), merged 2026-10-23; uses D857 (#2536, #2502) |
 | The rollout readiness check (`telegram_readiness_d868.test.ts`) | D868 (#2514) |
 | Yes/No buttons on the notice | D756's buttons task, not filed: it waits on §3 step 10's probe |
 
@@ -41,7 +42,6 @@ together with what the Telegram track (#2508) has merged so far:
 
 | Part | Task |
 | --- | --- |
-| Every note to text and translated: round videos, larger notes (translation is D857's, shared with WhatsApp) | D865 (#2511) |
 | Edits and deletions of a Telegram message honoured at the source (D866 §4, waiting on S1's ruling) | D866 (#2512) |
 | Calls by forwarding a recording, and "Send to Axal" (`TELEGRAM_CAPTURE`) | D867 (#2513) |
 | The Record a Session › Telegram screens | D869 (#2515) |
@@ -53,6 +53,27 @@ NO keeps the notes held; a STOP stops further downloads; neither sets the chat
 aside. A consented note's audio is stored and transcribed as recorder audio
 (#2083). Setting the secrets is safe: `TELEGRAM_CHANNEL`
 ships `canary`, so only Super Admins can link.
+
+**Speech and translation after D865 (#2611).** The admitted media are voice
+notes, audio files and audio documents. The limit remains **5 MiB inclusive**
+(5 × 1,024 × 1,024 bytes; called 5 MB in the member UI). A declared oversize file
+is refused before `getFile`; Telegram's reported size is checked before the
+download, and the streamed body is bounded even when sizes are absent.
+`TELEGRAM_VIDEO_NOTES` remains `false`: a round video is a waiting placeholder
+with a refusal, never a downloaded or silently empty transcript. Send its audio
+track as an admitted audio file within the limit instead. Direct MP4-with-video
+and a 5–20 MiB intake are still **UNVERIFIED**, not shipped capabilities; D865
+records the preview-only measurement follow-up.
+
+Assigned text and transcribed notes enter D857's existing translation stage
+before structuring, following the member's manual/automatic processing choice
+and the chat quiet window. No translation runs in the webhook. The target is
+the founder's working language, then account locale, then English. The original
+stays alongside an encrypted translation. Already matching text needs no
+translation model call or AI-token hold; a refused/failed translation leaves
+the original usable and translation pending for bounded retries. Telegram's
+app-language preference is not a detected source language. Speech-to-text and
+translation both use the existing AI-token ledger, not a separate translator.
 
 ## 1. Owner steps, in order
 
@@ -133,8 +154,9 @@ each has a source mutation that must make it fail:
   503 `not_configured` while the secret is unset, 401 when it is missing or
   wrong;
 - an assigned chat's text flows, but no note is queued before the contact's YES;
-- a note over 5 MB is refused, on its declared size before any call and on
-  `getFile`'s size before any download;
+- a note over 5 MiB is refused, on its declared size before any call and on
+  `getFile`'s size before any download; an exact-limit admitted audio file
+  succeeds, and an undeclared oversize streamed body is still refused;
 - round videos are refused while `TELEGRAM_VIDEO_NOTES` is off;
 - at most 50 notes a day per connection are transcribed, and a counter that
   cannot be read refuses;
@@ -186,7 +208,12 @@ Premium (account 1), with a second Telegram account playing the interviewee
 6. **Audio and speakers.** On the session's review: the voice note and the
    audio file play; the transcript shows "Me" and the interviewee by side,
    never "Speaker ?". The round video is never fetched and reads "Round video
-   messages can't be transcribed yet." (D865 changes this line when it merges.)
+   messages can't be transcribed yet." D865 (#2611) keeps this gate off; send
+   its audio track as an audio file within 5 MiB instead.
+   For the language check, use invented text and audio in another language:
+   after the normal processing step, verify the original stays and the translation into your working language
+   appears. Already matching text needs no translation
+   run; a failed translation leaves the original available with a pending state.
 7. **STOP.** Reply **STOP** from account 2. See on account 2: "Understood.
    Recording has stopped for this chat. To have what was already recorded
    deleted, just ask me." See in Axal: "Stopped". Send another voice note from
