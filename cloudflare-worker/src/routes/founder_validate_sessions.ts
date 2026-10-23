@@ -1,3 +1,4 @@
+import { botParticipants } from '../services/meetingBotParticipants';
 import { BotError, dispatchBot, sessionBot, botControl, botView, stopSessionBot } from '../services/meetingBots';
 /**
  * D657 — interview sessions on Validate: record, transcribe live and in full,
@@ -206,6 +207,13 @@ sessions.get('/sessions/:id/bot', async (c) => {
     if (!response.ok) return botFailure(new BotError(503,'bot_unavailable','The meeting bot is temporarily unavailable.'));
     return json({bot:await response.json()});
   } catch (e) { return botFailure(e); }
+});
+// D886 B7: identities are a separate creator-only read, never the content-free status DTO.
+sessions.get('/sessions/:id/bot/participants', async (c) => {
+  const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;
+  if (scoped.session.created_by_user_id !== scoped.user.id) return notFound('Session');
+  try { return json(await botParticipants(c.env, scoped.session.id, scoped.user.id)); }
+  catch (e) { return botFailure(e); }
 });
 sessions.post('/sessions/:id/bot/stop', async (c) => {
   const scoped = await scopeSession(c); if (scoped instanceof Response) return scoped;

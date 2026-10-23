@@ -1492,3 +1492,9 @@ address is returned. These links remain usable when `MAIL_LINK_SECRET` is unset.
 - `MeetingBotRun` controls transitions, alarms, runtime leases and ledger blocks.
   Interface implementation only; no live runtime or public switch enabled by B1.
   B7 owns the UI. D886 §12 is the request/response contract.
+
+D886 B7 (#2585): Record a Session dispatches through the bot member routes, and
+its session page polls status/Stop plus GET `…/sessions/:id/bot/participants`
+(creator-only saved display names/times). Scheduled-call POST accepts
+`auto_send_bot:false`; GET includes `bot`; DELETE stops the queued bot first.
+No new public endpoint, runtime wiring or switch change.

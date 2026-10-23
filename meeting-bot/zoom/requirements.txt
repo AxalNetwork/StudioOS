@@ -1,0 +1,2 @@
+# BSD Python binding, Linux runtime only. Native SDK/library compatibility is a B8 live gate.
+zoom-meeting-sdk==0.0.27

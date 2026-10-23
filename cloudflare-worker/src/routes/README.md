@@ -248,3 +248,8 @@ them to `MeetingBotRun`. It uses no member session or provider credential.
 `founder_validate_sessions.ts` supplies the authenticated creator-only dispatch,
 status and stop routes; consent withdrawal and deletion stop the bot too.
 See D886 §12 for the concrete contract and feature gates.
+
+D886 B7: the sessions router adds creator-only `…/bot/participants` for the saved
+roster. The meetings router accepts `auto_send_bot:false`, otherwise queues B1
+for the consented session at the scheduled start. Bot refusal is separate from
+successful call creation; cancellation stops the bot before the provider call.

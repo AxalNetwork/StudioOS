@@ -308,3 +308,26 @@ test('D886 Stop flushes the captured tail during a bounded drain; withdrawal sti
     assert.equal(w.stops.length,1);
   }finally{Date.now=clock;}
 });
+
+test('B7 participants read is creator-only, decrypts the latest roster, excludes bot/IDs and distinguishes missing/corrupt data',async()=>{
+  const w=world(),r=await post(w),uid=r.body.bot.uid;
+  assert.equal(w.db.prepare('SELECT submitted_via FROM interview_sessions WHERE id=?').get(w.session).submitted_via,'meeting_bot');
+  const path=`/sessions/${w.session}/bot/participants`;
+  assert.equal((await call(w.env,FOUNDER,'GET',path)).body.participants,null);
+  await event(w,uid,{seq:1,type:'roster',participants:[{id:'fixture-a',name:'Fixture name',joined_ms:0,left_ms:null},{id:'fixture-b',name:'person@example.invalid',joined_ms:10,left_ms:100},{id:'fixture-bot',name:'Eadwyn AI',joined_ms:0,left_ms:null}]});
+  const read=await call(w.env,FOUNDER,'GET',path);assert.equal(read.status,200);
+  assert.deepEqual(read.body.participants,[{display_name:'Fixture name',joined_ms:0,left_ms:null},{display_name:'Participant 2',joined_ms:10,left_ms:100}]);
+  assert.equal(JSON.stringify(read.body).includes('fixture-a'),false);assert.equal(JSON.stringify(read.body).includes('@'),false);
+  w.db.prepare("UPDATE users SET role='admin',founder_id=100 WHERE id=?").run(OTHER);
+  assert.equal((await call(w.env,OTHER,'GET',path)).status,404);
+  w.db.prepare("UPDATE meeting_bot_events SET payload_enc='corrupt' WHERE run_uid=?").run(uid);
+  assert.equal((await call(w.env,FOUNDER,'GET',path)).status,503);
+});
+
+test('B7 queued bot cannot be started as a device from a stale session snapshot',async()=>{
+  const w=world();const {loadSession,transition}=await import('../src/services/interviewSessions.ts');
+  const before=await loadSession(w.env,w.session);
+  const r=await post(w,{meeting_url:syntheticLink(),scheduled_at:new Date(Date.now()+3600000).toISOString()});assert.equal(r.status,202);
+  assert.equal(await transition(w.env,before!,'start'),false);
+  assert.equal((await call(w.env,FOUNDER,'POST',`/sessions/${w.session}/start`,{})).status,409);
+});

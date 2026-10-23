@@ -46,6 +46,9 @@ folder's lockfile. No TypeScript compilation step is needed in the image.
 | `src/entry.ts` | Private HTTP entry, bounded command bodies, fixed logs, SIGTERM/SIGINT shutdown and a hard 28-second exit bound. |
 | `Dockerfile`, `.dockerignore` | Linux image; its build runs the fake-adapter command smoke test before producing the runtime stage. |
 | `package.json`, `package-lock.json` | Pinned browser dependency and isolated runtime install. |
+
+| `src/adapters/teams.ts` | B5 (#2583): Microsoft Teams as a browser guest, over a `TeamsPage` driver (attributes only, so a caption's or a message's words never reach it). Launcher → pre-join (mic and camera off) → lobby, including Teams' "Suspected threats" bot approval; the notice in the meeting chat; the People pane as the roster; live captions' speaker names as the speaker timeline. A captcha, anonymous join turned off or a blocked bot is `platform_blocked`. |
+| `src/adapters/teamsSelectors.ts` | B5: every Teams selector and the link rule (work or school, and Teams free; https only). **Provisional**, from published reports, until the live check records Teams' screens. |
 | `notice.mjs` | B9's notice contract (#2587, #2590): `meetingBotNotice`, `MEETING_BOT_NAME`, the publication gate and the dispatch disclosure. See **The notice** below. |
 | `src/adapters/meet.ts` | B3 (#2581): `MeetAdapter`, Google Meet. It joins as a guest with the microphone and camera off, waits in the waiting room, reads the participant panel and the active-speaker indicator, takes the tab's audio, and detects the end of the call and removal by the host (removal reads as the call ending). It takes a `MeetPage` (`src/adapters/meet/page.ts`), which a Playwright `Page` satisfies, so the core stays dependency-free. |
 | `src/adapters/meet/selectors.ts` | Every Meet page hook, in one place. **UNVERIFIED:** written without access to Meet, and to be measured (#2581 step 1, D886 §8). |
@@ -255,3 +258,13 @@ Run `npm ci --prefix meeting-bot`, then `npm run test:meeting-bot` from the
 repository root. `CHROMIUM_PATH` can select an installed test browser for the
 constructed Meet fixture. The new callback/recovery/container scenarios and
 13 isolated source mutations use no real meetings, credentials or providers.
+
+### Python sidecar continuation (B4)
+
+`src/zoomSidecar.ts` implements `ZoomSdkBridge` over a private local pipe to
+`zoom/sidecar.py`; `zoom/native.py` maps the SDK calls and callbacks.
+See `zoom/README.md` for dependencies, protocol/privacy rules, tests, 32-to-16 kHz
+conversion and outstanding B1/B2/B8 wiring. This replaces the unimplemented
+native bridge boundary with code tested against synthetic SDK objects and a
+real Python protocol peer. Linux SDK import and live meeting behavior remain
+UNVERIFIED. The existing ZoomAdapter accepts it as its `sdk` dependency.

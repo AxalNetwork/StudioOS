@@ -1,3 +1,4 @@
+import { BotError, dispatchBot, stopSessionBot, sessionBot, botView } from '../services/meetingBots';
 /**
  * D684 (#1577) — a Zoom or Google Meet call scheduled from a Validate
  * interview, and the transcript it brings back. Mounted on
@@ -131,7 +132,8 @@ meetings.get('/interviews/:id/meetings', async (c) => {
     { provider: 'google_meet' as const, label: PROVIDER_LABEL.google_meet, available: available(c.env, 'google_meet'),
       connected: !!google, transcript_access: meet.transcriptAccess(google) },
   ];
-  return c.json({ meetings: rows.map(view), providers });
+  const items=await Promise.all(rows.map(async row=>({ ...view(row), bot:c.env.MEETING_BOT_RUN ? await sessionBot(c.env,row.session_id,s.user.id).then(run=>run?botView(run):null) : null })));
+  return c.json({ meetings: items, providers });
 });
 
 // ---------------------------------------------------------------------------
@@ -395,8 +397,13 @@ meetings.post('/interviews/:id/meetings', async (c) => {
     ).bind(uid, provider, created.externalRef, session.id, s.scoped.interview.id, s.user.id, created.joinUrl,
       created.startsAt, created.endsAt, notice ? MEETING_ERRORS[notice] : null).run();
     const ref = await loadRef(c.env, uid);
+    let bot=null, bot_error=null;
+    if (body?.auto_send_bot !== false) {
+      try { bot=await dispatchBot(c.env,s.user,session,{meeting_url:created.joinUrl,scheduled_at:created.startsAt}); }
+      catch (e) { bot_error=e instanceof BotError?e.body():{code:'bot_unavailable',message:'Eadwyn AI could not be queued. Open the session to check its status.'}; }
+    }
     return c.json({
-      meeting: ref ? view(ref) : null, session_id: session.id,
+      bot, bot_error, meeting: ref ? view(ref) : null, session_id: session.id,
       notice: notice ? { code: notice, message: MEETING_ERRORS[notice] } : null,
     }, 201);
   } catch (x) {
@@ -424,6 +431,8 @@ meetings.delete('/interviews/:id/meetings/:refUid', async (c) => {
   if (s instanceof Response) return s;
   const ref = await memberRef(c.env, s.user.id, s.scoped.interview.id, c.req.param('refUid'));
   if (!ref) return refuse(c, 404, { code: 'meeting_not_found', message: 'That call no longer exists.' });
+  try { await stopSessionBot(c.env,ref.session_id,s.user.id); }
+  catch { return refuse(c,503,{code:'bot_stop_pending',message:'Eadwyn AI is still stopping. Try cancelling the call again.'}); }
   if (ref.status === 'cancelled') return c.json({ meeting: view(ref), provider_cancelled: view(ref).provider_cancelled });
   if (ref.status === 'imported') {
     return refuse(c, 409, { code: 'already_imported', message: 'This call’s transcript is already in the interview. Delete the session instead.' });
