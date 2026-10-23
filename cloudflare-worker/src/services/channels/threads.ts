@@ -62,6 +62,7 @@ import { refKey } from './events';
 import { enqueueChannelJob } from './jobs';
 import { isOurSend } from './outbound';
 import { expireCapturesStatements } from './whatsappCapture';
+import { discardExpiredDrafts, expireCapturesStatements as expireTelegramCapturesStatements } from './telegramCapture';
 import {
   CHANNEL_LIMITS, audioConsentRequired, consentAsked, consentRequired, consentRequiredProviders, type InboundDelete, type InboundEdit, type InboundMessage, type MessageSide,
   type MessagingProvider, type VoiceMedia,
@@ -1064,12 +1065,13 @@ export async function forgetConnection(env: Env, integrationId: number): Promise
 export async function purgeExpired(env: Env, now = new Date()): Promise<{
   threads: number; messages: number; codes: number; events: number; counters: number; drafts: number; lapsed: number; captures: number;
 }> {
+  await discardExpiredDrafts(env, now);
   const cutoff = new Date(now.getTime() - CHANNEL_LIMITS.pendingDays * 86_400_000).toISOString();
   const day = new Date(now.getTime() - 86_400_000).toISOString();
   const twoDays = new Date(now.getTime() - 2 * 86_400_000).toISOString();
   const events = new Date(now.getTime() - 90 * 86_400_000).toISOString();
   const unused = new Date(now.getTime() - CHANNEL_LIMITS.senderLinkDays * 86_400_000).toISOString();
-  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed, , captures] = await env.DB.batch([
+  const [msgs, threads, codes, evs, counters, linkAttempts, lapsed, , captures, , telegramCaptures] = await env.DB.batch([
     env.DB.prepare(`DELETE FROM channel_thread_messages WHERE datetime(sent_at) < datetime(?)`).bind(cutoff),
     env.DB.prepare(
       `DELETE FROM channel_threads WHERE status IN ('pending', 'ignored')
@@ -1090,6 +1092,7 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
           AND datetime(COALESCE(last_synced_at, updated_at, created_at)) < datetime(?)`,
     ).bind(unused),
     ...expireCapturesStatements(env, now),
+    ...expireTelegramCapturesStatements(env, now),
   ]);
   // #1939 part 3: a lapsed (or otherwise ended) link keeps no venture choice, so relinking starts clean.
   await env.DB.prepare(`DELETE FROM whatsapp_link_settings WHERE integration_id NOT IN
@@ -1102,6 +1105,6 @@ export async function purgeExpired(env: Env, now = new Date()): Promise<{
     codes: Number(codes.meta?.changes ?? 0), events: Number(evs.meta?.changes ?? 0),
     counters: Number(counters.meta?.changes ?? 0) + Number(linkAttempts.meta?.changes ?? 0),
     lapsed: Number(lapsed.meta?.changes ?? 0),
-    captures: Number(captures.meta?.changes ?? 0),
+    captures: Number(captures.meta?.changes ?? 0) + Number(telegramCaptures.meta?.changes ?? 0),
   };
 }
