@@ -29,6 +29,7 @@ import {
   googleGrantHasScope,
   makeGoogleSyncIdentityStateMarker,
   googleSyncIdentityMatchesState,
+  shouldResetGoogleSyncMappings,
 } from '../src/routes/calendar.ts';
 import { returnFromNonce } from '../src/util/oauthReturn.ts';
 
@@ -158,6 +159,10 @@ test('retained Calendar mappings are bound to the original Google identity', asy
   assert.equal(await googleSyncIdentityMatchesState(env, `mp_rb42_${marker}nonce`, 'google-sub-2'), false);
   assert.equal(await googleSyncIdentityMatchesState(env, `mp_rb42_${marker}nonce`, ''), false);
   assert.equal(await googleSyncIdentityMatchesState(env, 'gm_nonce', 'google-sub-1'), null);
+  assert.equal(shouldResetGoogleSyncMappings(true, false), false);
+  assert.equal(shouldResetGoogleSyncMappings(false, true), true);
+  assert.equal(shouldResetGoogleSyncMappings(null, true), false);
+  assert.equal(shouldResetGoogleSyncMappings(null, false), true);
 });
 
 test('preserved Meet OAuth state keeps Build return routing without showing a new-grant banner', () => {

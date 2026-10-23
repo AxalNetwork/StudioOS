@@ -755,6 +755,14 @@ export async function googleSyncIdentityMatchesState(
   return marker === await hmacSign(env.JWT_SECRET, `calendar-sync:${googleSub}`);
 }
 
+export function shouldResetGoogleSyncMappings(
+  retainedIdentityMatches: boolean | null,
+  hadPreviousGoogleConnection: boolean,
+): boolean {
+  return retainedIdentityMatches === false
+    || (retainedIdentityMatches === null && !hadPreviousGoogleConnection);
+}
+
 async function storedGoogleGrantHasScope(env: Env, userId: number, wanted: string): Promise<boolean> {
   await ensureCalendarOAuthSchema(env);
   const sql = getSQL(env);
@@ -1143,6 +1151,14 @@ calendar.get('/google/callback', async (c) => {
     }
 
     const retainedIdentityMatches = await googleSyncIdentityMatchesState(c.env, nonce, googleSub);
+    let previousGoogleConnection: any;
+    try {
+      previousGoogleConnection = (await sql`
+        SELECT google_sub FROM google_oauth_tokens WHERE user_id = ${userId}
+      ` as any[])[0];
+    } catch (e: any) {
+      if (!/no such table/i.test(String(e?.message || e))) throw e;
+    }
 
     const refreshEnc = await encryptString(c.env, refreshToken);
     const persist = await persistGoogleCallbackTokens(c.env, {
@@ -1157,11 +1173,11 @@ calendar.get('/google/callback', async (c) => {
     if (!persist.ok) {
       return failureRedirect(c.env, 'google', persist.reason, returnTo);
     }
-    if (retainedIdentityMatches !== true) {
+    if (shouldResetGoogleSyncMappings(retainedIdentityMatches, !!previousGoogleConnection)) {
       // Gmail removal retained Calendar event mappings so reconnecting the
-      // same account remains idempotent. A different account, or a callback
-      // without a live connection identity marker after an abandoned consent,
-      // must start with fresh mappings to avoid reusing another account's IDs.
+      // same account remains idempotent. A different account clears them; an
+      // unmarked callback clears them only when no previous connection exists
+      // (for example, a fresh connect after abandoned Gmail-removal consent).
       try {
         await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
       } catch (e: any) {
