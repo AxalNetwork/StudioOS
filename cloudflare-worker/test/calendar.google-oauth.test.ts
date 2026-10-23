@@ -224,6 +224,25 @@ test('Google disconnect keeps the saved connection when revocation fails', async
   assert.deepEqual(writes, [], 'local credentials must remain available for a later revoke retry');
 });
 
+test('removing Gmail preserves Google event mappings for the immediate reconnect', async () => {
+  const deletes: string[] = [];
+  const DB = {
+    prepare(sql: string) {
+      return { bind() { return { async all() {
+        if (/SELECT refresh_token FROM google_oauth_tokens/.test(sql)) return { results: [{ refresh_token: 'plain-refresh-token' }] };
+        deletes.push(sql);
+        return { results: [] };
+      } }; } };
+    },
+  };
+  await revokeAndDisconnectGoogle({ ...FULL_GOOGLE, DB } as any, 42, async () =>
+    new Response('', { status: 200 }), { preserveCalendarSync: true },
+  );
+  assert.equal(deletes.some(sql => /DELETE FROM calendar_sync_records/.test(sql)), false);
+  assert.ok(deletes.some(sql => /DELETE FROM google_oauth_tokens/.test(sql)));
+  assert.ok(deletes.some(sql => /DELETE FROM user_google_links/.test(sql)));
+});
+
 test('buildMicrosoftAuthUrl produces a well-formed login.microsoftonline.com URL', () => {
   const url = new URL(buildMicrosoftAuthUrl(FULL_MICROSOFT as any, 'nonce.sig'));
   assert.equal(url.hostname, 'login.microsoftonline.com');

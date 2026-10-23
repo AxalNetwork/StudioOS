@@ -710,17 +710,22 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
 /** Revoke Google's grant before dropping the only locally stored refresh token. */
 export async function revokeAndDisconnectGoogle(
   env: Env, userId: number, fetcher: typeof fetch = fetch,
+  options: { preserveCalendarSync?: boolean } = {},
 ): Promise<void> {
   const token = await loadRefreshTokenExport(env, 'google_oauth_tokens', userId);
   if (token) await revokeGoogleOAuthGrant(token.raw, fetcher);
 
-  await clearGoogleLocalConnection(env, userId);
+  await clearGoogleLocalConnection(env, userId, options);
 }
 
-async function clearGoogleLocalConnection(env: Env, userId: number): Promise<void> {
+async function clearGoogleLocalConnection(
+  env: Env, userId: number, options: { preserveCalendarSync?: boolean } = {},
+): Promise<void> {
   const sql = getSQL(env);
   await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${userId}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
+  if (!options.preserveCalendarSync) {
+    await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
+  }
   // The Google link table was added after older deployments. Disconnect must
   // still work there while removing the sign-in link where the table exists.
   try {
@@ -762,7 +767,7 @@ calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not r
   const keepMeetTranscripts = googleGrantHasScope(row.scope, GOOGLE_MEET_TRANSCRIPT_SCOPE);
   const next = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint, keepMeetTranscripts);
   if (next.status !== 200) return c.json(next.body, next.status);
-  await revokeAndDisconnectGoogle(c.env, user.id);
+  await revokeAndDisconnectGoogle(c.env, user.id, undefined, { preserveCalendarSync: true });
   return c.json({ ...next.body, gmail_access_removed: true });
 }));
 

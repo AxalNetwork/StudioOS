@@ -435,4 +435,6 @@ test('Google offers an explicit local-only disconnect after revocation fails', (
     'the fallback action must be labeled so it does not imply Google revocation');
   assert.match(pageRaw, /googleCalForceDisconnect\(\)[\s\S]*?Google Account/,
     'the fallback must warn the member about any remaining Google grant');
+  assert.match(pageRaw, /busy && !gmailRemovalBusy && text === 'Sync now' \? 'Syncing…'/,
+    'removing Gmail must not label the calendar as syncing');
 });

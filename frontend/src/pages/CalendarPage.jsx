@@ -1060,7 +1060,7 @@ function ProviderCard({ provider, name, state, status, result, busy, gmailRemova
           {s.actions.map(([text, cls, fn]) => (
             <button key={text} type="button" className={`cal-btn ${cls} cal-btn-sm`}
                     onClick={fn} disabled={busy}>
-              {busy && text === 'Sync now' ? 'Syncing…' : text}
+              {busy && !gmailRemovalBusy && text === 'Sync now' ? 'Syncing…' : text}
             </button>
           ))}
           {gmailStillGranted && <button type="button" className="cal-btn cal-btn-o cal-btn-sm"
