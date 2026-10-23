@@ -268,7 +268,7 @@ export class MeetingBotRun implements DurableObject {
         if (!stored) throw new BotError(503,'bot_unavailable','The audio manifest could not be read.');
         return this.ticket(run,{...JSON.parse(stored),seq:event.seq},false);
       }
-      return json({duplicate:true,bot:botView(run),budget_deadline_at:await this.lease()});
+      return json({duplicate:true,bot:botView(run),budget_deadline_at:terminal(run.status) || run.status==='processing' ? null : await this.lease()});
     }
     if (terminal(run.status)) throw new BotError(409,'bot_finished','This bot run has ended.');
     if (run.started_at !== null && run.status !== 'processing' && Date.now() >= run.started_at + run.limit_minutes*60_000) { await this.finish(run,'stopped','time_limit'); throw new BotError(409,'bot_time_limit','The bot reached its time limit.'); }

@@ -381,6 +381,7 @@ async function complete(Supervisor=MeetingBotRun) {
   assert.equal((await event(w,uid,{seq:3,type:'status',status:'processing',chunks:1,chunks_failed:0})).body.bot.status,'processing');
   assert.equal((await upload(w,ticket.body.upload_path)).status,401);
   assert.equal((await event(w,uid,{seq:4,type:'status',status:'done',chunks:1,chunks_failed:0})).body.bot.status,'done');
+  assert.equal((await event(w,uid,{seq:4,type:'status',status:'done',chunks:1,chunks_failed:0})).body.budget_deadline_at,null,'a terminal replay cannot renew recording');
   assert.equal(w.stops.length,1);
 }
 async function incomplete(Supervisor=MeetingBotRun) {
@@ -460,7 +461,8 @@ for(const [name,before,after,check,published] of [
   ['renewal boundary delayed','now < last.end - BOT_RENEWAL_LEAD_MS','now <= last.end - BOT_RENEWAL_LEAD_MS',renewal,true],
   ['current block charged early','elapsedOnly && block.end > end','false',renewal,true],
   ['alarm waits until expiry','lease-BOT_RENEWAL_LEAD_MS','lease',renewal,true],
-  ['duplicate loses renewed lease','duplicate:true,bot:botView(run),budget_deadline_at:await this.lease()','duplicate:true,bot:botView(run)',renewal,true],
+  ['duplicate loses renewed lease',"duplicate:true,bot:botView(run),budget_deadline_at:terminal(run.status) || run.status==='processing' ? null : await this.lease()",'duplicate:true,bot:botView(run)',renewal,true],
+  ['terminal replay renews recording',"terminal(run.status) || run.status==='processing' ? null : await this.lease()",'await this.lease()',complete,true],
   ['unpublished gate ignored','if (!MEETING_BOT_NOTICE_PUBLISHED)','if (false)',noticeOff,false],
   ['venture attribution omitted','await botVentureName(this.env,run)','null',noticeCompany,true],
   ['notice omitted from start','!,notice,venture_name:ventureName','!,venture_name:ventureName',noticeCompany,true],
