@@ -81,7 +81,9 @@ export function httpTransport(opts: HttpTransportOptions): CallbackTransport {
       // queued audio/events have been acknowledged.
       const status=report.reason==='interrupted'?'failed':report.state==='left'?(recorded?'processing':'stopped'):report.state;
       const failure_code=report.reason==='interrupted'?'runtime_failed':report.code?failures[report.code]:null;
-      const data=await event({type:'status',status,failure_code},`status:${status}:${failure_code}`);
+      const data=await event({type:'status',status,failure_code,
+        ...(report.chunks===undefined?{}:{chunks:report.chunks}),
+        ...(report.chunks_failed===undefined?{}:{chunks_failed:report.chunks_failed})},`status:${status}:${failure_code}`);
       if (status==='recording') recorded=true;
       return ['failed','processing','stopped'].includes(status)||data.duplicate===true&&data.budget_deadline_at==null?undefined:lease(data);
     },

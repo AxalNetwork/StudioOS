@@ -1,7 +1,7 @@
 /** D886 B2: uncertainty replays one event, never replaces its payload or duplicates audio. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { httpTransport } from '../src/callback.ts';
+import { httpTransport, TransportError } from '../src/callback.ts';
 import { encodeWav } from '../src/wav.ts';
 import { EventBatcher } from '../src/events.ts';
 import { runBot } from '../src/lifecycle.ts';
@@ -38,8 +38,9 @@ test('uncertain status is acknowledged before concurrent heartbeat/chunk payload
   await assert.rejects(()=>transport.status({state:'recording'}));
   await Promise.all([transport.status({state:'recording'}),transport.heartbeat()]);
   assert.deepEqual(seen.map(e=>[e.seq,e.type]),[[1,'status'],[1,'status'],[2,'heartbeat']]);
-  await transport.status({state:'left',reason:'call_ended'});
+  await transport.status({state:'left',reason:'call_ended',chunks:3,chunks_failed:0});
   assert.equal(seen.at(-1).status,'processing');
+  assert.deepEqual([seen.at(-1).chunks,seen.at(-1).chunks_failed],[3,0]);
 });
 
 test('a lost PUT acknowledgement renews the same manifest and accepts only B1 chunk_already_uploaded',async()=>{
@@ -104,5 +105,13 @@ test('a permanently failed upload has a bounded flush and never reports a comple
   const clock=new FakeClock(),callback=new StubCallback(),adapter=new FakeAdapter({openDoor:true});adapter.arrive('p1','Synthetic');
   callback.failChunk.set(0,1000);const run=runBot(config(clock),{clock,adapter,transport:callback});
   await clock.advance(1);adapter.say(tone(1600));adapter.end();const start=clock.now();
-  const result=await clock.until(run);assert.equal(result.state,'failed');assert.equal(result.code,'processing_failed');assert.ok(clock.now()-start<=21_000);assert.equal(adapter.listening,0);
+  const result=await clock.until(run);assert.equal(result.state,'failed');assert.equal(result.code,'processing_failed');assert.equal(result.chunks_failed,1);assert.ok(clock.now()-start<=21_000);assert.equal(adapter.listening,0);
+});
+
+
+test('an explicit heartbeat budget refusal stops immediately instead of waiting for the old lease',async()=>{
+  const clock=new FakeClock(),callback=new StubCallback(),adapter=new FakeAdapter({openDoor:true});adapter.arrive('p1','Synthetic');
+  callback.heartbeat=async()=>{throw new TransportError(402);};
+  const run=runBot(config(clock),{clock,adapter,transport:callback});await clock.advance(15_000);
+  const result=await clock.until(run);assert.equal(result.reason,'tokens');assert.ok(clock.now()<1_120_000);assert.equal(adapter.listening,0);
 });

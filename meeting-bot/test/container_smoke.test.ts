@@ -11,7 +11,7 @@ async function command(host:RuntimeHost,path:string,payload:object,secret=SECRET
   const raw=JSON.stringify(payload),headers={'content-type':'application/json',...await signRequest(secret,path,raw,Date.now())};
   return host.fetch(new Request('http://runtime.internal'+path,{method:'POST',headers,body:raw}));
 }
-const run=()=>({uid:UID,platform:'google_meet',meeting_url:'https://meet.google.com/abc-defg-hij',limit_minutes:30,deadline_at:Date.now()+1_800_000,budget_deadline_at:Date.now()+120_000});
+const run=()=>({uid:UID,platform:'google_meet',notice:'Synthetic test notice',meeting_url:'https://meet.google.com/abc-defg-hij',limit_minutes:30,deadline_at:Date.now()+1_800_000,budget_deadline_at:Date.now()+120_000});
 
 test('container command smoke: authenticated, idempotent, promptly acknowledged start and stop',async()=>{
   let release:(value:FakeAdapter)=>void=()=>{},calls=0;const statuses:StatusReport[]=[];
@@ -40,7 +40,9 @@ test('container refuses unpublished notice, invalid lease, stale signatures and 
   assert.equal((await host.fetch(new Request('http://runtime.internal/start',{method:'POST',headers:stale,body:raw}))).status,401);
   assert.equal((await command(host,'/start',{...run(),padding:'x'.repeat(17000)})).status,413);assert.equal(calls,0);
   assert.throws(()=>new RuntimeHost({secret:SECRET,callbackOrigin:'http://axal.vc',adapter:async()=>new FakeAdapter()}));
-  const allowed=new RuntimeHost({secret:SECRET,callbackOrigin:'https://axal.vc',notice:()=> 'Synthetic notice',adapter:async()=>{calls++;return new FakeAdapter();}});
+  const allowed=new RuntimeHost({secret:SECRET,callbackOrigin:'https://axal.vc',notice:()=> 'Synthetic test notice',adapter:async()=>{calls++;return new FakeAdapter();}});
+  assert.equal((await command(allowed,'/start',{...run(),notice:undefined})).status,503);
+  assert.equal((await command(allowed,'/start',{...run(),notice:'Another notice'})).status,503);
   assert.equal((await command(allowed,'/start',{...run(),budget_deadline_at:Date.now()-1})).status,503);assert.equal(calls,0);
 });
 
@@ -49,7 +51,7 @@ test('factory completed after lease expiry still releases its adapter without jo
   let release:(adapter:FakeAdapter)=>void=()=>{};
   const adapter=new FakeAdapter({openDoor:true});
   const transport:CallbackTransport={async status(){},async heartbeat(){return Date.now()+120_000;},async events(){},async putChunk(){}};
-  const host=new RuntimeHost({secret:SECRET,callbackOrigin:'https://axal.vc',notice:()=> 'Synthetic notice',transport:()=>transport,
+  const host=new RuntimeHost({secret:SECRET,callbackOrigin:'https://axal.vc',notice:()=> 'Synthetic test notice',transport:()=>transport,
     adapter:async()=>new Promise(resolve=>{release=resolve;})});
   assert.equal((await command(host,'/start',{...run(),budget_deadline_at:Date.now()+50})).status,202);
   await new Promise(resolve=>setTimeout(resolve,60));release(adapter);await host.shutdown();

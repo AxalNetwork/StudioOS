@@ -239,10 +239,10 @@ same signed-header format, signing their actual path. The five-minute command
 window and 16 KiB body bound are enforced before a command is acted on.
 
 `/start` takes B1's `{uid,platform,meeting_url,limit_minutes,deadline_at,
-budget_deadline_at}`. An optional server-selected `venture_name` personalises
-B9's shared notice; its generic authorised-venture fallback is otherwise used.
-The runtime itself calls the gated `meetingBotNotice`, so an unpublished
-notice refuses before constructing an adapter. There is no environment bypass.
+budget_deadline_at,notice,venture_name}` (#2607). The approved notice must be
+present and exactly match B9's gated `meetingBotNotice` for the server-selected
+venture label (nullable). An absent, mismatched or unpublished notice refuses
+before constructing an adapter. There is no environment bypass or draft fallback.
 A repeated identical start returns an acknowledgement and creates no second
 adapter; a conflicting run/payload is refused. `/stop` takes `{uid}`.
 Neither command waits for the callback of the same serialized supervisor.
@@ -257,7 +257,7 @@ bridge has been packaged or measured. The switch and notice remain gated.
 Run `npm ci --prefix meeting-bot`, then `npm run test:meeting-bot` from the
 repository root. `CHROMIUM_PATH` can select an installed test browser for the
 constructed Meet fixture. The new callback/recovery/container scenarios and
-13 isolated source mutations use no real meetings, credentials or providers.
+17 isolated source mutations use no real meetings, credentials or providers.
 
 ### Python sidecar continuation (B4)
 
@@ -268,3 +268,8 @@ conversion and outstanding B1/B2/B8 wiring. This replaces the unimplemented
 native bridge boundary with code tested against synthetic SDK objects and a
 real Python protocol peer. Linux SDK import and live meeting behavior remain
 UNVERIFIED. The existing ZoomAdapter accepts it as its `sdk` dependency.
+
+
+The merged B4 Python sidecar source and pinned requirement file are copied into
+the image. Its native SDK binding/GLib/PulseAudio installation and live loading
+remain B8's verification gate; the factory does not activate it prematurely.

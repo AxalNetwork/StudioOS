@@ -12,12 +12,14 @@ RUN npm ci --omit=dev --ignore-scripts \
 FROM base AS verified
 COPY src ./src
 COPY notice.mjs ./notice.mjs
+COPY zoom/native.py zoom/sidecar.py zoom/requirements.txt ./zoom/
 COPY test/container_smoke.test.ts ./test/container_smoke.test.ts
 RUN node --experimental-strip-types --no-warnings --test test/container_smoke.test.ts
 
 FROM base AS runtime
 COPY --from=verified --chown=node:node /app/src ./src
 COPY --from=verified --chown=node:node /app/notice.mjs ./notice.mjs
+COPY --from=verified --chown=node:node /app/zoom ./zoom
 USER node
 EXPOSE 8080
 STOPSIGNAL SIGTERM

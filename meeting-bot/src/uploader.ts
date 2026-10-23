@@ -39,6 +39,7 @@ export class ChunkUploader {
   private readonly queue: Chunk[] = [];
   private readonly stored = new Set<number>();
   private running: Promise<void> | null = null;
+  private inFlight: Chunk | null = null;
   private readonly transport: CallbackTransport;
   private readonly clock: Clock;
   private readonly log: LogSink;
@@ -68,7 +69,7 @@ export class ChunkUploader {
   }
 
   get storedCount(): number { return this.stored.size; }
-  get failedCount(): number { return this.queue.length; }
+  get failedCount(): number { return this.queue.length + (this.inFlight ? 1 : 0); }
   /** The highest `seq` the Worker holds, or -1. */
   get lastSeq(): number { return this.stored.size ? Math.max(...this.stored) : -1; }
 
@@ -77,7 +78,9 @@ export class ChunkUploader {
     const kept: Chunk[] = [];
     while (this.queue.length) {
       const chunk = this.queue.shift()!;
+      this.inFlight = chunk;
       const ok = await withRetry(() => this.transport.putChunk(chunk.seq, chunk.wav, chunk.start_ms), this.clock,undefined,this.signal);
+      this.inFlight = null;
       if (ok) {
         this.stored.add(chunk.seq);
         logLine(this.log, 'chunk_stored', { seq: chunk.seq, bytes: chunk.wav.byteLength });

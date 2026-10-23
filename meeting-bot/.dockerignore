@@ -7,3 +7,7 @@
 !src/**
 !test/
 !test/container_smoke.test.ts
+!zoom/
+!zoom/native.py
+!zoom/sidecar.py
+!zoom/requirements.txt

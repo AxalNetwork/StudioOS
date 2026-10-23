@@ -1,5 +1,6 @@
 /** D886 B2: notice before capture, Worker-funded runtime, bounded cleanup. */
 import { ADMIT_TIMEOUT_MS, ALONE_MS, BOT_NAME, EVENT_FLUSH_MS, HEARTBEAT_MS, NOTICE_TRIES, PAID_LIMIT_MS } from './constants.ts';
+import { TransportError } from './callback.ts';
 import { EventBatcher } from './events.ts';
 import { logLine } from './log.ts';
 import { ChunkUploader, withRetry } from './uploader.ts';
@@ -44,7 +45,10 @@ export async function runBot(cfg: RunConfig,deps: RunDeps): Promise<RunResult> {
   renew(cfg.budgetDeadlineAt);
   const heartbeat=async()=>{
     if(finished||control.signal.aborted)return;
-    try{renew(await transport.heartbeat());}catch{logLine(log,'heartbeat_unsent');}
+    try{renew(await transport.heartbeat());}catch(error){
+      if(error instanceof TransportError&&[401,402,403,409].includes(error.status))end(error.status===402?'tokens':'stopped');
+      logLine(log,'heartbeat_unsent');
+    }
     if(!finished&&!control.signal.aborted)heartbeatCancel=clock.setTimeout(()=>{void heartbeat();},HEARTBEAT_MS);
   };
   heartbeatCancel=clock.setTimeout(()=>{void heartbeat();},HEARTBEAT_MS);

@@ -54,8 +54,10 @@ export class RuntimeHost {
       ||typeof command.meeting_url!=='string'||command.meeting_url.length>2048)return reply({code:'invalid_command'},400);
     let cfg:RunConfig;
     try{
+      const approved=(this.options.notice??(ventureName=>meetingBotNotice({ventureName})))(typeof command.venture_name==='string'?command.venture_name:undefined);
+      if(typeof command.notice!=='string'||command.notice!==approved)throw new Error('notice_required');
       cfg={runId:command.uid,platform:command.platform,meetingUrl:command.meeting_url,
-        notice:(this.options.notice??(ventureName=>meetingBotNotice({ventureName})))(typeof command.venture_name==='string'?command.venture_name:undefined),limitMs:command.limit_minutes*60_000,
+        notice:command.notice,limitMs:command.limit_minutes*60_000,
         deadlineAt:command.deadline_at,budgetDeadlineAt:command.budget_deadline_at};
       checkConfig(cfg,now);
     }catch{return reply({code:'runtime_not_ready'},503);}

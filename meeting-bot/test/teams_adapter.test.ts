@@ -36,7 +36,7 @@ function start(over: { url?: string; first?: ScreenName; afterJoin?: ScreenName 
   const adapter = new TeamsAdapter(page, { clock });
   const stop = new AbortController();
   const lines: string[] = [];
-  const cfg: RunConfig = { runId: 'run_t', platform: 'teams', meetingUrl: over.url ?? WORK, notice: NOTICE, limitMs: FREE_LIMIT_MS };
+  const cfg: RunConfig = { runId: 'run_t', platform: 'teams', meetingUrl: over.url ?? WORK, notice: NOTICE, limitMs: FREE_LIMIT_MS, deadlineAt:clock.now()+FREE_LIMIT_MS,budgetDeadlineAt:clock.now()+120_000 };
   const run = runBot(cfg, { adapter, transport: cb, clock, stop: stop.signal, log: (e, f) => lines.push(JSON.stringify({ e, ...f })) });
   return { clock, cb, page, adapter, stop, run, lines };
 }
@@ -99,9 +99,9 @@ test('2. a whole call: launcher, pre-join with mic and camera off, lobby, notice
   assert.deepEqual([r.state, r.reason, r.participants], ['left', 'call_ended', 2]);
   assert.equal(cb.chunks.get(1)!.byteLength, 44 + SAMPLE_RATE * 2, 'the last second is sent at the end');
 
-  const events = cb.allEvents.map((e) => (e.type === 'roster' ? `${e.kind}:${e.key}` : `speaker:${e.key}`));
-  assert.deepEqual(events, ['join:p1', 'join:p2', 'speaker:p1', 'speaker:p2', 'leave:p2']);
-  assert.ok(!cb.allEvents.some((e) => e.type === 'roster' && e.key === 'self'), 'the bot never reports itself');
+  const events = cb.allEvents.map((e) => (e.type === 'roster' ? `roster:${e.participants.map(p=>p.id+':'+(p.left_ms===null?'in':'out')).join(',')}` : `speaker:${e.participant_id}`));
+  assert.deepEqual(events, ['roster:p1:in', 'roster:p1:in,p2:in', 'speaker:p1', 'speaker:p2', 'roster:p1:in,p2:out', 'speaker:null']);
+  assert.ok(!cb.allEvents.some((e) => e.type === 'roster' && e.participants.some(p=>p.id==='self')), 'the bot never reports itself');
   assert.equal(page.closed, 1, 'the page is closed on leaving');
 
   for (const words of ['Sam Founder', 'Dana Ruiz', '1234567890123', 'FixturePass1', 'teams.microsoft.com']) {
@@ -173,7 +173,7 @@ test('4. a speaker is one roster id or nothing: an unknown or shared name is not
   stop.abort();
   await clock.until(run);
   await settle();
-  assert.deepEqual(cb.allEvents.filter((e) => e.type === 'speaker').map((e) => e.key), ['p3']);
+  assert.deepEqual(cb.allEvents.filter((e) => e.type === 'speaker').map((e) => e.participant_id), ['p3', null]);
   assert.deepEqual([...page.asked.get(TEAMS.captionRow.selector)!], ['data-speaker-name'], 'only the author is read from a caption');
   for (const [sel, attrs] of page.asked) assert.ok(!attrs.has('textContent') && !attrs.has('innerText'), sel);
 });
