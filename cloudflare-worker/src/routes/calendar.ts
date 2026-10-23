@@ -769,7 +769,7 @@ calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not r
   await ensureCalendarOAuthSchema(c.env);
   const sql = getSQL(c.env);
   const row = (await sql`
-    SELECT scope FROM google_oauth_tokens WHERE user_id = ${user.id}
+    SELECT scope, google_sub FROM google_oauth_tokens WHERE user_id = ${user.id}
   ` as any[])[0];
   if (!row) return c.json({ error: { code: 'google_not_connected' } }, 409);
   if (!googleGrantHasScope(row.scope, 'https://www.googleapis.com/auth/gmail.readonly')) {
@@ -786,7 +786,7 @@ calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not r
     c.env, user.id, loginHint, keepMeetTranscripts, '', keepMeetTranscripts, identityMarker,
   );
   if (next.status !== 200) return c.json(next.body, next.status);
-  await revokeAndDisconnectGoogle(c.env, user.id, undefined, { preserveCalendarSync: true });
+  await revokeAndDisconnectGoogle(c.env, user.id, undefined, { preserveCalendarSync: !!row.google_sub });
   return c.json({ ...next.body, gmail_access_removed: true });
 }));
 
@@ -899,9 +899,19 @@ async function startGoogleOAuth(c: any, meetTranscripts = false) {
   const preserveMeetTranscripts = !meetTranscripts
     && meetTranscriptsEnabled(c.env)
     && await storedGoogleGrantHasScope(c.env, user.id, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+  const sql = getSQL(c.env);
+  let linkedGoogle: any;
+  try {
+    linkedGoogle = (await sql`
+      SELECT google_sub FROM google_oauth_tokens WHERE user_id = ${user.id}
+    ` as any[])[0];
+  } catch (e: any) {
+    if (!/no such table/i.test(String(e?.message || e))) throw e;
+  }
+  const stateMarker = await makeGoogleSyncIdentityStateMarker(c.env, linkedGoogle?.google_sub);
   const { status, body } = await buildGoogleOAuthStartResponse(
     c.env, user.id, loginHint, meetTranscripts || preserveMeetTranscripts,
-    returnTag(returnTo, c.req.query('project_id')), preserveMeetTranscripts,
+    returnTag(returnTo, c.req.query('project_id')), preserveMeetTranscripts, stateMarker,
   );
   if (status === 200 && (returnTo === 'integrations' || returnTo === 'build' || returnTo === 'record')) {
     c.header(
@@ -1085,13 +1095,12 @@ calendar.get('/google/callback', async (c) => {
     if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state', returnTo);
     const nonce = signed;
     if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
-    const meetTranscripts = nonce.startsWith('gm_') || nonce.startsWith('mp_');
     const newMeetGrant = nonce.startsWith('gm_');
     const userId = await consumeState(c.env, nonce, 'google');
     if (!userId) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
 
     const tokens = await exchangeGoogleCode(c.env, code);
-    if (meetTranscripts && !String(tokens?.scope || '').split(/[\s,]+/).includes(GOOGLE_MEET_TRANSCRIPT_SCOPE)) {
+    if (newMeetGrant && !String(tokens?.scope || '').split(/[\s,]+/).includes(GOOGLE_MEET_TRANSCRIPT_SCOPE)) {
       return failureRedirect(c.env, 'google', 'meet_scope_missing', returnTo);
     }
     const refreshToken = tokens?.refresh_token;
@@ -1148,10 +1157,11 @@ calendar.get('/google/callback', async (c) => {
     if (!persist.ok) {
       return failureRedirect(c.env, 'google', persist.reason, returnTo);
     }
-    if (retainedIdentityMatches === false) {
+    if (retainedIdentityMatches !== true) {
       // Gmail removal retained Calendar event mappings so reconnecting the
-      // same account remains idempotent. A different selected account must
-      // start with fresh mappings to avoid applying another account's IDs.
+      // same account remains idempotent. A different account, or a callback
+      // without a live connection identity marker after an abandoned consent,
+      // must start with fresh mappings to avoid reusing another account's IDs.
       await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
     }
     const extra: Record<string, string> = {};

@@ -324,6 +324,20 @@ test('/google/start: healthy → 200 with redirect_url to accounts.google.com', 
   assert.ok(stub.calls.some(c => /INSERT INTO oauth_state_tokens/.test(c.sql)));
 });
 
+test('preserved Meet consent carries the retained Google identity in signed Build state', async () => {
+  const stub = makeStubDB();
+  const env = { ...FULL_GOOGLE, DB: stub.DB } as any;
+  const marker = await makeGoogleSyncIdentityStateMarker(env, 'google-sub-1');
+  const { status, body } = await buildGoogleOAuthStartResponse(
+    env, 42, undefined, true, 'rb42_', true, marker,
+  );
+  assert.equal(status, 200);
+  const state = new URL(body.redirect_url).searchParams.get('state') || '';
+  const nonce = decodeURIComponent(state.split('.')[0]);
+  assert.match(nonce, /^mp_rb42_gs[A-Za-z0-9_-]{43}_/);
+  assert.equal(returnFromNonce(nonce), 'build:42');
+});
+
 test('/outlook/start: missing secret → typed 500 oauth_config_missing', async () => {
   const env: EnvShape = { ...FULL_MICROSOFT };
   delete env.MICROSOFT_CLIENT_ID;
