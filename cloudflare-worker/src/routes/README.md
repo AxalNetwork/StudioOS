@@ -4,6 +4,14 @@ These files are the production API behind `https://axal.vc/api/*`. They are
 mounted by `cloudflare-worker/src/index.ts` and run on Cloudflare Workers
 against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 
+Issue #2460 removes blanket Operating Partner access from the shared
+founder-resource guard and the financial/revenue loaders. Financial recompute
+requires the same edit permission as saving. A project relationship for these
+outside members is pending #2438; the generic guard grants them no access in
+the meantime. Deal-room reads retain their separate partner rule. Legacy legal
+entity listing and other routes with independent role gates are separate
+policies, not grants from the founder-resource guard.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,

@@ -994,6 +994,9 @@ async function investorHasDealRelationship(sql: any, userId: number, dealId: num
 }
 
 async function canReadDeal(sql: any, user: User, dealId: number, projectFounderId: any): Promise<boolean> {
+  // #2460 narrows the generic founder guard; deal-room policy is separate
+  // and deliberately retains the existing partner reader pending #2450.
+  if (user.role === 'partner') return true;
   if (canAccessFounderResource(user as any, projectFounderId)) return true;
   const role = String((user as any).role || '').toLowerCase();
   if (role === 'investor') return investorHasDealRelationship(sql, (user as any).id, dealId);
