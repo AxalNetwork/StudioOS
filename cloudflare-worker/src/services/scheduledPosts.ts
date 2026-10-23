@@ -17,8 +17,8 @@
  *      Telegram retains its existing 'failed' recovery. Neither is re-sent
  *      automatically, because the provider may already have accepted it.
  *   2. A 'scheduled' row whose `scheduled_for` SQLite cannot read
- *      (`datetime()` is NULL) becomes 'failed', with the value it could not
- *      read. It is never skipped for ever.
+ *      (`datetime()` is NULL) returns X to draft (Telegram to failed), with
+ *      the unreadable value. Neither silently stays scheduled forever.
  *   3. Due rows are read `datetime(scheduled_for) <= datetime(?)`, bound to the
  *      tick's own minute (D239). `datetime()` on BOTH sides: the column has
  *      held ISO strings, SQL strings and strings with an offset, and a bare
@@ -82,7 +82,7 @@ const TABLES = [
                    updated_at = datetime('now')
              WHERE status = 'sending' AND datetime(updated_at) <= datetime(?)`,
     unreadable: `UPDATE x_posts
-                    SET status = 'failed',
+                    SET status = 'draft',
                         send_error = 'The scheduled time ' || COALESCE('"' || scheduled_for || '"', '(none)') || ' could not be read as a time, so it was never due. Set the time again.',
                         updated_at = datetime('now')
                   WHERE status = 'scheduled' AND datetime(scheduled_for) IS NULL`,
@@ -97,6 +97,7 @@ export interface SweepResult {
   stale_failed: number;
   stale_unknown: number;
   unreadable_failed: number;
+  unreadable_draft: number;
   due: number;
   sent: number;
   refused_or_failed: number;
@@ -106,7 +107,7 @@ export interface SweepResult {
 
 export async function sweepScheduledPosts(env: Env, now: Date): Promise<SweepResult> {
   const out: SweepResult = {
-    stale_failed: 0, stale_unknown: 0, unreadable_failed: 0, due: 0, sent: 0, refused_or_failed: 0, left_for_next_tick: 0, errors: [],
+    stale_failed: 0, stale_unknown: 0, unreadable_failed: 0, unreadable_draft: 0, due: 0, sent: 0, refused_or_failed: 0, left_for_next_tick: 0, errors: [],
   };
   await ensureTelegramSchema(env);
   await ensureXSchema(env);
@@ -123,7 +124,9 @@ export async function sweepScheduledPosts(env: Env, now: Date): Promise<SweepRes
     } catch (e) { out.errors.push(`${t.console} stale: ${(e as Error).message}`); }
     try {
       const r = await env.DB.prepare(t.unreadable).run();
-      out.unreadable_failed += Number((r.meta as { changes?: number } | undefined)?.changes ?? 0);
+      const count = Number((r.meta as { changes?: number } | undefined)?.changes ?? 0);
+      if (t.console === 'x') out.unreadable_draft += count;
+      else out.unreadable_failed += count;
     } catch (e) { out.errors.push(`${t.console} unreadable: ${(e as Error).message}`); }
   }
 

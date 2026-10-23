@@ -366,10 +366,20 @@ r.delete('/accounts/:id', async (c) => {
   if ((sent?.n ?? 0) > 0) {
     return c.json({ error: 'has_sent_posts', message: 'Account has sent or unresolved posts; disable it instead.' }, 409);
   }
-  await c.env.DB.prepare(`DELETE FROM x_posts WHERE account_id = ? AND status NOT IN ('sent', 'sending', 'unknown', 'failed') AND tweet_id IS NULL`).bind(id).run();
-  const removed = await c.env.DB.prepare(`DELETE FROM x_accounts WHERE id = ? AND NOT EXISTS
-    (SELECT 1 FROM x_posts WHERE account_id = ?)`).bind(id, id).run();
-  if (!removed.meta?.changes) return c.json({ error: 'account_has_posts', message: 'The account changed. Reload it before deleting.' }, 409);
+  const removed = await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM x_posts WHERE account_id = ?
+      AND NOT EXISTS (SELECT 1 FROM x_posts WHERE account_id = ?
+        AND (status IN ('sent', 'sending', 'unknown', 'failed') OR tweet_id IS NOT NULL))
+      RETURNING media_r2_keys`).bind(id, id),
+    c.env.DB.prepare(`DELETE FROM x_accounts WHERE id = ? AND NOT EXISTS
+      (SELECT 1 FROM x_posts WHERE account_id = ?)`).bind(id, id),
+  ]);
+  if (!removed[1].meta?.changes) return c.json({ error: 'account_has_posts', message: 'The account changed. Reload it before deleting.' }, 409);
+  for (const row of removed[0].results || []) {
+    for (const key of safeJson<string[]>((row as any).media_r2_keys, [])) {
+      if (key.startsWith('x/')) { try { await c.env.FILES?.delete(key); } catch {} }
+    }
+  }
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_account_deleted', accountId: id });
   return c.json({ ok: true });
 });
@@ -521,7 +531,7 @@ r.get('/posts', async (c) => {
   const args: unknown[] = [];
   if (status) {
     // Allow comma-separated status filter so the admin UI can fetch all
-    // manageable states (draft|approved|scheduled|failed) in a single call —
+    // draft and unresolved states (including sending and unknown) in a single call —
     // otherwise scheduled posts disappear from the Drafts tab after being
     // scheduled and `Reschedule` becomes unreachable.
     const parts = String(status).split(',').map(s => s.trim()).filter(Boolean);
@@ -967,7 +977,7 @@ r.post('/posts/:id/resolve', async (c) => {
  * alike, extracted from the `/send` handler the way `sendTelegramPost` is.
  * The two modes differ in the claim (the clock claims only a due, still-
  * 'scheduled' head), in what a refusal does (the clock records it as
- * 'failed' with its reason, since nobody is there to answer and a row left
+ * 'draft' with its reason, since nobody is there to answer and a row left
  * 'scheduled' would be refused every minute) and in the PII override (a
  * click only).
  *
@@ -1004,8 +1014,8 @@ export async function sendXPost(
       const reason = String(body.message || body.error).slice(0, 500);
       try {
         await env.DB.prepare(
-          `UPDATE x_posts SET status = 'failed', send_error = ?, updated_at = datetime('now')
-            WHERE (id = ? OR thread_continuation_of = ?) AND status IN ('scheduled', 'sending')`,
+          `UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
+            WHERE (id = ? OR thread_continuation_of = ?) AND status = 'scheduled' AND tweet_id IS NULL`,
         ).bind(reason, id, id).run();
       } catch {}
       await writeAudit(env, {
@@ -1053,18 +1063,18 @@ export async function sendXPost(
 
   // Release helper — flips the head AND any children we reserved back to a
   // recoverable state. Idempotent: only touches rows we left in 'sending'.
-  // The clock always records 'failed', with the reason.
-  const releaseClaim = async (next: 'draft' | 'failed' = 'draft', errMsg?: string) => {
-    const to = mode === 'clock' ? 'failed' : next;
+  // A proven non-delivery returns to draft with its reason, never to the
+  // legacy failed state whose historical outcome needs checking.
+  const releaseClaim = async (errMsg?: string) => {
     try {
       await env.DB.prepare(
-        `UPDATE x_posts SET status = ?, send_error = ?, updated_at = datetime('now')
+        `UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
            WHERE id = ? AND status = 'sending' AND tweet_id IS NULL`,
-      ).bind(to, errMsg ? errMsg.slice(0, 500) : null, id).run();
+      ).bind(errMsg ? errMsg.slice(0, 500) : null, id).run();
       await env.DB.prepare(
-        `UPDATE x_posts SET status = ?, send_error = ?, updated_at = datetime('now')
+        `UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
            WHERE thread_continuation_of = ? AND status = 'sending' AND tweet_id IS NULL`,
-      ).bind(to, errMsg ? errMsg.slice(0, 500) : null, id).run();
+      ).bind(errMsg ? errMsg.slice(0, 500) : null, id).run();
     } catch {}
   };
 
@@ -1075,7 +1085,7 @@ export async function sendXPost(
   const used = await reservedTodayWithInflight(env, post.account_id);
   const cap = dailyCap(env);
   if (used > cap) {
-    await releaseClaim('draft', mode === 'clock'
+    await releaseClaim(mode === 'clock'
       ? `daily_cap_reached: the account had used ${used} of its ${cap} posts today. Reschedule it, or send it by hand tomorrow.`
       : undefined);
     if (mode === 'clock') {
@@ -1099,7 +1109,7 @@ export async function sendXPost(
       const message = mode === 'clock'
         ? 'The PII linter blocked this scheduled post. A scheduled send cannot carry an override; open it and send it by hand with a reason.'
         : 'PII linter blocked the send. Provide override_reason (≥8 chars) to proceed.';
-      await releaseClaim('draft', mode === 'clock' ? `pii_linter_blocked: ${message}` : undefined);
+      await releaseClaim(mode === 'clock' ? `pii_linter_blocked: ${message}` : undefined);
       if (mode === 'clock') {
         await writeAudit(env, {
           adminId: actor.id, adminEmail: actor.email, action: 'x_scheduled_send_refused',
@@ -1128,7 +1138,7 @@ export async function sendXPost(
     accessToken = await getFreshAccessToken(env, acct);
   } catch (e) {
     const { body, status } = xErrorPayload(e);
-    await releaseClaim('failed', String((body as any).message || (body as any).code).slice(0, 500));
+    await releaseClaim(String((body as any).message || (body as any).code).slice(0, 500));
     return { status, body: body as Record<string, unknown> };
   }
 
@@ -1139,7 +1149,7 @@ export async function sendXPost(
   const receipts: Receipt[] = [];
   const blocked = (children.results || []).some((child: any) => !child.tweet_id && ['unknown', 'failed'].includes(child.status));
   if (blocked) {
-    await releaseClaim('draft');
+    await releaseClaim();
     return { status: 409, body: { error: 'x_outcome_needs_review', code: 'x_outcome_needs_review', message: 'Check the unresolved thread posts on X before sending this thread.' } };
   }
   let parentId: string | undefined;
@@ -1206,7 +1216,7 @@ export async function sendXPost(
       // Only untouched reservations can be released. Never reset this row if
       // it may have arrived, even if recording the unknown outcome failed.
       try {
-        await env.DB.prepare(`UPDATE x_posts SET status = 'failed', send_error = ?, updated_at = datetime('now')
+        await env.DB.prepare(`UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
           WHERE (id = ? OR thread_continuation_of = ?) AND status = 'sending' AND tweet_id IS NULL AND id <> ?`)
           .bind(unknown ? 'The thread stopped before this post was sent.' : message, id, id, unknown ? row.id : -1).run();
       } catch {}

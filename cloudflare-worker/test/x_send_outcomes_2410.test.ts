@@ -155,11 +155,11 @@ test('#2410 an explicit checked outcome resolves without sending, is audited, an
     const resolved = await w.request('POST', `/posts/${lost}/resolve`, checked('sent', p.created[0]));
     assert.equal(resolved.status, 200); assert.equal(w.row(lost).status, 'sent'); assert.equal(w.row(lost).tweet_id, p.created[0]);
     assert.equal(p.calls.length, 1); assert.equal((await w.send(lost)).status, 409);
-    const rejected = w.post(); p.next('reject'); await w.send(rejected);
+    const rejected = w.post('failed');
     assert.equal(w.row(rejected).status, 'failed'); assert.equal((await w.send(rejected)).status, 409);
     assert.equal((await w.request('POST', `/posts/${rejected}/resolve`, checked('not_sent'))).status, 200);
-    assert.equal(w.row(rejected).status, 'draft'); assert.equal(p.calls.length, 2);
-    assert.equal((await w.send(rejected)).status, 200); assert.equal(p.calls.length, 3);
+    assert.equal(w.row(rejected).status, 'draft'); assert.equal(p.calls.length, 1);
+    assert.equal((await w.send(rejected)).status, 200); assert.equal(p.calls.length, 2);
     const known = w.post('unknown', { tweet: '999001' });
     assert.equal((await w.request('POST', `/posts/${known}/resolve`, checked('not_sent'))).status, 409);
     assert.equal((await w.request('POST', `/posts/${known}/resolve`, checked('sent', '999002'))).status, 409);
@@ -196,8 +196,8 @@ test('#2410 a thread stops at an uncertain child, preserving head and child rece
     const out = await w.send(head);
     assert.equal(out.body.code, 'x_sent_not_saved'); assert.equal(p.calls.length, 2);
     assert.equal(w.row(head).status, 'sent'); assert.equal(w.row(child).status, 'unknown'); assert.equal(w.row(child).tweet_id, '100002');
-    assert.equal(w.row(last).status, 'failed'); assert.equal(p.calls[1].reply.in_reply_to_tweet_id, '100001');
-    assert.equal((await w.send(head)).status, 409); assert.equal(p.calls.length, 2);
+    assert.equal(w.row(last).status, 'draft'); assert.equal(p.calls[1].reply.in_reply_to_tweet_id, '100001');
+    assert.equal((await w.send(head)).status, 409); assert.equal((await w.send(last)).status, 400); assert.equal(p.calls.length, 2);
   } finally { p.restore(); w.db.close(); }
 });
 
@@ -266,5 +266,62 @@ test('#2410 regression: a failed receipt save cannot make a second Send publish 
     await w.send(id);
     assert.equal(p.created.length, 1, 'a second Send must not publish another post after the receipt save failed');
     assert.ok(['unknown', 'sending'].includes(firstState), 'an accepted post never becomes failed');
+  } finally { p.restore(); w.db.close(); }
+});
+
+test('#2410 proven non-deliveries return to draft without a checked-X attestation', async () => {
+  const w = await world(), p = provider();
+  try {
+    const rejected = w.post(); p.next('reject');
+    assert.equal((await w.send(rejected)).body.code, 'x_forbidden');
+    assert.equal(w.row(rejected).status, 'draft'); assert.equal(p.created.length, 0);
+    assert.equal((await w.send(rejected)).status, 200); assert.equal(p.created.length, 1);
+    const missing = w.post('draft', { media: ['x/missing.png'] });
+    await w.send(missing); assert.equal(w.row(missing).status, 'draft'); assert.equal(p.calls.length, 2);
+    const disabled = w.post('scheduled');
+    w.db.prepare('UPDATE x_accounts SET enabled=0 WHERE id=1').run();
+    await w.send(disabled, 'clock'); assert.equal(w.row(disabled).status, 'draft');
+    w.db.prepare('UPDATE x_accounts SET enabled=1 WHERE id=1').run();
+    const capped = w.post('scheduled'); w.env.X_DAILY_CAP = '1';
+    w.db.prepare("UPDATE x_posts SET scheduled_for='2020-01-01' WHERE id=?").run(capped);
+    assert.equal((await w.send(capped, 'clock')).status, 429); assert.equal(w.row(capped).status, 'draft');
+    delete w.env.X_DAILY_CAP;
+    const unreadable = w.post('scheduled');
+    w.db.prepare("UPDATE x_posts SET scheduled_for='not a date' WHERE id=?").run(unreadable);
+    const sweep = await sweepScheduledPosts(w.env, new Date());
+    assert.equal(sweep.unreadable_draft, 1); assert.equal(w.row(unreadable).status, 'draft');
+    const token = w.post(); w.db.prepare("UPDATE x_accounts SET access_token_ct='broken' WHERE id=1").run();
+    await w.send(token); assert.equal(w.row(token).status, 'draft'); assert.equal(p.calls.length, 2);
+    assert.equal(w.db.prepare("SELECT COUNT(*) AS n FROM admin_audit_log WHERE action='x_post_outcome_checked'").get()!.n, 0);
+  } finally { p.restore(); w.db.close(); }
+});
+
+test('#2410 account deletion preserves every draft on a racing outcome or database error, and cleans deleted media after commit', async () => {
+  const w = await world(), p = provider(), first = w.post('draft', { media: ['x/fixture.png', 'another/path'] }), second = w.post();
+  const removed: string[] = []; w.env.FILES.delete = async (key: string) => { removed.push(key); };
+  try {
+    w.beforeWrite(sql => { if (sql.startsWith('DELETE FROM x_posts WHERE account_id')) w.db.prepare("UPDATE x_posts SET status='unknown' WHERE id=?").run(second); });
+    assert.equal((await w.request('DELETE', '/accounts/1')).status, 409);
+    assert.equal(w.row(first)?.status, 'draft'); assert.equal(w.row(second)?.status, 'unknown'); assert.deepEqual(removed, []);
+    w.beforeWrite(); w.db.prepare("UPDATE x_posts SET status='draft' WHERE id=?").run(second);
+    w.fail(sql => sql.startsWith('DELETE FROM x_accounts'));
+    assert.equal((await w.request('DELETE', '/accounts/1')).status, 500);
+    assert.equal(w.row(first)?.status, 'draft'); assert.equal(w.row(second)?.status, 'draft'); assert.deepEqual(removed, []);
+    w.fail(); assert.equal((await w.request('DELETE', '/accounts/1')).status, 200);
+    assert.equal(w.row(first), undefined); assert.equal(w.row(second), undefined);
+    assert.equal(w.db.prepare('SELECT id FROM x_accounts WHERE id=1').get(), undefined);
+    assert.deepEqual(removed, ['x/fixture.png']); assert.equal(p.calls.length, 0);
+  } finally { p.restore(); w.db.close(); }
+});
+
+
+test('#2410 a preclaim clock refusal cannot release an active Send reservation', async () => {
+  const w = await world(), p = provider(), id = w.post('scheduled');
+  try {
+    w.db.prepare('UPDATE x_accounts SET enabled=0 WHERE id=1').run();
+    w.beforeWrite(sql => { if (sql.includes("SET status = 'draft'")) w.db.prepare("UPDATE x_posts SET status='sending' WHERE id=?").run(id); });
+    assert.equal((await w.send(id, 'clock')).status, 409);
+    assert.equal(w.row(id).status, 'sending'); assert.equal(p.calls.length, 0);
+    w.beforeWrite(); assert.equal((await w.send(id)).status, 409); assert.equal(w.row(id).status, 'sending');
   } finally { p.restore(); w.db.close(); }
 });

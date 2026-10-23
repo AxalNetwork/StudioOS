@@ -527,11 +527,15 @@ export function PostsTab({ posts, accounts, onReload, notify, mode }) {
     if (reason.length < 8 || reason.length > 500) { notify('Give a reason between 8 and 500 characters.', 'error'); return; }
     if (!window.confirm(outcome === 'sent'
       ? 'I checked X and found this published post. Record it as sent?'
-      : 'I checked X and confirmed this post was not published. Return it to draft? This does not send it.')) return;
+      : post.thread_continuation_of
+        ? 'I checked X and confirmed this reply was not published. Record that result? This does not resume the thread; use a new draft for any unsent text.'
+        : 'I checked X and confirmed this post was not published. Return it to draft? This does not send it.')) return;
     setBusyId(post.id);
     try {
       await api.resolvePost(post.id, { outcome, checked_x: true, reason, ...(tweetId ? { tweet_id: tweetId } : {}) });
-      notify(outcome === 'sent' ? 'Recorded as sent.' : 'Returned to draft. Nothing was sent.', 'success');
+      notify(outcome === 'sent' ? 'Recorded as sent.' : post.thread_continuation_of
+        ? 'Recorded as not sent. Use a new draft for unsent text; this does not resume the thread.'
+        : 'Returned to draft. Nothing was sent.', 'success');
       onReload();
     } catch (e) { notify(e?.message || 'The result could not be recorded.', 'error'); }
     finally { setBusyId(null); }
@@ -679,8 +683,11 @@ export function PostsTab({ posts, accounts, onReload, notify, mode }) {
             <div className="mb-2 flex flex-wrap items-center gap-2 text-xs" data-testid={`x-outcome-review-${p.id}`}>
               <span className="text-amber-800 dark:text-amber-200">Check X before another send. Record the result below.</span>
               <button disabled={busyId === p.id} onClick={() => resolve(p, 'sent')} className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded">I found it on X</button>
-              {!p.tweet_id && <button disabled={busyId === p.id} onClick={() => resolve(p, 'not_sent')} className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded">I checked: not sent</button>}
+              {!p.tweet_id && <button disabled={busyId === p.id} onClick={() => resolve(p, 'not_sent')} className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded">{p.thread_continuation_of ? 'Record not sent' : 'I checked: not sent'}</button>}
             </div>
+          )}
+          {mode === 'drafts' && p.thread_continuation_of && (
+            <p className="mb-2 text-xs text-gray-500">Thread replies are sent from their head. A published thread cannot be resumed; use a new draft for unsent text.</p>
           )}
           {editId === p.id ? (
             <div>
@@ -907,7 +914,7 @@ function AdminXFull() { // paused feature implementation retained for quick re-e
     setLoading(true);
     try {
       // Drafts tab must surface every still-manageable state — scheduled +
-      // approved + failed all need to remain visible so Reschedule/Send/Edit
+      // drafts and unresolved sends all need to remain visible so recovery
       // stay reachable after the first state transition.
       const [d, h] = await Promise.all([
         api.listPosts({ status: 'draft,approved,scheduled,failed,sending,unknown', limit: 100 }),

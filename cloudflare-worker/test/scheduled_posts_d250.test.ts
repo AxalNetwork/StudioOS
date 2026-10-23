@@ -195,7 +195,7 @@ test('a disabled X account refuses the clock and the click — X checks it now',
   try {
     const sched = xPost(db, { status: 'scheduled', scheduled_for: iso('2026-09-24T09:00:00Z'), account: 2 });
     await sweepScheduledPosts(env, TICK);
-    assert.equal(row(db, 'x_posts', sched).status, 'failed');
+    assert.equal(row(db, 'x_posts', sched).status, 'draft');
     assert.match(row(db, 'x_posts', sched).send_error, /disabled/);
     const draft = xPost(db, { status: 'draft', account: 2 });
     const click = await sendXPost(env, draft, { actor: { id: SCHEDULER, email: 'scheduler@axal.example' }, mode: 'click' });
@@ -274,7 +274,7 @@ test('X\'s daily cap fails a scheduled post with the reason; it is not retried e
     db.prepare(`INSERT INTO x_posts (account_id, status, body, sent_at, created_by) VALUES (1, 'sent', 'earlier', datetime('now'), ?)`).run(DRAFTER);
     const id = xPost(db, { status: 'scheduled', scheduled_for: iso('2026-09-24T09:00:00Z') });
     await sweepScheduledPosts(env, TICK);
-    assert.equal(row(db, 'x_posts', id).status, 'failed');
+    assert.equal(row(db, 'x_posts', id).status, 'draft');
     assert.match(row(db, 'x_posts', id).send_error, /daily_cap_reached/);
     await sweepScheduledPosts(env, TICK);
     assert.equal(s.sends.length, 0);

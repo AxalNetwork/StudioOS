@@ -8,9 +8,9 @@ import { PostsTab, xPostId } from '../src/pages/admin/AdminX.jsx';
 import { adminX } from '../src/lib/api.js';
 import { renderedText } from './_renderedText.mjs';
 
-function card(status, tweet_id = null) {
+function card(status, tweet_id = null, thread_continuation_of = null) {
   return renderToStaticMarkup(createElement(PostsTab, {
-    posts: [{ id: 7, account_id: 1, body: 'A product update.', status, tweet_id, media_r2_keys: ['x/fixture.png'], alt_texts: [], alt_proposals: {} }],
+    posts: [{ id: 7, account_id: 1, body: 'A product update.', status, tweet_id, thread_continuation_of, media_r2_keys: ['x/fixture.png'], alt_texts: [], alt_proposals: {} }],
     accounts: [{ id: 1, handle: 'fixture' }], mode: 'drafts', onReload() {}, notify() {},
   }));
 }
@@ -58,4 +58,15 @@ test('#2410 a reload includes unknown and in-progress sends instead of hiding th
   const source = readFileSync(new URL('../src/pages/admin/AdminX.jsx', import.meta.url), 'utf8');
   const statuses = /api\.listPosts\(\{ status: '([^']+)'/.exec(source)?.[1].split(',');
   assert.ok(statuses?.includes('unknown')); assert.ok(statuses.includes('sending'));
+});
+
+
+test('#2410 a thread recovery records an outcome without promising to resume a published thread', () => {
+  const markup = card('unknown', null, 1);
+  assert.match(renderedText(markup), /A published thread cannot be resumed; use a new draft for unsent text/);
+  assert.ok(buttons(markup).includes('Record not sent'));
+  assert.equal(buttons(markup).includes('Send'), false);
+  const resolved = card('draft', null, 1);
+  assert.equal(buttons(resolved).includes('Send'), false);
+  assert.match(renderedText(resolved), /use a new draft for unsent text/);
 });
