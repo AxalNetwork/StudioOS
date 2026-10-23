@@ -171,6 +171,28 @@ body {
   padding-right: env(safe-area-inset-right, 0px);
 }
 
+/* Mobile tap stability (#2656). Safari may magnify small editable controls
+   when they gain focus, then leave menus in that magnified viewport. Keep
+   these controls readable at rest, rather than changing scale on focus.
+   Unlayered !important beats compact component/Tailwind input typography.
+   The rem floor follows an enlarged root font; desktop typography stays put. */
+@media (max-width: 1023px) {
+  html.app-type {
+    /* Ordinary/rapid taps do not become smart zoom. Panning and deliberate
+       pinch zoom remain available; the viewport meta has no scale cap. */
+    touch-action: manipulation;
+  }
+
+  html.app-type :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]),
+    textarea,
+    select,
+    [contenteditable="true"]
+  ) {
+    font-size: max(16px, 1rem) !important;
+  }
+}
+
 /* Signed-in surfaces share one face (--font-app). Set on <html> rather than
    on the shell element so portals — menus, modals, toasts mounted on <body>
    — get it too. The public site never sets the class. */
