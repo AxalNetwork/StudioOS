@@ -1,5 +1,9 @@
+import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import MeetingBotConsentNotice from './MeetingBotConsentNotice.jsx';
+import MeetingBotPanel from './MeetingBotPanel.jsx';
+import { botRefusal } from './meetingBotSession.js';
 import { channelsApi } from '../../lib/api/channels.js';
 import { BrandIcon, Unreadable } from '../../ui';
 import { MeetTranscripts, TelegramChannelCard, WhatsAppChannelCard, useChannelsOverview } from '../account/ChannelsGroup';
@@ -191,9 +195,32 @@ export function MeetingRow({ meeting, interview, api = channelsApi, onChanged, n
           </span>
         )}
       </div>
+      {meeting.session_id != null && <ScheduledBotChoice meeting={meeting} onChanged={onChanged} now={now} />}
+      {meeting.bot && <MeetingBotPanel sessionId={meeting.session_id} />}
       <Alert>{error}</Alert>
     </li>
   );
+}
+
+export function ScheduledBotChoice({ meeting, onChanged, now = Date.now(), api = interviewSessionsApi }) {
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+  const queued=meeting.bot?.status==='queued';
+  if (meeting.status!=='scheduled' || !Number.isFinite(Date.parse(meeting.starts_at)) || Date.parse(meeting.starts_at)<=now) return null;
+  const change=async(e)=>{
+    if(busy)return;
+    setBusy(true);setError('');
+    try {
+      if(!e.target.checked) await api.stopBot(meeting.session_id);
+      else await api.sendBot(meeting.session_id,{meeting_url:meeting.join_url,scheduled_at:meeting.starts_at});
+      onChanged?.();
+    }catch(x){setError(botRefusal(x));}
+    finally{setBusy(false);}
+  };
+  return <div className="space-y-1">
+    <label className="flex items-center gap-2 text-[12.5px] text-gray-800 dark:text-gray-200"><input type="checkbox" disabled={busy || !!meeting.bot && !['queued','stopped','failed','done'].includes(meeting.bot.status)} checked={queued} onChange={change} data-testid="scheduled-bot-choice" />Send Eadwyn AI at the start time</label>
+    <Alert>{error}</Alert>
+  </div>;
 }
 
 /**
@@ -227,9 +254,9 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
     if (out.error) { setRefusal({ text: out.error, connect: false }); return; }
     setBusy(true); setRefusal(null); setNotice('');
     try {
-      const r = await api.scheduleMeeting(interview.id, out.body);
+      const r = await api.scheduleMeeting(interview.id, { ...out.body, auto_send_bot: form.autoSend !== false });
       // Scheduled, with what to fix before the call when there is something (Meet's transcript permission).
-      setNotice(typeof r?.notice?.message === 'string' ? r.notice.message : '');
+      setNotice(r?.bot_error ? `The call is scheduled, but ${botRefusal(r.bot_error)}` : r?.bot ? 'Eadwyn AI is queued for the start time.' : typeof r?.notice?.message === 'string' ? r.notice.message : 'The call is scheduled.');
       load();
     } catch (e) { setRefusal(scheduleRefusal(e, form.provider)); }
     finally { setBusy(false); }
@@ -237,7 +264,7 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
 
   return (
     <div className="space-y-3" data-testid="interview-schedule">
-      <p className="text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="schedule-intro">Axal creates the call and a session for it. {transcriptNote(form.provider, form.record)} Calls over Telegram or WhatsApp cannot be recorded this way; use the in-app recorder for those.</p>
+      <p className="text-[12.5px] text-gray-700 dark:text-gray-300" data-testid="schedule-intro">Axal creates the call and a session for it. {form.autoSend !== false ? 'Eadwyn AI records the call after admission; it does not need a paid recording or transcription plan on the meeting platform.' : transcriptNote(form.provider, form.record)} Calls over Telegram or WhatsApp cannot be recorded this way; use the in-app recorder for those.</p>
       <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Call on">
         {MEETING_PROVIDERS.map((p) => (
           <button key={p.key} type="button" role="radio" aria-checked={form.provider === p.key} disabled={!available(p.key)} data-testid={`meeting-provider-${p.key}`}
@@ -257,7 +284,12 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
         </label>
         <label className="space-y-1 text-[12px] text-axal-faint">Title (optional)<input type="text" maxLength={200} className={FIELD} value={form.topic} placeholder={`Interview${interview?.interviewee_name ? ` with ${interview.interviewee_name}` : ''}`} onChange={set('topic')} /></label>
       </div>
-      <p className={NOTE}>Your local time. Share the join link with the person you are interviewing.</p>
+      <p className={NOTE}>Your local time. Share the join link with the person you are interviewing. Automatic bot sends can be queued up to seven days ahead; for later calls, switch it on closer to the call.</p>
+      <label className="flex items-center gap-2 text-[13px] text-gray-800 dark:text-gray-200">
+        <input type="checkbox" checked={form.autoSend !== false} onChange={(e) => setForm((f) => ({ ...f, autoSend: e.target.checked }))} data-testid="meeting-auto-send" />
+        Send Eadwyn AI at the start time
+      </label>
+      {form.autoSend !== false && <MeetingBotConsentNotice />}
       <fieldset className="space-y-1.5" data-testid="meeting-consent">
         <legend className="text-[12px] font-semibold text-axal-ink">How did they agree to be recorded and transcribed?</legend>
         <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="How the interviewee agreed to be recorded and transcribed">
@@ -276,7 +308,7 @@ export function SchedulePanel({ interview, api = channelsApi, now, initialForm }
           <label className="flex items-center gap-2 text-[12.5px] font-semibold text-gray-800 dark:text-gray-200">
             <input type="checkbox" className="h-4 w-4 accent-violet-700" checked={form.record === true}
               onChange={(e) => setForm((f) => ({ ...f, record: !!e.target.checked }))} data-testid="input-meeting-record" />
-            Record in the cloud (needed for the transcript)
+            {form.autoSend !== false ? 'Also record in the Zoom cloud (optional)' : 'Record in the cloud (needed for the transcript)'}
           </label>
           <p className={NOTE}>Zoom starts recording to your Zoom cloud when the call starts, and Zoom’s own recording notice tells everyone on the call that it is being recorded. Cloud recording needs a paid Zoom plan.</p>
         </div>

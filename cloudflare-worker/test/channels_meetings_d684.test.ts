@@ -1237,7 +1237,7 @@ test('Zoom is a Connectors provider: PKCE on the authorize URL, Basic auth on th
   assert.equal(desc.tier, 'free');
   assert.deepEqual(desc.oauth_scopes, ['meeting:write:meeting', 'meeting:delete:meeting',
     'cloud_recording:read:list_recording_files', 'meeting:read:meeting', 'meeting:read:list_past_instances', 'user:read:user',
-    'cloud_recording:read:recording', 'zoomapp:inmeeting']);
+    'cloud_recording:read:recording', 'zoomapp:inmeeting', 'user:read:token']);
   assert.equal(CONNECTOR_METADATA.zoom.permissions.length, desc.oauth_scopes!.length, 'one plain sentence per scope');
   assert.equal(CONNECTOR_METADATA.zoom.category, 'Messaging');
 
@@ -1285,4 +1285,21 @@ test('a call is scheduled only with the interviewee\'s consent recorded, and how
   assert.equal(ok.status, 201);
   const s = f.db.prepare('SELECT consent_status, consent_method, consent_at FROM interview_sessions WHERE id = ?').get(ok.body.session_id);
   assert.deepEqual([s.consent_status, s.consent_method, typeof s.consent_at], ['given', 'written', 'string']);
+});
+
+test('B7 scheduling queues a bot by default, persists opt-out, and cancelling stops its DO before the call',async(t)=>{
+  const f=world();await connectGoogle(f,GRANTED);
+  f.db.exec(mig('531_meeting_bots.sql'));
+  const commands:string[]=[];
+  f.env.MEETING_BOT='on';f.env.MEETING_BOT_SECRET='x'.repeat(40);f.env.MEETING_BOT_COST_MICROUSD_PER_MINUTE='1000';
+  f.env.MEETING_BOT_RUNTIME={start:async()=>{},stop:async()=>{}};
+  f.env.MEETING_BOT_RUN={idFromName:(s:string)=>s,get:()=>({fetch:async(req:Request)=>{commands.push(new URL(req.url).pathname);return json({status:'queued'});}})};
+  let serial=0;
+  mockFetch(t,{'POST https://oauth2.googleapis.com/token':googleToken,'POST https://www.googleapis.com/calendar/v3/calendars/primary/events':()=>json(calendarEvent({id:'evt-'+(++serial)})),'DELETE https://www.googleapis.com/calendar/v3/calendars/primary/events/evt-1':()=>new Response(null,{status:204})});
+  const args={consent:CONSENT,provider:'google_meet',starts_at:iso(HOUR),duration_min:30};
+  const first=await call(f.env,ME,'POST',`/interviews/${INTERVIEW}/meetings`,args);assert.equal(first.status,201);assert.equal(first.body.bot.status,'queued');assert.deepEqual(commands,['/init']);
+  const sid=first.body.session_id;assert.equal(f.db.prepare('SELECT submitted_via FROM interview_sessions WHERE id=?').get(sid).submitted_via,'meeting_bot');
+  const listed=await call(f.env,ME,'GET',`/interviews/${INTERVIEW}/meetings`);assert.equal(listed.body.meetings[0].bot.status,'queued');
+  const second=await call(f.env,ME,'POST',`/interviews/${INTERVIEW}/meetings`,{...args,auto_send_bot:false});assert.equal(second.status,201);assert.equal(second.body.bot,null);assert.deepEqual(commands,['/init']);
+  await call(f.env,ME,'DELETE',`/interviews/${INTERVIEW}/meetings/${first.body.meeting.uid}`);assert.deepEqual(commands,['/init','/stop']);
 });

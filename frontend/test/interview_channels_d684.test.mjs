@@ -90,7 +90,7 @@ test('every channels call hits D684 §9’s method and path, with the body the W
     await channelsApi.scheduleMeeting(7, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: '30', topic: 'Interview' });
     await channelsApi.cancelMeeting(7, 'r 1');
     await channelsApi.importMeeting(7, 'r1');
-    await channelsApi.scheduleMeeting(7, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
+    await channelsApi.scheduleMeeting(7, { provider: 'zoom', auto_send_bot: true, starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
   } finally { f.restore(); }
   assert.deepEqual(f.calls.map((c) => `${c.method} ${c.path}`), [
     'GET /channels', 'POST /channels/telegram/link', 'POST /channels/whatsapp/connect', 'DELETE /channels/telegram',
@@ -102,14 +102,14 @@ test('every channels call hits D684 §9’s method and path, with the body the W
     'POST /founder/validate/interviews/7/meetings',
   ]);
   // Zoom's cloud recording reaches the Worker only when the member turned it on (`auto_record`, routes/founder_validate_meetings.ts).
-  assert.deepEqual(f.calls[17].body, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
+  assert.deepEqual(f.calls[17].body, { provider: 'zoom', auto_send_bot: true, starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, consent: { status: 'given', method: 'verbal' }, auto_record: true });
   assert.deepEqual(f.calls[2].body, { code: 'c0de', waba_id: '1', phone_number_id: '2' });
   assert.deepEqual(f.calls[8].body, { interview_id: 7 });
   assert.deepEqual(f.calls[9].body, { create: { interviewee_name: 'Ada', project_id: 3 } });
   assert.deepEqual(f.calls[10].body, { ignored: true });
   assert.deepEqual(f.calls[11].body, { ignored: false });
   assert.deepEqual(f.calls[12].body, { text: 'Thanks!', client_key: 'key-1' });
-  assert.deepEqual(f.calls[14].body, { provider: 'zoom', starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, topic: 'Interview' });
+  assert.deepEqual(f.calls[14].body, { provider: 'zoom', auto_send_bot: true, starts_at: '2026-10-20T09:00:00.000Z', duration_min: 30, topic: 'Interview' });
 });
 
 test('#1587 the assignment carries Who\'s company and quote consent, as the Worker reads them', async () => {

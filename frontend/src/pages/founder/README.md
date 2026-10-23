@@ -1,5 +1,7 @@
 # Founder workspaces
 
+`MeetingBotConsentNotice.jsx` (D886 B9) supplies the visible-bot sentence beside B7’s existing recording-consent control. The wording comes from the shared `meeting-bot/notice.mjs` module. It does not dispatch a bot or replace the server consent gate.
+
 This folder contains the founder-specific workspace shell and the dedicated canvas landing pages that replace generic route wrappers for active Founder View.
 
 - `FounderWorkspacePage.jsx` provides the shared founder workspace frame used by routes that have not graduated to a dedicated canvas landing.
@@ -44,3 +46,28 @@ D653: `RoundCallSheet.jsx` is Raise’s Call for Capital, five steps (D686 §5.6
 - D684 (#1578), interview channels. `ChannelsInbox.jsx` is `/validate/inbox`, Conversations: customer chats from the member's business Telegram and WhatsApp, waiting until each is assigned to an interview (or one is created from it), or ignored; the thread view and the reply composer, which says why it cannot send outside the 24-hour rule and never calls a Telegram message delivered. `InterviewChannels.jsx` holds an interview's Connect panel ("From Telegram or WhatsApp" in Record a session), its Schedule a call panel (Zoom or Google Meet, with each call's status in plain words), and the waiting panel a channel session shows on its page until its messages or transcript arrive. `channelThreads.js` is their rules, among them a waiting note said as the kind it is (D756 §1.12, #1981: Voice note, Audio file or Round video, from the thread read's `media`) and WhatsApp's "Add this chat to an interview by <date> to keep its voice notes", once per waiting chat (`voiceKeepBy`, D754 §5, #1980: from `voice_fetch_by`, which the Worker never sends for Telegram). `assistantSession.js` tells a channel session (`submitted_via` is the provider key) from an assistant's: "From Telegram" gets the channel badge, never the assistant's, and opens on the transcript.
 - `InterviewReviewPage.jsx` is Customer research's record (D697, #1659; its default export is `InterviewRecord`), drawn by `../cycles/CycleRoute.jsx` in record mode at `/validate/customer-research/:id`, inside the cycle. It draws what the record read sends (#1692): the facts, What it fed, Session and Activity for every reader, and for a writer only, Transcript (the session switcher, `?session=`, the summary, the passages with their start times, Search, the player), Eadwyn's placements (`InterviewSessionPage`'s `ReviewStep`), Cost (the chosen session's receipt lines) and the interview's tools. Edit details writes only the name and company through the record's `edit-details`; Delete keeps its confirm. The session routes are called only when the read sends Transcript, and every dialog goes through `CycleRoute`'s `openDialog`. Its rules are `interviewReviewModel.js`, `recordParts` among them. `SessionSummary.jsx` is the summary (§5.10): StudioOS's own, each sentence linked to the passages it cites, the model named, "Not recorded" with none, and Summarise when there is a transcript and no summary. Since D757 (#1927) it also holds the digest (`DigestView`: a writer's draft, "Draft · written by <model>", with Keep and Edit, which removes a key quote but never rewrites one; a kept digest for anyone else), the engine's state in the Worker's words (`EngineLine`, Add tokens on a budget refusal) and the source badge. `InterviewReview.jsx`'s `ModuleSuggestions` lists the session's suggestions under all seven Validate modules, each with "Heard in <name> · time · speaker" linking its line, and Accept all for a module. Their rules are `sessionDigestModel.js`; the Record finish line ("Summary drafted · n suggestions to review", linking to the session) is `../../lib/activeRecording.js`'s `finishLine`. An assigned chat's Inbox row says the same ("Summary drafted · n suggestions", `channelThreads.js`'s `threadEngineLine`), from the thread read's `digest_status` and `pending_suggestions` (#1930).
 - `InterviewReview.jsx` is the review step of `/validate/session/:id` (D660 part 2): placements by module with accept, edit and discard, compare, "Ask the transcript" with citations, and the structuring receipt. It takes data as props; `InterviewSessionPage`'s `ReviewStep` mounts it once a session is transcribed, on #1494's routes (D660 part 3).
+
+### Meeting bot controls — D886 B7 (#2585)
+
+`RecordLightbox.jsx` makes Send Eadwyn AI the primary action for a supported
+call link, alongside an explicit Record this device action. Consent is saved
+before dispatch; B9's `MeetingBotConsentNotice.jsx` is shown before the press.
+A refusal neither retries nor opens a microphone. The bot's setup excludes the
+plain meeting URL; B1 stores it encrypted. Device and bot setup use distinct
+idempotency keys so an explicit fallback creates its own recording.
+
+`meetingBotSession.js` supplies the state/actions, with authored refusal and
+failure sentences. `MeetingBotPanel.jsx` binds it to the real session API,
+polls while moving, stops polling on completion/unmount, and draws status,
+approximate run time, Stop and the latest saved participants. `InterviewSessionPage.jsx`
+keeps bot sessions out of device recovery and preserves named transcript labels.
+`InterviewChannels.jsx` defaults auto-send on when scheduling; the Worker queues
+it after creating the call. Each scheduled row can cancel/re-enable that send.
+Call cancellation stops the bot's alarm first. A queued run is the stored choice;
+no browser timer or local-only preference dispatches a call.
+
+The participants read is separate from status: creator-only, latest encrypted
+roster, display names and offsets without platform IDs. Missing is Not recorded;
+failed reads are Unreadable. B6 still owns final speaker mapping/transcription;
+B7 reads the stored speaker labels as they arrive. Runtime wiring and rollout
+remain B8/B9's gates. S1 authorized the existing screen look without a new canvas.

@@ -49,8 +49,28 @@ that turns out different is a one-line PR.
    - `cloud_recording:read:recording`: comes with the transcript event;
    - `zoomapp:inmeeting`: comes with a General app.
 
-   Add none beyond these eight. The callback compares the grant with the registry
-   (`cloudflare-worker/src/integrations/registry.ts`) and refuses a wider one.
+   Add none beyond these eight, and the ninth below. The callback compares the
+   grant with the registry (`cloudflare-worker/src/integrations/registry.ts`)
+   and refuses a wider one.
+
+   **The notetaker (D886, #2582): one more scope and one feature.**
+   - **The order matters.** Add them only **after** the PR that lists
+     `user:read:token` in the registry has deployed. A grant carrying a scope
+     the registry does not list is refused (`scope_overreach`) for every
+     founder. A grant without it still connects; the notetaker then asks the
+     founder to reconnect Zoom (`zoom_obf_scope_missing`).
+   - **Scope** `user:read:token`: mint the notetaker's OBF ("on behalf of")
+     join token. Zoom requires it since 2026-03-02 for a Meeting SDK app
+     joining a meeting outside Axal's Zoom account. Zoom mints it only while
+     the founder is in the call, so the notetaker says "Join the call first;
+     the notetaker follows."
+   - **Feature**: Features → Embed → **Meeting SDK**, on the same General app.
+     *Unverified*: whether Zoom gives the SDK its own key and secret, or the
+     app's Client ID and Secret sign the SDK's JWT. If separate, they are
+     stored as `ZOOM_SDK_KEY` and `ZOOM_SDK_SECRET` (step 5) with the B2
+     runtime (#2580).
+   - **Founders reconnect once.** A grant made before the scope was added does
+     not carry it.
 4. **Events.** Features → Access → Event subscription:
    - Event notification endpoint: `https://axal.vc/api/channels/zoom/webhook`.
    - Events: `meeting.ended`, `recording.transcript_completed`,
@@ -286,3 +306,24 @@ these steps rely on: the webhook signature, tenancy from the ref, scope
 overreach, consent and notice, metering and the purge. Each gate is
 mutation-checked. It certifies the code, not the Zoom app or Google's
 verification.
+
+## Zoom bot adapter continuation (#2582, B4)
+
+The SDK orchestration in `meeting-bot/src/zoomAdapter.ts` is fake-tested and
+not wired for live dispatch. Follow §1's app feature/scope/reconnect steps.
+B8 must supply a Linux `ZoomSdkBridge` and confirm the deployed SDK version;
+B1 supplies the founder-scoped OBF mint and the `waiting_for_host` update.
+The existing Worker helper holds/refreshed OAuth stays in the Worker. Supply
+only a fresh OBF for each attempt, never credentials in process arguments or
+logs. Confirm the actual SDK signing credentials before configuring secrets.
+
+On a free test account, record M3/M4/M6 in D886 with counts and states only:
+external-account join before/after the founder arrives, waiting-room admission,
+chat notice, host recording approval/refusal/revocation, roster/rename/leave,
+active-speaker/silence, Stop and founder departure. The native bridge must
+stop audio when recording privilege or the authorizing user's presence ends.
+No live success is claimed by the synthetic SDK tests.
+
+Current B2 transport carries mixed audio only. Per-participant streams require
+a shared participant-key extension before they can be uploaded without losing
+attribution. Keep that limitation explicit during testing and rollout.

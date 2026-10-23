@@ -30,7 +30,6 @@ import { mercuryPersonalApi } from '../src/lib/api/mercuryPersonal.js';
 
 const h = React.createElement;
 const flat = (s) => s.replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
-const TOKEN = ['fixture', 'not', 'a', 'token', '2'].join('-');
 
 const P = (key, display_name, extra = {}) => ({
   key, display_name, integration_type: 'data_feed', status: 'live', tier: 'free', auth_type: 'api_key',

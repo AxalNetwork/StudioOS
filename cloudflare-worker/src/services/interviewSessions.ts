@@ -238,7 +238,7 @@ export async function transition(env: Env, session: SessionRow, action: keyof ty
             started_at = COALESCE(started_at, CASE WHEN ? = 1 THEN datetime('now') END),
             stopped_at = CASE WHEN ? = 'stop' THEN datetime('now') ELSE stopped_at END,
             updated_at = datetime('now')
-      WHERE id = ? AND status IN (?, ?)`,
+      WHERE id = ? AND status IN (?, ?) AND COALESCE(submitted_via, '') <> 'meeting_bot'`,
   ).bind(t.to, closesInterval ? 1 : 0, opensInterval ? 1 : 0, closesInterval ? 1 : 0, opensInterval ? 1 : 0,
     action, session.id, fromA, fromB).run();
   const changed = Number(r.meta?.changes || 0) === 1;
