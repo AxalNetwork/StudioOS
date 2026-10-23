@@ -171,9 +171,11 @@ events.get('/', async (c) => {
     `SELECT * FROM events WHERE host_user_id = ? ORDER BY starts_at DESC`,
   ).bind(u.id).all();
   const attending = await c.env.DB.prepare(
-    `SELECT e.*, r.status AS reg_status, r.waitlist_position AS reg_waitlist_position
+    `SELECT e.*, r.status AS reg_status, r.waitlist_position AS reg_waitlist_position,
+            r.comp, ch.code AS checkin_code
        FROM events e
        JOIN event_registrations r ON r.event_id = e.id
+       LEFT JOIN event_checkins ch ON ch.event_id = e.id AND ch.registration_id = r.id
       WHERE r.user_id = ? AND r.status IN ('registered','confirmed','attended','waitlisted')
       ORDER BY e.starts_at ASC`,
   ).bind(u.id).all();
@@ -183,6 +185,8 @@ events.get('/', async (c) => {
       ...shapeEvent(r),
       reg_status: r.reg_status,
       reg_waitlist_position: r.reg_waitlist_position ?? null,
+      checkin_code: r.checkin_code ?? null,
+      comp: r.comp === 1,
     })),
   });
 });

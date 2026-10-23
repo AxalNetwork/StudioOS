@@ -310,7 +310,7 @@ export default function PublicEventDetailPage() {
                       </p>
                       <div className="mt-4 flex items-center gap-3">
                         <a
-                          href={eventsPublic.icsUrl(slug)}
+                          href={user ? events.icsUrl(event.id) : eventsPublic.icsUrl(slug)}
                           download
                           className="inline-flex items-center gap-2 text-sm text-violet-700 dark:text-violet-300 hover:underline"
                         >
