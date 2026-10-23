@@ -226,12 +226,11 @@ test('held: the legacy POST /api/capital/calls refuses a line on Fund I', async 
   assert.equal(lines(env).length, before);
 });
 
-test('held: the legacy POST /api/capital/capitalCall, which bills every active LP, writes nothing', async () => {
+test('retired: the legacy POST /api/capital/capitalCall writes nothing', async () => {
   const env = makeEnv();
   const before = lines(env).length;
   const r = await call(capital, env, HOLDER_ID, '/capitalCall', { method: 'POST', jti: 'totp-holder', body: { startup_id: 77, amount: 300 } });
-  assert.equal(r.status, 409, r.text);
-  assert.equal(r.body.error, 'fund_account_missing');
+  assert.equal(r.status, 404, r.text);
   assert.equal(lines(env).length, before);
 });
 
@@ -269,7 +268,7 @@ test('with the Fund\'s account, every path issues as before', async () => {
   const one = await call(capital, env, HOLDER_ID, '/calls', { method: 'POST', jti: 'totp-holder', body: { limited_partner_id: 100, amount: 25 } });
   assert.equal(one.status, 201, one.text);
   const all = await call(capital, env, HOLDER_ID, '/capitalCall', { method: 'POST', jti: 'totp-holder', body: { startup_id: 77, amount: 300 } });
-  assert.equal(all.status, 200, all.text);
+  assert.equal(all.status, 404, all.text);
 });
 
 test('another fund\'s call issues with no registry table at all', async () => {
