@@ -357,8 +357,6 @@ export default function CapTablePage({ embedded = false }) {
   // Task #29 — load the read-only ownership/dilution comparison for a project.
   async function loadCompare(pid = selectedProjectId, open = false) {
     const id = pid ? String(pid) : '';
-    const request = ++projectRead.current;
-    setReadProjectId('');
     if (!id) { setApiError('Select a startup to compare scenarios.'); return; }
     setCompareLoading(true); setCompareError(null);
     if (open) setCompareOpen(true);

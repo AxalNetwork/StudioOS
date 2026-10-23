@@ -6,7 +6,7 @@ const source = readFileSync(new URL('../src/pages/CapTablePage.jsx', import.meta
 const variants = readFileSync(new URL('../src/pages/CapTableVariantsPage.jsx', import.meta.url), 'utf8');
 function handler(text, start, end, scope) {
   const code = text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start)));
-  return new Function(...Object.keys(scope), `${code}; return ${start.includes('selectProject') ? 'selectProject' : start.includes('saveScenario') ? 'saveScenario' : start.includes('loadScenario') ? 'loadScenario' : 'createVariant'};`)(...Object.values(scope));
+  return new Function(...Object.keys(scope), `${code}; return ${start.includes('selectProject') ? 'selectProject' : start.includes('saveScenario') ? 'saveScenario' : start.includes('loadScenario') ? 'loadScenario' : start.includes('loadCompare') ? 'loadCompare' : 'createVariant'};`)(...Object.values(scope));
 }
 function setup(read) {
   const state = { inputs: 'untouched', ready: '', errors: null, writes: 0, defaults: 0 };
@@ -63,4 +63,14 @@ test('saved scenario loads open Save only after a successful current read', asyn
   await load('synthetic'); assert.equal(f.state.ready, '3'); assert.deepEqual(f.state.inputs, { recorded: true });
   f.scope.api.getCapTableScenario = async () => { throw new Error('network'); };
   await load('synthetic'); assert.equal(f.state.ready, ''); assert.ok(f.state.errors);
+});
+
+test('read-only comparison cannot invalidate a successful scenario read', async () => {
+  let ready='3'; const generation={current:7};
+  const load=handler(source,'async function loadCompare','  function toggleCompare',{
+    selectedProjectId:'3',projectRead:generation,setReadProjectId:v=>ready=v,setApiError:()=>{},
+    setCompareLoading:()=>{},setCompareError:()=>{},setCompareOpen:()=>{},setCompare:()=>{},
+    api:{getCapTableCompare:async()=>({})},
+  });
+  await load('3',true);assert.equal(ready,'3');assert.equal(generation.current,7);
 });
