@@ -26,12 +26,10 @@ model calls are made. The sidecar never has an OAuth refresh/access token.
 A caller supplies an SDK JWT signed with the credentials actually assigned to
 Axal's Zoom app; do not guess whether they are separate from OAuth credentials.
 B1 must supply the founder/run-scoped OBF mint through its existing helper.
-B8 now supplies the signed `zoom-credentials` bootstrap through B1. It accepts
-no member or meeting selector and reads both from the stored authorized run.
-The merged runtime reports `waiting_room` while the authorizing user is absent.
-App/OAuth credentials stay in the Worker; only short-lived SDK/OBF material
-crosses the private run-scoped channel. PRODUCTION.md names the operator's
-configuration and the later live gates.
+No runtime mint endpoint exists on the inspected B1 main yet. Do not expose a
+mint accepting caller-supplied member IDs or meeting IDs. B1 also needs a
+waiting-state representation. These are integration prerequisites, not
+implemented endpoints in this change.
 
 The core notice is sent before joining audio, requesting recording privilege
 or starting raw recording. Host denial/timeout refuses recording; revocation

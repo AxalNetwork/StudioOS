@@ -3,7 +3,6 @@
 !package.json
 !package-lock.json
 !notice.mjs
-!container-entry.sh
 !src/
 !src/**
 !test/
@@ -12,4 +11,3 @@
 !zoom/native.py
 !zoom/sidecar.py
 !zoom/requirements.txt
-!zoom/check_runtime.py

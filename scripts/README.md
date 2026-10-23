@@ -176,21 +176,13 @@ code that motivated them.
 
 ## Meeting bot image pipeline (#2586, D886 B8)
 
-`build-meeting-bot-image.mjs` builds the B2 runtime context
+`build-meeting-bot-image.mjs` builds the future B2 runtime context
 (`meeting-bot/`) only when its Dockerfile and ignore file both exist.
 `lib/meetingBotImage.mjs` validates repository/commit metadata and forms
 Docker argument arrays; its test uses a stub runner to check failure ordering.
 The image helper performs no migrations, deployment, login or publication.
 `--fixture` builds a scratch image solely to smoke-test CI plumbing; it emits
 no publishable image output and contains no bot runtime.
-
-`preflight-meeting-bot-deploy.mjs` builds that real image before migrations in
-both deploy paths, including branch provisioning/redeployment. Its fixed context has no fixture override.
-`dry-run-meeting-bot-deploy.mjs` validates production/preview/generated-branch bundles and
-Containers configuration in temporary scratch-image/assets copies only; it
-never deploys. `lib/meetingBotDeploy.test.mjs` runs isolated subprocesses to
-prove that a failed image build cannot reach migrations and checks all three
-binding/image declarations. Docker is required for real image/dry-run checks.
 
 ## Release drafts (the version beside the logo)
 

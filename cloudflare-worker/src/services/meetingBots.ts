@@ -11,7 +11,6 @@ import { budgetRefusalMessage } from './aiRouter';
 import { userMeetsTier } from '../middleware/requireTier';
 import { AUDIO_CHANNELS, type SessionRow } from './interviewSessions';
 import { writableSession } from './interviewIntake';
-import { runtimeOrigin } from './meetingBotRuntime';
 
 export const BOT_COMMISSION_MULTIPLIER = AI_MARKUP;
 export const BOT_SCHEDULE_MAX_MS = 7 * 86400_000;
@@ -32,7 +31,6 @@ export interface BotRun {
 export interface BotRuntime {
   start(run: { uid: string; platform: BotPlatform; meeting_url: string; limit_minutes: number; deadline_at: number; budget_deadline_at: number; notice: string; venture_name: string | null }): Promise<void>;
   stop(run: { uid: string }): Promise<void>;
-  heartbeat?(run: {uid:string;deadline_at:number;budget_deadline_at:number}): Promise<void>;
 }
 export class BotError extends Error {
   status: number; code: string;
@@ -72,12 +70,8 @@ export function botView(run: BotRun) {
     rate_per_minute_microusd: run.rate_per_minute_microusd };
 }
 export function botEnabled(env: Env) { return env.MEETING_BOT === 'on' || env.MEETING_BOT === 'canary'; }
-export function botConfigured(env: Env, platform?: BotPlatform) {
-  if (!botEnabled(env) || !env.MEETING_BOT_RUN || (env.MEETING_BOT_SECRET?.length ?? 0)<32) return false;
-  if (env.MEETING_BOT_RUNTIME) return true;
-  if (!env.MEETING_BOT_CONTAINER) return false;
-  try { runtimeOrigin(env); } catch { return false; }
-  return platform!=='zoom' || !!(env.MEETING_BOT_ZOOM_CLIENT_ID?.trim() && env.MEETING_BOT_ZOOM_CLIENT_SECRET?.trim());
+export function botConfigured(env: Env) {
+  return botEnabled(env) && !!env.MEETING_BOT_RUN && !!env.MEETING_BOT_RUNTIME && (env.MEETING_BOT_SECRET?.length ?? 0) >= 32;
 }
 export async function botMemberEnabled(env: Env, user: User): Promise<boolean> {
   if (env.MEETING_BOT === 'on') return true;
@@ -125,13 +119,13 @@ export async function dispatchBot(env: Env, user: User, session: SessionRow, arg
   session = await botSession(env, { user_id: user.id, session_id: session.id, project_id: session.project_id });
   if (!AUDIO_CHANNELS.has(session.channel)) throw new BotError(400,'bot_needs_audio','Choose an audio recording session for the meeting bot.');
   const parsed = botPlatform(args.meeting_url);
-  if (!botConfigured(env,parsed.platform) || !await botMemberEnabled(env,user)) throw new BotError(503, 'bot_unavailable', 'The meeting bot is not set up here.');
+  if (!botConfigured(env) || !await botMemberEnabled(env,user)) throw new BotError(503, 'bot_unavailable', 'The meeting bot is not set up here.');
   const active = await env.DB.prepare("SELECT uid FROM meeting_bots WHERE session_id = ? AND status NOT IN ('done','failed','stopped')").bind(session.id).first();
   if (active) { await botControl(env,String(active.uid),'init'); throw new BotError(409, 'bot_already_running', 'A meeting bot is already running for this session.'); }
   if (session.status !== 'draft' || session.audio_bytes > 0) throw new BotError(409, 'session_in_use', 'Create a fresh session for this meeting bot.');
   const at = args.scheduled_at === undefined ? now : typeof args.scheduled_at === 'string' ? Date.parse(args.scheduled_at) : NaN;
   if (!Number.isFinite(at) || at < now - 60_000 || at > now + BOT_SCHEDULE_MAX_MS) throw new BotError(400, 'invalid_schedule', 'Choose a start time within the next seven days.');
-  if (!botConfigured(env,parsed.platform) || !await botMemberEnabled(env,user)) throw new BotError(503, 'bot_unavailable', 'The meeting bot is not set up here.');
+  if (!botConfigured(env) || !await botMemberEnabled(env,user)) throw new BotError(503, 'bot_unavailable', 'The meeting bot is not set up here.');
   const cost = env.MEETING_BOT === 'canary' ? 2232 : Number(env.MEETING_BOT_COST_MICROUSD_PER_MINUTE);
   const multiplier=await memberChargeMultiplier(env,user.id);
   const rate = botRate(cost,multiplier), limit = botLimit(user), uid = crypto.randomUUID(), scheduled = Math.max(at, now);

@@ -198,3 +198,14 @@ provider-scoped consent, replay/lease checks, authored failures and partial
 audio cleanup are owned here; the Business chat's interviewee-YES rule stays
 in `consent.ts`. The seven-day capture retention is Axal's rule. D867 records
 the call study, limits, lifecycle and owner-only live follow-up.
+
+## Telegram source changes (D866 §4, #2618)
+
+`telegramSource.ts` applies the owner's option A to assigned Business chats.
+Migration 533 preserves the pending message hash as a final segment's
+`source_ref`. Edits replace the passage and withdraw its pending suggestions;
+deletions leave a neutral marker and annotate decided citations. Decisions
+stay, other providers keep their current rule, and late AI results cannot
+restore changed source text. See D866 §4 for queue, retention and rollout
+bounds. `threads.ts` retains pending-message edits/deletions and dispatches
+this assigned-chat exception.

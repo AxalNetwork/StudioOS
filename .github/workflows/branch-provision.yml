@@ -187,11 +187,11 @@ jobs:
           args=(d1 create "studioos-${BRANCH}")
           [[ "$D1_JURISDICTION" != none ]] && args+=(--jurisdiction "$D1_JURISDICTION")
           [[ "$LOCATION_HINT" != none ]] && args+=(--location "$LOCATION_HINT")
-          npx --yes wrangler@4.149.0 "${args[@]}" 2>&1 | tee d1.log || {
+          npx --yes wrangler@4.131.0 "${args[@]}" 2>&1 | tee d1.log || {
             grep -qi 'already exists' d1.log \
               || { echo "::error::d1 create failed — see above"; exit 1; }
             echo "::notice::studioos-${BRANCH} already exists; reusing it"
-            npx --yes wrangler@4.149.0 d1 info "studioos-${BRANCH}" --json > d1.log
+            npx --yes wrangler@4.131.0 d1 info "studioos-${BRANCH}" --json > d1.log
           }
           id=$(grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' d1.log | head -n 1)
           [[ -n "$id" ]] || { echo "::error::could not read the new database id from wrangler's output"; exit 1; }
@@ -202,7 +202,7 @@ jobs:
           set -o pipefail
           for binding in TOKENS RATE_LIMITS; do
             title="studioos-${BRANCH}-$(echo "$binding" | tr '[:upper:]' '[:lower:]')"
-            npx --yes wrangler@4.149.0 kv namespace create "$title" 2>&1 | tee "kv-${binding}.log" || {
+            npx --yes wrangler@4.131.0 kv namespace create "$title" 2>&1 | tee "kv-${binding}.log" || {
               grep -qi 'already exists' "kv-${binding}.log" \
                 || { echo "::error::kv namespace create failed for ${binding}"; exit 1; }
             }
@@ -218,14 +218,14 @@ jobs:
           for suffix in files publications backups; do
             args=(r2 bucket create "studioos-${BRANCH}-${suffix}")
             [[ "$D1_JURISDICTION" != none ]] && args+=(--jurisdiction "$D1_JURISDICTION")
-            tolerate npx --yes wrangler@4.149.0 "${args[@]}" \
+            tolerate npx --yes wrangler@4.131.0 "${args[@]}" \
               || { echo "::error::r2 bucket create failed for ${suffix}"; exit 1; }
           done
           for q in "studioos-${BRANCH}-job-queue" "studioos-${BRANCH}-job-queue-dlq"; do
-            tolerate npx --yes wrangler@4.149.0 queues create "$q" \
+            tolerate npx --yes wrangler@4.131.0 queues create "$q" \
               || { echo "::error::queues create failed for ${q}"; exit 1; }
           done
-          tolerate npx --yes wrangler@4.149.0 vectorize create "axal-search-${BRANCH}" \
+          tolerate npx --yes wrangler@4.131.0 vectorize create "axal-search-${BRANCH}" \
             --dimensions 768 --metric cosine \
             || { echo "::error::vectorize create failed"; exit 1; }
 
@@ -244,9 +244,6 @@ jobs:
       # Migration 207 (the single super-admin holder) sits below the cutoff and
       # is therefore MARKED, NEVER EXECUTED — a branch gets no super_admins
       # row, which is exactly right (D106).
-      - name: Build meeting bot image before branch migrations
-        run: node scripts/preflight-meeting-bot-deploy.mjs
-
       - name: Build the database from the baseline
         run: |
           node scripts/migrate-d1.mjs --branch "$BRANCH" --bootstrap
@@ -268,7 +265,7 @@ jobs:
           HQ_RPC_SECRET: ${{ secrets.HQ_RPC_SECRET }}
         run: |
           set -o pipefail
-          put() { printf '%s' "$2" | npx --yes wrangler@4.149.0 secret put "$1" \
+          put() { printf '%s' "$2" | npx --yes wrangler@4.131.0 secret put "$1" \
             --config "wrangler.branch.${BRANCH}.toml" > /dev/null; }
           # A per-deployment JWT secret: a session minted on one branch must
           # not verify on another (D.4).
@@ -336,7 +333,7 @@ jobs:
           set -o pipefail
           [[ "$BRANCH" =~ ^[a-z][a-z0-9-]{1,15}$ && "$BRANCH" != hq ]] || { echo "::error::bad branch code"; exit 1; }
           [[ "$RPC_SECRET_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::RPC_SECRET_SHA256 is not a sha256 digest"; exit 1; }
-          npx --yes wrangler@4.149.0 d1 execute studioos-db --config wrangler.toml --remote \
+          npx --yes wrangler@4.131.0 d1 execute studioos-db --config wrangler.toml --remote \
             --command "UPDATE licence_deployments SET rpc_secret_hash = '${RPC_SECRET_SHA256}', updated_at = datetime('now') WHERE code = '${BRANCH}'"
 
       # ── the one account that exists on a new branch ──────────────────────
@@ -355,7 +352,7 @@ jobs:
           set -o pipefail
           deployed=0
           for attempt in 1 2 3; do
-            if npx --yes wrangler@4.149.0 deploy --config "wrangler.branch.${BRANCH}.toml" 2>&1 | tee deploy.log; then
+            if npx --yes wrangler@4.131.0 deploy --config "wrangler.branch.${BRANCH}.toml" 2>&1 | tee deploy.log; then
               deployed=1
               break
             fi

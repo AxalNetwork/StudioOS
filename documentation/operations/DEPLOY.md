@@ -22,16 +22,12 @@ npm expands that into three scripts, in order:
 
 | Hook         | Command                                                                                     |
 | ------------ | ------------------------------------------------------------------------------------------- |
-| `predeploy`  | `node scripts/preflight-meeting-bot-deploy.mjs && node scripts/migrate-d1.mjs --remote` |
+| `predeploy`  | `node scripts/migrate-d1.mjs --remote`                                                        |
 | `deploy`     | `npm run build && cd cloudflare-worker && npx wrangler deploy --config ../wrangler.toml --env production` |
 | `postdeploy` | `node scripts/check-spa-live.mjs`                                                             |
 
-So one invocation builds the meeting-bot runtime image, applies pending D1
-migrations, builds the frontend into `docs/`, uploads the Worker and its image,
-and then probes the live site. Docker with linux/amd64 build support is required.
-An image build failure stops before migrations. Containers access and the
-environment-specific secret prerequisites are in
-`documentation/architecture/PRODUCTION.md`.
+So one invocation applies pending D1 migrations, builds the frontend into
+`docs/`, uploads the worker, and then probes the live site.
 
 A failing `post`-script propagates to the parent `npm run`. **`npm run deploy`
 exiting 0 is therefore real evidence that the live smoke check passed** — not
@@ -69,7 +65,7 @@ workstation holds wrangler credentials:
 
 | Workflow | When | What it runs |
 | --- | --- | --- |
-| `cloudflare-worker-deploy.yml` | every push to `main` | real meeting-bot image build, then the runner, **before** `wrangler deploy` — a failure fails the deploy |
+| `cloudflare-worker-deploy.yml` | every push to `main` | the runner, **before** `wrangler deploy` — a failure fails the deploy |
 | `d1-migrate.yml` | by hand, from the Actions tab | one of `dry-run`, `adopt-and-baseline`, `verify-marked`, `apply`, each bracketed by a read-only plan |
 
 The token behind `CLOUDFLARE_API_TOKEN` therefore needs **D1:Edit** as well as

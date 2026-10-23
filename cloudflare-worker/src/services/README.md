@@ -340,13 +340,6 @@ D886 B7: `meetingBotParticipants.ts` decrypts the latest roster for the separate
 creator-only participants read. It projects display names/times only, excludes
 the bot and emails, and never turns a failed read into an empty list.
 
-D886 B8 (#2586): `meetingBotRuntime.ts` resolves the private container adapter
-and derives a run-scoped command/callback key. B1 retains all authorization,
-consent, status and paid-lease ownership. `meetingBotZoom.ts` mints short-lived
-SDK/OBF material for the stored run's founder and meeting only; its ingress is
-signed, non-cacheable and durably throttled by B1. Long-lived credentials stay
-in the Worker. See PRODUCTION.md for secret names and deployment gates.
-
 Event responses use `eventsCommon.ts` to withhold online and hybrid join URLs
 unless a manager or a confirmed seat with settled payment reads them. Public
 calendar exports and invitation attachments use the same public projection.

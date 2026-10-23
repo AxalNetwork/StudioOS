@@ -338,7 +338,7 @@ for (const [name, before, after, verify] of [
   ['store translation in plaintext', "await encryptColumn(env, SEGMENT_TABLE, 'translated_text', row.id, translated)", 'translated', (translate: typeof translateSession) => translationPath(structureSession, translate)],
   ['drop ledger reference', 'target, r.usage?.model || model, reservation, row.id', 'target, r.usage?.model || model, null, row.id', (translate: typeof translateSession) => translationPath(structureSession, translate)],
   ['turn failure into success', "translation_status = 'pending', translation_attempts", "translation_status = 'done', translation_attempts", translationFailure],
-  ['mark refusal as undetected', 'out.pending += 1;', 'out.undetected += 1;', translationRefusal],
+  ['mark refusal as undetected', 'out.pending += Number(written.meta?.changes ?? 0);', 'out.undetected += Number(written.meta?.changes ?? 0);', translationRefusal],
 ] as const) test('D865 mutation: ' + name, async () => {
   await verify(translateSession);
   const m = await variant(translationSource, before, after);

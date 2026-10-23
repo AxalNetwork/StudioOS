@@ -425,11 +425,8 @@ export interface Env {
   // when these are undefined.
   MEETING_BOT?: string;
   MEETING_BOT_SECRET?: string;
-  MEETING_BOT_ZOOM_CLIENT_ID?: string;
-  MEETING_BOT_ZOOM_CLIENT_SECRET?: string;
   MEETING_BOT_COST_MICROUSD_PER_MINUTE?: string;
   MEETING_BOT_RUN?: DurableObjectNamespace;
-  MEETING_BOT_CONTAINER?: DurableObjectNamespace;
   MEETING_BOT_RUNTIME?: import('./services/meetingBots').BotRuntime;
   PIPELINE_ROOM?: DurableObjectNamespace;
   ONBOARDING_CHAT?: DurableObjectNamespace;
