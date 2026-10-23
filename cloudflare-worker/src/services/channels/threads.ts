@@ -564,12 +564,17 @@ export async function applyDelete(env: Env, conn: ChannelConnection, del: Inboun
   const thread = await threadForChat(env, conn, del.externalChatId);
   if (!thread) return 0;
   const { changeTelegramSource } = await import('./telegramSource');
-  let removed = conn.provider === 'telegram' && thread.status === 'assigned'
-    ? await changeTelegramSource(env, conn, thread, del.externalMessageIds.slice(0, 100), null) : 0;
+  let removed = 0;
+  // Remove voice placeholders first. An in-flight append either committed
+  // before this deletion (and the source lookup below sees it), or loses its
+  // atomic placeholder guard and stores only the transcription receipt.
   for (const id of del.externalMessageIds.slice(0, 100)) {
     const res = await env.DB.prepare(`DELETE FROM channel_thread_messages WHERE thread_id = ? AND external_message_id = ?`)
       .bind(thread.id, await refKey(thread.provider, id)).run();
     removed += Number(res.meta?.changes ?? 0);
+  }
+  if (conn.provider === 'telegram' && thread.status === 'assigned') {
+    removed += await changeTelegramSource(env, conn, thread, del.externalMessageIds.slice(0, 100), null);
   }
   if (removed) {
     await env.DB.prepare(

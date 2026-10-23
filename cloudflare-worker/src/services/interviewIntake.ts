@@ -194,6 +194,8 @@ export const TRANSCRIPT_MIRROR_MAX_BYTES = 1_000_000;
 export async function appendSegments(
   env: Env, userId: number, sessionId: number, segments: StoredSegment[], provider: ChannelProvider,
   alongside: D1PreparedStatement[] = [],
+  /** A Telegram voice placeholder must still exist inside the append's batch. */
+  sourceGuard?: { messageId: number; sourceRef: string },
 ): Promise<number> {
   const clean = segments
     .map((s) => ({ ...s, text: String(s.text ?? '').trim() }))
@@ -205,25 +207,31 @@ export async function appendSegments(
   }
   const model = intakeModel(provider);
   const plain = clean.map((s) => s.text).join('\n');
+  // Static SQL only; the source identifiers remain bound. The placeholder is
+  // removed by `alongside` after these writes, in this same atomic batch.
+  const guard = sourceGuard ? ` AND EXISTS (
+    SELECT 1 FROM channel_thread_messages m JOIN channel_threads t ON t.id = m.thread_id
+    WHERE m.id = ? AND m.external_message_id = ? AND t.session_id = ? AND t.user_id = ? AND t.provider = 'telegram')` : '';
+  const guardArgs = sourceGuard ? [sourceGuard.messageId, sourceGuard.sourceRef, session.id, userId] : [];
   const results = await env.DB.batch([
     ...clean.map((s) => provider === 'telegram' && /^[a-f0-9]{64}$/.test(s.source_ref ?? '') ? env.DB.prepare(
       `INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, speaker_raw, text, model, source_ref)
-       VALUES (?, 'final', ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(session.id, s.start_ms, s.end_ms, s.speaker_label, s.speaker_raw, s.text, model, s.source_ref) : env.DB.prepare(
+       SELECT ?, 'final', ?, ?, ?, ?, ?, ?, ? WHERE 1 = 1${guard}`,
+    ).bind(session.id, s.start_ms, s.end_ms, s.speaker_label, s.speaker_raw, s.text, model, s.source_ref, ...guardArgs) : env.DB.prepare(
       `INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, speaker_raw, text, model)
        VALUES (?, 'final', ?, ?, ?, ?, ?, ?)`,
     ).bind(session.id, s.start_ms, s.end_ms, s.speaker_label, s.speaker_raw, s.text, model)),
     // The first move to transcribed, claimed inside the write: it changes a
     // row only for the one batch that finds the session still a draft.
     env.DB.prepare(
-      `UPDATE interview_sessions SET status = 'transcribed' WHERE id = ? AND status = 'draft'`,
-    ).bind(session.id),
+      `UPDATE interview_sessions SET status = 'transcribed' WHERE id = ? AND status = 'draft'${guard}`,
+    ).bind(session.id, ...guardArgs),
     env.DB.prepare(
       `UPDATE interview_sessions
           SET status = CASE WHEN status IN ('draft', 'structured') THEN 'transcribed' ELSE status END,
               final_model = ?, updated_at = datetime('now')
-        WHERE id = ?`,
-    ).bind(model, session.id),
+        WHERE id = ?${guard}`,
+    ).bind(model, session.id, ...guardArgs),
     env.DB.prepare(
       `UPDATE discovery_interviews
           SET transcript = CASE
@@ -231,12 +239,12 @@ export async function appendSegments(
                 WHEN transcript IS NULL OR transcript = '' THEN ?
                 ELSE transcript || char(10) || ? END,
               transcribed_at = datetime('now'), transcribed_by_model = ?, updated_at = datetime('now')
-        WHERE id = ?`,
-    ).bind(plain, TRANSCRIPT_MIRROR_MAX_BYTES, plain, plain, model, session.interview_id),
+        WHERE id = ?${guard}`,
+    ).bind(plain, TRANSCRIPT_MIRROR_MAX_BYTES, plain, plain, model, session.interview_id, ...guardArgs),
     ...alongside,
   ]);
   if (Number(results[clean.length]?.meta?.changes ?? 0) > 0) await markHeld(env, session, userId);
-  return clean.length;
+  return results.slice(0, clean.length).reduce((n, result) => n + Number(result.meta?.changes ?? 0), 0);
 }
 
 /**
