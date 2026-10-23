@@ -125,6 +125,18 @@ export async function ndaActive(env: Env, founderUserId: number, investorUserId:
   return !!row;
 }
 
+/** The NDA belongs to the venture founder, independently of who shared it. */
+export async function projectNdaActive(env: Env, projectId: number, investorUserId: number): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 FROM pairwise_ndas n
+       JOIN users owner ON owner.id = n.party_a_user_id
+       JOIN projects p ON p.founder_id = owner.founder_id
+      WHERE p.id = ? AND n.party_b_user_id = ? AND n.status = 'active'
+        AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))`,
+  ).bind(projectId, investorUserId).first();
+  return !!row;
+}
+
 export async function logAccess(env: Env, projectId: number, userId: number, action: string, fileId: number | null) {
   try {
     await env.DB.prepare(
@@ -235,7 +247,7 @@ r.get('/shared/:projectUid', async (c) => {
     const grant = project ? await activeGrant(c.env, project.id, user.id) : null;
     if (!project || !grant) return c.json({ detail: 'Data room not found' }, 404);
 
-    const nda = await ndaActive(c.env, grant.granted_by_user_id, user.id);
+    const nda = await projectNdaActive(c.env, project.id, user.id);
     const folders = await c.env.DB.prepare(
       `SELECT uid, name, parent_id, id, visibility, display_order
          FROM data_room_folders WHERE project_id = ? ORDER BY display_order, name`,
@@ -296,7 +308,7 @@ r.post('/shared/:projectUid/files/:uid/download', async (c) => {
 
     // The gate is re-checked HERE, not inherited from the listing. A uid
     // captured while an NDA was live must stop working when it lapses.
-    if (file.visibility === 'nda' && !(await ndaActive(c.env, grant.granted_by_user_id, user.id))) {
+    if (file.visibility === 'nda' && !(await projectNdaActive(c.env, project.id, user.id))) {
       // Logged before the refusal (D374): the founder's activity log filters
       // Blocked, and an attempt nobody recorded is one they cannot see.
       await logAccess(c.env, project.id, user.id, 'blocked', file.id);
@@ -340,9 +352,10 @@ r.get('/:projectUid', async (c) => {
     const grants = await c.env.DB.prepare(
       `SELECT g.uid, g.status, g.created_at, g.expires_at,
               u.email AS investor_email, u.name AS investor_name,
+              granter.name AS granted_by_name, granter.role AS granted_by_role,
               EXISTS (
                 SELECT 1 FROM pairwise_ndas n
-                 WHERE n.party_a_user_id = g.granted_by_user_id
+                 WHERE n.party_a_user_id IN (SELECT owner.id FROM users owner WHERE owner.founder_id = p.founder_id)
                    AND n.party_b_user_id = g.investor_user_id
                    AND n.status = 'active'
                    AND (n.valid_until IS NULL OR datetime(n.valid_until) > datetime('now'))
@@ -357,6 +370,8 @@ r.get('/:projectUid', async (c) => {
               ) AS committed
          FROM data_room_grants g
          JOIN users u ON u.id = g.investor_user_id
+         JOIN projects p ON p.id = g.project_id
+         LEFT JOIN users granter ON granter.id = g.granted_by_user_id
         WHERE g.project_id = ? ORDER BY g.created_at DESC`,
     ).bind(project.id).all<any>();
     const reportShares = await reportSharesOf(c.env, project.id);
@@ -778,12 +793,11 @@ r.post('/:projectUid/grants', async (c) => {
     if (!email) return c.json({ detail: 'email is required' }, 400);
 
     // Resolves to an EXISTING account. No invitation is sent and no row is
-    // written for an unknown address — the UI says so rather than implying an
-    // invite flow that does not exist.
+    // written for an unknown address. Both outcomes return the same response.
     const investor = await c.env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = ?')
       .bind(email).first<{ id: number }>();
-    if (!investor) return c.json({ detail: 'No account with that address' }, 404);
-    if (investor.id === user.id) return c.json({ detail: 'You already own this room' }, 400);
+    if (!investor) return c.json({ ok: true }, 201);
+    if (investor.id === user.id) return c.json({ ok: true }, 201);
 
     const uid = newUid();
     // Re-granting a revoked investor reactivates the existing row rather than

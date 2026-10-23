@@ -188,11 +188,20 @@ no publishable image output and contains no bot runtime.
 
 `release-draft.mjs` keeps one draft GitHub release ready for the owner to
 publish (`.github/workflows/release-draft.yml`, on every push to `main`). It
-reads the newest published release, names the next tag with
-`frontend/src/lib/release.js`'s rule (v0.1.0-alpha first, then a minor bump per
-release at the current stage), asks GitHub to generate the notes since that
-release, and creates or updates the single draft as a pre-release while the
-stage is alpha or beta. `--dry-run` prints the plan and writes nothing.
-`lib/releaseDraft.test.mjs` pins the rules. Publishing stays the owner's:
-`release-published.yml` then redeploys `main`, and the deploy builds the new tag
-into `VITE_AXAL_RELEASE` for the badge.
+generates GitHub's notes since the newest published release and creates or
+refreshes the draft, without publishing. `--dry-run` prints the plan and
+writes nothing. `lib/releaseDraft.test.mjs` pins the rules. Publishing stays
+the owner's: `release-published.yml` then redeploys `main`, and the deploy
+builds the new tag into `VITE_AXAL_RELEASE` for the badge.
+
+`release-draft.mjs` reads all pages of published GitHub releases and uses
+`frontend/src/lib/release.js` to count distinct UTC months, Monday-start weeks
+and days with releases, including the current draft day. Empty periods add
+nothing; counts accumulate across years. Tags are plain `v1.4.15` values.
+Multiple historic publications on one day count once. The draft refreshes
+until publication; after publication that UTC day is frozen and subsequent
+runs make no release or tag writes. Later changes wait for another release
+day. Publishing remains manual; refresh an old draft before publishing it.
+`--dry-run` generates notes without writing a release. Legacy tags still
+parse for the badge and publication history. The generator fails on invalid
+publication dates instead of silently losing history.

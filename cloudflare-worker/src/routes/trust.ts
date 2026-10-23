@@ -612,12 +612,23 @@ trust.post('/sanctions/screen/:user_id', async (c) => {
     nationality: body?.nationality || corp?.registered_country || null,
   };
   if (!subject.full_legal_name) return c.json({ error: 'missing_subject_name' }, 400);
-  const { screenUser } = await import('../services/sanctions');
-  const result = await screenUser(c.env, userId, subject, {
-    admin_user_id: admin.id,
-    reason: body?.reason || 'admin_triggered',
-  });
-  return c.json(result);
+  const { screenUser, IncompleteSanctionsScreeningError } = await import('../services/sanctions');
+  try {
+    const result = await screenUser(c.env, userId, subject, {
+      admin_user_id: admin.id,
+      reason: body?.reason || 'admin_triggered',
+    });
+    return c.json(result);
+  } catch (e) {
+    if (e instanceof IncompleteSanctionsScreeningError) {
+      return refuse(c, 503, {
+        code: 'screening_incomplete',
+        message: `Screening not completed: ${e.missingLists.join(', ')} sanctions lists are unavailable or empty. No result was recorded. Try again later.`,
+        extra: { code: 'screening_incomplete', missing_lists: e.missingLists },
+      });
+    }
+    throw e;
+  }
 });
 
 // ---------------------------------------------------------------------------

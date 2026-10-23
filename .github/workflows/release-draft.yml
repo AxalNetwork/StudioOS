@@ -1,7 +1,7 @@
 name: Release draft
 
 # Keeps ONE draft GitHub release ready for the owner to publish: the next tag
-# (v0.1.0-alpha first, then a minor bump per release at the current stage,
+# (cumulative active months.weeks.days, starting at v1.1.1,
 # frontend/src/lib/release.js) and GitHub's generated notes since the last
 # published release. Publishing stays the owner's; release-published.yml then
 # redeploys so the version beside the logo follows.
