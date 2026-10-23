@@ -442,7 +442,7 @@ test('an invalid meeting link blocks Start; a valid one is sent with its provide
     assert.ok(m.text().includes('A Zoom link is on zoom.us.'));
     await m.type('record-link', 'https://acme.zoom.us/j/12345678');
     assert.equal(m.pr(m.by('record-start'))['aria-disabled'], undefined);
-    await m.click('record-start');
+    await m.click(m.by('record-device') ? 'record-device' : 'record-start');
     assert.equal(s.calls.open[0].call_provider, 'zoom');
     assert.equal(s.calls.open[0].meeting_url, 'https://acme.zoom.us/j/12345678');
   } finally { await m.unmount(); }
@@ -827,7 +827,7 @@ test('#1588 attach by link: a video Start on a connected Zoom also attaches the 
       await m.click('record-consents-verbal');
       if (provider) await m.type('record-provider', provider);
       await m.type('record-link', link);
-      await m.click('record-start');
+      await m.click(m.by('record-device') ? 'record-device' : 'record-start');
     } finally { await m.unmount(); }
     return { begun, attached, s };
   };
@@ -858,7 +858,7 @@ test('#1588 r2 a Start that becomes busy while its session is being made is refu
   try {
     await m.type('record-name', 'Dana');
     await m.click('record-consents-verbal');
-    await m.click('record-start');
+    await m.click(m.by('record-device') ? 'record-device' : 'record-start');
     assert.deepEqual(log, ['prepare', 'release'], 'begin is never called');
     assert.match(m.text(), /You are already recording another session\./);
     assert.equal(m.pr(m.by('record-error-live')).href, '/validate/record/live?session=88');

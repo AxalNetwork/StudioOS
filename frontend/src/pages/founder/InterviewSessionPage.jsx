@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
+import MeetingBotPanel from './MeetingBotPanel.jsx';
 import { interviewSessionsApi } from '../../lib/api/interviewSessions.js';
 import { railPressHeaders } from '../../lib/railPage.js';
 import { useActiveRecording } from '../../contexts/ActiveRecordingContext';
@@ -89,7 +90,7 @@ export function TranscriptReview({ segments, intervieweeName, onAssign, time = f
       {rows.map((s) => (
         <li key={s.id} id={`seg-${s.id}`} className="scroll-mt-4 text-[13px]">
           <div className="mb-1 flex flex-wrap items-center gap-1">
-            {SPEAKER_CHOICES(intervieweeName).map((label) => (
+            {[...new Set([s.speaker_label, ...SPEAKER_CHOICES(intervieweeName)].filter(Boolean))].map((label) => (
               <button key={label} type="button" data-testid={`speaker-${s.id}-${label}`} aria-pressed={s.speaker_label === label}
                 onClick={() => s.speaker_label !== label && onAssign?.(s.id, label)}
                 className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${s.speaker_label === label ? 'border-violet-700 bg-violet-700 text-white' : 'border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300'}`}>{label}</button>
@@ -114,7 +115,7 @@ export function SessionRail({ session, models, receipt }) {
   return (
     <aside className="space-y-4 text-[12px]" data-testid="session-rail">
       {/* D684: a Zoom or Meet session's words are the provider's transcript; no model of ours made them. */}
-      {AUDIO.has(session.channel) && !channelOf(session) && (
+      {AUDIO.has(session.channel) && !channelOf(session) && session.submitted_via !== 'meeting_bot' && (
         <section>
           <h3 className="mb-1 text-[11px] font-bold uppercase text-axal-faint">Speech to text</h3>
           <p>Live: <strong>{session.live_model ? (live?.label || session.live_model) : 'Off'}</strong></p>
@@ -444,7 +445,8 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
     setData((d) => ({ ...d, segments: d.segments.map((s) => (s.id === segId ? { ...s, speaker_label: label } : s)) }));
   };
 
-  const recording = ['recording', 'paused'].includes(session.status);
+  const botSession = session.submitted_via === 'meeting_bot';
+  const recording = !botSession && ['recording', 'paused'].includes(session.status);
 
   const reviewFirst = openingStep(session) === 'review';
   // D684: a channel session still waiting for its messages or its call's transcript.
@@ -495,7 +497,8 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
             onDiscard={async () => { await api.remove(session.id); navigate(`/validate/customer-research?project_id=${session.project_id}`, { replace: true }); }} />
         )}
         <ChannelVoiceNotes api={api} session={session} chunks={chunks} consent={data.channel_consent} />
-        {session.status === 'draft' && (waiting
+        {botSession && <MeetingBotPanel sessionId={session.id} api={api} onStatus={load} />}
+        {session.status === 'draft' && !botSession && (waiting
           ? <ChannelSessionPanel session={session} onChanged={() => { load(); loadReceipt(); }} />
           : <StartPanel session={session} error={startError} liveHref={startLive} busy={busy} onStart={start} onConsent={consent} />)}
         {recording && (
@@ -530,7 +533,7 @@ export default function InterviewSessionPage({ api = interviewSessionsApi }) {
         {['stopped', 'transcribed', 'structured', 'reviewed'].includes(session.status) && (
           <section className="space-y-3">
             <h2 className="text-[16px] font-bold">Transcript</h2>
-            {session.status === 'stopped' && AUDIO.has(session.channel) && (
+            {session.status === 'stopped' && AUDIO.has(session.channel) && !botSession && (
               <button type="button" onClick={async () => { setTranscribing(true); try { await api.transcribe(session.id, session.final_model, railPressHeaders('transcribe:recording')); } catch (e) { setError(e?.message); } setTranscribing(false); load(); loadReceipt(); }} className="rounded-md bg-violet-700 px-3 py-1.5 text-[12px] font-bold text-white">Transcribe</button>
             )}
             {/* D668: a session an assistant submitted opens on the review step, above its transcript. */}
