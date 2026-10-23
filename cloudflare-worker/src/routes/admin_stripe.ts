@@ -50,9 +50,13 @@ const REQUIRED_EVENTS: string[] = [
   'customer.subscription.updated',
   'customer.subscription.deleted',
   'payment_intent.succeeded',
+  'payment_intent.payment_failed',
   'invoice.finalized',
   'invoice.paid',
   'charge.succeeded',
+  'charge.refunded',
+  'charge.dispute.created',
+  'charge.dispute.closed',
 ];
 
 function webhookUrl(env: Env): string {
