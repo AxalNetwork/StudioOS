@@ -11,6 +11,11 @@
 # migration 302 — a whole-commit allowlist entry would hide a real finding
 # in any of those too.
 9080925048929ef222056a0e469c32d8207f86dc:cloudflare-worker/test/webpush_d335.test.ts:generic-api-key:33
+# D886 B8 (#2586): the first runtime factory test used a plainly synthetic
+# signing string, only with an injected in-memory transport. It was never a
+# credential. The test now generates a fresh random key. Pin only this finding
+# in the already-pushed commit, without excluding the file or other findings.
+7d5b835f59372243eeafc8c5e957a7df1eaece8b:meeting-bot/test/runtime_adapters.test.ts:generic-api-key:8
 # Synthetic test secret used only by the ticket creation/recovery fixture.
 4335b06fcf2231342ebe76e853398142586fdc03:cloudflare-worker/test/ticket_creation_recovery.test.ts:generic-api-key:12
 # D482 (#1022): the synthetic JWT signing string in the D482 route test's first

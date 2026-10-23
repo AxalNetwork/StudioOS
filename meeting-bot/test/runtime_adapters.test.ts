@@ -1,11 +1,11 @@
 /** B8 adapter selection/credential transport without browsers, native code or network. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { runtimeAdapter } from '../src/runtimeAdapters.ts';
 import type { RuntimeAdapterContext } from '../src/runtime.ts';
 import type { ZoomSdkBridge } from '../src/zoomAdapter.ts';
-const uid='00000000-0000-4000-8000-000000000001',secret='synthetic-private-key-012345678901234567890';
+const uid='00000000-0000-4000-8000-000000000001',secret=randomBytes(32).toString('hex');
 const transport={status:async()=>{},heartbeat:async()=>Date.now()+120_000,events:async()=>{},putChunk:async()=>{}};
 const context:RuntimeAdapterContext={uid,secret,callbackOrigin:'https://worker.example.test',transport};
 test('packaged browser selection includes Teams and Meet and closes each owned browser',async()=>{

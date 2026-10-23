@@ -96,6 +96,7 @@ export const BINDINGS: readonly BindingSpec[] = [
   { name: 'JOB_QUEUE', kind: 'Queue', hq: 'studioos-job-queue', branch: (c) => branchResourceNames(c).queue, shared: false },
   { name: 'PIPELINE_ROOM', kind: 'Durable Object namespace', hq: 'PipelineRoom', branch: () => 'PipelineRoom', shared: false },
   { name: 'MEETING_BOT_RUN', kind: 'Durable Object namespace', hq: 'MeetingBotRun', branch: () => 'MeetingBotRun', shared: false },
+  { name: 'MEETING_BOT_CONTAINER', kind: 'Durable Object namespace', hq: 'MeetingBotContainer', branch: () => 'MeetingBotContainer', shared: false },
   { name: 'ONBOARDING_CHAT', kind: 'Durable Object namespace', hq: 'OnboardingChat', branch: () => 'OnboardingChat', shared: false },
   { name: 'VECTORIZE', kind: 'Vectorize index', hq: 'axal-search', branch: (c) => branchResourceNames(c).vectorize, shared: false },
   { name: 'ANALYTICS', kind: 'Analytics Engine dataset', hq: 'studioos_metrics', branch: () => 'studioos_metrics', shared: true },

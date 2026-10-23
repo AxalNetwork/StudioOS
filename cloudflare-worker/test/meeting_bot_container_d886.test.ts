@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { stripTypeScriptTypes } from 'node:module';
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { MeetingBotContainer } from '../src/durable-objects/meeting-bot-container.ts';
 import { meetingBotRuntime, runtimeKey, runtimeHeaders } from '../src/services/meetingBotRuntime.ts';
 import { validBotCallback } from '../src/durable-objects/meeting-bot-run.ts';
@@ -13,7 +13,7 @@ import { FakeAdapter } from '../../meeting-bot/src/fakeAdapter.ts';
 import type { Env } from '../src/types.ts';
 
 const UID='00000000-0000-4000-8000-000000000001',OTHER='00000000-0000-4000-8000-000000000002';
-const SECRET='synthetic-container-secret-01234567890123456789';
+const SECRET=randomBytes(32).toString('hex');
 test('B8 incomplete container/Zoom configuration is refused before dispatch can reserve a budget',()=>{
   const env={MEETING_BOT:'on',MEETING_BOT_SECRET:SECRET,APP_URL:'https://worker.example.test',MEETING_BOT_RUN:{},MEETING_BOT_CONTAINER:{}} as Env;
   assert.equal(botConfigured(env,'google_meet'),true);assert.equal(botConfigured(env,'teams'),true);assert.equal(botConfigured(env,'zoom'),false);
