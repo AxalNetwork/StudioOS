@@ -186,3 +186,15 @@ session) and `pending_suggestions` (only pending rows on that member's session).
 WhatsApp voice ingestion and its `voice_note_added` handoff (#1935, PR #2063)
 are inherited from main. Telegram's corresponding audio work remains on #1978;
 the combined voice follow-up is not part of this text PR.
+
+## D867 private Telegram forwards
+
+`telegramCapture.ts` receives the existing webhook's private media/answer
+events behind `TELEGRAM_CAPTURE` (off). Proven linked senders can collect
+up to 20 audio items for 30 minutes, attest via an ordinary one-time reply
+keyboard, then import through the recorder's `putChunk`/`finishSession` path.
+Before YES only UID-bound encrypted media references are held. Sender binding,
+provider-scoped consent, replay/lease checks, authored failures and partial
+audio cleanup are owned here; the Business chat's interviewee-YES rule stays
+in `consent.ts`. The seven-day capture retention is Axal's rule. D867 records
+the call study, limits, lifecycle and owner-only live follow-up.
