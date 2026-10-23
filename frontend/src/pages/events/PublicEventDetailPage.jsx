@@ -29,6 +29,22 @@ function formatTime(iso) {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
 }
 
+export function renderEventLocation(event) {
+  return (
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-slate-400" />
+                    {event.location_kind === 'virtual' ? 'Virtual' : (event.location_text || 'TBA')}
+                    {event.location_url ? (
+                      <a href={event.location_url} target="_blank" rel="noopener noreferrer" className="text-violet-700 dark:text-violet-300 hover:underline ml-1">
+                        Join link
+                      </a>
+                    ) : event.location_kind !== 'physical' && event.location_kind !== 'in_person' ? (
+                      <span className="ml-1">Join link sent to ticket holders</span>
+                    ) : null}
+                  </div>
+  );
+}
+
 export function renderAgenda(items) {
   if (!Array.isArray(items)) return <p>Unreadable — agenda response is incomplete.</p>;
   if (items.length === 0) return <p>No agenda items yet.</p>;
@@ -263,15 +279,7 @@ export default function PublicEventDetailPage() {
                     {formatTime(event.starts_at)}
                     {event.ends_at ? ` — ${formatTime(event.ends_at)}` : ''}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-slate-400" />
-                    {event.location_kind === 'virtual' ? 'Virtual' : (event.location_text || 'TBA')}
-                    {event.location_url ? (
-                      <a href={event.location_url} target="_blank" rel="noopener noreferrer" className="text-violet-700 dark:text-violet-300 hover:underline ml-1">
-                        Join link
-                      </a>
-                    ) : null}
-                  </div>
+                  {renderEventLocation(event)}
                   {event.capacity != null ? (
                     <div className="flex items-center gap-2">
                       <Users className="w-4 h-4 text-slate-400" />

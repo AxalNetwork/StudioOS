@@ -37,11 +37,14 @@ function fixture(route = events) {
 async function ownTickets(route = events) {
   const f = fixture(route);
   try {
+    const joinUrl = 'https://meet.example.test/own-ticket-room';
+    f.db.prepare("UPDATE events SET location_kind='virtual',location_url=? WHERE id=1").run(joinUrl);
     for (const [user, code, comp] of [[2,'fixture-a-code',true],[3,'fixture-b-code',false]] as const) {
       const response = await f.request('/', user);
       assert.equal(response.status, 200);
       const body: any = await response.json();
       assert.equal(body.attending.length, 1);
+      assert.equal(body.attending[0].location_url, joinUrl);
       assert.deepEqual([body.attending[0].status, body.attending[0].reg_status, body.attending[0].checkin_code, body.attending[0].comp], ['published','confirmed',code,comp]);
       assert.equal(JSON.stringify(body).includes(user === 2 ? 'fixture-b-code' : 'fixture-a-code'), false);
     }
@@ -52,9 +55,13 @@ async function ownTickets(route = events) {
     // A cancelled seat can be registered again on the waitlist, retaining its
     // historical check-in row. Listing must mirror registration's no-code rule.
     f.db.exec("UPDATE event_registrations SET status='waitlisted' WHERE id=10");
-    assert.equal((await (await f.request('/')).json() as any).attending[0]?.checkin_code, null);
+    const waitlisted: any = await (await f.request('/')).json();
+    assert.equal(waitlisted.attending[0]?.checkin_code, null);
+    assert.equal(waitlisted.attending[0]?.location_url, null);
     f.db.exec("UPDATE event_registrations SET status='confirmed',payment_status='pending' WHERE id=10");
-    assert.equal((await (await f.request('/')).json() as any).attending[0]?.checkin_code, null);
+    const pending: any = await (await f.request('/')).json();
+    assert.equal(pending.attending[0]?.checkin_code, null);
+    assert.equal(pending.attending[0]?.location_url, null);
     f.db.exec("DELETE FROM event_checkins WHERE registration_id=10; UPDATE event_registrations SET status='waitlisted',waitlist_position=4,comp=0 WHERE id=10");
     const waiting: any = await (await f.request('/')).json();
     assert.equal(waiting.attending.length, 1);
@@ -98,6 +105,7 @@ async function load(source: string) {
 test('#2395: list assertions reject projection and ownership mutations, then pass restored code', async () => {
   const mutants = [
     ['checkin_code: r.checkin_code ?? null', 'checkin_code: null'],
+    ['r.payment_status AS reg_payment_status', 'NULL AS reg_payment_status'],
     ['comp: r.comp === 1', 'comp: false'],
     ['reg_waitlist_position: r.reg_waitlist_position ?? null', 'reg_waitlist_position: null'],
     ['reg_status: r.reg_status', 'reg_status: r.status'],
@@ -122,7 +130,7 @@ test('#2395: calendar checks reject missing file, session and privacy gates, the
     ['return new Response(ics, {', "return new Response('', {"],
     ['if (u instanceof Response) return u;', 'if (u instanceof Response) return c.json({}, 200);'],
     ['if (!(await canViewEvent(c.env, event, u)))', 'if (false)'],
-    ['event: shapeEvent(event, { includePrivate: manage })', 'event: shapeEvent(event)'],
+    ['includePrivate: manage, includeJoinLink:', 'includePrivate: false, includeJoinLink:'],
   ]) {
     const inTail = tail.includes(before);
     assert.ok(inTail || head.includes(before), before);

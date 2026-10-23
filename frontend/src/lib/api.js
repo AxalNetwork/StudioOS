@@ -4653,7 +4653,9 @@ export const api = {
   googleCalStatus: () => request('/calendar/google/status'),
   googleCalConnect: ({ return_to, project_id } = {}) =>
     request(`/calendar/google/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}${project_id ? `&project_id=${encodeURIComponent(project_id)}` : ''}` : ''}`, { method: 'POST' }),
+  googleCalRemoveGmailAccess: () => request('/calendar/google/remove-gmail-access', { method: 'POST' }),
   googleCalDisconnect: () => request('/calendar/google', { method: 'DELETE' }),
+  googleCalForceDisconnect: () => request('/calendar/google/force-disconnect', { method: 'POST' }),
   googleCalSync: () => request('/calendar/google/sync', { method: 'POST' }),
 
   // Microsoft 365 / Outlook Calendar sync

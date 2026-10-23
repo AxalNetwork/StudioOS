@@ -33,6 +33,7 @@ import type { Env } from '../types';
 import { run as aiRun, type RailContext } from './aiRouter';
 import { AI_SURFACE } from './aiSurfaces';
 import { normPhrase } from './painGroups';
+import { SOURCE_DELETED_TEXT } from './interviewSessions';
 import type { ModuleSlug } from './cycleValidate';
 import { FINDING_KINDS, norm, parseAmount, type FindingKind } from './interviewFindings';
 
@@ -683,7 +684,8 @@ export function toSegments(rows: readonly SegmentRow[]): Segment[] {
     if (end <= start) end = start + 1;
     out.push({ start, end, speaker: r.speaker_label || null, text, ...(Number.isSafeInteger(r.id) ? { id: r.id as number } : {}) });
   }
-  return out;
+  // Compute spans before hiding tombstones: later citations keep their offsets.
+  return out.filter((s) => s.text !== SOURCE_DELETED_TEXT);
 }
 
 export type AskOutcome =

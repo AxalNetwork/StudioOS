@@ -20,6 +20,7 @@ import { requireAuth } from '../auth';
 import {
   googleOAuthAvailable, microsoftOAuthAvailable,
   buildGoogleAuthUrl, buildMicrosoftAuthUrl, GOOGLE_MEET_TRANSCRIPT_SCOPE,
+  revokeGoogleOAuthGrant, loadRefreshTokenExport,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs,
@@ -706,6 +707,145 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
   });
 }));
 
+/** Revoke Google's grant before dropping the only locally stored refresh token. */
+export async function revokeAndDisconnectGoogle(
+  env: Env, userId: number, fetcher: typeof fetch = fetch,
+  options: { preserveCalendarSync?: boolean; preserveGoogleIdentity?: boolean } = {},
+): Promise<void> {
+  const token = await loadRefreshTokenExport(env, 'google_oauth_tokens', userId);
+  if (token) {
+    try {
+      await revokeGoogleOAuthGrant(token.raw, fetcher);
+    } catch (cause: any) {
+      const error: any = new Error(`Google did not confirm grant revocation: ${String(cause?.message || cause)}`);
+      error.code = 'google_revocation_failed';
+      throw error;
+    }
+  }
+
+  await clearGoogleLocalConnection(env, userId, options);
+}
+
+async function clearGoogleLocalConnection(
+  env: Env, userId: number, options: { preserveCalendarSync?: boolean; preserveGoogleIdentity?: boolean } = {},
+): Promise<void> {
+  const sql = getSQL(env);
+  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${userId}`;
+  if (!options.preserveCalendarSync) {
+    await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
+  }
+  // The Google link table was added after older deployments. Disconnect must
+  // still work there while removing the sign-in link where the table exists.
+  if (!options.preserveGoogleIdentity) {
+    try {
+      await sql`DELETE FROM user_google_links WHERE user_id = ${userId}`;
+    } catch (e: any) {
+      if (!/no such table/i.test(String(e?.message || e))) throw e;
+    }
+  }
+}
+
+export function googleGrantHasScope(scope: unknown, wanted: string): boolean {
+  return String(scope || '').split(/[\s,]+/)
+    .includes(wanted);
+}
+
+/** Opaque, signed marker lets the Gmail-reset callback identify the account that owns retained event mappings. */
+export async function makeGoogleSyncIdentityStateMarker(env: Env, googleSub: string | null | undefined): Promise<string> {
+  if (!googleSub) return '';
+  return `gs${await hmacSign(env.JWT_SECRET, `calendar-sync:${googleSub}`)}_`;
+}
+
+export async function googleSyncIdentityMatchesState(
+  env: Env, nonce: string, googleSub: string | null | undefined,
+): Promise<boolean | null> {
+  const marker = /(?:^|_)gs([A-Za-z0-9_-]{43})_/.exec(nonce)?.[1];
+  if (!marker) return null;
+  if (!googleSub) return false;
+  return marker === await hmacSign(env.JWT_SECRET, `calendar-sync:${googleSub}`);
+}
+
+export function shouldResetGoogleSyncMappings(
+  retainedIdentityMatches: boolean | null,
+  hadPreviousGoogleConnection: boolean,
+): boolean {
+  return retainedIdentityMatches === false
+    || (retainedIdentityMatches === null && !hadPreviousGoogleConnection);
+}
+
+export function callbackGoogleScopes(
+  incomingScope: unknown,
+  previousScope: unknown,
+  identityChanged: boolean,
+): string {
+  const scopes = new Set(String(incomingScope || '').split(/[\s,]+/).filter(Boolean));
+  const gmailScope = 'https://www.googleapis.com/auth/gmail.readonly';
+  if (!identityChanged && googleGrantHasScope(previousScope, gmailScope)) scopes.add(gmailScope);
+  return [...scopes].join(' ');
+}
+
+export async function clearGoogleIdentityLink(env: Env, userId: number, previousGoogleSub: string): Promise<void> {
+  if (!previousGoogleSub) return;
+  const sql = getSQL(env);
+  try {
+    await sql`DELETE FROM user_google_links WHERE user_id = ${userId} AND google_sub = ${previousGoogleSub}`;
+  } catch (e: any) {
+    if (!/no such table/i.test(String(e?.message || e))) throw e;
+  }
+}
+
+async function storedGoogleGrantHasScope(env: Env, userId: number, wanted: string): Promise<boolean> {
+  await ensureCalendarOAuthSchema(env);
+  const sql = getSQL(env);
+  const row = (await sql`
+    SELECT scope FROM google_oauth_tokens WHERE user_id = ${userId}
+  ` as any[])[0];
+  return googleGrantHasScope(row?.scope, wanted);
+}
+
+calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not remove Gmail access', async (c) => {
+  const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
+  const sql = getSQL(c.env);
+  const row = (await sql`
+    SELECT scope, google_sub FROM google_oauth_tokens WHERE user_id = ${user.id}
+  ` as any[])[0];
+  if (!row) return c.json({ error: { code: 'google_not_connected' } }, 409);
+  if (!googleGrantHasScope(row.scope, 'https://www.googleapis.com/auth/gmail.readonly')) {
+    return c.json({ error: { code: 'gmail_scope_not_granted' } }, 409);
+  }
+
+  // Prepare the new consent before revoking the existing grant so a missing
+  // OAuth configuration cannot leave the member disconnected.
+  const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
+  const keepMeetTranscripts = meetTranscriptsEnabled(c.env)
+    && googleGrantHasScope(row.scope, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+  const identityMarker = await makeGoogleSyncIdentityStateMarker(c.env, row.google_sub);
+  const next = await buildGoogleOAuthStartResponse(
+    c.env, user.id, loginHint, keepMeetTranscripts, '', keepMeetTranscripts, identityMarker,
+  );
+  if (next.status !== 200) return c.json(next.body, next.status);
+  try {
+    await revokeAndDisconnectGoogle(c.env, user.id, undefined, {
+      preserveCalendarSync: !!row.google_sub,
+      preserveGoogleIdentity: true,
+    });
+  } catch (e: any) {
+    if (e?.code !== 'google_revocation_failed') throw e;
+    // The consent state was prepared before revocation so bad OAuth config
+    // cannot strand the connection. Discard it when revocation fails.
+    try {
+      const rawState = new URL(next.body.redirect_url).searchParams.get('state');
+      const nonce = rawState ? await verifyState(c.env, rawState) : null;
+      if (nonce) await consumeState(c.env, nonce, 'google');
+    } catch (cleanupError) {
+      console.warn('[CAL:g_remove_gmail] could not discard unused OAuth state', cleanupError);
+    }
+    return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
+  }
+  return c.json({ ...next.body, gmail_access_removed: true });
+}));
+
 /**
  * Task #35 — pure helper exposed for testing. Returns the JSON body +
  * HTTP status that `/google/start` should send. Side effect: persists the
@@ -719,6 +859,8 @@ export async function buildGoogleOAuthStartResponse(
   loginHint?: string,
   meetTranscripts = false,
   tag = '',
+  meetTranscriptsPreserved = false,
+  stateMarker = '',
 ): Promise<{ status: 200 | 500; body: any }> {
   const missing = preflightOAuthSecrets(env, 'google');
   if (missing.length > 0) {
@@ -733,7 +875,7 @@ export async function buildGoogleOAuthStartResponse(
       },
     };
   }
-  const nonce = `${meetTranscripts ? 'gm_' : ''}${tag}${crypto.randomUUID().replace(/-/g, '')}`;
+  const nonce = `${meetTranscriptsPreserved ? 'mp_' : meetTranscripts ? 'gm_' : ''}${tag}${stateMarker}${crypto.randomUUID().replace(/-/g, '')}`;
   try {
     await persistState(env, nonce, userId, 'google');
     const state = await makeState(env, nonce);
@@ -808,7 +950,25 @@ async function startGoogleOAuth(c: any, meetTranscripts = false) {
   // across the Google round-trip via a short-lived, scoped cookie. Build's
   // return also rides in the signed nonce, with its venture (#1597).
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
-  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint, meetTranscripts, returnTag(returnTo, c.req.query('project_id')));
+  // With incremental scope carry-forward disabled, include an already granted
+  // optional Meet scope explicitly during ordinary reconnects.
+  const preserveMeetTranscripts = !meetTranscripts
+    && meetTranscriptsEnabled(c.env)
+    && await storedGoogleGrantHasScope(c.env, user.id, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+  const sql = getSQL(c.env);
+  let linkedGoogle: any;
+  try {
+    linkedGoogle = (await sql`
+      SELECT google_sub FROM google_oauth_tokens WHERE user_id = ${user.id}
+    ` as any[])[0];
+  } catch (e: any) {
+    if (!/no such table/i.test(String(e?.message || e))) throw e;
+  }
+  const stateMarker = await makeGoogleSyncIdentityStateMarker(c.env, linkedGoogle?.google_sub);
+  const { status, body } = await buildGoogleOAuthStartResponse(
+    c.env, user.id, loginHint, meetTranscripts || preserveMeetTranscripts,
+    returnTag(returnTo, c.req.query('project_id')), preserveMeetTranscripts, stateMarker,
+  );
   if (status === 200 && (returnTo === 'integrations' || returnTo === 'build' || returnTo === 'record')) {
     c.header(
       'Set-Cookie',
@@ -991,12 +1151,12 @@ calendar.get('/google/callback', async (c) => {
     if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state', returnTo);
     const nonce = signed;
     if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
-    const meetTranscripts = nonce.startsWith('gm_');
+    const newMeetGrant = nonce.startsWith('gm_');
     const userId = await consumeState(c.env, nonce, 'google');
     if (!userId) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
 
     const tokens = await exchangeGoogleCode(c.env, code);
-    if (meetTranscripts && !String(tokens?.scope || '').split(/[\s,]+/).includes(GOOGLE_MEET_TRANSCRIPT_SCOPE)) {
+    if (newMeetGrant && !String(tokens?.scope || '').split(/[\s,]+/).includes(GOOGLE_MEET_TRANSCRIPT_SCOPE)) {
       return failureRedirect(c.env, 'google', 'meet_scope_missing', returnTo);
     }
     const refreshToken = tokens?.refresh_token;
@@ -1038,11 +1198,36 @@ calendar.get('/google/callback', async (c) => {
       });
     }
 
+    const retainedIdentityMatches = await googleSyncIdentityMatchesState(c.env, nonce, googleSub);
+    let previousGoogleConnection: any;
+    try {
+      previousGoogleConnection = (await sql`
+        SELECT google_sub, scope FROM google_oauth_tokens WHERE user_id = ${userId}
+      ` as any[])[0];
+    } catch (e: any) {
+      if (!/no such table/i.test(String(e?.message || e))) throw e;
+    }
+    const previousGoogleSub = String(previousGoogleConnection?.google_sub || '');
+    const identityChanged = retainedIdentityMatches === false
+      || (retainedIdentityMatches === null && !!previousGoogleSub && !!googleSub && previousGoogleSub !== googleSub);
+    let previousGoogleIdentityLink = '';
+    try {
+      const link = (await sql`
+        SELECT google_sub FROM user_google_links WHERE user_id = ${userId}
+      ` as any[])[0];
+      previousGoogleIdentityLink = String(link?.google_sub || '');
+    } catch (e: any) {
+      if (!/no such table/i.test(String(e?.message || e))) throw e;
+    }
+    // include_granted_scopes=false makes Google's new token omit legacy Gmail,
+    // but the old same-account grant remains until its owner removes it explicitly.
+    const callbackScope = callbackGoogleScopes(tokens.scope, previousGoogleConnection?.scope, identityChanged);
+
     const refreshEnc = await encryptString(c.env, refreshToken);
     const persist = await persistGoogleCallbackTokens(c.env, {
       userId,
       refreshEnc,
-      scope: tokens.scope || '',
+      scope: callbackScope,
       googleEmail: info.email || null,
       googleSub,
       emailsMatch,
@@ -1051,9 +1236,25 @@ calendar.get('/google/callback', async (c) => {
     if (!persist.ok) {
       return failureRedirect(c.env, 'google', persist.reason, returnTo);
     }
+    if (identityChanged && previousGoogleIdentityLink && previousGoogleIdentityLink !== googleSub) {
+      // The original sign-in link remains intact if consent is abandoned; once
+      // a different Calendar identity is confirmed, remove only that old link.
+      await clearGoogleIdentityLink(c.env, userId, previousGoogleIdentityLink);
+    }
+    if (shouldResetGoogleSyncMappings(identityChanged ? false : retainedIdentityMatches, !!previousGoogleConnection)) {
+      // Gmail removal retained Calendar event mappings so reconnecting the
+      // same account remains idempotent. A different account clears them; an
+      // unmarked callback clears them only when no previous connection exists
+      // (for example, a fresh connect after abandoned Gmail-removal consent).
+      try {
+        await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
+      } catch (e: any) {
+        if (!/no such table/i.test(String(e?.message || e))) throw e;
+      }
+    }
     const extra: Record<string, string> = {};
     // The return banner tells a transcript grant from an ordinary connect (#1926).
-    if (meetTranscripts) extra.meet = 'granted';
+    if (newMeetGrant) extra.meet = 'granted';
     if (persist.warn) {
       extra.warn = persist.warn;
       if (persist.warnEmail) extra.google_email = persist.warnEmail;
@@ -1069,21 +1270,15 @@ calendar.get('/google/callback', async (c) => {
 calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
-  // Task #70 — the Integrations Google tile bundles Calendar + Gmail +
-  // "Continue with Google" sign-in behind a single consent. Disconnect
-  // therefore cascades the sign-in link too so the tile flips fully to
-  // "Not connected" instead of leaving a stale identity binding that
-  // the user can't see or revoke from the UI. Guarded so it doesn't
-  // fail on legacy deployments missing the side table.
   try {
-    await sql`DELETE FROM user_google_links WHERE user_id = ${user.id}`;
+    await revokeAndDisconnectGoogle(c.env, user.id);
+    return c.json({ ok: true });
   } catch (e: any) {
-    if (!/no such table/i.test(String(e?.message || e))) throw e;
+    if (e?.code === 'google_revocation_failed') {
+      return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
+    }
+    throw e;
   }
-  return c.json({ ok: true });
 }));
 
 calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => {
@@ -1297,10 +1492,25 @@ calendar.delete('/events/:id', async (c) => {
 calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconnect Google', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
-  return c.json({ ok: true });
+  try {
+    await revokeAndDisconnectGoogle(c.env, user.id);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    if (e?.code === 'google_revocation_failed') {
+      return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
+    }
+    throw e;
+  }
+}));
+calendar.post('/google/force-disconnect', safe('g_force_disconnect', 'Could not disconnect Google locally', async (c) => {
+  const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
+  await clearGoogleLocalConnection(c.env, user.id);
+  return c.json({
+    ok: true,
+    revoked: false,
+    warning: 'Google did not confirm revocation. Remove Axal VC from your Google Account access settings if it still appears there.',
+  });
 }));
 calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', async (c) => {
   const user = await requireAuth(c);

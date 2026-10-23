@@ -339,3 +339,7 @@ feature-switch change, live-runtime validation or production deployment here.
 D886 B7: `meetingBotParticipants.ts` decrypts the latest roster for the separate
 creator-only participants read. It projects display names/times only, excludes
 the bot and emails, and never turns a failed read into an empty list.
+
+Event responses use `eventsCommon.ts` to withhold online and hybrid join URLs
+unless a manager or a confirmed seat with settled payment reads them. Public
+calendar exports and invitation attachments use the same public projection.

@@ -206,7 +206,10 @@ export async function appendSegments(
   const model = intakeModel(provider);
   const plain = clean.map((s) => s.text).join('\n');
   const results = await env.DB.batch([
-    ...clean.map((s) => env.DB.prepare(
+    ...clean.map((s) => provider === 'telegram' && /^[a-f0-9]{64}$/.test(s.source_ref ?? '') ? env.DB.prepare(
+      `INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, speaker_raw, text, model, source_ref)
+       VALUES (?, 'final', ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(session.id, s.start_ms, s.end_ms, s.speaker_label, s.speaker_raw, s.text, model, s.source_ref) : env.DB.prepare(
       `INSERT INTO interview_transcript_segments (session_id, source, start_ms, end_ms, speaker_label, speaker_raw, text, model)
        VALUES (?, 'final', ?, ?, ?, ?, ?, ?)`,
     ).bind(session.id, s.start_ms, s.end_ms, s.speaker_label, s.speaker_raw, s.text, model)),

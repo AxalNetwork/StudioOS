@@ -229,6 +229,11 @@ export async function transcribeVoiceNote(env: Env, opts: {
   if (!chunk || !chunk.r2_key.startsWith(AUDIO_PREFIX)) {
     return { ok: false, refusal: 'chunk_missing', message: 'The voice note could not be read. Nothing was stored.', budget: false };
   }
+  // D866: retain the proven pending-message hash on a Telegram voice passage.
+  const source = opts.provider === 'telegram' ? await env.DB.prepare(
+    `SELECT m.external_message_id FROM channel_thread_messages m JOIN channel_threads t ON t.id = m.thread_id
+      WHERE m.id = ? AND t.session_id = ? AND t.user_id = ? AND t.provider = 'telegram'`,
+  ).bind(seq, session.id, userId).first<{ external_message_id: string }>() : null;
   const model = voiceNoteModel(session);
   const r = await transcribeChunk(env, { session, userId, chunk, model, intervieweeName: null, offsetMs: 0 });
   if (!r.ok) {
@@ -239,9 +244,11 @@ export async function transcribeVoiceNote(env: Env, opts: {
     });
     return r;
   }
+  if (source && !await env.DB.prepare('SELECT 1 AS hit FROM channel_thread_messages WHERE id = ? AND external_message_id = ?')
+    .bind(seq, source.external_message_id).first()) return { ok: true, appended: 0, already: true };
   // D754 §6: one `final` segment per note, under the side's label, beside the chat's own lines.
   const text = r.segments.map((x) => String(x.text ?? '').trim()).filter(Boolean).join(' ');
-  const segments: StoredSegment[] = text ? [{ start_ms: null, end_ms: null, speaker_label: opts.speakerLabel, speaker_raw: null, text }] : [];
+  const segments: StoredSegment[] = text ? [{ start_ms: null, end_ms: null, speaker_label: opts.speakerLabel, speaker_raw: null, text, ...(source ? { source_ref: source.external_message_id } : {}) }] : [];
   // A plain INSERT, not OR IGNORE: a chunk staged by another run fails the whole batch, so nothing is appended twice.
   const stage = env.DB.prepare(
     `INSERT INTO interview_chunk_transcripts (session_id, seq, model, language, segments_json, cost_microusd, fallback_used)
@@ -363,8 +370,11 @@ export async function summariseSession(env: Env, session: SessionRow, userId: nu
   };
   await env.DB.prepare(
     `UPDATE interview_sessions SET summary = ?, summary_model = ?, summarised_at = datetime('now'), summary_citations_json = ?,
-            digest_json = ?, digest_kept_at = NULL, digest_kept_by = NULL, updated_at = datetime('now') WHERE id = ? AND consent_status <> 'declined'`,
-  ).bind(out.sentences.map((s) => s.text).join(' '), usedModel, JSON.stringify(out.sentences), JSON.stringify(digest), session.id).run();
+            digest_json = ?, digest_kept_at = NULL, digest_kept_by = NULL, updated_at = datetime('now') WHERE id = ? AND consent_status <> 'declined'
+        AND NOT EXISTS (SELECT 1 FROM json_each(?) expected
+          LEFT JOIN interview_transcript_segments current ON current.id = json_extract(expected.value, '$.id') AND current.session_id = ?
+          WHERE current.id IS NULL OR current.text IS NOT json_extract(expected.value, '$.text'))`,
+  ).bind(out.sentences.map((s) => s.text).join(' '), usedModel, JSON.stringify(out.sentences), JSON.stringify(digest), session.id, JSON.stringify(rows.results ?? []), session.id).run();
   return { ok: true, sentences: out.sentences, model: usedModel, digest: out.digest };
 }
 
