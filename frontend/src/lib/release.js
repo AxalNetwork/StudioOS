@@ -8,14 +8,14 @@
  * follows the release with no code change. `scripts/release-draft.mjs` keeps
  * one draft release ready for the owner to publish, named by `nextReleaseTag`.
  *
- * The stage is a product decision. Moving to beta is this one line, in one
- * reviewed PR: the next draft is then named `-beta`, and so is the badge once
- * that release is published.
+ * New tags count active release periods without a stage suffix. RELEASE_STAGE
+ * remains the fallback badge for builds with no published release; legacy
+ * alpha, beta and rc tags continue to parse.
  */
 export const RELEASE_STAGE = 'alpha';
 
-/** The first tag, when no release has been published yet. */
-export const FIRST_RELEASE = `v0.1.0-${RELEASE_STAGE}`;
+/** The first release counts one active month, week and day. */
+export const FIRST_RELEASE = 'v1.1.1';
 
 const TAG = /^v(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)(?:\.(\d+))?)?$/;
 
@@ -32,16 +32,29 @@ export function parseRelease(tag) {
   };
 }
 
-/**
- * The next release's tag. While pre-1.0, each release is a minor bump at the
- * current stage: v0.1.0-alpha → v0.2.0-alpha. The owner can still rename the
- * draft before publishing it (a patch, or 1.0.0).
- */
-export function nextReleaseTag(lastTag, stage = RELEASE_STAGE) {
-  const last = parseRelease(lastTag);
-  if (!last) return `v0.1.0-${stage}`;
-  const suffix = stage === 'stable' ? '' : `-${stage}`;
-  return `v${last.major}.${last.minor + 1}.0${suffix}`;
+/** Published release dates only; invalid history must not reset the counters. */
+export function releaseDays(releases) {
+  return [...new Set(releases.filter((r) => !r.draft && parseRelease(r.tag_name)).map((r) => {
+    const date = new Date(r.published_at || NaN);
+    if (!Number.isFinite(date.getTime())) throw new Error('Published release has no valid publication date.');
+    return date.toISOString().slice(0, 10);
+  }))];
+}
+
+/** Count active UTC months, Monday-start weeks and days, including today's draft. */
+export function nextReleaseTag(releases = [], now = new Date()) {
+  const today = now.toISOString().slice(0, 10);
+  const days = new Set([...releaseDays(releases), today]);
+  const months = new Set();
+  const weeks = new Set();
+  for (const day of days) {
+    if (day > today) throw new Error('Publication date is in the future.');
+    months.add(day.slice(0, 7));
+    const monday = new Date(`${day}T00:00:00Z`);
+    monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7);
+    weeks.add(monday.toISOString().slice(0, 10));
+  }
+  return `v${months.size}.${weeks.size}.${days.size}`;
 }
 
 /**
