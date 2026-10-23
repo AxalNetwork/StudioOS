@@ -392,6 +392,24 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
 
+# D886 B8: private, one isolated runtime per run. Image refs are digest-pinned
+# by Wrangler; instance selection remains standard-2 in MeetingBotContainer.
+[[durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+
+[[containers]]
+class_name = "MeetingBotContainer"
+scheduling_policy = "durable_object"
+
+[containers.images.runtime]
+dockerfile = "./meeting-bot/Dockerfile"
+build_context = "./meeting-bot"
+
+[[migrations]]
+tag = "v3-meeting-bot-container"
+new_sqlite_classes = ["MeetingBotContainer"]
+
 # ---------- Vectorize (semantic search) ----------
 # Index `axal-search` (768-dim, cosine) backs the global search bar on the
 # Dashboard. Embeddings are produced by Workers AI `@cf/baai/bge-base-en-v1.5`.
@@ -685,6 +703,24 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
 
+# D886 B8: private, one isolated runtime per run. Image refs are digest-pinned
+# by Wrangler; instance selection remains standard-2 in MeetingBotContainer.
+[[env.production.durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+
+[[env.production.containers]]
+class_name = "MeetingBotContainer"
+scheduling_policy = "durable_object"
+
+[env.production.containers.images.runtime]
+dockerfile = "./meeting-bot/Dockerfile"
+build_context = "./meeting-bot"
+
+[[env.production.migrations]]
+tag = "v3-meeting-bot-container"
+new_sqlite_classes = ["MeetingBotContainer"]
+
 [[env.production.vectorize]]
 binding    = "VECTORIZE"
 index_name = "axal-search"
@@ -852,6 +888,24 @@ new_sqlite_classes = ["PipelineRoom", "OnboardingChat"]
 [[env.preview.migrations]]
 tag = "v2-meeting-bot"
 new_sqlite_classes = ["MeetingBotRun"]
+
+# D886 B8: private, one isolated runtime per run. Image refs are digest-pinned
+# by Wrangler; instance selection remains standard-2 in MeetingBotContainer.
+[[env.preview.durable_objects.bindings]]
+name = "MEETING_BOT_CONTAINER"
+class_name = "MeetingBotContainer"
+
+[[env.preview.containers]]
+class_name = "MeetingBotContainer"
+scheduling_policy = "durable_object"
+
+[env.preview.containers.images.runtime]
+dockerfile = "./meeting-bot/Dockerfile"
+build_context = "./meeting-bot"
+
+[[env.preview.migrations]]
+tag = "v3-meeting-bot-container"
+new_sqlite_classes = ["MeetingBotContainer"]
 
 [[env.preview.r2_buckets]]
 binding     = "FILES"
