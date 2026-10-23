@@ -21,9 +21,11 @@ async function fixture() {
  return {db,env};
 }
 function providerFor(url: string) {
- if (url.includes('ofac.treas.gov')) return 'ofac';
- if (url.includes('ec.europa.eu')) return 'eu';
- if (url.includes('ofsistorage')) return 'uk_hmt';
+ const parsed = new URL(url);
+ if (parsed.protocol !== 'https:') throw new Error('Unexpected network request');
+ if (parsed.hostname === 'sanctionslistservice.ofac.treas.gov') return 'ofac';
+ if (parsed.hostname === 'webgate.ec.europa.eu') return 'eu';
+ if (parsed.hostname === 'ofsistorage.blob.core.windows.net') return 'uk_hmt';
  throw new Error('Unexpected network request');
 }
 const bodies = {
@@ -87,4 +89,13 @@ test('2444: admin route answers 503 with missing providers and no new verdict',a
  assert.equal(res.status,503);const body=await res.json();
  assert.equal(body.code,'screening_incomplete'); assert.deepEqual(body.missing_lists,['uk_hmt']);
  assert.match(body.detail,/not completed/); unchanged(db);
+});
+
+test('2444: the provider stub refuses lookalike hosts and provider names in URL paths',()=>{
+ for (const url of [
+  'https://ofac.treas.gov.example.invalid/SDN.JSON',
+  'https://example.invalid/ec.europa.eu',
+  'https://example.invalid/ofsistorage',
+  'http://sanctionslistservice.ofac.treas.gov/SDN.JSON',
+ ]) assert.throws(()=>providerFor(url),/Unexpected network request/);
 });
