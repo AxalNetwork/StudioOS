@@ -621,7 +621,11 @@ trust.post('/sanctions/screen/:user_id', async (c) => {
     return c.json(result);
   } catch (e) {
     if (e instanceof IncompleteSanctionsScreeningError) {
-      return c.json({ detail: e.message, code: 'screening_incomplete', missing_lists: e.missingLists }, 503);
+      return refuse(c, 503, {
+        code: 'screening_incomplete',
+        message: `Screening not completed: ${e.missingLists.join(', ')} sanctions lists are unavailable or empty. No result was recorded. Try again later.`,
+        extra: { code: 'screening_incomplete', missing_lists: e.missingLists },
+      });
     }
     throw e;
   }

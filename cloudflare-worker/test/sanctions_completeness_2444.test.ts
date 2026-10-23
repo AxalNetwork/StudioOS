@@ -87,7 +87,8 @@ test('2444: admin route answers 503 with missing providers and no new verdict',a
  const token=await new SignJWT({user_id:1,role:'admin'}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
  const res=await trust.request('/sanctions/screen/7',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:'{}'},env);
  assert.equal(res.status,503);const body=await res.json();
- assert.equal(body.code,'screening_incomplete'); assert.deepEqual(body.missing_lists,['uk_hmt']);
+ assert.equal(body.code,'screening_incomplete'); assert.equal(body.error,'screening_incomplete');
+ assert.equal(body.message,body.detail); assert.deepEqual(body.missing_lists,['uk_hmt']);
  assert.match(body.detail,/not completed/); unchanged(db);
 });
 
