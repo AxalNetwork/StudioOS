@@ -289,7 +289,7 @@ Rollback reverts the worker (and with it the SPA), not D1 — see
 Before any canary, apply migration 531 and the appended `v2-meeting-bot` Durable
 Object migration. Keep the existing `v1-realtime` migration. `MEETING_BOT_RUN`
 binds class `MeetingBotRun` in default, production and preview environments.
-B8 supplies the `MEETING_BOT_RUNTIME` start/stop binding; runtime must enforce
+B8 resolves the `MEETING_BOT_CONTAINER` namespace through its private runtime adapter; the runtime enforces
 the budget lease locally and acknowledge commands without awaiting callbacks.
 Provision a distinct `MEETING_BOT_SECRET` (32+ random characters) in each
 environment; never put its value in configuration, logs or review material.
@@ -304,28 +304,69 @@ only rolling two-minute bot-fee holds are taken. B6 charges Nova through aiRoute
 See D886 §12 for the HMAC protocol, final-part drain and recovery. No live call,
 price measurement, switch change or deployment is performed by B1.
 
-## Meeting bot deployment prerequisites (#2586, D886 B8 — partial)
+## Meeting bot deployment (#2586, D886 B8)
 
-The standalone image workflow is a pipeline skeleton, not a deployed bot.
-It validates commit-scoped image names and builds before registry login.
-PRs build a labelled scratch fixture and, once B2 supplies it, the real
-runtime image. Publication requires an owner-triggered main workflow run;
-it uses the built-in `GITHUB_TOKEN`, scoped to package writes for that job.
-No registry password, PAT or VM credential is introduced by this partial.
-Use the published image digest, rather than a mutable SHA tag, for eventual
-runtime configuration and rollback. Images contain code only: never bake
-meeting links, passcodes, run tokens, participant names or transcripts into
-a build context or a log. B2 must review its ignore file and copy allowlist.
+`MeetingBotContainer` is an internal SQLite Durable Object, one per run uid.
+Default, production and preview each declare `MEETING_BOT_CONTAINER`, the
+`durable_object` Containers policy and `images.runtime` from the allowlisted
+`meeting-bot/Dockerfile` context. Keep the existing migrations and append
+`v3-meeting-bot-container`. B0's selected `standard-2` is chosen at start;
+Wrangler exposes the prepared image by digest through the named image map.
+There is no public proxy to the container's port 8080.
 
-`MEETING_BOT_SECRET` is the callback HMAC secret reserved by #2579/#2586.
-Provision it through the existing Worker/runtime secret mechanisms only
-after B1's signing contract and B0's host are settled. It must never be an
-image build argument, label or logged value. No value is recorded here.
-Any host/registry pull credentials will be named only after the host is chosen.
+B1's start/stop and accepted, funded heartbeats use the private adapter.
+The host waits for a signed HTTP start acknowledgement, rather than treating
+`container.running` as readiness. It stores a fingerprint and timing only;
+no meeting link, notice or secret is persisted there. Each container receives
+a key derived for its run and an HTTPS callback origin from `APP_URL`; the
+Worker's master callback key stays in the Worker. Signed commands carry the
+meeting link privately. The previous master-key callback signature remains
+accepted for the existing B1 contract, but is not given to Containers.
 
-Remaining release gates: B0 host/instance/cost decision and its D886 file;
-B2 runtime Dockerfile and tests; B1 BotRuntime/callback contract; start,
-stop and heartbeat against a stub; host-specific health checks; binding
-parity in production and preview; and a failed image build stopping both
-`npm run deploy` and the Worker deploy workflow **before migrations**.
-Until then the existing Worker deploy path and meeting-bot flags stay as-is.
+A durable Stop tombstone prevents late starts. SIGTERM gives captured audio
+at most 30 seconds to drain, then an alarm destroys the process. Funded leases
+and the plan deadline bound the host too. A crashed process is not restarted
+under the same uid: B2 has no durable sequence/audio resume cursor. B1 remains
+the only owner of run status, consent, authorization and metering.
+
+The image contains Chromium, Python/GLib, Xvfb, PulseAudio and the pinned Zoom
+binding; the build imports its native module before it can pass. The runtime
+runs as `node`, keeps Chromium's sandbox, and boots local display/audio services
+without provider diagnostics. Teams and Meet use their merged adapters. Zoom
+uses the merged sidecar and an authenticated, rate-limited bootstrap for the
+stored run's founder and meeting. It returns short-lived SDK/OBF material only
+after current access, consent, run phase and paid lease checks. OAuth and app
+credentials never enter the image or sidecar environment. Bootstrap responses
+are not cached. Live compatibility and platform admission remain D886's gates.
+
+Secret names only, provisioned separately per environment:
+- `MEETING_BOT_SECRET`: the existing 32+ character Worker master callback key.
+- `MEETING_BOT_ZOOM_CLIENT_ID`, `MEETING_BOT_ZOOM_CLIENT_SECRET`: the credentials
+  actually assigned to the Meeting SDK-enabled Zoom app, used in the Worker
+  for a short-lived SDK JWT. Confirm the app's production credentials with the
+  owner; these names do not imply another provider grant is interchangeable.
+- Existing `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` deploy the Worker
+  and its Containers image. The account/token must permit Containers/registry
+  deployment. No value or registry password is recorded in source.
+
+Both root `npm run deploy` and the deploy workflow require a real linux/amd64
+image build **before D1 migrations**. No fixture flag can bypass that preflight.
+A build failure prevents migrations. Wrangler then deploys the same Dockerfile
+and prepares its digest-pinned image; an upload/deploy failure is not a database
+rollback. Keep the existing migration/deploy recovery procedures.
+
+The image workflow builds the real image on PRs, boots it with provider network
+access disabled, verifies HTTP process health/native import, and dry-runs the
+production and preview configuration using an explicitly isolated scratch
+image/assets copy. None of those steps publishes or provisions a runtime.
+An owner-triggered main run can additionally archive the versioned image in
+GHCR with its job-scoped `GITHUB_TOKEN`; its digest is recorded in the summary.
+Wrangler deploy uses Cloudflare's prepared image, not a mutable GHCR tag.
+
+Publication, canary/live calls and measured prices remain the owner's later
+B9 release steps. This integration changes no enablement or notice setting.
+Rollback restores reviewed Worker/image code; retain applied DO migrations.
+
+References: [Containers API](https://developers.cloudflare.com/containers/api/durable-object-container/),
+[Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/#containers),
+[Zoom SDK authorization](https://developers.zoom.us/docs/meeting-sdk/auth/).

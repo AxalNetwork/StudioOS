@@ -16,7 +16,7 @@ name: Cloudflare Worker deploy
 # post-deploy-smoke.yml. docs/ is not committed (D529): this job builds it,
 # over the previous deploy's assets restored from the actions cache.
 #
-# Migrations run FIRST, through the same runner `npm run deploy`'s predeploy
+# After the image build gate, migrations run through the same runner `npm run deploy`'s predeploy
 # hook uses. This job used to call `wrangler deploy` directly, which is one of
 # the two ways documentation/operations/DEPLOY.md §1.1 names for shipping the
 # worker ahead of its schema — and it did, on every merge to main.
@@ -48,7 +48,7 @@ jobs:
   deploy:
     name: build and deploy studioos Worker
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -101,6 +101,9 @@ jobs:
       # A failure here fails the deploy: the new worker must never start
       # against an old schema. The runner refuses a ledger it cannot read and
       # names the fix (see .github/workflows/d1-migrate.yml).
+      - name: Build meeting bot image before migrations
+        run: node scripts/preflight-meeting-bot-deploy.mjs
+
       - name: Apply pending D1 migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
