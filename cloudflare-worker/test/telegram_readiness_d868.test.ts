@@ -16,8 +16,9 @@ import * as telegram from '../src/services/channels/telegram.ts';
 import * as threads from '../src/services/channels/threads.ts';
 import * as events from '../src/services/channels/events.ts';
 import * as connections from '../src/services/channels/connections.ts';
+import * as capture from '../src/services/channels/telegramCapture.ts';
 import { decryptColumn } from '../src/services/columnCipher.ts';
-import { ME, INTERVIEW, SECRETS, AUDIO, send } from './_channels_fixture.ts';
+import { ME, TG_ME, TG_OTHER, INTERVIEW, SECRETS, AUDIO, send, telegramApi } from './_channels_fixture.ts';
 import { AT, readinessFixture as fixture, runReadiness, type Mutation } from './_channel_readiness.ts';
 
 const TEXT = 'Synthetic readiness message.';
@@ -26,8 +27,8 @@ const FIVE_MB = 5 * 1024 * 1024;
 const NOTES_PER_DAY = 50;
 const PURGE_DAYS = 30;
 
-type Api = { telegram: typeof telegram; threads: typeof threads; events: typeof events; connections: typeof connections };
-const original: Api = { telegram, threads, events, connections };
+type Api = { telegram: typeof telegram; threads: typeof threads; events: typeof events; connections: typeof connections; capture: typeof capture };
+const original: Api = { telegram, threads, events, connections, capture };
 
 const message = (over = {}) => ({
   externalChatId: 'd868-chat', externalMessageId: 'd868-message', side: 'contact' as const,
@@ -181,6 +182,68 @@ async function rollout(environment: string, api = original) {
   });
 }
 
+/** D867: private forwards use the proven link and member attestation, not a chat's YES. */
+async function captures(environment: string, api = original) {
+  let downloads = 0, replies = 0;
+  await fixture(environment, async ({ env, db, queued, aiCalls, r2 }) => {
+    db.exec('ALTER TABLE projects ADD COLUMN updated_at TEXT; UPDATE projects SET updated_at = CURRENT_TIMESTAMP;');
+    db.exec('DELETE FROM telegram_business_connections');
+    const media = {
+      kind: 'telegram_capture' as const, provider: 'telegram' as const, eventId: 'd868-capture',
+      telegramUserId: TG_ME, chatId: TG_ME, externalMessageId: 'd868-capture-message', contextMessageId: null,
+      text: null, voice: { fileRef: 'd868-capture-file', mime: 'audio/ogg', sizeBytes: AUDIO.OGG.byteLength, media: 'voice' as const },
+      sentAt: AT.toISOString(),
+    };
+    const count = () => db.prepare('SELECT COUNT(*) AS n FROM telegram_captures').get().n;
+    const fileWork = () => [downloads, r2.objects.size, aiCalls.length];
+    for (const flag of [undefined, '', 'off', 'unknown', 'canary']) {
+      env.TELEGRAM_CAPTURE = flag;
+      await api.capture.handleCapture(env, media);
+      await api.capture.handleCapture(env, { ...media, telegramUserId: TG_OTHER, chatId: TG_OTHER });
+      assert.equal(count(), 0, 'disabled capture must keep no media references');
+      assert.deepEqual([replies, queued.length, ...fileWork()], [0, 0, 0, 0, 0]);
+    }
+    env.TELEGRAM_CAPTURE = 'on';
+    env.TELEGRAM_CHANNEL = 'canary';
+    await api.capture.handleCapture(env, media);
+    assert.equal(count(), 0, 'capture must still enforce the channel canary');
+    assert.equal(replies, 0);
+    env.TELEGRAM_CHANNEL = 'on';
+    await api.capture.handleCapture(env, media);
+    const row = db.prepare('SELECT * FROM telegram_captures').get();
+    assert.equal(count(), 1); assert.equal(row.status, 'waiting');
+    assert.match(row.media_refs_enc, /^v1\./); assert.equal(row.media_refs_enc.includes(media.voice.fileRef), false);
+    assert.equal((await api.capture.captureItems(env, row))![0].id, media.voice.fileRef);
+    assert.equal(replies, 1); assert.equal(queued.length, 0);
+    assert.deepEqual(await api.capture.importCapture(env, row.uid, 'd868-held'), { done: 'nothing' });
+    assert.deepEqual(fileWork(), [0, 0, 0], 'a held capture must download nothing');
+    await api.capture.handleCapture(env, { ...media, eventId: 'd868-answer', externalMessageId: 'd868-answer', text: 'Yes, in writing', voice: null });
+    const consent = db.prepare("SELECT * FROM channel_consents WHERE provider = 'telegram' AND capture_id = ?").get(row.id);
+    assert.deepEqual([consent.source, consent.method, consent.status, consent.user_id], ['member_attested', 'written', 'given', ME]);
+    assert.equal(queued.length, 1); assert.deepEqual(fileWork(), [0, 0, 0]);
+    for (const flag of [undefined, 'off', 'unknown']) {
+      env.TELEGRAM_CAPTURE = flag;
+      assert.deepEqual(await api.capture.importCapture(env, row.uid, 'd868-disabled'), { done: 'nothing' });
+      assert.deepEqual(fileWork(), [0, 0, 0], 'turning capture off must also block queued import');
+    }
+    env.TELEGRAM_CAPTURE = 'on';
+    db.prepare("UPDATE channel_consents SET status = 'withdrawn', withdrawn_at = datetime('now') WHERE id = ?").run(consent.id);
+    assert.deepEqual(await api.capture.importCapture(env, row.uid, 'd868-withdrawn'), { done: 'nothing' });
+    assert.deepEqual(fileWork(), [0, 0, 0]);
+    db.prepare("UPDATE channel_consents SET status = 'given' WHERE id = ?").run(consent.id);
+    const imported = await api.capture.importCapture(env, row.uid, 'd868-approved');
+    assert.equal(imported.done, 'imported', 'the enabled, attested control must reach the recorder');
+    assert.deepEqual(fileWork(), [2, 1, 0]);
+    const session = db.prepare('SELECT * FROM interview_sessions WHERE id = (SELECT session_id FROM telegram_captures WHERE id = ?)').get(row.id);
+    assert.deepEqual([session.submitted_via, session.consent_status, session.consent_method, session.created_by_user_id], ['telegram', 'given', 'written', ME]);
+    assert.equal(queued.filter((q: any) => q.job_type === 'interview_process').length, 1);
+  }, (url, init) => {
+    if (/\/getFile$|\/file\/bot/.test(url.pathname)) downloads++;
+    if (url.pathname.endsWith('/sendMessage')) replies++;
+    return telegramApi(url, init);
+  });
+}
+
 const mutations: Mutation<Api>[] = [
   ['secret accepts a mismatch', 'telegram', 'telegram.ts', "constantTimeEqual(a, b) ? 'ok' : 'mismatch';", "'ok';", secret],
   ['secret accepts a missing header', 'telegram', 'telegram.ts', "  if (!presented) return 'missing';\n", '', secret],
@@ -210,9 +273,23 @@ const mutations: Mutation<Api>[] = [
     "return mode === 'on' || (mode === 'canary' && isSuperAdmin(user));", 'return true;', rollout],
   ['rollout closed to everyone', 'connections', 'connections.ts',
     "return mode === 'on' || (mode === 'canary' && isSuperAdmin(user));", 'return false;', rollout],
+  ['capture defaults open', 'capture', 'telegramCapture.ts',
+    "String(env.TELEGRAM_CAPTURE ?? '').trim().toLowerCase() === 'on'", "String(env.TELEGRAM_CAPTURE ?? '').trim().toLowerCase() !== 'off'", captures],
+  ['capture always closed', 'capture', 'telegramCapture.ts',
+    "String(env.TELEGRAM_CAPTURE ?? '').trim().toLowerCase() === 'on'", 'false', captures],
+  ['disabled capture replies to unlinked senders', 'capture', 'telegramCapture.ts',
+    '  if (!enabled(env)) return;', '', captures],
+  ['capture bypasses canary', 'capture', 'telegramCapture.ts',
+    " || !(await channelOpenToMember(env, 'telegram', userId))", '', captures],
+  ['queued capture ignores off', 'capture', 'telegramCapture.ts',
+    "if (!enabled(env) || !providerAvailable(env, 'telegram')", "if (!providerAvailable(env, 'telegram')", captures],
+  ['capture accepts withdrawn attestation', 'capture', 'telegramCapture.ts',
+    "provider = 'telegram' AND user_id = ? AND status = 'given'", "provider = 'telegram' AND user_id = ? AND status IN ('given','withdrawn')", captures],
+  ['capture media references stored plain', 'capture', 'telegramCapture.ts',
+    "const enc = await encryptColumn(env, 'telegram_captures', 'media_refs_enc', uid, JSON.stringify([item]));", 'const enc = JSON.stringify([item]);', captures],
 ];
 
-runReadiness('D868', original, { secret, notesConsent, voiceSize, videoNotes, voiceCap, purge, encryptedText, rollout }, mutations);
+runReadiness('D868', original, { secret, notesConsent, voiceSize, videoNotes, voiceCap, purge, encryptedText, rollout, captures }, mutations);
 
 // The route refuses a caller without the secret before reading one byte of the body
 // (routes/channels.ts). Checked through the real router; its mutation is run by hand (D868 §2).
