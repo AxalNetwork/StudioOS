@@ -5,7 +5,6 @@ import { decryptColumn, encryptColumn } from '../services/columnCipher';
 import { settleAiReservation, reserveAiBudget, aiPaused } from '../services/aiBudget';
 import { constantTimeEqual } from '../rpc/secret';
 import { withDeadline } from '../util/deadline';
-import { meetingBotRuntime, runtimeKey, runtimeUid } from '../services/meetingBotRuntime';
 import { putChunk, isUploadWav, MAX_CHUNK_BYTES, WAV_HEADER_BYTES, UPLOAD_BYTES_PER_SECOND } from '../services/interviewSessions';
 import {
   BOT_HEARTBEAT_MS, BOT_PROCESSING_MAX_MS, BotError, botRow, botSession, botView, botConfigured, botMemberEnabled, botVentureName, terminal,
@@ -28,9 +27,7 @@ export async function validBotCallback(env: Env, req: Request, raw: string, now 
   const signature = req.headers.get('x-meeting-bot-signature') ?? '';
   if ((env.MEETING_BOT_SECRET?.length ?? 0) < 32 || !/^\d{13}$/.test(ts) || Math.abs(now - Number(ts)) > BOT_CALLBACK_WINDOW_MS || !/^[a-f0-9]{64}$/.test(signature)) return false;
   const text = `v1:${ts}:${req.method}:${new URL(req.url).pathname}:${raw}`;
-  if (constantTimeEqual(signature, await botHmac(env.MEETING_BOT_SECRET!, text))) return true;
-  const uid = /^\/api\/meeting-bots\/([^/]+)\/(?:events|zoom-credentials)$/.exec(new URL(req.url).pathname)?.[1];
-  return runtimeUid(uid) && constantTimeEqual(signature,await botHmac(await runtimeKey(env.MEETING_BOT_SECRET!,uid),text));
+  return constantTimeEqual(signature, await botHmac(env.MEETING_BOT_SECRET!, text));
 }
 export async function validBotUploadToken(env: Env, uid: string, seq: string, token: string, now=Date.now()) {
   const parts=token.split('.');
@@ -79,16 +76,6 @@ export class MeetingBotRun implements DurableObject {
         else if (action === '/stop') await this.finish(run,'stopped',null);
         else if (action === '/event') return await this.event(req,run);
         else if (action === '/chunk') return await this.upload(req,run);
-        else if (action === '/zoom-credentials') {
-          if (!await this.allowed(run) || !['joining','waiting_room'].includes(run.status) || (await this.lease()??0)<=Date.now()) throw new BotError(403,'bot_zoom_unavailable','The Zoom runtime is not available.');
-          const last=await this.state.storage.get<number>('credentials_requested_at')??0;
-          if (Date.now()-last<2500) throw new BotError(429,'bot_zoom_rate','The runtime must wait before retrying.');
-          await this.state.storage.put('credentials_requested_at',Date.now());
-          const { zoomRuntimeCredentials }=await import('../services/meetingBotZoom');
-          const credentials=await zoomRuntimeCredentials(this.env,run);
-          if (!await this.allowed(run) || (await this.lease()??0)<=Date.now()) throw new BotError(403,'bot_zoom_unavailable','The Zoom runtime is not available.');
-          return json(credentials);
-        }
         else if (action === '/status') await this.tick(run);
         else throw new BotError(404,'bot_not_found','The bot run is not available.');
         run = await botRow(this.env,uid);
@@ -109,7 +96,7 @@ export class MeetingBotRun implements DurableObject {
     await this.state.storage.put('snapshot',run);
   }
   private async allowed(run: BotRun) {
-    if (!botConfigured(this.env,run.platform) || await aiPaused(this.env,run.user_id)) return false;
+    if (!botConfigured(this.env) || await aiPaused(this.env,run.user_id)) return false;
     const member = await this.env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(run.user_id).first<any>();
     if (!member || !await botMemberEnabled(this.env,member) || Number(member.jwt_min_iat ?? 0) * 1000 > run.created_at) return false;
     try { await botSession(this.env,run); return true; } catch { return false; }
@@ -117,7 +104,7 @@ export class MeetingBotRun implements DurableObject {
   private async stopRuntime(run: BotRun) {
     if (run.started_at === null) { await this.state.storage.put('runtime_stopped',true); return; }
     try {
-      await withDeadline(meetingBotRuntime(this.env).stop({uid:run.uid}),5000,'bot stop');
+      await withDeadline(this.env.MEETING_BOT_RUNTIME!.stop({uid:run.uid}),5000,'bot stop');
       await this.state.storage.put('runtime_stopped',true);
     } catch { await this.state.storage.setAlarm(Date.now()+BOT_HEARTBEAT_MS); }
   }
@@ -223,7 +210,7 @@ export class MeetingBotRun implements DurableObject {
       await this.env.DB.prepare('UPDATE meeting_bots SET started_at = ? WHERE uid = ? AND started_at IS NULL').bind(run.started_at,run.uid).run();
       await this.update(run,'joining');
       try {
-        await withDeadline(meetingBotRuntime(this.env).start({uid:run.uid,platform:run.platform,meeting_url:link,limit_minutes:run.limit_minutes,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!,notice,venture_name:ventureName}),10_000,'bot start');
+        await withDeadline(this.env.MEETING_BOT_RUNTIME!.start({uid:run.uid,platform:run.platform,meeting_url:link,limit_minutes:run.limit_minutes,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!,notice,venture_name:ventureName}),10_000,'bot start');
       } catch { return this.finish(run,'failed','runtime_unavailable'); }
     }
     const now=Date.now();
@@ -349,13 +336,7 @@ export class MeetingBotRun implements DurableObject {
         }
       }
       payload={status,failure_code:failure};
-    } else if (event.type === 'heartbeat') {
-      if (run.status!=='processing' && run.started_at!==null) {
-        const runtime=meetingBotRuntime(this.env);
-        if (runtime.heartbeat) await withDeadline(runtime.heartbeat({uid:run.uid,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!}),5000,'bot heartbeat');
-      }
-      payload={};
-    }
+    } else if (event.type === 'heartbeat') payload={};
     else if (event.type === 'roster') {
       if (!Array.isArray(event.participants) || event.participants.length>500 || event.participants.some((p:any)=>!p || typeof p.id!=='string' || p.id.length>128 || typeof p.name!=='string' || p.name.length>160 || !int(p.joined_ms,run.limit_minutes*60_000) || (p.left_ms!==null && !int(p.left_ms,run.limit_minutes*60_000)))) throw new BotError(400,'invalid_bot_event','The bot roster is not valid.');
       payload={participants:event.participants.map((p:any)=>({id:p.id,name:p.name,joined_ms:p.joined_ms,left_ms:p.left_ms}))};
