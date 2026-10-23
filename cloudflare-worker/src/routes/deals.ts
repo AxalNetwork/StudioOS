@@ -1,3 +1,4 @@
+import { getVerifiedLatestSnapshot } from '../services/scoreIntegrity';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
@@ -305,7 +306,7 @@ deals.get('/stage-analytics', async (c) => {
  */
 deals.get('/screening', async (c) => {
   const user = await requireAuth(c);
-  if (!isPrivilegedRole(user.role as string)) return c.json({ detail: 'Forbidden' }, 403);
+  if (user.role !== 'admin' && user.role !== 'partner') return c.json({ detail: 'Forbidden' }, 403);
   const sql = getSQL(c.env);
 
   /** The six the scorer writes, in the order it writes them. */
@@ -321,7 +322,7 @@ deals.get('/screening', async (c) => {
   let scored: unknown;
   let flags: unknown;
   try {
-    const rows = await sql`
+    const rows = user.role === 'admin' ? await sql`
       SELECT d.id AS deal_id, d.status AS deal_status,
              p.name AS company, p.sector AS sector,
              s.total_score, s.tier, s.created_at AS scored_at,
@@ -341,7 +342,19 @@ deals.get('/screening', async (c) => {
              ) s ON s.project_id = d.project_id
        WHERE (p.id IS NULL OR p.deleted_at IS NULL)
        ORDER BY s.created_at DESC, d.created_at DESC
-       LIMIT 200`;
+       LIMIT 200` : await sql`
+      SELECT d.id AS deal_id, d.status AS deal_status, d.project_id,
+             p.name AS company, p.sector
+        FROM deals d JOIN projects p ON p.id = d.project_id
+       WHERE p.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 200`;
+    if (user.role !== 'admin') {
+      for (const row of rows as any[]) {
+        const verified = await getVerifiedLatestSnapshot(c.env, Number(row.project_id), {
+          role: user.role, userId: user.id,
+        });
+        if (verified) Object.assign(row, verified.row, { scored_at: verified.row.created_at });
+      }
+    }
 
     const list = (rows as any[]).map((r) => {
       // `anomaly_flags` is JSON written by detectAnomalies: [{type, severity}].
@@ -357,8 +370,10 @@ deals.get('/screening', async (c) => {
         total_score: r.total_score === null || r.total_score === undefined ? null : Number(r.total_score),
         tier: r.tier ?? null,
         scored_at: r.scored_at ?? null,
-        review_status: r.admin_review_status ?? null,
-        flags: Array.isArray(parsed) ? parsed : [],
+        ...(user.role === 'admin' ? {
+          review_status: r.admin_review_status ?? null,
+          flags: Array.isArray(parsed) ? parsed : [],
+        } : {}),
         // The six, in the rubric's order, so the page never re-derives it.
         dimensions: RUBRIC.map((dim) => ({
           key: dim.key,
@@ -383,12 +398,12 @@ deals.get('/screening', async (c) => {
     const flagged = withScore.filter((r) => r.review_status === 'flagged');
     const bySeverity: Record<string, number> = {};
     for (const r of flagged) {
-      for (const f of r.flags) {
+      for (const f of r.flags || []) {
         const key = String(f?.severity || 'unrecorded');
         bySeverity[key] = (bySeverity[key] || 0) + 1;
       }
     }
-    flags = {
+    flags = user.role !== 'admin' ? { available: false, reason: 'Administrator access required.' } : {
       available: true,
       open: flagged.length,
       by_severity: bySeverity,

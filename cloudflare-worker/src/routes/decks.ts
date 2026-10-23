@@ -1,7 +1,7 @@
 /**
  * Task #25 — Pitch deck builder (Worker mirror).
  *
- * 10-slide deck pulling project + scoring data, per-slide rich-text
+ * 10-slide deck pulling project facts, per-slide rich-text
  * (markdown body) + image fields, version history, restore, and
  * ONE-TIME signed share URLs (HMAC + DB-tracked single-use).
  */
@@ -247,16 +247,7 @@ function fmtMoney(n: any): string | null {
   return `$${Math.round(v).toLocaleString()}`;
 }
 
-async function latestScore(env: Env, projectId: number): Promise<any | null> {
-  try {
-    return await env.DB.prepare(
-      `SELECT * FROM score_snapshots WHERE project_id = ? AND is_sandbox = 0
-       ORDER BY created_at DESC LIMIT 1`
-    ).bind(projectId).first<any>();
-  } catch { return null; }
-}
-
-function heuristicSlides(p: any, snap: any | null): any[] {
+function heuristicSlides(p: any): any[] {
   // Task #14 — extended to read every project column the 12 deck templates
   // reference, preserving the literal '—' placeholder when the column is
   // empty so the editor renders a visible "needs filling" cue instead of
@@ -286,8 +277,6 @@ function heuristicSlides(p: any, snap: any | null): any[] {
   const cac = fmtMoney(p.cac);
   const grossMarginPct = p.gross_margin_pct != null && p.gross_margin_pct !== ''
     ? `${Math.round(Number(p.gross_margin_pct) * 100) / 100}%` : null;
-  const scoreLine = snap ? `Internal score: ${Math.round(Number(snap.total_score) * 10) / 10}/100 (${snap.tier}).` : '';
-  const marketLine = snap ? `Market scoring: ${Math.round(Number(snap.market_total) * 10) / 10} (urgency + trend signal).` : '';
   const arr = (xs: (string | null | undefined)[]) => xs.filter((x): x is string => !!x);
 
   return [
@@ -298,13 +287,12 @@ function heuristicSlides(p: any, snap: any | null): any[] {
       tam ? `TAM: ${tam}` : `TAM: ${DASH}`,
       sam ? `SAM: ${sam}` : `SAM: ${DASH}`,
       som ? `SOM: ${som}` : `SOM: ${DASH}`,
-      whyNow !== DASH ? whyNow : null, marketLine,
+      whyNow !== DASH ? whyNow : null,
     ]), image_url: null },
     { title: 'Traction', subtitle: "What's working", body: tractionSummary, bullets: arr([
       users > 0 ? `${users.toLocaleString()} users` : `Users: ${DASH}`,
       revenue ? `${revenue} revenue` : `Revenue: ${DASH}`,
       p.growth_signals || DASH,
-      scoreLine,
     ]), image_url: null },
     { title: 'Business model', subtitle: 'How we make money', body: '', bullets: arr([
       cac ? `Blended CAC: ${cac}` : `CAC: ${DASH}`,
@@ -330,7 +318,7 @@ function heuristicSlides(p: any, snap: any | null): any[] {
 // row. The task is the page's row in D764's matrix (`ai/railMatrix.json`,
 // "Founder · Raise · Pitch deck": kind vision, `rail_vision`). A refusal or a failed run returns null and the
 // heuristic deck is used, as a missing key used to.
-async function aiSlides(env: Env, p: any, snap: any | null, userId: number): Promise<any[] | null> {
+async function aiSlides(env: Env, p: any, userId: number): Promise<any[] | null> {
   try {
     const ctx = {
       name: p.name, sector: p.sector, stage: p.stage,
@@ -339,19 +327,11 @@ async function aiSlides(env: Env, p: any, snap: any | null, userId: number): Pro
       tam: p.tam, sam: p.sam, users: p.users_count, revenue: p.revenue,
       growth_signals: p.growth_signals, cost_to_mvp: p.cost_to_mvp,
       funding_needed: p.funding_needed, use_of_funds: p.use_of_funds,
-      scoring: snap ? {
-        total_score: snap.total_score, tier: snap.tier,
-        market_total: snap.market_total, team_total: snap.team_total,
-        product_total: snap.product_total, capital_total: snap.capital_total,
-        fit_total: snap.fit_total, distribution_total: snap.distribution_total,
-        ai_notes: snap.ai_notes,
-      } : null,
     };
     const prompt = `Draft a 10-slide pitch deck for the following startup. Return ONLY valid JSON of the shape:
 {"slides":[{"title":"...","subtitle":"...","body":"...","bullets":["...","..."]}, ...]}
 Use exactly these slide titles in order: ${JSON.stringify(SLIDE_TITLES)}.
 \`body\` is a 1-2 sentence narrative paragraph (markdown allowed). \`bullets\` is 2-4 punchy bullets (≤18 words each).
-Use the scoring numbers in the Traction and Market slides where helpful.
 Startup data: ${JSON.stringify(ctx)}`;
     const res = await aiRouterRun(env, {
       task: 'rail_vision',
@@ -594,9 +574,8 @@ decks.post('/generate', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
   await ensureSchema(c.env);
-  const snap = await latestScore(c.env, pid);
-  const fallback = heuristicSlides(p, snap);
-  const raw = (await aiSlides(c.env, p, snap, Number(user.id) || 0)) || fallback;
+  const fallback = heuristicSlides(p);
+  const raw = (await aiSlides(c.env, p, Number(user.id) || 0)) || fallback;
   const aligned = enforceTen(raw, fallback);
   const slides = sanitizeSlides(aligned);
   while (slides.length < 10) slides.push(fallback[slides.length]);
@@ -611,7 +590,7 @@ decks.post('/generate', async (c) => {
 
 // Task #10 — One-liner & Elevator pitch generator ("one-click positioning").
 // Pulls the selected project's TEAM (cap-table founders), TRACTION (project
-// columns + financial model + latest score) and recent UPDATES (submitted
+// columns + financial model) and recent UPDATES (submitted
 // portfolio updates), then asks the AI for a punchy one-liner, a short
 // elevator pitch and 3-5 alternate positioning lines. Growth-tier, owner-
 // scoped. Uses the held, guarded run path; a refused run has no silent
@@ -667,7 +646,6 @@ decks.post('/positioning', async (c) => {
     updates = (ur.results || []).filter((u) => String(u.title || '').trim());
   } catch { /* table may not exist in dev */ }
 
-  const snap = await latestScore(c.env, pid);
 
   const hasTraction = !!(
     p.traction_summary || p.growth_signals || p.users_count || p.revenue
@@ -691,7 +669,6 @@ decks.post('/positioning', async (c) => {
     team,
     runway_months: fin?.runway_months, ltv_cac_ratio: fin?.ltv_cac_ratio,
     avg_monthly_burn: fin?.avg_monthly_burn,
-    score_tier: snap?.tier,
     recent_updates: updates.map((u) => (u.period ? `${u.period}: ${u.title}` : u.title)),
   };
 

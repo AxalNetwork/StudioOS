@@ -1,3 +1,5 @@
+import { getVerifiedLatestSnapshot, type VisibilityCtx } from './scoreIntegrity';
+type ReadContext = VisibilityCtx & { userId: number | null };
 /**
  * Task #9 — Venture Risk scoring service.
  *
@@ -503,7 +505,10 @@ export async function loadProject(env: Env, projectId: number): Promise<ProjectR
     .catch(() => null);
 }
 
-export async function loadSnapshot(env: Env, projectId: number): Promise<SnapshotInputs | null> {
+export async function loadSnapshot(env: Env, projectId: number, ctx?: ReadContext): Promise<SnapshotInputs | null> {
+  if (ctx && ctx.role !== 'admin') {
+    return (await getVerifiedLatestSnapshot(env, projectId, ctx))?.row ?? null;
+  }
   return env.DB.prepare(
     `SELECT market_total, team_total, product_total, capital_total, fit_total,
             distribution_total, market_trend, market_urgency
@@ -595,11 +600,11 @@ export type Assessment = {
   computed_at: string;
 };
 
-export async function buildAssessment(env: Env, projectId: number): Promise<Assessment | null> {
+export async function buildAssessment(env: Env, projectId: number, ctx?: ReadContext): Promise<Assessment | null> {
   const project = await loadProject(env, projectId);
   if (!project) return null;
   const [snapshot, overrides] = await Promise.all([
-    loadSnapshot(env, projectId),
+    loadSnapshot(env, projectId, ctx),
     loadOverrides(env, projectId),
   ]);
   const layers = mergeLayers(computeAutoLayers({ snapshot, project }), overrides);
@@ -634,7 +639,7 @@ export type MatrixRow = {
   layers: Record<LayerKey, MatrixCellLayer>;
 };
 
-export async function buildMatrix(env: Env, limit = 200): Promise<MatrixRow[]> {
+export async function buildMatrix(env: Env, limit = 200, ctx?: ReadContext): Promise<MatrixRow[]> {
   const res = await env.DB.prepare(
     `SELECT ${PROJECT_COLUMNS} FROM projects
       WHERE deleted_at IS NULL
@@ -647,7 +652,7 @@ export async function buildMatrix(env: Env, limit = 200): Promise<MatrixRow[]> {
   const rows: MatrixRow[] = [];
   for (const p of projects) {
     const [snapshot, overrides] = await Promise.all([
-      loadSnapshot(env, p.id),
+      loadSnapshot(env, p.id, ctx),
       loadOverrides(env, p.id),
     ]);
     const auto = computeAutoLayers({ snapshot, project: p });

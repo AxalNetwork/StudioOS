@@ -172,6 +172,15 @@ export async function signHmac(env: Env, message: string): Promise<string> {
 // Minimal shape a score snapshot row exposes for verification + visibility.
 // Matches the columns added by `score_anti_cheat.sql`.
 export interface ScoreSnapshotRow {
+  market_total: number;
+  team_total: number;
+  product_total: number;
+  capital_total: number;
+  fit_total: number;
+  distribution_total: number;
+  market_trend: number;
+  market_urgency: number;
+
   id: number;
   project_id: number;
   total_score: number;
@@ -414,12 +423,12 @@ export async function getVerifiedLatestSnapshot(
   // Admins see the latest official row regardless so they can spot tampering.
   const sql = isAdmin
     ? `SELECT id, project_id, total_score, tier, is_sandbox, admin_review_status,
-              integrity_hash, integrity_version, created_at
+              integrity_hash, integrity_version, created_at, market_total, team_total, product_total, capital_total, fit_total, distribution_total, market_trend, market_urgency
          FROM score_snapshots
         WHERE project_id = ? AND is_sandbox = 0
         ORDER BY id DESC LIMIT 1`
     : `SELECT id, project_id, total_score, tier, is_sandbox, admin_review_status,
-              integrity_hash, integrity_version, created_at
+              integrity_hash, integrity_version, created_at, market_total, team_total, product_total, capital_total, fit_total, distribution_total, market_trend, market_urgency
          FROM score_snapshots
         WHERE project_id = ? AND is_sandbox = 0
           AND admin_review_status IN ('auto_approved','approved')
