@@ -393,3 +393,21 @@ test('#2410 a checked outcome cannot resolve a newer unknown attempt read after 
     assert.equal(p.calls.length, 0);
   } finally { p.restore(); w.db.close(); }
 });
+
+
+test('#2410 unresolved capacity names the old uncertain posts on click and clock refusals', async () => {
+  const w = await world(), p = provider(), unknown = w.post('unknown');
+  try {
+    w.env.X_DAILY_CAP = '1';
+    w.db.prepare("UPDATE x_posts SET updated_at=datetime('now','-3 days') WHERE id=?").run(unknown);
+    const click = w.post(), out = await w.send(click);
+    assert.equal(out.status, 429); assert.equal(out.body.code, 'x_unresolved_capacity');
+    assert.deepEqual(out.body.unresolved_post_ids, [unknown]);
+    assert.ok(String(out.body.message).includes(`#${unknown}`)); assert.match(String(out.body.message), /Check X and record their outcomes/);
+    const clock = w.post('scheduled'); w.db.prepare("UPDATE x_posts SET scheduled_for='2020-01-01' WHERE id=?").run(clock);
+    assert.equal((await w.send(clock, 'clock')).body.code, 'x_unresolved_capacity');
+    assert.equal(w.row(clock).status, 'draft'); assert.ok(w.row(clock).send_error?.includes(`#${unknown}`));
+    assert.equal((await w.request('POST', `/posts/${unknown}/resolve`, checked('not_sent'))).status, 200);
+    assert.equal((await w.send(click)).status, 200); assert.equal(p.calls.length, 1);
+  } finally { p.restore(); w.db.close(); }
+});

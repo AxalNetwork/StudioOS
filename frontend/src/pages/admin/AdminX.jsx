@@ -504,7 +504,7 @@ export function PostsTab({ posts, accounts, onReload, notify, mode }) {
         return;
       }
       if (e?.status === 429 || e?.code === 'daily_cap_reached') {
-        notify('Daily send cap reached for this account', 'error');
+        notify(e?.code === 'x_unresolved_capacity' ? e.message : 'Daily send cap reached for this account', 'error');
         onReload();
         return;
       }

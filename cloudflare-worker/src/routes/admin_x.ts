@@ -1090,16 +1090,21 @@ export async function sendXPost(
   const used = await reservedTodayWithInflight(env, post.account_id);
   const cap = dailyCap(env);
   if (used > cap) {
-    await releaseClaim(mode === 'clock'
-      ? `daily_cap_reached: the account had used ${used} of its ${cap} posts today. Reschedule it, or send it by hand tomorrow.`
-      : undefined);
+    const pending = await env.DB.prepare(`SELECT id FROM x_posts WHERE account_id = ? AND status = 'unknown' ORDER BY id LIMIT 20`)
+      .bind(post.account_id).all<{ id: number }>();
+    const unresolved = (pending.results || []).map(row => row.id);
+    const code = unresolved.length ? 'x_unresolved_capacity' : 'daily_cap_reached';
+    const message = unresolved.length
+      ? `Unresolved X posts ${unresolved.map(id => `#${id}`).join(', ')} hold this account's send capacity. Check X and record their outcomes before sending more.`
+      : `The account has reached its daily send cap of ${cap}. Reschedule it, or send it tomorrow.`;
+    await releaseClaim(`${code}: ${message}`);
     if (mode === 'clock') {
       await writeAudit(env, {
         adminId: actor.id, adminEmail: actor.email, action: 'x_scheduled_send_refused',
-        postId: id, accountId: post.account_id, extra: { code: 'daily_cap_reached', used, cap },
+        postId: id, accountId: post.account_id, extra: { code, used, cap, unresolved_post_ids: unresolved },
       });
     }
-    return { status: 429, body: { error: 'daily_cap_reached', used, cap } };
+    return { status: 429, body: { error: code, code, message, used, cap, unresolved_post_ids: unresolved } };
   }
 
   // PII linter — concatenate head + every child of the thread so a leak
