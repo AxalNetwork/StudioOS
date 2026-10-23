@@ -1369,7 +1369,7 @@ brand.post('/landing/by-project/:pid/publish', async (c) => {
 brand.get('/landing/by-project/:pid/waitlist', async (c) => {
   const user = await requireAuth(c);
   const pid = parseInt(c.req.param('pid'));
-  try { await projectOwned(c, user, pid); }
+  try { await projectOwned(c, user, pid, { contactData: true }); }
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const audienceFilter = VALID_AUDIENCE(c.req.query('audience'));

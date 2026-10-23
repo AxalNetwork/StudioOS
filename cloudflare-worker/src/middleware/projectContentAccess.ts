@@ -12,7 +12,7 @@ import { findableBy } from '../services/investorFindable';
 type Project = { id: number; founder_id: number | null; company_id: number | null };
 type Context = { env: Env; req: { header: (name: string) => string | undefined } };
 
-export async function projectOwned(c: Context, user: User, projectId: number, opts: { write?: boolean; audit?: boolean } = {}): Promise<Project> {
+export async function projectOwned(c: Context, user: User, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}): Promise<Project> {
   user = { ...user, role: String(user.role || '').toLowerCase() } as User;
   const project = await c.env.DB.prepare('SELECT id, founder_id, company_id FROM projects WHERE id = ?')
     .bind(projectId).first<Project>();
@@ -30,7 +30,7 @@ export async function projectOwned(c: Context, user: User, projectId: number, op
   const owner = user.role === 'founder' && !!user.founder_id && user.founder_id === project.founder_id;
   if (!owner) {
     const role = await getProjectMembershipRole(c.env, project.id, user.id);
-    if (!role || !['owner', 'cofounder', 'advisor'].includes(role) || (opts.write && role === 'advisor')) throw new Error('Forbidden');
+    if (!role || !['owner', 'cofounder', 'advisor'].includes(role) || ((opts.write || opts.contactData) && role === 'advisor')) throw new Error('Forbidden');
   }
   if (!await canAccessProject(c.env, user, project, opts)) throw new Error('Forbidden');
   if (owner

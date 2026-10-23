@@ -99,10 +99,11 @@ const otherWrites = (): Array<[string, string, any?]> => [
   ['POST', '/api/brand/landing/by-project/1/pages', { name: 'Synthetic new page', page_slug: 'synthetic-page' }],
   ['GET', '/api/brand/landing/by-project/1/preview-url'], ['GET', '/api/brand/landing/pages/1/preview-url'],
 ];
+const contacts: Array<[string, string]> = [['GET', '/api/brand/landing/by-project/1/waitlist']];
 const reads: Array<[string, string]> = [
   ['GET', '/api/brand/site/by-project/1'],
   ['GET', '/api/decks/10'], ['GET', '/api/decks/by-project/1'], ['GET', '/api/decks/10/engagement'], ['GET', '/api/decks/recommend?project_id=1'],
-  ['GET', '/api/brand/landing/by-project/1'], ['GET', '/api/brand/landing/by-project/1/waitlist'],
+  ['GET', '/api/brand/landing/by-project/1'],
   ['GET', '/api/brand/landing/pages/1/public-url'],
   ['GET', '/api/brand/landing/by-project/1/page-slug-available?page_slug=synthetic-free'],
   ['GET', '/api/brand/landing/by-project/1/pages'], ['GET', '/api/brand/landing/pages/1'],
@@ -111,7 +112,7 @@ for (const [who, label] of [[3, 'investor'], [4, 'Operating Partner'], [5, 'unre
   test(label + ' cannot read or modify venture content through management routes', async () => {
     const f = await fixture(); const before = snapshot(f);
     try {
-      for (const [method, path, body] of [...writes(f), ...otherWrites(), ...reads]) {
+      for (const [method, path, body] of [...writes(f), ...otherWrites(), ...reads, ...contacts]) {
         const r = await request(f, who, method, path, body);
         assert.equal(r.status, 403, label + ' ' + method + ' ' + path + ': ' + JSON.stringify(r.body));
       }
@@ -254,5 +255,26 @@ for (const who of [11, 12]) test('accepted advisor '+who+' can read an existing 
     f.db.exec('DELETE FROM brand_sites WHERE project_id = 1'); const before = snapshot(f);
     assert.equal((await request(f, who, 'GET', '/api/brand/site/by-project/1')).status, 403);
     assert.equal(snapshot(f), before);
+  } finally { f.db.close(); }
+});
+
+for (const who of [1, 2, 6, 13, 11, 12]) test('waitlist contact access is limited to owners and cofounders: ' + who, async () => {
+  const f = await fixture(); const prepare = f.env.DB.prepare.bind(f.env.DB); let contactReads = 0;
+  f.env.DB.prepare = (sql: string) => { if (sql.includes('FROM waitlist_signups')) contactReads++; return prepare(sql); };
+  try {
+    const before = snapshot(f);
+    const auditBefore = Number(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE action = 'project_content_write_authorized'").get().n);
+    const r = await request(f, who, 'GET', '/api/brand/landing/by-project/1/waitlist');
+    if (who === 11 || who === 12) {
+      assert.equal(r.status, 403); assert.equal(contactReads, 0);
+      assert.equal(JSON.stringify(r.body).includes('synthetic2435@example.test'), false);
+    } else {
+      assert.equal(r.status, 200); assert.equal(contactReads, 1);
+      assert.equal(r.body.count, 1);
+      assert.equal(r.body.signups[0].email, 'synthetic2435@example.test');
+      assert.equal(r.body.signups[0].name, 'Synthetic signup');
+    }
+    assert.equal(snapshot(f), before);
+    assert.equal(Number(f.db.prepare("SELECT count(*) AS n FROM activity_logs WHERE action = 'project_content_write_authorized'").get().n), auditBefore);
   } finally { f.db.close(); }
 });
