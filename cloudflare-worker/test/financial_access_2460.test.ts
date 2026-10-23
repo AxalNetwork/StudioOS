@@ -41,8 +41,10 @@ async function call(env: any, who: number, method: string, path: string, body?: 
   if (company !== undefined) headers['X-Company-Id'] = String(company);
   return app.request(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }, env);
 }
+// #2462: a save records every driver; a partial set is refused with 400.
+const drivers = { starting_cash: 12345, price_per_unit: 10, units_month_0: 5, monthly_growth_pct: 2, cac: 4, monthly_churn_pct: 3, salaries_monthly: 10, opex_monthly: 10, gross_margin_pct: 70, horizon_months: 24 };
 async function seed(env: any) {
-  assert.equal((await call(env, 2, 'PUT', '/financials/1', { assumptions: { starting_cash: 12345 } })).status, 200);
+  assert.equal((await call(env, 2, 'PUT', '/financials/1', { assumptions: drivers })).status, 200);
 }
 for (const who of [3, 4, 5, 6, 7, 8]) {
   test(`${roles[who - 1]} ${who}: no model, export, recompute, save, revenue or legal document access`, async () => {
@@ -74,7 +76,7 @@ for (const who of [1, 2]) {
     try {
       await seed(env);
       assert.equal((await call(env, who, 'GET', '/financials/1')).status, 200);
-      assert.equal((await call(env, who, 'PUT', '/financials/1', { assumptions: { starting_cash: 54321 } })).status, 200);
+      assert.equal((await call(env, who, 'PUT', '/financials/1', { assumptions: { ...drivers, starting_cash: 54321 } })).status, 200);
       db.exec("UPDATE financial_models SET computed_json = '{}', updated_at = 'unchanged-sentinel'");
       assert.equal((await call(env, who, 'POST', '/financials/1/recompute')).status, 200);
       const row = db.prepare('SELECT computed_json, updated_at FROM financial_models').get() as any;

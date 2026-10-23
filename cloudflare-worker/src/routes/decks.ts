@@ -608,7 +608,7 @@ decks.post('/positioning', async (c) => {
   let fin: any = null;
   try {
     const fmRow = await c.env.DB
-      .prepare('SELECT computed_json, assumptions_json FROM financial_models WHERE project_id = ?')
+      .prepare('SELECT computed_json, assumptions_json FROM financial_models WHERE project_id = ? AND updated_by IS NOT NULL')
       .bind(pid).first<any>();
     if (fmRow?.computed_json) { try { fin = JSON.parse(fmRow.computed_json); } catch { fin = null; } }
     if (!fin && fmRow?.assumptions_json) { try { fin = JSON.parse(fmRow.assumptions_json); } catch { fin = null; } }

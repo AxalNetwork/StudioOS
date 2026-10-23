@@ -159,9 +159,9 @@ function validateAssumptionsStrict(input: unknown):
   const out = {} as Record<keyof Assumptions, number>;
   (Object.keys(bounds) as Array<keyof Assumptions>).forEach((k) => {
     const raw = src[k];
-    // Allow missing → use default (matches Pydantic field defaults).
+    // Every driver must be explicitly recorded.
     if (raw === undefined || raw === null || raw === '') {
-      out[k] = DEFAULTS[k];
+      errors.push(`${k}: required`);
       return;
     }
     const v = Number(raw);
@@ -457,17 +457,16 @@ financials.get('/:projectId', async (c) => {
     console.error('[financials] GET select failed:', (e as Error).message);
   }
 
-  if (!fm) {
-    const a = normalizeAssumptions(null);
-    const computed = projectFinancials(a);
+  if (!fm || !fm.updated_by) {
+
     return c.json({
       exists: false,
       project_id: projectId,
       project_name: project.name,
-      assumptions: a,
-      computed,
-      sensitivity: sensitivity(a),
-      capital_recompute: capitalRecompute(a, computed),
+      assumptions: null,
+      computed: null,
+      sensitivity: null,
+      capital_recompute: null,
       updated_at: null,
     });
   }
@@ -506,7 +505,15 @@ financials.put('/:projectId', async (c) => {
   if (!validated.ok) {
     return c.json({ detail: 'Invalid assumptions', errors: validated.errors }, 400);
   }
-  const a = validated.value;
+  const previous = await c.env.DB.prepare(
+    'SELECT assumptions_json FROM financial_models WHERE project_id = ?',
+  ).bind(projectId).first<any>();
+  const stored = safeJsonParse<Record<string, any>>(previous?.assumptions_json, {});
+  const sources = { ...(stored._sources || {}) };
+  for (const [key, value] of Object.entries(validated.value)) {
+    if (stored[key] !== value) sources[key] = 'typed';
+  }
+  const a = { ...stored, ...validated.value, _sources: sources };
   const computed = projectFinancials(a);
   const sens = sensitivity(a);
   const capital = capitalRecompute(a, computed);
