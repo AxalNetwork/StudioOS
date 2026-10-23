@@ -70,6 +70,7 @@ function finance(api = ops) {
   assert.equal(f.target_markup_bps, 2500);
   assert.equal(f.target_gross_margin_bps, 2000);
   assert.equal(f.realised_margin_bps, 2000);
+  assert.equal(f.realised_markup_bps, 2500);
   assert.equal(f.cost_per_bot_hour_microusd, 1600, '180 runtime seconds, not 2 recorded minutes');
   assert.equal(api.botFinancials([row({ runtime_seconds: null })]).cost_per_bot_hour_microusd, null);
   assert.equal(api.botFinancials([row({ runtime_seconds: 0 })]).cost_per_bot_hour_microusd, null);
@@ -96,10 +97,11 @@ function thresholds(api = ops) {
   assert.deepEqual(high.filter(a => a.kind === 'failure_rate'), [{ kind: 'failure_rate', platform: 'zoom', failed: 4, completed: 10, rate_bps: 4000 }]);
   assert.equal(api.evaluateBotAlerts([row({ status: 'failed', ended_at: at(-DAY - 1), created_at: at(-2 * DAY) })], NOW).some(a => a.kind === 'failure_rate'), false);
   assert.equal(api.evaluateBotAlerts([row({ status: 'failed', ended_at: at(-DAY), created_at: at(-2 * DAY) })], NOW).some(a => a.kind === 'failure_rate'), true);
-  assert.deepEqual(api.evaluateBotAlerts([row({ provider_cost_microusd: 85 })], NOW), [], 'exact 15% does not alert');
-  assert.equal(api.evaluateBotAlerts([row({ provider_cost_microusd: 86 })], NOW).some(a => a.kind === 'low_margin'), true);
-  assert.equal(api.evaluateBotAlerts([row({ provider_cost_microusd: 1, charged_microusd: 0 })], NOW).some(a => a.kind === 'low_margin'), true, 'positive cost with zero charge needs an alert');
-  assert.equal(api.evaluateBotAlerts([row({ provider_cost_microusd: 1, charged_microusd: 0 })], NOW).find(a => a.kind === 'low_margin')!.margin_bps, null, 'margin with zero revenue is undefined');
+  assert.deepEqual(api.evaluateBotAlerts([row({ provider_cost_microusd: 85 })], NOW), [], '15% gross margin is more than 15% markup');
+  assert.deepEqual(api.evaluateBotAlerts([row({ provider_cost_microusd: 100, charged_microusd: 115 })], NOW), [], 'exact 15% markup does not alert');
+  assert.equal(api.evaluateBotAlerts([row({ provider_cost_microusd: 100, charged_microusd: 114 })], NOW).some(a => a.kind === 'low_markup'), true);
+  assert.equal(api.evaluateBotAlerts([row({ provider_cost_microusd: 1, charged_microusd: 0 })], NOW).some(a => a.kind === 'low_markup'), true, 'positive cost with zero charge needs an alert');
+  assert.equal(api.evaluateBotAlerts([row({ provider_cost_microusd: 1, charged_microusd: 0 })], NOW).find(a => a.kind === 'low_markup')!.markup_bps, -10000, 'zero revenue is minus 100% markup');
   assert.deepEqual(api.evaluateBotAlerts([row({ provider_cost_microusd: 0, charged_microusd: 0 })], NOW), []);
   assert.deepEqual(api.evaluateBotAlerts([row({ provider_cost_microusd: 99 }), row({ charged_microusd: null })], NOW), [], 'unknown bill cannot yield a partial margin');
   assert.deepEqual(api.evaluateBotAlerts([row({ provider_cost_microusd: 99, created_at: at(-8 * DAY), ended_at: at(-7 * DAY - 1) })], NOW), []);
@@ -132,7 +134,7 @@ function privacy(api = ops) {
   for (const alert of [
     ...out.alerts,
     { kind: 'missed_heartbeat' as const, platform: 'teams' as const, runs: 1, private: marker },
-    { kind: 'low_margin' as const, charged_microusd: 100, provider_cost_microusd: 90, margin_bps: 1000, private: marker },
+    { kind: 'low_markup' as const, charged_microusd: 100, provider_cost_microusd: 90, markup_bps: 1111, private: marker },
   ]) {
     const n = api.botAlertNotification(1, alert);
     assert.equal(n.userId, 1);
@@ -245,8 +247,8 @@ for (const [name, before, after, check] of [
   ['audio minutes price runtime', 'cost * 3600 / seconds', 'cost * 60 / ended.reduce((sum, r) => sum + (r.minutes ?? 0), 0)', finance],
   ['exact 30% alerts', 'failed * 10 > completed.length * 3', 'failed * 10 >= completed.length * 3', thresholds],
   ['stops dilute failure rate', "(r.status === 'done' || r.status === 'failed')", "TERMINAL.has(r.status)", thresholds],
-  ['exact 15% alerts', '* 100n < BigInt(charged) * 15n', '* 100n <= BigInt(charged) * 15n', thresholds],
-  ['zero charge ignored', '(charged === 0 && cost > 0)', '(false)', thresholds],
+  ['exact 15% alerts', '* 100n < BigInt(cost) * 15n', '* 100n <= BigInt(cost) * 15n', thresholds],
+  ['markup uses revenue denominator', 'BigInt(cost) * 15n', 'BigInt(charged) * 15n', thresholds],
   ['heartbeat boundary early', 'stamp(r.heartbeat_due_at) < now', 'stamp(r.heartbeat_due_at) <= now', heartbeat],
   ['terminal heartbeat alerted', "HEARTBEAT.has(r.status) && stamp(r.heartbeat_due_at) < now", "stamp(r.heartbeat_due_at) < now", heartbeat],
   ['raw error code leaks', "BOT_FAILURE_CODES.includes(raw as BotFailureCode) ? raw as BotFailureCode : 'unknown'", "raw as BotFailureCode", privacy],
