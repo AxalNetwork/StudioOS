@@ -257,10 +257,10 @@ async function isProjectParty(env: Env, user: User, project: { id: number; found
   }
   if (user.role === 'investor') {
     const invited = await sql`SELECT 1 FROM deal_invitations i JOIN deals d ON d.id = i.deal_id
-      WHERE d.project_id = ${project.id} AND i.investor_user_id = ${user.id} LIMIT 1`;
+      WHERE d.project_id = ${project.id} AND i.investor_user_id = ${user.id} AND i.status IN ('invited','interested') LIMIT 1`;
     if (invited.length) return true;
     const committed = await sql`SELECT 1 FROM commitments c JOIN deals d ON d.id = c.deal_id
-      WHERE d.project_id = ${project.id} AND c.investor_user_id = ${user.id} LIMIT 1`;
+      WHERE d.project_id = ${project.id} AND c.investor_user_id = ${user.id} AND c.status IN ('pending','confirmed') LIMIT 1`;
     return committed.length > 0;
   }
   if (String(user.role) === 'advisor') {
@@ -282,9 +282,9 @@ async function isDealParty(env: Env, user: User, dealId: number): Promise<boolea
   if (!deal) return false;
   if (deal.lead_partner_id === user.id) return true;
   if (user.role === 'investor') {
-    const invited = await sql`SELECT 1 FROM deal_invitations WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} LIMIT 1`;
+    const invited = await sql`SELECT 1 FROM deal_invitations WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} AND status IN ('invited','interested') LIMIT 1`;
     if (invited.length) return true;
-    const committed = await sql`SELECT 1 FROM commitments WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} LIMIT 1`;
+    const committed = await sql`SELECT 1 FROM commitments WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} AND status IN ('pending','confirmed') LIMIT 1`;
     return committed.length > 0;
   }
   return isProjectParty(env, user, deal, false);
@@ -306,6 +306,7 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
   const dealId = Number(body.deal_id);
   if (!Number.isSafeInteger(dealId) || dealId <= 0) return c.json({ detail: 'deal_id required' }, 400);
   if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
+  if (user.role === 'investor' && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
   if (body.attendee_user_ids != null && !Array.isArray(body.attendee_user_ids)) return c.json({ detail: 'Invalid attendees' }, 400);
   const attendeeIds = new Set<number>((body.attendee_user_ids || []).map(Number));
   for (const attendeeId of attendeeIds) {

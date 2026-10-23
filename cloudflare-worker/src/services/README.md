@@ -363,4 +363,6 @@ Google/Outlook sync and individual pushes; staff-wide typed lists stay separate.
 recorded membership, deal relationship, assigned deal lead or live advisor session grant before
 creating a check-in. IC creation requires a readable deal and validates named
 attendees against that exact deal (venture owner/member/advisor, invited or
-committed investor, or assigned lead); the organiser explicitly opts themselves in.
+committed investor, or assigned lead); the organiser explicitly opts themselves in. Passed investor invitations and
+withdrawn commitments confer no scheduling rights; investor organisers need a
+current relationship too, beyond the legacy deal-reader gate.

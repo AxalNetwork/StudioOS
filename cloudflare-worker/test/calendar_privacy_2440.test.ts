@@ -127,6 +127,10 @@ async function allowedCheckins(route = calendar) {
     assert.equal((await f.request('/founder-checkins', 2, checkin({ founder_user_id: 3, project_id: 30 }))).status, 404, 'inactive founder');
     assert.equal((await f.request('/founder-checkins', 2, checkin({ counterpart_user_id: 10 }))).status, 403, 'unrelated counterpart');
     assert.equal((await f.request('/founder-checkins', 8, checkin())).status, 403, 'removed member');
+    f.db.exec("UPDATE deal_invitations SET status='passed' WHERE deal_id=200 AND investor_user_id=4");
+    assert.equal((await f.request('/founder-checkins', 4, checkin())).status, 403, 'passed invitation');
+    f.db.exec("UPDATE commitments SET status='withdrawn' WHERE investor_user_id=6");
+    assert.equal((await f.request('/founder-checkins', 6, checkin())).status, 403, 'withdrawn commitment');
     f.db.exec("UPDATE advisor_client_grants SET scope_sessions=0");
     assert.equal((await f.request('/founder-checkins', 9, checkin())).status, 403, 'no sessions grant');
     f.db.exec("UPDATE advisor_client_grants SET scope_sessions=1,status='revoked'");
@@ -146,6 +150,9 @@ async function icGuards(route = calendar) {
     f.db.exec('INSERT INTO deals (id,project_id,lead_partner_id) VALUES (201,20,12)');
     assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [12] }))).status, 403, 'lead on a different deal of the same venture');
     assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [5] }))).status, 403, 'foreign-deal investor');
+    f.db.exec("UPDATE users SET role='investor' WHERE id=12");
+    assert.equal((await f.request('/ic-meetings', 12, ic({ deal_id: 201, attendee_user_ids: [2] }))).status, 403, 'assigned investor lead still needs deal read access');
+    f.db.exec("UPDATE users SET role='partner' WHERE id=12");
     f.db.exec('INSERT INTO deal_invitations (deal_id,investor_user_id) VALUES (201,5)');
     assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [5] }))).status, 403, 'same venture, different deal');
     for (const role of roles) {
@@ -153,6 +160,13 @@ async function icGuards(route = calendar) {
       assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [10] }))).status, 403, `outside attendee ${role}`);
     }
     assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [999] }))).status, 403);
+    f.db.exec("INSERT INTO deal_invitations (deal_id,investor_user_id,status) VALUES (200,5,'passed'); UPDATE commitments SET status='withdrawn' WHERE investor_user_id=6");
+    assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [5] }))).status, 403, 'passed invitee');
+    assert.equal((await f.request('/ic-meetings', 4, ic())).status, 403, 'withdrawn attendee');
+    assert.equal((await f.request('/ic-meetings', 6, ic({ attendee_user_ids: [2] }))).status, 403, 'withdrawn organizer');
+    f.db.exec("UPDATE deal_invitations SET status='passed' WHERE deal_id=200 AND investor_user_id=4");
+    assert.equal((await f.request('/ic-meetings', 4, ic({ attendee_user_ids: [2] }))).status, 403, 'passed organizer');
+    f.db.exec("UPDATE deal_invitations SET status='interested' WHERE deal_id=200 AND investor_user_id=4; UPDATE commitments SET status='confirmed' WHERE investor_user_id=6");
     assert.equal(f.db.prepare('SELECT count(*) AS n FROM ic_meetings').get()?.n, 0);
     for (const role of ['founder','partner','exploring','advisor']) {
       f.db.prepare('UPDATE users SET role=? WHERE id=10').run(role);
@@ -195,6 +209,11 @@ test('#2440: scheduling assertions reject each removed relationship/ownership gu
     ["if (!canScheduleIc(lc(user.role)))", 'if (false)', icGuards],
     ["if (!Number.isSafeInteger(dealId) || dealId <= 0)", 'if (false)', icGuards],
     ["if (!(await userMayReadDeal(c.env, user, dealId)))", 'if (false)', icGuards],
+    ["if (user.role === 'investor' && !(await isDealParty(c.env, user, dealId)))", 'if (false)', icGuards],
+    ["AND i.status IN ('invited','interested')", '', allowedCheckins],
+    ["AND c.status IN ('pending','confirmed')", '', allowedCheckins],
+    ["AND status IN ('invited','interested')", '', icGuards],
+    ["AND status IN ('pending','confirmed')", '', icGuards],
     ["if (!attendee || !(await isDealParty(c.env, attendee, dealId)))", 'if (false)', icGuards],
     ["if (body.attendee_user_ids != null && !Array.isArray(body.attendee_user_ids))", 'if (false)', icGuards],
     ["if (!Number.isSafeInteger(attendeeId) || attendeeId <= 0)", 'if (false)', icGuards],
@@ -202,7 +221,7 @@ test('#2440: scheduling assertions reject each removed relationship/ownership gu
     ["if (deal.lead_partner_id === user.id) return true;", '', icGuards],
     ["if (lead.length) return true;", '', allowedCheckins],
     ['isProjectParty(env, user, deal, false)', 'isProjectParty(env, user, deal)', icGuards],
-    ["WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} LIMIT 1", "WHERE deal_id != ${dealId} AND investor_user_id = ${user.id} LIMIT 1", icGuards],
+    ["WHERE deal_id = ${dealId} AND investor_user_id = ${user.id}", "WHERE deal_id != ${dealId} AND investor_user_id = ${user.id}", icGuards],
     ["if (!isSelf && !(await related(user)))", 'if (false)', deniedCheckins],
     ["if (founder.role !== 'founder')", 'if (false)', allowedCheckins],
     ["if (projectId !== null && !projects.length)", 'if (false)', allowedCheckins],
