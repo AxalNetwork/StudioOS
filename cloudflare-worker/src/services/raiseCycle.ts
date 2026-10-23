@@ -115,7 +115,7 @@ export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; score
        FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
       WHERE s.project_id = ? ORDER BY s.scored_at, s.id`,
   ).bind(ctx.projectId).all<ScoreRow>();
-  return { items: items.results || [], scores: scores.results || [] };
+  return { items: items.results || [], scores: (scores.results || []).filter(s => READINESS_KEYS.includes(s.item_key) && (s.item_key === 'team' || s.source === 'computed') && !(s.source === 'manual' && s.evidence === 'measured')) };
 }
 
 /** The newest score each item has, as of the end of `asOf` (or now). */
@@ -326,7 +326,7 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
  * not become unreadable because the benchmark could not be read.
  */
 export function benchmarkRows(b: PeerBenchmark): Array<{ label: string; value: string | number | null; tone?: string }> {
-  const own = { label: 'Your venture score', value: b.own_score };
+  const own = { label: 'Your Lab score', value: b.own_score };
   if (b.state === 'ok' && b.group) {
     return [
       own,
@@ -1306,12 +1306,14 @@ const sparkOrNone = (points: number[]) => (points.filter((p) => Number.isFinite(
 async function readinessFigure(ctx: Ctx): Promise<Figure> {
   return safeFigure({ key: 'readiness_score', label: 'Readiness score', unit: 'score', source: 'readiness_scores' }, async () => {
     const { scores } = await loadReadiness(ctx);
-    const now = overallReadiness(latestScores(scores).values());
-    if (now == null) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No readiness item scored yet' };
+    const latest = latestScores(scores);
+    const coverage = { scored: latest.size, total: READINESS_ITEMS.length };
+    const now = overallReadiness(latest.values());
+    if (now == null) return { value: null, coverage, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No readiness item scored yet' };
     const cut = daysBefore(ctx.today, 30);
     const then = scores.some((s) => String(s.scored_at).slice(0, 10) <= cut) ? overallReadiness(latestScores(scores, cut).values()) : null;
     return {
-      value: now, delta_30d: then == null ? null : now - then,
+      value: now, coverage, delta_30d: then == null ? null : now - then,
       spark: sparkOrNone(readinessHistory(scores).slice(-8).map((h) => h.score)), state: 'ok', as_of: ctx.today, reason: null,
     };
   });

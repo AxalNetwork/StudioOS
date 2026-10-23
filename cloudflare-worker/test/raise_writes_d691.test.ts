@@ -1381,3 +1381,18 @@ test('D752: the D691 writer\'s stage change withdraws a committed prospect\'s ra
   assert.equal((await cyc(db, C_FOUNDER, 'PATCH', q('/prospects/77'), { stage: 'passed' })).status, 200);
   assert.deepEqual({ ...state() }, { state: 'withdrawn', withdraw_reason: "The prospect's amount or stage changed after the match (D752)." });
 });
+
+
+test('#2445: computed scores and measured personal evidence are refused without writing', async () => {
+  const db = cycleFixture();
+  try {
+    for (const key of ['narrative','deck','data_room','cap_table','use_of_funds','traction']) {
+      const r = await cyc(db,C_FOUNDER,'PUT',q('/readiness/'+key),{score:10,evidence:'pattern'});
+      assert.equal(r.status,400,key);
+    }
+    assert.equal((await cyc(db,C_FOUNDER,'PUT',q('/readiness/team'),{score:10,evidence:'measured'})).status,400);
+    assert.equal(n(db,'SELECT COUNT(*) AS n FROM readiness_scores'),0);
+    assert.equal((await cyc(db,C_FOUNDER,'PUT',q('/readiness/team'),{score:6,evidence:'pattern'})).status,200);
+    assert.equal(n(db,"SELECT COUNT(*) AS n FROM readiness_scores WHERE source='manual' AND evidence='pattern'"),1);
+  } finally { db.close(); }
+});

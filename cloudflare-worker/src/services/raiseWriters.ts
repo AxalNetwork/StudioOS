@@ -29,7 +29,7 @@ import { ensureTier } from '../middleware/requireTier';
 import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { createProspect, RAISE_STAGES } from '../routes/contacts';
 import {
-  READINESS_ITEMS, READINESS_KEYS, EVIDENCE, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
+  READINESS_ITEMS, READINESS_KEYS, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
   changedSinceScored, computeReadiness, checkInputs, consistencyCheck, type Mismatch,
 } from './raiseCycle';
 
@@ -66,10 +66,11 @@ export async function scoreReadinessItem(env: Env, a: {
 }): Promise<{ ok: true }> {
   const key = String(a.key ?? '');
   if (!READINESS_KEYS.includes(key)) throw new WriterError(400, 'Unknown readiness item');
+  if (key !== 'team') throw new WriterError(400, 'This item is scored by its check; use Re-score instead');
   const score = Number(a.score);
   if (!Number.isInteger(score) || score < 0 || score > 10) throw new WriterError(400, 'The score is a whole number from 0 to 10');
   const evidence = String(a.evidence ?? '');
-  if (!(EVIDENCE as readonly string[]).includes(evidence)) throw new WriterError(400, 'Evidence is anecdote, pattern or measured');
+  if (!['anecdote', 'pattern'].includes(evidence)) throw new WriterError(400, 'A personal score uses anecdote or pattern evidence');
   const ids = await ensureReadinessItems(env, a.projectId);
   await env.DB.prepare(
     `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by) VALUES (?, ?, ?, ?, ?, 'manual', ?)`,
