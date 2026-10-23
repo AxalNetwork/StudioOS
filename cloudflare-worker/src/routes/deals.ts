@@ -1,4 +1,4 @@
-import { getVerifiedLatestSnapshot } from '../services/scoreIntegrity';
+import { getVerifiedLatestSnapshots } from '../services/scoreIntegrity';
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { schedulePush } from '../integrations/autopush';
@@ -348,11 +348,12 @@ deals.get('/screening', async (c) => {
         FROM deals d JOIN projects p ON p.id = d.project_id
        WHERE p.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 200`;
     if (user.role !== 'admin') {
+      const verified = await getVerifiedLatestSnapshots(c.env, (rows as any[]).map(row => Number(row.project_id)), {
+        role: user.role, userId: user.id,
+      });
       for (const row of rows as any[]) {
-        const verified = await getVerifiedLatestSnapshot(c.env, Number(row.project_id), {
-          role: user.role, userId: user.id,
-        });
-        if (verified) Object.assign(row, verified.row, { scored_at: verified.row.created_at });
+        const snapshot = verified.get(Number(row.project_id));
+        if (snapshot) Object.assign(row, snapshot.row, { scored_at: snapshot.row.created_at });
       }
     }
 

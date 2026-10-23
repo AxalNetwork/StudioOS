@@ -333,34 +333,29 @@ export async function detectAnomalies(env: Env, snap: DetectInput): Promise<Anom
 
 // Log an LP/partner read so admin can replay disputes. Best-effort — never
 // throw out of here; failing to log a read must not break the read.
-export async function logScoreRead(
-  env: Env,
-  args: {
-    snapshotId: number;
-    projectId: number;
-    userId: number | null;
-    role: string;
-    integrityHash: string | null;
-    integrityValid: boolean | null;
-  },
-): Promise<void> {
+interface ScoreReadArgs {
+  snapshotId: number;
+  projectId: number;
+  userId: number | null;
+  role: string;
+  integrityHash: string | null;
+  integrityValid: boolean | null;
+}
+function scoreReadStatement(env: Env, args: ScoreReadArgs): D1PreparedStatement {
+  return env.DB.prepare(
+    `INSERT INTO activity_logs (project_id, user_id, action, details, actor)
+     VALUES (?, ?, 'score_read', ?, ?)`,
+  ).bind(args.projectId, args.userId, JSON.stringify({
+    snapshot_id: args.snapshotId,
+    integrity_hash: args.integrityHash,
+    integrity_valid: args.integrityValid,
+    role: args.role,
+  }), args.role);
+}
+export async function logScoreRead(env: Env, args: ScoreReadArgs): Promise<void> {
   if (!isAuditableRole(args.role)) return;
-  try {
-    await env.DB.prepare(
-      `INSERT INTO activity_logs (project_id, user_id, action, details, actor)
-       VALUES (?, ?, 'score_read', ?, ?)`,
-    ).bind(
-      args.projectId,
-      args.userId,
-      JSON.stringify({
-        snapshot_id: args.snapshotId,
-        integrity_hash: args.integrityHash,
-        integrity_valid: args.integrityValid,
-        role: args.role,
-      }),
-      args.role,
-    ).run();
-  } catch { /* never crash a read because logging failed */ }
+  try { await scoreReadStatement(env, args).run(); }
+  catch { /* never crash a read because logging failed */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -461,4 +456,48 @@ export async function getVerifiedLatestSnapshot(
   });
 
   return { row, hashValid };
+}
+
+
+/** Bulk form of the centralized verified read; one selection and one audit batch.
+ * Project IDs are deduplicated; a rejected signature is audited but never returned.
+ */
+export async function getVerifiedLatestSnapshots(
+  env: Env, projectIds: number[], ctx: VisibilityCtx & { userId: number | null },
+): Promise<Map<number, { row: ScoreSnapshotRow; hashValid: boolean }>> {
+  const ids = [...new Set(projectIds)];
+  const result = new Map<number, { row: ScoreSnapshotRow; hashValid: boolean }>();
+  if (!ids.length) return result;
+  const sql = ctx.role === 'admin'
+    ? `SELECT id, project_id, total_score, tier, is_sandbox, admin_review_status,
+              integrity_hash, integrity_version, created_at, market_total, team_total,
+              product_total, capital_total, fit_total, distribution_total, market_trend, market_urgency
+         FROM score_snapshots WHERE id IN (
+           SELECT MAX(id) FROM score_snapshots
+            WHERE project_id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+              AND is_sandbox = 0 GROUP BY project_id)`
+    : `SELECT id, project_id, total_score, tier, is_sandbox, admin_review_status,
+              integrity_hash, integrity_version, created_at, market_total, team_total,
+              product_total, capital_total, fit_total, distribution_total, market_trend, market_urgency
+         FROM score_snapshots WHERE id IN (
+           SELECT MAX(id) FROM score_snapshots
+            WHERE project_id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+              AND is_sandbox = 0 AND admin_review_status IN ('auto_approved','approved')
+            GROUP BY project_id)`;
+  const selected = await env.DB.prepare(sql).bind(JSON.stringify(ids)).all<ScoreSnapshotRow>();
+  const audit: D1PreparedStatement[] = [];
+  for (const row of selected.results || []) {
+    const hashValid = (await verifyScoreHash(env, row)).valid;
+    if (isAuditableRole(ctx.role)) {
+      try { audit.push(scoreReadStatement(env, {
+      snapshotId: row.id, projectId: row.project_id, userId: ctx.userId, role: ctx.role,
+      integrityHash: row.integrity_hash, integrityValid: hashValid,
+      })); } catch { /* same best-effort audit policy as single reads */ }
+    }
+    if (snapshotIsVisible(row, hashValid, ctx)) result.set(row.project_id, { row, hashValid });
+  }
+  if (audit.length) {
+    try { await env.DB.batch(audit); } catch { /* same best-effort audit policy as single reads */ }
+  }
+  return result;
 }

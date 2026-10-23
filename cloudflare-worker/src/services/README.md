@@ -11,6 +11,8 @@ runs these directly against an in-process SQLite, with no request at all.
 existing deal permissions. Self/admin trust reads retain obligation details;
 related external readers receive only the bare score. Non-admin risk and
 screening snapshots use `scoreIntegrity.ts` verification and read auditing.
+Bulk reads deduplicate projects, select snapshots once, and batch per-score
+audit entries without weakening approval or signature checks.
 
 ## The ones worth knowing
 

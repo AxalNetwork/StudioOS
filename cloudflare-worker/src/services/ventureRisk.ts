@@ -1,4 +1,4 @@
-import { getVerifiedLatestSnapshot, type VisibilityCtx } from './scoreIntegrity';
+import { getVerifiedLatestSnapshot, getVerifiedLatestSnapshots, type VisibilityCtx } from './scoreIntegrity';
 type ReadContext = VisibilityCtx & { userId: number | null };
 /**
  * Task #9 — Venture Risk scoring service.
@@ -649,10 +649,12 @@ export async function buildMatrix(env: Env, limit = 200, ctx?: ReadContext): Pro
     .all<ProjectRow>()
     .catch(() => null);
   const projects = res?.results ?? [];
+  const verified = ctx && ctx.role !== 'admin'
+    ? await getVerifiedLatestSnapshots(env, projects.map(project => project.id), ctx) : null;
   const rows: MatrixRow[] = [];
   for (const p of projects) {
     const [snapshot, overrides] = await Promise.all([
-      loadSnapshot(env, p.id, ctx),
+      verified ? Promise.resolve(verified.get(p.id)?.row ?? null) : loadSnapshot(env, p.id, ctx),
       loadOverrides(env, p.id),
     ]);
     const auto = computeAutoLayers({ snapshot, project: p });

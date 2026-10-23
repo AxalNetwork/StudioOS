@@ -9,7 +9,7 @@ import risk from '../src/routes/venture_risk.ts';
 import trust from '../src/routes/trust.ts';
 import decks from '../src/routes/decks.ts';
 import deals from '../src/routes/deals.ts';
-import { signScore } from '../src/services/scoreIntegrity.ts';
+import { signScore, getVerifiedLatestSnapshots } from '../src/services/scoreIntegrity.ts';
 import { mayReadTrustScores } from '../src/services/scoreAccess.ts';
 
 const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -147,5 +147,42 @@ test('deck generation: fallback uses project facts without internal scores', asy
     assert.doesNotMatch(drafting, /scoring:|Use the scoring numbers|snap\./);
     const positioning = source.slice(source.indexOf("decks.post('/positioning'"), source.indexOf("decks.post('/positioning'") + 6500);
     assert.doesNotMatch(positioning, /score_tier|latestScore/);
+  } finally { f.db.close(); }
+});
+
+
+test('bulk score reads: deduplicate deals and batch audit without weakening visibility', async () => {
+  const f = fixture();
+  try {
+    await snapshot(f);
+    f.db.exec('INSERT INTO deals(id,project_id) VALUES(101,10)');
+    let selections = 0;
+    let auditBatches = 0;
+    const originalPrepare = f.env.DB.prepare.bind(f.env.DB);
+    const originalBatch = f.env.DB.batch.bind(f.env.DB);
+    f.env.DB.prepare = (sql: string) => {
+      if (sql.includes('FROM score_snapshots')) selections++;
+      return originalPrepare(sql);
+    };
+    f.env.DB.batch = async (statements: any[]) => {
+      auditBatches++;
+      return originalBatch(statements);
+    };
+    const response = await request(deals, f.env, 2, '/screening');
+    assert.equal(response.status, 200);
+    const body: any = await response.json();
+    assert.equal(body.scored.rows.filter((r: any) => r.total_score === 91).length, 2);
+    assert.equal(selections, 1);
+    assert.equal(auditBatches, 1);
+    assert.equal((f.db.prepare("SELECT COUNT(*) AS n FROM activity_logs WHERE action='score_read'").get() as any).n, 1);
+    selections = 0; auditBatches = 0;
+    assert.equal((await request(risk, f.env, 2, '/matrix')).status, 200);
+    assert.equal(selections, 1);
+    assert.equal(auditBatches, 1);
+    const visible = await getVerifiedLatestSnapshots(f.env, [10, 10, 20], { role: 'investor', userId: 3 });
+    assert.equal(visible.size, 1);
+    assert.equal(visible.get(10)?.row.total_score, 91);
+    f.db.exec("UPDATE score_snapshots SET total_score=99");
+    assert.equal((await getVerifiedLatestSnapshots(f.env, [10], { role: 'investor', userId: 3 })).size, 0);
   } finally { f.db.close(); }
 });
