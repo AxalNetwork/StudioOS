@@ -15,7 +15,7 @@ Task #48.
 | `form-lightbox-contracts.yml` | D695 canonical/legacy form and responsive page contracts with modal effects and mutation/restoration; guards, root build then full drift | PR to `main` touching form/lightbox contracts | none (`contents: read`) |
 | `release-draft.yml` | Keeps one draft GitHub release ready for the owner: the next tag (v0.1.0-alpha first, then a minor bump per release at the stage in `frontend/src/lib/release.js`) and GitHub's generated notes since the last published release; tests the rules first (`scripts/lib/releaseDraft.test.mjs`), then runs `scripts/release-draft.mjs` | push to `main`; manual dispatch | none (`GITHUB_TOKEN` with `contents: write`) |
 | `release-published.yml` | When the owner publishes a release, dispatches `cloudflare-worker-deploy.yml` on `main`, so the build picks up the new tag and the version beside the logo shows it; never deploys the tag's own commit | release published | none (`GITHUB_TOKEN` with `actions: write`) |
-| `meeting-bot-image.yml` | D886 B8 (#2586): checks image/deploy contracts, both environment dry-runs and the real image/isolated boot; an owner-triggered main run archives the image in GHCR (see below) | PR to `main` touching the meeting bot or its helper; manual dispatch | none (`GITHUB_TOKEN` with `packages: write` on the manual run only) |
+| `meeting-bot-image.yml` | D886 B8 (#2586): checks image/deploy contracts, production/preview/generated-branch dry-runs and the real image/isolated boot; an owner-triggered main run archives the image in GHCR (see below) | PR to `main` touching the meeting bot or its helper; manual dispatch | none (`GITHUB_TOKEN` with `packages: write` on the manual run only) |
 | `ci.yml` | Frontend build, worker typecheck, API↔Worker drift, dev-backend import smoke, npm + pip audits | push/PR to `main` | none (uses `GITHUB_TOKEN` only) |
 | `meeting-worker-contracts.yml` | Mocked meeting reliability, mutation/restoration and hosted-attach contracts, alongside the full drift gate | PR to `main` touching meeting Worker code or tests | none (`contents: read`) |
 | `build-worker-contracts.yml` | Focused D686 connector, Workspace mapping and local Wrangler D1 tests with mocked provider I/O; supplements the root build and full drift gate | PR to `main` touching the Build Worker contracts | none (`contents: read`; local scratch D1 only) |
@@ -100,16 +100,16 @@ Do NOT use floating refs like `@main`, `:latest`, or unreleased majors
 
 ## Meeting bot image and deploy gate (D886 B8)
 
-`meeting-bot-image.yml` checks image/deploy contracts, dry-runs production and
-preview with temporary scratch copies, builds the real runtime image, and boots
+`meeting-bot-image.yml` checks image/deploy contracts, dry-runs production,
+preview and a generated branch with temporary scratch copies, builds the real runtime image, and boots
 that image with provider network access disabled. The boot/native-import check
 validates packaging and process health, not live meetings or publication.
 An owner-triggered main run additionally publishes a commit-tagged GHCR archive
 using the job-scoped `GITHUB_TOKEN`; the summary records its digest. PRs receive
 no registry credentials or package-write permission.
 
-`cloudflare-worker-deploy.yml` and root `npm run deploy` both run the same real
-image preflight before D1 migrations. A failed build stops there. Wrangler then
+`cloudflare-worker-deploy.yml`, `branch-provision.yml` and root `npm run deploy`
+run the same real image preflight before their D1 migrations. A failed build stops there. Wrangler then
 prepares Cloudflare's named image for the private per-run host. No feature or
 notice setting changes here. Operator prerequisites and secret names are in
 PRODUCTION.md; account Containers access must be provisioned before deployment.
