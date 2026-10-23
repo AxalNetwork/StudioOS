@@ -1917,7 +1917,6 @@ export const api = {
 
   activityLog: (params) => request(`/activity${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),
-  activitySyncGithub: () => request('/activity/sync-github', { method: 'POST' }),
 
   // D128 — `q` searches name and email; `envelope: 1` adds the per-role TOTALS
   // over the whole table. Called with no argument this is byte-for-byte the
