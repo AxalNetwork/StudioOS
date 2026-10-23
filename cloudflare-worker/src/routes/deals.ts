@@ -6,7 +6,6 @@ import { investorActiveCompany } from './_investorProjectScope';
 import { openConditionsOnDeal } from './ic';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { requireAuth, requireRole, requireAdmin, canAccessFounderResource } from '../auth';
-import { buildZip } from '../util/zip';
 import { isPassReason, passReasonLabel, PASS_REASON_KEYS, PASS_REASON_UNRECORDED } from '../services/dealPassTaxonomy';
 import { buildPassBreakdown, buildStageFunnel, DEAL_METRIC_UNAVAILABLE } from '../services/dealAnalytics';
 import { ensureDealPassSchema, recordStageEvent, stageRecordingStartedAt } from '../services/dealStageHistory';
@@ -52,6 +51,18 @@ function enrichDeal(row: any): any {
 
 const isPrivilegedRole = (role: string) =>
   role === 'admin' || role === 'partner' || role === 'investor';
+
+/** Internal deal-team fields never leave staff responses. */
+export function serializeDeal(row: any, role: string): any {
+  const result = enrichDeal(row);
+  if (role !== 'admin' && role !== 'partner') {
+    delete result.notes;
+    delete result.pass_reason;
+    delete result.pass_note;
+    delete result.passed_by_user_id;
+  }
+  return result;
+}
 
 deals.get('/', async (c) => {
   const user = await requireAuth(c);
@@ -123,7 +134,7 @@ deals.get('/', async (c) => {
         : await sql`SELECT d.*, p.name as project_name, p.sector as project_sector, pr.name as partner_name, f.id as founder_user_id FROM deals d LEFT JOIN projects p ON d.project_id = p.id LEFT JOIN partners pr ON d.partner_id = pr.id LEFT JOIN users f ON f.founder_id = p.founder_id WHERE p.founder_id = ${user.founder_id} AND (p.company_id = ${founderCompanyId} OR p.company_id IS NULL) AND p.deleted_at IS NULL ORDER BY d.created_at DESC`);
   }
   await sql.end();
-  return c.json((rows as any[]).map(enrichDeal));
+  return c.json((rows as any[]).map(row => serializeDeal(row, user.role)));
 });
 
 // ---------------------------------------------------------------------------
@@ -640,7 +651,7 @@ deals.get('/:id', async (c) => {
     return c.json({ detail: 'Forbidden: you do not own this deal' }, 403);
   }
   await sql.end();
-  return c.json(enrichDeal(rows[0]));
+  return c.json(serializeDeal(rows[0], user.role));
 });
 
 deals.put('/:id', async (c) => {
@@ -1032,47 +1043,23 @@ deals.get('/:id/documents', async (c) => {
 });
 
 deals.get('/:id/data-room', async (c) => {
-  const id = parseInt(c.req.param('id'));
-  const ctx = await loadDealForRead(c, id);
-  if (ctx.error) return ctx.error;
-  const { sql, deal } = ctx;
-  const docs = deal.project_id
-    ? await sql`SELECT id, title, content FROM documents WHERE project_id = ${deal.project_id} ORDER BY created_at DESC`
-    : [];
-  await sql.end();
-  const entries = [{
-    name: 'README.txt',
-    content: [
-      `Data Room — ${deal.project_name || 'Deal #' + id}`,
-      `Stage: ${deal.status}`,
-      `Documents: ${docs.length}`,
-      `Exported: ${new Date().toISOString()}`,
-    ].join('\n'),
-  }];
-  const seen = new Set<string>();
-  for (const d of docs as any[]) {
-    const base = String(d.title || `document_${d.id}`).replace(/[^a-zA-Z0-9 \-_.]/g, '_');
-    let name = `${base}.txt`;
-    let i = 1;
-    while (seen.has(name)) { name = `${base}_${i++}.txt`; }
-    seen.add(name);
-    entries.push({ name, content: d.content || '(document stored externally — no inline content)' });
-  }
-  const zip = buildZip(entries);
-  return new Response(zip, {
-    headers: {
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="data-room-deal-${id}.zip"`,
-    },
-  });
+  await requireAuth(c);
+  return c.json({ detail: 'This export is retired. Use the shared data room with its grants and NDA checks.' }, 410);
 });
 
 deals.get('/:id/commitments', async (c) => {
   const id = parseInt(c.req.param('id'));
   const ctx = await loadDealForRead(c, id);
   if (ctx.error) return ctx.error;
-  const { sql } = ctx;
-  const rows = await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
+  const { sql, user } = ctx;
+  if (user.role !== 'admin' && user.role !== 'founder' && user.role !== 'investor') {
+    const rows = await sql`SELECT COALESCE(SUM(amount), 0) AS total FROM commitments WHERE deal_id = ${id}`;
+    await sql.end();
+    return c.json({ total: Number(rows[0]?.total ?? 0) });
+  }
+  const rows = user.role === 'investor'
+    ? await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} AND c.investor_user_id = ${user.id} ORDER BY c.created_at DESC`
+    : await sql`SELECT c.id, c.uid, c.deal_id, c.investor_user_id, c.amount, c.status, c.notes, c.created_at, u.name AS investor_name FROM commitments c LEFT JOIN users u ON u.id = c.investor_user_id WHERE c.deal_id = ${id} ORDER BY c.created_at DESC`;
   await sql.end();
   return c.json(rows);
 });
