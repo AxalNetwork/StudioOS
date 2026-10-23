@@ -605,14 +605,13 @@ decks.post('/positioning', async (c) => {
   try {
     await ensureProjectMembershipSchema(c.env);
     const rows = await c.env.DB.prepare(
-      `WITH target AS (SELECT id, founder_id FROM projects WHERE id = ?),
-        team_ids AS (
+      `WITH target AS (SELECT id, founder_id FROM projects WHERE id = ?)
+        SELECT u.id, u.name FROM users u JOIN (
           SELECT u.id FROM users u JOIN target p ON u.founder_id = p.founder_id WHERE u.role = 'founder'
           UNION
           SELECT pm.user_id FROM project_members pm JOIN target p ON pm.project_id = p.id
             WHERE pm.status = 'accepted' AND pm.role IN ('owner', 'cofounder', 'advisor')
-        )
-        SELECT u.id, u.name FROM team_ids t JOIN users u ON u.id = t.id CROSS JOIN target p
+        ) t ON u.id = t.id CROSS JOIN target p
         WHERE u.is_active = 1 AND trim(COALESCE(u.name, '')) <> ''
         ORDER BY CASE WHEN u.role = 'founder' AND u.founder_id = p.founder_id THEN 0 ELSE 1 END, u.id LIMIT 6`,
     ).bind(pid).all<{ id: number; name: string }>();
