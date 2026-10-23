@@ -31,6 +31,7 @@ import {
   googleSyncIdentityMatchesState,
   shouldResetGoogleSyncMappings,
   callbackGoogleScopes,
+  clearGoogleIdentityLink,
 } from '../src/routes/calendar.ts';
 import { returnFromNonce } from '../src/util/oauthReturn.ts';
 
@@ -229,6 +230,16 @@ test('Google disconnect revokes before deleting its saved connection', async () 
     'db:DELETE FROM',
     'db:DELETE FROM',
   ]);
+});
+
+test('a confirmed Google identity switch clears the old sign-in link', async () => {
+  const writes: string[] = [];
+  const DB = { prepare(sql: string) { return { bind() { return { async all() {
+    writes.push(sql);
+    return { results: [] };
+  } }; } }; } };
+  await clearGoogleIdentityLink({ ...FULL_GOOGLE, DB } as any, 42, 'old-google-sub');
+  assert.ok(writes.some(sql => /DELETE FROM user_google_links WHERE user_id = \? AND google_sub = \?/.test(sql)));
 });
 
 test('Google disconnect keeps the saved connection when revocation fails', async () => {
