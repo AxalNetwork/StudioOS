@@ -128,6 +128,9 @@ export function RoundClosesPanel({ projectId, onError }) {
         </div>
       )}
 
+      {p && (p.amount_not_recorded_count > 0 || p.status_not_set_count > 0) && <p className="text-xs text-amber-700">
+        {p.amount_not_recorded_count || 0} · Amount not recorded. {p.status_not_set_count || 0} · Status not set. Incomplete allocations are excluded from the relevant totals.
+      </p>}
       {adding && (
         <form onSubmit={addClose} className="rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 flex flex-wrap gap-2 items-end">
           <label className="flex-1 min-w-[160px]">

@@ -1,3 +1,4 @@
+import { mayReadTrustScores } from '../services/scoreAccess';
 /**
  * Trust Center routes — Task #3 (Y-1).
  *
@@ -174,7 +175,7 @@ trust.get('/score/:userId', async (c) => {
   const target = Number(c.req.param('userId'));
   if (!Number.isInteger(target) || target <= 0) return c.json({ error: 'invalid_user' }, 400);
   const isSelf = caller.id === target;
-  const allowed = isSelf || caller.role === 'admin' || caller.role === 'partner' || caller.role === 'investor';
+  const allowed = await mayReadTrustScores(c.env, caller, [target]);
   if (!allowed) return c.json({ error: 'forbidden' }, 403);
   await ensureTrustSchema(c.env);
   // Self-heal: seed any missing rows for the target's role so a
@@ -196,7 +197,9 @@ trust.get('/score/:userId', async (c) => {
   const missing = required
     .filter(o => o.status !== 'satisfied' && o.status !== 'waived')
     .map(o => o.obligation_key);
-  return c.json({ user_id: target, score, missing, required_total: required.length });
+  return c.json(isSelf || caller.role === 'admin'
+    ? { user_id: target, score, missing, required_total: required.length }
+    : { user_id: target, score });
 });
 
 // ---------------------------------------------------------------------------
@@ -237,6 +240,7 @@ trust.post('/score/batch', async (c) => {
     raw.map((v: any) => Number(v)).filter((n: number) => Number.isInteger(n) && n > 0),
   )).slice(0, 200) as number[];
   if (ids.length === 0) return c.json({ scores: [] });
+  if (!await mayReadTrustScores(c.env, caller, ids)) return c.json({ error: 'forbidden' }, 403);
   await ensureTrustSchema(c.env);
   const placeholders = ids.map(() => '?').join(',');
   const rows: any = await c.env.DB.prepare(
@@ -260,7 +264,9 @@ trust.post('/score/batch', async (c) => {
     const missing = required
       .filter((o: any) => o.status !== 'satisfied' && o.status !== 'waived')
       .map((o: any) => o.obligation_key);
-    return { user_id: id, score, missing, required_total: required.length };
+    return caller.role === 'admin' || caller.id === id
+      ? { user_id: id, score, missing, required_total: required.length }
+      : { user_id: id, score };
   });
   return c.json({ scores });
 });

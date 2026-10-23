@@ -75,14 +75,14 @@ const PERSONAL = ['founder', 'partner', 'investor'];
 // D884 (#2557): an investor sees their own Mercury on a branch too.
 const BRANCH_PERSONAL = ['founder', 'partner', 'investor'];
 
-test('on HQ, /available lists mercury to an admin as a preview of the founder\'s card (D879) and to a founder, a partner and an investor as their own; every other row is unchanged', async () => {
+test('on HQ, /available lists mercury to an admin as a preview of the founder\'s card (D879) and to a founder, a partner and an investor as their own; Carta stays founder/investor-only', async () => {
   const db = fixture();
   for (const role of ROLES) {
     const r = await call(db, role, 'GET', '/available');
     assert.equal(r.status, 200, role);
     const keys = r.body.items.map((p: any) => p.key);
     // D757 §2.11: Zoom is a Validate source, listed only to who can hold a venture.
-    assert.deepEqual(keys.filter((k: string) => k !== 'mercury'), OTHERS.filter((k) => k !== 'zoom' || role === 'admin' || role === 'founder'), `${role}: the other providers, in order`);
+    assert.deepEqual(keys.filter((k: string) => k !== 'mercury'), OTHERS.filter((k) => (k !== 'zoom' || role === 'admin' || role === 'founder') && (k !== 'carta' || role === 'founder' || role === 'investor')), `${role}: the other providers, in order`);
     assert.equal(keys.includes('mercury'), role === 'admin' || PERSONAL.includes(role), role);
     for (const p of r.body.items.filter((x: any) => x.key !== 'mercury')) {
       const desc = REGISTRY.find((d) => d.key === p.key)!;

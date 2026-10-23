@@ -7,9 +7,9 @@
  *   POST   /:projectId/recompute     — recompute from stored assumptions
  *   GET    /:projectId/export.xlsx   — CSV fallback (worker has no XLSX lib)
  *
- * Authorization mirrors the Python helpers:
- *   admin / partner              — read-only on any project
- *   admin / founder (own project) — may PUT
+ * Production authorization (#2460):
+ *   admin / founder (own project) — read, save and recompute
+ *   partner                      — no blanket access (#2460; tie pending #2438)
  *   anyone else                  — 403
  *
  * Response shapes match the FastAPI source EXACTLY so FinancialsPage
@@ -377,11 +377,8 @@ type Project = { id: number; name: string; founder_id: number | null; company_id
  * the project is the caller's own, it is just not in the workspace they have
  * selected.
  *
- * Privileged callers are exempt because `projects.company_id` is the FOUNDER's
- * company; a partner's active company is their agency, an id this column never
- * carries, and narrowing them by it would erase their access rather than
- * restrict it. `projectInActiveCompany` takes no actor for this reason — the
- * decision that this is the ownership path is made here, once.
+ * Admin callers are exempt. Other roles must pass the company check as well
+ * as the resource gate. #2460 removes the former partner exemption.
  *
  * `submitted_by` is deliberately not selected: `projects` does not have that
  * column on prod (it lives on `issues` — schema.sql:418) and selecting it
@@ -410,7 +407,7 @@ const ACTIVE_COMPANY_KEY = '__activeCompanyId';
 
 function isPrivileged(role: string): boolean {
   // Task #3 (DF) — investor removed from read-allowlist per IDOR contract.
-  return role === 'admin' || role === 'partner';
+  return role === 'admin';
 }
 
 function ensureCanView(project: Project, user: { role: string; founder_id?: number | null }) {
@@ -592,7 +589,7 @@ financials.post('/:projectId/recompute', async (c) => {
 
   const project = await loadProject(c, projectId, user);
   if (!project) return c.json({ detail: 'Project not found' }, 404);
-  ensureCanView(project, user);
+  ensureCanEdit(project, user);
   await ensureFinancialsModelSchema(c.env);
 
   let fm: { assumptions_json: string } | null = null;

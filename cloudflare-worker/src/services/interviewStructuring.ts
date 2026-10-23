@@ -671,6 +671,12 @@ export interface SegmentRow {
  */
 export function toSegments(rows: readonly SegmentRow[]): Segment[] {
   const out: Segment[] = [];
+  const nextStarts: Array<number | undefined> = new Array(rows.length);
+  let nextStart: number | undefined;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    nextStarts[i] = nextStart;
+    if (Number.isSafeInteger(rows[i].start_ms)) nextStart = rows[i].start_ms as number;
+  }
   for (let i = 0; i < rows.length; i += 1) {
     const r = rows[i];
     const text = String(r.text || '').trim();
@@ -678,7 +684,7 @@ export function toSegments(rows: readonly SegmentRow[]): Segment[] {
     const prevEnd = out.length ? out[out.length - 1].end : 0;
     // A recorded start is kept as recorded, even where two speakers overlap.
     const start = Number.isSafeInteger(r.start_ms) && (r.start_ms as number) >= 0 ? (r.start_ms as number) : Math.max(prevEnd, i * 1000);
-    const nextStart = rows.slice(i + 1).map((n) => n.start_ms).find((n) => Number.isSafeInteger(n));
+    const nextStart = nextStarts[i];
     let end = Number.isSafeInteger(r.end_ms) ? (r.end_ms as number)
       : (typeof nextStart === 'number' && nextStart > start ? nextStart : start + 1000);
     if (end <= start) end = start + 1;
