@@ -14,8 +14,11 @@
  * single-use HMAC-signed state token persisted in oauth_state_tokens.
  */
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { getSQL } from '../db';
+import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
+import { userMayReadDeal } from './deals';
+import { logAdminAction } from '../services/adminAudit';
 import { requireAuth } from '../auth';
 import {
   googleOAuthAvailable, microsoftOAuthAvailable,
@@ -240,6 +243,49 @@ async function serializeIc(env: Env, m: any): Promise<any> {
   };
 }
 
+// Calendar invitations need an actual venture tie, not staff's global read
+// permission. Investor access follows the deal invitation/commitment stores;
+// advisor access follows the founder's live, unexpired session grant.
+async function isProjectParty(env: Env, user: User, project: { id: number; founder_id: number | null }): Promise<boolean> {
+  if (user.role === 'founder' && user.founder_id && user.founder_id === project.founder_id) return true;
+  const member = await getProjectMembershipRole(env, project.id, user.id);
+  if (member && await canAccessProject(env, user, project)) return true;
+  const sql = getSQL(env);
+  if (user.role === 'investor') {
+    const invited = await sql`SELECT 1 FROM deal_invitations i JOIN deals d ON d.id = i.deal_id
+      WHERE d.project_id = ${project.id} AND i.investor_user_id = ${user.id} LIMIT 1`;
+    if (invited.length) return true;
+    const committed = await sql`SELECT 1 FROM commitments c JOIN deals d ON d.id = c.deal_id
+      WHERE d.project_id = ${project.id} AND c.investor_user_id = ${user.id} LIMIT 1`;
+    return committed.length > 0;
+  }
+  if (String(user.role) === 'advisor') {
+    const grants = await sql`SELECT 1 FROM advisor_client_grants
+      WHERE project_id = ${project.id} AND advisor_user_id = ${user.id} AND status = 'active'
+        AND scope_sessions = 1 AND (expires_at IS NULL OR datetime(expires_at) > datetime('now')) LIMIT 1`;
+    return grants.length > 0;
+  }
+  return false;
+}
+
+// IC invitations are scoped to this exact deal, rather than any deal belonging
+// to the same venture. Reading a deal as staff alone does not make an invitee
+// a party to it; the authenticated organiser is explicitly opting in themselves.
+async function isDealParty(env: Env, user: User, dealId: number): Promise<boolean> {
+  const sql = getSQL(env);
+  const deal = (await sql`SELECT p.id, p.founder_id, d.lead_partner_id FROM deals d JOIN projects p ON p.id = d.project_id
+    WHERE d.id = ${dealId} AND p.deleted_at IS NULL` as any[])[0];
+  if (!deal) return false;
+  if (deal.lead_partner_id === user.id) return true;
+  if (user.role === 'investor') {
+    const invited = await sql`SELECT 1 FROM deal_invitations WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} LIMIT 1`;
+    if (invited.length) return true;
+    const committed = await sql`SELECT 1 FROM commitments WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} LIMIT 1`;
+    return committed.length > 0;
+  }
+  return isProjectParty(env, user, deal);
+}
+
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
   const user = await requireAuth(c);
   if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
@@ -253,6 +299,18 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
   }
   const duration = Math.min(600, Math.max(10, parseInt(body.duration_min, 10) || 60));
   const sql = getSQL(c.env);
+  const dealId = Number(body.deal_id);
+  if (!Number.isSafeInteger(dealId) || dealId <= 0) return c.json({ detail: 'deal_id required' }, 400);
+  if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
+  if (body.attendee_user_ids != null && !Array.isArray(body.attendee_user_ids)) return c.json({ detail: 'Invalid attendees' }, 400);
+  const attendeeIds = new Set<number>((body.attendee_user_ids || []).map(Number));
+  for (const attendeeId of attendeeIds) {
+    if (!Number.isSafeInteger(attendeeId) || attendeeId <= 0) return c.json({ detail: 'Invalid attendee' }, 400);
+    if (attendeeId === user.id) continue;
+    const attendee = (await sql`SELECT * FROM users WHERE id = ${attendeeId} AND is_active = 1` as User[])[0];
+    if (!attendee || !(await isDealParty(c.env, attendee, dealId))) return c.json({ detail: 'Attendee is not on this deal' }, 403);
+  }
+  attendeeIds.add(user.id);
   const uid = crypto.randomUUID();
   const r = await sql`
     INSERT INTO ic_meetings
@@ -260,17 +318,12 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
        location_kind, location_uri)
     VALUES
       (${uid}, ${title}, ${body.agenda || null}, ${startAt.toISOString()}, ${duration},
-       ${body.deal_id || null}, ${user.id},
+       ${dealId}, ${user.id},
        ${body.location_kind || 'video'}, ${body.location_uri || null})
     RETURNING *
   ` as any[];
   const meeting = r[0];
-  const attendeeIds = new Set<number>(
-    Array.isArray(body.attendee_user_ids)
-      ? body.attendee_user_ids.map((n: any) => parseInt(n, 10)).filter((n: number) => Number.isFinite(n))
-      : [],
-  );
-  attendeeIds.add(user.id);
+  await logAdminAction(c.env, user.id, user.email, 'calendar_ic_created', { meeting_id: meeting.id, deal_id: dealId, attendees: attendeeIds.size });
   for (const uid2 of attendeeIds) {
     const u = (await sql`SELECT 1 FROM users WHERE id = ${uid2}` as any[])[0];
     if (!u) continue;
@@ -412,18 +465,30 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
   if (title.length < 2) return c.json({ detail: 'title required (min 2 chars)' }, 400);
 
   const sql = getSQL(c.env);
-  const founder = (await sql`SELECT id FROM users WHERE id = ${founderId}` as any[])[0];
+  const founder = (await sql`SELECT * FROM users WHERE id = ${founderId} AND is_active = 1` as any[])[0];
   if (!founder) return c.json({ detail: 'founder user not found' }, 404);
 
+  if (founder.role !== 'founder') return c.json({ detail: 'Target must be a founder' }, 403);
+  const projectId = body.project_id == null ? null : Number(body.project_id);
+  if (projectId !== null && (!Number.isSafeInteger(projectId) || projectId <= 0)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const projects = projectId === null
+    ? await sql`SELECT id, founder_id FROM projects WHERE founder_id = ${founder.founder_id} AND deleted_at IS NULL` as any[]
+    : await sql`SELECT id, founder_id FROM projects WHERE id = ${projectId} AND founder_id = ${founder.founder_id} AND deleted_at IS NULL` as any[];
+  if (projectId !== null && !projects.length) return c.json({ detail: 'Project does not belong to this founder' }, 403);
   const isSelf = user.id === founderId;
-  const requestedCounterId = body.counterpart_user_id ? parseInt(body.counterpart_user_id, 10) : null;
-  const isCounter = requestedCounterId === user.id;
-  const role = lc(user.role);
-  if (!(isAdmin(role) || isSelf || isCounter || ['partner', 'investor', 'advisor'].includes(role))) {
-    return c.json({ detail: 'Not allowed to schedule this check-in' }, 403);
+  const related = async (person: User) => {
+    for (const project of projects) if (await isProjectParty(c.env, person, project)) return true;
+    return false;
+  };
+  if (!isSelf && !(await related(user))) return c.json({ detail: 'Not allowed to schedule this check-in' }, 403);
+  const counterId = body.counterpart_user_id == null ? (isSelf ? null : user.id) : Number(body.counterpart_user_id);
+  if (counterId !== null) {
+    if (!Number.isSafeInteger(counterId) || counterId <= 0) return c.json({ detail: 'Invalid counterpart' }, 400);
+    if (counterId !== founderId && counterId !== user.id) {
+      const counterpart = (await sql`SELECT * FROM users WHERE id = ${counterId} AND is_active = 1` as User[])[0];
+      if (!counterpart || !(await related(counterpart))) return c.json({ detail: 'Counterpart is not related to this venture' }, 403);
+    }
   }
-  // Default counterpart to caller if not the founder themselves.
-  const counterId = requestedCounterId ?? (isSelf ? null : user.id);
   const duration = Math.min(240, Math.max(10, parseInt(body.duration_min, 10) || 30));
   const uid = crypto.randomUUID();
   const r = await sql`
@@ -431,12 +496,13 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
       (uid, founder_user_id, counterpart_user_id, project_id, title, notes,
        start_at, duration_min, location_kind, location_uri)
     VALUES
-      (${uid}, ${founderId}, ${counterId}, ${body.project_id || null},
+      (${uid}, ${founderId}, ${counterId}, ${projectId},
        ${title}, ${body.notes || null}, ${startAt.toISOString()}, ${duration},
        ${body.location_kind || 'video'}, ${body.location_uri || null})
     RETURNING *
   ` as any[];
   const checkin = r[0];
+  await logAdminAction(c.env, user.id, user.email, 'calendar_checkin_created', { checkin_id: checkin.id, target_user_id: founderId, project_id: projectId });
   // Task #52 — push founder check-in to attendees' external calendars
   // (deferred via waitUntil so the response returns immediately).
   const ckId = checkin.id;
