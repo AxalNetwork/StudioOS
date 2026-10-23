@@ -285,6 +285,25 @@ test('D886 moving processing progress keeps assembly alive without extending run
   }finally{Date.now=clock;}
 });
 
+test('D886 Stop queues saved audio after the final drain while its run remains stopped',async()=>{
+  const w=world(),r=await post(w),uid=r.body.bot.uid;
+  const messages:any[]=[];
+  w.env.USE_CF_QUEUE='true';w.env.JOB_QUEUE={send:async(body:any)=>{messages.push(body);}} as any;
+  await event(w,uid,{seq:1,type:'status',status:'recording'});
+  await event(w,uid,{seq:2,type:'roster',participants:[{id:'p',name:'Fixture speaker',joined_ms:0,left_ms:null}]});
+  await event(w,uid,{seq:3,type:'speaker',participant_id:'p',at_ms:0});
+  const ticket=await event(w,uid,{seq:4,type:'chunk',chunk_seq:0,start_ms:0,size_bytes:wav().byteLength});
+  assert.equal((await upload(w,ticket.body.upload_path)).status,200);
+  w.db.prepare('INSERT INTO interview_chunk_transcripts(session_id,seq,model,segments_json) VALUES(?,0,?,?)')
+    .run(w.session,'@cf/deepgram/nova-3',JSON.stringify([{start_ms:0,end_ms:1000,text:'Fixture.',speaker_raw:'0'}]));
+  assert.equal((await call(w.env,FOUNDER,'POST',`/sessions/${w.session}/bot/stop`,{})).body.bot.status,'processing');
+  assert.equal((await event(w,uid,{seq:5,type:'status',status:'done'})).body.bot.status,'stopped');
+  assert.equal(messages.length,1);
+  assert.equal(await runInterviewProcessJob(w.env,messages[0].payload),'done');
+  assert.equal((await botRow(w.env,uid))!.status,'stopped');
+  assert.equal(w.stt.length,0);
+});
+
 
 test('D886 racing dispatch holds one budget only; total bytes, audio retention and completed status remain scoped',async()=>{
   const w=world(),results=await Promise.all([post(w),post(w)]);
