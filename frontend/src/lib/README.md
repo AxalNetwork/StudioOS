@@ -125,3 +125,10 @@ person reads; before this they only agreed by accident, because only the
 matrix had a label and the row rendered the raw key. `labelForType()` falls
 back to a titleised version of an unknown key rather than rendering blank, so
 a new `notify()` call site's events are legible immediately, label or not.
+
+#2639: `phoneNumber.js` normalises phone form input with libphonenumber-js/min
+metadata. Country supplies the national-format default; an international prefix
+wins. Only E.164 reaches the Worker; profile and SMS previews show that exact
+destination. Possible length is not proof a number is assigned or SMS-capable;
+the existing verification step remains required. Recovery uses the already
+verified stored number and never accepts a new client-supplied destination.
