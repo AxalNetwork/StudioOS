@@ -127,6 +127,7 @@ const ACCOUNT_CALLS: Record<string, string[]> = {
   hubspot: ['/oauth/v1/refresh-tokens/'],
   calendly: ['/webhook_subscriptions', "fetch(uri, { method: 'DELETE'"],
   salesforce: ['/services/oauth2/revoke'],
+  google_calendar: ['https://oauth2.googleapis.com/revoke'],
   carta: ['/o/revoke_token/'],
   docusign: ["'/connect'", '/hmac`', '`/connect/${encodeURIComponent(connectId)}`', '/oauth/revoke`'],
   stripe: ['/oauth/deauthorize'],
@@ -277,7 +278,8 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
     assert.equal(CONNECTOR_METADATA[e.key].verified, e.page.verified_on !== null, `${e.id}: verified without a recorded date, or the reverse`);
   }
   for (const k of ['hubspot', 'calendly', 'slack', 'stripe', 'google_calendar', 'microsoft_365']) assert.equal(CONNECTOR_METADATA[k].verified, false, k);
-  assert.ok(CONNECTOR_METADATA.google_calendar.permissions.includes('Gmail (read-only) is asked for at sign-in; Axal VC does not read your Gmail.'));
+  assert.equal(CONNECTOR_METADATA.google_calendar.permissions.some((p) => /Gmail/i.test(p)), false,
+    'the Google Calendar connector must not disclose or request Gmail access');
   assert.equal(CONNECTOR_METADATA.google_calendar.permissions.some((p) => /Read Gmail messages/.test(p)), false);
 });
 

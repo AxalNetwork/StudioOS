@@ -51,12 +51,23 @@ export async function ensureUniqueEventSlug(
 
 const TRUTHY = (v: unknown): boolean => v === 1 || v === true || v === '1';
 
+/** A seat awaiting approval or payment does not grant access to the call. */
+export function hasConfirmedEventSeat(registration: any): boolean {
+  return ['confirmed', 'attended'].includes(registration?.status)
+    && ['none', 'free', 'paid'].includes(registration?.payment_status);
+}
+
+/** Only known in-person formats may publish their location URL. */
+export function isInPersonEvent(event: any): boolean {
+  return event?.location_kind === 'physical' || event?.location_kind === 'in_person';
+}
+
 /**
  * Public-safe event projection. `includePrivate` adds host-only operational
  * fields (audience rules, admin flags). Boolean-ish INTEGER columns are coerced
  * so the JSON surface is stable regardless of the D1/SQLite driver.
  */
-export function shapeEvent(row: any, opts: { includePrivate?: boolean } = {}) {
+export function shapeEvent(row: any, opts: { includePrivate?: boolean; includeJoinLink?: boolean } = {}) {
   if (!row) return null;
   const base: Record<string, unknown> = {
     id: row.id,
@@ -73,7 +84,7 @@ export function shapeEvent(row: any, opts: { includePrivate?: boolean } = {}) {
     timezone: row.timezone ?? 'UTC',
     location_kind: row.location_kind ?? 'virtual',
     location_text: row.location_text ?? null,
-    location_url: row.location_url ?? null,
+    location_url: isInPersonEvent(row) || opts.includePrivate || opts.includeJoinLink ? row.location_url ?? null : null,
     capacity: row.capacity != null ? Number(row.capacity) : null,
     waitlist_enabled: TRUTHY(row.waitlist_enabled),
     approval_required: TRUTHY(row.approval_required),
@@ -92,7 +103,7 @@ export function shapeEvent(row: any, opts: { includePrivate?: boolean } = {}) {
   return base;
 }
 
-export function shapeAgendaItem(row: any) {
+export function shapeAgendaItem(row: any, opts: { includeJoinLink?: boolean } = {}) {
   if (!row) return null;
   return {
     id: row.id,
@@ -106,7 +117,7 @@ export function shapeAgendaItem(row: any) {
     speaker_name: row.speaker_name ?? null,
     speaker_title: row.speaker_title ?? null,
     location_text: row.location_text ?? null,
-    location_url: row.location_url ?? null,
+    location_url: opts.includeJoinLink ? row.location_url ?? null : null,
     display_order: Number(row.display_order || 0),
   };
 }

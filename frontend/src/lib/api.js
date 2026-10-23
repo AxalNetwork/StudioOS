@@ -1917,7 +1917,6 @@ export const api = {
 
   activityLog: (params) => request(`/activity${params ? `?${new URLSearchParams(params)}` : ''}`),
   activitySummary: () => request('/activity/summary'),
-  activitySyncGithub: () => request('/activity/sync-github', { method: 'POST' }),
 
   // D128 — `q` searches name and email; `envelope: 1` adds the per-role TOTALS
   // over the whole table. Called with no argument this is byte-for-byte the
@@ -4653,7 +4652,9 @@ export const api = {
   googleCalStatus: () => request('/calendar/google/status'),
   googleCalConnect: ({ return_to, project_id } = {}) =>
     request(`/calendar/google/connect${return_to ? `?return_to=${encodeURIComponent(return_to)}${project_id ? `&project_id=${encodeURIComponent(project_id)}` : ''}` : ''}`, { method: 'POST' }),
+  googleCalRemoveGmailAccess: () => request('/calendar/google/remove-gmail-access', { method: 'POST' }),
   googleCalDisconnect: () => request('/calendar/google', { method: 'DELETE' }),
+  googleCalForceDisconnect: () => request('/calendar/google/force-disconnect', { method: 'POST' }),
   googleCalSync: () => request('/calendar/google/sync', { method: 'POST' }),
 
   // Microsoft 365 / Outlook Calendar sync
@@ -5408,6 +5409,9 @@ export const adminX = {
       method: 'POST',
       body: JSON.stringify(override_reason ? { override_reason } : {}),
     }),
+  resolvePost: (id, outcome) => request(`/admin/x/posts/${id}/resolve`, {
+    method: 'POST', body: JSON.stringify(outcome),
+  }),
   schedulePost: (id, scheduled_for) =>
     request(`/admin/x/posts/${id}/schedule`, {
       method: 'POST', body: JSON.stringify({ scheduled_for }),
