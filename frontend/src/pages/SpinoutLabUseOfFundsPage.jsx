@@ -659,7 +659,7 @@ export default function SpinoutLabUseOfFundsPage() {
                   </div>
                   <input
                     type="range" min={0} max={100} value={pcts[i]} disabled={!canEdit}
-                    onChange={(e) => applyAlloc(rebalance(pcts, i, Number(e.target.value), 100 - extraSections.current.reduce((sum, x) => sum + Number(x.pct || 0), 0)))}
+                    onChange={(e) => applyAlloc(rebalance(pcts, i, Number(e.target.value), 100 - extraSections.current.reduce((sum, x) => sum + (Number(x?.pct) || 0), 0)))}
                     className="w-full" style={{ accentColor: b.color }}
                     data-testid={`slider-${b.key}`}
                   />
