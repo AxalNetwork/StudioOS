@@ -18,14 +18,16 @@
  * refresh_token into D1.
  */
 import { Hono } from 'hono';
+import { cartaAudience } from '../integrations/cartaScopes';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
-import { requireAuth } from '../auth';
+import { requireAuth, selectJwt } from '../auth';
 import { ensureTier, userMeetsTier, tierUpsell } from '../middleware/requireTier';
 import { hashEmail } from '../util/hashEmail';
 import {
   REGISTRY,
+  descriptorForRole,
   publicDescriptor,
   ensureIntegrationsSchema,
   getDescriptor,
@@ -637,12 +639,12 @@ integrations.post('/connect', async (c) => {
     if (e instanceof ConnectRefusal) return refuse(c, e.status, { code: e.code, message: e.sentence });
     return refuse(c, 400, { code: 'connect_failed', message: 'The connection could not be made. Check the credentials and try again.', raw: e, audience: 'owner' });
   }
-  if (desc.auth_type === 'oauth2' && hasScopeOverreach(desc, result.scopes || [])) {
+  if (desc.auth_type === 'oauth2' && hasScopeOverreach(descriptorForRole(desc, user.role), result.scopes || [])) {
     try { await impl.revokeGranted?.(c.env, result); } catch { /* refusal still wins */ }
     await logEvent(c.env, {
       integration_id: 0, user_id: user.id, provider_key: key,
       direction: 'internal', event_type: 'overreach', status: 'error',
-      response_summary: `Provider granted permissions beyond the requested set (${extraScopes(desc, result.scopes || []).join(', ')}); connection refused.`,
+      response_summary: `Provider granted permissions beyond the requested set (${extraScopes(descriptorForRole(desc, user.role), result.scopes || []).join(', ')}); connection refused.`,
     });
     return c.json({ error: 'scope_overreach', message: 'The provider granted permissions beyond those requested. The connection was refused.' }, 403);
   }
@@ -1446,6 +1448,7 @@ integrations.get('/oauth/:provider/start', async (c) => {
       extra: { provider },
     });
   }
+  if (provider === 'carta' && (await selectJwt(c))?.payload.impersonated_by) return refuse(c, 403, { code: 'support_session_refused', message: 'A support session cannot connect a member’s Carta account.' });
   // PKCE + signed state. The state token is bound to (user, provider) and
   // single-use; we hand it to the provider as the OAuth `state` param so
   // the callback can replay both userId and PKCE verifier.
@@ -1455,6 +1458,7 @@ integrations.get('/oauth/:provider/start', async (c) => {
   // callback recovers it from state.extra and passes through to connect()
   // so we never trust the query string at callback time.
   const extra: Record<string, unknown> = { challenge: pkce.challenge, company_id: selectedCompany };
+  if (provider === 'carta') extra.carta_audience = cartaAudience(user.role);
   if (c.req.query('return_to') === 'build') {
     extra.return_to = 'build';
     // The venture rides in the state, not in per-origin storage: the callback is
@@ -1564,12 +1568,12 @@ integrations.get('/oauth/:provider/callback', async (c) => {
       oauth_state: state,
       config: { pkce_verifier: consumed.pkce_verifier ?? undefined, ...providerExtra },
     });
-    if (hasScopeOverreach(desc, result.scopes || [])) {
+    if (hasScopeOverreach(descriptorForRole(desc, user.role), result.scopes || [])) {
       try { await impl.revokeGranted?.(c.env, result); } catch { /* refusal still wins */ }
       await logEvent(c.env, {
         integration_id: 0, user_id: user.id, provider_key: provider,
         direction: 'internal', event_type: 'overreach', status: 'error',
-        response_summary: `Provider granted permissions beyond the requested set (${extraScopes(desc, result.scopes || []).join(', ')}); connection refused.`,
+        response_summary: `Provider granted permissions beyond the requested set (${extraScopes(descriptorForRole(desc, user.role), result.scopes || []).join(', ')}); connection refused.`,
       });
       return c.redirect(returnQuery(consumed?.extra, `oauth=error&provider=${encodeURIComponent(provider)}&reason=scope_overreach`));
     }

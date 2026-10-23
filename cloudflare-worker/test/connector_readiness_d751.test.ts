@@ -131,7 +131,9 @@ test.beforeEach(() => _clearOauthCredsCache());
 
 test('D751 1-2: /available says configured for the nine OAuth connectors only, from the env pair', async () => {
   const f = fixture();
-  const none = await rows(f.env, ADMIN);
+  // #2634: Carta is visible to its founder/investor audiences only.
+  const none = await rows(f.env, FOUNDER);
+  assert.equal((await rows(f.env, ADMIN)).has('carta'), false);
   for (const k of NINE) assert.equal(none.get(k)?.configured, false, k);
   for (const k of ['figma', 'google_calendar', 'microsoft_365', 'crunchbase', 'affinity', 'mercury']) {
     if (none.has(k)) assert.ok(!('configured' in none.get(k)), `${k} carries no configured`);

@@ -11,16 +11,22 @@
  * Disconnect flips Carta-sourced rows to `source='manual'` (rows preserved,
  * no destructive delete) and best-effort revokes the refresh token.
  *
+ * Investor grants (#2634) use separate read_investor_* scopes and live reads
+ * through cartaInvestor.ts; they never enter these issuer import stores.
+ *
  * Out of scope: write-back to Carta, Pulley, 409A artefact pulls.
  *
  * IMPORTANT: imported once from index.ts so registerProvider() runs at boot.
  */
 import type { Context } from 'hono';
+import { cartaAudience, cartaScopesFor, cartaExtraScopes } from '../cartaScopes';
+import { selectJwt } from '../../auth';
 import { oauthCallbackUrl } from '../../util/url';
 import type { Env, User } from '../../types';
 import { scheduledConnectorEnabled } from '../companyScope';
 import {
   registerProvider,
+  ConnectRefusal,
   REGISTRY,
   type ProviderImpl,
   type ConnectInput,
@@ -39,7 +45,6 @@ const AUTH_HOST = 'https://login.playground.carta.team';
 const API_BASE = 'https://api.playground.carta.team/v1alpha1';
 const PROD_AUTH_HOST = 'https://login.app.carta.com';
 const PROD_API_BASE = 'https://api.carta.com/v1alpha1';
-const SCOPES = ['read_issuer_info', 'read_issuer_stakeholders', 'read_issuer_securities'];
 const authHost = (isDemo: boolean) => isDemo ? AUTH_HOST : PROD_AUTH_HOST;
 const apiBase = (isDemo: boolean) => isDemo ? API_BASE : PROD_API_BASE;
 // Rows saved before environment selection used production. Keep those grants there.
@@ -140,6 +145,11 @@ export async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<
     const refreshToken = typeof creds?.refresh_token === 'string' ? creds.refresh_token : '';
     if (!refreshToken) throw new Error('carta_refresh_token_missing');
     const refreshed = await refreshAccessToken(env, refreshToken, storedDemo(row));
+    const audience = safeParse(row.config_json || '{}').audience === 'investor' ? 'investor' : 'founder';
+    if (refreshed.scope && cartaExtraScopes(audience, refreshed.scope.split(/\s+/).filter(Boolean)).length) {
+      await revokeGranted(env, { credentials: { refresh_token: refreshed.refresh_token || refreshToken }, config: { is_demo: storedDemo(row) } });
+      throw new Error('carta_scope_overreach');
+    }
     const newCreds: CredentialBlob = {
       access_token: refreshed.access_token,
       refresh_token: refreshed.refresh_token || refreshToken,
@@ -165,7 +175,7 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
   return at;
 }
 
-async function cartaFetch(env: Env, row: IntegrationRow, path: string, init: RequestInit = {}): Promise<Response> {
+export async function cartaFetch(env: Env, row: IntegrationRow, path: string, init: RequestInit = {}): Promise<Response> {
   let token = await getActiveAccessToken(env, row);
   const base = apiBase(storedDemo(row));
   const url = new URL(path.startsWith('http') ? path : `${base}${path}`);
@@ -176,25 +186,29 @@ async function cartaFetch(env: Env, row: IntegrationRow, path: string, init: Req
   headers.set('Authorization', `Bearer ${token}`);
   headers.set('Accept', 'application/json');
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  let res = await fetch(url, { ...init, headers });
+  let res = await fetch(url, { ...init, headers, redirect: 'error', signal: AbortSignal.timeout(10_000) });
   if (res.status === 401) {
     token = await refreshAndPersist(env, row);
     const headers2 = new Headers(init.headers || {});
     headers2.set('Authorization', `Bearer ${token}`);
     headers2.set('Accept', 'application/json');
     if (init.body && !headers2.has('Content-Type')) headers2.set('Content-Type', 'application/json');
-    res = await fetch(url, { ...init, headers: headers2 });
+    res = await fetch(url, { ...init, headers: headers2, redirect: 'error', signal: AbortSignal.timeout(10_000) });
   }
   return res;
 }
 
 // ───────────────────────────────────────────────────────────── connect
 
-async function connect(c: Context<{ Bindings: Env }>, _user: User, input: ConnectInput): Promise<ConnectResult> {
+async function connect(c: Context<{ Bindings: Env }>, user: User, input: ConnectInput): Promise<ConnectResult> {
+  if ((await selectJwt(c))?.payload.impersonated_by) throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot connect a member’s Carta account.');
+  const audience = cartaAudience(user.role);
+  if (!audience) throw new ConnectRefusal(403, 'purpose_not_allowed', 'Carta connects a founder’s company or an investor’s own firm.');
   if (!input.oauth_code) {
     throw new Error('carta_requires_oauth_code: complete the OAuth handshake first.');
   }
   const cfg = (input.config || {}) as Record<string, unknown>;
+  if (cfg.carta_audience !== undefined && cfg.carta_audience !== audience) throw new ConnectRefusal(403, 'carta_audience_changed', 'Your profile changed during sign-in. Start again.');
   const verifier = typeof cfg.pkce_verifier === 'string' ? cfg.pkce_verifier : null;
   const tokens = await exchangeCode(c.env, input.oauth_code, verifier, cfg.is_demo !== false);
   if (!tokens.refresh_token) {
@@ -209,6 +223,13 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
     issued_at: Date.now(),
     expires_in: tokens.expires_in || null,
   };
+
+  const granted = tokens.scope ? tokens.scope.split(/\s+/).filter(Boolean) : [];
+  if (audience === 'investor' || cartaExtraScopes(audience, granted).length) {
+    // The shared route rejects/revokes an overbroad grant before any data read.
+    return { credentials, scopes: granted, config: { is_demo: cfg.is_demo !== false, audience },
+      capabilities: ['Firm and fund reads', 'Portfolio investments', 'Securities and cap tables'] };
+  }
 
   // Pick the first issuer the user has access to as the active issuer.
   // Carta's read endpoints are scoped to an issuer id; we persist it on
@@ -240,20 +261,24 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
     capabilities: ['Cap-table sync', 'Stakeholder import', 'Securities import'],
     config: {
       is_demo: cfg.is_demo !== false,
+      audience,
       issuer_id: issuerId,
       issuer_name: issuerName,
     },
   };
 }
 
-async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
+async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, user: User, state: string): Promise<string> {
+  if ((await selectJwt(c))?.payload.impersonated_by) throw new ConnectRefusal(403, 'support_session_refused', 'A support session cannot connect a member’s Carta account.');
+  const audience = cartaAudience(user.role);
+  if (!audience) throw new ConnectRefusal(403, 'purpose_not_allowed', 'Carta connects a founder’s company or an investor’s own firm.');
   const { id } = await ensureCreds(c.env);
   let isDemo = true;
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: id,
     redirect_uri: redirectUri(c.env),
-    scope: SCOPES.join(' '),
+    scope: cartaScopesFor(audience).join(' '),
     state,
   });
   // Recover PKCE challenge from oauth_state_tokens.extra_json (foundation
@@ -350,6 +375,7 @@ async function ensureIssuer(env: Env, row: IntegrationRow): Promise<{ id: string
 }
 
 async function sync(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<SyncResult> {
+  if (safeParse(row.config_json || '{}').audience === 'investor') return { summary: 'Investor Carta is read live in Deals and Portfolio; no founder records imported.', counts: { pulled: 0 } };
   const counts = { pulled: 0, holders: 0, securities: 0, vesting: 0, option_pools: 0, errors: 0 };
   const issuer = await ensureIssuer(c.env, row);
 
@@ -568,28 +594,32 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
 // ───────────────────────────────────────────────────────────── disconnect
 
 async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<void> {
-  // Flip Carta-sourced rows back to manual; rows are PRESERVED.
-  try {
-    await c.env.DB.prepare(
-      "UPDATE cap_table_holders SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
-    ).bind(row.user_id).run();
-    await c.env.DB.prepare(
-      "UPDATE cap_table_securities SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
-    ).bind(row.user_id).run();
-    // Vesting + option-pool rows imported from Carta get the same flip-to-
-    // manual treatment so they're preserved through a disconnect.
+  // Investor grants never change founder stores.
+  if (safeParse(row.config_json || '{}').audience !== 'investor') {
+    // Flip Carta-sourced rows back to manual; rows are PRESERVED.
     try {
       await c.env.DB.prepare(
-        "UPDATE cap_table_vesting SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+        "UPDATE cap_table_holders SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
       ).bind(row.user_id).run();
-    } catch { /* table may be absent on legacy deployments */ }
-    try {
       await c.env.DB.prepare(
-        "UPDATE cap_table_option_pools SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+        "UPDATE cap_table_securities SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
       ).bind(row.user_id).run();
-    } catch { /* table may be absent on legacy deployments */ }
-  } catch (e) {
-    console.warn('[carta] disconnect flip-to-manual failed:', (e as Error).message);
+      // Vesting + option-pool rows imported from Carta get the same flip-to-
+      // manual treatment so they're preserved through a disconnect.
+      try {
+        await c.env.DB.prepare(
+          "UPDATE cap_table_vesting SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+        ).bind(row.user_id).run();
+      } catch { /* table may be absent on legacy deployments */ }
+      try {
+        await c.env.DB.prepare(
+          "UPDATE cap_table_option_pools SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+        ).bind(row.user_id).run();
+      } catch { /* table may be absent on legacy deployments */ }
+    } catch (e) {
+      console.warn('[carta] disconnect flip-to-manual failed:', (e as Error).message);
+    }
+
   }
 
   // Best-effort token revoke.
@@ -629,9 +659,9 @@ async function revokeGranted(env: Env, result: ConnectResult): Promise<void> {
 
 function validateConfig(
   patch: Record<string, unknown>,
-  _existing: Record<string, unknown>,
+  existing: Record<string, unknown>,
 ): { ok: true; patch: Record<string, unknown> } | { ok: false; error: string } {
-  const ALLOWED = new Set(['issuer_id', 'issuer_name']);
+  const ALLOWED = new Set(existing.audience === 'investor' ? [] : ['issuer_id', 'issuer_name']);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(patch)) {
     if (!ALLOWED.has(k)) return { ok: false, error: `unknown_config_key: ${k}` };
@@ -652,6 +682,7 @@ function validateConfig(
  * retry on its normal cadence.
  */
 async function postConnect(c: Context<{ Bindings: Env }>, user: User, row: IntegrationRow): Promise<void> {
+  if (safeParse(row.config_json || '{}').audience === 'investor') return;
   try {
     // Re-load row to pick up the freshly-persisted issuer_id config the
     // `connect()` call discovered (it's written by the integrations route
@@ -732,6 +763,7 @@ export async function syncAllCartaIntegrations(env: Env): Promise<{ scanned: num
     return { scanned: 0, ok: 0, failed: 0 };
   }
   for (const row of (rows.results || [])) {
+    if (safeParse(row.config_json || '{}').audience === 'investor') continue;
     if (!(await scheduledConnectorEnabled(env, row))) continue;
     scanned++;
     try {
