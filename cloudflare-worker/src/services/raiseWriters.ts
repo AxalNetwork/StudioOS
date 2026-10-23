@@ -79,11 +79,11 @@ export async function scoreReadinessItem(env: Env, a: {
   return { ok: true };
 }
 
-/** Each item's newest score, by item key. */
+/** Each computed check's newest eligible score; manual history never sets its re-score clock. */
 async function newestScores(env: Env, projectId: number) {
   const res = await env.DB.prepare(
     `SELECT i.item_key, s.score, s.missing, s.scored_at FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
-      WHERE s.project_id = ? ORDER BY s.scored_at, s.id`,
+      WHERE s.project_id = ? AND s.source = 'computed' ORDER BY s.scored_at, s.id`,
   ).bind(projectId).all<{ item_key: string; score: number; missing: string | null; scored_at: string }>();
   const out = new Map<string, { score: number; missing: string | null; scored_at: string }>();
   for (const r of res.results || []) out.set(r.item_key, r);
