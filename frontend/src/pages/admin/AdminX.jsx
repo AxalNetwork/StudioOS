@@ -48,11 +48,12 @@ function statusBadge(status) {
     sending: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200',
     sent: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200',
     failed: 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200',
+    unknown: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-200',
     retracted: 'bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200',
   };
   return (
     <span className={`px-2 py-0.5 rounded text-xs font-medium ${map[status] || 'bg-gray-100 text-gray-700'}`}>
-      {status}
+      {status === 'unknown' ? 'Needs checking' : status}
     </span>
   );
 }
@@ -472,7 +473,15 @@ function ComposeTab({ accounts, onSaved, notify }) {
   );
 }
 
-function PostsTab({ posts, accounts, onReload, notify, mode }) {
+export function xPostId(value) {
+  const input = String(value || '').trim();
+  if (/^\d{1,30}$/.test(input)) return input;
+  if (input.length > 2048) return null;
+  return /^https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}\/status\/(\d{1,30})(?:[?#].*)?$/.exec(input)?.[1] || null;
+}
+const editableXPost = (p) => !p.tweet_id && !['sent', 'sending', 'unknown', 'failed'].includes(p.status);
+
+export function PostsTab({ posts, accounts, onReload, notify, mode }) {
   const [busyId, setBusyId] = useState(null);
   const [overrideFor, setOverrideFor] = useState(null);  // { id, findings }
   const [editId, setEditId] = useState(null);
@@ -499,9 +508,33 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
         onReload();
         return;
       }
-      notify(`Send failed: ${e?.message || e}`, 'error');
+      notify(['x_sent_not_saved', 'x_outcome_unknown', 'x_outcome_needs_review'].includes(e?.code)
+        ? e.message : `Send failed: ${e?.message || e}`, 'error');
       onReload();
     } finally { setBusyId(null); }
+  };
+
+  const resolve = async (post, outcome) => {
+    let tweetId = post.tweet_id;
+    if (outcome === 'sent' && !tweetId) {
+      const answer = window.prompt('Paste the published X post link or its ID:');
+      if (!answer) return;
+      tweetId = xPostId(answer);
+      if (!tweetId) { notify('Enter a valid X post link or numeric ID.', 'error'); return; }
+    }
+    const reason = window.prompt('What did you check on X? Give a reason (8–500 characters):')?.trim();
+    if (!reason) return;
+    if (reason.length < 8 || reason.length > 500) { notify('Give a reason between 8 and 500 characters.', 'error'); return; }
+    if (!window.confirm(outcome === 'sent'
+      ? 'I checked X and found this published post. Record it as sent?'
+      : 'I checked X and confirmed this post was not published. Return it to draft? This does not send it.')) return;
+    setBusyId(post.id);
+    try {
+      await api.resolvePost(post.id, { outcome, checked_x: true, reason, ...(tweetId ? { tweet_id: tweetId } : {}) });
+      notify(outcome === 'sent' ? 'Recorded as sent.' : 'Returned to draft. Nothing was sent.', 'success');
+      onReload();
+    } catch (e) { notify(e?.message || 'The result could not be recorded.', 'error'); }
+    finally { setBusyId(null); }
   };
 
   const approve = async (id) => {
@@ -568,15 +601,15 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
     <div className="space-y-3">
       {posts.map((p) => (
         <div key={p.id} className="border border-gray-200 dark:border-gray-700 rounded p-3 bg-white dark:bg-gray-900">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
               {statusBadge(p.status)}
               <span className="text-gray-600 dark:text-gray-300">@{p.handle}</span>
               {p.thread_continuation_of && <span className="text-xs text-indigo-600">↳ thread #{p.thread_position}</span>}
               {p.source === 'aggregator' && <span className="px-2 py-0.5 text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-200 rounded">aggregator · {p.source_kind}</span>}
               <span className="text-xs text-gray-500">{new Date(p.created_at).toLocaleString()}</span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
               {p.tweet_link && (
                 <a href={p.tweet_link} target="_blank" rel="noreferrer" className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded flex items-center gap-1">
                   <ExternalLink size={12} /> View
@@ -589,13 +622,13 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
                       <CheckCircle2 size={12} /> Approve
                     </button>
                   )}
-                  {!p.thread_continuation_of && ['draft', 'approved', 'scheduled', 'failed'].includes(p.status) && (
+                  {!p.thread_continuation_of && editableXPost(p) && ['draft', 'approved', 'scheduled'].includes(p.status) && (
                     <button disabled={busyId === p.id} onClick={() => send(p.id)}
                       className="px-2 py-1 text-xs rounded bg-blue-600 text-white disabled:opacity-50 flex items-center gap-1">
                       {busyId === p.id ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Send
                     </button>
                   )}
-                  {!p.thread_continuation_of && ['draft', 'approved', 'scheduled', 'failed'].includes(p.status) && (
+                  {!p.thread_continuation_of && editableXPost(p) && ['draft', 'approved', 'scheduled'].includes(p.status) && (
                     <button
                       onClick={async () => {
                         // D250 — the prompt says local time, so the default is local
@@ -623,12 +656,12 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
                       {scheduledNote(p.scheduled_for)}
                     </span>
                   )}
-                  {p.status !== 'sent' && p.status !== 'sending' && (
+                  {editableXPost(p) && (
                     <button onClick={() => startEdit(p)} className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded flex items-center gap-1">
                       <Edit3 size={12} /> Edit
                     </button>
                   )}
-                  {p.status !== 'sent' && p.status !== 'sending' && (
+                  {editableXPost(p) && (
                     <button onClick={() => remove(p.id)} className="px-2 py-1 text-xs border border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 rounded">
                       <Trash2 size={12} />
                     </button>
@@ -642,6 +675,13 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
               )}
             </div>
           </div>
+          {mode === 'drafts' && ['unknown', 'failed'].includes(p.status) && (
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs" data-testid={`x-outcome-review-${p.id}`}>
+              <span className="text-amber-800 dark:text-amber-200">Check X before another send. Record the result below.</span>
+              <button disabled={busyId === p.id} onClick={() => resolve(p, 'sent')} className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded">I found it on X</button>
+              {!p.tweet_id && <button disabled={busyId === p.id} onClick={() => resolve(p, 'not_sent')} className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded">I checked: not sent</button>}
+            </div>
+          )}
           {editId === p.id ? (
             <div>
               <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={4}
@@ -663,7 +703,7 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
                 <div key={i} className="border border-gray-200 dark:border-gray-700 rounded px-2 py-1 flex items-center gap-2">
                   <ImageIcon size={12} />
                   <span className="font-mono text-gray-500 truncate max-w-[200px]">{k.split('/').pop()}</span>
-                  {!p.alt_texts?.[i] && !p.alt_proposals?.[i] && (
+                  {editableXPost(p) && !p.alt_texts?.[i] && !p.alt_proposals?.[i] && (
                     <button onClick={() => genAlt(p.id, i)} className="text-purple-600 dark:text-purple-300 flex items-center gap-1" title="Draft alt-text with Eadwyn">
                       <Sparkles size={12} /> Alt
                     </button>
@@ -671,8 +711,10 @@ function PostsTab({ posts, accounts, onReload, notify, mode }) {
                   {!p.alt_texts?.[i] && p.alt_proposals?.[i] && (
                     <span className="flex items-center gap-2" data-testid={`x-alt-proposal-${p.id}-${i}`}>
                       <span className="text-purple-700 dark:text-purple-300 italic truncate max-w-[280px]">Eadwyn: "{p.alt_proposals[i].text}" · not saved</span>
-                      <button onClick={() => useAlt(p.id, i, p.alt_proposals[i])} className="px-1.5 py-0.5 bg-purple-600 text-white rounded">Use it</button>
-                      <button onClick={() => discardAlt(p.alt_proposals[i])} className="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200">Discard</button>
+                      {editableXPost(p) && <>
+                        <button onClick={() => useAlt(p.id, i, p.alt_proposals[i])} className="px-1.5 py-0.5 bg-purple-600 text-white rounded">Use it</button>
+                        <button onClick={() => discardAlt(p.alt_proposals[i])} className="px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-gray-700 dark:text-gray-200">Discard</button>
+                      </>}
                     </span>
                   )}
                   {p.alt_texts?.[i] && <span className="text-gray-500 italic truncate max-w-[280px]">"{p.alt_texts[i]}"</span>}
@@ -868,7 +910,7 @@ function AdminXFull() { // paused feature implementation retained for quick re-e
       // approved + failed all need to remain visible so Reschedule/Send/Edit
       // stay reachable after the first state transition.
       const [d, h] = await Promise.all([
-        api.listPosts({ status: 'draft,approved,scheduled,failed', limit: 100 }),
+        api.listPosts({ status: 'draft,approved,scheduled,failed,sending,unknown', limit: 100 }),
         api.listPosts({ status: 'sent', limit: 50 }),
       ]);
       setPosts(d.posts || []);

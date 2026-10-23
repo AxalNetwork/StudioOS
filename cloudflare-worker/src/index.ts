@@ -2166,8 +2166,8 @@ export default {
           try {
             const { sweepScheduledPosts } = await import('./services/scheduledPosts');
             const p = await sweepScheduledPosts(env, now);
-            if (p.due || p.stale_failed || p.unreadable_failed || p.errors.length) {
-              console.info(`[cron] scheduled posts due=${p.due} sent=${p.sent} refused_or_failed=${p.refused_or_failed} stale_failed=${p.stale_failed} unreadable_failed=${p.unreadable_failed} left_for_next_tick=${p.left_for_next_tick}`);
+            if (p.due || p.stale_failed || p.stale_unknown || p.unreadable_failed || p.errors.length) {
+              console.info(`[cron] scheduled posts due=${p.due} sent=${p.sent} refused_or_failed=${p.refused_or_failed} stale_failed=${p.stale_failed} stale_unknown=${p.stale_unknown} unreadable_failed=${p.unreadable_failed} left_for_next_tick=${p.left_for_next_tick}`);
               if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
             }
           } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }

@@ -5408,6 +5408,9 @@ export const adminX = {
       method: 'POST',
       body: JSON.stringify(override_reason ? { override_reason } : {}),
     }),
+  resolvePost: (id, outcome) => request(`/admin/x/posts/${id}/resolve`, {
+    method: 'POST', body: JSON.stringify(outcome),
+  }),
   schedulePost: (id, scheduled_for) =>
     request(`/admin/x/posts/${id}/schedule`, {
       method: 'POST', body: JSON.stringify({ scheduled_for }),

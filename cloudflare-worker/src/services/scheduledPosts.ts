@@ -12,9 +12,10 @@
  *
  * ONE PASS, IN FOUR STEPS, each its own statement so one failing costs only
  * itself:
- *   1. A row stuck in 'sending' for STALE_SENDING_MINUTES becomes 'failed',
- *      with a reason. It is NEVER re-sent: a send that died after Telegram or
- *      X accepted it would post twice. The console's Send is the retry.
+ *   1. A row stuck in 'sending' for STALE_SENDING_MINUTES is quarantined: X
+ *      becomes 'unknown' and requires HQ to check X and record its outcome;
+ *      Telegram retains its existing 'failed' recovery. Neither is re-sent
+ *      automatically, because the provider may already have accepted it.
  *   2. A 'scheduled' row whose `scheduled_for` SQLite cannot read
  *      (`datetime()` is NULL) becomes 'failed', with the value it could not
  *      read. It is never skipped for ever.
@@ -46,14 +47,14 @@ export const SEND_CAP_PER_TICK = 10;
 /** One send may take this long before the tick stops waiting on it. */
 export const SEND_DEADLINE_MS = 25_000;
 /**
- * A row still 'sending' after this is failed, never re-sent. A scheduled
+ * A row still 'sending' after this is quarantined, never re-sent. A scheduled
  * invocation may run 15 minutes (Cloudflare's "Duration" limit, D201); twice
  * that leaves no live send it could be.
  */
 export const STALE_SENDING_MINUTES = 30;
 
 // Each table's three statements as complete literals: the two tables differ
-// only in their name and X's thread heads, and SQL text is never assembled
+// in their stale-outcome recovery and X's thread heads. SQL is never assembled
 // from a value (check-sql-prepare).
 const TABLES = [
   {
@@ -76,8 +77,8 @@ const TABLES = [
   {
     console: 'x',
     stale: `UPDATE x_posts
-               SET status = 'failed',
-                   send_error = 'The send started at ' || updated_at || ' UTC and never finished. It is not re-sent automatically, because the post may already be live; check the channel, then send it by hand if it is not.',
+               SET status = 'unknown',
+                   send_error = 'It is not known whether X published this post. Check X and record the result before trying again.',
                    updated_at = datetime('now')
              WHERE status = 'sending' AND datetime(updated_at) <= datetime(?)`,
     unreadable: `UPDATE x_posts
@@ -94,6 +95,7 @@ const TABLES = [
 
 export interface SweepResult {
   stale_failed: number;
+  stale_unknown: number;
   unreadable_failed: number;
   due: number;
   sent: number;
@@ -104,18 +106,20 @@ export interface SweepResult {
 
 export async function sweepScheduledPosts(env: Env, now: Date): Promise<SweepResult> {
   const out: SweepResult = {
-    stale_failed: 0, unreadable_failed: 0, due: 0, sent: 0, refused_or_failed: 0, left_for_next_tick: 0, errors: [],
+    stale_failed: 0, stale_unknown: 0, unreadable_failed: 0, due: 0, sent: 0, refused_or_failed: 0, left_for_next_tick: 0, errors: [],
   };
   await ensureTelegramSchema(env);
   await ensureXSchema(env);
   const dueBy = sqlStamp(now.getTime());
   const staleBefore = sqlStamp(now.getTime() - STALE_SENDING_MINUTES * 60_000);
 
-  // 1 + 2 — the two ways a row is failed without being sent.
+  // 1 + 2 — quarantine unfinished sends and refuse unreadable schedules.
   for (const t of TABLES) {
     try {
       const r = await env.DB.prepare(t.stale).bind(staleBefore).run();
-      out.stale_failed += Number((r.meta as { changes?: number } | undefined)?.changes ?? 0);
+      const count = Number((r.meta as { changes?: number } | undefined)?.changes ?? 0);
+      if (t.console === 'x') out.stale_unknown += count;
+      else out.stale_failed += count;
     } catch (e) { out.errors.push(`${t.console} stale: ${(e as Error).message}`); }
     try {
       const r = await env.DB.prepare(t.unreadable).run();

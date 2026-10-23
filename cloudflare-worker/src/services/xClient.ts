@@ -212,6 +212,7 @@ async function authJsonCall<T>(opts: {
   url: string;
   accessToken: string;
   json?: unknown;
+  signal?: AbortSignal;
 }): Promise<T> {
   if (breakerOpen()) throw new XError('x_breaker_open', 'X API circuit breaker is open after repeated failures.');
   let res: Response;
@@ -223,6 +224,7 @@ async function authJsonCall<T>(opts: {
         ...(opts.json ? { 'content-type': 'application/json' } : {}),
       },
       body: opts.json ? JSON.stringify(opts.json) : undefined,
+      signal: opts.signal,
     });
   } catch (e) {
     recordFailure();
@@ -274,6 +276,7 @@ export async function createTweet(opts: {
     url: `${API_BASE}/tweets`,
     accessToken: opts.accessToken,
     json: body,
+    signal: AbortSignal.timeout(15_000),
   });
 }
 
