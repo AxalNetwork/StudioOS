@@ -51,6 +51,7 @@ import { DEFAULT_FINAL_MODEL } from './sttModels';
 import { appendSegments } from './interviewIntake';
 import type { ChannelProvider } from './channels/types';
 import type { DigestOutcome } from './validateEngine';
+import { NOVA_3 } from './sttFormats';
 import { callTranscriptSource } from './conversationAnalytics';
 import { summariseTranscript, toSegments, type DigestSections, type ReceiptLine, type SegmentRow, type SummarySentence } from './interviewStructuring';
 
@@ -445,7 +446,7 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
     .bind(session.id).all<{ seq: number }>();
   const have = new Set((staged.results || []).map((r) => r.seq));
   const todo = chunks.filter((ch) => !have.has(ch.seq));
-  const model = session.final_model || DEFAULT_FINAL_MODEL;
+  const model = session.submitted_via === 'meeting_bot' ? NOVA_3 : session.final_model || DEFAULT_FINAL_MODEL;
   await env.DB.prepare(`UPDATE interview_sessions SET status = 'transcribing', updated_at = datetime('now') WHERE id = ? AND status = 'stopped'`)
     .bind(session.id).run();
   await setStage(env, session.id, 'transcribing', { done: have.size, total: chunks.length });
@@ -464,7 +465,13 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
       await failProcessing(env, session, r.message);
       return 'failed';
     }
-    await env.DB.prepare(
+    if (session.submitted_via === 'meeting_bot') {
+      const { sessionBot } = await import('./meetingBots');
+      const run = await sessionBot(env,session.id,userId);
+      if (!run) throw new Error('bot_not_ready');
+      const { stageBotChunk } = await import('./meetingBotAssembly');
+      await stageBotChunk(env,run.uid,ch.seq,r);
+    } else await env.DB.prepare(
       `INSERT OR IGNORE INTO interview_chunk_transcripts (session_id, seq, model, language, segments_json, cost_microusd, fallback_used)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).bind(session.id, ch.seq, r.model, r.language, JSON.stringify(r.segments), r.costMicro, r.fallback ? 1 : 0).run();
@@ -476,6 +483,14 @@ async function transcribeBatch(env: Env, session: SessionRow, userId: number, in
 
 /** Every staged chunk, placed on one timeline, written as the final transcript once. */
 async function assemble(env: Env, session: SessionRow) {
+  if (session.submitted_via === 'meeting_bot') {
+    const { sessionBot } = await import('./meetingBots');
+    const run = await sessionBot(env,session.id,session.created_by_user_id);
+    if (!run) throw new Error('bot_not_ready');
+    const { prepareBotAssembly, commitBotAssembly } = await import('./meetingBotAssembly');
+    await commitBotAssembly(env,await prepareBotAssembly(env,run.uid));
+    return;
+  }
   const lastSeq = session.expected_last_seq ?? -1;
   const chunks = expectedChunks(await listChunks(env, session.id), lastSeq);
   const rows = await env.DB.prepare(
@@ -532,6 +547,13 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
   const interview = await env.DB.prepare('SELECT interviewee_name FROM discovery_interviews WHERE id = ?')
     .bind(session.interview_id).first<{ interviewee_name: string | null }>();
   try {
+    if (session.submitted_via === 'meeting_bot') {
+      const { sessionBot } = await import('./meetingBots');
+      const run = await sessionBot(env,session.id,userId);
+      if (!run) throw new Error('bot_not_ready');
+      const { botAssemblyInputs } = await import('./meetingBotAssembly');
+      await botAssemblyInputs(env,run.uid);
+    }
     // D754 (#1935): a chat's session holds voice notes, not a recording: append, never assemble.
     if (!AUDIO_CHANNELS.has(session.channel)) return await transcribeVoiceNotes(env, session, userId, interview?.interviewee_name ?? null);
     if (session.processing_stage === 'uploading' || session.processing_stage === 'transcribing') {
@@ -572,7 +594,8 @@ export async function runInterviewProcessJob(env: Env, payload: unknown): Promis
     }
     return session.processing_stage as Stage;
   } catch (e) {
-    console.warn('[processing] job failed', sessionId, (e as Error)?.message);
+    if (session.submitted_via === 'meeting_bot') console.warn('[processing] bot job failed');
+    else console.warn('[processing] job failed', sessionId, (e as Error)?.message);
     await failProcessing(env, session, 'Processing stopped unexpectedly. Nothing was lost; try again.');
     return 'failed';
   }
