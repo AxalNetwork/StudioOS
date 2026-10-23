@@ -184,3 +184,13 @@ capture plus the platform indicator is the explicitly limited fake-tested path.
 M3/M4/M6 on a free Zoom account, native SDK packaging/version selection, the
 owner's app feature and credentials, and B1 wiring remain outstanding. This
 library is not enabled for live dispatch by this change.
+
+### Python sidecar continuation (B4)
+
+`src/zoomSidecar.ts` implements `ZoomSdkBridge` over a private local pipe to
+`zoom/sidecar.py`; `zoom/native.py` maps the SDK calls and callbacks.
+See `zoom/README.md` for dependencies, protocol/privacy rules, tests, 32-to-16 kHz
+conversion and outstanding B1/B2/B8 wiring. This replaces the unimplemented
+native bridge boundary with code tested against synthetic SDK objects and a
+real Python protocol peer. Linux SDK import and live meeting behavior remain
+UNVERIFIED. The existing ZoomAdapter accepts it as its `sdk` dependency.
