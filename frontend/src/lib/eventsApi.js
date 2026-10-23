@@ -50,7 +50,7 @@ export const eventsApi = {
   // GET /:id/invite-suggestions — matching-ranked people to invite (host/admin).
   inviteSuggestions: (id) => request(`/events/${id}/invite-suggestions`),
   // Direct file URLs (opened in a new tab / anchor href, not fetched via request()).
-  icsUrl: (id) => `${BASE}/events/${id}/event.ics`,
+  icsUrl: (id) => `${BASE}/events/${id}/ics`,
   exportUrl: (id) => `${BASE}/events/${id}/export`,
 };
 

@@ -167,9 +167,9 @@ async function scanUserMentions(
          FROM users u
          LEFT JOIN user_promotion_consent c ON c.user_id = u.id
         WHERE u.full_legal_name IS NOT NULL AND length(u.full_legal_name) >= 6`,
-    ).all<{ id: number; full_name: string; email: string; consented: number }>();
+    ).all<{ id: number; full_legal_name: string; email: string; consented: number }>();
     for (const r of userRows.results || []) {
-      const name = (r.full_name || '').trim();
+      const name = (r.full_legal_name || '').trim();
       if (!name) continue;
       const parts = name.split(/\s+/);
       if (parts.length < 2) continue; // require first + last to count as "full legal name"
@@ -180,7 +180,7 @@ async function scanUserMentions(
       }
     }
   } catch {
-    /* full_name column / consent table absent — ignore */
+    /* legal-name column / consent table absent — ignore */
   }
 
   return out;

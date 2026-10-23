@@ -41,6 +41,7 @@ import { clampLimit, parseOffset } from '../util/pagination';
 import { withDeadline } from '../util/deadline';
 import { ensureXSchema, X_MAX_TWEET_LEN, X_MAX_MEDIA_PER_TWEET, X_DEFAULT_DAILY_CAP } from '../services/xSchema';
 import { encryptString, decryptString } from '../services/cryptoBox';
+import { acquireRefreshLease } from '../integrations/refreshLease';
 import {
   XError,
   XConfigMissing,
@@ -131,7 +132,7 @@ function xErrorPayload(e: unknown): { body: Record<string, unknown>; status: 400
   if (e instanceof XError) {
     const status: 400 | 429 | 502 | 503 =
       e.code === 'rate_limited' ? 429 :
-      e.code === 'x_breaker_open' ? 503 :
+      e.code === 'x_breaker_open' || e.code === 'x_refresh_busy' ? 503 :
       e.code === 'x_unauthorized' || e.code === 'x_forbidden' || e.code === 'x_duplicate_content' ? 400 :
       502;
     // D278 — X's own text is an admin's to read, clipped, on `upstream`;
@@ -164,6 +165,7 @@ const X_SENTENCES: Record<string, string> = {
   x_network: 'X could not be reached. Try again in a moment.',
   x_oauth_exchange_failed: 'Connecting the X account did not complete. Start the connection again.',
   x_oauth_refresh_failed: 'The X session could not be renewed. Reconnect the X account.',
+  x_refresh_busy: 'The X session is being renewed. Try again in a moment.',
   x_api_error: 'X returned an error. Try again in a moment.',
   x_upstream: 'X returned an error. Try again in a moment.',
 };
@@ -231,30 +233,57 @@ async function loadAccount(env: Env, id: number) {
  * place when the cached one is within 60s of expiry (or already expired).
  * Throws XConfigMissing / x_unauthorized via the underlying refresh call.
  */
-async function getFreshAccessToken(env: Env, account: any): Promise<string> {
+export async function getFreshAccessToken(env: Env, account: any): Promise<string> {
   if (!account?.access_token_ct) throw new XError('x_account_not_linked', 'X account not linked yet.');
-  const exp = account.expires_at ? Date.parse(account.expires_at) : 0;
-  const needRefresh = !exp || exp - Date.now() < 60_000;
-  if (!needRefresh) {
-    const at = await decryptString(env, account.access_token_ct);
-    if (!at) throw new XError('x_account_not_linked', 'Stored access token unreadable. Re-authorise the account.');
-    return at;
-  }
+  const liveToken = async (row: any): Promise<string | null> => {
+    const exp = row?.expires_at ? Date.parse(row.expires_at) : 0;
+    if (!row?.access_token_ct || !exp || exp - Date.now() < 60_000) return null;
+    const token = await decryptString(env, row.access_token_ct);
+    if (!token) throw new XError('x_account_not_linked', 'Stored access token unreadable. Re-authorise the account.');
+    return token;
+  };
+  const cached = await liveToken(account);
+  if (cached) return cached;
   if (!account.refresh_token_ct) {
     throw new XError('x_refresh_missing', 'Access token expired and no refresh token stored. Re-authorise the account.');
   }
-  const rt = await decryptString(env, account.refresh_token_ct);
-  if (!rt) throw new XError('x_refresh_missing', 'Stored refresh token unreadable. Re-authorise the account.');
-  const fresh = await refreshAccessToken(env, rt);
-  const newAtCt = await encryptString(env, fresh.access_token);
-  const newRtCt = fresh.refresh_token ? await encryptString(env, fresh.refresh_token) : account.refresh_token_ct;
-  const expiresAt = new Date(Date.now() + (fresh.expires_in || 7200) * 1000).toISOString();
-  await env.DB.prepare(
-    `UPDATE x_accounts
-        SET access_token_ct = ?, refresh_token_ct = ?, expires_at = ?, updated_at = datetime('now')
-      WHERE id = ?`,
-  ).bind(newAtCt, newRtCt, expiresAt, account.id).run();
-  return fresh.access_token;
+
+  // X rotates refresh tokens on use. Serialize callers per account, and
+  // re-read D1 on both sides of the KV lease so a loser uses the winner's pair.
+  const lease = await acquireRefreshLease(env, 'x', String(account.id));
+  try {
+    if (!lease.acquired) {
+      for (let i = 0; i < 6; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const current = await loadAccount(env, account.id);
+        const freshToken = await liveToken(current);
+        if (freshToken) return freshToken;
+      }
+      throw new XError('x_refresh_busy', 'Another request is renewing this X account.');
+    }
+    const current = await loadAccount(env, account.id);
+    if (!current) throw new XError('x_account_not_linked', 'X account not linked yet.');
+    const freshToken = await liveToken(current);
+    if (freshToken) return freshToken;
+    account = current;
+    if (!account?.refresh_token_ct) {
+      throw new XError('x_refresh_missing', 'Access token expired and no refresh token stored. Re-authorise the account.');
+    }
+    const rt = await decryptString(env, account.refresh_token_ct);
+    if (!rt) throw new XError('x_refresh_missing', 'Stored refresh token unreadable. Re-authorise the account.');
+    const fresh = await refreshAccessToken(env, rt);
+    const newAtCt = await encryptString(env, fresh.access_token);
+    const newRtCt = fresh.refresh_token ? await encryptString(env, fresh.refresh_token) : account.refresh_token_ct;
+    const expiresAt = new Date(Date.now() + (fresh.expires_in || 7200) * 1000).toISOString();
+    await env.DB.prepare(
+      `UPDATE x_accounts
+          SET access_token_ct = ?, refresh_token_ct = ?, expires_at = ?, updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(newAtCt, newRtCt, expiresAt, account.id).run();
+    return fresh.access_token;
+  } finally {
+    await lease.release();
+  }
 }
 
 // Per-account daily cap (KV-backed) -------------------------------------
@@ -398,7 +427,7 @@ r.post('/accounts/:id/test', async (c) => {
   if (!acct) return c.json({ error: 'not_found' }, 404);
   try {
     const at = await getFreshAccessToken(c.env, acct);
-    const me = await getMe(at);
+    const me = await getMe(at, id);
     await c.env.DB.prepare(
       `UPDATE x_accounts SET last_test_at = datetime('now'), last_error = NULL,
                               x_user_id = COALESCE(x_user_id, ?),
@@ -498,7 +527,7 @@ const oauthCallback = async (c: any) => {
     const refreshCt = tok.refresh_token ? await encryptString(c.env, tok.refresh_token) : null;
     const expiresAt = new Date(Date.now() + (tok.expires_in || 7200) * 1000).toISOString();
     let xUserId: string | null = null;
-    try { xUserId = (await getMe(tok.access_token)).data.id; } catch {}
+    try { xUserId = (await getMe(tok.access_token, bound.account_id)).data.id; } catch {}
     await c.env.DB.prepare(
       `UPDATE x_accounts
           SET access_token_ct = ?, refresh_token_ct = ?, expires_at = ?,
@@ -1179,8 +1208,7 @@ export async function sendXPost(
       for (const key of safeJson<string[]>(row.media_r2_keys, []).slice(0, X_MAX_MEDIA_PER_TWEET)) {
         const object = await env.FILES?.get(key);
         if (!object) throw new XError('media_missing', 'The image could not be read.');
-        const mimeType = key.endsWith('.png') ? 'image/png' : key.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
-        const uploaded = await uploadMedia({ accessToken, bytes: new Uint8Array(await object.arrayBuffer()), mimeType });
+        const uploaded = await uploadMedia({ accessToken, accountId: acct.id, bytes: new Uint8Array(await object.arrayBuffer()) });
         mediaIds.push(uploaded.media_id_string);
       }
       // A slow preflight cannot continue after the stale-send sweep or an
@@ -1193,7 +1221,7 @@ export async function sendXPost(
       if (fence.meta?.changes !== 1) throw new XError('x_send_state_changed', 'The post changed before sending. Reload it.');
       rowClaimStamp = renewedStamp;
       attempted = true;
-      const out = await createTweet({ accessToken, text: row.body, inReplyToTweetId: parentId, mediaIds });
+      const out = await createTweet({ accessToken, accountId: acct.id, text: row.body, inReplyToTweetId: parentId, mediaIds });
       if (typeof out?.data?.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(out.data.id)) throw new Error('invalid_post_receipt');
       accepted = { id: row.id, tweet_id: out.data.id, link: `https://x.com/${acct.handle}/status/${out.data.id}` };
       // The durable receipt is deliberately independent of hashes, counters
@@ -1270,7 +1298,7 @@ r.post('/posts/:id/retract', async (c) => {
   const acct: any = await loadAccount(c.env, post.account_id);
   try {
     const at = await getFreshAccessToken(c.env, acct);
-    await deleteTweet({ accessToken: at, tweetId: post.tweet_id });
+    await deleteTweet({ accessToken: at, accountId: acct.id, tweetId: post.tweet_id });
     await c.env.DB.prepare(
       `UPDATE x_posts SET status = 'retracted', retracted_at = datetime('now'),
                           retracted_by = ?, retraction_reason = ?,

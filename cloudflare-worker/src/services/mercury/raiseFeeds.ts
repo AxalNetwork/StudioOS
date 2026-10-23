@@ -585,7 +585,7 @@ export async function acceptRaiseProposal(env: Env, a: {
     if (p.kind === 'statement') return await acceptStatement(env, a, p);
     if (p.kind === 'safe') {
       const out = await addHolder(env, {
-        projectId: pid, actor: user, group: 'investors', instrument: 'safe',
+        projectId: pid, actor: user, group: 'investors', instrument: 'safe', basis: 'post_money',
         name: String(p.payload.investor_name || 'SAFE investor').slice(0, 200),
         amount_cents: p.payload.amount_cents, cap_cents: p.payload.cap_cents ?? null, discount_pct: p.payload.discount_pct ?? null,
       });

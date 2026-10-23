@@ -93,7 +93,7 @@ export function eventsPhoneGroups({ events, suggested, now = new Date() }) {
       key: t.id || t.registration_id,
       title: `${shortDay(t.starts_at)} · ${t.title || t.event_title}`,
       description: [fmtDate(t.starts_at, t.timezone), whereOf(t)].filter(Boolean).join(' · '),
-      pill: ticketPill(t.status, ahead),
+      pill: ticketPill(t.reg_status, ahead),
       testid: 'events-phone-ticket',
     });
   }
@@ -368,7 +368,7 @@ function AttendingList({ tickets }) {
                 )}
               </div>
               <div className="mt-2 flex items-center gap-2">
-                <StatusBadge status={t.status} map={REG_STATUS_STYLES} />
+                <StatusBadge status={t.reg_status} map={REG_STATUS_STYLES} />
                 {t.comp ? (
                   <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
                     Free seat

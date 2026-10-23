@@ -62,7 +62,7 @@ function provider() {
   let next = 'accept';
   globalThis.fetch = (async (input: any, init: any = {}) => {
     const url = new URL(String(input));
-    if (url.hostname === 'upload.twitter.com') return Response.json({ media_id_string: 'media-fixture' });
+    if (url.hostname === 'api.x.com' && url.pathname === '/2/media/upload') return Response.json({ data: { id: 'media-fixture', size: 1 } });
     assert.equal(url.hostname, 'api.twitter.com'); assert.equal(url.pathname, '/2/tweets'); assert.equal(init.method, 'POST');
     signals.push(init.signal);
     calls.push(JSON.parse(init.body));

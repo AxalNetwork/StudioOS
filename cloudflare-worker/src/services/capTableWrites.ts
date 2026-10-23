@@ -33,6 +33,7 @@
  */
 import type { Env, User } from '../types';
 import { simulate, validateInputs, type Inputs } from './captable';
+import type { SafeBasis } from './safeConversion';
 import { ensureTier } from '../middleware/requireTier';
 import { ensureCapTableVariantColumn } from './captableSchema';
 import { hashEmail } from '../util/hashEmail';
@@ -320,6 +321,7 @@ export type AddHolderArgs = {
   email?: string | null;
   group: 'founders' | 'investors';
   instrument: 'common' | 'safe' | 'note';
+  basis?: SafeBasis;
   shares?: number | null;
   ownership_pct?: number | null;
   amount_cents?: number | null;
@@ -396,7 +398,7 @@ async function recompute(env: Env, actor: User, projectId: number, base: Scenari
   return saved.row;
 }
 
-function safeEntry(name: string, a: { instrument: string; amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null; prospect_id: number | null }) {
+function safeEntry(name: string, a: { instrument: string; basis?: SafeBasis; amount_cents?: number | null; cap_cents?: number | null; discount_pct?: number | null; prospect_id: number | null }) {
   const amount = posInt(a.amount_cents);
   if (amount == null) throw new HolderError(400, 'amount_cents must be a positive whole number of cents');
   const e: Record<string, unknown> = { name, amount: amount / 100 };
@@ -408,6 +410,10 @@ function safeEntry(name: string, a: { instrument: string; amount_cents?: number 
   if (a.discount_pct != null) {
     if (typeof a.discount_pct !== 'number' || !(a.discount_pct >= 0 && a.discount_pct <= 90)) throw new HolderError(400, 'discount_pct must be 0..90');
     e.discount = a.discount_pct / 100;
+  }
+  if (a.basis != null) {
+    if (a.basis !== 'pre_money' && a.basis !== 'post_money') throw new HolderError(400, 'basis must be pre_money or post_money');
+    e.basis = a.basis;
   }
   if (a.instrument === 'note') e.instrument = 'note';
   if (a.prospect_id != null) e.prospect_id = a.prospect_id;

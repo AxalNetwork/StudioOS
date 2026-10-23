@@ -3,8 +3,8 @@
  *
  * Owns:
  *   - Section catalog + per-subject-type weights (composite scoring).
- *   - External-data connectors (stubs by default; wired to live APIs only
- *     when their feature flag + secret are present in env).
+ *   - External-data connectors (only live implementations with their flag
+ *     and credentials can emit evidence; unavailable connectors are disabled).
  *   - LLM-style finding extractor (regex + heuristic; the real LLM call
  *     is gated behind OPENAI_API_KEY and is a TODO with a deterministic
  *     fallback so the route always returns *something* useful).
@@ -258,84 +258,14 @@ export function isFlagged(env: Env, flag: string): boolean {
   return Boolean(v && /^(1|true|on|yes)$/i.test(String(v)));
 }
 
-// ---------- Connector implementations (stubs) ----------
-//
-// Each returns deterministic-but-realistic findings keyed off the subject
-// label so the dashboard isn't empty before live keys are wired. When a
-// connector's flag IS set AND its secret_env is present we still return
-// the stub today — wiring the real HTTP call is a follow-up. The stub
-// shape matches what the live extractor will produce.
-
-function mockFindings(connector: ConnectorKey, subject: string): RawFinding[] {
-  const seed = subject.length;
-  switch (connector) {
-    case 'opencorporates':
-      return [{
-        source_kind: connector, severity: seed % 7 === 0 ? 'medium' : 'info',
-        title: `Registry record for "${subject}"`,
-        detail: 'No active dissolution flags. Officer list matches expected founders.',
-        evidence_url: `https://opencorporates.com/companies?q=${encodeURIComponent(subject)}`,
-        section_key: 'corporate_legal',
-      }];
-    case 'sec_edgar':
-      return [{
-        source_kind: connector, severity: 'info',
-        title: 'No SEC EDGAR filings linked', detail: 'Subject not present in EDGAR full-text index.',
-        evidence_url: 'https://www.sec.gov/edgar', section_key: 'financial_health',
-      }];
-    case 'sanctions_ofac':
-      return [{
-        source_kind: connector, severity: seed % 11 === 0 ? 'critical' : 'info',
-        title: seed % 11 === 0 ? 'Possible sanctions list match (manual review required)' : 'No sanctions match',
-        detail: seed % 11 === 0 ? 'Heuristic name match — high false-positive rate; verify with full DOB+address.' : 'Not present on OFAC / EU / UK consolidated lists.',
-        evidence_url: 'https://sanctionssearch.ofac.treas.gov/', section_key: 'compliance_aml',
-      }];
-    case 'newsapi':
-      return [{
-        source_kind: connector, severity: seed % 5 === 0 ? 'low' : 'info',
-        title: `${seed % 5 === 0 ? 'Mixed' : 'Neutral'} press coverage`,
-        detail: 'Last 90d: ~3 mentions, none materially negative.',
-        section_key: 'reputation_press',
-      }];
-    case 'gdelt':
-      return [{
-        source_kind: connector, severity: 'info',
-        title: 'GDELT tone within normal range', detail: 'Avg tone -0.4 (neutral), volume <0.1% of comparable orgs.',
-        section_key: 'reputation_press',
-      }];
-    case 'linkedin':
-      return [{
-        source_kind: connector, severity: 'info',
-        title: 'LinkedIn presence verified', detail: 'Profile age >24mo; tenure history consistent with self-reported bio.',
-        section_key: 'founder_integrity',
-      }];
-    case 'github':
-      return [{
-        source_kind: connector, severity: 'info',
-        title: 'GitHub footprint detected', detail: 'Repos public; no abandoned-since-funding pattern.',
-        section_key: 'product_tech',
-      }];
-    case 'whois_dns':
-      return [{
-        source_kind: connector, severity: seed % 4 === 0 ? 'low' : 'info',
-        title: 'WHOIS / DNS hygiene',
-        detail: seed % 4 === 0 ? 'Domain registered <12mo ago; SPF present, DMARC missing.' : 'Domain >24mo old; SPF + DMARC present.',
-        section_key: 'cyber_posture',
-      }];
-    case 'crunchbase':
-      return [{
-        source_kind: connector, severity: 'info',
-        title: `Crunchbase profile lookup for "${subject}"`,
-        detail: 'No live Crunchbase API key configured — set CRUNCHBASE_API_KEY on the worker or configure it in HQ → Integration keys to surface funding history, employee range, and operating-status flags.',
-        evidence_url: `https://www.crunchbase.com/textsearch?q=${encodeURIComponent(subject)}`,
-        section_key: 'market_position',
-      }];
-  }
-}
+// ---------- Live connector implementations ----------
 
 async function runConnector(env: Env, connector: ConnectorMeta, subject: string): Promise<ConnectorResult> {
+  if (connector.key !== 'crunchbase') {
+    return { status: 'disabled', records_count: 0, raw_response: null, findings: [], error_message: 'Not live: this connector has no live implementation.' };
+  }
   if (!isFlagged(env, connector.flag_env)) {
-    return { status: 'disabled', records_count: 0, raw_response: null, findings: [] };
+    return { status: 'disabled', records_count: 0, raw_response: null, findings: [], error_message: 'Not live: this connector is switched off.' };
   }
   if (connector.key === 'crunchbase') {
     // Env-first via `loadOauthCreds`, falls back to admin-managed
@@ -433,11 +363,7 @@ async function runConnector(env: Env, connector: ConnectorMeta, subject: string)
       }
     }
   }
-  // Live calls for other connectors would dispatch here. For now emit
-  // the deterministic stub so the dashboard always has data — the
-  // contract for the live path stays identical.
-  const findings = mockFindings(connector.key, subject);
-  return { status: 'ok', records_count: findings.length, raw_response: { stub: true, subject }, findings };
+  return { status: 'disabled', records_count: 0, raw_response: null, findings: [], error_message: 'Not live: Crunchbase credentials are not available.' };
 }
 
 // ---------- Risk scoring ----------
