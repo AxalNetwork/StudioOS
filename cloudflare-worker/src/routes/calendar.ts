@@ -1162,7 +1162,11 @@ calendar.get('/google/callback', async (c) => {
       // same account remains idempotent. A different account, or a callback
       // without a live connection identity marker after an abandoned consent,
       // must start with fresh mappings to avoid reusing another account's IDs.
-      await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
+      try {
+        await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
+      } catch (e: any) {
+        if (!/no such table/i.test(String(e?.message || e))) throw e;
+      }
     }
     const extra: Record<string, string> = {};
     // The return banner tells a transcript grant from an ordinary connect (#1926).
