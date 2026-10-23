@@ -147,7 +147,7 @@ test('under B2\'s runBot: waiting room, the notice before listening, then the ca
     const lines: string[] = [];
     const notice = 'Eadwyn AI is recording this call.';
     const stop = new AbortController();
-    const run = runBot({ runId: 'run-1', platform: 'google_meet', meetingUrl: `${LINK}?pwd=secret-passcode`, notice, limitMs: FREE_LIMIT_MS }, {
+    const run = runBot({ runId: 'run-1', platform: 'google_meet', meetingUrl: `${LINK}?pwd=secret-passcode`, notice, limitMs: FREE_LIMIT_MS, deadlineAt: Date.now()+FREE_LIMIT_MS, budgetDeadlineAt: Date.now()+120_000 }, {
       adapter: bot, transport, stop: stop.signal, log: (event, fields) => lines.push(`${event} ${JSON.stringify(fields)}`),
     });
     // A failing check below must not leave the run's timers holding the process open.
@@ -163,8 +163,8 @@ test('under B2\'s runBot: waiting room, the notice before listening, then the ca
     assert.equal(result.state, 'left');
     assert.equal(result.reason, 'call_ended');
     const events = transport.allEvents;
-    assert.ok(events.some((e) => e.type === 'roster' && e.kind === 'join' && e.key === 'p1'));
-    assert.ok(events.some((e) => e.type === 'speaker' && e.key === 'p1'));
+    assert.ok(events.some((e) => e.type === 'roster' && e.participants.some(p=>p.id==='p1'&&p.left_ms===null)));
+    assert.ok(events.some((e) => e.type === 'speaker' && e.participant_id === 'p1'));
     for (const line of lines) {
       for (const word of ['meet.google.com', 'secret-passcode', 'Participant A', 'Eadwyn AI', notice]) assert.ok(!line.includes(word), line);
     }

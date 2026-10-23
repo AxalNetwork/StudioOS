@@ -38,3 +38,6 @@ export const RETRY_TRIES = 8;
 
 /** How many times the notice is tried before the bot gives up and leaves. */
 export const NOTICE_TRIES = 3;
+
+/** Heartbeat before B1's two-minute funded lease expires. */
+export const HEARTBEAT_MS = 15_000;

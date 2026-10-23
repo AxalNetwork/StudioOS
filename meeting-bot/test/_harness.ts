@@ -64,6 +64,8 @@ export class StubCallback implements CallbackTransport {
   readonly lostAnswer = new Set<number>();
   failEvents = 0;
   failStatus = 0;
+  leaseDeadline = Number.MAX_SAFE_INTEGER;
+  async heartbeat(): Promise<number> { return this.leaseDeadline; }
 
   async status(report: StatusReport): Promise<void> {
     if (this.failStatus > 0) { this.failStatus -= 1; throw new Error('down'); }

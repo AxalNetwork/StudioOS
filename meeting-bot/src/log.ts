@@ -15,9 +15,9 @@ const CODES: ReadonlySet<string> = new Set([
   // states
   'joining', 'waiting_room', 'recording', 'left', 'failed',
   // failure codes
-  'not_admitted', 'meeting_ended', 'link_invalid', 'platform_blocked', 'obf_unavailable',
+  'not_admitted', 'meeting_ended', 'link_invalid', 'platform_blocked', 'obf_unavailable', 'notice_failed', 'processing_failed',
   // leave reasons
-  'call_ended', 'alone', 'stopped', 'time_limit',
+  'call_ended', 'alone', 'stopped', 'time_limit', 'tokens', 'interrupted',
 ]);
 
 export type LogValue = string | number | boolean;
