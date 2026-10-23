@@ -1,11 +1,12 @@
+import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 /**
  * T12 — Cap-table simulator routes (port of backend/app/api/routes/captable.py).
  *
  * Mounted at /api/captable. Authenticated. Scenarios are owned by their
- * creator; admin can read all.
+ * creator; project-bound data additionally requires current project access.
  *
  *   POST   /simulate                     — stateless run (no persist)
- *   GET    /scenarios                    — list mine (admin: all)
+ *   GET    /scenarios                    — list mine (including admin)
  *   POST   /scenarios                    — create + simulate + persist
  *   GET    /scenarios/{uid}              — read one
  *   PUT    /scenarios/{uid}              — update inputs + re-simulate
@@ -22,7 +23,7 @@ import { requireAuth } from '../auth';
 import { simulate, validateInputs, toCsv, type Inputs, type SimulateResult } from '../services/captable';
 import {
   canReadProject, canWriteProject, canReadScenario, canWriteScenario,
-  type AccessUser,
+  type AccessUser, type AccessProject,
 } from '../services/captableAccess';
 import { ensureCapTableVariantColumn } from '../services/captableSchema';
 import {
@@ -95,8 +96,6 @@ captable.use('*', async (c, next) => {
   return next();
 });
 
-function isAdmin(role: string): boolean { return (role || '').toLowerCase() === 'admin'; }
-
 function safeJson<T>(s: string | null | undefined, fallback: T): T {
   if (!s) return fallback;
   try { return JSON.parse(s) as T; } catch { return fallback; }
@@ -120,7 +119,7 @@ function serialize(s: ScenarioRow, withResult = true): any {
 
 type AuthUser = AccessUser & { id: number; role: string };
 
-type ProjectRow = { id: number; founder_id: number | null; company_id?: number | null };
+type ProjectRow = { id: number; founder_id: number | null; company_id?: number | null } & AccessProject;
 type Ctx = Context<{ Bindings: Env }>;
 
 /** The project row as stored — no company narrowing. Only the gates below read this. */
@@ -129,21 +128,23 @@ async function loadProjectRow(env: Env, projectId: number): Promise<ProjectRow |
     .bind(projectId).first<ProjectRow>();
 }
 
-/**
- * Roles whose access to a project does NOT come from owning it.
- *
- * Mirrors `canReadProject` in services/captableAccess: admin, partner and
- * investor may read any project. Company scoping narrows the OWNERSHIP path
- * only — `projects.company_id` is the founder's company, and under the
- * agreed model every other role's active company is their own firm, an id
- * this column never carries. Narrowing them by it would not restrict them, it
- * would erase them. The same set is used for the write gates: writes are
- * still refused afterwards by `canWriteProject`/`canWriteScenario` exactly as
- * before, so exempting the wider set here loosens nothing.
- */
-function isCompanyExempt(user: { role?: string | null }): boolean {
-  const r = String(user.role || '').toLowerCase();
-  return r === 'admin' || r === 'partner' || r === 'investor';
+/** Membership paths are independent of the member's own active company. */
+function isCompanyExempt(user: AuthUser, project: ProjectRow): boolean {
+  return !(user.role.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id);
+}
+async function projectPermissions(env: Env, user: AuthUser, project: ProjectRow): Promise<ProjectRow> {
+  const principal = { ...user, role: user.role.toLowerCase() } as any;
+  if (principal.role === 'admin') return { ...project, capRead: true, capWrite: true };
+  if (principal.role === 'investor') return { ...project, capRead: false, capWrite: false };
+  const owner = principal.role === 'founder' && !!principal.founder_id && principal.founder_id === project.founder_id;
+  // canAccessProject's broad partner exception is owned by #2438. Require a
+  // recorded membership first, including for partners, until that is resolved.
+  const member = owner ? null : await getProjectMembershipRole(env, project.id, principal.id);
+  if (!owner && !['owner','cofounder','advisor'].includes(member ?? '')) return { ...project, capRead: false, capWrite: false };
+  return { ...project,
+    capRead: await canAccessProject(env, principal, project),
+    capWrite: (owner || member !== 'advisor') && await canAccessProject(env, principal, project, { write: true }),
+  };
 }
 
 /** The caller's active company for this request, verified once and memoised. */
@@ -166,37 +167,22 @@ const ACTIVE_COMPANY_KEY = '__activeCompanyId';
 async function loadProject(c: Ctx, projectId: number, user: AuthUser): Promise<ProjectRow | null> {
   const row = await loadProjectRow(c.env, projectId);
   if (!row) return null;
-  if (isCompanyExempt(user)) return row;
-  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? row : null;
+  if (isCompanyExempt(user, row)) return projectPermissions(c.env, user, row);
+  return projectInActiveCompany(await activeCompanyFor(c, user), row) ? projectPermissions(c.env, user, row) : null;
 }
 
-/**
- * A scenario bound to a project the caller cannot see under their active
- * company is itself invisible.
- *
- * This is the one place the progress.ts pattern is not enough on its own.
- * `canReadScenario` admits the scenario's OWNER before it ever looks at the
- * project, so if the narrowed loader simply returned null here, a founder
- * would still reach their scenario through the owner path with the project
- * hidden — a cross-company leak, and one that would report `project: null`
- * as if the binding did not exist. So the project is loaded RAW, and the
- * company rule is applied explicitly: bound + row exists + caller on the
- * ownership path + outside the active company → 404, the same answer the
- * project itself gives.
- *
- * A bound scenario whose project row is genuinely GONE is unchanged: it
- * still falls through to the owner path, as it always has. Only the
- * out-of-company case is new.
+/** Project-bound scenarios inherit current membership and owner-company gates.
+ * Missing projects never turn a bound scenario into a private ownership bypass.
  */
 async function projectForScenario(c: Ctx, row: ScenarioRow, user: AuthUser): Promise<ProjectRow | null> {
   if (row.project_id == null) return null;
   const proj = await loadProjectRow(c.env, row.project_id);
   if (!proj) return null;
-  if (isCompanyExempt(user)) return proj;
+  if (isCompanyExempt(user, proj)) return projectPermissions(c.env, user, proj);
   if (!projectInActiveCompany(await activeCompanyFor(c, user), proj)) {
     throw new HttpError(404, 'Scenario not found');
   }
-  return proj;
+  return projectPermissions(c.env, user, proj);
 }
 
 /** Read-gate a scenario by uid: owner / admin / (project-bound → project read). */
@@ -208,12 +194,23 @@ async function ensureScenarioReadOr404(c: Ctx, uid: string, user: AuthUser): Pro
   return row;
 }
 
+async function auditMemberWrite(c: Ctx, user: AuthUser, project: ProjectRow | null) {
+  if (!project || user.role.toLowerCase() === 'admin' ||
+    (user.role.toLowerCase() === 'founder' && !!user.founder_id && user.founder_id === project.founder_id)) return;
+  const key = `captable_write:${project.id}`;
+  if (c.get(key as never)) return;
+  await c.env.DB.prepare('INSERT INTO activity_logs (project_id, user_id, action, details, actor) VALUES (?, ?, ?, ?, ?)')
+    .bind(project.id, user.id, 'captable_member_write_authorized', JSON.stringify({ method: c.req.method, route: c.req.routePath }), `user:${user.id}`).run();
+  c.set(key as never, true as never);
+}
+
 /** Write-gate a scenario by uid: owner / admin / (project-bound → project write). */
 async function ensureScenarioWriteOr404(c: Ctx, uid: string, user: AuthUser): Promise<ScenarioRow> {
   const row = await loadByUid(c.env, uid);
   if (!row) throw new HttpError(404, 'Scenario not found');
   const proj = await projectForScenario(c, row, user);
   if (!canWriteScenario(user, row, proj)) throw new HttpError(403, 'Not your scenario');
+  await auditMemberWrite(c, user, proj);
   return row;
 }
 
@@ -223,6 +220,7 @@ async function ensureProjectWriteAccess(c: Ctx, projectId: number | null | undef
   const proj = await loadProject(c, projectId, user);
   if (!proj) throw new HttpError(404, 'Project not found');
   if (!canWriteProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
+  await auditMemberWrite(c, user, proj);
 }
 
 class HttpError extends Error {
@@ -349,14 +347,20 @@ captable.post('/simulate', async (c) => {
 
 captable.get('/scenarios', async (c) => {
   const user = await requireAuth(c);
-  const rows = isAdmin(user.role)
-    ? await c.env.DB.prepare(
-        'SELECT * FROM cap_table_scenarios ORDER BY updated_at DESC',
-      ).all<ScenarioRow>()
-    : await c.env.DB.prepare(
-        'SELECT * FROM cap_table_scenarios WHERE owner_user_id = ? ORDER BY updated_at DESC',
-      ).bind(user.id).all<ScenarioRow>();
-  return c.json({ items: (rows.results || []).map((r) => serialize(r as any, false)) });
+  const rows = await c.env.DB.prepare(
+    'SELECT * FROM cap_table_scenarios WHERE owner_user_id = ? ORDER BY updated_at DESC',
+  ).bind(user.id).all<ScenarioRow>();
+  const visible: ScenarioRow[] = [];
+  const projects = new Map<number, ProjectRow | null>();
+  for (const row of rows.results || []) {
+    if (row.project_id == null || user.role.toLowerCase() === 'admin') { visible.push(row); continue; }
+    if (!projects.has(row.project_id)) {
+      try { projects.set(row.project_id, await projectForScenario(c, row, user)); }
+      catch (e) { if (e instanceof HttpError && e.status === 404) projects.set(row.project_id, null); else throw e; }
+    }
+    if (canReadScenario(user, row, projects.get(row.project_id) ?? null)) visible.push(row);
+  }
+  return c.json({ items: visible.map((r) => serialize(r as any, false)) });
 });
 
 captable.post('/scenarios', async (c) => {
@@ -984,12 +988,9 @@ captable.get('/:projectId', async (c) => {
   const user = await requireAuth(c);
   const projectId = Number(c.req.param('projectId'));
   if (!Number.isFinite(projectId)) return c.json({ detail: 'Invalid project_id' }, 400);
-  const proj = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
-    .bind(projectId).first<{ id: number; founder_id: number | null }>();
+  const proj = await loadProject(c, projectId, user);
   if (!proj) return c.json({ detail: 'Project not found' }, 404);
-  if (user.role === 'founder' && user.founder_id !== proj.founder_id) {
-    return c.json({ detail: 'Forbidden' }, 403);
-  }
+  if (!canReadProject(user, proj)) return c.json({ detail: 'Forbidden' }, 403);
   const holders = await c.env.DB.prepare(
     'SELECT * FROM cap_table_holders WHERE project_id = ? ORDER BY id ASC',
   ).bind(projectId).all();
@@ -998,7 +999,11 @@ captable.get('/:projectId', async (c) => {
   ).bind(projectId).all();
   return c.json({
     project_id: projectId,
-    holders: holders.results || [],
+    holders: (holders.results || []).map((row: any) => {
+      const out = { ...row };
+      if (!canWriteProject(user, proj)) delete out.email;
+      return out;
+    }),
     securities: securities.results || [],
   });
 });
