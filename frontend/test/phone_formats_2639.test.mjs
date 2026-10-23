@@ -23,6 +23,9 @@ function verifyNumbers(api) {
   for (const [input,country,expected] of cases) assert.equal(api.normalizePhoneInput(input,country)?.e164, expected, input);
   assert.equal(api.normalizePhoneInput('+33 (0)6 39 98 01 23','CH')?.country, 'FR');
   for (const input of ['123','0790000','not a number','+999123456789','+41790000000 ext 2','++41790000000','079/0000000','0'.repeat(90)]) assert.equal(api.normalizePhoneInput(input,'CH'), null, input);
+  assert.equal(api.normalizePhoneInput('(202) 555-0123','AQ'),null);
+  assert.equal(api.normalizePhoneInput('+12025550123','AQ')?.e164,'+12025550123');
+  assert.equal(api.phonePlaceholder('AQ'),'+country code …');
   assert.equal(api.phoneCountry('ch'), 'CH');
   assert.equal(api.phoneCountry(null), 'US');
   assert.equal(api.phoneCountry('XX'), 'US');
@@ -37,6 +40,7 @@ test('#2639: national, 00 and international formats agree; invalid input stays r
     ['defaultCountry: selected', "defaultCountry: 'US'"],
     ['!parsed.isPossible()', 'false'],
     ['parsed.country ||', 'null ||'],
+    ["if (!input.startsWith('+') && rawCountry && !isSupportedCountry(rawCountry)) return null;", ''],
     ["isSupportedCountry(country) ? country : 'US'", "'US'"],
   ]);
 });
@@ -124,7 +128,7 @@ async function verifyProfile(module, invalid = false) {
   try {
     await f.click('Edit');
     const byId = id => f.nodes().find(n => f.props(n).id===id);
-    assert.equal(byId('ac-country').tagName,'SELECT');
+    assert.equal(f.props(byId('ac-country')).value,'CH');
     await act(async () => f.props(byId('ac-phone')).onChange({target:{value:invalid?'123':'079 000 00 00'}}));
     if (!invalid) assert.ok(f.text().includes("We'll save +41 79 000 00 00"));
     await f.click('Save');
@@ -163,5 +167,33 @@ test('#2639: legacy identity editor also previews and sends canonical phone',asy
   ]);
   await mutationCheck(legacySource,'pages/SettingsPage.jsx',module=>verifyLegacy(module,true),[
     ['if (!normalizedPhone) { setFieldErrors({ phone_e164: PHONE_ERROR }); return; }', 'if (!normalizedPhone) { save({ phone_e164: phoneInput }); return; }'],
+  ]);
+});
+
+async function verifyStoredCountry(module) {
+  for (const country of ['AQ','XX','UK','ch']) {
+    const calls=[];
+    const f=await mountForm(h(module.PersonalDetailsCard,{account:{name:'Fixture'},identity:{status:'ready',data:{}},details:{status:'ready',data:{country}},onSave:async patch=>{calls.push(patch);return {};}}));
+    try {
+      await f.click('Edit');
+      const byId=id=>f.nodes().find(n=>f.props(n).id===id);
+      assert.equal(f.props(byId('ac-country')).value,country,'show the actual stored value');
+      if (country==='AQ' || country==='XX') {
+        await act(async()=>f.props(byId('ac-phone')).onChange({target:{value:'(202) 555-0123'}}));
+        await f.click('Save');
+        assert.equal(calls.length,0,'unknown phone country needs an explicit calling prefix');
+        assert.ok(f.text().includes(PHONE_ERROR));
+      }
+      await act(async()=>f.props(byId('ac-phone')).onChange({target:{value:'+12025550123'}}));
+      await f.click('Save');
+      assert.equal(calls[0].phone_e164,'+12025550123');
+      assert.equal('country' in calls[0],false,'saving a phone must not rewrite profile country');
+    } finally {await f.unmount();}
+  }
+}
+test('#2639: legacy and unsupported profile countries stay visible and cannot be silently parsed as US',async()=>{
+  await mutationCheck(profileSource,'pages/account/AccountProfile.jsx',verifyStoredCountry,[
+    ["{...ed.upper('country')}","{...ed.upper('country')} value=\"US\""],
+    ['normalizePhoneInput(patch.phone_e164, ed.draft.country ?? det.country)',"normalizePhoneInput(patch.phone_e164, 'US')"],
   ]);
 });

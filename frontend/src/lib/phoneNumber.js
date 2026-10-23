@@ -15,6 +15,8 @@ export function phoneCountry(value) {
 }
 
 export function phonePlaceholder(country) {
+  const rawCountry = String(country || '').trim().toUpperCase().replace(/^UK$/, 'GB');
+  if (rawCountry && !isSupportedCountry(rawCountry)) return '+country code …';
   const code = phoneCountry(country);
   return { CH: '079 …', US: '(202) 555-01xx', CA: '(416) 555-01xx', GB: '07700 900…', FR: '06 39 98 …', IT: '3…' }[code]
     || `+${getCountryCallingCode(code)} …`;
@@ -27,6 +29,8 @@ export function normalizePhoneInput(value, country = 'US') {
   if (!raw || raw.length > 80 || !/^[+\d\s().\u2010-\u2015-]+$/.test(raw)) return null;
   const input = raw.replace(/[\s().\u2010-\u2015-]/g, '').replace(/^00/, '+');
   if (!/^\+?\d+$/.test(input)) return null;
+  const rawCountry = String(country || '').trim().toUpperCase().replace(/^UK$/, 'GB');
+  if (!input.startsWith('+') && rawCountry && !isSupportedCountry(rawCountry)) return null;
   const selected = phoneCountry(country);
   const parsed = parsePhoneNumberFromString(input, { defaultCountry: selected, extract: false });
   if (!parsed || !parsed.isPossible() || parsed.ext || !/^\+[1-9]\d{6,14}$/.test(parsed.number)) return null;

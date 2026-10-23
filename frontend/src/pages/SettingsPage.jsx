@@ -728,7 +728,7 @@ function PersonalIdentityCard({ flash, onPctChange }) {
   if (!row) return <Card title="Identity"><div className="text-sm text-gray-500">Loading…</div></Card>;
 
   const r = row;
-  const normalizedPhone = normalizePhoneInput(phoneInput, phoneCountry(r.country));
+  const normalizedPhone = normalizePhoneInput(phoneInput, r.country);
   const set = (k, v) => setRow({ ...r, [k]: v });
   const onBlurSave = (k) => {
     const v = r[k] ?? null;
