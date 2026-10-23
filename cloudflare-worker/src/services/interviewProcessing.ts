@@ -234,6 +234,17 @@ export async function transcribeVoiceNote(env: Env, opts: {
     `SELECT m.external_message_id FROM channel_thread_messages m JOIN channel_threads t ON t.id = m.thread_id
       WHERE m.id = ? AND t.session_id = ? AND t.user_id = ? AND t.provider = 'telegram'`,
   ).bind(seq, session.id, userId).first<{ external_message_id: string }>() : null;
+  if (opts.provider === 'telegram' && !source) {
+    // A deleted placeholder is not an untracked voice note. Mark the chunk
+    // consumed without speech or a new charge so recovery cannot retry it.
+    await env.DB.batch([
+      env.DB.prepare(`INSERT OR IGNORE INTO interview_chunk_transcripts
+        (session_id, seq, model, language, segments_json, cost_microusd, fallback_used)
+        VALUES (?, ?, ?, NULL, '[]', 0, 0)`).bind(session.id, seq, voiceNoteModel(session)),
+      ...(opts.alongside ?? []),
+    ]);
+    return { ok: true, appended: 0, already: true };
+  }
   const model = voiceNoteModel(session);
   const r = await transcribeChunk(env, { session, userId, chunk, model, intervieweeName: null, offsetMs: 0 });
   if (!r.ok) {
@@ -244,19 +255,22 @@ export async function transcribeVoiceNote(env: Env, opts: {
     });
     return r;
   }
-  if (source && !await env.DB.prepare('SELECT 1 AS hit FROM channel_thread_messages WHERE id = ? AND external_message_id = ?')
-    .bind(seq, source.external_message_id).first()) return { ok: true, appended: 0, already: true };
   // D754 §6: one `final` segment per note, under the side's label, beside the chat's own lines.
   const text = r.segments.map((x) => String(x.text ?? '').trim()).filter(Boolean).join(' ');
   const segments: StoredSegment[] = text ? [{ start_ms: null, end_ms: null, speaker_label: opts.speakerLabel, speaker_raw: null, text, ...(source ? { source_ref: source.external_message_id } : {}) }] : [];
   // A plain INSERT, not OR IGNORE: a chunk staged by another run fails the whole batch, so nothing is appended twice.
   const stage = env.DB.prepare(
     `INSERT INTO interview_chunk_transcripts (session_id, seq, model, language, segments_json, cost_microusd, fallback_used)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(session.id, seq, r.model, r.language, JSON.stringify(segments), r.costMicro, r.fallback ? 1 : 0);
+     SELECT ?, ?, ?, ?, CASE WHEN ? IS NULL OR EXISTS (
+       SELECT 1 FROM channel_thread_messages m JOIN channel_threads t ON t.id = m.thread_id
+       WHERE m.id = ? AND m.external_message_id = ? AND t.session_id = ? AND t.user_id = ? AND t.provider = 'telegram')
+       THEN ? ELSE '[]' END, ?, ?`,
+  ).bind(session.id, seq, r.model, r.language, source?.external_message_id ?? null,
+    seq, source?.external_message_id ?? null, session.id, userId, JSON.stringify(segments), r.costMicro, r.fallback ? 1 : 0);
   let appended = 0;
   try {
-    appended = await appendSegments(env, userId, session.id, segments, opts.provider, [stage, ...(opts.alongside ?? [])]);
+    appended = await appendSegments(env, userId, session.id, segments, opts.provider, [stage, ...(opts.alongside ?? [])],
+      source ? { messageId: seq, sourceRef: source.external_message_id } : undefined);
   } catch (e) {
     if (!isKeyConflict(e)) throw e;
     return { ok: true, appended: 0, already: true };

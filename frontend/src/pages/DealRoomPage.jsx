@@ -308,6 +308,10 @@ export const COMMITMENT_MATCH_STATUSES = Object.freeze(['pending', 'confirmed'])
 // proof of funds, once, after the commitments load: an audited request that
 // counts a view. It comes from its own route, never from `dealCommitments`,
 // which other invited investors read. Every other viewer makes no proof read.
+export function CommitmentTotal({ total }) {
+  return <div className="text-sm text-gray-700 dark:text-gray-300" data-testid="commitments-total">Total committed: {fmtMoney(total)}</div>;
+}
+
 export function CommitmentsTab({ dealId, proof = false, user = null, onShare, founderMatch = false }) {
   // D752 (#1891): an investor on HQ sees a door on their own row only.
   const own = useProofTargets({ enabled: showsProof(user) });
@@ -330,6 +334,7 @@ export function CommitmentsTab({ dealId, proof = false, user = null, onShare, fo
   }, [proof, loaded, dealId]);
   if (failed) return <Unreadable what="The commitments" claim="That is not a claim that none is recorded." onRetry={load} />;
   if (items == null) return <div className="text-center text-gray-500 py-8"><Loader2 className="animate-spin inline" size={16} /></div>;
+  if (!Array.isArray(items)) return <CommitmentTotal total={items.total} />;
   if (items.length === 0) return <div className="text-center text-gray-500 py-8">No commitments recorded yet</div>;
   return (
     <>

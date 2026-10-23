@@ -3,11 +3,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import structureRoutes from '../src/routes/founder_validate_structure.ts';
+import structureRoutes, { storePlacements } from '../src/routes/founder_validate_structure.ts';
 import { changeTelegramSource } from '../src/services/channels/telegramSource.ts';
 import { extractConversationItems } from '../src/services/conversationItems.ts';
 import { loadSession, SOURCE_DELETED_TEXT, SOURCE_DELETED_NOTE } from '../src/services/interviewSessions.ts';
-import { summariseSession } from '../src/services/interviewProcessing.ts';
+import { transcribeVoiceNote, summariseSession } from '../src/services/interviewProcessing.ts';
 import { translateSession } from '../src/services/sessionTranslation.ts';
 import { digestSession } from '../src/services/validateEngine.ts';
 import { toSegments } from '../src/services/interviewStructuring.ts';
@@ -285,7 +285,7 @@ test('source edits preserve a declined consent state and never queue AI after ST
     [NEW, 'declined', 'skipped', 'Synthetic consent stopped', queued]);
 });
 
-test('the rebuilt legacy mirror is bounded in UTF-8 bytes without changing later passages', async () => {
+test('the updated legacy mirror is bounded in UTF-8 bytes without changing later passages', async () => {
   const w = await assigned();
   const large = '🟣'.repeat(100000);
   for (let i = 0; i < 3; i++) w.db.prepare("INSERT INTO interview_transcript_segments (session_id, source, text, model) VALUES (?, 'final', ?, 'channel:telegram')").run(w.sid, large);
@@ -294,4 +294,203 @@ test('the rebuilt legacy mirror is bounded in UTF-8 bytes without changing later
   assert.ok(Buffer.byteLength(mirror) <= 1000000);
   assert.ok(mirror.startsWith(NEW + '\n' + OTHER_LINE));
   assert.equal(lines(w, w.sid).at(-1).text, large);
+});
+
+test('source changes preserve manual and legacy mirror text, including an oversized first passage', async () => {
+  const w = await assigned();
+  const prefix = 'Synthetic manually pasted history.\n';
+  w.db.prepare('UPDATE discovery_interviews SET transcript = ? WHERE id = ?').run(prefix + OLD + '\n' + OTHER_LINE, INTERVIEW);
+  await hook(w, edit(w.first));
+  assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, prefix + NEW + '\n' + OTHER_LINE);
+  await hook(w, deleted([w.first]));
+  assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, prefix + SOURCE_DELETED_TEXT + '\n' + OTHER_LINE);
+  w.db.prepare('UPDATE interview_transcript_segments SET text = ? WHERE id = ?').run('🟣'.repeat(300000), lines(w, w.sid)[0].id);
+  await hook(w, edit(w.second));
+  assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, prefix + SOURCE_DELETED_TEXT + '\n' + NEW);
+  const full = '🟣'.repeat(249990) + '\n' + NEW;
+  w.db.prepare('UPDATE discovery_interviews SET transcript = ? WHERE id = ?').run(full, INTERVIEW);
+  await hook(w, edit(w.second, NEW.repeat(100)));
+  const capped = w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript;
+  assert.equal(capped, full.replaceAll(NEW, ''));
+  assert.ok(Buffer.byteLength(capped) <= 1000000);
+});
+
+test('bulk deletion reads source rows once and keeps unrelated passages and citation spans', async () => {
+  const w = await assigned();
+  const prepare = w.env.DB.prepare.bind(w.env.DB); let reads = 0;
+  w.env.DB.prepare = (sql: string) => {
+    if (sql.includes('speaker_label, text, source_ref, model')) reads++;
+    return prepare(sql);
+  };
+  await hook(w, deleted([w.first, w.second, ...Array.from({ length: 98 }, (_, i) => 900000 + i)]));
+  assert.deepEqual(lines(w, w.sid).map((r: any) => r.text), [SOURCE_DELETED_TEXT, SOURCE_DELETED_TEXT]);
+  assert.equal(reads, 1);
+});
+
+test('a long source snapshot is bound once for many placements and a stale source rejects the entire run', async () => {
+  const w = await assigned();
+  const sourceText = 'Synthetic long passage. '.repeat(10000);
+  const id = lines(w, w.sid)[0].id;
+  w.db.prepare('UPDATE interview_transcript_segments SET text = ? WHERE id = ?').run(sourceText, id);
+  const snapshot = [{ id, text: sourceText }];
+  const prepare = w.env.DB.prepare.bind(w.env.DB); let snapshotBinds = 0;
+  w.env.DB.prepare = (sql: string) => {
+    const stmt = prepare(sql);
+    if (sql.includes('INSERT INTO validate_proposals')) {
+      const bind = stmt.bind.bind(stmt);
+      stmt.bind = (...args: any[]) => {
+        snapshotBinds += args.filter((v) => v === JSON.stringify(snapshot)).length;
+        return bind(...args);
+      };
+    }
+    return stmt;
+  };
+  const opts = { projectId: PROJECT, sessionId: w.sid, interviewId: INTERVIEW, runId: 'long-synthetic', userId: ME, model: 'synthetic',
+    sourceSnapshot: snapshot, placements: Array.from({ length: 40 }, (_, i) => ({ kind: 'competitor_mention', payload: { name: 'Synthetic ' + i },
+      cite: { from: 0, to: 1000 }, quote: 'Synthetic long passage.' })) as any };
+  assert.equal((await storePlacements(w.env, opts)).stored, 40);
+  assert.equal(snapshotBinds, 1);
+  assert.equal(proposals(w, w.sid).length, 40);
+  w.db.prepare('UPDATE interview_transcript_segments SET text = ? WHERE id = ?').run(NEW, id);
+  assert.equal((await storePlacements(w.env, { ...opts, runId: 'stale-synthetic' })).stored, 0);
+  assert.equal(proposals(w, w.sid).length, 40);
+});
+
+test('STOP plus an in-flight source edit keeps withdrawal state and cleans up late suggestions', async () => {
+  const w = await assigned(); seed(w, 'pending', 1000); seed(w, 'accepted');
+  let stopped = false, queuedAtStop = 0;
+  ai(w, async (stage) => {
+    if (stage === 'summary' && !stopped) {
+      stopped = true; await hook(w, edit(w.first));
+      w.db.prepare("UPDATE interview_sessions SET consent_status = 'declined', digest_status = 'skipped', digest_note = 'Synthetic STOP' WHERE id = ?").run(w.sid);
+      queuedAtStop = w.queued.length;
+    }
+  });
+  const r = await digestSession(w.env, { sessionId: w.sid, userId: ME, trigger: 'chat_assigned' });
+  assert.deepEqual([r.ok, !r.ok && 'reason' in r ? r.reason : null], [false, 'consent_not_recorded']);
+  const session = (await loadSession(w.env, w.sid))!;
+  assert.equal(session.digest_status, 'skipped');
+  assert.ok(session.digest_note!.includes('withdrew consent'));
+  assert.equal(w.queued.length, queuedAtStop);
+  assert.equal(proposals(w, w.sid).length, 1);
+  assert.deepEqual([proposals(w, w.sid)[0].status, proposals(w, w.sid)[0].citation_json], ['accepted', null]);
+});
+
+for (const timing of ['before_source', 'during_speech', 'before_commit']) {
+  test('a voice deletion ' + timing + ' cannot append untracked text or lose a paid receipt', async () => {
+    const w = await assigned();
+    w.db.prepare("UPDATE channel_threads SET consent_state = 'given' WHERE id = ?").run(w.thread.id);
+    w.db.prepare("UPDATE interview_sessions SET consent_status = 'given' WHERE id = ?").run(w.sid);
+    const voiceId = ++ids.message;
+    await hook(w, businessMessage('BC-ME', { id: voiceId, voice: { file_id: 'synthetic-voice', duration: 5, mime_type: 'audio/ogg', file_size: 4000 } }));
+    let speechCalls = 0, staged = false, removed = false;
+    const remove = () => {
+      removed = true;
+      w.db.prepare('DELETE FROM channel_thread_messages WHERE thread_id = ? AND external_message_id = ?').run(w.thread.id, ref('telegram', '8001:' + voiceId));
+    };
+    const prepare = w.env.DB.prepare.bind(w.env.DB);
+    w.env.DB.prepare = (sql: string) => {
+      if (timing === 'before_source' && sql.includes('SELECT m.external_message_id') && !removed) remove();
+      if (sql.includes('INSERT INTO interview_chunk_transcripts')) staged = true;
+      return prepare(sql);
+    };
+    const batch = w.env.DB.batch.bind(w.env.DB);
+    w.env.DB.batch = async (stmts: any[]) => {
+      if (timing === 'before_commit' && staged && !removed) remove();
+      return batch(stmts);
+    };
+    w.env.AI.run = async (model: string) => {
+      if (/guard/.test(model)) return { response: 'safe' };
+      speechCalls++;
+      if (timing === 'during_speech') remove();
+      return { text: 'Synthetic deleted voice.', transcription_info: { language: 'en' } };
+    };
+    const job = w.queued.filter((j: any) => j.job_type === 'channel_followup' && j.payload.kind === 'voice').at(-1);
+    const f = mockFetch(telegramApi);
+    try { await runChannelJob(w.env, 'channel_followup', job.payload); } finally { f.restore(); }
+    assert.equal(removed, true);
+    assert.equal(speechCalls, timing === 'before_source' ? 0 : 1);
+    assert.deepEqual(lines(w, w.sid).map((r: any) => r.text), [OLD, OTHER_LINE]);
+    const chunks = w.db.prepare('SELECT * FROM interview_chunk_transcripts WHERE session_id = ?').all(w.sid);
+    assert.equal(chunks.length, 1);
+    assert.deepEqual(JSON.parse(chunks[0].segments_json), []);
+    const receipts = w.db.prepare("SELECT * FROM interview_session_receipts WHERE session_id = ? AND kind = 'final'").all(w.sid);
+    assert.equal(receipts.length, timing === 'before_source' ? 0 : 1);
+    if (receipts.length) assert.equal(receipts[0].cost_microusd, chunks[0].cost_microusd);
+    const replay = await transcribeVoiceNote(w.env, { session: (await loadSession(w.env, w.sid))!, userId: ME, seq: chunks[0].seq,
+      speakerLabel: 'Interviewee', provider: 'telegram' });
+    assert.deepEqual(replay, { ok: true, appended: 0, already: true });
+    assert.equal(speechCalls, timing === 'before_source' ? 0 : 1);
+  });
+}
+
+test('a voice append racing the deletion lookup is either suppressed or found and tombstoned', async () => {
+  const w = await assigned();
+  w.db.prepare("UPDATE channel_threads SET consent_state = 'given' WHERE id = ?").run(w.thread.id);
+  w.db.prepare("UPDATE interview_sessions SET consent_status = 'given' WHERE id = ?").run(w.sid);
+  const voiceId = ++ids.message;
+  await hook(w, businessMessage('BC-ME', { id: voiceId, voice: { file_id: 'synthetic-voice', duration: 5, mime_type: 'audio/ogg', file_size: 4000 } }));
+  w.env.AI.run = async (model: string) => /guard/.test(model) ? { response: 'safe' }
+    : { text: 'Synthetic deleted voice.', transcription_info: { language: 'en' } };
+  let staged = false, releaseAppend!: () => void, appendReady!: () => void;
+  const paused = new Promise<void>((r) => { appendReady = r; });
+  const commit = new Promise<void>((r) => { releaseAppend = r; });
+  const prepare = w.env.DB.prepare.bind(w.env.DB);
+  let jobRun: Promise<unknown>;
+  w.env.DB.prepare = (sql: string) => {
+    if (sql.includes('INSERT INTO interview_chunk_transcripts')) staged = true;
+    const stmt = prepare(sql);
+    if (sql.includes('speaker_label, text, source_ref, model')) {
+      const all = stmt.all.bind(stmt);
+      stmt.all = async () => {
+        const rows = await all();
+        releaseAppend(); await jobRun;
+        return rows;
+      };
+    }
+    return stmt;
+  };
+  const batch = w.env.DB.batch.bind(w.env.DB);
+  w.env.DB.batch = async (stmts: any[]) => {
+    if (staged) { staged = false; appendReady(); await commit; }
+    return batch(stmts);
+  };
+  const job = w.queued.filter((j: any) => j.job_type === 'channel_followup' && j.payload.kind === 'voice').at(-1);
+  const f = mockFetch(telegramApi);
+  try {
+    jobRun = runChannelJob(w.env, 'channel_followup', job.payload);
+    await paused;
+    await hook(w, deleted([voiceId]));
+    await jobRun;
+  } finally { releaseAppend(); f.restore(); }
+  assert.deepEqual(lines(w, w.sid).map((r: any) => r.text), [OLD, OTHER_LINE]);
+  const chunks = w.db.prepare('SELECT segments_json FROM interview_chunk_transcripts WHERE session_id = ?').all(w.sid);
+  assert.deepEqual(chunks.map((c: any) => JSON.parse(c.segments_json)), [[]]);
+  assert.equal(w.db.prepare("SELECT COUNT(*) AS n FROM interview_session_receipts WHERE session_id = ? AND kind = 'final'").get(w.sid).n, 1);
+});
+
+
+test('short and multiline source passages replace only unique full mirror passages', async () => {
+  const w = await assigned();
+  const row = lines(w, w.sid)[0];
+  for (const word of ['no', 'a', '1', 'first\nsecond']) {
+    const prefix = 'Synthetic history: not, know, enough, a note, 11 and first\nsecondhand.\n';
+    w.db.prepare("UPDATE interview_transcript_segments SET text = ?, model = 'channel:telegram' WHERE id = ?").run(word, row.id);
+    w.db.prepare('UPDATE discovery_interviews SET transcript = ? WHERE id = ?').run(prefix + word + '\n' + OTHER_LINE, INTERVIEW);
+    await hook(w, edit(w.first, NEW));
+    assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, prefix + NEW + '\n' + OTHER_LINE);
+    w.db.prepare("UPDATE interview_transcript_segments SET text = ?, model = 'channel:telegram' WHERE id = ?").run(word, row.id);
+    w.db.prepare('UPDATE discovery_interviews SET transcript = ? WHERE id = ?').run(prefix + word, INTERVIEW);
+    await hook(w, deleted([w.first]));
+    assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, prefix + SOURCE_DELETED_TEXT);
+  }
+  w.db.prepare("UPDATE interview_transcript_segments SET text = 'no', model = 'channel:telegram' WHERE id = ?").run(row.id);
+  w.db.prepare("UPDATE discovery_interviews SET transcript = 'no\nno' WHERE id = ?").run(INTERVIEW);
+  await hook(w, deleted([w.first]));
+  assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, 'no\nno', 'an ambiguous mirror has no source mapping to guess');
+  assert.equal(lines(w, w.sid)[0].text, SOURCE_DELETED_TEXT);
+  w.db.prepare("UPDATE interview_transcript_segments SET text = 'no', model = 'channel:telegram' WHERE id = ?").run(row.id);
+  w.db.prepare("UPDATE discovery_interviews SET transcript = 'no' WHERE id = ?").run(INTERVIEW);
+  await hook(w, edit(w.first));
+  assert.equal(w.db.prepare('SELECT transcript FROM discovery_interviews WHERE id = ?').get(INTERVIEW).transcript, NEW, 'first and last line may be the same passage');
 });

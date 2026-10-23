@@ -89,3 +89,67 @@ test('without APP_URL the return stays relative, as before', async () => {
   const r = await callback(undefined, ['incoming-webhook']);
   assert.deepEqual([r.status, r.location], [302, '/integrations?oauth=ok&provider=slack']);
 });
+
+for (const demo of [undefined, '1', '0']) {
+  test(`Carta OAuth start binds the environment to state (demo=${demo ?? 'default'})`, async () => {
+    await import('../src/integrations/providers/carta.ts');
+    const { db, env } = fixture('https://axal.vc');
+    db.prepare("UPDATE users SET subscription_tier = 'studio' WHERE id = 1").run();
+    env.CARTA_CLIENT_ID = 'state-fixture-client'; env.CARTA_CLIENT_SECRET = 'state-fixture-secret';
+    const jwt = await new SignJWT({ user_id: 1, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    const app = new Hono<any>(); app.route('/api/integrations', integrations);
+    try {
+      const response = await app.request(`/api/integrations/oauth/carta/start${demo === undefined ? '' : `?demo=${demo}`}`,
+        { headers: { Authorization: `Bearer ${jwt}`, 'X-Company-Id': '10' } }, env);
+      assert.equal(response.status, 200);
+      const body = await response.json() as any;
+      const state = db.prepare('SELECT extra_json FROM oauth_state_tokens WHERE state = ?').get(body.state) as any;
+      assert.equal(JSON.parse(state.extra_json).is_demo, demo !== '0');
+      assert.equal(new URL(body.authorize_url).hostname, demo === '0' ? 'login.app.carta.com' : 'login.playground.carta.team');
+    } finally { db.close(); }
+  });
+}
+
+for (const isDemo of [true, false]) {
+  test(`Carta callback and settings preserve signed ${isDemo ? 'playground' : 'production'} choice`, async () => {
+    await import('../src/integrations/providers/carta.ts');
+    const { db, env } = fixture('https://axal.vc');
+    db.prepare("UPDATE users SET subscription_tier = 'studio' WHERE id = 1").run();
+    env.CARTA_CLIENT_ID = 'test-client'; env.CARTA_CLIENT_SECRET = 'test-secret';
+    const state = await issueOauthState(env, 1, 'carta', 'verifier-fixture', { company_id: 10, is_demo: isDemo });
+    const jwt = await new SignJWT({ user_id: 1, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    const headers = { Authorization: `Bearer ${jwt}`, 'X-Company-Id': '10' };
+    const app = new Hono<any>(); app.route('/api/integrations', integrations);
+    const before = globalThis.fetch;
+    const auth = isDemo ? 'https://login.playground.carta.team' : 'https://login.app.carta.com';
+    const api = isDemo ? 'https://api.playground.carta.team' : 'https://api.carta.com';
+    let exchanges = 0;
+    globalThis.fetch = (async (input: any, init: any) => {
+      if (String(input) === `${auth}/o/access_token/`) {
+        exchanges++;
+        assert.equal(new URLSearchParams(init.body).get('code_verifier'), 'verifier-fixture');
+        return new Response(JSON.stringify({ access_token: 'access-fixture', refresh_token: 'refresh-fixture', scope: 'read_issuer_info read_issuer_stakeholders read_issuer_securities' }));
+      }
+      assert.equal(String(input), `${api}/v1alpha1/issuers`);
+      return new Response(JSON.stringify({ issuers: [{ id: 'issuer-fixture' }] }));
+    }) as any;
+    try {
+      // A callback query cannot replace the environment authenticated in state.
+      const response = await app.request(`/api/integrations/oauth/carta/callback?code=fixture&state=${encodeURIComponent(state)}&demo=${isDemo ? '0' : '1'}`,
+        { headers }, env);
+      assert.equal(response.headers.get('location'), 'https://axal.vc/integrations?oauth=ok&provider=carta');
+      assert.equal(exchanges, 1);
+      const row = db.prepare("SELECT uid, config_json FROM integrations WHERE user_id=1 AND provider_key='carta'").get() as any;
+      assert.equal(JSON.parse(row.config_json).is_demo, isDemo);
+      const update = await app.request(`/api/integrations/${row.uid}/config`, {
+        method: 'PATCH', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({ sync_frequency: 'daily' }),
+      }, env);
+      assert.equal(update.status, 200);
+      assert.equal((await update.json() as any).config.is_demo, isDemo);
+      const saved = db.prepare('SELECT config_json FROM integrations WHERE uid=?').get(row.uid) as any;
+      assert.equal(JSON.parse(saved.config_json).is_demo, isDemo);
+    } finally { globalThis.fetch = before; db.close(); }
+  });
+}

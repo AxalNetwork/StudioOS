@@ -542,10 +542,10 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
           <Group label="Sync">
             <Row a="How often" b={syncFrequencyLabel(conn)} />
             <Row a="Last sync" b={syncNote || lastSyncLabel(conn)}
-              action={conn.uid ? <button type="button" className={BTN.link} disabled={syncing} onClick={syncNow} data-testid="button-sync-now">{syncing ? 'Syncing…' : 'Sync now'}</button> : null} />
+              action={conn.uid && !p.legacy_only ? <button type="button" className={BTN.link} disabled={syncing} onClick={syncNow} data-testid="button-sync-now">{syncing ? 'Syncing…' : 'Sync now'}</button> : null} />
           </Group>
         )}
-        <SettingsGroup p={p} onTool={setTool} onReplace={() => go('key')} />
+        {p.legacy_only ? <Banner tone="neutral">{p.legacy_notice}</Banner> : <SettingsGroup p={p} onTool={setTool} onReplace={() => go('key')} />}
         {conn.uid
           ? <ActivityGroup conn={conn} />
           : <Group label="Activity"><Row a={<Unrecorded reason={`${name} keeps no activity log in StudioOS.`}>Not recorded</Unrecorded>} /></Group>}
@@ -562,7 +562,7 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
       <>
         {backBtn}
         <span className="mr-auto text-[11.5px] text-axal-muted dark:text-gray-400">On disconnect: {disconnectNote(p, viewerRole)}</span>
-        {status.why && <button type="button" className={BTN.primary} onClick={() => go('pre')}>Reconnect</button>}
+        {status.why && !p.legacy_only && <button type="button" className={BTN.primary} onClick={() => go('pre')}>Reconnect</button>}
         <button type="button" className={BTN.danger} onClick={() => setConfirming(true)} data-testid="button-disconnect">Disconnect</button>
       </>
     );
@@ -607,11 +607,11 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="sf_env" checked={sfSandbox} onChange={() => setSfSandbox(true)} /> Sandbox</label>
           </Group>
         )}
-        {p.key === 'docusign' && (
+        {(p.key === 'docusign' || p.key === 'carta') && (
           <Group label="Account">
-            <div data-testid="docusign-env-picker">
+            <div data-testid={`${p.key}-env-picker`}>
               <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="ds_env" checked={!dsDemo} onChange={() => setDsDemo(false)} /> Production</label>
-              <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="ds_env" checked={dsDemo} onChange={() => setDsDemo(true)} /> Demo</label>
+              <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="ds_env" checked={dsDemo} onChange={() => setDsDemo(true)} /> {p.key === 'carta' ? 'Playground' : 'Demo'}</label>
             </div>
           </Group>
         )}

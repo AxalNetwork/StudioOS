@@ -272,6 +272,12 @@ export async function digestSession(env: Env, opts: {
     await writeOutcome(env, session.id, { status: 'refused', note: refusalNote(null), trigger: opts.trigger });
     throw err;
   }
+  // Consent may change while a provider/model call is in flight. Its late
+  // result cannot restore the withdrawn digest, suggestions or engine state.
+  if ((await loadSession(env, session.id))?.consent_status === 'declined') {
+    await withdrawDigest(env, session.id, opts.userId, { onlyDeclined: true });
+    return { ok: false, status: 'refused', reason: 'consent_not_recorded', refusal: null, note: NOTES.withdrawn };
+  }
   // D866: source edits/deletions can arrive during a provider call. Stores
   // reject stale snapshots; keep a fresh run due instead of sealing the old hash.
   if (session.submitted_via === 'telegram' && await transcriptHash(await finalSegments(env, session.id)) !== hash) {
@@ -281,12 +287,6 @@ export async function digestSession(env: Env, opts: {
     await writeOutcome(env, session.id, { status: 'queued', note, trigger: opts.trigger });
     await enqueueDigest(env, session.id, opts.userId, 'chat_text_added');
     return { ok: false, status: 'skipped', reason: 'source_changed', note };
-  }
-  // Consent may change while a provider/model call is in flight. Its late
-  // result cannot restore the withdrawn digest, suggestions or engine state.
-  if ((await loadSession(env, session.id))?.consent_status === 'declined') {
-    await withdrawDigest(env, session.id, opts.userId, { onlyDeclined: true });
-    return { ok: false, status: 'refused', reason: 'consent_not_recorded', refusal: null, note: NOTES.withdrawn };
   }
   if (prefs.dropped) notes.push(NOTES.modelDropped);
   const runId = structure?.ok ? structure.runId : undefined;

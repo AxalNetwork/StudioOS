@@ -1446,6 +1446,7 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   dealCommitments: (id) => request(`/deals/${id}/commitments`),
+  dealCommitmentWithdraw: (id, uid) => request(`/deals/${id}/commitments/${encodeURIComponent(uid)}/withdraw`, { method: 'POST' }),
   createCommitment: (id, data) => request(`/deals/${id}/commitments`, { method: 'POST', body: JSON.stringify(data) }),
   dealActivity: (id) => request(`/deals/${id}/activity`),
   dealInvitations: (id) => request(`/deals/${id}/invitations`),
@@ -1469,7 +1470,6 @@ export const api = {
 
   matchPartnersLegacy: (data) => request('/partners/matchPartners', { method: 'POST', body: JSON.stringify(data) }),
   generateMemo: (data) => request('/scoring/generateMemo', { method: 'POST', body: JSON.stringify(data) }),
-  capitalCall: (data) => request('/capital/capitalCall', { method: 'POST', body: JSON.stringify(data) }),
 
   founderSubmit: (data) => request('/projects/submit', { method: 'POST', body: JSON.stringify(data) }),
 

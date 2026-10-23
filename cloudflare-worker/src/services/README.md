@@ -7,6 +7,13 @@ not return a `Response`.
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
 
+`scoreAccess.ts` scopes #2439 project risk and external trust-score reads through
+existing deal permissions. Self/admin trust reads retain obligation details;
+related external readers receive only the bare score. Non-admin risk and
+screening snapshots use `scoreIntegrity.ts` verification and read auditing.
+Bulk reads deduplicate projects, select snapshots once, and batch per-score
+audit entries without weakening approval or signature checks.
+
 ## The ones worth knowing
 
 `meetingBotOperations.ts` implements D886 B10 (#2588): count-only time windows,

@@ -154,7 +154,6 @@ const SUPER_ACTS: Array<[string, string, string, unknown]> = [
   ['issue a call', 'POST', '/api/funds/1/capital-call', { amount_cents: 100_000 }],
   ['add an LP with a first call', 'POST', '/api/funds/1/lps', { name: 'New LP', email: 'new@lp.example', commitment_amount: 100, first_call_cents: 5_000 }],
   ['legacy create call', 'POST', '/api/capital/calls', { limited_partner_id: 100, amount: 5 }],
-  ['legacy issue to all', 'POST', '/api/capital/capitalCall', { startup_id: 1, amount: 10 }],
   ['execute a distribution', 'POST', '/api/funds/distributions/execute', { fund_id: 1, proceeds_cents: 100_000 }],
   ['change the GP of record', 'PATCH', '/api/funds/1', { gp_user_id: OTHER_GP }],
   ['change the carry', 'PATCH', '/api/funds/1', { carried_interest: 0.3 }],

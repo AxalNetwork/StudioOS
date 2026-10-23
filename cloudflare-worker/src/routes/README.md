@@ -4,6 +4,14 @@ These files are the production API behind `https://axal.vc/api/*`. They are
 mounted by `cloudflare-worker/src/index.ts` and run on Cloudflare Workers
 against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.
 
+Issue #2460 removes blanket Operating Partner access from the shared
+founder-resource guard and the financial/revenue loaders. Financial recompute
+requires the same edit permission as saving. A project relationship for these
+outside members is pending #2438; the generic guard grants them no access in
+the meantime. Deal-room reads retain their separate partner rule. Legacy legal
+entity listing and other routes with independent role gates are separate
+policies, not grants from the founder-resource guard.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
@@ -61,6 +69,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/public/plans-and-packs → public.ts (D755: every plan's price and AI allowance and the packs on sale; D1 only, no session)
 /api/usage         → usage.ts           (the caller's own stored files by area, across all their companies; never another member's, D642)
 /api/connectors/health → connectors_health.ts (D848: the caller's connections, each with its granted companies, its health state, the time it was checked, its error category and its last ten checks; never a token or a provider's message. Mounted before the connector router)
+/api/carta/investor → carta_investor.ts (#2634: the caller's own active investor grant; live read-only firms, funds, investments, certificates, convertible notes, warrants and capitalization tables; no support/admin bypass, founder imports or personal-data logs)
 /api/connectors    → integrations.ts    (canonical connection catalogue, company scope, requests, suggestions and logs; D650; connector pages (`GET /directory/:key`, D753))
 /api/integrations  → integrations.ts    (temporary alias to the same handlers; D650)
                                          (D655: GET /:uid/sync-status, GET /:uid/fed, GET|PUT /:uid/repositories for GitHub)

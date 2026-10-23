@@ -233,11 +233,10 @@ test('the zone is mounted once, gated, and registered before the id route', () =
   const byId = ROUTE.indexOf("deals.get('/:id'");
   assert.ok(literal > -1 && byId > -1 && literal < byId,
     '/screening is registered after /:id, so it is swallowed by the id route');
-  // SCOPED TO THIS HANDLER, because the same guard line appears verbatim in
-  // `/pass-analytics` and `/stage-analytics` — deleting it from `/screening`
-  // left the file still matching, and the mutation escaped. The slice ends at
-  // the next handler's own registration.
+  // Scope this check to the screening handler: a guard on another route
+  // cannot protect this desk. #2439 restricts it to admin/partner; investors
+  // may be privileged elsewhere but cannot read internal screening scores.
   const handler = ROUTE.slice(literal, ROUTE.indexOf('\ndeals.', literal + 10));
-  assert.match(handler, /if \(!isPrivilegedRole\(user\.role as string\)\) return c\.json\(\{ detail: 'Forbidden' \}, 403\)/,
-    'the screening desk is no longer gated on a privileged role');
+  assert.match(handler, /if \(user\.role !== 'admin' && user\.role !== 'partner'\) return c\.json\(\{ detail: 'Forbidden' \}, 403\)/,
+    'the screening desk must permit only admins and partners (#2439)');
 });

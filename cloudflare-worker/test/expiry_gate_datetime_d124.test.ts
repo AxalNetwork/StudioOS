@@ -229,5 +229,7 @@ test('no access-control gate compares a bare timestamp column', () => {
   // And the fix is actually present, so this test cannot pass by the files
   // having lost their gates altogether.
   const wrapped = FILES.reduce((n, f) => n + (src(f).match(/datetime\([a-z_]*\.?(?:expires_at|valid_until)\)/g) || []).length, 0);
-  assert.equal(wrapped, 13, `expected 13 normalised comparisons across the gated files, found ${wrapped}`);
+  // 14 since #2461: data_room.ts's projectNdaActive gates on the venture
+  // founder's NDA with its own normalised valid_until comparison.
+  assert.equal(wrapped, 14, `expected 14 normalised comparisons across the gated files, found ${wrapped}`);
 });

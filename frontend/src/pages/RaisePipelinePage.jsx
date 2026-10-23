@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   TrendingUp, RefreshCw, Plus, Upload, X, Pencil, Megaphone, ExternalLink,
   CalendarDays, Target, CircleDollarSign, Users,
@@ -103,7 +103,12 @@ export function csvToProspects(rows) {
 
 export default function RaisePipelinePage({ embedded = false }) {
   useAuth();
-  const [projectId, setProjectId] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [projects, setProjects] = useState([]);
+  const requestedProject = searchParams.get('project_id') || searchParams.get('project');
+  const projectId = projects.some(p => String(p.id) === requestedProject) ? Number(requestedProject) : null;
+  const loadVersion = useRef(0);
+  const [commitPrompt, setCommitPrompt] = useState(null);
   const [roundInfo, setRoundInfo] = useState({ round: null, raised: 0, committed_count: 0 });
   const [items, setItems] = useState([]);
   const [stages, setStages] = useState(STAGES);
@@ -124,29 +129,33 @@ export default function RaisePipelinePage({ embedded = false }) {
     api.listProjects()
       .then((list) => {
         const safe = list || [];
-        if (safe.length > 0) setProjectId(safe[0].id);
-        else setLoading(false);
+        setProjects(safe);
+        setLoading(false);
       })
       .catch((e) => { setErr(e.message || 'Failed to load projects'); setLoading(false); });
   }, []);
 
   const load = (pid = projectId) => {
-    if (!pid) return;
+    const version = ++loadVersion.current;
+    setItems([]); setUpdates([]); setSharedUpdates([]); setDrawerId(null);
+    setShowAdd(false); setShowImport(false); setShowRoundEdit(false); setCommitPrompt(null);
+    if (!pid) { setLoading(false); return; }
     setLoading(true); setErr(null);
     Promise.all([
       api.raiseProspects(pid),
-      api.raiseRound(pid).catch((e) => { setErr(e?.message || 'Failed to load round details'); return { round: null, raised: 0, committed_count: 0 }; }),
-      api.raiseUpdates(pid).catch((e) => { setErr(e?.message || 'Failed to load investor updates'); return { items: [], shared_updates: [] }; }),
+      api.raiseRound(pid).catch((e) => { if (version !== loadVersion.current) return { round: null }; setErr(e?.message || 'Failed to load round details'); return { round: null, raised: 0, committed_count: 0 }; }),
+      api.raiseUpdates(pid).catch((e) => { if (version !== loadVersion.current) return { items: [], shared_updates: [] }; setErr(e?.message || 'Failed to load investor updates'); return { items: [], shared_updates: [] }; }),
     ])
       .then(([pr, rd, up]) => {
+        if (version !== loadVersion.current) return;
         setItems(pr?.items || []);
         setStages(pr?.stages?.length ? pr.stages : STAGES);
         setRoundInfo(rd || { round: null, raised: 0, committed_count: 0 });
         setUpdates(up?.items || []);
         setSharedUpdates(up?.shared_updates || []);
       })
-      .catch((e) => setErr(e.message || 'Failed to load'))
-      .finally(() => setLoading(false));
+      .catch((e) => { if (version === loadVersion.current) setErr(e.message || 'Failed to load'); })
+      .finally(() => { if (version === loadVersion.current) setLoading(false); });
   };
   useEffect(() => { load(projectId); }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -156,11 +165,16 @@ export default function RaisePipelinePage({ embedded = false }) {
   };
 
   const update = async (id, patch) => {
+    if (patch.stage === 'committed' && !patch.commit_status) {
+      setCommitPrompt({ id, patch });
+      setDrawerId(null);
+      return null;
+    }
     setBusyId(id); setErr(null);
     try {
       const updated = await api.raiseProspectUpdate(id, patch);
       setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...updated } : it)));
-      if (patch.stage !== undefined || patch.amount !== undefined) refreshRound();
+      if (patch.stage !== undefined || patch.amount !== undefined || patch.commit_status !== undefined) refreshRound();
       return updated;
     } catch (e) {
       setErr(e.message || 'Failed to save');
@@ -200,9 +214,17 @@ export default function RaisePipelinePage({ embedded = false }) {
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          {/* The in-body startup picker is gone (#181) — see MarketIntelPage for
-              the reasoning. `projectId` is still set from the first project the
-              fetch returns, which is what happened whenever it was hidden. */}
+          <label className="text-sm">Venture
+            <select aria-label="Venture" value={projectId || ''} className={inputCls} onChange={e => {
+              const next = new URLSearchParams(searchParams);
+              next.delete('project');
+              if (e.target.value) next.set('project_id', e.target.value); else next.delete('project_id');
+              setSearchParams(next);
+            }}>
+              <option value="">Choose a venture</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </label>
           <button onClick={() => setShowAdd(true)} disabled={!projectId} className={btnPrimary}>
             <Plus size={14} /> Add investor
           </button>
@@ -215,11 +237,17 @@ export default function RaisePipelinePage({ embedded = false }) {
         </div>
       </div>
 
+      {commitPrompt && <div role="dialog" aria-label="Commitment status" className="mb-4 border rounded-xl p-4">
+        <p className="text-sm mb-2">Record the commitment status before moving this investor to Committed.</p>
+        {['soft', 'signed', 'wired'].map(status => <button key={status} className={btnGhost} disabled={!!busyId}
+          onClick={async () => { const saved = await update(commitPrompt.id, { ...commitPrompt.patch, commit_status: status }); if (saved) setCommitPrompt(null); }}>{status}</button>)}
+        <button className={btnGhost} onClick={() => setCommitPrompt(null)}>Cancel</button>
+      </div>}
       {err && <div className="mb-4 px-4 py-2 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm">{err}</div>}
 
       {!projectId && !loading ? (
         <div className="text-sm text-gray-500 dark:text-gray-400 py-12 text-center border border-dashed border-gray-300 dark:border-gray-700 rounded-xl">
-          You need a project before you can run a raise pipeline.
+          Choose a venture before adding or importing investors.
         </div>
       ) : (
         <>
@@ -278,9 +306,8 @@ export default function RaisePipelinePage({ embedded = false }) {
                           className={`w-full text-left bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-2.5 shadow-sm hover:border-emerald-300 dark:hover:border-emerald-700 cursor-grab active:cursor-grabbing ${busyId === it.id ? 'opacity-50' : ''}`}>
                           <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{it.name || it.email}</div>
                           {it.firm && <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{it.firm}</div>}
-                          {it.amount != null && (
-                            <div className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">{fmtMoney(it.amount)}</div>
-                          )}
+                          <div className="mt-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">{it.amount == null ? 'Amount not recorded' : fmtMoney(it.amount)}</div>
+                          {it.stage === 'committed' && <div className="text-xs">{it.commit_status || 'Status not set'}</div>}
                         </button>
                       ))}
                       {(byStage[s] || []).length === 0 && (
@@ -442,11 +469,14 @@ function AddInvestorModal({ projectId, stages, onClose, onCreated }) {
   const [firm, setFirm] = useState('');
   const [amount, setAmount] = useState('');
   const [stage, setStage] = useState('to_contact');
+  const [commitStatus, setCommitStatus] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
   const save = async () => {
+    if (!projectId) { setErr('Choose a venture first'); return; }
+    if (stage === 'committed' && !commitStatus) { setErr('Choose a commitment status'); return; }
     setBusy(true); setErr(null);
     try {
       const cleaned = amount.replace(/[$,\s]/g, '');
@@ -457,6 +487,7 @@ function AddInvestorModal({ projectId, stages, onClose, onCreated }) {
         firm: firm || undefined,
         amount: cleaned !== '' ? Number(cleaned) : undefined,
         stage,
+        commit_status: stage === 'committed' ? commitStatus : null,
         notes: notes || undefined,
       });
       onCreated(p);
@@ -493,6 +524,7 @@ function AddInvestorModal({ projectId, stages, onClose, onCreated }) {
         </div>
         <div>
           <label className={labelCls}>Stage</label>
+          {stage === 'committed' && <label className={labelCls}>Commitment status<select required value={commitStatus} onChange={e => setCommitStatus(e.target.value)} className={inputCls}><option value="">Status not set</option>{['soft', 'signed', 'wired'].map(v => <option key={v} value={v}>{v}</option>)}</select></label>}
           <select value={stage} onChange={(e) => setStage(e.target.value)} className={inputCls}>
             {stages.map((s) => <option key={s} value={s}>{STAGE_LABEL[s] || s}</option>)}
           </select>
@@ -534,6 +566,7 @@ function ImportCsvModal({ projectId, onClose, onDone }) {
   };
 
   const doImport = async () => {
+    if (!projectId) { setParseErr('Choose a venture first'); return; }
     if (!rows) return;
     setBusy(true); setParseErr(null);
     try {
@@ -654,6 +687,7 @@ function ProspectDrawer({ prospect, stages, busy, onSave, onClose }) {
           {err && <div className="px-3 py-2 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-sm">{err}</div>}
 
           <div>
+            {prospect.stage === 'committed' && <label className={labelCls}>Commitment status<select value={prospect.commit_status || ''} onChange={e => onSave(prospect.id, { commit_status: e.target.value || null })} className={inputCls}><option value="">Status not set</option>{['soft', 'signed', 'wired'].map(v => <option key={v} value={v}>{v}</option>)}</select></label>}
             <label className={labelCls}>Stage</label>
             <select value={prospect.stage} disabled={busy}
               onChange={(e) => onSave(prospect.id, { stage: e.target.value })}

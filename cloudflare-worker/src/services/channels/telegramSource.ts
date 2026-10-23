@@ -22,15 +22,17 @@ export async function changeTelegramSource(
   catch (err) { if (err instanceof IntakeError) return 0; throw err; }
   if (session.interview_id !== thread.interview_id || session.submitted_via !== 'telegram') return 0;
   let changed = 0;
-  for (const messageId of new Set(messageIds)) {
-    const hash = await refKey('telegram', messageId);
-    const rows = (await env.DB.prepare(
+  const rows = (await env.DB.prepare(
       `SELECT id, start_ms, end_ms, speaker_label, text, source_ref, model FROM interview_transcript_segments
         WHERE session_id = ? AND source = 'final' ORDER BY COALESCE(start_ms, 0), id`,
     ).bind(session.id).all<SegmentRow & { id: number; source_ref: string | null; model: string | null }>()).results ?? [];
-    const spans = toSegments(rows);
+  // Telegram replacements are nonempty, and deletion keeps a span marker,
+  // so offsets do not change during this delivery. Read and map only once.
+  const spans = new Map(toSegments(rows).map((span) => [span.id, span]));
+  for (const messageId of new Set(messageIds)) {
+    const hash = await refKey('telegram', messageId);
     for (const row of rows.filter((r) => r.source_ref === hash && r.model === 'channel:telegram')) {
-      const span = spans.find((s) => s.id === row.id);
+      const span = spans.get(row.id);
       const replacement = text ?? SOURCE_DELETED_TEXT;
       if (!span || row.text === replacement) continue;
       const token = `channel:telegram:change:${crypto.randomUUID()}`;
@@ -72,18 +74,25 @@ export async function changeTelegramSource(
              status = CASE WHEN status = 'structured' THEN 'transcribed' ELSE status END, updated_at = datetime('now')
             WHERE id = ? AND EXISTS (SELECT 1 FROM interview_transcript_segments WHERE id = ? AND model = ?)`,
         ).bind(session.id, row.id, token),
-        // Rebuild the bounded legacy mirror across this interview's sessions,
-        // not only this chat. It must not keep text deleted from a segment.
+        // Pasted/legacy text may have no segment. Match a unique complete
+        // passage (including its line boundaries); never replace substrings
+        // or guess between identical occurrences in this flattened mirror.
         env.DB.prepare(
-          `UPDATE discovery_interviews SET transcript = (
-              SELECT group_concat(text, char(10)) FROM (
-                SELECT t.text, SUM(length(CAST(t.text AS BLOB)) + 1) OVER (
-                  ORDER BY s.id, COALESCE(t.start_ms, 0), t.id ROWS UNBOUNDED PRECEDING) AS mirror_bytes
-                FROM interview_transcript_segments t JOIN interview_sessions s ON s.id = t.session_id
-                WHERE s.interview_id = ? AND t.source = 'final' ORDER BY s.id, COALESCE(t.start_ms, 0), t.id
-              ) WHERE mirror_bytes <= ?), updated_at = datetime('now')
-            WHERE id = ? AND EXISTS (SELECT 1 FROM interview_transcript_segments WHERE id = ? AND model = ?)`,
-        ).bind(session.interview_id, TRANSCRIPT_MIRROR_MAX_BYTES, session.interview_id, row.id, token),
+          `WITH parts AS (
+            SELECT substr(transcript, 1, pos - 1) AS prefix, substr(transcript, pos + old_length) AS suffix
+              FROM (
+                SELECT transcript, instr(char(10) || transcript || char(10), char(10) || ? || char(10)) AS pos,
+                       length(?) AS old_length FROM discovery_interviews WHERE id = ?
+              ) WHERE pos > 0
+                AND instr(substr(char(10) || transcript || char(10), pos + 1), char(10) || ? || char(10)) = 0
+          )
+          UPDATE discovery_interviews SET transcript = (
+            SELECT prefix || CASE WHEN length(CAST(prefix || ? || suffix AS BLOB)) <= ? THEN ? ELSE '' END || suffix FROM parts
+          ), updated_at = datetime('now')
+            WHERE id = ? AND EXISTS (SELECT 1 FROM parts)
+              AND EXISTS (SELECT 1 FROM interview_transcript_segments WHERE id = ? AND model = ?)`,
+        ).bind(row.text, row.text, session.interview_id, row.text, replacement, TRANSCRIPT_MIRROR_MAX_BYTES,
+          replacement, session.interview_id, row.id, token),
         env.DB.prepare('UPDATE interview_transcript_segments SET model = ? WHERE id = ? AND model = ?')
           .bind(text === null ? 'channel:telegram:deleted' : 'channel:telegram', row.id, token),
       ]);
