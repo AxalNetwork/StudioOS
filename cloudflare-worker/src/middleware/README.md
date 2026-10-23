@@ -5,6 +5,7 @@ ahead of the routers, or applied per-route where the gate is specific.
 
 | File | What it enforces |
 | --- | --- |
+| `projectContentAccess.ts` | #2435: shared deck/brand management authorization, accepted-member write rights, a separate owner/cofounder gate for waitlist contacts, an owner company filter and actor audit for member write authorization with route template/method (not a completed-write event) (get-or-create reads audit only when allocating). Shares use separate public gates. |
 | `requireTier.ts` | Plan entitlement. `ensureTier(user, 'growth')` and friends. |
 | `requireInvestorTier.ts` | The investor-side equivalent. |
 | `rateLimit.ts` | Request budgets. **Fails closed** — a bucket that cannot be read denies rather than allows. |

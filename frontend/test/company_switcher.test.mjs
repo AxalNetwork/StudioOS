@@ -106,7 +106,17 @@ test('the scope notice stands exactly as long as scoping is incomplete', () => {
 
   const routes = readdirSync(resolve(root, 'cloudflare-worker/src/routes'))
     .filter((f) => f.endsWith('.ts'))
-    .map((f) => ({ f, src: codeOnly(read(`cloudflare-worker/src/routes/${f}`)) }));
+    .map((f) => {
+      let src = codeOnly(read(`cloudflare-worker/src/routes/${f}`));
+      // #2435 moves the real request-aware gate into shared middleware.
+      // Follow its import and call; an unscoped router gains no exemption.
+      if (f === 'decks.ts' || f === 'brand.ts') {
+        assert.match(src, /import \{ projectOwned \} from '\.\.\/middleware\/projectContentAccess'/, `${f} must import its shared gate`);
+        assert.match(src, /await projectOwned\(c, user,/, `${f} must call its shared gate`);
+        src += codeOnly(read('cloudflare-worker/src/middleware/projectContentAccess.ts'));
+      }
+      return { f, src };
+    });
   const queriesProjects = routes.filter(({ src }) => /\b(FROM|JOIN)\s+projects\b/.test(src));
   const founderOwned = queriesProjects.filter(({ src }) => FOUNDER_OWNED.test(src));
   const unscoped = founderOwned
