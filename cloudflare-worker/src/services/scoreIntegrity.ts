@@ -9,6 +9,7 @@ export const INTEGRITY_VERSION = 'v1';
 
 // Server-computed fields a client must never supply on a /score request.
 const RESERVED_INPUT_FIELDS = [
+  'ai_adjustment',
   'score',
   'tier',
   'score_breakdown',
@@ -212,7 +213,7 @@ export function isAuditableRole(role: string | null | undefined): boolean {
 // ---------------------------------------------------------------------------
 
 export interface AnomalyFlag {
-  type: 'input_jump' | 'duplicate_text' | 'practice_jump' | 'rapid_iteration';
+  type: 'low_score_review' | 'input_jump' | 'duplicate_text' | 'practice_jump' | 'rapid_iteration';
   detail: string;
   severity: 'low' | 'medium' | 'high';
 }
