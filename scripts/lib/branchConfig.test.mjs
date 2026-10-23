@@ -44,6 +44,19 @@ test('the shipped registry renders clean, and so does a real entry', () => {
   assert.deepEqual(checkRendered(TOML, e, render(e)), []);
 });
 
+test('B8 branch container image, policy, host binding and migration stay complete',()=>{
+  const e=entry(),src=render(e);
+  const {sections}=parseToml(src);
+  assert.equal(sections.find(s=>s.name==='containers')?.kv.get('scheduling_policy'),'"durable_object"');
+  assert.equal(sections.find(s=>s.name==='containers.images.runtime')?.kv.get('build_context'),'"./meeting-bot"');
+  assert.ok(sections.some(s=>s.name==='durable_objects.bindings'&&s.kv.get('name')==='"MEETING_BOT_CONTAINER"'));
+  assert.ok(sections.some(s=>s.name==='migrations'&&s.kv.get('new_sqlite_classes')==='["MeetingBotContainer"]'));
+  assert.deepEqual(checkRendered(TOML,e,src),[]);
+  for(const [before,after] of [['scheduling_policy = "durable_object"','scheduling_policy = "default"'],['build_context = "./meeting-bot"','build_context = "./other"'],['dockerfile = "./meeting-bot/Dockerfile"','dockerfile = "./other/Dockerfile"']]){
+    assert.ok(src.includes(before));assert.ok(checkRendered(TOML,e,src.replace(before,after)).some(p=>p.includes('container')));
+  }
+});
+
 test('every name is derived from the code, and the shared dataset is not', () => {
   const src = render();
   const n = derivedNames('fr');

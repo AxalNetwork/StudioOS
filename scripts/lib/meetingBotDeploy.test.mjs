@@ -58,3 +58,14 @@ test('B8 Actions deploy builds before migrations; offline CI validates both envi
   const image=readFileSync(new URL('../../.github/workflows/meeting-bot-image.yml',import.meta.url),'utf8');
   assert.ok(image.includes('node scripts/dry-run-meeting-bot-deploy.mjs'));
 });
+test('B8 provisioned/new branch workflows also build before any branch migrations',()=>{
+  const source=readFileSync(new URL('../../.github/workflows/cloudflare-worker-deploy.yml',import.meta.url),'utf8');
+  const provision=readFileSync(new URL('../../.github/workflows/branch-provision.yml',import.meta.url),'utf8');
+  const check=(text,migration)=>{const image=text.indexOf('run: node scripts/preflight-meeting-bot-deploy.mjs');assert.ok(image>=0 && image<text.indexOf(migration));};
+  const branches=source.slice(source.indexOf('\n  branches:'));
+  check(branches,'node scripts/migrate-d1.mjs --branch');check(provision,'node scripts/migrate-d1.mjs --branch');
+  for(const text of [branches,provision]){
+    assert.ok(text.includes('wrangler@4.149.0'));assert.ok(!text.includes('wrangler@4.131.0'));
+    assert.throws(()=>check(text.replace('run: node scripts/preflight-meeting-bot-deploy.mjs','run: true'),'node scripts/migrate-d1.mjs --branch'));
+  }
+});

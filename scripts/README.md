@@ -185,8 +185,8 @@ The image helper performs no migrations, deployment, login or publication.
 no publishable image output and contains no bot runtime.
 
 `preflight-meeting-bot-deploy.mjs` builds that real image before migrations in
-both deploy paths. Its fixed context has no fixture override.
-`dry-run-meeting-bot-deploy.mjs` validates production/preview bundles and
+both deploy paths, including branch provisioning/redeployment. Its fixed context has no fixture override.
+`dry-run-meeting-bot-deploy.mjs` validates production/preview/generated-branch bundles and
 Containers configuration in temporary scratch-image/assets copies only; it
 never deploys. `lib/meetingBotDeploy.test.mjs` runs isolated subprocesses to
 prove that a failed image build cannot reach migrations and checks all three

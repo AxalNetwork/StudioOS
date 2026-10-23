@@ -285,6 +285,10 @@ jobs:
         if: steps.list.outputs.codes != ''
         run: npm run build -- --seed-restored-tree
 
+      - name: Build meeting bot image before branch migrations
+        if: steps.list.outputs.codes != ''
+        run: node scripts/preflight-meeting-bot-deploy.mjs
+
       - name: Render, migrate and deploy each branch
         if: steps.list.outputs.codes != ''
         env:
@@ -297,7 +301,7 @@ jobs:
           deploy_branch() {
             local code="$1" attempt
             for attempt in 1 2 3; do
-              if npx --yes wrangler@4.131.0 deploy --config "wrangler.branch.${code}.toml" --var "WORKER_DEPLOY_VERSION:${GITHUB_SHA}" 2>&1 | tee "deploy.${code}.log"; then
+              if npx --yes wrangler@4.149.0 deploy --config "wrangler.branch.${code}.toml" --var "WORKER_DEPLOY_VERSION:${GITHUB_SHA}" 2>&1 | tee "deploy.${code}.log"; then
                 return 0
               fi
               if ! grep -qE '\[code: 10013\]' "deploy.${code}.log"; then

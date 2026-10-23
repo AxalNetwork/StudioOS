@@ -351,14 +351,15 @@ Secret names only, provisioned separately per environment:
   deployment. No value or registry password is recorded in source.
 
 Both root `npm run deploy` and the deploy workflow require a real linux/amd64
-image build **before D1 migrations**. No fixture flag can bypass that preflight.
+image build **before D1 migrations**. Branch provisioning/redeployment use the same gate
+and a Containers-capable Wrangler version. No fixture flag can bypass that preflight.
 A build failure prevents migrations. Wrangler then deploys the same Dockerfile
 and prepares its digest-pinned image; an upload/deploy failure is not a database
 rollback. Keep the existing migration/deploy recovery procedures.
 
 The image workflow builds the real image on PRs, boots it with provider network
 access disabled, verifies HTTP process health/native import, and dry-runs the
-production and preview configuration using an explicitly isolated scratch
+production, preview and generated-branch configuration using an explicitly isolated scratch
 image/assets copy. None of those steps publishes or provisions a runtime.
 An owner-triggered main run can additionally archive the versioned image in
 GHCR with its job-scoped `GITHUB_TOKEN`; its digest is recorded in the summary.
