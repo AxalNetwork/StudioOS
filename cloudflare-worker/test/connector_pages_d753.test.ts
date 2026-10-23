@@ -117,7 +117,7 @@ const linesOf = (file: string) => {
 };
 
 /** The sign-in's own token exchange and refresh: not tools (D753 decision 3). */
-const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint'];
+const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint'];
 /** A read that is a POST. */
 const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
 /** Connection plumbing: a revoke, a deauthorize, a webhook subscription or listener, a signing key. */

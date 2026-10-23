@@ -150,8 +150,8 @@ export function pageChoices(p) {
   if (!p) return { env: null, alt: [] };
   const env = p.key === 'salesforce'
     ? { name: 'sf_env', label: 'Org type', options: [{ value: 'production', label: 'Production' }, { value: 'sandbox', label: 'Sandbox' }] }
-    : p.key === 'docusign'
-      ? { name: 'ds_env', label: 'Account', options: [{ value: 'production', label: 'Production' }, { value: 'demo', label: 'Demo' }] }
+    : (p.key === 'docusign' || p.key === 'carta')
+      ? { name: 'ds_env', label: 'Account', options: [{ value: 'production', label: 'Production' }, { value: 'demo', label: p.key === 'carta' ? 'Playground' : 'Demo' }] }
       : null;
   const kind = authKind(p);
   const alt = [];

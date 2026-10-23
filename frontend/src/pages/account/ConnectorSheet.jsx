@@ -607,11 +607,11 @@ export function ConnectorPanel({ p, view, setView, ret = {}, onChanged, onClose,
             <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="sf_env" checked={sfSandbox} onChange={() => setSfSandbox(true)} /> Sandbox</label>
           </Group>
         )}
-        {p.key === 'docusign' && (
+        {(p.key === 'docusign' || p.key === 'carta') && (
           <Group label="Account">
-            <div data-testid="docusign-env-picker">
+            <div data-testid={`${p.key}-env-picker`}>
               <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="ds_env" checked={!dsDemo} onChange={() => setDsDemo(false)} /> Production</label>
-              <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="ds_env" checked={dsDemo} onChange={() => setDsDemo(true)} /> Demo</label>
+              <label className="flex items-center gap-2 px-3 py-2 text-[13px]"><input type="radio" name="ds_env" checked={dsDemo} onChange={() => setDsDemo(true)} /> {p.key === 'carta' ? 'Playground' : 'Demo'}</label>
             </div>
           </Group>
         )}

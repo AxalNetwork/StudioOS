@@ -5,7 +5,7 @@
  * (issuer / stakeholders / securities) into local D1 tables
  * `cap_table_holders` + `cap_table_securities` with `source='carta'`.
  *
- * Scopes: `read:cap_table read:stakeholders read:securities`.
+ * Scopes: `read_issuer_info read_issuer_stakeholders read_issuer_securities`.
  * Cron cadence: every 6 hours (gated in index.ts).
  *
  * Disconnect flips Carta-sourced rows to `source='manual'` (rows preserved,
@@ -32,9 +32,22 @@ import { decryptCredentials, encryptCredentials, type CredentialBlob } from '../
 import { acquireRefreshLease } from '../refreshLease';
 
 const PROVIDER_KEY = 'carta';
-const AUTH_HOST = 'https://login.carta.com';
-const API_BASE = 'https://api.carta.com/v1alpha1';
-const SCOPES = ['read:cap_table', 'read:stakeholders', 'read:securities'];
+// Verified 2026-10-23 against Carta's Endpoints & TTLs and Postman guides:
+// https://docs.carta.com/api-platform/guides/references/endpoints-configuration/
+// https://docs.carta.com/api-platform/guides/guides/postman/
+const AUTH_HOST = 'https://login.playground.carta.team';
+const API_BASE = 'https://api.playground.carta.team/v1alpha1';
+const PROD_AUTH_HOST = 'https://login.app.carta.com';
+const PROD_API_BASE = 'https://api.carta.com/v1alpha1';
+const SCOPES = ['read_issuer_info', 'read_issuer_stakeholders', 'read_issuer_securities'];
+const authHost = (isDemo: boolean) => isDemo ? AUTH_HOST : PROD_AUTH_HOST;
+const apiBase = (isDemo: boolean) => isDemo ? API_BASE : PROD_API_BASE;
+// Rows saved before environment selection used production. Keep those grants there.
+const storedDemo = (row: IntegrationRow) => safeParse(row.config_json || '{}').is_demo === true;
+const tokenHeaders = (id: string, secret: string) => ({
+  'Content-Type': 'application/x-www-form-urlencoded',
+  Authorization: `Basic ${btoa(`${id}:${secret}`)}`,
+});
 
 /** The callback URL registered with the provider; HQ → Integration keys shows the same (D751). */
 export function redirectUri(env: Env): string {
@@ -62,44 +75,41 @@ function safeParse(s: string): Record<string, unknown> {
   try { return JSON.parse(s) as Record<string, unknown>; } catch { return {}; }
 }
 
-async function exchangeCode(env: Env, code: string, codeVerifier: string | null): Promise<CartaTokenResponse> {
+async function exchangeCode(env: Env, code: string, codeVerifier: string | null, isDemo: boolean): Promise<CartaTokenResponse> {
   const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
     code,
     redirect_uri: redirectUri(env),
     client_id: id,
-    client_secret: secret,
   });
   if (codeVerifier) body.set('code_verifier', codeVerifier);
-  const res = await fetch(`${AUTH_HOST}/o/token/`, {
+  const res = await fetch(`${authHost(isDemo)}/o/access_token/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: tokenHeaders(id, secret),
     body,
   });
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`carta_token_exchange_failed: ${res.status} ${txt.slice(0, 300)}`);
+    throw new Error(`carta_token_exchange_failed: ${res.status}`);
   }
   return await res.json() as CartaTokenResponse;
 }
 
-async function refreshAccessToken(env: Env, refreshToken: string): Promise<CartaTokenResponse> {
+async function refreshAccessToken(env: Env, refreshToken: string, isDemo: boolean): Promise<CartaTokenResponse> {
   const { id, secret } = await ensureCreds(env);
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
+    redirect_uri: redirectUri(env),
     client_id: id,
-    client_secret: secret,
   });
-  const res = await fetch(`${AUTH_HOST}/o/token/`, {
+  const res = await fetch(`${authHost(isDemo)}/o/access_token/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    headers: tokenHeaders(id, secret),
     body,
   });
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`carta_refresh_failed: ${res.status} ${txt.slice(0, 300)}`);
+    throw new Error(`carta_refresh_failed: ${res.status}`);
   }
   return await res.json() as CartaTokenResponse;
 }
@@ -129,7 +139,7 @@ export async function refreshAndPersist(env: Env, row: IntegrationRow): Promise<
     const creds = await reread();
     const refreshToken = typeof creds?.refresh_token === 'string' ? creds.refresh_token : '';
     if (!refreshToken) throw new Error('carta_refresh_token_missing');
-    const refreshed = await refreshAccessToken(env, refreshToken);
+    const refreshed = await refreshAccessToken(env, refreshToken, storedDemo(row));
     const newCreds: CredentialBlob = {
       access_token: refreshed.access_token,
       refresh_token: refreshed.refresh_token || refreshToken,
@@ -157,7 +167,11 @@ async function getActiveAccessToken(env: Env, row: IntegrationRow): Promise<stri
 
 async function cartaFetch(env: Env, row: IntegrationRow, path: string, init: RequestInit = {}): Promise<Response> {
   let token = await getActiveAccessToken(env, row);
-  const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
+  const base = apiBase(storedDemo(row));
+  const url = new URL(path.startsWith('http') ? path : `${base}${path}`);
+  if (url.origin !== new URL(base).origin || !url.pathname.startsWith('/v1alpha1/')) {
+    throw new Error('carta_invalid_page_url');
+  }
   const headers = new Headers(init.headers || {});
   headers.set('Authorization', `Bearer ${token}`);
   headers.set('Accept', 'application/json');
@@ -182,7 +196,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
   }
   const cfg = (input.config || {}) as Record<string, unknown>;
   const verifier = typeof cfg.pkce_verifier === 'string' ? cfg.pkce_verifier : null;
-  const tokens = await exchangeCode(c.env, input.oauth_code, verifier);
+  const tokens = await exchangeCode(c.env, input.oauth_code, verifier, cfg.is_demo !== false);
   if (!tokens.refresh_token) {
     throw new Error(
       'carta_no_refresh_token: Carta did not return a refresh_token. Reconnect and grant offline access.',
@@ -205,7 +219,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
   let issuerId: string | null = null;
   let issuerName: string | null = null;
   try {
-    const res = await fetch(`${API_BASE}/issuers`, {
+    const res = await fetch(`${apiBase(cfg.is_demo !== false)}/issuers`, {
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
     });
     if (res.ok) {
@@ -225,6 +239,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
     external_account_name: issuerName,
     capabilities: ['Cap-table sync', 'Stakeholder import', 'Securities import'],
     config: {
+      is_demo: cfg.is_demo !== false,
       issuer_id: issuerId,
       issuer_name: issuerName,
     },
@@ -233,6 +248,7 @@ async function connect(c: Context<{ Bindings: Env }>, _user: User, input: Connec
 
 async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, state: string): Promise<string> {
   const { id } = await ensureCreds(c.env);
+  let isDemo = true;
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: id,
@@ -248,6 +264,7 @@ async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, sta
     ).bind(state).first<{ extra_json: string | null }>();
     if (row?.extra_json) {
       const extra = JSON.parse(row.extra_json) as Record<string, unknown>;
+      isDemo = extra.is_demo !== false;
       const challenge = typeof extra.challenge === 'string' ? extra.challenge : '';
       if (challenge) {
         params.set('code_challenge', challenge);
@@ -255,7 +272,7 @@ async function buildAuthorizeUrl(c: Context<{ Bindings: Env }>, _user: User, sta
       }
     }
   } catch { /* PKCE optional */ }
-  return `${AUTH_HOST}/o/authorize/?${params.toString()}`;
+  return `${authHost(isDemo)}/o/authorize/?${params.toString()}`;
 }
 
 // ───────────────────────────────────────────────────────────── sync
@@ -583,12 +600,12 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
       const { id, secret } = await ensureCreds(c.env);
       const body = new URLSearchParams({
         token: refresh,
+        token_type_hint: 'refresh_token',
         client_id: id,
-        client_secret: secret,
       });
-      await fetch(`${AUTH_HOST}/o/revoke_token/`, {
+      await fetch(`${authHost(storedDemo(row))}/o/revoke_token/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: tokenHeaders(id, secret),
         body,
       });
     }
@@ -601,10 +618,10 @@ async function revokeGranted(env: Env, result: ConnectResult): Promise<void> {
   const refresh = typeof result.credentials.refresh_token === 'string' ? result.credentials.refresh_token : '';
   if (!refresh) return;
   const { id, secret } = await ensureCreds(env);
-  await fetch(`${AUTH_HOST}/o/revoke_token/`, {
+  await fetch(`${authHost(result.config?.is_demo === true)}/o/revoke_token/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ token: refresh, client_id: id, client_secret: secret }),
+    headers: tokenHeaders(id, secret),
+    body: new URLSearchParams({ token: refresh, token_type_hint: 'refresh_token' }),
   });
 }
 

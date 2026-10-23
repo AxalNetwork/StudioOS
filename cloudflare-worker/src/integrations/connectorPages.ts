@@ -319,7 +319,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
   carta: {
     tagline: 'Your Carta cap table in Founding team, refreshed every six hours. Read-only.',
     long_description: [
-      'Mirror your Carta cap table (issuer, stakeholders, securities and vesting) into Founding team on a six-hour sync.',
+      'Mirror your Carta cap table (issuer, stakeholders, securities and vesting) into Founding team on a six-hour sync. Choose Playground for a playground app, or Production for an approved production app.',
       'Read-only: Axal VC reads your cap table and never changes it in Carta. When you disconnect, it revokes its Carta sign-in.',
     ],
     tools: [
@@ -327,16 +327,16 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       tool('list_stakeholders', 'stakeholders', 'read', 'Reads each issuer’s stakeholders.', 'founding_team', ["/stakeholders`, 'stakeholders'"]),
       tool('list_securities', 'securities', 'read', 'Reads each issuer’s securities.', 'founding_team', ["/securities`, 'securities'"]),
       tool('list_vesting_schedules', 'vesting schedules', 'read', 'Reads each issuer’s vesting schedules.', null, ['/vesting-schedules`']),
-      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['`${AUTH_HOST}/o/revoke_token/`']),
+      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['/o/revoke_token/']),
     ],
     prompts: [],
     prompts_reason: notRead('Carta'),
     made_by: AXAL,
     service: { name: 'Carta', href: null },
     sign_in: { kind: 'oauth', label: 'Sign in with Carta', key_help_href: null },
-    endpoints: { sign_in: 'https://login.carta.com/o/authorize/', api: 'https://api.carta.com/v1alpha1' },
+    endpoints: { sign_in: 'https://login.playground.carta.team/o/authorize/', api: 'https://api.playground.carta.team/v1alpha1' },
     added: '2026-09',
-    links: { ...NO_LINKS, developer_docs: 'https://carta.com/api/' },
+    links: { ...NO_LINKS, developer_docs: 'https://docs.carta.com/api-platform/guides/' },
     verified_on: null,
   },
   slack: {

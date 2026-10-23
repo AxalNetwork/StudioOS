@@ -89,3 +89,24 @@ test('without APP_URL the return stays relative, as before', async () => {
   const r = await callback(undefined, ['incoming-webhook']);
   assert.deepEqual([r.status, r.location], [302, '/integrations?oauth=ok&provider=slack']);
 });
+
+for (const demo of [undefined, '1', '0']) {
+  test(`Carta OAuth start binds the environment to state (demo=${demo ?? 'default'})`, async () => {
+    await import('../src/integrations/providers/carta.ts');
+    const { db, env } = fixture('https://axal.vc');
+    db.prepare("UPDATE users SET subscription_tier = 'studio' WHERE id = 1").run();
+    env.CARTA_CLIENT_ID = 'state-fixture-client'; env.CARTA_CLIENT_SECRET = 'state-fixture-secret';
+    const jwt = await new SignJWT({ user_id: 1, role: 'founder' }).setProtectedHeader({ alg: 'HS256' })
+      .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+    const app = new Hono<any>(); app.route('/api/integrations', integrations);
+    try {
+      const response = await app.request(`/api/integrations/oauth/carta/start${demo === undefined ? '' : `?demo=${demo}`}`,
+        { headers: { Authorization: `Bearer ${jwt}`, 'X-Company-Id': '10' } }, env);
+      assert.equal(response.status, 200);
+      const body = await response.json() as any;
+      const state = db.prepare('SELECT extra_json FROM oauth_state_tokens WHERE state = ?').get(body.state) as any;
+      assert.equal(JSON.parse(state.extra_json).is_demo, demo !== '0');
+      assert.equal(new URL(body.authorize_url).hostname, demo === '0' ? 'login.app.carta.com' : 'login.playground.carta.team');
+    } finally { db.close(); }
+  });
+}
