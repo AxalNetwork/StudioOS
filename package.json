@@ -15,7 +15,7 @@
     "test:drift": "npm run test:frontend && npm run test:worker && npm run test:meeting-bot && npm run test:retention && npm run test:guards && npm run test:types && npm run test:types:frontend && npm run lint:undef && node scripts/check-dark-mode.mjs",
     "test:e2e": "playwright test",
     "build": "node scripts/build-frontend.mjs",
-    "predeploy": "node scripts/migrate-d1.mjs --remote",
+    "predeploy": "node scripts/preflight-meeting-bot-deploy.mjs && node scripts/migrate-d1.mjs --remote",
     "deploy": "npm run build && cd cloudflare-worker && npx wrangler deploy --config ../wrangler.toml --env production",
     "postdeploy": "node scripts/check-spa-live.mjs",
     "verify:live": "node scripts/check-spa-live.mjs",
