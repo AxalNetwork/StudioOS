@@ -172,6 +172,9 @@ export class MeetingBotRun implements DurableObject {
     await this.stopRuntime(run);
   }
   private async finish(run: BotRun, status: 'done'|'failed'|'stopped', code: string | null) {
+    if (status === 'stopped' && run.status === 'processing' && await this.state.storage.get('drain_until') && await this.allowed(run)) {
+      await this.queueAssembly(run,true);
+    }
     if (!terminal(run.status)) await this.update(run,status,code);
     // Always retain an alarm until the runtime stop AND ledger settlement have succeeded.
     await this.state.storage.setAlarm(Date.now()+BOT_HEARTBEAT_MS);
@@ -209,6 +212,15 @@ export class MeetingBotRun implements DurableObject {
       if (until && now>=until) return this.finish(run,'stopped',(await this.state.storage.get<string>('drain_reason'))??null);
       if (until) await this.state.storage.setAlarm(Math.min(now+BOT_HEARTBEAT_MS,until));
       if (!await this.state.storage.get('runtime_stopped')) await this.stopRuntime(run);
+      if (!until) {
+        await this.queueAssembly(run);
+        const session = await botSession(this.env,run);
+        const persisted = await botRow(this.env,run.uid);
+        if (session.processing_stage === 'done' && persisted?.participants_enc) return this.finish(run,'done',null);
+        if (session.processing_stage === 'failed') return this.finish(run,'failed','processing_failed');
+        const progress = Date.parse(String(session.processing_updated_at ?? '').replace(' ','T').replace(/Z?$/,'Z'));
+        if (Number.isFinite(progress) && now-progress < BOT_PROCESSING_MAX_MS) return;
+      }
       if (run.ended_at !== null && now-run.ended_at>=BOT_PROCESSING_MAX_MS) return this.finish(run,'failed','processing_timeout');
     } else if (run.started_at !== null && now-run.started_at>=run.limit_minutes*60_000) return this.drain(run,'time_limit');
     else if (run.heartbeat_at !== null && now-run.heartbeat_at>2*BOT_HEARTBEAT_MS) return this.finish(run,'failed','heartbeat_timeout');
@@ -228,6 +240,27 @@ export class MeetingBotRun implements DurableObject {
       try { await this.tick(run); } catch { await this.state.storage.setAlarm(Date.now()+BOT_HEARTBEAT_MS); }
     });
   }
+  private async queueAssembly(run: BotRun, force = false) {
+    if (await this.state.storage.get('assembly_queued')) return;
+    const tickets = await this.state.storage.list<UploadTicket>({prefix:'chunk:'});
+    const unfinished = [...tickets.values()].filter(ticket=>!ticket.used);
+    if (unfinished.length && !force && unfinished.some(ticket=>ticket.expires>Date.now())) return;
+    const { queueBotAssembly } = await import('../services/meetingBotAssembly');
+    try {
+      if (unfinished.length) {
+        const { BotAssemblyError } = await import('../services/meetingBotAssembly');
+        throw new BotAssemblyError('bot_audio_incomplete');
+      }
+      await queueBotAssembly(this.env,run.uid);
+    }
+    catch (error) {
+      const { BotAssemblyError } = await import('../services/meetingBotAssembly');
+      if (!(error instanceof BotAssemblyError)) throw error;
+      await this.env.DB.prepare(`UPDATE interview_sessions SET processing_stage = 'failed', processing_error = 'The recording parts could not be assembled. Nothing was inferred.',
+        processing_updated_at = datetime('now') WHERE id = ? AND consent_status = 'given' AND audio_removed_at IS NULL`).bind(run.session_id).run();
+    }
+    await this.state.storage.put('assembly_queued',true);
+  }
   private async event(req: Request, run: BotRun) {
     if (!await this.allowed(run)) { await this.finish(run,'stopped','access_revoked'); throw new BotError(409,'consent_required','This bot run no longer has permission.'); }
     // Signature was validated by the public router; only internal calls reach this endpoint.
@@ -245,6 +278,7 @@ export class MeetingBotRun implements DurableObject {
       return json({duplicate:true,bot:botView(run)});
     }
     if (terminal(run.status)) throw new BotError(409,'bot_finished','This bot run has ended.');
+    if (run.status === 'processing' && !await this.draining(run) && ['roster','speaker','chunk'].includes(event.type)) throw new BotError(409,'bot_processing','The recording is already being processed.');
     if (run.started_at !== null && run.status !== 'processing' && Date.now() >= run.started_at + run.limit_minutes*60_000) { await this.finish(run,'stopped','time_limit'); throw new BotError(409,'bot_time_limit','The bot reached its time limit.'); }
     const last=await this.env.DB.prepare('SELECT MAX(seq) AS seq FROM meeting_bot_events WHERE run_uid = ?').bind(run.uid).first<{seq:number|null}>();
     if (last?.seq !== null && last?.seq !== undefined && Number(event.seq)<=last.seq) throw new BotError(409,'stale_bot_event','This bot event is older than the last accepted event.');
@@ -253,6 +287,10 @@ export class MeetingBotRun implements DurableObject {
     if (event.type === 'status') {
       if (typeof event.status !== 'string' || event.status !== run.status && !NEXT[run.status].includes(event.status as BotStatus)) throw new BotError(409,'invalid_bot_transition','That bot status change is not available.');
       const status=event.status as BotStatus;
+      if (status==='done' && !await this.state.storage.get('drain_until')) {
+        const session = await botSession(this.env,run);
+        if (session.processing_stage !== 'done' || !run.participants_enc) throw new BotError(409,'bot_processing','The transcript is still being assembled.');
+      }
       const failure=typeof event.failure_code==='string' && FAILED_CODES.has(event.failure_code) ? event.failure_code : status==='failed'?'runtime_failed':null;
       if (status==='done' || status==='failed' || status==='stopped') {
         const draining=await this.state.storage.get<number>('drain_until');
@@ -263,6 +301,7 @@ export class MeetingBotRun implements DurableObject {
         if (status==='recording') await this.env.DB.prepare("UPDATE interview_sessions SET status = 'recording', submitted_via = 'meeting_bot', recording_since = datetime('now'), started_at = COALESCE(started_at,datetime('now')) WHERE id = ? AND consent_status = 'given'").bind(run.session_id).run();
         if (status==='processing') {
           await this.endClock(run); await this.stopRuntime(run);
+          await this.state.storage.setAlarm(Date.now()+1000);
         }
       }
       payload={status,failure_code:failure};
@@ -273,7 +312,7 @@ export class MeetingBotRun implements DurableObject {
       const count=event.participants.filter((p:any)=>p.left_ms===null).length;
       await this.env.DB.prepare('UPDATE meeting_bots SET participant_count = ? WHERE uid = ?').bind(count,run.uid).run(); run.participant_count=count;
     } else if (event.type === 'speaker') {
-      if (typeof event.participant_id!=='string' || event.participant_id.length>128 || !int(event.at_ms,run.limit_minutes*60_000)) throw new BotError(400,'invalid_bot_event','The speaker event is not valid.');
+      if (event.participant_id!==null && (typeof event.participant_id!=='string' || event.participant_id.length>128) || !int(event.at_ms,run.limit_minutes*60_000)) throw new BotError(400,'invalid_bot_event','The speaker event is not valid.');
       payload={participant_id:event.participant_id,at_ms:event.at_ms};
     } else if (event.type === 'chunk') {
       return this.ticket(run,event);
