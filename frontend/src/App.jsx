@@ -1241,7 +1241,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
             <div className="flex items-center gap-2.5 dark:rounded-lg dark:bg-white/95 dark:px-2 dark:py-1">
               {/* onLight: this island is white in dark mode. Default AxalLogo
                   ink is dark:text-gray-100 and would disappear on it. */}
-              <AxalLogo size="sm" onLight />
+              <AxalLogo size="sm" onLight showRelease />
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
