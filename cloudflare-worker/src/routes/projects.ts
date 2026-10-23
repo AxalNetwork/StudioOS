@@ -675,6 +675,9 @@ projects.post('/submit', async (c) => {
     projectId: project.id, totalScore: result.total_score, isSandbox: false,
     inputs: inputsSnapshot as Record<string, number>, qualitativeText: qualText || '',
   });
+  if (result.total_score < 70) {
+    intakeFlags.push({ type: 'low_score_review', detail: 'A low score requires a human decision; project status is unchanged.', severity: 'low' });
+  }
   const intakeReview: 'auto_approved' | 'flagged' =
     intakeFlags.length > 0 ? 'flagged' : 'auto_approved';
   const intakeFlagsJson = intakeFlags.length > 0 ? JSON.stringify(intakeFlags) : null;
@@ -699,7 +702,7 @@ projects.post('/submit', async (c) => {
       ${b.capital.cost_mvp}, ${b.capital.time_revenue}, ${b.capital.burn_traction}, ${b.capital.total},
       ${b.fit.alignment}, ${b.fit.synergy}, ${b.fit.total},
       ${b.distribution.channels}, ${b.distribution.virality}, ${b.distribution.total},
-      0, 'auto',
+      ${result.ai_adjustment}, 'auto',
       0, ${INTEGRITY_VERSION}, ${JSON.stringify(inputsSnapshot)}, ${qualText}, ${lockedUntil},
       ${intakeFlagsJson}, ${intakeReview}
     )
@@ -708,8 +711,8 @@ projects.post('/submit', async (c) => {
   const intakeHash = await signScore(c.env, project.id, result.total_score, snapshot.created_at, INTEGRITY_VERSION);
   await sql`UPDATE score_snapshots SET integrity_hash = ${intakeHash} WHERE id = ${snapshot.id}`;
 
-  let newStatus = 'rejected', dealStatus = 'rejected', newStage = project.stage;
-  if (intakeReview === 'flagged') {
+  let newStatus = project.status, dealStatus = 'applied', newStage = project.stage;
+  if (intakeReview === 'flagged' && result.total_score >= 70) {
     // Flagged intake holds the project in review until admin signs off, so
     // an LP or partner viewing the pipeline never sees an unverified TIER_1.
     newStatus = 'scoring';
