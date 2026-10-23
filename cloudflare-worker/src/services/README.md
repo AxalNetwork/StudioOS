@@ -172,7 +172,9 @@ refuse a caller below `studio` with `ensureTier`'s 402, recompute through
 `captable.ts` keeps financing reserves in dilution but excludes unallocated
 option-pool shares from exit payouts (#2446). Pre-round capped SAFEs choose
 purchase amount or cap/basis-based conversion; cash-out SAFEs leave liquidity
-capitalization and insufficient cash is prorated, with exact cent allocation.
+capitalization and insufficient cash is prorated, with exact integer-cent
+allocation. Exit values must fit safe integer cents; SAFE amounts and caps must
+be finite. A pre-round ledger with no positive finite issued shares is withheld.
 Unrecorded note or uncapped liquidity terms produce no waterfall plus a warning.
 Scenario inputs do not record individual option grants, which the payout
 assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through

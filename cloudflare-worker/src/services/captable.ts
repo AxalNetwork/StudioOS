@@ -201,10 +201,9 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
 
     // 2) Convert SAFEs and notes.
     //
-    // The legacy inline path below is preserved EXACTLY for scenarios
-    // that use only plain pre-money SAFEs, because saved result_json
-    // financing share counts match the original FastAPI engine. Post-money SAFEs and notes need a fixed-point
-    // solve that path cannot express, so they route to
+    // The legacy inline path preserves financing share counts for plain
+    // pre-money SAFEs. Exit payouts use the corrected liquidity rules below.
+    // Post-money SAFEs and notes need a fixed-point solve, so they route to
     // services/safeConversion.ts instead.
     const safePrefs: Record<string, number> = {};
     if (needsExtendedConversion(pendingSafes as ConvertibleIn[])) {
