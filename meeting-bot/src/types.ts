@@ -14,10 +14,10 @@
 export type Platform = 'zoom' | 'google_meet' | 'teams';
 
 /** The failure codes D886 defines, as the bot reports them. */
-export type FailureCode = 'not_admitted' | 'meeting_ended' | 'link_invalid' | 'platform_blocked' | 'obf_unavailable';
+export type FailureCode = 'not_admitted' | 'meeting_ended' | 'link_invalid' | 'platform_blocked' | 'obf_unavailable' | 'notice_failed' | 'processing_failed';
 
 /** Why a run that recorded ended. */
-export type LeaveReason = 'call_ended' | 'alone' | 'stopped' | 'time_limit';
+export type LeaveReason = 'call_ended' | 'alone' | 'stopped' | 'time_limit' | 'tokens' | 'interrupted';
 
 /** The states the bot reports; B1's Durable Object is the only writer of the run's status. */
 export type BotState = 'joining' | 'waiting_room' | 'recording' | 'left' | 'failed';
@@ -92,12 +92,18 @@ export interface RunConfig {
   readonly notice: string;
   /** The founder's plan limit in ms: 30 minutes on a free Axal plan, 2 hours on a paid one. */
   readonly limitMs: number;
+  /** Absolute Worker deadlines, including lobby/runtime time. Never reset at admission. */
+  readonly deadlineAt: number;
+  readonly budgetDeadlineAt: number;
 }
 
 /** A roster or speaker event as it is sent to the callback. `n` orders and de-duplicates them. */
+export interface RosterParticipant {
+  readonly id: string; readonly name: string; readonly joined_ms: number; readonly left_ms: number | null;
+}
 export type BotEvent =
-  | { readonly n: number; readonly type: 'roster'; readonly kind: 'join' | 'leave'; readonly key: string; readonly name: string; readonly at_ms: number }
-  | { readonly n: number; readonly type: 'speaker'; readonly key: string | null; readonly at_ms: number };
+  | { readonly n: number; readonly type: 'roster'; readonly participants: readonly RosterParticipant[] }
+  | { readonly n: number; readonly type: 'speaker'; readonly participant_id: string | null; readonly at_ms: number };
 
 export interface StatusReport {
   readonly state: BotState;
@@ -117,10 +123,14 @@ export interface StatusReport {
  * is the HTTP implementation; tests use a stub.
  */
 export interface CallbackTransport {
-  status(report: StatusReport): Promise<void>;
+  status(report: StatusReport): Promise<number | void>;
+  /** Renew the Worker-funded lease. An absent/invalid lease is a refusal. */
+  heartbeat(): Promise<number>;
+  /** Abort outstanding HTTP requests after the final bounded flush. */
+  close?(): void;
   events(batch: readonly BotEvent[]): Promise<void>;
   /** Store one audio chunk. Sending the same `seq` twice stores it once. */
-  putChunk(seq: number, wav: Uint8Array<ArrayBuffer>): Promise<void>;
+  putChunk(seq: number, wav: Uint8Array<ArrayBuffer>, startMs?: number): Promise<void>;
 }
 
 /** Timers the core uses, injectable so tests run on a fake clock. */

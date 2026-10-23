@@ -71,15 +71,16 @@ export const TELEGRAM_ALLOWED_UPDATES = [
 ] as const;
 
 /**
- * getFile's own ceiling: the Bot API serves nothing larger. Axal takes at most
- * the recorder's MAX_CHUNK_BYTES (5 MB, `CHANNEL_AUDIO_MAX_BYTES`), D756.
+ * getFile's own ceiling, not Axal's admission limit. D865 retains the
+ * recorder's MAX_CHUNK_BYTES (5 MB, `CHANNEL_AUDIO_MAX_BYTES`): increasing
+ * this constant alone cannot admit a larger note through the shared intake.
  */
 export const TELEGRAM_MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024;
 
 /**
- * D756 (#1896): round video messages are stored as placeholders but not
- * fetched, until the owner's live check shows Whisper reads Telegram's MP4
- * with a video track. A follow-up flips this, with a fixture test.
+ * D756 / D865: round videos remain placeholders. Direct MP4-with-video
+ * support is UNVERIFIED on Workers AI. Enabling this also needs an
+ * admitted audio track: video/mp4 is refused by the shared audio MIME rule.
  */
 export const TELEGRAM_VIDEO_NOTES = false;
 
