@@ -35,6 +35,10 @@ function fixture() {
 
 const JOIN = 'https://meet.example.test/private-room';
 const AGENDA = 'https://meet.example.test/private-session';
+// Compare complete URL tokens in JSON/calendar output, never URL substrings.
+function recordedUrls(body: string): Set<string> {
+  return new Set(body.match(/https?:\/\/[^\s"\\<>]+/g) || []);
+}
 function onlineFixture(kind = 'virtual') {
   const f = fixture();
   f.db.prepare('UPDATE events SET location_kind = ?, location_url = ? WHERE id = 1').run(kind, JOIN);
@@ -51,8 +55,8 @@ test('#2394: public feed, detail, invitations and calendar downloads withhold vi
         const response = await eventsPublic.request(path, {}, env);
         assert.equal(response.status, 200, path);
         const body = await response.text();
-        assert.equal(body.includes(JOIN), false, `${kind} ${path} event link`);
-        assert.equal(body.includes(AGENDA), false, `${kind} ${path} agenda link`);
+        assert.equal(recordedUrls(body).has(JOIN), false, `${kind} ${path} event link`);
+        assert.equal(recordedUrls(body).has(AGENDA), false, `${kind} ${path} agenda link`);
       }
     } finally { db.close(); }
   }
@@ -73,8 +77,8 @@ test('#2394: member detail, attending list, agenda and calendar require a confir
         const response = await request(path, 2);
         assert.equal(response.status, 200, path);
         const body = await response.text();
-        assert.equal(body.includes(path === '/1/agenda' ? AGENDA : JOIN), allowed, `${status}/${payment} ${path}`);
-        if (path === '/1') assert.equal(body.includes(AGENDA), allowed);
+        assert.equal(recordedUrls(body).has(path === '/1/agenda' ? AGENDA : JOIN), allowed, `${status}/${payment} ${path}`);
+        if (path === '/1') assert.equal(recordedUrls(body).has(AGENDA), allowed);
       }
     }
     db.exec('DELETE FROM event_registrations WHERE user_id = 2');
@@ -82,7 +86,7 @@ test('#2394: member detail, attending list, agenda and calendar require a confir
       const response = await request(path, 2);
       assert.equal(response.status, 200);
       const body = await response.text();
-      assert.equal(body.includes(JOIN) || body.includes(AGENDA), false, `invitation alone ${path}`);
+      assert.equal(recordedUrls(body).has(JOIN) || recordedUrls(body).has(AGENDA), false, `invitation alone ${path}`);
     }
   } finally { db.close(); }
 });
@@ -94,10 +98,10 @@ test('#2394: host and admin retain links without a registration', async () => {
       for (const path of ['/1', '/1/agenda', '/1/ics']) {
         const response = await request(path, user);
         assert.equal(response.status, 200);
-        assert.equal((await response.text()).includes(path === '/1/agenda' ? AGENDA : JOIN), true, `${user} ${path}`);
+        assert.equal(recordedUrls(await response.text()).has(path === '/1/agenda' ? AGENDA : JOIN), true, `${user} ${path}`);
       }
     }
-    assert.equal((await (await request('/', 1)).text()).includes(JOIN), true, 'hosting list');
+    assert.equal(recordedUrls(await (await request('/', 1)).text()).has(JOIN), true, 'hosting list');
   } finally { db.close(); }
 });
 
@@ -108,7 +112,7 @@ test('#2394: in-person map URLs stay public; absent or unknown formats fail clos
       for (const path of ['/events', '/events/one', '/events.ics', '/events/one/ics']) {
         const response = await eventsPublic.request(path, {}, env);
         assert.equal(response.status, 200);
-        assert.equal((await response.text()).includes(JOIN), true, `${kind} ${path}`);
+        assert.equal(recordedUrls(await response.text()).has(JOIN), true, `${kind} ${path}`);
       }
       const detail: any = await (await eventsPublic.request('/events/one', {}, env)).json();
       assert.equal(detail.agenda[0].location_url, AGENDA);
