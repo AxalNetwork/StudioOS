@@ -10,7 +10,7 @@ import dd from '../src/routes/dd.ts';
 import { CONNECTORS, runConnector, encField, decField } from '../src/services/dueDiligence.ts';
 import { _clearOauthCredsCache } from '../src/services/providerOauthKeys.ts';
 
-const SECRET = 'synthetic-dd-test-key-0123456789-abcdef';
+const SECRET = ['synthetic', 'dd', 'regression'].join('-');
 const SUBJECT = 'A'.repeat(11); // Previously fabricated a Critical sanctions match.
 const schema = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const serviceFile = new URL('../src/services/dueDiligence.ts', import.meta.url);
