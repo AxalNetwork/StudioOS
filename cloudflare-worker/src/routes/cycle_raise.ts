@@ -7,7 +7,10 @@
  *       (D692: the phone's parts, in the shape all four cycles share; services/cycleFocus.ts)
  *   GET /modules/:slug?project=:pid&q=&filter=&sort=&page=
  *     → { module: { slug, name, records_title }, card: Card,
- *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? } }
+ *         records: { cols, rows, total, page, page_size, filters?, sorts?, add? }, parts? }
+ *     Investor narrative's `parts.narrative` (D909): every version with its
+ *     based-on, saved, by and read-by; the newest's check; the current deck.
+ *     `{ state: 'unreadable' }` when it could not be read.
  *     The first sort is the default. Row ids are D691's (#1699): an item key,
  *     a version, a link, file or prospect id, a cap-table `h-`/`e-` key or
  *     `pool`, or a use-of-funds section key.
@@ -76,7 +79,7 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
-import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, callsHistory, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
+import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, callsHistory, narrativeHome, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
   addCapHolder, updateCapHolder, saveUseOfFunds, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
@@ -183,6 +186,13 @@ cycleRaise.get('/modules/:slug', async (c) => {
     records = { state: 'unreadable', reason: `${mod.name} records could not be read`, cols: [], rows: [], total: null, page: rq.page, page_size: null };
   }
   const parts: Record<string, unknown> = slug === 'capital-relationships' ? { calls: await callsHistory(ctx) } : {};
+  // D909 (#2693): Home's tiles, Needs you and the Versions tab. It fails on its own, never the module.
+  if (slug === 'investor-narrative') {
+    parts.narrative = await narrativeHome(ctx).catch((e) => {
+      console.warn('[cycle_raise] narrative part unreadable:', (e as Error)?.message);
+      return { state: 'unreadable', reason: 'The narrative versions could not be read' };
+    });
+  }
   // The Mercury part fails on its own: an owner check that cannot be read shows no part, never a failed module.
   // D882: the founder with no usable sign-in reads how to connect, never an empty figure.
   const founderOnly = await mercuryFounderOnly(c, s).catch(() => undefined);
