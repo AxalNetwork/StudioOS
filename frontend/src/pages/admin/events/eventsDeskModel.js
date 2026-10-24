@@ -43,8 +43,8 @@ export const REVIEW_PATH = '/admin/events/review';
 export const ALL_PATH = '/admin/events/all';
 /** D919 (#2702): the Calendar tab. */
 export const CALENDAR_TAB_PATH = '/admin/events/calendar';
-/** Where the sidebar's Community row lands; the canvas's `/admin/community` is not a route. */
-export const COMMUNITY_PATH = '/admin/held/community';
+/** Community's own address since D930 (#2367); `/admin/held/community` only redirects there. */
+export const COMMUNITY_PATH = '/admin/community';
 
 export const TITLE = 'Events';
 export const LINE = 'Approve public events, keep the calendar healthy and see how events perform.';
