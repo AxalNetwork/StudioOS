@@ -1,7 +1,7 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Landmark } from 'lucide-react';
-import { Card } from '../../ui';
+import { HQ_EYEBROW, HQ_LINKS, HQ_TITLE, hqLine } from './hqNoticeModel';
 
 /**
  * What an admin without the elevation sees on an HQ-only route.
@@ -25,30 +25,25 @@ import { Card } from '../../ui';
  * sees, full stop.
  */
 export default function SuperAdminOnlyNotice() {
+  // D940 (#2745, SHL7a): the canvas's card. It names what HQ manages here and links Studio and My licence, never the console.
+  const { pathname } = useLocation();
   return (
-    <Card className="border-dashed bg-axal-ground p-6" data-testid="super-admin-only-notice">
-      <div className="max-w-2xl">
-        <div className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[.09em] text-axal-faint">
-          <Landmark size={13} /> HQ only
-        </div>
-        <h2 className="mt-2 text-lg font-extrabold tracking-tight">
-          This console belongs to the Super Admin
-        </h2>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
-          The Super Admin is the single account that licenses the platform to subsidiaries:
-          it issues, re-terms, suspends and terminates territory licences, and names who holds
-          that power. You are signed in as an admin without that elevation, so this page stays
-          closed here rather than opening and refusing every action.
-        </p>
-        <p className="mt-2 text-[12.5px] leading-relaxed text-axal-muted">
-          If you administer a licence, your own read of it is under My Licence. Everything
-          else in the admin product is unchanged.
-        </p>
-        <p className="mt-3 flex flex-wrap gap-3 text-[12px]">
-          <Link to="/admin" className="text-rose-800 underline dark:text-rose-300">Admin Console →</Link>
-          <Link to="/admin/my-licence" className="text-rose-800 underline dark:text-rose-300">My Licence →</Link>
-        </p>
+    <div className="mx-auto mt-14 w-full max-w-[600px] rounded-xl border-[1.5px] border-dashed border-gray-300 bg-white p-6 dark:border-gray-700 dark:bg-gray-900" data-testid="super-admin-only-notice">
+      <div className="flex items-center gap-2 text-[10.5px] font-extrabold uppercase tracking-[.09em] text-axal-muted dark:text-gray-400">
+        <Landmark size={13} aria-hidden="true" /> {HQ_EYEBROW}
       </div>
-    </Card>
+      <h1 className="mt-2 text-[18px] font-extrabold tracking-[-.01em] text-axal-ink dark:text-gray-100">{HQ_TITLE}</h1>
+      <p className="mt-2 text-[13px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="super-admin-only-line">{hqLine(pathname)}</p>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {HQ_LINKS.map((l, i) => (
+          <Link key={l.href} to={l.href}
+            className={`inline-flex min-h-[40px] items-center rounded-[9px] px-3.5 text-[13px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet ${i === 0
+              ? 'border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800'
+              : 'text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200'}`}>
+            {l.label}
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }
