@@ -27,7 +27,10 @@ function fixture(upgrade = true) {
   const file = join(scratch, `${++serial}.sqlite`); copyFileSync(seed, file);
   const db = new DatabaseSync(file, { enableForeignKeyConstraints: false });
   db.exec("INSERT INTO users(id,role,name,email,is_active) VALUES(5,'admin','Synthetic inviter','inviter@example.invalid',1),(8,'admin','Synthetic resender','resender@example.invalid',1),(9,'founder','Synthetic outsider','outsider@example.invalid',1)");
-  if (upgrade) db.exec(migration);
+  if (upgrade) {
+    db.exec(migration);
+    for (const name of readdirSync('cloudflare-worker/sql/migrations').filter(n => /^\d+_.*\.sql$/.test(n) && migrationNumber(n) > 547).sort()) db.exec(read('cloudflare-worker/sql/migrations/'+name));
+  }
   const env: any = envFor(db);
   const app = new Hono<any>().route('/', adminPartners);
   app.onError((err,c) => c.json({error:err.message}, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
@@ -143,6 +146,7 @@ test('D924 a different admin renews the matching agreement link for the full 14 
 
 for(const reason of ['invitation_revoked','link_lapsed'] as const) test(`D924 activation persists ${reason} and grants nothing`,async()=>{
  const f=fixture();try{const {id,envId}=await agreement(f);
+ f.db.prepare("UPDATE esign_envelopes SET status='completed' WHERE id=?").run(envId);
  if(reason==='invitation_revoked')f.db.prepare("UPDATE partner_invitations SET status='revoked' WHERE id=?").run(id);
  const result=await activatePartnerDealOnSignature(f.env,envId);assert.equal(result?.activated,false);assert.equal(result?.void_reason,reason);
  const deal:any=f.db.prepare('SELECT * FROM partner_deals WHERE envelope_id=?').get(envId);assert.equal(deal.status,'voided');assert.equal(deal.void_reason,reason);assert.equal(deal.user_id,null);assert.equal(deal.referral_code,null);assert.equal(row(f,id).status,reason==='link_lapsed'?'expired':'revoked');
