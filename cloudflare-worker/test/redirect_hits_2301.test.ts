@@ -43,5 +43,6 @@ test('the list is closed and well formed', () => {
   }
   assert.equal(isRedirectKey('/dashboard'), false, 'a bare path is not a redirect key');
   const keep = REDIRECT_ROUTES.filter((r) => r.keep).map((r) => r.path).sort();
-  assert.deepEqual(keep, ['/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
+  // D937: sent cohort notices keep the old Lab address working permanently.
+  assert.deepEqual(keep, ['/admin/spinout-lab', '/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
 });

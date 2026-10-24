@@ -80,3 +80,7 @@ admins, advisor denial, admitted cofounders, measured runway, absent versus zero
 review scores/counts, owner-plan export branding, live brand-kit selection,
 founder/Lab score separation, canonical pairwise NDA state and one activity row
 per completed write. `decks.autofill.test.ts` also checks AI-only coverage is zero.
+
+`deck_share_null_limit_d895.test.ts` covers migration 549's data, index, foreign-key
+and sequence preservation, nullable fresh/legacy bootstraps, NULL module links,
+finite editor caps, concurrent claims and unchanged expiry/revocation/browser guards.
