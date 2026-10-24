@@ -83,8 +83,7 @@ export const PAGE_SIZE_MAX = 100;
  * is the profile's own `user_id`, else the account holding its email (as the
  * profile read does: an address can move to a later account).
  */
-const ROWS_CTE = `
-  WITH rows AS (
+const ROWS_SUBQUERY = `(
     SELECT p.rowid AS row_id, p.ref, p.email, p.created_at, p.user_id, p.invitation_id,
            p.full_name, p.organization, p.persona, p.legal_entity_name, p.entity_type,
            p.founder_track, p.company_established, p.partnership_goal, p.agreement_type,
@@ -98,7 +97,7 @@ const ROWS_CTE = `
     FROM partner_profiles p
     LEFT JOIN users u ON u.id = p.user_id OR (p.user_id IS NULL AND u.email = p.email)
     LEFT JOIN user_role_review rr ON rr.user_id = u.id
-  )`;
+  ) AS listed`;
 
 /** Sort orders, by key. `reviewed` waits for part 2's review dates. */
 const ORDER_BY: Record<string, string> = {
@@ -238,11 +237,11 @@ export async function listPartnerProfiles(env: Env, query: ListQuery): Promise<L
   const page = Math.max(1, Math.floor(Number(query.page)) || 1);
   const whereSql = filters.where.length ? ' WHERE ' + filters.where.join(' AND ') : '';
 
-  const totalsSql = ROWS_CTE + ' SELECT COUNT(*) AS total,'
+  const totalsSql = 'SELECT COUNT(*) AS total,'
     + " COALESCE(SUM(status = 'draft'), 0) AS draft, COALESCE(SUM(status = 'pending'), 0) AS pending,"
     + " COALESCE(SUM(status = 'verified'), 0) AS verified, COALESCE(SUM(status = 'rejected'), 0) AS rejected,"
-    + ' COALESCE(SUM(status IS NULL), 0) AS not_recorded FROM rows' + whereSql;
-  const rowsSql = ROWS_CTE + ' SELECT * FROM rows' + whereSql + orderBy + ' LIMIT ? OFFSET ?';
+    + ' COALESCE(SUM(status IS NULL), 0) AS not_recorded FROM ' + ROWS_SUBQUERY + whereSql;
+  const rowsSql = 'SELECT * FROM ' + ROWS_SUBQUERY + whereSql + orderBy + ' LIMIT ? OFFSET ?';
 
   const totals = await env.DB.prepare(totalsSql).bind(...filters.binds).first<any>();
   const result = await env.DB.prepare(rowsSql).bind(...filters.binds, pageSize, (page - 1) * pageSize).all<any>();
@@ -261,7 +260,7 @@ export async function listedByRef(env: Env, ref: string) {
   const row = await env.DB.prepare(ROW_BY_REF_SQL).bind(ref).first<any>();
   return row ? listRow(row) : null;
 }
-const ROW_BY_REF_SQL = ROWS_CTE + ' SELECT * FROM rows WHERE ref = ?';
+const ROW_BY_REF_SQL = 'SELECT * FROM ' + ROWS_SUBQUERY + ' WHERE ref = ?';
 
 /** The distinct values the page's free-text filters can offer. */
 export async function listOptions(env: Env) {
