@@ -164,8 +164,9 @@ test('readiness with no items returns empty, with the action that starts it', as
   assert.equal(bars.items.length, 7);
   assert.equal(bars.items.find((i: any) => i.label === 'Use of funds').value, 10);
   assert.equal(bars.items.find((i: any) => i.label === 'Team').value, null, 'no check measures the team: Not recorded, never 0');
-  // Mean of the six computed scores (use of funds 10, the rest 0) out of 100.
-  assert.equal(fig((await overview(db)).body, 'readiness_score').value, Math.round((10 / 6) * 10));
+  assert.equal(bars.items.find((i: any) => i.label === 'Investor narrative').value, null, 'nothing compared is unscored');
+  // The narrative has no comparison and stays unscored; mean of five numeric checks.
+  assert.equal(fig((await overview(db)).body, 'readiness_score').value, Math.round((10 / 5) * 10));
   // D691 decision 12: one row on each re-scored item's record.
   assert.deepEqual(db.prepare("SELECT entity_id FROM activity_logs WHERE entity_type = 'raise.fundraising-readiness' AND action = 'readiness_rescored' AND user_id = ? ORDER BY entity_id").all(FOUNDER).map((r: any) => r.entity_id),
     ['cap_table', 'data_room', 'deck', 'narrative', 'traction', 'use_of_funds']);
