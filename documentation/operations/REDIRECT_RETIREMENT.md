@@ -27,6 +27,13 @@ The owner ticked "the internal redirects (§12), after 90 days" on #2297 on
   - A route that redirects some roles and renders a page for others is a page
     and is not listed. `/raise/data-room`, which §12 names, is one: founders
     open the Data room there.
+- **Old admin tabs (D939, #2744).** The list also has a closed set of sixteen
+  `/admin?tab=<value>` keys: the fourteen historical console sections plus
+  Integration keys and GitHub Sync. They remain counter keys even while a
+  section still renders its old console; #2743 moves those sections. Each tab
+  is reviewed separately, not as `/admin`. Extra query fields and hashes never
+  enter these keys. A query key must match the complete allowlist entry at the
+  Worker; arbitrary or augmented values are ignored.
 - **Keep.** Entries marked `keep` stay whatever their count: the addresses an
   email or an external link can carry (#2297 §12: `/settings`,
   `/settings/:section`, `/notifications`, `/notifications/*`, `/tickets/:id`,
@@ -39,7 +46,8 @@ The owner ticked "the internal redirects (§12), after 90 days" on #2297 on
     sends one first-party beacon each time a listed address is opened.
   - `POST /api/public/analytics/pageview` counts it in `public_pageviews` as
     `redirect:<pattern>`, by day, only for a pattern on the list.
-  - Path only: the pattern, never the visited ids, query or hash, and no IP,
+  - Fixed patterns only: the pattern, never visited ids, arbitrary query or hash
+    (only the allowlisted admin tab is retained), and no IP,
     user agent or cookie.
 
 ## On 2027-01-19
@@ -57,6 +65,9 @@ The owner ticked "the internal redirects (§12), after 90 days" on #2297 on
 2. **Remove** every listed redirect that is not `keep` and had no hits: its
    `<Route>` in App.jsx, its `*Redirect` component if nothing else uses it,
    its entry in `redirectRoutes.ts`, and the tests that pin it.
+   For a fixed admin-tab key, remove only its legacy redirect/mapping after
+   the section has moved. A tab still rendering a console is a live page,
+   not a redirect to retire because its counter is zero.
 3. **List the rest on #2301** with their counts, for the owner to decide.
 4. **Add the guard test** (#2301 step 3): every removed address must stay
    absent from App.jsx's routes and from every in-app link, so it cannot come

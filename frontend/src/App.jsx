@@ -1911,7 +1911,7 @@ function AppInner() {
   // render the lens's location while the URL and history stay put.
   const lensLocation = useLensLocation();
   // #2301 — count each opening of an old redirect address before it is retired.
-  useRedirectBeacon(location.pathname);
+  useRedirectBeacon(location.pathname, location.search);
 
   // `opts.hq` is only meaningful for mode 'admin': true is the HQ shell
   // ("Super Admin" in the list), false the plain shell ("Admin"). Other modes
