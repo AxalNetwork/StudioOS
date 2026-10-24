@@ -20,7 +20,7 @@ import { SignJWT } from 'jose';
 
 import deckSources from '../src/routes/deck_sources.ts';
 import decks from '../src/routes/decks.ts';
-import { DECK_SOURCES, coverageOf, sourceAndGrade, bindingsOf, type SourceItem } from '../src/services/decks/sources.ts';
+import { DECK_SOURCES, coverageOf, sourceAndGrade, bindingsOf, sanitizeBinding, type SourceItem } from '../src/services/decks/sources.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { withThrownResponses } from '../src/util/thrownResponse.ts';
@@ -118,13 +118,13 @@ sources.route('/api/decks', deckSources);
 sources.route('/api/decks', decks);
 sources.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
-async function call(db: DatabaseSync, who: number, method: string, path: string, extra: Record<string, unknown> = {}) {
+async function call(db: DatabaseSync, who: number, method: string, path: string, extra: Record<string, unknown> = {}, body?: unknown) {
   const role = { [ADMIN]: 'admin', [INVESTOR]: 'investor' }[who] ?? 'founder';
   const token = await new SignJWT({ user_id: who, role, ...extra }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
   try {
-    const res = await withThrownResponses(() => sources.request(path, { method, headers: { Authorization: `Bearer ${token}` } },
+    const res = await withThrownResponses(() => sources.request(path, { method, headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) },
       { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any));
     return { status: res.status, body: await res.json().catch(() => null) as any };
   } finally { [console.warn, console.error] = saved; }
@@ -385,6 +385,44 @@ test('refresh: a Stripe value changed after as_of marks its card stale; an uncha
   // Another founder may not ask.
   assert.equal((await call(db, OTHER, 'POST', '/api/decks/70/refresh')).status, 403);
   assert.equal((await call(db, FOUNDER, 'POST', '/api/decks/999/refresh')).status, 404);
+});
+
+test('a save keeps each figure\u2019s binding, drops a malformed one, and refresh finds what was saved', async () => {
+  const db = fixture(); seed(db);
+  // The deck tables are the deck route's own lazy schema: a read creates them.
+  await call(db, FOUNDER, 'GET', '/api/decks/1');
+  db.prepare('INSERT INTO pitch_decks (id, project_id, version, title, slides, is_current) VALUES (?, ?, ?, ?, ?, 1)').run(80, P, 1, 'Seed', '[]');
+  const mrr = byKey((await call(db, FOUNDER, 'GET', `/api/decks/sources?project_id=${P}`)).body.items).get('grow.mrr')!;
+  const binding = { source_key: mrr.source_key, record_ref: mrr.record_ref, as_of: mrr.as_of, grade: mrr.grade, snapshot_hash: mrr.snapshot_hash };
+  const slides = [
+    { title: 'Traction', binding, fields: [
+      { key: 'mrr', label: 'MRR', kind: 'paragraph', value: '$16,950', binding: { ...binding, extra: 'dropped' } },
+      { key: 'bad', label: 'Bad', kind: 'paragraph', value: 'x', binding: { source_key: 'DROP TABLE', snapshot_hash: 'zz' } },
+    ] },
+  ];
+  const saved = await call(db, FOUNDER, 'PUT', '/api/decks/80', {}, { slides, title: 'Seed' });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  const kept = saved.body.slides;
+  assert.deepEqual(kept[0].binding, binding, 'a slide-level binding survives the save');
+  assert.deepEqual(kept[0].fields[0].binding, binding, 'a field binding survives, with only its five keys');
+  assert.equal(kept[0].fields[1].binding, undefined, 'a malformed binding is dropped, not repaired');
+  const fresh = await call(db, FOUNDER, 'POST', `/api/decks/${saved.body.id}/refresh`);
+  assert.equal(fresh.body.checked, 2);
+  assert.equal(fresh.body.stale, 0);
+  db.exec(`INSERT INTO project_metrics (project_id, snapshot_date, mrr, paying_accounts, source) VALUES (${P}, '2026-10-31', 18200, 38, 'stripe')`);
+  const stale = await call(db, FOUNDER, 'POST', `/api/decks/${saved.body.id}/refresh`);
+  assert.equal(stale.body.stale, 2, 'both saved bindings to MRR are stale once Stripe moves');
+});
+
+test('sanitizeBinding keeps five bounded keys and refuses a key no slot could name', () => {
+  const ok = { source_key: 'grow.mrr', record_ref: 'project_metrics:7', as_of: '2026-09-30', grade: 'Measured', snapshot_hash: 'a'.repeat(24) };
+  assert.deepEqual(sanitizeBinding({ ...ok, value: 999, html: '<b>' }), ok);
+  assert.equal(sanitizeBinding(null), null);
+  assert.equal(sanitizeBinding('grow.mrr'), null);
+  assert.equal(sanitizeBinding({ ...ok, source_key: 'Grow.MRR' }), null);
+  assert.equal(sanitizeBinding({ ...ok, source_key: 'grow' }), null);
+  assert.deepEqual(sanitizeBinding({ ...ok, as_of: '30 Sep', grade: 'Excellent', snapshot_hash: 'xyz', record_ref: 'r'.repeat(121) }),
+    { source_key: 'grow.mrr', record_ref: null, as_of: null, grade: null, snapshot_hash: null });
 });
 
 test('bindingsOf finds slide, field and block bindings and ignores malformed ones', () => {
