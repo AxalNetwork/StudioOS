@@ -35,6 +35,8 @@ import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
+import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
+import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
 import { isSupportSession } from '../integrations/providers/mercury';
 
 /** D895 applies only to deck operations, not other project-content routes. */
@@ -113,7 +115,10 @@ async function ensureSchema(env: Env): Promise<void> {
        investor_label TEXT,
        allow_download INTEGER NOT NULL DEFAULT 1 CHECK (allow_download IN (0, 1)),
        allow_forwarding INTEGER NOT NULL DEFAULT 1 CHECK (allow_forwarding IN (0, 1)),
-       bound_viewer_hash TEXT
+       bound_viewer_hash TEXT,
+       -- Migration 540 (D902): the NDA gate and what the link includes.
+       nda_required INTEGER NOT NULL DEFAULT 0 CHECK (nda_required IN (0, 1)),
+       include_json TEXT
      )`,
     `CREATE INDEX IF NOT EXISTS idx_deck_share_hash ON pitch_deck_share_tokens(token_hash)`,
     // Task #53 — per-impression telemetry surfaced in the Engagement panel.
@@ -162,6 +167,9 @@ async function ensureSchema(env: Env): Promise<void> {
       ['allow_download', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_download INTEGER NOT NULL DEFAULT 1 CHECK (allow_download IN (0, 1))`],
       ['allow_forwarding', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_forwarding INTEGER NOT NULL DEFAULT 1 CHECK (allow_forwarding IN (0, 1))`],
       ['bound_viewer_hash', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN bound_viewer_hash TEXT`],
+      // Migration 540 — D902: the NDA gate and what the link includes.
+      ['nda_required', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN nda_required INTEGER NOT NULL DEFAULT 0 CHECK (nda_required IN (0, 1))`],
+      ['include_json', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN include_json TEXT`],
     ];
     for (const [col, ddl] of add463) {
       if (!have.has(col)) {
@@ -465,6 +473,8 @@ function sanitizeFields(input: any[]): any[] {
     // Preserve the read-only flag so auto-computed fields stay non-editable
     // after a save/reload round-trip.
     if (f?.readonly) out.readonly = true;
+    // D902 — a quote's consent, recorded on the field, is what lets a link carry it.
+    if (f?.consent === true) out.consent = true;
     return out;
   });
 }
@@ -877,7 +887,7 @@ decks.get('/share/:token', async (c) => {
     // viewer pages can show a "share link expired" state distinct from
     // an outright invalid signature (which stays 403).
     if (/expired/i.test(String(e?.message || ''))) {
-      return c.json({ error: 'share link has expired' }, 410);
+      return closedLink(c, 'share link has expired', await expiredTokenDeckId(c.env, token));
     }
     return refuse(c, 403, { code: 'forbidden', message: 'This share link is not valid.', raw: e });
   }
@@ -888,6 +898,20 @@ decks.get('/share/:token', async (c) => {
   // the claim, so a refused browser uses no view.
   const bind = await bindShareViewer(c, await sha256Hex(token));
   if (bind.refused) return refuse(c, 403, { code: 'forwarding_off', message: SHARE_SENT_TO_SOMEONE_ELSE });
+  // D902 — the link's NDA and what it includes. With the NDA required, a live
+  // link sends no card, and uses no view, until the person opening it has
+  // accepted the NDA on this link; the gate carries only what the NDA names.
+  const link = await c.env.DB.prepare(
+    'SELECT id, nda_required, include_json FROM pitch_deck_share_tokens WHERE token_hash = ?',
+  ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null }>();
+  const ndaRequired = Number(link?.nda_required ?? 0) === 1;
+  if (link && ndaRequired && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
+    const gate = await ndaGate(c, Number(link.id), parseInt(m[1]));
+    if (gate) {
+      if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
+      return c.json(gate);
+    }
+  }
   // Task #53 — atomic claim against view_limit. Increment view_count
   // only when there is capacity left and the token hasn't expired.
   // D1's meta.changes tells us if THIS request consumed a view slot.
@@ -917,7 +941,7 @@ decks.get('/share/:token', async (c) => {
       `SELECT id, view_count, view_limit, expires_at FROM pitch_deck_share_tokens WHERE token_hash = ?`
     ).bind(h).first<any>();
     if (!tokRow) return c.json({ error: 'share link is invalid' }, 403);
-    return c.json({ error: 'share link is no longer valid' }, 410);
+    return closedLink(c, 'share link is no longer valid', parseInt(m[1]));
   }
   const id = parseInt(m[1]);
   const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
@@ -958,18 +982,80 @@ decks.get('/share/:token', async (c) => {
     if (pr?.name) projectName = String(pr.name).slice(0, 200);
   } catch {}
   if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
+  // D902 — only what the link includes leaves the Worker (`shareInclude.ts`).
+  const included = parseShareInclude(link?.include_json);
+  const deck = rowToDeck(row);
   return c.json({
-    ...rowToDeck(row),
+    ...deck,
+    slides: shareSlides(deck.slides, included),
     view_id: viewId,
     method_id: methodId,
     project_id: Number(row.project_id) || null,
     project_name: projectName,
-    spinout_fields: await bakeSpinoutFields(c.env, row),
+    spinout_fields: shareSpinoutFields(await bakeSpinoutFields(c.env, row)),
     // D691 decision 5 — the viewer hides Save as PDF when this is false. It
     // does not stop a screenshot or the browser's own print.
     allow_download: bind.allowDownload,
+    nda_required: ndaRequired,
+    included,
+    // A link is frozen to the version it was made from (D902; the token's scope).
+    frozen: { version: Number(row.version), as_of: row.created_at ?? null },
   });
 });
+
+/** D902 — PD22: a link that is no longer open says so, names the venture to ask, and shows nothing from the deck. */
+export const SHARE_LINK_CLOSED = 'This link is no longer open.';
+export const shareLinkAsk = (venture: string | null) => (venture ? `Ask ${venture} for a new one.` : 'Ask the venture for a new one.');
+
+async function closedLink(c: any, error: string, deckId: number | null) {
+  const env: Env = c.env;
+  let venture: string | null = null;
+  if (deckId) {
+    try {
+      const r = await env.DB.prepare('SELECT p.name FROM pitch_decks d JOIN projects p ON p.id = d.project_id WHERE d.id = ?')
+        .bind(deckId).first<{ name: string | null }>();
+      if (r?.name) venture = String(r.name).slice(0, 200);
+    } catch { /* the card still says the link is closed */ }
+  }
+  return c.json({ error, code: 'link_closed', message: SHARE_LINK_CLOSED, venture, ask: shareLinkAsk(venture) }, 410);
+}
+
+/**
+ * D902 — the NDA gate's answer, or null when this person accepted the NDA on
+ * this link (`deck_share_conversions` 'nda_signed', written by
+ * `POST /share/:token/nda`). It names the venture and the version, and sends
+ * no card: the text is read from `GET /share/:token/nda`.
+ */
+async function ndaGate(c: any, linkId: number, deckId: number) {
+  const env: Env = c.env;
+  let userId: number | null = null;
+  try { userId = Number((await requireAuth(c)).id) || null; } catch { /* not signed in: the gate asks them to */ }
+  if (userId) {
+    try {
+      const { ensureDeckShareConversionSchema } = await import('./deck_share_actions');
+      await ensureDeckShareConversionSchema(env);
+      const ok = await env.DB.prepare(
+        "SELECT 1 AS ok FROM deck_share_conversions WHERE share_token_id = ? AND user_id = ? AND type = 'nda_signed' LIMIT 1",
+      ).bind(linkId, userId).first<{ ok: number }>();
+      if (ok) return null;
+    } catch (e) {
+      // An acceptance that cannot be read is not one: the gate stays shut.
+      console.error('[decks share] NDA acceptance unreadable', (e as Error).message);
+    }
+  }
+  const deck = await env.DB.prepare(
+    'SELECT d.version, d.title, d.created_at, p.name AS project_name FROM pitch_decks d LEFT JOIN projects p ON p.id = d.project_id WHERE d.id = ?',
+  ).bind(deckId).first<{ version: number; title: string | null; created_at: string | null; project_name: string | null }>();
+  return {
+    gate: 'nda',
+    nda_required: true,
+    nda_accepted: false,
+    signed_in: userId != null,
+    project_name: deck?.project_name ? String(deck.project_name).slice(0, 200) : null,
+    title: deck?.title ?? null,
+    frozen: { version: deck ? Number(deck.version) : null, as_of: deck?.created_at ?? null },
+  };
+}
 
 /**
  * POST /api/decks/share/:token/heartbeat — viewer pings read-time so
@@ -1069,6 +1155,14 @@ decks.get('/:id/engagement', async (c) => {
     console.error('[decks engagement] conversion aggregation failed', (e as Error).message);
   }
 
+  // D902 — PD19 for this version: per-viewer median, seconds per card against
+  // the version before, the ask, and each link's investor and settings.
+  let analytics: Awaited<ReturnType<typeof shareAnalytics>> | null = null;
+  try { analytics = await shareAnalytics(c.env, row); } catch (e) {
+    console.error('[decks engagement] share analytics failed', (e as Error).message);
+  }
+  const linkOf = (shareId: number): LinkAnalytics | null => analytics?.links.get(Number(shareId)) ?? null;
+
   return c.json({
     deck_id: id,
     total_views: viewRows.length,
@@ -1094,6 +1188,8 @@ decks.get('/:id/engagement', async (c) => {
       // withdraw. `revoked_at` is also what distinguishes "the owner ended
       // this" from "it ran out" — the reason the column exists.
       revoked_at: t.revoked_at || null,
+      // D902 — the investor and settings, null when the analytics could not be read.
+      ...(linkOf(t.id) ?? { investor: null, allow_download: null, allow_forwarding: null, nda_required: null, include: null, nda_signed: null }),
     })),
     views: viewRows.map((v) => ({
       id: v.id, share_token_id: v.share_token_id,
@@ -1102,6 +1198,16 @@ decks.get('/:id/engagement', async (c) => {
       created_at: v.created_at, updated_at: v.updated_at,
       conversion: convByView.get(Number(v.id)) || null,
     })),
+    analytics: analytics
+      ? {
+          available: true,
+          viewers: analytics.viewers,
+          median_seconds_per_viewer: analytics.median_seconds_per_viewer,
+          cards: analytics.cards,
+          previous: analytics.previous,
+          reached_ask: analytics.reached_ask,
+        }
+      : { available: false, unreadable: true, reason: 'The views on this version could not be read. That is not the same as none.' },
   });
 });
 
@@ -1427,6 +1533,10 @@ export type CreateShareLinkArgs = {
   investorLabel?: string | null;
   allowDownload?: boolean;
   allowForwarding?: boolean;
+  /** D902 — no card is sent until the NDA is accepted on this link. */
+  ndaRequired?: boolean;
+  /** D902 — what the link includes; the default when left out. */
+  include?: ShareInclude;
   /** The deck's venture: the link's `raise.pitch-deck` row is logged under it (D691 decision 12). */
   projectId?: number | null;
 };
@@ -1448,12 +1558,14 @@ export async function createShareLink(env: Env, a: CreateShareLinkArgs): Promise
   const label = typeof a.investorLabel === 'string' && a.investorLabel.trim() ? a.investorLabel.trim().slice(0, 200) : null;
   const ins = await env.DB.prepare(
     `INSERT INTO pitch_deck_share_tokens
-       (deck_id, token_hash, expires_at, view_limit, view_count, created_by, prospect_id, investor_label, allow_download, allow_forwarding)
-     VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
+       (deck_id, token_hash, expires_at, view_limit, view_count, created_by, prospect_id, investor_label, allow_download, allow_forwarding,
+        nda_required, include_json)
+     VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     a.deckId, await sha256Hex(token), expiresAt, a.viewLimit ?? SHARE_NO_VIEW_LIMIT, a.userId,
     a.prospectId ?? null, a.prospectId ? null : label,
     a.allowDownload === false ? 0 : 1, a.allowForwarding === false ? 0 : 1,
+    a.ndaRequired ? 1 : 0, JSON.stringify(a.include ?? DEFAULT_SHARE_INCLUDE),
   ).run();
   // D367 — the link's row id, so the sheet that minted it can withdraw it
   // (DELETE /:id/shares/:shareId) when the founder replaces it. Null if the
@@ -1574,11 +1686,32 @@ async function signingKey(env: Env): Promise<CryptoKey> {
 async function mintSignedToken(env: Env, fileKey: string, ttlSeconds: number, actor: string | null): Promise<string> {
   const payload: any = { k: fileKey, exp: Math.floor(Date.now() / 1000) + Math.max(1, ttlSeconds) };
   if (actor) payload.a = actor;
+  // D902 — a nonce, so two links made for one version in the same second are two
+  // tokens. Without it they signed the same payload, and the second link's
+  // insert failed on the unique hash.
+  payload.n = b64url(crypto.getRandomValues(new Uint8Array(9)));
   const body = b64url(new TextEncoder().encode(JSON.stringify(payload)));
   const key = await signingKey(env);
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
   return `${body}.${b64url(sig)}`;
 }
+/**
+ * D902 — the deck an authentic but expired share token names, so its closed
+ * card can name the venture. The signature is checked first, as
+ * `verifySignedToken` does; a forged token names nothing.
+ */
+async function expiredTokenDeckId(env: Env, token: string): Promise<number | null> {
+  try {
+    const idx = token.indexOf('.');
+    if (idx <= 0) return null;
+    const body = token.slice(0, idx);
+    const expected = b64url(await crypto.subtle.sign('HMAC', await signingKey(env), new TextEncoder().encode(body)));
+    if (!timingEqual(expected, token.slice(idx + 1))) return null;
+    const m = /^deck:(\d+):v(\d+)$/.exec(String(JSON.parse(new TextDecoder().decode(b64urlDecode(body)))?.k || ''));
+    return m ? parseInt(m[1]) : null;
+  } catch { return null; }
+}
+
 export async function verifySignedToken(env: Env, token: string): Promise<any> {
   const idx = token.indexOf('.');
   if (idx <= 0) throw new Error('Malformed token');
