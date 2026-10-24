@@ -405,6 +405,7 @@ const FounderBuildCadence = lazy(() => import('./pages/founder/FounderBuildCaden
 const PitchStudio = lazy(() => import('./pages/raise/pitch/PitchStudio'));
 const PitchWorkspaceMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceMoved'));
 const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
+const PitchEditor = lazy(() => import('./pages/raise/pitch/PitchEditor'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
@@ -2943,7 +2944,11 @@ function AppInner() {
            ? <PitchWorkspaceMoved />
            : founderEditor(<PitchStudio tab="decks" />))} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
-      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
+      {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. Today's
+          template builder moves to /raise/pitch/builder until the editor covers
+          its templates and fills, when #2676's last part retires it. */}
+      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchEditor />)))} />
+      <Route path="/raise/pitch/builder" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
       <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />
       {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
       <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />

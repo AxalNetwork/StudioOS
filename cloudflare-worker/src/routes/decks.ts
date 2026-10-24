@@ -36,7 +36,11 @@ import { railFor, refuseRun } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { sanitizeBinding } from '../services/decks/sources';
-import { AUDIENCES, contentHash, modelProblems, sanitizeModel, sanitizeTheme } from '../services/decks/slideModel';
+import {
+  AUDIENCES, BLOCK_KINDS, CHART_RANGES, CHART_TYPES, GRID_COLS, GRID_ROWS, IMAGE_TAGS, LAYOUTS, MAX_BLOCKS, NOTES_MAX,
+  TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme,
+} from '../services/decks/slideModel';
+import { checkVideoLink } from '../services/decks/videoLink';
 import { ensureDeckVersionColumns } from '../services/decks/deckVersionColumns';
 import { isSupportSession } from '../integrations/providers/mercury';
 
@@ -1199,6 +1203,81 @@ decks.get('/:id/engagement', async (c) => {
       conversion: convByView.get(Number(v.id)) || null,
     })),
   });
+});
+
+// D898 (#2676) — the slide model the editor draws: the grid, the twelve
+// layouts as presets, the block kinds, chart types, audiences and themes. The
+// editor reads it rather than keeping its own copy, so the two cannot drift.
+// Registered before `/:id`, like every single-segment read.
+decks.get('/model', async (c) => {
+  await requireAuth(c);
+  return c.json({
+    grid: { cols: GRID_COLS, rows: GRID_ROWS },
+    max_blocks: MAX_BLOCKS,
+    notes_max: NOTES_MAX,
+    layouts: LAYOUTS,
+    block_kinds: BLOCK_KINDS,
+    chart_types: CHART_TYPES,
+    chart_ranges: CHART_RANGES,
+    text_styles: TEXT_STYLES,
+    image_tags: IMAGE_TAGS,
+    video_ratios: VIDEO_RATIOS,
+    audiences: AUDIENCES,
+    themes: THEME_KINDS,
+  });
+});
+
+// D898, PD1 and PD8 — the venture's brand kit, which the editor's centre card
+// and its Design tab draw on: the newest live landing page's palette, fonts,
+// logos and voice. `kit: null` is a venture with no brand kit yet; a read that
+// fails is 503, never an empty kit. The inline logo SVG is not sent (the page
+// would have to inject it); its URL forms are, through the image guard.
+decks.get('/brand-kit', async (c) => {
+  const user = await requireAuth(c);
+  const pid = Number(c.req.query('project_id'));
+  if (!Number.isSafeInteger(pid) || pid <= 0) return c.json({ error: 'project_id required' }, 400);
+  try { await projectOwned(c, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
+  let row: any;
+  try {
+    row = await c.env.DB.prepare(
+      `SELECT name, theme_color, palette_bg, palette_ink, palette_secondary, palette_accent, font_pairing, voice_json,
+              logo_url, logo_dark_url, logo_svg, logo_dark_svg, updated_at
+         FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1`,
+    ).bind(pid).first<any>();
+  } catch (e) {
+    console.warn('[decks] brand kit unreadable', (e as Error)?.message);
+    return c.json({ error: 'Your brand kit could not be read.', code: 'unreadable' }, 503);
+  }
+  if (!row) return c.json({ project_id: pid, kit: null });
+  const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v.trim()) ? v.trim().toLowerCase() : null);
+  let voice: string[] = [];
+  try {
+    const parsed = JSON.parse(row.voice_json || '[]');
+    const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.tags) ? parsed.tags : [];
+    voice = list.filter((t: unknown) => typeof t === 'string' && t.trim()).map((t: string) => t.trim().slice(0, 40)).slice(0, 8);
+  } catch { voice = []; }
+  return c.json({
+    project_id: pid,
+    kit: {
+      name: typeof row.name === 'string' ? row.name.slice(0, 120) : null,
+      palette: { bg: hex(row.palette_bg), ink: hex(row.palette_ink), accent: hex(row.palette_accent) ?? hex(row.theme_color), secondary: hex(row.palette_secondary) },
+      fonts: typeof row.font_pairing === 'string' && row.font_pairing.trim() ? row.font_pairing.trim().slice(0, 120) : null,
+      voice,
+      logo: { light: sanitizeImageUrl(row.logo_url), dark: sanitizeImageUrl(row.logo_dark_url), inline: Boolean(row.logo_svg || row.logo_dark_svg) },
+      updated_at: row.updated_at ?? null,
+    },
+  });
+});
+
+// D898, PD8c — a video link, checked with its provider before it is placed.
+// Only YouTube and Vimeo, only their fixed oEmbed URLs (services/decks/videoLink.ts).
+decks.get('/video-link', async (c) => {
+  await requireAuth(c);
+  const r = await checkVideoLink(c.req.query('url'), sanitizeImageUrl);
+  if (r.state === 'ok') return c.json(r);
+  if (r.state === 'refused') return c.json({ error: 'Paste a YouTube or Vimeo link.', state: r.state }, 400);
+  if (r.state === 'not_found') return c.json({ error: 'That video is not public, or does not exist.', state: r.state }, 404);
+  return c.json({ error: 'The video could not be checked just now. Try again.', state: r.state }, 503);
 });
 
 decks.get('/methods', async (c) => {

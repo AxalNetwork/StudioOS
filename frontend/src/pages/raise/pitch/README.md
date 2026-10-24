@@ -15,11 +15,14 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 | `PitchBoundary.jsx` | D905, PD22: what an Advisor, an Operating Partner or an Explorer reads at `/raise/pitch`, inside their own shell. Nothing from a deck is read. |
 | `sourcesModel.js` | D896 (#2675): pure words and derivations of the deck's sources — value wording by unit, chips, grouping and filters, the coverage meter, Missing, the scorecard dialog. |
 | `SourcesBoards.jsx` | D896: `CoverageMeter` (PD11), `SourceChip`, `SourcesLegend` (PD10b), `ScorecardDialog`, `SourcesPanel` (PD10), `SourcesStep` (PD4) and `useDeckSources`, over `GET /api/decks/sources`. Built here, mounted by part 3 (New deck) and part 4 (the editor). |
+| `PitchEditor.jsx` | D898 (#2676), PD1, PD1b, PD8, PD8c and PD24–PD27: the editor at `/raise/pitch/edit`. The rail with stale dots and reorder, the centre card on the brand kit with its blocks on the 12 × 6 grid, speaker notes, the Sources, Design and Notes tabs, Add a block, and Save, which says what it changes before it writes a version. Reads the slide model from the Worker (`GET /api/decks/model`). |
+| `editorModel.js` | Pure: what a save changes, layouts that carry a card's content, placement on the grid, standard sizes, stale cards, "Saved · …", the card's colours. |
 | `PitchWorkspaceMoved.jsx` | The old `/raise/pitch?mode=workspace` address: it opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`, the venture and the hash kept. |
 
-The deck builder itself stays `../../PitchWorkspacePage.jsx` (with
-`../../PitchDeckPage.jsx`) at `/raise/pitch/edit` until #2434's editor part
-replaces it.
+The template builder, `../../PitchWorkspacePage.jsx` (with
+`../../PitchDeckPage.jsx`), moved to `/raise/pitch/builder` when the editor
+took `/raise/pitch/edit` (D898). New deck opens it until #2676's last part
+retires it.
 
 ## The rules for adding here
 
