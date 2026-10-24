@@ -161,8 +161,17 @@ came from S1's prompt on #2368, as the usual pair:
   whitespace and the font link.
 
 It is the admin desk at `/admin/events`, not the member canvas `Events.dc.html`
-above. No value was edited. S1's integration lands next and records its grade
-here.
+above. No value was edited.
+
+**Grade: UPGRADE.** `/admin/events` is live. S1's integration (D915) makes it
+the desk's Overview, with Review at `/admin/events/review`, All events at
+`/admin/events/all` and one page per event at `/admin/events/:id`, and draws
+the blocks whose reads exist: the tiles and status strip, the review queue with
+Approve and Send back, the events table with its counts under Guard G, and the
+event page with its publish gate, tiles, agenda and dialogs. The other boards
+wait for reads and columns the Worker does not have, so this canvas stays in
+the queue until its seven parts land (#2699 to #2705; D915 §6 lists them). The `ROUTE_MAP.md`
+row says what is drawn today.
 
 ## Landed 2026-10-24 — Admin · Community · Partner invitations (#2370)
 

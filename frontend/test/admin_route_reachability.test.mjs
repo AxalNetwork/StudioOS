@@ -278,6 +278,14 @@ const COMPOSED = new Map([
     'frontend/src/pages/subsidiary/LicenceSummary.jsx',
     'frontend/src/pages/subsidiary/LicenceTerms.jsx',
   ]],
+  // D915 (2026-10-24, #2368): the Events desk draws its tabs from the files
+  // beside it, and they hold the doors to one event's page (`/admin/events/:id`).
+  ['frontend/src/pages/admin/AdminEventsPage.jsx', [
+    'frontend/src/pages/admin/events/EventsOverview.jsx',
+    'frontend/src/pages/admin/events/EventsReview.jsx',
+    'frontend/src/pages/admin/events/EventsAll.jsx',
+    'frontend/src/pages/admin/events/EventPage.jsx',
+  ]],
 ]);
 
 /** path → the files whose doors that path can reach. */

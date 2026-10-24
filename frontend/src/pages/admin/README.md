@@ -77,6 +77,11 @@ drawn from the Worker's act table — see its own README.
 Insights canvas from the reads that exist; `/admin/held/insights` redirects to
 it — see its own README.
 
+`events/` is D915's Events desk: the tabs, the event page, the dialogs and the
+model behind `AdminEventsPage.jsx`, which stays the routed page at
+`/admin/events`, `/admin/events/review`, `/admin/events/all` and
+`/admin/events/:id` — see its own README.
+
 `contracts/` owns the D647 desk, counted agreement pages, related lists,
 signing detail and guided envelope panel. Both shells reach `/admin/contracts`.
 
