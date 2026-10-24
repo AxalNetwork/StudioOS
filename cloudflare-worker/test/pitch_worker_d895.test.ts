@@ -343,3 +343,58 @@ test('D895: canonical NDA linkage also works when the viewer id is lower than th
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM deck_share_conversions WHERE type='nda_signed'").get()!.n,1);
  }finally{f.db.close()}
 });
+
+
+test('D895: brand save/read alignment changes the newest live page and leaves other pages intact',async()=>{
+ const f=await fixture();try{
+  f.db.exec("INSERT INTO landing_pages(id,project_id,slug,page_slug,name,archived_at) VALUES(101,1,'old','old','Old',NULL),(102,1,'current','current','Current',NULL),(103,1,'archived','archived','Archived','2026-10-01')");
+  const initial=await call(f,2,'GET','/api/brand/landing/by-project/1');assert.equal(initial.body.id,102);
+  const saved=await call(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Edited current',voice_tags:['Direct'],logo_dark_url:'https://example.invalid/dark.svg'});assert.equal(saved.status,200,JSON.stringify(saved.body));assert.equal(saved.body.id,102);
+  const read=await call(f,2,'GET','/api/brand/landing/by-project/1');assert.equal(read.body.id,102);assert.equal(read.body.name,'Edited current');assert.deepEqual(read.body.voice_tags,['Direct']);assert.equal(read.body.logo_dark_url,'https://example.invalid/dark.svg');
+  assert.equal(f.db.prepare('SELECT name FROM landing_pages WHERE id=101').get()!.name,'Old');assert.equal(f.db.prepare('SELECT name FROM landing_pages WHERE id=103').get()!.name,'Archived');
+ }finally{f.db.close()}
+});
+
+test('D895: saving with only an archived home creates a fresh live page and preserves the archived page',async()=>{
+ const f=await fixture();try{
+  f.db.exec("INSERT INTO landing_pages(id,project_id,slug,page_slug,name,archived_at) VALUES(101,1,'archived-home','home','Archived home','2026-10-01')");
+  assert.equal((await call(f,2,'GET','/api/brand/landing/by-project/1')).body,null);
+  const saved=await call(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Fresh home'});assert.equal(saved.status,200,JSON.stringify(saved.body));assert.notEqual(saved.body.id,101);assert.equal(saved.body.page_slug,'home-2');
+  const read=await call(f,2,'GET','/api/brand/landing/by-project/1');assert.equal(read.body.id,saved.body.id);assert.equal(read.body.name,'Fresh home');
+  assert.deepEqual({...f.db.prepare('SELECT name,archived_at FROM landing_pages WHERE id=101').get()},{name:'Archived home',archived_at:'2026-10-01'});
+  const edited=await call(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Edited fresh home'});assert.equal(edited.status,200);assert.equal(edited.body.id,saved.body.id);assert.equal(f.db.prepare('SELECT count(*) AS n FROM landing_pages WHERE project_id=1').get()!.n,2);
+ }finally{f.db.close()}
+});
+test('D895: an all-archived site still respects the existing five-page limit on a legacy brand save',async()=>{
+ const f=await fixture();try{
+  const insert=f.db.prepare("INSERT INTO landing_pages(project_id,slug,page_slug,name,archived_at) VALUES(1,?,?,?,'2026-10-01')");for(let i=0;i<5;i++)insert.run('archived-'+i,i===0?'home':'archived-'+i,'Archived '+i);
+  const saved=await call(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Another home'});assert.equal(saved.status,409);assert.equal(saved.body.code,'page_limit_reached');
+  assert.equal(f.db.prepare('SELECT count(*) AS n FROM landing_pages WHERE project_id=1').get()!.n,5);assert.equal((await call(f,2,'GET','/api/brand/landing/by-project/1')).body,null);
+ }finally{f.db.close()}
+});
+
+
+test('D895: legacy publish and preview target the page shown by the current brand read',async()=>{
+ for(const oldArchived of [null,'2026-10-01']){
+  const f=await fixture();try{
+   f.db.prepare("INSERT INTO landing_pages(id,project_id,slug,page_slug,name,preview_token,archived_at) VALUES(101,1,'old','home','Old','synthetic-old-preview',?)").run(oldArchived);
+   f.db.exec("INSERT INTO landing_pages(id,project_id,slug,page_slug,name,preview_token,archived_at) VALUES(102,1,'current','current','Current','synthetic-current-preview',NULL),(103,1,'archived','archived','Archived','synthetic-archived-preview','2026-10-01')");
+   assert.equal((await call(f,2,'GET','/api/brand/landing/by-project/1')).body.id,102);
+   const published=await call(f,2,'POST','/api/brand/landing/by-project/1/publish',{published:true});assert.equal(published.status,200,JSON.stringify(published.body));
+   assert.equal(f.db.prepare('SELECT published FROM landing_pages WHERE id=102').get()!.published,1);
+   assert.equal(f.db.prepare('SELECT published FROM landing_pages WHERE id=101').get()!.published,0);assert.equal(f.db.prepare('SELECT published FROM landing_pages WHERE id=103').get()!.published,0);
+   const preview=await call(f,2,'GET','/api/brand/landing/by-project/1/preview-url');assert.equal(preview.status,200);assert.equal(preview.body.url,'/landing/preview/synthetic-current-preview');
+  }finally{f.db.close()}
+ }
+});
+
+test('D895: legacy publish and preview report no live page instead of claiming an empty or archived page is live',async()=>{
+ const f=await fixture();try{
+  assert.equal((await call(f,2,'POST','/api/brand/landing/by-project/1/publish',{published:true})).status,404);
+  assert.equal((await call(f,2,'GET','/api/brand/landing/by-project/1/preview-url')).status,404);
+  f.db.exec("INSERT INTO landing_pages(project_id,slug,page_slug,name,preview_token,archived_at) VALUES(1,'archived-only','home','Archived only','synthetic-archived-only','2026-10-01')");
+  const published=await call(f,2,'POST','/api/brand/landing/by-project/1/publish',{published:true});assert.equal(published.status,409);assert.equal(published.body.error,'page_archived');
+  assert.equal((await call(f,2,'GET','/api/brand/landing/by-project/1/preview-url')).status,404);
+  assert.equal(f.db.prepare('SELECT published FROM landing_pages WHERE project_id=1').get()!.published,0);
+ }finally{f.db.close()}
+});
