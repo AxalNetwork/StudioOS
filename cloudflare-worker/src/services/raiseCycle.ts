@@ -105,7 +105,7 @@ export const READINESS_KEYS: readonly string[] = READINESS_ITEMS.map((i) => i.ke
 export const EVIDENCE = ['anecdote', 'pattern', 'stated', 'measured'] as const;
 const EVIDENCE_TONE: Record<string, string> = { measured: 'v1', stated: 'v2', pattern: 'v2', anecdote: 'v3' };
 
-export type ScoreRow = { item_id: number; item_key: string; score: number; evidence: string; missing: string | null; source: string; scored_at: string };
+export type ScoreRow = { item_id: number; item_key: string; score: number | null; evidence: string | null; missing: string | null; source: string; scored_at: string };
 export type ItemRow = { id: number; item_key: string; label: string; position: number };
 
 export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; scores: ScoreRow[] }> {
@@ -131,8 +131,8 @@ export function latestScores(scores: ScoreRow[], asOf?: string): Map<number, Sco
 }
 
 /** The overall score out of 100: the mean of each scored item's newest score. Null with none. */
-export function overallReadiness(latest: Iterable<{ score: number }>): number | null {
-  const xs = [...latest].map((s) => Number(s.score)).filter((n) => Number.isFinite(n));
+export function overallReadiness(latest: Iterable<{ score: number | null }>): number | null {
+  const xs = [...latest].filter(s => s.score != null).map((s) => Number(s.score)).filter((n) => Number.isFinite(n));
   if (xs.length === 0) return null;
   return Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10);
 }
@@ -150,7 +150,7 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
-export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number; evidence: 'measured' | 'stated'; missing: string | null; reads: ReadRow[] };
+export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
 /**
@@ -229,16 +229,16 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const v = num(latestVersion?.v);
   if (v == null) {
     out.push({
-      key: 'narrative', score: 0, evidence: 'measured', missing: 'Save an investor narrative version.',
+      key: 'narrative', score: null, evidence: null, missing: 'Not enough recorded · save an investor narrative version.',
       reads: [{ a: 'Narrative versions', b: 'none saved', ...met(false) }],
     });
   } else {
-    const m = await env.DB.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = ?')
-      .bind(projectId, v).first<{ n: number }>();
-    const mismatches = Number(m?.n ?? 0);
-    const { compared } = await checkInputs(env, projectId, v);
+    const { stated, metrics, compared } = await checkInputs(env, projectId, v);
+    // Re-score compares the current evidence itself; an empty or stale stored
+    // mismatch list is not proof that a version agrees with today's figures.
+    const mismatches = consistencyCheck(stated, metrics).length;
     out.push({
-      compared_count: compared, key: 'narrative', score: Math.max(0, 10 - 2 * mismatches), evidence: 'measured',
+      compared_count: compared, key: 'narrative', score: compared > 0 ? Math.max(0, 10 - 2 * mismatches) : null, evidence: compared > 0 ? 'measured' : null,
       missing: compared === 0 ? 'Not enough recorded' : mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
       reads: [
         { a: 'Newest version', b: `v${v}`, ...met(true) },
@@ -273,10 +273,10 @@ const LATEST_WRITE: Record<Exclude<ReadinessKey, 'team'>, string | null> = {
  * something other than that score (a deleted row leaves no newer write).
  */
 export async function changedSinceScored(
-  env: Env, projectId: number, c: ComputedScore, newest: { score: number; missing: string | null; scored_at: string } | undefined,
+  env: Env, projectId: number, c: ComputedScore, newest: { score: number | null; missing: string | null; scored_at: string } | undefined,
 ): Promise<boolean> {
   if (!newest) return true;
-  if (Number(newest.score) !== c.score || (newest.missing ?? null) !== c.missing) return true;
+  if (newest.score !== c.score || (newest.missing ?? null) !== c.missing) return true;
   const sql = LATEST_WRITE[c.key as Exclude<ReadinessKey, 'team'>];
   if (sql == null) return true;
   // Each statement names the venture once per store it reads.
@@ -301,7 +301,7 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
       kind: 'hbar',
       items: items.map((i) => {
         const s = latest.get(Number(i.id));
-        return { label: i.label, value: s ? Number(s.score) : null, tone: s ? EVIDENCE_TONE[s.evidence] ?? 'grey' : 'grey' };
+        return { label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s?.score != null && s.evidence ? EVIDENCE_TONE[s.evidence] ?? 'grey' : 'grey' };
       }),
       legend: [{ label: 'Measured', tone: 'v1' }, { label: 'Pattern', tone: 'v2' }, { label: 'Anecdote', tone: 'v3' }],
     }];
@@ -357,9 +357,9 @@ async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const latest = latestScores(scores);
   let rows = items.map((i) => ({ i, s: latest.get(Number(i.id)) ?? null })).filter(({ i }) => has(rq.q, i.label));
   const state = rq.filter.state;
-  if (state === 'scored') rows = rows.filter(({ s }) => s != null);
+  if (state === 'scored') rows = rows.filter(({ s }) => s?.score != null);
   else if (state === 'gap') rows = rows.filter(({ s }) => s != null && String(s.missing ?? '').trim() !== '');
-  else if (state === 'not_scored') rows = rows.filter(({ s }) => s == null);
+  else if (state === 'not_scored') rows = rows.filter(({ s }) => s?.score == null);
   // Score, highest first, is the default; an item no one scored comes last.
   if (rq.sort !== 'order') rows.sort((a, b) => (b.s?.score ?? -1) - (a.s?.score ?? -1));
   return paged(
@@ -368,7 +368,7 @@ async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       // D691 decision 3: the item's key, the same in every list, record and write.
       id: READINESS_KEYS.includes(i.item_key) ? i.item_key : null,
       cells: {
-        item: i.label, score: s ? Number(s.score) : null, evidence: s?.evidence ?? null,
+        item: i.label, score: s?.score != null ? Number(s.score) : null, evidence: s?.score != null ? s.evidence : null,
         missing: s ? s.missing ?? '' : null, updated: s ? day(s.scored_at) : null,
       },
     })),
@@ -1409,7 +1409,7 @@ async function readinessFigure(ctx: Ctx): Promise<Figure> {
   return safeFigure({ key: 'readiness_score', label: 'Readiness score', unit: 'score', source: 'readiness_scores' }, async () => {
     const { scores } = await loadReadiness(ctx);
     const latest = latestScores(scores);
-    const coverage = { scored: latest.size, total: READINESS_ITEMS.length };
+    const coverage = { scored: [...latest.values()].filter(s => s.score != null && Number.isFinite(Number(s.score))).length, total: READINESS_ITEMS.length };
     const now = overallReadiness(latest.values());
     if (now == null) return { value: null, coverage, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No readiness item scored yet' };
     const cut = daysBefore(ctx.today, 30);

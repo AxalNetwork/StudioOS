@@ -45,6 +45,8 @@ const ago = (days: number) => new Date(NOW - days * 86_400_000).toISOString().sl
 function seeded() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'user_role_review', 'partner_profiles', 'projects', 'tickets', 'ai_usage_logs', 'activity_logs']) db.exec(ddl(t));
+  // D990: a Draft is read off migration 275's answer columns too.
+  db.exec(readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/275_partner_profiles_columns.sql'), 'utf8'));
   const u = db.prepare(`INSERT INTO users (id, role, name, email, is_active, created_at, kyc_status, kyc_submitted_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   u.run(1, 'admin', 'Ada Admin', 'ada@secret.example', 1, ago(400), 'approved', null);

@@ -492,11 +492,6 @@ export const EMPTY_LINE = 'No events yet. Members create events from Events › 
  * Review (EV3)
  * ------------------------------------------------------------------ */
 
-export const QUEUE_SORTS = [
-  { key: 'starts', label: 'Starts soonest' },
-  { key: 'created', label: 'Newest created' },
-];
-
 export const NOTHING_WAITING = 'Nothing is waiting.';
 export const NOTHING_WAITING_SUB = 'A public event lands here when its host submits it.';
 
@@ -528,19 +523,12 @@ const byStart = (a, b) => {
   if (y === null) return -1;
   return x - y;
 };
-const byCreatedDesc = (a, b) => (parseStamp(b.created_at) ?? -Infinity) - (parseStamp(a.created_at) ?? -Infinity);
 export const titleOf = (ev) => String(ev?.title || '').trim() || 'Untitled event';
 
 const matches = (ev, q) => {
   const needle = String(q || '').trim().toLowerCase();
   return !needle || titleOf(ev).toLowerCase().includes(needle);
 };
-
-/** The queue, searched by title and sorted by start or by creation. */
-export function queueRows(events, { q = '', sort = 'starts' } = {}) {
-  const rows = (events || []).filter((ev) => matches(ev, q));
-  return [...rows].sort(sort === 'created' ? byCreatedDesc : byStart);
-}
 
 const ROLE_WORD = { admin: 'Admin', founder: 'Founder', partner: 'Operating Partner', investor: 'Investor', exploring: 'Explorer' };
 
@@ -571,7 +559,10 @@ export function capacityLine(ev) {
   return `${plural(Number(ev.capacity), 'seat', 'seats')} · waitlist ${ev.waitlist_enabled ? 'on' : 'off'}`;
 }
 
-/** The selected event's facts, from its R1 row. Submitted waits for D915 part 2's `submitted_at`. */
+/**
+ * The selected event's facts, from its R1 row. D921 (`reviewModel.reviewFacts`)
+ * adds Type, Venture and Submitted, and draws Place with its format.
+ */
 export function factsOf(ev) {
   return [
     { key: 'visibility', label: 'Visibility', value: visibilityWord(ev?.visibility), sub: ev?.visibility === 'public' ? 'This is why it needs review.' : null },
@@ -583,7 +574,6 @@ export function factsOf(ev) {
     { key: 'audience', label: 'Who may register', value: audienceLine(rulesOf(ev)) },
     { key: 'comp', label: 'Free seats for', value: compLine(rulesOf(ev)) },
     { key: 'created', label: 'Created', value: dateLabel(ev?.created_at) },
-    { key: 'submitted', label: 'Submitted', unrecorded: { text: 'Not recorded yet', reason: 'The time a host submits an event is not stored yet.' } },
   ];
 }
 
@@ -835,6 +825,11 @@ export const sendBackTitle = (ev) => `Send ${titleOf(ev)} back to the host?`;
  * Refusals: one sentence under the action
  * ------------------------------------------------------------------ */
 
+/** D917's 409 `not_waiting`: another admin decided it, or the host withdrew it, after this page read it. */
+export const CHANGED = 'This event changed while you were reading it. Reload to see the latest.';
+/** D917's 400 `reason_required`, drawn under the reason field. */
+export const REASON_NEEDED = 'Write a reason for the host. They see it with the event.';
+
 export const SUSPENDED = 'This studio’s licence is suspended, so approving and featuring are paused until HQ lifts it.';
 export const FROZEN = 'That did not go through: your account is frozen. Writes are paused until you answer HQ’s notice on My licence.';
 
@@ -845,5 +840,7 @@ export function refusalText(err, fallback = 'That did not go through. Try again.
   if (status === 423 || code === 'branch_suspended') return SUSPENDED;
   if (status === 404 || code === 'not_found') return GONE;
   if (code === 'invalid_capacity') return CAPACITY_ERROR;
+  if (code === 'not_waiting') return CHANGED;
+  if (code === 'reason_required') return REASON_NEEDED;
   return fallback;
 }

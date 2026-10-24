@@ -55,6 +55,8 @@ const NEW_COLUMNS: Array<[string, string]> = [
   ['dealflow_channels', 'TEXT'],
   ['conflicts_text', 'TEXT'],
   ['focus_text', 'TEXT'],
+  // --- migration 556 (D990): the profile's reference, filled below ---------
+  ['ref', 'TEXT'],
 ];
 
 async function ensureProfileTable(env: Env) {
@@ -105,6 +107,16 @@ async function ensureProfileTable(env: Env) {
   try {
     await db.prepare(
       `CREATE INDEX IF NOT EXISTS idx_partner_profiles_user ON partner_profiles(user_id)`,
+    ).run();
+  } catch {}
+  // Migration 556's reference (D990), so a database bootstrapped here names
+  // its profiles the way the Partner profiles page and its logs do.
+  try {
+    await db.prepare(`UPDATE partner_profiles SET ref = 'pp_' || lower(hex(randomblob(5))) WHERE ref IS NULL`).run();
+    await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_profiles_ref ON partner_profiles(ref)`).run();
+    await db.prepare(
+      `CREATE TRIGGER IF NOT EXISTS trg_partner_profiles_ref AFTER INSERT ON partner_profiles WHEN NEW.ref IS NULL
+       BEGIN UPDATE partner_profiles SET ref = 'pp_' || lower(hex(randomblob(5))) WHERE rowid = NEW.rowid; END`,
     ).run();
   } catch {}
 }
@@ -553,17 +565,37 @@ profiling.post('/admin/:email/verify', async (c) => {
   const reqBody = await c.req.json();
   const { agreement_type, admin_notes, status } = reqBody;
 
-  const newStatus = ['verified', 'rejected', 'pending'].includes(status) ? status : 'verified';
+  if (!['verified', 'rejected'].includes(status)) {
+    return c.json({ error: 'invalid_status', message: 'Choose Verified or Rejected. Use Reopen to return a profile to Waiting.' }, 400);
+  }
+  const newStatus = status;
 
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM partner_profiles WHERE email = ${email}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Profile not found' }, 404); }
 
+  // D992: preflight the requested send before recording a verdict or audit row.
+  // Keep the shared plan policy (including its admin exemption).
+  const providerRaw = String(reqBody?.provider ?? reqBody?.via_provider ?? 'native').toLowerCase();
+  const viaProvider = providerRaw === 'docusign' ? 'docusign' : 'native';
+  // Match the eSign route's shared plan policy. Admins currently bypass it.
+  if (newStatus === 'verified' && agreement_type && viaProvider === 'docusign') {
+    const { userMeetsTier } = await import('../middleware/requireTier');
+    if (!userMeetsTier(adminUser, 'studio')) {
+      await sql.end();
+      return c.json({ error: 'tier_required', required: 'studio', message: 'DocuSign sends require the Raise + Grow plan.' }, 402);
+    }
+  }
+
+  // Omission preserves a field; an explicit empty string or null clears it.
+  const agreementType = agreement_type === undefined ? rows[0].agreement_type : agreement_type || null;
+  const adminNotes = admin_notes === undefined ? rows[0].admin_notes : admin_notes || null;
+
   await sql`
     UPDATE partner_profiles
     SET admin_status = ${newStatus},
-        agreement_type = ${agreement_type || rows[0].agreement_type || null},
-        admin_notes = ${admin_notes || rows[0].admin_notes || null},
+        agreement_type = ${agreementType ?? null},
+        admin_notes = ${adminNotes ?? null},
         updated_at = CURRENT_TIMESTAMP
     WHERE email = ${email}
   `;
@@ -598,23 +630,6 @@ profiling.post('/admin/:email/verify', async (c) => {
           ? await c.env.DB.prepare(`SELECT id, name, email FROM users WHERE id = ?`).bind(targetUserId).first().catch(() => null)
           : null;
         const recipientName = targetRow?.name || rows[0]?.full_name || rows[0]?.name || '';
-        // Task #2 — admins can opt the verify-flow envelope through
-        // DocuSign by passing `provider:'docusign'` (canonical) or
-        // `via_provider:'docusign'` (legacy alias) on the verify
-        // request body. Defaults to native if absent or invalid.
-        const providerRaw = String(reqBody?.provider ?? reqBody?.via_provider ?? 'native').toLowerCase();
-        const viaProvider = providerRaw === 'docusign' ? 'docusign' : 'native';
-        // Studio-tier gate — DocuSign is a Studio-only provider.
-        // Without this check a downgraded admin who still has an
-        // active DocuSign connection could route envelopes through
-        // it via the verify path, bypassing the gate enforced on
-        // POST /api/legal/esign/send.
-        if (viaProvider === 'docusign') {
-          const { userMeetsTier } = await import('../middleware/requireTier');
-          if (!userMeetsTier(adminUser, 'studio')) {
-            return c.json({ error: 'tier_required', required: 'studio', message: 'DocuSign sends require the Raise + Grow plan.' }, 402);
-          }
-        }
         esignResult = await createAndSendEnvelope(c.env, {
           adminUserId: adminUser.id,
           adminName: adminUser.name || adminUser.email,
@@ -635,7 +650,7 @@ profiling.post('/admin/:email/verify', async (c) => {
     }
   }
 
-  return c.json({ updated: true, status: newStatus, agreement_type, admin_notes, esign: esignResult, esign_refusal: esignRefusal });
+  return c.json({ updated: true, status: newStatus, agreement_type: agreementType ?? null, admin_notes: adminNotes ?? null, esign: esignResult, esign_refusal: esignRefusal });
 });
 
 export default profiling;

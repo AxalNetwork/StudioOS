@@ -179,7 +179,8 @@ export default function PartnerProfilesConsole({ onPendingCount }) {
   );
 }
 
-function ProfileReviewModal({ profile, onClose, onSaved }) {
+/** D989 — Partner profiles (`../profiles/PartnerProfiles.jsx`) opens the same review until its part 6 redraws it. */
+export function ProfileReviewModal({ profile, onClose, onSaved }) {
   useEscapeClose(onClose);
   const [agreement, setAgreement] = useState(profile.agreement_type || '');
   const [notes, setNotes] = useState(profile.admin_notes || '');

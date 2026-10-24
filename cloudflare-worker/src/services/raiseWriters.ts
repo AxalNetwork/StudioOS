@@ -27,6 +27,7 @@ import { SERVED_FUNDS } from './researchFundDirectory';
 import { normalizeUseOfFunds } from '../util/useOfFunds';
 import { ensureTier } from '../middleware/requireTier';
 import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
+import { shareIncludeFromBody } from './decks/shareInclude';
 import { createProspect, RAISE_STAGES } from '../routes/contacts';
 import {
   READINESS_ITEMS, READINESS_KEYS, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
@@ -84,8 +85,8 @@ async function newestScores(env: Env, projectId: number) {
   const res = await env.DB.prepare(
     `SELECT i.item_key, s.score, s.missing, s.scored_at FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
       WHERE s.project_id = ? AND s.source = 'computed' ORDER BY s.scored_at, s.id`,
-  ).bind(projectId).all<{ item_key: string; score: number; missing: string | null; scored_at: string }>();
-  const out = new Map<string, { score: number; missing: string | null; scored_at: string }>();
+  ).bind(projectId).all<{ item_key: string; score: number | null; missing: string | null; scored_at: string }>();
+  const out = new Map<string, { score: number | null; missing: string | null; scored_at: string }>();
   for (const r of res.results || []) out.set(r.item_key, r);
   return out;
 }
@@ -121,7 +122,7 @@ export async function rescoreReadiness(env: Env, a: { projectId: number; userId:
     await env.DB.prepare(
       `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by) VALUES (?, ?, ?, ?, ?, 'computed', ?)`,
     ).bind(ids.get(c.key), a.projectId, c.score, c.evidence, c.missing, a.userId).run();
-    await logRaise(env, a.userId, a.projectId, 'fundraising-readiness', c.key, 'readiness_rescored', `Re-scored by its check: ${c.score}/10`);
+    await logRaise(env, a.userId, a.projectId, 'fundraising-readiness', c.key, 'readiness_rescored', c.score == null ? `Not scored: ${c.missing}` : `Re-scored by its check: ${c.score}/10`);
   }
   return { scored: computed.length, items: computed.map((c) => c.key) };
 }
@@ -328,6 +329,17 @@ export async function updateNarrativeVersion(env: Env, a: { projectId: number; u
 // ---------------------------------------------------------------------------
 
 export const LINK_EXPIRY_DAYS = [7, 14, 30] as const;
+/** D902 — the most views a link may be limited to. */
+export const LINK_VIEW_LIMIT_MAX = 100;
+
+/** `view_limit`: a whole number 1–100, or null (or left out) for no limit. */
+function viewLimit(v: unknown): number | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > LINK_VIEW_LIMIT_MAX) {
+    throw new WriterError(400, `view_limit is a whole number from 1 to ${LINK_VIEW_LIMIT_MAX}, or null for no limit`);
+  }
+  return v;
+}
 
 /** `expires_days`: 7, 14 or 30, or null for Never. */
 function expiryDays(v: unknown): number | null {
@@ -362,6 +374,12 @@ async function linkInvestor(env: Env, projectId: number, b: Record<string, unkno
  * New link: one token for one of this venture's decks, through
  * `createShareLink()`, which logs it. The raw link is returned here once and
  * never read back. The plan gate is the share route's (decision 13).
+ *
+ * D902 — THE ONE LINK WRITER (decision 5). The studio's Share (the editor and
+ * "New link" on Share & analytics) and the Raise module's form send this one
+ * body: the investor, `expires_days`, `view_limit` (1–100, or null for none),
+ * `allow_download`, `allow_forwarding`, `nda_required`, and `include`
+ * (`services/decks/shareInclude.ts`; left out, answer A).
  */
 export async function createDeckLink(env: Env, a: { projectId: number; user: User; body: Record<string, unknown> }) {
   ensureTier(a.user, 'studio');
@@ -376,15 +394,23 @@ export async function createDeckLink(env: Env, a: { projectId: number; user: Use
   const days = expiryDays(b.expires_days);
   const allowDownload = flag(b.allow_download, 'allow_download') ?? true;
   const allowForwarding = flag(b.allow_forwarding, 'allow_forwarding') ?? true;
+  const limit = viewLimit(b.view_limit);
+  const ndaRequired = flag(b.nda_required, 'nda_required') ?? false;
+  const include = shareIncludeFromBody(b.include);
+  if (!include) throw new WriterError(400, 'include is an object of figures, sources, notes and bands, each true or false');
   const link = await createShareLink(env, {
     deckId: deck.id, deckVersion: Number(deck.version), userId: Number(a.user.id) || null, actorEmail: a.user.email || null,
     ttlSeconds: days == null ? null : days * 86400, prospectId: investor.prospectId, investorLabel: investor.label,
     allowDownload, allowForwarding, projectId: a.projectId,
+    viewLimit: limit, ndaRequired, include,
   });
   if (link.id == null) throw new WriterError(500, 'The link was made but its id was not reported');
   return {
     id: link.id, share_path: `/share/deck/${link.token}`, expires_at: link.expiresAt,
     allow_download: allowDownload, allow_forwarding: allowForwarding,
+    view_limit: limit ?? null, nda_required: ndaRequired, include,
+    // The version the link is frozen to (D902 §0.4): a link never follows a later save.
+    deck_version: Number(deck.version),
   };
 }
 

@@ -9,7 +9,7 @@ export const PERSONAS = [
     id: 'lp_individual',
     label: 'LP — Individual',
     short_description: 'Individual limited partner committing personal capital to the main fund.',
-    role_alignment: 'partner',
+    profile: 'investor',
     nav_extras: [],
     follow_up_questions: [
       { key: 'check_size_usd', prompt: 'Typical check size you write per fund (USD)?', type: 'number' },
@@ -22,7 +22,7 @@ export const PERSONAS = [
     id: 'lp_institutional',
     label: 'LP — Institutional',
     short_description: 'Institutional LP (endowment, foundation, pension, fund-of-funds).',
-    role_alignment: 'partner',
+    profile: 'investor',
     nav_extras: [{ to: '/funds', label: 'Funds' }],
     follow_up_questions: [
       { key: 'institution_name', prompt: 'Institution name?', type: 'text' },
@@ -35,7 +35,7 @@ export const PERSONAS = [
     id: 'gp_external',
     label: 'GP — External Fund',
     short_description: 'GP running an external fund interested in deal-by-deal collaboration.',
-    role_alignment: 'partner',
+    profile: 'investor',
     nav_extras: [{ to: '/deals', label: 'Deal Flow' }, { to: '/pipeline', label: 'Pipeline Board' }],
     follow_up_questions: [
       { key: 'fund_name', prompt: 'Fund name?', type: 'text' },
@@ -48,7 +48,7 @@ export const PERSONAS = [
     id: 'angel_scout',
     label: 'Angel / Scout',
     short_description: 'Individual angel or scout sourcing and writing small early checks.',
-    role_alignment: 'partner',
+    profile: 'investor',
     nav_extras: [{ to: '/refer', label: 'Refer & Earn' }, { to: '/deals', label: 'Deal Flow' }],
     follow_up_questions: [
       { key: 'check_size_usd', prompt: 'Typical angel check size (USD)?', type: 'number' },
@@ -61,7 +61,7 @@ export const PERSONAS = [
     id: 'corporate_vc',
     label: 'Corporate VC',
     short_description: 'Strategic / corporate VC arm of an operating company.',
-    role_alignment: 'partner',
+    profile: 'investor',
     nav_extras: [{ to: '/deals', label: 'Deal Flow' }],
     follow_up_questions: [
       { key: 'parent_company', prompt: 'Parent company?', type: 'text' },
@@ -74,7 +74,7 @@ export const PERSONAS = [
     id: 'sovereign_family_office',
     label: 'Sovereign / Family Office',
     short_description: 'Sovereign wealth, family office, or multi-family office investor.',
-    role_alignment: 'partner',
+    profile: 'investor',
     nav_extras: [],
     follow_up_questions: [
       { key: 'office_name', prompt: 'Office name?', type: 'text' },
@@ -87,7 +87,7 @@ export const PERSONAS = [
     id: 'academic',
     label: 'Academic / Lab',
     short_description: 'Academic researcher, university tech-transfer office, or research lab.',
-    role_alignment: 'partner',
+    profile: 'exploring',
     nav_extras: [],
     follow_up_questions: [
       { key: 'institution', prompt: 'Institution / lab name?', type: 'text' },
@@ -100,7 +100,7 @@ export const PERSONAS = [
     id: 'founder_new',
     label: 'Founder — New Venture',
     short_description: 'Founder spinning out a brand-new venture through the 28-day engine.',
-    role_alignment: 'founder',
+    profile: 'founder',
     nav_extras: [],
     follow_up_questions: [
       { key: 'venture_idea', prompt: 'One-line description of the venture?', type: 'text' },
@@ -113,7 +113,7 @@ export const PERSONAS = [
     id: 'founder_existing',
     label: 'Founder — Existing Company',
     short_description: 'Founder of an existing company on the Strategic Scale partnership track.',
-    role_alignment: 'founder',
+    profile: 'founder',
     nav_extras: [{ to: '/raise/legal', label: 'Legal' }],
     follow_up_questions: [
       { key: 'company_name', prompt: 'Company name?', type: 'text' },
@@ -126,8 +126,8 @@ export const PERSONAS = [
     id: 'operator_advisor',
     label: 'Operator / Advisor',
     short_description: 'Operating partner or advisor offering sweat-equity expertise to spin-outs.',
-    role_alignment: 'partner',
-    nav_extras: [{ to: '/build', label: 'Startups' }],
+    profile: 'advisor',
+    nav_extras: [{ to: '/practice', label: 'Practice' }],
     follow_up_questions: [
       { key: 'expertise', prompt: 'Primary expertise area (e.g. GTM, eng, finance, product)?', type: 'text' },
       { key: 'years_experience', prompt: 'Years of senior operating experience?', type: 'number' },
@@ -139,7 +139,7 @@ export const PERSONAS = [
     id: 'service_provider',
     label: 'Service Provider',
     short_description: 'Legal, technical, or other service provider to the studio.',
-    role_alignment: 'partner',
+    profile: 'partner',
     nav_extras: [],
     follow_up_questions: [
       { key: 'service_type', prompt: 'Type of service (Legal / Technical / Accounting / Other)?', type: 'choice', choices: ['Legal', 'Technical', 'Accounting', 'Other'] },
@@ -152,7 +152,7 @@ export const PERSONAS = [
     id: 'press_analyst',
     label: 'Press / Analyst',
     short_description: 'Journalist, industry analyst, or research publication.',
-    role_alignment: 'partner',
+    profile: 'exploring',
     nav_extras: [],
     follow_up_questions: [
       { key: 'outlet', prompt: 'Outlet / publication?', type: 'text' },

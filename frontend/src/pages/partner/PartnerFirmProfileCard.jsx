@@ -64,7 +64,7 @@ export function NoFirmAttached() {
       <p className="mt-1">
         A firm record is created during partner onboarding and linked to the account that finished it.
         If you were invited as a partner, finish onboarding from your invitation link; an admin can
-        also attach an existing firm under Partners → Firm links.
+        also attach an existing firm under Advisors &amp; Partners → Firms.
       </p>
     </div>
   );
