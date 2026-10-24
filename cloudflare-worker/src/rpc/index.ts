@@ -31,13 +31,14 @@ import {
   applyPromoCeiling, applyEscalationAnswer, applyTemplateCopy,
   applyBenchmarks, openSupportSession,
   moveAccountOut, inviteAccount, unbindAdmin, branchFundsRegistry, branchApprovalAges, branchOpenTickets, branchActivation,
-  applyGames, branchGameHoldings,
+  applyGames, branchGameHoldings, branchInsights,
   type SupportSessionRequest, type MoveOutRequest, type InviteRequest, type UnbindRequest,
 } from './branchOps';
 import {
   recordEscalation, licenceForBranch, reportUsage,
   type EscalationInput, type UsageFigure, type EscalationAnswer,
 } from './hqOps';
+import { pendingInsightsLoader } from '../services/insightsScope';
 
 /** Exported by a branch Worker; called by HQ over `BRANCH_<CODE>`. */
 export class HqEntrypoint extends WorkerEntrypoint<Env> {
@@ -62,6 +63,11 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   // D486 — this branch's activation funnel by creation week, for HQ's H15.
   // Counts only, so no secret, on the rule above.
   activation() { return branchActivation(this.env); }
+
+  // D893 — Admin › Insights over this branch's own database, for HQ's
+  // Super Admin scope. Counts only, so no secret, on the rule above. The
+  // loader becomes #2660's `loadAdminInsights` once it is on this deploy.
+  insights(params?: Record<string, string>) { return branchInsights(this.env, params, pendingInsightsLoader); }
 
   // D487 — the games this branch holds and their completed runs, for H18.
   // A read, so no secret, on the rule above.
