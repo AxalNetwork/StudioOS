@@ -292,6 +292,9 @@ test('notifyExpiringRevshareWindows: fires one warning per threshold + one admin
   assert.match(digest.body, /30d remaining/);
   assert.match(digest.body, /7d remaining/);
   assert.match(digest.body, /1d remaining/);
+  // D923 (#2370): the digest links Partner invitations' Referrals tab, not the old address.
+  assert.match(digest.body, /\nAdmin panel: \/admin\/partner-invitations\/referrals$/);
+  assert.doesNotMatch(digest.body, /\/admin\/partners\b/);
 });
 
 /* ================================================================== */

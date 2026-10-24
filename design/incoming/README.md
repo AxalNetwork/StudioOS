@@ -186,8 +186,20 @@ came from S1's prompt on #2370, as the usual pair:
 It draws the desk at the proposed `/admin/partner-invitations` (Overview,
 Invitations, Deals, Referrals), the invitation and deal lightboxes (the canvas
 uses centred lightboxes where the prompt said drawers), the new-invitation
-dialog and the confirm dialogs. No value was edited. S1's integration lands
-next and records its grade here.
+dialog and the confirm dialogs. No value was edited.
+
+**Grade: UPGRADE.** `/admin/partner-invitations` is live. S1's integration
+(D923) makes it the desk's Overview, with Invitations, Deals and Referrals at
+their own addresses, one address per invitation and per deal (a lightbox over
+its tab, a full page on a phone), Firm links kept off the canvas at
+`/admin/partner-invitations/firm-links`, and `/admin/partners` redirecting with
+the moved notice. It draws the blocks whose reads exist: the tiles and Needs
+you, the invitations table under Guards L and I, the deals table with Top
+deals, the referrals under Guard F, the two records, New invitation and the
+Resend, Revoke and Terminate dialogs. The charts and the other boards wait for
+reads and columns the Worker does not have, so this canvas stays in the queue
+until its nine parts land (D923 §6 lists them). The `ROUTE_MAP.md` row says
+what is drawn today.
 
 ## Landed 2026-10-24 — Admin · Programs (#2371)
 

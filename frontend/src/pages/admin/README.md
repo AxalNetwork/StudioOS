@@ -82,6 +82,12 @@ model behind `AdminEventsPage.jsx`, which stays the routed page at
 `/admin/events`, `/admin/events/review`, `/admin/events/all` and
 `/admin/events/:id` — see its own README.
 
+`partners/` is D923's Partner invitations desk: the tabs, the invitation and
+deal records, the dialogs, Firm links and the model behind
+`PartnerInvitations.jsx`, which stays the routed page at
+`/admin/partner-invitations` and its sub-paths; `/admin/partners` redirects to
+it — see its own README.
+
 `contracts/` owns the D647 desk, counted agreement pages, related lists,
 signing detail and guided envelope panel. Both shells reach `/admin/contracts`.
 

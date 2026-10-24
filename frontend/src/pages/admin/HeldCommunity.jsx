@@ -8,8 +8,9 @@ import { Figure, laneOf, useHeldGlance } from './heldFigures';
 /**
  * Admin · Community on HQ-held accounts — S20's row (D286).
  *
- * FIVE LITERAL LINKS. Events, Jobs, Circles, Advisors & Partners and
- * Wellbeing (the last placed here by D283). The prose for the first three is
+ * SIX LITERAL LINKS. Events, Jobs, Circles, Advisors & Partners, Wellbeing
+ * (placed here by D283) and Partner invitations (placed here by D923, which
+ * its canvas lights under Community). The prose for the first three is
  * `BranchCommunity`'s own `COMMUNITY_CONSOLES` — read, never edited, so the
  * two shells describe one console in one voice — but every link below is
  * written out, because the reachability walk reads syntax and three of these
@@ -56,8 +57,8 @@ export default function HeldCommunity() {
   return (
     <HeldZone
       workspace="Community"
-      stance="Five consoles, each opened where it is decided"
-      coverage={['Five community consoles; Events and Jobs pending counted on the Studio glance']}
+      stance="Six consoles, each opened where it is decided"
+      coverage={['Six community consoles; Events and Jobs pending counted on the Studio glance']}
       coverageNote="Counts live in each console; this page links to them."
       unavailable={[
         ['A community figure for a branch', 'No branch is deployed, and these consoles read HQ’s own rows.'],
@@ -92,6 +93,15 @@ export default function HeldCommunity() {
           figure={<Figure state={glance} value={undefined} reason="The wellbeing roster has no pending queue, and no count of it is on the Studio glance." testId="held-community-wellbeing-count" />}
         >
           <Link to="/admin?tab=wellbeing" className="font-semibold text-axal-ink underline underline-offset-2">Open wellbeing</Link>
+        </Console>
+        <Console
+          label="Partner invitations"
+          scope="Yours to send"
+          what="Bring operating partners in, see where each invitee stands, and keep their deals healthy."
+          testId="held-community-partner-invitations"
+          figure={<Figure state={glance} value={undefined} reason={noQueue(glance, 'Partner invitations') || 'Partner invitations have no pending queue.'} testId="held-community-partner-invitations-count" />}
+        >
+          <Link to="/admin/partner-invitations" className="font-semibold text-axal-ink underline underline-offset-2">Open partner invitations</Link>
         </Console>
       </ul>
     </HeldZone>

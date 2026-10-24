@@ -101,7 +101,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 148 the same day (D894, #2434): `Pitch Deck Studio`, its shell and the Decks and Share & analytics tabs at /raise/pitch.
   // 149 the same day (D906, #2454): `Investor narrative`, the tool's tabs inside the module page at /raise/investor-narrative.
   // 150 the same day (D915, #2368): `Events Console`, the admin Events desk's tabs and one page per event at /admin/events.
-  assert.equal(recs.length, 150);
+  // 151 the same day (D923, #2370): `Partner invitations`, its tabs and one address per invitation and per deal at /admin/partner-invitations.
+  assert.equal(recs.length, 151);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);

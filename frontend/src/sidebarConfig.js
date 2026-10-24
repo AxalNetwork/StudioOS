@@ -224,10 +224,12 @@ export const SIDEBAR_GROUPS = {
       // is the complete statement of what the row owns (SidebarNav), so a
       // door the landing draws without a `match` entry lights no row.
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
-        match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/partners', '/admin/spinout-moderation'] },
+        match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation'] },
       { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
         match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
-      { to: '/admin/held/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles'] },
+      // D923 (#2370) — Partner invitations lives under Community, as its canvas
+      // lights it; Approvals keeps lane 13 as a door, so one row lights the page.
+      { to: '/admin/held/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/partner-invitations'] },
       // D647 — the shared Contracts page and template library. Not "read-only":
       // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin
       // authors templates today. Whether they should is D286's filed question.

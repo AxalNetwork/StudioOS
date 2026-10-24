@@ -287,7 +287,9 @@ const ADMIN = [
   alias('/admin/wellbeing', key(AD, 'Community', 'Wellbeing experts'), 'The wellbeing resource library, Wellbeing experts’ own page.'),
   own('/admin?tab=network-profiles', key(AD, 'Community', 'Advisors and partners')),
   own('/admin?tab=directory', key(AD, 'Community', 'Directory')),
-  own('/admin/partners', key(AD, 'Community', 'Partner invitations')),
+  // D923 (#2370): re-rooted at the new address; the prefix covers the tabs and
+  // the records. `/admin/partners` only redirects, so it draws no rail.
+  own('/admin/partner-invitations', key(AD, 'Community', 'Partner invitations')),
   own('/admin/contracts', key(AD, 'Contracts')),
   alias('/branch/contracts', key(AD, 'Contracts'), 'The branch’s Contracts page.'),
   own('/admin/contracts?tab=agreements', key(AD, 'Contracts', 'Agreements')),

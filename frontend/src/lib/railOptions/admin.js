@@ -70,7 +70,7 @@ export const ADMIN_BOARDS = [
   { id: 'S28', section: 'Community', module: 'Wellbeing experts', route: '/admin?tab=wellbeing', files: ['pages/admin/consoles/WellbeingConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
   { id: 'S29', section: 'Community', module: 'Advisors and partners', route: '/admin?tab=network-profiles', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: ADMIN_PAGE },
   { id: 'S30', section: 'Community', module: 'Directory', route: '/admin?tab=directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
-  { id: 'S31', section: 'Community', module: 'Partner invitations', route: '/admin/partners', files: ['pages/admin/PartnerInvitations.jsx'], rail: FRAME },
+  { id: 'S31', section: 'Community', module: 'Partner invitations', route: '/admin/partner-invitations', files: ['pages/admin/PartnerInvitations.jsx'], rail: FRAME },
   { id: 'S32', section: 'Contracts', module: null, route: '/admin/contracts', files: [CONTRACTS], rail: CONTRACTS },
   { id: 'S33', section: 'Contracts', module: 'Agreements', route: '/admin/contracts', files: ['pages/admin/contracts/AgreementList.jsx', 'pages/admin/contracts/AgreementDetail.jsx'], rail: CONTRACTS },
   { id: 'S34', section: 'Contracts', module: 'NDAs', route: '/admin/contracts?tab=ndas', files: ['pages/admin/contracts/RelatedLists.jsx'], rail: CONTRACTS },

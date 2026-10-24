@@ -382,7 +382,8 @@ export const LANE_CONSOLES = {
 export const NO_QUEUE_CONSOLES = {
   Directory: '/admin?tab=directory',
   Circles: '/admin/circles',
-  'Partner invitations': '/admin/partners',
+  // D923 (#2370): lane 13 and this door move together.
+  'Partner invitations': '/admin/partner-invitations',
   'Advisor cohort access': '/admin/advisor-cohorts',
 };
 

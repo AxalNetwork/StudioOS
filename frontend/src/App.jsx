@@ -2698,7 +2698,18 @@ function AppInner() {
           zone, the take rate, is `requireSuperAdmin`; the page asks only when
           `/me` carries the elevation and says so otherwise. */}
       <Route path="/admin/commissions" element={guard(['admin'], hqOnly(<AdminCommissions user={user} />))} />
-      <Route path="/admin/partners" element={guard(['admin'], <AdminPartnerInvitations />)} />
+      {/* D923 (#2370) — Partner invitations moved to its tabs. The old address
+          lands on Overview with the moved notice; it is counted for #2319. */}
+      <Route path="/admin/partners" element={<Navigate to="/admin/partner-invitations?moved=partners" replace />} />
+      {/* D923 (#2370) — the tabs and one address per invitation and per deal,
+          each behind today's guard, never hqOnly. Static paths before :id. */}
+      <Route path="/admin/partner-invitations" element={guard(['admin'], <AdminPartnerInvitations />)} />
+      <Route path="/admin/partner-invitations/invitations" element={guard(['admin'], <AdminPartnerInvitations />)} />
+      <Route path="/admin/partner-invitations/invitations/:id" element={guard(['admin'], <AdminPartnerInvitations />)} />
+      <Route path="/admin/partner-invitations/deals" element={guard(['admin'], <AdminPartnerInvitations />)} />
+      <Route path="/admin/partner-invitations/deals/:id" element={guard(['admin'], <AdminPartnerInvitations />)} />
+      <Route path="/admin/partner-invitations/referrals" element={guard(['admin'], <AdminPartnerInvitations />)} />
+      <Route path="/admin/partner-invitations/firm-links" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
       <Route path="/admin/exploring" element={guard(['admin'], <AdminExploring />)} />
@@ -2997,7 +3008,7 @@ function AppInner() {
           Both halves have a live home, which is what made this page outdated
           rather than merely old. Browsing the ecosystem is /directory, the
           public partner directory. Getting a partner INTO the system is
-          /admin/partners, the invitation flow, or /partners/onboard for
+          /admin/partner-invitations, the invitation flow, or /partners/onboard for
           self-serve — both of which run the onboarding this page's four-field
           `api.createPartner` skipped entirely.
 

@@ -128,7 +128,8 @@ test('the four held landings and Insights are guard([\'admin\']) without hqOnly,
 test('every console link on a landing is literal, registered, and never under /branch/', () => {
   // Programs has four doors after the owner removed the Assessment editor.
   // D506 — Approvals gained its fifteenth door, Spinout moderation (D442's console).
-  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 4, Community: 5 };
+  // D923 — Community gained its sixth, Partner invitations, which its canvas lights there.
+  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 4, Community: 6 };
   for (const [label, file] of Object.entries(LANDINGS)) {
     const doors = doorsIn(CODE[file]);
     assert.equal(doors.length, expectedDoors[label], `${label} draws ${doors.length} literal links, expected ${expectedDoors[label]}`);
@@ -192,7 +193,8 @@ const S22_LANES = [
   [10, 'Absorbed', 'Jobs', '/admin/jobs', '<LaneState glance={glance} laneKey="jobs" />'],
   [11, 'Absorbed', 'Events', '/admin/events', '<LaneState glance={glance} laneKey="events" />'],
   [12, 'Absorbed', 'Circles', '/admin/circles', '<LaneState glance={glance} noQueue="Circles" />'],
-  [13, 'Absorbed', 'Partner invitations', '/admin/partners', '<LaneState glance={glance} noQueue="Partner invitations" />'],
+  // D923 — lane 13 follows the page to its new address, target and shown text together.
+  [13, 'Absorbed', 'Partner invitations', '/admin/partner-invitations', '<LaneState glance={glance} noQueue="Partner invitations" />'],
   [14, 'Absorbed', 'Best-Fit', '/admin/best-fit', '<LaneState glance={glance} laneKey="best_fit" />'],
   [15, 'Absorbed', 'Due diligence', '/admin/due-diligence', '<LaneState glance={glance} laneKey="due_diligence" />'],
   [16, 'Absorbed', 'Advisor cohort access', '/admin/advisor-cohorts', '<LaneState glance={glance} noQueue="Advisor cohort access" />'],
@@ -235,9 +237,9 @@ test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation lin
  * The other landings
  * ------------------------------------------------------------------ */
 
-test('Community links its five consoles at their own routes — Advisors & Partners at the tab, never the standalone route', () => {
+test('Community links its six consoles at their own routes — Advisors & Partners at the tab, never the standalone route', () => {
   const doors = doorsIn(CODE[LANDINGS.Community]);
-  assert.deepEqual(doors, ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing']);
+  assert.deepEqual(doors, ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing', '/admin/partner-invitations']);
   assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the standalone roster route would make its EXEMPT entry stale');
   assert.match(SRC[LANDINGS.Community], /import \{ COMMUNITY_CONSOLES \} from '\.\.\/branch\/BranchCommunity'/,
     'the console prose is BranchCommunity\'s own list, read rather than copied');
@@ -295,7 +297,7 @@ test('the three false labels are not rendered, and no gate was narrowed or raise
  * ------------------------------------------------------------------ */
 
 test('the ten routes that lost their sidebar row have a literal door on this shell', () => {
-  const orphans = ['/admin/refer-earn', '/admin/partners', '/admin/lp-applications', '/admin/my-licence', '/admin/best-fit',
+  const orphans = ['/admin/refer-earn', '/admin/partner-invitations', '/admin/lp-applications', '/admin/my-licence', '/admin/best-fit',
     '/admin/events', '/admin/jobs', '/admin/circles', '/admin/due-diligence', '/admin/advisor-cohorts'];
   const doors = new Set([
     ...rows.map((r) => pathOf(r.to)),
