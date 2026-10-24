@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Megaphone, Sparkles, Loader2, Copy, Check, Users, TrendingUp,
   FileText, Calculator, AlertTriangle,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useSearchParams } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import PageExplainer from '../components/PageExplainer';
 import { useRailOption } from '../ui/railCrumbs';
@@ -26,9 +27,13 @@ import { railPageHeaders } from '../lib/railPage.js';
  * workspace tab; standalone renders its own icon + title + explainer.
  */
 export default function PitchPositioningPage({ embedded = false }) {
-  const [projects, setProjects] = useState([]);
-  const [projectId, setProjectId] = useState('');
-  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const named = Number(searchParams.get('project_id') || searchParams.get('project')) || null;
+  const [loadedProjectId, setProjectId] = useState(named);
+  const projectId = named || loadedProjectId;
+  const [projectStatus, setProjectStatus] = useState(named ? 'ready' : 'loading');
+  const latestQuery = useRef(searchParams);
+  latestQuery.current = searchParams;
   const [generating, setGenerating] = useState(false);
   // D771 (#2097): while positioning is generated, the rail is that option's.
   useRailOption(generating ? 'draft:positioning' : null, 'Generate positioning');
@@ -40,24 +45,29 @@ export default function PitchPositioningPage({ embedded = false }) {
   useEffect(() => () => { requestVersion.current++; }, []);
 
   useEffect(() => {
+    requestVersion.current++;
+    setGenerating(false); setResult(null); setError(''); setAiUnavailable(false);
+  }, [projectId]);
+
+  // Match useProject: an address wins; only an unnamed address reads a fallback.
+  useEffect(() => {
+    if (named) { setProjectId(named); setProjectStatus('ready'); return undefined; }
     let alive = true;
+    setProjectStatus('loading');
     api.listProjects().then((r) => {
       if (!alive) return;
-      const list = Array.isArray(r) ? r : (r?.projects || []);
-      setProjects(list);
-      if (list.length) setProjectId(String(list[0].id));
+      const first = (Array.isArray(r) ? r : r?.projects || [])[0];
+      setProjectId(first?.id || null); setProjectStatus(first ? 'ready' : 'none');
+      if (first) {
+        const next = new URLSearchParams(latestQuery.current);
+        next.set('project_id', String(first.id)); setSearchParams(next, { replace: true });
+      }
     }).catch((e) => {
       if (!alive) return;
-      reportError('PitchPositioningPage:listProjects', e);
-      setError('Could not load your startups. Please refresh and try again.');
-    }).finally(() => { if (alive) setLoadingProjects(false); });
+      reportError('PitchPositioningPage:listProjects', e); setProjectId(null); setProjectStatus('unreadable');
+    });
     return () => { alive = false; };
-  }, []);
-
-  const selectedProject = useMemo(
-    () => projects.find((p) => String(p.id) === String(projectId)) || null,
-    [projects, projectId],
-  );
+  }, [named, setSearchParams]);
 
   async function copy(text, key) {
     try {
@@ -81,7 +91,7 @@ export default function PitchPositioningPage({ embedded = false }) {
   }
 
   async function generate() {
-    if (!projectId) return;
+    if (!projectId || projectStatus !== 'ready') return;
     const version = ++requestVersion.current;
     const current = railPageHeaders();
     const headers = { ...current, 'X-Rail-Page': current['X-Rail-Page'] || encodeURIComponent('Founder · Raise · Pitch deck'), 'X-Rail-Option': 'draft:positioning' };
@@ -90,7 +100,7 @@ export default function PitchPositioningPage({ embedded = false }) {
     setAiUnavailable(false);
     setResult(null);
     try {
-      const r = await api.deckPositioning(projectId, headers);
+      const r = await api.deckPositioning(String(projectId), headers);
       if (requestVersion.current !== version) return;
       setResult(r);
     } catch (e) {
@@ -132,32 +142,16 @@ export default function PitchPositioningPage({ embedded = false }) {
 
       {/* Picker + generate */}
       <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 mb-6">
-        <label
-          htmlFor="positioning-project"
-          className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2"
-        >
-          Startup
-        </label>
+        <div className="block text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">Startup</div>
         <div className="flex flex-col sm:flex-row gap-3">
-          <select
-            id="positioning-project"
-            data-testid="positioning-project"
-            value={projectId}
-            onChange={(e) => { requestVersion.current++; setGenerating(false); setProjectId(e.target.value); setResult(null); setError(''); setAiUnavailable(false); }}
-            disabled={loadingProjects || generating}
-            className="flex-1 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:opacity-60"
-          >
-            {loadingProjects && <option>Loading…</option>}
-            {!loadingProjects && projects.length === 0 && <option value="">No startups yet</option>}
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name || `Startup #${p.id}`}</option>
-            ))}
-          </select>
+          <p data-testid="positioning-project" className="flex-1 text-sm text-gray-700 dark:text-gray-200">
+            {projectStatus === 'loading' ? 'Loading…' : projectStatus === 'unreadable' ? 'The venture could not be read.' : projectId ? `Startup #${projectId}` : 'No startup recorded.'}
+          </p>
           <button
             type="button"
             data-testid="positioning-generate"
             onClick={generate}
-            disabled={!projectId || generating || loadingProjects}
+            disabled={!projectId || generating || projectStatus !== 'ready'}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 text-sm font-medium whitespace-nowrap"
           >
             {generating ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
@@ -201,7 +195,7 @@ export default function PitchPositioningPage({ embedded = false }) {
         <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-8 text-center">
           <Loader2 className="w-6 h-6 animate-spin text-violet-600 mx-auto mb-3" />
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Writing positioning for {selectedProject?.name || 'your startup'}…
+            Writing positioning for your startup…
           </p>
         </div>
       )}

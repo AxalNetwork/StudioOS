@@ -1306,9 +1306,8 @@ brand.get('/landing/by-project/:pid', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
   await ensureSchema(c.env);
-  // Primary page = oldest page (multi-page sites; legacy single-page callers
-  // keep working against it).
-  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
+  // D895: the current kit comes from the newest live landing page.
+  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1').bind(pid).first<any>();
   if (!row) return c.json(null);
   return c.json(rowToLanding(row));
 });
@@ -1327,16 +1326,18 @@ brand.put('/landing/by-project/:pid', async (c) => {
   const extras = parseBrandExtras(body);
   if (!extras.ok) return c.json({ error: extras.error }, 400);
   await ensureSchema(c.env);
-  // Legacy single-page endpoint — operates on the project's PRIMARY page
-  // (oldest by id). Additional pages are managed by the /pages endpoints.
-  const existing = await c.env.DB.prepare('SELECT id, slug, preview_token FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
+  // The legacy save must target the same newest live page as the paired read.
+  const existing = await c.env.DB.prepare('SELECT id, slug, preview_token FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1').bind(pid).first<any>();
   let rowId: number;
   if (existing) {
     const previewToken = existing.preview_token || newPreviewToken();
     await updateLandingRow(c.env, existing.id, name, body, previewToken, null);
     rowId = existing.id;
   } else {
-    rowId = await insertLandingRow(c.env, pid, 'home', name, body);
+    const count = await pageCountFor(c.env, pid);
+    if (count >= MAX_PAGES_PER_PROJECT) return c.json({ error: `You've reached the limit of ${MAX_PAGES_PER_PROJECT} landing pages for this project. Delete a page to make room for a new one.`, code: 'page_limit_reached', limit: MAX_PAGES_PER_PROJECT, count }, 409);
+    // Archived pages keep their paths; allocate a fresh home without overwriting them.
+    rowId = await insertLandingRow(c.env, pid, await allocatePageSlug(c.env, pid, 'home'), name, body);
   }
   await writeBrandExtras(c.env, rowId, extras.value);
   // Make sure the project has a branded site slug once a page exists.
@@ -1355,13 +1356,14 @@ brand.post('/landing/by-project/:pid/publish', async (c) => {
   const flag = body?.published === false ? 0 : 1;
   await ensureSchema(c.env);
   if (flag) {
-    const primary = await c.env.DB.prepare('SELECT archived_at FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
-    if (primary?.archived_at) return c.json({ error: 'page_archived' }, 409);
+    const primary = await c.env.DB.prepare('SELECT archived_at FROM landing_pages WHERE project_id = ? ORDER BY (archived_at IS NULL) DESC, id DESC LIMIT 1').bind(pid).first<any>();
+    if (!primary) return c.json({ error: 'no_live_page' }, 404);
+    if (primary.archived_at) return c.json({ error: 'page_archived' }, 409);
   }
-  // Primary page only — per-page publish lives at /landing/pages/:id/publish.
+  // Publish the same current live page as the paired legacy read and save.
   await c.env.DB.prepare(
     `UPDATE landing_pages SET published=?, updated_at=datetime('now')
-     WHERE id = (SELECT id FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1)`
+     WHERE id = (SELECT id FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1)`
   ).bind(flag, pid).run();
   return c.json({ ok: true, published: !!flag });
 });
@@ -1394,7 +1396,7 @@ brand.get('/landing/by-project/:pid/preview-url', async (c) => {
   try { await projectOwned(c, user, pid, { write: true, audit: false }); }
   catch (e: any) { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
-  const row = await c.env.DB.prepare('SELECT id, preview_token FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
+  const row = await c.env.DB.prepare('SELECT id, preview_token FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1').bind(pid).first<any>();
   if (!row) return c.json({ error: 'no preview token' }, 404);
   let token = row.preview_token;
   if (!token) {

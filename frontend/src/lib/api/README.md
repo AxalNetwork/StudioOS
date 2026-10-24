@@ -252,7 +252,10 @@ one: accept, edit or discard. Deciding writes no record; the page's own Save doe
 D893 (#2660): `insights.js` reads Admin › Insights' one read,
 `insightsApi.adminInsights(params)` (`GET /api/admin/insights`, any admin): every
 block of the canvas as counts, filtered by range, profile and country, with the
-period before (`compare`) and one profile's lightbox (`group`).
+period before (`compare`) and one profile's lightbox (`group`). For #2661,
+`insightsApi.insightsExport(body)` (`POST /api/admin/insights/export`) asks for
+the same figures as a logged, counts-only CSV or PDF, and answers with a signed
+24-hour link.
 
 D885 (#2561): `channelKeys.js` sets, rotates (or generates) and removes the
 interview channels' Worker secrets from HQ › Integration keys › Channels

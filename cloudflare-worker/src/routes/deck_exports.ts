@@ -14,13 +14,12 @@
  *   POST /api/decks/:id/export  (decks.ts, PDF and PowerPoint)
  *        the middleware below hashes the file the route answers and writes
  *        its `deck_exports` row; its audit row is part 1's (#2674, fix 11).
- *        Part 1 owns `decks.ts`, so this part does not edit it: once it
- *        merges, `{format: 'html'}` joins that route and this middleware
- *        becomes one call there.
+ *        PDF/PowerPoint keep D895's route and audit; its access check is
+ *        exported for reuse here. Consolidating export formats into one
+ *        route remains a separate refactor.
  *
- * WHO. The same check as the PDF export: `projectOwned` with `write`, so an
- * advisor is refused and an admin is not (PD21's "an admin changes nothing"
- * is part 1's to close in the Worker; the studio hides Export for them).
+ * WHO. The same D895 deck-specific check as PDF/PowerPoint: founders export,
+ * admins read without exporting, and advisors cannot read deck data.
  *
  * BRAND. The venture owner's plan, never the exporter's (bug 9, as part 1's
  * `deckOwnerBrand`): a missing owner reads as the free plan.
@@ -33,13 +32,12 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
 import { refuse } from '../util/refusal';
 import { logCycleWriteStatement } from '../services/cycleActivity';
 import { getDeckBrand } from '../services/decks/branding';
 import { boundedDownload } from '../services/channels/providerHttp';
 import { imageDataUri, imageUrlsOf, sniffImage, writeOfflineDeck } from '../services/decks/offlineHtml';
-import { sanitizeImageUrl } from './decks';
+import { projectOwned, sanitizeImageUrl } from './decks';
 
 const deckExports = new Hono<{ Bindings: Env }>();
 

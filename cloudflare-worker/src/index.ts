@@ -191,6 +191,8 @@ import cycleGrow from './routes/cycle_grow';
 import deckShareActions from './routes/deck_share_actions';
 // D901 (#2680) — the HTML export and the deck export ledger.
 import deckExports from './routes/deck_exports';
+import deckNotes from './routes/deck_notes';
+import deckSources from './routes/deck_sources';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -235,6 +237,8 @@ import learningWebinarsRoutes from './routes/learning_webinars';
 import adminLearningWebinarsRoutes from './routes/admin_learning_webinars';
 import { adminLearningVideo, learningVideo } from './routes/learning_video';
 import adminHq from './routes/admin_hq';
+import adminInsightsScopes from './routes/admin_insights_scopes';
+import adminCommunityRoutes from './routes/admin_community';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
 import adminPlatform from './routes/admin_platform';
@@ -1006,6 +1010,9 @@ app.route('/api/admin/jobs', adminJobsRoutes);
 // Task #9 — Communities & Circles admin. Mount BEFORE the catch-all /api/admin
 // so /api/admin/circles/* resolves here, not in the generic admin router.
 app.route('/api/admin/circles', adminCirclesRoutes);
+// D932 — Admin · Community's reads (Recent activity). Any admin; before the
+// catch-all like the consoles above.
+app.route('/api/admin/community', adminCommunityRoutes);
 app.route('/api/admin/assessment', adminAssessmentRoutes);
 // Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
 // the specific prefixes resolve here, not in the generic admin router.
@@ -1078,6 +1085,9 @@ app.route('/api/admin/ticket-reviews', adminTicketReviews);
 // HQ · Home — the franchisor's overview. Super-admin-only, mounted before
 // the catch-all like everything else in the HQ tier.
 app.route('/api/admin/hq', adminHq);
+// D893 — Admin › Insights' Scope select: HQ-held and each deployed
+// subsidiary. Super Admin on HQ, before the catch-all.
+app.route('/api/admin/insights/scopes', adminInsightsScopes);
 // HQ · Revenue — the money rails. Super-admin-only, and before the
 // catch-all for the same reason as the rest of the HQ tier.
 app.route('/api/admin/revenue', adminRevenue);
@@ -1165,6 +1175,10 @@ app.route('/api/decks', deckShareActions);
 // D901 (#2680): before decks.ts, so its middleware records the PDF and
 // PowerPoint file that POST /api/decks/:id/export answers.
 app.route('/api/decks', deckExports);
+// D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
+app.route('/api/decks', deckNotes);
+// D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
+app.route('/api/decks', deckSources);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

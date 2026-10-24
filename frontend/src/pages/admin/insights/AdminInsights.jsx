@@ -9,10 +9,11 @@ import { Lightbox, PhoneSheet, RailFrame, WorkerRail, openEadwynPanel, usePhoneW
 import { Chart, ChartTable, Legend } from './InsightsCharts';
 import {
   EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NO_PERMISSION, NO_PERMISSION_FILTER,
-  PAGE_UNREADABLE, PROFILE_FILTERS, RANGES, SCOPE_LABEL, SCOPE_NOTE, SCOPE_TITLE, SOURCE_LINE,
-  activeFilterCount, asOfLabel, buildBlocks, buildGroup, buildKpis, countryOptions, definitionOf, figuresCsv,
+  PAGE_UNREADABLE, PROFILE_FILTERS, RANGES, SCOPE_NOTE, SCOPE_TITLE, SOURCE_LINE,
+  activeFilterCount, asOfLabel, buildBlocks, buildGroup, buildKpis, countryOptions, definitionOf,
+  EXPORT_FORMATS, EXPORT_LOGGED, EXPORT_NO_GROUP, EXPORT_WHAT, exportBody, exportToast,
   filterCountries, filtersFromSearch, groupFromSearch, isEmptyStudio, pageFailed, rangeLabel, rangeLine,
-  readParams, scopeState,
+  readParams, scopeChip, scopeLines, scopeParam, scopeState,
 } from './insightsModel';
 
 /**
@@ -25,8 +26,11 @@ import {
  * and the others answer; nothing here is a sample.
  *
  * WHO SEES WHAT. Any admin opens it (`guard(['admin'])`) and reads the same
- * blocks. The Super Admin also gets the Scope select. A plain Admin who opens
- * a `?scope=` link for another studio sees INS10, and no read is made.
+ * blocks. The Super Admin also gets the Scope select: HQ-held, then each
+ * deployed subsidiary from `GET /api/admin/insights/scopes`. A picked
+ * subsidiary is read with `scope=<code>`, from its own database (D893 S08,
+ * #2662). A plain Admin who opens a `?scope=` link for another studio sees
+ * INS10, and no read is made.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -47,12 +51,12 @@ const idle = { status: 'loading', data: null };
  * after a newer one was asked is dropped, so a quick change of filter cannot
  * draw the older answer.
  */
-function useInsightsReads(filters, groupKey, enabled) {
+function useInsightsReads(filters, groupKey, enabled, scope) {
   const [insights, setInsights] = useState(idle);
   const [group, setGroup] = useState(idle);
   const [asOf, setAsOf] = useState(null);
   const [tick, setTick] = useState(0);
-  const params = JSON.stringify(readParams(filters));
+  const params = JSON.stringify({ ...readParams(filters), scope });
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -78,6 +82,24 @@ function useInsightsReads(filters, groupKey, enabled) {
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
   return { reads: { insights, group }, asOf, reload };
+}
+
+/**
+ * The Scope select's list, for a Super Admin only. `null` until it answers; a
+ * read that fails leaves HQ-held alone, so the page still reads its own.
+ */
+function useScopes(superAdmin) {
+  const [scopes, setScopes] = useState(null);
+  useEffect(() => {
+    if (!superAdmin) return undefined;
+    let live = true;
+    insightsApi.insightsScopes().then(
+      (data) => { if (live) setScopes(Array.isArray(data?.scopes) ? data.scopes : []); },
+      (e) => { reportError('admin-insights:scopes', e); if (live) setScopes([]); },
+    );
+    return () => { live = false; };
+  }, [superAdmin]);
+  return scopes;
 }
 
 /** The line under the filter bar: what the page is showing. */
@@ -236,20 +258,99 @@ function Filters({ filters, countries, onChange, vertical = false }) {
   );
 }
 
-function ScopeSelect() {
+/** The select's open list (INS2): HQ-held, one line per subsidiary, and the note while there is none. */
+export function ScopeList({ scopes, current, onPick }) {
+  const lines = scopeLines(scopes);
+  const picked = current?.kind === 'branch' ? current.code : 'hq';
+  return (
+    <div role="listbox" aria-label="Scope" className={`${CARD} absolute left-0 top-9 z-10 flex w-[300px] flex-col gap-0.5 p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`} data-testid="insights-scope-list">
+      {lines.map((l) => {
+        const on = l.code === picked;
+        return (
+          <button key={l.code} type="button" role="option" aria-selected={on} onClick={() => onPick(l.code)} data-testid={`insights-scope-option-${l.code}`}
+            className={`rounded-[7px] px-2.5 py-2 text-left text-[13px] font-bold ${on ? 'bg-axal-lavender text-axal-violet dark:bg-violet-950/50 dark:text-violet-300' : 'text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800'}`}>
+            {l.label}
+          </button>
+        );
+      })}
+      {lines.some((l) => l.kind === 'branch') ? null : (
+        <div className="mt-1 border-t border-axal-hairline px-2.5 pb-1 pt-2 text-[12px] leading-normal text-axal-muted dark:border-gray-700 dark:text-gray-400">{SCOPE_NOTE}</div>
+      )}
+    </div>
+  );
+}
+
+function ScopeSelect({ scopes, current, onPick }) {
   const [open, setOpen] = useState(false);
+  const label = current?.kind === 'branch' ? current.label : 'HQ-held accounts';
   return (
     <div className="relative">
       <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((o) => !o)} data-testid="insights-scope"
         className="rounded-[7px] border border-axal-lavender-edge bg-axal-lavender px-2.5 py-1.5 text-[12.5px] font-bold text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300">
-        Scope · HQ-held accounts ▾
+        Scope · {label} ▾
       </button>
-      {open && (
-        <div role="listbox" aria-label="Scope" className={`${CARD} absolute left-0 top-9 z-10 flex w-[300px] flex-col gap-0.5 p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`}>
-          <div role="option" aria-selected="true" className="rounded-[7px] bg-axal-lavender px-2.5 py-2 text-[13px] font-bold text-axal-violet dark:bg-violet-950/50 dark:text-violet-300">HQ-held accounts</div>
-          <div className="mt-1 border-t border-axal-hairline px-2.5 pb-1 pt-2 text-[12px] leading-normal text-axal-muted dark:border-gray-700 dark:text-gray-400">{SCOPE_NOTE}</div>
+      {open && <ScopeList scopes={scopes} current={current} onPick={(code) => { setOpen(false); onPick(code); }} />}
+    </div>
+  );
+}
+
+/**
+ * The export dialog (INS5, #2661). "This group only" can be chosen while a
+ * group is open; the file is made and logged by the Worker, so the dialog
+ * says so before anything is made.
+ */
+export function ExportDialog({ group, groupLabel, rangeText, busy, initialWhat = 'page', onCancel, onExport }) {
+  const [what, setWhat] = useState(group && initialWhat === 'group' ? 'group' : 'page');
+  const [format, setFormat] = useState('csv');
+  return (
+    <Lightbox label="Export these figures" title="Export these figures" onClose={onCancel} testId="insights-export-dialog">
+      <div className="flex flex-col gap-3.5 px-1 pb-1">
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className={EYE}>What</legend>
+          {EXPORT_WHAT.map((o) => {
+            const off = o.key === 'group' && !group;
+            return (
+              <label key={o.key} className={`flex items-center gap-2 text-[13.5px] ${off ? 'text-axal-muted dark:text-gray-500' : ''}`}>
+                <input type="radio" name="ins-what" value={o.key} checked={what === o.key} disabled={off} onChange={() => setWhat(o.key)} data-testid={`insights-export-what-${o.key}`} />
+                {o.key === 'group' && group ? `${o.label} · ${groupLabel}` : o.label}
+              </label>
+            );
+          })}
+          {group ? null : <span className={SUB}>{EXPORT_NO_GROUP}</span>}
+        </fieldset>
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className={EYE}>Format</legend>
+          {EXPORT_FORMATS.map((o) => (
+            <label key={o.key} className="flex items-center gap-2 text-[13.5px]">
+              <input type="radio" name="ins-fmt" value={o.key} checked={format === o.key} onChange={() => setFormat(o.key)} data-testid={`insights-export-format-${o.key}`} /> {o.label}
+            </label>
+          ))}
+        </fieldset>
+        <div className="flex flex-col gap-1">
+          <span className={EYE}>Range</span>
+          <span className="font-mono text-[13px] text-axal-ink dark:text-gray-100">{rangeText}</span>
         </div>
+        <p className={`m-0 ${SUB}`}>The file holds counts only, never names or emails. {EXPORT_LOGGED}</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" className={GHOST} onClick={onCancel}>Cancel</button>
+          <button type="button" className={PRIMARY} onClick={() => onExport({ what, format })} disabled={busy} data-testid="insights-export-go">{busy ? 'Exporting…' : 'Export'}</button>
+        </div>
+      </div>
+    </Lightbox>
+  );
+}
+
+/** The toast an export leaves: the signed link, or the Worker's refusal. */
+export function ExportToast({ toast, onClose }) {
+  return (
+    <div role="status" className="fixed bottom-6 left-1/2 z-[90] flex -translate-x-1/2 items-center gap-3.5 rounded-[12px] bg-axal-ink px-4 py-3 text-[13px] text-white shadow-[0_12px_30px_rgba(0,0,0,.25)]" data-testid="insights-toast">
+      {toast.error ? <span>{toast.error}</span> : (
+        <>
+          <span>{toast.fellBack ? 'Your export is ready, as a web page: the PDF could not be made.' : 'Your export is ready.'}{toast.expires ? ' The link works for 24 hours.' : ''}</span>
+          <a href={toast.url} {...(toast.url.startsWith('data:') ? { download: `insights.${toast.format}` } : { target: '_blank', rel: 'noopener noreferrer' })} className="font-bold text-violet-300" data-testid="insights-toast-download">Download</a>
+        </>
       )}
+      <button type="button" aria-label="Close" className="text-[16px] leading-none text-white/70" onClick={onClose}>×</button>
     </div>
   );
 }
@@ -261,18 +362,20 @@ export default function AdminInsights() {
   const superAdmin = isSuperAdminUser(useAuth()?.user);
   const [pick, setPick] = useState(null);
   const [count, setCount] = useState(null);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState(null);
+  const [exportBusy, setExportBusy] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [toast, setToast] = useState(null);
   const filtersBtn = useRef(null);
 
   const params = new URLSearchParams(loc.search);
   const moved = params.get('moved') === MOVED_KEY;
-  const scope = scopeState(loc.search, superAdmin);
+  const scopes = useScopes(superAdmin);
+  const scope = scopeState(loc.search, superAdmin, scopes);
   const groupKey = groupFromSearch(loc.search);
   const filters = useMemo(() => filtersFromSearch(loc.search), [loc.search]);
   const noperm = scope.kind === 'noperm';
-  const { reads, asOf, reload } = useInsightsReads(filters, groupKey, !noperm);
+  const { reads, asOf, reload } = useInsightsReads(filters, groupKey, !noperm && scope.kind !== 'pending', scopeParam(scope));
   const [countryQ, setCountryQ] = useState('');
 
   const setParam = useCallback((key, value) => {
@@ -281,6 +384,9 @@ export default function AdminInsights() {
     const s = next.toString();
     navigate({ pathname: loc.pathname, search: s ? `?${s}` : '', hash: loc.hash }, { replace: true });
   }, [loc.search, loc.pathname, loc.hash, navigate]);
+
+  /** A Scope line: HQ-held removes `scope`, a subsidiary sets its code. */
+  const pickScope = useCallback((code) => setParam('scope', code === 'hq' ? null : code), [setParam]);
 
   /** Several filters at once: `null` removes one, so the default never sits in the URL. */
   const setFilters = useCallback((patch) => {
@@ -298,14 +404,12 @@ export default function AdminInsights() {
   const empty = isEmptyStudio(reads.insights, filters);
   const asOfText = asOf ? `As of ${asOfLabel(asOf)}` : 'Reading…';
 
-  useEffect(() => () => { if (toast?.url) URL.revokeObjectURL(toast.url); }, [toast]);
-
-  const doExport = () => {
-    const csv = figuresCsv({ kpis, blocks, asOf: asOf ? asOfLabel(asOf) : '', filters });
-    let url = null;
-    try { url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); } catch (e) { reportError('admin-insights:export', e); }
-    setExporting(false);
-    setToast(url ? { url, name: `insights-${new Date().toISOString().slice(0, 10)}.csv` } : { error: true });
+  const doExport = ({ what, format }) => {
+    setExportBusy(true);
+    insightsApi.insightsExport(exportBody({ what, format, filters, group: groupKey, scope: scopeParam(scope) })).then(
+      (answer) => setToast(exportToast(answer)),
+      (e) => { reportError('admin-insights:export', e); setToast(exportToast(null, e)); },
+    ).finally(() => { setExportBusy(false); setExporting(null); });
   };
 
   const def = count ? definitionOf(count, reads.insights) : null;
@@ -315,10 +419,12 @@ export default function AdminInsights() {
       workspace="Insights"
       role="admin"
       stance="The accounts you manage, as counts"
-      note="This rail reads HQ’s own database, the accounts HQ holds on axal.vc, and no other. No subsidiary is deployed yet."
+      note={scope.kind === 'branch'
+        ? `This rail reads ${scope.label}’s own database, asked by HQ, as counts. No account leaves it.`
+        : 'This rail reads HQ’s own database, the accounts HQ holds on axal.vc, and no other.'}
       coverage={['Accounts by profile, plan, country, identity check and completeness; sign-ups, activity, activation and retention by week; dormant accounts, open tickets and AI spend, from the Insights read']}
       coverageNote="Each figure is read alone; one that cannot be read says so and the others still answer."
-      unavailable={[['Product testers', 'A sub-account #2377 has not defined yet.'], ['Other subsidiaries', 'HQ reads them once they are deployed (#2662).']]}
+      unavailable={[['Product testers', 'A sub-account #2377 has not defined yet.']]}
       data-testid="insights-rail"
     />
   );
@@ -329,7 +435,7 @@ export default function AdminInsights() {
         <header className="flex flex-col gap-[7px]">
           <h1 className="m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] text-axal-ink dark:text-gray-100">Insights</h1>
           <p className="m-0 text-[13.5px] leading-normal text-axal-muted dark:text-gray-400">The accounts you manage, in figures and charts.</p>
-          <span title={SCOPE_TITLE} className="cursor-help self-start rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="insights-scope-chip">{SCOPE_LABEL}</span>
+          <span title={scope.kind === 'branch' ? `Read from ${scope.label}’s own database through HQ; counts only.` : SCOPE_TITLE} className="cursor-help self-start rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="insights-scope-chip">{scopeChip(scope)}</span>
           {moved && (
             <div role="status" className="flex items-center justify-between gap-3 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="insights-moved">
               <span>{MOVED_NOTICE}</span>
@@ -342,13 +448,13 @@ export default function AdminInsights() {
           <div className={`${CARD} sticky top-0 z-[2] flex flex-col gap-2 px-3.5 py-[11px]`} data-testid="insights-filters">
             <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
               <Filters filters={filters} countries={countries} onChange={setFilters} />
-              {superAdmin ? <ScopeSelect /> : null}
+              {superAdmin ? <ScopeSelect scopes={scopes} current={scope} onPick={pickScope} /> : null}
               {noperm ? <span className="text-[13.5px] text-axal-muted dark:text-gray-400">{NO_PERMISSION_FILTER}</span> : null}
               <span className="ml-auto flex flex-wrap items-center gap-2.5">
                 {superAdmin ? <Link to="/admin/analytics" className="text-[12.5px] font-bold text-axal-violet dark:text-violet-300">Compare all subsidiaries on HQ Analytics</Link> : null}
                 <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="insights-asof">{asOfText}</span>
                 <button type="button" aria-label="Refresh" onClick={() => reload()} className="grid h-8 w-8 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700"><RefreshCw size={16} aria-hidden="true" /></button>
-                <button type="button" className={GHOST} onClick={() => setExporting(true)} disabled={noperm} data-testid="insights-export">Export</button>
+                <button type="button" className={GHOST} onClick={() => setExporting('page')} disabled={noperm} data-testid="insights-export">Export</button>
               </span>
             </div>
             <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="insights-filter-line">{filterLine(filters)}</p>
@@ -408,7 +514,7 @@ export default function AdminInsights() {
         <PhoneSheet label="Filters" title="Filters" onClose={() => setSheet(false)} opener={filtersBtn}>
           <div className="flex flex-col gap-2.5 px-4 pb-6">
             <Filters vertical filters={filters} countries={countries} onChange={setFilters} />
-            {superAdmin ? <ScopeSelect /> : null}
+            {superAdmin ? <ScopeSelect scopes={scopes} current={scope} onPick={pickScope} /> : null}
             <button type="button" className={`${PRIMARY} min-h-[44px]`} onClick={() => setSheet(false)}>Show results</button>
           </div>
         </PhoneSheet>
@@ -427,42 +533,6 @@ export default function AdminInsights() {
             <button type="button" className={`${GHOST} self-end`} onClick={() => setCount(null)}>Close</button>
           </div>
         </Lightbox>
-      )}
-
-      {exporting && (
-        <Lightbox label="Export these figures" title="Export these figures" onClose={() => setExporting(false)} testId="insights-export-dialog">
-          <div className="flex flex-col gap-3.5 px-1 pb-1">
-            <fieldset className="flex flex-col gap-1.5">
-              <legend className={EYE}>What</legend>
-              <label className="flex items-center gap-2 text-[13.5px]"><input type="radio" name="ins-what" defaultChecked /> Figures on this page</label>
-            </fieldset>
-            <fieldset className="flex flex-col gap-1.5">
-              <legend className={EYE}>Format</legend>
-              <label className="flex items-center gap-2 text-[13.5px]"><input type="radio" name="ins-fmt" defaultChecked /> CSV</label>
-            </fieldset>
-            <div className="flex flex-col gap-1">
-              <span className={EYE}>Range</span>
-              <span className="font-mono text-[13px] text-axal-ink dark:text-gray-100">{rangeLine(reads.insights, Date.now())}</span>
-            </div>
-            <p className={`m-0 ${SUB}`}>The file holds counts only, never names or emails.</p>
-            <div className="flex justify-end gap-2">
-              <button type="button" className={GHOST} onClick={() => setExporting(false)}>Cancel</button>
-              <button type="button" className={PRIMARY} onClick={doExport} data-testid="insights-export-go">Export</button>
-            </div>
-          </div>
-        </Lightbox>
-      )}
-
-      {toast && (
-        <div role="status" className="fixed bottom-6 left-1/2 z-[90] flex -translate-x-1/2 items-center gap-3.5 rounded-[12px] bg-axal-ink px-4 py-3 text-[13px] text-white shadow-[0_12px_30px_rgba(0,0,0,.25)]" data-testid="insights-toast">
-          {toast.error ? <span>The export could not be made in this browser.</span> : (
-            <>
-              <span>Your export is ready.</span>
-              <a href={toast.url} download={toast.name} className="font-bold text-violet-300">Download</a>
-            </>
-          )}
-          <button type="button" aria-label="Close" className="text-[16px] leading-none text-white/70" onClick={() => setToast(null)}>×</button>
-        </div>
       )}
 
       {group && !noperm && (
@@ -538,12 +608,20 @@ export default function AdminInsights() {
               {group.count === null || group.count === undefined ? null : (
                 <Link to={group.accountsHref} className={PRIMARY}>{`Open these ${group.count.toLocaleString('en-US')} accounts in Accounts`}</Link>
               )}
+              <button type="button" className={GHOST} onClick={() => setExporting('group')} data-testid="insights-group-export">Export this group</button>
               <button type="button" className={GHOST} onClick={() => openEadwynPanel(`Insights · ${group.label}`)}>Ask Eadwyn about this group</button>
             </div>
             <span className="text-[11.5px] leading-normal text-axal-muted dark:text-gray-400">Counts only. Names and emails are in Accounts.</span>
           </div>
         </Lightbox>
       )}
+
+      {exporting && (
+        <ExportDialog group={noperm ? null : groupKey} groupLabel={group?.label || ''} rangeText={rangeLine(reads.insights, Date.now())}
+          busy={exportBusy} initialWhat={exporting} onCancel={() => setExporting(null)} onExport={doExport} />
+      )}
+
+      {toast && <ExportToast toast={toast} onClose={() => setToast(null)} />}
     </RailFrame>
   );
 }

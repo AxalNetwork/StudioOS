@@ -22,6 +22,7 @@ export * from './api/bankAccounts.js';
 export * from './api/billingInvoices.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
+export * from './api/community.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
 export * from './api/companySheet.js';
@@ -32,6 +33,7 @@ export * from './api/creditRules.js';
 export * from './api/cycleValidate.js';
 export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
+export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
@@ -2699,6 +2701,12 @@ export const api = {
     { method: 'POST', body: JSON.stringify(slides ? { view_id: viewId, seconds, slides } : { view_id: viewId, seconds }) },
   ),
   deckEngagement: (id) => request(`/decks/${id}/engagement`),
+  // D905 (#2684) — a deck's notes, from its admins to its founders (PD21).
+  deckNotes: (id) => request(`/decks/${id}/notes`),
+  deckPostNote: (id, payload) => request(`/decks/${id}/notes`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  // The Super Admin's default template by sector and stage; an admin reads it.
+  deckRecommendOverrides: () => request('/decks/admin/recommend-overrides'),
+  deckSetRecommendOverride: (payload) => request('/decks/admin/recommend-overrides', { method: 'PUT', body: JSON.stringify(payload || {}) }),
   // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than
   // deleting it, so the impression history stays attributable to a link the
   // founder can still see they created; idempotent, so a double-click or a

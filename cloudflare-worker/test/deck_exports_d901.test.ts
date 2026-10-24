@@ -33,6 +33,7 @@ import { SignJWT } from 'jose';
 
 import deckExports from '../src/routes/deck_exports.ts';
 import decks from '../src/routes/decks.ts';
+import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { IMAGE_MISSING, NAV_SCRIPT, NOT_RECORDED, NO_NOTES, NO_SOURCES } from '../src/services/decks/offlineHtml.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -62,9 +63,10 @@ function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of TABLES) db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)!));
   db.exec(MIGRATION);
-  db.prepare(`INSERT INTO users (id, email, name, role, is_active) VALUES (1, 'admin.d901@example.test', 'Admin', 'admin', 1)`).run();
+  db.prepare(`INSERT INTO users (id, email, name, role, founder_id, is_active) VALUES (1, 'owner.d901@example.test', 'Founder', 'founder', 100, 1)`).run();
   db.prepare(`INSERT INTO users (id, email, name, role, is_active) VALUES (2, 'other.d901@example.test', 'Other', 'founder', 1)`).run();
-  db.prepare(`INSERT INTO projects (id, name) VALUES (1, 'Testventure Labs')`).run();
+  db.exec("INSERT INTO users (id, email, name, role, is_active) VALUES (3, 'admin.d901@example.test', 'Admin', 'admin', 1), (4, 'advisor.d901@example.test', 'Advisor', 'advisor', 1)");
+  db.prepare(`INSERT INTO projects (id, name, founder_id) VALUES (1, 'Testventure Labs', 100)`).run();
   db.prepare(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_by) VALUES (10, 1, 4, ?, 'Seed deck', 1, 1)`).run(JSON.stringify(SLIDES));
   const env: any = { DB: d1Over(db), JWT_SECRET };
   const app = new Hono<any>();
@@ -106,7 +108,7 @@ test('1. the HTML file opens offline: no URL, no <link>, default-src none, data:
   const f = fixture();
   const restore = images();
   try {
-    const r = await call(f, 1, 'admin', 'POST', '/10/export/html', { notes: true, sources: true });
+    const r = await call(f, 1, 'founder', 'POST', '/10/export/html', { notes: true, sources: true });
     assert.equal(r.status, 200, r.text);
     assert.match(r.headers.get('content-type')!, /^text\/html/);
     assert.match(r.headers.get('content-disposition')!, /filename="Seed-deck-v4\.html"/);
@@ -139,7 +141,7 @@ test('2. the file shows what the version holds: escaped, "Not recorded", missing
   const f = fixture();
   const restore = images();
   try {
-    const on = (await call(f, 1, 'admin', 'POST', '/10/export/html', { notes: true, sources: true })).text;
+    const on = (await call(f, 1, 'founder', 'POST', '/10/export/html', { notes: true, sources: true })).text;
     assert.ok(!on.includes('<script>alert(1)'), 'a title cannot open a script');
     assert.ok(on.includes('Testventure &lt;script&gt;alert(1)&lt;/script&gt;'));
     assert.ok(on.includes('Line one<br>Line two'));
@@ -154,7 +156,7 @@ test('2. the file shows what the version holds: escaped, "Not recorded", missing
     assert.ok(on.includes('Written with AI help: card 2 (Traction).'));
     assert.ok(on.includes('<span id="count">4 cards</span>'), 'three cards and the Sources appendix');
 
-    const off = (await call(f, 1, 'admin', 'POST', '/10/export/html', {})).text;
+    const off = (await call(f, 1, 'founder', 'POST', '/10/export/html', {})).text;
     assert.ok(!off.includes('Speaker notes') && !off.includes('Open with the problem.'), 'notes stay out unless asked for');
     assert.ok(!off.includes(NO_SOURCES), 'no appendix unless asked for');
     assert.ok(off.includes('<span id="count">3 cards</span>'));
@@ -192,9 +194,9 @@ test('4. every export is recorded: the HTML file and its audit row, the PowerPoi
   const f = fixture();
   const restore = images();
   try {
-    const html = await call(f, 1, 'admin', 'POST', '/10/export/html', { notes: true });
+    const html = await call(f, 1, 'founder', 'POST', '/10/export/html', { notes: true });
     assert.equal(html.headers.get('x-content-sha256'), sha(html.bytes));
-    const pptx = await call(f, 1, 'admin', 'POST', '/10/export', { format: 'pptx' });
+    const pptx = await call(f, 1, 'founder', 'POST', '/10/export', { format: 'pptx' });
     assert.equal(pptx.status, 200, pptx.text);
     assert.equal(pptx.headers.get('x-content-sha256'), sha(pptx.bytes), 'the hash is of the file handed out');
     assert.deepEqual(ledger(f.db), [
@@ -202,16 +204,16 @@ test('4. every export is recorded: the HTML file and its audit row, the PowerPoi
       { deck_id: 10, version: 4, format: 'pptx', content_hash: sha(pptx.bytes), external_ref: null, created_by: 1 },
     ]);
     // The PDF and PowerPoint audit row is part 1's (#2674): this middleware writes none.
-    assert.deepEqual(audits(f.db), [{ project_id: 1, user_id: 1, entity_type: 'raise.pitch-deck', action: 'deck_exported', details: 'Deck exported as HTML' }]);
+    assert.deepEqual(audits(f.db), [{ project_id: 1, user_id: 1, entity_type: 'raise.pitch-deck', action: 'deck_exported', details: 'Deck exported as HTML' }, { project_id: 1, user_id: 1, entity_type: 'raise.pitch-deck', action: 'deck_exported', details: 'Deck exported' }]);
     assert.doesNotMatch(audits(f.db)[0].details as string, /\d/, 'the audit row names no figure');
 
-    const list = await call(f, 1, 'admin', 'GET', '/10/exports');
+    const list = await call(f, 1, 'founder', 'GET', '/10/exports');
     const rows = JSON.parse(list.text).exports;
-    assert.deepEqual(rows.map((r: any) => [r.format, r.version, r.by]), [['pptx', 4, 'Admin'], ['html', 4, 'Admin']]);
+    assert.deepEqual(rows.map((r: any) => [r.format, r.version, r.by]), [['pptx', 4, 'Founder'], ['html', 4, 'Founder']]);
 
-    const again = await call(f, 1, 'admin', 'POST', '/10/export/html', { notes: true });
+    const again = await call(f, 1, 'founder', 'POST', '/10/export/html', { notes: true });
     assert.equal(sha(again.bytes), sha(html.bytes), 'the same version and options make the same file');
-    const bad = await call(f, 1, 'admin', 'POST', '/10/export', { format: 'html' });
+    const bad = await call(f, 1, 'founder', 'POST', '/10/export', { format: 'html' });
     assert.equal(bad.status, 400);
     assert.equal(ledger(f.db).length, 3, 'a refused export records nothing');
   } finally { restore(); }
@@ -225,18 +227,42 @@ test('5. no ledger, no file; someone outside the venture gets 403 and no row', a
     const outsider = await call(f, 2, 'founder', 'POST', '/10/export/html', {});
     assert.equal(outsider.status, 403);
     assert.equal((await call(f, 2, 'founder', 'GET', '/10/exports')).status, 403);
-    assert.equal((await call(f, 1, 'admin', 'POST', '/999/export/html', {})).status, 404);
+    assert.equal((await call(f, 1, 'founder', 'POST', '/999/export/html', {})).status, 404);
     assert.deepEqual(ledger(f.db), []);
 
     f.db.exec('DROP TABLE deck_exports');
-    const r = await call(f, 1, 'admin', 'POST', '/10/export/html', {});
+    const r = await call(f, 1, 'founder', 'POST', '/10/export/html', {});
     assert.equal(r.status, 503);
     const body = JSON.parse(r.text);
     assert.equal(body.error, 'export_not_recorded');
     assert.ok(body.message.includes('Nothing was shared.'));
     assert.ok(!r.text.includes('<html'), 'no file is handed out');
-    const p = await call(f, 1, 'admin', 'POST', '/10/export', { format: 'pptx' });
+    assert.deepEqual(audits(f.db), [], 'HTML audit and ledger fail atomically');
+    const p = await call(f, 1, 'founder', 'POST', '/10/export', { format: 'pptx' });
     assert.equal(p.status, 503, 'the PowerPoint file is held back too');
-    assert.deepEqual(audits(f.db), [], 'the audit row went with the ledger row');
+    // D895 logs the route attempt before the recording middleware can withhold its file.
+    assert.deepEqual(audits(f.db), [{ project_id: 1, user_id: 1, entity_type: 'raise.pitch-deck', action: 'deck_exported', details: 'Deck exported' }]);
+  } finally { restore(); }
+});
+
+test('D895 remains the export boundary: founders export, admins only read, advisors read nothing', async () => {
+  const f = fixture();
+  await ensureProjectMembershipSchema(f.env);
+  f.db.exec("INSERT INTO project_members (project_id, user_id, role, status) VALUES (1, 4, 'advisor', 'accepted')");
+  const restore = images();
+  try {
+    assert.equal((await call(f, 1, 'founder', 'POST', '/10/export/html', {})).status, 200);
+    const before = ledger(f.db);
+    const beforeAudit = audits(f.db);
+    for (const [who, role] of [[3, 'admin'], [4, 'advisor']] as const) {
+      assert.equal((await call(f, who, role, 'POST', '/10/export/html', {})).status, 403);
+      for (const format of ['pdf', 'pptx']) assert.equal((await call(f, who, role, 'POST', '/10/export', { format })).status, 403);
+    }
+    assert.equal((await call(f, 3, 'admin', 'GET', '/10/exports')).status, 200);
+    const advisor = await call(f, 4, 'advisor', 'GET', '/10/exports');
+    assert.equal(advisor.status, 403);
+    assert.equal(JSON.stringify(JSON.parse(advisor.text)).includes('content_hash'), false);
+    assert.deepEqual(ledger(f.db), before);
+    assert.deepEqual(audits(f.db), beforeAudit);
   } finally { restore(); }
 });

@@ -149,6 +149,8 @@ export const RPC_SURFACE: { hqCallsBranch: RpcSide; branchCallsHq: RpcSide } = {
       m('openTickets', true),
       // D486 — H15's activation funnel fans out to it (admin_hq.ts). A read of counts, no secret.
       m('activation', true),
+      // D893 — Admin › Insights' Super Admin scope reads one branch (insightsScope.ts). A read of counts, no secret.
+      m('insights', true),
       // D487 — H18's games card fans out to it (admin_content.ts). A read, no secret.
       m('gameHoldings', true),
       m('applyLicence', true),

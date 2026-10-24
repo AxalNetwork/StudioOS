@@ -4,19 +4,10 @@
 import type { Env } from '../types';
 import { parseAudienceRules } from './eventAudience';
 
-export const EVENT_TYPES = [
-  'meetup',
-  'workshop',
-  'webinar',
-  'demo_day',
-  'office_hours',
-  'conference',
-  'social',
-  'other',
-] as const;
+export { EVENT_TYPE_IDS as EVENT_TYPES } from './eventTypes';
 
 export const EVENT_VISIBILITIES = ['public', 'unlisted', 'private'] as const;
-export const LOCATION_KINDS = ['virtual', 'physical', 'hybrid'] as const;
+export const LOCATION_KINDS = ['virtual', 'physical', 'in_person', 'hybrid'] as const;
 
 export function slugify(input: string): string {
   const base = (input || '')
@@ -98,6 +89,10 @@ export function shapeEvent(row: any, opts: { includePrivate?: boolean; includeJo
   };
   if (opts.includePrivate) {
     base.admin_published = TRUTHY(row.admin_published);
+    base.submitted_at = row.submitted_at ?? null;
+    base.approved_at = row.approved_at ?? null;
+    base.review_note = row.review_note ?? null;
+    base.changed_after_approval_at = row.changed_after_approval_at ?? null;
     base.audience_rules = parseAudienceRules(row.audience_rules_json);
   }
   return base;
