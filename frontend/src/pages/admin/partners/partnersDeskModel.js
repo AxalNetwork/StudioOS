@@ -47,8 +47,8 @@ export const FIRM_LINKS_PATH = '/admin/partner-invitations/firm-links';
 export const OLD_PATH = '/admin/partners';
 export const MOVED = 'partners';
 export const MOVED_PATH = `${DESK_PATH}?moved=${MOVED}`;
-/** Where the sidebar's Community row lands; the canvas's `/admin/community` is not a route. */
-export const COMMUNITY_PATH = '/admin/held/community';
+/** Community's own address since D930 (#2367); `/admin/held/community` only redirects there. */
+export const COMMUNITY_PATH = '/admin/community';
 export const CONTRACTS_TEMPLATES_PATH = '/admin/contracts?tab=templates';
 export const CONTRACTS_PAYOUTS_PATH = '/admin/contracts?tab=partner-deals';
 export const PROFILES_PATH = '/admin?tab=profiles';

@@ -110,7 +110,7 @@ test('the addresses: four tabs, one address per invitation and per deal, Firm li
   assert.equal(withoutMoved('?moved=partners&deal=4'), '?deal=4');
   assert.equal(dealFromSearch('?deal=7'), '7');
   assert.equal(dealFromSearch('?deal=x'), null);
-  assert.equal(COMMUNITY_PATH, '/admin/held/community', 'the canvas\'s /admin/community is not a route');
+  assert.equal(COMMUNITY_PATH, '/admin/community', 'the crumb links Community\'s own address (D930), not the redirect');
   assert.equal(TITLE, 'Partner invitations');
   assert.equal(LINE, 'Bring operating partners in, see where each invitee stands, and keep their deals healthy.');
   assert.equal(MOVED_LINE, 'Partner invitations has a new address. Update your bookmark.');
@@ -506,8 +506,8 @@ test('the page keeps its frame and today\'s rail note, its crumb and its literal
   const doors = [...page.matchAll(/<DeskTab to="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(doors, TABS.map((t) => t.path), 'the strip and TABS list the same four doors');
   assert.match(page, /<DeskTab to="\/admin\/partner-invitations" end /, 'Overview is lit only on its own address');
-  assert.match(page, /<Link to="\/admin\/held\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Partner invitations/);
-  assert.doesNotMatch(page, /to="\/admin\/community"|scope-chip/, 'no dead crumb and no scope chip');
+  assert.match(page, /<Link to="\/admin\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Partner invitations/);
+  assert.doesNotMatch(page, /to="\/admin\/held\/community"|scope-chip/, 'the crumb links Community itself, not its redirect, and there is no scope chip');
   // Firm links' one door is Overview's Needs-you row, written out.
   assert.match(read('frontend/src/pages/admin/partners/PartnersOverview.jsx'), /<Link to="\/admin\/partner-invitations\/firm-links"/);
 });

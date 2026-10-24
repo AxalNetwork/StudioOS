@@ -78,7 +78,7 @@ function AdminEventsPageBody() {
       <nav aria-label="Breadcrumb" className={CRUMB} data-testid="events-crumb">
         {tab === 'event'
           ? <Link to="/admin/events/all" className={CRUMB_LINK}>‹ All events</Link>
-          : <><Link to="/admin/held/community" className={CRUMB_LINK}>Community</Link> › Events</>}
+          : <><Link to="/admin/community" className={CRUMB_LINK}>Community</Link> › Events</>}
       </nav>
 
       {tab !== 'event' ? (
