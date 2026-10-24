@@ -193,7 +193,12 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
   const api = read('frontend/src/lib/api.js');
-  assert.equal((api.match(/^export \* from '\.\/api\/narrative\.js';$/gm) || []).length, 1, 'Narrative is re-exported exactly once; other domains may be added beside it');
+  // API domains remain alphabetically ordered; new domains can appear between these three.
+  const domains = [...api.matchAll(/^export \* from '\.\/api\/([^']+)\.js';$/gm)].map((m) => m[1]);
+  const expected = ['mercuryPersonal', 'narrative', 'newsletter'];
+  for (const domain of expected) assert.equal(domains.filter((x) => x === domain).length, 1, `${domain} is re-exported exactly once`);
+  const positions = expected.map((domain) => domains.indexOf(domain));
+  assert.ok(positions[0] < positions[1] && positions[1] < positions[2], 'the three exports keep their order without excluding new intervening domains');
 });
 
 
