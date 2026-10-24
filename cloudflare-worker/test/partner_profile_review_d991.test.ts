@@ -238,7 +238,7 @@ test('Reopen puts a verdict back in the queue, keeps it in the history, and tell
   assert.equal(events(db, ref).length, 2);
 });
 
-test('Reopen refuses a member, an unknown reference, an over-long reason, and a suspended branch', async () => {
+test('Reopen refuses a member, an unknown reference, an over-long reason; a suspended branch is not frozen, like the verdicts', async () => {
   const { db, env } = fixture();
   await quiet(() => verify(env, 'chat@example.test', { status: 'verified' }));
   const ref = profileOf(db, 'chat@example.test').ref;
@@ -252,8 +252,8 @@ test('Reopen refuses a member, an unknown reference, an over-long reason, and a 
   db.exec(`INSERT INTO branch_licence (id, status) VALUES (1, 'suspended')`);
   const branch = { ...envOf(db), BRANCH_CODE: 'fr', APP_URL: 'https://fr.example.test', PUBLIC_BASE_URL: 'https://fr.example.test' };
   const s = await call(branch, ADMIN, `/api/admin/partner-profiles/${ref}/reopen`, { method: 'POST', body: {} });
-  assert.equal(s.status, 423);
-  assert.equal(profileOf(db, 'chat@example.test').admin_status, 'verified', 'nothing changed');
+  assert.equal(s.status, 200, 'Partner profiles are not frozen on a suspended branch (branchFreeze.js, D260)');
+  assert.equal(profileOf(db, 'chat@example.test').admin_status, 'pending');
 });
 
 test('a pending status through the verify route is a reopen too, kept in the history', async () => {

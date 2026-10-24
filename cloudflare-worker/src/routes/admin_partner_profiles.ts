@@ -22,7 +22,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin, requireBranchNotSuspended } from '../auth';
+import { requireAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { hashEmail } from '../util/hashEmail';
 import { maskPartnerProfile } from '../services/sensitiveFields';
@@ -104,8 +104,8 @@ r.get('/:ref/history', async (c) => {
 });
 
 r.post('/:ref/reopen', async (c) => {
+  // Not frozen on a suspended branch, like the verdicts it undoes (D260's Approvals row).
   const admin = await requireAdmin(c);
-  await requireBranchNotSuspended(c);
   const ref = c.req.param('ref');
   if (!PROFILE_REF.test(ref)) return refuse(c, 404, { code: 'profile_not_found', message: 'No partner profile has that reference.' });
   const body = await c.req.json().catch(() => ({} as any));
