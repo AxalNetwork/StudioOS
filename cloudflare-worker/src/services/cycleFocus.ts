@@ -313,18 +313,18 @@ async function raiseFocus(ctx: RaiseCtx, cards: Card[], calls: CallsRead): Promi
   return cardFocus('raise', cards);
 }
 
-/** Committed against the active round's target. */
+/** Recorded signed or received money against the active round's target. */
 function raiseMeter(figures: Figure[]): Meter | null {
   const f = figureOf(figures, 'committed');
   if (!f || f.state !== 'ok' || f.value == null) return null;
   if (Array.isArray(f.value)) {
     const [amt, target] = (f.value as unknown as number[]).map(Number);
     if (!num(amt) || !num(target)) return null;
-    return { key: 'committed', label: 'Committed', count: amt, target, target_reason: null, display: `${usdShort(amt)} of ${usdShort(target)}` };
+    return { key: 'committed', label: 'Signed or received', count: amt, target, target_reason: null, display: `${usdShort(amt)} of ${usdShort(target)}` };
   }
   const amt = Number(f.value);
   if (!num(amt)) return null;
-  return { key: 'committed', label: 'Committed', count: amt, target: null, target_reason: f.reason ?? 'No active round target is recorded', display: usdShort(amt) };
+  return { key: 'committed', label: 'Signed or received', count: amt, target: null, target_reason: f.reason ?? 'No active round target is recorded', display: usdShort(amt) };
 }
 
 function raiseIndex(ctx: RaiseCtx, figures: Figure[], cards: Card[], calls: CallsRead): IndexRow[] {
