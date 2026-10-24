@@ -218,7 +218,7 @@ test('the dots, the order and the save plan', () => {
 
 test('NAR21: every component in every state, each with dark classes', () => {
   const html = (el) => renderToStaticMarkup(h(MemoryRouter, null, el));
-  for (const s of Object.keys(CLAIM_STATES)) assert.match(html(h(ClaimPill, { state: s })), new RegExp(s.replace("'", '&#x27;')), s);
+  for (const s of Object.keys(CLAIM_STATES)) assert.ok(html(h(ClaimPill, { state: s })).includes(s.replace(/'/g, '&#x27;')), s);
   assert.equal(Object.keys(CLAIM_STATES).length, 5, 'five claim states');
   for (const s of ['Empty', 'Written', 'Stale', 'Mismatch']) assert.match(html(h(SectionDot, { state: s })), new RegExp(`aria-label="${s}"`));
   for (const s of ['Connector', 'Document', 'Recorded', 'Signed', 'Typed']) assert.match(html(h(SourceKind, { source: s })), new RegExp(s));
