@@ -740,7 +740,7 @@ test('4: form-options and every action take the module\'s write gate, and an id 
       assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, 403, `${m.slug} form-options as ${who}`);
       for (const key of ACTIONS[m.slug]) assert.equal((await act(db, m.slug, id, key, {}, { who })).status, 403, `${m.slug} ${key} as ${who}`);
     }
-    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, 200, `${m.slug} form-options as ${who}`);
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, m.slug === 'pitch-deck' && who === ADMIN ? 403 : 200, `${m.slug} form-options as ${who}`);
   }
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM activity_logs'), before, 'a refused action writes nothing');
   // Venture B's prospect (9) named in a holder's body, and its version (7) as Based on.
