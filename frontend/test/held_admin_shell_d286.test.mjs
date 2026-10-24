@@ -225,12 +225,18 @@ test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation lin
   assert.deepEqual(drawnLanes(), S22_LANES);
   const moderation = drawnLanes().find((l) => l[2] === 'Spinout moderation');
   assert.equal(moderation[3], '/admin/spinout-moderation', 'Spinout moderation lost its console — D442 built it and D506 made this lane its HQ door');
-  // Held to the map: every route S22 links is a console the H35 map places on Admin · Approvals, or a tab S22 absorbs.
+  // Queued consoles belong on Approvals. A No queue row is a reference to
+  // an Admin console, whose actual placement can be another shell row.
   const laned = new Set(ADMIN_PLACEMENT
     .filter((e) => [e, ...(e.also || [])].some((p) => p.tier === 'Admin' && p.row === 'Approvals'))
     .map((e) => e.route));
-  for (const [, , lane, route] of S22_LANES) {
+  const adminConsoles = new Set(ADMIN_PLACEMENT.filter((e) => e.tier === 'Admin').map((e) => e.route));
+  for (const [, , lane, route, state] of S22_LANES) {
     if (!route || route === '/admin/programs/spinout-lab/applications') continue; // the Lab's queue is placed on Programs (D937), not Approvals
+    if (state.includes('noQueue=')) {
+      assert.ok(adminConsoles.has(route), `${lane} references ${route}, which has no Admin console placement`);
+      continue;
+    }
     // D506 — the moderation console (D442) was built after the H35 map was drawn and is
     // not a legacy row, so the map does not place it (admin_placement_h35 pins the map
     // to H35's question); this lane and the branch board are its two doors.
