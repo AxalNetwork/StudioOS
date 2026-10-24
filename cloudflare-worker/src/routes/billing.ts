@@ -1533,7 +1533,10 @@ async function handleStripeEvent(
   // tier columns (subscription_tier / stripe_customer_id) instead of the MI
   // Pro columns. Both pipes share the same Stripe webhook because Stripe
   // only delivers to one endpoint per env.
-  const meta = (obj.metadata as Record<string, string> | undefined) ?? {};
+  // D892 (#2453): a subscription event with no `kind` — one the payments intent
+  // made before the fix — takes its plan from its price's catalog product.
+  const { subscriptionMetadata } = await import('../services/planSubscription');
+  const meta = await subscriptionMetadata(env, event.type, obj);
   const isTier = meta.kind === 'tier'
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('tier:'));
   const isInvestor = meta.kind === 'investor'
@@ -1979,6 +1982,13 @@ async function handleStripeEvent(
     case 'invoice.finalized': {
       const { handleInvoiceEvent } = await import('../services/invoiceEmails');
       await handleInvoiceEvent(env, obj);
+      return;
+    }
+    // D892 (#2453): a renewal whose payment failed tells the member, once per
+    // attempt. Access while Stripe retries is #2451's owner question 4.
+    case 'invoice.payment_failed': {
+      const { recordRenewalFailure } = await import('../services/planSubscription');
+      await recordRenewalFailure(env, obj);
       return;
     }
     case 'charge.succeeded': {

@@ -215,10 +215,12 @@ test('6: decision 9 — names for writers and the posting\'s host, counts for th
   const shortlist = async (who: number) => sectionOf(await rec(db, 'team-expansion', 31, { who }), 'shortlist').rows.map((r: any) => r.a);
   assert.deepEqual(await shortlist(FOUNDER), ['Sol Ito', 'Lena Park']);
   assert.deepEqual(await shortlist(ADMIN), ['Sol Ito', 'Lena Park']);
-  for (const who of [COFOUNDER, ADVISOR, PARTNER]) {
+  for (const who of [COFOUNDER, ADVISOR]) {
     const rows = await shortlist(who);
     assert.deepEqual(rows, ['1 at interview · 1 at offer'], `user ${who} sees counts`);
   }
+  // D889 (#2438): a partner with no tie to the venture reads none of it.
+  assert.equal((await rec(db, 'team-expansion', 31, { who: PARTNER })).status, 403, 'untied partner');
   // An advisor reads, without a third party's name, and with no action.
   const adv = await rec(db, 'product-improvement', 'fba1', { who: ADVISOR });
   assert.equal(adv.status, 200);
@@ -247,7 +249,8 @@ test('6: decision 9 — names for writers and the posting\'s host, counts for th
   assert.equal(sectionOf(co, 'posted-on').rows[0].href, undefined);
   // On the posting the co-founder hosts, they are the host.
   assert.ok(actionKeys(await rec(db, 'team-expansion', 33, { who: COFOUNDER })).includes('close-role'));
-  // A partner is a writer (projectAccess): names and actions.
+  // A partner who is an accepted co-founder is a writer (projectAccess, D889): names and actions.
+  db.prepare("INSERT INTO project_members (project_id, user_id, role, status) VALUES (?, ?, 'cofounder', 'accepted')").run(A, PARTNER);
   const pt = await rec(db, 'product-improvement', 'fba1', { who: PARTNER });
   assert.ok(sectionOf(pt, 'customer'));
   assert.ok(actionKeys(pt).includes('edit'));

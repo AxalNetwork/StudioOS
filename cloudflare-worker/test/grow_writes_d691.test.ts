@@ -337,7 +337,7 @@ test('4: markets take a Research country and a size; obligations take culture, r
   assert.deepEqual(one(f, 'SELECT recurrence, remind_days_json FROM compliance_events WHERE id = ?', ob.body.id), { recurrence: 'quarterly', remind_days_json: null });
 });
 
-test('4: an advisor gets 403 on every new write; a partner (staff role) writes; another venture\'s founder gets 403', async () => {
+test('4: an advisor gets 403 on every new write; a partner writes only as an accepted co-founder (D889); another venture\'s founder gets 403', async () => {
   const f = fixture();
   const writes: Array<[string, string, Record<string, unknown>]> = [
     ['POST', '/kpis', { kpi: 'mrr', value: 1, as_of: day(-1) }],
@@ -353,9 +353,15 @@ test('4: an advisor gets 403 on every new write; a partner (staff role) writes; 
     assert.equal((await call(f, OTHER, method, `/api/cycles/grow${path}`, { project: PA, ...body })).status, 403, `other venture ${path}`);
   }
   assert.equal(one(f, 'SELECT COUNT(*) AS n FROM activity_logs WHERE entity_type LIKE ?', 'grow.%').n, 0);
+  // D889 (#2438): a partner with no tie to the venture writes nothing.
+  for (const [method, path, body] of writes) {
+    assert.equal((await grow(f, PARTNER, method, path, body)).status, 403, `untied partner ${path}`);
+  }
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM activity_logs WHERE entity_type LIKE ?', 'grow.%').n, 0);
+  f.db.exec(`INSERT INTO project_members (project_id, user_id, role, status) VALUES (${PA}, ${PARTNER}, 'cofounder', 'accepted')`);
   for (const [method, path, body] of writes) {
     const r = await grow(f, PARTNER, method, path, body);
-    assert.equal(r.status, 201, `partner ${path}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.status, 201, `co-founder partner ${path}: ${JSON.stringify(r.body)}`);
   }
 });
 
@@ -499,8 +505,9 @@ test('5: an advisor reads the lists, but feedback rows carry no from_name for a 
   assert.equal(advisor.status, 200);
   assert.equal('from_name' in advisor.body.records.rows[0], false);
   assert.doesNotMatch(JSON.stringify(advisor.body), /Quinn/);
-  for (const who of [FOUNDER, COFOUNDER, PARTNER, ADMIN]) {
+  for (const who of [FOUNDER, COFOUNDER, ADMIN]) {
     assert.equal((await list(f, 'product-improvement', '', who)).body.records.rows[0].from_name, 'Quinn Customer', `writer ${who}`);
   }
-  assert.equal((await list(f, 'product-improvement', '', OTHER)).status, 403);
+  // D889 (#2438): a partner with no tie is refused like any outsider.
+  for (const who of [OTHER, PARTNER]) assert.equal((await list(f, 'product-improvement', '', who)).status, 403, `outsider ${who}`);
 });

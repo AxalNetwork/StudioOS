@@ -137,8 +137,8 @@ async function computeProjectPermissions(env: Env, user: AuthUser, project: Proj
   if (principal.role === 'admin') return { ...project, capRead: true, capWrite: true };
   if (principal.role === 'investor') return { ...project, capRead: false, capWrite: false };
   const owner = principal.role === 'founder' && !!principal.founder_id && principal.founder_id === project.founder_id;
-  // canAccessProject's broad partner exception is owned by #2438. Require a
-  // recorded membership first, including for partners, until that is resolved.
+  // A recorded membership first, for every non-owner. Since D889 (#2438)
+  // canAccessProject requires one of a partner too; this check stays explicit.
   const member = owner ? null : await getProjectMembershipRole(env, project.id, principal.id);
   if (!owner && !['owner','cofounder','advisor'].includes(member ?? '')) return { ...project, capRead: false, capWrite: false };
   return { ...project,

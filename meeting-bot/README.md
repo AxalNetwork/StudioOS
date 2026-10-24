@@ -42,7 +42,7 @@ folder's lockfile. No TypeScript compilation step is needed in the image.
 | `src/fakeAdapter.ts` | A scripted platform for the tests, and the reference implementation an adapter copies. |
 | `src/index.ts` | The public library exports. |
 | `src/runtime.ts` | One authenticated, idempotent run per container; start/stop acknowledge without waiting on callbacks. |
-| `src/runtimeAdapters.ts` | Packaged adapter factory: Chromium/Meet now, explicit failure while Zoom native bridge and Teams wiring are absent. |
+| `src/runtimeAdapters.ts` | Packaged adapter factory: Chromium/Meet and Teams, plus the packaged Zoom sidecar with run-scoped credential bootstrap. |
 | `src/entry.ts` | Private HTTP entry, bounded command bodies, fixed logs, SIGTERM/SIGINT shutdown and a hard 28-second exit bound. |
 | `Dockerfile`, `.dockerignore` | Linux image; its build runs the fake-adapter command smoke test before producing the runtime stage. |
 | `package.json`, `package-lock.json` | Pinned browser dependency and isolated runtime install. |
@@ -157,8 +157,8 @@ does.
 
 `src/zoomAdapter.ts` implements `MeetingAdapter` with an injected
 `ZoomSdkBridge`. Import it directly; the core's shared exports are unchanged.
-This is orchestration tested against fakes, **not a packaged Linux SDK client**.
-B8 must supply the native bridge and B1 must supply a founder-scoped OBF mint
+The adapter orchestration is tested against fakes. B8 packages the Linux SDK
+sidecar and uses B1's founder-scoped OBF mint
 through the existing Worker helper. Neither SDK JWT signing keys nor OAuth
 access tokens belong in this adapter. OBF tokens exist only as local join
 arguments; the native bridge must discard them after each attempt.
@@ -232,7 +232,7 @@ not permission for the runtime to extend an unfunded interval.
 
 ## Container control
 
-The container uses `MEETING_BOT_SECRET` (the existing shared secret),
+The container uses `MEETING_BOT_SECRET` (a derived per-run key from B8),
 `MEETING_BOT_CALLBACK_ORIGIN` (an HTTPS Worker origin) and optional `PORT`
 (default 8080). B8 keeps this port private. POST `/start` and `/stop` use the
 same signed-header format, signing their actual path. The five-minute command
@@ -251,8 +251,8 @@ Neither command waits for the callback of the same serialized supervisor.
 publication gate. Readiness is not a live platform verification. The image
 runs as the `node` user. Chromium's sandbox is enabled; B8 must verify the
 container host's namespace/seccomp compatibility, rather than disabling it.
-Python is the sidecar host only: this image does not claim the Zoom SDK native
-bridge has been packaged or measured. The switch and notice remain gated.
+Python hosts the packaged Zoom SDK sidecar; image CI checks its native load.
+Live SDK behavior and host sandbox compatibility remain unmeasured. The switch and notice remain gated.
 
 Run `npm ci --prefix meeting-bot`, then `npm run test:meeting-bot` from the
 repository root. `CHROMIUM_PATH` can select an installed test browser for the
@@ -270,6 +270,14 @@ real Python protocol peer. Linux SDK import and live meeting behavior remain
 UNVERIFIED. The existing ZoomAdapter accepts it as its `sdk` dependency.
 
 
-The merged B4 Python sidecar source and pinned requirement file are copied into
-the image. Its native SDK binding/GLib/PulseAudio installation and live loading
-remain B8's verification gate; the factory does not activate it prematurely.
+The merged B4 sidecar and pinned requirements are packaged with GLib/PulseAudio
+and Xvfb. Image CI verifies native load; the factory supplies scoped credentials.
+Actual provider behavior remains a gated live check.
+
+## Independent deployment (B8)
+
+`worker/` hosts the private container Durable Object; its README explains the
+control boundary. `wrangler.meeting-bot.toml` and `meeting-bot-deploy.yml` own
+the image release independently of the site. `container-entry.sh` supplies
+Xvfb/PulseAudio for the SDK sidecar. The packaged factory now connects Teams
+and Zoom; no real-platform measurement or publication is implied.

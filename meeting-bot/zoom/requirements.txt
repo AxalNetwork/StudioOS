@@ -1,2 +1,3 @@
 # BSD Python binding, Linux runtime only. Native SDK/library compatibility is a B8 live gate.
-zoom-meeting-sdk==0.0.27
+# CPython 3.11 / Linux amd64 wheel shipped by the Bookworm image.
+zoom-meeting-sdk==0.0.27 --hash=sha256:8f675cf37554d514d274006015e2286fc947a120a193393e91af73b83bed7400
