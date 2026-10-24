@@ -109,14 +109,14 @@ test('a role alone does not trigger Eadwyn; shipped and contact facts have sourc
     ['Onboarding shipped, asked for by 3 customers', 'Product improvement · Onboarding shipped 12 Oct', '2026-10-12']);
 });
 
-test('a kept metric with a figure but no source is dropped; a null stays null', () => {
+test('an unproved metric is typed; a null stays null', () => {
   const kept = cleanMetrics([
     { key: 'mrr', label: 'MRR', unit: 'usd', value: 10, source: 'stripe', as_of: '2026-10-01' },
     { key: 'burn', label: 'Burn', unit: 'usd', value: 5 },
     { key: 'runway', label: 'Runway', unit: 'months', value: null },
     { key: 'invented', value: 1, source: 'x' },
   ]);
-  assert.deepEqual(kept.map((x) => [x.key, x.value]), [['mrr', 10], ['runway', null]]);
+  assert.deepEqual(kept.map((x) => [x.key, x.value]), [['mrr', 10], ['burn', 5], ['runway', null]]);
 });
 
 test('every highlight carries a source: a line without one is refused', () => {
@@ -488,4 +488,22 @@ test('the sent update appears in Raise as an investor update sent, from the same
   assert.deepEqual([body.shared_updates[0].uid, body.shared_updates[0].source, body.shared_updates[0].investors, body.shared_updates[0].delivered],
     [uid, 'share_update', 2, 1]);
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM portfolio_updates').get() as any).n, 2, 'no copy: the sent row and the draft');
+});
+
+test('#2447: share saves revalidate sources from stored period facts, including unchanged browser metrics',async()=>{
+ const db=await fixture();
+ const created=await call(db,FOUNDER,'POST','',{project_id:7,title:'Synthetic update',status:'draft'});assert.equal(created.status,201);
+ const uid=created.body.uid;
+ const context=await call(db,FOUNDER,'GET','/share/context?project_id=7&period_start=2026-10-01&period_end=2026-10-31');
+ const metric=context.body.metrics.find((m:any)=>m.key==='mrr');
+ const save=(body:any)=>call(db,FOUNDER,'PUT',`/${uid}/share`,body);
+ assert.equal((await save({period_start:'2026-10-01',period_end:'2026-10-31',metrics:[metric]})).status,200);
+ const saved=()=>JSON.parse((db.prepare('SELECT metrics_json FROM portfolio_updates WHERE uid=?').get(uid) as any).metrics_json)[0];
+ assert.equal(saved().source,'stripe');
+ assert.equal((await save({metrics:[{...metric,value:1}]})).status,200);assert.equal(saved().source,'typed');
+ assert.equal((await save({metrics:[metric]})).status,200);
+ db.exec('UPDATE project_metrics SET mrr=2');
+ assert.equal((await save({audience:{investors:true,team:false,network:false}})).status,200);assert.equal(saved().source,'typed');
+ assert.equal((await save({metrics:[{...metric,value:2}]})).status,200);assert.equal(saved().source,'stripe');
+ assert.equal((await save({period_start:'2025-01-01',period_end:'2025-01-31'})).status,200);assert.equal(saved().source,'typed');
 });

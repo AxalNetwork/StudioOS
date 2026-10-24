@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * D840 part 2 (#2347): the Raise feeds' world, shared by
  * `mercury_raise_feeds_d840.test.ts` and D882's `mercury_grow_raise_mcp_d882.test.ts`.
@@ -73,11 +74,13 @@ export async function fixture() {
       config_json TEXT, last_error TEXT, last_error_at TEXT, updated_at TEXT);
     CREATE TABLE integration_logs(id INTEGER PRIMARY KEY, integration_id INTEGER, user_id INTEGER, provider_key TEXT, direction TEXT, event_type TEXT, status TEXT, response_summary TEXT);
     CREATE TABLE user_company_links(user_id INTEGER, company_id INTEGER);
-    CREATE TABLE revenue_entries(id INTEGER PRIMARY KEY, project_id INTEGER, source TEXT, source_ref TEXT);
     CREATE TABLE contacts(id INTEGER PRIMARY KEY);
   `);
+  db.exec(mig('311_revenue_entries.sql'));
+  db.exec(mig('477_mercury_personal.sql'));
   personalMatchTables(db);
   for (const m of ['445_connector_fed_items.sql', '520_mercury_raise_feeds.sql']) db.exec(mig(m));
+  raiseEvidenceTables(db);
   db.exec(`
     INSERT INTO users (id, role, founder_id, name, email, is_active, subscription_tier) VALUES
       (1, 'founder', 11, 'One', 'one@example.test', 1, 'studio'), (2, 'founder', 22, 'Two', 'two@example.test', 1, 'studio'),
@@ -86,7 +89,7 @@ export async function fixture() {
     INSERT INTO user_company_links VALUES (1, 10), (2, 20), (1, 99);
     INSERT INTO raise_prospects (id, uid, project_id, name, firm, stage, amount) VALUES
       (501, 'rp-1', 101, 'Harbour Angels', 'Harbour Angels', 'diligence', 50000), (502, 'rp-2', 202, 'New Fund', 'New Fund', 'meeting', 25000);
-    INSERT INTO revenue_entries (project_id, source, source_ref) VALUES (101, 'mercury', '${fakeTx(9)}');
+    INSERT INTO revenue_entries (uid,project_id,customer,amount_cents,revenue_type,received_on,source,source_ref) VALUES ('synthetic-existing',101,'Synthetic customer',4000000,'one_time','2026-09-27','mercury','${fakeTx(9)}');
   `);
   const env: any = { DB: d1Over(db), JWT_SECRET, ENVIRONMENT: 'development', KEK_PII: 'k'.repeat(48), FILES: memR2() };
   const { fake, accessToken } = mercury();

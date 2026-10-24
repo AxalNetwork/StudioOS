@@ -82,7 +82,7 @@ export function FigureTile({ fig }) {
       </span>
       {fig?.coverage && <span className="text-xs text-axal-muted">{fig.coverage.scored} of {fig.coverage.total} items scored</span>}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>
+        <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{fig?.key === 'committed' && fig?.reason ? fig.reason : delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>
         {value != null && sparkDrawable(fig.spark) && <Spark values={fig.spark} label={`${fig.label}, last points`} />}
       </div>
     </div>

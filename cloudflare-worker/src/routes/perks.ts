@@ -60,10 +60,12 @@
 import { Hono } from 'hono';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import type { Env } from '../types';
-import { requireAuth, requireAdmin, requireRole, requireSuperAdmin } from '../auth';
+import { requireAuth, requireAdmin, requireRole, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
 import { mapError, newUid, nowIso, todayIso } from './_t13t14t15_helpers';
 import { userMeetsTier, type Tier } from '../middleware/requireTier';
 import { refuse } from '../util/refusal';
+import { logAdminAction } from '../services/adminAudit';
+import { perkClaimsCounts } from '../services/perkClaims';
 import { manualAdjust, ruleReason } from '../services/creditGrants';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -764,6 +766,44 @@ r.post('/partner/:uid/redeem', async (c) => {
  * Admin                                                             *
  * ---------------------------------------------------------------- */
 
+// D957: literal admin reads precede all listing parameter routes.
+r.get('/admin/claims', async (c) => {
+  try {
+    await requireAdmin(c);
+    const weeks = Number(c.req.query('weeks') || 12);
+    if (!Number.isInteger(weeks) || weeks < 1 || weeks > 52) return refuse(c, 400, { code: 'bad_weeks', message: 'Choose from 1 to 52 weeks.' });
+    return c.json(await perkClaimsCounts(c.env, weeks));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/admin/listings', async (c) => {
+  try {
+    await requireAdmin(c);
+    const q = new URL(c.req.url).searchParams;
+    const status = q.get('status') || 'all';
+    const sort = q.get('sort') || 'newest';
+    if (!['draft', 'in_review', 'live', 'paused', 'rejected', 'all'].includes(status)) return refuse(c, 400, { code: 'bad_status', message: 'Choose a known listing status or all.' });
+    if (!['newest', 'oldest'].includes(sort)) return refuse(c, 400, { code: 'bad_sort', message: 'Choose newest or oldest.' });
+    const integer = (key: string, fallback: number, max: number) => {
+      const value = q.has(key) ? Number(q.get(key)) : fallback;
+      return Number.isSafeInteger(value) && value >= 0 ? Math.min(value, max) : fallback;
+    };
+    const limit = Math.max(1, integer('limit', 25, 100)), offset = integer('offset', 0, Number.MAX_SAFE_INTEGER);
+    const total = await c.env.DB.prepare(`SELECT COUNT(*) AS n FROM perks WHERE (? = 'all' OR status = ?)`)
+      .bind(status, status).first<{ n: number }>();
+    const rows = await c.env.DB.prepare(
+      `SELECT p.*, u.email AS partner_email,
+              (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id) AS claim_count,
+              (SELECT COUNT(*) FROM perk_claims x WHERE x.perk_id = p.id AND x.status = 'redeemed') AS redeemed_count
+         FROM perks p LEFT JOIN users u ON u.id = p.partner_user_id WHERE (? = 'all' OR p.status = ?)
+        ORDER BY CASE WHEN ? = 'oldest' THEN datetime(p.updated_at) END ASC,
+                 CASE WHEN ? = 'newest' THEN datetime(p.updated_at) END DESC,
+                 CASE WHEN ? = 'oldest' THEN p.id END ASC, p.id DESC LIMIT ? OFFSET ?`,
+    ).bind(status, status, sort, sort, sort, limit, offset).all();
+    return c.json({ items: rows.results || [], total: Number(total?.n || 0) });
+  } catch (e) { return mapError(c, e); }
+});
+
 r.get('/admin/queue', async (c) => {
   try {
     await requireAdmin(c);
@@ -830,28 +870,40 @@ r.get('/admin/credits/:userId', async (c) => {
 r.post('/admin/:uid/review', async (c) => {
   try {
     const admin = await requireAdmin(c);
+    await requireBranchNotSuspended(c);
     const b = await c.req.json().catch(() => ({} as any));
     const action = String(b?.action || '');
-    if (!REVIEWABLE.has(action)) {
-      return c.json({ error: 'action must be approve, reject or pause' }, 400);
-    }
+    if (!REVIEWABLE.has(action)) return refuse(c, 400, { code: 'bad_action', message: 'Choose approve, reject or pause.' });
     const perk = await c.env.DB.prepare('SELECT * FROM perks WHERE uid = ?')
       .bind(c.req.param('uid')).first<PerkRow>();
-    if (!perk) return c.json({ error: 'not_found' }, 404);
-    if (action === 'reject' && !str(b?.review_note)) {
-      return c.json({ error: 'a rejection must say why — the partner sees this' }, 400);
-    }
+    if (!perk) return refuse(c, 404, { code: 'not_found', message: 'No listing has that id.' });
+    const note = str(b?.review_note, 1000);
+    if (action === 'reject' && !note) return refuse(c, 400, { code: 'note_required', message: 'a rejection must say why — the partner sees this' });
+    const moves: Record<string, readonly string[]> = {
+      approve: ['in_review', 'draft', 'paused', 'live'], reject: ['in_review', 'draft'], pause: ['live'],
+    };
+    const notReviewable = (state: string) => refuse(c, 409, { code: 'not_reviewable', message: `This listing is ${state}; ${action} does not apply to that state. Read it again.` });
+    if (!moves[action].includes(perk.status)) return notReviewable(perk.status);
+    const same = action === 'approve' && perk.status === 'live';
     const status = action === 'approve' ? 'live' : action === 'reject' ? 'rejected' : 'paused';
-    // D412 — the editorial quote on a featured card is Axal's, so only this
-    // route writes it; omitted keeps what is there, '' clears it.
+    const featured = b?.featured === undefined ? perk.featured : (b.featured ? 1 : 0);
     const editorial = b?.editorial_note === undefined ? perk.editorial_note : (str(b.editorial_note, 500) || null);
-    await c.env.DB.prepare(
-      `UPDATE perks SET status = ?, review_note = ?, reviewed_by_user_id = ?,
-              reviewed_at = ?, featured = ?, editorial_note = ?, updated_at = ? WHERE id = ?`,
-    ).bind(
-      status, str(b?.review_note, 1000) || null, admin.id, nowIso(),
-      b?.featured ? 1 : perk.featured, editorial, nowIso(), perk.id,
-    ).run();
+    const result = same ? await c.env.DB.prepare(
+      `UPDATE perks SET featured = ?, editorial_note = ?, updated_at = ?
+        WHERE id = ? AND status = ? AND updated_at = ?`,
+    ).bind(featured, editorial, nowIso(), perk.id, perk.status, perk.updated_at).run() : await c.env.DB.prepare(
+      `UPDATE perks SET status = ?, review_note = ?, reviewed_by_user_id = ?, reviewed_at = ?,
+              featured = ?, editorial_note = ?, updated_at = ? WHERE id = ? AND status = ? AND updated_at = ?`,
+    ).bind(status, note || perk.review_note, admin.id, nowIso(), featured, editorial, nowIso(), perk.id, perk.status, perk.updated_at).run();
+    if (Number(result.meta?.changes) !== 1) {
+      const current = await c.env.DB.prepare('SELECT status FROM perks WHERE id = ?').bind(perk.id).first<{ status: string }>();
+      return notReviewable(current?.status || 'missing');
+    }
+    await logAdminAction(c.env, admin.id, admin.email,
+      same ? 'perk.feature_updated' : action === 'approve' ? 'perk.approved' : action === 'reject' ? 'perk.rejected' : 'perk.paused', {
+        uid: perk.uid, before: perk.status, after: status, featured_changed: Number(featured) !== Number(perk.featured),
+        ...(perk.partner_user_id ? { target_user_id: perk.partner_user_id } : {}),
+      });
     return c.json({ ok: true, status });
   } catch (e) { return mapError(c, e); }
 });
