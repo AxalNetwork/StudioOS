@@ -150,6 +150,8 @@ const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
+// D989 (#2380): Partner profiles, out of the Admin Console, under Approvals.
+const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfiles'));
 const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminLab = lazy(() => import('./pages/admin/lab/AdminLab'));
@@ -2846,6 +2848,9 @@ function AppInner() {
       <Route path="/admin/advisors-partners" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/firms" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/deck" element={guard(['admin'], <AdvisorsPartners />)} />
+      {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
+      <Route path="/admin/partner-profiles" element={guard(['admin'], <PartnerProfiles />)} />
+      <Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />
       <Route path="/admin/network-profiles" element={<ApRedirect />} />
       {/* D937 (#2374) — the Spin-Out Lab under Programs, its tabs as sub-paths
           (D936's header). /admin/spinout-lab, its /preview and the Admin

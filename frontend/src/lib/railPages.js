@@ -265,7 +265,7 @@ const ADMIN = [
   own('/admin/held/approvals', key(AD, 'Approvals')),
   alias('/branch/approvals', key(AD, 'Approvals'), 'The branch’s Approvals page.'),
   own('/admin?tab=kyc', key(AD, 'Approvals', 'Identity checks')),
-  own('/admin?tab=profiles', key(AD, 'Approvals', 'Entity profiles')),
+  own('/admin/partner-profiles', key(AD, 'Approvals', 'Entity profiles')),
   own('/admin/lp-applications', key(AD, 'Approvals', 'LP applications')),
   own('/admin/refer-earn', key(AD, 'Approvals', 'Referrals')),
   own('/admin/best-fit', key(AD, 'Approvals', 'Best fit')),

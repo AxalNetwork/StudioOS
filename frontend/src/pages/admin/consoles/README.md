@@ -7,7 +7,7 @@ console lives here, in its own file, and reads only its own data (D648):
 | File | Console | Reads |
 | --- | --- | --- |
 | `UsersConsole.jsx` | Users: the account directory, role picker, support sessions, the account drawer | the users list, trust scores |
-| `PartnerProfilesConsole.jsx` | Partner Profiles and the profile review drawer | the profiles list |
+| `PartnerProfilesConsole.jsx` | Partner Profiles and the profile review drawer. Since D989 the tab forwards to `/admin/partner-profiles` (`../profiles/`), which opens this file's `ProfileReviewModal` | the profiles list |
 | `KycConsole.jsx` | KYC / AML queue and its review drawer | the queue, one record on Review |
 | `LegalConsole.jsx` | Legal (contracts, envelopes, signed documents) | its own contract reads |
 | `PersonasConsole.jsx` | Personas | the persona list |

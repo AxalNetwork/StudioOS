@@ -63,8 +63,9 @@ test('H27 and H28 are HQ\'s Integration keys page, which draws the frame named f
 
 test('an admin\'s tabs are named for the Admin profile\'s boards, from the same map', () => {
   const boards = ADMIN_BOARDS.filter((b) => b.route.startsWith('/admin?tab=') && tabOf(b.route) !== 'lab-applications');
-  // Six until D972 (#2369) moved S29 Advisors and partners to its own page.
-  assert.ok(boards.length >= 5, 'the Admin profile lists fewer /admin tabs than it did');
+  // Six until D972 (#2369) moved S29 Advisors and partners to its own page,
+  // five until D989 (#2380) moved S7 Entity profiles to /admin/partner-profiles.
+  assert.ok(boards.length >= 4, 'the Admin profile lists fewer /admin tabs than it did');
   for (const b of boards) assert.equal(tabBoard(tabOf(b.route), 'admin'), nameOf(b), `${b.id} ?tab=${tabOf(b.route)}`);
   const drawn = TABS.filter((t) => tabBoard(t, 'admin'));
   assert.deepEqual(drawn.sort(), [...new Set(boards.map((b) => tabOf(b.route)))].sort());

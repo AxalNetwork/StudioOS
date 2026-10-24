@@ -132,6 +132,28 @@ recent activity and the four lightboxes wait for D930's five parts (D931 to
 D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
 row says what is drawn today.
 
+## Landed 2026-10-24 — Approvals · Partner profiles (#2380)
+
+The owner's artifacts `VCDLJZYykybEB6hZ8oSrs8` and `59A3MvD1qSbS8dpFwZZp8f`
+came from S21's prompt on #2380, as the usual pair:
+- `Partner Profiles · Boards.dc.html` is the board grid (PRF1 to PRF12, with
+  the lettered boards PRF3b–c, PRF4a–c, PRF5a–f, PRF7a–b, PRF9a–c, PRF10a–c and
+  PRF11a–c), the output of `scripts/read-canvas.mjs` as is;
+- `Partner Profiles Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/partner-profiles` and `/all` are live, and
+`/admin?tab=profiles` forwards there with the moved notice. S21's integration
+(D989) draws the header, the Waiting tile, the queue oldest first, the status
+chips, the onboarding categories, search and pages, and keeps today's review
+dialog. Ages, sources, accounts, identity checks, Drafts, the weekly chart, the
+lightbox, the dialogs and the phone layout wait for D989's seven parts, so this
+canvas stays in the queue until they land. The `ROUTE_MAP.md` row says what is
+drawn today.
+
 ## Landed 2026-10-24 — HQ · Program grants (#2376)
 
 The owner's artifacts `9bU81t2zZxckmAmhrKenc6` and `DSX8rakWCr4VBkoRddA3yU`

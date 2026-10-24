@@ -222,7 +222,7 @@ test('Billing: a failed disputes read draws Unreadable, never "No disputes loade
 // ── The shell fetches only the open console's data ──────────────────────────
 const OWN = {
   users: ['adminListUsers', 'trustScoreBatch'],
-  profiles: ['adminListProfiles'],
+  // D989 (#2380): ?tab=profiles forwards to /admin/partner-profiles before this page mounts.
   kyc: ['kycAdminQueue'],
   personas: ['listPersonasAdmin'],
   directory: ['adminListDirectoryPartners'],

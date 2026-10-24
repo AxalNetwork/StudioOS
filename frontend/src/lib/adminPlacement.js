@@ -99,7 +99,8 @@ export const ADMIN_PLACEMENT = [
   // ── Admin Console tabs · /admin?tab=… ───────────────────────────────────
   tab('users', 'Users', hq('Team', 'embedded'),
     { how: 'Already embedded on HQ · Team; embedded panel on Admin · Accounts.', also: [admin('Accounts', 'embedded')] }),
-  tab('profiles', 'Partner Profiles', admin('Approvals', 'lane'), { how: 'A lane.' }),
+  tab('profiles', 'Partner profiles', admin('Approvals', 'lane'),
+    { route: '/admin/partner-profiles', how: 'Its own page under Approvals (D989), lane 7; the legacy tab redirects here.' }),
   tab('kyc', 'KYC Queue', admin('Approvals', 'lane'),
     { how: 'A lane. HQ · Team carries a card link to it.', also: [hq('Team', 'card link')] }),
   tab('lab-applications', 'Spin-Out Lab', admin('Programs', 'embedded'),

@@ -266,8 +266,12 @@ const SECOND_MOUNTS = new Map([
  * file, not in AdminPage.jsx. HQ's Accounts page mounts the Users console
  * alone. Checked against the hosts' own imports below, so it cannot drift.
  */
+const PROFILES_CONSOLE = 'frontend/src/pages/admin/consoles/PartnerProfilesConsole.jsx';
 const COMPOSED = new Map([
-  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx' && !HQ_KEYS_CONSOLE_FILES.includes(f))],
+  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx' && !HQ_KEYS_CONSOLE_FILES.includes(f) && f !== PROFILES_CONSOLE)],
+  // D989 (#2380): Partner profiles left the console for its own page, which
+  // opens the console's review dialog until its part 6 redraws it.
+  ['frontend/src/pages/admin/profiles/PartnerProfiles.jsx', [PROFILES_CONSOLE]],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
   ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],

@@ -224,7 +224,7 @@ export const SIDEBAR_GROUPS = {
       // is the complete statement of what the row owns (SidebarNav), so a
       // door the landing draws without a `match` entry lights no row.
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
-        match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation'] },
+        match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation', '/admin/partner-profiles'] },
       { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
         match: ['/admin/programs/spinout-lab', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
       // D930 (#2367): Community's own address; /admin/held/community redirects here.

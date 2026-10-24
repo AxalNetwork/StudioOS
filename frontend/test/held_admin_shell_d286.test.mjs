@@ -193,7 +193,7 @@ const S22_LANES = [
   [4, 'Core', 'Spinout moderation', '/admin/spinout-moderation', '<LaneState glance={glance} laneKey="moderation" />'],
   [5, 'Core', 'Content to HQ', null, 'Not applicable to HQ-held accounts'],
   [6, 'Absorbed', 'KYC', '/admin?tab=kyc', '<LaneState glance={glance} laneKey="kyc" />'],
-  [7, 'Absorbed', 'Partner profiles', '/admin?tab=profiles', '<LaneState glance={glance} laneKey="partner_profiles" />'],
+  [7, 'Absorbed', 'Partner profiles', '/admin/partner-profiles', '<LaneState glance={glance} laneKey="partner_profiles" />'],
   [8, 'Absorbed', 'Directory', '/admin?tab=directory', '<LaneState glance={glance} noQueue="Directory" />'],
   [9, 'Absorbed', 'Exploring', '/admin/exploring', '<LaneState glance={glance} laneKey="exploring" />'],
   [10, 'Absorbed', 'Jobs', '/admin/jobs', '<LaneState glance={glance} laneKey="jobs" />'],
