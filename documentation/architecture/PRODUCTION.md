@@ -347,8 +347,9 @@ before it can dispatch. Do not share HQ's secret with a branch.
    Disabling this variable freezes bot deployments without affecting the site.
 5. After both production and preview hosts exist, run
    `node scripts/configure-meeting-bot-binding.mjs` to review the full site
-   config, then use `--write` in a follow-up owner PR. Run the binding parity
-   and branch guards before its normal site deployment. This adds all three
+   config and matching HQ-only architecture catalogue entry, then use
+   `--write` in a follow-up owner PR. Run the full build/drift suite, including
+   binding parity, branch isolation and topology, before normal site deployment. This adds all three
    remote bindings together; absent bindings keep `botConfigured` false.
 6. Record first deployment and remaining live checks on #1008. No production
    bot deployment was performed by this implementation. First deployment,

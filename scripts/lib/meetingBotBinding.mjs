@@ -14,3 +14,13 @@ export function withMeetingBotBinding(source) {
   }
   return source;
 }
+
+/** Keep the reviewed topology catalogue aligned with the opt-in binding. */
+export function withMeetingBotTopology(source) {
+  const row="  { name: 'MEETING_BOT_CONTAINER', kind: 'Durable Object namespace', hq: 'MeetingBotContainer', branch: () => null, shared: false, hqOnly: true },";
+  if(source.includes(row))return source;
+  if(source.includes("name: 'MEETING_BOT_CONTAINER'"))throw Error('conflicting_bot_topology');
+  const marker="  { name: 'MEETING_BOT_RUN', kind: 'Durable Object namespace', hq: 'MeetingBotRun', branch: () => 'MeetingBotRun', shared: false },";
+  if(!source.includes(marker))throw Error('missing_binding_catalogue');
+  return source.replace(marker,marker+'\n'+row);
+}

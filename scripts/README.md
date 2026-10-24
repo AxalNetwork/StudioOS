@@ -215,6 +215,6 @@ with an isolated scratch image; Docker is required. It never deploys.
 `lib/meetingBotDeploy.test.mjs` protects independent site releases, remote
 binding targets and branch isolation.
 
-`configure-meeting-bot-binding.mjs` prints the prospective site config; only
+`configure-meeting-bot-binding.mjs` prints the prospective site config and topology catalogue; only
 `--write` changes it, after the owner deploys both bot hosts. Its pure helper
-`lib/meetingBotBinding.mjs` adds all three remote bindings idempotently.
+`lib/meetingBotBinding.mjs` adds all three remote bindings and the HQ-only catalogue entry idempotently.

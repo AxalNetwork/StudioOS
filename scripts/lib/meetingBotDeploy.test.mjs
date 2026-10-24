@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseSections, bindings } from '../check-wrangler-binding-parity.mjs';
-import { withMeetingBotBinding } from './meetingBotBinding.mjs';
+import { withMeetingBotBinding, withMeetingBotTopology } from './meetingBotBinding.mjs';
 import { renderBranchConfig, checkRendered } from './branchConfig.mjs';
 const read=p=>readFileSync(new URL('../../'+p,import.meta.url),'utf8');
 const site=read('wrangler.toml'),bot=read('wrangler.meeting-bot.toml');
@@ -51,4 +51,14 @@ test('independent bot deployment is main-only, owner-gated, builds first and nev
   for(const path of ['cloudflare-worker/src/util/doNamespace.ts','cloudflare-worker/src/types.ts'])assert.ok(workflow.includes(path));
   assert.ok(workflow.indexOf('node scripts/build-meeting-bot-image.mjs')<workflow.indexOf('wrangler deploy --config wrangler.meeting-bot.toml'));
   assert.doesNotMatch(workflow,/migrate-d1|npm run deploy|--config wrangler.toml/);
+});
+
+test('owner provisioning also updates the HQ-only catalogue and refuses conflicting definitions',()=>{
+  const source=read('cloudflare-worker/src/services/topology.ts');
+  const output=withMeetingBotTopology(source);
+  assert.match(output,/name: 'MEETING_BOT_CONTAINER'.*hq: 'MeetingBotContainer'.*branch: \(\) => null.*hqOnly: true/);
+  assert.equal(withMeetingBotTopology(output),output);
+  assert.throws(()=>withMeetingBotTopology(output.replace("hq: 'MeetingBotContainer'","hq: 'WrongHost'")),/conflicting_bot_topology/);
+  assert.throws(()=>withMeetingBotTopology(''),/missing_binding_catalogue/);
+  assert.throws(()=>withMeetingBotBinding(withMeetingBotBinding(site).replace('script_name = "studioos-meeting-bot"','script_name = "wrong-host"')),/conflicting_bot_binding/);
 });
