@@ -98,6 +98,21 @@ item of HQ's Licences strip, built to its canvas under the shared admin page
 header (D936). No grant is stored yet, so its cells say "Not recorded" — see
 its own README.
 
+`payments/` is D1008's Payments at `/admin/platform/payments`, HQ only, under
+Platform, built to its canvas under the shared admin page header (D936).
+`/admin?tab=payments` redirects to it; today's editor opens on request at the
+foot of its Catalogue until D1008's dialogs land — see its own README.
+
+`segments/` is D997's Persona segments at `/admin/persona-segments`, under
+Accounts (HQ: Content), built to its canvas under the shared admin page header
+(D936). `/admin?tab=personas` redirects to it; today's re-tag table stays at the
+foot of its Overview until D997 part 8 — see its own README.
+
+`profiles/` is D989's Partner profiles at `/admin/partner-profiles`, under
+Approvals, built to its canvas under the shared admin page header (D936).
+`/admin?tab=profiles` redirects to it; its review is the console's dialog until
+D989 part 6 — see its own README.
+
 `lab/` is D937's Spin-Out Lab page at `/admin/programs/spinout-lab`, built to
 the Spin-Out Lab canvas under the shared admin page header (D936). Its tabs
 mount `AdminSpinoutLab.jsx`'s consoles one section at a time;

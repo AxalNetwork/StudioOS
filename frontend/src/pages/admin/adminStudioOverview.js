@@ -371,7 +371,7 @@ export const LANE_CONSOLES = {
   cohort: '/admin/programs/spinout-lab/applications',
   moderation: '/admin/spinout-moderation',
   kyc: '/admin?tab=kyc',
-  partner_profiles: '/admin?tab=profiles',
+  partner_profiles: '/admin/partner-profiles',
   exploring: '/admin/exploring',
   jobs: '/admin/jobs',
   events: '/admin/events',

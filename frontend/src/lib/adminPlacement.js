@@ -105,21 +105,23 @@ export const ADMIN_PLACEMENT = [
   // ── Admin Console tabs · /admin?tab=… ───────────────────────────────────
   tab('users', 'Users', hq('Team', 'embedded'),
     { how: 'Already embedded on HQ · Team; embedded panel on Admin · Accounts.', also: [admin('Accounts', 'embedded')] }),
-  tab('profiles', 'Partner Profiles', admin('Approvals', 'lane'), { how: 'A lane.' }),
+  tab('profiles', 'Partner profiles', admin('Approvals', 'lane'),
+    { route: '/admin/partner-profiles', how: 'Its own page under Approvals (D989), lane 7; the legacy tab redirects here.' }),
   tab('kyc', 'KYC Queue', admin('Approvals', 'lane'),
     { how: 'A lane. HQ · Team carries a card link to it.', also: [hq('Team', 'card link')] }),
   tab('lab-applications', 'Spin-Out Lab', admin('Programs', 'embedded'),
     { route: '/admin/programs/spinout-lab/applications', how: 'Its own page under Programs (D937); the legacy tab redirects here.' }),
   tab('legal', 'Contracts', hq('Contracts', 'embedded'),
     { route: '/admin/contracts', how: 'One Contracts page in both shells; the legacy Legal link redirects here.', also: [admin('Contracts', 'embedded')] }),
-  tab('personas', 'Personas', hq('Content', 'sub-nav'),
-    { how: 'Sub-navigation item (the taxonomy). Retagging one person lives on Admin · Accounts.', also: [admin('Accounts', 'card link')] }),
+  tab('personas', 'Persona segments', hq('Content', 'sub-nav'),
+    { route: '/admin/persona-segments', how: 'Its own page (D997): a Content sub-navigation item on HQ, under Accounts on the Admin shell; the legacy tab redirects here.', also: [admin('Accounts', 'card link')] }),
   tab('directory', 'Directory', admin('Approvals', 'lane'), { how: 'A lane.' }),
   // Integration keys and GitHub Sync stood here as Platform sub-navigation
   // items. The owner's ruling (2026-10-20) took both out of the Admin Console:
   // they are one Super Admin page, `/admin/integration-keys`, with an HQ row
   // of its own, so there is no legacy tab left to place.
-  tab('payments', 'Payments', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
+  tab('payments', 'Payments', hq('Platform', 'sub-nav'),
+    { route: '/admin/platform/payments', hqOnly: true, how: 'Its own page under Platform, HQ only (D1008); sub-navigation item; the legacy tab redirects here.' }),
   // D708 (#1773) — beside Payments: the Super Admin's bank-account registry.
   tab('bank-accounts', 'Bank accounts', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Payments.' }),
   tab('product-testing', 'Product testing', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Bank accounts (D815).' }),

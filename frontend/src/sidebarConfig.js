@@ -223,13 +223,13 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'admin', label: 'Admin', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/exploring', '/admin/trash'] },
+      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/exploring', '/admin/trash', '/admin/persona-segments'] },
       // D506 — the Spin-Out moderation console joined the lanes Approvals
       // leads to (lane 4 links it), so the row stays lit inside it. `match`
       // is the complete statement of what the row owns (SidebarNav), so a
       // door the landing draws without a `match` entry lights no row.
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
-        match: ['/admin/lp-applications', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation'] },
+        match: ['/admin/lp-applications', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation', '/admin/partner-profiles'] },
       // D953 (#2371): the catalogue and every program page under it, the three
       // old addresses that redirect into it, and, as before, the Lab console
       // and Profiling trends, whose one door is the catalogue's foot (O-PRF).

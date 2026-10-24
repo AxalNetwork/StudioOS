@@ -198,7 +198,7 @@ const S22_LANES = [
   [4, 'Core', 'Spinout moderation', '/admin/spinout-moderation', '<LaneState glance={glance} laneKey="moderation" />'],
   [5, 'Core', 'Content to HQ', null, 'Not applicable to HQ-held accounts'],
   [6, 'Absorbed', 'KYC', '/admin?tab=kyc', '<LaneState glance={glance} laneKey="kyc" />'],
-  [7, 'Absorbed', 'Partner profiles', '/admin?tab=profiles', '<LaneState glance={glance} laneKey="partner_profiles" />'],
+  [7, 'Absorbed', 'Partner profiles', '/admin/partner-profiles', '<LaneState glance={glance} laneKey="partner_profiles" />'],
   [8, 'Absorbed', 'Directory', '/admin?tab=directory', '<LaneState glance={glance} noQueue="Directory" />'],
   [9, 'Absorbed', 'Exploring', '/admin/exploring', '<LaneState glance={glance} laneKey="exploring" />'],
   [10, 'Absorbed', 'Jobs', '/admin/jobs', '<LaneState glance={glance} laneKey="jobs" />'],
@@ -278,7 +278,7 @@ test('Programs (D953) opens the Lab console and Profiling trends, never the Admi
   assert.ok(!programs.includes('/admin?tab=lab-applications'), 'Programs links the Lab tab and the Lab console, one console twice');
   assert.ok(!programs.includes('/admin/advisor-cohorts'), 'Programs links the old address, which only redirects');
   assert.deepEqual(doorsIn(CODE[LANDINGS.Accounts]),
-    ['/admin', '/admin/exploring', '/admin?tab=personas', '/admin/trash']);
+    ['/admin', '/admin/exploring', '/admin/persona-segments', '/admin/trash']);
 });
 
 test('Insights (D893) reads the Insights read, and links only registered routes, never /branch/', () => {

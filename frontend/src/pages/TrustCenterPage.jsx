@@ -1318,6 +1318,7 @@ export default function TrustCenterPage({ chromeless = false }) {
     return <TrustPhoneView status={loading ? 'loading' : 'unreadable'} reload={load} />;
   }
   if (loading) return <div className="p-8 text-slate-600">Loading trust center…</div>;
+  if (matrix?.failed) return <div className="p-8 text-slate-600 dark:text-slate-300" role="alert">Trust score unreadable. <button type="button" onClick={load}>Try again</button></div>;
   if (err) return <div className="p-8 text-red-600 flex items-center gap-2"><AlertCircle className="w-5 h-5" />{err}</div>;
 
   const overview = (

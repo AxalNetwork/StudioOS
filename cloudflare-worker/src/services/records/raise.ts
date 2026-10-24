@@ -149,12 +149,12 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   const out: RecordContent = {
     title: item.label,
     sub: s ? `Readiness item · scored ${day(s.scored_at)}` : 'Readiness item · not scored yet',
-    pills: s
-      ? [{ text: `${Number(s.score)} / 10`, tone: s.score >= 8 ? 'ok' : s.score >= 5 ? 'amb' : 'bad' }, { text: cap1(String(s.evidence)), tone: 'vio' }]
+    pills: s?.score != null
+      ? [{ text: s.score == null ? 'Not scored' : `${Number(s.score)} / 10`, tone: s.score == null ? 'grey' : s.score >= 8 ? 'ok' : s.score >= 5 ? 'amb' : 'bad' }, { text: cap1(String(s.evidence)), tone: 'vio' }]
       : [{ text: 'Not scored', tone: 'grey' }],
     facts: [
-      fact('Score', s ? `${Number(s.score)} / 10` : null, notScored),
-      fact('Evidence', s ? cap1(String(s.evidence)) : null, notScored),
+      fact('Score', s?.score != null ? `${Number(s.score)} / 10` : null, notScored),
+      fact('Evidence', s?.score != null ? cap1(String(s.evidence)) : null, s?.missing || notScored),
       fact('Missing', s ? String(s.missing ?? '').trim() || 'Nothing' : null, notScored),
       fact('Last scored', s ? day(s.scored_at) : null, notScored),
     ],
@@ -185,7 +185,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   }, { when: (id) => id === 'data_room' }),
   section('history', 'Score over time', async (_rc, _id, record) => {
     const { mine } = loadedOf(record);
-    return { rows: [...(mine ?? [])].reverse().slice(0, 12).map((s: any) => ({ a: day(s.scored_at) ?? '', b: String(Number(s.score)) })), empty: 'Not scored yet.' };
+    return { rows: [...(mine ?? [])].reverse().slice(0, 12).map((s: any) => ({ a: day(s.scored_at) ?? '', b: s.score == null ? (s.missing || 'Not scored') : String(Number(s.score)) })), empty: 'Not scored yet.' };
   }, { side: true }),
   section('opens', 'Opens', async (rc, id) => {
     const o = OPENS[id];
@@ -199,7 +199,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
       key: 'score', label: 'Score', kind: 'form', tone: 'primary',
       form: { title: 'Score Team', cta: 'Save score', fields: [
         { key: 'score', label: 'Score', kind: 'CH', options: Array.from({ length: 11 }, (_, n) => ({ value: String(n), label: `${n} / 10` })),
-          value: s ? String(Number(s.score)) : undefined, required: true },
+          value: s?.score != null ? String(Number(s.score)) : undefined, required: true },
         { key: 'evidence', label: 'Evidence', kind: 'CH', options: EVIDENCE.filter(e => e === 'anecdote' || e === 'pattern').map((e) => ({ value: e, label: cap1(e) })), value: s?.evidence ?? undefined, required: true },
         { key: 'missing', label: 'Missing', kind: 'T', value: s?.missing ?? '' },
       ] },
@@ -223,7 +223,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   return {
     items: READINESS_ITEMS.map((i) => {
       const sc = newest.get(i.key);
-      return { value: i.key, label: i.label, by_hand: i.key === 'team', last_scored: sc ? day(sc.scored_at) : null, score: sc ? Number(sc.score) : null };
+      return { value: i.key, label: i.label, by_hand: i.key === 'team', last_scored: sc ? day(sc.scored_at) : null, score: sc?.score != null ? Number(sc.score) : null };
     }),
     since: opts([['all', 'Everything'], ['last', 'Since the last score']]),
     evidence: EVIDENCE.filter(e => e === 'anecdote' || e === 'pattern').map((e) => ({ value: e, label: cap1(e) })),

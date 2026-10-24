@@ -98,6 +98,21 @@ async function verifyShareToken(env: Env, token: string, c: any): Promise<{ deck
   return { deckId, tokenId: live.id };
 }
 
+/**
+ * D902 — a studio link: one made by the one link writer, which always names
+ * its investor. The studio's links do not offer the deal pack (bug 12; its
+ * terms are CAPITAL's, #2424). A link with no investor is the Spin-Out Lab's.
+ */
+async function studioLink(env: Env, tokenId: number | null): Promise<boolean> {
+  if (tokenId == null) return false;
+  const r = await env.DB.prepare(
+    "SELECT 1 AS yes FROM pitch_deck_share_tokens WHERE id = ? AND (prospect_id IS NOT NULL OR (investor_label IS NOT NULL AND investor_label <> ''))",
+  ).bind(tokenId).first<{ yes: number }>();
+  return !!r;
+}
+
+export const DEAL_PACK_NOT_OFFERED = 'This link does not offer a deal pack. Ask the venture about terms.';
+
 async function logConversion(
   env: Env,
   opts: {
@@ -176,13 +191,58 @@ deckShareActions.get('/share/:token/context', async (c) => {
   if (!tok) return c.json({ error: 'invalid_token' }, 401);
   const ctx = await loadDeckContext(c.env, tok.deckId);
   if (!ctx) return c.json({ error: 'deck_not_found' }, 404);
+  const link = tok.tokenId == null ? null : await c.env.DB.prepare('SELECT nda_required FROM pitch_deck_share_tokens WHERE id = ?')
+    .bind(tok.tokenId).first<{ nda_required: number | null }>();
   return c.json({
     deck_id: tok.deckId,
     project_id: ctx.project_id,
     project_name: ctx.project_name,
     deck_title: ctx.deck_title,
     nda_template_key: DECK_SHARE_NDA_SLUG,
+    // D902 — whether the viewer must accept the NDA first, and whether this link offers the deal pack.
+    nda_required: Number(link?.nda_required ?? 0) === 1,
+    offers_deal_pack: !(await studioLink(c.env, tok.tokenId)),
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// GET /nda — D902: the NDA's text, before anyone accepts it (PD20 A). Only
+// the POST built it before. Signed in, it is merged for this person; not
+// signed in, the person's own fields read as what they will be filled with.
+// A text that cannot be read or still has a field nobody filled answers as
+// the POST does, and the gate stays shut.
+// ─────────────────────────────────────────────────────────────────────
+export const NDA_YOUR_NAME = '[Your name]';
+export const NDA_YOUR_EMAIL = '[Your email]';
+
+deckShareActions.get('/share/:token/nda', async (c) => {
+  const tok = await verifyShareToken(c.env, c.req.param('token'), c);
+  if (!tok) return c.json({ error: 'invalid_token' }, 401);
+  const ctx = await loadDeckContext(c.env, tok.deckId);
+  if (!ctx) return c.json({ error: 'deck_not_found' }, 404);
+  let user: { name: string | null; email: string } | null = null;
+  try {
+    const u = await requireAuth(c);
+    const row = await c.env.DB.prepare('SELECT email, name FROM users WHERE id = ?').bind(Number(u.id)).first<{ email: string; name: string | null }>();
+    if (row?.email) user = { name: row.name ?? null, email: row.email };
+  } catch { /* not signed in */ }
+  const name = user?.name || NDA_YOUR_NAME;
+  const email = user?.email || NDA_YOUR_EMAIL;
+  let text: string | null = null;
+  try {
+    text = await deckShareNdaBody(c.env, {
+      recipient_name: name, recipient_email: email, investor_name: name, investor_email: email,
+      counterparty_name: ctx.project_name || 'the Project',
+      effective_date: new Date().toISOString().slice(0, 10),
+    });
+  } catch (e) {
+    if ((e as Error)?.message === 'unfilled_fields') {
+      return refuse(c, 409, { code: 'template_fields_unfilled', message: 'This NDA is not ready to sign yet. Try again later.', raw: e });
+    }
+    return refuse(c, 503, { code: 'template_unreadable', message: 'The NDA could not be read. Try again in a moment.', raw: e });
+  }
+  if (!text) return refuse(c, 503, { code: 'template_unreadable', message: 'The NDA could not be read. Try again in a moment.' });
+  return c.json({ template_key: DECK_SHARE_NDA_SLUG, venture: ctx.project_name, text, filled_for_you: user != null });
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -544,6 +604,7 @@ deckShareActions.post('/share/:token/feedback', async (c) => {
 deckShareActions.post('/share/:token/deal-pack', async (c) => {
   const tok = await verifyShareToken(c.env, c.req.param('token'), c);
   if (!tok) return c.json({ error: 'invalid_token' }, 401);
+  if (await studioLink(c.env, tok.tokenId)) return c.json({ code: 'deal_pack_not_offered', detail: DEAL_PACK_NOT_OFFERED }, 404);
   await ensureDeckShareConversionSchema(c.env);
 
   let authUser;
@@ -617,6 +678,7 @@ deckShareActions.post('/share/:token/deal-pack', async (c) => {
 deckShareActions.post('/share/:token/deal-pack/sign', async (c) => {
   const tok = await verifyShareToken(c.env, c.req.param('token'), c);
   if (!tok) return c.json({ error: 'invalid_token' }, 401);
+  if (await studioLink(c.env, tok.tokenId)) return c.json({ code: 'deal_pack_not_offered', detail: DEAL_PACK_NOT_OFFERED }, 404);
   await ensureDeckShareConversionSchema(c.env);
 
   let authUser;
