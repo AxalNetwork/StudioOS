@@ -809,7 +809,7 @@ export const NOTE_MAX = 1000;
  * predicate), never for a draft or a waiting event. The note reaches
  * registrants with an account. The paid box comes from the summary's paid
  * count (D922): it names how many paid and how much; while the summary is
- * unreadable it falls back to the event's price, and says so.
+ * loading or unreadable it falls back to the event's price, and says which.
  */
 export function cancelCopy(ev, payments = { state: 'loading' }) {
   let paid = null;
@@ -817,7 +817,8 @@ export function cancelCopy(ev, payments = { state: 'loading' }) {
     const n = Number(payments.data.paid?.count || 0);
     if (n > 0) paid = `${plural(n, 'paid ticket', 'paid tickets')} (${amounts(payments.data.paid)}) ${n === 1 ? 'is' : 'are'} not refunded automatically. HQ refunds them in Revenue › Billing.`;
   } else if (isPaid(ev)) {
-    paid = 'This is a paid event. Its paid tickets could not be counted here; any that were paid are not refunded automatically. HQ refunds them in Revenue › Billing.';
+    const why = payments.state === 'loading' ? 'are still being counted' : 'could not be counted here';
+    paid = `This is a paid event. Its paid tickets ${why}; any that were paid are not refunded automatically. HQ refunds them in Revenue › Billing.`;
   }
   return {
     title: `Cancel ${titleOf(ev)}?`,
