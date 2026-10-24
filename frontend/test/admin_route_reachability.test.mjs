@@ -299,8 +299,8 @@ const COMPOSED = new Map([
   ]],
   // D923 (2026-10-24, #2370): Partner invitations draws its tabs, its records
   // and its dialogs from the files beside it. They hold the doors to one
-  // invitation, one deal and Firm links, whose only door is Overview's
-  // Needs-you row.
+  // invitation and one deal, and Overview's Needs-you row opens Advisors &
+  // Partners › Firms (D952).
   ['frontend/src/pages/admin/PartnerInvitations.jsx', [
     'frontend/src/pages/admin/partners/PartnersOverview.jsx',
     'frontend/src/pages/admin/partners/PartnersInvitations.jsx',
@@ -309,7 +309,6 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersDeals.jsx',
     'frontend/src/pages/admin/partners/DealRecord.jsx',
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
-    'frontend/src/pages/admin/partners/FirmLinks.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
   // D953 (2026-10-24, #2371): Programs. The catalogue draws its card doors and
@@ -419,6 +418,12 @@ const EXEMPT = [
        + 'X_CLIENT_ID/SECRET are bound on the prod worker (sidebarConfig.js, beside '
        + 'the Telegram row).',
   },
+  {
+    path: '/admin/*',
+    kind: 'not-found',
+    why: 'D940 (#2745): the catch-all for an /admin address no route names. It draws Not found for an '
+       + 'admin, and RoleGuard draws SHL7b\'s card for a member, so nothing should link to it.',
+  },
   // `/admin/network-profiles`'s entry was deleted in D972 (#2369): the route
   // forwards to Advisors & Partners' Deck roster now, so it is a redirect, not
   // a page with no door.
@@ -511,7 +516,7 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
   // D953's Programs redirects and D937/D972's Lab/network redirects coexist.
-  assert.deepEqual(REDIRECTS, ['/admin/refer-earn', '/admin/partners', '/admin/held/programs', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
+  assert.deepEqual(REDIRECTS, ['/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/programs', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
@@ -530,6 +535,8 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
     LabPreviewRedirect: ['/admin/programs/spinout-lab/preview', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PREVIEW_PATH'],
     // D972 (#2369): the roster is Advisors & Partners' Deck roster tab.
     ApRedirect: ['/admin/advisors-partners/deck', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_DECK_PATH'],
+    // D952 (#2728): Partner invitations' Firm links moved to the Firms tab.
+    FirmLinksRedirect: ['/admin/advisors-partners/firms', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_FIRMS_PATH'],
   };
   for (const path of REDIRECTS) {
     const route = BY_PATH.get(path);
@@ -563,6 +570,17 @@ test('no exemption covers a route that already has a door', () => {
   for (const e of EXEMPT) {
     assert.ok(BY_PATH.has(e.path), `${e.path} is exempted but is not a registered route`);
     assert.ok(e.why && e.why.length > 40, `${e.path}'s exemption does not state a reason`);
+  }
+});
+
+test('a not-found exemption is a splat that draws Not found and nothing else', () => {
+  // A 404 has no door by definition; the claim is that this route IS one, so its element is checked.
+  const app = readRoutesSource();
+  for (const e of EXEMPT.filter((x) => x.kind === 'not-found')) {
+    assert.ok(e.path.endsWith('/*'), `${e.path} is exempted as not-found but is not a splat`);
+    assert.equal(BY_PATH.get(e.path)?.component, 'NotFoundPage', `${e.path} no longer draws NotFoundPage`);
+    const line = app.split('\n').find((l) => l.includes(`<Route path="${e.path}"`));
+    assert.match(line || '', /element=\{guard\(\['admin'\], <NotFoundPage \/>\)\} \/>/, `${e.path} draws more than Not found`);
   }
 });
 

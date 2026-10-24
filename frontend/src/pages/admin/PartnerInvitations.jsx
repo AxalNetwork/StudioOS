@@ -1,9 +1,10 @@
 // D923 (#2370) — Partner invitations, built to the owner's "Partner
 // invitations" canvas (PI1–PI12) from the reads that exist. This file is the
 // routed page at `/admin/partner-invitations` (Overview), `/invitations`,
-// `/invitations/:id`, `/deals`, `/deals/:id`, `/referrals` and `/firm-links`
-// (one `guard(['admin'])` route each in App.jsx; `/admin/partners` redirects
-// here with `?moved=partners`), and the desk's shell: the crumb, the moved
+// `/invitations/:id`, `/deals`, `/deals/:id` and `/referrals` (one
+// `guard(['admin'])` route each in App.jsx; `/admin/partners` redirects here
+// with `?moved=partners`; D952 moved `/firm-links` to Advisors & Partners ›
+// Firms, which it now forwards to), and the desk's shell: the crumb, the moved
 // notice, the header, the tab strip, the tab the address names, the record
 // drawn over its tab, and the dialogs. The tabs, their model and their reads
 // live in `partners/` (see its README). Worker-only surface
@@ -15,7 +16,6 @@ import { actionPrimary, usePhoneWidth } from '../../ui';
 import { FOCUSABLE } from '../../ui/lightboxFocus.js';
 import AdminBoardFrame from './AdminBoardFrame';
 import DealRecord from './partners/DealRecord';
-import FirmLinks from './partners/FirmLinks';
 import InvitationRecord from './partners/InvitationRecord';
 import NewInvitationDialog from './partners/NewInvitationDialog';
 import { ResendDialog, RevokeDialog, TerminateDialog } from './partners/PartnerDialogs';
@@ -60,9 +60,10 @@ function DeskTab({ to, end = false, testId, count, linkRef, children }) {
  * `TABS`, because the reachability walk (`admin_route_reachability.test.mjs`)
  * counts a literal `to="…"` as a door, as on Licences (D800) and Events
  * (D915); `admin_partner_invitations_d923.test.mjs` holds the two lists
- * equal. Each count is exact or says what it covers (D923 §1). Firm links has
- * no tab: its door is Overview's Needs-you row. On a phone the strip scrolls
- * sideways. `current` holds the lit tab's link, focus's last fallback.
+ * equal. Each count is exact or says what it covers (D923 §1). Attaching an
+ * account to a firm is on Advisors & Partners › Firms (D952); Overview's
+ * Needs-you row links it. On a phone the strip scrolls sideways. `current`
+ * holds the lit tab's link, focus's last fallback.
  */
 function DeskTabs({ counts, tab, current }) {
   const at = (key) => (tab === key ? current : undefined);
@@ -201,7 +202,6 @@ function PartnerInvitationsBody() {
         {route.tab === 'invitations' ? <PartnersInvitations reads={reads} now={now} actions={actions} /> : null}
         {route.tab === 'deals' ? <PartnersDeals reads={reads} now={now} actions={actions} /> : null}
         {route.tab === 'referrals' ? <PartnersReferrals reads={reads} fan={fan} now={now} /> : null}
-        {route.tab === 'firm-links' ? <FirmLinks reads={reads} /> : null}
       </div>
 
       {route.record?.kind === 'invitation' ? <InvitationRecord key={route.record.id} id={route.record.id} reads={reads} now={now} onClose={closeRecord} actions={actions} /> : null}
