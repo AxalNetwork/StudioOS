@@ -533,7 +533,10 @@ export async function decideCohortApplication(c: Context<{ Bindings: Env }>, leg
   }
   await logActivity(c.env, adminUser.email, adminUser.id, `cohort_applicant_${status}`,
     `Admin ${adminUser.name} marked applicant #${applicantId} ${status} for ${label} (reason: ${reason})`);
-  return c.json({ ok: true, status, emailed, applicant_note_saved: applicantNoteSaved });
+  return c.json({
+    ok: true, status: legacy ? decision : status, emailed, applicant_note_saved: applicantNoteSaved,
+    ...(legacy ? { cohort: status === 'approved' ? label : null } : {}),
+  });
 }
 
 r.post('/applications/:applicant_id/decide', (c) => decideCohortApplication(c));

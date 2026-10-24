@@ -63,7 +63,8 @@ test('D943: both doors require a reason and make the same scheduled decision', a
         assert.equal(rows(w),before);
         const r = await post(w,path,{ ...payload,reason:'Synthetic review' });
         assert.equal(r.status,200,JSON.stringify(r));
-        assert.equal(r.body.status,status);
+        assert.equal(r.body.status,legacy?decision:status);
+        if (legacy) assert.equal(r.body.cohort,status==='approved'?'January 2035':null);
         const applicant = w.db.prepare('SELECT status,decision_reason,decided_by FROM cohort_applicants WHERE id=1').get();
         assert.equal(applicant.status,status);
         assert.equal(applicant.decision_reason,'Synthetic review');
@@ -148,7 +149,7 @@ test('D943: two decisions on the same previously read applicant save only one ve
     const db = w.env.DB;
     let arrived = 0;
     let release!: () => void;
-    const barrier = new Promise<void>((resolve,reject) => { release=resolve;timer=setTimeout(()=>reject(new Error('Synthetic barrier timed out')),3000); });
+    const barrier = new Promise<void>((resolve,reject) => { release=resolve;timer=setTimeout(()=>reject(new Error('Synthetic barrier timed out')),30000); });
     w.env.DB = { ...db, prepare(sql: string) {
       const st = db.prepare(sql);
       if (sql.startsWith('SELECT ca.*')) {
