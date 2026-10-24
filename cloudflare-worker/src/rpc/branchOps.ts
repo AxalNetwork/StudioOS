@@ -43,6 +43,7 @@ import { activationFunnel, type ActivationRead } from '../services/activationFun
 import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from '../services/gameLibrary';
 import { notifyRequestAnswer } from '../services/escalationAnswerNotice';
 import { countsOnly, insightsParams, type InsightsLoader } from '../services/insightsScope';
+import { programsParams, type ProgramsLoader } from '../services/programCatalogue';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -1232,6 +1233,24 @@ export async function branchInsights(
   const query = params && typeof params === 'object' ? params as Record<string, string | undefined> : {};
   const read = await load(env, insightsParams(query));
   return { branch, as_of: nowIso(), insights: countsOnly(read) as Record<string, unknown> };
+}
+
+/**
+ * D954 (#2787) — Admin › Programs' catalogue over this branch's own database,
+ * for HQ's Super Admin scope. The same read HQ makes over its own (`load`),
+ * with the contract's parameters only, and counts only: stripped of every
+ * personal key before it leaves (`countsOnly`), so it answers program keys and
+ * counts and HQ adds the names from its registry. A read, so no secret.
+ */
+export async function branchPrograms(
+  env: Env,
+  params: unknown,
+  load: ProgramsLoader,
+): Promise<BranchAnswer<{ programs: Record<string, unknown> }>> {
+  const branch = requireBranch(env);
+  const query = params && typeof params === 'object' ? params as Record<string, string | undefined> : {};
+  const read = await load(env, programsParams(query));
+  return { branch, as_of: nowIso(), programs: countsOnly(read) as Record<string, unknown> };
 }
 
 /**

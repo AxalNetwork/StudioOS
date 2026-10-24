@@ -219,7 +219,7 @@ async function call(f: any, method: string, path: string, user: number | null, b
 
 test('the admin catalogue read carries the checks, the two keys\' modes and no key, shows-on and each price\'s allowance', async () => {
   const f = world({ pk: 'pk_live_fixtureOnly000' }); await seed(f);
-  const r = await call(f, 'GET', '/api/admin/catalog/products', ADMIN);
+  const r = await call(f, 'GET', '/api/admin/catalog/products', OWNER);
   assert.equal(r.status, 200, r.text);
   assert.deepEqual(r.body.keys, { account_mode: 'test', publishable_mode: 'live' });
   assert.deepEqual(r.body.checks.map((c: any) => c.code).sort(), ['key_mode_mismatch', 'plan_no_yearly', 'subscription_no_card']);
