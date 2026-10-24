@@ -36,8 +36,16 @@ const version = (n, oneLiner) => ({
 });
 const MODULE = { module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' }, card: { state: 'empty', reason: 'No narrative saved yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } };
 
+// D908's compare (`GET /narrative/compare`), which D909 draws instead of two record reads.
+const COMPARE = { a: 3, b: 4, pairs: [
+  { key: 'problem', label: 'Problem', a: { body: 'Books close by hand.' }, b: { body: 'Books close by hand.' }, state: 'same' },
+  { key: 'traction', label: 'Traction', a: { body: null }, b: { body: 'Pilots convert to paid.' }, state: 'changed' },
+  { key: 'team', label: 'Team', a: { body: null }, b: { body: null }, state: 'not_recorded' },
+] };
+
 function handler(url) {
   if (url.includes('/form-options')) return response(OPTIONS);
+  if (url.includes('/narrative/compare?')) return response(COMPARE);
   const m = url.match(/\/records\/([^/?]+)\?/);
   if (m) return /^\d+$/.test(m[1]) ? response(version(m[1], `Close the month in a day (v${m[1]}).`)) : response({ detail: 'Not found' }, 404);
   if (url.includes('/cycles/raise/modules/')) return response(MODULE);
@@ -147,28 +155,26 @@ test('Check reads the saved versions and the newest version, never a record call
   } finally { await view.close(); }
 });
 
-test('Story reads the version the address names, and draws Not recorded, never a blank', async () => {
+test('Story reads the version the address names, from the narrative\'s own stores', async () => {
+  // D910 (#2694): Story reads D908's sections and bindings, not the record;
+  // what it draws is tested in narrative_story_d910.test.mjs.
   const view = await mounted('/raise/investor-narrative/story?project_id=3&version=2');
   try {
-    assert.ok(view.requests.some((u) => u.includes('/records/2?project=3')));
-    assert.ok(!view.requests.some((u) => u.includes('/records/4?')), 'only the chosen version');
-    const t = view.text();
-    assert.match(t, /Close the month in a day \(v2\)\./);
-    // 2026-10-24 (D906 review): read Story's own mark, not the page; the rail says "Not recorded" too.
-    assert.equal(view.testIds().filter((id) => id === 'narrative-story-not-recorded').length, 2, 'Problem and Traction draw Not recorded, never a blank');
-    assert.match(t, /ProblemNot recorded/, 'an empty section draws its heading over a blank');
-    assert.match(t, /TractionNot recorded/);
-    assert.ok(view.hrefs().includes(`${HOME_PATH}/2?project_id=3`), 'the version\'s own page, to edit it');
+    assert.ok(view.requests.some((u) => u.includes('/cycles/raise/narrative/2?project=3')));
+    assert.ok(!view.requests.some((u) => u.includes('/cycles/raise/narrative/4?')), 'only the chosen version');
+    assert.ok(!view.requests.some((u) => u.includes('/records/2?')), 'Story no longer reads the record');
+    assert.ok(view.testIds().includes('narrative-story-page'));
   } finally { await view.close(); }
 });
 
 test('Versions lists every version and compares the newest with the one before', async () => {
   const view = await mounted('/raise/investor-narrative/versions?project_id=3');
   try {
-    assert.ok(view.requests.some((u) => u.includes('/records/4?project=3')));
-    assert.ok(view.requests.some((u) => u.includes('/records/3?project=3')));
+    // D909: through D908's compare, which replaced D906's two record reads.
+    assert.ok(view.requests.some((u) => u.includes('/cycles/raise/narrative/compare?project=3&a=3&b=4')), view.requests.join('\n'));
+    assert.ok(!view.requests.some((u) => u.includes('/records/')), 'no record is read to compare');
     assert.ok(view.testIds().includes('narrative-compare'));
-    assert.ok(view.testIds().includes('narrative-compare-changed'), 'the one-liner differs between v4 and v3');
+    assert.ok(view.testIds().includes('narrative-compare-changed'), 'Traction differs between v3 and v4');
     for (const v of ['4', '3', '2']) assert.ok(view.hrefs().includes(`${HOME_PATH}/${v}?project_id=3`), v);
   } finally { await view.close(); }
 });

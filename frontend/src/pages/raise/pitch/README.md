@@ -17,13 +17,15 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 | `NewDeck.jsx` | D897 (#2677), PD3–PD6: New deck at `/raise/pitch/new` — audience and round, the sources step (D896's `SourcesStep`), the outline Eadwyn proposes, then the proposal kept card by card. Every write opens a dialog with its cost; `?proposal=<id>` reopens a proposal. |
 | `newDeckModel.js` | D897: pure words and derivations for New deck and PD2's fast path — AI tokens, the prompt's figure check (the Worker's word list), the round line, outline edits, chips, estimates, the dialogs' sentences, and the proposal's cards. |
 | `SourcesBoards.jsx` | D896: `CoverageMeter` (PD11), `SourceChip`, `SourcesLegend` (PD10b), `ScorecardDialog`, `SourcesPanel` (PD10), `SourcesStep` (PD4) and `useDeckSources`, over `GET /api/decks/sources`. Built here, mounted by part 3 (New deck) and part 4 (the editor). |
+| `PitchEditor.jsx` | D898 (#2676), PD1, PD1b, PD8, PD8c and PD24–PD27: the editor at `/raise/pitch/edit`. The rail with stale dots and reorder, the centre card on the brand kit with its blocks on the 12 × 6 grid, speaker notes, the Sources, Design and Notes tabs, Add a block, and Save, which says what it changes before it writes a version. Reads the slide model from the Worker (`GET /api/decks/model`). |
+| `editorModel.js` | Pure: what a save changes, layouts that carry a card's content, placement on the grid, standard sizes, stale cards, "Saved · …", the card's colours. |
 | `PitchWorkspaceMoved.jsx` | The old `/raise/pitch?mode=workspace` address: it opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`, the venture and the hash kept. |
 
-The deck builder itself stays `../../PitchWorkspacePage.jsx` (with
-`../../PitchDeckPage.jsx`) at `/raise/pitch/edit` until #2434's editor part
-replaces it. New deck (D897) and the Decks tab's "Build a standard deck now"
-build proposals there are kept from; nothing they build is a version until the
-founder saves the cards they kept.
+The template builder, `../../PitchWorkspacePage.jsx` (with
+`../../PitchDeckPage.jsx`), stays at `/raise/pitch/builder`; the editor
+uses `/raise/pitch/edit` (D898). New deck (D897) at `/raise/pitch/new`
+and the Decks tab's standard-deck fast path build proposals. Nothing
+they build becomes a version until the founder saves the cards they kept.
 
 ## The rules for adding here
 

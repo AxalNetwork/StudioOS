@@ -119,6 +119,8 @@ test('an admin sees nothing of the narrative before a reason; the reason opens i
 });
 
 const narrativeHandler = (url) => {
+  if (/\/narrative\/4\?/.test(url)) return response({ version: 4, meta: { state: 'ok', investor_type: 'seed_fund' }, sections: { state: 'ok', items: [{ key: 'problem', body: 'Close the month in a day.' }] }, bindings: { state: 'ok', items: [] } });
+  if (url.includes('/decks/sources')) return response({ items: [] });
   if (url.includes('/form-options')) return response(OPTIONS);
   if (/\/records\/4\?/.test(url)) return response(VERSION);
   if (url.includes('/narrative/notes')) return response({ notes: [NOTE], viewer: 'founder' });
@@ -134,6 +136,9 @@ test('Story for an admin: the notes thread, no edit link, no reads list; for the
     assert.ok(!admin.testIds().includes('narrative-reads'));
     assert.match(admin.text(), /Open v4/);
     assert.ok(!/to edit it/.test(admin.text()), 'an admin is offered no edit');
+    for (const id of ['story-words', 'story-note', 'story-save-open', 'story-insert-open']) assert.ok(!admin.testIds().includes(id), `admin must not see ${id}`);
+    assert.ok(admin.testIds().includes('story-read-only'));
+    assert.ok(!admin.requests.some(([method]) => method === 'PUT'), 'admin reads never save a section');
     assert.match(admin.text(), /Lead Traction with retention before revenue\./);
     assert.match(admin.text(), /Add note/);
   } finally { await admin.close(); }
@@ -144,7 +149,8 @@ test('Story for an admin: the notes thread, no edit link, no reads list; for the
     assert.ok(founder.testIds().includes('narrative-reads'));
     assert.match(founder.text(), /Ada Admin · Studio admin · 24 Oct/);
     assert.match(founder.text(), /Quarterly portfolio review/);
-    assert.match(founder.text(), /Open v4 to edit it/);
+    assert.match(founder.text(), /One-liner, investor type and what it checks against: open v4/);
+    assert.ok(founder.testIds().includes('story-words'), 'founder retains the Story editor');
   } finally { await founder.close(); }
 });
 
@@ -182,7 +188,7 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(app, /<Route path="\/raise\/:slug" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="raise" \/>\)\} \/>/);
   assert.match(app, /\{ under: \/\^\\\/raise\\\/investor-narrative\(\\\/\|\$\)\/, roles: NARRATIVE_BOUNDARY_ROLES, Panel: NarrativeBoundary \}/);
   const guard = app.slice(app.indexOf('function RoleGuard('), app.indexOf('function AuthScreen('));
-  assert.ok(guard.indexOf('if (boundary) return <boundary.Panel />;') > 0 && guard.indexOf('if (boundary) return <boundary.Panel />;') < guard.indexOf('<Navigate to={defaultPath} replace />'),
+  assert.ok(guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} />;') > 0 && guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} />;') < guard.indexOf('<Navigate to={defaultPath} replace />'),
     'the boundary is drawn instead of the redirect, only for a refused role');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin\(user\);/);
@@ -193,8 +199,9 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
   const api = read('frontend/src/lib/api.js');
-  // The module is re-exported by its one line; its place in the alphabetical block is check-api-drift's to hold (D527).
-  assert.match(api, /\nexport \* from '\.\/api\/narrative\.js';\n/);
+  const exports = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end')).split('\n').filter(line => line.startsWith('export * from'));
+  assert.equal(exports.filter(line => line === "export * from './api/narrative.js';").length, 1);
+  assert.deepEqual(exports, [...exports].sort(), 'API modules stay alphabetical as new domains land');
 });
 
 
@@ -215,4 +222,27 @@ test('merged Positioning stays read only for admins while keeping core and versi
   assert.ok(!page.requests.some(r=>r[0]!=='GET'));
   assert.ok(!page.requests.some(r=>r[1].includes('/positioning/draft')));
  }finally{await page.close();}
+});
+
+
+test('merged Versions keeps reads visible to admins and creation controls for founders only', async () => {
+  const saved = [{ value: '4', label: 'v4 · seed fund' }, { value: '3', label: 'v3 · angel' }];
+  const versionRows = saved.map(v => ({ version: Number(v.value), audience: v.label, based_on: 'Blank', saved: '2026-10-24', by: 'Fay Founder', read_by: null }));
+  const handle = (url) => {
+    if (url.includes('/form-options')) return response({ versions: saved });
+    if (url.includes('/narrative/compare')) return response({ pairs: [{ key: 'problem', label: 'Problem', a: { body: 'Before' }, b: { body: 'After' }, state: 'changed' }] });
+    if (url.includes('/modules/investor-narrative')) return response({ parts: { narrative: { state: 'ok', versions: versionRows } } });
+    return narrativeHandler(url);
+  };
+  for (const admin of [true, false]) {
+    const page = await mounted(h(NarrativeTabPage, { tab: 'versions', projectId: 1, search: '?project_id=1', admin, cards: [] }), handle);
+    try {
+      assert.ok(page.testIds().includes('narrative-read-by'));
+      assert.match(page.text(), /from Blank/);
+      assert.match(page.text(), /Before/);
+      assert.equal(page.testIds().includes('narrative-duplicate'), !admin);
+      assert.equal(page.testIds().includes('narrative-start-from'), !admin);
+      assert.ok(page.requests.every(([method]) => method === 'GET'));
+    } finally { await page.close(); }
+  }
 });

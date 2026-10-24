@@ -16,9 +16,10 @@
  *
  * ONE DEFINITION PER FIGURE. Every events figure (registrations, show-up, by
  * type, by role, the events queue's age) is D918's (#2701), read through its
- * events overview service so Community and the Events desk cannot disagree.
- * Until that service is on this Worker, each events part answers unreadable
- * with `EVENTS_PENDING_REASON`. None is computed here.
+ * events overview (`readOverview` in services/adminEventsReads.ts) so
+ * Community and the Events desk cannot disagree. Each of its blocks keeps its
+ * own answer here: a block D918 could not read is unreadable here too, and
+ * nothing is recomputed. Only the keys are Community's.
  *
  * WELLBEING ANSWERS ARE NEVER READ. The check-in band counts distinct members
  * in `wellbeing_daily_pulses` and touches no other column, so no answer is
@@ -30,6 +31,7 @@
  */
 import type { Env } from '../types';
 import { weekAxis, type WeekAxis } from './activeAccounts';
+import { readOverview } from './adminEventsReads';
 import { previousAxis } from './adminInsights';
 import { JOB_STATUSES } from './jobBoardCommon';
 import { SAMPLE_EXPERT_UID_PREFIX } from './wellbeing/seedExperts';
@@ -46,8 +48,6 @@ export const CHECKIN_BUCKET = 5;
 /** The postings `jobs.top` lists. */
 export const TOP_POSTINGS = 5;
 
-export const EVENTS_PENDING_REASON =
-  'Events figures come from the Events desk overview (D918), which this Worker does not have yet.';
 export const DAYS_OPEN_REASON = 'No store records when a posting was published, so how long it has been open is not known.';
 /** D930 §5: the corrected CM1 sentence. */
 export const ACTIVE_MEMBERS_REASON =
@@ -78,8 +78,6 @@ async function block<T>(what: string, read: () => Promise<T>): Promise<({ availa
   }
 }
 
-/** An events part, until D918's service is on this Worker. */
-const eventsPending = (): Unreadable => ({ available: false, unreadable: true, reason: EVENTS_PENDING_REASON });
 
 /** `users.role` (or no account) as a Community role. `mentor` is an advisor, `partner` an Operating Partner. */
 export function participationRole(role: unknown, hasAccount: boolean): ParticipationRole {
@@ -286,6 +284,66 @@ async function checkinsPart(env: Env, axis: WeekAxis) {
 }
 
 // ---------------------------------------------------------------------------
+// Events: D918's blocks, in Community's keys
+// ---------------------------------------------------------------------------
+
+type D918Block = { available: true; [k: string]: any } | Unreadable;
+const isRead = (b: D918Block | undefined): b is { available: true; [k: string]: any } => Boolean(b && b.available === true);
+
+/** D918's role buckets as Community's. An account D918 cannot place stays `not_recorded`, apart from `other`. */
+const D918_ROLE: Record<string, ParticipationRole> = {
+  founder: 'founder', investor: 'investor', advisor: 'advisor', partner: 'operating_partner', exploring: 'explorer', guest: 'guest', admin: 'other',
+};
+
+export function eventsByRole(b: D918Block) {
+  if (!isRead(b)) return b;
+  const by_role = zeroRoles();
+  let notRecorded = 0;
+  for (const [k, v] of Object.entries(b.counts || {})) {
+    const role = D918_ROLE[k];
+    if (role) by_role[role] += n(v);
+    else notRecorded += n(v);
+  }
+  return { available: true as const, by_role, not_recorded: notRecorded };
+}
+
+/** D918's weekly block on Community's week keys: `week`, and `to_date` on the current one. */
+export function eventsWeekly(b: D918Block) {
+  if (!isRead(b)) return b;
+  const weeks = Array.isArray(b.weeks) ? b.weeks : [];
+  return {
+    available: true as const,
+    registrations: { window: n(b.registrations?.this_period), previous: n(b.registrations?.previous_period) },
+    weekly: weeks.map((w: any) => ({ week: String(w.week_start), registrations: n(w.registrations), checkins: n(w.checkins), to_date: w.to_date === true })),
+  };
+}
+
+/** D918's show-up, counts only: its list of recent events stays on the Events desk. */
+export function showUpCounts(b: D918Block) {
+  if (!isRead(b)) return b;
+  const { recent: _recent, ...counts } = b;
+  return counts;
+}
+
+/**
+ * The events parts of the read, from one call to D918's overview. It catches
+ * inside each of its blocks, so a failed store fails only the parts it feeds.
+ */
+async function eventsParts(env: Env, weeks: CommunityWeeks, nowMs: number) {
+  const o = await readOverview(env, weeks, nowMs);
+  return {
+    queue: o.queue,
+    events: {
+      weekly: eventsWeekly(o.weekly as D918Block),
+      show_up: showUpCounts(o.show_up as D918Block),
+      by_type: o.by_type,
+      waitlisted: o.waitlisted,
+    },
+    byRole: eventsByRole(o.by_role as D918Block),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The read
 // ---------------------------------------------------------------------------
 
@@ -298,7 +356,8 @@ export function parseCommunityWeeks(raw: string | undefined): CommunityWeeks | n
 export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: number = Date.now()) {
   const axis = weekAxis(new Date(nowMs).toISOString(), weeks);
   const before = previousAxis(axis);
-  const [jobsQ, jobs, jobsRoles, circles, network, experts, bookings, checkins] = await Promise.all([
+  const [ev, jobsQ, jobs, jobsRoles, circles, network, experts, bookings, checkins] = await Promise.all([
+    eventsParts(env, weeks, nowMs),
     block('The job board queue', () => jobsQueue(env, nowMs)),
     block('The job board', () => jobsBlock(env, axis, before)),
     block('Job applications by role', () => jobsByRole(env, axis)),
@@ -316,10 +375,10 @@ export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: 
     previous: { from: before.from, to: before.to },
     as_of: new Date(nowMs).toISOString(),
     blocks: {
-      queue: { events: eventsPending(), jobs: jobsQ, overdue_hours: OVERDUE_HOURS },
-      events: eventsPending(),
+      queue: { events: ev.queue, jobs: jobsQ, overdue_hours: OVERDUE_HOURS },
+      events: ev.events,
       jobs,
-      participation_by_role: { events: eventsPending(), jobs: jobsRoles },
+      participation_by_role: { events: ev.byRole, jobs: jobsRoles },
       circles,
       network,
       wellbeing: { experts, bookings, checkins },

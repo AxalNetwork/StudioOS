@@ -18,16 +18,19 @@
  *     narrative rows and its consistency check, as the Worker states them.
  * Nothing is a sample. A read that fails says so where its figure would be.
  *
+ * Story (D910, #2694) reads the narrative's own stores, D908's sections and
+ * bound figures, and PITCH's source registry; its derivations are in
+ * `storyModel.js`.
+ *
  * D911 (#2695): Positioning is stored (D908) and drawn here, from
  *   - `GET /api/cycles/raise/narrative/positioning?version=` → the core, the
  *     version's own fields and what the version reads;
  *   - `GET …/narrative/positioning/draft` → Validate's segments and
  *     competitors, and Eadwyn's open proposals.
  *
- * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. Claims, bound figures, the deck
- * side of the check and objections need stores the Worker does not have. Each
- * is a slot task on #2454 (D906 §6); this file grows the derivation when its
- * read lands.
+ * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. Claims' states, the deck side
+ * of the check and objections are slot tasks on #2454 (D906 §6); this file
+ * grows the derivation when its read lands.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
@@ -119,12 +122,6 @@ export function storyRows(record) {
     .filter((r) => r.label);
 }
 
-/**
- * The canvas's story sections that no store holds yet (D906 §3): the sections
- * store is part 2. Listed so the Story tab says what waits, never drawn empty.
- */
-export const WAITING_SECTIONS = ['Solution', 'Market', 'Business model', 'Competition', 'Team'];
-
 const RESULTS = { Mismatch: 'bad', OK: 'ok', 'Not compared': 'grey' };
 
 /**
@@ -170,6 +167,119 @@ export function compareRows(a, b) {
     return { label, a: l, b: r, changed: l !== r };
   });
 }
+
+// ---------------------------------------------------------------------------
+// D909 (#2693): Home's tiles and lists (NAR1), New version (NAR11) and
+// Versions (NAR12), from the module read's `parts.narrative` and D908's compare.
+// ---------------------------------------------------------------------------
+
+/** The Worker's Home part when it read, else null (unreadable, refused or absent). */
+export const homePart = (data) => (data?.parts?.narrative?.state === 'ok' ? data.parts.narrative : null);
+export const homeUnreadable = (data) => data?.parts?.narrative?.state === 'unreadable';
+
+export const CLAIMS_WAIT = 'Claims are counted once StudioOS checks each claim against its record.';
+export const OBJECTIONS_WAIT = 'Answers to objections are not recorded yet.';
+const DASH = '—';
+
+const versionName = (v) => `v${v.version} · ${v.audience || NOT_RECORDED}`;
+
+/**
+ * NAR1's four tiles: Versions and Open mismatches from the part; Claims backed
+ * (#2430) and Objections answered (#2457) a dash with the reason, never 0.
+ */
+export function homeTiles(part) {
+  const versions = Array.isArray(part?.versions) ? part.versions : [];
+  const newest = part?.newest ?? null;
+  const mismatches = Array.isArray(newest?.mismatches) ? newest.mismatches : [];
+  return [
+    { key: 'versions', label: 'Versions', value: String(versions.length), sub: versions[0] ? `Newest ${versionName(versions[0])}` : 'No version yet' },
+    { key: 'claims', label: 'Claims backed', value: DASH, sub: CLAIMS_WAIT, waits: true },
+    {
+      key: 'mismatches', label: 'Open mismatches',
+      value: !newest || !newest.compared ? DASH : String(mismatches.length),
+      sub: !newest ? 'No version yet'
+        : !newest.compared ? `Nothing compared yet in v${newest.version}`
+          : mismatches.length ? `${[...new Set(mismatches.map((m) => m.figure))].join(', ')}, in v${newest.version}` : `None in v${newest.version}`,
+      waits: !newest || !newest.compared,
+    },
+    { key: 'objections', label: 'Objections answered', value: DASH, sub: OBJECTIONS_WAIT, waits: true },
+  ];
+}
+
+/** NAR1's "Needs you": each mismatch in the newest version, opened on its Check. */
+export function needsYou(part, search = '') {
+  const newest = part?.newest;
+  return (Array.isArray(newest?.mismatches) ? newest.mismatches : []).map((m, i) => ({
+    key: `${m.figure}-${i}`, pill: 'Mismatch', title: m.figure, sub: m.sentence,
+    href: tabHref(TABS.find((t) => t.id === 'check'), search, newest.version),
+  }));
+}
+export const NEEDS_NONE = 'Nothing needs you in the newest version.';
+
+/** The footer: the deck reads the narrative only when one of its cards binds a version. */
+export function homeFooter(part) {
+  if (!part?.deck) return 'No pitch deck yet, so nothing reads your narrative.';
+  return part.deck.reads_narrative ? 'The Pitch deck studio reads your narrative.' : 'No card of your pitch deck reads your narrative yet.';
+}
+
+/** NAR12's based-on line: "from v1 · saved 2026-10-20 · by Fay Founder", "Not recorded" for what was not. */
+export function versionSub(v) {
+  return `from ${v?.based_on || NOT_RECORDED} · saved ${v?.saved || NOT_RECORDED} · by ${v?.by || NOT_RECORDED}`;
+}
+
+/** NAR12's Read by: "Pitch deck v6 · cards 1, 2", or the sentence that no deck reads it. */
+export function readByLine(v) {
+  const cards = Array.isArray(v?.read_by?.cards) ? v.read_by.cards : [];
+  if (!cards.length) return 'No deck reads this version.';
+  return `Pitch deck v${v.read_by.deck_version} · ${cards.length === 1 ? 'card' : 'cards'} ${cards.join(', ')}`;
+}
+
+/** No Delete is drawn; a version a deck reads says why it could not be one. */
+export const deleteLine = (v) => (v?.read_by?.cards?.length
+  ? `v${v.version} cannot be deleted while Pitch deck v${v.read_by.deck_version} reads it.`
+  : null);
+
+/** D908's compare, as the page draws it: every section, each side's words or null, and whether it changed. */
+export function compareView(res) {
+  return (Array.isArray(res?.pairs) ? res.pairs : []).map((p) => ({
+    key: String(p?.key ?? ''), label: String(p?.label ?? ''),
+    a: p?.a?.body ?? null, b: p?.b?.body ?? null, changed: p?.state === 'changed',
+  })).filter((r) => r.key && r.label);
+}
+
+/** Duplicate's dialog sentence. */
+export const duplicateSentence = (v, next) => `Creates v${next}, a copy of v${v.version} for ${v.audience || 'the same audience'}. Nothing in v${v.version} changes.`;
+
+/** The next version number: one past the newest saved. */
+export const nextVersion = (versions) => (Array.isArray(versions) && versions.length ? Math.max(...versions.map((v) => Number(v.version ?? v.value) || 0)) + 1 : 1);
+
+const AUDIENCE = {
+  angel: 'angels', pre_seed_fund: 'pre-seed funds', seed_fund: 'seed funds', series_a_fund: 'Series A funds',
+  strategic: 'strategic investors', grant: 'a grant', other: 'other investors',
+};
+
+/**
+ * NAR11's line: "Creates v5 for Series A funds. Nothing in v4 changes." The
+ * version kept is the one started from, else the newest; with none saved, only
+ * the first sentence.
+ */
+export function newVersionLine(values, versions) {
+  const saved = Array.isArray(versions) ? versions : [];
+  const n = nextVersion(saved);
+  const who = AUDIENCE[String(values?.investor_type ?? '')];
+  const from = /^version-([1-9][0-9]{0,8})$/.exec(String(values?.start_from ?? ''));
+  const kept = from ? from[1] : saved.length ? String(Math.max(...saved.map((v) => Number(v.version ?? v.value) || 0))) : null;
+  return [`Creates v${n}${who ? ` for ${who}` : ''}.`, kept ? `Nothing in v${kept} changes.` : null].filter(Boolean).join(' ');
+}
+
+/** The New version address with a saved version chosen to start from (NAR12's "Make vN the start of a new version"). */
+export const startFromHref = (version, search = '') => {
+  const q = tabSearch(search, null, false);
+  return `${NEW_PATH}${q ? `${q}&` : '?'}start_from=version-${encodeURIComponent(String(version))}`;
+};
+
+/** D911: the positioning tab, with the venture query kept. */
+export const positioningHref = (search = '') => `${POSITIONING_PATH}${tabSearch(search, null, false)}`;
 
 export const NO_VERSION = 'No narrative yet. Start a version for one kind of investor.';
 // What the Worker's check reads today (raiseCycle.ts checkInputs): the figures
