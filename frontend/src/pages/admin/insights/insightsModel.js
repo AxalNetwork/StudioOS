@@ -1,27 +1,23 @@
 /**
- * D893 (#2366) — Admin › Insights, the page's model. Pure: no React, no fetch.
+ * D893 (#2366, #2660) — Admin › Insights, the page's model. Pure: no React, no fetch.
  *
- * The canvas is "Admin Insights" (INS1–INS11). This file turns the reads the
- * page makes into the canvas's KPI tiles and blocks, each in one of four
- * states, so a figure that could not be read never shows as a zero:
+ * The canvas is "Admin Insights" (INS1–INS11). This file turns the page's one
+ * read, `GET /api/admin/insights` (#2660, any admin, counts only), into the
+ * canvas's KPI tiles and blocks, each in one of four states, so a figure that
+ * could not be read never shows as a zero:
  *   ready       a measured value (0 is a value)
- *   loading     its read has not answered
- *   unreadable  its read failed; `reason` says which and that it is not a zero
- *   unrecorded  no read counts it yet; `reason` says what is missing
+ *   loading     the read has not answered
+ *   unreadable  the read, or that block's own store, failed; `reason` says so
+ *   unrecorded  nothing counts it yet; `reason` says what is missing
  *
- * WHAT IS READ TODAY, and from where:
- *   · the Studio glance (`GET /api/admin/studio/glance`, any admin): accounts
- *     by profile, new in 7/30 days, deactivated, sign-ups per Monday week,
- *     AI spend this month, open tickets by status;
- *   · the analytics overview (`GET /api/monitoring/analytics/overview`, any
- *     admin), once for last week and once for the week before: distinct
- *     signed-in accounts that made a logged request;
- *   · the retention cohorts (`GET /api/monitoring/analytics/cohorts`, any
- *     admin): each sign-up week's share active in the last 30 days;
- *   · HQ analytics (`GET /api/admin/hq/analytics`, Super Admin only): the
- *     HQ-held weekly active line and the activation funnel.
- * Everything else on the canvas waits for the Insights read (#2366's backend
- * task), and says so in its own block.
+ * The Worker answers each block alone: `{ available: true, … }`,
+ * `{ available: false, unreadable: true, reason }` or `{ recorded: false,
+ * reason }`. `blockState` maps the last two onto the page's states, and every
+ * builder below starts from it.
+ *
+ * THE FILTERS ARE THE URL'S. `range`, `profile`, `country` and `compare` are
+ * query parameters, so a filtered view can be linked, and the read is made
+ * with exactly what the URL holds (`readParams`).
  */
 
 export const INSIGHTS_PATH = '/admin/insights';
@@ -35,14 +31,28 @@ export const NO_PERMISSION_FILTER = 'Only HQ can look at another studio’s acco
 export const PAGE_UNREADABLE = 'Insights could not be read. Try again.';
 export const EMPTY_LINE = 'No accounts yet. When people join, this page fills in.';
 
-/** The ranges the canvas offers. Only eight weeks is read until the Insights read ships. */
+/** The ranges the canvas offers: the Worker's `ANALYTICS_RANGES`. */
 export const RANGES = [
-  { key: '8w', label: '8 weeks', ready: true },
-  { key: 'quarter', label: 'Quarter', ready: false },
-  { key: 'year', label: 'Year', ready: false },
+  { key: '8w', label: '8 weeks' },
+  { key: 'quarter', label: 'Quarter' },
+  { key: 'year', label: 'Year' },
 ];
-export const PROFILE_FILTERS = ['All', 'Founders', 'Investors', 'LPs', 'Advisors', 'Operating Partners', 'Explorers', 'Product testers'];
-export const FILTER_WAITS = 'Filtering by range, profile and country arrives with the Insights read.';
+const RANGE_KEYS = RANGES.map((r) => r.key);
+
+/**
+ * The canvas's profile chips. `role` is the `users.role` the Worker filters
+ * on; a chip with `waits` is drawn but cannot be chosen, and says why.
+ */
+export const PROFILE_FILTERS = [
+  { label: 'All', role: null },
+  { label: 'Founders', role: 'founder' },
+  { label: 'Investors', role: 'investor' },
+  { label: 'LPs', role: null, waits: 'LPs are investors with an approved LP application, not a profile of their own, so they are counted inside Investors.' },
+  { label: 'Advisors', role: 'advisor' },
+  { label: 'Operating Partners', role: 'partner' },
+  { label: 'Explorers', role: 'exploring' },
+  { label: 'Product testers', role: null, waits: 'A Product tester is a sub-account that #2377 has not defined yet, so nothing marks one.' },
+];
 
 /**
  * The chart palette (#2375's one palette): violet, sky, amber, emerald, muted.
@@ -57,19 +67,21 @@ const PROFILE_OF = {
   advisor: { key: 'advisor', label: 'Advisors', tone: 'amber' },
   mentor: { key: 'advisor', label: 'Advisors', tone: 'amber' },
   partner: { key: 'partner', label: 'Operating Partners', tone: 'emerald' },
-  explorer: { key: 'explorer', label: 'Explorers', tone: 'muted' },
+  exploring: { key: 'exploring', label: 'Explorers', tone: 'muted' },
+  explorer: { key: 'exploring', label: 'Explorers', tone: 'muted' },
   admin: { key: 'admin', label: 'Admins', tone: 'muted' },
 };
 
 export function profileOf(role) {
   const r = String(role || '').trim().toLowerCase();
   if (PROFILE_OF[r]) return PROFILE_OF[r];
-  if (!r || r === 'no role') return { key: 'none', label: 'No role', tone: 'muted' };
+  if (!r || r === 'no role' || r === 'no account') return { key: 'none', label: r === 'no account' ? 'No account' : 'No role', tone: 'muted' };
   return { key: r, label: r.charAt(0).toUpperCase() + r.slice(1), tone: 'muted' };
 }
 
 const nf = (n) => Number(n).toLocaleString('en-US');
 const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
+const usd = (v) => `$${(Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** 'YYYY-MM-DD' → '31 Aug'. */
@@ -94,41 +106,38 @@ export function asOfLabel(ms) {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${hh}:${mm} UTC`;
 }
 
-/** Monday 00:00 UTC of the week holding `ms`, as 'YYYY-MM-DD' (the Worker's `weekStart`). */
-export function mondayOf(ms) {
-  const d = new Date(ms);
-  const day = (d.getUTCDay() + 6) % 7;
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day)).toISOString().slice(0, 10);
+/* ------------------------------------------------------------------ *
+ * The filters, from and to the URL
+ * ------------------------------------------------------------------ */
+
+/** What the URL asks the page to show. Anything it does not recognise is the default. */
+export function filtersFromSearch(search) {
+  const p = new URLSearchParams(search || '');
+  const range = RANGE_KEYS.includes(p.get('range')) ? p.get('range') : '8w';
+  const role = p.get('profile');
+  const profile = PROFILE_FILTERS.some((f) => f.role && f.role === role) ? role : null;
+  const country = (p.get('country') || '').trim() || null;
+  return { range, profile, country, compare: p.get('compare') === '1' };
 }
 
-/**
- * The two whole weeks the overview is read for: last week and the one before,
- * as `{ from, to }` ISO dates (Monday to Sunday, UTC), for `api.analyticsOverview`.
- */
-export function lastTwoWeeks(nowMs) {
-  const thisMonday = Date.parse(`${mondayOf(nowMs)}T00:00:00Z`);
-  const day = 86_400_000;
-  const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
+/** The read's query: the filters, and the group when the lightbox is open. Unset ones are left out. */
+export function readParams(filters, group = null) {
   return {
-    last: { from: iso(thisMonday - 7 * day), to: iso(thisMonday - day) },
-    before: { from: iso(thisMonday - 14 * day), to: iso(thisMonday - 8 * day) },
+    range: filters.range === '8w' ? undefined : filters.range,
+    profile: filters.profile || undefined,
+    country: filters.country || undefined,
+    compare: filters.compare || undefined,
+    group: group || undefined,
   };
 }
 
-/**
- * SQLite's `strftime('%Y-W%W')` cohort key → the Monday it starts.
- * `%W` counts weeks from the year's first Monday (week 01); days before it are
- * week 00, whose Monday falls in the previous year.
- */
-export function cohortMonday(key) {
-  const m = /^(\d{4})-W(\d{2})$/.exec(String(key || ''));
-  if (!m) return null;
-  const year = Number(m[1]);
-  const w = Number(m[2]);
-  const jan1 = Date.UTC(year, 0, 1);
-  const dow = (new Date(jan1).getUTCDay() + 6) % 7; // Monday = 0
-  const firstMonday = jan1 + ((7 - dow) % 7) * 86_400_000;
-  return new Date(firstMonday + (w - 1) * 7 * 86_400_000).toISOString().slice(0, 10);
+export function rangeLabel(key) {
+  return RANGES.find((r) => r.key === key)?.label || '8 weeks';
+}
+
+/** How many filters differ from the defaults: the badge on the phone's Filters button. */
+export function activeFilterCount(f) {
+  return (f.range !== '8w' ? 1 : 0) + (f.profile ? 1 : 0) + (f.country ? 1 : 0) + (f.compare ? 1 : 0);
 }
 
 /* ------------------------------------------------------------------ *
@@ -140,143 +149,84 @@ const loading = () => ({ state: 'loading' });
 const unreadable = (reason) => ({ state: 'unreadable', reason });
 const unrecorded = (reason) => ({ state: 'unrecorded', reason });
 
-/** One read's status → the state a block built on it starts from, or null when it is ready. */
-function gate(read, reason) {
+const READ_FAILED = 'Insights could not be read. This is not a claim that the count is zero.';
+const NOT_IN_ANSWER = 'This block was not in the answer, so it is not shown as zero.';
+
+/**
+ * One Worker block → `null` when it is readable, else the page state to draw.
+ * The read itself loading or failing decides first.
+ */
+export function blockState(read, block) {
   if (!read || read.status === 'loading') return loading();
-  if (read.status === 'error') return unreadable(reason);
+  if (read.status === 'error') return unreadable(READ_FAILED);
+  if (!block) return unreadable(NOT_IN_ANSWER);
+  if (block.recorded === false) return unrecorded(block.reason);
+  if (block.available === false) return unreadable(block.reason || READ_FAILED);
   return null;
 }
 
-export const WAITS_FOR_READ = {
-  plan: 'Plans are not counted for this page yet: the read that counts accounts by plan is not built.',
-  activity: 'Weekly active accounts are not counted for this page yet. Last week’s figure is in the tiles above.',
-  activation: 'The activation funnel is read for HQ only today. It reaches this page with the Insights read.',
-  activated: 'The activation funnel is read for HQ only today.',
-  countries: 'Countries are not counted for this page yet: the read that counts accounts by country is not built.',
-  identity: 'Identity checks are not counted for this page yet: the read that counts them by state is not built.',
-  completeness: 'Profile completeness is not counted for this page yet.',
-  dormant: 'Dormant accounts are not counted for this page yet.',
-  lps: 'not counted yet, investors with an approved LP application',
-  testers: 'not counted yet, a sub-account any profile can apply for (#2377)',
-  spendByProfile: 'AI spend by profile is not counted for this page yet.',
-  growthSplit: 'The split by profile is not counted yet, so each week is one column.',
-};
+const data = (read) => (read?.status === 'ready' ? read.data || {} : {});
+const kpi = (read, k) => data(read).kpis?.[k];
+const blk = (read, k) => data(read).blocks?.[k];
 
 /* ------------------------------------------------------------------ *
  * The KPI row (INS1)
  * ------------------------------------------------------------------ */
 
-const GLANCE_FAILED = 'The Studio glance could not be read. This is not a claim that the count is zero.';
-const LOG_FAILED = 'The request log did not answer. This is not a claim that nobody was active.';
-
-/** Reads the glance's two HQ blocks, or a failure the tiles can name. */
-export function glanceParts(read) {
-  const accounts = read?.data?.hq?.accounts;
-  const insights = read?.data?.hq?.insights;
-  return {
-    accounts: accounts && accounts.available !== false && Array.isArray(accounts.by_role) ? accounts : null,
-    accountsReason: accounts?.reason || GLANCE_FAILED,
-    signups: insights?.signups_by_week?.available ? insights.signups_by_week : null,
-    signupsReason: insights?.signups_by_week?.reason || GLANCE_FAILED,
-    spend: insights?.ai_spend_month?.available ? insights.ai_spend_month : null,
-    spendReason: insights?.ai_spend_month?.reason || GLANCE_FAILED,
-    tickets: insights?.open_tickets?.available ? insights.open_tickets : null,
-    ticketsReason: insights?.open_tickets?.reason || GLANCE_FAILED,
-    hasHq: Boolean(read?.data?.hq),
-  };
-}
-
-/** The closed activation cohorts of the HQ-held line, or null. */
-export function hqActivation(hq) {
-  const line = hq?.status === 'ready' ? (hq.data?.activation?.lines || []).find((l) => l.code === 'hq') : null;
-  return line && line.available !== false && Array.isArray(line.cohorts) ? line : null;
-}
-
-export function buildKpis({ glance, overview, hq, superAdmin }) {
-  const g = glanceParts(glance);
+export function buildKpis({ insights }) {
   const tiles = [];
+  const accounts = kpi(insights, 'accounts');
 
-  // Accounts
   {
-    const s = gate(glance, GLANCE_FAILED);
-    if (s) tiles.push({ key: 'accounts', label: 'Accounts', ...s });
-    else if (!g.accounts) tiles.push({ key: 'accounts', label: 'Accounts', ...unreadable(g.accountsReason) });
-    else {
-      tiles.push({
-        key: 'accounts', label: 'Accounts', ...ready({
-          value: nf(g.accounts.total),
-          delta: g.accounts.new_30d ? `+${nf(g.accounts.new_30d)} in 30 days` : '',
-          deltaTone: 'positive',
-          sub: `${nf(g.accounts.deactivated)} deactivated`,
-        }),
-      });
-    }
+    const s = blockState(insights, accounts);
+    tiles.push({
+      key: 'accounts', label: 'Accounts', ...(s || ready({
+        value: nf(accounts.total),
+        delta: accounts.new_30d ? `+${nf(accounts.new_30d)} in 30 days` : '',
+        deltaTone: 'positive',
+        sub: `${nf(accounts.deactivated)} deactivated`,
+      })),
+    });
   }
-
-  // New this week
   {
-    const s = gate(glance, GLANCE_FAILED);
-    if (s) tiles.push({ key: 'new', label: 'New this week', ...s });
-    else if (!g.signups) tiles.push({ key: 'new', label: 'New this week', ...unreadable(g.signupsReason) });
-    else {
-      const w = g.signups.weeks;
-      const now = w[w.length - 1];
-      const prev = w[w.length - 2];
-      tiles.push({
-        key: 'new', label: 'New this week', ...ready({
-          value: nf(now?.count ?? 0), tag: now?.to_date ? 'to date' : '',
-          sub: prev ? `${nf(prev.count)} last week` : '',
-        }),
-      });
-    }
+    const n = kpi(insights, 'new_this_week');
+    const s = blockState(insights, n);
+    tiles.push({
+      key: 'new', label: 'New this week', ...(s || ready({
+        value: nf(n.count), tag: 'to date', sub: `${nf(n.last_week)} last week`,
+      })),
+    });
   }
-
-  // Active last week
   {
-    const s = gate(overview?.last, LOG_FAILED);
-    if (s) tiles.push({ key: 'active', label: 'Active last week', ...s });
-    else {
-      const v = Number(overview.last.data?.active_users) || 0;
-      const total = g.accounts?.total;
-      const before = overview.before?.status === 'ready' ? Number(overview.before.data?.active_users) : null;
-      let delta = '';
-      let deltaTone = '';
-      if (Number.isFinite(before) && before > 0) {
-        const change = Math.round(((v - before) / before) * 100);
-        delta = `${change >= 0 ? '+' : '−'}${Math.abs(change)}% on the week before`;
-        deltaTone = change >= 0 ? 'positive' : 'negative';
-      }
-      tiles.push({
-        key: 'active', label: 'Active last week', ...ready({
-          value: nf(v), sub: Number.isFinite(total) && total > 0 ? `${pct(v, total)}% of accounts` : '', delta, deltaTone,
-        }),
-      });
+    const a = kpi(insights, 'active_last_week');
+    let s = blockState(insights, a);
+    if (!s && (a.value === null || a.value === undefined)) {
+      s = unrecorded('The request log holds nothing for last week, so it is left blank rather than shown as zero.');
     }
+    let delta = '';
+    let deltaTone = '';
+    if (!s && Number.isFinite(a.week_before) && a.week_before > 0) {
+      const change = Math.round(((a.value - a.week_before) / a.week_before) * 100);
+      delta = `${change >= 0 ? '+' : '−'}${Math.abs(change)}% on the week before`;
+      deltaTone = change >= 0 ? 'positive' : 'negative';
+    }
+    const total = accounts?.available ? accounts.total : null;
+    tiles.push({
+      key: 'active', label: 'Active last week', ...(s || ready({
+        value: nf(a.value), sub: Number.isFinite(total) && total > 0 ? `${pct(a.value, total)}% of accounts` : '', delta, deltaTone,
+      })),
+    });
   }
-
-  // Activated
   {
-    if (!superAdmin) tiles.push({ key: 'activated', label: 'Activated', ...unrecorded(WAITS_FOR_READ.activated) });
-    else {
-      const s = gate(hq, 'HQ analytics could not be read. This is not a claim that nobody activated.');
-      if (s) tiles.push({ key: 'activated', label: 'Activated', ...s });
-      else {
-        const line = hqActivation(hq);
-        const closed = line ? line.cohorts.filter((c) => !c.week_two_open && c.active_week_two !== null) : [];
-        const created = closed.reduce((t, c) => t + c.created, 0);
-        if (!line) tiles.push({ key: 'activated', label: 'Activated', ...unreadable('The activation funnel could not be read.') });
-        else if (!created) tiles.push({ key: 'activated', label: 'Activated', ...unrecorded('No sign-up week has finished its second week yet.') });
-        else {
-          const active = closed.reduce((t, c) => t + c.active_week_two, 0);
-          tiles.push({
-            key: 'activated', label: 'Activated', ...ready({
-              value: `${pct(active, created)}%`,
-              sub: `of accounts whose second week has ended were active in it (last ${closed.length} sign-up weeks)`,
-            }),
-          });
-        }
-      }
-    }
+    const a = kpi(insights, 'activated');
+    let s = blockState(insights, a);
+    if (!s && a.rate_pct === null) s = unrecorded('No sign-up week in this range has finished its second week yet.');
+    tiles.push({
+      key: 'activated', label: 'Activated', ...(s || ready({
+        value: `${Math.round(a.rate_pct)}%`,
+        sub: `of accounts whose second week has ended were active in it (${nf(a.cohorts_counted)} sign-up week${a.cohorts_counted === 1 ? '' : 's'})`,
+      })),
+    });
   }
   return tiles;
 }
@@ -285,7 +235,7 @@ export function buildKpis({ glance, overview, hq, superAdmin }) {
  * The blocks (INS1)
  * ------------------------------------------------------------------ */
 
-/** The canvas's "How is this counted?" text, one entry per block (INS4). */
+/** The canvas's "How is this counted?" text, one entry per block (INS4). The Worker's sentence wins when it sends one. */
 export const DEFINITIONS = {
   who: {
     title: 'Who your accounts are',
@@ -297,7 +247,7 @@ export const DEFINITIONS = {
   activity: {
     title: 'Active accounts',
     body: 'An active account is a signed-in account that made at least one request the platform logs as activity during the week. Health checks, monitoring and requests refused for rate do not count. Weeks run Monday to Sunday in UTC.',
-    more: [['LPs', 'investors with an approved LP application.'], ['Activated', 'active on any day from day 8 to day 14 after the account was created.']],
+    more: [['Activated', 'active on any day from day 8 to day 14 after the account was created.']],
   },
   activation: {
     title: 'Activation',
@@ -313,101 +263,159 @@ export const DEFINITIONS = {
   spend: { title: 'AI spend this month', body: 'The estimated cost of every AI call this calendar month (UTC), with the number of calls.' },
 };
 
+/** The dialog's text for one block: the Worker's sentence when the read sent one. */
+export function definitionOf(key, insights) {
+  const local = DEFINITIONS[key];
+  if (!local) return null;
+  const server = data(insights).definitions?.[key];
+  return server ? { ...local, body: server } : local;
+}
+
 /** The source line under a definition. */
 export const SOURCE_LINE = 'Source: this studio’s own database and request log.';
 
-function whoBlock(glance, g) {
-  const base = { key: 'who', title: 'Who your accounts are', span: 8 };
-  const s = gate(glance, GLANCE_FAILED);
-  if (s) return { ...base, ...s };
-  if (!g.accounts) return { ...base, ...unreadable(g.accountsReason) };
+/** #2384's words for the identity-check states. */
+export const IDENTITY_WORDS = [
+  ['not_started', 'Not started', 'muted'],
+  ['pending', 'Waiting', 'amber'],
+  ['approved', 'Approved', 'emerald'],
+  ['rejected', 'Rejected', 'violet'],
+  ['other', 'Other', 'sky'],
+];
+
+/** Worker roles merged into the canvas's profiles, largest first. */
+function mergeProfiles(list, valueOf) {
   const merged = new Map();
-  for (const r of g.accounts.by_role) {
-    const p = profileOf(r.role);
+  for (const r of list || []) {
+    const p = profileOf(r.profile);
     const cur = merged.get(p.key) || { ...p, value: 0 };
-    cur.value += Number(r.count) || 0;
+    cur.value += valueOf(r);
     merged.set(p.key, cur);
   }
-  const rows = [...merged.values()].sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
-  const total = g.accounts.total;
+  return [...merged.values()].sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+}
+
+function whoBlock(insights) {
+  const base = { key: 'who', title: 'Who your accounts are', span: 8 };
+  const w = blk(insights, 'who');
+  const s = blockState(insights, w);
+  if (s) return { ...base, ...s };
+  const rows = mergeProfiles(w.by_profile, (r) => Number(r.count) || 0);
   const top = rows[0];
+  const lps = w.lps === null || w.lps === undefined ? `not read: ${w.lps_reason || 'the LP applications could not be read'}` : `${nf(w.lps)} investors with an approved LP application`;
+  const testers = w.product_testers?.recorded === false ? `not recorded: ${w.product_testers.reason}` : '';
   return {
     ...base, ...ready({
-      take: top && total ? `${top.label} are the largest group, ${pct(top.value, total)}% of accounts.` : '',
+      take: top && w.total ? `${top.label} are the largest group, ${pct(top.value, w.total)}% of accounts.` : 'No accounts match these filters.',
       chart: { type: 'hbar', rows: rows.map((r) => ({ label: r.label, value: r.value, tone: r.tone, group: r.key })), axis: 'accounts', clickable: true },
-      alt: `Accounts by profile: ${rows.map((r) => `${r.label} ${nf(r.value)}`).join(', ')}. Total ${nf(total)}.`,
-      badges: [['LPs', WAITS_FOR_READ.lps], ['Product testers', WAITS_FOR_READ.testers]],
-      foot: `LPs and Product testers sit inside a profile, so they are not added to the total. Total ${nf(total)}.`,
+      alt: `Accounts by profile: ${rows.map((r) => `${r.label} ${nf(r.value)}`).join(', ')}. Total ${nf(w.total)}.`,
+      badges: [['LPs', lps], ...(testers ? [['Product testers', testers]] : [])],
+      foot: `LPs and Product testers sit inside a profile, so they are not added to the total. Total ${nf(w.total)}.`,
     }),
   };
 }
 
-function growthBlock(glance, g) {
-  const base = { key: 'growth', title: 'Growth', span: 12 };
-  const s = gate(glance, GLANCE_FAILED);
+function planBlock(insights) {
+  const base = { key: 'plan', title: 'Plan', span: 4 };
+  const p = blk(insights, 'plan');
+  const s = blockState(insights, p);
   if (s) return { ...base, ...s };
-  if (!g.signups) return { ...base, ...unreadable(g.signupsReason) };
-  const weeks = g.signups.weeks;
-  const total = weeks.reduce((t, w) => t + w.count, 0);
+  // Free is muted; the paid tiers take the palette in order, violet first.
+  let paidSlot = 0;
+  const parts = (p.by_tier || []).map((t) => ({
+    label: t.tier === 'free' ? 'Free' : t.tier.charAt(0).toUpperCase() + t.tier.slice(1),
+    value: Number(t.count) || 0,
+    tone: t.tier === 'free' ? 'muted' : PALETTE[paidSlot++ % 4],
+  }));
+  return {
+    ...base, ...ready({
+      take: p.paid_pct === null ? 'No accounts match these filters.' : `${p.paid_pct}% of accounts are on a paid plan.`,
+      chart: { type: 'donut', parts, center: p.paid_pct === null ? '—' : `${Math.round(p.paid_pct)}%`, centerSub: 'paid' },
+      alt: `Accounts by plan: ${parts.map((x) => `${x.label} ${nf(x.value)}`).join(', ')}. ${nf(p.paid)} paid.`,
+      legend: parts.map((x) => ({ label: `${x.label} ${nf(x.value)}`, tone: x.tone })),
+    }),
+  };
+}
+
+function growthBlock(insights, range) {
+  const base = { key: 'growth', title: 'Growth', span: 12 };
+  const g = blk(insights, 'growth');
+  const s = blockState(insights, g);
+  if (s) return { ...base, ...s };
+  const weeks = g.weeks || [];
+  const profiles = mergeProfiles(
+    Object.keys(Object.assign({}, ...weeks.map((w) => w.by_profile || {}))).map((p) => ({ profile: p })),
+    (r) => weeks.reduce((t, w) => t + (Number(w.by_profile?.[r.profile]) || 0), 0),
+  );
+  // The roles each canvas profile merges, so a stack adds mentors to Advisors.
+  const rolesOf = (key) => Object.keys(Object.assign({}, ...weeks.map((w) => w.by_profile || {}))).filter((r) => profileOf(r).key === key);
+  const stacks = profiles.map((p, i) => ({ key: p.key, label: p.label, tone: PALETTE[i % PALETTE.length], roles: rolesOf(p.key) }));
+  const total = weeks.reduce((t, w) => t + w.total, 0);
   const full = weeks.filter((w) => !w.to_date);
   const lastFull = full[full.length - 1];
   return {
     ...base, ...ready({
-      take: `${nf(total)} new accounts in eight weeks${lastFull ? `, ${nf(lastFull.count)} last week` : ''}.`,
+      take: `${nf(total)} new accounts in ${rangeLabel(range).toLowerCase()}${lastFull ? `, ${nf(lastFull.total)} last week` : ''}.`,
       chart: {
-        type: 'columns',
-        rows: weeks.map((w) => ({ label: dayLabel(w.week_start), value: w.count, toDate: w.to_date, text: w.to_date ? `${nf(w.count)} to date` : nf(w.count) })),
+        type: 'stack',
+        rows: weeks.map((w) => ({
+          label: dayLabel(w.week),
+          value: w.total,
+          toDate: w.to_date,
+          text: w.to_date ? `${nf(w.total)} to date` : nf(w.total),
+          parts: stacks.map((st) => ({ tone: st.tone, value: st.roles.reduce((t, r) => t + (Number(w.by_profile?.[r]) || 0), 0) })),
+        })),
       },
-      alt: `New accounts per week, ${dayLabel(weeks[0]?.week_start)} to ${dayLabel(weeks[weeks.length - 1]?.week_start)}: ${weeks.map((w) => (w.to_date ? `and ${w.count} to date` : w.count)).join(', ')}.`,
-      note: WAITS_FOR_READ.growthSplit,
-      legend: [{ label: 'New accounts', tone: 'violet' }, { label: 'This week, to date', tone: 'hatch' }],
-      foot: 'Weeks start Monday, UTC. Y axis: new accounts that week.',
+      alt: `New accounts per week, ${dayLabel(weeks[0]?.week)} to ${dayLabel(weeks[weeks.length - 1]?.week)}: ${weeks.map((w) => (w.to_date ? `and ${w.total} to date` : w.total)).join(', ')}.`,
+      legend: [...stacks.map((st) => ({ label: st.label, tone: st.tone })), { label: 'This week, to date', tone: 'hatch' }],
+      foot: 'Weeks start Monday, UTC. Y axis: new accounts that week, by profile.',
     }),
   };
 }
 
-function activityBlock(hq, superAdmin) {
+function activityBlock(insights, compare) {
   const base = { key: 'activity', title: 'Activity', span: 12 };
-  if (!superAdmin) return { ...base, ...unrecorded(WAITS_FOR_READ.activity) };
-  const s = gate(hq, LOG_FAILED);
+  const a = blk(insights, 'activity');
+  const s = blockState(insights, a);
   if (s) return { ...base, ...s };
-  const a = hq.data?.active_accounts;
-  const line = a?.available ? (a.series || []).find((x) => x.code === 'hq') : null;
-  if (!line) return { ...base, ...unreadable(a?.reason || LOG_FAILED) };
-  const weeks = hq.data.weeks || [];
-  const values = line.values || [];
-  const lastIdx = values.length - 2;
-  const last = values[lastIdx];
+  const values = a.values || [];
+  const weeks = a.weeks || data(insights).weeks || [];
+  const last = values[values.length - 2];
   const known = values.slice(0, -1).filter((v) => v !== null);
-  const most = known.length && last !== null && last === Math.max(...known);
+  const most = known.length > 1 && last !== null && last === Math.max(...known);
+  const previous = compare && Array.isArray(a.previous) ? a.previous : null;
   return {
     ...base, ...ready({
       take: last === null || last === undefined ? 'Last week has no recorded value.' : `${nf(last)} accounts were active last week${most ? ', the most in this range' : ''}.`,
-      chart: { type: 'line', values, labels: weeks.map(dayLabel) },
-      alt: `Active accounts per week: ${values.map((v, i) => (i === values.length - 1 ? `and ${v ?? 'none'} to date` : v ?? 'none')).join(', ')}.`,
-      legend: [{ label: 'Active accounts', tone: 'violet' }, { label: 'This week, to date (hollow point)', tone: 'hollow' }],
-      foot: 'Active: a signed-in account with at least one logged request that week. HQ-held accounts only.',
+      chart: { type: 'line', values, labels: weeks.map(dayLabel), previous },
+      alt: `Active accounts per week: ${values.map((v, i) => (i === values.length - 1 ? `and ${v ?? 'none'} to date` : v ?? 'none')).join(', ')}.${previous ? ` The period before: ${previous.map((v) => v ?? 'none').join(', ')}.` : ''}`,
+      legend: [
+        { label: 'Active accounts', tone: 'violet' },
+        { label: 'This week, to date (hollow point)', tone: 'hollow' },
+        ...(previous ? [{ label: 'The period before', tone: 'dotted' }] : []),
+      ],
+      note: values.some((v) => v === null) ? 'A week before the request log began is left blank, not drawn as zero.' : '',
+      foot: 'Active: a signed-in account with at least one logged request that week.',
     }),
   };
 }
 
 /** The cohort the funnel shows: `pick` if it is one of the weeks, else the newest whose week two has ended. */
-export function activationCohort(line, pick) {
-  if (!line) return null;
-  const picked = line.cohorts.find((c) => c.week === pick);
+export function activationCohort(cohorts, pick) {
+  if (!cohorts?.length) return null;
+  const picked = cohorts.find((c) => c.week === pick);
   if (picked) return picked;
-  const closed = line.cohorts.filter((c) => !c.week_two_open);
-  return closed[closed.length - 1] || line.cohorts[line.cohorts.length - 1] || null;
+  const closed = cohorts.filter((c) => !c.week_two_open && c.created > 0);
+  return closed[closed.length - 1] || [...cohorts].reverse().find((c) => c.created > 0) || cohorts[cohorts.length - 1];
 }
 
-function activationBlock(hq, superAdmin, pick) {
+function activationBlock(insights, pick) {
   const base = { key: 'activation', title: 'Activation', span: 6 };
-  if (!superAdmin) return { ...base, ...unrecorded(WAITS_FOR_READ.activation) };
-  const s = gate(hq, 'HQ analytics could not be read. This is not a claim that nobody activated.');
+  const a = blk(insights, 'activation');
+  const s = blockState(insights, a);
   if (s) return { ...base, ...s };
-  const line = hqActivation(hq);
-  if (!line) return { ...base, ...unreadable('The activation funnel could not be read.') };
-  const c = activationCohort(line, pick);
+  const cohorts = a.cohorts || [];
+  const c = activationCohort(cohorts, pick);
   if (!c || !c.created) return { ...base, ...unrecorded('No account was created in these weeks.') };
   const step = (label, v) => ({ label, value: v ?? 0, text: v === null || v === undefined ? 'not read' : `${nf(v)} · ${pct(v, c.created)}%`, dash: v === null || v === undefined });
   const rows = [
@@ -416,9 +424,10 @@ function activationBlock(hq, superAdmin, pick) {
     step('Accepted the terms', c.terms_accepted),
     c.week_two_open ? { label: 'Active in week two', value: 0, text: 'week two not finished', dash: true } : step('Active in week two', c.active_week_two),
   ];
+  const shown = cohorts.filter((x) => x.created > 0);
   return {
     ...base, ...ready({
-      select: { value: c.week, options: line.cohorts.map((x) => ({ value: x.week, label: `Accounts created in the week of ${dateLabel(x.week)}` })) },
+      select: { value: c.week, options: shown.map((x) => ({ value: x.week, label: `Accounts created in the week of ${dateLabel(x.week)}` })) },
       take: c.week_two_open || c.active_week_two === null
         ? 'That week’s accounts have not finished their second week.'
         : `${pct(c.active_week_two, c.created)}% of that week’s accounts were active in their second week.`,
@@ -427,7 +436,7 @@ function activationBlock(hq, superAdmin, pick) {
       note: c.invited === null || c.invited === undefined ? '' : `${nf(c.invited)} of them came from an invitation.`,
       chart2: {
         type: 'columns', pct: true, max: 100,
-        rows: line.cohorts.map((x) => ({
+        rows: shown.map((x) => ({
           label: dayLabel(x.week),
           value: x.week_two_open || x.active_week_two === null ? 0 : pct(x.active_week_two, x.created),
           open: x.week_two_open,
@@ -440,79 +449,145 @@ function activationBlock(hq, superAdmin, pick) {
   };
 }
 
-function retentionBlock(cohorts) {
+function retentionBlock(insights) {
   const base = { key: 'retention', title: 'Still active after sign-up', span: 6 };
-  const s = gate(cohorts, LOG_FAILED);
+  const r = blk(insights, 'retention');
+  const s = blockState(insights, r);
   if (s) return { ...base, ...s };
-  const rows = (cohorts.data?.cohorts || [])
-    .map((c) => ({ monday: cohortMonday(c.cohort), signups: Number(c.signups) || 0, retained: Number(c.retained_30d) || 0 }))
-    .filter((c) => c.monday && c.signups > 0)
-    .slice(-8);
-  if (!rows.length) return { ...base, ...unrecorded('No account signed up in the last twelve months.') };
-  const shares = rows.map((r) => pct(r.retained, r.signups));
+  const rows = (r.cohorts || []).filter((c) => c.signups > 0);
+  if (!rows.length) return { ...base, ...unrecorded('No account signed up in these weeks.') };
+  const shares = rows.map((c) => pct(c.retained_30d, c.signups));
   const oldest = shares[0];
   const newest = shares[shares.length - 1];
   return {
     ...base, ...ready({
       take: `${oldest}% of the oldest week are still active; ${newest < oldest ? 'newer weeks are lower' : newest > oldest ? 'newer weeks are higher' : 'the newest week is the same'}.`,
-      chart: { type: 'columns', pct: true, max: 100, rows: rows.map((r, i) => ({ label: dayLabel(r.monday), value: shares[i], text: `${shares[i]}%` })) },
+      chart: { type: 'columns', pct: true, max: 100, rows: rows.map((c, i) => ({ label: dayLabel(c.week), value: shares[i], text: `${shares[i]}%` })) },
       alt: `Share of each sign-up week active in the last 30 days: ${shares.join(', ')} percent.`,
-      foot: 'Y axis: share of that week’s sign-ups active in the last 30 days.',
+      foot: 'Y axis: share of that week’s sign-ups active in the last 30 days. Weeks with no sign-up are left out.',
     }),
   };
 }
 
-function ticketsBlock(glance, g) {
-  const base = { key: 'tickets', title: 'Open support tickets', span: 6 };
-  const s = gate(glance, GLANCE_FAILED);
+function countriesBlock(insights) {
+  const base = { key: 'countries', title: 'Where they are', span: 12 };
+  const c = blk(insights, 'countries');
+  const s = blockState(insights, c);
   if (s) return { ...base, ...s };
-  if (!g.tickets) return { ...base, ...unreadable(g.ticketsReason) };
-  const open = Number(g.tickets.by_status?.open) || 0;
-  const inProgress = Number(g.tickets.by_status?.in_progress) || 0;
+  const rows = (c.rows || []).slice(0, 12);
+  const rest = (c.rows || []).slice(12).reduce((t, r) => t + r.count, 0);
+  const total = (c.rows || []).reduce((t, r) => t + r.count, 0) + (c.not_stated || 0);
+  return {
+    ...base, ...ready({
+      take: rows[0] ? `${rows[0].country} holds the most accounts, ${pct(rows[0].count, total)}%.` : 'No account has stated a country.',
+      chart: rows.length ? { type: 'hbar', rows: [...rows.map((r) => ({ label: r.country, value: r.count })), ...(rest ? [{ label: 'Other countries', value: rest, tone: 'muted' }] : [])], axis: 'accounts' } : null,
+      alt: `Accounts by country: ${rows.map((r) => `${r.country} ${nf(r.count)}`).join(', ')}${rest ? `, other countries ${nf(rest)}` : ''}. ${nf(c.not_stated)} stated none.`,
+      foot: `${nf(c.not_stated)} accounts stated no country. The country is as written on the profile.`,
+    }),
+  };
+}
+
+function identityBlock(insights) {
+  const base = { key: 'identity', title: 'Identity checks', span: 4, link: { label: 'Open KYC & KYB', to: '/admin?tab=kyc' } };
+  const i = blk(insights, 'identity');
+  const s = blockState(insights, i);
+  if (s) return { ...base, ...s };
+  const rows = IDENTITY_WORDS.filter(([k]) => k !== 'other' || i.other > 0).map(([k, label, tone]) => ({ label, value: Number(i[k]) || 0, tone }));
+  return {
+    ...base, ...ready({
+      take: `${nf(i.pending)} waiting for a decision.`,
+      chart: { type: 'hbar', rows, axis: '' },
+      alt: `Identity checks: ${rows.map((r) => `${r.label} ${nf(r.value)}`).join(', ')}.`,
+    }),
+  };
+}
+
+function completenessBlock(insights) {
+  const base = { key: 'completeness', title: 'Profile completeness', span: 4 };
+  const c = blk(insights, 'completeness');
+  const s = blockState(insights, c);
+  if (s) return { ...base, ...s };
+  const bands = c.bands || [];
+  const top = bands[bands.length - 1];
+  const counted = bands.reduce((t, b) => t + b.count, 0);
+  return {
+    ...base, ...ready({
+      take: top ? `${pct(top.count, counted)}% of profiles are ${top.band}% complete.` : '',
+      chart: { type: 'columns', rows: bands.map((b) => ({ label: `${b.band}%`, value: b.count })) },
+      alt: `Profiles by completeness: ${bands.map((b) => `${b.band} percent ${nf(b.count)}`).join(', ')}.`,
+      note: c.not_recorded ? `${nf(c.not_recorded)} accounts have no completeness figure, so they are not put in a band.` : '',
+    }),
+  };
+}
+
+function dormantBlock(insights) {
+  const base = { key: 'dormant', title: 'Dormant', span: 4 };
+  const d = blk(insights, 'dormant');
+  const s = blockState(insights, d);
+  if (s) return { ...base, ...s };
+  return {
+    ...base, ...ready({
+      take: `No logged request in ${nf(d.days)} days.`,
+      big: nf(d.count), bigSub: 'accounts',
+      note: [
+        d.never_seen ? `${nf(d.never_seen)} accounts have made no request since activity was first recorded, so they are not counted as dormant.` : '',
+        d.last_month === null ? `No comparison with last month: ${d.last_month_reason || 'it cannot be read back.'}` : '',
+      ].filter(Boolean).join(' '),
+      chart: null,
+    }),
+  };
+}
+
+function ticketsBlock(insights) {
+  const base = { key: 'tickets', title: 'Open support tickets', span: 6 };
+  const t = blk(insights, 'tickets');
+  const s = blockState(insights, t);
+  if (s) return { ...base, ...s };
+  const open = Number(t.by_status?.open) || 0;
+  const inProgress = Number(t.by_status?.in_progress) || 0;
   return {
     ...base, ...ready({
       take: open === 1 ? 'One ticket is waiting for a first answer.' : `${nf(open)} tickets are waiting for a first answer.`,
-      big: nf(g.tickets.open), bigSub: 'open now',
-      chart: g.tickets.open ? { type: 'bar100', parts: [{ label: 'Open', value: open, tone: 'violet' }, { label: 'In progress', value: inProgress, tone: 'sky' }] } : null,
+      big: nf(t.open), bigSub: 'open now',
+      chart: t.open ? { type: 'bar100', parts: [{ label: 'Open', value: open, tone: 'violet' }, { label: 'In progress', value: inProgress, tone: 'sky' }] } : null,
       alt: `Open support tickets: open ${open}, in progress ${inProgress}.`,
       legend: [{ label: `Open ${nf(open)}`, tone: 'violet' }, { label: `In progress ${nf(inProgress)}`, tone: 'sky' }],
     }),
   };
 }
 
-function spendBlock(glance, g) {
+function spendBlock(insights) {
   const base = { key: 'spend', title: 'AI spend this month', span: 6 };
-  const s = gate(glance, GLANCE_FAILED);
+  const sp = blk(insights, 'spend');
+  const s = blockState(insights, sp);
   if (s) return { ...base, ...s };
-  if (!g.spend) return { ...base, ...unreadable(g.spendReason) };
-  const usd = Number(g.spend.usd) || 0;
+  const rows = mergeProfiles(sp.by_profile, (r) => Number(r.usd) || 0);
   return {
     ...base, ...ready({
-      take: 'This month’s AI use, across every account.',
-      big: `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      bigSub: `over ${nf(g.spend.calls)} calls`,
-      note: WAITS_FOR_READ.spendByProfile,
-      chart: null,
+      take: rows[0] && sp.usd > 0 ? `${rows[0].label} spent the most, ${pct(rows[0].value, sp.usd)}% of this month’s AI cost.` : 'No AI use this month.',
+      big: usd(sp.usd),
+      bigSub: `over ${nf(sp.calls)} calls`,
+      chart: rows.length ? { type: 'hbar', rows: rows.map((r) => ({ label: r.label, value: Math.round(r.value * 100) / 100, tone: r.tone, text: usd(r.value) })), axis: 'USD' } : null,
+      alt: `AI spend this month by profile: ${rows.map((r) => `${r.label} ${usd(r.value)}`).join(', ')}.`,
     }),
   };
 }
 
 /** Every block, in the canvas's order. `pick` is the Activation week the viewer chose. */
-export function buildBlocks({ glance, cohorts, hq, superAdmin, pick }) {
-  const g = glanceParts(glance);
+export function buildBlocks({ insights, filters = { range: '8w', compare: false }, pick }) {
   return [
-    whoBlock(glance, g),
-    { key: 'plan', title: 'Plan', span: 4, ...unrecorded(WAITS_FOR_READ.plan) },
-    growthBlock(glance, g),
-    activityBlock(hq, superAdmin),
-    activationBlock(hq, superAdmin, pick),
-    retentionBlock(cohorts),
-    { key: 'countries', title: 'Where they are', span: 12, ...unrecorded(WAITS_FOR_READ.countries) },
-    { key: 'identity', title: 'Identity checks', span: 4, ...unrecorded(WAITS_FOR_READ.identity), link: { label: 'Open KYC & KYB', to: '/admin?tab=kyc' } },
-    { key: 'completeness', title: 'Profile completeness', span: 4, ...unrecorded(WAITS_FOR_READ.completeness) },
-    { key: 'dormant', title: 'Dormant', span: 4, ...unrecorded(WAITS_FOR_READ.dormant) },
-    ticketsBlock(glance, g),
-    spendBlock(glance, g),
+    whoBlock(insights),
+    planBlock(insights),
+    growthBlock(insights, filters.range),
+    activityBlock(insights, filters.compare),
+    activationBlock(insights, pick),
+    retentionBlock(insights),
+    countriesBlock(insights),
+    identityBlock(insights),
+    completenessBlock(insights),
+    dormantBlock(insights),
+    ticketsBlock(insights),
+    spendBlock(insights),
   ];
 }
 
@@ -520,22 +595,30 @@ export function buildBlocks({ glance, cohorts, hq, superAdmin, pick }) {
  * The page's state
  * ------------------------------------------------------------------ */
 
-/** The whole page failed: every read the page made failed. */
-export function pageFailed(reads, superAdmin) {
-  const list = [reads.glance, reads.cohorts, reads.overview?.last, ...(superAdmin ? [reads.hq] : [])];
-  return list.every((r) => r && r.status === 'error');
+/** The whole page failed: its one read failed. */
+export function pageFailed(insights) {
+  return insights?.status === 'error';
 }
 
-/** A new studio: the glance answered and holds no account. */
-export function isEmptyStudio(glance) {
-  const a = glanceParts(glance).accounts;
-  return glance?.status === 'ready' && Boolean(a) && a.total === 0;
+/** A new studio: the read answered, no filter is set, and it holds no account. */
+export function isEmptyStudio(insights, filters) {
+  const a = kpi(insights, 'accounts');
+  const unfiltered = !filters || (!filters.profile && !filters.country);
+  return insights?.status === 'ready' && unfiltered && a?.available === true && a.total === 0;
+}
+
+/** The countries the filter offers: the ones the read counted, and the one chosen. */
+export function countryOptions(insights, chosen) {
+  const rows = blk(insights, 'countries')?.rows || [];
+  const list = rows.map((r) => r.country);
+  if (chosen && !list.includes(chosen)) list.unshift(chosen);
+  return list;
 }
 
 /**
  * What `?scope=` asks for. A plain Admin may only see their own accounts, so
  * any other scope is INS10's "no permission". A Super Admin may ask for HQ's
- * accounts; no subsidiary is deployed yet, so any other value falls back.
+ * accounts; no subsidiary is deployed yet (#2662), so any other value falls back.
  */
 export function scopeState(search, superAdmin) {
   const raw = new URLSearchParams(search || '').get('scope');
@@ -553,23 +636,40 @@ export function groupFromSearch(search) {
   return byLabel ? byLabel.key : null;
 }
 
-/** The group lightbox's content (INS3). Counts only, from the glance. */
-export function buildGroup(key, glance) {
+/** Countries in the group's table that match the search box, as typed. */
+export function filterCountries(rows, q) {
+  const needle = String(q || '').trim().toLowerCase();
+  if (!needle) return rows;
+  return rows.filter((r) => String(r.country ?? 'Not stated').toLowerCase().includes(needle));
+}
+
+/**
+ * The group lightbox's content (INS3), from the read made with `group=<role>`.
+ * Counts only; its doors lead to Accounts, which holds the names.
+ */
+export function buildGroup(key, groupRead) {
   if (!key) return null;
-  const g = glanceParts(glance);
   const label = Object.values(PROFILE_OF).find((p) => p.key === key)?.label || profileOf(key).label;
-  let count = null;
-  if (g.accounts) {
-    count = g.accounts.by_role.filter((r) => profileOf(r.role).key === key).reduce((t, r) => t + (Number(r.count) || 0), 0);
-  }
+  const base = { key, label, accountsHref: `/admin/held/accounts?profile=${encodeURIComponent(key)}` };
+  const g = data(groupRead).group;
+  const s = blockState(groupRead, g);
+  if (s) return { ...base, ...s, count: null, tiles: [], countries: [] };
+  const v = (x, unit = '') => (x === null || x === undefined ? { text: 'Not recorded', missing: true } : { text: `${nf(x)}${unit}` });
   return {
-    key,
-    label,
-    count,
-    state: glance?.status === 'ready' ? (g.accounts ? 'ready' : 'unreadable') : glance?.status === 'error' ? 'unreadable' : 'loading',
-    tiles: ['New in 30 days', 'Active last week', 'Activated', 'Dormant'],
-    waits: 'These figures for one profile arrive with the Insights read.',
-    accountsHref: `/admin/held/accounts?profile=${encodeURIComponent(key)}`,
+    ...base,
+    state: 'ready',
+    count: g.count,
+    tiles: [
+      ['New in 30 days', v(g.new_30d)],
+      ['Active last week', v(g.active_last_week)],
+      ['Activated', v(g.activated_pct === null ? null : Math.round(g.activated_pct), '%')],
+      ['Dormant', v(g.dormant)],
+    ],
+    signups: { type: 'columns', rows: (g.signups_by_week || []).map((w) => ({ label: dayLabel(w.week), value: w.count, toDate: w.to_date, text: w.to_date ? `${nf(w.count)} to date` : nf(w.count) })) },
+    active: { type: 'line', values: (g.active_by_week || []).map((w) => w.count), labels: (g.active_by_week || []).map((w) => dayLabel(w.week)) },
+    countries: (g.by_country || []).map((r) => ({
+      country: r.country, accounts: r.accounts, new_30d: r.new_30d, active_last_week: r.active_last_week,
+    })),
   };
 }
 
@@ -587,25 +687,32 @@ const csvCell = (v) => {
  * on this page carries a name, an email or an id, and none is added here.
  * A block that is not ready is written with its state, never as a zero.
  */
-export function figuresCsv({ kpis, blocks, asOf, scope = SCOPE_LABEL }) {
+export function figuresCsv({ kpis, blocks, asOf, scope = SCOPE_LABEL, filters = null }) {
   const out = [['block', 'item', 'value']];
   out.push(['scope', '', scope]);
   out.push(['as of', '', asOf]);
-  for (const k of kpis) out.push(['tiles', k.label, k.state === 'ready' ? `${k.value}${k.tag ? ` ${k.tag}` : ''}` : k.state === 'unrecorded' ? 'not recorded' : k.state === 'unreadable' ? 'could not be read' : 'reading']);
+  if (filters) {
+    out.push(['filters', 'range', rangeLabel(filters.range)]);
+    if (filters.profile) out.push(['filters', 'profile', profileOf(filters.profile).label]);
+    if (filters.country) out.push(['filters', 'country', filters.country]);
+  }
+  const stateWord = (x) => (x.state === 'unrecorded' ? 'not recorded' : x.state === 'unreadable' ? 'could not be read' : 'reading');
+  for (const k of kpis) out.push(['tiles', k.label, k.state === 'ready' ? `${k.value}${k.tag ? ` ${k.tag}` : ''}` : stateWord(k)]);
   for (const b of blocks) {
-    if (b.state !== 'ready') { out.push([b.title, '', b.state === 'unrecorded' ? 'not recorded' : b.state === 'unreadable' ? 'could not be read' : 'reading']); continue; }
+    if (b.state !== 'ready') { out.push([b.title, '', stateWord(b)]); continue; }
     if (b.big) out.push([b.title, b.bigSub || '', b.big]);
     const c = b.chart;
-    if (c?.type === 'hbar' || c?.type === 'columns') for (const r of c.rows) out.push([b.title, r.label, r.text ?? r.value]);
+    if (c?.type === 'hbar' || c?.type === 'columns' || c?.type === 'stack') for (const r of c.rows) out.push([b.title, r.label, r.text ?? r.value]);
     if (c?.type === 'line') c.values.forEach((v, i) => out.push([b.title, c.labels[i] || String(i), v ?? '']));
-    if (c?.type === 'bar100') for (const p of c.parts) out.push([b.title, p.label, p.value]);
+    if (c?.type === 'bar100' || c?.type === 'donut') for (const p of c.parts) out.push([b.title, p.label, p.value]);
   }
   return out.map((r) => r.map(csvCell).join(',')).join('\n') + '\n';
 }
 
 /** The read-only range line in the export dialog: '8 weeks · 31 Aug 2026 to 24 Oct 2026'. */
-export function rangeLine(glance, nowMs) {
-  const w = glanceParts(glance).signups?.weeks;
-  const from = w?.[0]?.week_start;
-  return from ? `8 weeks · ${dateLabel(from)} to ${dateLabel(new Date(nowMs).toISOString().slice(0, 10))}` : '8 weeks';
+export function rangeLine(insights, nowMs) {
+  const d = data(insights);
+  const from = d.weeks?.[0];
+  const label = rangeLabel(d.range);
+  return from ? `${label} · ${dateLabel(from)} to ${dateLabel(new Date(nowMs).toISOString().slice(0, 10))}` : label;
 }

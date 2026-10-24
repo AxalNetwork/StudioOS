@@ -8,19 +8,23 @@ keeps the query and hash and adds `?moved=held-insights` for the one-line notice
 - `AdminInsights.jsx` — the page: header, filter bar (a sheet on a phone), KPI
   tiles, blocks, the "How is this counted?" and Export dialogs, and the group
   lightbox. It mounts its own `WorkerRail` in a `RailFrame`.
-- `insightsModel.js` — pure. Turns the reads into tiles and blocks, each
-  `ready`, `loading`, `unreadable` or `unrecorded`; definitions; the CSV.
-- `InsightsCharts.jsx` — the SVG charts (bars, columns, weekly line, 100% bar),
+- `insightsModel.js` — pure. Turns the read into tiles and blocks, each
+  `ready`, `loading`, `unreadable` or `unrecorded`; the filters from and to
+  the URL; definitions; the CSV.
+- `InsightsCharts.jsx` — the SVG charts (bars, columns, stacked columns, the
+  weekly line with its dotted period before, the 100% bar and the Plan donut),
   their legend and "View as table".
 
 ## Rules
 
-- Every figure comes from a mounted Worker read. The Super Admin's HQ analytics
-  read is made only for a Super Admin; a plain Admin would get a 403.
-- A read that failed or has not answered is never drawn as zero. A figure no
-  read counts yet says "Not recorded" with its reason (`WAITS_FOR_READ`).
+- The page makes one read, `GET /api/admin/insights` (#2660, any admin), with
+  the URL's range, profile, country and compare; the group lightbox makes the
+  same read with `group=<role>`. A plain Admin asking for another scope sees
+  INS10 and no read is made.
+- A read that failed or has not answered is never drawn as zero. A block whose
+  store failed shows the Worker's sentence; one nothing records says "Not
+  recorded" with its reason.
 - Counts only: nothing on this page or in its export carries a name, an email
   or an account id.
-- #2660 replaces the four reads with `GET /api/admin/insights` and enables the
-  filters; #2661 makes the export a logged Worker export; #2662 adds the
-  Super Admin's subsidiary scope.
+- #2661 makes the export a logged Worker export; #2662 adds the Super Admin's
+  subsidiary scope.
