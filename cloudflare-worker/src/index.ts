@@ -241,6 +241,7 @@ import adminSecurity from './routes/admin_security';
 import adminHqSupport from './routes/admin_hq_support';
 import adminStudioGlance from './routes/admin_studio_glance';
 import adminInsights from './routes/admin_insights';
+import adminCommunity from './routes/admin_community';
 import adminInsightsExport from './routes/admin_insights_export';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
@@ -1005,6 +1006,8 @@ app.route('/api/admin/jobs', adminJobsRoutes);
 // Task #9 — Communities & Circles admin. Mount BEFORE the catch-all /api/admin
 // so /api/admin/circles/* resolves here, not in the generic admin router.
 app.route('/api/admin/circles', adminCirclesRoutes);
+// D931 (#2715) — Admin › Community's counts read. Before the catch-all /api/admin.
+app.route('/api/admin/community', adminCommunity);
 app.route('/api/admin/assessment', adminAssessmentRoutes);
 // Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
 // the specific prefixes resolve here, not in the generic admin router.
