@@ -131,7 +131,13 @@ export function HqInsights({ view, superAdmin = false }) {
             : <span className="tabular-nums">{nf(view.tickets.open)}</span>
           : <Unreadable what="Tickets" claim={view.tickets.reason || 'Not the same as none open.'} />}
       </div>
-      <p>Active accounts: <Unrecorded reason={view.active.reason} /></p>
+      <div>Active accounts last week:{' '}
+        {view.active.kind === 'ready'
+          ? <><span className="tabular-nums">{nf(view.active.value)}</span> (week of {view.active.week})</>
+          : view.active.kind === 'unreadable'
+            ? <Unreadable what="Active accounts" claim={view.active.reason || 'Not the same as nobody active.'} />
+            : <Unrecorded reason={view.active.reason} />}
+      </div>
       <p>Territory benchmark: <Unrecorded reason={view.benchmark.reason} /></p>
     </div>
   );

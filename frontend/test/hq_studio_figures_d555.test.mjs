@@ -15,7 +15,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import {
-  glancesFromStudioGlance, hqAccountsView, hqApprovalsView, hqInsightsView, LANE_CONSOLES, NO_QUEUE_CONSOLES,
+  glancesFromStudioGlance, hqAccountsView, hqApprovalsView, hqInsightsView, LANE_CONSOLES, NO_QUEUE_CONSOLES, ACTIVE_BEFORE_LOG,
   orderNeedsDecision,
 } from '../src/pages/admin/adminStudioOverview.js';
 import { AdminStudioOverview, HqAccounts, HqApprovals, HqInsights } from '../src/pages/admin/AdminStudioOverview.jsx';
@@ -50,7 +50,7 @@ const PAYLOAD = {
   templates: { recorded: true, available: true, items: [{ slug: 'msa' }], pushed_at: null },
   insights: { recorded: true, label: LABEL,
     signups_by_week: { available: true, weeks: Array.from({ length: 8 }, (_, i) => ({ week_start: `2026-08-${String(10 + i * 7).padStart(2, '0')}`, count: i, to_date: i === 7 })) },
-    active_accounts: { recorded: false, reason: 'No store on this database records a sign-in per account.' },
+    active_accounts: { available: true, week: '2026-09-28', value: 9, basis: 'An active account is …' },
     ai_spend_month: { available: true, month: '2026-10', usd: 12.5, calls: 40 },
     open_tickets: { available: false, reason: 'The support ticket table could not be read.' },
     benchmark: { recorded: false, reason: 'HQ pushes the territory median and keeps no copy (D148).' } },
@@ -74,7 +74,10 @@ test('the view models: accounts counts, lanes worst first with consoles, insight
   assert.deepEqual([i.signups.thisWeek, i.signups.eightWeeks], [7, 28]);
   assert.equal(i.spend.usd, 12.5);
   assert.equal(i.tickets.kind, 'unreadable');
-  assert.equal(i.active.kind, 'unrecorded');
+  assert.deepEqual(i.active, { kind: 'ready', value: 9, week: '2026-09-28' }, 'D893: last week\'s actives are read');
+  assert.equal(hqInsightsView({ ...PAYLOAD.insights, active_accounts: { available: true, week: 'w', value: null } }).active.reason,
+    ACTIVE_BEFORE_LOG, 'a week before the log began is blank, not zero');
+  assert.equal(hqInsightsView({ ...PAYLOAD.insights, active_accounts: { available: false, reason: 'gone' } }).active.kind, 'unreadable');
   // Every console the overview links is one HeldApprovals links.
   const held = read('frontend/src/pages/admin/HeldApprovals.jsx');
   for (const to of [...Object.values(LANE_CONSOLES), ...Object.values(NO_QUEUE_CONSOLES)]) {
@@ -109,7 +112,7 @@ test('the overview cards draw HQ\'s figures, labelled, with each line linking to
   assert.match(t, /Sign-ups: 7 this week \(to date\) · 28 in 8 weeks/);
   assert.match(t, /AI spend this month: \$12\.50 over 40 calls/);
   assert.match(t, /Tickets could not be read/);
-  assert.match(t, /Active accounts: Not recorded/);
+  assert.match(t, /Active accounts last week: 9 \(week of 2026-09-28\)/);
   const markup = html(h(AdminStudioOverview, { user: null, glance: PAYLOAD }));
   for (const to of ['/admin?tab=kyc', '/admin/jobs', '/admin/exploring', '/admin/trash', '/admin/lp-applications']) {
     // None of these paths carries an &, so the href is the path as written.
