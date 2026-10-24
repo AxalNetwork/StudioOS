@@ -105,7 +105,7 @@ function PartnerInvitationsBody() {
       {!recordPage ? (
         <>
           <nav aria-label="Breadcrumb" className={CRUMB} data-testid="partners-crumb">
-            <Link to="/admin/held/community" className={CRUMB_LINK}>Community</Link> › Partner invitations
+            <Link to="/admin/community" className={CRUMB_LINK}>Community</Link> › Partner invitations
           </nav>
 
           <header className="flex flex-wrap items-start justify-between gap-3" data-testid="partners-header">

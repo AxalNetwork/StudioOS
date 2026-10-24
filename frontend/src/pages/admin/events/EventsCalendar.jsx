@@ -7,7 +7,7 @@ import {
   CAL_VIEWS, LEGEND, WEEKDAYS, addMonths, blockBox, calendarSearch, calendarState, monthGrid, monthList, overlapText,
   seatsLine, timeText, unplacedLine, weekGrid, addDays,
 } from './calendarModel';
-import { matchesFilters, readQuery, writeQuery } from './allEventsModel';
+import { hostOptions, matchesFilters, readQuery, writeQuery } from './allEventsModel';
 import EventFilters, { CONTROL } from './EventFilters';
 import { CARD, H2, LINK, SUB, StatusPill } from './parts';
 
@@ -20,8 +20,7 @@ import { CARD, H2, LINK, SUB, StatusPill } from './parts';
  * List is the phone's default. A day with a clash (D915 §2's rule) carries an
  * amber dot and "[n] overlap". A chip opens a small card: title, time, seats,
  * status and "Open event". The address keeps the month, the view and the
- * filters (Status, Visibility, Price; Type, Format and Host wait for parts 1
- * and 3).
+ * filters (Status, Visibility, Price and Host; Type and Format wait for part 1).
  */
 
 const PHONE = '(max-width: 639px)';
@@ -246,7 +245,7 @@ export default function EventsCalendar({ reads, now }) {
         </div>
       </div>
 
-      <EventFilters query={query} onChange={filter} fields={['status', 'visibility', 'price']} />
+      <EventFilters query={query} onChange={filter} hosts={hostOptions(list)} fields={['status', 'visibility', 'price', 'host']} />
       <Legend />
 
       {reads.all.status === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">Reading…</span> : null}

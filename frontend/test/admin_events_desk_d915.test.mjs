@@ -77,7 +77,7 @@ test('the tabs and addresses: four tabs (Calendar from part 4, D919), and one pa
   for (const bad of ['0', '-1', 'abc', '1.5', '']) assert.equal(isEventId(bad), false, bad);
   assert.equal(tabFor('/admin/events/calendar'), 'calendar');
   assert.equal(eventIdFor('/admin/events/calendar'), null, 'Calendar is a tab, never an event');
-  assert.equal(COMMUNITY_PATH, '/admin/held/community', 'the canvas\'s /admin/community is not a route');
+  assert.equal(COMMUNITY_PATH, '/admin/community', 'the crumb links Community\'s own address (D930), not the redirect');
   assert.equal(SCOPE_LABEL, INSIGHTS_SCOPE_LABEL, 'the scope chip is Insights\' own');
   assert.equal(TITLE, 'Events');
   assert.equal(LINE, 'Approve public events, keep the calendar healthy and see how events perform.');
@@ -365,10 +365,10 @@ test('the page keeps its frame, its crumb and its literal tab doors', () => {
   const doors = [...page.matchAll(/<DeskTab to="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(doors, TABS.map((t) => t.path), 'the strip and TABS list the same four doors');
   assert.match(page, /<DeskTab to="\/admin\/events" end /, 'Overview is lit only on its own address');
-  assert.match(page, /<Link to="\/admin\/held\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Events/);
+  assert.match(page, /<Link to="\/admin\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Events/);
   assert.match(page, /<Link to="\/admin\/events\/all" className=\{CRUMB_LINK\}>‹ All events<\/Link>/);
   assert.match(page, /<Link to="\/events\/new" className=\{actionGhost\} data-testid="events-new">New event<\/Link>/, 'New event, not "New studio event" (O-STU)');
-  assert.doesNotMatch(page, /to="\/admin\/community"/);
+  assert.doesNotMatch(page, /to="\/admin\/held\/community"/, 'the crumb links Community itself, not its redirect');
   // The approvals lane and the Community doors keep /admin/events.
   assert.match(read('frontend/src/pages/admin/HeldApprovals.jsx'), /to="\/admin\/events"/);
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /to="\/admin\/events"/);
