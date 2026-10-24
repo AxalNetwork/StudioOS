@@ -57,7 +57,7 @@ import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { moduleToolLinks } from './founderToolNavigation.js';
 import { NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
-import { isNarrativeTab, SLUG as NARRATIVE } from '../raise/narrative/narrativeModel';
+import { isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
 const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
@@ -923,7 +923,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       </div>
     );
   } else if (narrativeTab) {
-    body = <NarrativeTabPage tab={narrativeTab} projectId={projectId} search={location.search} cards={tabs} action={action} phone={phone} />;
+    body = (
+      <NarrativeTabPage tab={narrativeTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        fixOn={fillsOn} search={location.search} cards={tabs} action={action} phone={phone} />
+    );
   } else if (record) {
     const recordTitle = recordState.data?.title || moduleName;
     body = <div className="space-y-4" data-testid="cycle-record-page">
@@ -1000,7 +1003,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
-        subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={q} /> : undefined}
+        subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} /> : undefined}
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}

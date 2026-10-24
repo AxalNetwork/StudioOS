@@ -168,6 +168,10 @@ export const positioningHref = (search = '') => `${POSITIONING_TODAY}${tabSearch
 
 export const NO_VERSION = 'No narrative yet. Start a version for one kind of investor.';
 export const POSITIONING_WAITS = 'Positioning moves here once it is stored. Until then it is written in the Pitch deck builder, and nothing it writes is kept.';
-export const CHECK_RUNS = 'The check runs each time a version is saved. It compares the figures the narrative states with your stored metrics; the deck side waits for the Pitch deck studio to bind its cards.';
+// What the Worker's check reads today (raiseCycle.ts checkInputs): the figures
+// the version states, and the venture profile's MRR, paying customers and
+// funding needed. Part 1 (#2691) narrows it to what the version states.
+export const CHECK_RUNS = 'The check runs each time a version is saved. It compares the figures the narrative states, and the MRR, paying customers and funding needed on the venture’s profile, with your stored metrics. The pitch deck’s own cards are not checked yet.';
+export const FIX_NEWEST_ONLY = 'Eadwyn phrases a fix for the first mismatch in the newest version only.';
 
 export { NOT_RECORDED };

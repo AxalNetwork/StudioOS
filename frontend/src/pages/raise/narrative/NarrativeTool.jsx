@@ -5,7 +5,7 @@ import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import {
-  CHECK_RUNS, HOME_PATH, LINE, NEW_PATH, NOT_RECORDED, NO_VERSION, POSITIONING_WAITS, SLUG, TABS, TITLE, WAITING_SECTIONS,
+  CHECK_RUNS, FIX_NEWEST_ONLY, HOME_PATH, LINE, NEW_PATH, NOT_RECORDED, NO_VERSION, POSITIONING_WAITS, SLUG, TABS, TITLE, WAITING_SECTIONS,
   checkRows, checkSummary, chosenVersion, compareRows, positioningHref, previousVersion, storyRows, tabHref, tabSearch,
   versionHref, versionsOf,
 } from './narrativeModel';
@@ -71,7 +71,7 @@ function useVersions(projectId, reload) {
     setState({ status: 'loading', versions: [] });
     cyclesWrite.formOptions('raise', projectId, SLUG)
       .then((data) => { if (alive) setState({ status: 'ready', versions: versionsOf(data) }); })
-      .catch(() => { if (alive) setState({ status: 'error', versions: [] }); });
+      .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', versions: [], message: error?.message || '' }); });
     return () => { alive = false; };
   }, [projectId, reload]);
   return state;
@@ -114,7 +114,7 @@ function StoryTab({ record, version, search }) {
           <h2 className={`m-0 text-[13.5px] font-extrabold tracking-[-.01em] ${INK}`}>{r.label}</h2>
           {r.text
             ? <p className={`m-0 whitespace-pre-line text-[13px] leading-relaxed ${INK}`}>{r.text}</p>
-            : <span className={`${NOT_SET} w-fit`}>{NOT_RECORDED}</span>}
+            : <span className={`${NOT_SET} w-fit`} data-testid="narrative-story-not-recorded">{NOT_RECORDED}</span>}
         </section>
       ))}
       <p className={`m-0 text-[12.5px] leading-relaxed ${MUTED}`} data-testid="narrative-story-waiting">
@@ -126,10 +126,15 @@ function StoryTab({ record, version, search }) {
   );
 }
 
-/** Check: the version's consistency check, in the Worker's own words. */
-function CheckTab({ record, search }) {
+/**
+ * Check: the version's consistency check, in the Worker's own words. Home's
+ * "Phrase the fix" band phrases the first mismatch of the newest version only,
+ * and only while AI assistance is on, so the link is drawn only then.
+ */
+function CheckTab({ record, search, newest, fixOn }) {
   const rows = checkRows(record);
   const summary = checkSummary(rows);
+  const mismatch = rows.some((r) => r.result === 'Mismatch');
   return (
     <div className="flex flex-col gap-3.5" data-testid="narrative-check">
       <section className={CARD}>
@@ -138,7 +143,7 @@ function CheckTab({ record, search }) {
           {summary && <span className={`text-[12.5px] font-semibold ${INK}`} data-testid="narrative-check-summary">{summary}</span>}
         </div>
         {rows.length === 0
-          ? <p className={`m-0 px-4 py-4 text-[13px] ${MUTED}`}>Nothing compared yet.</p>
+          ? <p className={`m-0 px-4 py-4 text-[13px] ${MUTED}`} data-testid="narrative-check-none">Nothing compared yet.</p>
           : rows.map((r) => (
             <div key={r.figure} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-2.5 last:border-b-0 dark:border-gray-800" data-testid="narrative-check-row">
               <div className="flex min-w-0 flex-col">
@@ -150,9 +155,12 @@ function CheckTab({ record, search }) {
           ))}
       </section>
       <p className={`m-0 text-[12.5px] leading-relaxed ${MUTED}`}>{CHECK_RUNS}</p>
-      <Link className={`${LINK} text-[12.5px]`} to={`${HOME_PATH}${tabSearch(search, null, false)}`} data-testid="narrative-check-fix">
-        Phrase a fix with Eadwyn on Home
-      </Link>
+      {mismatch && fixOn && newest && (
+        <Link className={`${LINK} text-[12.5px]`} to={`${HOME_PATH}${tabSearch(search, null, false)}`} data-testid="narrative-check-fix">
+          Phrase the fix for the first mismatch with Eadwyn on Home
+        </Link>
+      )}
+      {mismatch && fixOn && !newest && <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="narrative-check-fix-newest">{FIX_NEWEST_ONLY}</p>}
     </div>
   );
 }
@@ -230,7 +238,7 @@ function PositioningTab({ search }) {
  * `cards` are the Raise modules for the header's rail; `action` is Call for
  * Capital, as on every Raise module page.
  */
-export function NarrativeTabPage({ tab, projectId, search = '', cards, action, phone = false }) {
+export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, fixOn = true, search = '', cards, action, phone = false }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const list = useVersions(projectId, reload);
@@ -242,14 +250,17 @@ export function NarrativeTabPage({ tab, projectId, search = '', cards, action, p
 
   let body;
   if (tab === 'positioning') body = <PositioningTab search={search} />;
+  // No venture means no versions read is made: say the venture list failed, never a skeleton.
+  else if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (list.status === 'loading') body = <Skeleton testId="narrative-loading" />;
+  else if (list.status === 'refused') body = <p role="status" className={`m-0 text-[13px] ${INK}`} data-testid="narrative-refused">{list.message || 'You do not have access to this venture’s narrative.'}</p>;
   else if (list.status === 'error') body = <Unreadable what="Your narrative versions" claim="This is not a claim that none are saved." onRetry={retry} />;
   else if (!list.versions.length) body = <NoVersion search={search} />;
   else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} />;
   else if (record.status === 'loading' || record.status === 'idle') body = <Skeleton testId="narrative-loading" />;
   else if (record.status === 'refused') body = <p className={`m-0 text-[13px] ${INK}`}>{record.message || 'This version could not be opened.'}</p>;
   else if (record.status === 'error') body = <Unreadable what={`Version ${version}`} claim="This is not a claim that it is empty." onRetry={retry} />;
-  else body = tab === 'story' ? <StoryTab record={record.data} version={version} search={search} /> : <CheckTab record={record.data} search={search} />;
+  else body = tab === 'story' ? <StoryTab record={record.data} version={version} search={search} /> : <CheckTab record={record.data} search={search} newest={version === list.versions[0]?.value} fixOn={fixOn} />;
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`narrative-${tab}-page`}>

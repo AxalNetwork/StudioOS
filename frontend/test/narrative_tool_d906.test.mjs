@@ -8,7 +8,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
-  HOME_PATH, TABS, checkRows, checkSummary, chosenVersion, compareRows, isNarrativeTab, positioningHref, previousVersion,
+  CHECK_RUNS, HOME_PATH, TABS, checkRows, checkSummary, chosenVersion, compareRows, isNarrativeTab, positioningHref, previousVersion,
   storyRows, tabHref, tabSearch, versionHref, versionsOf,
 } from '../src/pages/raise/narrative/narrativeModel.js';
 
@@ -155,7 +155,10 @@ test('Story reads the version the address names, and draws Not recorded, never a
     assert.ok(!view.requests.some((u) => u.includes('/records/4?')), 'only the chosen version');
     const t = view.text();
     assert.match(t, /Close the month in a day \(v2\)\./);
-    assert.match(t, /Not recorded/);
+    // 2026-10-24 (D906 review): read Story's own mark, not the page; the rail says "Not recorded" too.
+    assert.equal(view.testIds().filter((id) => id === 'narrative-story-not-recorded').length, 2, 'Problem and Traction draw Not recorded, never a blank');
+    assert.match(t, /ProblemNot recorded/, 'an empty section draws its heading over a blank');
+    assert.match(t, /TractionNot recorded/);
     assert.ok(view.hrefs().includes(`${HOME_PATH}/2?project_id=3`), 'the version\'s own page, to edit it');
   } finally { await view.close(); }
 });
@@ -206,10 +209,76 @@ test('no versions offers New version; a failed versions read says so, and reads 
   } finally { await none.close(); }
   const failed = await mounted('/raise/investor-narrative/check?project_id=3', { handle: (u) => (u.includes('/form-options') ? response({ detail: 'boom' }, 500) : handler(u)) });
   try {
-    assert.match(failed.text(), /could not be read/);
+    // 2026-10-24 (D906 review): the sentence itself; the rail's own "could not be read" matched before.
+    assert.match(failed.text(), /Your narrative versions could not be read\. This is not a claim that none are saved\./);
+    assert.ok(!failed.testIds().includes('narrative-loading'), 'a failed read is drawn as still loading');
     assert.doesNotMatch(failed.text(), /Nothing compared yet|No narrative yet/, 'a failed read is not an empty one');
     assert.ok(!failed.requests.some((u) => u.includes('/records/')));
   } finally { await failed.close(); }
+});
+
+/* ------------------------------------------------------------------ *
+ * The review's fixes (2026-10-24)
+ * ------------------------------------------------------------------ */
+
+const answering = (rules) => (u, o) => { for (const [match, answer] of rules) if (match(u)) return answer(u); return handler(u, o); };
+const isProjects = (u) => /\/api\/projects(\?|$)/.test(u);
+
+test('on a phone, Home keeps the tool\'s tabs when its own read fails', async () => {
+  const view = await mounted('/raise/investor-narrative?project_id=3', { phone: true, handle: answering([[(u) => /\/modules\/investor-narrative\?/.test(u), () => response({ detail: 'boom' }, 500)]]) });
+  try {
+    assert.ok(view.testIds().includes('phone-module'));
+    assert.ok(view.testIds().includes('narrative-tabs'), 'the tabs vanish with Home\'s read; their own reads still work');
+    assert.match(view.text(), /could not be read/);
+  } finally { await view.close(); }
+});
+
+test('a tab with no venture list says the list could not be read, never an endless skeleton', async () => {
+  const view = await mounted('/raise/investor-narrative/story', { handle: answering([[isProjects, () => response({ detail: 'boom' }, 500)]]) });
+  try {
+    assert.match(view.text(), /Your ventures could not be read\. This is not a claim that you have none\./);
+    assert.ok(!view.testIds().includes('narrative-loading'));
+    assert.ok(!view.requests.some((u) => u.includes('/form-options')), 'no versions read without a venture');
+  } finally { await view.close(); }
+});
+
+test('a refused versions read is the Worker\'s sentence, with no Retry', async () => {
+  const view = await mounted('/raise/investor-narrative/check?project_id=9', { handle: answering([[(u) => u.includes('/form-options'), () => response({ detail: 'Forbidden' }, 403)]]) });
+  try {
+    assert.ok(view.testIds().includes('narrative-refused'));
+    assert.match(view.text(), /Forbidden/);
+    assert.doesNotMatch(view.text(), /Your narrative versions could not be read/, 'a refusal is drawn as a failed read');
+  } finally { await view.close(); }
+});
+
+test('Check offers Eadwyn\'s fix only for a mismatch in the newest version', async () => {
+  const newest = await mounted('/raise/investor-narrative/check?project_id=3');
+  try {
+    assert.ok(newest.testIds().includes('narrative-check-fix'), 'v4 has a mismatch: the fix is on Home');
+    assert.ok(newest.hrefs().includes(`${HOME_PATH}?project_id=3`));
+  } finally { await newest.close(); }
+  const older = await mounted('/raise/investor-narrative/check?project_id=3&version=3');
+  try {
+    assert.ok(!older.testIds().includes('narrative-check-fix'), 'Home phrases the newest version\'s fix, not v3\'s');
+    assert.ok(older.testIds().includes('narrative-check-fix-newest'));
+  } finally { await older.close(); }
+  const noMismatch = await mounted('/raise/investor-narrative/check?project_id=3', { handle: answering([[(u) => /\/records\/4\?/.test(u), () => {
+    const rec = version(4, 'A.'); rec.main[1].rows = rec.main[1].rows.map((r) => ({ ...r, c: 'Not compared', tone: 'grey' })); return response(rec);
+  }]]) });
+  try {
+    assert.ok(!noMismatch.testIds().includes('narrative-check-fix'), 'a fix is offered with nothing to fix');
+    assert.ok(!noMismatch.testIds().includes('narrative-check-fix-newest'));
+  } finally { await noMismatch.close(); }
+});
+
+test('the check\'s line says what the Worker compares today, and Home\'s tabs keep the version', async () => {
+  // raiseCycle.ts checkInputs also reads the venture profile's MRR, paying customers and funding needed (#2691 narrows it).
+  assert.match(CHECK_RUNS, /venture’s profile/);
+  assert.doesNotMatch(CHECK_RUNS, /deck side waits/);
+  const home = await mounted('/raise/investor-narrative?project_id=3&version=2');
+  try {
+    assert.ok(home.hrefs().includes(`${HOME_PATH}/check?project_id=3&version=2`), 'Home drops the version the founder was reading');
+  } finally { await home.close(); }
 });
 
 /* ------------------------------------------------------------------ *
@@ -222,7 +291,8 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const narrativeTab = record && cycle === 'raise' && isNarrativeTab\(slug, recordId\) \? recordId : null;/);
   assert.match(route, /enabled: record && known && validRecord && !narrativeTab && !!projectId && !!def/);
-  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{q\} \/> : undefined\}/);
+  // 2026-10-24 (D906 review): Home's tabs keep the address's version, as every other tab page does.
+  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{tabSearch\(q, searchParams\.get\('version'\)\)\} \/> : undefined\}/);
   for (const f of ['Investor Narrative Page.dc.html', 'Investor Narrative · Boards.dc.html']) {
     const src = read(`design/incoming/${f}`);
     assert.match(src, /<script src="\.\/support\.js"><\/script>/, f);
