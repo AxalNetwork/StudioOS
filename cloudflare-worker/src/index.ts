@@ -192,6 +192,7 @@ import deckShareActions from './routes/deck_share_actions';
 // D901 (#2680) — the HTML export and the deck export ledger.
 import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
+import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
@@ -1177,6 +1178,8 @@ app.route('/api/decks', deckShareActions);
 app.route('/api/decks', deckExports);
 // D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
 app.route('/api/decks', deckNotes);
+// D900 (#2679): a version's review and the venture's review history; two-segment paths, before `decks`.
+app.route('/api/decks', deckReview);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 app.route('/api/decks', decks);

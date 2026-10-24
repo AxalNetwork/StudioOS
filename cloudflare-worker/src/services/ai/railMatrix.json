@@ -5099,6 +5099,31 @@
    ]
   },
   {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "review:deck-version",
+   "optionLabel": "Review this version",
+   "kind": "reason",
+   "handler": "draft",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
    "pageKey": "Founder · Raise · Cap table",
    "optionKey": "draft:raise/capital",
    "optionLabel": "Read the round back",
