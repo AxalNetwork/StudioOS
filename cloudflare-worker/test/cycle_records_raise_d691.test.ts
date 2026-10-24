@@ -200,7 +200,8 @@ const overview = async (db: DatabaseSync) => {
 /** Step 3's table: title, columns, filters, default sort. */
 const CANVAS: Record<string, { title: string; cols: string[]; filters: string[]; sort: string }> = {
   'fundraising-readiness': { title: 'Readiness items', cols: ['Item', 'Score', 'Evidence', 'Missing', 'Updated'], filters: ['State'], sort: 'Score' },
-  'investor-narrative': { title: 'Versions', cols: ['Version', 'Investor type', 'Deck use', 'Mismatches', 'Date'], filters: ['Investor type'], sort: 'Newest' },
+  // D909 (#2693): NAR1's columns, less Claims backed, which waits for #2430.
+  'investor-narrative': { title: 'Versions', cols: ['Version', 'Audience', 'Based on', 'Mismatches', 'Read by deck', 'Saved', 'By'], filters: ['Audience'], sort: 'Newest' },
   'pitch-deck': { title: 'Investor links', cols: ['Investor', 'Expires', 'Views', 'Time on deck', 'Most read'], filters: ['State'], sort: 'Last viewed' },
   'data-room': { title: 'Files', cols: ['File', 'Folder', 'Answers request', 'Access', 'Updated'], filters: ['Folder', 'Access', 'Answers', 'Area'], sort: 'Updated' },
   'cap-table': { title: 'Holders', cols: ['Holder', 'Group', 'Instrument', 'Before', 'After round'], filters: ['Group', 'Instrument'], sort: 'Ownership' },
