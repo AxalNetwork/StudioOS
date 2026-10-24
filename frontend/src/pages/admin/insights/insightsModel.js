@@ -703,39 +703,43 @@ export function buildGroup(key, groupRead) {
 }
 
 /* ------------------------------------------------------------------ *
- * Export (INS5): the figures on the page, as counts only
+ * Export (INS5): the Worker's logged, counts-only file (#2661)
  * ------------------------------------------------------------------ */
 
-const csvCell = (v) => {
-  const s = v === null || v === undefined ? '' : String(v);
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-};
+export const EXPORT_WHAT = [
+  { key: 'page', label: 'Figures on this page' },
+  { key: 'group', label: 'This group only' },
+];
+export const EXPORT_FORMATS = [{ key: 'csv', label: 'CSV' }, { key: 'pdf', label: 'PDF' }];
+export const EXPORT_LOGGED = 'Each export is logged under your name.';
+export const EXPORT_NO_GROUP = 'Open a group to export it alone.';
+const EXPORT_FAILED = 'The export could not be made. Try again.';
 
 /**
- * The page's figures as CSV rows: block, item, value. Counts only — no block
- * on this page carries a name, an email or an id, and none is added here.
- * A block that is not ready is written with its state, never as a zero.
+ * The body of `POST /api/admin/insights/export` for what the page shows: its
+ * range, profile, country and selected scope, and the open group when the export is that
+ * group alone. Compare is the page's view, not a figure, so it is not sent.
  */
-export function figuresCsv({ kpis, blocks, asOf, scope = SCOPE_LABEL, filters = null }) {
-  const out = [['block', 'item', 'value']];
-  out.push(['scope', '', scope]);
-  out.push(['as of', '', asOf]);
-  if (filters) {
-    out.push(['filters', 'range', rangeLabel(filters.range)]);
-    if (filters.profile) out.push(['filters', 'profile', profileOf(filters.profile).label]);
-    if (filters.country) out.push(['filters', 'country', filters.country]);
+export function exportBody({ what, format, filters, group = null, scope }) {
+  const body = { what, format, range: filters.range };
+  if (scope) body.scope = scope;
+  if (filters.profile) body.profile = filters.profile;
+  if (filters.country) body.country = filters.country;
+  if (what === 'group' && group) body.group = group;
+  return body;
+}
+
+/**
+ * The toast for an export's answer. The link is the Worker's signed one;
+ * `fellBack` says a PDF shipped as HTML because Browser Run could not render
+ * it. A refusal carries the Worker's own sentence, never a raw error.
+ */
+export function exportToast(answer, error = null) {
+  if (error || !answer?.download_url) {
+    const said = typeof error?.message === 'string' && error.code ? error.message : '';
+    return { error: said || EXPORT_FAILED };
   }
-  const stateWord = (x) => (x.state === 'unrecorded' ? 'not recorded' : x.state === 'unreadable' ? 'could not be read' : 'reading');
-  for (const k of kpis) out.push(['tiles', k.label, k.state === 'ready' ? `${k.value}${k.tag ? ` ${k.tag}` : ''}` : stateWord(k)]);
-  for (const b of blocks) {
-    if (b.state !== 'ready') { out.push([b.title, '', stateWord(b)]); continue; }
-    if (b.big) out.push([b.title, b.bigSub || '', b.big]);
-    const c = b.chart;
-    if (c?.type === 'hbar' || c?.type === 'columns' || c?.type === 'stack') for (const r of c.rows) out.push([b.title, r.label, r.text ?? r.value]);
-    if (c?.type === 'line') c.values.forEach((v, i) => out.push([b.title, c.labels[i] || String(i), v ?? '']));
-    if (c?.type === 'bar100' || c?.type === 'donut') for (const p of c.parts) out.push([b.title, p.label, p.value]);
-  }
-  return out.map((r) => r.map(csvCell).join(',')).join('\n') + '\n';
+  return { url: answer.download_url, format: answer.format, fellBack: answer.format === 'html', expires: answer.expires_in_seconds ?? null };
 }
 
 /** The read-only range line in the export dialog: '8 weeks · 31 Aug 2026 to 24 Oct 2026'. */

@@ -256,3 +256,21 @@ test('D893 end to end on the real read (#2660): the export gets the page\'s own 
   assert.equal((await post(w, { format: 'csv' }, FOUNDER)).status, 403);
   assert.equal(audit(w.db).length, 1);
 });
+
+test('D893 export preserves the selected subsidiary scope in its read, header and audit', async () => {
+  const queries: string[] = [];
+  const w = world({ reader: async (_c, q) => { queries.push(q.toString()); return { status: 200, body: READ({ scope: { label: 'Branch North' } }) }; } });
+  try {
+    const r = await post(w, { format: 'csv', scope: 'north' });
+    assert.equal(r.status, 200);
+    assert.equal(new URLSearchParams(queries[0]).get('scope'), 'north');
+    assert.match(stored(w)[0], /Scope,Branch North/);
+    assert.equal(JSON.parse(audit(w.db)[0].filters_json).scope, 'north');
+  } finally { w.db.close(); }
+  const denied = world({ real: true });
+  try {
+    assert.equal((await post(denied, { format: 'csv', scope: 'north' })).status, 403);
+    assert.equal(denied.store.size, 0);
+    assert.equal(audit(denied.db).length, 0);
+  } finally { denied.db.close(); }
+});

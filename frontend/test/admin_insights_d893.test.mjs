@@ -24,7 +24,7 @@ import AdminInsights, { Block, Tile } from '../src/pages/admin/insights/AdminIns
 import { Chart } from '../src/pages/admin/insights/InsightsCharts.jsx';
 import {
   MOVED_NOTICE, NO_PERMISSION, PROFILE_FILTERS, activationCohort, activeFilterCount, blockState, buildBlocks, buildGroup,
-  buildKpis, countryOptions, dayLabel, definitionOf, figuresCsv, filterCountries, filtersFromSearch, groupFromSearch,
+  buildKpis, countryOptions, dayLabel, definitionOf, exportBody, filterCountries, filtersFromSearch, groupFromSearch,
   isEmptyStudio, pageFailed, profileOf, rangeLine, readParams, scopeState,
 } from '../src/pages/admin/insights/insightsModel.js';
 import { renderedText } from './_renderedText.mjs';
@@ -322,24 +322,11 @@ test('INS3: ?group= opens a profile, filled from the read with group=<role>, wit
   assert.equal(buildGroup(null, ok()), null);
 });
 
-test('INS5: the CSV holds counts only, its filters, and a block that is not ready is written with its state', () => {
-  const r = structuredClone(RESPONSE);
-  r.kpis.active_last_week = { available: false, unreadable: true, reason: 'x' };
-  r.blocks.spend = { recorded: false, reason: 'y' };
-  const kpis = buildKpis({ insights: ok(r) });
-  const blocks = buildBlocks({ insights: ok(r), filters: F });
-  const csv = figuresCsv({ kpis, blocks, asOf: '24 Oct 2026, 09:40 UTC', filters: { ...F, profile: 'founder', country: 'Canada' } });
-  assert.match(csv, /^block,item,value\n/);
-  assert.match(csv, /filters,range,8 weeks/);
-  assert.match(csv, /filters,profile,Founders/);
-  assert.match(csv, /filters,country,Canada/);
-  assert.match(csv, /tiles,Active last week,could not be read/);
-  assert.match(csv, /AI spend this month,,not recorded/);
-  assert.match(csv, /Who your accounts are,Founders,500/);
-  assert.match(csv, /Plan,Free,1027/);
-  assert.match(csv, /Growth,31 Aug,31/);
-  assert.match(csv, /"24 Oct 2026, 09:40 UTC"/);
-  assert.doesNotMatch(csv, /@/, 'an email in the export');
+test('INS5: the export asks the Worker for the page\'s filters, and the group only when it is that group (#2661)', () => {
+  const filters = { ...F, profile: 'founder', country: 'Canada', compare: true };
+  assert.deepEqual(exportBody({ what: 'page', format: 'csv', filters, group: 'founder' }), { what: 'page', format: 'csv', range: '8w', profile: 'founder', country: 'Canada' });
+  assert.deepEqual(exportBody({ what: 'group', format: 'pdf', filters: { ...F, range: 'year' }, group: 'investor' }), { what: 'group', format: 'pdf', range: 'year', group: 'investor' });
+  assert.deepEqual(exportBody({ what: 'page', format: 'csv', filters: F, scope: 'north' }), { what: 'page', format: 'csv', range: F.range, scope: 'north' });
   assert.match(rangeLine(ok(), Date.parse('2026-10-24T12:00:00Z')), /^8 weeks · 31 Aug 2026 to 24 Oct 2026$/);
   assert.equal(dayLabel('2026-08-31'), '31 Aug');
 });
