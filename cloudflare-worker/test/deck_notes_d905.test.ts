@@ -19,7 +19,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
@@ -175,7 +175,7 @@ test("a note never leaves through the deck's own read, a share or an export: onl
   assert.equal(JSON.stringify(versions.body).includes('SYNTHETIC-NOTE'), false);
   const src = new URL('../src/', import.meta.url).pathname;
   const readers: string[] = [];
-  const walk = (dir: string) => { for (const name of readdirSync(dir)) { const p = join(dir, name); if (statSync(p).isDirectory()) walk(p); else if (/\.ts$/.test(p) && /deck_notes/.test(readFileSync(p, 'utf8'))) readers.push(p.slice(src.length)); } };
+  const walk = (dir: string) => { for (const e of readdirSync(dir, { withFileTypes: true })) { const p = join(dir, e.name); if (e.isDirectory()) walk(p); else if (e.isFile() && /\.ts$/.test(p) && /deck_notes/.test(readFileSync(p, 'utf8'))) readers.push(p.slice(src.length)); } };
   walk(src);
   assert.deepEqual(readers.sort(), ['index.ts', 'routes/deck_notes.ts'], 'index.ts only mounts it');
   assert.equal(/FROM\s+deck_notes|JOIN\s+deck_notes/i.test(readFileSync(join(src, 'index.ts'), 'utf8')), false);
