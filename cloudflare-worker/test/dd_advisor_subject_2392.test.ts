@@ -11,8 +11,8 @@ import dd from '../src/routes/dd.ts';
 import { sectionsFor, checklistFor, encField, decField, type DDSubjectType } from '../src/services/dueDiligence.ts';
 
 const BASELINE=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
-// Local prototype until S1 assigns the migration number; promote before a PR.
-const REBUILD=readFileSync(new URL('./_dd_advisor_subject.pending.sql',import.meta.url),'utf8');
+// S1 assigned migration 535 and decision D888 on #2392.
+const REBUILD=readFileSync(new URL('../sql/migrations/535_dd_advisor_subject.sql',import.meta.url),'utf8');
 const OLD_CASE=tableFromBaseline(readFileSync(new URL('../sql/migrations/008_due_diligence.sql',import.meta.url),'utf8'),'dd_cases');
 const OLD_SCHEMA=BASELINE.replace(tableFromBaseline(BASELINE,'dd_cases'),OLD_CASE+"\nALTER TABLE dd_cases ADD COLUMN template_depth TEXT NOT NULL DEFAULT 'standard';");
 const SUBJECTS=['project','founder','advisor','investor','partner'] as const;

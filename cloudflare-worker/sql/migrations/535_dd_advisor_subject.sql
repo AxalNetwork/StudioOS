@@ -1,6 +1,5 @@
--- #2392 local rebuild prototype; migration and decision numbers pending S1.
--- Not in sql/migrations: the production migration runner cannot apply this file.
--- Move to the assigned migration path and update its regression test before a PR.
+-- 535 / D888 / #2392: admit advisor while preserving legacy mentor cases.
+-- Assigned by S1 on #2392, 2026-10-24. Forward migration only; do not edit 008.
 
 -- Current case creation uses project/founder/advisor/investor/partner.
 -- mentor remains accepted at storage for lossless historical reads only.
