@@ -87,6 +87,8 @@ test('the fixed tab keys cover the legacy section list and retired moved tabs, n
   assert.deepEqual(ADMIN_TAB_REDIRECTS.map((r) => r.path).sort(), tabs.map((t) => `/admin?tab=${t}`).sort());
   for (const { path } of ADMIN_TAB_REDIRECTS) assert.equal(redirectPatternFor('/admin', path.slice('/admin'.length)), path);
   assert.equal(redirectPatternFor('/admin', '?tab=k%79c&email=private@example.test'), '/admin?tab=kyc');
+  assert.equal(redirectPatternFor('/admin/', '?tab=kyc'), '/admin?tab=kyc');
+  assert.equal(redirectPatternFor('/ADMIN', '?tab=kyc'), '/admin?tab=kyc');
   for (const search of ['', '?tab=unknown', '?tab=private@example.test', '?tab=', '?other=kyc']) assert.equal(redirectPatternFor('/admin', search), null, search);
 });
 

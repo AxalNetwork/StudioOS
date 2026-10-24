@@ -17,7 +17,7 @@ import { fireAnalytics } from './seo';
 /** The redirect pattern an address opens, or null when it is not on the list. */
 export function redirectPatternFor(pathname, search = '') {
   if (typeof pathname !== 'string' || !pathname) return null;
-  if (pathname === '/admin') {
+  if (matchPath({ path: '/admin', end: true }, pathname)) {
     const tab = new URLSearchParams(search).get('tab');
     return ADMIN_TAB_REDIRECTS.find((r) => r.path === `/admin?tab=${tab}`)?.path || null;
   }
