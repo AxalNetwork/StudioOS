@@ -664,7 +664,7 @@ test('the sign-in pane uses the signed-in enrolment routes, never the login-flow
   const page = read('frontend/src/pages/SettingsPage.jsx');
   assert.doesNotMatch(page, /api\.(setupTotp|verifyTotp|smsStartChallenge|smsVerifyChallenge|authFactors)\(/);
   assert.match(page, /<TotpEnrollment/);
-  assert.match(page, /api\.smsStartEnrollment\(phone, country, null\)/);
+  assert.match(page, /api\.smsStartEnrollment\(normalizedPhone\.e164, normalizedPhone\.country, null\)/);
   const auth = read('cloudflare-worker/src/routes/auth.ts');
   assert.match(auth, /if \(user\.verification_token !== tokenHash\) \{ await sql\.end\(\); return c\.json\(\{ error: 'Invalid setup token\.' \}, 403\); \}/);
   const sms = read('cloudflare-worker/src/routes/auth_sms.ts');

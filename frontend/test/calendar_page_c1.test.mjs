@@ -418,3 +418,23 @@ test('every value read out of the canvas is escaped before it becomes a pattern'
 test('the page prints none of the canvas fixture', () => {
   assert.doesNotMatch(pageRaw, /Halyard Security|Meridian Robotics|Priya Nair|Perkins Coie|Thornbury Capital|Kelp Bio|LoopSense|Ashurst|Marcus Chen|Verity Health|7 – 13 Sep 2026|2 min ago|4 hrs ago/);
 });
+
+test('members with a legacy Gmail grant can remove it and reconnect Google without Gmail', () => {
+  assert.match(pageRaw, /provider === 'google_calendar'[\s\S]*?gmail\.readonly/,
+    'the removal action must be limited to a Google connection that still has the Gmail scope');
+  assert.match(pageRaw, /data-testid="calendar-remove-gmail-access"[\s\S]*?>\s*\{gmailRemovalBusy \? 'Removing Gmail access…' : 'Remove Gmail access'\}/,
+    'the quiet removal action is missing from the Google Calendar card');
+  assert.match(pageRaw, /api\.googleCalRemoveGmailAccess\(\)[\s\S]*?window\.location\.assign\(r\.redirect_url \|\| r\.auth_url\)/,
+    "removing Gmail access must continue into Google's fresh consent");
+});
+
+test('Google offers an explicit local-only disconnect after revocation fails', () => {
+  assert.match(pageRaw, /e\?\.code === 'google_revocation_failed'[\s\S]*?forceDisconnectAvailable: revocationFailed/,
+    'only a confirmed Google revocation failure must leave a local disconnect option');
+  assert.match(pageRaw, /data-testid="calendar-force-disconnect"[\s\S]*?Disconnect locally/,
+    'the fallback action must be labeled so it does not imply Google revocation');
+  assert.match(pageRaw, /googleCalForceDisconnect\(\)[\s\S]*?Google Account/,
+    'the fallback must warn the member about any remaining Google grant');
+  assert.match(pageRaw, /busy && !gmailRemovalBusy && text === 'Sync now' \? 'Syncing…'/,
+    'removing Gmail must not label the calendar as syncing');
+});

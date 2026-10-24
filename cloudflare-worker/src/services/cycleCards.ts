@@ -38,6 +38,7 @@ export interface CardNext { text: string; href: string }
 export type Next = CardNext | null;
 
 export interface Figure {
+  coverage?: { scored: number; total: number };
   key: string;
   label: string;
   /** `null` whenever the state is not `ok`. Never 0 for "missing". */

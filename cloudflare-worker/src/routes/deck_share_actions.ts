@@ -118,7 +118,7 @@ async function logConversion(
           WHERE deck_id = ? AND user_id = ? AND type = 'deal_signed' LIMIT 1`
       ).bind(opts.deckId, opts.userId).first<any>();
       if (exists?.id) return;
-    } else if (opts.viewId) {
+    } else if (opts.viewId && opts.type !== 'deal_pack_opened') {
       const exists = await env.DB.prepare(
         `SELECT id FROM deck_share_conversions
           WHERE deck_id = ? AND view_id = ? AND type = ? LIMIT 1`
@@ -403,20 +403,21 @@ deckShareActions.post('/share/:token/nda', async (c) => {
       `NDA — ${ctx.project_name || ('Deck ' + tok.deckId)}`,
       ndaBody,
       DECK_SHARE_NDA_SLUG,
-      signedBy,
+      user.name || user.email,
     ).run();
     docId = Number((ins as any)?.meta?.last_row_id || 0) || null;
   } catch (e) {
     console.error('[deck_share] nda doc insert failed', (e as Error).message);
   }
 
+  if (!docId) return c.json({ error: 'NDA acceptance could not be recorded. Try again.' }, 503);
   await logConversion(c.env, {
     deckId: tok.deckId, tokenId: tok.tokenId, viewId,
     projectId: ctx.project_id, userId,
     type: 'nda_signed', refId: docId ? String(docId) : null,
   });
 
-  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG });
+  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG, data_room_access_granted: false, message: 'NDA acceptance recorded. This does not grant data-room access; a separate founder grant and the data room NDA checks still apply.' });
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -516,8 +517,7 @@ deckShareActions.post('/share/:token/feedback', async (c) => {
 // in the modal; sign-action calls back into POST /deal-pack/sign.
 // We persist the docs as 'deal_pack_safe' / 'deal_pack_term_sheet' /
 // 'deal_pack_side_letter' (non-contract types so the legal.ts guard
-// stays satisfied). A real e-sign envelope round-trip is overkill for
-// MVP — these rows function as the auditable artifact.
+// stays satisfied). Signing requires a linked completed e-sign envelope.
 // ─────────────────────────────────────────────────────────────────────
 deckShareActions.post('/share/:token/deal-pack', async (c) => {
   const tok = await verifyShareToken(c.env, c.req.param('token'), c);
@@ -531,9 +531,11 @@ deckShareActions.post('/share/:token/deal-pack', async (c) => {
 
   const body = await c.req.json().catch(() => null) as any;
   const viewId = body?.view_id ? Number(body.view_id) : null;
-  const checkSize = body?.check_size ? String(body.check_size).slice(0, 60) : 'TBD';
-  const valuationCap = body?.valuation_cap ? String(body.valuation_cap).slice(0, 60) : '$8M';
-  const discount = body?.discount ? String(body.discount).slice(0, 20) : '20%';
+  const missing = ['check_size', 'valuation_cap', 'discount'].filter(k => body?.[k] == null || String(body[k]).trim() === '');
+  if (missing.length) return c.json({ error: 'Missing deal terms', missing_fields: missing }, 400);
+  const checkSize = String(body.check_size).slice(0, 60);
+  const valuationCap = String(body.valuation_cap).slice(0, 60);
+  const discount = String(body.discount).slice(0, 20);
 
   const ctx = await loadDeckContext(c.env, tok.deckId);
   if (!ctx) return c.json({ error: 'deck_not_found' }, 404);
@@ -625,8 +627,15 @@ deckShareActions.post('/share/:token/deal-pack/sign', async (c) => {
             SET status = 'signed', signed_by = ?, signed_at = datetime('now'), updated_at = datetime('now')
           WHERE id = ?
             AND project_id IS ?
-            AND doc_type IN ('deal_pack_safe','deal_pack_term_sheet','deal_pack_side_letter')`
-      ).bind(signedBy, id, ctx.project_id).run();
+            AND doc_type IN ('deal_pack_safe','deal_pack_term_sheet','deal_pack_side_letter')
+            AND EXISTS (SELECT 1 FROM deck_share_conversions conv
+              WHERE conv.user_id = ? AND conv.deck_id = ? AND conv.share_token_id IS ?
+                AND conv.type = 'deal_pack_opened'
+                AND (',' || conv.ref_id || ',') LIKE ('%,' || documents.id || ',%'))
+            AND EXISTS (SELECT 1 FROM esign_envelopes e WHERE e.id = documents.migrated_to_esign_id
+              AND e.status = 'completed' AND e.completed_at IS NOT NULL AND e.signed_r2_key IS NOT NULL
+              AND e.user_id = ? AND e.document_body = documents.content)`
+      ).bind(authUser.name || authUser.email, id, ctx.project_id, userId, tok.deckId, tok.tokenId, userId).run();
       const changes = Number((res as any)?.meta?.changes || 0);
       if (changes >= 1) signedIds.push(id);
       else notSignedIds.push(id);

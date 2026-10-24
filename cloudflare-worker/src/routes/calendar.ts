@@ -14,12 +14,16 @@
  * single-use HMAC-signed state token persisted in oauth_state_tokens.
  */
 import { Hono } from 'hono';
-import type { Env } from '../types';
+import type { Env, User } from '../types';
 import { getSQL } from '../db';
+import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
+import { userMayReadDeal } from './deals';
+import { logAdminAction } from '../services/adminAudit';
 import { requireAuth } from '../auth';
 import {
   googleOAuthAvailable, microsoftOAuthAvailable,
   buildGoogleAuthUrl, buildMicrosoftAuthUrl, GOOGLE_MEET_TRANSCRIPT_SCOPE,
+  revokeGoogleOAuthGrant, loadRefreshTokenExport,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
   fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs,
@@ -239,6 +243,53 @@ async function serializeIc(env: Env, m: any): Promise<any> {
   };
 }
 
+// Calendar invitations need an actual venture tie, not staff's global read
+// permission. Investor access follows the deal invitation/commitment stores;
+// advisor access follows the founder's live, unexpired session grant.
+async function isProjectParty(env: Env, user: User, project: { id: number; founder_id: number | null }, allowVentureLead = true): Promise<boolean> {
+  if (user.role === 'founder' && user.founder_id && user.founder_id === project.founder_id) return true;
+  const member = await getProjectMembershipRole(env, project.id, user.id);
+  if (member && await canAccessProject(env, user, project)) return true;
+  const sql = getSQL(env);
+  if (allowVentureLead) {
+    const lead = await sql`SELECT 1 FROM deals WHERE project_id = ${project.id} AND lead_partner_id = ${user.id} LIMIT 1`;
+    if (lead.length) return true;
+  }
+  if (user.role === 'investor') {
+    const invited = await sql`SELECT 1 FROM deal_invitations i JOIN deals d ON d.id = i.deal_id
+      WHERE d.project_id = ${project.id} AND i.investor_user_id = ${user.id} AND i.status IN ('invited','interested') LIMIT 1`;
+    if (invited.length) return true;
+    const committed = await sql`SELECT 1 FROM commitments c JOIN deals d ON d.id = c.deal_id
+      WHERE d.project_id = ${project.id} AND c.investor_user_id = ${user.id} AND c.status IN ('pending','confirmed') LIMIT 1`;
+    return committed.length > 0;
+  }
+  if (String(user.role) === 'advisor') {
+    const grants = await sql`SELECT 1 FROM advisor_client_grants
+      WHERE project_id = ${project.id} AND advisor_user_id = ${user.id} AND status = 'active'
+        AND scope_sessions = 1 AND (expires_at IS NULL OR datetime(expires_at) > datetime('now')) LIMIT 1`;
+    return grants.length > 0;
+  }
+  return false;
+}
+
+// IC invitations are scoped to this exact deal, rather than any deal belonging
+// to the same venture. Reading a deal as staff alone does not make an invitee
+// a party to it; the authenticated organiser is explicitly opting in themselves.
+async function isDealParty(env: Env, user: User, dealId: number): Promise<boolean> {
+  const sql = getSQL(env);
+  const deal = (await sql`SELECT p.id, p.founder_id, d.lead_partner_id FROM deals d JOIN projects p ON p.id = d.project_id
+    WHERE d.id = ${dealId} AND p.deleted_at IS NULL` as any[])[0];
+  if (!deal) return false;
+  if (deal.lead_partner_id === user.id) return true;
+  if (user.role === 'investor') {
+    const invited = await sql`SELECT 1 FROM deal_invitations WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} AND status IN ('invited','interested') LIMIT 1`;
+    if (invited.length) return true;
+    const committed = await sql`SELECT 1 FROM commitments WHERE deal_id = ${dealId} AND investor_user_id = ${user.id} AND status IN ('pending','confirmed') LIMIT 1`;
+    return committed.length > 0;
+  }
+  return isProjectParty(env, user, deal, false);
+}
+
 calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', async (c) => {
   const user = await requireAuth(c);
   if (!canScheduleIc(lc(user.role))) return c.json({ detail: 'Investor or admin role required' }, 403);
@@ -252,6 +303,19 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
   }
   const duration = Math.min(600, Math.max(10, parseInt(body.duration_min, 10) || 60));
   const sql = getSQL(c.env);
+  const dealId = Number(body.deal_id);
+  if (!Number.isSafeInteger(dealId) || dealId <= 0) return c.json({ detail: 'deal_id required' }, 400);
+  if (!(await userMayReadDeal(c.env, user, dealId))) return c.json({ detail: 'Not allowed to schedule for this deal' }, 403);
+  if (user.role === 'investor' && !(await isDealParty(c.env, user, dealId))) return c.json({ detail: 'Current deal relationship required' }, 403);
+  if (body.attendee_user_ids != null && !Array.isArray(body.attendee_user_ids)) return c.json({ detail: 'Invalid attendees' }, 400);
+  const attendeeIds = new Set<number>((body.attendee_user_ids || []).map(Number));
+  for (const attendeeId of attendeeIds) {
+    if (!Number.isSafeInteger(attendeeId) || attendeeId <= 0) return c.json({ detail: 'Invalid attendee' }, 400);
+    if (attendeeId === user.id) continue;
+    const attendee = (await sql`SELECT * FROM users WHERE id = ${attendeeId} AND is_active = 1` as User[])[0];
+    if (!attendee || !(await isDealParty(c.env, attendee, dealId))) return c.json({ detail: 'Attendee is not on this deal' }, 403);
+  }
+  attendeeIds.add(user.id);
   const uid = crypto.randomUUID();
   const r = await sql`
     INSERT INTO ic_meetings
@@ -259,17 +323,12 @@ calendar.post('/ic-meetings', safe('ic_create', 'Could not create IC meeting', a
        location_kind, location_uri)
     VALUES
       (${uid}, ${title}, ${body.agenda || null}, ${startAt.toISOString()}, ${duration},
-       ${body.deal_id || null}, ${user.id},
+       ${dealId}, ${user.id},
        ${body.location_kind || 'video'}, ${body.location_uri || null})
     RETURNING *
   ` as any[];
   const meeting = r[0];
-  const attendeeIds = new Set<number>(
-    Array.isArray(body.attendee_user_ids)
-      ? body.attendee_user_ids.map((n: any) => parseInt(n, 10)).filter((n: number) => Number.isFinite(n))
-      : [],
-  );
-  attendeeIds.add(user.id);
+  await logAdminAction(c.env, user.id, user.email, 'calendar_ic_created', { meeting_id: meeting.id, deal_id: dealId, attendees: attendeeIds.size });
   for (const uid2 of attendeeIds) {
     const u = (await sql`SELECT 1 FROM users WHERE id = ${uid2}` as any[])[0];
     if (!u) continue;
@@ -411,18 +470,30 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
   if (title.length < 2) return c.json({ detail: 'title required (min 2 chars)' }, 400);
 
   const sql = getSQL(c.env);
-  const founder = (await sql`SELECT id FROM users WHERE id = ${founderId}` as any[])[0];
+  const founder = (await sql`SELECT * FROM users WHERE id = ${founderId} AND is_active = 1` as any[])[0];
   if (!founder) return c.json({ detail: 'founder user not found' }, 404);
 
+  if (founder.role !== 'founder') return c.json({ detail: 'Target must be a founder' }, 403);
+  const projectId = body.project_id == null ? null : Number(body.project_id);
+  if (projectId !== null && (!Number.isSafeInteger(projectId) || projectId <= 0)) return c.json({ detail: 'Invalid project_id' }, 400);
+  const projects = projectId === null
+    ? await sql`SELECT id, founder_id FROM projects WHERE founder_id = ${founder.founder_id} AND deleted_at IS NULL` as any[]
+    : await sql`SELECT id, founder_id FROM projects WHERE id = ${projectId} AND founder_id = ${founder.founder_id} AND deleted_at IS NULL` as any[];
+  if (projectId !== null && !projects.length) return c.json({ detail: 'Project does not belong to this founder' }, 403);
   const isSelf = user.id === founderId;
-  const requestedCounterId = body.counterpart_user_id ? parseInt(body.counterpart_user_id, 10) : null;
-  const isCounter = requestedCounterId === user.id;
-  const role = lc(user.role);
-  if (!(isAdmin(role) || isSelf || isCounter || ['partner', 'investor', 'advisor'].includes(role))) {
-    return c.json({ detail: 'Not allowed to schedule this check-in' }, 403);
+  const related = async (person: User) => {
+    for (const project of projects) if (await isProjectParty(c.env, person, project)) return true;
+    return false;
+  };
+  if (!isSelf && !(await related(user))) return c.json({ detail: 'Not allowed to schedule this check-in' }, 403);
+  const counterId = body.counterpart_user_id == null ? (isSelf ? null : user.id) : Number(body.counterpart_user_id);
+  if (counterId !== null) {
+    if (!Number.isSafeInteger(counterId) || counterId <= 0) return c.json({ detail: 'Invalid counterpart' }, 400);
+    if (counterId !== founderId && counterId !== user.id) {
+      const counterpart = (await sql`SELECT * FROM users WHERE id = ${counterId} AND is_active = 1` as User[])[0];
+      if (!counterpart || !(await related(counterpart))) return c.json({ detail: 'Counterpart is not related to this venture' }, 403);
+    }
   }
-  // Default counterpart to caller if not the founder themselves.
-  const counterId = requestedCounterId ?? (isSelf ? null : user.id);
   const duration = Math.min(240, Math.max(10, parseInt(body.duration_min, 10) || 30));
   const uid = crypto.randomUUID();
   const r = await sql`
@@ -430,12 +501,13 @@ calendar.post('/founder-checkins', safe('ck_create', 'Could not create check-in'
       (uid, founder_user_id, counterpart_user_id, project_id, title, notes,
        start_at, duration_min, location_kind, location_uri)
     VALUES
-      (${uid}, ${founderId}, ${counterId}, ${body.project_id || null},
+      (${uid}, ${founderId}, ${counterId}, ${projectId},
        ${title}, ${body.notes || null}, ${startAt.toISOString()}, ${duration},
        ${body.location_kind || 'video'}, ${body.location_uri || null})
     RETURNING *
   ` as any[];
   const checkin = r[0];
+  await logAdminAction(c.env, user.id, user.email, 'calendar_checkin_created', { checkin_id: checkin.id, target_user_id: founderId, project_id: projectId });
   // Task #52 — push founder check-in to attendees' external calendars
   // (deferred via waitUntil so the response returns immediately).
   const ckId = checkin.id;
@@ -706,6 +778,145 @@ calendar.get('/google/status', safe('g_status', 'Could not load Google status', 
   });
 }));
 
+/** Revoke Google's grant before dropping the only locally stored refresh token. */
+export async function revokeAndDisconnectGoogle(
+  env: Env, userId: number, fetcher: typeof fetch = fetch,
+  options: { preserveCalendarSync?: boolean; preserveGoogleIdentity?: boolean } = {},
+): Promise<void> {
+  const token = await loadRefreshTokenExport(env, 'google_oauth_tokens', userId);
+  if (token) {
+    try {
+      await revokeGoogleOAuthGrant(token.raw, fetcher);
+    } catch (cause: any) {
+      const error: any = new Error(`Google did not confirm grant revocation: ${String(cause?.message || cause)}`);
+      error.code = 'google_revocation_failed';
+      throw error;
+    }
+  }
+
+  await clearGoogleLocalConnection(env, userId, options);
+}
+
+async function clearGoogleLocalConnection(
+  env: Env, userId: number, options: { preserveCalendarSync?: boolean; preserveGoogleIdentity?: boolean } = {},
+): Promise<void> {
+  const sql = getSQL(env);
+  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${userId}`;
+  if (!options.preserveCalendarSync) {
+    await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
+  }
+  // The Google link table was added after older deployments. Disconnect must
+  // still work there while removing the sign-in link where the table exists.
+  if (!options.preserveGoogleIdentity) {
+    try {
+      await sql`DELETE FROM user_google_links WHERE user_id = ${userId}`;
+    } catch (e: any) {
+      if (!/no such table/i.test(String(e?.message || e))) throw e;
+    }
+  }
+}
+
+export function googleGrantHasScope(scope: unknown, wanted: string): boolean {
+  return String(scope || '').split(/[\s,]+/)
+    .includes(wanted);
+}
+
+/** Opaque, signed marker lets the Gmail-reset callback identify the account that owns retained event mappings. */
+export async function makeGoogleSyncIdentityStateMarker(env: Env, googleSub: string | null | undefined): Promise<string> {
+  if (!googleSub) return '';
+  return `gs${await hmacSign(env.JWT_SECRET, `calendar-sync:${googleSub}`)}_`;
+}
+
+export async function googleSyncIdentityMatchesState(
+  env: Env, nonce: string, googleSub: string | null | undefined,
+): Promise<boolean | null> {
+  const marker = /(?:^|_)gs([A-Za-z0-9_-]{43})_/.exec(nonce)?.[1];
+  if (!marker) return null;
+  if (!googleSub) return false;
+  return marker === await hmacSign(env.JWT_SECRET, `calendar-sync:${googleSub}`);
+}
+
+export function shouldResetGoogleSyncMappings(
+  retainedIdentityMatches: boolean | null,
+  hadPreviousGoogleConnection: boolean,
+): boolean {
+  return retainedIdentityMatches === false
+    || (retainedIdentityMatches === null && !hadPreviousGoogleConnection);
+}
+
+export function callbackGoogleScopes(
+  incomingScope: unknown,
+  previousScope: unknown,
+  identityChanged: boolean,
+): string {
+  const scopes = new Set(String(incomingScope || '').split(/[\s,]+/).filter(Boolean));
+  const gmailScope = 'https://www.googleapis.com/auth/gmail.readonly';
+  if (!identityChanged && googleGrantHasScope(previousScope, gmailScope)) scopes.add(gmailScope);
+  return [...scopes].join(' ');
+}
+
+export async function clearGoogleIdentityLink(env: Env, userId: number, previousGoogleSub: string): Promise<void> {
+  if (!previousGoogleSub) return;
+  const sql = getSQL(env);
+  try {
+    await sql`DELETE FROM user_google_links WHERE user_id = ${userId} AND google_sub = ${previousGoogleSub}`;
+  } catch (e: any) {
+    if (!/no such table/i.test(String(e?.message || e))) throw e;
+  }
+}
+
+async function storedGoogleGrantHasScope(env: Env, userId: number, wanted: string): Promise<boolean> {
+  await ensureCalendarOAuthSchema(env);
+  const sql = getSQL(env);
+  const row = (await sql`
+    SELECT scope FROM google_oauth_tokens WHERE user_id = ${userId}
+  ` as any[])[0];
+  return googleGrantHasScope(row?.scope, wanted);
+}
+
+calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not remove Gmail access', async (c) => {
+  const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
+  const sql = getSQL(c.env);
+  const row = (await sql`
+    SELECT scope, google_sub FROM google_oauth_tokens WHERE user_id = ${user.id}
+  ` as any[])[0];
+  if (!row) return c.json({ error: { code: 'google_not_connected' } }, 409);
+  if (!googleGrantHasScope(row.scope, 'https://www.googleapis.com/auth/gmail.readonly')) {
+    return c.json({ error: { code: 'gmail_scope_not_granted' } }, 409);
+  }
+
+  // Prepare the new consent before revoking the existing grant so a missing
+  // OAuth configuration cannot leave the member disconnected.
+  const loginHint = user?.email ? String(user.email).toLowerCase().trim() : undefined;
+  const keepMeetTranscripts = meetTranscriptsEnabled(c.env)
+    && googleGrantHasScope(row.scope, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+  const identityMarker = await makeGoogleSyncIdentityStateMarker(c.env, row.google_sub);
+  const next = await buildGoogleOAuthStartResponse(
+    c.env, user.id, loginHint, keepMeetTranscripts, '', keepMeetTranscripts, identityMarker,
+  );
+  if (next.status !== 200) return c.json(next.body, next.status);
+  try {
+    await revokeAndDisconnectGoogle(c.env, user.id, undefined, {
+      preserveCalendarSync: !!row.google_sub,
+      preserveGoogleIdentity: true,
+    });
+  } catch (e: any) {
+    if (e?.code !== 'google_revocation_failed') throw e;
+    // The consent state was prepared before revocation so bad OAuth config
+    // cannot strand the connection. Discard it when revocation fails.
+    try {
+      const rawState = new URL(next.body.redirect_url).searchParams.get('state');
+      const nonce = rawState ? await verifyState(c.env, rawState) : null;
+      if (nonce) await consumeState(c.env, nonce, 'google');
+    } catch (cleanupError) {
+      console.warn('[CAL:g_remove_gmail] could not discard unused OAuth state', cleanupError);
+    }
+    return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
+  }
+  return c.json({ ...next.body, gmail_access_removed: true });
+}));
+
 /**
  * Task #35 — pure helper exposed for testing. Returns the JSON body +
  * HTTP status that `/google/start` should send. Side effect: persists the
@@ -719,6 +930,8 @@ export async function buildGoogleOAuthStartResponse(
   loginHint?: string,
   meetTranscripts = false,
   tag = '',
+  meetTranscriptsPreserved = false,
+  stateMarker = '',
 ): Promise<{ status: 200 | 500; body: any }> {
   const missing = preflightOAuthSecrets(env, 'google');
   if (missing.length > 0) {
@@ -733,7 +946,7 @@ export async function buildGoogleOAuthStartResponse(
       },
     };
   }
-  const nonce = `${meetTranscripts ? 'gm_' : ''}${tag}${crypto.randomUUID().replace(/-/g, '')}`;
+  const nonce = `${meetTranscriptsPreserved ? 'mp_' : meetTranscripts ? 'gm_' : ''}${tag}${stateMarker}${crypto.randomUUID().replace(/-/g, '')}`;
   try {
     await persistState(env, nonce, userId, 'google');
     const state = await makeState(env, nonce);
@@ -808,7 +1021,25 @@ async function startGoogleOAuth(c: any, meetTranscripts = false) {
   // across the Google round-trip via a short-lived, scoped cookie. Build's
   // return also rides in the signed nonce, with its venture (#1597).
   const returnTo = String(c.req.query('return_to') || '').toLowerCase();
-  const { status, body } = await buildGoogleOAuthStartResponse(c.env, user.id, loginHint, meetTranscripts, returnTag(returnTo, c.req.query('project_id')));
+  // With incremental scope carry-forward disabled, include an already granted
+  // optional Meet scope explicitly during ordinary reconnects.
+  const preserveMeetTranscripts = !meetTranscripts
+    && meetTranscriptsEnabled(c.env)
+    && await storedGoogleGrantHasScope(c.env, user.id, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+  const sql = getSQL(c.env);
+  let linkedGoogle: any;
+  try {
+    linkedGoogle = (await sql`
+      SELECT google_sub FROM google_oauth_tokens WHERE user_id = ${user.id}
+    ` as any[])[0];
+  } catch (e: any) {
+    if (!/no such table/i.test(String(e?.message || e))) throw e;
+  }
+  const stateMarker = await makeGoogleSyncIdentityStateMarker(c.env, linkedGoogle?.google_sub);
+  const { status, body } = await buildGoogleOAuthStartResponse(
+    c.env, user.id, loginHint, meetTranscripts || preserveMeetTranscripts,
+    returnTag(returnTo, c.req.query('project_id')), preserveMeetTranscripts, stateMarker,
+  );
   if (status === 200 && (returnTo === 'integrations' || returnTo === 'build' || returnTo === 'record')) {
     c.header(
       'Set-Cookie',
@@ -991,12 +1222,12 @@ calendar.get('/google/callback', async (c) => {
     if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state', returnTo);
     const nonce = signed;
     if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
-    const meetTranscripts = nonce.startsWith('gm_');
+    const newMeetGrant = nonce.startsWith('gm_');
     const userId = await consumeState(c.env, nonce, 'google');
     if (!userId) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
 
     const tokens = await exchangeGoogleCode(c.env, code);
-    if (meetTranscripts && !String(tokens?.scope || '').split(/[\s,]+/).includes(GOOGLE_MEET_TRANSCRIPT_SCOPE)) {
+    if (newMeetGrant && !String(tokens?.scope || '').split(/[\s,]+/).includes(GOOGLE_MEET_TRANSCRIPT_SCOPE)) {
       return failureRedirect(c.env, 'google', 'meet_scope_missing', returnTo);
     }
     const refreshToken = tokens?.refresh_token;
@@ -1038,11 +1269,36 @@ calendar.get('/google/callback', async (c) => {
       });
     }
 
+    const retainedIdentityMatches = await googleSyncIdentityMatchesState(c.env, nonce, googleSub);
+    let previousGoogleConnection: any;
+    try {
+      previousGoogleConnection = (await sql`
+        SELECT google_sub, scope FROM google_oauth_tokens WHERE user_id = ${userId}
+      ` as any[])[0];
+    } catch (e: any) {
+      if (!/no such table/i.test(String(e?.message || e))) throw e;
+    }
+    const previousGoogleSub = String(previousGoogleConnection?.google_sub || '');
+    const identityChanged = retainedIdentityMatches === false
+      || (retainedIdentityMatches === null && !!previousGoogleSub && !!googleSub && previousGoogleSub !== googleSub);
+    let previousGoogleIdentityLink = '';
+    try {
+      const link = (await sql`
+        SELECT google_sub FROM user_google_links WHERE user_id = ${userId}
+      ` as any[])[0];
+      previousGoogleIdentityLink = String(link?.google_sub || '');
+    } catch (e: any) {
+      if (!/no such table/i.test(String(e?.message || e))) throw e;
+    }
+    // include_granted_scopes=false makes Google's new token omit legacy Gmail,
+    // but the old same-account grant remains until its owner removes it explicitly.
+    const callbackScope = callbackGoogleScopes(tokens.scope, previousGoogleConnection?.scope, identityChanged);
+
     const refreshEnc = await encryptString(c.env, refreshToken);
     const persist = await persistGoogleCallbackTokens(c.env, {
       userId,
       refreshEnc,
-      scope: tokens.scope || '',
+      scope: callbackScope,
       googleEmail: info.email || null,
       googleSub,
       emailsMatch,
@@ -1051,9 +1307,25 @@ calendar.get('/google/callback', async (c) => {
     if (!persist.ok) {
       return failureRedirect(c.env, 'google', persist.reason, returnTo);
     }
+    if (identityChanged && previousGoogleIdentityLink && previousGoogleIdentityLink !== googleSub) {
+      // The original sign-in link remains intact if consent is abandoned; once
+      // a different Calendar identity is confirmed, remove only that old link.
+      await clearGoogleIdentityLink(c.env, userId, previousGoogleIdentityLink);
+    }
+    if (shouldResetGoogleSyncMappings(identityChanged ? false : retainedIdentityMatches, !!previousGoogleConnection)) {
+      // Gmail removal retained Calendar event mappings so reconnecting the
+      // same account remains idempotent. A different account clears them; an
+      // unmarked callback clears them only when no previous connection exists
+      // (for example, a fresh connect after abandoned Gmail-removal consent).
+      try {
+        await sql`DELETE FROM calendar_sync_records WHERE user_id = ${userId} AND provider = 'google'`;
+      } catch (e: any) {
+        if (!/no such table/i.test(String(e?.message || e))) throw e;
+      }
+    }
     const extra: Record<string, string> = {};
     // The return banner tells a transcript grant from an ordinary connect (#1926).
-    if (meetTranscripts) extra.meet = 'granted';
+    if (newMeetGrant) extra.meet = 'granted';
     if (persist.warn) {
       extra.warn = persist.warn;
       if (persist.warnEmail) extra.google_email = persist.warnEmail;
@@ -1069,21 +1341,15 @@ calendar.get('/google/callback', async (c) => {
 calendar.delete('/google', safe('g_disconnect', 'Could not disconnect Google', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
-  // Task #70 — the Integrations Google tile bundles Calendar + Gmail +
-  // "Continue with Google" sign-in behind a single consent. Disconnect
-  // therefore cascades the sign-in link too so the tile flips fully to
-  // "Not connected" instead of leaving a stale identity binding that
-  // the user can't see or revoke from the UI. Guarded so it doesn't
-  // fail on legacy deployments missing the side table.
   try {
-    await sql`DELETE FROM user_google_links WHERE user_id = ${user.id}`;
+    await revokeAndDisconnectGoogle(c.env, user.id);
+    return c.json({ ok: true });
   } catch (e: any) {
-    if (!/no such table/i.test(String(e?.message || e))) throw e;
+    if (e?.code === 'google_revocation_failed') {
+      return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
+    }
+    throw e;
   }
-  return c.json({ ok: true });
 }));
 
 calendar.post('/google/sync', safe('g_sync', 'Google sync failed', async (c) => {
@@ -1297,10 +1563,25 @@ calendar.delete('/events/:id', async (c) => {
 calendar.post('/google/disconnect', safe('g_disconnect_post', 'Could not disconnect Google', async (c) => {
   const user = await requireAuth(c);
   await ensureCalendarOAuthSchema(c.env);
-  const sql = getSQL(c.env);
-  await sql`DELETE FROM google_oauth_tokens WHERE user_id = ${user.id}`;
-  await sql`DELETE FROM calendar_sync_records WHERE user_id = ${user.id} AND provider = 'google'`;
-  return c.json({ ok: true });
+  try {
+    await revokeAndDisconnectGoogle(c.env, user.id);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    if (e?.code === 'google_revocation_failed') {
+      return c.json({ error: { code: 'google_revocation_failed', message: 'Google did not confirm revocation. Your saved connection is still available to retry.' } }, 502);
+    }
+    throw e;
+  }
+}));
+calendar.post('/google/force-disconnect', safe('g_force_disconnect', 'Could not disconnect Google locally', async (c) => {
+  const user = await requireAuth(c);
+  await ensureCalendarOAuthSchema(c.env);
+  await clearGoogleLocalConnection(c.env, user.id);
+  return c.json({
+    ok: true,
+    revoked: false,
+    warning: 'Google did not confirm revocation. Remove Axal VC from your Google Account access settings if it still appears there.',
+  });
 }));
 calendar.post('/microsoft/disconnect', safe('m_disconnect_post', 'Could not disconnect Microsoft', async (c) => {
   const user = await requireAuth(c);

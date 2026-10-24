@@ -644,3 +644,25 @@ test('D686 #1594 Calls history mutations: flag, project scope, date, counts and 
     await assert.rejects(()=>check(bad,which),{name:'AssertionError'});
   }
 });
+
+
+test('#2445: readiness coverage counts valid checks, never historical manual overrides',async()=>{
+ const db=fixture();
+ try {
+  assert.deepEqual(fig((await overview(db)).body,'readiness_score').coverage,{scored:0,total:7});
+  db.exec("INSERT INTO readiness_items(id,project_id,item_key,label,position) VALUES(900,1,'traction','Traction',5),(901,1,'team','Team',6)");
+  db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,source) VALUES(900,1,4,'measured','computed'),(900,1,10,'pattern','manual'),(901,1,10,'measured','manual')");
+  const {loadReadiness}=await import('../src/services/raiseCycle.ts');
+ assert.equal((await loadReadiness({env:env(db),projectId:P} as any)).scores.length,1);
+ let f=fig((await overview(db)).body,'readiness_score');
+  assert.deepEqual(f.coverage,{scored:1,total:7}); assert.equal(f.value,40);
+  db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,source) VALUES(901,1,6,'pattern','manual')");
+  f=fig((await overview(db)).body,'readiness_score');
+  assert.deepEqual(f.coverage,{scored:2,total:7}); assert.equal(f.value,50);
+ }finally{db.close();}
+});
+
+test('#2445: benchmark explicitly identifies the separate Lab score',async()=>{
+ const {benchmarkRows}=await import('../src/services/raiseCycle.ts');
+ assert.equal(benchmarkRows({state:'empty',own_score:7,reason:'Not enough peers'} as any)[0].label,'Your Lab score');
+});

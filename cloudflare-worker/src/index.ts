@@ -345,6 +345,7 @@ import mercuryAttestationRoutes from './routes/mercury_attestations';
 import mercuryOauthRoutes from './routes/mercury_oauth';
 import connectorsHealth from './routes/connectors_health';
 import connectorsCustomRoutes from './routes/connectors_custom';
+import cartaInvestorRoutes from './routes/carta_investor';
 import mercuryInvestorRoutes from './routes/mercury_investor';
 import adminBankAccounts from './routes/admin_bank_accounts';
 import adminFundStructure from './routes/admin_fund_structure';
@@ -984,6 +985,7 @@ app.route('/api/mercury/personal', mercuryPersonalRoutes);
 app.route('/api/mercury/attestations', mercuryAttestationRoutes);
 // D840 part 4 — an investor's own Mercury feeds their sections, read-only, HQ only.
 app.route('/api/mercury/investor', mercuryInvestorRoutes);
+app.route('/api/carta/investor', cartaInvestorRoutes);
 // D708 — each Axal entity's bank accounts, Super Admin only. Before the
 // catch-all /api/admin so /api/admin/bank-accounts/* resolves here.
 app.route('/api/admin/bank-accounts', adminBankAccounts);
@@ -2166,8 +2168,8 @@ export default {
           try {
             const { sweepScheduledPosts } = await import('./services/scheduledPosts');
             const p = await sweepScheduledPosts(env, now);
-            if (p.due || p.stale_failed || p.unreadable_failed || p.errors.length) {
-              console.info(`[cron] scheduled posts due=${p.due} sent=${p.sent} refused_or_failed=${p.refused_or_failed} stale_failed=${p.stale_failed} unreadable_failed=${p.unreadable_failed} left_for_next_tick=${p.left_for_next_tick}`);
+            if (p.due || p.stale_failed || p.stale_unknown || p.unreadable_failed || p.unreadable_draft || p.errors.length) {
+              console.info(`[cron] scheduled posts due=${p.due} sent=${p.sent} refused_or_failed=${p.refused_or_failed} stale_failed=${p.stale_failed} stale_unknown=${p.stale_unknown} unreadable_failed=${p.unreadable_failed} unreadable_draft=${p.unreadable_draft} left_for_next_tick=${p.left_for_next_tick}`);
               if (p.errors.length) console.warn('[cron] scheduled posts errors', p.errors.slice(0, 5));
             }
           } catch (e) { console.error('[cron] scheduled posts sweep failed', e); }

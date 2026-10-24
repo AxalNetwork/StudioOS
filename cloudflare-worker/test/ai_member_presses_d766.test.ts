@@ -132,7 +132,7 @@ test('legal documents: the document is the filled template; Eadwyn\'s notes are 
   // note filed against the deal instead of the document.
   const ai = makeAI(() => reply('- Add a pro-rata side letter.'));
   const w = world(ai);
-  const r = await call(w, 'POST', '/api/legalcap/legal/generate', { deal_id: 7, type: 'SAFE' });
+  const r = await call(w, 'POST', '/api/legalcap/legal/generate', { deal_id: 7, type: 'SAFE', variables: { investor_name: 'Synthetic investor', amount: '123', valuation_cap: '1000000', discount_rate: '0', founder_title: 'Founder' } });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   const stored = w.f.db.prepare('SELECT id, content FROM legal_documents').get();
   const doc = JSON.parse(stored.content);

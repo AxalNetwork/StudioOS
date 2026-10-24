@@ -449,7 +449,7 @@ test('8: with the flag on and no open call, the call focus, the meter and the fo
 test('8: readiness reads as a score out of 100; a commitment with no target shows the count alone', async () => {
   const db = fixture();
   db.exec(`INSERT INTO readiness_items (id, project_id, item_key, label, position) VALUES (1, ${P}, 'deck', 'Pitch deck', 1)`);
-  db.exec(`INSERT INTO readiness_scores (item_id, project_id, score, evidence) VALUES (1, ${P}, 7, 'measured')`);
+  db.exec(`INSERT INTO readiness_scores (item_id, project_id, score, evidence, source) VALUES (1, ${P}, 7, 'measured', 'computed')`);
   prospect(db, P, 'committed', null, 900000);
   const r = await rRead(db);
   assert.deepEqual([row(r.body, 'fundraising-readiness').detail, row(r.body, 'fundraising-readiness').value], ['Readiness score', '70 of 100']);

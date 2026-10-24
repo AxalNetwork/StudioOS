@@ -246,7 +246,17 @@ test('every founder surface identified by the measurement now narrows', () => {
   // cheap half that keeps a later edit from silently dropping one of seven
   // files back off the rollout.
   for (const f of ['decks', 'legal', 'scoring', 'settings', 'private-data', 'assistant', 'imports']) {
-    const src = read(`cloudflare-worker/src/routes/${f}.ts`);
+    const route = read(`cloudflare-worker/src/routes/${f}.ts`);
+    let src = route;
+    if (f === 'decks') {
+      // #2435 shares the actual gate with brand; follow that import rather
+      // than requiring the removed duplicate company predicate in the router.
+      for (const router of [route, read('cloudflare-worker/src/routes/brand.ts')]) {
+        assert.match(router, /import \{ projectOwned \} from '\.\.\/middleware\/projectContentAccess'/);
+        assert.match(router, /await projectOwned\(c, user,/);
+      }
+      src += read('cloudflare-worker/src/middleware/projectContentAccess.ts');
+    }
     assert.match(src, /activeCompanyFor|resolveActiveCompany/, `${f}.ts must resolve the active company`);
     assert.match(src, /company_id/, `${f}.ts must use it`);
   }

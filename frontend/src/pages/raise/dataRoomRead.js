@@ -173,3 +173,10 @@ export function queueRefusal(file, maxMb) {
   if (file.size > maxMb * 1024 * 1024) return `Larger than ${maxMb} MB`;
   return null;
 }
+
+/** Attribution stays visible even when an older granter's name is unavailable. */
+export function grantAttribution(grant) {
+  const name = grant.granted_by_name || 'Not recorded';
+  const role = grant.granted_by_role;
+  return `Granted by ${name}${role ? ` (${role})` : ''}`;
+}

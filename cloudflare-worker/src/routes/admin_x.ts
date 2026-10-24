@@ -12,20 +12,21 @@
  *     GET    /accounts                            — list (no tokens echoed)
  *     POST   /accounts                            — manual create stub (handle+display)
  *     PUT    /accounts/:id                        — patch label/enabled
- *     DELETE /accounts/:id                        — only when no sent posts
+ *     DELETE /accounts/:id                        — only when no published or unresolved posts
  *     POST   /accounts/:id/test                   — GET /users/me probe
  *     GET    /oauth/start?account_id=&redirect=   — kick PKCE flow
  *     GET    /oauth/callback                      — token exchange + persist (encrypted)
  *   Posts
  *     GET    /posts?status=&account_id=&limit=&offset=
  *     POST   /posts                               — create draft (manual)
- *     PUT    /posts/:id                           — edit draft (forbidden when sent/sending)
- *     DELETE /posts/:id                           — delete draft (forbidden when sent/sending)
+ *     PUT    /posts/:id                           — edit an unattempted draft
+ *     DELETE /posts/:id                           — delete an unattempted draft
  *     POST   /posts/:id/media                     — add a single R2-backed image (≤4 total)
  *     POST   /posts/:id/alt-text                  — auto-generate alt-text via Workers AI
  *     POST   /posts/:id/lint                      — preview PII linter findings
  *     POST   /posts/:id/approve                   — admin approve (status=approved), keeping the offered captions
  *     POST   /posts/:id/send                      — send (linter blocks unless override_reason)
+ *     POST   /posts/:id/resolve                   — record HQ’s checked outcome, never send
  *     POST   /posts/:id/schedule                  — set scheduled_for
  *     POST   /posts/:id/retract                   — DELETE on the X API + flip status
  *   Aggregator
@@ -37,8 +38,10 @@ import type { Env } from '../types';
 import { requireSuperAdmin } from '../auth';
 import { hashEmail } from '../util/hashEmail';
 import { clampLimit, parseOffset } from '../util/pagination';
+import { withDeadline } from '../util/deadline';
 import { ensureXSchema, X_MAX_TWEET_LEN, X_MAX_MEDIA_PER_TWEET, X_DEFAULT_DAILY_CAP } from '../services/xSchema';
 import { encryptString, decryptString } from '../services/cryptoBox';
+import { acquireRefreshLease } from '../integrations/refreshLease';
 import {
   XError,
   XConfigMissing,
@@ -70,6 +73,15 @@ const X_IMAGE_MIME: Record<string, string> = {
   'image/webp': 'webp',
 };
 const X_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// A failed row may predate outcome tracking and already be live on X.
+const xPostLocked = (post: {status: string; tweet_id?: string | null}) =>
+  !!post.tweet_id || ['sent', 'sending', 'unknown', 'failed'].includes(post.status);
+
+/** An exact claim identity that SQLite datetime() can still age for recovery. */
+function xClaimStamp(): string {
+  const suffix = Array.from(crypto.getRandomValues(new Uint32Array(2)), n => String(n).padStart(10, '0')).join('');
+  return new Date().toISOString().replace('Z', `${suffix}Z`);
+}
 
 // ---------------- helpers ----------------
 
@@ -120,7 +132,7 @@ function xErrorPayload(e: unknown): { body: Record<string, unknown>; status: 400
   if (e instanceof XError) {
     const status: 400 | 429 | 502 | 503 =
       e.code === 'rate_limited' ? 429 :
-      e.code === 'x_breaker_open' ? 503 :
+      e.code === 'x_breaker_open' || e.code === 'x_refresh_busy' ? 503 :
       e.code === 'x_unauthorized' || e.code === 'x_forbidden' || e.code === 'x_duplicate_content' ? 400 :
       502;
     // D278 — X's own text is an admin's to read, clipped, on `upstream`;
@@ -153,6 +165,7 @@ const X_SENTENCES: Record<string, string> = {
   x_network: 'X could not be reached. Try again in a moment.',
   x_oauth_exchange_failed: 'Connecting the X account did not complete. Start the connection again.',
   x_oauth_refresh_failed: 'The X session could not be renewed. Reconnect the X account.',
+  x_refresh_busy: 'The X session is being renewed. Try again in a moment.',
   x_api_error: 'X returned an error. Try again in a moment.',
   x_upstream: 'X returned an error. Try again in a moment.',
 };
@@ -220,30 +233,57 @@ async function loadAccount(env: Env, id: number) {
  * place when the cached one is within 60s of expiry (or already expired).
  * Throws XConfigMissing / x_unauthorized via the underlying refresh call.
  */
-async function getFreshAccessToken(env: Env, account: any): Promise<string> {
+export async function getFreshAccessToken(env: Env, account: any): Promise<string> {
   if (!account?.access_token_ct) throw new XError('x_account_not_linked', 'X account not linked yet.');
-  const exp = account.expires_at ? Date.parse(account.expires_at) : 0;
-  const needRefresh = !exp || exp - Date.now() < 60_000;
-  if (!needRefresh) {
-    const at = await decryptString(env, account.access_token_ct);
-    if (!at) throw new XError('x_account_not_linked', 'Stored access token unreadable. Re-authorise the account.');
-    return at;
-  }
+  const liveToken = async (row: any): Promise<string | null> => {
+    const exp = row?.expires_at ? Date.parse(row.expires_at) : 0;
+    if (!row?.access_token_ct || !exp || exp - Date.now() < 60_000) return null;
+    const token = await decryptString(env, row.access_token_ct);
+    if (!token) throw new XError('x_account_not_linked', 'Stored access token unreadable. Re-authorise the account.');
+    return token;
+  };
+  const cached = await liveToken(account);
+  if (cached) return cached;
   if (!account.refresh_token_ct) {
     throw new XError('x_refresh_missing', 'Access token expired and no refresh token stored. Re-authorise the account.');
   }
-  const rt = await decryptString(env, account.refresh_token_ct);
-  if (!rt) throw new XError('x_refresh_missing', 'Stored refresh token unreadable. Re-authorise the account.');
-  const fresh = await refreshAccessToken(env, rt);
-  const newAtCt = await encryptString(env, fresh.access_token);
-  const newRtCt = fresh.refresh_token ? await encryptString(env, fresh.refresh_token) : account.refresh_token_ct;
-  const expiresAt = new Date(Date.now() + (fresh.expires_in || 7200) * 1000).toISOString();
-  await env.DB.prepare(
-    `UPDATE x_accounts
-        SET access_token_ct = ?, refresh_token_ct = ?, expires_at = ?, updated_at = datetime('now')
-      WHERE id = ?`,
-  ).bind(newAtCt, newRtCt, expiresAt, account.id).run();
-  return fresh.access_token;
+
+  // X rotates refresh tokens on use. Serialize callers per account, and
+  // re-read D1 on both sides of the KV lease so a loser uses the winner's pair.
+  const lease = await acquireRefreshLease(env, 'x', String(account.id));
+  try {
+    if (!lease.acquired) {
+      for (let i = 0; i < 6; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const current = await loadAccount(env, account.id);
+        const freshToken = await liveToken(current);
+        if (freshToken) return freshToken;
+      }
+      throw new XError('x_refresh_busy', 'Another request is renewing this X account.');
+    }
+    const current = await loadAccount(env, account.id);
+    if (!current) throw new XError('x_account_not_linked', 'X account not linked yet.');
+    const freshToken = await liveToken(current);
+    if (freshToken) return freshToken;
+    account = current;
+    if (!account?.refresh_token_ct) {
+      throw new XError('x_refresh_missing', 'Access token expired and no refresh token stored. Re-authorise the account.');
+    }
+    const rt = await decryptString(env, account.refresh_token_ct);
+    if (!rt) throw new XError('x_refresh_missing', 'Stored refresh token unreadable. Re-authorise the account.');
+    const fresh = await refreshAccessToken(env, rt);
+    const newAtCt = await encryptString(env, fresh.access_token);
+    const newRtCt = fresh.refresh_token ? await encryptString(env, fresh.refresh_token) : account.refresh_token_ct;
+    const expiresAt = new Date(Date.now() + (fresh.expires_in || 7200) * 1000).toISOString();
+    await env.DB.prepare(
+      `UPDATE x_accounts
+          SET access_token_ct = ?, refresh_token_ct = ?, expires_at = ?, updated_at = datetime('now')
+        WHERE id = ?`,
+    ).bind(newAtCt, newRtCt, expiresAt, account.id).run();
+    return fresh.access_token;
+  } finally {
+    await lease.release();
+  }
 }
 
 // Per-account daily cap (KV-backed) -------------------------------------
@@ -270,7 +310,7 @@ async function reservedTodayWithInflight(env: Env, accountId: number): Promise<n
             WHERE account_id = ? AND status = 'sent'
               AND date(sent_at) = date('now')) +
          (SELECT COUNT(*) FROM x_posts
-            WHERE account_id = ? AND status = 'sending') AS n`,
+            WHERE account_id = ? AND status IN ('sending', 'unknown')) AS n`,
     ).bind(accountId, accountId).first();
     return Number(row?.n || 0);
   } catch { return 0; }
@@ -356,13 +396,25 @@ r.delete('/accounts/:id', async (c) => {
   await ensureXSchema(c.env);
   const id = Number(c.req.param('id'));
   const sent = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM x_posts WHERE account_id = ? AND status = 'sent'`,
+    `SELECT COUNT(*) AS n FROM x_posts WHERE account_id = ? AND (status IN ('sent', 'sending', 'unknown', 'failed') OR tweet_id IS NOT NULL)`,
   ).bind(id).first<{ n: number }>();
   if ((sent?.n ?? 0) > 0) {
-    return c.json({ error: 'has_sent_posts', message: 'Account has sent posts; disable it instead.' }, 409);
+    return c.json({ error: 'has_sent_posts', message: 'Account has sent or unresolved posts; disable it instead.' }, 409);
   }
-  await c.env.DB.prepare(`DELETE FROM x_posts WHERE account_id = ?`).bind(id).run();
-  await c.env.DB.prepare(`DELETE FROM x_accounts WHERE id = ?`).bind(id).run();
+  const removed = await c.env.DB.batch([
+    c.env.DB.prepare(`DELETE FROM x_posts WHERE account_id = ?
+      AND NOT EXISTS (SELECT 1 FROM x_posts WHERE account_id = ?
+        AND (status IN ('sent', 'sending', 'unknown', 'failed') OR tweet_id IS NOT NULL))
+      RETURNING media_r2_keys`).bind(id, id),
+    c.env.DB.prepare(`DELETE FROM x_accounts WHERE id = ? AND NOT EXISTS
+      (SELECT 1 FROM x_posts WHERE account_id = ?)`).bind(id, id),
+  ]);
+  if (!removed[1].meta?.changes) return c.json({ error: 'account_has_posts', message: 'The account changed. Reload it before deleting.' }, 409);
+  for (const row of removed[0].results || []) {
+    for (const key of safeJson<string[]>((row as any).media_r2_keys, [])) {
+      if (key.startsWith('x/')) { try { await c.env.FILES?.delete(key); } catch {} }
+    }
+  }
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_account_deleted', accountId: id });
   return c.json({ ok: true });
 });
@@ -375,7 +427,7 @@ r.post('/accounts/:id/test', async (c) => {
   if (!acct) return c.json({ error: 'not_found' }, 404);
   try {
     const at = await getFreshAccessToken(c.env, acct);
-    const me = await getMe(at);
+    const me = await getMe(at, id);
     await c.env.DB.prepare(
       `UPDATE x_accounts SET last_test_at = datetime('now'), last_error = NULL,
                               x_user_id = COALESCE(x_user_id, ?),
@@ -475,7 +527,7 @@ const oauthCallback = async (c: any) => {
     const refreshCt = tok.refresh_token ? await encryptString(c.env, tok.refresh_token) : null;
     const expiresAt = new Date(Date.now() + (tok.expires_in || 7200) * 1000).toISOString();
     let xUserId: string | null = null;
-    try { xUserId = (await getMe(tok.access_token)).data.id; } catch {}
+    try { xUserId = (await getMe(tok.access_token, bound.account_id)).data.id; } catch {}
     await c.env.DB.prepare(
       `UPDATE x_accounts
           SET access_token_ct = ?, refresh_token_ct = ?, expires_at = ?,
@@ -514,7 +566,7 @@ r.get('/posts', async (c) => {
   const args: unknown[] = [];
   if (status) {
     // Allow comma-separated status filter so the admin UI can fetch all
-    // manageable states (draft|approved|scheduled|failed) in a single call —
+    // draft and unresolved states (including sending and unknown) in a single call —
     // otherwise scheduled posts disappear from the Drafts tab after being
     // scheduled and `Reschedule` becomes unreachable.
     const parts = String(status).split(',').map(s => s.trim()).filter(Boolean);
@@ -601,7 +653,7 @@ r.put('/posts/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
   if (!post) return c.json({ error: 'not_found' }, 404);
-  if (post.status === 'sent' || post.status === 'sending') return c.json({ error: 'cannot_edit_in_state', state: post.status }, 409);
+  if (xPostLocked(post)) return c.json({ error: 'cannot_edit_in_state', state: post.status }, 409);
   const body: any = await c.req.json().catch(() => ({}));
   const sets: string[] = [];
   const args: unknown[] = [];
@@ -621,7 +673,8 @@ r.put('/posts/:id', async (c) => {
   }
   if (sets.length === 0) return c.json({ error: 'no_fields' }, 400);
   sets.push("updated_at = datetime('now')");
-  await c.env.DB.prepare(`UPDATE x_posts SET ${sets.join(', ')} WHERE id = ?`).bind(...args, id).run();
+  const edited = await c.env.DB.prepare(`UPDATE x_posts SET ${sets.join(', ')} WHERE id = ? AND status NOT IN ('sent', 'sending', 'unknown', 'failed') AND tweet_id IS NULL`).bind(...args, id).run();
+  if (!edited.meta?.changes) return c.json({ error: 'post_changed', message: 'The post changed. Reload it before editing.' }, 409);
   const afterRow: any = await loadPost(c.env, id);
   const editedHash = await sha256Hex(String(afterRow?.body || ''));
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_edited', postId: id, accountId: post.account_id, bodyHash: editedHash, extra: { fields: Object.keys(body) } });
@@ -634,14 +687,15 @@ r.delete('/posts/:id', async (c) => {
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
   if (!post) return c.json({ error: 'not_found' }, 404);
-  if (post.status === 'sent' || post.status === 'sending') return c.json({ error: 'cannot_delete_in_state', state: post.status }, 409);
+  if (xPostLocked(post)) return c.json({ error: 'cannot_delete_in_state', state: post.status }, 409);
   const keys = safeJson<string[]>(post.media_r2_keys, []);
+  const removed = await c.env.DB.prepare(`DELETE FROM x_posts WHERE id = ? AND status NOT IN ('sent', 'sending', 'unknown', 'failed') AND tweet_id IS NULL`).bind(id).run();
+  if (!removed.meta?.changes) return c.json({ error: 'post_changed', message: 'The post changed. Reload it before deleting.' }, 409);
   if (c.env.FILES) {
     for (const k of keys) {
       if (k && k.startsWith('x/')) { try { await c.env.FILES.delete(k); } catch {} }
     }
   }
-  await c.env.DB.prepare(`DELETE FROM x_posts WHERE id = ?`).bind(id).run();
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_deleted', postId: id, accountId: post.account_id });
   return c.json({ ok: true });
 });
@@ -653,7 +707,7 @@ r.post('/posts/:id/media', async (c) => {
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
   if (!post) return c.json({ error: 'not_found' }, 404);
-  if (post.status === 'sent' || post.status === 'sending') return c.json({ error: 'cannot_attach_in_state', state: post.status }, 409);
+  if (xPostLocked(post)) return c.json({ error: 'cannot_attach_in_state', state: post.status }, 409);
 
   const body: any = await c.req.json().catch(() => ({}));
   const dataUri = String(body.data_uri || '');
@@ -787,7 +841,7 @@ r.put('/posts/:id/alt-text', async (c) => {
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
   if (!post) return c.json({ error: 'not_found' }, 404);
-  if (post.status === 'sent' || post.status === 'sending') return c.json({ error: 'cannot_edit_in_state', state: post.status }, 409);
+  if (xPostLocked(post)) return c.json({ error: 'cannot_edit_in_state', state: post.status }, 409);
   const keys = safeJson<string[]>(post.media_r2_keys, []);
   const body: any = await c.req.json().catch(() => ({}));
   const idx = Number(body.index);
@@ -886,17 +940,18 @@ r.post('/posts/:id/schedule', async (c) => {
   const id = Number(c.req.param('id'));
   const post: any = await loadPost(c.env, id);
   if (!post) return c.json({ error: 'not_found' }, 404);
-  if (post.status === 'sent' || post.status === 'sending') return c.json({ error: 'cannot_schedule_in_state', state: post.status }, 409);
+  if (xPostLocked(post)) return c.json({ error: 'cannot_schedule_in_state', state: post.status }, 409);
   const body: any = await c.req.json().catch(() => ({}));
   const at = Date.parse(String(body.scheduled_for || ''));
   if (!Number.isFinite(at)) return c.json({ error: 'invalid_scheduled_for' }, 400);
   if (at < Date.now() - 60_000) return c.json({ error: 'scheduled_in_past' }, 400);
   // D250 — `scheduled_by` names who the scheduled send is recorded as
   // (migration 290): the admin who scheduled it, not whoever drafted it.
-  await c.env.DB.prepare(
+  const scheduled = await c.env.DB.prepare(
     `UPDATE x_posts SET status = 'scheduled', scheduled_for = ?, scheduled_by = ?, send_error = NULL,
-            updated_at = datetime('now') WHERE id = ?`,
+            updated_at = datetime('now') WHERE id = ? AND status NOT IN ('sent', 'sending', 'unknown', 'failed') AND tweet_id IS NULL`,
   ).bind(new Date(at).toISOString(), admin.id, id).run();
+  if (!scheduled.meta?.changes) return c.json({ error: 'post_changed', message: 'The post changed. Reload it before scheduling.' }, 409);
   const schedHash = await sha256Hex(String(post.body || ''));
   await writeAudit(c.env, { adminId: admin.id, adminEmail: admin.email, action: 'x_post_scheduled', postId: id, accountId: post.account_id, bodyHash: schedHash, extra: { scheduled_for: new Date(at).toISOString() } });
   return c.json({ ok: true });
@@ -913,12 +968,51 @@ r.post('/posts/:id/send', async (c) => {
   return c.json(out.body, out.status as any);
 });
 
+// #2410: this records an operator's check; it never calls X or sends a post.
+r.post('/posts/:id/resolve', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  await ensureXSchema(c.env);
+  const id = Number(c.req.param('id'));
+  const post: any = await loadPost(c.env, id);
+  if (!post) return c.json({ error: 'not_found' }, 404);
+  if (!['unknown', 'failed'].includes(post.status)) return c.json({ error: 'outcome_not_reviewable' }, 409);
+  const body: any = await c.req.json().catch(() => ({}));
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+  if (body.checked_x !== true || !['sent', 'not_sent'].includes(body.outcome) || reason.length < 8 || reason.length > 500) {
+    return c.json({ error: 'outcome_check_required', message: 'Check X and give a reason before recording the result.' }, 400);
+  }
+  if (post.tweet_id && (body.outcome === 'not_sent' || body.tweet_id && body.tweet_id !== post.tweet_id)) {
+    return c.json({ error: 'accepted_post_id_preserved', message: 'X returned a post ID. That accepted post cannot be marked not sent.' }, 409);
+  }
+  const tweetId = body.outcome === 'sent' ? String(post.tweet_id || body.tweet_id || '') : null;
+  if (tweetId !== null && !/^\d{1,30}$/.test(tweetId)) return c.json({ error: 'post_id_required', message: 'Enter the published X post ID.' }, 400);
+  const acct: any = await loadAccount(c.env, post.account_id);
+  if (!acct) return c.json({ error: 'account_not_found' }, 404);
+  const link = tweetId ? `https://x.com/${acct.handle}/status/${tweetId}` : null;
+  const filters = JSON.stringify({ post_id: id, account_id: post.account_id, outcome: body.outcome, tweet_id: tweetId, reason });
+  const audit = await auditHasActor(c.env)
+    ? c.env.DB.prepare(`INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json, actor)
+        SELECT ?, 'x_post_outcome_checked', 'x', ?, ? WHERE changes() = 1`).bind(admin.id, filters, await hashEmail(admin.email))
+    : c.env.DB.prepare(`INSERT INTO admin_audit_log (admin_user_id, action, report_type, filters_json)
+        SELECT ?, 'x_post_outcome_checked', 'x', ? WHERE changes() = 1`).bind(admin.id, filters);
+  const result = await c.env.DB.batch([
+    c.env.DB.prepare(`UPDATE x_posts SET status = ?, tweet_id = ?, tweet_link = ?,
+        sent_at = CASE WHEN ? IS NOT NULL THEN COALESCE(sent_at, datetime('now')) ELSE NULL END,
+        scheduled_for = NULL, scheduled_by = NULL, send_error = NULL, updated_at = datetime('now')
+        WHERE id = ? AND status = ? AND tweet_id IS ? AND updated_at IS ?`)
+      .bind(tweetId ? 'sent' : 'draft', tweetId, link, tweetId, id, post.status, post.tweet_id ?? null, post.updated_at ?? null),
+    audit,
+  ]);
+  if (!result[0].meta?.changes) return c.json({ error: 'outcome_changed', message: 'The post changed. Reload it before recording the result.' }, 409);
+  return c.json({ ok: true, status: tweetId ? 'sent' : 'draft', tweet_id: tweetId, link });
+});
+
 /**
  * D250 — THE ONE X SEND, for the console's click and the scheduled sweep
  * alike, extracted from the `/send` handler the way `sendTelegramPost` is.
  * The two modes differ in the claim (the clock claims only a due, still-
  * 'scheduled' head), in what a refusal does (the clock records it as
- * 'failed' with its reason, since nobody is there to answer and a row left
+ * 'draft' with its reason, since nobody is there to answer and a row left
  * 'scheduled' would be refused every minute) and in the PII override (a
  * click only).
  *
@@ -941,7 +1035,8 @@ export async function sendXPost(
   const overrideReason = opts.overrideReason ?? null;
   const post: any = await loadPost(env, id);
   if (!post) return { status: 404, body: { error: 'not_found' } };
-  if (post.status === 'sent') return { status: 409, body: { error: 'already_sent' } };
+  if (post.status === 'sent' || post.tweet_id) return { status: 409, body: { error: 'already_sent' } };
+  if (mode === 'click' && ['unknown', 'failed'].includes(post.status)) return { status: 409, body: { error: 'x_outcome_needs_review', code: 'x_outcome_needs_review', message: 'Check X and record whether this post was published before trying again.' } };
   if (post.status === 'sending') return { status: 409, body: { error: 'send_in_progress' } };
   if (post.thread_continuation_of) {
     return { status: 400, body: { error: 'cannot_send_thread_child_directly', head_id: post.thread_continuation_of } };
@@ -954,8 +1049,8 @@ export async function sendXPost(
       const reason = String(body.message || body.error).slice(0, 500);
       try {
         await env.DB.prepare(
-          `UPDATE x_posts SET status = 'failed', send_error = ?, updated_at = datetime('now')
-            WHERE (id = ? OR thread_continuation_of = ?) AND status IN ('scheduled', 'sending')`,
+          `UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
+            WHERE (id = ? OR thread_continuation_of = ?) AND status = 'scheduled' AND tweet_id IS NULL`,
         ).bind(reason, id, id).run();
       } catch {}
       await writeAudit(env, {
@@ -978,16 +1073,20 @@ export async function sendXPost(
   // Compare-and-set: atomically transition the head row to 'sending'.
   // We CAS BEFORE the cap check so the head's own reservation is visible to
   // any concurrent send racing the same account (see reservedTodayWithInflight).
+  // The exact timestamp is also the claim identity. Extra fractional digits
+  // add a random suffix while remaining readable by SQLite datetime() and JS
+  // Date. A late invocation must never mutate a later claim of the same row.
+  const claimStamp = xClaimStamp();
   const claim = mode === 'clock'
     ? await env.DB.prepare(
-      `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
-         WHERE id = ? AND status = 'scheduled'
+      `UPDATE x_posts SET status = 'sending', updated_at = ?
+         WHERE id = ? AND status = 'scheduled' AND tweet_id IS NULL
            AND datetime(scheduled_for) <= datetime(?)`,
-    ).bind(id, opts.dueBy ?? '').run()
+    ).bind(claimStamp, id, opts.dueBy ?? '').run()
     : await env.DB.prepare(
-      `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
-         WHERE id = ? AND status IN ('draft', 'approved', 'scheduled', 'failed')`,
-    ).bind(id).run();
+      `UPDATE x_posts SET status = 'sending', updated_at = ?
+         WHERE id = ? AND status IN ('draft', 'approved', 'scheduled') AND tweet_id IS NULL`,
+    ).bind(claimStamp, id).run();
   if (!claim.meta || (claim.meta as { changes?: number }).changes !== 1) {
     return { status: 409, body: { error: 'already_sending_or_sent' } };
   }
@@ -996,51 +1095,56 @@ export async function sendXPost(
   // the full thread's reservation footprint atomically. Children that have
   // already been sent stay 'sent' and are skipped at send time.
   await env.DB.prepare(
-    `UPDATE x_posts SET status = 'sending', updated_at = datetime('now')
+    `UPDATE x_posts SET status = 'sending', updated_at = ?
        WHERE thread_continuation_of = ?
-         AND status IN ('draft', 'approved', 'scheduled', 'failed')`,
-  ).bind(id).run();
+         AND status IN ('draft', 'approved', 'scheduled') AND tweet_id IS NULL`,
+  ).bind(claimStamp, id).run();
 
   // Release helper — flips the head AND any children we reserved back to a
   // recoverable state. Idempotent: only touches rows we left in 'sending'.
-  // The clock always records 'failed', with the reason.
-  const releaseClaim = async (next: 'draft' | 'failed' = 'draft', errMsg?: string) => {
-    const to = mode === 'clock' ? 'failed' : next;
+  // A proven non-delivery returns to draft with its reason, never to the
+  // legacy failed state whose historical outcome needs checking.
+  const releaseClaim = async (errMsg?: string) => {
     try {
       await env.DB.prepare(
-        `UPDATE x_posts SET status = ?, send_error = ?, updated_at = datetime('now')
-           WHERE id = ? AND status = 'sending'`,
-      ).bind(to, errMsg ? errMsg.slice(0, 500) : null, id).run();
+        `UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
+           WHERE id = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
+      ).bind(errMsg ? errMsg.slice(0, 500) : null, id, claimStamp).run();
       await env.DB.prepare(
-        `UPDATE x_posts SET status = ?, send_error = ?, updated_at = datetime('now')
-           WHERE thread_continuation_of = ? AND status = 'sending'`,
-      ).bind(to, errMsg ? errMsg.slice(0, 500) : null, id).run();
+        `UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
+           WHERE thread_continuation_of = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
+      ).bind(errMsg ? errMsg.slice(0, 500) : null, id, claimStamp).run();
     } catch {}
   };
 
   // Atomic cap enforcement: with head + children now reserved in 'sending',
-  // count sent-today + every in-flight 'sending' row for this account. Two
+  // count sent-today + every sending or unresolved row for this account. Two
   // concurrent sends racing the same account both reach this point, but each
   // sees the other's reservations, so only the first one can fit under cap.
   const used = await reservedTodayWithInflight(env, post.account_id);
   const cap = dailyCap(env);
   if (used > cap) {
-    await releaseClaim('draft', mode === 'clock'
-      ? `daily_cap_reached: the account had used ${used} of its ${cap} posts today. Reschedule it, or send it by hand tomorrow.`
-      : undefined);
+    const pending = await env.DB.prepare(`SELECT id FROM x_posts WHERE account_id = ? AND status = 'unknown' ORDER BY id LIMIT 20`)
+      .bind(post.account_id).all<{ id: number }>();
+    const unresolved = (pending.results || []).map(row => row.id);
+    const code = unresolved.length ? 'x_unresolved_capacity' : 'daily_cap_reached';
+    const message = unresolved.length
+      ? `Unresolved X posts ${unresolved.map(id => `#${id}`).join(', ')} hold this account's send capacity. Check X and record their outcomes before sending more.`
+      : `The account has reached its daily send cap of ${cap}. Reschedule it, or send it tomorrow.`;
+    await releaseClaim(`${code}: ${message}`);
     if (mode === 'clock') {
       await writeAudit(env, {
         adminId: actor.id, adminEmail: actor.email, action: 'x_scheduled_send_refused',
-        postId: id, accountId: post.account_id, extra: { code: 'daily_cap_reached', used, cap },
+        postId: id, accountId: post.account_id, extra: { code, used, cap, unresolved_post_ids: unresolved },
       });
     }
-    return { status: 429, body: { error: 'daily_cap_reached', used, cap } };
+    return { status: 429, body: { error: code, code, message, used, cap, unresolved_post_ids: unresolved } };
   }
 
   // PII linter — concatenate head + every child of the thread so a leak
   // hidden in tweet 3 still blocks the whole thread.
   const children: any = await env.DB.prepare(
-    `SELECT id, body FROM x_posts WHERE thread_continuation_of = ? ORDER BY thread_position ASC`,
+    `SELECT * FROM x_posts WHERE thread_continuation_of = ? ORDER BY thread_position ASC`,
   ).bind(id).all();
   const fullText = [post.body, ...((children.results || []) as any[]).map((r) => r.body)].join('\n');
   const lint = await lintForSend(env, fullText, 'public');
@@ -1049,7 +1153,7 @@ export async function sendXPost(
       const message = mode === 'clock'
         ? 'The PII linter blocked this scheduled post. A scheduled send cannot carry an override; open it and send it by hand with a reason.'
         : 'PII linter blocked the send. Provide override_reason (≥8 chars) to proceed.';
-      await releaseClaim('draft', mode === 'clock' ? `pii_linter_blocked: ${message}` : undefined);
+      await releaseClaim(mode === 'clock' ? `pii_linter_blocked: ${message}` : undefined);
       if (mode === 'clock') {
         await writeAudit(env, {
           adminId: actor.id, adminEmail: actor.email, action: 'x_scheduled_send_refused',
@@ -1063,8 +1167,8 @@ export async function sendXPost(
       };
     }
     await env.DB.prepare(
-      `UPDATE x_posts SET override_reason = ?, override_findings = ?, updated_at = datetime('now') WHERE id = ?`,
-    ).bind(overrideReason.slice(0, 1000), JSON.stringify(lint.findings), id).run();
+      `UPDATE x_posts SET override_reason = ?, override_findings = ? WHERE id = ? AND status = 'sending' AND updated_at = ?`,
+    ).bind(overrideReason.slice(0, 1000), JSON.stringify(lint.findings), id, claimStamp).run();
     await writeAudit(env, {
       adminId: actor.id, adminEmail: actor.email, action: 'x_pii_override',
       postId: id, accountId: post.account_id,
@@ -1078,94 +1182,106 @@ export async function sendXPost(
     accessToken = await getFreshAccessToken(env, acct);
   } catch (e) {
     const { body, status } = xErrorPayload(e);
-    await releaseClaim('failed', String((body as any).message || (body as any).code).slice(0, 500));
+    await releaseClaim(String((body as any).message || (body as any).code).slice(0, 500));
     return { status, body: body as Record<string, unknown> };
   }
 
-  // Helper to send one post row (head OR child) with its own media.
-  const sendOne = async (row: any, inReplyTo?: string): Promise<{ tweet_id: string; link: string }> => {
-    const keys = safeJson<string[]>(row.media_r2_keys, []);
-    const mediaIds: string[] = [];
-    for (const k of keys.slice(0, X_MAX_MEDIA_PER_TWEET)) {
-      const o = await env.FILES?.get(k);
-      if (!o) throw new XError('media_missing', `R2 object missing: ${k}`);
-      const buf = new Uint8Array(await o.arrayBuffer());
-      const mimeGuess =
-        k.endsWith('.png') ? 'image/png' :
-        k.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
-      const up = await uploadMedia({ accessToken, bytes: buf, mimeType: mimeGuess });
-      mediaIds.push(up.media_id_string);
-    }
-    const res = await createTweet({ accessToken, text: row.body, inReplyToTweetId: inReplyTo, mediaIds });
-    const tweetId = res.data.id;
-    const link = `https://x.com/${acct.handle}/status/${tweetId}`;
-    return { tweet_id: tweetId, link };
-  };
-
-  try {
-    // Send head, then walk thread children sequentially.
-    const headOut = await sendOne(post);
-    const bodyHash = await sha256Hex(fullText);
-    await env.DB.prepare(
-      `UPDATE x_posts SET status = 'sent', sent_at = datetime('now'),
-                          tweet_id = ?, tweet_link = ?, body_hash = ?,
-                          send_error = NULL, updated_at = datetime('now')
-         WHERE id = ?`,
-    ).bind(headOut.tweet_id, headOut.link, bodyHash, id).run();
-    await bumpSentToday(env, post.account_id, 1);
-
-    let parentId = headOut.tweet_id;
-    const sentChildren: Array<{ id: number; tweet_id: string }> = [];
-    for (const child of (children.results || []) as any[]) {
-      // Re-load to get media keys.
-      const full: any = await env.DB.prepare(`SELECT * FROM x_posts WHERE id = ?`).bind(child.id).first();
-      try {
-        const out = await sendOne(full, parentId);
-        await env.DB.prepare(
-          `UPDATE x_posts SET status = 'sent', sent_at = datetime('now'),
-                              tweet_id = ?, tweet_link = ?, in_reply_to_tweet_id = ?,
-                              send_error = NULL, updated_at = datetime('now')
-             WHERE id = ?`,
-        ).bind(out.tweet_id, out.link, parentId, child.id).run();
-        sentChildren.push({ id: child.id, tweet_id: out.tweet_id });
-        await bumpSentToday(env, post.account_id, 1);
-        parentId = out.tweet_id;
-      } catch (e) {
-        // Partial thread — head succeeded, this child + remaining children
-        // are marked failed so the admin can re-send them (each is a
-        // standalone row). Bubble the error up to the caller too.
-        await env.DB.prepare(
-          `UPDATE x_posts SET status = 'failed', send_error = ?, updated_at = datetime('now')
-             WHERE id = ? AND status <> 'sent'`,
-        ).bind(String((e as Error).message).slice(0, 500), child.id).run();
-        const { body, status } = xErrorPayload(e);
-        await writeAudit(env, {
-          adminId: actor.id, adminEmail: actor.email, action: 'x_post_thread_partial',
-          postId: id, accountId: post.account_id, bodyHash,
-          extra: { sent_children: sentChildren.length, failed_child_id: child.id, code: (body as any).code, via: mode },
-        });
-        return {
-          status,
-          body: { ok: false, partial: true, head: headOut, sent_children: sentChildren, failed_child: { id: child.id, ...body } },
-        };
+  // Compute ancillary data before publishing. The post ID is the first write
+  // after X accepts each row; later bookkeeping cannot make it retryable.
+  const bodyHash = await sha256Hex(fullText);
+  type Receipt = { id: number; tweet_id: string; link: string };
+  const receipts: Receipt[] = [];
+  const blocked = (children.results || []).some((child: any) => !child.tweet_id && ['unknown', 'failed'].includes(child.status));
+  if (blocked) {
+    await releaseClaim();
+    return { status: 409, body: { error: 'x_outcome_needs_review', code: 'x_outcome_needs_review', message: 'Check the unresolved thread posts on X before sending this thread.' } };
+  }
+  let parentId: string | undefined;
+  for (const row of [post, ...(children.results || [])] as any[]) {
+    // Never publish a child that already has an external receipt.
+    if (row.tweet_id) { parentId = row.tweet_id; continue; }
+    let attempted = false;
+    let rowClaimStamp = claimStamp;
+    let accepted: Receipt | undefined;
+    try {
+      const mediaIds: string[] = [];
+      for (const key of safeJson<string[]>(row.media_r2_keys, []).slice(0, X_MAX_MEDIA_PER_TWEET)) {
+        const object = await env.FILES?.get(key);
+        if (!object) throw new XError('media_missing', 'The image could not be read.');
+        const uploaded = await uploadMedia({ accessToken, accountId: acct.id, bytes: new Uint8Array(await object.arrayBuffer()) });
+        mediaIds.push(uploaded.media_id_string);
       }
+      // A slow preflight cannot continue after the stale-send sweep or an
+      // operator has changed the row. Renew its lease immediately before the
+      // bounded POST so the stale sweep cannot quarantine an active request.
+      const renewedStamp = xClaimStamp();
+      const fence = await withDeadline(env.DB.prepare(
+        `UPDATE x_posts SET updated_at = ? WHERE id = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
+      ).bind(renewedStamp, row.id, claimStamp).run(), 5000, 'X send claim');
+      if (fence.meta?.changes !== 1) throw new XError('x_send_state_changed', 'The post changed before sending. Reload it.');
+      rowClaimStamp = renewedStamp;
+      attempted = true;
+      const out = await createTweet({ accessToken, accountId: acct.id, text: row.body, inReplyToTweetId: parentId, mediaIds });
+      if (typeof out?.data?.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(out.data.id)) throw new Error('invalid_post_receipt');
+      accepted = { id: row.id, tweet_id: out.data.id, link: `https://x.com/${acct.handle}/status/${out.data.id}` };
+      // The durable receipt is deliberately independent of hashes, counters
+      // and audit records. A failure here is an accepted-but-unsaved outcome.
+      const saved = await withDeadline(env.DB.prepare(
+        `UPDATE x_posts SET tweet_id = ?, tweet_link = ?, in_reply_to_tweet_id = ?,
+          status = 'sent', sent_at = datetime('now'), send_error = NULL, updated_at = datetime('now')
+          WHERE id = ? AND status = 'sending' AND tweet_id IS NULL AND updated_at = ?`,
+      ).bind(accepted.tweet_id, accepted.link, parentId ?? null, row.id, rowClaimStamp).run(), 5000, 'X post receipt');
+      if (saved.meta?.changes !== 1) throw new Error('receipt_not_saved');
+      receipts.push(accepted);
+      parentId = accepted.tweet_id;
+      try {
+        await env.DB.prepare(`UPDATE x_posts SET body_hash = ? WHERE id = ? AND tweet_id = ? AND status = 'sent'`)
+          .bind(bodyHash, row.id, accepted.tweet_id).run();
+      } catch { console.warn('[x_post_metadata_not_saved]', JSON.stringify({ post_id: row.id, tweet_id: accepted.tweet_id })); }
+      await bumpSentToday(env, post.account_id, 1);
+    } catch (e) {
+      // An HTTP rejection proves no post was created. A timeout, 5xx, malformed
+      // success or lost response does not. Old 'failed' rows also require review.
+      const rejected = e instanceof XError && (e.code === 'x_breaker_open'
+        || e.status !== undefined && e.status >= 400 && e.status < 500 && e.status !== 408);
+      const unknown = !!accepted || attempted && !rejected;
+      const message = accepted
+        ? `X accepted post ${accepted.tweet_id}, but its receipt was not saved completely. Do not send it again; check X and record the result.`
+        : unknown ? 'It is not known whether X published this post. Check X and record the result before trying again.'
+        : String(xErrorPayload(e).body.message || 'The post was not sent.');
+      if (unknown) {
+        console.warn('[x_post_outcome_needs_review]', JSON.stringify({ post_id: row.id, ...(accepted ? { tweet_id: accepted.tweet_id } : {}) }));
+        // Retain the original sending reservation if D1 is unavailable. The
+        // stale sweep turns it into unknown, never a retryable failed row.
+        try {
+          await withDeadline(env.DB.prepare(`UPDATE x_posts SET status = 'unknown', send_error = ?,
+            tweet_id = COALESCE(tweet_id, ?), tweet_link = COALESCE(tweet_link, ?), updated_at = updated_at
+            WHERE id = ? AND status = 'sending' AND updated_at = ?`)
+            .bind(message, accepted?.tweet_id ?? null, accepted?.link ?? null, row.id, rowClaimStamp).run(), 5000, 'X uncertain outcome');
+        } catch { /* Response and content-free log preserve any accepted ID. */ }
+      }
+      // Only untouched reservations can be released. Never reset this row if
+      // it may have arrived, even if recording the unknown outcome failed.
+      try {
+        await env.DB.prepare(`UPDATE x_posts SET status = 'draft', send_error = ?, updated_at = datetime('now')
+          WHERE (id = ? OR thread_continuation_of = ?) AND status = 'sending' AND tweet_id IS NULL AND id <> ? AND updated_at IN (?, ?)`)
+          .bind(unknown ? 'The thread stopped before this post was sent.' : message, id, id, unknown ? row.id : -1, claimStamp, rowClaimStamp).run();
+      } catch {}
+      const code = accepted ? 'x_sent_not_saved' : unknown ? 'x_outcome_unknown' : String(xErrorPayload(e).body.code || 'x_send_failed');
+      await writeAudit(env, { adminId: actor.id, adminEmail: actor.email, action: unknown ? 'x_post_outcome_unknown' : 'x_post_send_failed',
+        postId: row.id, accountId: post.account_id, bodyHash,
+        extra: { code, via: mode, ...(accepted ? { tweet_id: accepted.tweet_id } : {}), sent_count: receipts.length } });
+      return { status: unknown ? 409 : xErrorPayload(e).status, body: { ok: false, error: code, code, message,
+        partial: receipts.length > 0, sent_children: receipts.filter(r => r.id !== id),
+        ...(receipts[0] ? { head: receipts[0] } : {}), ...(accepted ? { tweet_id: accepted.tweet_id, link: accepted.link } : {}) } };
     }
-
-    await writeAudit(env, {
-      adminId: actor.id, adminEmail: actor.email, action: 'x_post_sent',
-      postId: id, accountId: post.account_id, bodyHash,
-      extra: { tweet_id: headOut.tweet_id, link: headOut.link, thread_size: 1 + sentChildren.length, had_override: !!overrideReason, via: mode },
-    });
-    return { status: 200, body: { ok: true, tweet_id: headOut.tweet_id, link: headOut.link, sent_children: sentChildren } };
-  } catch (e) {
-    const { body, status } = xErrorPayload(e);
-    await releaseClaim('failed', String((body as any).message || (body as any).code).slice(0, 500));
-    await writeAudit(env, {
-      adminId: actor.id, adminEmail: actor.email, action: 'x_post_send_failed',
-      postId: id, accountId: post.account_id, extra: { code: (body as any).code, via: mode },
-    });
-    return { status, body: body as Record<string, unknown> };
   }
+  const head = receipts.find(row => row.id === id)!;
+  await writeAudit(env, {
+    adminId: actor.id, adminEmail: actor.email, action: 'x_post_sent', postId: id, accountId: post.account_id, bodyHash,
+    extra: { tweet_id: head.tweet_id, link: head.link, thread_size: receipts.length, had_override: !!overrideReason, via: mode },
+  });
+  return { status: 200, body: { ok: true, tweet_id: head.tweet_id, link: head.link, sent_children: receipts.filter(row => row.id !== id) } };
 }
 
 r.post('/posts/:id/retract', async (c) => {
@@ -1182,7 +1298,7 @@ r.post('/posts/:id/retract', async (c) => {
   const acct: any = await loadAccount(c.env, post.account_id);
   try {
     const at = await getFreshAccessToken(c.env, acct);
-    await deleteTweet({ accessToken: at, tweetId: post.tweet_id });
+    await deleteTweet({ accessToken: at, accountId: acct.id, tweetId: post.tweet_id });
     await c.env.DB.prepare(
       `UPDATE x_posts SET status = 'retracted', retracted_at = datetime('now'),
                           retracted_by = ?, retraction_reason = ?,

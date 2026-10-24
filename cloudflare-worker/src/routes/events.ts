@@ -46,6 +46,8 @@ import {
   ensureUniqueEventSlug,
   shapeAgendaItem,
   shapeEvent,
+  hasConfirmedEventSeat,
+  isInPersonEvent,
 } from '../services/eventsCommon';
 import {
   loadUserVectors,
@@ -93,6 +95,16 @@ export async function canViewEvent(env: Env, event: any, user: User): Promise<bo
          AND status != 'revoked' LIMIT 1`,
   ).bind(event.id, user.id, user.email).first();
   return !!inv;
+}
+
+// This lookup is always for the authenticated member, never an email supplied
+// by a public caller or an invitation token.
+async function canReadJoinLink(env: Env, event: any, user: User): Promise<boolean> {
+  if (canManage(event, user) || isInPersonEvent(event)) return true;
+  const registration = await env.DB.prepare(
+    `SELECT status, payment_status FROM event_registrations WHERE event_id = ? AND user_id = ?`,
+  ).bind(event.id, user.id).first();
+  return hasConfirmedEventSeat(registration);
 }
 
 async function loadEvent(env: Env, id: number): Promise<any | null> {
@@ -171,18 +183,23 @@ events.get('/', async (c) => {
     `SELECT * FROM events WHERE host_user_id = ? ORDER BY starts_at DESC`,
   ).bind(u.id).all();
   const attending = await c.env.DB.prepare(
-    `SELECT e.*, r.status AS reg_status, r.waitlist_position AS reg_waitlist_position
+    `SELECT e.*, r.status AS reg_status, r.payment_status AS reg_payment_status,
+            r.waitlist_position AS reg_waitlist_position, r.comp, ch.code AS checkin_code
        FROM events e
        JOIN event_registrations r ON r.event_id = e.id
+       LEFT JOIN event_checkins ch ON ch.event_id = e.id AND ch.registration_id = r.id
+         AND r.status != 'waitlisted' AND r.payment_status != 'pending'
       WHERE r.user_id = ? AND r.status IN ('registered','confirmed','attended','waitlisted')
       ORDER BY e.starts_at ASC`,
   ).bind(u.id).all();
   return c.json({
     hosting: (hosting.results || []).map((r) => shapeEvent(r, { includePrivate: true })),
     attending: (attending.results || []).map((r: any) => ({
-      ...shapeEvent(r),
+      ...shapeEvent(r, { includeJoinLink: canManage(r, u) || hasConfirmedEventSeat({ status: r.reg_status, payment_status: r.reg_payment_status }) }),
       reg_status: r.reg_status,
       reg_waitlist_position: r.reg_waitlist_position ?? null,
+      checkin_code: r.checkin_code ?? null,
+      comp: r.comp === 1,
     })),
   });
 });
@@ -292,7 +309,7 @@ events.get('/suggested', async (c) => {
     archetype,
     track,
     events: scored.slice(0, 8).map((s) => ({
-      ...shapeEvent(s.e),
+      ...shapeEvent(s.e, { includeJoinLink: canManage(s.e, u) }),
       suggestion_reason: prefer.has(s.e.type)
         ? (archetype?.label ? `Recommended for ${archetype.label}` : 'Matches your track')
         : null,
@@ -390,11 +407,11 @@ events.get('/:id', async (c) => {
   const agenda = await c.env.DB.prepare(
     `SELECT * FROM event_agenda_items WHERE event_id = ? ORDER BY display_order ASC, id ASC`,
   ).bind(id).all();
-  const registration = await c.env.DB.prepare(`SELECT id, status, waitlist_position, decision_reason, decided_at FROM event_registrations WHERE event_id = ? AND user_id = ?`).bind(id, u.id).first();
+  const registration = await c.env.DB.prepare(`SELECT id, status, payment_status, waitlist_position, decision_reason, decided_at FROM event_registrations WHERE event_id = ? AND user_id = ?`).bind(id, u.id).first();
   return c.json({
     registration,
-    event: shapeEvent(event, { includePrivate: manage }),
-    agenda: (agenda.results || []).map(shapeAgendaItem),
+    event: shapeEvent(event, { includePrivate: manage, includeJoinLink: hasConfirmedEventSeat(registration) }),
+    agenda: (agenda.results || []).map((row) => shapeAgendaItem(row, { includeJoinLink: manage || isInPersonEvent(event) || hasConfirmedEventSeat(registration) })),
   });
 });
 
@@ -894,7 +911,7 @@ events.get('/:id/ics', async (c) => {
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
   if (!(await canViewEvent(c.env, event, u))) return c.json({ error: 'forbidden' }, 403);
-  const ics = buildEventIcs(event);
+  const ics = buildEventIcs(shapeEvent(event, { includeJoinLink: await canReadJoinLink(c.env, event, u) }));
   return new Response(ics, {
     headers: {
       'content-type': 'text/calendar; charset=utf-8',
@@ -944,7 +961,8 @@ events.get('/:id/agenda', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT * FROM event_agenda_items WHERE event_id = ? ORDER BY display_order ASC, id ASC`,
   ).bind(id).all();
-  return c.json({ agenda: (rows.results || []).map(shapeAgendaItem) });
+  const includeJoinLink = await canReadJoinLink(c.env, event, u);
+  return c.json({ agenda: (rows.results || []).map((row) => shapeAgendaItem(row, { includeJoinLink })) });
 });
 
 events.post('/:id/agenda', async (c) => {
@@ -973,7 +991,7 @@ events.post('/:id/agenda', async (c) => {
   // Task #7 — a founder speaker on a Demo Day agenda earns Demo Day Presenter.
   if (body.speaker_user_id) await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
   await logAdminAction(c.env, u.id, u.email, 'event_agenda_created', { event_id: id, agenda_item_id: row?.id });
-  return c.json({ item: shapeAgendaItem(row) }, 201);
+  return c.json({ item: shapeAgendaItem(row, { includeJoinLink: true }) }, 201);
 });
 
 events.post('/:id/agenda/reorder', async (c) => {
@@ -1024,7 +1042,7 @@ events.patch('/:id/agenda/:aid', async (c) => {
     await awardAgendaSpeakerBadge(c.env, Number(body.speaker_user_id), event.type);
   }
   await logAdminAction(c.env, u.id, u.email, 'event_agenda_updated', { event_id: id, agenda_item_id: aid });
-  return c.json({ item: shapeAgendaItem(row) });
+  return c.json({ item: shapeAgendaItem(row, { includeJoinLink: true }) });
 });
 
 events.delete('/:id/agenda/:aid', async (c) => {

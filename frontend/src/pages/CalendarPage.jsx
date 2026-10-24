@@ -344,6 +344,7 @@ export default function CalendarPage() {
   const [google, setGoogle] = useState(null);
   const [microsoft, setMicrosoft] = useState(null);
   const [syncBusy, setSyncBusy] = useState(false);
+  const [gmailRemovalBusy, setGmailRemovalBusy] = useState(false);
   const [msSyncBusy, setMsSyncBusy] = useState(false);
   const [googleResult, setGoogleResult] = useState(null);
   const [microsoftResult, setMicrosoftResult] = useState(null);
@@ -513,9 +514,42 @@ export default function CalendarPage() {
   }
   async function disconnectGoogle() {
     if (!window.confirm('Disconnect Google Calendar? Already-pushed events stay on Google.')) return;
-    await api.googleCalDisconnect();
-    await loadGoogle();
-    setGoogleResult({ kind: 'success', text: 'Google disconnected.' });
+    try {
+      await api.googleCalDisconnect();
+      await loadGoogle();
+      setGoogleResult({ kind: 'success', text: 'Google disconnected.' });
+    } catch (e) {
+      const revocationFailed = e?.code === 'google_revocation_failed';
+      setGoogleResult({
+        kind: 'error',
+        text: revocationFailed
+          ? `${e.message || 'Google could not confirm revocation.'} Your connection is still saved.`
+          : `Google could not be disconnected: ${e.message || 'please try again.'}`,
+        forceDisconnectAvailable: revocationFailed,
+      });
+    }
+  }
+  async function forceDisconnectGoogle() {
+    if (!window.confirm('Disconnect from Axal VC even though Google did not confirm revocation? Calendar credentials will be removed here. If Axal VC still appears in your Google Account, remove its access there too.')) return;
+    try {
+      const r = await api.googleCalForceDisconnect();
+      await loadGoogle();
+      setGoogleResult({ kind: 'success', text: r.warning || 'Disconnected from Axal VC. Check your Google Account access settings.' });
+    } catch (e) {
+      setGoogleResult({ kind: 'error', text: e.message || 'Google could not be disconnected locally.' });
+    }
+  }
+  async function removeGmailAccess() {
+    if (!window.confirm('Remove Gmail access? Google will revoke this app’s current grant, briefly disconnect Calendar, then ask you to reconnect without Gmail access.')) return;
+    setGmailRemovalBusy(true);
+    setGoogleResult(null);
+    try {
+      const r = await api.googleCalRemoveGmailAccess();
+      window.location.assign(r.redirect_url || r.auth_url);
+    } catch (e) {
+      setGoogleResult({ kind: 'error', text: e.message || 'Gmail access could not be removed.' });
+      setGmailRemovalBusy(false);
+    }
   }
   async function runSync() {
     setSyncBusy(true); setGoogleResult(null);
@@ -734,8 +768,10 @@ export default function CalendarPage() {
           <div className="cal-providers">
             <ProviderCard
               provider="google_calendar" name="Google Calendar" state={gState} status={google} result={googleResult}
-              busy={syncBusy} envVars="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET"
-              onConnect={connectGoogle} onSync={runSync} onDisconnect={disconnectGoogle} onRetry={loadGoogle}
+              busy={syncBusy || gmailRemovalBusy} gmailRemovalBusy={gmailRemovalBusy}
+              envVars="GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET"
+              onConnect={connectGoogle} onSync={runSync} onDisconnect={disconnectGoogle}
+              onRemoveGmail={removeGmailAccess} onForceDisconnect={forceDisconnectGoogle} onRetry={loadGoogle}
             />
             <ProviderCard
               provider="microsoft_365" name="Microsoft Outlook" state={mState} status={microsoft} result={microsoftResult}
@@ -965,7 +1001,7 @@ function providerState(status, result) {
   return 'connected';
 }
 
-function ProviderCard({ provider, name, state, status, result, busy, envVars, onConnect, onSync, onDisconnect, onRetry }) {
+function ProviderCard({ provider, name, state, status, result, busy, gmailRemovalBusy, envVars, onConnect, onSync, onDisconnect, onRemoveGmail, onForceDisconnect, onRetry }) {
   const last = status?.last_synced_at ? new Date(status.last_synced_at) : null;
   const lastText = last && !Number.isNaN(last.getTime()) ? last.toLocaleString() : null;
   const account = status?.google_email || status?.microsoft_email || null;
@@ -1011,6 +1047,8 @@ function ProviderCard({ provider, name, state, status, result, busy, envVars, on
     },
   };
   const s = SPEC[state] || SPEC.reading;
+  const gmailStillGranted = provider === 'google_calendar' && status?.connected === true
+    && String(status?.scope || '').split(/[\s,]+/).includes('https://www.googleapis.com/auth/gmail.readonly');
 
   return (
     <div className="cal-card" data-testid={`calendar-provider-${state}`}>
@@ -1024,14 +1062,22 @@ function ProviderCard({ provider, name, state, status, result, busy, envVars, on
       </div>
       {!lastText && <p className="cal-prov-why">{s.whyNoSync}</p>}
       <p className="cal-prov-why">{s.why}</p>
-      {s.actions.length > 0 && (
+      {(s.actions.length > 0 || gmailStillGranted || result?.forceDisconnectAvailable) && (
         <div className="cal-prov-actions">
           {s.actions.map(([text, cls, fn]) => (
             <button key={text} type="button" className={`cal-btn ${cls} cal-btn-sm`}
                     onClick={fn} disabled={busy}>
-              {busy && text === 'Sync now' ? 'Syncing…' : text}
+              {busy && !gmailRemovalBusy && text === 'Sync now' ? 'Syncing…' : text}
             </button>
           ))}
+          {gmailStillGranted && <button type="button" className="cal-btn cal-btn-o cal-btn-sm"
+            onClick={onRemoveGmail} disabled={busy} data-testid="calendar-remove-gmail-access">
+            {gmailRemovalBusy ? 'Removing Gmail access…' : 'Remove Gmail access'}
+          </button>}
+          {result?.forceDisconnectAvailable && <button type="button" className="cal-btn cal-btn-q cal-btn-sm"
+            onClick={onForceDisconnect} disabled={busy} data-testid="calendar-force-disconnect">
+            Disconnect locally
+          </button>}
         </div>
       )}
       {result && <p className="cal-prov-said">{result.text}</p>}
@@ -1061,7 +1107,11 @@ function IcMeetingModal({ me, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
+  const dealId = Number(form.deal_id);
+  const validDeal = Number.isSafeInteger(dealId) && dealId > 0;
+
   async function submit() {
+    if (!validDeal) { setErr('Enter a valid deal id.'); return; }
     setBusy(true); setErr(null);
     try {
       const ids = form.attendee_user_ids.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => Number.isFinite(n));
@@ -1070,7 +1120,7 @@ function IcMeetingModal({ me, onClose, onSaved }) {
         agenda: form.agenda || null,
         start_at: new Date(form.start_at).toISOString(),
         duration_min: parseInt(form.duration_min, 10) || 60,
-        deal_id: form.deal_id ? parseInt(form.deal_id, 10) : null,
+        deal_id: dealId,
         location_uri: form.location_uri || null,
         attendee_user_ids: ids,
       });
@@ -1096,8 +1146,8 @@ function IcMeetingModal({ me, onClose, onSaved }) {
             <input type="number" min={10} max={600} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
                    value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: e.target.value })} />
           </Field>
-          <Field label="Deal id (optional)">
-            <input className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
+          <Field label="Deal id (required)">
+            <input type="number" min={1} step={1} required className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm"
                    value={form.deal_id} onChange={(e) => setForm({ ...form, deal_id: e.target.value })} />
           </Field>
         </div>
@@ -1117,7 +1167,7 @@ function IcMeetingModal({ me, onClose, onSaved }) {
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <button onClick={onClose} className="text-sm px-3 py-1.5 border border-slate-300 rounded">Cancel</button>
-          <button onClick={submit} disabled={busy || !form.title || !form.start_at}
+          <button onClick={submit} disabled={busy || !form.title || !form.start_at || !validDeal}
                   className="text-sm px-3 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50">
             {busy ? 'Saving…' : 'Schedule'}
           </button>

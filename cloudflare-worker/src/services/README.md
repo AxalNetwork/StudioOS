@@ -7,6 +7,21 @@ not return a `Response`.
 The split matters because it is what makes the logic testable: the worker suite
 runs these directly against an in-process SQLite, with no request at all.
 
+`captableAccess.ts` consumes verified project permissions from the cap-table
+router (#2436). Investors receive no project-bound cap-table access; accepted
+cofounders may write and accepted advisors may read without holder emails.
+Partners require recorded membership. Scenario ownership cannot bypass project
+permissions; list responses are owner-scoped, including for admins. Bound
+scenarios whose project is missing fail closed for non-admins; admin can recover
+or delete them. They are never silently detached into private scenarios.
+
+`scoreAccess.ts` scopes #2439 project risk and external trust-score reads through
+existing deal permissions. Self/admin trust reads retain obligation details;
+related external readers receive only the bare score. Non-admin risk and
+screening snapshots use `scoreIntegrity.ts` verification and read auditing.
+Bulk reads deduplicate projects, select snapshots once, and batch per-score
+audit entries without weakening approval or signature checks.
+
 ## The ones worth knowing
 
 `meetingBotOperations.ts` implements D886 B10 (#2588): count-only time windows,
@@ -169,6 +184,18 @@ vesting row, on the same `user_id` and `holder_id`) and returns `h-<id>`;
 Investors · SAFE or note adds a `safes[]` entry and returns its `e-<n>`. Both
 refuse a caller below `studio` with `ensureTier`'s 402, recompute through
 `saveScenario()`, and log nothing themselves.
+`captable.ts` keeps financing reserves in dilution but excludes unallocated
+option-pool shares from exit payouts (#2446). Pre-round capped SAFEs choose
+purchase amount or cap/basis-based conversion; cash-out SAFEs leave liquidity
+capitalization and insufficient cash is prorated, with exact integer-cent
+allocation. Exit values must fit safe integer cents; SAFE amounts and caps must
+be finite. A pre-round ledger with no positive finite issued shares is withheld.
+Unrecorded note or uncapped liquidity terms produce no waterfall plus a warning.
+Scenario inputs do not record individual option grants, which the payout
+assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through
+`capTableWrites.ts`; manual missing basis retains the legacy pre-money default.
+The [YC post-money user guide](https://bookface-static.ycombinator.com/assets/ycdc/Website%20User%20Guide%20Feb%202023%20-%20final-28acf9a3b938e643cc270b7da514194d5c271359be25b631b025605673fa9f95.pdf)
+explains exclusion of cash-outs and the unissued pool from liquidity capitalization.
 `dataRoomAccess.ts` (D691 decision 6, #1700) is the data room's one access
 predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
 `nobody`) and `access_expires_at`, with `investorCommitted()` (a committed
@@ -339,3 +366,18 @@ feature-switch change, live-runtime validation or production deployment here.
 D886 B7: `meetingBotParticipants.ts` decrypts the latest roster for the separate
 creator-only participants read. It projects display names/times only, excludes
 the bot and emails, and never turns a failed read into an empty list.
+
+Event responses use `eventsCommon.ts` to withhold online and hybrid join URLs
+unless a manager or a confirmed seat with settled payment reads them. Public
+calendar exports and invitation attachments use the same public projection.
+
+#2440: `calendar.ts` reads only events the member owns, organises or attends,
+including for admins. The same boundary feeds the page, calendar downloads,
+Google/Outlook sync and individual pushes; staff-wide typed lists stay separate.
+`../routes/calendar.ts` checks a founder's project and the caller/counterpart's
+recorded membership, deal relationship, assigned deal lead or live advisor session grant before
+creating a check-in. IC creation requires a readable deal and validates named
+attendees against that exact deal (venture owner/member/advisor, invited or
+committed investor, or assigned lead); the organiser explicitly opts themselves in. Passed investor invitations and
+withdrawn commitments confer no scheduling rights; investor organisers need a
+current relationship too, beyond the legacy deal-reader gate.

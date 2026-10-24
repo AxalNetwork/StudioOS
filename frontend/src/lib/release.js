@@ -6,16 +6,16 @@
  * (`.github/workflows/cloudflare-worker-deploy.yml`). Publishing a release
  * redeploys `main` (`.github/workflows/release-published.yml`), so the badge
  * follows the release with no code change. `scripts/release-draft.mjs` keeps
- * one draft release ready for the owner to publish, named by `nextReleaseTag`.
+ * daily drafts from main commit history, named by `nextReleaseTag`.
  *
- * The stage is a product decision. Moving to beta is this one line, in one
- * reviewed PR: the next draft is then named `-beta`, and so is the badge once
- * that release is published.
+ * New tags count active release periods without a stage suffix. RELEASE_STAGE
+ * remains the fallback badge for builds with no published release; legacy
+ * alpha, beta and rc tags continue to parse.
  */
 export const RELEASE_STAGE = 'alpha';
 
-/** The first tag, when no release has been published yet. */
-export const FIRST_RELEASE = `v0.1.0-${RELEASE_STAGE}`;
+/** The first release counts one active month and day, in week zero. */
+export const FIRST_RELEASE = 'v1.0.1';
 
 const TAG = /^v(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)(?:\.(\d+))?)?$/;
 
@@ -32,16 +32,24 @@ export function parseRelease(tag) {
   };
 }
 
-/**
- * The next release's tag. While pre-1.0, each release is a minor bump at the
- * current stage: v0.1.0-alpha → v0.2.0-alpha. The owner can still rename the
- * draft before publishing it (a patch, or 1.0.0).
+/** Active months accumulate; active week/day counters belong to the latest month.
+ * Month weeks are seven-day blocks (1–7, 8–14, ...), numbered from zero.
+ * Only blocks/days with main commits count: weeks 0–4, days 1–31.
  */
-export function nextReleaseTag(lastTag, stage = RELEASE_STAGE) {
-  const last = parseRelease(lastTag);
-  if (!last) return `v0.1.0-${stage}`;
-  const suffix = stage === 'stable' ? '' : `-${stage}`;
-  return `v${last.major}.${last.minor + 1}.0${suffix}`;
+export function nextReleaseTag(commitDays) {
+  const days = [...new Set(commitDays)].sort();
+  if (!days.length) throw new Error('No active commit days.');
+  const months = new Set();
+  for (const day of days) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error('Invalid commit day.');
+    const date = new Date(`${day}T00:00:00Z`);
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== day) throw new Error('Invalid commit day.');
+    months.add(day.slice(0, 7));
+  }
+  const month = days.at(-1).slice(0, 7);
+  const activeDays = days.filter((day) => day.slice(0, 7) === month);
+  const activeWeeks = new Set(activeDays.map((day) => Math.floor((Number(day.slice(8)) - 1) / 7)));
+  return `v${months.size}.${activeWeeks.size - 1}.${activeDays.length}`;
 }
 
 /**

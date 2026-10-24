@@ -517,9 +517,9 @@ const PROVIDERS = [
 ];
 const EV_NOW = new Date(Date.UTC(2026, 9, 17, 12));
 const TICKETS = [
-  { id: 't1', title: 'Pricing pressure-test workshop', starts_at: '2026-10-24T15:00:00Z', status: 'confirmed', location_kind: 'Online' },
-  { id: 't2', title: 'Demo Day', starts_at: '2026-11-18T15:00:00Z', status: 'waitlisted' },
-  { id: 't3', title: 'Fundraising basics', starts_at: '2026-10-03T15:00:00Z', status: 'attended' },
+  { id: 't1', title: 'Pricing pressure-test workshop', starts_at: '2026-10-24T15:00:00Z', status: 'published', reg_status: 'confirmed', location_kind: 'Online' },
+  { id: 't2', title: 'Demo Day', starts_at: '2026-11-18T15:00:00Z', status: 'published', reg_status: 'waitlisted' },
+  { id: 't3', title: 'Fundraising basics', starts_at: '2026-10-03T15:00:00Z', status: 'published', reg_status: 'attended' },
 ];
 const HOSTING = [{ id: 41, title: 'Founder dinner', starts_at: '2026-11-02T18:00:00Z', status: 'published', visibility: 'members' }];
 const SUGGESTED = [{ id: 51, slug: 'office-hours-block', title: 'Office hours block', starts_at: '2026-12-02T15:00:00Z' }];

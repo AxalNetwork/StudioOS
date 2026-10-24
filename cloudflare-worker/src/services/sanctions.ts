@@ -214,9 +214,23 @@ export function fuzzyMatchEntities(
 
 // ---------------------------------------------------------------------------
 // List loaders — cached in KV (24h). Each returns a normalised
-// SanctionEntity[] for that provider. Network failures degrade silently
-// to an empty list so a single source outage doesn't break screening.
+// SanctionEntity[] for that provider. Every list must be available and
+// nonempty before a screening result may be recorded.
 // ---------------------------------------------------------------------------
+export class IncompleteSanctionsScreeningError extends Error {
+  readonly missingLists: SanctionsProvider[];
+  constructor(missingLists: SanctionsProvider[]) {
+    super(`Screening not completed: sanctions lists unavailable or empty (${missingLists.join(', ')}). No result was recorded.`);
+    this.name = 'IncompleteSanctionsScreeningError';
+    this.missingLists = missingLists;
+  }
+}
+
+function usableList(value: unknown, provider: SanctionsProvider): value is SanctionEntity[] {
+  return Array.isArray(value) && value.length > 0 && value.every(e =>
+    e && e.source === provider && typeof e.name === 'string' && e.name.trim().length > 0 && Array.isArray(e.aliases));
+}
+
 async function getCachedList(
   env: Env,
   provider: SanctionsProvider,
@@ -226,14 +240,15 @@ async function getCachedList(
   if (kv) {
     try {
       const cached = await kv.get(KV_PREFIX + provider, 'json');
-      if (Array.isArray(cached)) return cached as SanctionEntity[];
+      if (usableList(cached, provider)) return cached;
     } catch (e) { /* fall through to fresh load */ }
   }
   let entities: SanctionEntity[] = [];
   try { entities = await loader(); } catch (e) {
     console.warn('[sanctions] loader failed', provider, (e as Error).message);
-    return [];
+    throw e;
   }
+  if (!usableList(entities, provider)) throw new Error(`Sanctions list unavailable or empty: ${provider}`);
   if (kv && entities.length) {
     try { await kv.put(KV_PREFIX + provider, JSON.stringify(entities), { expirationTtl: KV_TTL_SECONDS }); } catch {}
   }
@@ -334,12 +349,15 @@ async function loadUkHmt(): Promise<SanctionEntity[]> {
 }
 
 export async function loadAllLists(env: Env): Promise<SanctionEntity[]> {
-  const [a, b, c] = await Promise.all([
-    getCachedList(env, 'ofac',   loadOfac),
-    getCachedList(env, 'eu',     loadEu),
+  const providers: SanctionsProvider[] = ['ofac', 'eu', 'uk_hmt'];
+  const results = await Promise.allSettled([
+    getCachedList(env, 'ofac', loadOfac),
+    getCachedList(env, 'eu', loadEu),
     getCachedList(env, 'uk_hmt', loadUkHmt),
   ]);
-  return [...a, ...b, ...c];
+  const missing = providers.filter((_, i) => results[i].status === 'rejected');
+  if (missing.length) throw new IncompleteSanctionsScreeningError(missing);
+  return results.flatMap(result => result.status === 'fulfilled' ? result.value : []);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,8 +370,8 @@ export async function screenUser(
   subject: ScreeningSubject,
   triggeredBy: { admin_user_id?: number | null; reason?: string } = {},
 ): Promise<{ id: number; hit: boolean; severity: string; matches: MatchHit[] }> {
-  await ensureSanctionsSchema(env);
   const entities = await loadAllLists(env);
+  await ensureSanctionsSchema(env);
   const matches = fuzzyMatchEntities(subject, entities);
   const hit = matches.length > 0;
   let severity: 'none' | 'review' | 'block' = 'none';
