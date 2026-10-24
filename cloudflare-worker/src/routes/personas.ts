@@ -9,6 +9,8 @@
  *                                          (allows up to 2 rows for the
  *                                          founder+operator overlap)
  * - GET  /api/personas/admin/list          admin: all users + persona rows
+ * - GET  /api/personas/admin/segments      admin: the segment counts (D999),
+ *                                          counts only, admins left out
  * - POST /api/personas/admin/:user_id/retag admin: set primary persona
  *                                          with manual_override = 1
  */
@@ -19,6 +21,7 @@ import { requireAuth, requireAdmin, isSuperAdmin } from '../auth';
 import { PERSONAS, PERSONA_BY_ID, isAllowedPersonaOverlap, type PersonaId } from '../personas';
 import { classifyPersona } from '../../ai-workers/persona-router';
 import { bindingKey } from '../util/schemaBootstrap';
+import { readPersonaSegments } from '../services/personaSegments';
 
 const personas = new Hono<{ Bindings: Env }>();
 
@@ -199,6 +202,14 @@ personas.get('/admin/list', async (c) => {
   `;
   await sql.end();
   return c.json({ users: rows });
+});
+
+// D999 (#2814): the segment counts behind /admin/persona-segments. Counts
+// only, over every account but admins; each block answers alone.
+personas.get('/admin/segments', async (c) => {
+  await ensurePersonaSchema(c.env);
+  await requireAdmin(c);
+  return c.json(await readPersonaSegments(c.env));
 });
 
 personas.post('/admin/:user_id/retag', async (c) => {

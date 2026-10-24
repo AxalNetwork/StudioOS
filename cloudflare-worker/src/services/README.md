@@ -24,6 +24,13 @@ audit entries without weakening approval or signature checks.
 
 ## The ones worth knowing
 
+`personaSegments.ts` is D999's segment counts (#2814) behind
+`GET /api/personas/admin/segments`: one grouped pass over every account but
+admins (deactivated ones counted apart), folded into blocks that each carry
+`available` and `reason`; the LP store, the tag dates and the move log are read
+alone, so one failed count never blanks the page. Counts only: no row names or
+ids a member.
+
 `meetingBotOperations.ts` implements D886 B10 (#2588): count-only time windows,
 complete-measurement financials, strict failure/heartbeat/markup thresholds and
 fixed notification copy. `meetingBotOperationsRead.ts` reads B1's canonical
