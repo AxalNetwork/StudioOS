@@ -28,7 +28,7 @@ import { EDIT_PATH, MOVED_KEY, MOVED_NOTICE, REVIEW_PATH } from './raise/pitch/p
 
 const TABS = [
   { id: 'deck', to: EDIT_PATH, label: 'Deck Builder', icon: Sparkles },
-  { id: 'positioning', to: '/raise/pitch/positioning', label: 'Positioning', icon: Megaphone },
+  { id: 'positioning', to: '/raise/investor-narrative/positioning', label: 'Positioning', icon: Megaphone },
   { id: 'review', to: REVIEW_PATH, label: 'Review', icon: FileText },
 ];
 

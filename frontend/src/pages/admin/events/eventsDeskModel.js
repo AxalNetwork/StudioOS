@@ -41,17 +41,20 @@ export { NOT_RECORDED, SCOPE_LABEL, SCOPE_TITLE };
 export const DESK_PATH = '/admin/events';
 export const REVIEW_PATH = '/admin/events/review';
 export const ALL_PATH = '/admin/events/all';
-/** Where the sidebar's Community row lands; the canvas's `/admin/community` is not a route. */
-export const COMMUNITY_PATH = '/admin/held/community';
+/** D919 (#2702): the Calendar tab. */
+export const CALENDAR_TAB_PATH = '/admin/events/calendar';
+/** Community's own address since D930 (#2367); `/admin/held/community` only redirects there. */
+export const COMMUNITY_PATH = '/admin/community';
 
 export const TITLE = 'Events';
 export const LINE = 'Approve public events, keep the calendar healthy and see how events perform.';
 
-/** The tab strip (EV1). Calendar joins with D915 part 4. */
+/** The tab strip (EV1). Calendar joined with D915 part 4 (D919). */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: DESK_PATH },
   { key: 'review', label: 'Review', path: REVIEW_PATH },
   { key: 'all', label: 'All events', path: ALL_PATH },
+  { key: 'calendar', label: 'Calendar', path: CALENDAR_TAB_PATH },
 ];
 
 /** The tab a path opens; `/admin/events/:id` is one event's page, which selects no tab. */
@@ -175,7 +178,7 @@ export function clockLabel(ms) {
 }
 
 /** The event's own zone when Intl knows it, else UTC. */
-function zoneOf(ev) {
+export function zoneOf(ev) {
   const tz = String(ev?.timezone || '').trim();
   if (!tz) return 'UTC';
   try {
@@ -540,6 +543,9 @@ export function queueRows(events, { q = '', sort = 'starts' } = {}) {
 }
 
 const ROLE_WORD = { admin: 'Admin', founder: 'Founder', partner: 'Operating Partner', investor: 'Investor', exploring: 'Explorer' };
+
+/** A member's role in the canvas's words; a role with no word is title-cased. */
+export const roleWord = (role) => ROLE_WORD[role] || titleCase(role) || NOT_RECORDED;
 
 /** Who may register (`mode`, `roles`, `personas`; a missing mode is "everyone", as the Worker reads it). */
 export function audienceLine(rules) {

@@ -1,7 +1,7 @@
 // D915 (#2368) — the admin Events desk, built to the owner's "Events Console"
 // canvas (EV1–EV17) from the reads that exist. This file is the routed page
-// at `/admin/events`, `/admin/events/review`, `/admin/events/all` and
-// `/admin/events/:id` (one `guard(['admin'])` route each in App.jsx), and the
+// at `/admin/events`, `/admin/events/review`, `/admin/events/all`,
+// `/admin/events/calendar` (D919) and `/admin/events/:id` (one `guard(['admin'])` route each in App.jsx), and the
 // desk's shell: the crumb, the header, the tab strip, then the tab the address
 // names. The tabs, their model and their reads live in `events/` (see its
 // README). Worker-only surface (`/api/admin/events/*`): the dev FastAPI does
@@ -13,6 +13,7 @@ import { actionGhost } from '../../ui';
 import AdminBoardFrame from './AdminBoardFrame';
 import EventPage from './events/EventPage';
 import EventsAll from './events/EventsAll';
+import EventsCalendar from './events/EventsCalendar';
 import EventsOverview from './events/EventsOverview';
 import EventsReview from './events/EventsReview';
 import { useEventsDesk } from './events/useEventsDesk';
@@ -39,12 +40,12 @@ function DeskTab({ to, end = false, testId, children }) {
 }
 
 /**
- * The tab strip (EV1). THE THREE PATHS ARE WRITTEN OUT, not mapped from
+ * The tab strip (EV1). THE FOUR PATHS ARE WRITTEN OUT, not mapped from
  * `TABS`, because the reachability walk (`admin_route_reachability.test.mjs`)
  * counts a literal `to="…"` as a door, as on Licences (D800);
  * `admin_events_desk_d915.test.mjs` holds the two lists equal. Review carries
  * an amber count when anything waits. On one event's page no tab is selected.
- * Calendar joins with D915 part 4.
+ * Calendar joined with D915 part 4 (D919, #2702).
  */
 function DeskTabs({ waiting }) {
   return (
@@ -60,16 +61,18 @@ function DeskTabs({ waiting }) {
           ) : null}
         </DeskTab>
         <DeskTab to="/admin/events/all" testId="events-tab-all">All events</DeskTab>
+        <DeskTab to="/admin/events/calendar" testId="events-tab-calendar">Calendar</DeskTab>
       </div>
     </nav>
   );
 }
 
 function AdminEventsPageBody() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const tab = tabFor(pathname);
   const eventId = eventIdFor(pathname);
-  const reads = useEventsDesk(tab, eventId);
+  // D919: "Cancelled with paid tickets" is the one view that needs the overview read.
+  const reads = useEventsDesk(tab, eventId, { paidView: new URLSearchParams(search).get('view') === 'paid_cancelled' });
   const now = Date.now();
   const waiting = readyList(reads.queue)?.length || 0;
 
@@ -78,7 +81,7 @@ function AdminEventsPageBody() {
       <nav aria-label="Breadcrumb" className={CRUMB} data-testid="events-crumb">
         {tab === 'event'
           ? <Link to="/admin/events/all" className={CRUMB_LINK}>‹ All events</Link>
-          : <><Link to="/admin/held/community" className={CRUMB_LINK}>Community</Link> › Events</>}
+          : <><Link to="/admin/community" className={CRUMB_LINK}>Community</Link> › Events</>}
       </nav>
 
       {tab !== 'event' ? (
@@ -103,6 +106,7 @@ function AdminEventsPageBody() {
       {tab === 'overview' ? <EventsOverview reads={reads} now={now} /> : null}
       {tab === 'review' ? <EventsReview reads={reads} /> : null}
       {tab === 'all' ? <EventsAll reads={reads} now={now} /> : null}
+      {tab === 'calendar' ? <EventsCalendar reads={reads} now={now} /> : null}
       {tab === 'event' ? <EventPage key={eventId} id={eventId} reads={reads} now={now} /> : null}
     </div>
   );

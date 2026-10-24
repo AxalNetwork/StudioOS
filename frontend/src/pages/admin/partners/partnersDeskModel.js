@@ -47,8 +47,8 @@ export const FIRM_LINKS_PATH = '/admin/partner-invitations/firm-links';
 export const OLD_PATH = '/admin/partners';
 export const MOVED = 'partners';
 export const MOVED_PATH = `${DESK_PATH}?moved=${MOVED}`;
-/** Where the sidebar's Community row lands; the canvas's `/admin/community` is not a route. */
-export const COMMUNITY_PATH = '/admin/held/community';
+/** Community's own address since D930 (#2367); `/admin/held/community` only redirects there. */
+export const COMMUNITY_PATH = '/admin/community';
 export const CONTRACTS_TEMPLATES_PATH = '/admin/contracts?tab=templates';
 export const CONTRACTS_PAYOUTS_PATH = '/admin/contracts?tab=partner-deals';
 export const PROFILES_PATH = '/admin?tab=profiles';
@@ -1064,10 +1064,18 @@ export function dealForInvitation(inv, deals) {
 const ENVELOPE_OUT = new Set(['sent', 'partially_signed']);
 const ENVELOPE_VOID = new Set(['void', 'voided', 'rejected', 'declined']);
 
-/** R7's signing link: live until its recipient's `token_expires_at`, then expired. */
+/**
+ * R7's signing link: while the envelope is out, live until its recipient's
+ * `token_expires_at`, then expired. A signed, voided or other envelope has no
+ * open link, whatever its recipients' dates say.
+ */
 export function signingLink(envelope, now) {
   if (isLoading(envelope)) return { state: 'loading' };
   if (isFailed(envelope)) return { state: isCoolOff(envelope.error) ? 'paused' : 'unreadable' };
+  const status = dataOf(envelope)?.status;
+  if (status === 'completed') return { state: 'signed' };
+  if (ENVELOPE_VOID.has(status)) return { state: 'voided' };
+  if (!ENVELOPE_OUT.has(status)) return { state: 'other' };
   const recipients = Array.isArray(dataOf(envelope)?.recipients) ? dataOf(envelope).recipients : [];
   const open = recipients.find((r) => r?.status !== 'signed') || recipients[0];
   const until = parseStamp(open?.token_expires_at);
@@ -1236,6 +1244,9 @@ export function resendCopy(inv, stage, envelope, now) {
     const link = signingLink(envelope, now);
     if (link.state === 'live') lines.push(`The agreement already sent stays open to signature until ${link.day}.`);
     else if (link.state === 'expired') lines.push(`The signing link expired on ${link.day}. Resending does not renew it. The original sender can send a reminder from the envelope page.`);
+    else if (link.state === 'signed') lines.push('The agreement already sent is signed. Resending does not change it.');
+    else if (link.state === 'voided') lines.push('The agreement already sent was voided. Resending does not send a new one.');
+    else if (link.state === 'other') lines.push('The agreement already sent is not out for signature. Resending does not change it.');
     else if (link.state === 'loading') lines.push('Reading whether the signing link is still open…');
     else lines.push('Whether the agreement’s signing link is still open could not be read.');
   }
