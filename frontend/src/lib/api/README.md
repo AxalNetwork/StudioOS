@@ -308,3 +308,9 @@ totals over the filtered set and the filters' options), the counts for the tiles
 and the weekly series, and one profile by its reference (`pp_…`), never by
 email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
 that read them.
+
+D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
+`/api/personas/segments`: every profile, one with its history, the needs read
+(members, needs met and gaps, offers by kind, links' reach), and the Super
+Admin's write, which names the version it read. Counts leave admins out and
+come back suppressed from 1 to 4.
