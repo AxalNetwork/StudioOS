@@ -49,7 +49,7 @@ class Component extends DCLogic {
     };
     const TASK = { Studio: 'chat', Home: 'chat', 'Axal VC Fund': 'research', Validate: 'synth', 'Problem discovery': 'synth', 'Customer research': 'speech', 'Ideal customer profile': 'synth', 'Market intelligence': 'research', 'Demand and urgency signals': 'numbers', 'Experiments and evidence': 'reason', Verdict: 'reason',
       Build: 'plan', 'Solution design': 'plan', 'Prototype / MVP': 'code', 'Product roadmap': 'plan', 'Founding team': 'plan', 'Company creation': 'legal', 'Operating systems': 'plan',
-      Raise: 'reason', 'Fundraising readiness': 'reason', 'Investor narrative': 'write', 'Pitch deck': 'vision', 'Data room': 'vision', 'Cap table': 'numbers', 'Use of funds': 'numbers', 'Capital relationships': 'match',
+      Raise: 'reason', 'Fundraising readiness': 'reason', 'Investor narrative': 'write', 'Pitch deck': 'deck', 'Data room': 'vision', 'Cap table': 'numbers', 'Use of funds': 'numbers', 'Capital relationships': 'match',
       Grow: 'plan', 'Product improvement': 'synth', Distribution: 'write', 'Revenue and traction': 'numbers', 'Team expansion': 'plan', 'Partner network': 'match', 'Market expansion': 'multi', 'Durable company-building': 'legal',
       Network: 'match', Relationships: 'match', Introductions: 'match', Organizations: 'match', Research: 'research', Ask: 'research', Markets: 'research', Market: 'research', Geographies: 'multi', Companies: 'research', Funds: 'research', Library: 'search', 'Client prep': 'research', Diligence: 'vision', Benchmarking: 'numbers',
       Deals: 'reason', Pipeline: 'match', Screening: 'reason', Commit: 'reason', Closing: 'legal', Portfolio: 'numbers', Positions: 'numbers', Performance: 'numbers', Updates: 'synth', 'Value-add': 'match',
@@ -64,6 +64,7 @@ class Component extends DCLogic {
       Platform: 'code', 'Integration keys': 'code', 'GitHub sync': 'code', 'Payments catalogue': 'numbers', 'Promo codes': 'numbers', 'Credit rules': 'numbers', 'AI allowances': 'numbers', Monitoring: 'code', 'Telegram channels': 'write', Support: 'write', Security: 'legal' };
     const M = (t, role, line) => ({ t, role, line });
     const SUG = {
+      deck: [M('Llama 3.3 70B Fast', 'Writing', 'Rewrites, shortens and drafts card text'), M('FLUX.2 Klein 9B', 'Images', 'Card images and backgrounds'), M('FLUX.1 Schnell', 'Quick images', 'Image drafts at the lowest cost'), M('Gemma 4 26B', 'Reading', 'Reads your slides and charts')],
       chat: [M('GLM-4.7 Flash', 'Default', 'Fast replies that can use your workspace'), M('Llama 3.3 70B Fast', 'Longer', 'Fuller answers and drafts'), M('GPT-OSS 120B', 'Deeper', 'Hard questions that need reasoning')],
       synth: [M('Llama 3.3 70B Fast', 'Default', 'Groups notes and quotes into themes'), M('GLM-4.7 Flash', 'Faster', 'Quick tagging at a lower cost'), M('GPT-OSS 120B', 'Deeper', 'Checks a theme against all the evidence')],
       speech: [M('Whisper Large v3 Turbo', 'Transcribe', 'Turns each recording into a transcript'), M('Deepgram Nova-3', 'Speakers', 'Labels who said what'), M('Deepgram Flux', 'Live', 'Captions while you talk'), M('Llama 3.3 70B Fast', 'Structure', 'Places quotes on themes and hypotheses')],
