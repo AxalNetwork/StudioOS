@@ -268,13 +268,16 @@ const SECOND_MOUNTS = new Map([
  */
 const PROFILES_CONSOLE = 'frontend/src/pages/admin/consoles/PartnerProfilesConsole.jsx';
 const PERSONAS_CONSOLE = 'frontend/src/pages/admin/consoles/PersonasConsole.jsx';
+const PAYMENTS_CONSOLE = 'frontend/src/pages/admin/consoles/PaymentsConsole.jsx';
 const COMPOSED = new Map([
-  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx' && !HQ_KEYS_CONSOLE_FILES.includes(f) && f !== PROFILES_CONSOLE && f !== PERSONAS_CONSOLE)],
+  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx' && !HQ_KEYS_CONSOLE_FILES.includes(f) && f !== PROFILES_CONSOLE && f !== PERSONAS_CONSOLE && f !== PAYMENTS_CONSOLE)],
   // D989 (#2380): Partner profiles left the console for its own page, which
   // opens the console's review dialog until its part 6 redraws it.
   ['frontend/src/pages/admin/profiles/PartnerProfiles.jsx', [PROFILES_CONSOLE]],
   // D997 (#2378): Persona segments keeps today's re-tag table until its part 8.
   ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [PERSONAS_CONSOLE]],
+  // D1008 (#2386): Payments opens today's editor on request until its parts 4 to 6.
+  ['frontend/src/pages/admin/payments/Payments.jsx', [PAYMENTS_CONSOLE]],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
   ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],

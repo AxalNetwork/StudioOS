@@ -114,7 +114,8 @@ export const ADMIN_PLACEMENT = [
   // items. The owner's ruling (2026-10-20) took both out of the Admin Console:
   // they are one Super Admin page, `/admin/integration-keys`, with an HQ row
   // of its own, so there is no legacy tab left to place.
-  tab('payments', 'Payments', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item.' }),
+  tab('payments', 'Payments', hq('Platform', 'sub-nav'),
+    { route: '/admin/platform/payments', hqOnly: true, how: 'Its own page under Platform, HQ only (D1008); sub-navigation item; the legacy tab redirects here.' }),
   // D708 (#1773) — beside Payments: the Super Admin's bank-account registry.
   tab('bank-accounts', 'Bank accounts', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Payments.' }),
   tab('product-testing', 'Product testing', hq('Platform', 'sub-nav'), { how: 'Sub-navigation item, after Bank accounts (D815).' }),

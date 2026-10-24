@@ -49,7 +49,7 @@ const TABS = (() => {
 // H36, verbatim.
 const PLATFORM = [
   ['Overview', '/admin/platform'], ['Switches', '/admin/platform/switches'], ['Topology', '/admin/platform/topology'],
-  ['Integration keys', '/admin?tab=integration-keys'], ['GitHub Sync', '/admin?tab=github'], ['Payments', '/admin?tab=payments'],
+  ['Integration keys', '/admin?tab=integration-keys'], ['GitHub Sync', '/admin?tab=github'], ['Payments', '/admin/platform/payments'],
   ['Promo codes', '/admin?tab=promos'], ['Monitoring', '/monitoring'], ['Telegram', '/admin/telegram'],
 ];
 // D642 (#1435) — U7's page joins the Platform row after Topology, so it lights that row.

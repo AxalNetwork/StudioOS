@@ -22,6 +22,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | `PROGRAM_GRANTS_MAP_2026-10-24.md` | The Program grants canvas (GR1–GR15) read board by board against the code that day: no grant store, the ledger read the grid's rows come from, and the licence page's tabs (D981). |
 | `PARTNER_PROFILES_MAP_2026-10-24.md` | The Partner profiles canvas (PRF1–PRF12) read board by board against the code that day: the list read the page draws from, what it lacks, and the verify route's three defects (D989). |
 | `PERSONA_SEGMENTS_MAP_2026-10-24.md` | The Persona segments canvas (SEG1–SEG14) read board by board against the code that day: the capped persona list the page draws from, the taxonomy, and the profile-mapping defects (D997). |
+| `PAYMENTS_MAP_2026-10-24.md` | The Payments canvas (PAY1–PAY13) read board by board against the code that day: the four reads the page draws from, the Worker gates still open to any admin, and the webhook's required events after #2393 (D1008). |
 | `ADMIN_PAGE_HEADER_MAP_2026-10-24.md` | The Admin page header canvas (SHL1–SHL9) read against what each board can reuse that day (D936). |
 | `SPINOUT_LAB_ADMIN_MAP_2026-10-24.md` | Every read behind the Spin-Out Lab admin canvas (SL1–SL21), board by board, its defects re-checked at HEAD, and production's calendar that day (D937). |
 | `PITCH_DECK_WORKER_MAP_2026-10-24.md` | Every deck endpoint against the Pitch deck studio canvas's boards, and the twelve #2434 bugs on that day (D894). |

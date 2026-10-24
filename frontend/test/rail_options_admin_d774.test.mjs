@@ -121,8 +121,8 @@ test('/admin draws the frame once around its tabs, each named for its board in D
   // H27 and H28 left with the keys for HQ's own page (the owner's ruling, 2026-10-20);
   // S29 and H23 for Advisors & Partners' own page (D972, #2369); S7 for
   // Partner profiles' own page (D989, #2380); H22 for Persona segments' own
-  // page (D997, #2378).
-  assert.deepEqual(tabbed.map(([, b]) => b.id), ['S2', 'S6', 'S28', 'S30', 'H11', 'H24', 'H29', 'H30']);
+  // page (D997, #2378); H29 for Payments' own page (D1008, #2386).
+  assert.deepEqual(tabbed.map(([, b]) => b.id), ['S2', 'S6', 'S28', 'S30', 'H11', 'H24', 'H30']);
   const code = codeOnly(read(ADMIN_PAGE));
   for (const [role, b] of tabbed) {
     assert.equal(b.host, ADMIN_PAGE, `${b.id} is not hosted by AdminPage`);

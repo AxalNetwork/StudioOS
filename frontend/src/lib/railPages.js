@@ -355,7 +355,7 @@ const SUPER = [
   // One Super Admin page since the owner's ruling of 2026-10-20; GitHub sync is its #github section.
   own('/admin/integration-keys', key(SA, 'Platform', 'Integration keys')),
   own('/admin/integration-keys#github', key(SA, 'Platform', 'GitHub sync')),
-  own('/admin?tab=payments', key(SA, 'Platform', 'Payments catalogue')),
+  own('/admin/platform/payments', key(SA, 'Platform', 'Payments catalogue')),
   own('/admin?tab=promos', key(SA, 'Platform', 'Promo codes')),
   own('/admin/credit-rules', key(SA, 'Platform', 'Credit rules')),
   own('/admin/platform/allowances', key(SA, 'Platform', 'AI allowances')),

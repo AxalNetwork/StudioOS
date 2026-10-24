@@ -154,6 +154,8 @@ const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartn
 const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfiles'));
 // D997 (#2378): Persona segments, out of the Admin Console, under Accounts (HQ: Content).
 const PersonaSegments = lazy(() => import('./pages/admin/segments/PersonaSegments'));
+// D1008 (#2386): Payments, out of the Admin Console, under Platform, HQ only.
+const Payments = lazy(() => import('./pages/admin/payments/Payments'));
 const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminLab = lazy(() => import('./pages/admin/lab/AdminLab'));
@@ -1106,7 +1108,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/topology">Topology</StripLink>
           <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
           <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
-          <StripLink to="/admin?tab=payments">Payments</StripLink>
+          <StripLink to="/admin/platform/payments">Payments</StripLink>
           <StripLink to="/admin?tab=bank-accounts">Bank accounts</StripLink>
           <StripLink to="/admin?tab=product-testing">Product testing</StripLink>
           <StripLink to="/admin?tab=promos">Promo codes</StripLink>
@@ -2826,6 +2828,9 @@ function AppInner() {
           rows by design, and this page is reached from Platform's Feature flags
           zone by a literal link, which the reachability walk counts. */}
       <Route path="/admin/platform/switches" element={guard(['admin'], hqOnly(<HqPlatformSwitchesPage />))} />
+      {/* D1008 (#2386): Payments, its two tabs as sub-paths, HQ only; /admin?tab=payments forwards here (LegacyContractsRedirect). */}
+      <Route path="/admin/platform/payments" element={guard(['admin'], hqOnly(<Payments />))} />
+      <Route path="/admin/platform/payments/stripe" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/meeting-bots" element={guard(['admin'], hqOnly(<HqMeetingBotsPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />

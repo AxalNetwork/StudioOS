@@ -17,6 +17,8 @@ const MOVED_TABS = {
   profiles: '/admin/partner-profiles?moved=profiles',
   // D997 (#2378): Persona segments has its own address (Accounts; HQ: Content).
   personas: '/admin/persona-segments?moved=personas',
+  // D1008 (#2386): Payments has its own address under Platform, HQ only.
+  payments: '/admin/platform/payments?moved=payments',
 };
 
 export function legacyContractsTarget(search) {

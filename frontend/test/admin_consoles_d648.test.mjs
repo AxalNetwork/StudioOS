@@ -229,7 +229,7 @@ const OWN = {
   // Integration keys and GitHub Sync left the console for HQ's own page
   // (the owner's ruling, 2026-10-20); `integration_keys_hq_only.test.mjs`.
   promos: ['adminListPromos', 'catalogProducts'],
-  payments: ['adminCatalogList', 'adminStripeGetConfig', 'adminStripeListWebhooks'],
+  // D1008 (#2386): ?tab=payments forwards to /admin/platform/payments before this page mounts.
   wellbeing: ['wellbeingExperts'],
 };
 /** The reads every tab used to make before it rendered anything. */

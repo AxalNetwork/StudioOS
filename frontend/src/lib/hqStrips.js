@@ -35,7 +35,7 @@ export const HQ_STRIPS = {
     ['Topology', '/admin/platform/topology'],
     ['AI allowances', '/admin/platform/allowances'],
     ['AI usage', '/admin/platform/ai-usage'],
-    ['Payments', '/admin?tab=payments'],
+    ['Payments', '/admin/platform/payments'],
     ['Bank accounts', '/admin?tab=bank-accounts'],
     ['Product testing', '/admin?tab=product-testing'],
     ['Promo codes', '/admin?tab=promos'],

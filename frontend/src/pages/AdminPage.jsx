@@ -13,11 +13,12 @@ import KycConsole from './admin/consoles/KycConsole';
 import { LegalPanel } from './admin/consoles/LegalConsole';
 import { DirectoryPanel } from './admin/consoles/DirectoryConsole';
 import { PromoCodesPanel } from './admin/consoles/PromoCodesConsole';
-import { PaymentsPanel } from './admin/consoles/PaymentsConsole';
 import { BankAccountsPanel } from './admin/consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './admin/consoles/ProductTestingConsole';
 import { BillingPanel } from './admin/consoles/BillingConsole';
 import { WellbeingExpertsPanel } from './admin/consoles/WellbeingConsole';
+// D1008 (#2386) — Payments left this console for its own page under
+// Platform; ?tab=payments forwards there in LegacyContractsRedirect.
 // D997 (#2378) — Persona segments left this console for its own page;
 // ?tab=personas forwards there in LegacyContractsRedirect.
 // D989 (#2380) — Partner profiles left this console for its own page under
@@ -230,7 +231,6 @@ export default function AdminPage({ onImpersonate, section = null }) {
       {tab === 'legal' && <div data-testid="admin-legal-panel"><LegalPanel /></div>}
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}
       {tab === 'promos' && <div data-testid="admin-promos-panel"><PromoCodesPanel /></div>}
-      {tab === 'payments' && <div data-testid="admin-payments-panel"><PaymentsPanel /></div>}
       {tab === 'bank-accounts' && <div data-testid="admin-bank-accounts-panel"><BankAccountsPanel /></div>}
       {tab === 'product-testing' && <div data-testid="admin-product-testing-panel"><ProductTestingPanel /></div>}
       {tab === 'billing' && <div data-testid="admin-billing-panel"><BillingPanel /></div>}

@@ -90,6 +90,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/fundAdmin',      'the fund administration console (D714) and, since D880, Axal VC\'s own Mercury connections'],
   ['frontend/src/pages/admin/segments',       'Persona segments under Accounts (D997)'],
   ['frontend/src/pages/admin/profiles',       'Partner profiles under Approvals (D989)'],
+  ['frontend/src/pages/admin/payments',       'Payments under Platform, HQ only (D1008)'],
   ['frontend/src/pages/admin/partners',       'the admin Partner invitations desk (D923): its tabs, the records, the dialogs and the model they read'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],
   ['frontend/src/pages/cycles',               'the four cycle overviews and module pages, from the shared cycle read (D661)'],

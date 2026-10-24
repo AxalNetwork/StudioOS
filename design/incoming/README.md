@@ -132,6 +132,28 @@ recent activity and the four lightboxes wait for D930's five parts (D931 to
 D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
 row says what is drawn today.
 
+## Landed 2026-10-24 — HQ · Platform · Payments (#2386)
+
+The owner's artifacts `N9XiycCLan8HmGXX4ZoQYY` (the board grid) and
+`MCmPfNiemjhjW7sYZLYS45` (the page) came from S21's prompt on #2386:
+- `Payments · Boards.dc.html` is the board grid (PAY1 to PAY13, with the
+  lettered boards PAY2c, PAY3a–d, PAY4a–c, PAY6a–f, PAY8a–b, PAY10b and
+  PAY12a–d), the output of `scripts/read-canvas.mjs` as is;
+- `Payments Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in whitespace,
+  the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/platform/payments` and `/stripe` are live behind
+`hqOnly`, and `/admin?tab=payments` forwards there with the moved notice. S21's
+integration (D1008) draws the header, Needs you from the keys and the webhook,
+the tiles, the grouped catalogue, and the Stripe connection's account, key,
+webhook, deliveries and mirror, and keeps today's editor on request. The Worker
+gates, the catalogue checks, the lightbox, the dialogs, the change log, dark and
+phone wait for D1008's six parts, so this canvas stays in the queue until they
+land. The `ROUTE_MAP.md` row says what is drawn today.
+
 ## Landed 2026-10-24 — Accounts · Persona segments (#2378)
 
 The owner's artifacts `JGt34N1bs5jqo9bBp2sHnq` (the page) and
