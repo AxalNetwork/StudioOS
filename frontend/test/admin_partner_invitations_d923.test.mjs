@@ -468,7 +468,8 @@ test('the Overview tiles: real figures from reads that succeeded, and words for 
   assert.equal(d.active.extra, '1 is past its end, not yet closed');
   assert.equal(d.awaiting.sub, '1 whose invitation has lapsed');
   assert.equal(d.redemptions90.value, '0');
-  assert.deepEqual([d.emails.state, d.emails.note.text], ['note', 'Not read here yet']);
+  // D929 renamed it in part 1's words; it stays "Not read here yet" until part 4's read.
+  assert.deepEqual([d.sends.label, d.sends.state, d.sends.note.text], ['Sends that failed', 'note', 'Not read here yet']);
 });
 
 test('one deal: obligations read "No obligations recorded" with none required, never "None outstanding"', () => {

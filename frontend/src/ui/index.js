@@ -97,7 +97,7 @@ export { parseStamp } from './parseStamp.js';
 // D893's charts, moved here from pages/admin/insights/ by D929 (#2725) so every
 // admin desk draws the same parts in the one palette (D915 §6). See Charts.jsx.
 export {
-  Bar100, Chart, ChartTable, Columns, Donut, HBars, Legend, WeekLine, useBoxWidth,
+  Bar100, Chart, ChartTable, Columns, Donut, GroupedColumns, HBars, Legend, StackBars, WeekLine, WeekLines, useBoxWidth,
 } from './Charts';
 
 // Pre-existing, re-exported so `ui/` is the one import surface.

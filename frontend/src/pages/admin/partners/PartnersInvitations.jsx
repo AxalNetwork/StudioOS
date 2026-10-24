@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { actionPrimary } from '../../../ui';
 import {
   CAPS, DEAL_TYPES, EMPTY_LINE, EMPTY_TITLE, INVITATION_SORTS, LINK_LAPSED, LIST_CLAIM, NOT_OFFERED, SENT_WITHIN, STAGE_CHIPS,
   WITHIN_INVITATIONS, atCap, dealTypeWord, filterInvitations, invitationHref, invitationRow, isStale, listOf, noMatchLine,
-  pageOf, rangeText,
+  pageOf, rangeText, stagesFromSearch,
 } from './partnersDeskModel';
 import {
   AMBER, CARD, Chip, CopyButton, INPUT, LINK, Pager, ReadState, RowMenu, StageCell, SUB, TD, TH,
@@ -15,15 +15,17 @@ import {
  * email), stage chips, deal type offered, invited by, sent within and the
  * sort run over the loaded rows; below the cap they are exact, at it the
  * pager says what it covers. Enter on a row opens it. The Email column and
- * Export CSV wait for parts 1 and 7.
+ * Export CSV wait for parts 1 and 7. D929: `?stage=` (Overview's C1) sets the
+ * stage chips it opens with.
  */
 
 const COLS = ['Invitee', 'Offered', 'Stage', 'Invited by', 'Sent', 'Opened', 'Expires', 'Result', ''];
 
 export default function PartnersInvitations({ reads, now, actions }) {
   const navigate = useNavigate();
+  const { search } = useLocation();
   const [q, setQ] = useState('');
-  const [stages, setStages] = useState([]);
+  const [stages, setStages] = useState(() => stagesFromSearch(search));
   const [type, setType] = useState('');
   const [invitedBy, setInvitedBy] = useState('');
   const [sentWithin, setSentWithin] = useState('');
