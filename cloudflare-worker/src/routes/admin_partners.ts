@@ -7,7 +7,12 @@
  * Endpoints:
  *   POST   /invitations            — create + email a partner invitation
  *   GET    /invitations            — list invitations (filter by status / email)
- *   POST   /invitations/:id/resend — re-send the magic-link email
+ *   POST   /invitations/:id/resend — re-send the magic-link email; `signing_link` says
+ *                                     whether the pending signing link was renewed (D927)
+ *   D927 (#2723), reads only — nothing here writes a row (admin_partners_reads.ts):
+ *   GET    /overview               — the Overview's blocks, each failing on its own
+ *   GET    /invitations/:id        — one invitation: message, step dates, offers seen, deal, history
+ *   GET    /offers/preview?types=  — buildProposals' text over a neutral profile
  *   POST   /invitations/:id/revoke — revoke an unsigned invitation
  *   GET    /deals                  — list active partner deals
  *   POST   /deals/:id/terminate    — terminate an active deal
@@ -30,6 +35,7 @@ import { clampLimit } from '../util/pagination';
 import { likeNeedleLower } from '../util/likeSearch';
 import { renewPartnerInvitationSigningLink } from './esign';
 import { clientIp } from '../util/clientIp';
+import { invitationRecord, offersPreview, parseTypes, partnersOverview } from './admin_partners_reads';
 
 const admin_partners = new Hono<{ Bindings: Env }>();
 
@@ -184,7 +190,32 @@ admin_partners.post('/invitations/:id/resend', async (c) => {
   await logAdminAction(c.env, admin.id, admin.email, 'partner_invitation_resent', {
     invitation_id: id, email_sent: emailSent,
   });
-  return c.json({ ok: true, email_sent: emailSent, link, expires_at: newExpires });
+  // D927: whether the pending signing link was renewed. `null` means there was
+  // no pending partner signature, so the onboarding email went instead;
+  // `not_renewed` means the renewal email failed and the prior link was restored.
+  const signingLink = renewed ? (renewed.ok ? 'renewed' : 'not_renewed') : null;
+  return c.json({ ok: true, email_sent: emailSent, link, expires_at: newExpires, signing_link: signingLink });
+});
+
+// ---------- D927 (#2723): reads, never a write ----------
+
+admin_partners.get('/overview', async (c) => {
+  await requireAdmin(c);
+  return c.json(await partnersOverview(c.env));
+});
+
+admin_partners.get('/invitations/:id{[0-9]+}', async (c) => {
+  await requireAdmin(c);
+  const record = await invitationRecord(c.env, Number(c.req.param('id')), appUrl(c.env));
+  if (!record) return c.json({ error: 'Invitation not found' }, 404);
+  return c.json(record);
+});
+
+admin_partners.get('/offers/preview', async (c) => {
+  await requireAdmin(c);
+  const parsed = parseTypes(c.req.query('types'));
+  if ('error' in parsed) return c.json({ error: parsed.error, valid: ALL_PARTNER_DEAL_TYPES }, 400);
+  return c.json({ types: parsed.types, profile: 'neutral', offers: offersPreview(parsed.types) });
 });
 
 admin_partners.post('/invitations/:id/revoke', async (c) => {

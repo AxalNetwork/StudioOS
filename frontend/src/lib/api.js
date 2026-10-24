@@ -1238,6 +1238,13 @@ export const api = {
       request(`/admin/partners/invitations/${id}/resend`, { method: 'POST' }),
     revokeInvitation: (id, reason) =>
       request(`/admin/partners/invitations/${id}/revoke`, { method: 'POST', body: JSON.stringify({ reason: reason || '' }) }),
+    // D927 (#2723) — reads only. The Overview's blocks, each `{ available, … }`; one
+    // invitation (message, step dates, offers seen, deal, history); and the offers'
+    // text over a neutral profile, profile-dependent phrases marked.
+    overview: () => request('/admin/partners/overview'),
+    getInvitation: (id) => request(`/admin/partners/invitations/${encodeURIComponent(id)}`),
+    previewOffers: (types = []) =>
+      request(`/admin/partners/offers/preview?types=${encodeURIComponent([].concat(types).join(','))}`),
     listDeals: (status = 'active') =>
       request(`/admin/partners/deals?status=${encodeURIComponent(status)}`),
     terminateDeal: (id, reason) =>
