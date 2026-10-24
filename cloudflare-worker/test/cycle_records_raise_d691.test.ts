@@ -200,7 +200,8 @@ const overview = async (db: DatabaseSync) => {
 /** Step 3's table: title, columns, filters, default sort. */
 const CANVAS: Record<string, { title: string; cols: string[]; filters: string[]; sort: string }> = {
   'fundraising-readiness': { title: 'Readiness items', cols: ['Item', 'Score', 'Evidence', 'Missing', 'Updated'], filters: ['State'], sort: 'Score' },
-  'investor-narrative': { title: 'Versions', cols: ['Version', 'Investor type', 'Deck use', 'Mismatches', 'Date'], filters: ['Investor type'], sort: 'Newest' },
+  // D909 (#2693): NAR1's columns, less Claims backed, which waits for #2430.
+  'investor-narrative': { title: 'Versions', cols: ['Version', 'Audience', 'Based on', 'Mismatches', 'Read by deck', 'Saved', 'By'], filters: ['Audience'], sort: 'Newest' },
   'pitch-deck': { title: 'Investor links', cols: ['Investor', 'Expires', 'Views', 'Time on deck', 'Most read'], filters: ['State'], sort: 'Last viewed' },
   'data-room': { title: 'Files', cols: ['File', 'Folder', 'Answers request', 'Access', 'Updated'], filters: ['Folder', 'Access', 'Answers', 'Area'], sort: 'Updated' },
   'cap-table': { title: 'Holders', cols: ['Holder', 'Group', 'Instrument', 'Before', 'After round'], filters: ['Group', 'Instrument'], sort: 'Ownership' },
@@ -563,8 +564,11 @@ test('4: only the venture\'s own writer reads a record, and another venture\'s i
   for (const m of MODULES) {
     const id = SECTIONS[m.slug].id;
     for (const who of [40, 41, 50, 20]) assert.equal((await rec(db, m.slug, id, { who })).status, 403, `${m.slug} as ${PEOPLE[who].role} ${who}`);
-    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await rec(db, m.slug, id, { who })).status, 200, `${m.slug} as ${who}`);
+    // D914 (#2698): an admin reads the narrative only after giving a reason (below).
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await rec(db, m.slug, id, { who })).status, m.slug === 'investor-narrative' && who === ADMIN ? 403 : 200, `${m.slug} as ${who}`);
   }
+  db.exec(`INSERT INTO narrative_read_reasons (project_id, reader_user_id, reader_kind, reason, expires_at) VALUES (${P}, ${ADMIN}, 'admin', 'Portfolio review', datetime('now', '+8 hours'))`);
+  assert.equal((await rec(db, 'investor-narrative', SECTIONS['investor-narrative'].id, { who: ADMIN })).status, 200, 'with a reason, the admin reads it');
   // Venture B's rows, read with ?project= the founder's own venture.
   db.exec(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at, created_at) VALUES (45, 6, 'h45', '2999-01-01 00:00:00', '2026-10-01 10:00:00')`);
   db.exec(`INSERT INTO data_room_files (id, uid, project_id, name, r2_key) VALUES (15, 'f15', ${P_OTHER}, 'theirs.pdf', 'k15')`);
@@ -740,7 +744,8 @@ test('4: form-options and every action take the module\'s write gate, and an id 
       assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, 403, `${m.slug} form-options as ${who}`);
       for (const key of ACTIONS[m.slug]) assert.equal((await act(db, m.slug, id, key, {}, { who })).status, 403, `${m.slug} ${key} as ${who}`);
     }
-    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, m.slug === 'pitch-deck' && who === ADMIN ? 403 : 200, `${m.slug} form-options as ${who}`);
+    // D895: an admin writes no deck. D914: an admin lists the narrative's versions only with a reason.
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, (m.slug === 'pitch-deck' || m.slug === 'investor-narrative') && who === ADMIN ? 403 : 200, `${m.slug} form-options as ${who}`);
   }
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM activity_logs'), before, 'a refused action writes nothing');
   // Venture B's prospect (9) named in a holder's body, and its version (7) as Based on.

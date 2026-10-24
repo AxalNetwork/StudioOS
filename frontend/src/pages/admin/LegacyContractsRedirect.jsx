@@ -13,6 +13,12 @@ const MOVED_TABS = {
   'lab-applications': '/admin/programs/spinout-lab/applications?moved=lab-applications',
   // D972 (#2369): the roster is the Deck roster tab of Advisors & Partners.
   'network-profiles': '/admin/advisors-partners/deck?moved=network-profiles',
+  // D989 (#2380): Partner profiles has its own address under Approvals.
+  profiles: '/admin/partner-profiles?moved=profiles',
+  // D997 (#2378): Persona segments has its own address (Accounts; HQ: Content).
+  personas: '/admin/persona-segments?moved=personas',
+  // D1008 (#2386): Payments has its own address under Platform, HQ only.
+  payments: '/admin/platform/payments?moved=payments',
 };
 
 export function legacyContractsTarget(search) {

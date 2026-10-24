@@ -25,7 +25,7 @@ keeps the query and hash and adds `?moved=held-community` for CM13's notice.
   - `lightboxModel.js` — pure. The addresses, the search, filters, sorts and
     25-row pages, and the Events and activity queries.
 
-The charts are D893's (`../insights/InsightsCharts.jsx`): one palette, and
+The charts are D893's (`../../../ui/Charts.jsx`): one palette, and
 only violet changes in dark mode.
 
 D923’s Partner invitations door is retained in the consoles strip when the old
