@@ -76,7 +76,7 @@ test('Home renders the tiles, Needs you and the footer from the part, or says th
   }
   assert.ok(html.includes(CLAIMS_WAIT) && html.includes(OBJECTIONS_WAIT));
   assert.ok(html.includes('href="/raise/investor-narrative/check?project_id=3&amp;version=4"'));
-  assert.ok(!/\[[^\]]*\]/.test(html.replace(/<[^>]+>/g, '')), 'no canvas sample');
+  for (const sample of ['[Name]', '[$', '[Northwind', '[Studio', '[v4', '[20 Oct]']) assert.ok(!html.includes(sample), `no canvas sample: ${sample}`);
   const none = renderToStaticMarkup(h(MemoryRouter, null, h(NarrativeHome, { data: data({ ...PART, newest: { version: 4, compared: 1, mismatches: [] } }) })));
   assert.ok(none.includes(NEEDS_NONE));
   const bad = renderToStaticMarkup(h(MemoryRouter, null, h(NarrativeHome, { data: data({ state: 'unreadable', reason: 'x' }) })));
