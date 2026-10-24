@@ -261,7 +261,7 @@ async function notifyAdminsOnce(
   try {
     const admins = await env.DB.prepare(`SELECT id FROM users WHERE role = 'admin' AND is_active = 1`).all<{ id: number }>();
     for (const a of admins.results || []) {
-      await notifyOnce(env, { userId: a.id, cycleId, notifType, title, body, link: '/admin/spinout-lab' });
+      await notifyOnce(env, { userId: a.id, cycleId, notifType, title, body, link: '/admin/programs/spinout-lab/applications' });
     }
   } catch (e) { console.warn('[cohort-apps] admin notify failed', e); }
 }

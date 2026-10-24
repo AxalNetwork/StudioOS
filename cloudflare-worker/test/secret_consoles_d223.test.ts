@@ -308,13 +308,15 @@ test('GET /api/admin/github carries has_token and no preview of the token', asyn
   }
 });
 
-test('the Stripe webhook update, which writes no secret, stays open to a plain admin', async () => {
-  // It adds the route's own fixed event set to an existing endpoint; the
-  // register beside it is the write the bar exists for.
+test('D1009: the Stripe webhook update is Super Admin only without a step-up', async () => {
+  // Updating the fixed event set is HQ-only; registering still takes D223's bar.
   const db = freshDb();
   const r = await call(envFor(db), { app: 'stripe', method: 'POST', path: '/webhook', body: { action: 'update', endpoint_id: 'we_1' } },
     PLAIN_ADMIN, 'totp-plain');
-  assert.notEqual(r.status, 403, r.text);
+  assert.equal(r.status, 403, r.text);
+  assert.equal(toStripe().length, 0);
+  const holder = await call(envFor(db), { app: 'stripe', method: 'POST', path: '/webhook', body: { action: 'update', endpoint_id: 'we_1' } }, HOLDER, 'totp-stale-holder');
+  assert.equal(holder.status, 200, holder.text);
   assert.equal(toCloudflare().length, 0, 'an events update wrote a Worker secret');
 });
 

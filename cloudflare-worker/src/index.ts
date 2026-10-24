@@ -42,6 +42,7 @@ import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
+import adminPartnersReads from './routes/admin_partners_reads';
 import adminNetwork from './routes/admin_network';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
@@ -50,6 +51,7 @@ import adminNetworkProfiles from './routes/admin_network_profiles';
 import profileHistoryRoutes from './routes/profile_history';
 import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
+import adminPartnerProfilesRoutes from './routes/admin_partner_profiles';
 import helpCenterRoutes, { adminHelpCenter } from './routes/help_center';
 import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
@@ -211,6 +213,7 @@ import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
+import adminProgramGrants from './routes/admin_program_grants';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
@@ -247,6 +250,7 @@ import adminSecurity from './routes/admin_security';
 import adminHqSupport from './routes/admin_hq_support';
 import adminStudioGlance from './routes/admin_studio_glance';
 import adminInsights from './routes/admin_insights';
+import adminPrograms from './routes/admin_programs';
 import adminInsightsExport from './routes/admin_insights_export';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
@@ -688,6 +692,8 @@ const COOL_OFF_PREFIXES = [
   // D755 — the catalog's writes, token packs included, sell what members pay
   // for and can mint a pack. Same class as promos.
   '/api/admin/catalog',
+  // D1009 — checkout keys and webhook settings share the Payments cool-off.
+  '/api/admin/stripe',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -852,6 +858,8 @@ app.route('/api/partners', partners);
 // Task #8 (X-1) — Partner deal engine. Admin endpoints under
 // /api/admin/partners (separate from legacy /api/partners) and the
 // public token-gated onboarding flow under /api/partner-onboard.
+// D927 (#2723) — the read-only overview, one invitation's read and the offer preview.
+app.route('/api/admin/partners', adminPartnersReads);
 app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetwork);
@@ -981,7 +989,7 @@ app.route('/api/admin/articles', adminArticles);
 // generic admin router. Step-up + requireAdmin enforced per-route.
 app.route('/api/admin/billing', adminBilling);
 // Task — Stripe product catalog admin sync. Mounted BEFORE the catch-all
-// /api/admin so /api/admin/catalog/* resolves here. requireAdmin per-route.
+// /api/admin so /api/admin/catalog/* resolves here. Super Admin gates per-route (D1009).
 app.route('/api/admin/catalog', adminCatalog);
 // Task #16 — Admin Stripe management (webhook + publishable key). Mounted
 // BEFORE the catch-all /api/admin so /api/admin/stripe/* resolves here.
@@ -1076,6 +1084,8 @@ app.route('/api/branch', branchInvitationRoutes);
 // database recorded. Same prefix as the other branch reads.
 app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
+// D982 (#2773): which programs HQ grants each licensed studio, on what terms.
+app.route('/api/admin/program-grants', adminProgramGrants);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
 app.route('/api/admin/super-admins', adminSuperAdmins);
@@ -1110,6 +1120,8 @@ app.route('/api/admin/studio', adminStudioGlance);
 // D893 (#2661): the logged, counts-only export of the Insights read below. Mounted first, so /export never reaches the read's router.
 app.route('/api/admin/insights/export', adminInsightsExport);
 app.route('/api/admin/insights', adminInsights);
+// D954 (#2787): Admin › Programs — the registry, the playbook, the catalogue read and each program's activity.
+app.route('/api/admin/programs', adminPrograms);
 app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
@@ -1254,6 +1266,8 @@ app.route('/api/profile', profileHistoryRoutes);
 app.route('/api/profile', founderProfileRoutes);
 // D358 — admin aggregates of how profiles move over time (routes/admin_profiling.ts).
 app.route('/api/admin/profiling', adminProfilingRoutes);
+// D990 — Partner profiles: the list, the counts and one profile by reference (routes/admin_partner_profiles.ts).
+app.route('/api/admin/partner-profiles', adminPartnerProfilesRoutes);
 // D603 — the Help Center's guide views and yes/no answers (routes/help_center.ts).
 app.route('/api/help', helpCenterRoutes);
 app.route('/api/admin/help', adminHelpCenter);

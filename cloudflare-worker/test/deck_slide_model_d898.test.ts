@@ -32,6 +32,7 @@ import { __resetForTest } from '../src/services/aiRouter.ts';
 import { CHART_TYPES, LAYOUTS, bindingOf, contentHash, sanitizeBlocks, videoOf } from '../src/services/decks/slideModel.ts';
 import { bindingsOf, sanitizeBinding } from '../src/services/decks/sources.ts';
 import { sanitizeImageUrl } from '../src/routes/decks.ts';
+import { checkVideoLink } from '../src/services/decks/videoLink.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const MIGRATION = readFileSync(new URL('../sql/migrations/539_pitch_deck_editor.sql', import.meta.url), 'utf8');
@@ -83,7 +84,9 @@ async function fixture() {
   __resetForTest();
   const f = aiBudgetFixture();
   f.db.exec('PRAGMA foreign_keys=OFF; ALTER TABLE users ADD COLUMN founder_id INTEGER; ALTER TABLE activity_logs ADD COLUMN project_id INTEGER; ALTER TABLE activity_logs ADD COLUMN entity_type TEXT; ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;');
-  for (const table of ['projects', 'pitch_decks', 'raise_rounds']) f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, table)));
+  for (const table of ['projects', 'pitch_decks', 'raise_rounds', 'landing_pages']) f.db.exec(stripForeignKeys(tableFromBaseline(BASELINE, table)));
+  // Migration 399: the brand voice, the dark logo and the archive, which the baseline predates.
+  f.db.exec(readFileSync(new URL('../sql/migrations/399_landing_brand_voice_dark_logo_archive.sql', import.meta.url), 'utf8'));
   f.db.exec(MIGRATION);
   f.db.exec(`CREATE TABLE mi_pro_subscriptions(user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
     CREATE TABLE user_recovery_state(user_id INTEGER PRIMARY KEY, cooling_off_until TEXT, step_up_due_at TEXT);
@@ -284,4 +287,70 @@ test('9. a share link and the print export carry the cards and theme, never the 
     for (const k of ['audience', 'round', 'by', 'content_hash']) assert.equal(k in r.body, false, `${what}: no ${k}`);
     assert.doesNotMatch(text, /Synthetic seed|round-seed|seed_fund/, `${what}: no round or audience`);
   }
+});
+
+test('10. the editor reads the slide model from the Worker: the grid, the twelve layouts, the kinds', async () => {
+  const f = await fixture();
+  const r = await call(f, OWNER, 'GET', '/api/decks/model');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.deepEqual(r.body.grid, { cols: 12, rows: 6 });
+  assert.deepEqual(r.body.layouts.map((l: any) => l.id), LAYOUTS.map((l) => l.id));
+  assert.equal(r.body.chart_types.length, 12);
+  assert.ok(r.body.block_kinds.includes('video'));
+  assert.ok([401, 403].includes((await call(f, null, 'GET', '/api/decks/model')).status), 'signed out reads nothing');
+});
+
+test("11. the brand kit: the newest live landing page's palette, fonts, voice and logos; none is null; a failed read is 503", async () => {
+  const f = await fixture();
+  let r = await call(f, OWNER, 'GET', '/api/decks/brand-kit?project_id=1');
+  assert.deepEqual([r.status, r.body.kit], [200, null], 'no landing page: no kit, never a sample');
+  const page = f.db.prepare(`INSERT INTO landing_pages (project_id, slug, name, theme_color, palette_bg, palette_ink, palette_accent, font_pairing, voice_json, logo_url, logo_svg, archived_at)
+    VALUES (1, ?, ?, '#2BB39A', ?, '#0f2a3d', NULL, 'Outfit + Space Grotesk', ?, ?, '<svg onload="x()"></svg>', ?)`);
+  page.run('live', 'Synthetic Labs', '#fbfaf7', JSON.stringify({ tags: ['plain', 'warm'] }), 'https://example.com/logo.png', null);
+  page.run('newer-archived', 'Synthetic Archived', '#000000', '[]', null, '2026-01-01'); // newer, but archived
+  r = await call(f, COFOUNDER, 'GET', '/api/decks/brand-kit?project_id=1');
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.kit.name, 'Synthetic Labs', 'the archived page is not the kit');
+  assert.deepEqual(r.body.kit.palette, { bg: '#fbfaf7', ink: '#0f2a3d', accent: '#2bb39a', secondary: null }, 'the accent falls back to the theme colour');
+  assert.deepEqual(r.body.kit.voice, ['plain', 'warm']);
+  assert.deepEqual(r.body.kit.logo, { light: 'https://example.com/logo.png', dark: null, inline: true });
+  assert.doesNotMatch(JSON.stringify(r.body), /<svg|onload/, 'the inline SVG never leaves the Worker');
+  for (const who of [ADVISOR, INVESTOR, OTHER_FOUNDER]) assert.equal((await call(f, who, 'GET', '/api/decks/brand-kit?project_id=1')).status, 403, String(who));
+  assert.equal((await call(f, OWNER, 'GET', '/api/decks/brand-kit')).status, 400);
+  f.db.exec('DROP TABLE landing_pages');
+  r = await call(f, OWNER, 'GET', '/api/decks/brand-kit?project_id=1');
+  assert.deepEqual([r.status, r.body.code], [503, 'unreadable'], 'a failed read is unreadable, never an empty kit');
+});
+
+test('12. a video link is checked with its provider only, on fixed URLs, with no redirect followed', async () => {
+  const asked: Array<[string, any]> = [];
+  const answer = (status: number, body: unknown) => async (url: string, init: any) => { asked.push([url, init]); return new Response(JSON.stringify(body), { status }); };
+  let r = await checkVideoLink('https://youtu.be/AbCdEfGhIjK', sanitizeImageUrl, answer(200, { title: 'Synthetic demo', thumbnail_url: 'https://evil.test/x.jpg' }) as any);
+  assert.deepEqual(r, { state: 'ok', provider: 'youtube', video_id: 'AbCdEfGhIjK', url: 'https://www.youtube.com/watch?v=AbCdEfGhIjK', title: 'Synthetic demo', poster_url: 'https://i.ytimg.com/vi/AbCdEfGhIjK/hqdefault.jpg' });
+  assert.equal(asked[0][0], 'https://www.youtube.com/oembed?format=json&url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DAbCdEfGhIjK', 'a fixed endpoint, the canonical URL');
+  assert.equal(asked[0][1].redirect, 'error');
+  r = await checkVideoLink('https://vimeo.com/123456789', sanitizeImageUrl, answer(200, { title: 'V', thumbnail_url: 'https://i.vimeocdn.com/video/1.jpg' }) as any);
+  assert.equal((r as any).poster_url, 'https://i.vimeocdn.com/video/1.jpg');
+  r = await checkVideoLink('https://vimeo.com/123456789', sanitizeImageUrl, answer(200, { title: 'V', thumbnail_url: 'https://images.example.com/x.jpg' }) as any);
+  assert.equal((r as any).poster_url, null, "a poster off the provider's host is dropped");
+  assert.deepEqual(await checkVideoLink('https://youtu.be/AbCdEfGhIjK', sanitizeImageUrl, answer(404, {}) as any), { state: 'not_found' });
+  assert.deepEqual(await checkVideoLink('https://youtu.be/AbCdEfGhIjK', sanitizeImageUrl, answer(500, {}) as any), { state: 'unreadable' });
+  assert.deepEqual(await checkVideoLink('https://youtu.be/AbCdEfGhIjK', sanitizeImageUrl, (async () => { throw new Error('net'); }) as any), { state: 'unreadable' });
+  const before = asked.length;
+  assert.deepEqual(await checkVideoLink('https://example.com/v.mp4', sanitizeImageUrl, answer(200, {}) as any), { state: 'refused' });
+  assert.equal(asked.length, before, 'a link that is not YouTube or Vimeo is never fetched');
+  // Through the route, on a stubbed fetch.
+  const f = await fixture();
+  const real = globalThis.fetch;
+  try {
+    globalThis.fetch = answer(200, { title: 'Synthetic demo' }) as any;
+    const ok = await call(f, OWNER, 'GET', `/api/decks/video-link?url=${encodeURIComponent('https://youtu.be/AbCdEfGhIjK')}`);
+    assert.deepEqual([ok.status, ok.body.title], [200, 'Synthetic demo']);
+    const no = await call(f, OWNER, 'GET', `/api/decks/video-link?url=${encodeURIComponent('https://example.com/v.mp4')}`);
+    assert.deepEqual([no.status, no.body.error], [400, 'Paste a YouTube or Vimeo link.']);
+    globalThis.fetch = answer(404, {}) as any;
+    assert.equal((await call(f, OWNER, 'GET', `/api/decks/video-link?url=${encodeURIComponent('https://youtu.be/AbCdEfGhIjK')}`)).status, 404);
+    globalThis.fetch = answer(502, {}) as any;
+    assert.equal((await call(f, OWNER, 'GET', `/api/decks/video-link?url=${encodeURIComponent('https://youtu.be/AbCdEfGhIjK')}`)).status, 503);
+  } finally { globalThis.fetch = real; }
 });

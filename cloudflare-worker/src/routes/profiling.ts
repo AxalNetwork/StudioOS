@@ -55,6 +55,8 @@ const NEW_COLUMNS: Array<[string, string]> = [
   ['dealflow_channels', 'TEXT'],
   ['conflicts_text', 'TEXT'],
   ['focus_text', 'TEXT'],
+  // --- migration 556 (D990): the profile's reference, filled below ---------
+  ['ref', 'TEXT'],
 ];
 
 async function ensureProfileTable(env: Env) {
@@ -105,6 +107,16 @@ async function ensureProfileTable(env: Env) {
   try {
     await db.prepare(
       `CREATE INDEX IF NOT EXISTS idx_partner_profiles_user ON partner_profiles(user_id)`,
+    ).run();
+  } catch {}
+  // Migration 556's reference (D990), so a database bootstrapped here names
+  // its profiles the way the Partner profiles page and its logs do.
+  try {
+    await db.prepare(`UPDATE partner_profiles SET ref = 'pp_' || lower(hex(randomblob(5))) WHERE ref IS NULL`).run();
+    await db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS uq_partner_profiles_ref ON partner_profiles(ref)`).run();
+    await db.prepare(
+      `CREATE TRIGGER IF NOT EXISTS trg_partner_profiles_ref AFTER INSERT ON partner_profiles WHEN NEW.ref IS NULL
+       BEGIN UPDATE partner_profiles SET ref = 'pp_' || lower(hex(randomblob(5))) WHERE rowid = NEW.rowid; END`,
     ).run();
   } catch {}
 }
