@@ -8,7 +8,7 @@ Pieces of three HQ review screens from the Ops canvas
 | --- | --- |
 | `hqReviewCopy.js` | Every sentence the three screens print, the dispute's money, date and status wording, and which Stripe failure a read is. Pure. |
 | `ReviewComments.jsx` | An article's review comments, with Delete beside Resolve; the delete is sent only from its confirmation. Mounted by `../../pages/admin/ArticlesQueuePage.jsx`. |
-| `SensitiveField.jsx` | One identity field masked until Show, the KYC block of four, and the line that says each showing is logged. Mounted by the KYC and partner-profile windows of `../../pages/AdminPage.jsx`. |
+| `SensitiveField.jsx` | One identity field masked until Show, the KYC block of four, and the line that says each showing is logged. Mounted by the KYC and partner-profile windows of `../../pages/admin/consoles/KycConsole.jsx` and `../../pages/admin/consoles/PartnerProfilesConsole.jsx`. |
 
 ## Rules
 
