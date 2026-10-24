@@ -6,12 +6,13 @@
  *
  * Endpoints:
  *   POST   /invitations            — create + email a partner invitation
- *   GET    /invitations            — list invitations (filter by status / email)
+ *   GET    /invitations            — list invitations: search, filters, sort, pages, total (D926)
+ *   GET    /invitations/lookup     — an open invitation and a member for one address (D926)
  *   (D927: GET /overview, GET /invitations/:id and GET /offers/preview are in
  *   admin_partners_reads.ts, mounted beside this router.)
  *   POST   /invitations/:id/resend — re-send the magic-link email
  *   POST   /invitations/:id/revoke — revoke an unsigned invitation
- *   GET    /deals                  — list active partner deals
+ *   GET    /deals                  — list deals: states, search, filters, sort, pages, total (D926)
  *   POST   /deals/:id/terminate    — terminate an active deal
  *   GET    /links                  — partner accounts and firms, unattached first
  *   POST   /links                  — attach (or detach) one account to one firm
@@ -28,7 +29,7 @@ import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchem
 // Sourcing the value from INVESTOR_QUOTAS keeps the column in sync with
 // the user's actual tier even if the free cap shifts later.
 import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
-import { clampLimit } from '../util/pagination';
+import { clampLimit, parseOffset } from '../util/pagination';
 import { likeNeedleLower } from '../util/likeSearch';
 import { renewPartnerInvitationSigningLink } from './esign';
 import { clientIp } from '../util/clientIp';
@@ -106,36 +107,179 @@ admin_partners.post('/invitations', async (c) => {
   }, 201);
 });
 
+/**
+ * D926 (#2722) — the Invitations list, searched, filtered, sorted and paged
+ * here, with an exact `total`. STATIC SQL: every filter is a bound value that
+ * is NULL when it was not asked for, and the sort is a bound `CASE ?9`, so no
+ * request text is ever spliced into a statement (the `apiUsageReport.ts`
+ * shape).
+ *
+ *   ?1  now, as ISO — Lapsed and "sent within" are measured from it
+ *   ?2  q: a name-or-email LIKE pattern, wildcards escaped
+ *   ?3  stage: a JSON array of D923 §2's stored words and `lapsed`
+ *   ?4  deal_type: one of the types the invitation offered (its first three)
+ *   ?5  invited_by: a user id
+ *   ?6  sent_within: days since the first send
+ *   ?7  status (today's exact stored-status filter)
+ *   ?8  email (today's address filter, D924's escaping)
+ *   ?9  sort, ?10 limit and ?11 offset, on the page only; the count binds ?1–?8
+ *
+ * LAPSED is D923's rule and D924's: the link's `expires_at` has passed and
+ * the invitation is not Signed, Revoked or a stored `expired`. Nothing writes
+ * it; it is computed on each read. A lapsed row answers to `lapsed` and not to
+ * its stored stage, as its pill says (the page's `STAGE_CHIPS`).
+ */
+const INVITATION_FILTERED = `
+  WITH f AS (
+    SELECT pi.id, pi.token, pi.recipient_email, pi.recipient_name, pi.allowed_deal_types,
+           pi.status, pi.expires_at, pi.created_at, pi.viewed_at, pi.signed_at,
+           pi.resulting_user_id, pi.resulting_deal_id, pi.envelope_id, pi.revoked_at,
+           pi.last_sent_at, pi.send_count, pi.last_send_ok, pi.last_send_reason,
+           pi.invited_by_user_id, u.name AS invited_by_name,
+           CASE WHEN pi.status NOT IN ('signed','revoked','expired')
+                 AND julianday(pi.expires_at) < julianday(?1) THEN 1 ELSE 0 END AS lapsed_now
+      FROM partner_invitations pi
+      LEFT JOIN users u ON u.id = pi.invited_by_user_id
+     WHERE (?7 IS NULL OR pi.status = ?7)
+       AND (?8 IS NULL OR LOWER(pi.recipient_email) LIKE ?8 ESCAPE '\\')
+       AND (?2 IS NULL OR LOWER(COALESCE(pi.recipient_name, '')) LIKE ?2 ESCAPE '\\'
+                       OR LOWER(pi.recipient_email) LIKE ?2 ESCAPE '\\')
+       AND (?4 IS NULL OR EXISTS (
+             SELECT 1 FROM json_each(CASE WHEN json_valid(pi.allowed_deal_types) THEN pi.allowed_deal_types ELSE '[]' END) t
+              WHERE t.type = 'text' AND CAST(t.key AS INTEGER) < 3 AND LOWER(t.value) = ?4))
+       AND (?5 IS NULL OR pi.invited_by_user_id = ?5)
+       AND (?6 IS NULL OR julianday(pi.created_at) >= julianday(?1) - ?6)
+  )
+  SELECT * FROM f
+   WHERE (?3 IS NULL OR (CASE WHEN f.lapsed_now = 1 THEN 'lapsed' ELSE f.status END)
+                        IN (SELECT value FROM json_each(?3)))`;
+
+const INVITATION_PAGE_SQL = `SELECT * FROM (` + INVITATION_FILTERED + `) AS g
+   ORDER BY
+     CASE WHEN ?9 IN ('oldest_open', 'expires_soonest')
+          THEN CASE WHEN g.status IN ('signed','revoked','expired') THEN 1 ELSE 0 END END,
+     CASE WHEN ?9 = 'oldest_open' THEN julianday(g.created_at) END ASC,
+     CASE WHEN ?9 = 'expires_soonest' THEN julianday(g.expires_at) END ASC,
+     CASE WHEN ?9 = 'name' THEN CASE WHEN TRIM(COALESCE(g.recipient_name, '')) = '' THEN 1 ELSE 0 END END,
+     CASE WHEN ?9 = 'name' THEN LOWER(TRIM(g.recipient_name)) END ASC,
+     CASE WHEN ?9 = 'name' THEN LOWER(g.recipient_email) END ASC,
+     CASE WHEN ?9 = 'stage' THEN
+       CASE WHEN g.status = 'signed' THEN 8
+            WHEN g.status IN ('revoked','expired') THEN 10
+            WHEN g.lapsed_now = 1 THEN 9
+            WHEN g.status = 'sent' THEN 1 WHEN g.status = 'viewed' THEN 2
+            WHEN g.status = 'profiled' THEN 3 WHEN g.status = 'proposed' THEN 4
+            WHEN g.status = 'selected' THEN 5 WHEN g.status = 'finalized' THEN 6
+            ELSE 11 END END ASC,
+     julianday(g.created_at) DESC, g.id DESC
+   LIMIT ?10 OFFSET ?11`;
+
+const INVITATION_COUNT_SQL = `SELECT COUNT(*) AS n FROM (` + INVITATION_FILTERED + `) AS g`;
+
+/** D923 §2's stored stages, and `lapsed`, which is computed. */
+export const INVITATION_STAGES = ['sent', 'viewed', 'profiled', 'proposed', 'selected', 'finalized', 'signed', 'revoked', 'expired', 'lapsed'] as const;
+export const INVITATION_SORTS = ['newest', 'oldest_open', 'expires_soonest', 'name', 'stage'] as const;
+/** Today's cap when a caller sends no `limit`; an asked-for page is at most 100 rows. */
+const LIST_DEFAULT_LIMIT = 200;
+const PAGE_MAX = 100;
+const WITHIN_MAX_DAYS = 3650;
+
+/** Repeated and comma-separated values alike: `?stage=sent&stage=viewed` or `?stage=sent,viewed`. */
+function manyOf(c: any, name: string): string[] | null {
+  const raw: string[] = c.req.queries(name) || [];
+  const out = raw.flatMap((v) => String(v).split(',')).map((v) => v.trim().toLowerCase()).filter(Boolean);
+  return out.length ? [...new Set(out)] : null;
+}
+
+/**
+ * A `LIKE ? ESCAPE '\'` pattern for a free-text search, or null when blank.
+ * `likeNeedleLower` escapes `%` and `_`; the backslash is escaped first, so a
+ * search for a literal `\` matches a backslash and nothing else.
+ */
+function searchPattern(raw: unknown): string | null {
+  return likeNeedleLower(String(raw ?? '').replace(/\\/g, '\\\\'), 1);
+}
+
+/** A positive whole number of at most `max`; `undefined` when absent, `null` when malformed. */
+function wholeParam(raw: string | undefined, max: number): number | null | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  if (!/^\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  return n >= 1 && n <= max ? n : null;
+}
+
+/** `limit` and `offset`: today's 200 when no limit is asked for, else at most 100. */
+function pageParams(c: any): { limit: number; offset: number } {
+  const raw = c.req.query('limit');
+  const limit = raw === undefined ? LIST_DEFAULT_LIMIT : clampLimit(raw, PAGE_MAX, PAGE_MAX);
+  return { limit, offset: parseOffset(c.req.query('offset')) };
+}
+
 admin_partners.get('/invitations', async (c) => {
   await requireAdmin(c);
-  const status = c.req.query('status');
+  const status = c.req.query('status') || null;
   const emailQ = c.req.query('email');
-  const conds: string[] = [];
-  const params: unknown[] = [];
-  if (status) { conds.push('status = ?'); params.push(status); }
-  if (emailQ) {
-    conds.push("LOWER(recipient_email) LIKE ? ESCAPE '\\'");
-    params.push(`%${emailQ.toLowerCase().replace(/[\\%_]/g, m => `\\${m}`)}%`);
+  const emailLike = emailQ ? `%${emailQ.toLowerCase().replace(/[\\%_]/g, m => `\\${m}`)}%` : null;
+
+  const stages = manyOf(c, 'stage');
+  if (stages && stages.some((s) => !(INVITATION_STAGES as readonly string[]).includes(s))) {
+    return c.json({ error: 'unknown_stage', valid: INVITATION_STAGES }, 400);
   }
-  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
-  const rows = await c.env.DB.prepare(
-    `SELECT pi.id, pi.token, pi.recipient_email, pi.recipient_name, pi.allowed_deal_types,
-            pi.status, pi.expires_at, pi.created_at, pi.viewed_at, pi.signed_at,
-            pi.resulting_user_id, pi.resulting_deal_id, pi.envelope_id, pi.revoked_at,
-            pi.last_sent_at, pi.send_count, pi.last_send_ok, pi.last_send_reason,
-            u.name AS invited_by_name
-       FROM partner_invitations pi
-       LEFT JOIN users u ON u.id = pi.invited_by_user_id
-       ${where}
-       ORDER BY pi.created_at DESC LIMIT 200`,
-  ).bind(...params).all();
-  const items = (rows.results || []).map((r: any) => ({
+  const dealType = (c.req.query('deal_type') || '').trim().toLowerCase() || null;
+  if (dealType && !(ALL_PARTNER_DEAL_TYPES as string[]).includes(dealType)) {
+    return c.json({ error: 'unknown_deal_type', valid: ALL_PARTNER_DEAL_TYPES }, 400);
+  }
+  const invitedBy = wholeParam(c.req.query('invited_by'), Number.MAX_SAFE_INTEGER);
+  if (invitedBy === null) return c.json({ error: 'invited_by must be a user id' }, 400);
+  const sentWithin = wholeParam(c.req.query('sent_within'), WITHIN_MAX_DAYS);
+  if (sentWithin === null) return c.json({ error: `sent_within must be 1 to ${WITHIN_MAX_DAYS} days` }, 400);
+  const sort = (c.req.query('sort') || 'newest').trim().toLowerCase();
+  if (!(INVITATION_SORTS as readonly string[]).includes(sort)) {
+    return c.json({ error: 'unknown_sort', valid: INVITATION_SORTS }, 400);
+  }
+  const { limit, offset } = pageParams(c);
+
+  const filters = [
+    new Date().toISOString(), searchPattern(c.req.query('q')), stages ? JSON.stringify(stages) : null,
+    dealType, invitedBy ?? null, sentWithin ?? null, status, emailLike,
+  ];
+  const [rows, count] = await Promise.all([
+    c.env.DB.prepare(INVITATION_PAGE_SQL).bind(...filters, sort, limit, offset).all(),
+    c.env.DB.prepare(INVITATION_COUNT_SQL).bind(...filters).first<{ n: number }>(),
+  ]);
+  const items = (rows.results || []).map(({ lapsed_now: _lapsed, ...r }: any) => ({
     ...r,
     allowed_deal_types: safeJsonArray(r.allowed_deal_types),
     link: `${appUrl(c.env)}/partners/onboard?token=${r.token}`,
     is_expired: !['signed', 'revoked'].includes(r.status) && new Date(r.expires_at).getTime() < Date.now(),
   }));
-  return c.json({ items });
+  return c.json({ items, total: Number(count?.n ?? 0), limit, offset, sort });
+});
+
+/**
+ * D926 (#2722) — the create lookup, for PI4's two warnings: an open invitation
+ * to this address ("Open it instead?", a warning, never a refusal) and a
+ * member who owns it. An exact, lower-cased match. It answers the member's
+ * role and nothing else about the account. A lapsed invitation is open here,
+ * because a resend reopens it (D923 §3); Signed, Revoked and a stored
+ * `expired` are not.
+ */
+admin_partners.get('/invitations/lookup', async (c) => {
+  await requireAdmin(c);
+  const email = String(c.req.query('email') || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return c.json({ error: 'Valid email required' }, 400);
+  const [open, member] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT id, created_at FROM partner_invitations
+        WHERE LOWER(recipient_email) = ? AND status NOT IN ('signed','revoked','expired')
+        ORDER BY julianday(created_at) DESC, id DESC LIMIT 1`,
+    ).bind(email).first<{ id: number; created_at: string }>(),
+    c.env.DB.prepare(`SELECT role FROM users WHERE LOWER(email) = ? LIMIT 1`).bind(email).first<{ role: string }>(),
+  ]);
+  return c.json({
+    open_invitation: open ? { id: Number(open.id), created_at: open.created_at } : null,
+    member: member ? { role: member.role } : null,
+  });
 });
 
 admin_partners.post('/invitations/:id/resend', async (c) => {
@@ -340,28 +484,99 @@ admin_partners.get('/deals/:id/redemptions', async (c) => {
   });
 });
 
+/**
+ * D926 (#2722) — the Deals list, searched, filtered, sorted and paged here,
+ * with an exact `total`. Static SQL with bound filters, as the invitations:
+ *
+ *   ?1  now, as ISO — "ends within" is measured from it
+ *   ?2  status: a JSON array of states, or NULL for `all`
+ *   ?3  deal_type
+ *   ?4  ends_within: days; only an active deal with an end date answers
+ *   ?5  q: partner name, email or referral code, wildcards escaped
+ *   ?6  has_redemptions: 1, or NULL
+ *   ?7  sort, ?8 limit and ?9 offset, on the page only; the count binds ?1–?6
+ *
+ * BEFORE SIGNING, a deal has no `user_id`, so its partner's name and address
+ * come from the invitation it was offered under (`invitation_id`). After
+ * signing they are the account's, as today.
+ */
+const DEAL_FILTERED = `
+  WITH f AS (
+    SELECT pd.id, pd.invitation_id, pd.user_id, pd.deal_type, pd.proposal_json,
+           pd.granted_tier_founder, pd.granted_tier_investor, pd.term_months,
+           pd.referral_code, pd.envelope_id, pd.status, pd.activated_at,
+           pd.expires_at, pd.terminated_at, pd.termination_reason, pd.created_at, pd.void_reason,
+           pd.activation_error, pd.activation_failed_at, pd.activation_preserved_founder,
+           pd.activation_preserved_investor, terminator.name AS terminated_by_name,
+           CASE WHEN pd.user_id IS NULL THEN inv.recipient_email ELSE u.email END AS partner_email,
+           CASE WHEN pd.user_id IS NULL THEN inv.recipient_name ELSE u.name END AS partner_name,
+           (SELECT COUNT(*) FROM partner_referral_redemptions WHERE partner_deal_id = pd.id) AS redemptions_count
+      FROM partner_deals pd
+      LEFT JOIN users u ON u.id = pd.user_id
+      LEFT JOIN users terminator ON terminator.id = pd.terminated_by_user_id
+      LEFT JOIN partner_invitations inv ON inv.id = pd.invitation_id
+     WHERE (?2 IS NULL OR pd.status IN (SELECT value FROM json_each(?2)))
+       AND (?3 IS NULL OR pd.deal_type = ?3)
+       AND (?4 IS NULL OR (pd.status = 'active' AND pd.expires_at IS NOT NULL
+                           AND julianday(pd.expires_at) <= julianday(?1) + ?4))
+  )
+  SELECT * FROM f
+   WHERE (?5 IS NULL OR LOWER(COALESCE(f.partner_name, '')) LIKE ?5 ESCAPE '\\'
+                     OR LOWER(COALESCE(f.partner_email, '')) LIKE ?5 ESCAPE '\\'
+                     OR LOWER(COALESCE(f.referral_code, '')) LIKE ?5 ESCAPE '\\')
+     AND (?6 IS NULL OR f.redemptions_count > 0)`;
+
+const DEAL_PAGE_SQL = `SELECT * FROM (` + DEAL_FILTERED + `) AS g
+   ORDER BY
+     CASE WHEN ?7 = 'ends_soonest'
+          THEN CASE WHEN g.status = 'active' AND g.expires_at IS NOT NULL THEN 0 ELSE 1 END END,
+     CASE WHEN ?7 = 'ends_soonest' AND g.status = 'active' THEN julianday(g.expires_at) END ASC,
+     CASE WHEN ?7 = 'most_redemptions' THEN g.redemptions_count END DESC,
+     CASE WHEN ?7 = 'partner'
+          THEN CASE WHEN TRIM(COALESCE(g.partner_name, g.partner_email, '')) = '' THEN 1 ELSE 0 END END,
+     CASE WHEN ?7 = 'partner' THEN LOWER(COALESCE(NULLIF(TRIM(g.partner_name), ''), g.partner_email)) END ASC,
+     julianday(g.created_at) DESC, g.id DESC
+   LIMIT ?8 OFFSET ?9`;
+
+const DEAL_COUNT_SQL = `SELECT COUNT(*) AS n FROM (` + DEAL_FILTERED + `) AS g`;
+
+/** partner_deals' six states (the vocabulary note at terminate). */
+export const DEAL_STATES = ['proposed', 'awaiting_signature', 'active', 'terminated', 'expired', 'voided'] as const;
+export const DEAL_SORTS = ['newest', 'ends_soonest', 'most_redemptions', 'partner'] as const;
+
 admin_partners.get('/deals', async (c) => {
   await requireAdmin(c);
-  const status = c.req.query('status') || 'active';
-  const rows = await c.env.DB.prepare(
-    `SELECT pd.id, pd.invitation_id, pd.user_id, pd.deal_type, pd.proposal_json,
-            pd.granted_tier_founder, pd.granted_tier_investor, pd.term_months,
-            pd.referral_code, pd.envelope_id, pd.status, pd.activated_at,
-            pd.expires_at, pd.terminated_at, pd.termination_reason, pd.created_at, pd.void_reason,
-            pd.activation_error, pd.activation_failed_at, pd.activation_preserved_founder,
-            pd.activation_preserved_investor, terminator.name AS terminated_by_name,
-            u.email AS partner_email, u.name AS partner_name,
-            (SELECT COUNT(*) FROM partner_referral_redemptions WHERE partner_deal_id = pd.id) AS redemptions_count
-       FROM partner_deals pd
-       LEFT JOIN users u ON u.id = pd.user_id
-       LEFT JOIN users terminator ON terminator.id = pd.terminated_by_user_id
-      WHERE pd.status = ?
-      ORDER BY pd.created_at DESC LIMIT 200`,
-  ).bind(status).all();
+  // Today's call sends one state, or none for Active. `all` matches every state;
+  // it used to be bound as a state named "all" and match nothing.
+  const asked = manyOf(c, 'status') || ['active'];
+  const statuses = asked.includes('all') ? null : asked;
+  if (statuses && statuses.some((s) => !(DEAL_STATES as readonly string[]).includes(s))) {
+    return c.json({ error: 'unknown_status', valid: [...DEAL_STATES, 'all'] }, 400);
+  }
+  const dealType = (c.req.query('deal_type') || '').trim().toLowerCase() || null;
+  if (dealType && !(ALL_PARTNER_DEAL_TYPES as string[]).includes(dealType)) {
+    return c.json({ error: 'unknown_deal_type', valid: ALL_PARTNER_DEAL_TYPES }, 400);
+  }
+  const endsWithin = wholeParam(c.req.query('ends_within'), WITHIN_MAX_DAYS);
+  if (endsWithin === null) return c.json({ error: `ends_within must be 1 to ${WITHIN_MAX_DAYS} days` }, 400);
+  const hasRaw = (c.req.query('has_redemptions') || '').trim().toLowerCase();
+  if (hasRaw && !['1', 'true', '0', 'false'].includes(hasRaw)) return c.json({ error: 'has_redemptions must be true or false' }, 400);
+  const sort = (c.req.query('sort') || 'newest').trim().toLowerCase();
+  if (!(DEAL_SORTS as readonly string[]).includes(sort)) return c.json({ error: 'unknown_sort', valid: DEAL_SORTS }, 400);
+  const { limit, offset } = pageParams(c);
+
+  const filters = [
+    new Date().toISOString(), statuses ? JSON.stringify(statuses) : null, dealType, endsWithin ?? null,
+    searchPattern(c.req.query('q')), hasRaw === '1' || hasRaw === 'true' ? 1 : null,
+  ];
+  const [rows, count] = await Promise.all([
+    c.env.DB.prepare(DEAL_PAGE_SQL).bind(...filters, sort, limit, offset).all(),
+    c.env.DB.prepare(DEAL_COUNT_SQL).bind(...filters).first<{ n: number }>(),
+  ]);
   const items = (rows.results || []).map((r: any) => ({
     ...r, proposal: safeJsonObject(r.proposal_json), proposal_json: undefined,
   }));
-  return c.json({ items });
+  return c.json({ items, total: Number(count?.n ?? 0), limit, offset, sort });
 });
 
 admin_partners.post('/deals/:id/terminate', async (c) => {
