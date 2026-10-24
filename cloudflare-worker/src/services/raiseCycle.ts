@@ -104,7 +104,7 @@ export const READINESS_KEYS: readonly string[] = READINESS_ITEMS.map((i) => i.ke
 export const EVIDENCE = ['anecdote', 'pattern', 'stated', 'measured'] as const;
 const EVIDENCE_TONE: Record<string, string> = { measured: 'v1', stated: 'v2', pattern: 'v2', anecdote: 'v3' };
 
-export type ScoreRow = { item_id: number; item_key: string; score: number | null; evidence: string; missing: string | null; source: string; scored_at: string };
+export type ScoreRow = { item_id: number; item_key: string; score: number | null; evidence: string | null; missing: string | null; source: string; scored_at: string };
 export type ItemRow = { id: number; item_key: string; label: string; position: number };
 
 export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; scores: ScoreRow[] }> {
@@ -149,7 +149,7 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
-export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern'; missing: string | null; reads: ReadRow[] };
+export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
 /**
@@ -228,7 +228,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const v = num(latestVersion?.v);
   if (v == null) {
     out.push({
-      key: 'narrative', score: null, evidence: 'pattern', missing: 'Not enough recorded · save an investor narrative version.',
+      key: 'narrative', score: null, evidence: null, missing: 'Not enough recorded · save an investor narrative version.',
       reads: [{ a: 'Narrative versions', b: 'none saved', ...met(false) }],
     });
   } else {
@@ -237,7 +237,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     // mismatch list is not proof that a version agrees with today's figures.
     const mismatches = consistencyCheck(stated, metrics).length;
     out.push({
-      compared_count: compared, key: 'narrative', score: compared > 0 ? Math.max(0, 10 - 2 * mismatches) : null, evidence: compared > 0 ? 'measured' : 'pattern',
+      compared_count: compared, key: 'narrative', score: compared > 0 ? Math.max(0, 10 - 2 * mismatches) : null, evidence: compared > 0 ? 'measured' : null,
       missing: compared === 0 ? 'Not enough recorded' : mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
       reads: [
         { a: 'Newest version', b: `v${v}`, ...met(true) },
@@ -300,7 +300,7 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
       kind: 'hbar',
       items: items.map((i) => {
         const s = latest.get(Number(i.id));
-        return { label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s ? EVIDENCE_TONE[s.evidence] ?? 'grey' : 'grey' };
+        return { label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s?.score != null && s.evidence ? EVIDENCE_TONE[s.evidence] ?? 'grey' : 'grey' };
       }),
       legend: [{ label: 'Measured', tone: 'v1' }, { label: 'Pattern', tone: 'v2' }, { label: 'Anecdote', tone: 'v3' }],
     }];

@@ -6,11 +6,12 @@ CREATE TABLE readiness_scores_d890 (
   item_id INTEGER NOT NULL REFERENCES readiness_items(id) ON DELETE CASCADE,
   project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   score INTEGER CHECK (score BETWEEN 0 AND 10),
-  evidence TEXT NOT NULL CHECK (evidence IN ('anecdote', 'pattern', 'stated', 'measured')),
+  evidence TEXT CHECK (evidence IN ('anecdote', 'pattern', 'stated', 'measured')),
   missing TEXT,
   source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'computed')),
   scored_by INTEGER REFERENCES users(id),
-  scored_at TEXT NOT NULL DEFAULT (datetime('now'))
+  scored_at TEXT NOT NULL DEFAULT (datetime('now')),
+  CHECK ((score IS NULL AND evidence IS NULL) OR (score IS NOT NULL AND evidence IS NOT NULL))
 );
 INSERT INTO readiness_scores_d890 (id,item_id,project_id,score,evidence,missing,source,scored_by,scored_at)
 SELECT id,item_id,project_id,score,evidence,missing,source,scored_by,scored_at FROM readiness_scores;

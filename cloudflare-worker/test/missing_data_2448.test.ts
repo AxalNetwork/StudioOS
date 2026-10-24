@@ -22,7 +22,7 @@ import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scrip
 import { runFullScore } from '../src/services/scoring.ts';
 import { REQUIRED_OFFICIAL_INPUTS } from '../src/services/scoreIntegrity.ts';
 import { computeAutoLayers, mergeLayers, overallFromLayers } from '../src/services/ventureRisk.ts';
-import { computeReadiness, overallReadiness, loadReadiness, RECORDS_FOR } from '../src/services/raiseCycle.ts';
+import { computeReadiness, overallReadiness, loadReadiness, RECORDS_FOR, readinessCard } from '../src/services/raiseCycle.ts';
 import { rescoreReadiness } from '../src/services/raiseWriters.ts';
 import trust from '../src/routes/trust.ts';
 import projects from '../src/routes/projects.ts';
@@ -97,14 +97,16 @@ test('2448: no traction snapshot produces no decision-gate recommendation',async
 });
 test('2448: narrative readiness without a comparison is unscored and omitted from overall',async()=>{
  const {db,env}=fixture();try {
- let n=(await computeReadiness(env,1)).find(x=>x.key==='narrative')!;assert.equal(n.score,null);assert.notEqual(n.evidence,'measured');
+ let n=(await computeReadiness(env,1)).find(x=>x.key==='narrative')!;assert.equal(n.score,null);assert.equal(n.evidence,null);
  db.exec("INSERT INTO spinout_deck_overrides(project_id,field_key,value,version) VALUES(1,'traction.takeaway','No figures stated',1)");
- n=(await computeReadiness(env,1)).find(x=>x.key==='narrative')!;assert.equal(n.score,null);assert.equal(n.missing,'Not enough recorded');
+ n=(await computeReadiness(env,1)).find(x=>x.key==='narrative')!;assert.equal(n.score,null);assert.equal(n.evidence,null);assert.equal(n.missing,'Not enough recorded');
  assert.equal(overallReadiness([{score:null}]),null);assert.equal(overallReadiness([{score:null},{score:8},{score:0}]),40);
  await rescoreReadiness(env,{projectId:1,userId:1,items:['narrative']});
- const row=db.prepare('SELECT score,evidence,missing FROM readiness_scores').get()!;assert.equal(row.score,null);assert.notEqual(row.evidence,'measured');
+ const row=db.prepare('SELECT score,evidence,missing FROM readiness_scores').get()!;assert.equal(row.score,null);assert.equal(row.evidence,null);
  assert.equal((await loadReadiness({env,projectId:1} as any)).scores[0].score,null);
- const ctx:any={env,projectId:1,today:'2026-10-24'};const query:any={q:'',sort:'order',filter:{},page:1};
+ const ctx:any={env,projectId:1,today:'2026-10-24'};
+ const card:any=await readinessCard(ctx);assert.equal(card.series.find(s=>s.kind==='hbar').items.find(i=>i.label==='Investor narrative').tone,'grey');
+ const query:any={q:'',sort:'order',filter:{},page:1};
  const records=await RECORDS_FOR['fundraising-readiness'](ctx,query);const narrative=records.rows.find(r=>r.id==='narrative')!;assert.equal(narrative.cells.score,null);assert.equal(narrative.cells.evidence,null);
  assert.equal((await RECORDS_FOR['fundraising-readiness'](ctx,{...query,filter:{state:'scored'}})).total,0);
  assert.ok((await RECORDS_FOR['fundraising-readiness'](ctx,{...query,filter:{state:'not_scored'}})).rows.some(r=>r.id==='narrative'));
@@ -127,12 +129,12 @@ test('2448: migration 558 preserves rows, defaults, indexes and deleted ID high-
  const indexes=db.prepare("SELECT name,sql FROM sqlite_master WHERE tbl_name='readiness_scores' AND type='index' ORDER BY name").all();
  db.exec(readFileSync(new URL('../sql/migrations/558_readiness_scores_nullable_score.sql',import.meta.url),'utf8'));
  assert.deepEqual(db.prepare('SELECT * FROM readiness_scores').all(),before);
- assert.deepEqual(db.prepare('PRAGMA table_info(readiness_scores)').all().map(c=>({...c})),columns.map(c=>({...c,notnull:c.name==='score'?0:c.notnull})));
+ assert.deepEqual(db.prepare('PRAGMA table_info(readiness_scores)').all().map(c=>({...c})),columns.map(c=>({...c,notnull:['score','evidence'].includes(c.name)?0:c.notnull})));
  assert.deepEqual(db.prepare("SELECT name,sql FROM sqlite_master WHERE tbl_name='readiness_scores' AND type='index' ORDER BY name").all(),indexes);
- db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,missing) VALUES(1,1,NULL,'pattern','Not enough recorded')");
- const added=db.prepare('SELECT * FROM readiness_scores ORDER BY id DESC LIMIT 1').get()!;assert.equal(added.id,901);assert.equal(added.score,null);assert.equal(added.source,'manual');assert.ok(added.scored_at);
+ db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,missing) VALUES(1,1,NULL,NULL,'Not enough recorded')");
+ const added=db.prepare('SELECT * FROM readiness_scores ORDER BY id DESC LIMIT 1').get()!;assert.equal(added.id,901);assert.equal(added.score,null);assert.equal(added.evidence,null);assert.equal(added.source,'manual');assert.ok(added.scored_at);
  assert.deepEqual(db.prepare('PRAGMA foreign_key_check(readiness_scores)').all(),[]);
- for(const bad of ["11,'stated'","0,'invented'"]) assert.throws(()=>db.exec(`INSERT INTO readiness_scores(item_id,project_id,score,evidence) VALUES(1,1,${bad})`),/CHECK/);
+ for(const bad of ["11,'stated'","0,'invented'","0,NULL","NULL,'pattern'"]) assert.throws(()=>db.exec(`INSERT INTO readiness_scores(item_id,project_id,score,evidence) VALUES(1,1,${bad})`),/CHECK/);
  }finally{db.close();}
  }
 });
