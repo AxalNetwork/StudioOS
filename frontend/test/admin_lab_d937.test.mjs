@@ -23,7 +23,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
   LAB_PATH, LAB_PREVIEW_PATH, MOVED_NOTICES, NOT_YET,
-  buildCohorts, buildNeeds, buildTiles, cohortWord, movedTarget, pageFailed, poolOf, tabOf,
+  buildNeeds, buildTiles, cohortWord, movedTarget, pageFailed, poolOf, tabOf,
 } from '../src/pages/admin/lab/labModel.js';
 import AdminLab from '../src/pages/admin/lab/AdminLab.jsx';
 import LabRedirect from '../src/pages/admin/lab/LabRedirect.jsx';
@@ -32,6 +32,7 @@ import AdminPageHeader, { HeaderTab } from '../src/ui/AdminPageHeader.jsx';
 import { PARTICIPANTS_EMPTY_UNTRUSTED } from '../src/pages/admin/AdminSpinoutLab.jsx';
 import { NO_RAIL_ROUTES } from '../src/lib/railPages.js';
 import { legacyContractsTarget } from '../src/pages/admin/LegacyContractsRedirect.jsx';
+import { overviewFixture } from './_lab_overview_fixture.mjs';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -117,26 +118,6 @@ test('the cohort words are the canvas\'s, read from the Worker\'s two columns', 
   assert.equal(cohortWord({ status: 'scheduled', app_status: 'postponed', year: 2026, month: 12 }), 'Moved to Jan 2027');
   assert.equal(cohortWord({ status: 'scheduled', app_status: 'something-new' }), 'Not recorded');
   assert.deepEqual(poolOf(APPLICATIONS.cycles[1]), { applied: 24, approved: 9, waitlisted: 3, waiting: 7, declined: 5 });
-});
-
-test('the cohort table is the calendar, oldest first, and a column whose read failed says so', () => {
-  const c = buildCohorts(ALL, NOW);
-  assert.equal(c.state, 'ready');
-  assert.deepEqual(c.rows.map((r) => [r.label, r.word]), [
-    ['Sep 2026', 'Finished'], ['Oct 2026', 'Running'], ['Nov 2026', 'Open for applications'], ['Dec 2026', 'Open for applications'],
-  ]);
-  const oct = c.rows[1];
-  assert.equal(oct.now, true);
-  assert.equal(oct.week4, '29 Oct 00:00 ET', 'a deadline is 00:00 ET, inclusive (D953)');
-  assert.equal(oct.started, '22');
-  assert.equal(c.rows[2].started, 'Not started');
-  assert.equal(c.rows[2].window, '1 Oct → 25 Oct 23:59 ET');
-  assert.equal(c.rows[2].pool, '24 applied · 9 approved · 3 waitlisted · 7 waiting');
-  // Applications failing costs the window and the pool, and says so.
-  const half = buildCohorts({ ...ALL, applications: bad }, NOW);
-  assert.equal(half.appsUnreadable, true);
-  assert.ok(half.rows.every((r) => r.pool === 'Could not be read' && r.window === 'Could not be read'));
-  assert.equal(buildCohorts({ ...ALL, timeline: bad }, NOW).state, 'unreadable');
 });
 
 test('Needs you lists each readable queue holding something, and names each queue it could not read', () => {
@@ -243,6 +224,7 @@ function worker(fail = []) {
     if (p === '/api/admin/studio/glance') return down('glance') ? json({ detail: 'down' }, 503) : json({ tier: 'hq', approvals: { label: 'HQ', lanes: [{ key: 'cohort', label: 'Cohort applications', count: 7, oldest_age_hours: 80 }], pending_total: 7 } });
     if (p === '/api/admin/cohort/applications') return down('applications') ? json({ detail: 'down' }, 503) : json(APPLICATIONS);
     if (p === '/api/admin/cohort/timeline') return down('timeline') ? json({ detail: 'down' }, 503) : json(TIMELINE);
+    if (p === '/api/admin/cohort/overview') return down('overview') ? json({ detail: 'down' }, 503) : json(overviewFixture());
     if (p === '/api/admin/cohort/review') return down('review') ? json({ detail: 'down' }, 503) : json(REVIEW);
     if (p === '/api/admin/lab-hosts') return down('hosts') ? json({ detail: 'down' }, 503) : json(HOSTS);
     if (p === '/api/spinout-lab/certificates') return down('certificates') ? json({ detail: 'down' }, 503) : json(CERTS);
@@ -278,13 +260,12 @@ test('mounted Overview: each block from its own read, the header\'s counts, and 
     assert.match(m.of('lab-tile-next'), /Nov 2026.*9 approved of 25 places · minimum 1 met/s);
     assert.match(m.of('lab-tile-lab'), /22.*Week 4, day 24 of 28/s);
     assert.match(m.of('lab-tile-graduated'), /6.*3 certificates issued/s);
-    assert.match(m.of('lab-cohort-5'), /Oct 2026.*now.*Running/s);
-    assert.match(m.of('lab-cohorts'), /cannot be moved here/);
+    assert.match(m.of('lab-calendar'), /Oct 2026.*Running/s);
     assert.match(m.of('lab-needs'), /7 applications waiting.*2 founders at risk.*1 founder in grace.*2 office-hours hosts.*2 graduates have no certificate/s);
-    for (const id of ['by-cohort', 'weeks', 'funnel', 'per-week']) assert.match(m.of(`lab-wait-${id}`), new RegExp(NOT_YET));
+    for (const id of ['by-cohort', 'weeks', 'funnel', 'per-week']) assert.doesNotMatch(m.of(`lab-${id}`), new RegExp(NOT_YET), `${id} is drawn now (D947)`);
     assert.ok(!m.has('admin-page-moved'), 'no notice without ?moved=');
     const paths = [...new Set(m.seen.map((s) => s.split('?')[0]))].sort();
-    assert.deepEqual(paths, ['/api/admin/cohort/applications', '/api/admin/cohort/review', '/api/admin/cohort/timeline', '/api/admin/lab-hosts', '/api/admin/studio/glance', '/api/spinout-lab/certificates']);
+    assert.deepEqual(paths, ['/api/admin/cohort/applications', '/api/admin/cohort/overview', '/api/admin/cohort/review', '/api/admin/cohort/timeline', '/api/admin/lab-hosts', '/api/admin/studio/glance', '/api/spinout-lab/certificates']);
   } finally { await m.unmount(); }
 });
 
@@ -293,10 +274,10 @@ test('mounted: one read failing costs only its blocks, and every read failing sa
   try {
     assert.match(one.of('lab-tile-next'), /Unreadable.*not the same as none/s);
     assert.match(one.of('lab-tile-lab'), /22/, 'another block stopped answering');
-    assert.match(one.of('lab-cohorts'), /Could not be read/);
+    assert.match(one.of('lab-calendar'), /Oct 2026/, 'the calendar is its own read');
     assert.ok(!one.has('lab-unreadable'));
   } finally { await one.unmount(); }
-  const all = await mount(LAB_PATH, ['glance', 'applications', 'timeline', 'review', 'hosts', 'certificates']);
+  const all = await mount(LAB_PATH, ['glance', 'applications', 'overview', 'timeline', 'review', 'hosts', 'certificates']);
   try {
     assert.match(all.of('lab-unreadable'), /Nothing here is a zero/);
     assert.match(all.of('lab-tab-applications'), /Applications—/);

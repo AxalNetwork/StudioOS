@@ -312,6 +312,12 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/FirmLinks.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
+  // D947 (#2752): the Spin-Out Lab's Overview calendar and its Cohorts tab draw
+  // the doors to one cohort's page (`/admin/programs/spinout-lab/cohorts/:ym`).
+  ['frontend/src/pages/admin/lab/AdminLab.jsx', [
+    'frontend/src/pages/admin/lab/LabCohorts.jsx',
+    'frontend/src/pages/admin/lab/LabOverviewBlocks.jsx',
+  ]],
 ]);
 
 /** path → the files whose doors that path can reach. */
