@@ -23,7 +23,7 @@
  * digit in Eadwyn's wording again on Accept (D908).
  *
  * WHAT IS STORED. Each field that survives is one `ai_rail_proposals` row
- * (D780) under `draft:narrative/positioning`, for the founder to Accept or
+ * (D780) under `draft:narrative-positioning`, for the founder to Accept or
  * Discard one at a time (D777 part 3). A run writes no positioning.
  */
 import type { Env } from '../../types';
@@ -32,7 +32,7 @@ import { currentDecision } from '../verdict';
 import { POSITIONING_KINDS } from './store';
 
 export const POSITIONING_PAGE = 'Founder · Raise · Investor narrative';
-export const POSITIONING_OPTION = 'draft:narrative/positioning';
+export const POSITIONING_OPTION = 'draft:narrative-positioning';
 
 const HAS_DIGIT = /[0-9]/;
 const MAX_ITEMS = 8;

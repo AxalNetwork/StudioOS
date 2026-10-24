@@ -25,7 +25,7 @@ import { withGuard } from './_guard_stub.mjs';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 
 const PAGE = 'Founder · Raise · Investor narrative';
-const OPTION = 'draft:narrative/positioning';
+const OPTION = 'draft:narrative-positioning';
 const mig = (f: string) => readFileSync(new URL(`../sql/migrations/${f}`, import.meta.url), 'utf8');
 
 const GOOD = {

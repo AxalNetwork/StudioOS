@@ -145,7 +145,7 @@ export const FOUNDER_OPTIONS = [
   // D911 (#2695): positioning moved into the Investor narrative tool, so its
   // option moved from Pitch deck's page to the narrative's (was draft:positioning).
   {
-    page: 'Founder · Raise · Investor narrative', key: 'draft:narrative/positioning', route: '/raise/investor-narrative/positioning', label: 'Propose positioning', kind: 'write', handler: 'draft',
+    page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-positioning', route: '/raise/investor-narrative/positioning', label: 'Propose positioning', kind: 'write', handler: 'draft',
     at: [['frontend/src/pages/raise/narrative/PositioningTab.jsx', 'narrativeApi.proposePositioning(']],
   },
   // The pitch deck's editor, the module's tool link, and its Review tab.

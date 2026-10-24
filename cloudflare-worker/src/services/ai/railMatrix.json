@@ -4950,7 +4950,7 @@
   },
   {
    "pageKey": "Founder · Raise · Investor narrative",
-   "optionKey": "draft:narrative/positioning",
+   "optionKey": "draft:narrative-positioning",
    "optionLabel": "Propose positioning",
    "kind": "write",
    "handler": "draft",

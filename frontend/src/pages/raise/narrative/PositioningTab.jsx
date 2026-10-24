@@ -4,6 +4,7 @@ import { narrativeApi } from '../../../lib/api/narrative';
 import { railPressHeaders } from '../../../lib/railPage';
 import { reportError } from '../../../lib/log';
 import { Lightbox, Unreadable } from '../../../ui';
+import { useRailOption } from '../../../ui/railCrumbs';
 import {
   MOVED_NOTICE, NOT_RECORDED, NO_FIGURES_READ, PROPOSAL_NOTE, PROPOSE_FOOT, REMOVED_LINE, WITHHELD_LINE,
   coreRows, isMoved, partItems, proposalRows, saveLine, tabSearch, versionRows,
@@ -25,7 +26,7 @@ import {
  * one-at-a-time rule (`routes/ai_rail_proposals.ts`) stands until S1 answers.
  */
 
-export const POSITIONING_OPTION = 'draft:narrative/positioning';
+export const POSITIONING_OPTION = 'draft:narrative-positioning';
 
 const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
 const INK = 'text-axal-ink dark:text-gray-100';
@@ -179,6 +180,8 @@ export default function PositioningTab({ projectId, version = null }) {
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState(null);
   const moved = isMoved(loc.search);
+  // The rail names the run while it is pressed, as every founder draft does (D771).
+  useRailOption(asking ? 'draft:narrative-positioning' : null, 'Propose positioning');
 
   const dismissMoved = () => navigate({ pathname: loc.pathname, search: tabSearch(loc.search), hash: loc.hash }, { replace: true });
   const saved = () => { setEditing(null); pos.reload(); };

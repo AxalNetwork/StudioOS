@@ -173,7 +173,7 @@ test('NAR5: Ask Eadwyn runs on its own option, the lightbox lists each line to a
     await view.click('positioning-ask');
     const post = view.requests.find((r) => r.method === 'POST' && r.url.includes('/positioning/draft'));
     assert.equal(post.url, '/api/cycles/raise/narrative/positioning/draft?project=3', 'proposals are for the core');
-    assert.equal(post.headers['X-Rail-Option'], encodeURIComponent('draft:narrative/positioning'));
+    assert.equal(post.headers['X-Rail-Option'], encodeURIComponent('draft:narrative-positioning'));
     assert.match(view.textOf('positioning-proposal'), /Proposed by Eadwyn.*Positioning proposal.*Nothing lands until you accept it/s);
     assert.match(view.textOf('positioning-proposal-rows'), /One-liner.*Month-end close.*Line 1.*Every difference/s);
     assert.match(view.textOf('positioning-read-from'), /Validate › Segments.*Validate › Competitors.*No figures are read/s);
@@ -230,10 +230,10 @@ test('the move: the route, the redirect inventory, the rail option, and every li
   assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
   assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/raise\/pitch\/positioning' \}/);
   const rail = read('frontend/src/lib/railOptions/founder.js');
-  assert.match(rail, /page: 'Founder · Raise · Investor narrative', key: 'draft:narrative\/positioning'/);
+  assert.match(rail, /page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-positioning'/);
   assert.doesNotMatch(rail, /key: 'draft:positioning'/);
   const matrix = read('cloudflare-worker/src/services/ai/railMatrix.json');
-  assert.ok(matrix.includes('"optionKey": "draft:narrative/positioning"'), 'the matrix was rebuilt');
+  assert.ok(matrix.includes('"optionKey": "draft:narrative-positioning"'), 'the matrix was rebuilt');
   assert.ok(!matrix.includes('"optionKey": "draft:positioning"'));
   for (const f of ['frontend/src/pages/cycles/CycleRoute.jsx', 'frontend/src/pages/SpinoutLabMarketPage.jsx', 'frontend/src/pages/cycles/founderToolNavigation.js', 'frontend/src/pages/PitchWorkspacePage.jsx']) {
     assert.doesNotMatch(read(f), /(?:to|href|path)[=:] ?['"`]\/raise\/pitch\/positioning/, `${f} still links the old page`);
