@@ -164,6 +164,22 @@ It is the admin desk at `/admin/events`, not the member canvas `Events.dc.html`
 above. No value was edited. S1's integration lands next and records its grade
 here.
 
+## Landed 2026-10-24 — Admin · Community · Partner invitations (#2370)
+
+The owner's artifacts `RVjg7kcnqPJpv5v9Mp1R63` and `FuLoT1AKA9NCDwKwhrp7ZM`
+came from S1's prompt on #2370, as the usual pair:
+- `Partner Invitations · Boards.dc.html` is the board grid (PI1 to PI12, with
+  the lettered boards: 29 in all), the output of `scripts/read-canvas.mjs` as is;
+- `Partner Invitations Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and one empty attribute's spelling.
+
+It draws the desk at the proposed `/admin/partner-invitations` (Overview,
+Invitations, Deals, Referrals), the invitation and deal lightboxes (the canvas
+uses centred lightboxes where the prompt said drawers), the new-invitation
+dialog and the confirm dialogs. No value was edited. S1's integration lands
+next and records its grade here.
+
 ## Landed 2026-10-24 — Admin · Programs (#2371)
 
 The owner's artifacts `QWsj2LjALVRBd1rsTg8bW3` and `8GEfQTVW1ebBpZsWbG8CG6`
