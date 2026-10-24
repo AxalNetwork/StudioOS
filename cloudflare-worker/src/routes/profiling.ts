@@ -11,6 +11,10 @@ import { AI_SURFACE } from '../services/aiSurfaces';
 // Task #9 — 'exploring' holding state (side table + role-CHECK relax).
 import { ensureExploringSchema, upsertSuggestedRole } from '../services/exploringSchema';
 import { railFor } from '../util/railContext';
+import { refuse } from '../util/refusal';
+import {
+  type MemberNotice, recordCapture, recordDecision, recordReopenAfterVerify, rejectReasonProblem, tellMember,
+} from '../services/partnerProfileReview';
 
 const profiling = new Hono<{ Bindings: Env }>();
 
@@ -57,6 +61,11 @@ const NEW_COLUMNS: Array<[string, string]> = [
   ['focus_text', 'TEXT'],
   // --- migration 556 (D990): the profile's reference, filled below ---------
   ['ref', 'TEXT'],
+  // --- migration 557 (D991): the review and the changed-after flag ---------
+  ['reviewed_at', 'TEXT'],
+  ['reviewed_by', 'INTEGER'],
+  ['reject_reason', 'TEXT'],
+  ['changed_after_review_at', 'TEXT'],
 ];
 
 async function ensureProfileTable(env: Env) {
@@ -117,6 +126,24 @@ async function ensureProfileTable(env: Env) {
     await db.prepare(
       `CREATE TRIGGER IF NOT EXISTS trg_partner_profiles_ref AFTER INSERT ON partner_profiles WHEN NEW.ref IS NULL
        BEGIN UPDATE partner_profiles SET ref = 'pp_' || lower(hex(randomblob(5))) WHERE rowid = NEW.rowid; END`,
+    ).run();
+  } catch {}
+  // Migration 557's history (D991), the same shape as the migration.
+  try {
+    await db.prepare(
+      `CREATE TABLE IF NOT EXISTS partner_profile_events (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         profile_ref TEXT NOT NULL,
+         kind TEXT NOT NULL CHECK (kind IN ('captured', 'verified', 'rejected', 'reopened')),
+         source TEXT CHECK (source IN ('chat', 'invitation', 'eadwyn')),
+         admin_user_id INTEGER,
+         reason TEXT,
+         created_at TEXT NOT NULL,
+         CHECK ((kind = 'captured') = (source IS NOT NULL))
+       )`,
+    ).run();
+    await db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_partner_profile_events_ref ON partner_profile_events(profile_ref, created_at)`,
     ).run();
   } catch {}
 }
@@ -390,6 +417,10 @@ ${transcript}`;
     `;
   }
 
+  // D991 — the capture joins the history; a re-save after a verdict keeps the
+  // verdict and is flagged (D989 §5, owner decision 3).
+  await recordCapture(c.env, email, 'chat');
+
   const personaLabel = founderTrack ? `${persona} / ${founderTrack}` : (persona || 'unknown');
   await sql`INSERT INTO activity_logs (action, details, actor, user_id) VALUES ('profile_captured', ${`Profile captured — ${personaLabel} — pending admin verification`}, ${await hashEmail(email)}, ${user.id})`;
 
@@ -566,6 +597,12 @@ profiling.post('/admin/:email/verify', async (c) => {
   const { agreement_type, admin_notes, status } = reqBody;
 
   const newStatus = ['verified', 'rejected', 'pending'].includes(status) ? status : 'verified';
+  // D991 — a rejection carries a reason the member reads, checked before
+  // anything is written.
+  if (newStatus === 'rejected') {
+    const problem = rejectReasonProblem(reqBody?.reject_reason);
+    if (problem) return refuse(c, 400, { code: 'reject_reason_required', message: problem });
+  }
 
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM partner_profiles WHERE email = ${email}`;
@@ -579,6 +616,9 @@ profiling.post('/admin/:email/verify', async (c) => {
         updated_at = CURRENT_TIMESTAMP
     WHERE email = ${email}
   `;
+  // D991 — who and when, the reason, the history row and the member's notice.
+  // `pending` here is a reopen: the verdict stays in the history.
+  const review = await reviewAfterVerdict(c.env, rows[0], newStatus, adminUser.id, reqBody?.reject_reason);
   // Log on the admin's record AND on the target user's record so the target sees it in their private feed.
   const targetUsers = await sql`SELECT id FROM users WHERE email = ${email}`;
   const targetUserId = targetUsers[0]?.id || null;
@@ -647,7 +687,38 @@ profiling.post('/admin/:email/verify', async (c) => {
     }
   }
 
-  return c.json({ updated: true, status: newStatus, agreement_type, admin_notes, esign: esignResult, esign_refusal: esignRefusal });
+  return c.json({
+    updated: true, status: newStatus, agreement_type, admin_notes, esign: esignResult, esign_refusal: esignRefusal,
+    reviewed_at: review.reviewed_at, member_notified: review.member_notified,
+  });
 });
+
+/**
+ * D991 — the decision path after the verify route's UPDATE. A verdict records
+ * who and when (and the reason on a rejection) and tells the member; a
+ * `pending` status is a reopen. A failure here is logged by reference and
+ * leaves the verdict standing: the UPDATE has already landed.
+ */
+async function reviewAfterVerdict(
+  env: Env, profile: any, status: string, adminUserId: number, rejectReason: unknown,
+): Promise<{ reviewed_at: string | null; member_notified: MemberNotice | undefined }> {
+  const ref: string | null = profile?.ref ?? null;
+  try {
+    if (status === 'verified' || status === 'rejected') {
+      const reason = status === 'rejected' ? String(rejectReason ?? '').trim() : null;
+      const done = await recordDecision(env, profile.email, status, adminUserId, reason);
+      if (!done) return { reviewed_at: null, member_notified: undefined };
+      const member_notified = await tellMember(env, { email: profile.email, user_id: profile.user_id ?? null, ref: done.ref }, status, reason);
+      return { reviewed_at: done.reviewed_at, member_notified };
+    }
+    // `profile` is the row read before the route's write, so its status is the one Reopen undoes.
+    if (ref && (profile.admin_status === 'verified' || profile.admin_status === 'rejected')) {
+      await recordReopenAfterVerify(env, ref, adminUserId);
+    }
+  } catch (e) {
+    console.error('[profiling/verify] review not recorded', ref ?? 'no ref', (e as Error)?.message);
+  }
+  return { reviewed_at: null, member_notified: undefined };
+}
 
 export default profiling;

@@ -39,6 +39,8 @@ const read = (p: string) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const BASELINE = read('cloudflare-worker/sql/schema_baseline.sql');
 const MIGRATION_275 = read('cloudflare-worker/sql/migrations/275_partner_profiles_columns.sql');
 const MIGRATION_556 = read('cloudflare-worker/sql/migrations/556_partner_profiles_ref.sql');
+// D991: part 2's review columns, which the list now reads.
+const MIGRATION_557 = read('cloudflare-worker/sql/migrations/557_partner_profile_review.sql');
 
 function makeD1(db: InstanceType<typeof DatabaseSync>) {
   const stmt = (sql: string) => {
@@ -99,6 +101,7 @@ function fixture() {
   p({ email: 'both@example.test', invitation_id: 8, chat_history: '[{"role":"user"}]', services_offered: 'Tax',
     full_name: 'Bo Both', admin_status: 'rejected', created_at: ago(24 * 20) });
   db.exec(MIGRATION_556);
+  db.exec(MIGRATION_557);
   const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: makeD1(db) };
   return { db, env };
 }
@@ -246,7 +249,7 @@ test('the sorts and the pages, and what waits for part 2 is refused rather than 
   assert.equal(p2.body.page_size, 2);
   assert.equal(p2.body.totals.total, 6, 'totals are over the filtered set, not the page');
   assert.equal((await call(f, '/?page_size=5000')).body.page_size, 100);
-  for (const [qs, code] of [['reviewed_by=1', 'not_recorded'], ['sort=reviewed', 'not_recorded'], ['sort=random', 'bad_sort'],
+  for (const [qs, code] of [['reviewed_by=ada', 'bad_filter'], ['sort=random', 'bad_sort'],
     ['status=approved', 'bad_filter'], ['source=email', 'bad_filter'], ['has_account=maybe', 'bad_filter'],
     ['identity=x', 'bad_filter'], ['captured_from=yesterday', 'bad_filter']]) {
     const r = await call(f, '/?' + qs);
@@ -293,7 +296,7 @@ test('the counts: waiting and its bands leave Drafts out, the weekly series coun
     available: true, reason: null, count: 3, over_24h: 2, over_72h: 1, oldest_at: undefined, drafts: 1,
   });
   assert.equal(r.body.waiting.oldest_at, ago(120));
-  assert.deepEqual(r.body.verified_30d, { available: false, reason: 'Verification and rejection dates are recorded from Partner profiles part 2.', count: null });
+  assert.deepEqual(r.body.verified_30d, { available: false, reason: 'Verification and rejection dates are recorded only from 24 Oct 2026 (D991); a verdict given before has none, so this count would be short.', count: null });
   assert.equal(r.body.envelopes_out.available, false);
   assert.equal(r.body.envelopes_out.count, null);
   const weeks = r.body.weekly.weeks;
