@@ -194,6 +194,7 @@ import deckShareActions from './routes/deck_share_actions';
 import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
 import deckSources from './routes/deck_sources';
+import deckNew from './routes/deck_new';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1182,6 +1183,8 @@ app.route('/api/decks', deckExports);
 app.route('/api/decks', deckNotes);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
+// D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
+app.route('/api/decks', deckNew);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

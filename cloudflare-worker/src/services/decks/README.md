@@ -15,6 +15,7 @@ Builds the deck payload from the venture's real records and renders it.
 | `branding.ts` | Logo, colours, lock-up. |
 | `recommend.ts` | Slide-level suggestions. |
 | `methods.ts` | Shared helpers. |
+| `newDeck.ts` | D897 (#2677): New deck, pure. The card catalogue and the three lengths, `numberIn` and `figureRefusal` (a prompt is never a source), the outline from the model or the founder, the run messages (figures as read-only facts), `wordingFromModel` (words that name a number are dropped), and `buildCards`: every figure a bound metric block and `auto` field, an empty slot Not recorded. |
 | `slideModel.ts` | D898 (#2676): the editor's slide model. The twelve layouts as presets of the 12 × 6 grid, the eight block kinds, the twelve chart types, the audiences and themes; `sanitizeModel` (what every stored read keeps, so an old deck opens), `modelProblems` (why a save is refused) and `contentHash`. A binding is `sources.ts`'s `sanitizeBinding`. |
 | `deckVersionColumns.ts` | D898: migration 539's four `pitch_decks` columns where it has not run, awaited by both runtime creators of the table. Imports nothing, so the advisor's write router can call it. |
 | `sources.ts` | D896 (#2675): `DECK_SOURCES`, one read-only adapter per row of #2434's sources table, a fixed slot list, `sourceAndGrade` (the one origin → Source and grade mapping), coverage, snapshot hashes and the binding compare behind `POST /api/decks/:id/refresh`. Writes nothing; no model runs. |

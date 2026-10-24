@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import decks from '../src/routes/decks.ts';
+import deckNew from '../src/routes/deck_new.ts';
 import brand from '../src/routes/brand.ts';
 import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
@@ -60,7 +61,7 @@ async function fixture() {
     }
     return { response: '{}', usage: { prompt_tokens: 10, completion_tokens: 10 } };
   } }) };
-  const app = new Hono<any>().route('/api/decks', decks).route('/api/brand', brand);
+  const app = new Hono<any>().route('/api/decks', deckNew).route('/api/decks', decks).route('/api/brand', brand);
   const out = { ...f, app, env, prompts, promptTexts, shareId: 0, token: '', slug: '' };
   // Owner controls initialize the exact runtime schema before hostile calls.
   assert.equal((await request(out, 2, 'GET', '/api/decks/by-project/1')).status, 200);
@@ -95,6 +96,10 @@ const otherWrites = (): Array<[string, string, any?]> => [
   ['POST', '/api/decks/proposals/40/keep'], ['DELETE', '/api/decks/proposals/40'],
   ['POST', '/api/brand/custom-templates', { name: 'Synthetic template', from_page_id: 1 }],
   ['POST', '/api/decks/generate', { project_id: 1 }], ['POST', '/api/decks/positioning', { project_id: 1 }],
+  // D897 (#2677): New deck's outline, quote and card-by-card keep.
+  ['POST', '/api/decks/outline', { project_id: 1, audience: 'seed_fund', length: 'standard' }],
+  ['POST', '/api/decks/new/quote', { project_id: 1, step: 'build', audience: 'seed_fund' }],
+  ['POST', '/api/decks/proposals/40/keep-slides', { all: true }],
   ['POST', '/api/decks/apply-method', { project_id: 1, method_id: 'yc_seed' }], ['POST', '/api/decks/10/export', { format: 'pptx' }],
   ['PUT', '/api/brand/site/by-project/1', { slug: 'synthetic-new-site' }],
   ['PUT', '/api/brand/landing/pages/1/address', { page_slug: 'synthetic-new-page' }],
@@ -106,6 +111,7 @@ const contacts: Array<[string, string]> = [['GET', '/api/brand/landing/by-projec
 const reads: Array<[string, string]> = [
   ['GET', '/api/brand/site/by-project/1'],
   ['GET', '/api/decks/10'], ['GET', '/api/decks/by-project/1'], ['GET', '/api/decks/10/engagement'], ['GET', '/api/decks/recommend?project_id=1'],
+  ['GET', '/api/decks/new/context?project_id=1'],
   ['GET', '/api/brand/landing/by-project/1'],
   ['GET', '/api/brand/landing/pages/1/public-url'],
   ['GET', '/api/brand/landing/by-project/1/page-slug-available?page_slug=synthetic-free'],
