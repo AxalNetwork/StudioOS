@@ -506,15 +506,24 @@ events.post('/:id/submit-review', async (c) => {
   if (!event) return c.json({ error: 'not_found' }, 404);
   if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
 
-  if (event.visibility === 'public') {
-    await c.env.DB.prepare(
-      `UPDATE events SET status = 'pending_review', submitted_at = ?, updated_at = datetime('now') WHERE id = ?`,
-    ).bind(new Date().toISOString(), id).run();
-  } else {
-    await c.env.DB.prepare(
-      `UPDATE events SET status = 'published', updated_at = datetime('now') WHERE id = ?`,
-    ).bind(id).run();
+  // Repeated submissions must not reset queue age or revive a cancelled event.
+  if (event.status === 'pending_review' || (event.status === 'published'
+      && Number(event.admin_published) !== 1 && event.visibility !== 'public')) {
+    return c.json({ event: shapeEvent(event, { includePrivate: true }) });
   }
+  if (!['draft', 'rejected'].includes(event.status)) return c.json({ error: 'not_submittable' }, 409);
+
+  let submitted: unknown;
+  if (event.visibility === 'public') {
+    submitted = await c.env.DB.prepare(
+      `UPDATE events SET status = 'pending_review', submitted_at = ?, updated_at = datetime('now') WHERE id = ? AND status IN ('draft', 'rejected') RETURNING id`,
+    ).bind(new Date().toISOString(), id).first();
+  } else {
+    submitted = await c.env.DB.prepare(
+      `UPDATE events SET status = 'published', updated_at = datetime('now') WHERE id = ? AND status IN ('draft', 'rejected') RETURNING id`,
+    ).bind(id).first();
+  }
+  if (!submitted) return c.json({ error: 'not_submittable' }, 409);
   await logAdminAction(c.env, u.id, u.email, 'event_submitted', { event_id: id });
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
 });

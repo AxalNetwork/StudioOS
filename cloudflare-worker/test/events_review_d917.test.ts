@@ -162,3 +162,21 @@ test('D917 changing a self-published event to public starts its review clock afr
   assert.notEqual(body.event.submitted_at,'2026-01-02T00:00:00Z');assert.equal(body.event.created_at,'2026-01-01T00:00:00Z');
   assert.equal(body.event.changed_after_approval_at,null);
 });
+
+
+test('D917 submission cannot revive cancelled or approved events, and repeats do not reset waiting age', async () => {
+  for (const visibility of ['public','private']) for (const status of ['cancelled','published']) {
+    const f=fixture();f.db.prepare('UPDATE events SET status=?, visibility=?, admin_published=1').run(status,visibility);
+    const res=await f.request('/1/submit-review',2,{},'POST',events);assert.equal(res.status,409);
+    assert.deepEqual(await res.json(),{error:'not_submittable'});assert.equal(row(f.db).status,status);
+  }
+  const f=fixture();const at='2026-01-02T00:00:00.000Z';f.db.prepare('UPDATE events SET submitted_at=?').run(at);
+  const repeated:any=await (await f.request('/1/submit-review',2,{},'POST',events)).json();assert.equal(repeated.event.submitted_at,at);assert.equal(row(f.db).status,'pending_review');
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get()!.n,0);
+  for (const visibility of ['public','private']) {
+    const race=fixture();race.db.prepare("UPDATE events SET status='draft', visibility=?").run(visibility);race.race('cancelled');
+    assert.equal((await race.request('/1/submit-review',2,{},'POST',events)).status,409);assert.equal(row(race.db).status,'cancelled');
+    const sentBack=fixture();sentBack.db.prepare("UPDATE events SET status='rejected', visibility=?").run(visibility);
+    assert.equal((await sentBack.request('/1/submit-review',2,{},'POST',events)).status,200);assert.equal(row(sentBack.db).status,visibility==='public'?'pending_review':'published');
+  }
+});

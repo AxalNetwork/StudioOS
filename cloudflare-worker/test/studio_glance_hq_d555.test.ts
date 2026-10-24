@@ -116,6 +116,7 @@ test('HQ approvals: when every lane answers, the total is their sum', async () =
   const db = seeded();
   for (const t of ['lp_applications', 'referral_submissions', 'cohort_applicants',
     'job_postings', 'events', 'admin_consultation_bookings', 'dd_cases']) db.exec(ddl(t));
+  db.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
   // Declared by migration 287, not the baseline; the lane reads these three columns.
   db.exec('CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY, status TEXT, resolved_at TEXT, created_at TEXT)');
   db.prepare(`INSERT INTO spinout_moderation_cases (status, resolved_at, created_at) VALUES ('under_review', NULL, ?), ('active', NULL, ?)`).run(ago(30), ago(31));
