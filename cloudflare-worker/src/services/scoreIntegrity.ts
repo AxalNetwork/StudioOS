@@ -75,7 +75,7 @@ export function assertOfficialInputsComplete(body: Record<string, unknown>): voi
   const missing: string[] = [];
   for (const k of REQUIRED_OFFICIAL_INPUTS) {
     const v = body[k];
-    if (v === undefined || v === null || v === '') {
+    if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) {
       missing.push(k);
       continue;
     }

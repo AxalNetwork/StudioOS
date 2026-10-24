@@ -682,12 +682,20 @@ export async function readCatalogMirrorSummary(env: Env): Promise<CatalogMirrorS
 // Metadata taxonomy validation.
 // ---------------------------------------------------------------------------
 
+/** D1009: a written reason shared by catalogue and checkout-key mutations. */
+export function paymentChangeReason(body: unknown): string | null {
+  const value = body && typeof body === 'object' ? (body as Record<string, unknown>).reason : null;
+  if (typeof value !== 'string') return null;
+  const reason = value.trim();
+  return reason.length > 0 && reason.length <= 500 ? reason : null;
+}
+
 /**
  * Validate the required metadata keys for a product kind.
  * Returns an array of human-readable error strings (empty = valid).
  *
  * Taxonomy (from the product catalog spec):
- *   subscription  → plan=mi_pro OR tier=growth|studio OR investor_tier=professional|institutional
+ *   subscription  → plan=mi_pro OR tier=growth|studio OR investor_tier=professional|institutional OR plan_group=advisor|partner
  *   incorporation → kind=incorporation
  *   session       → kind=session
  *   alacarte      → kind=alacarte + feature_key (non-empty) + unlock_days (positive integer)
@@ -702,10 +710,11 @@ export function validateProductMetadata(
     const hasTier = metadata.tier === 'growth' || metadata.tier === 'studio';
     const hasInv =
       metadata.investor_tier === 'professional' || metadata.investor_tier === 'institutional';
-    if (!hasPlan && !hasTier && !hasInv) {
+    const hasGroup = metadata.plan_group === 'advisor' || metadata.plan_group === 'partner';
+    if (!hasPlan && !hasTier && !hasInv && !hasGroup) {
       errs.push(
         'subscription requires metadata.plan=mi_pro, metadata.tier=growth|studio, ' +
-          'or metadata.investor_tier=professional|institutional',
+          'metadata.investor_tier=professional|institutional, or metadata.plan_group=advisor|partner',
       );
     }
   } else if (kind === 'incorporation') {

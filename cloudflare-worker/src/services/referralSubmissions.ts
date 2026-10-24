@@ -27,6 +27,19 @@ export const STATUSES = [
 ] as const;
 export type Status = (typeof STATUSES)[number];
 
+/** D957: forward pipeline moves; rejection/closure are final. Same-status saves are annotations. */
+export const REVIEW_MOVES: Record<Status, readonly Status[]> = {
+  draft: ['submitted', 'rejected', 'closed'],
+  submitted: ['under_review', 'more_info_needed', 'qualified', 'rejected', 'closed'],
+  under_review: ['more_info_needed', 'qualified', 'rejected', 'closed'],
+  more_info_needed: ['under_review', 'qualified', 'rejected', 'closed'],
+  qualified: ['in_conversation', 'rejected', 'closed'],
+  in_conversation: ['converted', 'rejected', 'closed'],
+  converted: ['reward_eligible', 'closed'],
+  reward_eligible: ['reward_issued', 'closed'],
+  reward_issued: [], rejected: [], closed: [],
+};
+
 /** Wire → display. Stored on each event row so relabelling later never
  *  rewrites history that has already been shown to a referrer. */
 export const STATUS_LABELS: Record<Status, string> = {
@@ -534,26 +547,38 @@ export async function reviewSubmission(
 
   if (patch.status !== undefined) {
     if (!isStatus(patch.status)) throw new ReferralError('bad_status', 'Unknown status.');
-    nextStatus = patch.status;
-    sets.push('status = ?');
-    binds.push(nextStatus);
+    if (patch.status !== row.status) {
+      if (!REVIEW_MOVES[row.status].includes(patch.status)) {
+        throw new ReferralError('bad_transition', `A referral cannot move from ${row.status} to ${patch.status}.`, 409);
+      }
+      nextStatus = patch.status;
+      sets.push('status = ?');
+      binds.push(nextStatus);
+    }
   }
   if (patch.rewardLabel !== undefined) { sets.push('reward_label = ?'); binds.push(clean(patch.rewardLabel, 120)); }
   if (patch.nextStep !== undefined) { sets.push('next_step = ?'); binds.push(clean(patch.nextStep, 240)); }
   if (patch.fitNotes !== undefined) { sets.push('fit_notes = ?'); binds.push(clean(patch.fitNotes, 2000)); }
 
-  if (sets.length) {
+  const statements: D1PreparedStatement[] = [];
+  // Also guard annotation-only saves against a concurrent status decision.
+  if (sets.length || patch.note) {
     sets.push('updated_at = CURRENT_TIMESTAMP');
-    binds.push(row.id);
-    await env.DB.prepare(
-      `UPDATE referral_submissions SET ${sets.join(', ')} WHERE id = ?`,
-    ).bind(...binds).run();
-  }
-
-  // A note with no status change is still worth recording (a reviewer asking
-  // for more detail), so append whenever either is present.
-  if (nextStatus || patch.note) {
-    await appendEvent(env, row.id, nextStatus, patch.note ?? null, actorUserId);
+    statements.push(env.DB.prepare(
+      `UPDATE referral_submissions SET ${sets.join(', ')} WHERE id = ? AND status = ?`,
+    ).bind(...binds, row.id, row.status));
+    if (nextStatus || patch.note) {
+      statements.push(env.DB.prepare(
+        `INSERT INTO referral_submission_events (submission_id, label, status, note, actor_user_id)
+         SELECT ?, ?, ?, ?, ? WHERE changes() = 1`,
+      ).bind(row.id, nextStatus ? STATUS_LABELS[nextStatus] : 'Updated', nextStatus,
+        clean(patch.note, MAX_LEN.note), actorUserId));
+    }
+    const result = await env.DB.batch(statements);
+    if (Number(result[0].meta?.changes) !== 1) {
+      const current = await getByUid(env, uid, null);
+      throw new ReferralError('bad_transition', `The referral moved from ${row.status} to ${current?.status || 'another state'}. Read it again before saving.`, 409);
+    }
   }
 
   const fresh = await getByUid(env, uid, null);
@@ -652,4 +677,52 @@ export function toWire(row: SubmissionRow, events?: SubmissionEvent[]) {
     updated_at: row.updated_at,
     ...(events ? { history: events } : {}),
   };
+}
+
+/** D957: shared queue definition for the admin page and program catalogue. */
+export async function listStrategicAccess(env: Env, { status = 'requested', limit = 100, offset = 0 } = {}) {
+  const count = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM referral_strategic_access WHERE (? = 'all' OR status = ?)`,
+  ).bind(status, status).first<{ n: number }>();
+  const rows = await env.DB.prepare(
+    `SELECT a.user_id, u.name, u.role, a.note, a.status, a.created_at AS requested_at, a.decided_at
+       FROM referral_strategic_access a LEFT JOIN users u ON u.id = a.user_id
+      WHERE (? = 'all' OR a.status = ?) ORDER BY datetime(a.created_at), a.id LIMIT ? OFFSET ?`,
+  ).bind(status, status, limit, offset).all();
+  return { items: rows.results || [], total: Number(count?.n || 0) };
+}
+
+export async function decideStrategicAccess(env: Env, userId: number, decision: string) {
+  if (decision !== 'granted' && decision !== 'declined') throw new ReferralError('bad_decision', 'Choose granted or declined.');
+  const out = await env.DB.prepare(
+    `UPDATE referral_strategic_access SET status = ?, decided_at = CURRENT_TIMESTAMP
+      WHERE user_id = ? AND status = 'requested'`,
+  ).bind(decision, userId).run();
+  const row = await env.DB.prepare('SELECT status, decided_at FROM referral_strategic_access WHERE user_id = ?')
+    .bind(userId).first<{ status: string; decided_at: string | null }>();
+  if (!row) throw new ReferralError('not_found', 'This member has not requested strategic referral access.', 404);
+  if (Number(out.meta?.changes) !== 1) throw new ReferralError('already_decided', `Strategic referral access is already ${row.status}.`, 409);
+  return row;
+}
+
+/** UTC Monday buckets, including the current partial week. */
+export async function referralWeekly(env: Env, weeks: number, now = new Date()) {
+  const end = now.toISOString();
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay() + 6) % 7 - 7 * (weeks - 1));
+  const from = monday.toISOString().slice(0, 10);
+  const rows = await env.DB.prepare(
+    `SELECT date(datetime(created_at), '-6 days', 'weekday 1') AS week, category, COUNT(*) AS count
+       FROM referral_submissions WHERE datetime(created_at) >= datetime(?) AND datetime(created_at) <= datetime(?)
+      GROUP BY date(datetime(created_at), '-6 days', 'weekday 1'), category`,
+  ).bind(from, end).all<{ week: string; category: string; count: number }>();
+  const items = [];
+  for (let i = 0; i < weeks; i++) {
+    const week = monday.toISOString().slice(0, 10);
+    const counts = Object.fromEntries(CATEGORIES.map((category) => [category,
+      Number(rows.results?.find((r) => r.week === week && r.category === category)?.count || 0)]));
+    items.push({ week, ...counts });
+    monday.setUTCDate(monday.getUTCDate() + 7);
+  }
+  return { from, items };
 }

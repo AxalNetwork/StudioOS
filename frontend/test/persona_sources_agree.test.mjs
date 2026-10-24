@@ -6,7 +6,7 @@
  * `frontend/src/lib/personas.js` — the copy the sidebar actually reads
  * (App.jsx) — and in `backend/app/api/routes/personas.py`, the dev-only
  * FastAPI mirror. All three agreed on the 12 ids, their labels,
- * `role_alignment` and the follow-up question keys. Their NAV ENTRIES did
+ * `profile` and the follow-up question keys. Their NAV ENTRIES did
  * not:
  *
  *   - founder_existing: the worker offered `/founder` (no such route exists
@@ -57,7 +57,7 @@ function stripComments(src) {
 }
 
 /**
- * One persona's record: label, role_alignment, nav_extras (as `to` targets,
+ * One persona's record: label, profile, nav_extras (as `to` targets,
  * order-independent) and follow-up question keys. `hasNav` distinguishes
  * "declares an empty nav_extras: []" from "the field does not exist at all"
  * (true of every Python entry), so the comparison below can skip Python's
@@ -90,7 +90,7 @@ function workerTable() {
   return parsePersonaBlocks(stripComments(raw(WORKER)), {
     idRe: /^\s*id:\s*'([a-z0-9_]+)',/gm,
     labelRe: /^\s*label:\s*'([^']*)',/m,
-    roleRe: /^\s*role_alignment:\s*'([a-z]+)',/m,
+    roleRe: /^\s*profile:\s*'([a-z]+)',/m,
     navRe: /nav_extras:\s*\[[^\]]*\]/,
     keyRe: /^\s*\{\s*key:\s*'([a-z0-9_]+)',/gm,
     hasNav: true,
@@ -101,7 +101,7 @@ function frontendTable() {
   return parsePersonaBlocks(stripComments(raw(FRONTEND)), {
     idRe: /^\s*id:\s*'([a-z0-9_]+)',/gm,
     labelRe: /^\s*label:\s*'([^']*)',/m,
-    roleRe: /^\s*role_alignment:\s*'([a-z]+)',/m,
+    roleRe: /^\s*profile:\s*'([a-z]+)',/m,
     navRe: /nav_extras:\s*\[[^\]]*\]/,
     keyRe: /^\s*\{\s*key:\s*'([a-z0-9_]+)',/gm,
     hasNav: true,
@@ -112,7 +112,7 @@ function devMirrorTable() {
   return parsePersonaBlocks(stripComments(raw(DEV_MIRROR)), {
     idRe: /^\s*"id":\s*"([a-z0-9_]+)",/gm,
     labelRe: /^\s*"label":\s*"([^"]*)",/m,
-    roleRe: /^\s*"role_alignment":\s*"([a-z]+)",/m,
+    roleRe: /^\s*"profile":\s*"([a-z]+)",/m,
     navRe: null,
     keyRe: /^\s*\{"key":\s*"([a-z0-9_]+)",/gm,
     hasNav: false,
@@ -146,7 +146,7 @@ test('each source parsed exactly 12 personas before anything is compared', () =>
   }
 });
 
-test('worker, frontend and dev mirror agree on label, role_alignment and question keys', () => {
+test('worker, frontend and dev mirror agree on label, profile and question keys', () => {
   const [worker, frontend, dev] = SOURCES.map(([, , read]) => read());
   const disagreements = [];
   for (const id of CANONICAL_IDS) {
@@ -157,7 +157,7 @@ test('worker, frontend and dev mirror agree on label, role_alignment and questio
         disagreements.push(`${id}: worker label "${w.label}", ${name} "${t.label}"`);
       }
       if (t.role !== w.role) {
-        disagreements.push(`${id}: worker role_alignment "${w.role}", ${name} "${t.role}"`);
+        disagreements.push(`${id}: worker profile "${w.role}", ${name} "${t.role}"`);
       }
       if (JSON.stringify(t.keys) !== JSON.stringify(w.keys)) {
         disagreements.push(`${id}: worker question keys [${w.keys}], ${name} [${t.keys}]`);
@@ -205,4 +205,18 @@ test('IntroductionsPanel\'s PERSONA_LABEL covers exactly the 12 canonical ids', 
   assert.deepEqual([...ids].sort(), [...CANONICAL_IDS].sort(),
     'PERSONA_LABEL\'s key set no longer matches the canonical 12 persona ids — a 13th '
     + 'persona (or a removed one) would otherwise render unlabelled instead of failing here');
+});
+
+
+// D998: agreement alone would let all three mirrors share the same wrong mapping.
+const PROFILES = {
+  lp_individual: 'investor', lp_institutional: 'investor', gp_external: 'investor', angel_scout: 'investor',
+  corporate_vc: 'investor', sovereign_family_office: 'investor', academic: 'exploring',
+  founder_new: 'founder', founder_existing: 'founder', operator_advisor: 'advisor',
+  service_provider: 'partner', press_analyst: 'exploring',
+};
+test('D998: every segment declares its current profile in every mirror', () => {
+  for (const [name, , read] of SOURCES) {
+    assert.deepEqual(Object.fromEntries([...read()].map(([id, p]) => [id, p.role])), PROFILES, name);
+  }
 });

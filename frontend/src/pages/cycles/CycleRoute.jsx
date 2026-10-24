@@ -56,8 +56,10 @@ import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { moduleToolLinks } from './founderToolNavigation.js';
-import { NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
-import { isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
+import { NarrativeHome, NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
+import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
+import { NarrativeAdminGate } from '../raise/narrative/NarrativeAdmin';
+
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
 const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
@@ -162,6 +164,13 @@ const CYCLE_DEFS = {
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
     parts: toFnMap({
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
+      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`.
+      'investor-narrative': (data, ctx) => (
+        <>
+          <NarrativeHome data={data} />
+          {mercuryPart('investor-narrative', data, ctx)}
+        </>
+      ),
       'capital-relationships': (data, ctx) => (
         <>
           <CallsHistory calls={data?.parts?.calls} />
@@ -706,8 +715,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     const rest = params.toString();
     navigate(`/${cycle}/${slug}/new${rest ? `?${rest}` : ''}`, { replace: true });
   }, [record, adding, lightbox, slug, forms, searchParams, cycle, navigate]);
-  const drafts = !record && slug && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
-  const fillKind = !record && slug && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
+  // D914 (#2698): an admin reads the Investor narrative read only, after giving a reason; no Add, edit, fill or draft.
+  const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin(user);
+  const drafts = !record && slug && !narrativeAdmin && def?.drafts instanceof Map && Array.isArray(def.drafts.get(slug)) ? def.drafts.get(slug) : [];
+  const fillKind = !record && slug && !narrativeAdmin && def?.fills && Object.prototype.hasOwnProperty.call(def.fills, slug) ? def.fills[slug] : null;
   // The cost before a run (D424), read only while a band is drawn: a draft
   // band or a fill band, which quotes its own kind's task from the same read.
   const ai = useAiSpend({ enabled: Boolean(fillsOn && projectId && (drafts.length || fillKind)) });
@@ -925,7 +936,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   } else if (narrativeTab) {
     body = (
       <NarrativeTabPage tab={narrativeTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        fixOn={fillsOn} search={location.search} cards={tabs} action={action} phone={phone} />
+        fixOn={fillsOn} search={location.search} cards={tabs} action={action} phone={phone} admin={narrativeAdmin} />
     );
   } else if (record) {
     const recordTitle = recordState.data?.title || moduleName;
@@ -992,10 +1003,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         query={query}
         onQuery={setQuery}
         action={action}
-        add={forms.length && projectId
+        add={narrativeAdmin ? undefined : forms.length && projectId
           ? forms.map((entry, i) => ({ text: entry.button, href: addHref(entry, i), state: { under: `${location.pathname}${location.search}` } }))
           : fnOf(def.add, slug)?.(q, openAction)}
-        rowAction={edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
+        rowAction={!narrativeAdmin && edit && projectId && !edit.hiddenFor?.(module) ? (row) => (edit.idOf(row) == null ? null : {
           text: edit.button,
           label: `${edit.button} ${((v) => (v.nr ? 'this row' : v.text))(cellView(row?.cells?.[recs?.cols?.[0]?.key]))}`,
           onClick: () => navigate(`${location.pathname}${location.search}`, { state: { editing: String(row.id) } }),
@@ -1022,6 +1033,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
       </ModulePage>
     );
+  }
+  // D914: nothing of the narrative is drawn for an admin before their reason; then it is read only.
+  if (narrativeAdmin && projectStatus !== 'none' && !actionPage) {
+    body = <NarrativeAdminGate projectId={projectId} onOpened={() => setReload((n) => n + 1)}>{body}</NarrativeAdminGate>;
   }
 
   // D698 — where the rail is: the cycle, and on a module route the module, so

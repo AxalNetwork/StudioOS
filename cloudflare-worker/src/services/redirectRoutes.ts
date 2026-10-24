@@ -1,11 +1,14 @@
 /**
  * #2301 — the SPA's redirect-only routes, counted before they are retired.
  *
- * Each entry is a `<Route path>` in `frontend/src/App.jsx` whose element always
+ * Each path-only entry is a `<Route path>` in `frontend/src/App.jsx` whose element always
  * forwards to another address (a `<Navigate>` or a `*Redirect` component, with
  * or without a role guard), never a page. Routes that redirect for some roles
  * and render a page for others (`/raise/data-room`, `/build`, …) are
- * not here: they are pages. `frontend/test/redirect_hits_2301.test.mjs` reads
+ * not here: they are pages. D939 additionally records the fixed historical
+ * admin-tab keys, including tabs awaiting their own redirect; these must stay
+ * countable when their console sections move. The tests pin that closed set.
+ * `frontend/test/redirect_hits_2301.test.mjs` reads
  * App.jsx and fails if this list and the routes drift apart.
  *
  * WHY A LIST. A redirect runs in the browser: the Worker serves the SPA shell
@@ -13,7 +16,7 @@
  * The SPA sends one first-party beacon when an address here is opened
  * (`lib/redirectBeacon.js`), and `POST /api/public/analytics/pageview` counts
  * it as `redirect:<pattern>` in `public_pageviews` — only for a pattern on this
- * list, so the beacon cannot write any other key. Path only: no IP, user agent
+ * list, so the beacon cannot write any other key. Fixed patterns only: no IP, user agent
  * or cookie.
  *
  * ORDER. Each exact pattern comes before its splat (`/notifications`, then
@@ -26,6 +29,28 @@
  * 2027-01-19 whatever their count, and are counted for the record.
  */
 export interface RedirectRoute { path: string; keep?: true }
+
+/** D939: the legacy console's fixed tabs, including the two retired integration tabs.
+ * Never record an arbitrary query value. These are counter keys, not Route paths.
+ */
+export const ADMIN_TAB_REDIRECTS: readonly RedirectRoute[] = Object.freeze([
+  { path: '/admin?tab=users' },
+  { path: '/admin?tab=profiles' },
+  { path: '/admin?tab=kyc' },
+  { path: '/admin?tab=lab-applications' },
+  { path: '/admin?tab=legal' },
+  { path: '/admin?tab=personas' },
+  { path: '/admin?tab=directory' },
+  { path: '/admin?tab=promos' },
+  { path: '/admin?tab=payments' },
+  { path: '/admin?tab=bank-accounts' },
+  { path: '/admin?tab=product-testing' },
+  { path: '/admin?tab=billing' },
+  { path: '/admin?tab=wellbeing' },
+  { path: '/admin?tab=network-profiles' },
+  { path: '/admin?tab=integration-keys' },
+  { path: '/admin?tab=github' },
+]);
 
 export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/for-mentors' },
@@ -141,6 +166,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/spinout-lab', keep: true }, // D937 (#2374): the Lab moved under Programs; sent cohort notices carry it (#2375)
   { path: '/admin/spinout-lab/preview' }, // D937 (#2374): the preview moved with the Lab
   { path: '/admin/network-profiles' }, // D972 (#2369): the roster is Advisors & Partners › Deck roster
+  ...ADMIN_TAB_REDIRECTS,
 
 ]);
 

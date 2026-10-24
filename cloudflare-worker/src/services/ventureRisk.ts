@@ -187,9 +187,10 @@ export type RiskInputs = {
 
 export type AutoLayer = {
   /** 0..100 de-risk confidence (higher = lower risk). */
-  score: number;
+  score: number | null;
   /** False when no platform signal feeds this layer yet. */
   has_data: boolean;
+  reason: string | null;
   /** Human-readable descriptions of the signals that fed the score. */
   signals: string[];
 };
@@ -204,19 +205,20 @@ export function parseHeadcount(v: string | null | undefined): number | null {
 /**
  * Compute the auto score for all 10 layers from current platform data. Pure:
  * deterministic in its inputs, no I/O. Layers with no feeding signal report
- * `has_data: false` and a score of 0 (explicit "unknown", not a silent guess).
+ * `has_data: false` and a null score.
  */
 export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLayer> {
   const snap = inputs.snapshot;
   const proj = inputs.project;
-  const hasSnap = !!snap;
+  const recorded = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+  const hasTeam = recorded(snap?.team_total);
   const hasText = (v: string | null | undefined) => !!(v && v.trim().length > 0);
   const num = (v: number | null | undefined) => (v != null && Number.isFinite(v) ? v : 0);
 
   // Founder — execution capacity from the team sub-score (/20).
   const founderSignals: string[] = [];
   let founder = 0;
-  if (hasSnap) {
+  if (hasTeam) {
     founder = pct(snap!.team_total, 20);
     founderSignals.push('Team execution sub-score');
   }
@@ -224,7 +226,7 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
   // Market — validated demand from the market sub-score (/25) + paying revenue.
   const marketSignals: string[] = [];
   let market = 0;
-  if (hasSnap) {
+  if (recorded(snap?.market_total)) {
     market = pct(snap!.market_total, 25);
     marketSignals.push('Market sub-score');
   }
@@ -232,12 +234,12 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
     market = clampScore(Math.max(market, 50) + 10);
     marketSignals.push('Paying revenue');
   }
-  const marketHas = hasSnap || num(proj?.revenue) > 0;
+  const marketHas = recorded(snap?.market_total) || num(proj?.revenue) > 0;
 
   // Competition — differentiation / moat from the fit sub-score (/15).
   const competitionSignals: string[] = [];
   let competition = 0;
-  if (hasSnap) {
+  if (recorded(snap?.fit_total)) {
     competition = pct(snap!.fit_total, 15);
     competitionSignals.push('Fit & moat sub-score');
   }
@@ -246,7 +248,7 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
   const timingSignals: string[] = [];
   let timing = 0;
   let timingHas = false;
-  if (hasSnap) {
+  if (recorded(snap?.market_trend) && recorded(snap?.market_urgency)) {
     timing = (pct(snap!.market_trend, 5) + pct(snap!.market_urgency, 10)) / 2;
     timingHas = true;
     timingSignals.push('Market trend & urgency');
@@ -260,7 +262,7 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
   // Financing — capital efficiency from the capital sub-score (/15).
   const financingSignals: string[] = [];
   let financing = 0;
-  if (hasSnap) {
+  if (recorded(snap?.capital_total)) {
     financing = pct(snap!.capital_total, 15);
     financingSignals.push('Capital sub-score');
   }
@@ -269,7 +271,7 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
   const marketingSignals: string[] = [];
   let marketing = 0;
   let marketingHas = false;
-  if (hasSnap) {
+  if (recorded(snap?.market_urgency)) {
     marketing = pct(snap!.market_urgency, 10);
     marketingHas = true;
     marketingSignals.push('Market urgency');
@@ -283,7 +285,7 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
   // Distribution — channels / virality from the distribution sub-score (/10).
   const distributionSignals: string[] = [];
   let distribution = 0;
-  if (hasSnap) {
+  if (recorded(snap?.distribution_total)) {
     distribution = pct(snap!.distribution_total, 10);
     distributionSignals.push('Distribution sub-score');
   }
@@ -291,7 +293,7 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
   // Technology — buildability from the product/tech sub-score (/15).
   const technologySignals: string[] = [];
   let technology = 0;
-  if (hasSnap) {
+  if (recorded(snap?.product_total)) {
     technology = pct(snap!.product_total, 15);
     technologySignals.push('Product/tech sub-score');
   }
@@ -311,15 +313,15 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
     [100, 30],
   ], num(proj?.revenue) > 0 ? 15 : 0);
   const productHas =
-    proj != null && (num(proj.users_count) > 0 || num(proj.revenue) > 0 || hasText(proj.growth_signals));
+    proj != null && (recorded(proj.users_count) || recorded(proj.revenue) || hasText(proj.growth_signals));
   let product = 0;
   if (productHas) {
     const parts: number[] = [];
-    if (num(proj?.users_count) > 0) {
+    if (recorded(proj?.users_count)) {
       parts.push(userPts);
       productSignals.push('Active users');
     }
-    if (num(proj?.revenue) > 0) {
+    if (recorded(proj?.revenue)) {
       parts.push(revPts);
       productSignals.push('Revenue');
     }
@@ -333,11 +335,11 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
   // Hiring — ability to scale the team: headcount + team sub-score.
   const hiringSignals: string[] = [];
   const headcount = parseHeadcount(proj?.employee_count);
-  const hiringHas = hasSnap || headcount != null;
+  const hiringHas = hasTeam || headcount != null;
   let hiring = 0;
   {
     const parts: number[] = [];
-    if (hasSnap) {
+    if (hasTeam) {
       parts.push(pct(snap!.team_total, 20));
       hiringSignals.push('Team sub-score');
     }
@@ -356,20 +358,21 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
   }
 
   const mk = (score: number, has: boolean, signals: string[]): AutoLayer => ({
-    score: r1(score),
+    score: has ? r1(score) : null,
+    reason: has ? null : 'No platform signal recorded for this layer',
     has_data: has,
     signals,
   });
 
   return {
-    founder: mk(founder, hasSnap, founderSignals),
+    founder: mk(founder, hasTeam, founderSignals),
     market: mk(market, marketHas, marketSignals),
-    competition: mk(competition, hasSnap, competitionSignals),
+    competition: mk(competition, recorded(snap?.fit_total), competitionSignals),
     timing: mk(timing, timingHas, timingSignals),
-    financing: mk(financing, hasSnap, financingSignals),
+    financing: mk(financing, recorded(snap?.capital_total), financingSignals),
     marketing: mk(marketing, marketingHas, marketingSignals),
-    distribution: mk(distribution, hasSnap, distributionSignals),
-    technology: mk(technology, hasSnap, technologySignals),
+    distribution: mk(distribution, recorded(snap?.distribution_total), distributionSignals),
+    technology: mk(technology, recorded(snap?.product_total), technologySignals),
     product: mk(product, productHas, productSignals),
     hiring: mk(hiring, hiringHas, hiringSignals),
   };
@@ -388,8 +391,8 @@ export type OverrideInput = {
 };
 
 export type MergedLayer = LayerMeta & {
-  auto_score: number;
-  auto_band: RiskBand;
+  auto_score: number | null;
+  auto_band: RiskBand | null;
   auto_has_data: boolean;
   /**
    * Carries real risk *data* (not just an annotation): auto data, OR an
@@ -397,14 +400,15 @@ export type MergedLayer = LayerMeta & {
    * a no-data layer never renders as a scored 0/High. Mirrored to the frontend.
    */
   has_data: boolean;
+  reason: string | null;
   analyst_score: number | null;
   analyst_band: RiskBand | null;
   analyst_note: string | null;
   status: string | null;
   /** Effective score = analyst override when present, else auto. */
-  score: number;
-  band: RiskBand;
-  color: BandColor;
+  score: number | null;
+  band: RiskBand | null;
+  color: BandColor | null;
   is_overridden: boolean;
   signals: string[];
   updated_by: number | null;
@@ -419,11 +423,11 @@ export function mergeLayers(
   return LAYERS.map((meta) => {
     const a = auto[meta.key];
     const o = overrides.get(meta.key) ?? null;
-    const autoBand = scoreToBand(a.score);
+    const autoBand = a.score == null ? null : scoreToBand(a.score);
     const hasScoreOverride = o != null && o.analyst_score != null && Number.isFinite(o.analyst_score);
     const analystScore = hasScoreOverride ? clampScore(o!.analyst_score as number) : null;
     const effectiveScore = analystScore != null ? analystScore : a.score;
-    const effectiveBand: RiskBand = o?.analyst_band
+    const effectiveBand: RiskBand | null = o?.analyst_band
       ? o.analyst_band
       : analystScore != null
         ? scoreToBand(analystScore)
@@ -444,13 +448,14 @@ export function mergeLayers(
       auto_band: autoBand,
       auto_has_data: a.has_data,
       has_data: hasScoreData,
+      reason: effectiveScore == null ? (o?.analyst_band ? 'Analyst band recorded without a numeric score' : a.reason) : null,
       analyst_score: analystScore,
       analyst_band: o?.analyst_band ?? null,
       analyst_note: o?.analyst_note ?? null,
       status: o?.status ?? null,
-      score: r1(effectiveScore),
+      score: effectiveScore == null ? null : r1(effectiveScore),
       band: effectiveBand,
-      color: bandColor(effectiveBand),
+      color: effectiveBand == null ? null : bandColor(effectiveBand),
       is_overridden: isOverridden,
       signals: a.signals,
       updated_by: o?.updated_by ?? null,
@@ -462,15 +467,13 @@ export function mergeLayers(
 /** Overall de-risking score = mean of the effective per-layer scores. Pure. */
 export function overallFromLayers(
   layers: MergedLayer[],
-): { score: number; band: RiskBand; color: BandColor } {
-  if (!layers.length) {
-    const band = scoreToBand(0);
-    return { score: 0, band, color: bandColor(band) };
-  }
-  const mean = layers.reduce((acc, l) => acc + l.score, 0) / layers.length;
-  const score = Math.round(mean * 10) / 10;
+): { score: number | null; band: RiskBand | null; color: BandColor | null; covered_layers: number; total_layers: number; reason: string | null } {
+  const scored = layers.filter(l => l.has_data && l.score != null && Number.isFinite(l.score));
+  const coverage = { covered_layers: scored.length, total_layers: layers.length };
+  if (!scored.length) return { score: null, band: null, color: null, ...coverage, reason: 'No scored risk layers recorded' };
+  const score = Math.round(scored.reduce((sum, l) => sum + l.score!, 0) / scored.length * 10) / 10;
   const band = scoreToBand(score);
-  return { score, band, color: bandColor(band) };
+  return { score, band, color: bandColor(band), ...coverage, reason: null };
 }
 
 // ── DB access ─────────────────────────────────────────────────────────────────
@@ -593,9 +596,12 @@ export async function deleteOverride(env: Env, projectId: number, layerKey: Laye
 export type Assessment = {
   project_id: number;
   project_name: string;
-  overall_score: number;
-  overall_band: RiskBand;
-  overall_color: BandColor;
+  overall_score: number | null;
+  overall_band: RiskBand | null;
+  overall_color: BandColor | null;
+  covered_layers: number;
+  total_layers: number;
+  reason: string | null;
   layers: MergedLayer[];
   computed_at: string;
 };
@@ -615,17 +621,21 @@ export async function buildAssessment(env: Env, projectId: number, ctx?: ReadCon
     overall_score: overall.score,
     overall_band: overall.band,
     overall_color: overall.color,
+    covered_layers: overall.covered_layers,
+    total_layers: overall.total_layers,
+    reason: overall.reason,
     layers,
     computed_at: new Date().toISOString(),
   };
 }
 
 export type MatrixCellLayer = {
-  score: number;
-  band: RiskBand;
-  color: BandColor;
+  score: number | null;
+  band: RiskBand | null;
+  color: BandColor | null;
   is_overridden: boolean;
   has_data: boolean;
+  reason: string | null;
 };
 
 export type MatrixRow = {
@@ -633,9 +643,12 @@ export type MatrixRow = {
   name: string;
   sector: string | null;
   stage: string | null;
-  overall_score: number;
-  overall_band: RiskBand;
-  overall_color: BandColor;
+  overall_score: number | null;
+  overall_band: RiskBand | null;
+  overall_color: BandColor | null;
+  covered_layers: number;
+  total_layers: number;
+  reason: string | null;
   layers: Record<LayerKey, MatrixCellLayer>;
 };
 
@@ -668,6 +681,7 @@ export async function buildMatrix(env: Env, limit = 200, ctx?: ReadContext): Pro
         color: l.color,
         is_overridden: l.is_overridden,
         has_data: l.has_data,
+        reason: l.reason,
       };
     }
     rows.push({
@@ -678,6 +692,9 @@ export async function buildMatrix(env: Env, limit = 200, ctx?: ReadContext): Pro
       overall_score: overall.score,
       overall_band: overall.band,
       overall_color: overall.color,
+      covered_layers: overall.covered_layers,
+      total_layers: overall.total_layers,
+      reason: overall.reason,
       layers: layerMap,
     });
   }

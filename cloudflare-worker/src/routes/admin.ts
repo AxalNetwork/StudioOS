@@ -1189,21 +1189,37 @@ admin.post('/users/:user_id/spinout-admit', async (c) => {
 //              the next cohort
 admin.get('/spinout-applications', async (c) => {
   await requireAdmin(c);
-  let applications: unknown[] = [];
+  // D960 (#2793) — a failed read is a failure, not an empty queue. It used to
+  // answer `{ applications: [] }` on any error, which the Lab drew as nobody
+  // applying. `counts` is by status over every application, uncapped, as
+  // `GET /api/admin/lab-hosts` answers, so a figure stays exact while the list
+  // stops at 200.
   try {
-    const rs = await c.env.DB.prepare(
-      `SELECT a.id, a.user_id, u.name, u.email, a.company_name, a.idea,
-              a.incorporated, a.stage, a.jurisdiction, a.cohort, a.status,
-              a.created_at, a.decided_at
-       FROM spinout_applications a
-       JOIN users u ON u.id = a.user_id
-       ORDER BY CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
-                a.created_at DESC
-       LIMIT 200`,
-    ).all();
-    applications = rs.results ?? [];
-  } catch { /* table not yet migrated → empty queue */ }
-  return c.json({ applications });
+    const [rs, counts] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT a.id, a.user_id, u.name, u.email, a.company_name, a.idea,
+                a.incorporated, a.stage, a.jurisdiction, a.cohort, a.status,
+                a.created_at, a.decided_at
+         FROM spinout_applications a
+         JOIN users u ON u.id = a.user_id
+         ORDER BY CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
+                  a.created_at DESC
+         LIMIT 200`,
+      ).all(),
+      c.env.DB.prepare(
+        'SELECT status, COUNT(*) AS n FROM spinout_applications GROUP BY status',
+      ).all<{ status: string; n: number }>(),
+    ]);
+    const byStatus: Record<string, number> = {};
+    for (const r of counts.results ?? []) byStatus[String(r.status)] = Number(r.n) || 0;
+    return c.json({ applications: rs.results ?? [], counts: byStatus });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'lab_applications_unreadable',
+      message: 'Lab applications could not be read. That is not the same as none.',
+      raw: e,
+    });
+  }
 });
 
 admin.post('/spinout-applications/:app_id/decide', async (c) => {
@@ -1405,6 +1421,9 @@ admin.get('/spinout-participants', async (c) => {
   };
 
   await ensureSpinoutAdmissionColumns(c.env);
+  // D960 (#2793) — each read here says when it failed, instead of reading as
+  // none: the list answers 503, and the two inner reads set a flag.
+  const PARTICIPANT_ROWS = 400;
   let rows: any[] = [];
   try {
     const rs = await c.env.DB.prepare(
@@ -1421,13 +1440,20 @@ admin.get('/spinout-participants', async (c) => {
           OR u.id IN (SELECT user_id FROM spinout_lab_milestones
                       WHERE milestone_key = 'incorporation_completed')
        ORDER BY u.spinout_lab_started_at ASC, u.id ASC, p.id ASC
-       LIMIT 400`,
-    ).all();
+       LIMIT ?`,
+    ).bind(PARTICIPANT_ROWS).all();
     rows = (rs.results ?? []) as any[];
-  } catch {
-    // tables predate the Lab migrations
-    return c.json({ participants: [], catalog });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'lab_participants_unreadable',
+      message: 'Lab participants could not be read. That is not the same as none.',
+      raw: e,
+    });
   }
+  // The limit counts user-and-project rows before the de-dup below, so a full
+  // page means some participants may be missing, not that there are exactly
+  // this many.
+  const truncated = rows.length >= PARTICIPANT_ROWS;
 
   // Several projects per founder: keep the first row per user (same rule
   // as the public cohort tracker).
@@ -1440,6 +1466,8 @@ admin.get('/spinout-participants', async (c) => {
   }
 
   const msMap = new Map<number, { key: string; week: number; completed_at: string }[]>();
+  let milestonesUnreadable = false;
+  let applicationsUnreadable = false;
   if (deduped.length > 0) {
     try {
       const placeholders = deduped.map(() => '?').join(',');
@@ -1454,7 +1482,12 @@ admin.get('/spinout-participants', async (c) => {
         list.push({ key: m.milestone_key, week: Number(m.week), completed_at: m.completed_at });
         msMap.set(m.user_id, list);
       }
-    } catch { /* milestones table missing → empty lists */ }
+    } catch (e) {
+      // A failed read is not "no milestones": it would make a graduate read as
+      // admitted. Say so, and leave a status it cannot know unset.
+      milestonesUnreadable = true;
+      console.error('[admin] spinout participants: milestones unreadable', (e as Error)?.message);
+    }
   }
 
   // Latest application per participant, fetched in ONE query (rows come
@@ -1478,7 +1511,10 @@ admin.get('/spinout-participants', async (c) => {
           appMap.set(a.user_id, rest);
         }
       }
-    } catch { /* table not yet migrated */ }
+    } catch (e) {
+      applicationsUnreadable = true;
+      console.error('[admin] spinout participants: applications unreadable', (e as Error)?.message);
+    }
   }
 
   const participants = [];
@@ -1487,7 +1523,9 @@ admin.get('/spinout-participants', async (c) => {
     const completedKeys = new Set(milestones.map((m) => m.key));
     const active = Number(r.spinout_lab_active ?? 0) === 1;
     const graduated = completedKeys.has('incorporation_completed');
-    const status = active ? 'active' : graduated ? 'graduated' : 'admitted';
+    // Graduated and admitted differ only by a milestone; with the milestones
+    // unread, a participant who is not active has a status nobody knows.
+    const status = active ? 'active' : milestonesUnreadable ? null : graduated ? 'graduated' : 'admitted';
     const week = status === 'graduated' ? 4 : Math.max(0, Math.min(4, Number(r.spinout_lab_week ?? 0)));
     let day: number | null = null;
     let daysRemaining: number | null = null;
@@ -1518,12 +1556,16 @@ admin.get('/spinout-participants', async (c) => {
       is_incorporated: Number(r.is_incorporated ?? 0) === 1,
       company_name: r.project_name ?? application?.company_name ?? null,
       sector: r.project_sector ?? null,
-      milestones,
-      unlocked_features: status !== 'admitted' ? unlockedFeaturesThrough(week) : [],
+      milestones: milestonesUnreadable ? null : milestones,
+      unlocked_features: status && status !== 'admitted' ? unlockedFeaturesThrough(week) : [],
       application: application ?? null,
     });
   }
-  return c.json({ participants, catalog });
+  return c.json({
+    participants, catalog, truncated,
+    ...(milestonesUnreadable ? { milestones_unreadable: true } : {}),
+    ...(applicationsUnreadable ? { applications_unreadable: true } : {}),
+  });
 });
 
 admin.post('/users/:user_id/resend-verification', async (c) => {

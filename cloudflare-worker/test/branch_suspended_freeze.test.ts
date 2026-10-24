@@ -274,6 +274,7 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
     // D107 — the four approval lanes.
     'cloudflare-worker/src/routes/admin_lp_applications.ts',
     'cloudflare-worker/src/routes/refer_earn.ts',
+    'cloudflare-worker/src/routes/perks.ts',
     'cloudflare-worker/src/routes/admin_cohort.ts',
     'cloudflare-worker/src/routes/spinout_moderation.ts',
     // D142 — the community publish-and-promote writes.
@@ -287,6 +288,8 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
     // the grant of limited access, Lab admission and the application decide.
     'cloudflare-worker/src/routes/admin.ts',
     'cloudflare-worker/src/routes/kyc.ts',
+    // D960 — granting and ending a mentor's access to a cohort's founders.
+    'cloudflare-worker/src/routes/advisors.ts',
   ];
   let checked = 0;
   for (const f of FILES) {
