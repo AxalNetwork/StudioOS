@@ -164,6 +164,22 @@ It is the admin desk at `/admin/events`, not the member canvas `Events.dc.html`
 above. No value was edited. S1's integration lands next and records its grade
 here.
 
+## Landed 2026-10-24 — Admin · Programs (#2371)
+
+The owner's artifacts `QWsj2LjALVRBd1rsTg8bW3` and `8GEfQTVW1ebBpZsWbG8CG6`
+came from S1's prompt on #2371, as the usual pair:
+- `Programs · Boards.dc.html` is the board grid (PG1 to PG20, with the lettered
+  boards: 45 in all), the output of `scripts/read-canvas.mjs` as is;
+- `Programs Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in whitespace,
+  the font link and one empty attribute's spelling.
+
+It draws the program catalogue and one page per program (Mentor cohort access,
+Referral partners, Refer & Earn, Perks, Investor cohort access, Learning,
+AI-native Venture), the Super Admin's catalogue and proposals, and the proposal
+flow. Grant terms stay on the Licences canvas. No value was edited. S1's
+integration lands next and records its grade here.
+
 ## Landed 2026-10-20 — Licences (D795, #2228)
 
 **Graduated 2026-10-20 (D800, #2233):** both files below now live in
