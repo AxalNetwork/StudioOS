@@ -1,8 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { COMMUNITY_CONSOLES } from '../src/pages/branch/BranchCommunity.jsx';
 import { ADMIN_PLACEMENT } from '../src/lib/adminPlacement.js';
 import { hqApprovalsView } from '../src/pages/admin/adminStudioOverview.js';
+
+test('D935: the displayed age basis matches the current Worker queries', () => {
+  const source = readFileSync(new URL('../../cloudflare-worker/src/services/approvalSources.ts', import.meta.url), 'utf8');
+  const jobsCount = source.split("key: 'jobs',")[1].split('rowsSql:')[0];
+  const eventsCount = source.split("key: 'events',")[1].split('rowsSql:')[0];
+  // #2715 must update the label and this contract when Jobs moves to submission.
+  const created = /MIN\(created_at\) AS oldest FROM job_postings/;
+  const submitted = /COALESCE\(submitted_at, created_at\)/;
+  assert.match(jobsCount, created);
+  assert.match(eventsCount, submitted);
+  assert.doesNotMatch(jobsCount.replace('MIN(created_at)', 'MIN(submitted_at)'), created);
+  assert.doesNotMatch(eventsCount.replace('COALESCE(submitted_at, created_at)', 'created_at'), submitted);
+});
 
 test('D935: the branch expert card names the existing resource library', () => {
   const card = COMMUNITY_CONSOLES.find((c) => c.key === 'wellbeing');
