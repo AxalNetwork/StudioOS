@@ -106,7 +106,7 @@ test('D917 material host edits flag approval without re-queuing; nonmaterial and
     const body: any = await res.json();assert.match(body.event.changed_after_approval_at, iso);assert.equal(body.event.status, 'published');assert.equal(body.event.admin_published, true);
   }
   for (const [state, approved, user, body] of [
-    ['published', 1, 2, { title: 'Fixture event' }], ['published',1,2,{location_kind:'unaccepted'}],
+    ['published', 1, 2, { title: 'Fixture event' }], ['published',1,2,{location_kind:'unaccepted',summary:'Recorded summary'}],
     ['published',1,2,{currency:''}], ['published',1,2,{currency:null}], ['published',1,2,{price_cents:'0'}], ['published',1,2,{ summary:'Other summary' }], ['draft',0,2,{title:'Changed fixture'}], ['published',1,1,{title:'Admin edit'}],
   ] as const) {
     const f=fixture();f.db.prepare('UPDATE events SET status=?, admin_published=?').run(state,approved);
