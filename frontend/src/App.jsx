@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import { isCyclePath } from './pages/cycles/cyclePaths';
+import { BOUNDARY_ROLES as NARRATIVE_BOUNDARY_ROLES } from './pages/raise/narrative/narrativeModel';
 import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
@@ -143,6 +144,7 @@ const HeldApprovals = lazy(() => import('./pages/admin/HeldApprovals'));
 const HeldPrograms = lazy(() => import('./pages/admin/HeldPrograms'));
 const AdminCommunity = lazy(() => import('./pages/admin/community/AdminCommunity'));
 const HeldCommunityRedirect = lazy(() => import('./pages/admin/community/HeldCommunityRedirect'));
+const PitchPositioningRedirect = lazy(() => import('./pages/raise/narrative/PitchPositioningRedirect'));
 const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'));
 const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsightsRedirect'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
@@ -409,6 +411,7 @@ const PitchStudio = lazy(() => import('./pages/raise/pitch/PitchStudio'));
 const PitchWorkspaceMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceMoved'));
 const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
+const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -1829,9 +1832,21 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   );
 }
 
+/**
+ * D914 (#2698), NAR14a: a page some profiles are not for draws its boundary,
+ * inside their own shell, instead of RoleGuard's redirect. The route's guard
+ * is unchanged; only who is refused is told why.
+ */
+const ROUTE_BOUNDARIES = [
+  { under: /^\/raise\/investor-narrative(\/|$)/, roles: NARRATIVE_BOUNDARY_ROLES, Panel: NarrativeBoundary },
+];
+
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
+  const { pathname } = useLocation();
   const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);
   if (!allowedRoles.includes(effectiveRole)) {
+    const boundary = ROUTE_BOUNDARIES.find((b) => b.under.test(pathname) && b.roles.has(effectiveRole));
+    if (boundary) return <boundary.Panel />;
     // Task #102 — impersonation handoff. When an admin starts impersonating
     // from an admin-only route (e.g. /admin/spinout-lab → "Open workspace"),
     // this guard re-renders with the impersonated role BEFORE the caller's
@@ -2972,7 +2987,8 @@ function AppInner() {
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
       <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
       <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />
-      <Route path="/raise/pitch/positioning" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
+      {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
+      <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />
       <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="review" />))} />
       {/* D901 (#2680) — present mode (PD16): full screen, reads one version, writes nothing. */}
       <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchPresent />))} />

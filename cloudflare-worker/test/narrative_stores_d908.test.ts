@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * D908 (#2692) — the Investor narrative's stores and `/api/cycles/raise/narrative/*`,
  * on real SQLite: migrations 442, 459, 463 and 544 over schema_baseline.sql.
@@ -44,6 +45,7 @@ function fixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  raiseEvidenceTables(db);
   db.exec(sqlOf('544_narrative_sections.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
@@ -182,7 +184,7 @@ test('refusals: an unknown section, an unknown version, nothing to change, too l
   assert.equal((await call(db, FOUNDER, 'PUT', `/narrative/${v}/sections/team`, { body: 'Grew 40% in a quarter.' })).status, 200);
 });
 
-test('who: a partner, an investor and another venture\'s founder get 403 on every read and write; an admin may', async () => {
+test('who: a partner, an investor and another venture\'s founder get 403 on every read and write; an admin reads only (D914)', async () => {
   const db = fixture();
   const v = await v1(db);
   for (const who of [PARTNER, INVESTOR, OTHER]) {
@@ -195,7 +197,9 @@ test('who: a partner, an investor and another venture\'s founder get 403 on ever
   }
   assert.equal(one(db, 'SELECT COUNT(*) AS n FROM narrative_sections').n, 0);
   assert.equal(one(db, 'SELECT COUNT(*) AS n FROM narrative_positioning').n, 0);
-  assert.equal((await call(db, ADMIN, 'PUT', `/narrative/${v}/sections/team`, { body: 'Admin' })).status, 200);
+  // D914 (#2698): an admin reads the narrative and leaves notes; their writes are refused.
+  const admin = await call(db, ADMIN, 'PUT', `/narrative/${v}/sections/team`, { body: 'Admin' });
+  assert.deepEqual([admin.status, admin.body.code], [403, 'admin_read_only']);
   // Another venture's version is not this one's.
   assert.equal((await call(db, OTHER, 'GET', `/narrative/${v}`, undefined, PB)).status, 404);
 });

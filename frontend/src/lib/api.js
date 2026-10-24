@@ -61,6 +61,8 @@ export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryInvestor.js';
 export * from './api/mercuryPersonal.js';
+export * from './api/narrative.js';
+export * from './api/network.js';
 export * from './api/newsletter.js';
 export * from './api/partnerSettlements.js';
 export * from './api/productTesting.js';
@@ -2479,6 +2481,13 @@ export const api = {
     ).toString();
     return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
   },
+  adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),
+  adminStrategicAccess: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/refer-earn/admin/strategic-access${qs ? `?${qs}` : ''}`);
+  },
+  adminStrategicAccessDecision: (userId, data) => request(`/refer-earn/admin/strategic-access/${encodeURIComponent(userId)}/decision`, { method: 'POST', body: JSON.stringify(data) }),
   adminReferralReview: (uid, data) =>
     request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`, {
       method: 'PATCH', body: JSON.stringify(data),
@@ -3421,6 +3430,11 @@ export const api = {
     request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkRate: (uid, stars) =>
     request(`/perks/${encodeURIComponent(uid)}/rating`, { method: 'POST', body: JSON.stringify({ stars }) }),
+  adminPerkClaims: (weeks = 12) => request(`/perks/admin/claims?${new URLSearchParams({ weeks })}`),
+  adminPerkListings: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/perks/admin/listings${qs ? `?${qs}` : ''}`);
+  },
   perkReviewQueue: () => request('/perks/admin/queue'),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
@@ -5317,7 +5331,16 @@ export const adminExploring = {
 // Task #1 — Admin advisor & partner network profiles (drives Spin-Out
 // Demo Day deck's Advisors & Network slide).
 export const adminNetworkProfiles = {
-  list: () => request('/admin/network-profiles'),
+  // D974: `{ state: 'shown' | 'hidden' | 'archived', q, limit }`; with no
+  // state the Worker lists shown and hidden rows.
+  list: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['state', 'q', 'limit']) if (params[k] != null && params[k] !== '') qs.set(k, String(params[k]));
+    const tail = qs.toString();
+    return request(`/admin/network-profiles${tail ? `?${tail}` : ''}`);
+  },
+  archive: (id) => request(`/admin/network-profiles/${id}/archive`, { method: 'POST' }),
+  restore: (id) => request(`/admin/network-profiles/${id}/restore`, { method: 'POST' }),
   create: (payload) => request('/admin/network-profiles', { method: 'POST', body: JSON.stringify(payload) }),
   update: (id, patch) => request(`/admin/network-profiles/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
   remove: (id) => request(`/admin/network-profiles/${id}`, { method: 'DELETE' }),

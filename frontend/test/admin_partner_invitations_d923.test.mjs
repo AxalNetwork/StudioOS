@@ -39,7 +39,7 @@ import {
   expiresCell, fanFigure, fanOut, filterInvitations, firmCounts, invitationRow, invitationTiles, isCompleteEmail,
   isFirstUse, isLapsed, memberCheck, needsYou, noMatchLine, obligationsLine, offeredTypes, pageOf, parseStamp, rangeText,
   redemptionDealSet, redemptionRow, refusalText, resendCopy, resentAt, revokeCopy, revokeVariant, revokedLine, routeFor,
-  stageOf, tabCounts, tabPath, terminateCopy, terminateReady, termText, tiersText, toggleType, windowOf, withoutMoved,
+  signingLink, stageOf, tabCounts, tabPath, terminateCopy, terminateReady, termText, tiersText, toggleType, windowOf, withoutMoved,
 } from '../src/pages/admin/partners/partnersDeskModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -110,7 +110,7 @@ test('the addresses: four tabs, one address per invitation and per deal, Firm li
   assert.equal(withoutMoved('?moved=partners&deal=4'), '?deal=4');
   assert.equal(dealFromSearch('?deal=7'), '7');
   assert.equal(dealFromSearch('?deal=x'), null);
-  assert.equal(COMMUNITY_PATH, '/admin/held/community', 'the canvas\'s /admin/community is not a route');
+  assert.equal(COMMUNITY_PATH, '/admin/community', 'the crumb links Community\'s own address (D930), not the redirect');
   assert.equal(TITLE, 'Partner invitations');
   assert.equal(LINE, 'Bring operating partners in, see where each invitee stands, and keep their deals healthy.');
   assert.equal(MOVED_LINE, 'Partner invitations has a new address. Update your bookmark.');
@@ -319,6 +319,15 @@ test('Resend says the renewed date, then one line by stage; at Agreement out it 
   assert.equal(expired.lines[1], 'The signing link expired on 20 Oct 2026. Resending does not renew it. The original sender can send a reminder from the envelope page.');
   assert.equal(expired.expiredSigning, true);
   assert.equal(copy({ status: 'finalized', envelope_id: 77 }, failed()).lines[1], 'Whether the agreement’s signing link is still open could not be read.');
+  // A future token date does not make a signed or voided envelope's link live.
+  const closed = (status) => ready({ id: 77, status, created_at: '2026-10-20 10:00:00', recipients: [{ status: 'pending', token_expires_at: '2026-10-28T10:00:00.000Z' }] });
+  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed('completed')).lines[1], 'The agreement already sent is signed. Resending does not change it.');
+  for (const status of ['voided', 'declined']) {
+    assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed(status)).lines[1], 'The agreement already sent was voided. Resending does not send a new one.', status);
+  }
+  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed('draft')).lines[1], 'The agreement already sent is not out for signature. Resending does not change it.');
+  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed('partially_signed')).lines[1], 'The agreement already sent stays open to signature until 28 Oct 2026.');
+  assert.deepEqual(['completed', 'voided', 'draft'].map((s) => signingLink(closed(s), NOW).state), ['signed', 'voided', 'other']);
   assert.equal(resendCopy(inv(1, { recipient_name: null }), stageOf(inv(1), { now: NOW }), loading(), NOW).title, 'Resend the invitation to p1@example.com?');
   assert.doesNotMatch(JSON.stringify(copy({ status: 'selected' })), /Her progress|Delivered/);
 });
@@ -468,7 +477,8 @@ test('the Overview tiles: real figures from reads that succeeded, and words for 
   assert.equal(d.active.extra, '1 is past its end, not yet closed');
   assert.equal(d.awaiting.sub, '1 whose invitation has lapsed');
   assert.equal(d.redemptions90.value, '0');
-  assert.deepEqual([d.emails.state, d.emails.note.text], ['note', 'Not read here yet']);
+  // D929 renamed it in part 1's words; it stays "Not read here yet" until part 4's read.
+  assert.deepEqual([d.sends.label, d.sends.state, d.sends.note.text], ['Sends that failed', 'note', 'Not read here yet']);
 });
 
 test('one deal: obligations read "No obligations recorded" with none required, never "None outstanding"', () => {
@@ -506,8 +516,8 @@ test('the page keeps its frame and today\'s rail note, its crumb and its literal
   const doors = [...page.matchAll(/<DeskTab to="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(doors, TABS.map((t) => t.path), 'the strip and TABS list the same four doors');
   assert.match(page, /<DeskTab to="\/admin\/partner-invitations" end /, 'Overview is lit only on its own address');
-  assert.match(page, /<Link to="\/admin\/held\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Partner invitations/);
-  assert.doesNotMatch(page, /to="\/admin\/community"|scope-chip/, 'no dead crumb and no scope chip');
+  assert.match(page, /<Link to="\/admin\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Partner invitations/);
+  assert.doesNotMatch(page, /to="\/admin\/held\/community"|scope-chip/, 'the crumb links Community itself, not its redirect, and there is no scope chip');
   // Firm links' one door is Overview's Needs-you row, written out.
   assert.match(read('frontend/src/pages/admin/partners/PartnersOverview.jsx'), /<Link to="\/admin\/partner-invitations\/firm-links"/);
 });

@@ -3,15 +3,22 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { adminCircles, adminEvents, adminJobs, adminNetworkProfiles } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
-import { RailFrame, WorkerRail } from '../../../ui';
+import {
+  Bar100, ChartTable, HBars, Legend, RailFrame, WorkerRail,
+} from '../../../ui';
+import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
 import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
-import { Bar100, ChartTable, HBars, Legend } from '../insights/InsightsCharts';
 import {
   AS_ENTERED_TIP, EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, NOT_YET, PAGE_LINE, PAGE_UNREADABLE,
   PERIOD_WAITS, PERIODS, SCOPE_LABEL, SCOPE_TITLE, WAITED_UNRECORDED, WAITS,
   asOfLabel, buildCircles, buildConsoles, buildJobs, buildNeeds, buildNextUp, buildTiles,
   isEmptyCommunity, pageFailed, readAllPages,
 } from './communityModel';
+import { openFrom, searchWith } from './lightboxModel';
+import ActivityLightbox from './ActivityLightbox';
+import CirclesLightbox from './CirclesLightbox';
+import EventsLightbox from './EventsLightbox';
+import JobsLightbox from './JobsLightbox';
 
 /**
  * D930 (#2367) — Admin › Community at /admin/community, built to the owner's
@@ -29,6 +36,10 @@ import {
  * says nothing here is a zero, and the consoles strip still opens every console
  * (CM10). Nothing on this page names a member, and nothing is decided here:
  * Review opens the console that decides.
+ *
+ * D934 (#2718): the four lightboxes, CM3–CM6. `?open=events|jobs|circles|
+ * activity` opens one, so a link can; Esc or Close takes it off the address,
+ * and focus goes back to the opener. Below 1024px a lightbox is the page.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -42,6 +53,13 @@ const LINK = 'text-[12px] font-bold text-axal-violet hover:text-axal-violet-deep
 const TAG = 'self-start rounded-full border border-dashed border-axal-muted px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
 const MONO = 'font-mono tabular-nums';
+
+const BOXES = { events: EventsLightbox, jobs: JobsLightbox, circles: CirclesLightbox, activity: ActivityLightbox };
+
+/** A card's lightbox opener. */
+function Opener({ box, onOpen, children }) {
+  return <button type="button" className={`${LINK} self-start`} onClick={() => onOpen(box)} data-testid={`community-open-${box}`}>{children}</button>;
+}
 
 const idle = { status: 'loading', data: null };
 const PAGE = 200;
@@ -151,14 +169,14 @@ function Card({ id, title, span = 6, state, reason, onRetry, children, foot }) {
 }
 
 /** A block of the canvas that waits for a part: drawn where the canvas puts it, and says why. */
-function WaitCard({ id, title, reason, span = 6 }) {
-  return <Card id={id} title={title} span={span} state="notyet" reason={reason} />;
+function WaitCard({ id, title, reason, span = 6, foot }) {
+  return <Card id={id} title={title} span={span} state="notyet" reason={reason} foot={foot} />;
 }
 
-function EventsCard({ next, onRetry }) {
+function EventsCard({ next, onRetry, onOpen }) {
   return (
     <Card id="events" title="Events" state={next.state} reason={next.reason} onRetry={onRetry}
-      foot={<Link to="/admin/events" className={`${LINK} self-start`}>Open events</Link>}>
+      foot={<span className="flex flex-wrap gap-4"><Opener box="events" onOpen={onOpen}>See all events</Opener><Link to="/admin/events" className={LINK}>Open events</Link></span>}>
       {() => (<>
       <span className={EYE}>Funnel</span>
       <NotYet reason={WAITS.funnel} />
@@ -188,12 +206,12 @@ function EventsCard({ next, onRetry }) {
   );
 }
 
-function JobsCard({ jobs, onRetry }) {
+function JobsCard({ jobs, onRetry, onOpen }) {
   const [table, setTable] = useState(false);
   const chart = jobs.state === 'ready' ? { type: 'bar100', parts: jobs.parts } : null;
   return (
     <Card id="jobs" title="Jobs" state={jobs.state} reason={jobs.reason} onRetry={onRetry}
-      foot={<Link to="/admin/jobs" className={`${LINK} self-start`}>Open job board</Link>}>
+      foot={<span className="flex flex-wrap gap-4"><Opener box="jobs" onOpen={onOpen}>See all postings</Opener><Link to="/admin/jobs" className={LINK}>Open job board</Link></span>}>
       {() => (<>
       <span className="flex items-baseline justify-between gap-2">
         <span className={EYE}>{`Postings by status · ${jobs.total}`}</span>
@@ -224,7 +242,7 @@ function JobsCard({ jobs, onRetry }) {
   );
 }
 
-function CirclesCard({ circles, roster, onRetry }) {
+function CirclesCard({ circles, roster, onRetry, onOpen }) {
   return (
     <section className={`${CARD} col-span-12 lg:col-span-6 flex min-w-0 flex-col gap-3 px-[18px] py-4`} data-testid="community-card-circles" aria-labelledby="community-h-circles">
       <h2 id="community-h-circles" className={H2}>Circles and roster</h2>
@@ -257,6 +275,7 @@ function CirclesCard({ circles, roster, onRetry }) {
         </div>
       )}
       <span className="flex flex-wrap gap-4">
+        <Opener box="circles" onOpen={onOpen}>See all circles</Opener>
         <Link to="/admin/circles" className={LINK}>Open circles</Link>
         <Link to="/admin/advisors-partners" className={LINK}>Open advisors &amp; partners</Link>
       </span>
@@ -318,6 +337,14 @@ export default function AdminCommunity() {
   const { reads, asOf, reload } = useCommunityReads();
   const moved = new URLSearchParams(loc.search).get('moved') === MOVED_KEY;
   const [now] = useState(() => Date.now());
+  const phone = usePhoneWidth();
+  const box = openFrom(loc.search);
+  const Box = box ? BOXES[box] : null;
+  // Opening pushes, so Back closes it too; closing replaces, so it is not reopened by Back.
+  const openBox = useCallback((b) => {
+    navigate({ pathname: loc.pathname, search: searchWith(loc.search, b), hash: loc.hash }, { replace: !b });
+  }, [loc.search, loc.pathname, loc.hash, navigate]);
+  const closeBox = useCallback(() => openBox(null), [openBox]);
 
   const dismissMoved = useCallback(() => {
     const next = new URLSearchParams(loc.search);
@@ -353,6 +380,7 @@ export default function AdminCommunity() {
 
   return (
     <RailFrame rail={rail} data-testid="admin-community">
+      {Box && phone ? <Box onClose={closeBox} /> : (
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="admin-community-page">
         <header className="flex flex-col gap-[7px]">
           <h1 className="m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] text-axal-ink dark:text-gray-100">Community</h1>
@@ -402,13 +430,14 @@ export default function AdminCommunity() {
             </div>
             <div className="grid grid-cols-12 gap-3.5">
               <WaitCard id="activity" title="Community activity by week" reason={WAITS.activity} span={12} />
-              <EventsCard next={next} onRetry={reload} />
+              <EventsCard next={next} onRetry={reload} onOpen={openBox} />
               <WaitCard id="who" title="Who takes part" reason={WAITS.who} />
-              <JobsCard jobs={jobs} onRetry={reload} />
-              <CirclesCard circles={circ.circles} roster={circ.roster} onRetry={reload} />
+              <JobsCard jobs={jobs} onRetry={reload} onOpen={openBox} />
+              <CirclesCard circles={circ.circles} roster={circ.roster} onRetry={reload} onOpen={openBox} />
               <WaitCard id="wellbeing" title="Wellbeing" reason={WAITS.wellbeing} />
               <NeedsCard needs={needs} onRetry={reload} />
-              <WaitCard id="recent" title="Recent activity" reason={WAITS.recent} span={12} />
+              <WaitCard id="recent" title="Recent activity" reason={WAITS.recent} span={12}
+                foot={<Opener box="activity" onOpen={openBox}>See all activity</Opener>} />
               {NOT_RECORDED.map((n) => (
                 <section key={n.key} className="col-span-12 flex flex-col gap-2 rounded-[12px] border border-dashed border-axal-hairline px-[18px] py-4 dark:border-gray-700 lg:col-span-6" data-testid={`community-unrecorded-${n.key}`}>
                   <span className="flex items-baseline justify-between gap-2">
@@ -446,6 +475,8 @@ export default function AdminCommunity() {
           </ul>
         </section>
       </div>
+      )}
+      {Box && !phone ? <Box onClose={closeBox} /> : null}
     </RailFrame>
   );
 }
