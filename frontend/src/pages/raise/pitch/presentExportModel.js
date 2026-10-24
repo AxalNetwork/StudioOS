@@ -9,8 +9,9 @@
  * `POST /api/decks/:id/export/html`, and reads the ledger,
  * `GET /api/decks/:id/exports`. Nothing here is a sample.
  *
- * WHAT IS NOT THERE YET. Speaker notes arrive with part 4's slide model
- * (#2676): until then a card with no notes says so. No card records its
+ * Speaker notes are each card's `notes` (D898's slide model, #2676); a card
+ * with none says so. They leave the venture only in an export the founder
+ * asks to carry them, never in a share link. WHAT IS NOT THERE YET. No card records its
  * source yet (part 2), so "Show sources" says that on each card. Google
  * Slides is part 10: its option is drawn, unavailable, with the reason.
  */
