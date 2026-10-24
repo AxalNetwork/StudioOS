@@ -50,7 +50,7 @@ export function HeaderTab({ to, end = true, count = null, children, 'data-testid
       to={to}
       end={end}
       data-testid={testId}
-      className={({ isActive }) => `inline-flex min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-0.5 text-[13px] sm:min-h-[40px] ${isActive ? 'border-axal-violet font-bold text-axal-ink dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400'}`}
+      className={({ isActive }) => `inline-flex min-h-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-0.5 text-[13px] sm:min-h-[40px] ${isActive ? 'border-axal-violet font-bold text-axal-ink dark:text-gray-100' : 'border-transparent text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}
     >
       {children}
       <TabCount count={count} />
@@ -122,7 +122,7 @@ export default function AdminPageHeader({
       {crumb && (
         <>
           <nav aria-label="Breadcrumb" className="hidden items-center gap-1.5 font-mono text-[11px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400 sm:flex" data-testid="admin-page-crumb">
-            <Link to={crumb.to} className="text-axal-muted hover:text-axal-violet dark:text-gray-400">{crumb.label}</Link>
+            <Link to={crumb.to} className="text-axal-muted hover:text-axal-violet dark:text-gray-400 dark:hover:text-violet-300">{crumb.label}</Link>
             {crumb.current ? <><span aria-hidden="true">›</span><span>{crumb.current}</span></> : null}
           </nav>
           <Link to={crumb.to} className="inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet sm:hidden" data-testid="admin-page-back">
