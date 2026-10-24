@@ -38,7 +38,8 @@ type Db = InstanceType<typeof DatabaseSync>;
 function baseDb(): Db {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   db.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, role TEXT NOT NULL DEFAULT 'founder', is_active INTEGER NOT NULL DEFAULT 1,
-                               jwt_min_iat INTEGER, name TEXT, email TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+                               jwt_min_iat INTEGER, name TEXT, email TEXT, country TEXT, -- D893's filter reads users.country, as the baseline has it
+                               created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
   db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'activity_logs')));
   exec(db, migration('245_legal_acceptances.sql'));
   exec(db, migration('236_company_invitations.sql'));
