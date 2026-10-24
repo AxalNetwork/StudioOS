@@ -1,7 +1,7 @@
 # Programs — what the code serves, board by board (2026-10-24)
 
 **A snapshot, not a spec.** S1 made this map for #2371 on 2026-10-24 to integrate the owner's "Programs" canvas
-(PG1–PG20, 40 frames, D933) and to split the rest into slot tasks. The readers worked from the code on
+(PG1–PG20, 40 frames, D953) and to split the rest into slot tasks. The readers worked from the code on
 `claude/spinout-lab-workspace-wuyyqd`, between `6205ee6` and `85746dd`. Each section names its own commit, and Part E
 lists the line cites that moved. The map was not checked against production, and nothing here is maintained
 afterwards. Re-read the code before you act on a line.
@@ -10,11 +10,11 @@ Path short forms: Worker paths are under `cloudflare-worker/src/` and frontend p
 path says otherwise. `dc:` is `design/incoming/Programs Page.dc.html`. `dcB:`, `bd:`, `grid:` and `boards:` are all
 `design/incoming/Programs · Boards.dc.html`.
 
-**Two part numberings.** "P1…P12" and "#2371·n" below are the parts #2371's body suggested. D933 §6 regroups the
-work into its own eleven parts (D934–D944), so cite D933's numbers in a task.
+**Two part numberings.** "P1…P12" and "#2371·n" below are the parts #2371's body suggested. D953 §6 regroups the
+work into its own twelve parts (D954–D965), so cite D953's numbers in a task.
 
-**Settled since.** D933 settles every open conflict and S-code listed in Parts A, C and E. Where this map and D933
-differ, D933 wins.
+**Settled since.** D953 settles every open conflict and S-code listed in Parts A, C and E. Where this map and D953
+differ, D953 wins.
 
 The five parts are:
 - **A:** the board-by-board gap tables.

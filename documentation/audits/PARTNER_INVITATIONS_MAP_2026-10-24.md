@@ -11,7 +11,7 @@ path says otherwise. `dc:` is `design/incoming/Partner Invitations Page.dc.html`
 `design/incoming/Partner Invitations · Boards.dc.html`.
 
 **Two part numberings.** "P1…P8" below are the parts #2370's body suggested. D923 §6 regroups the work into its
-own nine parts (D924–D932), so cite D923's numbers in a task.
+own nine parts (D924–D929 and D950–D952), so cite D923's numbers in a task.
 
 **Settled since.** D923 settles the open conflicts listed in Parts C and E. These are the crumb and the sidebar
 row, the Firm links tab, the redirect, the record addresses, the lapse rule, the step-date words and the
