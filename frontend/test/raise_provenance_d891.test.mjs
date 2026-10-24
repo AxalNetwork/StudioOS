@@ -2,6 +2,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
+import { FigureTile } from '../src/pages/cycles/CycleOverview.jsx';
+import PhoneCycleRoot from '../src/pages/cycles/PhoneCycleRoot.jsx';
 import { FilledMark } from '../src/pages/SpinoutLabMarketPage.jsx';
 import FounderRaiseDataRoom from '../src/pages/founder/FounderRaiseDataRoom.jsx';
 import { accessNow, noAccessReason, roomStats } from '../src/pages/raise/dataRoomRead.js';
@@ -53,4 +57,20 @@ test('the founder matrix refuses hidden files and file activity excludes blocked
   const activity=tiles.find(n=>/^Items viewed/.test(nodeText(n)));assert.ok(activity);assert.match(nodeText(activity),/^Items viewed1/);
   const most=tiles.find(n=>/^Most viewed/.test(nodeText(n)));assert.ok(most);assert.match(nodeText(most),/Downloadable file/);assert.doesNotMatch(nodeText(most),/Private file/);
  }finally {await m.unmount();Object.assign(api,prior);}
+});
+
+
+test('commitment breakdown is visible on desktop and phone, including a missing firm total',()=>{
+ const detail='Soft: $100,000 · Signed: $200,000 · Received: $300,000 · Status not recorded: $400,000';
+ const fig={key:'committed',label:'Signed or received against target',value:[500000,1000000],unit:'of',state:'ok',reason:detail,delta_30d:null,spark:[],source:'raise_prospects'};
+ const desktop=renderToStaticMarkup(React.createElement(FigureTile,{fig}));
+ for(const words of ['Soft: $100,000','Signed: $200,000','Received: $300,000','Status not recorded: $400,000']) assert.ok(desktop.includes(words));
+ const focus={rule:'card',eyebrow:'Raise',headline:'Review the raise',why:'Recorded evidence',cta:{label:'Open pipeline',href:'/raise/capital-relationships?project=1'},then:null};
+ const meter={key:'committed',label:'Signed or received',count:500000,target:1000000,target_reason:null,display:'$500k of $1M',detail};
+ const phone=m=>renderToStaticMarkup(React.createElement(MemoryRouter,null,React.createElement(PhoneCycleRoot,{cycle:'raise',raw:{focus,meter:m,index:[],cards:[]},search:'?project_id=1'})));
+ assert.ok(phone(meter).includes(detail));
+ const missing=phone({...meter,count:null,target:null,display:null});
+ assert.match(missing,/Not recorded/);assert.ok(missing.includes('Status not recorded: $400,000'));
+ const desktopMissing=renderToStaticMarkup(React.createElement(FigureTile,{fig:{...fig,value:null,state:'not_recorded'}}));
+ assert.ok(desktopMissing.includes('Status not recorded: $400,000'));
 });

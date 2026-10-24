@@ -62,6 +62,8 @@ export interface Meter {
   count: number | null;
   target: number | null;
   target_reason: string | null;
+  /** Recorded breakdown, including amounts outside the firm total. */
+  detail?: string | null;
   /** The value text the canvas draws ("14 of 20", "$900k of $1.5M"), so the browser formats nothing. */
   display: string | null;
 }
@@ -316,15 +318,18 @@ async function raiseFocus(ctx: RaiseCtx, cards: Card[], calls: CallsRead): Promi
 /** Recorded signed or received money against the active round's target. */
 function raiseMeter(figures: Figure[]): Meter | null {
   const f = figureOf(figures, 'committed');
-  if (!f || f.state !== 'ok' || f.value == null) return null;
+  if (!f) return null;
+  if (f.state !== 'ok' || f.value == null) return f.state === 'not_recorded'
+    ? { key: 'committed', label: 'Signed or received', count: null, target: null, target_reason: null, display: null, detail: f.reason ?? null }
+    : null;
   if (Array.isArray(f.value)) {
     const [amt, target] = (f.value as unknown as number[]).map(Number);
     if (!num(amt) || !num(target)) return null;
-    return { key: 'committed', label: 'Signed or received', count: amt, target, target_reason: null, display: `${usdShort(amt)} of ${usdShort(target)}` };
+    return { key: 'committed', label: 'Signed or received', count: amt, target, target_reason: null, detail: f.reason ?? null, display: `${usdShort(amt)} of ${usdShort(target)}` };
   }
   const amt = Number(f.value);
   if (!num(amt)) return null;
-  return { key: 'committed', label: 'Signed or received', count: amt, target: null, target_reason: f.reason ?? 'No active round target is recorded', display: usdShort(amt) };
+  return { key: 'committed', label: 'Signed or received', count: amt, target: null, target_reason: 'no active round target is recorded', detail: f.reason ?? null, display: usdShort(amt) };
 }
 
 function raiseIndex(ctx: RaiseCtx, figures: Figure[], cards: Card[], calls: CallsRead): IndexRow[] {

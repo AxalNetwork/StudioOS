@@ -431,6 +431,8 @@ test('8: with the flag on and no open call, the call focus, the meter and the fo
     assert.deepEqual(r.body.focus.cta, { label: 'Call for Capital', href: `/raise/call?project_id=${P}` });
     assert.equal(r.body.focus.then, 'Follow up with the 3 investors due or overdue this week.');
     assert.deepEqual([r.body.meter.label, r.body.meter.count, r.body.meter.target, r.body.meter.display], ['Signed or received', 900000, 1500000, '$900k of $1.5M']);
+    assert.equal(r.body.meter.detail,r.body.figures.find((f:any)=>f.key==='committed').reason);
+    assert.match(r.body.meter.detail,/Signed: \$600,000.*Received: \$300,000/);
     assert.equal(r.body.index[0].key, 'calls');
     assert.equal(row(r.body, 'calls').value, null, 'no call yet: Not recorded');
 
@@ -742,4 +744,13 @@ test('the helpers: one sentence, no leading Then; the canvas\'s money; the card 
     cta: { label: 'Mark the first must-have', href: '/build/prototype-mvp?project=1' }, then: null,
   });
   assert.deepEqual(['ok', 'too_little', 'unreadable', 'empty', 'not_recorded'].map((state) => cardValue({ state } as any)), ['', '', 'Unreadable', null, null]);
+});
+
+
+test('#2447: unclassified commitments keep a visible meter explanation when the firm total is missing',async()=>{
+ const db=fixture();prospect(db,P,'committed',null,400000);
+ db.exec(`UPDATE raise_prospects SET commit_status=NULL WHERE project_id=${P}`);
+ const r=await rRead(db);assert.equal(r.status,200);assert.ok(r.body.meter);assert.ok(r.body.focus?.cta?.href);
+ assert.equal(r.body.meter.display,null);assert.equal(r.body.meter.count,null);
+ assert.match(r.body.meter.detail,/Status not recorded: \$400,000/);
 });
