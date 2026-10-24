@@ -49,6 +49,13 @@ async function scenario(fn=zoomRuntimeCredentials){
     const {payload}=await jwtVerify(result.sdk_jwt,new TextEncoder().encode(SDK),{algorithms:['HS256']});
     assert.equal(payload.appKey,'synthetic-sdk-client');assert.equal(payload.mn,'111111111');assert.equal(payload.role,0);
     assert.equal(payload.exp,Math.floor((w.run.started_at!+w.run.limit_minutes*60_000)/1000));assert.equal(payload.tokenExp,payload.exp);
+    const short=await fn(w.env,{...w.run,started_at:Date.now()-25*60_000});
+    const shortPayload=(await jwtVerify(short.sdk_jwt,new TextEncoder().encode(SDK),{algorithms:['HS256']})).payload;
+    assert.equal(Number(shortPayload.exp)-Number(shortPayload.iat),1800);
+    const paidRun={...w.run,limit_minutes:120,started_at:Date.now()-20*60_000};
+    const paid=await fn(w.env,paidRun);
+    const paidPayload=(await jwtVerify(paid.sdk_jwt,new TextEncoder().encode(SDK),{algorithms:['HS256']})).payload;
+    assert.equal(paidPayload.exp,Math.floor((paidRun.started_at+120*60_000)/1000));
     assert.equal(w.db.prepare('SELECT total_changes() n').get()!.n,before);
     mode='refuse';const waiting=await fn(w.env,w.run);assert.equal(waiting.waitingForHost,true);assert.equal(waiting.token,undefined);
     mode='ok';let count=calls;
@@ -116,7 +123,7 @@ test('B8 bootstrap withholds credentials after late authority, lease or rollout 
 const file=new URL('../src/services/meetingBotZoom.ts',import.meta.url),source=readFileSync(file,'utf8');
 for(const [i,[before,after]] of [
   ['await botSession(env,run);',''],['zoomConnection(env,run.user_id)','zoomConnection(env,run.user_id+1)'],
-  ['mintObfToken(env,connection,meeting)','mintObfToken(env,connection,\'999999999\')'],['role:0','role:1'],['Math.min(deadline,now+7200)','now+7200'],
+  ['mintObfToken(env,connection,meeting)','mintObfToken(env,connection,\'999999999\')'],['role:0','role:1'],['Math.min(deadline,now+7200)','now+7200'],['iat+1800','iat+1'],
 ].entries())test('B8 Zoom credential mutation '+i+' is caught',async()=>{
   await scenario();assert.ok(source.includes(before));
   const js=stripTypeScriptTypes(source.replaceAll(before,after),{mode:'strip'})
