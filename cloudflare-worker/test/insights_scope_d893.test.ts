@@ -141,7 +141,7 @@ test('the branch answers its own read, with the contract\'s parameters only, and
 
 test('HQ\'s tier refuses to answer as a branch, and a deploy without #2660\'s read says so', async () => {
   await assert.rejects(() => branchInsights({ DB: d1Over(db0()) } as any, {}, loader as any), /only live on a branch/);
-  await assert.rejects(() => branchInsights(branchEnv(), {}, pendingInsightsLoader), new RegExp(INSIGHTS_READ_PENDING.replace(/[().]/g, '\\$&')));
+  await assert.rejects(() => branchInsights(branchEnv(), {}, pendingInsightsLoader), (e: Error) => e.message === INSIGHTS_READ_PENDING);
 });
 
 test('countsOnly keeps counts, profiles, countries and labels, and removes ids, names and emails at any depth', () => {
