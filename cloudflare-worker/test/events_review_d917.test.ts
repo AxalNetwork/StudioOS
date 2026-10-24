@@ -106,7 +106,8 @@ test('D917 material host edits flag approval without re-queuing; nonmaterial and
     const body: any = await res.json();assert.match(body.event.changed_after_approval_at, iso);assert.equal(body.event.status, 'published');assert.equal(body.event.admin_published, true);
   }
   for (const [state, approved, user, body] of [
-    ['published', 1, 2, { title: 'Fixture event' }], ['published',1,2,{ summary:'Other summary' }], ['draft',0,2,{title:'Changed fixture'}], ['published',1,1,{title:'Admin edit'}],
+    ['published', 1, 2, { title: 'Fixture event' }], ['published',1,2,{location_kind:'unaccepted'}],
+    ['published',1,2,{currency:''}], ['published',1,2,{currency:null}], ['published',1,2,{price_cents:'0'}], ['published',1,2,{ summary:'Other summary' }], ['draft',0,2,{title:'Changed fixture'}], ['published',1,1,{title:'Admin edit'}],
   ] as const) {
     const f=fixture();f.db.prepare('UPDATE events SET status=?, admin_published=?').run(state,approved);
     assert.equal((await f.request('/1',user,body,'PATCH',events)).status,200);assert.equal(row(f.db).changed_after_approval_at,null);
@@ -151,4 +152,13 @@ test('D917 approval lane ages and orders from submitted_at, falling back to crea
   f.db.exec("UPDATE events SET submitted_at='2026-03-02T08:00:00.000Z' WHERE id=1; UPDATE events SET created_at='2026-03-02 10:00:00' WHERE id=2");
   assert.equal(f.db.prepare(source.countSql).get()!.oldest,'2026-03-02 08:00:00');
   assert.deepEqual(f.db.prepare(source.rowsSql).all(10).map(r=>r.id),[1,2]);
+});
+
+
+test('D917 changing a self-published event to public starts its review clock afresh', async () => {
+  const f=fixture();f.db.exec("UPDATE events SET visibility='unlisted', status='published', admin_published=0, submitted_at='2026-01-02T00:00:00Z'");
+  const res=await f.request('/1',2,{visibility:'public'},'PATCH',events);assert.equal(res.status,200);
+  const body:any=await res.json();assert.equal(body.event.status,'pending_review');assert.match(body.event.submitted_at,iso);
+  assert.notEqual(body.event.submitted_at,'2026-01-02T00:00:00Z');assert.equal(body.event.created_at,'2026-01-01T00:00:00Z');
+  assert.equal(body.event.changed_after_approval_at,null);
 });
