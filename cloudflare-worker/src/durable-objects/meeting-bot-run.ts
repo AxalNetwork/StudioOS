@@ -352,6 +352,9 @@ export class MeetingBotRun implements DurableObject {
     } else if (event.type === 'heartbeat') {
       if (run.status!=='processing' && run.started_at!==null) {
         const runtime=meetingBotRuntime(this.env);
+        // Renewal is part of the signed event acknowledgement: a failed host
+        // lease must not grant more capture time. B2 retries the same seq/body;
+        // only a successful renewal advances liveness (regression-tested).
         if (runtime.heartbeat) await withDeadline(runtime.heartbeat({uid:run.uid,deadline_at:run.started_at+run.limit_minutes*60_000,budget_deadline_at:(await this.lease())!}),5000,'bot heartbeat');
       }
       payload={};

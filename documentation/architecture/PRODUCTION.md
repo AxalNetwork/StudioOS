@@ -342,7 +342,8 @@ before it can dispatch. Do not share HQ's secret with a branch.
 4. After merge and owner verification, set the Actions variable
    `MEETING_BOT_DEPLOY_ENABLED=true`, then manually dispatch
    `meeting-bot-deploy.yml` on main. It builds/tests the image before deploying
-   only the bot config. Later main changes under `meeting-bot/` trigger it.
+   only the preview and production bot hosts, in that order. Later main changes
+   under `meeting-bot/` or the bundled shared helpers trigger it.
    Disabling this variable freezes bot deployments without affecting the site.
 5. After both production and preview hosts exist, run
    `node scripts/configure-meeting-bot-binding.mjs` to review the full site

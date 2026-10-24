@@ -8,6 +8,8 @@ on:
       - 'wrangler.meeting-bot.toml'
       - '.github/workflows/meeting-bot-deploy.yml'
       - 'cloudflare-worker/src/services/meetingBotRuntime.ts'
+      - 'cloudflare-worker/src/util/doNamespace.ts'
+      - 'cloudflare-worker/src/types.ts'
   workflow_dispatch:
 
 permissions:
@@ -36,9 +38,11 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
         run: node scripts/build-meeting-bot-image.mjs
-      - name: Deploy private bot Worker only
+      - name: Deploy private bot hosts only
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.MEETING_BOT_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           WRANGLER_SEND_METRICS: 'false'
-        run: cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml
+        run: |
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env preview
+          cloudflare-worker/node_modules/.bin/wrangler deploy --config wrangler.meeting-bot.toml --env ""

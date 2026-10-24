@@ -310,8 +310,9 @@ test('each workflow deploys what the page says, on the trigger it says', () => {
   // second as what deployed the branch it is shown on, and the first as what
   // provisioned it.
   const bot = deployLines(byFile['meeting-bot-deploy.yml']);
-  assert.equal(bot.length,1);assert.match(bot[0],/--config wrangler\.meeting-bot\.toml/);
-  assert.doesNotMatch(bot[0],/--config wrangler\.toml/);
+  assert.equal(bot.length,2);assert.match(bot[0],/--config wrangler\.meeting-bot\.toml/);
+  assert.match(bot[0],/--env preview/);assert.match(bot[1],/--env ""/);
+  for(const line of bot)assert.doesNotMatch(line,/--config wrangler\.toml/);
   const branchDeployers = WORKFLOWS.filter((w) => deployLines(w.src).some((l) => l.includes('wrangler.branch.'))).map((w) => w.file);
   assert.deepEqual(branchDeployers, [BRANCH_DEPLOYED_BY, BRANCH_PROVISIONED_BY].sort());
   assert.equal(BRANCH_DEPLOYED_BY, 'cloudflare-worker-deploy.yml');

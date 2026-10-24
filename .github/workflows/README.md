@@ -112,6 +112,6 @@ Wrangler's registry and never runs site D1 migrations.
 
 `meeting-bot-deploy.yml` handles main bot changes and manual main dispatch,
 behind the owner-set `MEETING_BOT_DEPLOY_ENABLED` Actions variable. It uses
-`MEETING_BOT_CLOUDFLARE_API_TOKEN` and deploys only the bot Worker config.
+`MEETING_BOT_CLOUDFLARE_API_TOKEN` and deploys only the preview and production bot hosts, in that order.
 `meeting-bot-image.yml` validates the real image/native load and bot config
 dry runs on PRs. Site deployment never builds or publishes a bot image.

@@ -46,6 +46,9 @@ test('independent bot deployment is main-only, owner-gated, builds first and nev
   assert.match(workflow,/branches: \[main\]/);assert.match(workflow,/workflow_dispatch:/);
   assert.match(workflow,/vars.MEETING_BOT_DEPLOY_ENABLED == 'true'/);
   assert.match(workflow,/secrets.MEETING_BOT_CLOUDFLARE_API_TOKEN/);
+  assert.match(workflow,/wrangler deploy --config wrangler\.meeting-bot\.toml --env preview/);
+  assert.match(workflow,/wrangler deploy --config wrangler\.meeting-bot\.toml --env ""/);
+  for(const path of ['cloudflare-worker/src/util/doNamespace.ts','cloudflare-worker/src/types.ts'])assert.ok(workflow.includes(path));
   assert.ok(workflow.indexOf('node scripts/build-meeting-bot-image.mjs')<workflow.indexOf('wrangler deploy --config wrangler.meeting-bot.toml'));
   assert.doesNotMatch(workflow,/migrate-d1|npm run deploy|--config wrangler.toml/);
 });

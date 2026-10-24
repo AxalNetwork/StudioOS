@@ -17,7 +17,7 @@ import { runtimeHeaders,runtimeKey } from '../src/services/meetingBotRuntime.ts'
 const UID='00000000-0000-4000-8000-000000000001',OTHER='00000000-0000-4000-8000-000000000002';
 const MASTER='synthetic-runtime-master-secret-0123456789',SDK='synthetic-sdk-credential-01234567890123456789';
 const ACCESS='synthetic-founder-access',OBF='synthetic-join-token';
-async function world(){
+async function world(Class=MeetingBotRun){
   const w=fixture();w.db.exec(mig('531_meeting_bots.sql'));w.db.exec(mig('532_meeting_bot_participants.sql'));
   w.db.exec(tableFromBaseline(readFileSync('cloudflare-worker/sql/schema_baseline.sql','utf8'),'integrations'));
   const session=seed(w,{kind:'recorder',chunks:0,ageDays:0});
@@ -30,7 +30,7 @@ async function world(){
   Object.assign(w.env,{MEETING_BOT:'on',MEETING_BOT_SECRET:MASTER,MEETING_BOT_RUNTIME:{start:async()=>{},stop:async()=>{}},MEETING_BOT_ZOOM_CLIENT_ID:'synthetic-sdk-client',MEETING_BOT_ZOOM_CLIENT_SECRET:SDK});
   const rows=new Map<string,any>([['billing',[{end:Date.now()+120_000}]]]);
   const state={blockConcurrencyWhile:(f:any)=>f(),storage:{get:async(k:string)=>rows.get(k),put:async(k:string,v:any)=>rows.set(k,v),setAlarm:async()=>{}}};
-  const supervisor=new MeetingBotRun(state as any,w.env);
+  const supervisor=new Class(state as any,w.env);
   w.env.MEETING_BOT_RUN={idFromName:(s:string)=>s,get:()=>({fetch:(r:Request)=>supervisor.fetch(r)})} as any;
   return {...w,session,rows,run:(await botRow(w.env,UID))!};
 }
@@ -78,6 +78,35 @@ test('B8 the authenticated supervisor heartbeat renews the private host with its
     const response=await app.fetch(new Request('https://worker.example.test'+path,{method:'POST',body:raw,headers:await runtimeHeaders(await runtimeKey(MASTER,UID),path,raw)}),w.env);
     assert.equal(response.status,200);assert.deepEqual(renewals,[{uid:UID,deadline_at:w.run.started_at!+1_800_000,budget_deadline_at:w.rows.get('billing')[0].end}]);
   }finally{w.db.close();}
+});
+
+async function renewalScenario(Class=MeetingBotRun){
+  const w=await world(Class);let attempts=0;
+  w.env.MEETING_BOT_RUNTIME!.heartbeat=async()=>{if(++attempts===1)throw Error('synthetic_host_unavailable');};
+  const app=new Hono();app.route('/api/meeting-bots',callbacks as any);
+  const path=`/api/meeting-bots/${UID}/events`,raw=JSON.stringify({seq:1,type:'heartbeat'});
+  const call=async()=>app.fetch(new Request('https://worker.example.test'+path,{method:'POST',body:raw,headers:await runtimeHeaders(await runtimeKey(MASTER,UID),path,raw)}),w.env);
+  try{
+    const before=w.db.prepare('SELECT heartbeat_at FROM meeting_bots WHERE uid=?').get(UID)!.heartbeat_at;
+    const failed=await call();assert.equal(failed.status,503);assert.equal((await failed.json()).budget_deadline_at,undefined);
+    assert.equal(w.db.prepare('SELECT heartbeat_at FROM meeting_bots WHERE uid=?').get(UID)!.heartbeat_at,before);
+    assert.equal(w.db.prepare('SELECT COUNT(*) n FROM meeting_bot_events WHERE run_uid=?').get(UID)!.n,0);
+    const retried=await call();assert.equal(retried.status,200);assert.equal((await retried.json()).budget_deadline_at,w.rows.get('billing')[0].end);
+    assert.equal(attempts,2);assert.equal(w.db.prepare('SELECT COUNT(*) n FROM meeting_bot_events WHERE run_uid=?').get(UID)!.n,1);
+    assert.ok(w.db.prepare('SELECT heartbeat_at FROM meeting_bots WHERE uid=?').get(UID)!.heartbeat_at);
+    assert.equal((await call()).status,200);assert.equal(attempts,2);
+  }finally{w.db.close();}
+}
+test('B8 host renewal failure is fail-closed and the same signed heartbeat retries without false liveness',()=>renewalScenario());
+test('B8 dropping the host renewal is detected and the restored control passes',async()=>{
+  await renewalScenario();
+  const file=new URL('../src/durable-objects/meeting-bot-run.ts',import.meta.url);
+  const source=readFileSync(file,'utf8');assert.ok(source.includes('if (runtime.heartbeat) await withDeadline'));
+  const js=stripTypeScriptTypes(source.replace('if (runtime.heartbeat) await withDeadline','if (false) await withDeadline'),{mode:'strip'})
+    .replace(/from '(\.[^']+)'/g,(_m,s)=>`from '${new URL(/\.[cm]?js$/.test(s)?s:s+'.ts',file).href}'`)
+    .replace(/import\('(\.[^']+)'\)/g,(_m,s)=>`import('${new URL(/\.[cm]?js$/.test(s)?s:s+'.ts',file).href}')`);
+  const {MeetingBotRun:Mutant}=await import('data:text/javascript;base64,'+Buffer.from(js).toString('base64'));
+  await assert.rejects(()=>renewalScenario(Mutant));await renewalScenario();
 });
 
 test('B8 Zoom ingress authenticates run scope, forbids identity overrides, and throttles mints durably',async()=>{
