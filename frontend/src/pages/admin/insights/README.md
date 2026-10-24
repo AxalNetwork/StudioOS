@@ -10,7 +10,7 @@ keeps the query and hash and adds `?moved=held-insights` for the one-line notice
   lightbox. It mounts its own `WorkerRail` in a `RailFrame`.
 - `insightsModel.js` — pure. Turns the read into tiles and blocks, each
   `ready`, `loading`, `unreadable` or `unrecorded`; the filters from and to
-  the URL; definitions; the CSV.
+  the URL; definitions; the export's request and toast.
 - `InsightsCharts.jsx` — the SVG charts (bars, columns, stacked columns, the
   weekly line with its dotted period before, the 100% bar and the Plan donut),
   their legend and "View as table".
@@ -26,5 +26,7 @@ keeps the query and hash and adds `?moved=held-insights` for the one-line notice
   recorded" with its reason.
 - Counts only: nothing on this page or in its export carries a name, an email
   or an account id.
-- #2661 makes the export a logged Worker export; #2662 adds the Super Admin's
-  subsidiary scope.
+- The export is the Worker's (#2661, `POST /api/admin/insights/export`): a
+  logged CSV or PDF of the same read, behind a signed 24-hour link. The page
+  makes no file in the browser. "This group only" needs an open group.
+- #2662 adds the Super Admin's subsidiary scope.
