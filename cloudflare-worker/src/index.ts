@@ -43,6 +43,7 @@ import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
 import adminPartnersReads from './routes/admin_partners_reads';
+import adminPartnerDealReads from './routes/admin_partner_deal_reads';
 import adminNetwork from './routes/admin_network';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
@@ -859,6 +860,9 @@ app.route('/api/partners', partners);
 // public token-gated onboarding flow under /api/partner-onboard.
 // D927 (#2723) — the read-only overview, one invitation's read and the offer preview.
 app.route('/api/admin/partners', adminPartnersReads);
+// D928 (#2724): one deal's read, the terminate preview, the cross-deal redemptions and the
+// agreement-ready signal. Before `adminPartners`; its deal ids match digits only, so `/deals/top` stays there.
+app.route('/api/admin/partners', adminPartnerDealReads);
 app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetwork);
