@@ -8,13 +8,15 @@ import * as whatsapp from '../src/services/channels/whatsapp.ts';
 import * as threads from '../src/services/channels/threads.ts';
 import * as events from '../src/services/channels/events.ts';
 import * as connections from '../src/services/channels/connections.ts';
+import * as translation from '../src/services/sessionTranslation.ts';
+import { withGuard } from './_guard_stub.mjs';
 import { decryptColumn } from '../src/services/columnCipher.ts';
-import { ME, INTERVIEW, sign } from './_channels_fixture.ts';
+import { ME, INTERVIEW, PROJECT, sign } from './_channels_fixture.ts';
 import { AT, readinessFixture as fixture, runReadiness, type Mutation } from './_channel_readiness.ts';
 
 const TEXT = 'Synthetic readiness message.';
-type Api = { whatsapp: typeof whatsapp; threads: typeof threads; events: typeof events; connections: typeof connections };
-const original: Api = { whatsapp, threads, events, connections };
+type Api = { whatsapp: typeof whatsapp; threads: typeof threads; events: typeof events; connections: typeof connections; translation: typeof translation };
+const original: Api = { whatsapp, threads, events, connections, translation };
 
 const message = (over = {}) => ({
   externalChatId: 'd861-chat', externalMessageId: 'd861-message', side: 'contact' as const,
@@ -106,6 +108,28 @@ async function encryptedText(environment: string, api = original) {
     assert.equal(row.text_enc.includes(TEXT), false);
     assert.equal(await decryptColumn(env, 'channel_thread_messages', 'text_enc', row.uid, row.text_enc), TEXT);
     assert.equal(await decryptColumn(env, 'channel_thread_messages', 'text_enc', 'another-row', row.text_enc), null);
+
+    // D857: final segments exist after consent; their translated copy uses its
+    // own column/row AAD. Originals in final segments remain as shipped by D857.
+    const source = 'Texte synthétique pour le contrôle.';
+    const translated = 'Synthetic text for the check.';
+    db.prepare(`INSERT INTO interview_sessions
+      (id, uid, interview_id, project_id, created_by_user_id, channel, consent_status)
+      VALUES (1, 'd861-translation-session', ?, ?, ?, 'text', 'given')`).run(INTERVIEW, PROJECT, ME);
+    db.prepare(`INSERT INTO interview_transcript_segments (session_id, source, text, source_lang)
+      VALUES (1, 'final', ?, 'fr')`).run(source);
+    env.AI = withGuard({ async run(model: string) {
+      assert.equal(model, translation.TRANSLATION_MODEL);
+      return { translated_text: translated };
+    } });
+    const result = await api.translation.translateSession(env, { sessionId: 1, userId: ME });
+    assert.equal(result.translated, 1);
+    const segment = db.prepare('SELECT id, text, translated_text FROM interview_transcript_segments WHERE session_id = 1').get();
+    assert.equal(segment.text, source, 'the original is kept');
+    assert.match(segment.translated_text, /^v1\./);
+    assert.equal(segment.translated_text.includes(translated), false);
+    assert.equal(await decryptColumn(env, 'interview_transcript_segments', 'translated_text', segment.id, segment.translated_text), translated);
+    assert.equal(await decryptColumn(env, 'interview_transcript_segments', 'translated_text', segment.id + 1, segment.translated_text), null);
   });
 }
 
@@ -149,6 +173,17 @@ const mutations: Mutation<Api>[] = [
     "textEnc: await encryptColumn(env, MSG_TABLE, 'text_enc', uid, text)", 'textEnc: text', encryptedText],
   ['pending text corrupted', 'threads', 'threads.ts',
     "textEnc: await encryptColumn(env, MSG_TABLE, 'text_enc', uid, text)", "textEnc: await encryptColumn(env, MSG_TABLE, 'text_enc', uid, 'different')", encryptedText],
+  ['translation stored plain', 'translation', '../sessionTranslation.ts',
+    "await encryptColumn(env, SEGMENT_TABLE, 'translated_text', row.id, translated)", 'translated', encryptedText],
+  ['translation corrupted', 'translation', '../sessionTranslation.ts',
+    "await encryptColumn(env, SEGMENT_TABLE, 'translated_text', row.id, translated)",
+    "await encryptColumn(env, SEGMENT_TABLE, 'translated_text', row.id, 'different')", encryptedText],
+  ['translation bound to wrong row', 'translation', '../sessionTranslation.ts',
+    "await encryptColumn(env, SEGMENT_TABLE, 'translated_text', row.id, translated)",
+    "await encryptColumn(env, SEGMENT_TABLE, 'translated_text', row.id + 1, translated)", encryptedText],
+  ['translation overwrites original', 'translation', '../sessionTranslation.ts',
+    'SET source_lang = ?, translated_text = ?, translated_lang = ?, translation_model = ?,',
+    "SET text = 'different', source_lang = ?, translated_text = ?, translated_lang = ?, translation_model = ?,", encryptedText],
   ['rollout allows everyone', 'connections', 'connections.ts',
     "return mode === 'on' || (mode === 'canary' && isSuperAdmin(user));", 'return true;', rollout],
   ['rollout denies everyone', 'connections', 'connections.ts',

@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * D908 (#2692) — the Investor narrative's stores and `/api/cycles/raise/narrative/*`,
  * on real SQLite: migrations 442, 459, 463 and 544 over schema_baseline.sql.
@@ -44,6 +45,7 @@ function fixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  raiseEvidenceTables(db);
   db.exec(sqlOf('544_narrative_sections.sql'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);

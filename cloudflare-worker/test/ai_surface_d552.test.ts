@@ -199,6 +199,7 @@ const EXPECTED: Record<string, string[]> = {
   // D778 part 2: positioning joins the deck draft on the same surface.
   'routes/decks.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'],
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
+  'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal
   'services/publications.ts': ['AI_SURFACE.adminPublications'],
   // D766 (#2094) — system calls moved into the router.
   'routes/monitoring.ts': ['AI_SURFACE.monitoring'],

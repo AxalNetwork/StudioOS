@@ -367,7 +367,7 @@ export function loadStudioGlance() {
 export const LANE_CONSOLES = {
   lp: '/admin/lp-applications',
   referrals: '/admin/refer-earn',
-  cohort: '/admin/spinout-lab',
+  cohort: '/admin/programs/spinout-lab/applications',
   moderation: '/admin/spinout-moderation',
   kyc: '/admin?tab=kyc',
   partner_profiles: '/admin?tab=profiles',
@@ -424,7 +424,9 @@ export function hqApprovalsView(approvals) {
   const lanes = approvals.lanes.map((l) => ({
     ...l,
     to: LANE_CONSOLES[l.key] || null,
-    age: ageText(l.oldest_age_hours),
+    // D935: Jobs still counts creation; #2700 moved Events to submission.
+    // TODO #2715: remove its prefix when the Jobs query moves to submission.
+    age: l.key === 'jobs' ? `created ${ageText(l.oldest_age_hours) || 'undated'}` : ageText(l.oldest_age_hours),
   }));
   const worst = lanes.find((l) => typeof l.count === 'number' && l.count > 0) || null;
   const total = approvals.pending_total;

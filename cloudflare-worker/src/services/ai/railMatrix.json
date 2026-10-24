@@ -4949,9 +4949,9 @@
    ]
   },
   {
-   "pageKey": "Founder · Raise · Pitch deck",
-   "optionKey": "draft:positioning",
-   "optionLabel": "Generate positioning",
+   "pageKey": "Founder · Raise · Investor narrative",
+   "optionKey": "draft:narrative-positioning",
+   "optionLabel": "Propose positioning",
    "kind": "write",
    "handler": "draft",
    "routeTask": "rail_write",

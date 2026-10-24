@@ -14,8 +14,11 @@
  * a value nobody recorded reads "Not recorded", never 0. A figure worked out
  * from a list the Worker caps says so.
  *
- * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. The canvas's coverage meter, checks,
- * source chips, audience and round columns, the fast-path build, "New in your
+ * The coverage meter on the current deck reads `GET /api/decks/sources`
+ * through `SourcesBoards.jsx` (D896, #2675); its words are `sourcesModel.js`.
+ *
+ * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. The canvas's checks,
+ * audience and round columns, the fast-path build, "New in your
  * data", per-version seconds, present mode and the share dialog need stores the
  * Worker does not have. Each is a slot task on #2434; this file grows the
  * derivation when its read lands.
@@ -35,9 +38,8 @@ export const MOVED_KEY = 'pitch-workspace';
 export const MOVED_NOTICE = 'Pitch deck has a new address. Update your bookmark.';
 
 export const TITLE = 'Pitch deck studio';
-// The canvas's second sentence, "Every figure shows its source.", waits for the
-// source chips (#2434 part 2): it is not true of the builder yet.
-export const LINE = 'Build your deck from what StudioOS already knows.';
+// D896 (#2675): the second sentence is back now that every source read carries its chip.
+export const LINE = 'Build your deck from what StudioOS already knows. Every figure shows its source.';
 // PD21: an admin reads the studio and leaves notes (D905).
 export const READ_ONLY = 'Read only. Notes are visible to the founder.';
 
@@ -102,7 +104,16 @@ export function mmss(seconds) {
 
 export const versionLabel = (v) => (v?.version == null ? 'Version not recorded' : `v${v.version}`);
 
-/** The versions table, newest first, as the canvas sorts it by default. */
+/** Who a version is written for (PD3), as the Worker stores it (D898, migration 539). */
+export const AUDIENCE_LABELS = {
+  angel: 'Angel', pre_seed_fund: 'Pre-seed fund', seed_fund: 'Seed fund', series_a_fund: 'Series A fund',
+  strategic: 'Strategic', grant: 'Grant', other: 'Other',
+};
+
+/**
+ * The versions table, newest first, as the canvas sorts it by default. A
+ * version saved before D898 has no audience or round: "Not recorded".
+ */
 export function versionRows(versions) {
   return [...versions]
     .sort((a, b) => Number(b.version ?? -1) - Number(a.version ?? -1))
@@ -110,6 +121,9 @@ export function versionRows(versions) {
       id: v.id,
       label: versionLabel(v),
       title: String(v.title || '').trim() || 'Untitled deck',
+      audience: AUDIENCE_LABELS[v.audience] || NOT_RECORDED,
+      round: String(v.round?.name || '').trim() || NOT_RECORDED,
+      by: String(v.by?.name || '').trim() || NOT_RECORDED,
       saved: dayLabel(v.created_at),
       current: Boolean(v.is_current || v.current),
     }));
