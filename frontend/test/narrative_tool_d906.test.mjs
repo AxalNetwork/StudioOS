@@ -221,7 +221,7 @@ test('no versions offers New version; a failed versions read says so, and reads 
  * The review's fixes (2026-10-24)
  * ------------------------------------------------------------------ */
 
-const answering = (rules) => (u, o) => { for (const [match, answer] of rules) if (match(u)) return answer(u); return handler(u, o); };
+const answering = (rules) => (u) => { for (const [match, answer] of rules) if (match(u)) return answer(u); return handler(u); };
 const isProjects = (u) => /\/api\/projects(\?|$)/.test(u);
 
 test('on a phone, Home keeps the tool\'s tabs when its own read fails', async () => {
