@@ -43,6 +43,7 @@ function fixture() {
     INSERT INTO spinout_certificates (user_id,credential_id,public_token,public_name,public_company,public_cohort,public_issued_on,status) VALUES
       (1,'fixture-cert','fixture-token','Synthetic graduate','Northwind Lab','October 2026 Cohort','2026-10-29','issued');`);
   for(let w=1;w<=4;w++)db.prepare('INSERT INTO week_windows (cohort_cycle_id,week_number,unlock_at,deadline_at) VALUES (10,?,?,?)').run(w,`2026-10-${String(1+(w-1)*7).padStart(2,'0')} 04:00:00`,`2026-10-${String(1+w*7).padStart(2,'0')} 04:00:00`);
+  db.exec("UPDATE users SET spinout_lab_started_at='2026-10-01 04:00:00',spinout_lab_active=0 WHERE id IN (1,9)");
   db.exec("UPDATE cohort_applicants SET created_at='2026-09-01 12:00:00' WHERE id=5");
   const env:any={JWT_SECRET,ENVIRONMENT:'development',DB:d1Over(db)};
   const call=async(path:string,who:number|null=900)=>{
@@ -209,4 +210,20 @@ test('D944: a pool-summary query failure does not discard independently readable
   const f=fixture();const original=f.env.DB;
   f.env.DB={...original,prepare(sql:string){const st=original.prepare(sql);if(sql.includes('COUNT(*) AS applied'))st.all=async()=>{throw new Error('synthetic pool summary failure');};return st;}};
   const c=october(await f.call('/overview'));assert.equal(c.applied.available,false);assert.equal(c.waiting.value,1);assert.equal(c.interview_set.value,1);assert.equal(c.weeks.available,true);f.db.close();
+});
+
+test('D944: legacy starts and graduates without application assignments are counted from recorded start dates',async()=>{
+  const f=fixture();f.db.exec("INSERT INTO users (id,role,email,name,is_active,spinout_lab_active,spinout_lab_started_at) VALUES (42,'founder','legacy@example.test','Synthetic legacy graduate',1,0,'2026-10-10 04:00:00'); INSERT INTO spinout_lab_milestones (user_id,week,milestone_key,completed_at) VALUES (42,4,'incorporation_completed','2026-10-29 04:00:00')");
+  const c=october(await f.call('/overview'));assert.equal(c.applied.value,9);assert.equal(c.started.value,3);assert.equal(c.incorporated.value,2);f.db.close();
+});
+
+test('D944: a failed start read is unavailable without losing pool counts or weekly outcomes',async()=>{
+  const f=fixture();const original=f.env.DB;
+  f.env.DB={...original,prepare(sql:string){const st=original.prepare(sql);if(sql.includes('AS started FROM candidates'))st.all=async()=>{throw new Error('synthetic starts failure');};return st;}};
+  const c=october(await f.call('/overview'));assert.equal(c.started.available,false);assert.equal(c.started.value,undefined);assert.equal(c.applied.value,9);assert.equal(c.weeks.available,true);f.db.close();
+});
+
+test('D944: readmission does not erase an earlier recorded activation or double-count its dated start',async()=>{
+  const f=fixture();f.db.exec("UPDATE users SET spinout_lab_started_at='2026-11-01 04:00:00' WHERE id=1; INSERT INTO cohort_applicants (application_id,user_id,cohort_cycle_id,status) VALUES (1,1,11,'activated')");
+  const r=await f.call('/overview');assert.equal(october(r).started.value,2);assert.equal(r.body.blocks.cohorts.items.find((c:any)=>c.cohort==='2026-11').started.value,1);assert.equal(october(r).incorporated.recorded,false);f.db.close();
 });

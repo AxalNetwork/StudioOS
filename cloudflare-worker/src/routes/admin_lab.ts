@@ -46,7 +46,7 @@ r.get('/overview', async (c) => {
   const now = new Date().toISOString();
   const weeks = labWeeks(Date.parse(now));
   // Independent reads: the absent/failing source affects only its metrics.
-  const [cycles, pools, interviews, outcomes, windows, incorporations, certificates, weekly] = await Promise.all([
+  const [cycles, pools, starts, interviews, outcomes, windows, incorporations, certificates, weekly] = await Promise.all([
     read(c.env.DB, `SELECT id, year, month, status, app_status, start_at, end_at, applications_open_at, applications_close_at
       FROM cohort_cycles ORDER BY year DESC, month DESC`, 'Cohorts could not be read.'),
     read(c.env.DB, `SELECT cohort_cycle_id, COUNT(*) AS applied,
@@ -56,9 +56,15 @@ r.get('/overview', async (c) => {
       SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS declined,
       SUM(CASE WHEN status = 'withdrawn' THEN 1 ELSE 0 END) AS withdrawn,
       SUM(CASE WHEN status = 'rolled_forward' THEN 1 ELSE 0 END) AS carried_forward,
-      SUM(CASE WHEN rolled_from_cycle_id IS NOT NULL THEN 1 ELSE 0 END) AS carried_in,
-      COUNT(DISTINCT CASE WHEN status = 'activated' THEN user_id END) AS started
+      SUM(CASE WHEN rolled_from_cycle_id IS NOT NULL THEN 1 ELSE 0 END) AS carried_in
       FROM cohort_applicants GROUP BY cohort_cycle_id`, 'The cohort application pool could not be read.'),
+    read(c.env.DB, `WITH candidates (cohort_cycle_id, user_id) AS (
+      SELECT cohort_cycle_id, user_id FROM cohort_applicants WHERE status = 'activated'
+      UNION SELECT cy.id, u.id FROM cohort_cycles cy JOIN users u
+        ON datetime(u.spinout_lab_started_at) >= datetime(cy.start_at)
+        AND datetime(u.spinout_lab_started_at) < datetime(cy.end_at)
+      ) SELECT cohort_cycle_id, COUNT(DISTINCT user_id) AS started FROM candidates GROUP BY cohort_cycle_id`,
+      'Recorded cohort starts could not be read.'),
     read(c.env.DB, `SELECT ca.cohort_cycle_id,
       SUM(CASE WHEN i.status = 'scheduled' THEN 1 ELSE 0 END) AS interview_set,
       SUM(CASE WHEN COALESCE(i.status, '') != 'scheduled' THEN 1 ELSE 0 END) AS waiting
@@ -69,14 +75,22 @@ r.get('/overview', async (c) => {
       (SELECT COUNT(DISTINCT g.user_id) FROM company_week_status g WHERE g.cohort_cycle_id = s.cohort_cycle_id AND g.status = 'grace') AS in_grace
       FROM company_week_status s GROUP BY s.cohort_cycle_id, s.week_number, s.status`, 'Weekly outcomes could not be read.'),
     read(c.env.DB, `SELECT cohort_cycle_id, week_number, unlock_at, deadline_at FROM week_windows ORDER BY week_number`, 'Week windows could not be read.'),
-    read(c.env.DB, `SELECT ca.cohort_cycle_id, COUNT(DISTINCT m.user_id) AS incorporated,
-      COUNT(DISTINCT CASE WHEN (SELECT COUNT(DISTINCT other.cohort_cycle_id) FROM cohort_applicants other
-        WHERE other.user_id = ca.user_id AND other.status = 'activated') > 1 THEN m.user_id END) AS ambiguous
-      FROM cohort_applicants ca JOIN spinout_lab_milestones m ON m.user_id = ca.user_id
-      JOIN cohort_cycles cy ON cy.id = ca.cohort_cycle_id
-      WHERE ca.status = 'activated' AND m.milestone_key = 'incorporation_completed'
-        AND datetime(m.completed_at) >= datetime(cy.start_at)
-      GROUP BY ca.cohort_cycle_id`, 'Incorporation milestones could not be read.'),
+    read(c.env.DB, `WITH candidates (cohort_cycle_id, user_id) AS (
+      SELECT cohort_cycle_id, user_id FROM cohort_applicants WHERE status = 'activated'
+      UNION SELECT cy.id, u.id FROM cohort_cycles cy JOIN users u
+        ON datetime(u.spinout_lab_started_at) >= datetime(cy.start_at)
+        AND datetime(u.spinout_lab_started_at) < datetime(cy.end_at)
+      ) SELECT candidate.cohort_cycle_id, COUNT(DISTINCT m.user_id) AS incorporated,
+      COUNT(DISTINCT CASE WHEN (SELECT COUNT(DISTINCT other.cohort_cycle_id) FROM candidates other
+        WHERE other.user_id = candidate.user_id) > 1 THEN m.user_id END) AS ambiguous
+      FROM candidates candidate JOIN cohort_cycles cy ON cy.id = candidate.cohort_cycle_id
+      LEFT JOIN users u ON u.id = candidate.user_id
+      JOIN spinout_lab_milestones m ON m.user_id = candidate.user_id
+      WHERE m.milestone_key = 'incorporation_completed' AND datetime(m.completed_at) >=
+        CASE WHEN datetime(u.spinout_lab_started_at) >= datetime(cy.start_at)
+          AND datetime(u.spinout_lab_started_at) < datetime(cy.end_at)
+          THEN datetime(u.spinout_lab_started_at) ELSE datetime(cy.start_at) END
+      GROUP BY candidate.cohort_cycle_id`, 'Incorporation milestones could not be read.'),
     read(c.env.DB, `SELECT public_cohort, COUNT(DISTINCT user_id) AS n FROM spinout_certificates
       WHERE status = 'issued' GROUP BY public_cohort`, 'The certificate registry could not be read.'),
     read(c.env.DB, `WITH weeks (idx, starts_at, ends_at) AS (VALUES
@@ -98,7 +112,7 @@ r.get('/overview', async (c) => {
       ...cycle, cohort: key(cycle),
       applied: metric('applied'), undecided: metric('pending'), approved: metric('approved'), waitlisted: metric('waitlisted'),
       declined: metric('declined'), withdrawn: metric('withdrawn'), carried_forward: metric('carried_forward'),
-      carried_in: metric('carried_in'), started: metric('started'),
+      carried_in: metric('carried_in'), started: starts.available ? value(Number(starts.rows.find(p => p.cohort_cycle_id === cycle.id)?.started || 0)) : starts,
       interview_set: interviews.available ? value(Number(iv?.interview_set || 0)) : interviews,
       interviewed: missing(INTERVIEW_REASON),
       waiting: interviews.available ? value(Number(iv?.waiting || 0)) : interviews,
@@ -114,7 +128,7 @@ r.get('/overview', async (c) => {
         })),
       },
       incorporated: !incorporations.available ? incorporations : Number(inc?.ambiguous || 0) > 0
-        ? missing('A graduate has activation records in multiple cohorts; the incorporation milestone has no cohort key, so attribution is ambiguous.')
+        ? missing('A graduate has recorded starts or activations in multiple cohorts; the incorporation milestone has no cohort key, so attribution is ambiguous.')
         : value(Number(inc?.incorporated || 0)),
       certificates_issued: certificates.available ? value(cs.reduce((n, s) => n + Number(s.n), 0)) : certificates,
     };
@@ -134,8 +148,8 @@ r.get('/overview', async (c) => {
   }, definitions: {
     applied: 'Application assignments in each cohort pool, including carried-in applications. Weekly submissions count application records once, not assignments or drafts.',
     approved: 'Approved and activated pool assignments; historical approvals subsequently rolled forward are not retained as approvals.',
-    started: 'Distinct members with activated pool assignments. Legacy admissions without a pool assignment are not attributed.',
-    incorporated: 'incorporation_completed milestones of activated members whose activated cohort membership is unambiguous; not application self-declarations or the global incorporated flag.',
+    started: 'Distinct members with a recorded activated pool assignment or a recorded start timestamp in the cohort window. Includes graduates, legacy admits without applications and retained historical activation records; overlap is counted once.',
+    incorporated: 'incorporation_completed milestones after the recorded start (or cohort start for a historical activation), associated through the recorded start/activation candidates. Multiple candidate cohorts make attribution ambiguous. Not application declarations or the global incorporated flag.',
     certificates_issued: 'Currently issued certificates whose frozen public_cohort matches YYYY-MM or the canonical Month Year Cohort label; revoked or unattributed certificates are not counted.',
     waiting: 'Pending pool assignments without a latest scheduled interview; scheduled does not mean interviewed.',
     in_grace: 'Distinct members with a recorded grace outcome; expired grace remains grace until the scheduler decides it.',
