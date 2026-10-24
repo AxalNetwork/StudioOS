@@ -56,7 +56,7 @@ function READ(over: Record<string, unknown> = {}) {
   };
 }
 
-function world({ reader, r2 = true, browser }: { reader?: InsightsReader; r2?: boolean; browser?: any } = {}) {
+function world({ reader, r2 = true, browser, real = false }: { reader?: InsightsReader; r2?: boolean; browser?: any; real?: boolean } = {}) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   db.exec(tableFromBaseline(BASELINE, 'users'));
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
@@ -72,7 +72,8 @@ function world({ reader, r2 = true, browser }: { reader?: InsightsReader; r2?: b
   const read: InsightsReader = reader ?? (async (_c, q) => { reads.push(q.toString()); return { status: 200, body: READ() }; });
   const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), FILES, ...(browser ? { BROWSER: browser } : {}) };
   const app = new Hono<any>();
-  app.route('/api/admin/insights/export', insightsExportRoutes(read));
+  // `real`: the route as index.ts mounts it, on its default reader, the page's own read.
+  app.route('/api/admin/insights/export', real ? insightsExportRoutes() : insightsExportRoutes(read));
   app.route('/api/monitoring/analytics', analytics);
   app.onError((err: any, c) => {
     const status = AUTH_ERROR_STATUSES[String(err?.message || '')];
@@ -235,4 +236,20 @@ test('D893 a CSV cell cannot start a formula', async () => {
   const line = stored(w)[0].split('\r\n').find((l: string) => l.startsWith('Dormant'))!;
   assert.equal(line, 'Dormant,status,,"Not recorded: =HYPERLINK(""x"")"');
   for (const [v, out] of [['=1+1', "'=1+1"], ['+x', "'+x"], ['@x', "'@x"], ['-x', "'-x"], ['-3', '-3'], ['12', '12'], ['a,b', '"a,b"']]) assert.equal(cell(v), out, v);
+});
+
+test('D893 end to end on the real read (#2660): the export gets the page\'s own answer, gates and all', async () => {
+  const w = world({ real: true });
+  const quiet = [console.error, console.warn]; console.error = () => {};
+  let r;
+  try { r = await post(w, { what: 'page', format: 'csv', range: 'quarter' }); } finally { [console.error] = quiet; }
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const csv = stored(w)[0];
+  assert.match(csv, /^Axal Insights,Figures on this page\r\nRange,quarter/);
+  assert.ok(csv.includes('Accounts,total,,2'), 'the read counted both seeded accounts');
+  assert.ok(!/@|Ada Admin|Fay Founder/.test(csv), 'counts only, through the real read');
+  assert.equal(audit(w.db).length, 1);
+  // The read's own gate answers for the export too.
+  assert.equal((await post(w, { format: 'csv' }, FOUNDER)).status, 403);
+  assert.equal(audit(w.db).length, 1);
 });

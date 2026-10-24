@@ -24,6 +24,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
+import adminInsightsRead from './admin_insights';
 import { ensureAdminAuditLogTable } from './admin';
 import { signDownloadToken } from '../services/analyticsReports';
 import {
@@ -43,7 +44,19 @@ const FILTER = /^[\p{L}\p{N} ._'()&-]{1,64}$/u;
 
 const bad = (c: C, code: string, message: string) => c.json({ code: code, detail: message }, 400);
 
-export function insightsExportRoutes(read: InsightsReader) {
+/**
+ * The page's own read (#2660), called in-process with the caller's own
+ * headers: the same session, the same gates and the same filter rules, so an
+ * export can never show what `GET /api/admin/insights` would not.
+ */
+export const pageRead: InsightsReader = async (c, query) => {
+  let ctx: typeof c.executionCtx | undefined;
+  try { ctx = c.executionCtx; } catch { /* no execution context outside a live request */ }
+  const res = await adminInsightsRead.request(`/?${query.toString()}`, { headers: c.req.raw.headers }, c.env, ctx);
+  return { status: res.status, body: await res.json().catch(() => ({ code: 'insights_unreadable', detail: 'The figures could not be read. Try again.' })) };
+};
+
+export function insightsExportRoutes(read: InsightsReader = pageRead) {
   const r = new Hono<{ Bindings: Env }>();
 
   r.post('/', async (c) => {

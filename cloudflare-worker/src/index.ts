@@ -240,6 +240,7 @@ import adminSecurity from './routes/admin_security';
 import adminHqSupport from './routes/admin_hq_support';
 import adminStudioGlance from './routes/admin_studio_glance';
 import adminInsights from './routes/admin_insights';
+import { insightsExportRoutes } from './routes/admin_insights_export';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
@@ -1091,6 +1092,8 @@ app.route('/api/admin/security', adminSecurity);
 app.route('/api/admin/hq-support', adminHqSupport);
 // Studio glance — both tiers, before the /api/admin catch-all (D443).
 app.route('/api/admin/studio', adminStudioGlance);
+// D893 (#2661): the logged, counts-only export of the Insights read below. Mounted first, so /export never reaches the read's router.
+app.route('/api/admin/insights/export', insightsExportRoutes());
 app.route('/api/admin/insights', adminInsights);
 app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licence);
