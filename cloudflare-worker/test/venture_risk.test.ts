@@ -306,18 +306,18 @@ test('by-project: founder and guest roles are forbidden (403)', async () => {
 });
 
 test('by-project: admin/partner are allowed and get 10 layers + overall', async () => {
-  for (const role of ['admin', 'partner']) {
+  for (const role of ['admin', 'partner']) for (const recorded of [false, true]) {
     const token = await mintToken(7, role);
-    const { env } = makeEnv({ user: { id: 7, role, is_active: 1 }, project: SAMPLE_PROJECT });
+    const { env } = makeEnv({ user: { id: 7, role, is_active: 1 }, project: { ...SAMPLE_PROJECT, revenue: recorded ? 0 : null, users_count: recorded ? 0 : null } });
     const res = await req(env, token, '/by-project/1');
     assert.equal(res.status, 200, `role ${role} should be allowed`);
     const body = (await res.json()) as any;
     assert.equal(body.project_id, 1);
     assert.equal(body.layers.length, 10);
-    assert.equal(body.overall_score, null);
-    assert.equal(body.overall_band, null);
-    assert.equal(body.covered_layers, 0);
-    assert.ok(body.reason);
+    assert.equal(body.overall_score, recorded ? 0 : null);
+    assert.equal(body.overall_band, recorded ? 'high' : null);
+    assert.equal(body.covered_layers, recorded ? 1 : 0);
+    if (recorded) assert.equal(body.reason, null); else assert.ok(body.reason);
   }
 });
 
