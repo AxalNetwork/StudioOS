@@ -1592,6 +1592,14 @@ esign.post('/sign/:token', async (c) => {
         const { activatePartnerDealOnSignature } = await import('../services/partnerDeals');
         const activation = await activatePartnerDealOnSignature(c.env, rec.envelope_id);
         partnerVoidReason = activation?.void_reason || null;
+        if (activation && !activation.activated && !partnerVoidReason) {
+          // D925 refuses to reactivate a deal already voided by an admin.
+          // Its recorded reason still belongs in the completion notice.
+          const voided = await c.env.DB.prepare(
+            `SELECT void_reason FROM partner_deals WHERE id = ? AND status = 'voided'`,
+          ).bind(activation.partner_deal_id).first<{ void_reason: string | null }>();
+          if (voided) partnerVoidReason = voided.void_reason || 'not_recorded';
+        }
       } catch {
         // D925: the signature stands even when activation fails. The admin
         // retry route uses this marker and the deal's own completed envelope.
@@ -1656,7 +1664,7 @@ esign.post('/sign/:token', async (c) => {
               ? `Signed, deal voided: ${envelopeRow.document_title || 'Agreement'}`
               : `Signed and executed: ${envelopeRow.document_title || 'Agreement'}`,
             body: partnerVoidReason
-              ? `The agreement was signed, but the deal was voided because ${partnerVoidReason === 'link_lapsed' ? 'the invitation link lapsed before signing' : partnerVoidReason === 'admin_revoked' ? 'an admin revoked the deal' : 'the invitation was revoked'}. No partner benefits were activated.`
+              ? `The agreement was signed, but the deal was voided. ${partnerVoidReason === 'link_lapsed' ? 'The invitation link lapsed before signing.' : partnerVoidReason === 'admin_revoked' ? 'An admin revoked the deal.' : partnerVoidReason === 'invitation_revoked' ? 'The invitation was revoked.' : 'The reason was not recorded.'} No partner benefits were activated.`
               : 'Every signer has signed the agreement you sent. The executed PDF and the audit trail are on the envelope.',
             link: statusView,
             payload: { envelope_uuid: envelopeRow.envelope_uuid, envelope_id: rec.envelope_id, role: 'sender' },

@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
 import { envFor, token, call as esignCall, ADMIN } from './_esign_harness.ts';
+import onboard from '../src/routes/partner_onboarding.ts';
 import adminPartners from '../src/routes/admin_partners.ts';
 import { activatePartnerDealOnSignature, ALL_PARTNER_DEAL_TYPES } from '../src/services/partnerDeals.ts';
 import { sendPartnerInvitationEmail, sendPartnerInvitationEmailResult, sendAgreementAssignedEmail, sendAgreementAssignedEmailResult } from '../src/services/email.ts';
@@ -174,13 +175,14 @@ test('D924 migration applies to fresh canonical schema and backfills only record
  }finally{f.db.close();}
 });
 
-for(const reason of ['invitation_revoked','link_lapsed'] as const) test(`D924 completion tells sender signed but voided: ${reason}`,async()=>{
+for(const reason of ['invitation_revoked','link_lapsed','admin_revoked'] as const) test(`D924 completion tells sender signed but voided: ${reason}`,async()=>{
  const f=fixture();try{const {id,envId}=await agreement(f);
  f.db.prepare("UPDATE esign_recipients SET token_expires_at='2999-01-01' WHERE envelope_id=?").run(envId);
- if(reason==='invitation_revoked')f.db.prepare("UPDATE partner_invitations SET status='revoked' WHERE id=?").run(id);
+ if(reason==='invitation_revoked'||reason==='admin_revoked')f.db.prepare("UPDATE partner_invitations SET status='revoked' WHERE id=?").run(id);
+ if(reason==='admin_revoked')f.db.prepare("UPDATE partner_deals SET status='voided',void_reason='admin_revoked' WHERE envelope_id=?").run(envId);
  const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
  const signed=await esignCall(f.env,'POST','/sign/'+'a'.repeat(64),null,{accepted:true,typed_name:'Synthetic Partner',signature_data_url:png});assert.equal(signed.status,200,JSON.stringify(signed.body));
- const notice:any=f.db.prepare("SELECT title,body FROM notifications_inbox WHERE user_id=5 AND type='contract_signed'").get();assert.ok(notice);assert.match(notice.title,/Signed, deal voided/);assert.doesNotMatch(notice.title,/executed/);assert.match(notice.body,reason==='link_lapsed'?/link lapsed before signing/:/invitation was revoked/);assert.match(notice.body,/No partner benefits were activated/);
+ const notice:any=f.db.prepare("SELECT title,body FROM notifications_inbox WHERE user_id=5 AND type='contract_signed'").get();assert.ok(notice);assert.match(notice.title,/Signed, deal voided/);assert.doesNotMatch(notice.title,/executed/);assert.match(notice.body,reason==='link_lapsed'?/link lapsed before signing/:reason==='admin_revoked'?/admin revoked the deal/:/invitation was revoked/);assert.match(notice.body,/No partner benefits were activated/);
  assert.equal((f.db.prepare('SELECT void_reason FROM partner_deals WHERE envelope_id=?').get(envId) as any).void_reason,reason);
  }finally{f.db.close();}
 });
@@ -260,4 +262,24 @@ for(const phase of ['expiry','token'])test(`D924 concurrent revoke at ${phase} r
  return statement;};
  try{const r=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(r.status,409);assert.equal(r.body.error,'Invitation has been revoked');assert.equal(tx.mails.length,0);assert.equal(row(f,id).send_count,1);assert.equal((f.db.prepare('SELECT signing_token FROM esign_recipients WHERE envelope_id=?').get(envId) as any).signing_token,'a'.repeat(64));if(phase==='expiry')assert.equal(row(f,id).expires_at,'2000-01-01T00:00:00Z');
  }finally{tx.restore();f.db.close();}
+});
+
+test('D924 stored expired stage survives resend and the renewed public onboarding read is usable',async()=>{
+ const f=fixture();const {id,envId}=await agreement(f);credentials(f);const tx=transport('ok');try{
+ f.db.prepare("UPDATE partner_invitations SET status='expired' WHERE id=?").run(id);
+ f.db.prepare("UPDATE esign_envelopes SET status='completed' WHERE id=?").run(envId);
+ f.db.prepare("UPDATE partner_deals SET status='voided',void_reason='link_lapsed' WHERE envelope_id=?").run(envId);
+ const sent=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(sent.status,200);assert.equal(sent.body.email_sent,true);assert.equal(row(f,id).status,'expired');assert.equal(row(f,id).last_send_ok,1);
+ const publicApp=new Hono<any>().route('/',onboard);const opened=await publicApp.request('/'+row(f,id).token,{},f.env);assert.equal(opened.status,200);const body:any=await opened.json();assert.equal(body.invitation.status,'expired');assert.equal(body.deal.status,'voided');assert.equal((f.db.prepare('SELECT void_reason FROM partner_deals WHERE envelope_id=?').get(envId) as any).void_reason,'link_lapsed');
+ }finally{tx.restore();f.db.close();}
+});
+
+test('D924 assigned migration 547 also applies after already-recorded migration 548',()=>{
+ const f=fixture(false);try{
+ f.db.exec(read('cloudflare-worker/sql/migrations/548_partner_deal_activation_error.sql'));
+ const id=invite(f);
+ f.db.prepare("INSERT INTO partner_deals(invitation_id,deal_type,proposal_json,activation_error,status) VALUES(?,'custom','{}','activation_failed','awaiting_signature')").run(id);
+ f.db.exec(migration);
+ const deal:any=f.db.prepare('SELECT activation_error,void_reason FROM partner_deals WHERE invitation_id=?').get(id);assert.equal(deal.activation_error,'activation_failed');assert.equal(deal.void_reason,null);assert.equal(row(f,id).send_count,1);
+ }finally{f.db.close();}
 });
