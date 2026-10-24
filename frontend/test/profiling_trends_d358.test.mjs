@@ -90,7 +90,8 @@ test('D358: a failed read is Unreadable with a retry, not an empty page', () => 
 test('D358: the page is an admin route, lit under Programs, with a door on the Programs landing', () => {
   assert.match(APP, /const AdminProfilingTrends = lazy\(\(\) => import\('\.\/pages\/admin\/AdminProfilingTrends'\)\);/);
   assert.match(APP, /<Route path="\/admin\/profiling-trends" element=\{guard\(\['admin'\], <AdminProfilingTrends \/>\)\} \/>/);
-  assert.match(SIDEBAR, /match: \['\/admin\/spinout-lab', '\/admin\/advisor-cohorts', '\/admin\/profiling-trends'\] \}/);
+  // D937 (#2374): the Lab's new address joined the row's match list first.
+  assert.match(SIDEBAR, /match: \['\/admin\/programs\/spinout-lab', '\/admin\/spinout-lab', '\/admin\/advisor-cohorts', '\/admin\/profiling-trends'\] \}/);
   assert.match(PROGRAMS, /<Link to="\/admin\/profiling-trends" className=\{OPEN\}>Open profiling trends<\/Link>/);
   assert.match(PROGRAMS, /stance="Four consoles, each opened where it is decided"/);
 });

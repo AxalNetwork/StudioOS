@@ -330,3 +330,28 @@ test('D895: legacy admin/advisor casing stays blocked on decks without changing 
   }
  }finally{f.db.close()}
 });
+
+test('#2447: landing-by-project records accepted and edited fills against the row actually saved', async () => {
+ const f=await fixture();
+ const result=await request(f,2,'PUT','/api/brand/landing/by-project/1',{
+  name:'Synthetic filled brand',tagline:'Founder edited tagline',headline:'Synthetic proposed headline',
+  ai_proposals:{tagline:'Synthetic proposed tagline',headline:'Synthetic proposed headline',not_a_column:'Synthetic ignored value'},ai_model:'synthetic-test-model',
+ });
+ assert.equal(result.status,200,JSON.stringify(result.body));
+ assert.ok(f.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fill_provenance'").get(),'a landing save must record fill provenance');
+ const fills=f.db.prepare("SELECT target_table,target_row_id,target_column,proposed_value,written_value,edited,decided_by FROM fill_provenance WHERE target_table='landing_pages' ORDER BY target_column").all() as any[];
+ assert.deepEqual(fills.map(r=>[r.target_column,r.proposed_value,r.written_value,r.edited]),[
+  ['headline','Synthetic proposed headline','Synthetic proposed headline',0],['tagline','Synthetic proposed tagline','Founder edited tagline',1],
+ ]);
+ assert.ok(fills.every(r=>r.target_row_id===result.body.id && r.decided_by===2));
+ const before=fills.length;
+ assert.equal((await request(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Typed brand',tagline:'Typed tagline'})).status,200);
+ assert.equal(f.db.prepare("SELECT count(*) n FROM fill_provenance WHERE target_table='landing_pages'").get()!.n,before);
+});
+
+test('#2447: malformed fill metadata cannot turn a stored landing save into a false failure',async()=>{
+ const f=await fixture();
+ const r=await request(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Synthetic saved page',tagline:'Synthetic saved tagline',ai_proposals:{tagline:{toString:1}}});
+ assert.equal(r.status,200);assert.equal(r.body.tagline,'Synthetic saved tagline');
+ assert.equal((f.db.prepare('SELECT tagline FROM landing_pages WHERE id=?').get(r.body.id) as any).tagline,'Synthetic saved tagline');
+});

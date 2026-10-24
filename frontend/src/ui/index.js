@@ -94,6 +94,9 @@ export { NOT_RECORDED, text, titleCase } from '../lib/absence';
 // D923 (#2370): a stored time read by one rule, D1's zone-less stamps as UTC.
 // A pure model imports `./parseStamp.js` itself, so it stays free of React.
 export { parseStamp } from './parseStamp.js';
+// D936 (#2375): the one admin page header — crumb, title, line, scope chip,
+// moved notice and tab bar — that replaces the Admin Console's title and dropdown.
+export { default as AdminPageHeader, HeaderTab, useMovedNotice, HELD_SCOPE_LABEL, HELD_SCOPE_TITLE } from './AdminPageHeader';
 
 // Pre-existing, re-exported so `ui/` is the one import surface.
 export { default as EmptyState } from '../components/EmptyState';

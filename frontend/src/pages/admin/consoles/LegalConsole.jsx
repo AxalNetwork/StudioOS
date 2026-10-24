@@ -187,7 +187,7 @@ export function LegalPanel() {
       </div>
 
       <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
-        Formation orders are in <Link to="/admin/spinout-lab" className="text-violet-600 underline dark:text-violet-400">Programs › Spin-Out Lab</Link>. Open its Formation orders tab.
+        Formation orders are in <Link to="/admin/programs/spinout-lab/formation" className="text-violet-600 underline dark:text-violet-400">Programs › Spin-Out Lab</Link>, on its Formation tab.
       </p>
 
       {/* Filters (only on the contract-list sub-tabs) */}
