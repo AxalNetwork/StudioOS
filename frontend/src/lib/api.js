@@ -1225,21 +1225,49 @@ export const api = {
   // Task #9 (X-2) — Partner deal engine: admin invitations + deals.
   adminPartners: {
     activateDeal: (id) => request(`/admin/partners/deals/${id}/activate`, { method: 'POST' }),
+    // D926 — search, filters, sort and pages run on the Worker, which answers
+    // an exact `total`. With no options the call is today's: the newest 200.
+    // `stage` is a list of stored stages and `lapsed`.
     listInvitations: (opts = {}) => {
       const q = new URLSearchParams();
       if (opts.status) q.set('status', opts.status);
       if (opts.email) q.set('email', opts.email);
+      if (opts.q) q.set('q', opts.q);
+      for (const s of [].concat(opts.stage || [])) q.append('stage', s);
+      if (opts.dealType) q.set('deal_type', opts.dealType);
+      if (opts.invitedBy != null) q.set('invited_by', String(opts.invitedBy));
+      if (opts.sentWithin) q.set('sent_within', String(opts.sentWithin));
+      if (opts.sort) q.set('sort', opts.sort);
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.offset) q.set('offset', String(opts.offset));
       const qs = q.toString();
       return request(`/admin/partners/invitations${qs ? `?${qs}` : ''}`);
     },
+    // D926 — PI4's two warnings: an open invitation to this address, and the
+    // member who owns it (their role only).
+    lookupInvitation: (email) =>
+      request(`/admin/partners/invitations/lookup?email=${encodeURIComponent(email)}`),
     createInvitation: (data) =>
       request('/admin/partners/invitations', { method: 'POST', body: JSON.stringify(data) }),
     resendInvitation: (id) =>
       request(`/admin/partners/invitations/${id}/resend`, { method: 'POST' }),
     revokeInvitation: (id, reason) =>
       request(`/admin/partners/invitations/${id}/revoke`, { method: 'POST', body: JSON.stringify({ reason: reason || '' }) }),
-    listDeals: (status = 'active') =>
-      request(`/admin/partners/deals?status=${encodeURIComponent(status)}`),
+    // A state, as today, or D926's options: `status` (a list, or 'all'),
+    // `q`, `dealType`, `endsWithin`, `hasRedemptions`, `sort`, `limit`, `offset`.
+    listDeals: (statusOrOpts = 'active') => {
+      const opts = typeof statusOrOpts === 'string' ? { status: statusOrOpts } : (statusOrOpts || {});
+      const q = new URLSearchParams();
+      for (const s of [].concat(opts.status || 'active')) q.append('status', s);
+      if (opts.q) q.set('q', opts.q);
+      if (opts.dealType) q.set('deal_type', opts.dealType);
+      if (opts.endsWithin) q.set('ends_within', String(opts.endsWithin));
+      if (opts.hasRedemptions) q.set('has_redemptions', 'true');
+      if (opts.sort) q.set('sort', opts.sort);
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.offset) q.set('offset', String(opts.offset));
+      return request(`/admin/partners/deals?${q.toString()}`);
+    },
     terminateDeal: (id, reason) =>
       request(`/admin/partners/deals/${id}/terminate`, { method: 'POST', body: JSON.stringify({ reason }) }),
     // Task #26 — operational counters
