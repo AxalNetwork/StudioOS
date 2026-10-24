@@ -149,9 +149,13 @@ const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'))
 const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsightsRedirect'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
-const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
+const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
+const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
+const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
-const AdminSpinoutLab = lazy(() => import('./pages/admin/AdminSpinoutLab'));
+const AdminLab = lazy(() => import('./pages/admin/lab/AdminLab'));
+const LabRedirect = lazy(() => import('./pages/admin/lab/LabRedirect'));
+const LabPreviewRedirect = lazy(() => import('./pages/admin/lab/LabPreviewRedirect'));
 const SpinoutModerationPage = lazy(() => import('./pages/admin/SpinoutModerationPage'));
 const AdminSpinoutJourneyPreview = lazy(() => import('./pages/admin/AdminSpinoutJourneyPreview'));
 const AdminTelegram = lazy(() => import('./pages/admin/AdminTelegram'));
@@ -1108,13 +1112,19 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/telegram">Telegram</StripLink>
         </HqSubNavStrip>
       )}
+      {hqStrip === 'Licences' && (
+        <HqSubNavStrip label="Licences">
+          <StripLink to="/admin/licences">Ledger</StripLink>
+          <StripLink to="/admin/licences/programs">Program grants</StripLink>
+        </HqSubNavStrip>
+      )}
       {hqStrip === 'Content' && (
         <HqSubNavStrip label="Content">
           <StripLink to="/admin/content">Overview</StripLink>
           <StripLink to="/admin/articles">Content queue</StripLink>
           <StripLink to="/admin/publications">Publications</StripLink>
           <StripLink to="/admin?tab=personas">Personas</StripLink>
-          <StripLink to="/admin?tab=network-profiles">Advisors &amp; Partners</StripLink>
+          <StripLink to="/admin/advisors-partners">Advisors &amp; Partners</StripLink>
           <StripLink to="/admin/team">Public team page</StripLink>
         </HqSubNavStrip>
       )}
@@ -2735,6 +2745,8 @@ function AppInner() {
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
+      {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
+      <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
@@ -2742,6 +2754,7 @@ function AppInner() {
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       {/* D800 (#2233): the Licences page's tabs, each a sub-path of the page, behind the same guard. */}
       <Route path="/admin/my-licence/terms" element={guard(['admin'], <MyLicencePage />)} />
+      <Route path="/admin/my-licence/programs" element={guard(['admin'], <MyLicencePage />)} />
       <Route path="/admin/my-licence/contract" element={guard(['admin'], <MyLicencePage />)} />
       <Route path="/admin/my-licence/statements" element={guard(['admin'], <MyLicencePage />)} />
       <Route path="/admin/my-licence/requests" element={guard(['admin'], <MyLicencePage />)} />
@@ -2841,15 +2854,30 @@ function AppInner() {
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       {/* D633 (#1391, Q3) — trust obligations by role, read-only; HQ Security links to it. */}
       <Route path="/admin/security/obligations" element={guard(['admin'], hqOnly(<TrustObligationsPage />))} />
-      <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
-      {/* Task #102 — standalone Spin-Out Lab admin dashboard (same component
-          as the AdminPage 'lab-applications' tab). */}
-      <Route path="/admin/spinout-lab" element={guard(['admin'], <AdminSpinoutLab standalone onImpersonate={handleImpersonate} />)} />
+      {/* D972 (#2369) — Advisors & Partners under Community, its tabs as
+          sub-paths (D936's header). /admin/network-profiles and the Admin
+          Console's ?tab=network-profiles forward to the Deck roster tab. */}
+      <Route path="/admin/advisors-partners" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/firms" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/deck" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/network-profiles" element={<ApRedirect />} />
+      {/* D937 (#2374) — the Spin-Out Lab under Programs, its tabs as sub-paths
+          (D936's header). /admin/spinout-lab, its /preview and the Admin
+          Console's ?tab=lab-applications forward here with the moved notice. */}
+      <Route path="/admin/programs/spinout-lab" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/applications" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/cohorts" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/participants" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/hosts" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/formation" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/programs/spinout-lab/graduation" element={guard(['admin'], <AdminLab onImpersonate={handleImpersonate} />)} />
+      <Route path="/admin/spinout-lab" element={<LabRedirect />} />
       {/* D442 — the console the approvals board links to. Not a tab of AdminPage. */}
       <Route path="/admin/spinout-moderation" element={guard(['admin'], <SpinoutModerationPage />)} />
       {/* Task #106 — read-only admin preview of the new-founder Spin-Out Lab
           journey (simulated client-side state; no impersonation, no writes). */}
-      <Route path="/admin/spinout-lab/preview" element={guard(['admin'], <AdminSpinoutJourneyPreview />)} />
+      <Route path="/admin/programs/spinout-lab/preview" element={guard(['admin'], <AdminSpinoutJourneyPreview />)} />
+      <Route path="/admin/spinout-lab/preview" element={<LabPreviewRedirect />} />
       <Route path="/admin/telegram" element={guard(['admin'], hqOnly(<AdminTelegram />))} />
       <Route path="/admin/x" element={guard(['admin'], hqOnly(<AdminX />))} />
       {/* Task #20 — Admin Best-Fit console (consultation queue + full report). */}

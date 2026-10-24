@@ -91,6 +91,7 @@ export function phoneMeter(raw, cycle = 'validate') {
       unreadable: false,
       display: typeof m.display === 'string' && m.display ? m.display : null,
       target_reason: target == null && m.target_reason ? m.target_reason : null,
+      ...(cycle === 'raise' && typeof m.detail === 'string' ? { detail: m.detail } : {}),
     };
   }
   const fig = figure(raw, 'interviews_this_month');

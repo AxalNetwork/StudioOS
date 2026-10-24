@@ -200,9 +200,9 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
 test('merged Positioning stays read only for admins while keeping core and version wording visible',async()=>{
  const core=[{kind:'one_liner',position:0,text:'Core words',source:null},{kind:'category',position:0,text:'Core category',source:null}];
  const override=[{kind:'category',position:0,text:'Version wording',source:null}];
- const page=await mounted(h(NarrativeTabPage,{tab:'positioning',projectId:1,search:'?project_id=1',admin:true,cards:[]}), (url,options)=>{
+ const page=await mounted(h(NarrativeTabPage,{tab:'positioning',projectId:1,search:'?project_id=1',admin:true,cards:[]}), (url)=>{
   if(url.includes('/narrative/positioning'))return response({core,overrides:override,effective:core});
-  return narrativeHandler(url,options);
+  return narrativeHandler(url);
  });
  try{
   assert.ok(page.testIds().includes('narrative-positioning'));

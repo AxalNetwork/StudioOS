@@ -33,6 +33,7 @@ import cycleRecords from '../src/routes/cycle_records.ts';
 import { ADMIN_READ_ONLY, REASON_REQUIRED } from '../src/services/narrative/adminRead.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -56,6 +57,7 @@ function fixture() {
   if (!cols('pitch_deck_share_tokens').has('revoked_at')) db.exec(sqlOf('248_deck_share_revoked_at.sql'));
   for (const m of ['129_captable_one_canonical_per_project.sql', '249_project_metrics.sql', '410_safe_issuances.sql', '442_raise_cycle_stores.sql',
     '459_cycle_activity_convention.sql', '463_raise_record_stores.sql', '544_narrative_sections.sql', '545_narrative_notes.sql']) db.exec(sqlOf(m));
+  raiseEvidenceTables(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);
