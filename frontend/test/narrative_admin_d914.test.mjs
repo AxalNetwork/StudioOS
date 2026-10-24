@@ -193,7 +193,12 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
   const api = read('frontend/src/lib/api.js');
-  assert.match(api, /export \* from '\.\/api\/mercuryPersonal\.js';\nexport \* from '\.\/api\/narrative\.js';\nexport \* from '\.\/api\/newsletter\.js';/);
+  // D527: one line in the alphabetical block. Its neighbours change as other
+  // domains land (network.js came next with D976), so only its place is pinned.
+  const modules = [...api.matchAll(/^export \* from '\.\/api\/([\w-]+)\.js';$/gm)].map((m) => m[1]);
+  assert.ok(modules.includes('narrative'), 'narrative.js is re-exported');
+  const at = modules.indexOf('narrative');
+  assert.ok(modules[at - 1].localeCompare('narrative') < 0 && (at === modules.length - 1 || modules[at + 1].localeCompare('narrative') > 0), 'in its alphabetical place');
 });
 
 
