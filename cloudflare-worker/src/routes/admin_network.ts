@@ -62,7 +62,7 @@ async function snapshot(env: Env, actor: any, now: number, includeSettlements = 
     read(env.DB, 'accounts', "SELECT id, name, role, headline, partner_id, kyc_status, last_active_at, is_active FROM users WHERE lower(role) IN ('advisor','partner')"),
     read(env.DB, 'advisors', `SELECT a.id, a.user_id, a.display_name, a.bio, a.headline, a.expertise_json, a.sectors_json,
       a.stages_json, a.languages_json, a.country, a.timezone, a.availability_note, a.weekly_hours_band,
-      a.linkedin_url, a.hourly_rate_usd, a.is_active, u.id AS member_id
+      a.linkedin_url, a.hourly_rate_usd, a.is_active, u.id AS member_id, u.role AS member_role
       FROM advisors a LEFT JOIN users u ON u.id = a.user_id
       WHERE lower(COALESCE(u.role,'')) <> 'admin' OR u.id = ? OR ? = 1`, [actor.id, isSuperAdmin(actor) ? 1 : 0]),
     read(env.DB, 'roster', `SELECT id, name, kind, role, company, bio, linkedin_url, skills_json, display_order, is_active,
@@ -121,6 +121,7 @@ function forId(block: Read<Row[]>, key: string, id: unknown): Row[] {
 }
 function hourlyRate(value: unknown): Read<Row> {
   if (value == null) return missing('Hourly rate not recorded.');
+  if (typeof value !== 'number') return unreadable('Hourly rate could not be read. Try again.');
   const cents = Number(value) * 100;
   return Number.isSafeInteger(cents) && cents >= 0 ? ok({ amount_cents: cents, currency: 'usd' }) : unreadable('Hourly rate could not be read. Try again.');
 }
@@ -151,9 +152,9 @@ function people(s: Snapshot) {
   const reach = new Map(shown.map((r, i) => [r.id, { reach: reaches[i], position: i + 1 }]));
   return sources.map(({ u, a, r }) => {
     const userId = u?.id ?? a?.member_id ?? null;
-    const kind = r ? 'deck_only' : u?.role?.toLowerCase() === 'partner' ? 'operating_partner' : 'advisor';
+    const kind = r ? 'deck_only' : (u?.role ?? a?.member_role)?.toLowerCase() === 'partner' ? 'operating_partner' : 'advisor';
     const firmRow = u?.partner_id == null ? null : forId(s.firms, 'id', u.partner_id)[0];
-    const firm: Read<any> = r?.company ? ok({ id: null, name: r.company, source: 'roster_text' }) : !has(s.firms) ? s.firms : firmRow ? ok({ id: firmRow.id, name: firmRow.name, company: firmRow.company, source: 'account_link' })
+    const firm: Read<any> = r?.company ? ok({ id: null, name: r.company, source: 'roster_text' }) : userId != null && !has(s.accounts) ? s.accounts : !has(s.firms) ? s.firms : firmRow ? ok({ id: firmRow.id, name: firmRow.name, company: firmRow.company, source: 'account_link' })
       : ok(null);
     const profile = userId == null ? null : forId(s.profile_checks, 'user_id', userId).at(-1);
     const hostRows = userId == null ? [] : forId(s.hosts, 'user_id', userId);
@@ -170,13 +171,13 @@ function people(s: Snapshot) {
       headline: field(r?.role ?? a?.headline ?? u?.headline, 'Headline'), firm, skills: skill,
       sectors: !a && !has(s.advisors) ? s.advisors : a ? strings(a.sectors_json, 'Sectors') : missing('No per-person sectors are recorded.'),
       stage: missing(STAGE), profile_check: userId == null ? missing('No member account is linked.') : !has(s.profile_checks) ? s.profile_checks : field(profile?.admin_status, 'Profile check'),
-      kyc: u ? field(u.kyc_status, 'KYC') : missing('No account KYC is linked.'),
+      kyc: userId != null && !has(s.accounts) ? s.accounts : u ? field(u.kyc_status, 'KYC') : missing('No account KYC is linked.'),
       lab_host: userId == null ? missing('No member account is linked.') : fromRows(s.hosts, () => hostRows.map(h => ({ id: h.id, status: h.status, capacity: h.capacity }))),
       sessions_90d: sessions, rating, deck,
       active_deals: fromRows(s.deals, () => dealRows.map(d => ({ id: d.id, type: d.deal_type, ends_at: d.expires_at }))),
       hourly_rate: !a && !has(s.advisors) ? s.advisors : a ? hourlyRate(a.hourly_rate_usd) : missing('No hourly rate recorded.'),
-      last_active: u ? field(u.last_active_at, 'Last active') : missing('No account activity timestamp is linked.'),
-      member_active: u ? ok(!!u.is_active) : missing('No member account is linked.'),
+      last_active: userId != null && !has(s.accounts) ? s.accounts : u ? field(u.last_active_at, 'Last active') : missing('No account activity timestamp is linked.'),
+      member_active: userId != null && !has(s.accounts) ? s.accounts : u ? ok(!!u.is_active) : missing('No member account is linked.'),
       _advisor: a,
     };
   });
@@ -310,7 +311,7 @@ route.get('/people/:ref', async (c) => {
   return c.json({ person: publicPerson(row), profile: !has(s.advisors) ? s.advisors : a ? ok({ bio: a.bio, stages: strings(a.stages_json, 'Stages'), languages: strings(a.languages_json, 'Languages'), country: field(a.country, 'Country'), timezone: field(a.timezone, 'Timezone'), availability_note: field(a.availability_note, 'Availability'), weekly_hours: field(a.weekly_hours_band, 'Weekly hours'), linkedin_url: field(a.linkedin_url, 'LinkedIn') }) : missing('No advisor profile is linked.'),
     work: {
       sessions_90d: row.sessions_90d,
-      firm_sessions_90d: row.kind === 'operating_partner' ? sessionCounts(s.partner_sessions, 'partner_id', take(row.firm)?.id) : missing('No operating-partner firm.'),
+      firm_sessions_90d: row.kind === 'operating_partner' ? !has(row.firm) ? row.firm : sessionCounts(s.partner_sessions, 'partner_id', take(row.firm)?.id) : missing('No operating-partner firm.'),
       open_slots_14d: !has(s.advisors) ? s.advisors : a ? fromRows(s.open_slots, value => Number(value.find(v => Number(v.advisor_id) === Number(a.id))?.n ?? 0)) : missing('No advisor profile linked.'),
       cohort_assignments: fromRows(s.cohort_assignments, value => value.filter(v => row.user_id != null && Number(v.advisor_user_id) === Number(row.user_id)).map(v => ({ cohort_id: v.cohort_cycle_id, assigned_at: v.assigned_at }))),
       engagements: !has(s.advisors) ? s.advisors : a ? fromRows(s.engagements, value => ['drafting', 'proposed', 'signed', 'renewal_due', 'ended'].map(lane => ({ lane, count: Number(value.find(v => Number(v.advisor_id) === Number(a.id) && v.lane === lane)?.n ?? 0) }))) : missing('No individual advisor engagement store linked.'),

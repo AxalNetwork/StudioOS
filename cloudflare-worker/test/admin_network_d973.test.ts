@@ -137,6 +137,7 @@ async function failureGate(mounted = route) {
     db.exec('DROP TABLE partners');
     const people = (await get(db, '/people', 1, {}, mounted)).body;
     assert.equal(people.total, 12); failed(people.items.find((p: any) => p.ref === 'user:3').firm);
+    failed((await get(db, '/people/user:3', 1, {}, mounted)).body.work.firm_sessions_90d);
     assert.equal((await get(db, '/people?q=Firm', 1, {}, mounted)).status, 503);
     db.exec('DROP TABLE network_profiles');
     const partial = (await get(db, '/people', 1, {}, mounted)).body; assert.equal(partial.total, null); assert.equal(partial.available, false); assert.equal(partial.items.length, 4);
@@ -177,6 +178,18 @@ test('failed advisor enrichment never describes a missing individual profile as 
   failed(p.sessions_90d); failed(p.skills); failed(p.sectors); failed(p.hourly_rate); failed(p.rating);
   const b = (await get(db, '/overview')).body; failed(b.counts.people); assert.equal(value(b.deals).total, 2); db.close();
 });
+async function accountFailureGate(mounted = route) {
+  const { db } = fixture(); db.exec('ALTER TABLE users DROP COLUMN last_active_at');
+  const b = (await get(db, '/people/user:2', 1, {}, mounted)).body;
+  assert.equal(b.person.ref, 'user:2'); failed(b.person.kyc); failed(b.person.last_active); failed(b.person.member_active); failed(b.person.firm);
+  assert.equal(value(b.work.sessions_90d).total, 3); db.close();
+}
+test('a failed account projection keeps joined identities but marks account columns unreadable', () => accountFailureGate());
+async function invalidRateGate(mounted = route) {
+  const { db } = fixture(); db.exec("UPDATE advisors SET hourly_rate_usd = '' WHERE id = 11");
+  const b = (await get(db, '/people/user:2', 1, {}, mounted)).body; failed(b.terms.hourly_rate); assert.equal(value(b.work.sessions_90d).total, 3); db.close();
+}
+test('a corrupt legacy hourly rate never becomes a free zero-dollar rate', () => invalidRateGate());
 test('rating, sessions, activity and descending name sorts use stored values with nulls last', async () => {
   const { db } = fixture();
   for (const sort of ['rating_desc', 'sessions_desc']) assert.equal((await get(db, '/people?sort=' + sort)).body.items[0].ref, 'user:2');
@@ -191,6 +204,11 @@ for (const [tag, before, after, gate] of [
   ['timezone', "timeZone: COHORT_TZ, year:", "timeZone: 'UTC', year:", overviewGate],
   ['partial', 'partial: i === 11', 'partial: false', overviewGate],
   ['privacy', 'SELECT advisor_id, lane, COUNT(*) AS n FROM advisor_engagements GROUP BY advisor_id, lane', 'SELECT advisor_id, lane, client_name, COUNT(*) AS n FROM advisor_engagements GROUP BY advisor_id, lane', drawerGate],
+  ['invalid-money', "if (typeof value !== 'number') return unreadable('Hourly rate could not be read. Try again.');", '', invalidRateGate],
+  ['account-kyc', 'kyc: userId != null && !has(s.accounts) ? s.accounts : u ?', 'kyc: u ?', accountFailureGate],
+  ['account-activity', 'last_active: userId != null && !has(s.accounts) ? s.accounts : u ?', 'last_active: u ?', accountFailureGate],
+  ['account-state', 'member_active: userId != null && !has(s.accounts) ? s.accounts : u ?', 'member_active: u ?', accountFailureGate],
+  ['firm-session-failure', "row.kind === 'operating_partner' ? !has(row.firm) ? row.firm : sessionCounts", "row.kind === 'operating_partner' ? sessionCounts", failureGate],
   ['money', 'Number(value) * 100', 'Number(value)', drawerGate],
   ['total', 'total: complete ? list.length : null', 'total: complete ? list.slice(offset, offset + limit).length : null', peopleGate],
   ['failure', "return unreadable(`${key} could not be read. Try again.`);", 'return ok([]);', failureGate],
