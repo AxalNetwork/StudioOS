@@ -88,6 +88,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/grants',         'Program grants under Licences (D981)'],
   ['frontend/src/pages/admin/lab',            'the Spin-Out Lab\'s admin page under Programs (D937)'],
   ['frontend/src/pages/admin/fundAdmin',      'the fund administration console (D714) and, since D880, Axal VC\'s own Mercury connections'],
+  ['frontend/src/pages/admin/segments',       'Persona segments under Accounts (D997)'],
   ['frontend/src/pages/admin/profiles',       'Partner profiles under Approvals (D989)'],
   ['frontend/src/pages/admin/partners',       'the admin Partner invitations desk (D923): its tabs, the records, the dialogs and the model they read'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],

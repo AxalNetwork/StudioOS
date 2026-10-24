@@ -143,7 +143,7 @@ test('the tabs, the redirects\' targets, the strip on a tab, and the whole-page 
   assert.equal(tabOf(`${AP_PATH}/people`), null, 'People is not a tab until its read exists');
   assert.equal(legacyContractsTarget('?tab=network-profiles'), '/admin/advisors-partners/deck?moved=network-profiles');
   assert.equal(stripFor('/admin/advisors-partners/deck'), 'Content', 'the Content strip is lost on a tab');
-  assert.equal(stripFor('/admin?tab=personas'), 'Content');
+  assert.equal(stripFor('/admin/persona-segments/unclassified'), 'Content');
   assert.equal(stripFor('/admin/advisors-partnersx'), null, 'a sibling path took the strip');
   assert.equal(pageFailed(ALL), false);
   assert.equal(pageFailed(Object.fromEntries(Object.keys(ALL).map((k) => [k, bad]))), true);

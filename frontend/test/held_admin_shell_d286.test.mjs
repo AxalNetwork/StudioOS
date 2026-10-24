@@ -268,7 +268,7 @@ test('Programs links its four consoles; Accounts links the Users table, Explorin
   assert.deepEqual(doorsIn(CODE[LANDINGS.Programs]),
     ['/admin?tab=lab-applications', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends']);
   assert.deepEqual(doorsIn(CODE[LANDINGS.Accounts]),
-    ['/admin', '/admin/exploring', '/admin?tab=personas', '/admin/trash']);
+    ['/admin', '/admin/exploring', '/admin/persona-segments', '/admin/trash']);
 });
 
 test('Insights (D893) reads the Insights read, and links only registered routes, never /branch/', () => {

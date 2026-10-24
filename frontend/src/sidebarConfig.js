@@ -218,7 +218,7 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'admin', label: 'Admin', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/exploring', '/admin/trash'] },
+      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/exploring', '/admin/trash', '/admin/persona-segments'] },
       // D506 — the Spin-Out moderation console joined the lanes Approvals
       // leads to (lane 4 links it), so the row stays lit inside it. `match`
       // is the complete statement of what the row owns (SidebarNav), so a

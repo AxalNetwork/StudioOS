@@ -132,6 +132,28 @@ recent activity and the four lightboxes wait for D930's five parts (D931 to
 D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
 row says what is drawn today.
 
+## Landed 2026-10-24 — Accounts · Persona segments (#2378)
+
+The owner's artifacts `JGt34N1bs5jqo9bBp2sHnq` (the page) and
+`YKKJwaY3jHiUFzjXXcv7PJ` (the board grid) came from S1's prompt on #2378:
+- `Persona Segments · Boards.dc.html` is the board grid (SEG1 to SEG14, with the
+  lettered boards SEG3i, SEG4a–c and SEG4t, SEG5d, SEG6c and SEG6s, SEG12d and
+  SEG12f, SEG13a–b and SEG14a–b), the output of `scripts/read-canvas.mjs` as is;
+- `Persona Segments Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/persona-segments` and `/unclassified` are live, and
+`/admin?tab=personas` forwards there with the moved notice. S21's integration
+(D997) draws the header in the viewer's shell, the tiles, segments by profile,
+how segments were set, the confidence bands, the segment cards and the
+Unclassified list, and keeps today's re-tag table. Needs and offers, answers,
+archetypes, a segment's page, the Move dialog, edit, suggestions, activity and
+the phone layout wait for D997's ten parts, so this canvas stays in the queue
+until they land. The `ROUTE_MAP.md` row says what is drawn today.
+
 ## Landed 2026-10-24 — Approvals · Partner profiles (#2380)
 
 The owner's artifacts `VCDLJZYykybEB6hZ8oSrs8` and `59A3MvD1qSbS8dpFwZZp8f`

@@ -152,6 +152,8 @@ const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
 // D989 (#2380): Partner profiles, out of the Admin Console, under Approvals.
 const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfiles'));
+// D997 (#2378): Persona segments, out of the Admin Console, under Accounts (HQ: Content).
+const PersonaSegments = lazy(() => import('./pages/admin/segments/PersonaSegments'));
 const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminLab = lazy(() => import('./pages/admin/lab/AdminLab'));
@@ -1123,7 +1125,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/content">Overview</StripLink>
           <StripLink to="/admin/articles">Content queue</StripLink>
           <StripLink to="/admin/publications">Publications</StripLink>
-          <StripLink to="/admin?tab=personas">Personas</StripLink>
+          <StripLink to="/admin/persona-segments">Persona segments</StripLink>
           <StripLink to="/admin/advisors-partners">Advisors &amp; Partners</StripLink>
           <StripLink to="/admin/team">Public team page</StripLink>
         </HqSubNavStrip>
@@ -2851,6 +2853,9 @@ function AppInner() {
       {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
       <Route path="/admin/partner-profiles" element={guard(['admin'], <PartnerProfiles />)} />
       <Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />
+      {/* D997 (#2378): Persona segments, its two tabs as sub-paths; /admin?tab=personas forwards here (LegacyContractsRedirect). */}
+      <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
+      <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/network-profiles" element={<ApRedirect />} />
       {/* D937 (#2374) — the Spin-Out Lab under Programs, its tabs as sub-paths
           (D936's header). /admin/spinout-lab, its /preview and the Admin

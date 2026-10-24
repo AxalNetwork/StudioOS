@@ -224,7 +224,7 @@ const OWN = {
   users: ['adminListUsers', 'trustScoreBatch'],
   // D989 (#2380): ?tab=profiles forwards to /admin/partner-profiles before this page mounts.
   kyc: ['kycAdminQueue'],
-  personas: ['listPersonasAdmin'],
+  // D997 (#2378): ?tab=personas forwards to /admin/persona-segments before this page mounts.
   directory: ['adminListDirectoryPartners'],
   // Integration keys and GitHub Sync left the console for HQ's own page
   // (the owner's ruling, 2026-10-20); `integration_keys_hq_only.test.mjs`.

@@ -65,7 +65,8 @@ PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Integration keys'), 2);
 PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Bank accounts') + 1, 0, ['Product testing', '/admin?tab=product-testing']);
 const CONTENT = [
   ['Overview', '/admin/content'], ['Content queue', '/admin/articles'], ['Publications', '/admin/publications'],
-  ['Personas', '/admin?tab=personas'],
+  // D997 (#2378): Personas is now Persona segments, at its own address.
+  ['Persona segments', '/admin/persona-segments'],
   ['Advisors & Partners', '/admin/advisors-partners'], ['Public team page', '/admin/team'],
 ];
 // D981 (#2376) — #2375's Licences strip: the ledger and Program grants.

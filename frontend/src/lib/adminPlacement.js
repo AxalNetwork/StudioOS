@@ -107,8 +107,8 @@ export const ADMIN_PLACEMENT = [
     { route: '/admin/programs/spinout-lab/applications', how: 'Its own page under Programs (D937); the legacy tab redirects here.' }),
   tab('legal', 'Contracts', hq('Contracts', 'embedded'),
     { route: '/admin/contracts', how: 'One Contracts page in both shells; the legacy Legal link redirects here.', also: [admin('Contracts', 'embedded')] }),
-  tab('personas', 'Personas', hq('Content', 'sub-nav'),
-    { how: 'Sub-navigation item (the taxonomy). Retagging one person lives on Admin · Accounts.', also: [admin('Accounts', 'card link')] }),
+  tab('personas', 'Persona segments', hq('Content', 'sub-nav'),
+    { route: '/admin/persona-segments', how: 'Its own page (D997): a Content sub-navigation item on HQ, under Accounts on the Admin shell; the legacy tab redirects here.', also: [admin('Accounts', 'card link')] }),
   tab('directory', 'Directory', admin('Approvals', 'lane'), { how: 'A lane.' }),
   // Integration keys and GitHub Sync stood here as Platform sub-navigation
   // items. The owner's ruling (2026-10-20) took both out of the Admin Console:

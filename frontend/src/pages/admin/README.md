@@ -88,6 +88,11 @@ item of HQ's Licences strip, built to its canvas under the shared admin page
 header (D936). No grant is stored yet, so its cells say "Not recorded" — see
 its own README.
 
+`segments/` is D997's Persona segments at `/admin/persona-segments`, under
+Accounts (HQ: Content), built to its canvas under the shared admin page header
+(D936). `/admin?tab=personas` redirects to it; today's re-tag table stays at the
+foot of its Overview until D997 part 8 — see its own README.
+
 `profiles/` is D989's Partner profiles at `/admin/partner-profiles`, under
 Approvals, built to its canvas under the shared admin page header (D936).
 `/admin?tab=profiles` redirects to it; its review is the console's dialog until

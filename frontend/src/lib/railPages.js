@@ -345,7 +345,7 @@ const SUPER = [
   own('/admin/content', key(SA, 'Content')),
   own('/admin/articles', key(SA, 'Content', 'Content queue')),
   own('/admin/publications', key(SA, 'Content', 'Publications')),
-  own('/admin?tab=personas', key(SA, 'Content', 'Personas')),
+  own('/admin/persona-segments', key(SA, 'Content', 'Personas')),
   own('/admin/advisors-partners', key(SA, 'Content', 'Advisors and partners')),
   own('/admin?tab=directory', key(SA, 'Content', 'Directory')),
   own('/admin/team', key(SA, 'Content', 'Public team page')),

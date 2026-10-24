@@ -11,7 +11,6 @@ import AdminBoardFrame from './admin/AdminBoardFrame';
 import UsersConsole from './admin/consoles/UsersConsole';
 import KycConsole from './admin/consoles/KycConsole';
 import { LegalPanel } from './admin/consoles/LegalConsole';
-import { PersonasPanel } from './admin/consoles/PersonasConsole';
 import { DirectoryPanel } from './admin/consoles/DirectoryConsole';
 import { PromoCodesPanel } from './admin/consoles/PromoCodesConsole';
 import { PaymentsPanel } from './admin/consoles/PaymentsConsole';
@@ -19,6 +18,8 @@ import { BankAccountsPanel } from './admin/consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './admin/consoles/ProductTestingConsole';
 import { BillingPanel } from './admin/consoles/BillingConsole';
 import { WellbeingExpertsPanel } from './admin/consoles/WellbeingConsole';
+// D997 (#2378) — Persona segments left this console for its own page;
+// ?tab=personas forwards there in LegacyContractsRedirect.
 // D989 (#2380) — Partner profiles left this console for its own page under
 // Approvals; ?tab=profiles forwards there in LegacyContractsRedirect.
 // D972 (#2369) — the network roster left this console for Advisors &
@@ -227,7 +228,6 @@ export default function AdminPage({ onImpersonate, section = null }) {
       )}
 
       {tab === 'legal' && <div data-testid="admin-legal-panel"><LegalPanel /></div>}
-      {tab === 'personas' && <PersonasPanel />}
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}
       {tab === 'promos' && <div data-testid="admin-promos-panel"><PromoCodesPanel /></div>}
       {tab === 'payments' && <div data-testid="admin-payments-panel"><PaymentsPanel /></div>}

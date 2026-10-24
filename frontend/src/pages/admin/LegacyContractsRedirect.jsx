@@ -15,6 +15,8 @@ const MOVED_TABS = {
   'network-profiles': '/admin/advisors-partners/deck?moved=network-profiles',
   // D989 (#2380): Partner profiles has its own address under Approvals.
   profiles: '/admin/partner-profiles?moved=profiles',
+  // D997 (#2378): Persona segments has its own address (Accounts; HQ: Content).
+  personas: '/admin/persona-segments?moved=personas',
 };
 
 export function legacyContractsTarget(search) {
