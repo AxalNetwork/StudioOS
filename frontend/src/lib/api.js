@@ -2753,6 +2753,8 @@ export const api = {
     `/decks/share/${encodeURIComponent(token)}/nda`,
     { method: 'POST', body: JSON.stringify(payload || {}) },
   ),
+  // D902 — the NDA's text before acceptance (PD20 A).
+  deckShareNdaText: (token) => request(`/decks/share/${encodeURIComponent(token)}/nda`),
   deckShareFeedback: (token, payload) => request(
     `/decks/share/${encodeURIComponent(token)}/feedback`,
     { method: 'POST', body: JSON.stringify(payload || {}) },
