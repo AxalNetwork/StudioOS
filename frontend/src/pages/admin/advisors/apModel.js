@@ -28,6 +28,7 @@ import { parseStamp } from '../../../ui/parseStamp.js';
 
 export const AP_PATH = '/admin/advisors-partners';
 export const AP_DECK_PATH = '/admin/advisors-partners/deck';
+export const AP_FIRMS_PATH = '/admin/advisors-partners/firms';
 export const COMMUNITY_PATH = '/admin/community';
 export const AP_TITLE = 'Advisors & Partners';
 export const PAGE_LINE = 'The advisors and operating partners the studio works with: who they are, where they stand and what they do.';
@@ -38,6 +39,8 @@ const DAY = 86400000;
 /** The old addresses' sentence (#2375's "renamed" form). */
 export const MOVED_NOTICES = {
   'network-profiles': 'Mentor & partner network is now Advisors & Partners, under Community.',
+  // D952 (#2728): Partner invitations' Firm links moved to the Firms tab.
+  'firm-links': 'Firm links moved here: attach a partner account to its firm under Firms.',
 };
 
 /** The tabs this integration draws (D972 §1). People waits for its read. */
@@ -171,7 +174,7 @@ export function buildNeeds(reads, now) {
   if (failed(reads.links)) unread.push('Partner accounts with no firm');
   else {
     const n = Number(reads.links.data?.unattached || 0);
-    if (n > 0) rows.push({ key: 'unattached', text: `${plural(n, 'partner account')} ${n === 1 ? 'has' : 'have'} no firm.`, action: 'Attach to a firm', to: '/admin/partner-invitations/firm-links' });
+    if (n > 0) rows.push({ key: 'unattached', text: `${plural(n, 'partner account')} ${n === 1 ? 'has' : 'have'} no firm.`, action: 'Attach to a firm', to: AP_FIRMS_PATH });
   }
   if (failed(reads.advisors)) unread.push('Advisor accounts with no profile');
   else {

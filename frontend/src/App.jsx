@@ -152,6 +152,7 @@ const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
 const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
+const FirmLinksRedirect = lazy(() => import('./pages/admin/advisors/FirmLinksRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminLab = lazy(() => import('./pages/admin/lab/AdminLab'));
 const LabRedirect = lazy(() => import('./pages/admin/lab/LabRedirect'));
@@ -2737,7 +2738,8 @@ function AppInner() {
       <Route path="/admin/partner-invitations/deals" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/partner-invitations/deals/:id" element={guard(['admin'], <AdminPartnerInvitations />)} />
       <Route path="/admin/partner-invitations/referrals" element={guard(['admin'], <AdminPartnerInvitations />)} />
-      <Route path="/admin/partner-invitations/firm-links" element={guard(['admin'], <AdminPartnerInvitations />)} />
+      {/* D952 (#2728): Firm links moved to Advisors & Partners › Firms; the old address forwards there. */}
+      <Route path="/admin/partner-invitations/firm-links" element={<FirmLinksRedirect />} />
       <Route path="/admin/team" element={guard(['admin'], <AdminTeam />)} />
       {/* Task #9 — exploring-users review queue (binding e-sign + role assignment). */}
       <Route path="/admin/exploring" element={guard(['admin'], <AdminExploring />)} />
