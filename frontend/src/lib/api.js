@@ -3776,7 +3776,15 @@ export const api = {
     request(`/captable/scenarios/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCapTableScenario: (uid) =>
     request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
-  exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
+  // D1016: the CSV as a blob, with `request()`'s headers (bearer, CSRF, company, rail) and the
+  // cookie; a refusal throws its own sentence, which the page shows in place.
+  downloadCapTableCsv: async (uid) => {
+    const res = await fetch(`${BASE}/captable/scenarios/${encodeURIComponent(uid)}/export.csv`, {
+      method: 'GET', headers: rawRequestHeaders('GET'), credentials: 'include',
+    });
+    if (!res.ok) throw await refusalError(res, 'The CSV could not be downloaded.');
+    return res.blob();
+  },
   // 409A safe harbour — appraisals on file plus the material events that
   // can end the presumption before the 12 months are up.
   get409a: (projectId) => request(`/captable/409a/${projectId}`),
