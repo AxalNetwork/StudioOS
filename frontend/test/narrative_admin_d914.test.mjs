@@ -193,7 +193,10 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
   const api = read('frontend/src/lib/api.js');
-  assert.match(api, /export \* from '\.\/api\/mercuryPersonal\.js';\nexport \* from '\.\/api\/narrative\.js';\nexport \* from '\.\/api\/newsletter\.js';/);
+  const exports = [...api.matchAll(/^export \* from '\.\/api\/([^']+)';$/gm)].map(m => m[1]);
+  assert.equal(exports.filter(name => name === 'narrative.js').length, 1);
+  assert.ok(exports.indexOf('mercuryPersonal.js') < exports.indexOf('narrative.js') && exports.indexOf('narrative.js') < exports.indexOf('newsletter.js'),
+    'narrative is exported once in its alphabetical place, allowing other domains between its neighbours');
 });
 
 
