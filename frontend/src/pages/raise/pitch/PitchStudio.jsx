@@ -7,11 +7,13 @@ import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
 import DeckReviewerPage from '../../DeckReviewerPage';
+import ExportDialog from './ExportDialog';
 import {
   EDIT_PATH, EMPTY_DECK, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
   asList, coverOf, currentVersion, dayLabel, isReadOnly, linkRows, mmss, newLinkHref, noViewsYet,
   readerStats, slideCaption, slideSeconds, ventureQuery, versionLabel, versionRows, weeklyViews,
 } from './pitchStudioModel';
+import { presentHref } from './presentExportModel';
 
 /**
  * D894 (#2434) — the Pitch deck studio's shell and the two tabs whose reads are
@@ -209,7 +211,7 @@ function StudioDecks({ reads, readOnly, q }) {
   } else {
     left = (
       <>
-        <CurrentDeck project={reads.project} current={current} deck={reads.deck} q={q} phone={phone} />
+        <CurrentDeck project={reads.project} current={current} versions={versions} deck={reads.deck} q={q} phone={phone} readOnly={readOnly} />
         <Versions rows={rows} phone={phone} />
       </>
     );
@@ -227,7 +229,8 @@ function StudioDecks({ reads, readOnly, q }) {
   );
 }
 
-function CurrentDeck({ project, current, deck, q, phone }) {
+function CurrentDeck({ project, current, versions, deck, q, phone, readOnly }) {
+  const [exporting, setExporting] = useState(false);
   const cover = deck.status === 'ok' ? coverOf(deck.data) : null;
   const title = `${String(project?.name || '').trim() || 'Your venture'} · ${versionLabel(current)}`;
   return (
@@ -253,8 +256,12 @@ function CurrentDeck({ project, current, deck, q, phone }) {
         </span>
         <div className="mt-auto flex flex-wrap gap-2">
           <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-open">Open</Link>
+          {/* D901 (#2680): present reads, so a read-only viewer presents too (PD21); export writes the ledger. */}
+          <Link to={presentHref(project?.id, current.id)} className={GHOST} data-testid="pitch-studio-present">Present</Link>
+          {!readOnly ? <button type="button" className={GHOST} onClick={() => setExporting(true)} data-testid="pitch-studio-export">Export</button> : null}
         </div>
       </div>
+      {exporting ? <ExportDialog versions={versions} current={current} onClose={() => setExporting(false)} /> : null}
     </section>
   );
 }

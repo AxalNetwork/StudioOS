@@ -189,6 +189,8 @@ import cycleGrow from './routes/cycle_grow';
 // catch-all so its `/share/:token/...` subpaths take precedence over
 // the existing /share/:token reader in decks.ts.
 import deckShareActions from './routes/deck_share_actions';
+// D901 (#2680) — the HTML export and the deck export ledger.
+import deckExports from './routes/deck_exports';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1160,6 +1162,9 @@ app.route('/api/brand', brand);
 // /api/decks/share/:token (signup, nda, feedback, deal-pack, context)
 // resolve to the new handlers before falling through to the catch-all.
 app.route('/api/decks', deckShareActions);
+// D901 (#2680): before decks.ts, so its middleware records the PDF and
+// PowerPoint file that POST /api/decks/:id/export answers.
+app.route('/api/decks', deckExports);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

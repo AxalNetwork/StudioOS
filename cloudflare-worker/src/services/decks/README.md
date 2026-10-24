@@ -9,7 +9,8 @@ Builds the deck payload from the venture's real records and renders it.
 | `autofill.ts` | Fills slide fields from the payload. |
 | `axalSpinoutDemoDay.ts` | The Demo Day deck variant. |
 | `deckRoster.ts` | What the Demo Day deck does with the Advisors & Partners roster, in one place (D214): the first `DECK_ROSTER_PROFILES` active rows become the Team & Network slide's profiles, the first `DECK_ROSTER_NAMES` named rows its names list, and every other active row is only counted. The deck and HQ's Content page both call it, so the page cannot mark a row "on the deck" that the deck drops. Imports nothing, so the Content summary does not pull in the deck assembler. |
-| `render.ts` | Slide rendering. |
+| `render.ts` | The slide types the export writers share. Its CDN-Tailwind `renderDeckHTML` had no caller and was removed (D901). |
+| `offlineHtml.ts` | The HTML export (D901): one self-contained file of a version. The fonts are inline, every image is a `data:` URI, and the CSP is `default-src 'none'`. Its one script is keyboard navigation, admitted by its hash. |
 | `pptx.ts` | PowerPoint export. |
 | `branding.ts` | Logo, colours, lock-up. |
 | `recommend.ts` | Slide-level suggestions. |
