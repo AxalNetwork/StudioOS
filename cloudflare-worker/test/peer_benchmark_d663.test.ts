@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * #1524 item 1 — the peer-group benchmark (D663 follow-up), on real SQLite.
  *
@@ -154,6 +155,7 @@ test('Fundraising readiness draws the benchmark beside the founder\'s own score,
   for (const t of ['spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'deck_share_views', 'data_room_folders', 'data_room_files',
     'data_room_access_log', 'cap_table_scenarios', 'raise_prospects', 'raise_rounds', 'contacts']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
+  raiseEvidenceTables(db);
   db.exec("INSERT INTO readiness_items (id, project_id, item_key, label) VALUES (1, 1, 'team', 'Team')");
   db.exec("INSERT INTO readiness_scores (item_id, project_id, score, evidence, source) VALUES (1, 1, 7, 'pattern', 'manual')");
   await official(db, OWN, 60);

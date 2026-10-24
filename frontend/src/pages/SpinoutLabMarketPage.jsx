@@ -93,7 +93,6 @@ export function FilledMark({ fill }) {
     source ? `Source: ${source}` : null,
     fill.citation?.quote ? `“${fill.citation.quote}”` : null,
     fill.edited && fill.proposed_value ? `It proposed: ${fill.proposed_value}` : null,
-    fill.model ? `Model: ${fill.model.split('/').pop()}` : null,
     // D777 part 4: the run that filled it and what it cost.
     fillRunLine(fill.run),
   ].filter(Boolean).join('\n');
