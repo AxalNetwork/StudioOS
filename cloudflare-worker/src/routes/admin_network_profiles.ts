@@ -6,17 +6,26 @@
  * as /api/admin/telegram, /api/admin/team).
  *
  * Endpoints:
- *   GET    /                    — list all profiles (active + archived)
- *   POST   /                    — create
- *   PUT    /:id                 — partial update (name, kind, role,
- *                                 bio, linkedin_url, skills,
- *                                 display_order, is_active)
- *   DELETE /:id                 — archive: sets is_active = 0 and keeps
- *                                 the row and its R2 photo, so re-activating
- *                                 is lossless (the handler below says why;
- *                                 this line said "hard delete" until D214)
+ *   GET    /                    — the roster: `?state=shown|hidden|archived`
+ *                                 (default: shown and hidden), `?q=` (name,
+ *                                 role, company), `?limit=` (1–500, default
+ *                                 200). Each row carries its deck reach.
+ *   POST   /                    — create (records `created_by`)
+ *   PUT    /:id                 — partial update (name, kind, role, company,
+ *                                 bio, linkedin_url, skills, display_order,
+ *                                 is_active = show / hide, linked_user_id)
+ *   POST   /:id/archive         — archive (D974): off the deck and out of the
+ *                                 working list, the row and its photo kept
+ *   POST   /:id/restore         — restore an archived row, as hidden
+ *   DELETE /:id                 — archive, kept for the console that calls it
+ *   GET    /:id/photo           — the photo, for an admin, in any state
  *   POST   /:id/photo           — upload square photo (data URI body)
  *   POST   /reorder             — { order: [id, ...] }
+ *
+ * D974 (#2760) — three states, not two. Hide (`is_active = 0`) keeps a row on
+ * the roster and off the deck; Archive also sets `archived_at`. Every write
+ * goes through `logAdminAction`, so it reaches HQ's governance feed; archive,
+ * restore, hide and show are each their own act.
  *
  * R2 layout: FILES bucket under `network/<uuid>.{jpg,png,webp}`, ≤2MB.
  * Public photo proxy lives in routes/network_public.ts so the bucket
@@ -25,7 +34,8 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
-import { hashEmail } from '../util/hashEmail';
+import { logAdminAction } from '../services/adminAudit';
+import { deckRosterReach } from '../services/decks/deckRoster';
 import {
   ensureNetworkProfilesSchema,
   NETWORK_KIND_DEFAULT,
@@ -101,21 +111,46 @@ function sanitizeOptUrl(raw: unknown): string | null {
   return URL_RE.test(s) ? s : null;
 }
 
+/** D974: every roster write reaches `admin_audit_log` (HQ's governance feed), not `activity_logs` alone. */
 async function logAdmin(env: Env, adminId: number, email: string, action: string, details: Record<string, unknown>) {
-  try {
-    const actorHash = await hashEmail(email);
-    await env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
-    ).bind(action, JSON.stringify(details), actorHash, adminId).run();
-  } catch (e) {
-    console.warn('[admin_network_profiles] activity log failed', e);
-  }
+  await logAdminAction(env, adminId, email, action, details);
 }
 
-function shape(row: any) {
+export const ROSTER_STATES = ['shown', 'hidden', 'archived'] as const;
+export type RosterState = typeof ROSTER_STATES[number];
+export type DeckReachLabel = 'on_slide' | 'name_only' | 'counted' | 'not_on_deck';
+
+export function stateOf(row: { is_active?: unknown; archived_at?: unknown }): RosterState {
+  if (row.archived_at) return 'archived';
+  return Number(row.is_active) === 1 ? 'shown' : 'hidden';
+}
+
+/**
+ * What the Demo Day deck does with each row (D214's rule, `deckRoster.ts`),
+ * over the rows the deck itself reads: `is_active = 1` in the deck's order
+ * (`loadNetworkProfiles`, axalSpinoutDemoDay.ts). A row the deck does not
+ * read is `not_on_deck`. Read over the whole roster, so a filter or a limit
+ * never changes a row's reach.
+ */
+async function deckReachById(env: Env): Promise<Map<number, DeckReachLabel>> {
+  const rows = (await env.DB.prepare(
+    `SELECT id, name FROM network_profiles WHERE is_active = 1 ORDER BY display_order ASC, name ASC, id ASC`,
+  ).all<{ id: number; name: string | null }>()).results || [];
+  const reach = deckRosterReach(rows.map((r) => String(r.name || '')));
+  const label: Record<string, DeckReachLabel> = { profile: 'on_slide', named: 'name_only', counted: 'counted' };
+  return new Map(rows.map((r, i) => [Number(r.id), label[reach[i]]]));
+}
+
+/**
+ * A row as HQ reads it. The R2 key stays in the Worker: the photo is read
+ * through `GET /:id/photo` (any state, admins only) or, while the row is
+ * shown, the public proxy.
+ */
+function shape(row: any, reach?: Map<number, DeckReachLabel>) {
   let skills: string[] = [];
   try { const arr = JSON.parse(row.skills_json || '[]'); if (Array.isArray(arr)) skills = arr.map(String); }
   catch { /* noop */ }
+  const state = stateOf(row);
   return {
     id: row.id,
     name: row.name,
@@ -124,32 +159,80 @@ function shape(row: any) {
     company: row.company || null,
     bio: row.bio || null,
     linkedin_url: row.linkedin_url || null,
-    photo_r2_key: row.photo_r2_key || null,
     has_photo: !!row.photo_r2_key,
-    photo_url: row.photo_r2_key ? `/api/public/network/${row.id}/photo` : null,
+    photo_url: row.photo_r2_key ? `/api/admin/network-profiles/${row.id}/photo` : null,
+    public_photo_url: row.photo_r2_key && state === 'shown' ? `/api/public/network/${row.id}/photo` : null,
     skills,
     display_order: row.display_order,
     is_active: !!row.is_active,
+    state,
+    archived_at: row.archived_at || null,
+    deck_reach: reach?.get(Number(row.id)) ?? 'not_on_deck',
+    linked_user: row.linked_user_id != null ? { id: Number(row.linked_user_id), name: row.linked_user_name ?? null } : null,
+    created_by: row.created_by != null ? { id: Number(row.created_by), name: row.created_by_name ?? null } : null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
 }
+
+/** A member account to link, or a sentence saying why not. */
+async function linkedUserOf(env: Env, raw: unknown): Promise<number | null | string> {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const id = Number(raw);
+  if (!Number.isSafeInteger(id) || id <= 0) return 'linked_user_id must be a member account';
+  const u = await env.DB.prepare('SELECT id FROM users WHERE id = ? AND is_active = 1').bind(id).first<any>();
+  return u ? id : 'linked_user_id must be a member account';
+}
+
 
 // ---------------- LIST ----------------
 
 r.get('/', async (c) => {
   await requireAdmin(c);
   await ensureNetworkProfilesSchema(c.env);
+  const rawState = c.req.query('state');
+  if (rawState != null && rawState !== '' && !(ROSTER_STATES as readonly string[]).includes(rawState)) {
+    return c.json({ error: 'invalid_state', allowed: ROSTER_STATES }, 400);
+  }
+  const states: RosterState[] = rawState ? [rawState as RosterState] : ['shown', 'hidden'];
+  const rawLimit = c.req.query('limit');
+  const limit = rawLimit == null || rawLimit === '' ? 200 : Number(rawLimit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) return c.json({ error: 'invalid_limit', min: 1, max: 500 }, 400);
+  const q = String(c.req.query('q') || '').trim().slice(0, 100);
+  // `q` is bound, with LIKE's own wildcards escaped, so "50%" finds "50%".
+  const like = `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  const want = (st: RosterState) => (states.includes(st) ? 1 : 0);
+  // One written-out query: the three states are disjoint and cover every row,
+  // and each is switched on by a bound flag rather than spliced in.
   const rows = (await c.env.DB.prepare(
-    `SELECT id, name, kind, role, company, bio, linkedin_url, photo_r2_key,
-            skills_json, display_order, is_active, created_at, updated_at
-       FROM network_profiles
-       ORDER BY is_active DESC, display_order ASC, name ASC`,
-  ).all()).results || [];
+    `SELECT p.id, p.name, p.kind, p.role, p.company, p.bio, p.linkedin_url, p.photo_r2_key,
+            p.skills_json, p.display_order, p.is_active, p.archived_at, p.linked_user_id, p.created_by,
+            p.created_at, p.updated_at, lu.name AS linked_user_name, cb.name AS created_by_name
+       FROM network_profiles p
+       LEFT JOIN users lu ON lu.id = p.linked_user_id
+       LEFT JOIN users cb ON cb.id = p.created_by
+      WHERE ((? = 1 AND p.archived_at IS NULL AND p.is_active = 1)
+          OR (? = 1 AND p.archived_at IS NULL AND p.is_active = 0)
+          OR (? = 1 AND p.archived_at IS NOT NULL))
+        AND (? = '' OR p.name LIKE ? ESCAPE '\\' OR p.role LIKE ? ESCAPE '\\' OR p.company LIKE ? ESCAPE '\\')
+      ORDER BY p.is_active DESC, p.display_order ASC, p.name ASC, p.id ASC
+      LIMIT ?`,
+  ).bind(want('shown'), want('hidden'), want('archived'), q, like, like, like, limit + 1).all()).results || [];
+  const counts = (await c.env.DB.prepare(
+    `SELECT SUM(CASE WHEN archived_at IS NULL AND is_active = 1 THEN 1 ELSE 0 END) AS shown,
+            SUM(CASE WHEN archived_at IS NULL AND is_active = 0 THEN 1 ELSE 0 END) AS hidden,
+            SUM(CASE WHEN archived_at IS NOT NULL THEN 1 ELSE 0 END) AS archived
+       FROM network_profiles`,
+  ).first<any>()) || {};
+  const reach = await deckReachById(c.env);
+  const listed = rows.slice(0, limit);
   return c.json({
-    profiles: rows.map(shape),
-    count: rows.length,
-    catalog: { kinds: NETWORK_KINDS, skills: SKILL_CATALOG },
+    profiles: listed.map((row) => shape(row, reach)),
+    count: listed.length,
+    truncated: rows.length > limit,
+    counts: { shown: Number(counts.shown) || 0, hidden: Number(counts.hidden) || 0, archived: Number(counts.archived) || 0 },
+    filter: { state: rawState || null, q: q || null, limit },
+    catalog: { kinds: NETWORK_KINDS, skills: SKILL_CATALOG, states: ROSTER_STATES },
   });
 });
 
@@ -184,6 +267,8 @@ r.post('/', async (c) => {
   const bio = String(body.bio || '').trim().slice(0, 2000) || null;
   const linkedin = sanitizeOptUrl(body.linkedin_url);
   const skills = sanitizeSkills(body.skills);
+  const linked = await linkedUserOf(c.env, body.linked_user_id);
+  if (typeof linked === 'string') return c.json({ error: 'invalid_linked_user', message: linked }, 400);
 
   const next: any = await c.env.DB.prepare(
     `SELECT COALESCE(MAX(display_order), -1) + 1 AS next FROM network_profiles`,
@@ -192,17 +277,20 @@ r.post('/', async (c) => {
   try {
     const row: any = await c.env.DB.prepare(
       `INSERT INTO network_profiles
-         (name, kind, role, company, bio, linkedin_url, skills_json, display_order, is_active)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (name, kind, role, company, bio, linkedin_url, skills_json, display_order, is_active, linked_user_id, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING id`,
     ).bind(
       name, kind, role, company, bio, linkedin,
       JSON.stringify(skills),
       Number(next?.next ?? 0),
       body.is_active === false ? 0 : 1,
+      linked, Number(admin.id) || null,
     ).first();
 
-    await logAdmin(c.env, admin.id, admin.email, 'network_profile_created', { id: row?.id, name, kind });
+    await logAdmin(c.env, admin.id, admin.email, 'network_profile_created', {
+      id: row?.id, name, kind, ...(linked != null ? { target_user_id: linked } : {}),
+    });
     return c.json({ id: row?.id }, 201);
   } catch (err: any) {
     console.error('[admin_network_profiles] create failed', err);
@@ -220,9 +308,14 @@ r.put('/:id', async (c) => {
   const body: any = await c.req.json().catch(() => ({}));
 
   const existing: any = await c.env.DB.prepare(
-    `SELECT id FROM network_profiles WHERE id = ?`,
+    `SELECT id, is_active, archived_at, linked_user_id FROM network_profiles WHERE id = ?`,
   ).bind(id).first();
   if (!existing) return c.json({ error: 'not_found' }, 404);
+  // An archived row is shown or hidden only after it is restored, so a stray
+  // `is_active` can never put an archived row back on the deck.
+  if ('is_active' in body && existing.archived_at) {
+    return c.json({ error: 'archived', message: 'Restore this profile before you show or hide it.' }, 409);
+  }
 
   const sets: string[] = [];
   const args: unknown[] = [];
@@ -244,6 +337,13 @@ r.put('/:id', async (c) => {
   if ('skills' in body)       { sets.push('skills_json = ?');  args.push(JSON.stringify(sanitizeSkills(body.skills))); }
   if ('display_order' in body){ sets.push('display_order = ?'); args.push(Number(body.display_order) || 0); }
   if ('is_active' in body)    { sets.push('is_active = ?');    args.push(body.is_active ? 1 : 0); }
+  let linked: number | null | undefined;
+  if ('linked_user_id' in body) {
+    const l = await linkedUserOf(c.env, body.linked_user_id);
+    if (typeof l === 'string') return c.json({ error: 'invalid_linked_user', message: l }, 400);
+    linked = l;
+    sets.push('linked_user_id = ?'); args.push(l);
+  }
 
   if (sets.length === 0) return c.json({ error: 'no_fields' }, 400);
   sets.push("updated_at = datetime('now')");
@@ -257,7 +357,17 @@ r.put('/:id', async (c) => {
     return c.json({ error: 'update_failed' }, 500);
   }
 
-  await logAdmin(c.env, admin.id, admin.email, 'network_profile_updated', { id, fields: Object.keys(body) });
+  const fields = Object.keys(body).filter((k) => k !== 'is_active');
+  if (fields.length) {
+    const target = linked ?? (existing.linked_user_id != null ? Number(existing.linked_user_id) : null);
+    await logAdmin(c.env, admin.id, admin.email, 'network_profile_updated', {
+      id, fields, ...(target != null ? { target_user_id: target } : {}),
+    });
+  }
+  // Showing and hiding are their own acts, logged only when the state changes.
+  if ('is_active' in body && (body.is_active ? 1 : 0) !== Number(existing.is_active)) {
+    await logAdmin(c.env, admin.id, admin.email, body.is_active ? 'network_profile_shown' : 'network_profile_hidden', { id });
+  }
   return c.json({ ok: true });
 });
 
@@ -269,23 +379,73 @@ r.put('/:id', async (c) => {
 // flips `is_active=0` instead of dropping the row, and the R2 photo
 // stays in place so re-activation is lossless.
 
-r.delete('/:id', async (c) => {
+// D974: archiving also sets `archived_at`, so a hidden row and an archived
+// one are told apart; it keeps `is_active = 0`, so the deck and the public
+// photo proxy, which read `is_active = 1`, drop it exactly as before.
+async function archive(c: any) {
   const admin = await requireAdmin(c);
   await ensureNetworkProfilesSchema(c.env);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
 
   const row: any = await c.env.DB.prepare(
-    `SELECT name, is_active FROM network_profiles WHERE id = ?`,
+    `SELECT name, archived_at FROM network_profiles WHERE id = ?`,
   ).bind(id).first();
   if (!row) return c.json({ error: 'not_found' }, 404);
+  if (row.archived_at) return c.json({ error: 'already_archived' }, 409);
 
   await c.env.DB.prepare(
-    `UPDATE network_profiles SET is_active = 0, updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE network_profiles SET is_active = 0, archived_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
   ).bind(id).run();
 
-  await logAdmin(c.env, admin.id, admin.email, 'network_profile_archived', { id, name: row.name });
-  return c.json({ ok: true, archived: true });
+  await logAdmin(c.env, admin.id, admin.email, 'network_profile_archived', { id });
+  return c.json({ ok: true, archived: true, state: 'archived' });
+}
+
+r.post('/:id/archive', archive);
+r.delete('/:id', archive);
+
+// Restore puts an archived row back as hidden: it returns to the roster, and
+// reaching the deck again is the separate act of showing it.
+r.post('/:id/restore', async (c) => {
+  const admin = await requireAdmin(c);
+  await ensureNetworkProfilesSchema(c.env);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
+  const row: any = await c.env.DB.prepare(`SELECT archived_at FROM network_profiles WHERE id = ?`).bind(id).first();
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  if (!row.archived_at) return c.json({ error: 'not_archived' }, 409);
+  await c.env.DB.prepare(
+    `UPDATE network_profiles SET archived_at = NULL, is_active = 0, updated_at = datetime('now') WHERE id = ?`,
+  ).bind(id).run();
+  await logAdmin(c.env, admin.id, admin.email, 'network_profile_restored', { id });
+  return c.json({ ok: true, state: 'hidden' });
+});
+
+// ---------------- PHOTO READ (admins, any state) ----------------
+//
+// The public proxy (`network_public.ts`) serves shown rows only, so HQ could
+// not see the photo of a hidden or archived row. This read serves every state
+// to an admin, and is never cached by a shared cache.
+r.get('/:id/photo', async (c) => {
+  await requireAdmin(c);
+  await ensureNetworkProfilesSchema(c.env);
+  const id = Number(c.req.param('id'));
+  if (!Number.isFinite(id)) return c.json({ error: 'invalid_id' }, 400);
+  const row = await c.env.DB.prepare(`SELECT photo_r2_key FROM network_profiles WHERE id = ?`).bind(id).first<{ photo_r2_key: string | null }>();
+  if (!row) return c.json({ error: 'not_found' }, 404);
+  if (!row.photo_r2_key || !row.photo_r2_key.startsWith('network/')) return c.json({ error: 'no_photo' }, 404);
+  if (!c.env.FILES) return c.json({ error: 'r2_unavailable' }, 503);
+  const obj = await c.env.FILES.get(row.photo_r2_key);
+  if (!obj) return c.json({ error: 'no_photo' }, 404);
+  return new Response(obj.body, {
+    status: 200,
+    headers: {
+      'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
+      'Cache-Control': 'private, no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 });
 
 // ---------------- PHOTO UPLOAD ----------------
@@ -339,7 +499,7 @@ r.post('/:id/photo', async (c) => {
   }
 
   await logAdmin(c.env, admin.id, admin.email, 'network_profile_photo_uploaded', { id, size: bytes.byteLength });
-  return c.json({ ok: true, photo_r2_key: key, photo_url: `/api/public/network/${id}/photo`, size: bytes.byteLength });
+  return c.json({ ok: true, has_photo: true, photo_url: `/api/admin/network-profiles/${id}/photo`, size: bytes.byteLength });
 });
 
 // ---------------- REORDER ----------------
