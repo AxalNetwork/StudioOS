@@ -24,7 +24,7 @@ import { AMBER, CARD, Card, EYE, Failed, H2, LINK, SUB, Tile } from './parts';
  *   · PI9's banner while the Worker's agreement-ready rule says the Partner
  *     Services agreement is not ready, and PI9b's first use (from R1).
  * The doors below are written out (`to="…"`) so the reachability walk finds
- * Firm links, whose only door is this row.
+ * each one. The Firms row opens Advisors & Partners › Firms (D952).
  */
 
 /** One Needs-you row's action. Each target is a literal door, by kind. */
@@ -45,7 +45,7 @@ function RowAction({ row, onResend }) {
     case 'Due diligence':
       return <Link to={row.action.to} className={cls} data-testid={`partners-needs-${row.key}-go`}>Open in Due diligence</Link>;
     case 'Firms':
-      return <Link to="/admin/partner-invitations/firm-links" className={cls} data-testid="partners-needs-firms-go">Open firm links</Link>;
+      return <Link to="/admin/advisors-partners/firms" className={cls} data-testid="partners-needs-firms-go">Open Firms</Link>;
     case 'Rev-share':
       return <Link to={row.action.to} className={cls}>Open Referrals</Link>;
     default:

@@ -299,8 +299,8 @@ const COMPOSED = new Map([
   ]],
   // D923 (2026-10-24, #2370): Partner invitations draws its tabs, its records
   // and its dialogs from the files beside it. They hold the doors to one
-  // invitation, one deal and Firm links, whose only door is Overview's
-  // Needs-you row.
+  // invitation and one deal, and Overview's Needs-you row opens Advisors &
+  // Partners › Firms (D952).
   ['frontend/src/pages/admin/PartnerInvitations.jsx', [
     'frontend/src/pages/admin/partners/PartnersOverview.jsx',
     'frontend/src/pages/admin/partners/PartnersInvitations.jsx',
@@ -309,7 +309,6 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersDeals.jsx',
     'frontend/src/pages/admin/partners/DealRecord.jsx',
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
-    'frontend/src/pages/admin/partners/FirmLinks.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
 ]);
@@ -493,7 +492,7 @@ test('every in-page /admin link points at a registered route', () => {
 test('a redirect-only /admin route is excluded, and its target is reachable', () => {
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
-  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news'],
+  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
@@ -507,6 +506,8 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
     LabPreviewRedirect: ['/admin/programs/spinout-lab/preview', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PREVIEW_PATH'],
     // D972 (#2369): the roster is Advisors & Partners' Deck roster tab.
     ApRedirect: ['/admin/advisors-partners/deck', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_DECK_PATH'],
+    // D952 (#2728): Partner invitations' Firm links moved to the Firms tab.
+    FirmLinksRedirect: ['/admin/advisors-partners/firms', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_FIRMS_PATH'],
   };
   for (const path of REDIRECTS) {
     const route = BY_PATH.get(path);

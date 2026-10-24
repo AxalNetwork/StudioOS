@@ -16,7 +16,8 @@
  *   · the addresses, the redirect and every wiring place D923 §1 names;
  *   · mounted against a stubbed Worker: a failed read is Unreadable and never
  *     "No invitations yet", counts at the cap, the create result stays until
- *     Done, Firm links asks before saving, Terminate waits for a reason.
+ *     Done, Terminate waits for a reason. (Firm links moved to Advisors &
+ *     Partners › Firms with D952; its mounted test is in admin_advisors_partners_d972.)
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -31,7 +32,7 @@ import { codeOnly } from './_codeOnly.mjs';
 import PartnerInvitations from '../src/pages/admin/PartnerInvitations.jsx';
 import { parseStamp as uiParseStamp } from '../src/ui/parseStamp.js';
 import {
-  AGREEMENT_BANNER, AGREEMENT_LAPSE_WARNING, CAPS, COMMUNITY_PATH, DEAL_NOT_ACTIVE, DEAL_STATE_KEYS, EMPTY_TITLE, FIRM_LINKS_PATH, FOUNDER_NO_PLAN,
+  AGREEMENT_BANNER, AGREEMENT_LAPSE_WARNING, CAPS, COMMUNITY_PATH, DEAL_NOT_ACTIVE, DEAL_STATE_KEYS, EMPTY_TITLE, FIRMS_TAB_PATH, FOUNDER_NO_PLAN,
   FROZEN, INVITATION_CLOSED, LINE, MOVED_LINE, MOVED_PATH, NOT_IN_READ, NOT_READ_YET, STORED_EXPIRED_WORD, TABS, TITLE, TRY_AGAIN, TYPE_FULL,
   WITHIN_DEALS, WITHIN_INVITATIONS, agreementReady, allTimeRedemptions, cameFromOldAddress, countClosing30, countLast90, countOpenWindows,
   createdLines, day, daysLeft, daysUsed, ddFor, dealFromSearch, dealState, dealTypeWord, dealsCount, dotsLabel, duplicateCheck, expiresCell,
@@ -89,7 +90,7 @@ const many = (n, f) => Array.from({ length: n }, (_, i) => f(i + 1));
  * The model
  * ------------------------------------------------------------------ */
 
-test('the addresses: four tabs, one address per invitation and per deal, Firm links without a tab, the old address moved', () => {
+test('the addresses: four tabs, one address per invitation and per deal, the old address moved, and Firm links gone to the Firms tab', () => {
   assert.deepEqual(TABS.map((t) => [t.label, t.path]), [
     ['Overview', '/admin/partner-invitations'], ['Invitations', '/admin/partner-invitations/invitations'],
     ['Deals', '/admin/partner-invitations/deals'], ['Referrals', '/admin/partner-invitations/referrals'],
@@ -98,11 +99,11 @@ test('the addresses: four tabs, one address per invitation and per deal, Firm li
   assert.deepEqual(routeFor('/admin/partner-invitations/'), { tab: 'overview', record: null });
   assert.deepEqual(routeFor('/admin/partner-invitations/invitations/12'), { tab: 'invitations', record: { kind: 'invitation', id: '12' } });
   assert.deepEqual(routeFor('/admin/partner-invitations/deals/41'), { tab: 'deals', record: { kind: 'deal', id: '41' } });
-  assert.deepEqual(routeFor('/admin/partner-invitations/firm-links'), { tab: 'firm-links', record: null });
   assert.deepEqual(routeFor('/admin/partner-invitations/referrals'), { tab: 'referrals', record: null });
-  assert.equal(tabPath('firm-links'), FIRM_LINKS_PATH);
+  // D952: the desk no longer draws Firm links; App.jsx forwards its address to the Firms tab.
+  assert.equal(FIRMS_TAB_PATH, '/admin/advisors-partners/firms');
+  assert.equal(tabPath('firm-links'), '/admin/partner-invitations', 'an unknown tab is Overview');
   assert.equal(tabPath('deals'), '/admin/partner-invitations/deals');
-  assert.ok(!TABS.some((t) => t.path === FIRM_LINKS_PATH), 'Firm links has an address and no tab');
   assert.equal(MOVED_PATH, '/admin/partner-invitations?moved=partners');
   assert.equal(cameFromOldAddress('?moved=partners'), true);
   assert.equal(cameFromOldAddress('?moved=held-insights'), false);
@@ -207,6 +208,7 @@ test('Guard L: a list at its cap says what it covers, never a total', () => {
   const accounts = many(CAPS.links, (i) => ({ id: i, email: `a${i}@x.co`, partner_id: i <= 18 ? null : 4 }));
   assert.equal(firmCounts({ accounts, firms: [{ id: 4 }] }).cover, 'Counted over the first 500 partner accounts.');
   assert.equal(firmCounts({ accounts: accounts.slice(0, 20), firms: [{ id: 4 }] }).text, '2 attached · 18 not · 1 firms on record');
+
   assert.equal(ddFor(deal(1), ready(many(CAPS.cases, (i) => ({ subject_id: 9000 + i, status: 'open' })))).text, NOT_IN_READ);
   assert.equal(ddFor(deal(1), ready([])).text, 'No case on record');
   assert.equal(memberCheck(ready(many(CAPS.users, (i) => ({ email: `x${i}@lio.co`, role: 'founder' }))), 'lio.co@lio.co').state, 'failed', 'a full page of matches cannot prove "not a member"');
@@ -444,10 +446,12 @@ const DESK_FILES = ['frontend/src/pages/admin/PartnerInvitations.jsx',
 test('the routes: each address under today\'s guard at App.jsx\'s six-space indent, static paths before :id, and the old address an inline Navigate', () => {
   const app = read('frontend/src/App.jsx');
   const paths = ['/admin/partner-invitations', '/admin/partner-invitations/invitations', '/admin/partner-invitations/invitations/:id',
-    '/admin/partner-invitations/deals', '/admin/partner-invitations/deals/:id', '/admin/partner-invitations/referrals', '/admin/partner-invitations/firm-links'];
+    '/admin/partner-invitations/deals', '/admin/partner-invitations/deals/:id', '/admin/partner-invitations/referrals'];
   const lines = paths.map((p) => `\n      <Route path="${p}" element={guard(['admin'], <AdminPartnerInvitations />)} />`);
   for (const l of lines) assert.ok(app.includes(l), l.trim());
-  assert.equal((app.match(/<AdminPartnerInvitations \/>/g) || []).length, 7);
+  assert.equal((app.match(/<AdminPartnerInvitations \/>/g) || []).length, 6);
+  // D952: the old Firm links address forwards to Advisors & Partners › Firms, unguarded like every redirect.
+  assert.ok(app.includes('\n      <Route path="/admin/partner-invitations/firm-links" element={<FirmLinksRedirect />} />'));
   assert.ok(app.indexOf(lines[1]) < app.indexOf(lines[2]) && app.indexOf(lines[3]) < app.indexOf(lines[4]), 'static paths before :id');
   assert.ok(app.includes('\n      <Route path="/admin/partners" element={<Navigate to="/admin/partner-invitations?moved=partners" replace />} />'));
   assert.doesNotMatch(codeOnly(app).split('\n').filter((l) => l.includes('partner-invitations')).join('\n'), /hqOnly\(/, 'no hqOnly');
@@ -462,8 +466,9 @@ test('the page keeps its frame and today\'s rail note, its crumb and its literal
   assert.match(page, /<DeskTab to="\/admin\/partner-invitations" end /, 'Overview is lit only on its own address');
   assert.match(page, /<Link to="\/admin\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Partner invitations/);
   assert.doesNotMatch(page, /to="\/admin\/held\/community"|scope-chip/, 'the crumb links Community itself, not its redirect, and there is no scope chip');
-  // Firm links' one door is Overview's Needs-you row, written out.
-  assert.match(read('frontend/src/pages/admin/partners/PartnersOverview.jsx'), /<Link to="\/admin\/partner-invitations\/firm-links"/);
+  // D952: Overview's Firms row opens the Firms tab, written out; nothing here links the old address.
+  assert.match(read('frontend/src/pages/admin/partners/PartnersOverview.jsx'), /<Link to="\/admin\/advisors-partners\/firms"/);
+  assert.doesNotMatch(read('frontend/src/pages/admin/partners/PartnersOverview.jsx') + page, /to="\/admin\/partner-invitations\/firm-links"/);
 });
 
 test('every wiring place D923 §1 names follows the page', () => {
@@ -488,7 +493,9 @@ test('the desk reads only D923 §2\'s reads through existing clients, and draws 
   for (const call of ['api.adminPartners.listInvitations(', 'api.adminPartners.listDeals(', 'api.adminPartners.listTopDeals(', 'api.adminPartners.dealRedemptions(',
     'api.adminListPartnerDeals(', 'api.adminPartners.listFirmLinks(', 'api.esignDetail(', 'api.esignTemplate(\'partner_services\')', 'dd.listCases(',
     'api.trustScoreBatch(', 'api.adminListUsers(', 'api.adminGetProfile(']) assert.ok(src.includes(call), `the desk no longer reads ${call}`);
-  for (const write of ['createInvitation(', 'resendInvitation(', 'revokeInvitation(', 'terminateDeal(', 'setFirmLink(']) assert.ok(src.includes(`api.adminPartners.${write}`), write);
+  for (const write of ['createInvitation(', 'resendInvitation(', 'revokeInvitation(', 'terminateDeal(']) assert.ok(src.includes(`api.adminPartners.${write}`), write);
+  // D952: attaching an account to a firm is decided on Advisors & Partners › Firms now, not on the desk.
+  assert.ok(!src.includes('api.adminPartners.setFirmLink('), 'the desk still writes firm links');
   for (const imp of src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api'/g)) {
     for (const name of imp[1].split(',').map((s) => s.trim()).filter(Boolean)) assert.ok(['api', 'dd'].includes(name), `a new client: ${name}`);
   }
@@ -773,24 +780,6 @@ test('a check\'s late reply for an address no longer in the field is dropped', a
   } finally { await view.close(); }
 });
 
-test('Firm links asks before it saves, and says the result on the page', async () => {
-  let saved = null;
-  const links = { accounts: [{ id: 31, email: 'ann@firm.co', name: 'Ann', partner_id: null, firm_name: null, firm_company: null }], firms: [{ id: 4, name: 'Northwind', company: 'Northwind LLC', email: null, accounts: 2 }], attached: 0, unattached: 1 };
-  const view = await mounted('/admin/partner-invitations/firm-links', worker({ links, writes: { link: (o) => { saved = JSON.parse(o.body); return response({ ok: true, user_id: 31, partner_id: 4, firm_name: 'Northwind' }); } } }));
-  try {
-    assert.equal(view.textOf('partners-firm-counts'), '0 attached · 1 not · 1 firms on record');
-    await view.change('partners-firm-select-31', { value: '4' });
-    assert.ok(view.has('partners-firm-confirm'), 'a change asks first');
-    assert.match(view.textOf('partners-firm-confirm'), /Attach Ann to Northwind LLC\?/);
-    assert.equal(view.textOf('partners-firm-confirm-body'), 'Every partner page Ann opens then belongs to Northwind LLC. The change is recorded in the admin audit log.');
-    assert.equal(view.requests.filter((r) => r.method === 'POST').length, 0, 'nothing is saved before the confirm');
-    await view.click('partners-firm-save');
-    assert.deepEqual(saved, { user_id: 31, partner_id: 4 });
-    assert.equal(view.textOf('partners-firm-saved'), 'Attached to Northwind.');
-    assert.ok(!view.has('partners-firm-confirm'));
-  } finally { await view.close(); }
-});
-
 test('Terminate is disabled until a reason is typed; its result and its refusal stay in the dialog', async () => {
   const lio = deal(7, { partner_name: 'Lio Testwell', redemptions_count: 3, expires_at: isoAt(LIVE + 100 * DAY) });
   let body = null;
@@ -833,15 +822,16 @@ test('Terminate is disabled until a reason is typed; its result and its refusal 
   } finally { await refused.close(); }
 });
 
-test('the old address lands on Overview with the moved notice; first use draws the empty state and keeps the Firm links door', async () => {
+test('the old address lands on Overview with the moved notice; first use draws the empty state and the Firms door', async () => {
   const links = { accounts: [{ id: 1, email: 'a@x.co', partner_id: null }, { id: 2, email: 'b@x.co', partner_id: null }], firms: [] };
   const view = await mounted(MOVED_PATH, worker({ invitations: [], links, overview: overviewReply({ unattached_account: { available: true, rows: [{ kind: 'unattached_account', id: 1 }, { kind: 'unattached_account', id: 2 }] } }) }));
   try {
     assert.equal(view.textOf('partners-moved'), `${MOVED_LINE}Dismiss`);
     assert.ok(view.has('partners-first-use'));
     assert.match(view.textOf('partners-first-use'), /No partner invitations yet\.Invite an operating partner to start\. They answer a short profile, choose an offer, and sign\.New invitation/);
-    assert.equal(view.textOf('partners-needs-firms'), 'Firms2 partner accounts are not attached to a firm.Open firm links');
-    assert.ok(view.hrefs().includes('/admin/partner-invitations/firm-links'));
+    assert.equal(view.textOf('partners-needs-firms'), 'Firms2 partner accounts are not attached to a firm.Open Firms');
+    assert.ok(view.hrefs().includes('/admin/advisors-partners/firms'));
+    assert.ok(!view.hrefs().includes('/admin/partner-invitations/firm-links'));
     assert.match(view.textOf('partners-tab-overview-count'), /^1, Rows in Needs you$/);
     await view.press('Dismiss');
     assert.equal(view.at.path, '/admin/partner-invitations');

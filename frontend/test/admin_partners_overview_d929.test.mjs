@@ -184,7 +184,7 @@ test('Needs you: every kind the read returns, each with its one action, named fr
     ['Term ending', 'The Services partnership with Dana 7 ends on 13 Nov 2026.', 'Open deal', '/admin/partner-invitations/deals/7'],
     ['Term ending', 'The custom deal with Dana 8 ends on 20 Nov 2026.', 'Open deal', '/admin/partner-invitations/deals/8'],
     ['Due diligence', 'The partner on the Services partnership with Dana 7 has a due-diligence case in review.', 'Open in Due diligence', '/admin/due-diligence/dd_7'],
-    ['Firms', '2 partner accounts are not attached to a firm.', 'Open firm links', '/admin/partner-invitations/firm-links'],
+    ['Firms', '2 partner accounts are not attached to a firm.', 'Open Firms', '/admin/advisors-partners/firms'],
     ['Rev-share', '2 rev-share windows on the Deal-sourcing revenue share with Dana 9 close within 30 days.', 'Open Referrals', '/admin/partner-invitations/referrals?deal=9'],
   ]);
   assert.equal(needs.rows[0].action.resend.id, 2, 'Resend opens the dialog on that invitation');
