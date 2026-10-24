@@ -257,6 +257,12 @@ period before (`compare`) and one profile's lightbox (`group`). For #2661,
 the same figures as a logged, counts-only CSV or PDF, and answers with a signed
 24-hour link.
 
+D931 (#2715): `community.js` reads Admin › Community's counts read,
+`communityApi.overview({ weeks })` (`GET /api/admin/community/overview`, any
+admin, `weeks` 4, 12 or 52): the queue's ages, the job board, who takes part,
+circles, the roster and wellbeing, each block answering alone. Its events parts
+come from the Events desk's overview (D918).
+
 D885 (#2561): `channelKeys.js` sets, rotates (or generates) and removes the
 interview channels' Worker secrets from HQ › Integration keys › Channels
 (`/api/admin/integration-keys/channels/:channel`, Super Admin behind the write

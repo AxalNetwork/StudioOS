@@ -96,7 +96,7 @@ export async function submitForReview(env: Env, posting: any, user: User): Promi
   if (!canManagePosting(posting, user)) return { ok: false, status: 403, error: 'forbidden' };
   if (!String(posting.title || '').trim()) return { ok: false, status: 400, error: 'title_required' };
   await env.DB.prepare(
-    `UPDATE job_postings SET status = 'pending_review', review_notes = NULL, updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE job_postings SET status = 'pending_review', review_notes = NULL, submitted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
   ).bind(posting.id).run();
   return { ok: true, posting: await env.DB.prepare('SELECT * FROM job_postings WHERE id = ?').bind(posting.id).first() };
 }
