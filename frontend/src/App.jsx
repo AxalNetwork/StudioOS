@@ -712,9 +712,9 @@ function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
   if (!persona || !Array.isArray(persona.nav_extras) || persona.nav_extras.length === 0) {
     return groups;
   }
-  // Never inject a persona group whose role_alignment differs from the
+  // Never inject a persona group whose profile differs from the
   // current user — a Founder nav extra has no place in an Investor sidebar.
-  if (persona.role_alignment && String(persona.role_alignment) !== String(role)) {
+  if (persona.profile && String(persona.profile) !== String(role)) {
     return groups;
   }
   const existingPaths = new Set();
@@ -2546,7 +2546,7 @@ function AppInner() {
           of the same page would let the gate and the links disagree about
           which one is canonical. */}
       <Route path="/onboarding/licence" element={<Navigate to="/onboarding" replace />} />
-      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
+      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder', 'exploring'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor', 'exploring'], <OnboardingInvestorPage />)} />
       <Route path="/onboarding/partner" element={guard(['admin', 'partner', 'exploring'], <OnboardingPartnerPage />)} />
