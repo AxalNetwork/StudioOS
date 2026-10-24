@@ -286,7 +286,9 @@ deckNew.post('/outline', async (c) => {
 
   const items = await sourcesFor(c, user, got.project, projectId);
   const userId = Number(user.id) || 0;
-  const res = await run(c.env, runOptions(c, user, projectId, 'outline', outlineMessage({ ...inputs, items })));
+  const ask = runOptions(c, user, projectId, 'outline', outlineMessage({ ...inputs, items }));
+  // D552 and D765: the page and the rail context are named at the call, as every run() names them.
+  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let rows: OutlineRow[] | null = null;
   let reason: string | null = null;
   if (res.ok) {
@@ -365,7 +367,8 @@ deckNew.post('/generate', async (c) => {
   const items = await sourcesFor(c, user, got.project, projectId);
   const name = await ventureName(c.env, projectId);
   const userId = Number(user.id) || 0;
-  const res = await run(c.env, runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude }), rows.length));
+  const ask = runOptions(c, user, projectId, 'build', buildMessage({ ...inputs, rows, items, ventureName: name, exclude }), rows.length);
+  const res = await run(c.env, { ...ask, surface: AI_SURFACE.raisePitch, rail: ask.rail });
   let wording: Wording[] = rows.map(() => ({ headline: null, body: null }));
   let dropped = 0;
   let by: 'Eadwyn' | 'none' = 'none';

@@ -7,7 +7,6 @@ import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import risk from '../src/routes/venture_risk.ts';
 import trust from '../src/routes/trust.ts';
-import decks from '../src/routes/decks.ts';
 import deals, { userMayReadDeal, userReadableDealIds } from '../src/routes/deals.ts';
 import { signScore, getVerifiedLatestSnapshots } from '../src/services/scoreIntegrity.ts';
 import { mayReadTrustScores } from '../src/services/scoreAccess.ts';
@@ -133,20 +132,23 @@ test('trust: related venture members get bare scores; self/admin retain missing 
 });
 
 
-test('deck generation: fallback uses project facts without internal scores', async () => {
+test('deck generation: a built deck reads no internal score', async () => {
+  // D897 (#2677): /generate builds from D896's slots (services/decks/newDeck.ts via
+  // routes/deck_new.ts). The Scoring slots are a band, off unless included, and
+  // neither band reads score_snapshots; New deck never asks for them.
   const f = fixture();
   try {
     await snapshot(f);
-    f.db.exec("UPDATE users SET subscription_tier='studio' WHERE id=4");
-    const response = await request(decks, f.env, 4, '/generate', { project_id: 10 });
-    assert.equal(response.status, 200, await response.clone().text());
-    const deck: any = await response.json();
-    assert.equal(deck.slides.length, 10);
-    assert.doesNotMatch(JSON.stringify(deck.slides), /Internal score|Market scoring|91\/100/);
+    const fresh = readFileSync(new URL('../src/routes/deck_new.ts', import.meta.url), 'utf8');
+    const deck = readFileSync(new URL('../src/services/decks/newDeck.ts', import.meta.url), 'utf8');
+    const sources = readFileSync(new URL('../src/services/decks/sources.ts', import.meta.url), 'utf8');
+    for (const [name, src] of [['deck_new.ts', fresh], ['newDeck.ts', deck]] as const) {
+      assert.doesNotMatch(src, /score_snapshots|total_score|Internal score|Market scoring|scoring:|includeScoring:\s*true/, name);
+    }
+    assert.match(fresh, /readSources\(\{ env: c\.env, projectId, today: today\(\), mercury: await mercuryFor\(c, user, project\) \}\)/, 'New deck reads the sources without the Scoring rows');
+    assert.doesNotMatch(sources.slice(sources.indexOf('const scoring: Adapter'), sources.indexOf('export const DECK_SOURCES')), /score_snapshots|total_score/);
     // The AI and positioning paths must never receive the private snapshot.
     const source = readFileSync(new URL('../src/routes/decks.ts', import.meta.url), 'utf8');
-    const drafting = source.slice(source.indexOf('async function aiSlides'), source.indexOf('// Spec: deck'));
-    assert.doesNotMatch(drafting, /scoring:|Use the scoring numbers|snap\./);
     const positioning = source.slice(source.indexOf("decks.post('/positioning'"), source.indexOf("decks.post('/positioning'") + 6500);
     assert.doesNotMatch(positioning, /score_tier|latestScore/);
   } finally { f.db.close(); }
