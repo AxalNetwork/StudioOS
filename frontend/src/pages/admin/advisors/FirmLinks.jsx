@@ -3,12 +3,14 @@ import { api } from '../../../lib/api';
 import { Lightbox, actionGhost, actionPrimary } from '../../../ui';
 import {
   FIRM_LINKS_NOTE, LIST_CLAIM, dataOf, firmChangeCopy, firmCounts, firmSavedLine, refusalText,
-} from './partnersDeskModel';
-import { AMBER, CARD, Done, INPUT, ReadState, Refusal, SUB, TD, TH } from './parts';
+} from '../partners/partnersDeskModel';
+import { AMBER, CARD, Done, INPUT, ReadState, Refusal, SUB, TD, TH } from '../partners/parts';
 
 /**
- * D923 (#2370) — Firm links, off the canvas, at its own address until #2369's
- * Firms tab takes it (part 9). Attaching a partner sign-in to the firm record
+ * D952 (#2728, part 9 of #2370) — attaching a partner account to its firm, on
+ * Advisors & Partners › Firms. It was D923's Firm links at
+ * /admin/partner-invitations/firm-links, which now forwards here with
+ * `?moved=firm-links`. Attaching a partner sign-in to the firm record
  * it belongs to: every partner surface resolves the caller through
  * `users.partner_id` and nothing else (D57). The admin names the account and
  * the firm; nothing is matched for them.
@@ -51,9 +53,9 @@ export default function FirmLinks({ reads }) {
   const copy = pending ? firmChangeCopy(pending.account, pending.firm, pending.current) : null;
 
   return (
-    <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} aria-label="Firm links" data-testid="partners-firm-links">
+    <section id="ap-firm-links" className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} aria-label="Attach accounts to firms" data-testid="partners-firm-links">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="m-0 text-[15px] font-extrabold tracking-[-.01em] text-axal-ink dark:text-gray-100">Firm links</h2>
+        <h2 className="m-0 text-[15px] font-extrabold tracking-[-.01em] text-axal-ink dark:text-gray-100">Attach accounts to firms</h2>
         <label className="flex items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
           <input type="checkbox" checked={onlyUnattached} onChange={(e) => setOnlyUnattached(e.target.checked)} data-testid="partners-firm-only" />
           Only accounts with no firm

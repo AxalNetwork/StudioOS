@@ -5,6 +5,7 @@
  *   GET  /programs                       published programs open to self-enrolment, and whether the caller is in each
  *   GET  /programs/enrolled              the caller's own programs, each with its contents and the caller's completion
  *   GET  /programs/mine                  the programs the caller is assigned to follow (the Super Admin: every program)
+ *   GET  /programs/mine/enrolments?weeks=4|12|52   enrolments per program and per week, in the same scope (D954 §6)
  *   POST /programs/:uid/enrol            self-enrol, into a published open program only
  *   GET  /programs/:uid                  a program and its contents, with the caller's own completion when enrolled
  *   GET  /programs/:uid/learners         read-only: each enrolled learner's completion of each content item
@@ -24,6 +25,8 @@ import { requireAuth, isSuperAdmin } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
 import { isAssignedAdmin } from '../services/learningAccess';
+import { weekAxis } from '../services/activeAccounts';
+import { learningEnrolmentWeeks, parseProgramWeeks } from '../services/programCatalogue';
 import {
   PROGRAM_COLS, P_COLS, programView, programContents, describeContents, programLearners, completionFor, enrolledContents, type ProgramRow,
 } from '../services/learningPrograms';
@@ -101,22 +104,69 @@ r.get('/programs/enrolled', async (c) => {
   });
 });
 
-r.get('/programs/mine', async (c) => {
-  const user = await auth(c); if (user instanceof Response) return user;
+/** The gate of `/programs/mine` and its weekly read: the Super Admin, or an admin. */
+function mineGate(c: C, user: any): Response | { sa: boolean } {
   const sa = isSuperAdmin(user);
   if (!sa && String(user.role ?? '').toLowerCase() !== 'admin') {
     return refuse(c, 403, { code: 'admins_only', message: 'Programs are assigned to admins.' });
   }
+  return { sa };
+}
+
+/**
+ * D954 §8: each program also carries `admins`, its count of assigned admins,
+ * as the Super Admin's list counts them. A count, never names.
+ */
+r.get('/programs/mine', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const g = mineGate(c, user); if (g instanceof Response) return g;
   const res = await c.env.DB.prepare(
     `SELECT ${P_COLS},
             (SELECT COUNT(*) FROM learning_enrollments e WHERE e.program_id = p.id AND e.status = 'active') AS learners,
-            (SELECT COUNT(*) FROM learning_program_contents pc WHERE pc.program_id = p.id) AS contents
+            (SELECT COUNT(*) FROM learning_program_contents pc WHERE pc.program_id = p.id) AS contents,
+            (SELECT COUNT(*) FROM learning_program_admins a WHERE a.program_id = p.id) AS admins
        FROM learning_programs p
       WHERE ? = 1 OR p.id IN (SELECT program_id FROM learning_program_admins WHERE user_id = ?)
       ORDER BY p.name COLLATE NOCASE, p.id LIMIT 500`,
-  ).bind(sa ? 1 : 0, user.id).all<any>();
+  ).bind(g.sa ? 1 : 0, user.id).all<any>();
   return c.json({
-    programs: (res.results || []).map((p) => ({ ...programView(p), learners: Number(p.learners), contents: Number(p.contents) })),
+    programs: (res.results || []).map((p) => ({ ...programView(p), learners: Number(p.learners), contents: Number(p.contents), admins: Number(p.admins) })),
+  });
+});
+
+/**
+ * D954 §6 — enrolments per week, from the enrolment events (migration 560), in
+ * `/programs/mine`'s scope. Every `enrolled` event counts in the Monday week
+ * (UTC) it happened: a learner removed later still counts in the week they
+ * enrolled, and a re-enrolment counts again. A re-enrolment made before 560
+ * overwrote its first date, so it counts once, at its later date.
+ */
+r.get('/programs/mine/enrolments', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const g = mineGate(c, user); if (g instanceof Response) return g;
+  const weeks = parseProgramWeeks(c.req.query('weeks'));
+  if (!weeks) return refuse(c, 400, { code: 'bad_weeks', message: 'weeks must be 4, 12 or 52.' });
+  const axis = weekAxis(new Date().toISOString(), weeks);
+  const [counts, scoped] = await Promise.all([
+    learningEnrolmentWeeks(c.env, { id: Number(user.id), superAdmin: g.sa }, axis),
+    c.env.DB.prepare(
+      `SELECT p.uid, p.name FROM learning_programs p
+        WHERE ? = 1 OR p.id IN (SELECT program_id FROM learning_program_admins WHERE user_id = ?)
+        ORDER BY p.name COLLATE NOCASE, p.id LIMIT 500`,
+    ).bind(g.sa ? 1 : 0, user.id).all<{ uid: string; name: string }>(),
+  ]);
+  const by = new Map(counts.programs.map((x) => [x.uid, x]));
+  const empty = axis.weeks.map((w) => ({ week: w, count: 0, to_date: w === axis.current }));
+  return c.json({
+    weeks,
+    week_axis: axis.weeks,
+    current_week: axis.current,
+    total: counts.total,
+    by_week: counts.weeks,
+    programs: (scoped.results || []).map((p) => ({
+      uid: p.uid, name: p.name, weeks: by.get(p.uid)?.weeks ?? empty, total: by.get(p.uid)?.total ?? 0,
+    })),
+    rule: 'Every enrolment counts in the week it happened, including learners removed later; a re-enrolment counts again from migration 560 on.',
   });
 });
 
@@ -134,10 +184,16 @@ r.post('/programs/:uid/enrol', async (c) => {
     return refuse(c, 403, { code: 'removed', message: 'You were removed from this program; ask its administrator.' });
   }
   const t = new Date().toISOString();
-  // The member's own row only: the user id is the session's.
-  await c.env.DB.prepare(
-    `INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status, updated_at) VALUES (?, ?, ?, ?, 'active', ?)`,
-  ).bind(p.id, user.id, user.id, t, t).run();
+  // The member's own row only: the user id is the session's. The enrolment
+  // event (D954 §6) lands in the same batch, so neither lands without the other.
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status, updated_at) VALUES (?, ?, ?, ?, 'active', ?)`,
+    ).bind(p.id, user.id, user.id, t, t),
+    c.env.DB.prepare(
+      `INSERT INTO learning_enrolment_events (program_id, user_id, kind, by_user_id, at) VALUES (?, ?, 'enrolled', ?, ?)`,
+    ).bind(p.id, user.id, user.id, t),
+  ]);
   return c.json({ enrolment: { program_uid: p.uid, status: 'active', enrolled_at: t } }, 201);
 });
 

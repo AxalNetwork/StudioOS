@@ -8,10 +8,19 @@ D915 (#2368): the admin Events desk at `/admin/events`, built to the owner's
 draws the shell: the crumb "Community › Events", the header, the literal tab
 strip, then the tab the address names.
 
-- `EventsOverview.jsx` — Overview (EV1): the four tiles, the status strip from
-  the events list, and Page views and Feedback as "Not recorded".
-- `EventsReview.jsx` — Review (EV3): the queue, the selected event's facts,
-  "What approving does" and the action bar; Approve (EV4) and Send back (EV5).
+- `EventsOverview.jsx` — D920 Overview (EV1/2, EV12–15, EV17a): period radios,
+  eight tiles, weekly chart/table, attention and upcoming rows, types, show-up,
+  profiles/sources and status counts, with independent block states.
+- `overviewModel.js` — D920's pure overview block states and derivations over
+  D918: money by currency, period comparison, chart rows, profiles and links.
+- `EventsReview.jsx` — Review (EV3, D921): the queue with its search over
+  title, host and venture, filters, sorts (Waiting longest first) and J/K; the
+  selected event's preview, facts, "What approving does" counted from the
+  free-seat preview, Clashes and History; Approve (EV4) and Send back (EV5);
+  the phone's full-screen sheet (EV17b, EV17c).
+- `reviewModel.js` — pure (D921). The wait, the queue's filters and sorts, the
+  type and format words, the preview, the Submitted and Venture facts, the
+  Clashes card, the History card and approve's counted third line.
 - `EventsAll.jsx` — All events (EV6, EV17d): the table, searched by title, with
   D919's filters, views, sorts, 25, 50 or 100 rows a page, the CSV of the rows
   on screen and the phone cards; each title opens the event's page.
@@ -30,7 +39,8 @@ strip, then the tab the address names.
   Cancel and Unpublish carry an optional note (D922).
 - `parts.jsx` — the card, pills, tile, refusal line and confirmation line the
   tabs share.
-- `useEventsDesk.js` — the reads, each made alone. R2 and the queue are read
+- `useEventsDesk.js` — the reads, each made alone; `useReviewReads` reads the
+  selected review event's history and free-seat preview (D921). R2 and the queue are read
   again whenever the list is switched on or off, so they are read together;
   "Updated" is the oldest answer among the reads the tab draws.
 - `eventsDeskModel.js` — pure. The tabs, the status words, Guard G, the
@@ -47,8 +57,9 @@ strip, then the tab the address names.
 - The desk reads `GET /api/admin/events` (every page, at `limit=200`),
   `GET /api/admin/events/analytics` (its per-event rows only, under Guard G),
   `GET /api/admin/events/:id`, `GET /api/events/:id/agenda`, and D918's
-  `GET /api/admin/events/:id/summary` and `…/:id/history` for one event. It
-  never reads the roster (names and emails), the analytics `summary`, or
+  `GET /api/admin/events/:id/summary` and `…/:id/history` for one event (D922).
+  Review reads the selected event's history and `/comp-preview` (D921).
+  It never reads the roster (names and emails), the analytics `summary`, or
   `conversion`.
 - A read that failed says what could not be read; it is never drawn as zero.
   A value no store holds says "Not recorded", one stored but not summed yet
@@ -58,9 +69,10 @@ strip, then the tab the address names.
 - The Worker checks no status on a write, so after one the event just decided
   leaves the queue, and the event page's actions wait, until a read newer
   than the write lands. Focus then sits on the confirmation line.
-- No period control is drawn until the part of D915 §6 that builds it lands.
-  The event page's type, format and two charts are D922's; charts come from
-  `ui/Charts`, never drawn here. Part 3's list (D918) gives the host line, host search
+- D920's Overview reads `GET /api/admin/events/overview?weeks=4|12|52`;
+  its Next-up card reads the enriched list, with no capped analytics read.
+  The event page's type, format and two charts are D922's. Charts reuse `../../../ui/Charts.jsx` and its one palette. Other tabs retain their
+  own reads. Part 3's list (D918) gives the host line, host search
   and the Host filter; "Cancelled with paid tickets" reads D918's overview,
   only while that view is on (`useEventsDesk`'s `paidView`).
 - Two events clash when neither is cancelled and their times overlap; an

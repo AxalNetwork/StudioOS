@@ -15,11 +15,12 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  AP_DECK_PATH, AP_PATH, MOVED_NOTICES, NOT_YET,
+  AP_DECK_PATH, AP_FIRMS_PATH, AP_PATH, MOVED_NOTICES, NOT_YET,
   buildFirms, buildNeeds, buildTiles, endingSoon, pageFailed, tabOf,
 } from '../src/pages/admin/advisors/apModel.js';
 import AdvisorsPartners from '../src/pages/admin/advisors/AdvisorsPartners.jsx';
 import ApRedirect from '../src/pages/admin/advisors/ApRedirect.jsx';
+import FirmLinksRedirect from '../src/pages/admin/advisors/FirmLinksRedirect.jsx';
 import { legacyContractsTarget } from '../src/pages/admin/LegacyContractsRedirect.jsx';
 import { stripFor } from '../src/lib/hqStrips.js';
 
@@ -111,7 +112,7 @@ test('ending soon is within 30 days from now, never a past date', () => {
 test('Needs you: each queue that holds something, with the page that decides it; a failed queue says so', () => {
   const n = buildNeeds(ALL, NOW);
   assert.deepEqual(n.rows.map((r) => [r.key, r.to]), [
-    ['unattached', '/admin/partner-invitations/firm-links'],
+    ['unattached', AP_FIRMS_PATH],
     ['no-profile', '/admin/held/accounts'],
     ['ending', '/admin/partner-invitations/deals'],
     ['hosts', '/admin/programs/spinout-lab/hosts'],
@@ -143,7 +144,7 @@ test('the tabs, the redirects\' targets, the strip on a tab, and the whole-page 
   assert.equal(tabOf(`${AP_PATH}/people`), null, 'People is not a tab until its read exists');
   assert.equal(legacyContractsTarget('?tab=network-profiles'), '/admin/advisors-partners/deck?moved=network-profiles');
   assert.equal(stripFor('/admin/advisors-partners/deck'), 'Content', 'the Content strip is lost on a tab');
-  assert.equal(stripFor('/admin?tab=personas'), 'Content');
+  assert.equal(stripFor('/admin/persona-segments/unclassified'), 'Content');
   assert.equal(stripFor('/admin/advisors-partnersx'), null, 'a sibling path took the strip');
   assert.equal(pageFailed(ALL), false);
   assert.equal(pageFailed(Object.fromEntries(Object.keys(ALL).map((k) => [k, bad]))), true);
@@ -151,13 +152,14 @@ test('the tabs, the redirects\' targets, the strip on a tab, and the whole-page 
 
 // ---------------------------------------------------------------- the page, mounted
 
-function worker(fail = []) {
+function worker(fail = [], writes = {}) {
   const seen = [];
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, init = {}) => {
     const u = new URL(String(url), 'http://x');
     seen.push(u.pathname + u.search);
     const p = u.pathname;
+    if ((init.method || 'GET') === 'POST' && p === '/api/admin/partners/links' && writes.link) return writes.link(init);
     const down = (n) => fail.includes(n);
     const map = {
       '/api/advisors/admin/cohort-assignments/assignable': ['advisors', ADVISORS],
@@ -174,10 +176,10 @@ function worker(fail = []) {
   return seen;
 }
 
-async function mount(url, fail) {
+async function mount(url, fail, writes) {
   const restore = installDocument();
   const original = globalThis.fetch;
-  const seen = worker(fail);
+  const seen = worker(fail, writes);
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -193,6 +195,17 @@ async function mount(url, fail) {
     of: (id) => { const n = byTestId(id); assert.ok(n, `no ${id}`); return textOf(n); },
     has: (id) => Boolean(byTestId(id)),
     h1s: () => walk(container).filter((n) => n.tagName === 'H1').length,
+    async change(id, value) {
+      const n = byTestId(id); assert.ok(n, `no ${id}`);
+      await act(async () => { props(n).onChange({ target: { value } }); });
+      for (let i = 0; i < 4; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    },
+    async click(id) {
+      const n = byTestId(id); assert.ok(n, `no ${id}`);
+      await act(async () => { props(n).onClick(); });
+      for (let i = 0; i < 6; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+    },
+    hrefs: () => walk(container).map((n) => props(n)?.href ?? props(n)?.to).filter((x) => typeof x === 'string'),
     async unmount() { await act(async () => root.unmount()); globalThis.fetch = original; restore(); },
   };
 }
@@ -220,6 +233,44 @@ test('mounted Firms: the table, the unattached strip, and only the three reads i
     const paths = [...new Set(m.seen.map((s) => s.split('?')[0]))].filter((p) => !p.startsWith('/api/ai')).sort();
     assert.deepEqual(paths, ['/api/admin/partners/deals', '/api/admin/partners/directory', '/api/admin/partners/links']);
   } finally { await m.unmount(); }
+});
+
+test('D952: attaching an account to a firm is on the Firms tab, asks before it saves, and says the result on the page', async () => {
+  let saved = null;
+  const m = await mount(`${AP_FIRMS_PATH}?moved=firm-links`, [], {
+    link: (o) => { saved = JSON.parse(o.body); return new Response(JSON.stringify({ ok: true, user_id: 10, partner_id: 100, firm_name: 'Example Ventures Ltd' }), { status: 200, headers: { 'Content-Type': 'application/json' } }); },
+  });
+  try {
+    assert.ok(m.of('admin-page-moved').includes(MOVED_NOTICES['firm-links']), 'the moved notice from the old address');
+    assert.ok(m.hrefs().includes('#ap-firm-links'), 'the unattached strip points at the section below, not Partner invitations');
+    assert.ok(!m.hrefs().includes('/admin/partner-invitations/firm-links'));
+    assert.equal(m.of('partners-firm-counts'), '2 attached · 1 not · 3 firms on record');
+    await m.change('partners-firm-select-10', '100');
+    assert.ok(m.has('partners-firm-confirm'), 'a change asks first');
+    assert.match(m.of('partners-firm-confirm'), /Attach Teo Sample to Example Ventures\?/);
+    assert.equal(m.seen.filter((s) => s === '/api/admin/partners/links').length >= 1, true);
+    assert.equal(saved, null, 'nothing is saved before the confirm');
+    await m.click('partners-firm-save');
+    assert.deepEqual(saved, { user_id: 10, partner_id: 100 });
+    assert.equal(m.of('partners-firm-saved'), 'Attached to Example Ventures Ltd.');
+    assert.ok(!m.has('partners-firm-confirm'));
+  } finally { await m.unmount(); }
+});
+
+test('D952: the old Firm links address keeps its query and hash and lands on the Firms tab with the moved key', async () => {
+  const restore = installDocument();
+  let landed = null;
+  function Spy() { const l = useLocation(); landed = `${l.pathname}${l.search}${l.hash}`; return null; }
+  const root = createRoot(document.createElement('div'));
+  await act(async () => {
+    root.render(h(MemoryRouter, { initialEntries: ['/admin/partner-invitations/firm-links?x=1#top'] },
+      h(Routes, null,
+        h(Route, { path: '/admin/partner-invitations/firm-links', element: h(FirmLinksRedirect) }),
+        h(Route, { path: AP_FIRMS_PATH, element: h(Spy) }))));
+  });
+  await act(async () => root.unmount());
+  restore();
+  assert.equal(landed, `${AP_FIRMS_PATH}?x=1&moved=firm-links#top`);
 });
 
 test('mounted Deck roster: today\'s roster under the header, with one h1 and the moved notice from the old address', async () => {
@@ -269,10 +320,24 @@ test('the routes, the redirects, the row, the strip and the reads the page must 
   assert.ok(app.includes('<Route path="/admin/network-profiles" element={<ApRedirect />} />'));
   assert.ok(app.includes('<StripLink to="/admin/advisors-partners">Advisors &amp; Partners</StripLink>'));
   assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/network-profiles' \}/);
+  // D952: Partner invitations' Firm links forwards to the Firms tab, and the redirect is counted.
+  assert.ok(app.includes('<Route path="/admin/partner-invitations/firm-links" element={<FirmLinksRedirect />} />'));
+  assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/partner-invitations\/firm-links' \}, \/\/ D952/);
+  // The partner-facing sentences name the new place.
+  for (const f of ['frontend/src/pages/partner/kit.jsx', 'frontend/src/pages/partner/PartnerFirmProfileCard.jsx']) {
+    const src = read(f);
+    assert.match(src, /Advisors &amp;\s+Partners → Firms/, f);
+    assert.doesNotMatch(src, /Partners →\s+Firm links/, f);
+  }
   assert.match(read('frontend/src/sidebarConfig.js'), /'\/admin\/partner-invitations', '\/admin\/advisors-partners'\] \}/);
   const page = read('frontend/src/pages/admin/advisors/AdvisorsPartners.jsx');
   // Nothing is decided here that another page decides (AP "DO NOT DRAW").
   assert.doesNotMatch(page, /setFirmLink|terminateDeal|adminSetPartnerDirectory|adminLabHostDecide|adminImpersonate/);
+  // D952's one exception: attaching an account to a firm, in its own file, asking before it saves.
+  const attach = read('frontend/src/pages/admin/advisors/FirmLinks.jsx');
+  assert.match(attach, /api\.adminPartners\.setFirmLink\(/);
+  assert.match(attach, /onChange=\{\(e\) => ask\(a, e\.target\.value\)\}/, 'a select only asks; the save is the confirm\'s button');
+  assert.doesNotMatch(attach, /terminateDeal|adminSetPartnerDirectory|adminLabHostDecide|adminImpersonate|window\.confirm|useToast/);
   // The partner directory read carries emails; no email reaches this page.
   assert.doesNotMatch(read('frontend/src/pages/admin/advisors/apModel.js') + page, /\.email\b/);
   assert.match(page, /export default function AdvisorsPartners\(\) \{\s*return \(\s*<AdminBoardFrame workspace="Advisors and partners"/);

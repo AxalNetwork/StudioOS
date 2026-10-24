@@ -50,22 +50,31 @@ function Buttons({ back = 'Back', onClose, action, onAction, disabled, busy, ton
   );
 }
 
-/** EV4: what approving does, and "Also feature it", which is a second call after the approve. */
-export function ApproveDialog({ ev, busy, refusal, onClose, onConfirm }) {
+/**
+ * EV4: what approving does, and "Also feature it", which is a second call
+ * after the approve. `lines` are the page's (D921: line 3 counted from part
+ * 3's free-seat preview), and `delivery` says where the invitations arrive.
+ */
+export function ApproveDialog({ ev, lines = null, delivery = null, busy, refusal, onClose, onConfirm }) {
   const [feature, setFeature] = useState(false);
   return (
     <Lightbox label={approveTitle(ev)} title={approveTitle(ev)} onClose={onClose} testId="events-approve-dialog"
       footer={<Buttons onClose={onClose} action="Approve and publish" busy={busy} onAction={() => onConfirm({ feature })} refusal={refusal} testId="events-approve-go" />}>
       <div className={BODY}>
-        <ul className={LINES}>{approveLines(ev).map((l) => <li key={l}>{l}</li>)}</ul>
+        <ul className={LINES} data-testid="events-approve-lines">{(lines || approveLines(ev)).map((l) => <li key={l}>{l}</li>)}</ul>
+        {delivery ? <p className={`m-0 ${SUB}`} data-testid="events-approve-delivery">{delivery}</p> : null}
         <Switch checked={feature} onChange={setFeature} label="Also feature it" sub={FEATURE_LINE} testId="events-approve-feature" />
       </div>
     </Lightbox>
   );
 }
 
-/** EV5: a reason is required (O-RSN); a quick reason fills it, and the Worker keeps 1000 characters. */
-export function SendBackDialog({ ev, busy, refusal, onClose, onConfirm }) {
+/**
+ * EV5: a reason is required (O-RSN, and D917's 400 `reason_required`, drawn
+ * under the field as `fieldError`); a quick reason fills it, and the Worker
+ * keeps 1000 characters.
+ */
+export function SendBackDialog({ ev, busy, refusal, fieldError = null, onClose, onConfirm }) {
   const [reason, setReason] = useState('');
   const ready = sendBackReady(reason);
   return (
@@ -88,9 +97,11 @@ export function SendBackDialog({ ev, busy, refusal, onClose, onConfirm }) {
         <label className="flex flex-col gap-1.5">
           <span className={EYE}>Reason for the host · required</span>
           <textarea value={reason} maxLength={REASON_MAX} rows={4} onChange={(e) => setReason(e.target.value.slice(0, REASON_MAX))}
+            aria-invalid={fieldError ? 'true' : undefined} aria-describedby={fieldError ? 'events-sendback-field-error' : undefined}
             className={`${INPUT} py-2 leading-normal`} data-testid="events-sendback-reason" />
           <span className="self-end font-mono text-[11px] text-axal-muted dark:text-gray-400" data-testid="events-sendback-count">{`${reason.length} / ${REASON_MAX}`}</span>
         </label>
+        {fieldError ? <p id="events-sendback-field-error" role="alert" className="m-0 text-[12.5px] font-semibold leading-normal text-red-700 dark:text-red-300" data-testid="events-sendback-field-error">{fieldError}</p> : null}
       </div>
     </Lightbox>
   );
