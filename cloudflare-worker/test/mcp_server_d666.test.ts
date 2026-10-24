@@ -276,13 +276,22 @@ test('activity_logs: one row per call with tool, company, client and outcome, an
   assert.ok(!JSON.stringify(db.prepare('SELECT * FROM activity_logs').all()).includes('SECRET-ARG-TEXT'));
 });
 
-test('tools are rate-limited per grant', async () => {
+test('tools are rate-limited per grant', async (t) => {
   const { env } = fixture();
   const { token } = await connect(env, [P]);
-  let last: any;
-  for (let i = 0; i <= 60; i += 1) last = await callTool(env, token, 'list_companies');
-  assert.equal(last.body.result.isError, true);
-  assert.match(toolJson(last).error, /Too many calls/);
+  // Keep all 61 calls in one minute, even when CI runs across a wall-clock boundary.
+  const minuteStart = Math.floor(Date.now() / 60_000) * 60_000;
+  t.mock.timers.enable({ apis: ['Date'], now: minuteStart + 59_999 });
+  for (let i = 0; i < 60; i += 1) {
+    const allowed = await callTool(env, token, 'list_companies');
+    assert.notEqual(allowed.body.result.isError, true, `call ${i + 1} is within the limit`);
+  }
+  const limited = await callTool(env, token, 'list_companies');
+  assert.equal(limited.body.result.isError, true);
+  assert.match(toolJson(limited).error, /Too many calls/);
+  t.mock.timers.setTime(minuteStart + 60_000);
+  const nextMinute = await callTool(env, token, 'list_companies');
+  assert.notEqual(nextMinute.body.result.isError, true, 'the next minute has a fresh allowance');
 });
 
 // ── Grants ─────────────────────────────────────────────────────────────────
