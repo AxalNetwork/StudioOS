@@ -242,9 +242,9 @@ export function funnelRows(stats) {
  * and a link nobody has opened has every view left. An opened link the
  * engagement read does not list (another version's, one past its newest 50,
  * or any opened link while that read is running or has failed) is neither live
- * nor dead: `live` is null. The page still offers Withdraw on it, because
- * withdrawing a link that is already used up does no harm, and says why its
- * views left are not shown.
+ * nor dead: `live` is null. The page still offers Withdraw on it, and says why
+ * its views left are not shown; withdrawing one that had already been used up
+ * marks it Revoked, and the dialog says so.
  */
 export function linkRows(records, engagement = null) {
   const shares = new Map(asList(engagement, 'shares').map((s) => [String(s.id), s]));

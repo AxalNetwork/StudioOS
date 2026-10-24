@@ -30,8 +30,9 @@ replaces it.
   records give the first; the engagement read's `shares` give the second for
   the current version's links. An opened link the engagement read does not
   answer for (another version's, or any while that read is running or has
-  failed) says why its views left are not shown, and still offers Withdraw:
-  withdrawing a link already used up does no harm.
+  failed) says why its views left are not shown, and still offers Withdraw.
+  Withdrawing one that had already been used up marks it Revoked, and the
+  dialog says so.
 - **A board waits for its store.** The canvas draws boards whose Worker reads do
   not exist yet: the coverage meter and source chips, the generate flow, the
   editor, card AI tools, present mode and export, the share dialog, images and

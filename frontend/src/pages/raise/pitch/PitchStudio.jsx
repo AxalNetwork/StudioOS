@@ -23,7 +23,8 @@ import {
  *                           reviews a version of the deck itself.
  *   /raise/pitch/analytics  Share & analytics (PD19): one version's readers,
  *                           seconds per slide, and every investor link, a page
- *                           at a time, with Withdraw on a live one.
+ *                           at a time, with Withdraw on every link not
+ *                           known to be dead.
  *   /raise/pitch/edit       the deck builder (PitchWorkspacePage), until #2434
  *                           part 4 builds the editor (PD1).
  *
@@ -422,8 +423,12 @@ export function StudioAnalytics({ reads, readOnly }) {
   // instead. This effect runs after the dialog's cleanup.
   useEffect(() => { if (toast) dismiss.current?.focus?.(); }, [toast]);
 
-  // A page the read no longer has (links were withdrawn or expired away while
-  // it was open) goes back to the read's last page, never "Links 0–0 of N".
+  // A defensive guard: the records list every link whatever its state, so the
+  // total shrinks only if links or versions are removed underneath an open
+  // page. A page the read no longer has goes back to the read's last page, and
+  // until that read answers it is drawn as reading, never "Links 0–0 of N" or
+  // "No investor link yet.".
+  const pastEnd = Boolean(pager && pager.total && pager.page > pager.pages);
   const { setPage } = reads;
   useEffect(() => {
     if (pager && pager.total && pager.page > pager.pages) setPage?.(pager.pages);
@@ -481,7 +486,9 @@ export function StudioAnalytics({ reads, readOnly }) {
           </div>
           {records?.state === 'unreadable' ? (
             <p className={`${MUTED} px-4 pb-4`}>Your investor links could not be read.</p>
-          ) : !links.length ? (
+          ) : pastEnd ? (
+            <p className={`${MUTED} px-4 pb-4`} data-testid="pitch-studio-links-reading">Reading your investor links…</p>
+          ) : !links.length && !pager?.total ? (
             <p className={`${MUTED} px-4 pb-4`}>No investor link yet.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -502,7 +509,7 @@ export function StudioAnalytics({ reads, readOnly }) {
                       <td className={`px-4 py-2.5 font-semibold ${INK}`}>{l.investor}</td>
                       <td className="px-4 py-2.5"><span className={l.live ? PILL_OK : PILL_MU}>{l.expires}</span></td>
                       <td className={`px-4 py-2.5 font-mono ${INK}`}>{l.views ?? NOT_RECORDED}</td>
-                      <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{l.views ? l.time ?? NOT_RECORDED : l.views === 0 ? 'Not opened' : NOT_RECORDED}</td>
+                      <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{l.views ? (l.time && !/^0\s*min$/.test(l.time) ? l.time : NOT_RECORDED) : l.views === 0 ? 'Not opened' : NOT_RECORDED}</td>
                       <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{l.mostRead ?? (l.views === 0 ? 'Not opened' : NOT_RECORDED)}</td>
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-3">
@@ -521,7 +528,7 @@ export function StudioAnalytics({ reads, readOnly }) {
               </table>
             </div>
           )}
-          {pager && pager.total ? (
+          {pager && pager.total && !pastEnd ? (
             <nav aria-label="Investor links" className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-4 py-3 dark:border-gray-700" data-testid="pitch-studio-links-pager">
               <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400">Links {pager.from}–{pager.to} of {pager.total}</span>
               {pager.pages > 1 ? (
@@ -563,7 +570,13 @@ export function StudioAnalytics({ reads, readOnly }) {
             </div>
           )}
         >
-          <p className={`m-0 text-[13px] leading-[1.55] ${INK}`}>{withdraw.investor}&apos;s link stops opening at once. Its views stay listed.</p>
+          {withdraw.live === null ? (
+            // Its views left were not read: it may already be used up. Withdrawing
+            // it then marks it Revoked, which the dialog says.
+            <p className={`m-0 text-[13px] leading-[1.55] ${INK}`}>If {withdraw.investor}&apos;s link still opens, it stops at once. Its views stay listed, and the link then reads Revoked.</p>
+          ) : (
+            <p className={`m-0 text-[13px] leading-[1.55] ${INK}`}>{withdraw.investor}&apos;s link stops opening at once. Its views stay listed.</p>
+          )}
           {failed ? <p role="alert" className="m-0 mt-2 text-[12.5px] font-semibold text-axal-destructive dark:text-red-400">The link could not be withdrawn. Try again.</p> : null}
         </Lightbox>
       ) : null}

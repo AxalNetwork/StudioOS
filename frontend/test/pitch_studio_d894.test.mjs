@@ -8,7 +8,8 @@
  *   · a read that fails is drawn as failed, and only the Worker's own empty
  *     card says nobody opened a link; a figure from a capped list says so;
  *   · a link is live only when it has not expired and is not used up, and only
- *     a live one offers Withdraw; every link is reachable, a page at a time;
+ *     a link known to be dead offers no Withdraw; every link is reachable, a
+ *     page at a time;
  *   · an admin reads (no New deck, New link or Withdraw), Review mounts the
  *     reviewer whatever the ventures read says, and no tab drops the venture;
  *   · the old `?mode=workspace` address opens the editor at its new address,
@@ -523,22 +524,24 @@ test('the pager reads the next page of links through the module read\'s own page
   } finally { await m.unmount(); }
 });
 
-test('a page of links the read no longer has goes back to the last page, never "Links 0–0 of N"', async () => {
-  // 2026-10-24 (D894 review, R2): on page 2, links are withdrawn or expire away
-  // until the read's total fits on one page; the re-read answers an empty page 2.
+test('a page of links the read no longer has is drawn as reading, then goes back to the last page', async () => {
+  // 2026-10-24 (D894 review, R2): a defensive guard. The records list every
+  // link whatever its state, so the total shrinks only if links or versions
+  // are removed underneath an open page; the stub shrinks it to reach page > pages.
   const rowsOf = (n, from) => Array.from({ length: n }, (_, i) => link(from + i, { text: '2026-11-04', tone: 'ok' }, 0));
   let total = 30;
+  let held = null;
   const m = await mount(h(PitchStudio, { tab: 'analytics' }), '/raise/pitch/analytics?project_id=7', {
     listProjects: async () => [{ id: 7, name: 'Acme' }],
     deckListVersions: async () => versions,
     deckGet: async () => deck,
     deckEngagement: async () => engagement,
-    'cycles.module': async (_c, _p, _s, q) => {
+    'cycles.module': (_c, _p, _s, q) => {
       const page = q?.page || 1;
-      const rows = page === 1 ? rowsOf(Math.min(25, total), 1) : rowsOf(Math.max(0, total - 25), 26);
-      return { card: cardOk, records: { ...records, rows, total, page } };
+      const answer = { card: cardOk, records: { ...records, rows: page === 1 ? rowsOf(Math.min(25, total), 1) : rowsOf(Math.max(0, total - 25), 26), total, page } };
+      if (total === 20 && page === 1) { held = deferred(); return held.p.then(() => answer); }
+      return Promise.resolve(answer);
     },
-    // The withdraw on page 2 answers while ten other links expire away.
     'cycles.recordAction': async () => { total = 20; return { ok: true }; },
   });
   try {
@@ -547,7 +550,13 @@ test('a page of links the read no longer has goes back to the last page, never "
     await m.press(m.by('pitch-studio-withdraw-30'));
     await m.press(m.by('pitch-studio-withdraw-confirm'));
     await m.settle();
-    assert.doesNotMatch(m.text(), /Links 0\s*–\s*0/, 'an empty page past the end is drawn');
+    // Page 2 answered empty with a total of 20; page 1 is still being read.
+    assert.ok(held, 'the last page was not asked for');
+    assert.ok(m.by('pitch-studio-links-reading'), 'a page past the end is not drawn as reading');
+    assert.doesNotMatch(m.text(), /Links 0\s*–\s*0/, '"Links 0–0 of N" is drawn while the last page is read');
+    assert.doesNotMatch(m.text(), /No investor link yet/, 'a venture with 20 links is drawn as having none');
+    await act(async () => { held.resolve(); });
+    await m.settle();
     assert.match(m.text(), /Links 1\s*–\s*20 of 20/);
     const pages = m.calls.filter(([n]) => n === 'cycles.module').map(([, , , , q]) => q.page);
     assert.deepEqual(pages.slice(-2), [2, 1], 'the empty page 2 is not followed by page 1');
@@ -558,9 +567,65 @@ test('the cover and the links table never draw a bare dash for a value nobody wr
   // 2026-10-24 (D894 review, R3): the Worker writes "—" into a field nobody filled.
   assert.deepEqual(coverOf({ title: 'Acme', slides: [{ fields: [{ key: 'title', value: 'Acme' }, { key: 'subtitle', value: '—' }] }] }), { headline: 'Acme', sub: '', slides: 1 });
   assert.equal(coverOf({ title: '—', slides: [{ title: 'Title', fields: [{ key: 'title', value: '—' }] }] }).headline, 'Title');
-  const a = renderedText(analytics(reads()));
-  assert.doesNotMatch(a, /(^|\s)—(\s|$)/, 'a bare dash in the links table or the tiles');
-  assert.match(a, /Not opened/);
+  // A dash anywhere in a cell or a tile, read from the markup (the flattened
+  // text runs cells together, so a dash there would never stand alone).
+  const noDash = (html, what) => assert.doesNotMatch(html, />\s*—\s*</, `a bare dash in ${what}`);
+  const a = analytics(reads());
+  noDash(a, 'the links table');
+  assert.match(renderedText(between(a, 'pitch-studio-link-12', 'pitch-studio-link-13')), /Revoked\s*0\s*Not opened\s*Not opened/);
+  // An opened link whose time reads "0 min" was never measured, or under half a minute.
+  assert.match(renderedText(between(a, 'pitch-studio-link-13', 'pitch-studio-link-14')), /Expired\s*1\s*Not recorded\s*Slide 1/);
+  // The tiles and the funnel with nothing recorded, and while the read runs.
+  const bare = analytics(reads({ engagement: ok({ ...engagement, conversions: {}, views: [{ id: 1, read_seconds: 0 }] }) }));
+  noDash(bare, 'a tile or the funnel');
+  assert.match(renderedText(between(bare, 'pitch-studio-tiles')), /Median time\s*Not recorded/);
+  assert.match(renderedText(between(bare, 'pitch-studio-tiles')), /NDA signed\s*Not recorded/);
+  assert.match(renderedText(between(bare, 'pitch-studio-funnel')), /Accepted the NDA\s*Not recorded/);
+  const running = analytics(reads({ engagement: { status: 'loading', data: null } }));
+  noDash(running, 'the funnel while it reads');
+  assert.match(renderedText(between(running, 'pitch-studio-funnel')), /Opened\s*Reading…/);
+});
+
+test('Withdraw on a link whose views left are unknown says it may already be closed', async () => {
+  // 2026-10-24 (D894 review, R1): link 15 is another version's, opened; link 11 is live.
+  const m = await mount(h(PitchStudio, { tab: 'analytics' }), '/raise/pitch/analytics?project_id=7', {
+    listProjects: async () => [{ id: 7, name: 'Acme' }],
+    deckListVersions: async () => versions,
+    deckGet: async () => deck,
+    deckEngagement: async () => engagement,
+    'cycles.module': async () => ({ card: cardOk, records }),
+  });
+  try {
+    await m.press(m.by('pitch-studio-withdraw-15'));
+    assert.match(m.text(), /If \[Fund 15\]\s*'s link still opens, it stops at once\. Its views stay listed, and the link then reads Revoked\./);
+    await m.press(m.all().find((n) => n.nodeName === 'BUTTON' && /^Cancel$/.test((n.textContent || '').trim())));
+    await m.press(m.by('pitch-studio-withdraw-11'));
+    assert.match(m.text(), /\[Fund A\]\s*'s link stops opening at once\. Its views stay listed\./);
+    assert.doesNotMatch(m.text(), /If \[Fund A\]\s*'s link still opens/);
+  } finally { await m.unmount(); }
+});
+
+test('after a Withdraw whose re-read fails, Dismiss hands focus to the tab, not the page body', async () => {
+  // 2026-10-24 (D894 review, R5): the failed read takes the "By investor" heading away.
+  let moduleCall = 0;
+  const m = await mount(h(PitchStudio, { tab: 'analytics' }), '/raise/pitch/analytics?project_id=7', {
+    listProjects: async () => [{ id: 7, name: 'Acme' }],
+    deckListVersions: async () => versions,
+    deckGet: async () => deck,
+    deckEngagement: async () => engagement,
+    'cycles.module': () => (++moduleCall === 1 ? Promise.resolve({ card: cardOk, records }) : Promise.reject(new Error('read failed'))),
+    'cycles.recordAction': async () => ({ ok: true }),
+  });
+  try {
+    await m.press(m.by('pitch-studio-withdraw-11'));
+    await m.press(m.by('pitch-studio-withdraw-confirm'));
+    await m.settle();
+    assert.ok(m.by('pitch-studio-links-error'), 'the failed re-read is not drawn as failed');
+    assert.ok(!m.all().some((n) => n.nodeName === 'H2' && /By investor/.test(n.textContent || '')), 'the heading is still there');
+    const dismiss = m.all().find((n) => m.pr(n)['aria-label'] === 'Dismiss');
+    await m.press(dismiss);
+    assert.equal(m.pr(document.activeElement)['data-testid'], 'pitch-studio-analytics', 'focus fell to the page body');
+  } finally { await m.unmount(); }
 });
 
 /* ------------------------------------------------------------------ *
