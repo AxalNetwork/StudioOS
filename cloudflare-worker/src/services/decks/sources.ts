@@ -480,7 +480,7 @@ export async function readSources(ctx: SourceCtx, opts: { includeScoring?: boole
     for (const s of slots) {
       const base = { source_key: s.key, area: a.area, module: a.module, label: s.label, unit: s.unit, href: a.href(ctx.projectId), ...(s.optional ? { optional: true } : {}) };
       const r = got?.[s.key];
-      if (got == null || r === 'withheld' || r == null || r.value == null) {
+      if (r === 'withheld' || r == null || r.value == null) {
         const state: SlotState = got == null ? 'unreadable' : r === 'withheld' ? 'withheld' : 'not_recorded';
         items.push({ ...base, value: null, as_of: null, grade: 'Not recorded', source: null, record_ref: null, snapshot_hash: null, state });
         continue;

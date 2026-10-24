@@ -224,6 +224,8 @@ heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 `../services/deckSlideDwell.ts`. See
 `documentation/architecture/decisions/D663.md`.
 
+D896 (#2675): `deck_sources.ts` mounts `GET /api/decks/sources` and `POST /api/decks/:id/refresh`, after `deck_share_actions.ts` and before `decks.ts`, so that `decks.ts`'s `GET /:id` cannot answer `/sources`. Both read only, through `projectOwned`; Mercury's slots are read only for the venture's own founder. The adapters are `../services/decks/sources.ts`. See `documentation/architecture/decisions/D896.md`.
+
 D653: `round_calls.ts` mounts `/api/round-calls`. Every operational route checks the default-off flag. Founder writes require venture ownership and verified active-company scope; investor reads/responses require active investor role, approved KYC and recipient entitlement; counsel reads/approval require HQ plus Super Admin, with fresh step-up on approval writes. D686 (#1594) adds owner counsel requests and the independent Super Admin counsel queue (registered before the UID route); request notices are emitted only after the winning audited write commits. Structured key terms, commitment dates and privacy-limited audience facts are stored/read by the Worker. Actual writes record the actor in activity_logs. `portfolio_updates.ts` links capital asks to an open private call without granting additional access.
 
 D667 (#1497): the assistant interview tools are service functions in

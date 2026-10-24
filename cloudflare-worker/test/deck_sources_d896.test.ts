@@ -210,6 +210,29 @@ test('a typed figure is Stated when no connector holds it', async () => {
   assert.equal(m.get('grow.churn')!.value, 2.5);
 });
 
+test('Stripe wins over a newer typed snapshot; approval of other terms is not Reviewed', async () => {
+  const db = fixture();
+  db.exec(`INSERT INTO project_metrics (project_id, snapshot_date, mrr, source) VALUES (${P}, '2026-09-30', 16950, 'stripe'), (${P}, '2026-10-15', 99999, NULL)`);
+  db.exec(`INSERT INTO raise_rounds (uid, project_id, name, target_amount, status, updated_at) VALUES ('r1', ${P}, 'Seed', 1500000, 'active', '2026-10-09')`);
+  // Counsel approved an earlier revision; the terms have changed since.
+  db.exec(`INSERT INTO round_calls (uid, project_id, round_id, name, amount_cents, instrument, terms, minimum_cheque_cents, target_close, created_by, terms_hash, counsel_approved_hash, counsel_approved_by, counsel_approved_at, counsel_approval_reference)
+    VALUES ('rc1', ${P}, 1, 'Seed call', 150000000, 'safe', 'Post-money SAFE', 2500000, '2026-12-15', ${FOUNDER}, 'h2', 'h1', 77, '2026-10-09', 'ref-1')`);
+  const m = byKey((await call(db, FOUNDER, 'GET', `/api/decks/sources?project_id=${P}`)).body.items);
+  assert.equal(m.get('grow.mrr')!.value, 16950);
+  assert.equal(m.get('grow.mrr')!.source, 'Connector');
+  assert.equal(m.get('raise.round_terms')!.grade, 'Stated');
+  assert.equal(m.get('raise.round_target')!.grade, 'Stated');
+});
+
+test('fit nobody recorded is not "no strong fit"', async () => {
+  const db = fixture();
+  db.exec(`INSERT INTO discovery_interviews (id, project_id, interviewee_name, interview_date, stage) VALUES (1, ${P}, 'Person A', '2026-09-10', 'done')`);
+  const m = byKey((await call(db, FOUNDER, 'GET', `/api/decks/sources?project_id=${P}`)).body.items);
+  assert.equal(m.get('validate.interviews')!.value, 1);
+  assert.equal(m.get('validate.strong_fit')!.state, 'not_recorded');
+  assert.equal(m.get('validate.strong_fit')!.value, null);
+});
+
 test('a pain theme and a validated claim, read from their stores', async () => {
   const db = fixture();
   db.exec(`INSERT INTO pain_groups (id, project_id, title, sort_order, updated_at) VALUES (4, ${P}, 'Manual reconciliation', 0, '2026-10-01')`);
