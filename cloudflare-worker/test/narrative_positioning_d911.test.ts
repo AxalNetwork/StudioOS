@@ -168,6 +168,10 @@ test('Accept writes the field with Eadwyn as its source; Discard keeps nothing; 
     // One at a time, once.
     assert.equal((await f.call('POST', `/narrative/positioning/proposals/${one.uid}`, { decision: 'discard' })).status, 409);
     assert.equal((await f.call('POST', `/narrative/positioning/proposals/${one.uid}`, { decision: 'all' })).status, 400);
+    // Accepting a discarded proposal writes nothing: the decision is checked before the write.
+    assert.equal((await f.call('POST', `/narrative/positioning/proposals/${elevator.uid}`, { decision: 'accept' })).status, 409);
+    assert.equal(f.positioning().length, 1);
+    assert.equal(f.logs().length, 2, 'a refused decision logs nothing');
     const st = f.db.prepare('SELECT uid, status FROM ai_rail_proposals WHERE uid IN (?, ?)').all(one.uid, elevator.uid) as any[];
     assert.deepEqual(Object.fromEntries(st.map((r) => [r.uid, r.status])), { [one.uid]: 'accepted', [elevator.uid]: 'discarded' });
   } finally { f.db.close(); }
