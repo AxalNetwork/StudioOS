@@ -180,6 +180,96 @@ export const FIX_NEWEST_ONLY = 'Eadwyn phrases a fix for the first mismatch in t
 
 export { NOT_RECORDED };
 
+// ── D914 (#2698): Admin and Super Admin read only (NAR13), and the no-permission panels (NAR14) ──
+//
+// The owner's answer to #2459 decision 3 for the narrative: an Admin on this
+// deployment, or the Super Admin on HQ, reads the whole narrative read only and
+// leaves notes; they give a reason first, which the founder sees. Reads:
+//   - `GET /api/cycles/raise/narrative/reads`  → the reasons, and the caller's own unexpired one;
+//   - `GET /api/cycles/raise/narrative/notes`  → the notes thread.
+// An admin's other narrative reads answer 403 `read_reason_required` until a
+// reason is given; their writes answer 403 `admin_read_only`.
+
+/** An admin reads the narrative read only. Admins previewing another role through "View as" are that role here. */
+export const isNarrativeAdmin = (user, viewMode = null) => String(user?.role || '') === 'admin' && (!viewMode || viewMode === 'admin');
+
+export const READ_ONLY = 'Read only. Notes are visible to the founder.';
+export const REASON_TITLE = 'Why are you opening this narrative?';
+export const REASON_HELP = 'The founder sees this reason, who gave it and when. It lets you read the narrative for 8 hours.';
+export const REASON_PLACEHOLDER = 'For example: quarterly portfolio review';
+export const REASON_MIN = 3;
+export const REASON_MAX = 200;
+export const READS_TITLE = 'Who read this narrative';
+export const NO_READS = 'No admin has opened this narrative.';
+export const NOTES_TITLE = 'Notes';
+export const NOTES_META = 'Visible to the founder';
+export const NO_NOTES = 'No notes yet.';
+export const NOTE_MAX = 2000;
+export const NOTE_PLACEHOLDER = 'Write a note for the founder…';
+export const NOTE_ANSWER_PLACEHOLDER = 'Answer the note…';
+
+/** The reason an admin typed, checked as the Worker checks it; null when it may be sent. */
+export function reasonProblem(text) {
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (t.length < REASON_MIN) return `Write a reason of at least ${REASON_MIN} characters.`;
+  if (t.length > REASON_MAX) return `A reason is at most ${REASON_MAX} characters.`;
+  return null;
+}
+
+const KIND = { admin: 'Studio admin', super_admin: 'HQ', founder: 'Founder' };
+export const kindLabel = (kind) => KIND[kind] || NOT_RECORDED;
+
+const when = (value) => {
+  if (!value) return null;
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(String(value)) ? `${String(value).replace(' ', 'T')}Z` : String(value);
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+};
+
+/** The line under the read-only banner: who opened it, for what, and that the founder sees it. */
+export function openedLine(read, viewer) {
+  if (!read?.reason) return null;
+  const who = viewer === 'super_admin' ? 'Opened by HQ' : 'Opened by an admin';
+  return `${who} for “${read.reason}”. The founder sees this reason.`;
+}
+
+/** One reason, as the founder reads it. A missing name is never invented. */
+export function readRow(r) {
+  return {
+    id: r?.id,
+    who: `${r?.by?.name || NOT_RECORDED} · ${kindLabel(r?.by?.kind)}`,
+    reason: String(r?.reason || '').trim() || NOT_RECORDED,
+    when: when(r?.created_at) || NOT_RECORDED,
+  };
+}
+
+/** One note, as the thread draws it: its eyebrow (who, what, when, which version) and its words. */
+export function noteRow(n) {
+  const on = n?.version == null ? 'the narrative' : `v${n.version}`;
+  return {
+    id: n?.id,
+    eye: `${n?.author?.name || NOT_RECORDED} · ${kindLabel(n?.author?.kind)} · ${when(n?.created_at) || NOT_RECORDED} · on ${on}`,
+    body: String(n?.body ?? ''),
+  };
+}
+
+/** What posting a note changes, said before it happens. */
+export const notePosts = (version) => `This posts your note on ${version == null ? 'the narrative' : `v${version}`}. The founder and the venture’s admins see it. It changes nothing in the narrative.`;
+
+// NAR14a: Investors, Advisors, Operating Partners and Explorers do not open the narrative.
+export const BOUNDARY = {
+  title: 'The Investor narrative is for the venture’s founders.',
+  line: 'Ask them to share their deck.',
+  action: 'Go to your home',
+};
+export const BOUNDARY_ROLES = new Set(['investor', 'advisor', 'partner', 'exploring']);
+// NAR14b: a founder who opens another venture's narrative.
+export const OTHER_VENTURE = {
+  title: 'This narrative belongs to another venture.',
+  line: 'You can open the narrative of a venture you found.',
+  action: 'Open your own narrative',
+};
+
 /* ------------------------------------------------------------------ *
  * D911 (#2695) — Positioning (NAR4, NAR5, NAR18, NAR19d)
  * ------------------------------------------------------------------ */
