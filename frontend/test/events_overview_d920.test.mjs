@@ -165,3 +165,26 @@ test('D920: changing the period re-reads all blocks, hides the old period and re
     assert.ok(calls.some((u) => u.endsWith('/overview?weeks=52')));
   } finally { await m.close(); }
 });
+
+test('D920: even the first committed frame after a period change hides the previous period', async () => {
+  const { useEventsDesk } = await import('../src/pages/admin/events/useEventsDesk.js');
+  const frames = [];
+  function Probe() {
+    const [weeks, setWeeks] = React.useState(12);
+    const r = useEventsDesk('overview', null, { weeks });
+    React.useLayoutEffect(() => { frames.push({ weeks, status: r.overview.status, value: r.overview.data?.weekly?.registrations?.this_period }); });
+    return h(EventsOverview, { reads: r, now: NOW, weeks, onWeeks: setWeeks });
+  }
+  const m = await mount(h(Probe), async (url) => {
+    if (String(url).includes('/overview?weeks=4')) return new Promise(() => {});
+    if (String(url).includes('/overview')) return Response.json(overviewFixture());
+    return Response.json({ events: [] });
+  });
+  try {
+    assert.ok(frames.some((r) => r.weeks === 12 && r.value === 18));
+    await m.click('events-period-4');
+    const changed = frames.filter((r) => r.weeks === 4);
+    assert.ok(changed.length > 0);
+    assert.ok(changed.every((r) => r.status === 'loading' && r.value === undefined), 'no committed frame labels old numbers as the new period');
+  } finally { await m.close(); }
+});
