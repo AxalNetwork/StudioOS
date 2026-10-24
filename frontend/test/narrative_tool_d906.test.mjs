@@ -243,11 +243,11 @@ test('a tab with no venture list says the list could not be read, never an endle
   } finally { await view.close(); }
 });
 
-test('a refused versions read is the Worker\'s sentence, with no Retry', async () => {
+test('a refused versions read is another venture\'s narrative (D914, NAR14b), with no Retry', async () => {
   const view = await mounted('/raise/investor-narrative/check?project_id=9', { handle: answering([[(u) => u.includes('/form-options'), () => response({ detail: 'Forbidden' }, 403)]]) });
   try {
-    assert.ok(view.testIds().includes('narrative-refused'));
-    assert.match(view.text(), /Forbidden/);
+    assert.ok(view.testIds().includes('narrative-other-venture'));
+    assert.match(view.text(), /This narrative belongs to another venture\./);
     assert.doesNotMatch(view.text(), /Your narrative versions could not be read/, 'a refusal is drawn as a failed read');
   } finally { await view.close(); }
 });
