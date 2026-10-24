@@ -71,14 +71,14 @@ function Svg({ width, height, children }) {
  * lightbox (INS3) or, on Partner invitations, a filtered list. `r.aria` names
  * what the button opens; `testIdPrefix` keys each button.
  */
-export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar' }) {
+export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar', max: maxIn, reference = null, truncateLabels = false }) {
   const [ref, W] = useBoxWidth();
   const LW = W < 420 ? 112 : 150;
   const RW = 92;
   const rh = 26;
   const H = rows.length * rh + 20;
   const bw = Math.max(40, W - LW - RW);
-  const max = Math.max(1, ...rows.map((r) => r.value));
+  const max = Math.max(1, maxIn || 0, ...rows.map((r) => r.value));
   return (
     <div ref={ref} className="w-full">
       <Svg width={W} height={H}>
@@ -91,7 +91,7 @@ export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar'
             : <rect x={LW} y={y + 3} width={w} height={15} rx={2} className={FILL[r.tone] || FILL.violet} />;
           const body = (
             <>
-              <text x={LW - 8} y={y + 14} textAnchor="end" className={`${INK} font-display text-[11px]`}>{r.label}</text>
+              <text x={LW - 8} y={y + 14} textAnchor="end" className={`${INK} font-display text-[11px]`}>{truncateLabels && r.label.length > Math.floor((LW - 12) / 6) ? `${r.label.slice(0, Math.floor((LW - 12) / 6) - 1)}…` : r.label}</text>
               {bar}
               <text x={LW + Math.max(w, r.dash ? 24 : 0) + 6} y={y + 14} className={INK}>{r.text ?? nf(r.value)}</text>
             </>
@@ -108,6 +108,7 @@ export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar'
             </g>
           );
         })}
+        {Number.isFinite(reference) ? <line x1={LW + bw * reference / max} x2={LW + bw * reference / max} y1={0} y2={H - 16} className="stroke-axal-muted dark:stroke-gray-400" strokeDasharray="3 3" data-testid="chart-reference" /> : null}
         <text x={LW} y={H - 3} className={MUTE}>0</text>
         <text x={LW + bw} y={H - 3} textAnchor="end" className={MUTE}>{axis}</text>
       </Svg>
