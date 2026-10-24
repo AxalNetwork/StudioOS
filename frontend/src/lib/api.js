@@ -1224,6 +1224,7 @@ export const api = {
 
   // Task #9 (X-2) — Partner deal engine: admin invitations + deals.
   adminPartners: {
+    activateDeal: (id) => request(`/admin/partners/deals/${id}/activate`, { method: 'POST' }),
     listInvitations: (opts = {}) => {
       const q = new URLSearchParams();
       if (opts.status) q.set('status', opts.status);
