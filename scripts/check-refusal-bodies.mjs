@@ -50,7 +50,6 @@ export const LEDGER = [
   { file: 'refer_earn.ts', contains: '{ ok: false, error: { code: e.code, message: e.message } }', reason: 'ReferralError is our own sentence with its code.' },
   { file: 'scoring.ts', contains: "return c.json({ error: e.message, field: e.field, code: 'reserved_field' }", reason: 'ReservedFieldError is our own validation sentence.' },
   { file: 'scoring.ts', contains: "return c.json({ error: e.message, missing: e.missing, code: 'missing_official_inputs' }", reason: 'MissingOfficialInputsError is our own validation sentence.' },
-  { file: 'projects.ts', contains: "if (e instanceof MissingOfficialInputsError) return c.json({ error: e.message, missing: e.missing, code: 'missing_official_inputs' }", reason: 'MissingOfficialInputsError is our own required-input validation sentence; the class uses fixed field names, never provider or database text.' },
   { file: 'settings.ts', contains: 'const body: Record<string, unknown> = { error: e.message };', reason: 'SettingsValidationError / ProfileValidationError: field-level sentences we wrote. Recasting `error` to a code is filed in D278.' },
   { file: 'settings.ts', contains: 'return c.json({ error: e.message, code: e.code }, e.status as 400);', reason: 'LinkedInImportError is our own sentence with its code.' },
   { file: 'admin_github.ts', contains: 'detail: `Network error', reason: 'A 200-status health-check body; out of scope and filed in D278.' },

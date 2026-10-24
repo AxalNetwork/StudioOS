@@ -629,7 +629,7 @@ projects.post('/submit', async (c) => {
     assertNoReservedFields(data);
     assertOfficialInputsComplete(data);
   } catch (e) {
-    if (e instanceof MissingOfficialInputsError) return c.json({ error: e.message, missing: e.missing, code: 'missing_official_inputs' }, 400);
+    if (e instanceof MissingOfficialInputsError) return c.json({ error: 'Complete all scoring inputs before submitting.', missing: e.missing, code: 'missing_official_inputs' }, 400);
     const message = e instanceof Error ? e.message : 'Reserved field rejected';
     return c.json({ error: message, code: 'reserved_field' }, 400);
   }
