@@ -187,7 +187,7 @@ export default function AdminSpinoutJourneyPreview() {
   const rawStage = params.get('stage');
   const stage = STAGES.some((s) => s.key === rawStage) ? rawStage : 'marketing';
   const setStage = (key) => setParams({ stage: key });
-  const exit = () => navigate('/admin?tab=lab-applications');
+  const exit = () => navigate('/admin/programs/spinout-lab');
 
   // Keep the walkthrough contained: the reused founder components carry
   // their real links (e.g. "Back to Spin-Out Lab" → /spinout-lab, marketing
