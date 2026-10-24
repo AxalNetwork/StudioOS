@@ -270,7 +270,12 @@ export function listState({ loading, loadError, profiles }) {
   return profiles.length ? 'list' : 'empty';
 }
 
-export default function AdminNetworkProfiles() {
+/**
+ * `embedded` is D972 (#2369): the Deck roster tab of /admin/advisors-partners
+ * draws this roster under its own header, so the roster drops its page title
+ * and frame and keeps one h1 on the page: the header's.
+ */
+export default function AdminNetworkProfiles({ embedded = false }) {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
@@ -364,17 +369,23 @@ export default function AdminNetworkProfiles() {
   }, [profiles]);
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className={embedded ? '' : 'max-w-5xl mx-auto p-6'} data-testid="network-roster">
       <ToastMessage toast={toast} onDismiss={dismissToast} />
       <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-            <Users className="w-6 h-6 text-violet-600" /> Mentor & partner network
-          </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Admin-only roster powering the Spin-Out Demo Day deck's Team & Network slide.
+        {embedded ? (
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            This list feeds the Team & Network slide of the Demo Day deck.
           </p>
-        </div>
+        ) : (
+          <div>
+            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+              <Users className="w-6 h-6 text-violet-600" /> Mentor & partner network
+            </h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
+              Admin-only roster powering the Spin-Out Demo Day deck's Team & Network slide.
+            </p>
+          </div>
+        )}
         <div className="flex gap-2">
           <button onClick={load} disabled={loading}
             className="inline-flex items-center gap-1 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800">

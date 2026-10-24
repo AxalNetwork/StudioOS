@@ -385,8 +385,8 @@ const rRead = (db: any, who = FOUNDER, pid = P) => request(rApp, db, who, `/api/
 let prSeq = 0;
 function prospect(db: any, pid: number, stage: string, due: string | null, amount: number | null = null) {
   prSeq += 1;
-  db.prepare(`INSERT INTO raise_prospects (uid, project_id, name, stage, next_step, next_step_due, amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    .run(`p${prSeq}`, pid, `Investor ${prSeq}`, stage, due ? 'Send the deck' : null, due, amount);
+  db.prepare(`INSERT INTO raise_prospects (uid, project_id, name, stage, next_step, next_step_due, amount, commit_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(`p${prSeq}`, pid, `Investor ${prSeq}`, stage, due ? 'Send the deck' : null, due, amount, stage === 'committed' ? 'signed' : null);
 }
 
 test('8: a new venture scores readiness first; a deck nobody opened is already a record', async () => {
@@ -417,6 +417,7 @@ test('8: with the flag on and no open call, the call focus, the meter and the fo
   db.exec(`INSERT INTO raise_rounds (uid, project_id, name, target_amount, status) VALUES ('r1', ${P}, 'Seed', 1500000, 'active')`);
   prospect(db, P, 'committed', null, 600000);
   prospect(db, P, 'committed', null, 300000);
+  db.exec("UPDATE raise_prospects SET commit_status='wired' WHERE amount=300000");
   prospect(db, P, 'meeting', day(1));
   prospect(db, P, 'contacted', day(6));
   prospect(db, P, 'diligence', day(-3)); // overdue
@@ -429,7 +430,9 @@ test('8: with the flag on and no open call, the call focus, the meter and the fo
     assert.equal(r.body.focus.headline, 'Call for capital from investors who fit.');
     assert.deepEqual(r.body.focus.cta, { label: 'Call for Capital', href: `/raise/call?project_id=${P}` });
     assert.equal(r.body.focus.then, 'Follow up with the 3 investors due or overdue this week.');
-    assert.deepEqual([r.body.meter.label, r.body.meter.count, r.body.meter.target, r.body.meter.display], ['Committed', 900000, 1500000, '$900k of $1.5M']);
+    assert.deepEqual([r.body.meter.label, r.body.meter.count, r.body.meter.target, r.body.meter.display], ['Signed or received', 900000, 1500000, '$900k of $1.5M']);
+    assert.equal(r.body.meter.detail,r.body.figures.find((f:any)=>f.key==='committed').reason);
+    assert.match(r.body.meter.detail,/Signed: \$600,000.*Received: \$300,000/);
     assert.equal(r.body.index[0].key, 'calls');
     assert.equal(row(r.body, 'calls').value, null, 'no call yet: Not recorded');
 
@@ -453,7 +456,8 @@ test('8: readiness reads as a score out of 100; a commitment with no target show
   prospect(db, P, 'committed', null, 900000);
   const r = await rRead(db);
   assert.deepEqual([row(r.body, 'fundraising-readiness').detail, row(r.body, 'fundraising-readiness').value], ['Readiness score', '70 of 100']);
-  assert.deepEqual([r.body.meter.display, r.body.meter.target, r.body.meter.target_reason], ['$900k', null, 'No active round target is recorded']);
+  assert.deepEqual([r.body.meter.label, r.body.meter.display, r.body.meter.target], ['Signed or received', '$900k', null]);
+  assert.match(r.body.meter.target_reason,/no active round target is recorded/);
   for (const who of [OTHER, INVESTOR, PARTNER]) {
     const x = await rRead(db, who);
     assert.equal(x.status, 403);
@@ -740,4 +744,13 @@ test('the helpers: one sentence, no leading Then; the canvas\'s money; the card 
     cta: { label: 'Mark the first must-have', href: '/build/prototype-mvp?project=1' }, then: null,
   });
   assert.deepEqual(['ok', 'too_little', 'unreadable', 'empty', 'not_recorded'].map((state) => cardValue({ state } as any)), ['', '', 'Unreadable', null, null]);
+});
+
+
+test('#2447: unclassified commitments keep a visible meter explanation when the firm total is missing',async()=>{
+ const db=fixture();prospect(db,P,'committed',null,400000);
+ db.exec(`UPDATE raise_prospects SET commit_status=NULL WHERE project_id=${P}`);
+ const r=await rRead(db);assert.equal(r.status,200);assert.ok(r.body.meter);assert.ok(r.body.focus?.cta?.href);
+ assert.equal(r.body.meter.display,null);assert.equal(r.body.meter.count,null);
+ assert.match(r.body.meter.detail,/Status not recorded: \$400,000/);
 });

@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * D661 (#1474) — Validate's REAL read, through the page's adapter.
  *
@@ -227,6 +228,7 @@ function raiseFixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  raiseEvidenceTables(db);
   db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)').run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Acme', 1001)`);
   return db;
