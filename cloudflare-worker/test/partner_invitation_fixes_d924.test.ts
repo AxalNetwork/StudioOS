@@ -192,6 +192,7 @@ for(const kind of ['refused','failed'] as const) test(`D924 agreement resend rec
  const f=fixture();const {id}=await agreement(f);credentials(f);const tx=transport(kind);try{
  const r=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(r.status,200);assert.equal(r.body.email_sent,false);assert.equal(row(f,id).last_send_reason,kind);assert.equal(row(f,id).last_send_ok,0);assert.equal(row(f,id).status,'finalized');
  const previous:any=f.db.prepare("SELECT signing_token,token_expires_at FROM esign_recipients WHERE envelope_id=(SELECT envelope_id FROM partner_invitations WHERE id=?)").get(id);assert.equal(previous.signing_token,'a'.repeat(64));assert.equal(previous.token_expires_at,'2000-01-01');
+ const audit:any=f.db.prepare("SELECT meta FROM esign_audit_events WHERE action='partner_signing_link_renewal_failed'").get();assert.equal(JSON.parse(audit.meta).link_renewed,false);assert.equal(JSON.parse(audit.meta).previous_link_restored,true);
  }finally{tx.restore();f.db.close();}
 });
 
@@ -233,6 +234,26 @@ test('D924 backfill preserves distinct same-second attempts when one audit store
  const good=JSON.stringify({invitation_id:id,email_sent:true}),bad=JSON.stringify({invitation_id:id,email_sent:false});
  f.db.prepare("INSERT INTO admin_audit_log(admin_user_id,action,filters_json,exported_at) VALUES(5,'partner_invitation_resent',?,'2026-01-01 12:00:00')").run(good);
  const add=f.db.prepare("INSERT INTO activity_logs(action,details,created_at) VALUES('partner_invitation_resent',?,'2026-01-01 12:00:00')");add.run(good);add.run(good);add.run(bad);
- f.db.exec(migration);assert.equal(row(f,id).send_count,3);
+ f.db.exec(migration);assert.equal(row(f,id).send_count,4);
  }finally{f.db.close();}
+});
+
+test('D924 historical counts include initial send and resend audits with unknown outcomes',()=>{
+ const f=fixture(false);try{const id=invite(f), other=invite(f);
+ const addAdmin=f.db.prepare("INSERT INTO admin_audit_log(admin_user_id,action,filters_json,exported_at) VALUES(5,'partner_invitation_resent',?,?)");
+ const addActivity=f.db.prepare("INSERT INTO activity_logs(action,details,created_at) VALUES('partner_invitation_resent',?,?)");
+ const good=JSON.stringify({invitation_id:id,email_sent:true}),unknown=JSON.stringify({invitation_id:id});
+ for(const add of [addAdmin,addActivity]){add.run(good,'2026-01-01 12:00:00');add.run(unknown,'2026-01-02 12:00:00');}
+ addAdmin.run(JSON.stringify({invitation_id:other,email_sent:false}),'2026-01-01 12:00:00');
+ f.db.exec(migration);assert.equal(row(f,id).send_count,3);assert.equal(row(f,id).last_send_ok,null);assert.equal(row(f,id).last_sent_at,'2026-01-02T12:00:00.000Z');assert.equal(row(f,other).send_count,2);assert.equal(row(f,other).last_send_ok,0);
+ }finally{f.db.close();}
+});
+
+for(const phase of ['expiry','token'])test(`D924 concurrent revoke at ${phase} refuses resend without mail`,async()=>{
+ const f=fixture();const {id,envId}=await agreement(f);credentials(f);const tx=transport('ok');const prepare=f.env.DB.prepare.bind(f.env.DB);
+ f.env.DB.prepare=(sql:string)=>{const statement=prepare(sql);const run=statement.run.bind(statement);
+ if((phase==='expiry'&&sql.includes('UPDATE partner_invitations SET expires_at'))||(phase==='token'&&sql.includes('UPDATE esign_recipients SET signing_token'))){statement.run=async()=>{f.db.prepare("UPDATE partner_invitations SET status='revoked' WHERE id=?").run(id);f.db.prepare("UPDATE esign_envelopes SET status='voided' WHERE id=?").run(envId);return run();};}
+ return statement;};
+ try{const r=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(r.status,409);assert.equal(r.body.error,'Invitation has been revoked');assert.equal(tx.mails.length,0);assert.equal(row(f,id).send_count,1);assert.equal((f.db.prepare('SELECT signing_token FROM esign_recipients WHERE envelope_id=?').get(envId) as any).signing_token,'a'.repeat(64));if(phase==='expiry')assert.equal(row(f,id).expires_at,'2000-01-01T00:00:00Z');
+ }finally{tx.restore();f.db.close();}
 });

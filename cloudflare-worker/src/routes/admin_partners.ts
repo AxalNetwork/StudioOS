@@ -147,14 +147,29 @@ admin_partners.post('/invitations/:id/resend', async (c) => {
 
   // Bump expiry on resend so the recipient gets a fresh 14-day window.
   const newExpires = new Date(Date.now() + INVITE_TTL_DAYS * 86400 * 1000).toISOString();
-  await c.env.DB.prepare(
-    `UPDATE partner_invitations SET expires_at = ? WHERE id = ?`,
+  const extended = await c.env.DB.prepare(
+    `UPDATE partner_invitations SET expires_at = ? WHERE id = ? AND status NOT IN ('signed','revoked')`,
   ).bind(newExpires, id).run();
+  if (!extended.meta?.changes) {
+    const current: any = await c.env.DB.prepare('SELECT status FROM partner_invitations WHERE id = ?').bind(id).first();
+    if (!current) return c.json({ error: 'Invitation not found' }, 404);
+    return current.status === 'signed'
+      ? c.json({ error: 'Already signed' }, 409)
+      : c.json({ error: 'Invitation has been revoked' }, 409);
+  }
 
   const link = `${appUrl(c.env)}/partners/onboard?token=${inv.token}`;
   const renewed = inv.envelope_id
     ? await renewPartnerInvitationSigningLink(c.env, id, admin, newExpires, clientIp(c.req.raw))
     : null;
+  if (!renewed) {
+    // Renewal can lose a race with revocation. Do not turn that refusal into
+    // an onboarding email for a link that is no longer usable.
+    const current: any = await c.env.DB.prepare('SELECT status FROM partner_invitations WHERE id = ?').bind(id).first();
+    if (!current) return c.json({ error: 'Invitation not found' }, 404);
+    if (current.status === 'signed') return c.json({ error: 'Already signed' }, 409);
+    if (current.status === 'revoked') return c.json({ error: 'Invitation has been revoked' }, 409);
+  }
   const sendResult = renewed ?? await sendPartnerInvitationEmailResult(
     c.env, inv.recipient_email, inv.recipient_name || '',
     admin.name || 'Axal VC', link, inv.personal_message || '',

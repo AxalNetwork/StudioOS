@@ -8,7 +8,8 @@ ALTER TABLE partner_deals ADD COLUMN void_reason TEXT CHECK (void_reason IN ('in
 
 -- logAdminAction writes both stores. Prefer the canonical admin audit entry
 -- for the same invitation/action/time, with activity-only entries as fallback.
--- Malformed audit JSON and entries without a recorded boolean are not facts.
+-- Malformed audit JSON cannot identify an attempt. Missing outcomes stay unknown;
+-- an invitation itself records its initial attempt, plus each audited resend.
 WITH activity_sends AS (
   SELECT *, ROW_NUMBER() OVER (
     PARTITION BY action, datetime(created_at), json_extract(details, '$.invitation_id'), json_extract(details, '$.email_sent')
@@ -31,21 +32,19 @@ WITH activity_sends AS (
        SELECT COUNT(*) FROM admin_audit_log b
         WHERE b.action = a.action AND datetime(b.exported_at) = datetime(a.created_at)
           AND json_extract(CASE WHEN json_valid(b.filters_json) THEN b.filters_json ELSE '{}' END, '$.invitation_id') = json_extract(a.details, '$.invitation_id')
-          AND json_type(CASE WHEN json_valid(b.filters_json) THEN b.filters_json ELSE '{}' END, '$.email_sent') IN ('true','false')
-          AND json_extract(CASE WHEN json_valid(b.filters_json) THEN b.filters_json ELSE '{}' END, '$.email_sent') = json_extract(a.details, '$.email_sent')
+          AND json_extract(CASE WHEN json_valid(b.filters_json) THEN b.filters_json ELSE '{}' END, '$.email_sent') IS json_extract(a.details, '$.email_sent')
      )
 ), known AS (
   SELECT *, json_extract(details, '$.invitation_id') AS invitation_id,
-         json_extract(details, '$.email_sent') AS ok,
+         CASE WHEN json_type(details, '$.email_sent') IN ('true','false') THEN json_extract(details, '$.email_sent') ELSE NULL END AS ok,
          ROW_NUMBER() OVER (
            PARTITION BY json_extract(details, '$.invitation_id')
            ORDER BY datetime(sent_at) DESC, source DESC, id DESC
          ) AS latest
     FROM sends
-   WHERE json_type(details, '$.email_sent') IN ('true','false')
 )
 UPDATE partner_invitations
    SET last_sent_at = (SELECT strftime('%Y-%m-%dT%H:%M:%fZ', sent_at) FROM known WHERE invitation_id = partner_invitations.id AND latest = 1),
-       send_count = MAX(1, (SELECT COUNT(*) FROM known WHERE invitation_id = partner_invitations.id)),
+       send_count = 1 + (SELECT COUNT(*) FROM known WHERE invitation_id = partner_invitations.id AND action = 'partner_invitation_resent'),
        last_send_ok = (SELECT ok FROM known WHERE invitation_id = partner_invitations.id AND latest = 1)
  WHERE id IN (SELECT invitation_id FROM known);

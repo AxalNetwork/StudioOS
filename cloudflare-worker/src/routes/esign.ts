@@ -1952,18 +1952,20 @@ export async function renewPartnerInvitationSigningLink(
     env, recipient.recipient_email, recipient.recipient_name || '', envelope.document_title || 'Agreement',
     `${env.APP_URL || 'https://axal.vc'}/esign/${token}`, actor.name || actor.email, 14,
   );
+  let previousLinkRestored = false;
   if (!result.ok) {
     // Keep the link already in the recipient's inbox usable after a failed
     // send. Compare the fresh token so a concurrent resend is never undone.
-    await env.DB.prepare(
+    const restored = await env.DB.prepare(
       `UPDATE esign_recipients SET signing_token = ?, token_expires_at = ?
         WHERE id = ? AND signing_token = ? AND status = 'pending'`,
     ).bind(recipient.signing_token, recipient.token_expires_at, recipient.id, token).run();
+    previousLinkRestored = (restored.meta?.changes || 0) > 0;
   }
   await appendAudit(env, envelope.id, {
     ts: new Date().toISOString(), signer_id: actor.id, signer_email: actor.email,
     action: result.ok ? 'partner_signing_link_renewed' : 'partner_signing_link_renewal_failed', ip: actorIp,
-    meta: { to: recipient.recipient_email, link_renewed: true, invitation_id: invitationId },
+    meta: { to: recipient.recipient_email, link_renewed: result.ok, previous_link_restored: previousLinkRestored, invitation_id: invitationId },
   });
   return result;
 }
