@@ -22,6 +22,7 @@ export const CHANNEL_PAGE_TEXT = Object.freeze({
       'Customers’ chats with your business number wait here for 30 days. Add one to an interview, and Axal asks the customer for consent in the chat before anything is recorded.',
       'Axal sends only what you ask it to, and only within 24 hours of the customer’s last message. Messages are billed by Meta to your WhatsApp Business Account after 1,000 a month.',
       'Calls stay closed on numbers connected through the WhatsApp Business app. Axal does not answer or place WhatsApp calls; use the in-app recorder with everyone’s consent instead.',
+      'Costs: transcription and translation use AI tokens. Translation keeps the original and adds your working language when needed.',
     ]),
     signIn: 'Meta sign-up',
     docs: 'https://developers.facebook.com/docs/whatsapp/cloud-api',
