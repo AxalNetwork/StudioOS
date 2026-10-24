@@ -53,8 +53,9 @@ strip, then the tab the address names.
   leaves the queue, and the event page's actions wait, until a read newer
   than the write lands. Focus then sits on the confirmation line.
 - No type, format, period control or chart is drawn until the part of D915 §6
-  that builds it lands. The host column, host search, the Host filter and
-  "Cancelled with paid tickets" wait for part 3's paged list.
+  that builds it lands. Part 3's list (D918) gives the host line, host search
+  and the Host filter; "Cancelled with paid tickets" reads D918's overview,
+  only while that view is on (`useEventsDesk`'s `paidView`).
 - Two events clash when neither is cancelled and their times overlap; an
   event with no `ends_at` lasts one hour (D915 §2). The Calendar and Needs
   attention use the one rule, `calendarModel.clashMap`.

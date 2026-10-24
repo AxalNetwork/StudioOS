@@ -35,8 +35,9 @@ import {
   monthGrid, monthList, placeOf, seatsLine, todayKey, unplacedLine, weekGrid,
 } from '../src/pages/admin/events/calendarModel.js';
 import {
-  ATTENTION_NOTE, COUNTS_NEEDED, CSV_COLUMNS, attentionReasons, csvCell, csvFor, csvName, filterCount, filteredRows,
-  isFull, isLowSignups, matchesFilters, priceMatches, readQuery, whenMatches, writeQuery,
+  ATTENTION_NOTE, COUNTS_NEEDED, CSV_COLUMNS, OVERDUE_HOURS, PAID_NOTE, attentionReasons, csvCell, csvFor, csvName, filterCount,
+  filteredRows, hostLine, hostOptions, isFull, isLowSignups, isOverdue, matchesFilters, matchesSearch, paidOnCancelled,
+  paidTicketsText, priceMatches, readQuery, whenMatches, writeQuery,
 } from '../src/pages/admin/events/allEventsModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -277,8 +278,8 @@ test('the views: This week, Full (never guessed), and Needs attention with the r
   assert.equal(isLowSignups(list[1], join, NOW), true);
   assert.equal(isLowSignups(ev(9, { starts_at: iso(8), capacity: 40 }), joined([row(9, 1)]), NOW), false, 'more than 7 days out');
   assert.deepEqual(ids('?view=attention', joined([], list.length)), [3, 4], 'without counts, only clashes');
-  assert.match(ATTENTION_NOTE, /Overdue reviews wait for the submission time/);
-  assert.match(COUNTS_NEEDED, /only clashes are listed/);
+  assert.match(ATTENTION_NOTE, /overdue reviews, full events, clashes and low sign-ups/);
+  assert.match(COUNTS_NEEDED, /only overdue reviews and clashes are listed/);
   assert.deepEqual(ids('?view=week'), [1, 6, 2], 'Monday 8 to Sunday 14 March; the 5th is the week before');
 });
 
@@ -333,9 +334,11 @@ test('the new files read nothing new, upload nothing and draw no chart', () => {
   const files = ['EventsCalendar.jsx', 'EventFilters.jsx', 'EventsAll.jsx', 'calendarModel.js', 'allEventsModel.js'].map((f) => `frontend/src/pages/admin/events/${f}`);
   const src = files.map((f) => codeOnly(read(f))).join('\n');
   for (const control of ['type="file"', '.draft(', 'dd.generateReport(']) assert.ok(!src.includes(control), `rail_options_admin_d774 lists ${control}`);
-  assert.doesNotMatch(src, /lib\/api|fetch\(|roster|\.summary\b|conversion/, 'no read beyond D915\'s R1 and R2');
+  assert.doesNotMatch(src, /lib\/api|fetch\(|roster|\.summary\b|conversion/, 'the tabs read through useEventsDesk only');
   assert.doesNotMatch(src, /<svg|recharts|location_kind|\bev\.type\b/, 'no chart, no type or format until part 1');
-  assert.doesNotMatch(src, /host_user_id|Hosted by|Studio team|Cancelled with paid tickets/, 'the host and the paid-tickets view wait for part 3');
+  assert.doesNotMatch(src, /host_user_id|\.email\b|Studio team/, 'the host line is D918\'s name and role; Studio team waits for O-STU');
+  const hook = codeOnly(read('frontend/src/pages/admin/events/useEventsDesk.js'));
+  assert.match(hook, /const wantPaid = tab === 'all' && paidView;\n\s*const paid = useRead\('overview', 'paid', withList, wantPaid, \(\) => adminEvents\.overview\(\)\);/, 'the overview is read only for the paid-tickets view');
   assert.match(read('frontend/src/pages/admin/AdminEventsPage.jsx'), /<DeskTab to="\/admin\/events\/calendar" testId="events-tab-calendar">Calendar<\/DeskTab>/, 'a literal door for the reachability walk');
   assert.match(read('documentation/architecture/ROUTE_MAP.md'), /`\/admin\/events\/calendar`/);
   assert.match(read('frontend/src/pages/admin/events/README.md'), /EventsCalendar\.jsx/);
@@ -521,4 +524,100 @@ test('All events on a phone: the cards are 44 px targets and the filters fold be
   assert.match(src, /max-sm:hidden/, 'the table gives way to the cards');
   assert.match(read('frontend/src/pages/admin/events/EventFilters.jsx'), /export const CONTROL = `\$\{INPUT\} max-sm:min-h-\[44px\]`;/);
   assert.match(read('frontend/src/pages/admin/events/EventsCalendar.jsx'), /flex min-h-\[44px\] items-center gap-3 rounded-\[10px\]/, 'the list rows too');
+});
+
+/* ------------------------------------------------------------------ *
+ * Step 3, from part 3's list (D918): hosts, Overdue, paid tickets
+ * ------------------------------------------------------------------ */
+
+// D918's list row: today's fields plus its counts, host line, venture and clash flag.
+const listed = (id, o = {}) => ev(id, { seats_taken: 0, attended: 0, waitlisted: 0, host: { name: 'Dana Ruiz', role: 'founder' }, venture: { name: 'Ledger tool' }, clash: false, waiting_hours: null, ...o });
+
+test('the host line: name, role and venture; no host is "Host not recorded", never a guess', () => {
+  assert.equal(hostLine(listed(1)), 'Dana Ruiz · Founder · Ledger tool');
+  assert.equal(hostLine(listed(1, { host: { name: 'Sam Okafor', role: 'partner' }, venture: null })), 'Sam Okafor · Operating Partner');
+  assert.equal(hostLine(listed(1, { host: { name: 'Kai', role: 'advisor' } })), 'Kai · Advisor · Ledger tool', 'a role with no word of its own is title-cased');
+  assert.equal(hostLine(listed(1, { host: null })), 'Host not recorded');
+  assert.equal(hostLine(listed(1, { host: { name: null, role: null }, venture: null })), 'Host’s name not recorded');
+  assert.deepEqual(hostOptions([listed(1), listed(2, { host: { name: 'Ana Lee', role: 'founder' } }), listed(3), listed(4, { host: null })]).map((h) => h.key), ['Ana Lee', 'Dana Ruiz'], 'each name once, in order; no host is no choice');
+});
+
+test('the search matches titles, hosts and ventures; the Host filter picks one host by name and lives in the address', () => {
+  const list = [listed(1, { title: 'Breakfast' }), listed(2, { title: 'Supper', host: { name: 'Ana Lee', role: 'founder' }, venture: { name: 'Bluefern' } }), listed(3, { title: 'Social', host: null })];
+  const ids = (search, q = '') => filteredRows(list, { q, query: readQuery(search), join: joined([]), now: NOW }).map((e) => e.id);
+  assert.deepEqual(ids('', 'lee'), [2], 'the host');
+  assert.deepEqual(ids('', 'bluefern'), [2], 'the venture');
+  assert.deepEqual(ids('', 'break'), [1], 'the title');
+  assert.equal(matchesSearch(list[2], 'dana'), false, 'an event with no host never matches a host');
+  assert.deepEqual(ids('?host=Ana%20Lee'), [2]);
+  assert.deepEqual(ids('?host=Nobody'), []);
+  assert.equal(readQuery('?host=%20Ana%20Lee%20').host, 'Ana Lee');
+  assert.equal(filterCount(readQuery('?host=Ana%20Lee&status=draft')), 2);
+  assert.equal(writeQuery('?host=Ana%20Lee', { host: null }), '');
+  assert.match(read('frontend/src/pages/admin/events/EventsCalendar.jsx'), /fields=\{\['status', 'visibility', 'price', 'host'\]\}/, 'the Calendar filters by host too');
+});
+
+test('Overdue joins Needs attention once a review has waited more than 72 hours (D918 §1), whatever the start', () => {
+  assert.equal(OVERDUE_HOURS, 72);
+  assert.equal(isOverdue(listed(1, { status: 'pending_review', waiting_hours: 73 })), true);
+  assert.equal(isOverdue(listed(1, { status: 'pending_review', waiting_hours: 72 })), false, 'more than 72');
+  assert.equal(isOverdue(listed(1, { status: 'pending_review', waiting_hours: null })), false, 'no wait read is no claim');
+  assert.equal(isOverdue(listed(1, { status: 'published', waiting_hours: 100 })), false);
+  const late = listed(5, { status: 'pending_review', waiting_hours: 90, starts_at: iso(-1) });
+  assert.deepEqual(attentionReasons(late, { join: joined([]), clashes: new Map(), now: NOW }).map((r) => r.word), ['Overdue'], 'a past start still waits for review');
+  assert.deepEqual(filteredRows([late, listed(6)], { query: readQuery('?view=attention'), join: joined([]), now: NOW }).map((e) => e.id), [5]);
+});
+
+test('Cancelled with paid tickets: from the overview\'s needs_attention, never an empty list when that read fails', () => {
+  const overview = (items, block = {}) => ready({ needs_attention: { available: true, items, ...block } });
+  const p = paidOnCancelled(overview([{ kind: 'paid_on_cancelled', event_id: 7, paid_tickets: 5 }, { kind: 'full', event_id: 8 }, { kind: 'paid_on_cancelled', event_id: 9, paid_tickets: 0 }]));
+  assert.equal(p.state, 'ready');
+  assert.deepEqual([...p.byId], [['7', 5]], 'only paid_on_cancelled with tickets');
+  assert.equal(paidOnCancelled({ status: 'error' }).state, 'unreadable');
+  assert.equal(paidOnCancelled(ready({ needs_attention: { available: false, unreadable: true, reason: 'x' } })).state, 'unreadable', 'D893\'s failed block');
+  assert.equal(paidOnCancelled(ready({})).state, 'unreadable');
+  assert.equal(paidOnCancelled({ status: 'loading' }).state, 'loading');
+  assert.equal(paidTicketsText(1), '1 paid ticket');
+  assert.equal(paidTicketsText(5), '5 paid tickets');
+  const list = [listed(7, { status: 'cancelled' }), listed(8, { status: 'cancelled' }), listed(9)];
+  const ids = (paid) => filteredRows(list, { query: readQuery('?view=paid_cancelled'), join: joined([]), now: NOW, paid }).map((e) => e.id);
+  assert.deepEqual(ids(p), [7]);
+  assert.deepEqual(ids(paidOnCancelled({ status: 'error' })), [], 'not read is no rows, and the page says why');
+  assert.match(PAID_NOTE, /not refunded automatically/);
+});
+
+test('All events, mounted: the host line, the Host filter, and the paid view reading the overview only while it is on', async () => {
+  const live = Date.now();
+  const at = (days) => new Date(live + days * DAY_MS).toISOString();
+  const list = [
+    listed(301, { title: 'Breakfast', starts_at: at(4) }),
+    listed(302, { title: 'Supper', starts_at: at(6), host: { name: 'Ana Lee', role: 'investor' }, venture: null }),
+    listed(303, { title: 'Social', starts_at: at(-3), status: 'cancelled', price_cents: 2500, host: null }),
+  ];
+  let overviews = 0;
+  const handle = (url) => {
+    if (url.startsWith('/api/admin/events/overview')) { overviews += 1; return response({ weeks: 12, needs_attention: { available: true, items: [{ kind: 'paid_on_cancelled', event_id: 303, paid_tickets: 4 }] } }); }
+    return worker({ list, analytics: { events: list.map((e) => row(e.id, 2)) } })(url);
+  };
+  const view = await mounted('/admin/events/all', handle);
+  try {
+    assert.equal(view.textOf('events-all-host-301'), 'Dana Ruiz · Founder · Ledger tool');
+    assert.equal(view.textOf('events-all-host-303'), 'Host not recorded');
+    assert.equal(view.textOf('events-all-card-host-302'), 'Ana Lee · Investor');
+    assert.equal(overviews, 0, 'no overview read until the view asks for it');
+    await view.change('events-filter-host', { value: 'Ana Lee' });
+    assert.equal(new URLSearchParams(where).get('host'), 'Ana Lee');
+    assert.deepEqual(view.testIds().filter((t) => /^events-all-row-/.test(t)), ['events-all-row-302']);
+    await view.change('events-filter-host', { value: '' });
+    await view.click('events-all-view-paid_cancelled');
+    assert.equal(overviews, 1, 'the paid view reads the overview');
+    assert.deepEqual(view.testIds().filter((t) => /^events-all-row-/.test(t)), ['events-all-row-303']);
+    assert.equal(view.textOf('events-all-paid-303'), '4 paid tickets');
+    assert.equal(view.textOf('events-all-paid-note'), PAID_NOTE);
+  } finally { await view.close(); }
+  const failed = await mounted('/admin/events/all?view=paid_cancelled', (url) => (url.startsWith('/api/admin/events/overview') ? response({ error: 'down' }, 503) : worker({ list })(url)));
+  try {
+    assert.match(failed.textOf('events-all'), /Paid tickets on cancelled events could not be read\./);
+    assert.equal(failed.has('events-all-none'), false, 'a failed read is never "No event matches"');
+  } finally { await failed.close(); }
 });
