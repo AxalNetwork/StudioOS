@@ -110,9 +110,8 @@ export const COMMUNITY_CONSOLES = [
     worker: 'wellbeing.ts',
     scope: 'Expert directory only',
     what: 'Verify or hide an expert on the founder-facing directory; a hidden or unverified '
-      + 'expert stops appearing to founders, and a takedown always works. Curated resources '
-      + 'have no console of their own here — POST and DELETE /resources exist on the worker '
-      + 'but nothing in the admin product calls them yet.',
+      + 'expert stops appearing to founders, and a takedown always works. '
+      + 'Curated resources are managed in the Wellbeing resource library.',
   },
 ];
 

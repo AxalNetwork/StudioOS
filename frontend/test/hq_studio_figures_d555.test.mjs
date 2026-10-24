@@ -106,7 +106,7 @@ test('the overview cards draw HQ\'s figures, labelled, with each line linking to
   assert.match(t, /1 deactivated, not counted above/);
   assert.match(t, /No total: a lane could not be read/);
   assert.match(t, /KYC · 4 pending · oldest 4 days · past the window/);
-  assert.match(t, /Jobs · 1 pending · oldest 5h/);
+  assert.match(t, /Jobs · 1 pending · oldest created 5h/);
   assert.match(t, /LP applications could not be read/);
   assert.doesNotMatch(t, /Events · 0 pending/, 'an empty lane is not listed on the card');
   assert.match(t, /Sign-ups: 7 this week \(to date\) · 28 in 8 weeks/);

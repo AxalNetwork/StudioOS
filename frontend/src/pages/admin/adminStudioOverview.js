@@ -424,7 +424,8 @@ export function hqApprovalsView(approvals) {
   const lanes = approvals.lanes.map((l) => ({
     ...l,
     to: LANE_CONSOLES[l.key] || null,
-    age: ageText(l.oldest_age_hours),
+    // D935: Jobs still counts creation; #2700 moved Events to submission.
+    age: l.key === 'jobs' ? `created ${ageText(l.oldest_age_hours) || 'undated'}` : ageText(l.oldest_age_hours),
   }));
   const worst = lanes.find((l) => typeof l.count === 'number' && l.count > 0) || null;
   const total = approvals.pending_total;
