@@ -3324,11 +3324,11 @@ const DRAFT_SURFACES: Record<string, {
       ).bind(pid).all<{ name: string; visibility: string; files: number }>();
       const files = await c.env.DB.prepare(
         `SELECT f.name, f.visibility,
-                (SELECT COUNT(DISTINCT l.user_id) FROM data_room_access_log l WHERE l.file_id = f.id) AS viewers
+                (SELECT COUNT(DISTINCT l.user_id) FROM data_room_access_log l WHERE l.file_id = f.id AND l.action = 'download') AS viewers
            FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name LIMIT 120`
       ).bind(pid).all<{ name: string; visibility: string; viewers: number }>();
       const grants = await c.env.DB.prepare(
-        `SELECT COUNT(*) AS n FROM data_room_grants WHERE project_id = ? AND status = 'active'`
+        `SELECT COUNT(*) AS n FROM data_room_grants WHERE project_id = ? AND status = 'active' AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))`
       ).bind(pid).first<{ n: number }>();
       const lines: string[] = [];
       for (const f of (folders.results || [])) {

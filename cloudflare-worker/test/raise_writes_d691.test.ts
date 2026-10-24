@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * D691 (S19-B, #1699 and #1700) — Raise's writes on real SQLite.
  *
@@ -61,6 +62,7 @@ function fixture() {
   db.exec(sqlOf('410_safe_issuances.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  raiseEvidenceTables(db);
   db.exec(sqlOf('544_narrative_sections.sql')); // D908: a version based on another copies its narrative stores
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
   db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)').run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test');
@@ -452,6 +454,7 @@ function linksFixture() {
   }
   db.exec(sqlOf('248_deck_share_revoked_at.sql'));
   addColumnsFrom(db, stripForeignKeys(sqlOf('463_raise_record_stores.sql')), 'pitch_deck_share_tokens');
+  db.exec(sqlOf('549_deck_share_nullable_view_limit.sql'));
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Kestrel Labs', 1001)`);
   db.exec(`INSERT INTO pitch_decks (id, project_id, version, slides) VALUES (${DECK}, ${P}, 1, '[]')`);
   return db;
@@ -777,6 +780,8 @@ function cycleFixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  raiseEvidenceTables(db);
+  db.exec(sqlOf('549_deck_share_nullable_view_limit.sql'));
   db.exec(sqlOf('544_narrative_sections.sql'));
   personalMatchTables(db); // D752: the trigger on raise_prospects
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
