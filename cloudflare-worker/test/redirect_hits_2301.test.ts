@@ -44,5 +44,6 @@ test('the list is closed and well formed', () => {
   assert.equal(isRedirectKey('/dashboard'), false, 'a bare path is not a redirect key');
   const keep = REDIRECT_ROUTES.filter((r) => r.keep).map((r) => r.path).sort();
   // D937: sent cohort notices keep the old Lab address working permanently.
-  assert.deepEqual(keep, ['/admin/spinout-lab', '/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
+  // D938: /admin forwards every old console tab, and #2375 keeps it for good.
+  assert.deepEqual(keep, ['/admin', '/admin/spinout-lab', '/help/:id', '/integrations', '/notifications', '/notifications/*', '/plans-and-pricing', '/product-testing', '/settings', '/settings/:section', '/support', '/tickets/:id']);
 });
