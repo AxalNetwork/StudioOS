@@ -114,6 +114,9 @@ scoring.post('/score', async (c) => {
   }
 
   const result = runFullScore(body as Record<string, number>);
+  if (result.total_score == null || !result.breakdown) {
+    return c.json({ ...result, is_sandbox: true, snapshot_id: null });
+  }
 
   // Stateless preview: no project_id → just return computed score (sandbox-style).
   if (!body.project_id) {

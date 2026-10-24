@@ -79,7 +79,7 @@ export default {
       id: 'personas',
       title: 'Personas (New Founder, Existing Company, Investor, Advisor)',
       overview:
-        "Personas are tighter slices of a role that tune your dashboard, the Personal Advisor’s opening questions, and which “quick action” cards appear first. Founders pick between New Founder (idea stage) and Existing Company; Investors and Advisors each have one persona today.",
+        "Personas are tighter slices of a role that tune your dashboard, the Personal Advisor’s opening questions, and which “quick action” cards appear first. Founders pick between New Founder (idea stage) and Existing Company; Investors have six segments: LP — Individual, LP — Institutional, GP — External Fund, Angel / Scout, Corporate VC, and Sovereign / Family Office. Advisors can choose Operator / Advisor; Service Provider maps to Operating Partner, and Academic / Lab and Press / Analyst map to Explorer. A segment does not change your account profile.",
       howto: [
         'During onboarding, pick the persona that matches what you’re doing this quarter.',
         'Re-open Settings → Profile → Re-run onboarding to switch personas later.',

@@ -6,6 +6,9 @@ import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
 import AdminSpinoutLab from '../AdminSpinoutLab';
+import LabFormation from './LabFormation';
+import LabGraduation from './LabGraduation';
+import LabHosts from './LabHosts';
 import {
   DATES_FIXED, FACTS, LAB_PATH, LAB_TITLE, MOVED_NOTICES, NOT_YET, PAGE_LINE, PROGRAMS_PATH, TABS, WAITS,
   buildCohorts, buildNeeds, buildTiles, pageFailed, tabOf,
@@ -20,8 +23,9 @@ import {
  *
  * THE INTEGRATION, NOT THE WHOLE CANVAS (D937 §3). The header, the tabs whose
  * console exists, and the Overview blocks whose reads exist, each drawn
- * truthfully. Every tab but Overview is today's console, asked for one section
- * through `AdminSpinoutLab`'s `section` prop. Applications is the cycle queue,
+ * truthfully. Applications, Cohorts and Participants are today's console,
+ * asked for one section through `AdminSpinoutLab`'s `section` prop; Hosts,
+ * Formation and Graduation are drawn to the canvas by D970 (#2755). Applications is the cycle queue,
  * the one door that decides with a reason; the old list that accepted with
  * none is not reached any more.
  *
@@ -259,15 +263,15 @@ function Overview({ reads, reload }) {
   );
 }
 
-/** Which console section each tab asks `AdminSpinoutLab` for. */
+/** Which console section each tab still asks `AdminSpinoutLab` for. */
 const SECTIONS = {
   applications: ['cycles'],
   cohorts: ['timing'],
   participants: ['participants'],
-  hosts: ['hosts'],
-  formation: ['review83b', 'formation'],
-  graduation: ['certificates'],
 };
+
+/** D970: the tabs drawn to the canvas (SL9–SL11), each its own file. */
+const DESKS = { hosts: LabHosts, formation: LabFormation, graduation: LabGraduation };
 
 export default function AdminLab({ onImpersonate }) {
   const loc = useLocation();
@@ -320,9 +324,9 @@ export default function AdminLab({ onImpersonate }) {
         tabs={tabs}
         data-testid="lab-header"
       />
-      {tab === 'overview'
-        ? <Overview reads={reads} reload={reload} />
-        : SECTIONS[tab].map((s) => <AdminSpinoutLab key={s} section={s} onImpersonate={onImpersonate} />)}
+      {tab === 'overview' ? <Overview reads={reads} reload={reload} /> : null}
+      {DESKS[tab] ? React.createElement(DESKS[tab]) : null}
+      {SECTIONS[tab] ? SECTIONS[tab].map((s) => <AdminSpinoutLab key={s} section={s} onImpersonate={onImpersonate} />) : null}
     </div>
   );
 }

@@ -211,14 +211,24 @@ r.post('/programs/:uid/enrollments', async (c) => {
   const target = await userByUid(c.env, b?.user_uid);
   if (!target) return refuse(c, 404, { code: 'no_such_user', message: 'No user has that uid.' });
   const t = now();
-  await c.env.DB.prepare(
-    `INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status, updated_at) VALUES (?, ?, ?, ?, 'active', ?)
-     ON CONFLICT (program_id, user_id) DO UPDATE SET
-       status = 'active',
-       enrolled_by = CASE WHEN learning_enrollments.status = 'active' THEN learning_enrollments.enrolled_by ELSE excluded.enrolled_by END,
-       enrolled_at = CASE WHEN learning_enrollments.status = 'active' THEN learning_enrollments.enrolled_at ELSE excluded.enrolled_at END,
-       updated_at = excluded.updated_at`,
-  ).bind(p.id, target.id, admin.id, t, t).run();
+  // D954 §6: an `enrolled` event only when this makes the row active, never
+  // for a learner already active. The event is written first and conditioned
+  // on the row as it stands, in the same batch as the upsert.
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO learning_enrolment_events (program_id, user_id, kind, by_user_id, at)
+       SELECT ?, ?, 'enrolled', ?, ?
+        WHERE NOT EXISTS (SELECT 1 FROM learning_enrollments WHERE program_id = ? AND user_id = ? AND status = 'active')`,
+    ).bind(p.id, target.id, admin.id, t, p.id, target.id),
+    c.env.DB.prepare(
+      `INSERT INTO learning_enrollments (program_id, user_id, enrolled_by, enrolled_at, status, updated_at) VALUES (?, ?, ?, ?, 'active', ?)
+       ON CONFLICT (program_id, user_id) DO UPDATE SET
+         status = 'active',
+         enrolled_by = CASE WHEN learning_enrollments.status = 'active' THEN learning_enrollments.enrolled_by ELSE excluded.enrolled_by END,
+         enrolled_at = CASE WHEN learning_enrollments.status = 'active' THEN learning_enrollments.enrolled_at ELSE excluded.enrolled_at END,
+         updated_at = excluded.updated_at`,
+    ).bind(p.id, target.id, admin.id, t, t),
+  ]);
   await record(c, admin, 'learning.program.enrol', { uid: p.uid, user_uid: target.uid });
   return c.json(await detail(c.env, p));
 });
@@ -227,10 +237,20 @@ r.delete('/programs/:uid/enrollments/:userUid', async (c) => {
   const admin = await gate(c); if (admin instanceof Response) return admin;
   const p = await programOr404(c); if (p instanceof Response) return p;
   const target = await userByUid(c.env, c.req.param('userUid'));
+  const t = now();
+  // D954 §6: the `removed` event, conditioned on the row still being active,
+  // in the same batch as the update, so a removal that changes nothing writes none.
   const res = target
-    ? await c.env.DB.prepare(
-      `UPDATE learning_enrollments SET status = 'removed', updated_at = ? WHERE program_id = ? AND user_id = ? AND status = 'active'`,
-    ).bind(now(), p.id, target.id).run()
+    ? (await c.env.DB.batch([
+      c.env.DB.prepare(
+        `INSERT INTO learning_enrolment_events (program_id, user_id, kind, by_user_id, at)
+         SELECT ?, ?, 'removed', ?, ?
+          WHERE EXISTS (SELECT 1 FROM learning_enrollments WHERE program_id = ? AND user_id = ? AND status = 'active')`,
+      ).bind(p.id, target.id, admin.id, t, p.id, target.id),
+      c.env.DB.prepare(
+        `UPDATE learning_enrollments SET status = 'removed', updated_at = ? WHERE program_id = ? AND user_id = ? AND status = 'active'`,
+      ).bind(t, p.id, target.id),
+    ]))[1]
     : null;
   if (!target || !Number((res as any)?.meta?.changes ?? 0)) {
     return refuse(c, 404, { code: 'not_enrolled', message: 'That user is not enrolled in this program.' });
