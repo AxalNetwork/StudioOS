@@ -395,6 +395,12 @@ const EXEMPT = [
        + 'X_CLIENT_ID/SECRET are bound on the prod worker (sidebarConfig.js, beside '
        + 'the Telegram row).',
   },
+  {
+    path: '/admin/*',
+    kind: 'not-found',
+    why: 'D940 (#2745): the catch-all for an /admin address no route names. It draws Not found for an '
+       + 'admin, and RoleGuard draws SHL7b\'s card for a member, so nothing should link to it.',
+  },
   // `/admin/network-profiles`'s entry was deleted in D972 (#2369): the route
   // forwards to Advisors & Partners' Deck roster now, so it is a redirect, not
   // a page with no door.
@@ -535,6 +541,17 @@ test('no exemption covers a route that already has a door', () => {
   for (const e of EXEMPT) {
     assert.ok(BY_PATH.has(e.path), `${e.path} is exempted but is not a registered route`);
     assert.ok(e.why && e.why.length > 40, `${e.path}'s exemption does not state a reason`);
+  }
+});
+
+test('a not-found exemption is a splat that draws Not found and nothing else', () => {
+  // A 404 has no door by definition; the claim is that this route IS one, so its element is checked.
+  const app = readRoutesSource();
+  for (const e of EXEMPT.filter((x) => x.kind === 'not-found')) {
+    assert.ok(e.path.endsWith('/*'), `${e.path} is exempted as not-found but is not a splat`);
+    assert.equal(BY_PATH.get(e.path)?.component, 'NotFoundPage', `${e.path} no longer draws NotFoundPage`);
+    const line = app.split('\n').find((l) => l.includes(`<Route path="${e.path}"`));
+    assert.match(line || '', /element=\{guard\(\['admin'\], <NotFoundPage \/>\)\} \/>/, `${e.path} draws more than Not found`);
   }
 });
 
