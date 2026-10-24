@@ -132,6 +132,47 @@ recent activity and the four lightboxes wait for D930's five parts (D931 to
 D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
 row says what is drawn today.
 
+## Landed 2026-10-24 — Admin page header (#2375)
+
+The owner's artifact `KhVPwtFC4WkDiPYCFmSdjv` came from S1's prompt on #2375.
+It is one canvas, not the usual pair: `Admin page header.dc.html` is a single
+page whose `board` switch draws SHL1 to SHL9, with SHL7 as two boards (SHL7a,
+the HQ-only notice; SHL7b, a member on an admin page). It is the output of
+`scripts/read-canvas.mjs` as is. No value was edited.
+
+**Grade: UPGRADE.** S21's integration (D936) builds the shared header,
+`frontend/src/ui/AdminPageHeader.jsx`: the breadcrumb, the title row with one
+pill and at most one primary button, the line, the scope chip, the moved
+notice and the tab bar with its three kinds of count. The Spin-Out Lab
+(#2374) is its first page. Moving every Admin Console tab to its own address
+under it, the redirect keys, the Accounts address and the stale copy wait for
+D936's parts, so this canvas stays in the queue until they land.
+
+## Landed 2026-10-24 — Admin · Spin-Out Lab (#2374)
+
+The owner's artifacts `PR6dqaBiLeUjUj84opEe86` and `SregZZjCTPU5GkUgXsukAZ`
+came from S1's prompt on #2374, as the usual pair:
+- `Spin-Out Lab Admin · Boards.dc.html` is the board grid (SL1 to SL21, with
+  the lettered boards the page's `board` switch lists: SL2b, SL3b, SL4a–g,
+  SL5l, SL8a–c, SL10d, SL11r, SL12s, SL13d, SL14s, SL16a and e, SL19a–b,
+  SL20a–d and SL21c), the output of `scripts/read-canvas.mjs` as is;
+- `Spin-Out Lab Admin Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+The page's script also defines a credits chart (`divSvg`, "spent on perk
+claims") that no board calls; it came along from the Programs canvas and
+is not part of this design. No value was edited.
+
+**Grade: UPGRADE.** `/admin/programs/spinout-lab` is live, with its tabs as
+sub-paths. `/admin/spinout-lab`, its `/preview` and the Admin Console's
+`?tab=lab-applications` forward there with the moved notice. S21's
+integration (D937) draws the header, the tabs whose consoles exist, and the
+Overview blocks whose reads exist. The charts, the paged queue, the drawers
+and dialogs, How it runs, Settings and Activity wait for D937's parts, so
+this canvas stays in the queue until they land. The `ROUTE_MAP.md` row says
+what is drawn today.
+
 ## Landed 2026-10-24 — Pitch deck studio (D894, #2434)
 
 The owner's artifacts `W5hRpjNZ4nsGBTJ7gd71Dy` and `RYeTPyEEdrmRnuUDktJcL3`
