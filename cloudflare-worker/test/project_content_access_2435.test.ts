@@ -223,7 +223,7 @@ test('an investor membership and role casing do not create management access', a
 
 const allocatingReads = [
   { path: '/api/brand/site/by-project/1', clear: 'DELETE FROM brand_sites WHERE project_id = 1' },
-  { path: '/api/brand/landing/by-project/1/preview-url', clear: 'UPDATE landing_pages SET preview_token = NULL WHERE id = 1' },
+  { path: '/api/brand/landing/by-project/1/preview-url', clear: 'UPDATE landing_pages SET preview_token = NULL WHERE project_id = 1' },
   { path: '/api/brand/landing/pages/1/preview-url', clear: 'UPDATE landing_pages SET preview_token = NULL WHERE id = 1' },
 ];
 for (const { path, clear } of allocatingReads) {
