@@ -66,7 +66,7 @@ canvas behind it still shows up here.
 | Admin | Studio | `/studio` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Accounts | `/admin/held/accounts` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Approvals | `/admin/held/approvals` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Programs | `/admin/held/programs` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Programs | `/admin/programs` | Admin · Programs |
 | Admin | Community | `/admin/community` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Contracts | `/admin/contracts` | Contracts · Subsidiary |
 | Admin | Fund admin | `/admin/fund-admin` | — (no canvas; shipped ahead of the design corpus) |
@@ -82,12 +82,13 @@ canvas behind it still shows up here.
 | Home | Messages | `/messages` | — (no canvas; shipped ahead of the design corpus) |
 | Account | My Profile | `/account` | — (no canvas; shipped ahead of the design corpus) |
 
-## `super_admin` — 13 destinations in 1 group
+## `super_admin` — 14 destinations in 1 group
 
 | Group | Label | Route | Canvas behind it |
 | --- | --- | --- | --- |
 | HQ | Home | `/hq` | Admin · Super |
 | HQ | Licences | `/admin/licences` | Admin · Super |
+| HQ | Programs | `/admin/programs` | Admin · Programs |
 | HQ | Funds | `/admin/funds` | Admin · Super |
 | HQ | Fund admin | `/admin/fund-admin` | — (no canvas; shipped ahead of the design corpus) |
 | HQ | Contracts | `/admin/contracts` | Admin · Super, Contracts · Super, Ops Page · HQ tools (Q1–Q3, D633) |
@@ -115,7 +116,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-32 of the 65 sidebar rows above are not claimed
+31 of the 66 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -131,7 +132,6 @@ rather than merely absent.
 - admin · Admin · Studio (`/studio`)
 - admin · Admin · Accounts (`/admin/held/accounts`)
 - admin · Admin · Approvals (`/admin/held/approvals`)
-- admin · Admin · Programs (`/admin/held/programs`)
 - admin · Admin · Community (`/admin/community`)
 - admin · Admin · Fund admin (`/admin/fund-admin`)
 - admin · Admin · Insights (`/admin/insights`)
@@ -154,4 +154,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Licences (`/admin/my-licence`)
 
-**Canvas corpus:** 152. **Workspace assignments:** 205.
+**Canvas corpus:** 153. **Workspace assignments:** 207.

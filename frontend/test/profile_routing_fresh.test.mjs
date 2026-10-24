@@ -103,7 +103,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 150 the same day (D915, #2368): `Events Console`, the admin Events desk's tabs and one page per event at /admin/events.
   // 151 the same day (D923, #2370): `Partner invitations`, its tabs and one address per invitation and per deal at /admin/partner-invitations.
   // 152 the same day (D930, #2367): `Admin Community`, the overview at /admin/community.
-  assert.equal(recs.length, 152);
+  // 153 the same day (D953, #2371): `Admin · Programs`, the catalogue at /admin/programs and one page per program.
+  assert.equal(recs.length, 153);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');

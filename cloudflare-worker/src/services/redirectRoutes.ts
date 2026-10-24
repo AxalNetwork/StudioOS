@@ -138,6 +138,9 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/held/insights' }, // D893 (#2366): Insights moved to /admin/insights
   { path: '/admin/partners' }, // D923 (#2370): Partner invitations moved to /admin/partner-invitations
   { path: '/admin/held/community' }, // D930 (#2367): Community moved to /admin/community
+  { path: '/admin/held/programs' }, // D953 (#2371): Programs moved to /admin/programs
+  { path: '/admin/advisor-cohorts' }, // D953 (#2371): now Programs › Mentor cohort access › People
+  { path: '/admin/refer-earn' }, // D953 (#2371): now Programs › Refer & Earn › Queue
 
 ]);
 
