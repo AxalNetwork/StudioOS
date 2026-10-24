@@ -391,6 +391,7 @@ export const SLOW_PATHS = [
   /^\/dd\/cases\/[^/]+\/(scan|report)$/,
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
+  /^\/decks\/[^/]+\/review$/,           // D900: a version's review
   /^\/funds\/[^/]+\/regenerate-lpa$/,
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
@@ -2765,6 +2766,10 @@ export const api = {
   // D905 (#2684) — a deck's notes, from its admins to its founders (PD21).
   deckNotes: (id) => request(`/decks/${id}/notes`),
   deckPostNote: (id, payload) => request(`/decks/${id}/notes`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  // D900 (#2679) — the studio's review of one version (PD14), and the venture's reviews per version.
+  // `headers` is the press's own rail context (`railPressHeaders('review:deck-version')`).
+  deckReviewVersion: (id, headers) => request(`/decks/${id}/review`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+  deckReviews: (id) => request(`/decks/${id}/reviews`),
   // The Super Admin's default template by sector and stage; an admin reads it.
   deckRecommendOverrides: () => request('/decks/admin/recommend-overrides'),
   deckSetRecommendOverride: (payload) => request('/decks/admin/recommend-overrides', { method: 'PUT', body: JSON.stringify(payload || {}) }),
