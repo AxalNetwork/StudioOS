@@ -51,9 +51,12 @@ export const FROZEN = [
     // D511 — graduation certificates too. Revoking one is not a takedown of the
     // branch's own content: it changes a graduate's credential on the public
     // verification page, so it freezes with issuing.
+    //
+    // D960 — mentor cohort access too, both ways: giving a mentor a cohort's
+    // founders and ending it are each an act on who can read founder data.
     row: 'Programs',
-    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike. Graduation certificates cannot be issued or revoked. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing.',
-    gatedIn: ['admin_cohort.ts', 'admin.ts', 'spinout_certificates.ts'],
+    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike. Graduation certificates cannot be issued or revoked. No mentor can be given, or lose, access to a cohort. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing.',
+    gatedIn: ['admin_cohort.ts', 'admin.ts', 'spinout_certificates.ts', 'advisors.ts'],
   },
   {
     // D260 — the admin acts that decide an account's access: both KYC
