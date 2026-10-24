@@ -30,6 +30,7 @@
 
 import { NOT_RECORDED, titleCase } from '../../../lib/absence.js';
 import { SCOPE_LABEL, SCOPE_TITLE } from '../insights/insightsModel.js';
+import { parseStamp } from '../../../ui/parseStamp.js';
 
 export { NOT_RECORDED, SCOPE_LABEL, SCOPE_TITLE };
 
@@ -131,14 +132,8 @@ export function listJoin(items) {
 
 export const DAY_MS = 86_400_000;
 
-/** A stored time as epoch ms. D1 writes "YYYY-MM-DD HH:MM:SS" in UTC; the editor sends ISO. */
-export function parseStamp(value) {
-  if (value == null || value === '') return null;
-  const s = String(value).trim();
-  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s) ? `${s.replace(' ', 'T')}Z` : s;
-  const ms = Date.parse(iso);
-  return Number.isFinite(ms) ? ms : null;
-}
+/** A stored time as epoch ms: the one rule in `ui/parseStamp.js`, which D923 moved there from here. */
+export { parseStamp };
 
 /**
  * An event has ended once its `ends_at` has passed; with no `ends_at`, a day
