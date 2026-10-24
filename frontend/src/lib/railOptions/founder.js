@@ -47,6 +47,7 @@ const DECK = 'frontend/src/pages/PitchDeckPage.jsx';
 const REVIEWER = 'frontend/src/pages/DeckReviewerPage.jsx';
 const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
 const STUDIO = 'frontend/src/pages/raise/pitch/PitchStudio.jsx';
+const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
 const BRAND = 'frontend/src/pages/BrandBuilderPage.jsx';
 const NETWORK_DESK = 'frontend/src/pages/founder/FounderNetworkDesk.jsx';
 const ASK = 'frontend/src/pages/research/AskZone.jsx';
@@ -179,6 +180,10 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-again', route: '/raise/pitch/review', label: 'Regenerate review', kind: 'reason', handler: 'draft',
     at: [[REVIEWER, 'deckReviewer.regenerate(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'review:deck-version', route: '/raise/pitch/review', label: 'Review this version', kind: 'reason', handler: 'draft',
+    at: [[PITCH_REVIEW, 'api.deckReviewVersion(']],
   },
   {
     page: 'Founder · Raise · Cap table', key: 'draft:raise/capital', route: '/raise/cap-table', label: 'Read the round back', kind: 'numbers', handler: 'draft',

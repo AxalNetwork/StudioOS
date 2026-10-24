@@ -43,6 +43,7 @@ import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
 import adminPartnersReads from './routes/admin_partners_reads';
+import adminPartnerDealReads from './routes/admin_partner_deal_reads';
 import adminNetwork from './routes/admin_network';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
@@ -195,6 +196,7 @@ import deckShareActions from './routes/deck_share_actions';
 // D901 (#2680) — the HTML export and the deck export ledger.
 import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
+import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckNew from './routes/deck_new';
 import notificationsRoutes from './routes/notifications';
@@ -861,6 +863,9 @@ app.route('/api/partners', partners);
 // public token-gated onboarding flow under /api/partner-onboard.
 // D927 (#2723) — the read-only overview, one invitation's read and the offer preview.
 app.route('/api/admin/partners', adminPartnersReads);
+// D928 (#2724): one deal's read, the terminate preview, the cross-deal redemptions and the
+// agreement-ready signal. Before `adminPartners`; its deal ids match digits only, so `/deals/top` stays there.
+app.route('/api/admin/partners', adminPartnerDealReads);
 app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetwork);
@@ -1193,6 +1198,8 @@ app.route('/api/decks', deckShareActions);
 app.route('/api/decks', deckExports);
 // D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
 app.route('/api/decks', deckNotes);
+// D900 (#2679): a version's review and the venture's review history; two-segment paths, before `decks`.
+app.route('/api/decks', deckReview);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
