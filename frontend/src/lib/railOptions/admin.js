@@ -77,7 +77,7 @@ export const ADMIN_BOARDS = [
   { id: 'S35', section: 'Contracts', module: 'Partner deals', route: '/admin/contracts?tab=partner-deals', files: ['pages/admin/contracts/RelatedLists.jsx'], rail: CONTRACTS },
   { id: 'S36', section: 'Contracts', module: 'Templates', route: '/admin/contracts?tab=templates', files: ['pages/admin/AdminTemplates.jsx', 'pages/admin/contracts/TemplateEditor.jsx', 'pages/admin/contracts/TemplateCatalog.jsx'], rail: CONTRACTS },
   { id: 'S37', section: 'Contracts', module: 'Forms', route: '/admin/contracts?tab=forms', files: ['pages/admin/AdminForms.jsx'], rail: CONTRACTS },
-  { id: 'S38', section: 'Insights', module: null, route: '/admin/insights', files: ['pages/admin/insights/AdminInsights.jsx', 'pages/admin/insights/insightsModel.js', 'pages/admin/insights/InsightsCharts.jsx'], rail: 'pages/admin/insights/AdminInsights.jsx' },
+  { id: 'S38', section: 'Insights', module: null, route: '/admin/insights', files: ['pages/admin/insights/AdminInsights.jsx', 'pages/admin/insights/insightsModel.js', 'ui/Charts.jsx'], rail: 'pages/admin/insights/AdminInsights.jsx' },
   { id: 'S39', section: 'Licences', module: null, route: '/admin/my-licence', files: ['pages/subsidiary/MyLicencePage.jsx'], rail: FRAME },
 ];
 

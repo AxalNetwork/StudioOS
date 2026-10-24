@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 
 /**
- * D893 (#2366) — the chart shapes the Insights canvas draws, as plain SVG:
+ * D893 (#2366), moved from pages/admin/insights/ by D929 (#2725) — the chart shapes the Insights canvas draws, as plain SVG:
  * horizontal bars, columns (the current week hatched, an unfinished week
  * dashed), columns stacked by profile (Growth), a weekly line (its last
  * segment dashed to a hollow point, and the period before as a dotted line

@@ -3,9 +3,10 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { adminCircles, adminEvents, adminJobs, adminNetworkProfiles } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
-import { RailFrame, WorkerRail } from '../../../ui';
+import {
+  Bar100, ChartTable, HBars, Legend, RailFrame, WorkerRail,
+} from '../../../ui';
 import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
-import { Bar100, ChartTable, HBars, Legend } from '../insights/InsightsCharts';
 import {
   AS_ENTERED_TIP, EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, NOT_YET, PAGE_LINE, PAGE_UNREADABLE,
   PERIOD_WAITS, PERIODS, SCOPE_LABEL, SCOPE_TITLE, WAITED_UNRECORDED, WAITS,
