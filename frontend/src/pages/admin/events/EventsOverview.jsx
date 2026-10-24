@@ -50,11 +50,11 @@ function Weekly({ b, showup, retry }) {
       <Toggle table={table} setTable={setTable} id="weekly" />
       {table ? <div className="overflow-x-auto"><ChartTable chart={chart} caption="Registrations and check-ins by week" /></div> : <>
         <Legend items={chart.series.map((s) => ({ label: s.label, tone: s.tone }))} />
-        <div role="img" aria-label={chart.labels.map((l, i) => `${l}${i === chart.labels.length - 1 ? ' so far' : ''}: ${count(chart.series[0].values[i])} registrations, ${count(chart.series[1].values[i])} check-ins`).join('; ')}>
-          <WeekLines series={chart.series} labels={chart.labels} />
+        <div role="img" aria-label={chart.labels.map((l, i) => `${l}${i === chart.currentIndex ? ' so far' : ''}: ${count(chart.series[0].values[i])} registrations, ${count(chart.series[1].values[i])} check-ins`).join('; ')}>
+          <WeekLines series={chart.series} labels={chart.labels} currentIndex={chart.currentIndex} />
         </div>
       </>}
-      <p className={SUB}>The current week is still running: so far. Registrations use sign-up dates; check-ins use scan dates. A missing value breaks the line.</p>
+      <p className={SUB}>{chart.currentIndex >= 0 ? 'The current week is still running: so far.' : 'These weeks are complete.'} Registrations use sign-up dates; check-ins use scan dates. A missing value breaks the line.</p>
       <p className="m-0 text-[13px] leading-normal text-axal-ink dark:text-gray-100" data-testid="events-weekly-sentence">{weeklySentence(b, showup)}</p>
     </> : null}
   </Block>;
@@ -84,7 +84,7 @@ function ShowUp({ b, retry }) {
         <Toggle table={table} setTable={setTable} id="showup" />
         <span className={SUB}>{b.seats_taken === 0 ? 'No seats taken at ended events.' : `All events ${percent(b.rate)}`}</span>
         {table ? <ChartTable chart={{ type: 'hbar', rows }} caption="Show-up by event" /> : <div role="img" aria-label={rows.map((r) => `${r.label}: ${r.text}`).join('; ')}><HBars rows={rows} truncateLabels max={100} reference={Number.isFinite(b.rate) ? b.rate * 100 : null} axis="100%" /></div>}
-      </> : <p className={SUB}>No event has ended yet.</p>}
+      </> : b.events === 0 ? <p className={SUB}>No event has ended yet.</p> : <Unreadable what="Per-event show-up" claim="The ended-event rows were not returned." onRetry={retry} />}
     </> : null}
   </Block>;
 }

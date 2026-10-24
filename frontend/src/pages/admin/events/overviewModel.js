@@ -54,7 +54,7 @@ export function paidLines(b) {
 
 export function weeklyChart(b) {
   const rows = Array.isArray(b.weeks) ? b.weeks : [];
-  return { type: 'lines', labels: rows.map((r) => shortWeek(r.week_start)), series: [
+  return { type: 'lines', currentIndex: rows.findIndex((r) => r.to_date === true), labels: rows.map((r) => shortWeek(r.week_start)), series: [
     { label: 'Registrations', tone: 'violet', values: rows.map((r) => Number.isFinite(r.registrations) ? r.registrations : null) },
     { label: 'Check-ins', tone: 'sky', dash: true, values: rows.map((r) => Number.isFinite(r.checkins) ? r.checkins : null) },
   ] };
@@ -69,7 +69,7 @@ export function weeklySentence(weekly, showup) {
 }
 
 export function typeRows(b, showAll) {
-  return EVENT_TYPES.map((t) => ({ label: t.label, value: b.counts?.[t.id], tone: 'violet' }))
+  return EVENT_TYPES.map((t) => ({ label: t.label, value: Number.isFinite(b.counts?.[t.id]) ? b.counts[t.id] : null, text: count(b.counts?.[t.id]), tone: 'violet' }))
     .filter((r) => showAll || r.value !== 0).sort((a, b) => (b.value ?? -1) - (a.value ?? -1));
 }
 /** D915: founders, investors, advisors, operating partners, then explorers/guests/admins as Other. */

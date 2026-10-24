@@ -68,7 +68,9 @@ function Svg({ width, height, children }) {
 
 /**
  * Horizontal bars. A row with `group` is a button: `onSelect(group)` opens its
- * lightbox (INS3) or, on Partner invitations, a filtered list. `r.aria` names
+ * lightbox (INS3) or, on Partner invitations, a filtered list.
+ * `max` and `reference` support comparable percentages; `truncateLabels`
+ * keeps long event titles inside narrow charts (the table retains full words). `r.aria` names
  * what the button opens; `testIdPrefix` keys each button.
  */
 export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar', max: maxIn, reference = null, truncateLabels = false }) {
@@ -78,7 +80,7 @@ export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar'
   const rh = 26;
   const H = rows.length * rh + 20;
   const bw = Math.max(40, W - LW - RW);
-  const max = Math.max(1, maxIn || 0, ...rows.map((r) => r.value));
+  const max = Math.max(1, maxIn || 0, ...rows.map((r) => r.value).filter(Number.isFinite));
   return (
     <div ref={ref} className="w-full">
       <Svg width={W} height={H}>
@@ -93,7 +95,7 @@ export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar'
             <>
               <text x={LW - 8} y={y + 14} textAnchor="end" className={`${INK} font-display text-[11px]`}>{truncateLabels && r.label.length > Math.floor((LW - 12) / 6) ? `${r.label.slice(0, Math.floor((LW - 12) / 6) - 1)}…` : r.label}</text>
               {bar}
-              <text x={LW + Math.max(w, r.dash ? 24 : 0) + 6} y={y + 14} className={INK}>{r.text ?? nf(r.value)}</text>
+              <text x={LW + Math.max(w, r.dash ? 24 : 0) + 6} y={y + 14} className={INK}>{r.text ?? (Number.isFinite(r.value) ? nf(r.value) : 'Not recorded')}</text>
             </>
           );
           if (!r.group || !onSelect) return <g key={r.label}>{body}</g>;
@@ -358,9 +360,11 @@ export function StackBars({ rows, onSelect, testIdPrefix = 'stack' }) {
  * A weekly line with several series: `series` are `{ label, tone, dash,
  * values }`. A dash says which series a line is, so it is never used for
  * time: the last value is the current week to date, drawn as a hollow point
- * on the same line. A null value breaks its line.
+ * on the same line. A null value breaks its line. `currentIndex` defaults
+ * to the last week; a caller with explicit period metadata may pass -1
+ * for completed weeks.
  */
-export function WeekLines({ series, labels, height = 220 }) {
+export function WeekLines({ series, labels, height = 220, currentIndex = labels.length - 1 }) {
   const [ref, W] = useBoxWidth();
   const Lx = 30;
   const R = 18;
@@ -397,7 +401,7 @@ export function WeekLines({ series, labels, height = 220 }) {
               ? <polyline key={run[0].i} points={run.map((p) => `${X(p.i)},${Y(p.v)}`).join(' ')} fill="none" strokeWidth="2.2"
                   strokeDasharray={s.dash ? '5 4' : undefined} className={STROKE[s.tone] || STROKE_V} />
               : null))}
-            {s.values.map((v, i) => (v === null || v === undefined ? null : i === last
+            {s.values.map((v, i) => (v === null || v === undefined ? null : i === currentIndex
               ? <circle key={i} cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} />
               : <circle key={i} cx={X(i)} cy={Y(v)} r="3" className={FILL[s.tone] || FILL.violet} />))}
           </g>
@@ -500,7 +504,7 @@ export function ChartTable({ chart, caption }) {
     rows = chart.rows.map((r) => [r.toDate ? `${r.label} (so far)` : r.label, ...chart.series.map((_, j) => cell(r.values[j]))]);
   } else if (chart?.type === 'lines') {
     head = ['Week', ...chart.series.map((s) => s.label)];
-    rows = chart.labels.map((l, i) => [i === chart.labels.length - 1 ? `${l} (so far)` : l, ...chart.series.map((s) => cell(s.values[i]))]);
+    rows = chart.labels.map((l, i) => [(chart.currentIndex ?? chart.labels.length - 1) === i ? `${l} (so far)` : l, ...chart.series.map((s) => cell(s.values[i]))]);
   } else if (chart?.type === 'stackbars') {
     head = [chart.head || 'Item', ...chart.parts.map((p) => p.label), 'Total'];
     rows = chart.rows.map((r) => [r.label, ...chart.parts.map((p) => nf(r.parts.find((x) => x.key === p.key)?.value || 0)), r.total ?? nf(r.parts.reduce((t, p) => t + p.value, 0))]);
@@ -537,7 +541,7 @@ export function Chart({ chart, onSelect }) {
   if (chart.type === 'hbar') return <HBars rows={chart.rows} axis={chart.axis} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
   if (chart.type === 'grouped') return <GroupedColumns rows={chart.rows} series={chart.series} height={chart.height} />;
   if (chart.type === 'stackbars') return <StackBars rows={chart.rows} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
-  if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} />;
+  if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} />;
   if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} />;
   if (chart.type === 'line') return <WeekLine values={chart.values} labels={chart.labels} previous={chart.previous} />;
   if (chart.type === 'bar100') return <Bar100 parts={chart.parts} />;

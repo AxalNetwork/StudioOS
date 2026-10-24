@@ -8,7 +8,7 @@ import { installDocument } from './_contracts_dom.mjs';
 import { overviewFixture } from './_events_overview_fixture.mjs';
 import EventsOverview from '../src/pages/admin/events/EventsOverview.jsx';
 import AdminEventsPage from '../src/pages/admin/AdminEventsPage.jsx';
-import { HBars, WeekLines } from '../src/ui/Charts.jsx';
+import { ChartTable, HBars, WeekLines } from '../src/ui/Charts.jsx';
 import { overviewBlock, paidLines, profileParts, registrationDelta, weeklyChart, nextEvents } from '../src/pages/admin/events/overviewModel.js';
 
 const h = React.createElement;
@@ -191,4 +191,28 @@ test('D920: even the first committed frame after a period change hides the previ
     assert.ok(changed.length > 0);
     assert.ok(changed.every((r) => r.status === 'loading' && r.value === undefined), 'no committed frame labels old numbers as the new period');
   } finally { await m.close(); }
+});
+
+
+test('D920 review: a missing type count leaves known bars intact, incomplete event rows are not an empty period, and completed weeks stay complete', () => {
+  const f = overviewFixture(); delete f.by_type.counts.demo_day;
+  const s = markup(reads(f));
+  assert.match(text(section(s, 'events-block-types')), /Not recorded/);
+  assert.doesNotMatch(section(s, 'events-block-types'), /NaN/);
+  assert.match(section(s, 'events-block-types'), /width="[1-9]/);
+  const sparseBars = renderToStaticMarkup(h(HBars, { rows: [{ label: 'Known', value: 7 }, { label: 'Missing' }] }));
+  assert.doesNotMatch(sparseBars, /NaN/);
+  assert.match(sparseBars, /Not recorded/);
+  assert.match(sparseBars, /width="518"/);
+  f.show_up.recent = [];
+  const missing = text(section(markup(reads(f)), 'events-block-showup'));
+  assert.match(missing, /Per-event show-up could not be read.*ended-event rows were not returned/);
+  assert.doesNotMatch(missing, /No event has ended/);
+  f.weekly.weeks.forEach((r) => { delete r.to_date; });
+  const chart = weeklyChart(f.weekly);
+  assert.equal(chart.currentIndex, -1);
+  const complete = renderToStaticMarkup(h(WeekLines, { ...chart, currentIndex: chart.currentIndex }));
+  assert.doesNotMatch(complete, /r="4.5"/);
+  assert.doesNotMatch(renderToStaticMarkup(h(ChartTable, { chart, caption: 'Completed weeks' })), /so far/);
+  assert.match(text(section(markup(reads(f)), 'events-block-weekly')), /These weeks are complete/);
 });
