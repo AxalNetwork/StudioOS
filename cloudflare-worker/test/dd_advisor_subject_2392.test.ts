@@ -8,7 +8,7 @@ import { SignJWT } from 'jose';
 import { makeD1 } from './_d1_sqlite.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 import dd from '../src/routes/dd.ts';
-import { sectionsFor, checklistFor, encField, decField, type DDSubjectType } from '../src/services/dueDiligence.ts';
+import { sectionsFor, checklistFor, encField, decField } from '../src/services/dueDiligence.ts';
 
 const BASELINE=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
 // S1 assigned migration 535 and decision D888 on #2392.
