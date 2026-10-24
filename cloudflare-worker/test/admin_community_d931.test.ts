@@ -20,9 +20,10 @@ import { SignJWT } from 'jose';
 
 import adminCommunityRoute from '../src/routes/admin_community.ts';
 import {
-  ACTIVE_MEMBERS_REASON, CIRCLE_DISCUSSIONS_REASON, DAYS_OPEN_REASON, EVENTS_PENDING_REASON, MIN_CHECKIN_COHORT,
-  communityOverview, parseCommunityWeeks, participationRole,
+  ACTIVE_MEMBERS_REASON, CIRCLE_DISCUSSIONS_REASON, DAYS_OPEN_REASON, MIN_CHECKIN_COHORT,
+  communityOverview, eventsByRole, eventsWeekly, parseCommunityWeeks, participationRole, showUpCounts,
 } from '../src/services/communityOverview.ts';
+import { readOverview } from '../src/services/adminEventsReads.ts';
 import { submitForReview } from '../src/services/jobBoardCommon.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 
@@ -231,14 +232,85 @@ test('the check-in band never reads an answer column', () => {
   assert.doesNotMatch(src, /\/api\/wellbeing\/aggregate/);
 });
 
-test('the events parts answer unreadable until D918, and the blocks no store holds are not recorded', async () => {
-  const b = (await read()).blocks as any;
-  const pending = { available: false, unreadable: true, reason: EVENTS_PENDING_REASON };
-  assert.deepEqual(b.events, pending);
-  assert.deepEqual(b.queue.events, pending);
-  assert.deepEqual(b.participation_by_role.events, pending);
+/**
+ * The events stores, as D918's own test builds them (its migrations), with a
+ * handful of registrations: two in the window by a founder and a guest, one
+ * by an Operating Partner, one by an account that is gone, and one in the
+ * period before; one ended event with three seats (one taken before the
+ * window) and one check-in.
+ */
+function withEvents(db = seeded()) {
+  for (const name of ['109_events_core.sql', '111_event_notifications.sql', '392_event_organiser.sql', '546_events_review_columns.sql']) {
+    db.exec(readFileSync(resolve(SQL, 'migrations', name), 'utf8'));
+  }
+  db.exec(`INSERT INTO events (id, slug, host_user_id, type, title, starts_at, ends_at, location_kind, capacity, visibility, status, price_cents, submitted_at, created_at) VALUES
+      (501, 'q1', 1, 'workshop', 'Queued fixture', '2026-11-01T10:00:00Z', NULL, 'virtual', 10, 'public', 'pending_review', 0, '2026-10-17T00:00:00Z', '2026-09-01 00:00:00'),
+      (502, 'h1', 1, 'meetup', 'Held fixture', '2026-10-10T10:00:00Z', '2026-10-10T12:00:00Z', 'virtual', 10, 'public', 'published', 0, NULL, '2026-09-01 00:00:00'),
+      (503, 'w1', 1, 'webinar', 'Waitlist fixture', '2026-10-25T10:00:00Z', NULL, 'virtual', 1, 'public', 'published', 0, NULL, '2026-09-01 00:00:00');
+    INSERT INTO event_registrations (id, event_id, user_id, email, status, comp, payment_status, amount_cents, registered_at) VALUES
+      (1, 502, 1, NULL, 'attended', 0, 'none', 0, '2026-10-05 09:00:00'),
+      (2, 502, NULL, 'guest@example.test', 'registered', 0, 'none', 0, '2026-10-06 09:00:00'),
+      (3, 503, 4, NULL, 'confirmed', 0, 'none', 0, '2026-10-20 09:00:00'),
+      (4, 503, 98, NULL, 'waitlisted', 0, 'none', 0, '2026-10-20 10:00:00'),
+      (5, 502, 2, NULL, 'registered', 0, 'none', 0, '2026-09-10 09:00:00');
+    INSERT INTO event_checkins (event_id, registration_id, code, checked_in_at) VALUES (502, 1, 'c1', '2026-10-10 10:01:00');`);
+  return db;
+}
+
+test('the events parts are D918\'s own blocks, in Community\'s keys, and nothing is recomputed', async () => {
+  const db = withEvents();
+  const b = (await read(db)).blocks as any;
+  const d = await readOverview(env(db), 4, NOW);
+  // One definition: each part is D918's answer for the same window.
+  assert.deepEqual(b.queue.events, d.queue);
+  assert.equal(b.queue.events.count, 1);
+  assert.equal(b.queue.events.overdue, 1, 'waiting since 17 Oct: more than 72 hours by 21 Oct');
+  assert.equal(b.queue.events.overdue_after_hours, b.queue.overdue_hours, 'the jobs and events queues share one Overdue');
+  assert.deepEqual(b.events.by_type, d.by_type);
+  assert.deepEqual(b.events.waitlisted, d.waitlisted);
+  const { recent: _r, ...showUp } = d.show_up as any;
+  assert.deepEqual(b.events.show_up, showUp);
+  assert.deepEqual([b.events.show_up.seats_taken, b.events.show_up.attended, b.events.show_up.rate], [3, 1, 0.33]);
+  assert.equal('recent' in b.events.show_up, false, 'the event list stays on the Events desk');
+
+  // The weekly block on Community's weeks.
+  assert.deepEqual(b.events.weekly.weekly.map((w: any) => w.week), (await read(db)).week_starts);
+  assert.deepEqual(b.events.weekly.weekly.map((w: any) => [w.registrations, w.checkins, w.to_date]), [[0, 0, false], [2, 1, false], [0, 0, false], [2, 0, true]]);
+  assert.deepEqual(b.events.weekly.registrations, { window: 4, previous: 1 });
+
+  // By role: D918's buckets as Community's; an account that is gone stays not recorded, never "other".
+  const role = b.participation_by_role.events;
+  assert.equal(role.available, true);
+  assert.deepEqual(role.by_role, { founder: 1, investor: 0, advisor: 0, operating_partner: 1, explorer: 0, guest: 1, other: 0 });
+  assert.equal(role.not_recorded, 0, 'D918 counts seated registrations only; the waitlisted one is not a seat');
+  assert.deepEqual(eventsByRole({ available: true, counts: { partner: 2, exploring: 1, admin: 3, not_recorded: 4, guest: 1 } }),
+    { available: true, by_role: { founder: 0, investor: 0, advisor: 0, operating_partner: 2, explorer: 1, guest: 1, other: 3 }, not_recorded: 4 });
+
   assert.deepEqual(b.active_members, { recorded: false, reason: ACTIVE_MEMBERS_REASON });
   assert.deepEqual(b.circle_discussions, { recorded: false, reason: CIRCLE_DISCUSSIONS_REASON });
+});
+
+test('an events part D918 could not read is unreadable here too, and the others still answer', async () => {
+  const u = { available: false as const, unreadable: true as const, reason: 'x could not be read on this database. That is not the same as none.' };
+  assert.equal(eventsByRole(u), u);
+  assert.equal(eventsWeekly(u), u);
+  assert.equal(showUpCounts(u), u);
+  // No events stores at all: every events part fails alone, and no part reads as zero.
+  const b = (await read()).blocks as any;
+  for (const x of [b.queue.events, b.events.weekly, b.events.show_up, b.events.by_type, b.events.waitlisted, b.participation_by_role.events]) {
+    assert.equal(x.available, false);
+    assert.equal(x.unreadable, true);
+    assert.equal(Object.keys(x).length, 3, 'a failed part carries no figure');
+  }
+  assert.equal(b.queue.jobs.available, true);
+  assert.equal(b.participation_by_role.jobs.available, true);
+  // Only the check-ins store gone: the weekly part fails, show-up and the queue still answer.
+  const db = withEvents();
+  db.exec('DROP TABLE event_checkins');
+  const c = (await read(db)).blocks as any;
+  assert.equal(c.events.weekly.unreadable, true);
+  assert.equal(c.events.show_up.available, true);
+  assert.equal(c.queue.events.available, true);
 });
 
 test('a failed store fails its own blocks only, never as a zero', async () => {
@@ -258,19 +330,20 @@ test('a failed store fails its own blocks only, never as a zero', async () => {
 });
 
 test('counts only: no name, email or account id anywhere in the answer', async () => {
-  const r = await read();
-  const text = JSON.stringify(r);
-  assert.doesNotMatch(text, /@|Private|secret/);
-  const walk = (v: unknown, path: string) => {
-    if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${path}[${i}]`));
-    if (v && typeof v === 'object') {
-      for (const [k, x] of Object.entries(v)) {
-        assert.ok(!/^(email|name|user_id|host_user_id|id|uid)$/.test(k), `${path}.${k} is a person's detail`);
-        walk(x, `${path}.${k}`);
+  for (const r of [await read(), await read(withEvents())]) {
+    const text = JSON.stringify(r);
+    assert.doesNotMatch(text, /@|Private|secret|fixture/, 'no person, and no event title');
+    const walk = (v: unknown, path: string) => {
+      if (Array.isArray(v)) return v.forEach((x, i) => walk(x, `${path}[${i}]`));
+      if (v && typeof v === 'object') {
+        for (const [k, x] of Object.entries(v)) {
+          assert.ok(!/^(email|name|user_id|host_user_id|id|uid)$/.test(k), `${path}.${k} is a person's detail`);
+          walk(x, `${path}.${k}`);
+        }
       }
-    }
-  };
-  walk(r, 'overview');
+    };
+    walk(r, 'overview');
+  }
 });
 
 test('submitting a posting for review records when (migration 550)', async () => {
