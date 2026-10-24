@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  DEAL_SORTS, DEAL_STATES, DEAL_TYPES, ENDS_WITHIN, LIST_CLAIM, WITHIN_DEALS, dataOf, dealHref, dealRow, dealTypeWord,
-  dealsUnion, filterDeals, isFailed, isLoading, noDealLine, pageOf, rangeText, topDealRows,
+  CONTRACTS_PAUSED, DEAL_SORTS, DEAL_STATES, DEAL_TYPES, ENDS_WITHIN, LIST_CLAIM, WITHIN_DEALS, contractsPaused, dataOf, dealHref,
+  dealRow, dealTypeWord, dealsUnion, filterDeals, isFailed, isLoading, noDealLine, pageOf, rangeText, topDealRows,
 } from './partnersDeskModel';
 import {
   AMBER, CARD, Card, Chip, CopyButton, DealStatePill, Failed, INPUT, LINK, MONO, Pager, ReadState, RowMenu, SUB, TD, TH,
@@ -107,6 +107,7 @@ export default function PartnersDeals({ reads, now, actions }) {
           ? <ReadState key={s.key} read={reads.deals[s.key]} what={`The deals in “${s.word}”`} claim={LIST_CLAIM} onRetry={reads.reload} testId={`partners-deals-read-${s.key}`} />
           : null)) : null}
         {isFailed(reads.cases) ? <ReadState read={reads.cases} what="The due-diligence cases" claim="That is not a claim that no case is open." onRetry={reads.reload} testId="partners-deals-cases" /> : null}
+        {contractsPaused(reads.contracts) ? <p className={`m-0 ${SUB}`} data-testid="partners-deals-contracts-paused">{CONTRACTS_PAUSED}</p> : null}
         {anyLoading ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">Reading…</span> : null}
         {u.capped.length ? <p className={`m-0 text-[12px] font-semibold ${AMBER}`} data-testid="partners-deals-capped">{`${WITHIN_DEALS}: ${u.capped.map((k) => DEAL_STATES.find((s) => s.key === k).word).join(', ')} stopped at 200.`}</p> : null}
 
@@ -136,7 +137,7 @@ export default function PartnersDeals({ reads, now, actions }) {
                           {row.code ? (
                             <span className="flex flex-col gap-1">
                               <span className={MONO}>{row.code}</span>
-                              <CopyButton text={row.code} label="Copy" testId={`partners-deals-copy-${row.id}`} />
+                              <CopyButton text={row.code} label="Copy" noun="code" testId={`partners-deals-copy-${row.id}`} />
                             </span>
                           ) : <span className="text-axal-muted dark:text-gray-400">Issued on signing</span>}
                         </td>

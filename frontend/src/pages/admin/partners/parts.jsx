@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Unreadable, Unrecorded } from '../../../ui';
 import {
-  COPIED, COPY_FAILED, READING, dataOf, dealState, dotsLabel, isCoolOff, isFailed, isLoading, isStale,
+  COPIED, READING, copyFailed, dataOf, dealState, dotsLabel, isCoolOff, isFailed, isLoading, isStale, pausedLine,
 } from './partnersDeskModel';
 
 /**
@@ -98,7 +98,7 @@ export function Failed({ what, claim, onRetry, testId }) {
 function Paused({ what, onRetry }) {
   return (
     <p role="alert" className="m-0 flex flex-wrap items-center gap-2 text-[12px] text-amber-900 dark:text-amber-200">
-      {`${what} is paused after a recent account recovery. Reading resumes when the 24-hour cool-off ends.`}
+      {pausedLine(what)}
       {onRetry ? <button type="button" onClick={onRetry} className="underline">Try again</button> : null}
     </p>
   );
@@ -192,10 +192,11 @@ export async function copyText(text) {
 
 /**
  * Copy, with "Copied" or "Copy failed. Select the link and copy it." On a
- * failure the link is shown in a field so it can be selected by hand. No
- * timer resets the words.
+ * failure the value is shown in a field so it can be selected by hand. No
+ * timer resets the words. `noun` names what is copied: a link by default, a
+ * referral code as "code".
  */
-export function CopyButton({ text, label = 'Copy', testId = 'partners-copy', showField = false }) {
+export function CopyButton({ text, label = 'Copy', testId = 'partners-copy', showField = false, noun = 'link' }) {
   const [state, setState] = useState('idle');
   const copy = async () => {
     try { await copyText(text); setState('copied'); } catch { setState('failed'); }
@@ -205,33 +206,72 @@ export function CopyButton({ text, label = 'Copy', testId = 'partners-copy', sho
       <span className="inline-flex flex-wrap items-center gap-2">
         <button type="button" onClick={copy} className={`${INPUT} min-h-[30px] font-semibold`} data-testid={testId}>{label}</button>
         {state === 'copied' ? <span role="status" className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-400" data-testid={`${testId}-result`}>{COPIED}</span> : null}
-        {state === 'failed' ? <span role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid={`${testId}-result`}>{COPY_FAILED}</span> : null}
+        {state === 'failed' ? <span role="alert" className="text-[12px] font-semibold text-red-700 dark:text-red-300" data-testid={`${testId}-result`}>{copyFailed(noun)}</span> : null}
       </span>
       {state === 'failed' || showField ? (
-        <input readOnly value={text} aria-label="The link" onFocus={(e) => e.target.select?.()} className={`${INPUT} w-full font-mono text-[12px]`} data-testid={`${testId}-field`} />
+        <input readOnly value={text} aria-label={`The ${noun}`} onFocus={(e) => e.target.select?.()} className={`${INPUT} w-full font-mono text-[12px]`} data-testid={`${testId}-field`} />
       ) : null}
     </span>
   );
 }
 
 /**
- * A row's menu, labelled "Actions for [name]". Its items are buttons; a
- * click inside never reaches the row, which opens on its own click and on
- * Enter.
+ * A row's menu, labelled "Actions for [name]": a disclosure of buttons, not
+ * an ARIA menu, as on Events (D915). A click inside never reaches the row,
+ * which opens on its own click and on Enter.
+ *
+ * FOCUS (D923 §1). Picking an item, or Escape, puts focus on ⋯ BEFORE the
+ * list unmounts. The dialog or record the item opens then records ⋯ as what
+ * opened it and gives focus back to it on close; unmounting the focused item
+ * first is what sent focus to <body>.
+ *
+ * PLACEMENT. The tables scroll sideways in an `overflow-x-auto` box, and
+ * `overflow-x` alone computes `overflow-y: auto`, so a list positioned
+ * `absolute` under ⋯ was clipped on the last rows and on every row of a short
+ * table (UsersConsole.jsx met the same). The open list is `position: fixed`
+ * off ⋯'s own rect, which no overflow box clips. It opens on the side with
+ * more room, capped to that room, and follows ⋯ on scroll and resize. It stays
+ * beside ⋯ in the DOM, so Tab reaches its items next.
  */
 export function RowMenu({ name, items, testId }) {
   const [open, setOpen] = useState(false);
+  const [at, setAt] = useState(null);
+  const button = useRef(null);
+  const listId = useId();
   const stop = (e) => e.stopPropagation();
+  const place = useCallback(() => {
+    const r = button.current?.getBoundingClientRect?.();
+    if (!r || typeof window === 'undefined') return;
+    const GAP = 6;
+    const EDGE = 12;
+    const below = window.innerHeight - r.bottom;
+    const above = r.top;
+    const right = Math.max(EDGE, window.innerWidth - r.right);
+    setAt(below >= above
+      ? { top: r.bottom + GAP, right, maxHeight: Math.max(96, below - GAP - EDGE) }
+      : { bottom: window.innerHeight - r.top + GAP, right, maxHeight: Math.max(96, above - GAP - EDGE) });
+  }, []);
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    place();
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return undefined;
+    // Capture phase, because the scroll happens on the table's own overflow box.
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => { window.removeEventListener('scroll', place, true); window.removeEventListener('resize', place); };
+  }, [open, place]);
+  const close = () => { button.current?.focus?.(); setOpen(false); };
   const item = 'block w-full rounded-[7px] px-2.5 py-2 text-left text-[13px] font-semibold text-axal-ink hover:bg-axal-ground disabled:cursor-not-allowed disabled:text-axal-muted dark:text-gray-100 dark:hover:bg-gray-800 dark:disabled:text-gray-500';
   return (
-    <div className="relative" onClick={stop} onKeyDown={(e) => { stop(e); if (e.key === 'Escape') setOpen(false); }} role="presentation">
-      <button type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`Actions for ${name}`}
+    <div className="relative" onClick={stop} onKeyDown={(e) => { stop(e); if (e.key === 'Escape' && open) close(); }} role="presentation">
+      <button ref={button} type="button" aria-expanded={open} aria-controls={open ? listId : undefined} aria-label={`Actions for ${name}`}
         onClick={() => setOpen((o) => !o)} className={`${INPUT} min-h-[30px] min-w-[34px] font-bold`} data-testid={testId}>⋯</button>
       {open ? (
-        <div role="menu" aria-label={`Actions for ${name}`} className={`${CARD} absolute right-0 top-9 z-20 flex w-[260px] flex-col gap-0.5 p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`} data-testid={`${testId}-list`}>
+        <div id={listId} style={at ? { position: 'fixed', top: at.top, bottom: at.bottom, right: at.right, maxHeight: at.maxHeight } : undefined}
+          className={`${CARD} ${at ? '' : 'absolute right-0 top-9 '}z-50 flex w-[260px] flex-col gap-0.5 overflow-y-auto p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`} data-testid={`${testId}-list`}>
           {items.map((it) => (it.render ? <div key={it.key} className="px-1 py-1">{it.render}</div> : (
-            <button key={it.key} type="button" role="menuitem" className={item} disabled={it.disabled}
-              onClick={() => { setOpen(false); it.onSelect?.(); }} data-testid={`${testId}-${it.key}`}>{it.label}</button>
+            <button key={it.key} type="button" className={item} disabled={it.disabled}
+              onClick={() => { close(); it.onSelect?.(); }} data-testid={`${testId}-${it.key}`}>{it.label}</button>
           )))}
         </div>
       ) : null}

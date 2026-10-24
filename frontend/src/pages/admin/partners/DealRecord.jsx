@@ -4,9 +4,9 @@ import { api } from '../../../lib/api';
 import { Lightbox, actionDanger } from '../../../ui';
 import useRecordCrumb from '../useRecordCrumb';
 import {
-  FIRST_500, LIST_CLAIM, MISSING_DEAL, NOT_IN_READ, NOT_READ_YET, READING, day, dayOr, daysUsed, dealAgreementLine, dealPartner,
-  dealTypeWord, ddFor, envelopeHref, findDeal, invitationForDeal, isRecordId, lastRedeemers, obligationsLine, proposalOf,
-  termText, tiersText,
+  DEAL_STATES, FIRST_500, LIST_CLAIM, MISSING_DEAL, NOT_IN_READ, NOT_READ_YET, NOT_RECORDED, NO_DEAL, READING, day, dayOr, daysUsed,
+  dealAgreementLine, dealPartner, dealTypeWord, ddFor, envelopeHref, findDeal, invitationForDeal, lastRedeemers, obligationsLine,
+  proposalOf, termText, tiersText,
 } from './partnersDeskModel';
 import { itemsOf, useRead } from './usePartnerDesk';
 import { AMBER, CopyButton, DealStatePill, EYE, Fact, LINK, MONO, ReadState, SUB, Unread } from './parts';
@@ -15,7 +15,9 @@ import { AMBER, CopyButton, DealStatePill, EYE, Fact, LINK, MONO, ReadState, SUB
  * D923 (#2370) — one deal (PI6), at `/admin/partner-invitations/deals/:id`:
  * a `Lightbox` over Deals on a desktop, a full page with "‹ Deals" on a
  * phone. Found in the six R2 lists; one outside them reads "Not in this
- * read" until part 5's single read.
+ * read" until part 5's single read, with its reason: a list stopped at its
+ * cap, or no deal in the lists has the address. A list that could not be read
+ * draws its own Try again here, because the tab's sits behind the dialog.
  *
  * The redemption count comes from the row, never from R4; R4 gives the last
  * ten redeemers, and a failed R4 reads Unreadable once (today's modal re-read
@@ -35,7 +37,7 @@ function Section({ title, children, testId }) {
 }
 
 export default function DealRecord({ id, reads, now, onClose, actions }) {
-  const found = isRecordId(id) ? findDeal(id, reads.deals) : { state: 'missing' };
+  const found = findDeal(id, reads.deals);
   const deal = found.state === 'ready' ? found.deal : null;
   const envelopeId = deal?.envelope_id ?? null;
   const signedAlready = Boolean(deal?.activated_at);
@@ -52,11 +54,15 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
       <Lightbox label="Deal" title="Deal" eyebrow="Deals" onClose={onClose} width={560} pageBelow="lg" testId="partners-deal">
         <div className="flex flex-col gap-2 px-5 py-4" data-testid="partners-deal-absent">
           {found.state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{READING}</span> : null}
-          {found.state === 'unreadable' ? <p className="m-0 text-[13px] text-red-700 dark:text-red-300">Some deal lists could not be read, so this deal could not be found. Try again.</p> : null}
-          {found.state === 'missing' ? (
+          {/* A list whose refresh failed is drawn as failed: its old rows did not hold this deal. */}
+          {found.state === 'unreadable' ? DEAL_STATES.filter((s) => reads.deals[s.key]?.status === 'error').map((s) => (
+            <ReadState key={s.key} read={{ ...reads.deals[s.key], data: null }} what={`The deals in “${s.word}”`}
+              claim="So this deal could not be looked up. That is not a claim that it does not exist." onRetry={reads.reload} testId={`partners-deal-read-${s.key}`} />
+          )) : null}
+          {found.state === 'missing' || found.state === 'none' ? (
             <>
               <p className="m-0 text-[14px] font-extrabold text-axal-ink dark:text-gray-100">{NOT_IN_READ}</p>
-              <p className={`m-0 ${SUB}`}>{MISSING_DEAL}</p>
+              <p className={`m-0 ${SUB}`} data-testid="partners-deal-absent-reason">{found.state === 'missing' ? MISSING_DEAL : NO_DEAL}</p>
             </>
           ) : null}
         </div>
@@ -77,7 +83,9 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
   ) : null;
 
   return (
-    <Lightbox label={`Deal ${deal.id} with ${partner.name}`} title={partner.name} sub={`Deal #${deal.id} · ${partner.email || 'address not recorded'}`} eyebrow="Deals"
+    // "address not recorded" only when the invitations were read in full and hold none for this deal; otherwise the title already says the read's state.
+    <Lightbox label={`Deal ${deal.id} with ${partner.name}`} title={partner.name}
+      sub={`Deal #${deal.id}${partner.email ? ` · ${partner.email}` : partner.name === NOT_RECORDED ? ' · address not recorded' : ''}`} eyebrow="Deals"
       onClose={onClose} width={940} pageBelow="lg" testId="partners-deal" footer={footer}>
       <div className="flex flex-col gap-4 px-5 py-4" data-testid="partners-deal-body">
         <div className="flex flex-wrap items-center gap-2">
@@ -113,7 +121,7 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
             <Section title="Referral code" testId="partners-deal-code">
               {deal.referral_code ? (
                 <>
-                  <span className="flex flex-wrap items-center gap-2"><span className={MONO}>{deal.referral_code}</span><CopyButton text={deal.referral_code} label="Copy" testId="partners-deal-copy" /></span>
+                  <span className="flex flex-wrap items-center gap-2"><span className={MONO}>{deal.referral_code}</span><CopyButton text={deal.referral_code} label="Copy" noun="code" testId="partners-deal-copy" /></span>
                   <span className="text-[13px] text-axal-ink dark:text-gray-100" data-testid="partners-deal-count">
                     {`Redemptions: ${Number.isFinite(count) ? count.toLocaleString('en-US') : 'not recorded'}`}
                   </span>

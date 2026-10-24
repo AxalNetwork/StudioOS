@@ -48,7 +48,9 @@ function NeedsYou({ needs, onResend, onRetry }) {
       {needs.failed.map((f) => (
         <Failed key={f.key} what={f.what} claim={f.reason || 'What it would add here is not known.'} onRetry={onRetry} testId={`partners-needs-failed-${f.key}`} />
       ))}
-      {needs.settled && !needs.rows.length && !needs.failed.length ? (
+      {/* Guard L: a source at its cap says what it covered, so an empty block is never read as "nothing". */}
+      {(needs.cover || []).map((c) => <p key={c.key} className={`m-0 ${SUB}`} data-testid={`partners-needs-cover-${c.key}`}>{c.text}</p>)}
+      {needs.settled && !needs.rows.length && !needs.failed.length && !(needs.cover || []).length ? (
         <p className={`m-0 ${SUB}`} data-testid="partners-needs-none">Nothing here needs you now.</p>
       ) : null}
       {rows.length ? (

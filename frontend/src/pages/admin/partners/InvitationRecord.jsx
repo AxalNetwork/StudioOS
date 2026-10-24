@@ -5,8 +5,8 @@ import { Lightbox, actionDanger, actionGhost } from '../../../ui';
 import useRecordCrumb from '../useRecordCrumb';
 import {
   AGREEMENT_NOT_READY, ANSWERS_LOGGED, LINK_LAPSED, LIST_CLAIM, MISSING_INVITATION, NOT_IN_READ, NOT_OFFERED, NOT_READ_YET,
-  READING, TERMS_NOT_READ, agreementLine, agreementReady, answersOf, dayOr, dealForInvitation, dealTypeWord, envelopeHref,
-  findInvitation, invitationRow, isRecordId, linkLine, progressRows, proposalOf, signingLink,
+  NO_INVITATION, READING, TERMS_NOT_READ, agreementLine, agreementReady, answersOf, dayOr, dealForInvitation, dealTypeWord,
+  envelopeHref, findInvitation, invitationRow, linkLine, progressRows, proposalOf, signingLink,
 } from './partnersDeskModel';
 import { useRead } from './usePartnerDesk';
 import {
@@ -20,7 +20,8 @@ import {
  * (PI11c). Closing returns to the tab, and focus to the row that opened it.
  *
  * It is found in R1's loaded rows (or a row this page read for its address);
- * one outside them reads "Not in this read" until part 4's single read. R7
+ * one outside them reads "Not in this read" until part 4's single read, with
+ * its reason: R1 stopped at its cap, or no invitation in it has the address. R7
  * gives the envelope; R12, their answers, is read only when the admin asks,
  * because each read is logged.
  */
@@ -37,7 +38,7 @@ function Section({ title, children, testId }) {
 }
 
 export default function InvitationRecord({ id, reads, now, onClose, actions }) {
-  const found = isRecordId(id) ? findInvitation(id, reads.invitations, reads.extra) : { state: 'missing' };
+  const found = findInvitation(id, reads.invitations, reads.extra);
   const inv = found.state === 'ready' ? found.inv : null;
   const envelopeId = inv?.envelope_id ?? null;
   const envelope = useRead('envelope', `envelope:${envelopeId}`, reads.tick, envelopeId !== null, () => api.esignDetail(envelopeId));
@@ -53,11 +54,12 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
       <Lightbox label="Invitation" title="Invitation" eyebrow="Invitations" onClose={onClose} width={560} pageBelow="lg" testId="partners-invitation">
         <div className="flex flex-col gap-2 px-5 py-4" data-testid="partners-invitation-absent">
           {found.state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{READING}</span> : null}
-          {found.state === 'unreadable' ? <ReadState read={reads.invitations} what="The invitations" claim={LIST_CLAIM} onRetry={reads.reload} /> : null}
-          {found.state === 'missing' ? (
+          {/* A refresh that failed is drawn as failed: its old rows did not hold this invitation. */}
+          {found.state === 'unreadable' ? <ReadState read={{ ...reads.invitations, data: null }} what="The invitations" claim={LIST_CLAIM} onRetry={reads.reload} testId="partners-invitation-read" /> : null}
+          {found.state === 'missing' || found.state === 'none' ? (
             <>
               <p className="m-0 text-[14px] font-extrabold text-axal-ink dark:text-gray-100">{NOT_IN_READ}</p>
-              <p className={`m-0 ${SUB}`}>{MISSING_INVITATION}</p>
+              <p className={`m-0 ${SUB}`} data-testid="partners-invitation-absent-reason">{found.state === 'missing' ? MISSING_INVITATION : NO_INVITATION}</p>
             </>
           ) : null}
         </div>

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
 import {
-  REASON_MAX, RESENT_NOT_SENT, RESENT_SENT, TERMINATED, counter, envelopeHref, refusalText, resendCopy, revokeCopy,
-  revokeVariant, revokedLine, stageOf, terminateCopy, terminateReady,
+  REASON_MAX, counter, envelopeHref, partialWrite, refusalText, resendCopy, resentResult, revokeCopy, revokeVariant,
+  revokedLine, stageOf, terminateCopy, terminateReady, terminatedLine,
 } from './partnersDeskModel';
 import { useRead } from './usePartnerDesk';
 import { CopyButton, Done, EYE, INPUT, LINK, Refusal } from './parts';
@@ -11,20 +11,27 @@ import { CopyButton, Done, EYE, INPUT, LINK, Refusal } from './parts';
 /**
  * D923 (#2370) — the confirm dialogs (PI8a Resend, PI8b Revoke, PI8c
  * Terminate). Each is a `Lightbox`, never a browser pop-up, and says only
- * what the Worker does. A refusal or a result sits inside the dialog, which
- * stays open, so a typed reason is not lost: there is no corner toast, and no
- * timer closes it. Closing after a write reads the desk again.
+ * what the Worker does (D924's resend, D925's revoke and terminate replies).
+ * A refusal or a result sits inside the dialog, which stays open, so a typed
+ * reason is not lost: there is no corner toast, and no timer closes it.
+ * Closing after a write reads the desk again.
  */
 
 const BODY = 'flex flex-col gap-3.5 px-5 py-4';
 const LINES = 'm-0 flex list-disc flex-col gap-1.5 pl-5 text-[13px] leading-normal text-axal-ink marker:text-axal-violet dark:text-gray-100';
 
-/** The dialog's buttons; after the write, one Done. The refusal sits under them. */
+/**
+ * The dialog's buttons; after the write, one Done. The refusal sits under
+ * them. The write swaps the focused action button for Done, so focus moves to
+ * Done rather than falling to <body> while the dialog stays open.
+ */
 function Buttons({ done, onClose, action, onAction, disabled, busy, tone = 'primary', refusal, testId }) {
+  const doneButton = useRef(null);
+  useEffect(() => { if (done) doneButton.current?.focus?.(); }, [done]);
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap justify-end gap-2">
-        {done ? <button type="button" className={actionPrimary} onClick={onClose} data-testid={`${testId}-done`}>Done</button> : (
+        {done ? <button ref={doneButton} type="button" className={actionPrimary} onClick={onClose} data-testid={`${testId}-done`}>Done</button> : (
           <>
             <button type="button" className={actionGhost} onClick={onClose} disabled={busy}>Cancel</button>
             <button type="button" className={tone === 'danger' ? actionDanger : actionPrimary} onClick={onAction} disabled={disabled || busy} data-testid={testId}>
@@ -50,25 +57,32 @@ function useWrite(reads, kind) {
   return { busy, refusal, reply, run, finish };
 }
 
-/** PI8a. The line by stage; at Agreement out it reads R7 for the signing link's expiry. */
+/**
+ * PI8a. The line by stage; at Agreement out it reads R7, because resend then
+ * renews the agreement's signing link too when the invitee's signature is
+ * pending (D924). A renewal whose email failed points to the envelope page.
+ */
 export function ResendDialog({ inv, reads, now, onClose }) {
   const stage = stageOf(inv, { proposed: reads.deals.proposed, now });
   const envelopeId = inv?.envelope_id ?? null;
   const envelope = useRead('envelope', `envelope:${envelopeId}`, reads.tick, stage.step === 6 && envelopeId !== null, () => api.esignDetail(envelopeId));
   const w = useWrite(reads, 'invitation');
   const copy = resendCopy(inv, stage, envelope, now);
+  // The result is read against what the dialog said before the write.
+  const [renews, setRenews] = useState(null);
+  const result = w.reply ? resentResult(w.reply, renews) : null;
   const close = w.finish(onClose);
   return (
     <Lightbox label={copy.title} title={copy.title} onClose={close} testId="partners-resend-dialog"
-      footer={<Buttons done={Boolean(w.reply)} onClose={close} action="Resend" busy={w.busy} refusal={w.refusal} onAction={() => w.run(() => api.adminPartners.resendInvitation(inv.id))} testId="partners-resend-go" />}>
+      footer={<Buttons done={Boolean(w.reply)} onClose={close} action="Resend" busy={w.busy} refusal={w.refusal} onAction={() => { setRenews(copy.renews); w.run(() => api.adminPartners.resendInvitation(inv.id)); }} testId="partners-resend-go" />}>
       <div className={BODY}>
         <ul className={LINES} data-testid="partners-resend-lines">{copy.lines.map((l) => <li key={l}>{l}</li>)}</ul>
-        {copy.expiredSigning && envelopeId !== null ? <a href={envelopeHref(envelopeId)} className={`${LINK} self-start`}>Open the envelope</a> : null}
-        {w.reply ? (
-          <Done testId="partners-resend-result" tone={w.reply.email_sent === true ? 'violet' : 'amber'}>
+        {result ? (
+          <Done testId="partners-resend-result" tone={result.sent ? 'violet' : 'amber'}>
             <span className="flex min-w-0 flex-1 flex-col gap-2">
-              <span>{w.reply.email_sent === true ? RESENT_SENT : RESENT_NOT_SENT}</span>
-              {w.reply.email_sent !== true && w.reply.link ? <CopyButton text={w.reply.link} label="Copy link" testId="partners-resend-copy" showField /> : null}
+              <span>{result.text}</span>
+              {result.envelope && envelopeId !== null ? <a href={envelopeHref(envelopeId)} className={`${LINK} self-start`} data-testid="partners-resend-envelope">Open the envelope</a> : null}
+              {result.copy && w.reply.link ? <CopyButton text={w.reply.link} label="Copy link" testId="partners-resend-copy" showField /> : null}
             </span>
           </Done>
         ) : null}
@@ -95,7 +109,7 @@ export function RevokeDialog({ inv, reads, onClose }) {
             className={`${INPUT} py-2 leading-normal`} data-testid="partners-revoke-reason" />
           <span className="self-end font-mono text-[11px] text-axal-muted dark:text-gray-400" data-testid="partners-revoke-count">{counter(reason.length, REASON_MAX)}</span>
         </label>
-        {w.reply ? <Done testId="partners-revoke-result"><span>{revokedLine(w.reply)}</span></Done> : null}
+        {w.reply ? <Done testId="partners-revoke-result" tone={partialWrite(w.reply) ? 'amber' : 'violet'}><span>{revokedLine(w.reply)}</span></Done> : null}
       </div>
     </Lightbox>
   );
@@ -119,7 +133,7 @@ export function TerminateDialog({ deal, reads, onClose }) {
             className={`${INPUT} py-2 leading-normal`} data-testid="partners-terminate-reason" />
           <span className="self-end font-mono text-[11px] text-axal-muted dark:text-gray-400" data-testid="partners-terminate-count">{counter(reason.length, REASON_MAX)}</span>
         </label>
-        {w.reply ? <Done testId="partners-terminate-result"><span>{TERMINATED}</span></Done> : null}
+        {w.reply ? <Done testId="partners-terminate-result" tone={partialWrite(w.reply) ? 'amber' : 'violet'}><span>{terminatedLine(w.reply)}</span></Done> : null}
       </div>
     </Lightbox>
   );

@@ -31,15 +31,17 @@ import { codeOnly } from './_codeOnly.mjs';
 import PartnerInvitations from '../src/pages/admin/PartnerInvitations.jsx';
 import { parseStamp as uiParseStamp } from '../src/ui/parseStamp.js';
 import {
-  AGREEMENT_BANNER, AGREEMENT_LAPSE_WARNING, CAPS, COMMUNITY_PATH, DEAL_NOT_ACTIVE, DEAL_STATE_KEYS, EMPTY_TITLE,
-  FIRM_LINKS_PATH, FOUNDER_NO_PLAN, FROZEN, INVITATION_CLOSED, LINE, MOVED_LINE, MOVED_PATH, NOT_IN_READ, NOT_READ_YET,
+  AGREEMENT_BANNER, AGREEMENT_LAPSE_WARNING, CAPS, COMMUNITY_PATH, CONTRACTS_PAUSED, DEAL_NOT_ACTIVE, DEAL_STATE_KEYS, EMPTY_TITLE,
+  FIRM_LINKS_PATH, FOUNDER_NO_PLAN, FROZEN, INVITATION_CLOSED, LINE, MISSING_DEAL, MISSING_INVITATION, MOVED_LINE, MOVED_PATH, NO_DEAL, NO_INVITATION,
+  NOT_IN_READ, NOT_READ_YET, RENEW_NOT_SENT,
   STORED_EXPIRED_WORD, TABS, TITLE, TRY_AGAIN, TYPE_FULL, WITHIN_DEALS, WITHIN_INVITATIONS, agreementReady,
-  allTimeRedemptions, cameFromOldAddress, countClosing30, countLast90, countOpenWindows, createdLines, day,
-  daysLeft, daysUsed, ddFor, dealFromSearch, dealState, dealTiles, dealTypeWord, dealsCount, dotsLabel, duplicateCheck,
-  expiresCell, fanFigure, fanOut, filterInvitations, firmCounts, invitationRow, invitationTiles, isCompleteEmail,
-  isFirstUse, isLapsed, memberCheck, needsYou, noMatchLine, obligationsLine, offeredTypes, pageOf, parseStamp, rangeText,
-  redemptionDealSet, redemptionRow, refusalText, resendCopy, resentAt, revokeCopy, revokeVariant, revokedLine, routeFor,
-  signingLink, stageOf, tabCounts, tabPath, terminateCopy, terminateReady, termText, tiersText, toggleType, windowOf, withoutMoved,
+  allTimeRedemptions, cameFromOldAddress, copyFailed, countClosing30, countLast90, countOpenWindows, createdLines, day,
+  daysLeft, daysUsed, ddFor, dealForInvitation, dealFromSearch, dealState, dealTiles, dealTypeWord, dealsCount, dealsUnion, dotsLabel, duplicateCheck,
+  expiresCell, fanFigure, fanOut, filterInvitations, findDeal, findInvitation, firmCounts, invitationRow, invitationTiles, isCompleteEmail,
+  isFirstUse, isLapsed, memberCheck, needsYou, noMatchLine, obligationsLine, offeredTypes, pageOf, parseStamp, partialWrite, pausedLine, rangeText,
+  redemptionDealSet, redemptionRow, refusalText, resendCopy, resentAt, resentResult, revokeCopy, revokeVariant, revokedLine, routeFor,
+  signingLink, stageOf, tabCounts, tabPath, terminateCopy, terminateReady, terminatedLine, termText, tiersText, toggleType, topDealRows, windowOf,
+  withoutMoved,
 } from '../src/pages/admin/partners/partnersDeskModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -209,7 +211,9 @@ test('Guard L: a list at its cap says what it covers, never a total', () => {
   // Firm links, DD and the member check, each at its own cap.
   const accounts = many(CAPS.links, (i) => ({ id: i, email: `a${i}@x.co`, partner_id: i <= 18 ? null : 4 }));
   assert.equal(firmCounts({ accounts, firms: [{ id: 4 }] }).cover, 'Counted over the first 500 partner accounts.');
-  assert.equal(firmCounts({ accounts: accounts.slice(0, 20), firms: [{ id: 4 }] }).text, '2 attached · 18 not · 1 firms on record');
+  assert.equal(firmCounts({ accounts: accounts.slice(0, 20), firms: [{ id: 4 }] }).text, '2 attached · 18 not · 1 firm on record', 'one firm is "1 firm"');
+  assert.equal(firmCounts({ accounts: accounts.slice(0, 20), firms: [{ id: 4 }, { id: 5 }] }).text, '2 attached · 18 not · 2 firms on record');
+  assert.equal(firmCounts({ accounts, firms: many(CAPS.links, (i) => ({ id: i })) }).text, '482 attached · 18 not · 500+ firms on record', 'at the cap the firms say what they cover');
   const firms = needsYou({ invitations: ready([]), deals: lists(), links: ready({ accounts, firms: [] }), template: ready({ fields: [] }), fan: { state: 'ready', items: [], exact: true }, now: NOW }).rows.find((r) => r.kind === 'Firms');
   assert.equal(firms.text, '18 partner accounts of the first 500 are not attached to a firm.');
   assert.equal(ddFor(deal(1), ready(many(CAPS.cases, (i) => ({ subject_id: 9000 + i, status: 'open' })))).text, NOT_IN_READ);
@@ -307,29 +311,47 @@ test('the agreement-ready rule: R8 refuses, or it lists a field finalize leaves 
   assert.equal(AGREEMENT_BANNER, 'The Partner Services agreement is not ready. Invitees who choose an offer cannot sign until it is completed in Contracts.');
 });
 
-test('Resend says the renewed date, then one line by stage; at Agreement out it reads the signing link', () => {
-  const env = (until) => ready({ id: 77, status: 'sent', created_at: '2026-10-20 10:00:00', recipients: [{ status: 'pending', token_expires_at: until }] });
+test('Resend says the renewed date, then one line by stage: the stage is kept, and at Agreement out a pending signing link is renewed too (D924)', () => {
+  const recipient = (o = {}) => ({ recipient_email: 'p1@example.com', status: 'pending', token_expires_at: '2026-10-28T10:00:00.000Z', ...o });
+  const env = (status = 'sent', recipients = [recipient()]) => ready({ id: 77, status, created_at: '2026-10-20 10:00:00', recipients });
   const copy = (o, envelope = loading()) => resendCopy(inv(1, { recipient_name: 'Mara Example', ...o }), stageOf(inv(1, o), { proposed: ready([]), now: NOW }), envelope, NOW);
+  const out = { status: 'finalized', envelope_id: 77 };
   assert.equal(copy({}).title, 'Resend the invitation to Mara Example?');
   assert.deepEqual(copy({}).lines, ['The link gets a new 14 days, until 7 Nov 2026.']);
   assert.equal(copy({ status: 'selected' }).lines[1], 'Mara Example’s chosen offer is kept.');
-  for (const status of ['profiled', 'proposed']) assert.equal(copy({ status }).lines[1], 'Their answers are kept. The stage shown here goes back to Sent until they continue.', status);
-  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, env('2026-10-28T10:00:00.000Z')).lines[1], 'The agreement already sent stays open to signature until 28 Oct 2026.');
-  const expired = copy({ status: 'finalized', envelope_id: 77 }, env('2026-10-20T10:00:00.000Z'));
-  assert.equal(expired.lines[1], 'The signing link expired on 20 Oct 2026. Resending does not renew it. The original sender can send a reminder from the envelope page.');
-  assert.equal(expired.expiredSigning, true);
-  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, failed()).lines[1], 'Whether the agreement’s signing link is still open could not be read.');
-  // A future token date does not make a signed or voided envelope's link live.
-  const closed = (status) => ready({ id: 77, status, created_at: '2026-10-20 10:00:00', recipients: [{ status: 'pending', token_expires_at: '2026-10-28T10:00:00.000Z' }] });
-  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed('completed')).lines[1], 'The agreement already sent is signed. Resending does not change it.');
-  for (const status of ['voided', 'declined']) {
-    assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed(status)).lines[1], 'The agreement already sent was voided. Resending does not send a new one.', status);
+  // D924: resend keeps the stored stage at every step, so nothing "goes back to Sent".
+  assert.equal(copy({ status: 'profiled' }).lines[1], 'Their answers are kept. The stage stays at Profile done.');
+  assert.equal(copy({ status: 'proposed' }).lines[1], 'Their answers are kept. The stage stays at Offers shown.');
+  // D924: with the invitee's own signature pending, the signing link is renewed to the new date, live or lapsed alike.
+  const RENEWS = 'The agreement’s signing link is renewed too, until 7 Nov 2026, and the email carries it.';
+  for (const envelope of [env(), env('sent', [recipient({ token_expires_at: '2026-10-20T10:00:00.000Z' })]), env('partially_signed'), env('sent', [recipient({ recipient_email: 'P1@Example.com ' })])]) {
+    assert.equal(copy(out, envelope).lines[1], RENEWS);
+    assert.equal(copy(out, envelope).renews, true);
   }
-  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed('draft')).lines[1], 'The agreement already sent is not out for signature. Resending does not change it.');
-  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed('partially_signed')).lines[1], 'The agreement already sent stays open to signature until 28 Oct 2026.');
-  assert.deepEqual(['completed', 'voided', 'draft'].map((s) => signingLink(closed(s), NOW).state), ['signed', 'voided', 'other']);
+  // No signature pending from the invitee: the onboarding email goes instead. A future token date never makes a closed envelope's link live.
+  const INSTEAD = 'so no signing link is renewed. Resending sends the onboarding email instead.';
+  assert.equal(copy(out, env('completed')).lines[1], `The agreement already sent is signed, ${INSTEAD}`);
+  for (const status of ['voided', 'declined']) assert.equal(copy(out, env(status)).lines[1], `The agreement already sent was voided, ${INSTEAD}`, status);
+  for (const envelope of [env('draft'), env('sent', [recipient({ status: 'signed' })]), env('sent', [recipient({ recipient_email: 'someone@else.co' })])]) {
+    assert.equal(copy(out, envelope).lines[1], `No signature from Mara Example is pending on the agreement, ${INSTEAD}`);
+    assert.equal(copy(out, envelope).renews, false);
+  }
+  assert.deepEqual(['completed', 'voided', 'draft'].map((st) => signingLink(env(st), NOW).state), ['signed', 'voided', 'other']);
+  // Not known: reading, failed, or paused by a cool-off (finding 8), each said as such.
+  assert.equal(copy(out).lines[1], 'Reading whether the agreement is still out for signature…');
+  assert.equal(copy(out, failed()).lines[1], 'The agreement’s envelope could not be read, so whether its signing link is renewed too is not known.');
+  const paused = copy(out, failed({ status: 423, code: 'recovery_cool_off_active' })).lines[1];
+  assert.equal(paused, 'Reading the agreement’s envelope is paused after a recent account recovery. It resumes when the 24-hour cool-off ends. Until then, whether its signing link is renewed too is not shown.');
+  assert.doesNotMatch(paused, /could not be read/, 'a 423 cool-off is said as paused');
+  for (const envelope of [loading(), failed(), failed({ status: 423, code: 'recovery_cool_off_active' })]) assert.equal(copy(out, envelope).renews, null);
   assert.equal(resendCopy(inv(1, { recipient_name: null }), stageOf(inv(1), { now: NOW }), loading(), NOW).title, 'Resend the invitation to p1@example.com?');
-  assert.doesNotMatch(JSON.stringify(copy({ status: 'selected' })), /Her progress|Delivered/);
+  assert.doesNotMatch(JSON.stringify([copy({ status: 'selected' }), copy(out, env()), copy({ status: 'profiled' })]), /Her progress|Delivered|goes back to Sent|does not renew/);
+  // The result: a renewal says so with the reply's date; a renewal whose email failed points to the envelope page, not to a link to copy.
+  assert.deepEqual(resentResult({ email_sent: true, expires_at: '2026-11-07T12:00:00.000Z' }, true), { text: 'Sent, with the agreement’s signing link renewed until 7 Nov 2026.', sent: true });
+  assert.deepEqual(resentResult({ email_sent: true }, false), { text: 'Sent.', sent: true });
+  assert.deepEqual(resentResult({ email_sent: false }, true), { text: RENEW_NOT_SENT, sent: false, envelope: true });
+  assert.equal(RENEW_NOT_SENT, 'Not sent, so the agreement’s signing link was not renewed. The original sender can send a reminder from the envelope page.');
+  for (const renews of [false, null]) assert.deepEqual(resentResult({ email_sent: false }, renews), { text: 'Not sent. Copy the link instead.', sent: false, copy: true });
 });
 
 test('Revoke picks its variant and shows voided counts only above zero; Terminate says what the Worker does', () => {
@@ -490,6 +512,147 @@ test('one deal: obligations read "No obligations recorded" with none required, n
 });
 
 /* ------------------------------------------------------------------ *
+ * The build review's findings (D923)
+ * ------------------------------------------------------------------ */
+
+const stale = (data) => ({ status: 'error', data, error: { status: 503 }, at: 1 });
+
+test('a record address that cannot be decoded opens no record and never crashes (finding 13); a missing record says why (C1)', () => {
+  assert.deepEqual(routeFor('/admin/partner-invitations/invitations/%E0'), { tab: 'invitations', record: { kind: 'invitation', id: '%E0' } });
+  assert.deepEqual(routeFor('/admin/partner-invitations/deals/50%'), { tab: 'deals', record: { kind: 'deal', id: '50%' } });
+  assert.equal(routeFor('/admin/partner-invitations/deals/12%2F').record.id, '12/', 'a good escape still decodes');
+  // C1: "missing" only past a cap; a complete list, or no record id at all, is "none".
+  assert.deepEqual(findInvitation('12', ready([inv(1)])), { state: 'none' });
+  assert.deepEqual(findInvitation('12', ready(many(CAPS.invitations, (i) => inv(1000 + i)))), { state: 'missing' });
+  assert.deepEqual(findInvitation('%E0', loading()), { state: 'none' }, 'no invitation can have an address that is no record id');
+  assert.deepEqual(findInvitation('12', stale([inv(1)])), { state: 'unreadable' }, 'a refresh that failed is no claim either way');
+  assert.deepEqual(findInvitation('12', { ...ready([inv(1)]), refreshing: true }), { state: 'loading' }, 'nor is a list still being read again');
+  assert.equal(findInvitation('12', ready([]), new Map([['12', inv(12)]])).state, 'ready', 'a row read for its address');
+  assert.deepEqual(findDeal('12', lists({ active: ready([deal(1)]) })), { state: 'none' });
+  assert.deepEqual(findDeal('12', lists({ active: ready(many(CAPS.deals, (i) => deal(1000 + i))) })), { state: 'missing' });
+  assert.deepEqual(findDeal('x', lists()), { state: 'none' });
+  assert.equal(NO_INVITATION, 'No invitation in the list has this address.');
+  assert.equal(NO_DEAL, 'No deal in the lists has this address.');
+});
+
+test('a deal between two lists while they are read again is loading, and one whose list could not refresh is unreadable, never "not in this read" (finding 19)', () => {
+  // Terminate moved deal 12 from active to terminated: active has answered, terminated is still being read again.
+  const moving = lists({ active: ready([deal(1)]), terminated: { ...ready([]), refreshing: true } });
+  assert.deepEqual(findDeal('12', moving), { state: 'loading' });
+  assert.deepEqual(findDeal('12', lists({ active: ready([deal(1)]), terminated: stale([]) })), { state: 'unreadable' });
+  assert.equal(dealsUnion(moving).refreshing.join(), 'terminated');
+  // The same race on the invitation record: a revoke moves its deal from proposed to voided.
+  assert.deepEqual(dealForInvitation(inv(5), lists({ proposed: ready([]), voided: { ...ready([]), refreshing: true } })), { state: 'loading' });
+  assert.deepEqual(dealForInvitation(inv(5), lists({ voided: stale([]) })), { state: 'unreadable' });
+  assert.deepEqual(dealForInvitation(inv(5), lists()), { state: 'none' });
+});
+
+test('the six lists hold each deal once: a deal in an old list and a fresh one is counted once, from the fresh copy (finding 2)', () => {
+  const was = deal(41, { redemptions_count: 7 });
+  const now = deal(41, { status: 'terminated', terminated_at: '2026-10-24 11:00:00', redemptions_count: 7 });
+  const other = deal(42, { redemptions_count: 2 });
+  for (const active of [stale([was, other]), { ...ready([was, other]), refreshing: true }, { ...ready([was, other]), at: 1 }]) {
+    const deals = lists({ active, terminated: { ...ready([now]), at: 2 } });
+    assert.equal(dealsCount(failed({ status: 423, code: 'recovery_cool_off_active' }), deals).text, '2');
+    assert.equal(allTimeRedemptions(failed(), deals).value, '9', '7 + 2, not 16');
+    assert.deepEqual(redemptionDealSet(failed(), deals).deals.map((d) => d.id).sort(), ['41', '42']);
+    assert.equal(findDeal('41', deals).deal.status, 'terminated', 'the fresh copy wins');
+    assert.equal(dealsUnion(deals).rows.length, 2);
+  }
+});
+
+test('the days-used bar and the Days left column agree to the day, past the half day too (finding 3)', () => {
+  const d = deal(1, { activated_at: '2025-11-08 06:00:00', expires_at: isoAt(Date.parse('2025-11-08T06:00:00Z') + 360 * DAY) });
+  for (const at of ['2026-10-24T18:00:00Z', '2026-10-25T05:59:00Z', '2026-10-24T12:00:00Z', '2026-11-02T20:00:00Z']) {
+    const t = Date.parse(at);
+    assert.equal(daysUsed(d, t).left, daysLeft(d, t).days, at);
+    assert.equal(daysUsed(d, t).used + daysUsed(d, t).left, 360, at);
+  }
+  assert.deepEqual([daysUsed(d, Date.parse('2026-10-24T18:00:00Z')).used, daysLeft(d, Date.parse('2026-10-24T18:00:00Z')).text], [350, '10 days']);
+  assert.equal(daysUsed(d, Date.parse('2026-11-02T20:00:00Z')).left, 1, 'an active deal with a day to run never reads "0 left"');
+});
+
+test('the obligations line names the terms and privacy every partner is seeded with (finding 4)', () => {
+  const scores = ready({ scores: [{ user_id: 507, missing: ['tos_v1', 'privacy_v1', 'kyb_v1'], required_total: 4 }] });
+  assert.equal(obligationsLine(scores, 507).text, 'Outstanding: Terms of service, Privacy, KYB');
+});
+
+test('Awaiting signature: a deal whose invitation is outside R1\'s newest 200 is said, never dropped from the lapsed count (finding 5)', () => {
+  const newest = many(CAPS.invitations - 1, (i) => inv(1000 + i));
+  const lapsedInv = inv(500, { status: 'finalized', envelope_id: 77, createdMs: NOW - 30 * DAY, is_expired: true });
+  const tile = (awaiting, invitations) => dealTiles({ deals: lists({ awaiting_signature: ready(awaiting) }), invitations: ready(invitations), fan: { state: 'loading' }, now: NOW }).find((t) => t.key === 'awaiting');
+  const unseen = tile([deal(9, { status: 'awaiting_signature', invitation_id: 999, user_id: null })], [...newest, inv(1999)]);
+  assert.equal(unseen.sub, null);
+  assert.equal(unseen.cover, '1 whose invitation is not in this read.');
+  const both = tile([deal(8, { status: 'awaiting_signature', invitation_id: 500, user_id: null }), deal(9, { status: 'awaiting_signature', invitation_id: 999, user_id: null })], [...newest, lapsedInv]);
+  assert.equal(both.sub, '1+ whose invitation has lapsed', 'a floor, at the cap');
+  assert.equal(both.subTone, 'amber');
+  assert.equal(both.cover, '1 whose invitation is not in this read.');
+  const below = tile([deal(8, { status: 'awaiting_signature', invitation_id: 500, user_id: null }), deal(9, { status: 'awaiting_signature', invitation_id: 999, user_id: null })], [lapsedInv]);
+  assert.deepEqual([below.sub, below.cover], ['1 whose invitation has lapsed', null], 'below the cap the count is exact');
+});
+
+test('Revoke takes the long variant when a deal list could not refresh (finding 10)', () => {
+  assert.equal(revokeVariant(inv(1), lists({ proposed: stale([]) })), 'long');
+  assert.equal(revokeVariant(inv(1), lists({ awaiting_signature: stale([deal(3, { status: 'awaiting_signature', invitation_id: 9 })]) })), 'long');
+  assert.equal(revokeVariant(inv(1), lists()), 'short');
+});
+
+test('the revoke and terminate results say what D925\'s replies report, failures included, and never an exception', () => {
+  assert.equal(revokedLine({ ok: true, voided_deals: 1, voided_envelopes: 0, failures: [{ step: 'void_envelope', envelope_id: 77 }] }), 'Invitation revoked. 1 deal voided. Some agreements could not be voided. Check them in Contracts.');
+  assert.equal(revokedLine({ ok: true, voided_deals: 0, voided_envelopes: 0, failures: [{ step: 'revoke_cascade' }] }), 'Invitation revoked. The chosen offer and its agreement could not all be voided. Check them in Contracts.');
+  assert.equal(revokedLine({ ok: true, voided_deals: 0, voided_envelopes: 0, failures: [] }), 'Invitation revoked.', 'an empty list is success');
+  assert.equal(terminatedLine({ ok: true, members_revoked: 3, partner_tiers_reverted: true, failures: [] }), 'Deal terminated. 3 members’ tiers revoked.');
+  assert.equal(terminatedLine({ ok: true, members_revoked: 1, partner_tiers_reverted: false, failures: [] }), 'Deal terminated. 1 member’s tiers revoked.');
+  assert.equal(terminatedLine({ ok: true, members_revoked: 0, partner_tiers_reverted: true, failures: [] }), 'Deal terminated.', 'a zero is never read as "no member lost a tier"');
+  assert.equal(terminatedLine({ ok: true, members_revoked: 2, partner_tiers_reverted: false, failures: [{ step: 'redeemer_founder_revoke', user_id: 9 }] }),
+    'Deal terminated. 2 members’ tiers revoked. Some tier changes did not complete, so the partner or a member may still hold this deal’s grant.');
+  assert.equal(terminatedLine({ ok: true, redemptions_revoked: 4 }), 'Deal terminated.', 'a redemption count is never turned into a member count');
+  assert.deepEqual([partialWrite({ failures: [{ step: 'x' }] }), partialWrite({ failures: [] }), partialWrite({})], [true, false, false]);
+  for (const line of [revokedLine({ failures: [{ step: 'void_envelope', message: 'D1_ERROR: boom' }] }), terminatedLine({ failures: [{ step: 'redeemers_read', error: 'SQLITE_BUSY' }] })]) {
+    assert.doesNotMatch(line, /D1_ERROR|SQLITE|boom|void_envelope|redeemers_read/);
+  }
+});
+
+test('Needs you at a cap says what it checked, and is never "Nothing here needs you now." or a bare 0 (finding 1)', () => {
+  const quiet = (o) => needsYou({ invitations: ready([]), deals: lists(), links: ready({ accounts: [], firms: [] }), template: ready({ fields: [] }), fan: { state: 'ready', items: [], exact: true }, now: NOW, ...o });
+  const active = quiet({ deals: lists({ active: ready(many(CAPS.deals, (i) => deal(i, { expires_at: isoAt(NOW + 200 * DAY) }))) }) });
+  assert.deepEqual([active.rows.length, active.failed.length, active.settled], [0, 0, true]);
+  assert.deepEqual(active.cover.map((c) => c.text), ['Deals ending are checked over the newest 200 active deals.']);
+  assert.deepEqual(tabCounts({ invitations: ready([]), deals: lists(), contracts: failed(), needs: active }).overview, { text: '0+', amber: false, title: 'Rows drawn in Needs you; some lists stop at their cap' });
+  const invs = quiet({ invitations: ready(many(CAPS.invitations, (i) => inv(i))) });
+  assert.deepEqual(invs.cover.map((c) => c.text), ['Lapsed invitations and chosen offers are checked within the newest 200 by first send.']);
+  const below = quiet({});
+  assert.deepEqual(below.cover, []);
+  assert.deepEqual(tabCounts({ invitations: ready([]), deals: lists(), contracts: failed(), needs: below }).overview, { text: '0', amber: false, title: 'Rows in Needs you' }, 'below the caps a 0 is real');
+});
+
+test('Copy names what it copies: a referral code is a code, not a link (finding 12)', () => {
+  assert.equal(copyFailed('code'), 'Copy failed. Select the code and copy it.');
+  assert.equal(copyFailed(), 'Copy failed. Select the link and copy it.');
+});
+
+test('Top deals leaves out the deals with no redemption (finding 22)', () => {
+  assert.deepEqual(topDealRows([{ id: 1, redemptions_count: 2 }, { id: 2, redemptions_count: 0 }, { id: 3, redemptions_count: null }, { id: 4 }, { id: 5, redemptions_count: '7' }]).map((d) => d.id), [1, 5]);
+  assert.deepEqual(topDealRows(null), []);
+});
+
+test('a 423 cool-off is said as paused, with a verb that holds for any subject, and R5\'s pause is said where its figures are drawn (finding 23)', () => {
+  assert.equal(pausedLine('The due-diligence cases'), 'Reading the due-diligence cases is paused after a recent account recovery. It resumes when the 24-hour cool-off ends.');
+  assert.equal(pausedLine('The envelope'), 'Reading the envelope is paused after a recent account recovery. It resumes when the 24-hour cool-off ends.');
+  const coolOff = failed({ status: 423, code: 'recovery_cool_off_active' });
+  const deals = lists({ active: ready([deal(1, { redemptions_count: 2 })]) });
+  assert.deepEqual(dealsCount(coolOff, deals), { text: '1', title: `Every deal, in every state. ${CONTRACTS_PAUSED}` });
+  assert.equal(CONTRACTS_PAUSED, 'Reading every deal from Contracts is paused after a recent account recovery, so the deal lists are counted instead.');
+  assert.equal(allTimeRedemptions(coolOff, deals).cover, CONTRACTS_PAUSED);
+  assert.equal(tabCounts({ invitations: ready([]), deals, contracts: coolOff, needs: null }).referrals.title, `Redemptions, all time. ${CONTRACTS_PAUSED}`);
+  // Any other failure of R5 falls back as D923 §2 decides, without the pause.
+  assert.deepEqual(dealsCount(failed(), deals), { text: '1', title: 'Every deal, in every state' });
+  assert.equal(allTimeRedemptions(failed(), deals).cover, undefined);
+  assert.equal(ddFor(deal(1), coolOff).text, 'Paused after a recent account recovery');
+});
+
+/* ------------------------------------------------------------------ *
  * Wiring and the source
  * ------------------------------------------------------------------ */
 
@@ -547,7 +710,16 @@ test('the desk reads only D923 §2\'s reads through existing clients, and draws 
     for (const name of imp[1].split(',').map((s) => s.trim()).filter(Boolean)) assert.ok(['api', 'dd'].includes(name), `a new client: ${name}`);
   }
   assert.doesNotMatch(src, /adminGetContract|adminContractDetail|partner_deal:|adminListContracts\(|esignList\(/, 'the Contracts detail and the Agreements union hide failures');
-  assert.doesNotMatch(src, /window\.confirm|useToast|setTimeout\([^)]*on(?:Close|Created)|dangerouslySetInnerHTML/, 'no pop-up, no toast, no timer that closes a dialog');
+  assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML/, 'no pop-up, no toast');
+  // No timer closes a dialog: each setTimeout's first argument, up to the comma that ends it (two levels of
+  // parentheses deep), must not name a closer. The old `setTimeout\([^)]*on(?:Close|Created)` stopped at the
+  // first ")", so `setTimeout(() => onClose(), 1500)` passed it.
+  const timerClosers = (code) => [...code.matchAll(/setTimeout\(\s*((?:[^(),]|\((?:[^()]|\([^()]*\))*\))*)/g)]
+    .map((m) => m[1]).filter((arg) => /\b(?:on(?:Close|Created)|close(?:Dialog|Record)?|finish)\b/.test(arg));
+  assert.deepEqual(timerClosers(src), [], 'no timer that closes a dialog');
+  assert.equal(timerClosers('setTimeout(() => onClose(), 1500); setTimeout(close, 1500); setTimeout(() => onCreated(r), 1500); setTimeout(() => { setX(1); onClose(); }, 9);').length, 4, 'the arrow and bare forms are caught');
+  assert.deepEqual(timerClosers('const timer = setTimeout(() => setCheckFor(typed), CHECK_DELAY_MS);'), [], 'the email check\'s debounce is not a closer');
+  assert.match(src, /setTimeout\(\(\) => setCheckFor\(typed\), CHECK_DELAY_MS\)/, 'and that debounce is still the desk\'s one timer');
   assert.doesNotMatch(src, /'—'|"—"|\?\? 0\b/, 'no dash or zero standing in for a value');
   assert.doesNotMatch(src, /<svg|recharts|Export CSV|Adjust terms|Founder Pro|\bDelivered\b|Agreement blocked|could not be sent/);
   for (const sample of ['Lio Testwell', 'Mara Example', 'Teo Sample', 'Ada Placeholder', '[12 Oct]', '[42]', 'partner/invite/']) assert.ok(!src.includes(sample), `a canvas sample reached the desk: ${sample}`);
@@ -575,7 +747,7 @@ const liveInv = (id, o = {}) => inv(id, o, LIVE);
 
 function worker({
   invitations = [], deals = {}, contracts, links = { accounts: [], firms: [], attached: 0, unattached: 0 }, template = { doc_type: 'partner_services', fields: [] },
-  top = [], cases = [], redemptions = {}, envelopes = {}, users = [], writes = {},
+  top = { items: [], status: 'all', limit: 5 }, cases = [], redemptions = {}, envelopes = {}, users = [], writes = {},
 } = {}) {
   const call = (v, ...a) => (typeof v === 'function' ? v(...a) : response(v));
   return (url, options = {}) => {
@@ -606,7 +778,7 @@ function worker({
     }
     if (path === '/api/admin/partners/links') return call(links);
     if (path === '/api/legal/esign/templates/partner_services') return call(template);
-    if (path === '/api/dd/cases') return call({ items: cases });
+    if (path === '/api/dd/cases') return typeof cases === 'function' ? cases() : response({ items: cases });
     const env = /^\/api\/legal\/esign\/(\d+)$/.exec(path);
     if (env) return envelopes[env[1]] ? call(envelopes[env[1]]) : response({ error: 'Envelope not found' }, 404);
     if (path === '/api/admin/users') return call(users, q);
@@ -614,12 +786,14 @@ function worker({
   };
 }
 
-async function mounted(url, handle, { clipboard } = {}) {
-  const restore = installDocument();
+async function mounted(url, handle, { clipboard, phone = false } = {}) {
+  // Focus mode: `focus()` moves `document.activeElement`, so focus return can be read.
+  const restore = installDocument('', { focus: true });
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia, navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator') };
   const requests = [];
   globalThis.fetch = async (u, options = {}) => { requests.push({ url: String(u), method: String(options.method || 'GET'), body: options.body }); return handle(String(u), options); };
-  globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  // `phone`: usePhoneWidth's (max-width: 1023px) matches, so a record is a page (PI11c).
+  globalThis.matchMedia = () => ({ matches: phone, addEventListener() {}, removeEventListener() {} });
   if (clipboard) Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { clipboard } });
   document.body.style = { overflow: 'auto', paddingRight: '' };
   const container = document.createElement('div'); document.body.appendChild(container);
@@ -644,6 +818,17 @@ async function mounted(url, handle, { clipboard } = {}) {
     props: (id) => props(byId(id)),
     within: (id, pred) => { const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)]; const top = byId(id); return top ? walk(top).filter((n) => pred(props(n), n)) : []; },
     nodeProps: props,
+    node: byId,
+    /** What a keyboard user has focused: the node's own `focus()`. */
+    focus(id) { const n = byId(id); assert.ok(n, `no ${id} to focus`); n.focus(); },
+    /** The data-testid of the focused node, or a word for <body>, nothing, or a node no longer in the page. */
+    focused() {
+      const a = document.activeElement;
+      if (!a) return 'nothing';
+      if (a === document.body) return 'body';
+      if (a.isConnected === false) return `removed:${props(a)['data-testid'] || text(a).trim()}`;
+      return props(a)['data-testid'] || `text:${text(a).trim()}`;
+    },
     async click(id) { const p = props(byId(id)); assert.ok(p.onClick, `no ${id} to click`); assert.ok(!p.disabled, `${id} is disabled`); await act(async () => { await p.onClick(event); }); await flush(); },
     /** A button by its words. */
     async press(label, scope = null) {
@@ -815,7 +1000,7 @@ test('Firm links asks before it saves, and says the result on the page', async (
   const links = { accounts: [{ id: 31, email: 'ann@firm.co', name: 'Ann', partner_id: null, firm_name: null, firm_company: null }], firms: [{ id: 4, name: 'Northwind', company: 'Northwind LLC', email: null, accounts: 2 }], attached: 0, unattached: 1 };
   const view = await mounted('/admin/partner-invitations/firm-links', worker({ links, writes: { link: (o) => { saved = JSON.parse(o.body); return response({ ok: true, user_id: 31, partner_id: 4, firm_name: 'Northwind' }); } } }));
   try {
-    assert.equal(view.textOf('partners-firm-counts'), '0 attached · 1 not · 1 firms on record');
+    assert.equal(view.textOf('partners-firm-counts'), '0 attached · 1 not · 1 firm on record');
     await view.change('partners-firm-select-31', { value: '4' });
     assert.ok(view.has('partners-firm-confirm'), 'a change asks first');
     assert.match(view.textOf('partners-firm-confirm'), /Attach Ann to Northwind LLC\?/);
@@ -833,7 +1018,8 @@ test('Terminate is disabled until a reason is typed; its result and its refusal 
   let body = null;
   const view = await mounted('/admin/partner-invitations/deals/7', worker({
     deals: { active: [lio] }, redemptions: { 7: () => response({ error: 'down' }, 503) },
-    writes: { terminate: (o) => { body = JSON.parse(o.body); return response({ ok: true, tiers_revoked: true, redemptions_revoked: 4 }); } },
+    // D925's reply; a legacy `redemptions_revoked` is kept in to prove it is never read as members.
+    writes: { terminate: (o) => { body = JSON.parse(o.body); return response({ ok: true, members_revoked: 2, partner_tiers_reverted: true, failures: [], redemptions_revoked: 4 }); } },
   }));
   try {
     assert.ok(view.has('partners-deal'), 'one deal opens over Deals');
@@ -856,8 +1042,8 @@ test('Terminate is disabled until a reason is typed; its result and its refusal 
     assert.equal(view.textOf('partners-terminate-count'), '15 / 500');
     await view.click('partners-terminate-go');
     assert.deepEqual(body, { reason: 'Breach of terms' });
-    assert.equal(view.textOf('partners-terminate-result'), 'Deal terminated.');
-    assert.doesNotMatch(view.textOf('partners-terminate-dialog'), /4 member|revoked/i, 'the reply\'s revoked counts are not turned into member counts');
+    assert.equal(view.textOf('partners-terminate-result'), 'Deal terminated. 2 members’ tiers revoked.', 'D925\'s members_revoked, the distinct members');
+    assert.doesNotMatch(view.textOf('partners-terminate-dialog'), /4 member/i, 'the reply\'s redemption count is not turned into a member count');
     assert.ok(view.has('partners-terminate-dialog'), 'the result stays in the dialog');
   } finally { await view.close(); }
   const refused = await mounted('/admin/partner-invitations/deals/7', worker({ deals: { active: [lio] }, writes: { terminate: () => response({ error: 'Deal is not active or not found' }, 409) } }));
@@ -891,11 +1077,12 @@ test('Deals: names before signing come from the invitation, the lapsed cross-che
   const view = await mounted('/admin/partner-invitations/deals', worker({
     invitations: [lapsed],
     deals: { active: [deal(7, { expires_at: isoAt(LIVE + 10 * DAY) })], proposed: [deal(8, { status: 'proposed', invitation_id: 2, user_id: null, partner_email: null, partner_name: null, referral_code: null, activated_at: null, expires_at: null, envelope_id: null })] },
-    contracts: { items: [{ id: 7, redemption_count: 0 }, { id: 8, redemption_count: 0 }], total: 2, limit: 500, offset: 0 },
+    // R5 holds a deal no R2 list returned here, so its total (3) is not the lists' sum (2).
+    contracts: { items: [{ id: 7, redemption_count: 0 }, { id: 8, redemption_count: 0 }, { id: 9, redemption_count: 0 }], total: 3, limit: 500, offset: 0 },
     cases: [{ uid: 'c1', subject_id: 507, status: 'open' }],
   }));
   try {
-    assert.match(view.textOf('partners-tab-deals-count'), /^2, Every deal, in every state$/);
+    assert.match(view.textOf('partners-tab-deals-count'), /^3, Every deal, in every state$/, 'R5\'s total, not the six lists\' sum of 2');
     assert.ok(view.has('partners-deals-row-7') && !view.has('partners-deals-row-8'), 'Active is on by default');
     assert.match(view.textOf('partners-deals-row-7'), /Founder grant: no plan/);
     assert.match(view.textOf('partners-deals-row-7'), /10 days/);
@@ -942,4 +1129,307 @@ test('Referrals under Guard F: one deal\'s failed read makes every fan-out figur
     assert.match(up.textOf('partners-ref-foot'), /^Payouts are handled in Contracts\.Open payouts in Contracts$/);
     assert.ok(up.hrefs().includes('/admin/contracts?tab=partner-deals'));
   } finally { await up.close(); }
+});
+
+/* ------------------------------------------------------------------ *
+ * Mounted: the build review's findings
+ * ------------------------------------------------------------------ */
+
+const keyEvent = (key) => ({ key, preventDefault() {}, stopPropagation() {} });
+const clickEvent = { button: 0, preventDefault() {}, stopPropagation() {}, defaultPrevented: false };
+
+test('a row-menu dialog gives focus to Done after the write and back to the row\'s "Actions for [name]" on close; the menu is a disclosure (findings 7, 9, 14, 21)', async () => {
+  const view = await mounted('/admin/partner-invitations/invitations', worker({
+    invitations: [liveInv(1, { recipient_name: 'Mara Example' })],
+    writes: { revoke: () => response({ ok: true, voided_deals: 1, voided_envelopes: 0, failures: [{ step: 'void_envelope', envelope_id: 77 }] }) },
+  }));
+  try {
+    assert.equal(view.props('partners-inv-menu-1')['aria-haspopup'], undefined, 'not an ARIA menu: no arrow keys are promised');
+    await view.click('partners-inv-menu-1');
+    const list = view.props('partners-inv-menu-1-list');
+    assert.equal(list.role, undefined);
+    assert.equal(view.props('partners-inv-menu-1')['aria-expanded'], true);
+    assert.equal(view.props('partners-inv-menu-1')['aria-controls'], list.id, 'the button names the list it shows');
+    assert.equal(view.props('partners-inv-menu-1-revoke').role, undefined);
+    // A keyboard user is on Revoke when they pick it.
+    view.focus('partners-inv-menu-1-revoke');
+    await view.click('partners-inv-menu-1-revoke');
+    assert.ok(view.has('partners-revoke-dialog'));
+    assert.equal(view.focused(), 'partners-inv-menu-1', 'focus moved to ⋯ before the item unmounted, so the dialog records ⋯ as its opener');
+    await view.click('partners-revoke-go');
+    assert.equal(view.focused(), 'partners-revoke-go-done', 'the write swapped the action for Done, and Done has focus');
+    assert.equal(view.textOf('partners-revoke-result'), 'Invitation revoked. 1 deal voided. Some agreements could not be voided. Check them in Contracts.');
+    await view.click('partners-revoke-go-done');
+    assert.ok(!view.has('partners-revoke-dialog'));
+    assert.equal(view.focused(), 'partners-inv-menu-1', 'closing gives focus back to the row\'s ⋯, never to <body>');
+    // Escape on an open menu puts focus on ⋯ too.
+    await view.click('partners-inv-menu-1');
+    view.focus('partners-inv-menu-1-resend');
+    await act(async () => { view.nodeProps(view.node('partners-inv-menu-1').parentNode).onKeyDown(keyEvent('Escape')); });
+    assert.ok(!view.has('partners-inv-menu-1-list'));
+    assert.equal(view.focused(), 'partners-inv-menu-1');
+  } finally { await view.close(); }
+});
+
+test('when the row that opened a dialog leaves its list after the write, focus goes to the lit tab, never to <body> (finding 7)', async () => {
+  let ended = false;
+  const lio = deal(7, { partner_name: 'Lio Testwell', expires_at: isoAt(LIVE + 100 * DAY) });
+  const view = await mounted('/admin/partner-invitations/deals', worker({
+    deals: {
+      active: () => response({ items: ended ? [] : [lio] }),
+      terminated: () => response({ items: ended ? [{ ...lio, status: 'terminated', terminated_at: d1(LIVE) }] : [] }),
+    },
+    writes: { terminate: () => { ended = true; return response({ ok: true, members_revoked: 0, partner_tiers_reverted: true, failures: [] }); } },
+  }));
+  try {
+    await view.click('partners-deals-menu-7');
+    view.focus('partners-deals-menu-7-terminate');
+    await view.click('partners-deals-menu-7-terminate');
+    await view.change('partners-terminate-reason', { value: 'Breach' });
+    await view.click('partners-terminate-go');
+    await view.click('partners-terminate-go-done');
+    assert.ok(!view.has('partners-deals-row-7'), 'the terminated deal left the Active list on the reload');
+    assert.equal(view.focused(), 'partners-tab-deals', 'focus is on the Deals tab, not on the removed row');
+  } finally { await view.close(); }
+});
+
+test('on a phone a record is a page over a tab that stays mounted: its search survives, and Back gives focus to the row (finding 16)', async () => {
+  const view = await mounted('/admin/partner-invitations/invitations', worker({
+    invitations: [liveInv(1, { recipient_name: 'Ann One' }), liveInv(2, { recipient_name: 'Zed Two' }), liveInv(3, { recipient_name: 'Cy Three' })],
+  }), { phone: true });
+  try {
+    await view.change('partners-inv-search', { value: 'Zed' });
+    assert.ok(view.has('partners-inv-row-2') && !view.has('partners-inv-row-1'));
+    view.focus('partners-inv-row-2');
+    await view.key('partners-inv-row-2', 'Enter');
+    assert.ok(view.has('partners-invitation-page'), 'a full page on a phone (PI11c)');
+    assert.equal(view.props('partners-tab-area').hidden, true, 'the tab is hidden under it, not unmounted');
+    assert.ok(view.has('partners-inv-search'));
+    view.focus('partners-invitation-back');
+    await view.click('partners-invitation-back');
+    assert.equal(view.at.path, '/admin/partner-invitations/invitations');
+    assert.equal(view.props('partners-tab-area').hidden, false);
+    assert.equal(view.props('partners-inv-search').value, 'Zed', 'the search is as it was');
+    assert.ok(view.has('partners-inv-row-2') && !view.has('partners-inv-row-1') && !view.has('partners-inv-row-3'), 'and so are its rows');
+    assert.equal(view.focused(), 'partners-inv-row-2', 'focus is back on the row that opened the record');
+  } finally { await view.close(); }
+});
+
+test('a deal opened from another tab\'s link closes onto Deals with focus on its tab, never on <body> (finding 16)', async () => {
+  const view = await mounted('/admin/partner-invitations/invitations', worker({
+    invitations: [liveInv(1, { status: 'signed', resulting_deal_id: 7, resulting_user_id: 507, signed_at: d1(LIVE - DAY) })], deals: { active: [deal(7)] },
+  }));
+  try {
+    const link = view.within('partners-inv-row-1', (p) => p.href === '/admin/partner-invitations/deals/7')[0];
+    assert.ok(link, 'the Result column links the deal');
+    link.focus();
+    await act(async () => { view.nodeProps(link).onClick(clickEvent); });
+    await view.flush();
+    assert.equal(view.at.path, '/admin/partner-invitations/deals/7');
+    assert.ok(view.has('partners-deal') && view.has('partners-deals'), 'the deal opens over its own tab, as D923 §1 decides');
+    await view.click('partners-deal-close');
+    assert.equal(view.at.path, '/admin/partner-invitations/deals');
+    assert.equal(view.focused(), 'partners-tab-deals', 'the link that opened it is gone, so focus goes to the lit tab');
+  } finally { await view.close(); }
+});
+
+test('the row menu is fixed off its button, so no table scroller clips it, and it opens upward near the bottom (finding 15)', async () => {
+  const view = await mounted('/admin/partner-invitations/invitations', worker({ invitations: [liveInv(1)] }));
+  const was = { innerHeight: globalThis.innerHeight, innerWidth: globalThis.innerWidth };
+  try {
+    globalThis.innerHeight = 800;
+    globalThis.innerWidth = 1280;
+    const trigger = view.node('partners-inv-menu-1');
+    trigger.getBoundingClientRect = () => ({ top: 100, bottom: 130, left: 1200, right: 1234, width: 34, height: 30 });
+    await view.click('partners-inv-menu-1');
+    assert.deepEqual(view.props('partners-inv-menu-1-list').style, { position: 'fixed', top: 136, bottom: undefined, right: 46, maxHeight: 652 });
+    assert.doesNotMatch(view.props('partners-inv-menu-1-list').className, /\babsolute\b/, 'never positioned inside the overflow-x box');
+    await view.click('partners-inv-menu-1');
+    // The only row of a short table, near the bottom of the window: more room above, so it opens upward.
+    trigger.getBoundingClientRect = () => ({ top: 700, bottom: 730, left: 1200, right: 1234, width: 34, height: 30 });
+    await view.click('partners-inv-menu-1');
+    assert.deepEqual(view.props('partners-inv-menu-1-list').style, { position: 'fixed', top: undefined, bottom: 106, right: 46, maxHeight: 682 });
+  } finally {
+    globalThis.innerHeight = was.innerHeight;
+    globalThis.innerWidth = was.innerWidth;
+    await view.close();
+  }
+});
+
+test('New invitation moves focus to the result\'s Done after Send (finding 9)', async () => {
+  const view = await mounted('/admin/partner-invitations', worker({ writes: { create: () => response({ id: 5, link: 'https://axal.vc/partners/onboard?token=s', email_sent: true }, 201) } }));
+  try {
+    await view.click('partners-new-button');
+    await view.change('partners-new-email', { value: 'new@example.com' });
+    await view.change('partners-new-type-equity_partnership-box', { checked: true });
+    view.focus('partners-new-send');
+    await view.click('partners-new-send');
+    assert.ok(view.has('partners-new-result'));
+    assert.equal(view.focused(), 'partners-new-done');
+  } finally { await view.close(); }
+});
+
+test('Resend at Agreement out says the signing link is renewed, and a renewal whose email failed points to the envelope (D924)', async () => {
+  const out = liveInv(3, { recipient_name: 'Teo Sample', status: 'finalized', envelope_id: 77 });
+  const envelope = { id: 77, status: 'sent', created_at: d1(LIVE - 2 * DAY), recipients: [{ recipient_email: 'p3@example.com', status: 'pending', token_expires_at: isoAt(LIVE + 3 * DAY) }] };
+  for (const sent of [true, false]) {
+    const view = await mounted('/admin/partner-invitations/invitations', worker({
+      invitations: [out], envelopes: { 77: envelope },
+      writes: { resend: () => response({ ok: true, email_sent: sent, link: 'https://axal.vc/partners/onboard?token=tok3', expires_at: '2026-12-01T10:00:00.000Z' }) },
+    }));
+    try {
+      await view.click('partners-inv-menu-3');
+      await view.click('partners-inv-menu-3-resend');
+      assert.match(view.textOf('partners-resend-lines'), /The agreement’s signing link is renewed too, until \d+ \w{3} \d{4}, and the email carries it\./);
+      assert.doesNotMatch(view.textOf('partners-resend-dialog'), /does not renew|Open the envelope/, 'before the write nothing says the link stays as it was');
+      await view.click('partners-resend-go');
+      if (sent) {
+        assert.equal(view.textOf('partners-resend-result'), 'Sent, with the agreement’s signing link renewed until 1 Dec 2026.');
+      } else {
+        assert.match(view.textOf('partners-resend-result'), new RegExp(`^${RENEW_NOT_SENT}Open the envelope$`));
+        assert.equal(view.props('partners-resend-envelope').href, '/legal/send?envelope=77');
+        assert.ok(!view.has('partners-resend-copy'), 'the onboarding link is not offered as if it were the signing link');
+      }
+    } finally { await view.close(); }
+  }
+});
+
+test('a record opened from a row read for its address is read again after a write, so it never offers writes the Worker now refuses (finding 11)', async () => {
+  let row = liveInv(999, { recipient_email: 'old@example.com', recipient_name: 'Old Partner', createdMs: LIVE - 60 * DAY, is_expired: true });
+  const view = await mounted('/admin/partner-invitations', worker({
+    invitations: (q) => response({ items: q.get('email') ? (row.recipient_email.includes(q.get('email')) ? [row] : []) : many(CAPS.invitations, (i) => liveInv(i)) }),
+    writes: { revoke: () => { row = { ...row, status: 'revoked', revoked_at: d1(LIVE) }; return response({ ok: true, voided_deals: 0, voided_envelopes: 0, failures: [] }); } },
+  }));
+  try {
+    await view.click('partners-new-button');
+    await view.change('partners-new-email', { value: 'old@example.com' });
+    await view.wait(450);
+    const open = view.within('partners-new-dup', (p, n) => String(n.tagName).toUpperCase() === 'A')[0];
+    assert.ok(open, 'the duplicate check offers "Open it"');
+    await act(async () => { view.nodeProps(open).onClick(clickEvent); });
+    await view.flush();
+    assert.equal(view.at.path, '/admin/partner-invitations/invitations/999');
+    assert.ok(view.has('partners-invitation-revoke'), 'the record, outside the newest 200, opens from the row read for its address');
+    await view.click('partners-invitation-revoke');
+    await view.click('partners-revoke-go');
+    await view.click('partners-revoke-go-done');
+    assert.match(view.textOf('partners-invitation-stage'), /Revoked/, 'the record shows the Worker\'s state after the write');
+    assert.ok(!view.has('partners-invitation-resend') && !view.has('partners-invitation-revoke'), 'and offers no write the Worker now refuses');
+  } finally { await view.close(); }
+});
+
+test('a deal before signing never says its address is "not recorded" when the invitations were not read in full (finding 17)', async () => {
+  const proposed = deal(8, { status: 'proposed', invitation_id: 2, user_id: null, partner_email: null, partner_name: null, referral_code: null, activated_at: null, expires_at: null, envelope_id: null });
+  for (const [invitations, title] of [[() => response({ error: 'down' }, 503), 'Could not be read'], [many(CAPS.invitations, (i) => liveInv(1000 + i)), NOT_IN_READ]]) {
+    const view = await mounted('/admin/partner-invitations/deals/8', worker({ invitations, deals: { proposed: [proposed] } }));
+    try {
+      assert.match(view.textOf('partners-deal'), new RegExp(`${title}Deal #8`));
+      assert.doesNotMatch(view.textOf('partners-deal'), /address not recorded/, 'the address is stored; it was not read here');
+    } finally { await view.close(); }
+  }
+  const complete = await mounted('/admin/partner-invitations/deals/8', worker({ invitations: [liveInv(5)], deals: { proposed: [proposed] } }));
+  try {
+    assert.match(complete.textOf('partners-deal'), /Not recordedDeal #8 · address not recorded/, 'read in full with no invitation for it: then it is not recorded');
+  } finally { await complete.close(); }
+});
+
+test('a deal record whose list could not be read offers Try again inside the dialog (finding 18)', async () => {
+  let tries = 0;
+  const view = await mounted('/admin/partner-invitations/deals/41', worker({ deals: { active: [deal(7)], expired: () => { tries += 1; return response({ error: 'down' }, 503); } } }));
+  try {
+    assert.equal(view.textOf('partners-deal-read-expired-unreadable').trim(), 'The deals in “Term over” could not be read. So this deal could not be looked up. That is not a claim that it does not exist.Try again');
+    assert.doesNotMatch(view.textOf('partners-deal-absent'), /Not in this read/);
+    const before = tries;
+    await view.press('Try again', 'partners-deal-absent');
+    assert.equal(tries, before + 1, 'Try again reads the lists again');
+  } finally { await view.close(); }
+});
+
+test('after Terminate from the record, the record never says "Not in this read" while the lists answer one by one (finding 19)', async () => {
+  let ended = false;
+  const lio = deal(7, { partner_name: 'Lio Testwell', expires_at: isoAt(LIVE + 100 * DAY) });
+  const later = (ms, body) => new Promise((done) => setTimeout(() => done(response(body)), ms));
+  const view = await mounted('/admin/partner-invitations/deals/7', worker({
+    deals: {
+      active: () => response({ items: ended ? [] : [lio] }),
+      terminated: () => (ended ? later(300, { items: [{ ...lio, status: 'terminated', terminated_at: d1(LIVE) }] }) : response({ items: [] })),
+    },
+    writes: { terminate: () => { ended = true; return response({ ok: true, members_revoked: 0, partner_tiers_reverted: true, failures: [] }); } },
+  }));
+  try {
+    await view.click('partners-deal-terminate');
+    await view.change('partners-terminate-reason', { value: 'Breach' });
+    await view.click('partners-terminate-go');
+    await view.click('partners-terminate-go-done');
+    // Active has answered without deal 7; Terminated is still being read again.
+    assert.ok(!view.has('partners-deal-absent-reason'));
+    assert.doesNotMatch(view.textOf('partners-deal'), /Not in this read/);
+    await view.wait(350);
+    assert.match(view.textOf('partners-deal-state'), /Terminated/);
+  } finally { await view.close(); }
+});
+
+test('Top deals reads R3 across every state and lists only the deals with redemptions (finding 22)', async () => {
+  const view = await mounted('/admin/partner-invitations/deals', worker({ top: { items: [deal(1, { redemptions_count: 3 }), deal(2, { redemptions_count: 0 })], status: 'all', limit: 5 } }));
+  try {
+    assert.ok(view.requests.some((r) => r.url === '/api/admin/partners/deals/top?limit=5&status=all'), 'every state, five rows');
+    assert.match(view.textOf('partners-top'), /Dana 1/);
+    assert.doesNotMatch(view.textOf('partners-top'), /Dana 2/, 'a deal with no redemption is left out');
+    assert.ok(!view.has('partners-top-read-unreadable'));
+  } finally { await view.close(); }
+  const none = await mounted('/admin/partner-invitations/deals', worker());
+  try { assert.match(none.textOf('partners-top'), /No deal has a redemption yet\./); } finally { await none.close(); }
+  const down = await mounted('/admin/partner-invitations/deals', worker({ top: () => response({ error: 'x' }, 500) }));
+  try {
+    assert.ok(down.has('partners-top-read-unreadable'));
+    assert.doesNotMatch(down.textOf('partners-top'), /No deal has a redemption yet/);
+  } finally { await down.close(); }
+});
+
+test('a 423 cool-off on R9 and R5 is said as paused on Deals, never as unread or as a silent fallback (finding 23)', async () => {
+  const coolOff = () => response({ error: 'recovery_cool_off_active' }, 423);
+  const view = await mounted('/admin/partner-invitations/deals', worker({ deals: { active: [deal(7, { expires_at: isoAt(LIVE + 50 * DAY) })] }, cases: coolOff, contracts: coolOff }));
+  try {
+    assert.equal(view.textOf('partners-deals-cases-unreadable'), 'Reading the due-diligence cases is paused after a recent account recovery. It resumes when the 24-hour cool-off ends.Try again');
+    assert.match(view.textOf('partners-deals-row-7'), /Paused after a recent account recovery/);
+    assert.doesNotMatch(view.textOf('partners-deals-row-7'), /No case on record|Could not be read|Not opened/);
+    assert.equal(view.textOf('partners-deals-contracts-paused'), CONTRACTS_PAUSED);
+    assert.equal(view.textOf('partners-tab-deals-count'), `1, Every deal, in every state. ${CONTRACTS_PAUSED}`);
+  } finally { await view.close(); }
+});
+
+test('copying a referral code that fails says to select the code, in a field named for it (finding 12)', async () => {
+  const view = await mounted('/admin/partner-invitations/deals', worker({ deals: { active: [deal(7)] } }), { clipboard: { writeText: async () => { throw new Error('denied'); } } });
+  try {
+    await view.click('partners-deals-copy-7');
+    assert.equal(view.textOf('partners-deals-copy-7-result'), 'Copy failed. Select the code and copy it.');
+    assert.equal(view.props('partners-deals-copy-7-field')['aria-label'], 'The code');
+    assert.equal(view.props('partners-deals-copy-7-field').value, 'PART-7');
+  } finally { await view.close(); }
+});
+
+test('a record not in the lists says why: past a cap, or no record has the address; an undecodable address never crashes (C1, finding 13)', async () => {
+  const cases = [
+    ['/admin/partner-invitations/invitations/12', worker({ invitations: [liveInv(1)] }), 'partners-invitation', NO_INVITATION],
+    ['/admin/partner-invitations/invitations/12', worker({ invitations: many(CAPS.invitations, (i) => liveInv(1000 + i)) }), 'partners-invitation', MISSING_INVITATION],
+    ['/admin/partner-invitations/invitations/%E0', worker(), 'partners-invitation', NO_INVITATION],
+    ['/admin/partner-invitations/deals/12', worker({ deals: { active: [deal(1)] } }), 'partners-deal', NO_DEAL],
+    ['/admin/partner-invitations/deals/12', worker({ deals: { active: many(CAPS.deals, (i) => deal(1000 + i)) } }), 'partners-deal', MISSING_DEAL],
+    ['/admin/partner-invitations/deals/50%', worker(), 'partners-deal', NO_DEAL],
+  ];
+  for (const [url, handle, id, reason] of cases) {
+    const view = await mounted(url, handle);
+    try {
+      assert.equal(view.textOf(`${id}-absent`), `${NOT_IN_READ}${reason}`, url);
+    } finally { await view.close(); }
+  }
+});
+
+test('Needs you at a cap is never "Nothing here needs you now.", and its count says it is a floor (finding 1)', async () => {
+  const view = await mounted('/admin/partner-invitations', worker({ invitations: [liveInv(1)], deals: { active: many(CAPS.deals, (i) => deal(i, { expires_at: isoAt(LIVE + 200 * DAY) })) } }));
+  try {
+    assert.ok(!view.has('partners-needs-none'));
+    assert.equal(view.textOf('partners-needs-cover-active'), 'Deals ending are checked over the newest 200 active deals.');
+    assert.equal(view.textOf('partners-tab-overview-count'), '0+, Rows drawn in Needs you; some lists stop at their cap');
+  } finally { await view.close(); }
 });

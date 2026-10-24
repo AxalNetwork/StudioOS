@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, dd } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
 import { redemptionDealSet } from './partnersDeskModel';
@@ -18,9 +18,10 @@ import { redemptionDealSet } from './partnersDeskModel';
  * are made by the record with `useRead`.
  *
  * `reload()` reads everything again after a write. A read that already
- * answered keeps its rows on screen while it is read again; one that then
- * fails keeps them as stale, and the page draws them under a "Could not
- * refresh" line.
+ * answered keeps its rows on screen while it is read again, marked
+ * `refreshing` until it answers; one that then fails keeps them as stale, and
+ * the page draws them under a "Could not refresh" line. Rows adopted for one
+ * address are read again by that address too.
  */
 
 const idle = (what) => ({ status: 'loading', data: null, error: null, at: null, what });
@@ -36,7 +37,8 @@ export function useRead(scope, what, tick, enabled, load) {
   useEffect(() => {
     if (!enabled) return undefined;
     let live = true;
-    setRead((r) => (r.what === what && r.data !== null ? { ...r, status: r.status === 'error' ? 'loading' : r.status } : idle(what)));
+    // A read again keeps its rows and says it is `refreshing`; the reply's state drops the mark.
+    setRead((r) => (r.what === what && r.data !== null ? { ...r, status: r.status === 'error' ? 'loading' : r.status, refreshing: true } : idle(what)));
     Promise.resolve().then(load).then(
       (data) => { if (live) setRead({ status: 'ready', data, error: null, at: Date.now(), what }); },
       (error) => {
@@ -121,6 +123,26 @@ export function usePartnerDesk(route) {
   const adopt = useCallback((row) => {
     if (row && row.id !== null && row.id !== undefined) setExtra((m) => new Map(m).set(String(row.id), row));
   }, []);
+  // A reload reads each adopted row again by its address, as it was read, so a
+  // record outside the newest 200 shows the Worker's state after a write. A
+  // row that is gone, or whose read failed, is dropped: the record then says
+  // it is not in this read rather than drawing the row from before the write.
+  const extraNow = useRef(extra);
+  extraNow.current = extra;
+  useEffect(() => {
+    if (!tick) return undefined;
+    let live = true;
+    const drop = (key) => (m) => { if (!m.has(key)) return m; const n = new Map(m); n.delete(key); return n; };
+    for (const [key, row] of extraNow.current) {
+      api.adminPartners.listInvitations({ email: row.recipient_email })
+        .then((r) => itemsOf(r, 'The invitations for this address').find((i) => String(i?.id) === key) || null)
+        .then(
+          (fresh) => { if (live) setExtra(fresh ? (m) => (m.has(key) ? new Map(m).set(key, fresh) : m) : drop(key)); },
+          (error) => { reportError('admin-partners:adopted', error); if (live) setExtra(drop(key)); },
+        );
+    }
+    return () => { live = false; };
+  }, [tick]);
 
   const invitations = useRead('invitations', 'invitations', tick, true,
     () => api.adminPartners.listInvitations({}).then((r) => itemsOf(r, 'The invitations')));
