@@ -1,6 +1,6 @@
 /**
- * D893 (#2660) — the Insights client: one module (D527), one route, and a query
- * that carries only what was asked. What the Worker answers is tested in
+ * D893 (#2660, #2661) — the Insights client: one module (D527), the read and the
+ * export, and a query that carries only what was asked. What the Worker answers is tested in
  * cloudflare-worker/test/admin_insights_d893.test.ts.
  */
 import test from 'node:test';
@@ -15,8 +15,10 @@ globalThis.localStorage = {
   getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)),
   removeItem: (k) => store.delete(k), clear: () => store.clear(),
 };
-globalThis.fetch = async (url) => {
+const sent = [];
+globalThis.fetch = async (url, init = {}) => {
   seen.push(String(url));
+  sent.push({ method: init.method || 'GET', body: init.body ?? null });
   return new Response(JSON.stringify({ range: '8w' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 };
 const { insightsApi } = await import('../src/lib/api.js');
@@ -34,12 +36,28 @@ test('adminInsights calls GET /api/admin/insights with only the filters that are
   ]);
 });
 
-test('the module is one line in api.js\'s alphabetical block, and calls only its one route', () => {
+test('insightsScopes calls GET /api/admin/insights/scopes, and a picked scope travels on the read (D893 S08)', async () => {
+  seen.length = 0;
+  await insightsApi.insightsScopes();
+  await insightsApi.adminInsights({ range: 'year', scope: 'north' });
+  assert.deepEqual(seen.map((u) => u.replace(/^https?:\/\/[^/]+/, '')), ['/api/admin/insights/scopes', '/api/admin/insights?range=year&scope=north']);
+});
+
+test('the module is one line in api.js\'s alphabetical block, and calls only its three routes', () => {
   const api = read('frontend/src/lib/api.js');
   const block = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end'));
   const lines = block.split('\n').filter((l) => l.startsWith('export * from'));
   assert.ok(lines.includes("export * from './api/insights.js';"));
   assert.deepEqual(lines, [...lines].sort(), 'alphabetical');
   const client = read('frontend/src/lib/api/insights.js');
-  assert.deepEqual([...client.matchAll(/request\(`([^`$]+)/g)].map((m) => m[1]), ['/admin/insights']);
+  assert.deepEqual([...client.matchAll(/request\([`']([^`'$]+)/g)].map((m) => m[1]), ['/admin/insights', '/admin/insights/scopes', '/admin/insights/export']);
+});
+
+test('insightsExport POSTs the body to /api/admin/insights/export (#2661)', async () => {
+  seen.length = 0; sent.length = 0;
+  const body = { what: 'group', format: 'pdf', range: 'year', group: 'founder' };
+  await insightsApi.insightsExport(body);
+  assert.deepEqual(seen.map((u) => u.replace(/^https?:\/\/[^/]+/, '')), ['/api/admin/insights/export']);
+  assert.equal(sent[0].method, 'POST');
+  assert.deepEqual(JSON.parse(sent[0].body), body);
 });

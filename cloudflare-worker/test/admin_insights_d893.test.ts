@@ -400,15 +400,16 @@ test('the route: any admin reads; a member is refused', async () => {
   assert.equal((await get(db, '', MEMBER)).status, 403);
 });
 
-test('the route: another scope is HQ\'s for a plain Admin and #2662\'s for a Super Admin; its own scope reads', async () => {
+test('the route: another scope is HQ\'s for a plain Admin and a branch read for a Super Admin; its own scope reads', async () => {
   const db = routeDb();
   const plain = await get(db, '?scope=mtl', PLAIN);
   assert.equal(plain.status, 403);
   assert.equal(plain.body.code, 'hq_only');
+  // D893 S08 (#2662): an unbound branch is read as not deployed, never as HQ's own accounts.
   const sup = await get(db, '?scope=mtl', SUPER);
-  assert.equal(sup.status, 400);
-  assert.equal(sup.body.code, 'scope_unavailable');
-  assert.match(sup.body.detail, /#2662/);
+  assert.equal(sup.status, 200);
+  assert.equal(sup.body.scope.key, 'mtl');
+  assert.deepEqual(sup.body.branch, { status: 'not_deployed' });
   assert.equal((await get(db, '?scope=hq', PLAIN)).status, 200);
   const branch = await get(db, '?scope=hq', PLAIN, { BRANCH_CODE: 'mtl' });
   assert.equal(branch.status, 403, 'a branch admin asking for HQ is asking for another scope');

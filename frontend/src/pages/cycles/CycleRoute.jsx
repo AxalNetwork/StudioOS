@@ -216,7 +216,7 @@ const CYCLE_DEFS = {
       // narrative states differently from the stored metrics; on request,
       // Eadwyn phrases the fix for the first one, citing both sides.
       ['investor-narrative', [{
-        surface: 'raise/narrative-fix', tone: 'warn', label: 'Mismatch · phrase the fix', run: 'Phrase the fix', accept: 'Keep this wording',
+        surface: 'raise/narrative-fix', tone: 'warn', label: 'Mismatch · phrase the fix', run: 'Phrase the fix', accept: 'Save reading to copy',
         empty: 'Nothing proposed yet. Eadwyn will phrase the fix for the first mismatch the consistency check found in your newest narrative version, naming both figures and where each was read.',
         nothingToDraft: 'The consistency check found no mismatch in your newest narrative version.',
         foot: 'Neither figure is taken as the right one. Keeping the wording changes neither the narrative nor the metrics.',
@@ -1010,7 +1010,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
             railOption={`fill:${fillKind}`} />
         )}
         {fillsOn && projectId ? drafts.map((draft) => (
-          <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} ai={ai} accent="violet" railOption={`draft:${draft.surface}`} />
+          <ZoneDraft key={`${slug}-${draft.surface}`} {...draft} scopeKey={String(projectId)} scoped={cycle === 'raise' && slug === 'investor-narrative'} ai={ai} accent="violet" railOption={`draft:${draft.surface}`} />
         )) : null}
         {/* D757 §2.7 (#1928): each Validate module's interview suggestions, writers only. Verdict takes none. */}
         {moduleStatus === 'ready' && cycle === 'validate' && slug !== 'verdict' && (
