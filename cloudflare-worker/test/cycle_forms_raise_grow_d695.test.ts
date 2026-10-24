@@ -177,9 +177,13 @@ test('11: New version starts from the live deck with none saved, then from the n
   const db = await fixture();
   const { w } = writesAs(db);
   const form = formFor('raise', 'investor-narrative');
+  // D909 (owner question 5 on #2454): the live wording is the Spin-Out deck's, offered to a Spin-Out venture only.
   let { values, fields } = await opened(form, w);
+  assert.deepEqual(choices(fields, 'start_from'), ['blank'], 'not a Spin-Out venture: blank only');
+  db.prepare("INSERT INTO spinout_deck_overrides (project_id, field_key, value, version) VALUES (?, 'problem.framing', 'Books close by hand.', 0)").run(P);
+  ({ values, fields } = await opened(form, w));
   assert.deepEqual(choices(fields, 'start_from'), ['live', 'blank']);
-  assert.equal(values.start_from, 'live', 'no saved version: the live deck is chosen');
+  assert.equal(values.start_from, 'live', 'a Spin-Out venture with no saved version: the Spin-Out wording is chosen');
   const first = await form.submit(w, P, { ...values, one_liner: 'Kestrel finds the leak', why_now: 'Rules changed in 2026', ask: '$1.5M for 18 months' });
   assert.equal(first.version, 1);
   ({ values, fields } = await opened(form, w));

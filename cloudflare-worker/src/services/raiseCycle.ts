@@ -32,6 +32,7 @@ import { roundCallsEnabled } from './roundCallPolicy';
 import { peerBenchmark, type PeerBenchmark } from './peerBenchmark';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
+import { deckReaders, readBySentence } from './narrative/readers';
 
 export { recordQuery };
 export type { RecordQuery };
@@ -104,7 +105,7 @@ export const READINESS_KEYS: readonly string[] = READINESS_ITEMS.map((i) => i.ke
 export const EVIDENCE = ['anecdote', 'pattern', 'stated', 'measured'] as const;
 const EVIDENCE_TONE: Record<string, string> = { measured: 'v1', stated: 'v2', pattern: 'v2', anecdote: 'v3' };
 
-export type ScoreRow = { item_id: number; item_key: string; score: number; evidence: string; missing: string | null; source: string; scored_at: string };
+export type ScoreRow = { item_id: number; item_key: string; score: number | null; evidence: string | null; missing: string | null; source: string; scored_at: string };
 export type ItemRow = { id: number; item_key: string; label: string; position: number };
 
 export async function loadReadiness(ctx: Ctx): Promise<{ items: ItemRow[]; scores: ScoreRow[] }> {
@@ -130,8 +131,8 @@ export function latestScores(scores: ScoreRow[], asOf?: string): Map<number, Sco
 }
 
 /** The overall score out of 100: the mean of each scored item's newest score. Null with none. */
-export function overallReadiness(latest: Iterable<{ score: number }>): number | null {
-  const xs = [...latest].map((s) => Number(s.score)).filter((n) => Number.isFinite(n));
+export function overallReadiness(latest: Iterable<{ score: number | null }>): number | null {
+  const xs = [...latest].filter(s => s.score != null).map((s) => Number(s.score)).filter((n) => Number.isFinite(n));
   if (xs.length === 0) return null;
   return Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10);
 }
@@ -149,7 +150,7 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
-export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number; evidence: 'measured' | 'stated'; missing: string | null; reads: ReadRow[] };
+export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
 /**
@@ -228,16 +229,16 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const v = num(latestVersion?.v);
   if (v == null) {
     out.push({
-      key: 'narrative', score: 0, evidence: 'measured', missing: 'Save an investor narrative version.',
+      key: 'narrative', score: null, evidence: null, missing: 'Not enough recorded · save an investor narrative version.',
       reads: [{ a: 'Narrative versions', b: 'none saved', ...met(false) }],
     });
   } else {
-    const m = await env.DB.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = ?')
-      .bind(projectId, v).first<{ n: number }>();
-    const mismatches = Number(m?.n ?? 0);
-    const { compared } = await checkInputs(env, projectId, v);
+    const { stated, metrics, compared } = await checkInputs(env, projectId, v);
+    // Re-score compares the current evidence itself; an empty or stale stored
+    // mismatch list is not proof that a version agrees with today's figures.
+    const mismatches = consistencyCheck(stated, metrics).length;
     out.push({
-      compared_count: compared, key: 'narrative', score: Math.max(0, 10 - 2 * mismatches), evidence: 'measured',
+      compared_count: compared, key: 'narrative', score: compared > 0 ? Math.max(0, 10 - 2 * mismatches) : null, evidence: compared > 0 ? 'measured' : null,
       missing: compared === 0 ? 'Not enough recorded' : mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
       reads: [
         { a: 'Newest version', b: `v${v}`, ...met(true) },
@@ -272,10 +273,10 @@ const LATEST_WRITE: Record<Exclude<ReadinessKey, 'team'>, string | null> = {
  * something other than that score (a deleted row leaves no newer write).
  */
 export async function changedSinceScored(
-  env: Env, projectId: number, c: ComputedScore, newest: { score: number; missing: string | null; scored_at: string } | undefined,
+  env: Env, projectId: number, c: ComputedScore, newest: { score: number | null; missing: string | null; scored_at: string } | undefined,
 ): Promise<boolean> {
   if (!newest) return true;
-  if (Number(newest.score) !== c.score || (newest.missing ?? null) !== c.missing) return true;
+  if (newest.score !== c.score || (newest.missing ?? null) !== c.missing) return true;
   const sql = LATEST_WRITE[c.key as Exclude<ReadinessKey, 'team'>];
   if (sql == null) return true;
   // Each statement names the venture once per store it reads.
@@ -300,7 +301,7 @@ export async function readinessCard(ctx: Ctx): Promise<Card> {
       kind: 'hbar',
       items: items.map((i) => {
         const s = latest.get(Number(i.id));
-        return { label: i.label, value: s ? Number(s.score) : null, tone: s ? EVIDENCE_TONE[s.evidence] ?? 'grey' : 'grey' };
+        return { label: i.label, value: s?.score != null ? Number(s.score) : null, tone: s?.score != null && s.evidence ? EVIDENCE_TONE[s.evidence] ?? 'grey' : 'grey' };
       }),
       legend: [{ label: 'Measured', tone: 'v1' }, { label: 'Pattern', tone: 'v2' }, { label: 'Anecdote', tone: 'v3' }],
     }];
@@ -356,9 +357,9 @@ async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const latest = latestScores(scores);
   let rows = items.map((i) => ({ i, s: latest.get(Number(i.id)) ?? null })).filter(({ i }) => has(rq.q, i.label));
   const state = rq.filter.state;
-  if (state === 'scored') rows = rows.filter(({ s }) => s != null);
+  if (state === 'scored') rows = rows.filter(({ s }) => s?.score != null);
   else if (state === 'gap') rows = rows.filter(({ s }) => s != null && String(s.missing ?? '').trim() !== '');
-  else if (state === 'not_scored') rows = rows.filter(({ s }) => s == null);
+  else if (state === 'not_scored') rows = rows.filter(({ s }) => s?.score == null);
   // Score, highest first, is the default; an item no one scored comes last.
   if (rq.sort !== 'order') rows.sort((a, b) => (b.s?.score ?? -1) - (a.s?.score ?? -1));
   return paged(
@@ -367,7 +368,7 @@ async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       // D691 decision 3: the item's key, the same in every list, record and write.
       id: READINESS_KEYS.includes(i.item_key) ? i.item_key : null,
       cells: {
-        item: i.label, score: s ? Number(s.score) : null, evidence: s?.evidence ?? null,
+        item: i.label, score: s?.score != null ? Number(s.score) : null, evidence: s?.score != null ? s.evidence : null,
         missing: s ? s.missing ?? '' : null, updated: s ? day(s.scored_at) : null,
       },
     })),
@@ -490,7 +491,13 @@ async function narrativeMetrics(env: Env, projectId: number) {
   return metrics;
 }
 
-export type VersionRow = { version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number; compared: number };
+export type VersionRow = {
+  version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number; compared: number;
+  /** D909: where the version started (`narrative_version_meta`), null when it was saved before 463 recorded it. */
+  start_from: string | null; based_on_version: number | null;
+  /** D909: who saved it, by name; null when no name is recorded. */
+  by: string | null;
+};
 
 export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
   const res = await ctx.env.DB.prepare(
@@ -505,8 +512,12 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
     'SELECT version, field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version > 0 AND field_key != ? ORDER BY version, field_key',
   ).bind(ctx.projectId, VERSION_MARKER_KEY).all<{ version: number; field_key: string; value: string }>();
   const meta = await ctx.env.DB.prepare(
-    'SELECT version, why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version > 0',
-  ).bind(ctx.projectId).all<{ version: number; why_now: string | null; check_against_json: string | null }>();
+    `SELECT m.version, m.why_now, m.check_against_json, m.start_from, m.based_on_version, u.name AS by_name
+       FROM narrative_version_meta m LEFT JOIN users u ON u.id = m.created_by
+      WHERE m.project_id = ? AND m.version > 0`,
+  ).bind(ctx.projectId).all<{ version: number; why_now: string | null; check_against_json: string | null; start_from: string | null; based_on_version: number | null; by_name: string | null }>();
+  const metaOf = new Map((meta.results || []).map((m) => [Number(m.version), m]));
+
   const stated = new Map<number, Stated[]>();
   for (const word of words.results || []) {
     const key = Number(word.version);
@@ -522,8 +533,27 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
     const metrics = (choices.get(Number(v.version)) || ['deck', 'metrics']).includes('metrics') ? commonMetrics : {};
     const values = stated.get(Number(v.version)) || [];
     const compared = values.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
-    return { ...v, compared, mismatches: consistencyCheck(values, metrics).length };
+    const m = metaOf.get(Number(v.version));
+    return {
+      ...v, compared, mismatches: consistencyCheck(values, metrics).length,
+      start_from: m?.start_from ?? null, based_on_version: m?.based_on_version == null ? null : Number(m.based_on_version),
+      by: String(m?.by_name ?? '').trim() || null,
+    };
   });
+}
+
+/**
+ * D909: where a version started, as the versions table and the Versions tab
+ * say it: "v1", "Blank", the live wording, or null (saved before 463 recorded
+ * it, which reads "Not recorded"). The live wording is the Spin-Out deck's, so
+ * a Spin-Out venture reads it by that name; any other venture's earlier
+ * versions copied it under today's name, "The live deck".
+ */
+export function basedOnLabel(v: Pick<VersionRow, 'start_from' | 'based_on_version'>, spinout: boolean): string | null {
+  if (v.start_from === 'version' && v.based_on_version != null) return `v${v.based_on_version}`;
+  if (v.start_from === 'blank') return 'Blank';
+  if (v.start_from === 'live') return spinout ? 'The Spin-Out deck wording' : 'The live deck';
+  return null;
 }
 
 export const fmtFigure = (f: FigureKey, v: number) => (f === 'paying_customers' ? Math.round(v).toLocaleString('en-US') : usd(v));
@@ -564,24 +594,66 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/**
+ * D909 (#2693, NAR1 and NAR12): what Home's tiles, "Needs you" and the
+ * Versions tab read, in one part of the module read (`parts.narrative`):
+ *   - `versions`: every saved version, newest first, with where it started,
+ *     when and by whom it was saved, and which cards of the current deck read
+ *     it (`services/narrative/readers.ts`);
+ *   - `newest`: the newest version's check, as the card states it: how many
+ *     figures were compared and each mismatch, figure by figure;
+ *   - `deck`: the current deck, and whether any of its cards reads a version;
+ *   - `spinout`: whether New version offers the Spin-Out deck wording.
+ * Claims backed (#2430) and Objections answered (#2457) have no store, so the
+ * part carries neither; the page says why.
+ */
+export async function narrativeHome(ctx: Ctx) {
+  const [versions, readers] = await Promise.all([loadVersions(ctx), deckReaders(ctx.env, ctx.projectId)]);
+  const newest = versions[0] ?? null;
+  const inputs = newest ? await checkInputs(ctx.env, ctx.projectId, newest.version) : null;
+  const found = inputs ? consistencyCheck(inputs.stated, inputs.metrics) : [];
+  return {
+    state: 'ok' as const,
+    versions: versions.map((v) => {
+      const cards = readers.deck ? readers.byVersion.get(Number(v.version)) ?? [] : [];
+      return {
+        version: Number(v.version), audience: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
+        based_on: basedOnLabel(v, readers.spinout), saved: day(v.saved_at), by: v.by,
+        read_by: cards.length ? { deck_version: readers.deck!.version, cards } : null,
+      };
+    }),
+    newest: newest && {
+      version: Number(newest.version), compared: inputs!.compared,
+      mismatches: found.map((m) => ({ figure: FIGURE_LABEL[m.figure], sentence: mismatchSentence(m) })),
+    },
+    deck: readers.deck && { version: readers.deck.version, reads_narrative: readers.byVersion.size > 0 },
+    spinout: readers.spinout,
+  };
+}
+
 async function narrativeRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const readers = await deckReaders(ctx.env, ctx.projectId);
   let rows = (await loadVersions(ctx)).filter((v) => has(rq.q, INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'], `v${v.version}`));
   if (rq.filter.investor_type) rows = rows.filter((v) => (v.investor_type ?? 'other') === rq.filter.investor_type);
   if (rq.sort === 'oldest') rows.reverse();
+  // D909 (NAR1): the canvas's columns less Claims backed, which waits for #2430's claim check.
   return paged(
-    [col('version', 'Version'), col('investor_type', 'Investor type'), col('deck', 'Deck use'), col('mismatches', 'Mismatches'), col('date', 'Date')],
+    [col('version', 'Version'), col('investor_type', 'Audience'), col('based_on', 'Based on'), col('mismatches', 'Mismatches'),
+      col('deck', 'Read by deck'), col('date', 'Saved'), col('by', 'By')],
     rows.map((v) => ({
       id: v.version,
       cells: {
         version: `v${v.version}`, investor_type: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
-        deck: 'No deck reads this version.',
+        based_on: basedOnLabel(v, readers.spinout),
         mismatches: { text: v.compared ? String(Number(v.mismatches)) : 'Nothing compared yet', tone: !v.compared ? 'muted' : Number(v.mismatches) ? 'warn' : 'ok' },
+        deck: readBySentence(readers, Number(v.version)),
         date: day(v.saved_at),
+        by: v.by,
       },
     })),
     rq.page,
     {
-      filters: [{ key: 'investor_type', label: 'Investor type', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
+      filters: [{ key: 'investor_type', label: 'Audience', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
       sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
     },
   );
@@ -1337,7 +1409,7 @@ async function readinessFigure(ctx: Ctx): Promise<Figure> {
   return safeFigure({ key: 'readiness_score', label: 'Readiness score', unit: 'score', source: 'readiness_scores' }, async () => {
     const { scores } = await loadReadiness(ctx);
     const latest = latestScores(scores);
-    const coverage = { scored: latest.size, total: READINESS_ITEMS.length };
+    const coverage = { scored: [...latest.values()].filter(s => s.score != null && Number.isFinite(Number(s.score))).length, total: READINESS_ITEMS.length };
     const now = overallReadiness(latest.values());
     if (now == null) return { value: null, coverage, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No readiness item scored yet' };
     const cut = daysBefore(ctx.today, 30);

@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import { isCyclePath } from './pages/cycles/cyclePaths';
+import { BOUNDARY_ROLES as NARRATIVE_BOUNDARY_ROLES } from './pages/raise/narrative/narrativeModel';
 import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
@@ -150,6 +151,12 @@ const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
+// D989 (#2380): Partner profiles, out of the Admin Console, under Approvals.
+const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfiles'));
+// D997 (#2378): Persona segments, out of the Admin Console, under Accounts (HQ: Content).
+const PersonaSegments = lazy(() => import('./pages/admin/segments/PersonaSegments'));
+// D1008 (#2386): Payments, out of the Admin Console, under Platform, HQ only.
+const Payments = lazy(() => import('./pages/admin/payments/Payments'));
 const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminLab = lazy(() => import('./pages/admin/lab/AdminLab'));
@@ -410,6 +417,7 @@ const PitchStudio = lazy(() => import('./pages/raise/pitch/PitchStudio'));
 const PitchWorkspaceMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceMoved'));
 const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
+const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -1102,7 +1110,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/platform/topology">Topology</StripLink>
           <StripLink to="/admin/platform/allowances">AI allowances</StripLink>
           <StripLink to="/admin/platform/ai-usage">AI usage</StripLink>
-          <StripLink to="/admin?tab=payments">Payments</StripLink>
+          <StripLink to="/admin/platform/payments">Payments</StripLink>
           <StripLink to="/admin?tab=bank-accounts">Bank accounts</StripLink>
           <StripLink to="/admin?tab=product-testing">Product testing</StripLink>
           <StripLink to="/admin?tab=promos">Promo codes</StripLink>
@@ -1121,7 +1129,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/content">Overview</StripLink>
           <StripLink to="/admin/articles">Content queue</StripLink>
           <StripLink to="/admin/publications">Publications</StripLink>
-          <StripLink to="/admin?tab=personas">Personas</StripLink>
+          <StripLink to="/admin/persona-segments">Persona segments</StripLink>
           <StripLink to="/admin/advisors-partners">Advisors &amp; Partners</StripLink>
           <StripLink to="/admin/team">Public team page</StripLink>
         </HqSubNavStrip>
@@ -1830,9 +1838,21 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   );
 }
 
+/**
+ * D914 (#2698), NAR14a: a page some profiles are not for draws its boundary,
+ * inside their own shell, instead of RoleGuard's redirect. The route's guard
+ * is unchanged; only who is refused is told why.
+ */
+const ROUTE_BOUNDARIES = [
+  { under: /^\/raise\/investor-narrative(\/|$)/, roles: NARRATIVE_BOUNDARY_ROLES, Panel: NarrativeBoundary },
+];
+
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
+  const { pathname } = useLocation();
   const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);
   if (!allowedRoles.includes(effectiveRole)) {
+    const boundary = ROUTE_BOUNDARIES.find((b) => b.under.test(pathname) && b.roles.has(effectiveRole));
+    if (boundary) return <boundary.Panel />;
     // Task #102 — impersonation handoff. When an admin starts impersonating
     // from an admin-only route (e.g. /admin/spinout-lab → "Open workspace"),
     // this guard re-renders with the impersonated role BEFORE the caller's
@@ -2822,6 +2842,9 @@ function AppInner() {
           rows by design, and this page is reached from Platform's Feature flags
           zone by a literal link, which the reachability walk counts. */}
       <Route path="/admin/platform/switches" element={guard(['admin'], hqOnly(<HqPlatformSwitchesPage />))} />
+      {/* D1008 (#2386): Payments, its two tabs as sub-paths, HQ only; /admin?tab=payments forwards here (LegacyContractsRedirect). */}
+      <Route path="/admin/platform/payments" element={guard(['admin'], hqOnly(<Payments />))} />
+      <Route path="/admin/platform/payments/stripe" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/meeting-bots" element={guard(['admin'], hqOnly(<HqMeetingBotsPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
@@ -2846,6 +2869,12 @@ function AppInner() {
       <Route path="/admin/advisors-partners" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/firms" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/deck" element={guard(['admin'], <AdvisorsPartners />)} />
+      {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
+      <Route path="/admin/partner-profiles" element={guard(['admin'], <PartnerProfiles />)} />
+      <Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />
+      {/* D997 (#2378): Persona segments, its two tabs as sub-paths; /admin?tab=personas forwards here (LegacyContractsRedirect). */}
+      <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
+      <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/network-profiles" element={<ApRedirect />} />
       {/* D937 (#2374) — the Spin-Out Lab under Programs, its tabs as sub-paths
           (D936's header). /admin/spinout-lab, its /preview and the Admin

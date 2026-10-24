@@ -78,7 +78,7 @@ export default function HeldAccounts() {
               Retags one person’s persona; the taxonomy itself is HQ’s.
             </p>
             <Figure state={glance} value={undefined} reason={NOT_ON_GLANCE} testId="held-accounts-personas-count" />
-            <p className="mt-2 text-[11.5px]"><Link to="/admin?tab=personas" className={OPEN}>Open personas</Link></p>
+            <p className="mt-2 text-[11.5px]"><Link to="/admin/persona-segments" className={OPEN}>Open Persona segments</Link></p>
           </Card>
         </li>
         <li>
