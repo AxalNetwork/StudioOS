@@ -1,4 +1,5 @@
 import { parseStamp } from '../../../ui/parseStamp.js';
+import { NOT_RECORDED } from '../../../lib/absence.js';
 
 /**
  * D989 (#2380), D994 (#2805) — Partner profiles at /admin/partner-profiles,
@@ -28,7 +29,7 @@ export const PP_TITLE = 'Partner profiles';
 export const PAGE_LINE = 'Check who each new member and partner says they are, then verify or reject, and send their first agreement.';
 export const RAIL_NOTE = 'Eadwyn reads the profiles on this page. Nothing changes until you act.';
 export const NOT_GIVEN = 'Not given';
-export const NOT_RECORDED = 'Not recorded';
+export { NOT_RECORDED };
 export const LIST_FAILED = 'We could not load partner profiles.';
 export const LIST_FAILED_SUB = 'This is not a sign that there are none.';
 export const COUNTS_FAILED = 'Could not be read';
