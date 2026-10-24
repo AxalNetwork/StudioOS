@@ -25,9 +25,12 @@
  *     check, so the reload is awaited rather than fired and forgotten.
  *   · THE FAILURE IS LOUD. They acted to stop something reaching someone; a
  *     swallowed error leaves them believing a live link is dead.
- *   · ONE RULE, BOTH PAGES. Raise · Pitch shows share state too and says on the
- *     page that it will not CHANGE it. Two pages computing state two ways is two
- *     answers with nothing to say which is current.
+ *   · ONE RULE, BOTH PAGES. The Pitch deck studio's Share & analytics tab
+ *     (D894) withdraws links too. Two pages computing state two ways is two
+ *     answers with nothing to say which is current, so the studio calls a link
+ *     live on the same three facts `deckShareState` reads: not withdrawn, not
+ *     expired (the module record's expiry cell) and not used up (the engagement
+ *     read's `exhausted`, which the records do not carry).
  *
  * Run with:
  *   node --import ./frontend/test/_deck-loader.mjs --test \
@@ -41,6 +44,7 @@ import { fileURLToPath } from 'node:url';
 import { codeOnly } from './_codeOnly.mjs';
 
 import { deckShareState, parseSqlUtc, toIsoUtc } from '../src/lib/deckShares.js';
+import { linkRows } from '../src/pages/raise/pitch/pitchStudioModel.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(resolve(HERE, '..', p), 'utf8');
@@ -241,7 +245,7 @@ test('the row changes before the founder is told it did', () => {
 
 // ------------------------------------------------------- the studio (D894)
 
-test('Pitch deck studio · Share & analytics withdraws through the link record, after a dialog, and only a live link', () => {
+test('Pitch deck studio · Share & analytics withdraws through the link record, after a dialog, and never a dead link', () => {
   // The read-only Pitch page this replaced promised it "never mints, revokes, or
   // edits a share link". The studio's Share & analytics tab (PD19) draws Withdraw
   // on each live link, so the promise is now about HOW it withdraws: through the
@@ -249,11 +253,30 @@ test('Pitch deck studio · Share & analytics withdraws through the link record, 
   // `deck_link_revoked`, after a dialog that says what changes.
   const src = codeOnly(STUDIO);
   assert.match(src, /cyclesApi\.recordAction\('raise', reads\.project\.id, 'pitch-deck', withdraw\.id, 'revoke'\)/);
-  assert.match(src, /!readOnly && l\.live \? <button/, 'Withdraw is drawn for a live link, and never for a reader');
+  // 2026-10-24 (D894 review, R1): a link whose views left are not known is
+  // still offered Withdraw; withdrawing one already used up does no harm.
+  assert.match(src, /!readOnly && l\.live !== false \? <button/, 'Withdraw is drawn on every link not known to be dead, and never for a reader');
   assert.match(src, /title="Withdraw this link\?"/);
   assert.match(STUDIO, /link stops opening at once\. Its views stay listed\./);
   assert.doesNotMatch(src, /deckRevokeShare/, 'a second way to end a link is back');
-  // A withdrawn or expired link stays listed, marked by the module's own state.
-  assert.match(codeOnly(STUDIO_MODEL), /live: exp\.tone === 'ok'/);
+  // A withdrawn, expired or used-up link stays listed, marked.
   assert.doesNotMatch(codeOnly(STUDIO_MODEL), /rows\.filter\(/, 'a link is filtered out of the list');
+});
+
+test('the studio and the panel agree on which links are live: a used-up link is dead on both', () => {
+  // A one-view link the builder minted (`view_limit: 1`), opened once, its 24
+  // hours not up: the claim refuses it (`view_count < view_limit`), the
+  // engagement read says `exhausted`, and the module record still says active.
+  const usedUp = { id: 14, expires_at: FUTURE, view_limit: 1, view_count: 1, exhausted: true, revoked_at: null };
+  const record = { rows: [{ id: 14, cells: { link: '[Fund B]', expires: { text: '2099-01-01', tone: 'ok' }, views: 1 } }] };
+  assert.equal(deckShareState(usedUp).live, false);
+  const [row] = linkRows(record, { shares: [usedUp] });
+  assert.equal(row.live, false, 'the studio calls a used-up link live');
+  assert.equal(row.expires, 'Used up');
+  // The same link with a view left is live on both.
+  const fresh = { ...usedUp, view_count: 0, exhausted: false };
+  assert.equal(deckShareState(fresh).live, true);
+  assert.equal(linkRows(record, { shares: [fresh] })[0].live, true);
+  // A link the records say is withdrawn or expired is dead whatever the shares say.
+  assert.equal(linkRows({ rows: [{ id: 14, cells: { expires: { text: 'Revoked', tone: 'muted' }, views: 1 } }] }, { shares: [fresh] })[0].live, false);
 });

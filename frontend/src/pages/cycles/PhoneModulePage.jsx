@@ -72,7 +72,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '',
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -88,15 +88,18 @@ export default function PhoneModulePage({
     <CycleBar back={{ label: cycleName, to: `/${meta.key}${search}` }} title={name} sub={card?.caption || undefined}
       eadwynLabel={`${cycleName} · ${name}`} />
   );
+  // A module that is also a tool draws its own tabs here (D906: Investor
+  // narrative), in every state: each tab has its own read.
+  const tabs = subnav ? <div className="mb-[14px] min-w-0">{subnav}</div> : null;
 
   if (status === 'unreadable') {
-    return <div data-testid="phone-module" data-cycle={meta.key} data-module={slug}>{bar}
+    return <div data-testid="phone-module" data-cycle={meta.key} data-module={slug}>{bar}{tabs}
       <Unreadable what={name} claim={message || 'This is not a claim that nothing is recorded.'} onRetry={onRetry} />
     </div>;
   }
   if (status === 'refused') {
     // #1704: the Worker's own sentence (Verdict for a partner), with no chart, no rows and no CTA.
-    return <div data-testid="phone-module" data-cycle={meta.key} data-module={slug}>{bar}
+    return <div data-testid="phone-module" data-cycle={meta.key} data-module={slug}>{bar}{tabs}
       <p role="status" className="m-0 rounded-xl border border-gray-200 bg-gray-50 p-4 text-[13px] text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300" data-testid="phone-module-refused">{message}</p>
     </div>;
   }
@@ -131,6 +134,7 @@ export default function PhoneModulePage({
   return (
     <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug}>
       {bar}
+      {tabs}
       {headline && (
         <section data-testid="phone-module-next" aria-labelledby="phone-module-next-title">
           <p className="m-0 flex min-h-[40px] items-center text-[10px] font-extrabold uppercase tracking-[.12em] text-violet-700 dark:text-violet-300">One next thing</p>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Community › Partner invitations</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Partner invitations</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">Bring operating partners in, see where each invitee stands, and keep their deals healthy. Drawn for an admin; HQ opens the same page with the same controls. Fields marked NEW do not exist yet and each has its Not recorded state on PI9.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="20">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Partner Invitations Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['PI1', 'Overview · desktop 1440', 'Opens on what needs the admin now: two rows of tiles, the Needs you list, then where open invitations stand, invitations per week, deals by type and state, and referral redemptions per week.', [D('PI1')]],
+      ['PI2', 'Invitations · desktop 1440', 'Every invitation with its stage and seven step dots, who sent it, its dates, email delivery (new) and the deal it produced. A row opens the invitation.', [D('PI2')]],
+      ['PI3', 'Invitation · lightbox over Invitations', 'A centred lightbox rather than a side drawer, per your rule against right sidebars. Teo Sample chose an offer but the agreement could not be sent; the three new step dates read Date not recorded.', [D('PI3')]],
+      ['PI4', 'New invitation dialog', 'Who, what to offer (up to three deal types, as the invitee will see them), adjust terms (new) and the message. The result stays in the same dialog: delivered, or not delivered with the link to copy.', [D('PI4', 'Form', 720), D('PI4d', 'Result · delivered', 720), D('PI4n', 'Result · not delivered', 720)]],
+      ['PI5', 'Deals · desktop 1440', 'Terms ending over the next 120 days, the top deals by redemptions, and every deal with its tiers, term, days left, code, redemptions, state and due diligence (new join).', [D('PI5')]],
+      ['PI6', 'Deal · lightbox over Deals', 'Ada Placeholder’s deal [#41]: terms with days used, the referral code and its last redeemers, the agreement, due diligence and obligations (new joins), the invitation and its history. Terminate shows on active deals only.', [D('PI6')]],
+      ['PI7', 'Referrals · desktop 1440', 'Redemptions across every deal: tiles, redemptions per week, the rev-share windows closing, and every redemption (new read). Payouts stay in Contracts.', [D('PI7')]],
+      ['PI8', 'Confirm dialogs', 'Resend gives a new 14 days and keeps the stage (new). Revoke takes an optional reason. Terminate needs a reason before its button turns on.', [D('PI8a', 'a · Resend', 660), D('PI8b', 'b · Revoke', 660), D('PI8c', 'c · Terminate', 660)]],
+      ['PI9', 'States', 'Loading, first use, one block unreadable, the not-recorded fields, the agreement-not-ready banner, and empty results with the moved notice.', [D('PI9a', 'Loading', 1200), D('PI9b', 'First use', 640), D('PI9c', 'One block unreadable', 1200), D('PI9d', 'Not recorded', 1200), D('PI9e', 'Agreement not ready', 1200), D('PI9f', 'No match · no deals · moved', 900)]],
+      ['PI10', 'No permission and refusals', 'A member who is not an admin, a studio HQ has paused, a deal type HQ has not granted a subsidiary studio (new), and two refused actions.', [D('PI10a', 'Not an admin · paused', 1100), D('PI10b', 'Not granted · refused', 760)]],
+      ['PI11', 'Phone · 390 wide', 'Tabs scroll sideways; tiles two to a row; Needs you and the lists as cards; the invitation as a full-screen page with a back link; filters in a bottom sheet.', [P('PI11a', 'Overview'), P('PI11b', 'Invitations'), P('PI11c', 'Invitation'), P('PI11d', 'Deals · filters')]],
+      ['PI12', 'Overview · dark · desktop 1440', 'PI1 in the dark colours; violet becomes #a78bfa in the charts.', [D('PI12')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

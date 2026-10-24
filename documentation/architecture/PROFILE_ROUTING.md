@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 149 canonical canvases at `design/canvases/`, listed
-199 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 152 canonical canvases at `design/canvases/`, listed
+205 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 69 canvases
+## Founder — 70 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -56,6 +56,7 @@ it, where in their nav, and how do they get there.*
 | Graduation Certificate | `/spinout-lab/certificate` · `/verify/:token` | Headerless | Full page + print stylesheet | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Grow · Share an update | `/grow/update` · `/updates/:uid` · `/grow/updates` · `/grow/durable-company-building#updates` | Headerless | Full page (proposed) | Sidebar → Headerless → Grow | NEW | Low |
 | Incorporate | `/spinout-lab/incorporate` · `/incorporate` · `/incorporate/success` · `/incorporate/83b` · `/incorporate/cofounder-agreement` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Raise | OUT OF SCOPE | High |
+| Investor narrative | `/raise/investor-narrative` · `/raise/investor-narrative/story` · `/positioning` · `/check` · `/versions` · `/raise/investor-narrative/:version` · `/new` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | REMOVED | Medium |
 | Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Metrics | `/build/kpi` | Headerless | Full page | Sidebar → Headerless → Build | UPGRADE | High |
@@ -174,7 +175,7 @@ it, where in their nav, and how do they get there.*
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
-## Subsidiary Admin — 16 canvases
+## Subsidiary Admin — 19 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -182,10 +183,13 @@ it, where in their nav, and how do they get there.*
 | Admin Community | `/admin/held/community` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Admin Insights | `/admin/held/insights` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Contracts · Subsidiary | `/admin/contracts` · `/admin?tab=legal` · `/esign/:token` | Admin | Full page | Sidebar → Admin → Contracts | UPGRADE | High |
+| Events Console | `/admin/events` · `/admin/events/review` · `/admin/events/all` · `/admin/events/:id` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
 | GP Application Review | `/admin/lp-applications` | Admin | Full page + review drawer | Sidebar → Admin → Approvals | UPGRADE | High |
+| Investor narrative | `/raise/investor-narrative` · `/raise/investor-narrative/story` · `/positioning` · `/check` · `/versions` · `/raise/investor-narrative/:version` · `/new` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | REMOVED | Medium |
 | Licences | `/admin/my-licence` · `/admin/my-licence/terms` · `/contract` · `/statements` · `/requests` · `/history` | Admin | Full page (proposed) | Sidebar → Admin → Licences | UPGRADE | Low |
 | Ops Page · Event organiser (E1–E4, D567) | `/events/:id/manage` · `/events/:id/manage/registrations` · `/events/:id/manage/agenda` · `/events/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Partner invitations | `/admin/partner-invitations` · `/admin/partner-invitations/invitations` · `/admin/partner-invitations/invitations/:id` · `/admin/partner-invitations/deals` · `/admin/partner-invitations/deals/:id` · `/admin/partner-invitations/referrals` · `/admin/partner-invitations/firm-links` · `/admin/partners` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
 | Pitch Deck Studio | `/raise/pitch/edit` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Research · Funds (directory) | `/research/funds` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Research · Funds (fund profile) | `/research/funds/catalog/:id` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
@@ -195,7 +199,7 @@ it, where in their nav, and how do they get there.*
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Super Admin — 12 canvases
+## Super Admin — 14 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -204,11 +208,13 @@ it, where in their nav, and how do they get there.*
 | Admin Insights | `/admin/held/insights` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Contracts · Super | `/admin/contracts` · `/admin/contracts/registry` | HQ | Full page | Sidebar → HQ → Contracts | UPGRADE | High |
 | Eadwyn Tickets · Review queue (T1, T1b, D606) | `/hq/review` | HQ | Full page | Sidebar → HQ → Support | CURRENT | High |
+| Events Console | `/admin/events` · `/admin/events/review` · `/admin/events/all` · `/admin/events/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Founder Journey Map | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/spinout-lab/investor-workspace` · `/lp-reports` · `/portfolio/waterfall` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Funds · Fabric | `/admin/fabric` · `/funds` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Legal Documents · Templates | `/admin/contracts?tab=templates` · `/admin?tab=bank-accounts` · `/esign/:token` · `/spinout-lab/investor-workspace` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Ops Page · HQ tools (Q1–Q3, D633) | `/admin/contracts` · `/admin/accounts/credits/:userId` · `/admin/security/obligations` | HQ | Full page | Sidebar → HQ → Contracts | CURRENT | High |
+| Partner invitations | `/admin/partner-invitations` · `/admin/partner-invitations/invitations` · `/admin/partner-invitations/invitations/:id` · `/admin/partner-invitations/deals` · `/admin/partner-invitations/deals/:id` · `/admin/partner-invitations/referrals` · `/admin/partner-invitations/firm-links` · `/admin/partners` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support Security · Super | `/admin/security` · `/admin/hq-support` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
 | Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
 
@@ -280,9 +286,9 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 101 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 56 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 42 | Not routed. Proposed route only. |
+| High | 103 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 58 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Low | 44 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

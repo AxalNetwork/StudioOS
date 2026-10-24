@@ -873,7 +873,7 @@ export async function notifyExpiringRevshareWindows(env: Env): Promise<{
       const body =
         `Daily rev-share attribution-window cron fired ${fired.length} warning${fired.length === 1 ? '' : 's'}:\n\n` +
         lines.join('\n') +
-        `\n\nAdmin panel: /admin/partners`;
+        `\n\nAdmin panel: /admin/partner-invitations/referrals`;
 
       // Counter is the number of admins we successfully emailed (not
       // a 0/1 flag) so cron telemetry reflects actual reach.

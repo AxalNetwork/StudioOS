@@ -135,7 +135,9 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/legal-capital' }, // #2354: the page is removed (#2297 §3); it lands on Raise › Legal
   { path: '/cofounder' }, // #2355: the page is removed (#2297 §3); it lands on Co-founder Match
   { path: '/admin/held/insights' }, // D893 (#2366): Insights moved to /admin/insights
+  { path: '/admin/partners' }, // D923 (#2370): Partner invitations moved to /admin/partner-invitations
   { path: '/admin/held/community' }, // D930 (#2367): Community moved to /admin/community
+
 ]);
 
 /** The key a hit is counted under in `public_pageviews.path`. */

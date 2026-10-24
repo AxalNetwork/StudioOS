@@ -262,7 +262,7 @@ test('mounted CM10b: every read failed — the banner says nothing is a zero, an
   try {
     assert.match(m.of('community-unreadable'), new RegExp(PAGE_UNREADABLE.replace('.', '\\.')));
     assert.ok(!m.has('community-tiles'), 'tiles drawn under a page that could not be read');
-    for (const to of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing']) {
+    for (const to of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing', '/admin/partner-invitations']) {
       assert.ok(m.links().includes(to), `the consoles strip lost ${to}`);
     }
   } finally { await m.unmount(); }

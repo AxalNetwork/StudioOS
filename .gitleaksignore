@@ -98,3 +98,7 @@ fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources
 # The next commit uses a generated low-entropy test value. Pin this already
 # pushed finding; keep every other commit, file and secret rule covered.
 65b2ef75d7337fe242f14526403d6781752ac0a7:cloudflare-worker/test/events_d916.test.ts:generic-api-key:15
+
+# D923 / PR #2706: redemptions90 is a UI tile key for the 90-day referral
+# count, not a credential. Ignore only this historical generic-api-key finding.
+beecd4b9f67fda255e419c41b8a54c85566acced:frontend/src/pages/admin/partners/partnersDeskModel.js:generic-api-key:937

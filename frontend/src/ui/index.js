@@ -91,6 +91,9 @@ export { Unrecorded, Unreadable } from './Honesty';
 // behaviours, and a title-caser 30 times under 14 names, one of which re-cased
 // its own fallback sentence into "Stage Not Recorded". See lib/absence.js.
 export { NOT_RECORDED, text, titleCase } from '../lib/absence';
+// D923 (#2370): a stored time read by one rule, D1's zone-less stamps as UTC.
+// A pure model imports `./parseStamp.js` itself, so it stays free of React.
+export { parseStamp } from './parseStamp.js';
 
 // Pre-existing, re-exported so `ui/` is the one import surface.
 export { default as EmptyState } from '../components/EmptyState';

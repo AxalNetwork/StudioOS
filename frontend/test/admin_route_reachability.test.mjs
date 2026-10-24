@@ -19,12 +19,11 @@
  * DOORS ARE MATCHED BY SYNTAX, NOT BY PATH SUBSTRING, and that is load-bearing
  * rather than tidy. `frontend/src/lib/api.js` carries ~90 `/admin/*` strings and
  * ZERO navigation — every one an argument to `request(...)`. A bare grep scores
- * `/admin/x` as linked 19 times and `/admin/team` 6 times, all falsely. Note
- * `codeOnly` does NOT save you here: the prose naming `/admin/partners`, in the
- * indented JSX block comment above that route's own `<Route>` in App.jsx, has
- * continuation lines that carry no leading asterisk, so it survives the strip.
- * Only the syntax anchor rejects it, which is what 'the door scanner reads
- * navigation syntax…' pins.
+ * `/admin/x` as linked 19 times and `/admin/team` 6 times, all falsely. A path
+ * that survives `codeOnly` is not a door either: `/admin/partners` survives as
+ * its redirect route's own `path=` (D923), which is code and not navigation.
+ * Only the syntax anchor tells the two apart, which is what 'the door scanner
+ * reads navigation syntax…' pins.
  *
  * `SIDEBAR_GROUPS` IS IMPORTED, NOT PARSED. `super_admin_shell.test.mjs:25` does
  * the same and ships (the "cannot be imported, lucide-react" note on
@@ -278,6 +277,29 @@ const COMPOSED = new Map([
     'frontend/src/pages/subsidiary/LicenceSummary.jsx',
     'frontend/src/pages/subsidiary/LicenceTerms.jsx',
   ]],
+  // D915 (2026-10-24, #2368): the Events desk draws its tabs from the files
+  // beside it, and they hold the doors to one event's page (`/admin/events/:id`).
+  ['frontend/src/pages/admin/AdminEventsPage.jsx', [
+    'frontend/src/pages/admin/events/EventsOverview.jsx',
+    'frontend/src/pages/admin/events/EventsReview.jsx',
+    'frontend/src/pages/admin/events/EventsAll.jsx',
+    'frontend/src/pages/admin/events/EventPage.jsx',
+  ]],
+  // D923 (2026-10-24, #2370): Partner invitations draws its tabs, its records
+  // and its dialogs from the files beside it. They hold the doors to one
+  // invitation, one deal and Firm links, whose only door is Overview's
+  // Needs-you row.
+  ['frontend/src/pages/admin/PartnerInvitations.jsx', [
+    'frontend/src/pages/admin/partners/PartnersOverview.jsx',
+    'frontend/src/pages/admin/partners/PartnersInvitations.jsx',
+    'frontend/src/pages/admin/partners/InvitationRecord.jsx',
+    'frontend/src/pages/admin/partners/NewInvitationDialog.jsx',
+    'frontend/src/pages/admin/partners/PartnersDeals.jsx',
+    'frontend/src/pages/admin/partners/DealRecord.jsx',
+    'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
+    'frontend/src/pages/admin/partners/FirmLinks.jsx',
+    'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
+  ]],
 ]);
 
 /** path → the files whose doors that path can reach. */
@@ -461,7 +483,8 @@ test('every in-page /admin link points at a registered route', () => {
 test('a redirect-only /admin route is excluded, and its target is reachable', () => {
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
-  assert.deepEqual(REDIRECTS, ['/admin/held/community', '/admin/held/insights', '/admin/news'],
+  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/community', '/admin/held/insights', '/admin/news'],
+
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
   // (D893: HeldInsightsRedirect sends /admin/held/insights to INSIGHTS_PATH;
@@ -572,16 +595,14 @@ test('the door scanner reads navigation syntax, not paths in prose or api calls'
   const api = doorsIn(read('frontend/src/lib/api.js')).doors.filter((d) => d.startsWith('/admin'));
   assert.deepEqual(api, [], 'api.js yielded navigation targets; the scanner is matching request() arguments');
 
-  // And prose. codeOnly does NOT strip the /admin/partners block comment in
-  // App.jsx — it is an indented {/* … */} whose continuation lines carry no
-  // leading `*` — so this proves the SYNTAX anchor rejects it, not the comment
-  // stripper.
+  // And a path in code that is not navigation. `/admin/partners` survives
+  // codeOnly as the redirect route's own `path="…"` (D923, #2370), so this
+  // proves the SYNTAX anchor rejects it, not the comment stripper.
   assert.ok(codeOnly(APP).includes('/admin/partners'),
-    'the /admin/partners prose comment in App.jsx no longer survives codeOnly; this '
-    + 'assertion now proves nothing — find another comment that mentions a route and '
-    + 'pin that instead');
+    'the /admin/partners route no longer survives codeOnly; this assertion now proves '
+    + 'nothing: pin another non-navigation path that does');
   assert.ok(!doorsIn(CHROME).doors.includes('/admin/partners'),
-    'the scanner read a path out of prose');
+    'the scanner read a door out of a path that is not navigation');
 
   // The commented row is invisible to the live set but present in the text.
   const raw = read('frontend/src/sidebarConfig.js');

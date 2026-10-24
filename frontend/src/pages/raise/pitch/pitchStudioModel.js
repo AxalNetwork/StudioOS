@@ -8,9 +8,11 @@
  *   - `GET /api/decks/:id`              → the current version's slides (its cover);
  *   - `GET /api/decks/:id/engagement`   → that version's views and NDA count;
  *   - `GET /api/cycles/raise/modules/pitch-deck` → views per week, seconds per
- *     slide and the investor links, for every version of the venture.
+ *     slide and the investor links, for every version of the venture, a page of
+ *     links at a time.
  * Nothing is a sample. A read that fails says so where its figure would be, and
- * a value nobody recorded reads "Not recorded", never 0.
+ * a value nobody recorded reads "Not recorded", never 0. A figure worked out
+ * from a list the Worker caps says so.
  *
  * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. The canvas's coverage meter, checks,
  * source chips, audience and round columns, the fast-path build, "New in your
@@ -20,6 +22,7 @@
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
+import { ENGAGEMENT_VIEW_ROWS } from '../../../lib/deckShareViews.js';
 
 export const STUDIO_PATH = '/raise/pitch';
 export const EDIT_PATH = '/raise/pitch/edit';
@@ -48,7 +51,7 @@ export const TABS = [
 export const EMPTY_DECK = 'No deck yet. Start from your records.';
 export const NO_VIEWS = 'No one has opened a link yet.';
 export const NO_VENTURE = 'No venture to build a deck for yet.';
-export { NOT_RECORDED };
+export { NOT_RECORDED, ENGAGEMENT_VIEW_ROWS };
 
 /** The query every studio address carries: the venture, and nothing else. */
 export const ventureQuery = (projectId) => (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '');
@@ -61,8 +64,12 @@ export function movedTarget(search = '', hash = '') {
   return { pathname: EDIT_PATH, search: `?${next.toString()}`, hash };
 }
 
-/** Admins, and anyone who is not the venture's founder, read the studio; they change nothing. */
-export const isReadOnly = (user) => String(user?.role || '') !== 'founder';
+/**
+ * An admin reads the studio and changes nothing (PD21); everyone else the route
+ * admits works in it, as before D894. An admin viewing as a founder (viewMode)
+ * is still an admin account, so still reads.
+ */
+export const isReadOnly = (user) => String(user?.role || '') === 'admin';
 
 export const asList = (value, ...keys) => {
   if (Array.isArray(value)) return value;
@@ -108,13 +115,22 @@ export function versionRows(versions) {
     }));
 }
 
-/** The cover line of a deck: its first slide's title, else its own title. */
+/**
+ * The cover of a deck: its first slide's title and subtitle fields (the
+ * template's headline and tagline), else the deck's own title. The slide's own
+ * `title` is its section name ("Title", or "Problem" on a generated deck) and
+ * its `subtitle` the venture's name, so the section name comes last and the
+ * venture's name, already the cover's eyebrow, never.
+ */
+// The Worker fills a field nobody wrote with a dash (`autofill.ts` PLACEHOLDER).
+const written = (v) => { const t = String(v ?? '').trim(); return t === '—' ? '' : t; };
+
 export function coverOf(deck) {
   const slides = Array.isArray(deck?.slides) ? deck.slides : [];
   const first = slides[0] || {};
   const field = (key) => (Array.isArray(first.fields) ? first.fields.find((f) => f?.key === key || f?.kind === key) : null);
-  const headline = String(first.title || field('title')?.value || deck?.title || '').trim();
-  const sub = String(first.subtitle || field('subtitle')?.value || '').trim();
+  const headline = written(field('title')?.value) || written(deck?.title) || written(first.title);
+  const sub = written(field('subtitle')?.value);
   return { headline: headline || 'Untitled deck', sub, slides: slides.length || null };
 }
 
@@ -123,13 +139,27 @@ const seriesOf = (card, kind) => (Array.isArray(card?.series) ? card.series.find
 /**
  * Views per week, oldest first, from the module card (eight weeks, every
  * version). `null` when the card holds no series: no deck, no views, or a read
- * that failed — the card's own state says which.
+ * that failed — the card's own state says which. Eight zeros is a real count:
+ * the venture has views, none of them in the last eight weeks.
  */
 export function weeklyViews(card) {
   const bars = seriesOf(card, 'vbars');
   if (!bars || !Array.isArray(bars.values)) return null;
   const values = bars.values.map((n) => Number(n) || 0);
   return { values, total: values.reduce((a, b) => a + b, 0), weeks: values.length };
+}
+
+/**
+ * What the module card says about the views, for both tabs. `failed`: the read
+ * or the card could not be read. `unopened`: the Worker's own empty card, no
+ * view ever, the one case that says "No one has opened a link yet.". `no-deck`:
+ * the Worker's other empty card. `ok`: views exist, perhaps none lately.
+ */
+export function viewsState(card, readStatus) {
+  if (readStatus === 'error' || !card || card.state === 'unreadable') return 'failed';
+  if (noViewsYet(card)) return 'unopened';
+  if (card.state === 'empty') return 'no-deck';
+  return weeklyViews(card) ? 'ok' : 'failed';
 }
 
 /** Seconds per slide, every version together, as the module card counts them. */
@@ -168,6 +198,12 @@ const median = (values) => {
 /**
  * One version's readers, from its engagement read. A viewer is one browser
  * (`ip_hash` with `ua_fingerprint`); a view with neither counts alone.
+ *
+ * The Worker sends at most ENGAGEMENT_VIEW_ROWS views, newest first, and counts
+ * `total_views` from that list, so at the cap `capped` is true: the views are
+ * "at least", and the viewers and the median cover the latest views only. The
+ * NDA count is not capped, and it counts signatures, not browsers: it is never
+ * divided by `viewers`.
  */
 export function readerStats(engagement) {
   if (!engagement || typeof engagement !== 'object') return null;
@@ -180,24 +216,72 @@ export function readerStats(engagement) {
     viewers: viewers.size,
     medianSeconds: median(seconds),
     ndaSigned: Number.isFinite(Number(nda)) ? Number(nda) : null,
+    capped: views.length >= ENGAGEMENT_VIEW_ROWS,
   };
 }
 
-/** The investor links, as the module's records give them. */
-export function linkRows(records) {
+/**
+ * The funnel, over one denominator from the same engagement read: the version's
+ * views. Each row is a count, and its bar that count's share of the views,
+ * never past the end of its track.
+ */
+export function funnelRows(stats) {
+  const of = stats?.views ?? null;
+  const share = (n) => (n == null || !of ? 0 : Math.min(100, Math.round((n / of) * 100)));
+  return [
+    { label: 'Opened', n: of, width: share(of) },
+    { label: 'Accepted the NDA', n: stats?.ndaSigned ?? null, width: share(stats?.ndaSigned ?? null) },
+  ];
+}
+
+/**
+ * The investor links, as the module's records give them, with what the
+ * engagement read adds.
+ *
+ * A link is live only when it has not expired or been withdrawn (the record's
+ * own expiry cell) AND it still has a view left. The records do not carry the
+ * second. The engagement read's `shares` do (`exhausted`: the Worker's
+ * `used_at`, or `view_count` at `view_limit`), for the current version's links,
+ * and a link nobody has opened has every view left. An opened link the
+ * engagement read does not list (another version's, one past its newest 50,
+ * or any opened link while that read is running or has failed) is neither live
+ * nor dead: `live` is null. The page still offers Withdraw on it, and says why
+ * its views left are not shown; withdrawing one that had already been used up
+ * marks it Revoked, and the dialog says so.
+ */
+export function linkRows(records, engagement = null) {
+  const shares = new Map(asList(engagement, 'shares').map((s) => [String(s.id), s]));
   return asList(records, 'rows').map((row) => {
     const c = row.cells || {};
     const exp = c.expires && typeof c.expires === 'object' ? c.expires : { text: String(c.expires ?? ''), tone: '' };
+    const views = Number.isFinite(Number(c.views)) ? Number(c.views) : null;
+    const share = shares.get(String(row.id));
+    const usedUp = exp.tone === 'ok' && Boolean(share?.exhausted);
     return {
       id: row.id,
       investor: String(c.link || '').trim() || 'Investor not recorded',
-      expires: exp.text || NOT_RECORDED,
-      live: exp.tone === 'ok',
-      views: Number.isFinite(Number(c.views)) ? Number(c.views) : null,
+      expires: usedUp ? 'Used up' : exp.text || NOT_RECORDED,
+      live: exp.tone !== 'ok' || usedUp ? false : share || views === 0 ? true : null,
+      views,
       time: c.time == null || c.time === '' ? null : String(c.time),
       mostRead: c.most_read == null ? null : String(c.most_read),
     };
   });
+}
+
+/**
+ * Where this page of links sits in the read's own total, for the pager; null
+ * when the read gave no total (the records could not be read).
+ */
+export function linkPage(records) {
+  if (records?.total == null || records?.page_size == null) return null;
+  const total = Number(records.total);
+  const size = Number(records.page_size);
+  if (!Number.isInteger(total) || !Number.isInteger(size) || size < 1) return null;
+  const page = Math.max(1, Number(records.page) || 1);
+  const shown = asList(records, 'rows').length;
+  const from = shown ? (page - 1) * size + 1 : 0;
+  return { page, pages: Math.max(1, Math.ceil(total / size)), total, from, to: shown ? from + shown - 1 : 0 };
 }
 
 /** The module's own "New link" address, when it offers one. */

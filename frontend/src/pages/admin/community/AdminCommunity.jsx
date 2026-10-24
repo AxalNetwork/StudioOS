@@ -424,7 +424,7 @@ export default function AdminCommunity() {
 
         <section aria-labelledby="community-h-consoles" className="flex flex-col gap-2.5">
           <h2 id="community-h-consoles" className={H2}>Consoles</h2>
-          <ul className="m-0 grid list-none grid-cols-1 gap-3.5 p-0 sm:grid-cols-2 lg:grid-cols-5" data-testid="community-consoles">
+          <ul className="m-0 grid list-none grid-cols-1 gap-3.5 p-0 sm:grid-cols-2 lg:grid-cols-3" data-testid="community-consoles">
             <Console testId="community-console-events" name="Events" what="Review, publish and run events" figure={doors.events}>
               <Link to="/admin/events" className={LINK}>Open events</Link>
             </Console>
@@ -439,6 +439,9 @@ export default function AdminCommunity() {
             </Console>
             <Console testId="community-console-wellbeing" name="Wellbeing" what="Verify experts and keep the library" figure={doors.wellbeing}>
               <Link to="/admin?tab=wellbeing" className={LINK}>Open wellbeing</Link>
+            </Console>
+            <Console testId="community-console-partner-invitations" name="Partner invitations" what="Bring operating partners in and keep their deals healthy" figure={{ state: 'unrecorded', text: 'Not recorded · Partner invitations have no pending queue.' }}>
+              <Link to="/admin/partner-invitations" className={LINK}>Open partner invitations</Link>
             </Console>
           </ul>
         </section>

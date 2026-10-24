@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Programs</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Programs</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">The home of every program: a catalogue with live figures, one page per program that explains how it runs and holds the tools to run it, and a way for a studio to propose a new program to HQ. Drawn for an admin of [Studio Lisbon], with Super Admin boards and callouts where HQ’s controls differ.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="20">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Programs Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['PG1', 'Catalogue · Admin · desktop 1440 · light', 'Four tiles, joins per week, what waits by program, credits in and out, the nine programs as cards, and the studio’s own proposals. The moved notice is for an old /admin/held/programs link. Waiting for you reads [21], the sum of the five queues in Waiting by program.', [D('PG1'), D('PG1h', 'Callout · today every admin works on accounts HQ holds', 1200)]],
+      ['PG2', 'Catalogue · Super Admin · desktop 1440', 'The HQ shell. New program, a Catalogue and Proposals tab strip, All studios with a studio filter, grant counts on every card, and Proposals from studios. Grant terms stay on Licences › Program grants.', [D('PG2')]],
+      ['PG3', 'Catalogue · dark', 'PG1 in the dark colours; violet series become #a78bfa.', [D('PG3')]],
+      ['PG4', 'Mentor cohort access · Overview', 'The program header every page shares: breadcrumb, pills, facts strip and seven tabs. Mentors per cohort shows December with no mentor.', [D('PG4')]],
+      ['PG5', 'Mentor cohort access · How it runs', 'The playbook as sections with a contents list. An admin sees Set by HQ on every section; the Super Admin edits and publishes.', [D('PG5'), D('PG5s', 'Super Admin variant', 1000)]],
+      ['PG6', 'Mentor cohort access · People and Assign', 'Every assignment, ended rows kept. Assigning opens a lightbox that says what the mentor will be able to read.', [D('PG6', 'People tab'), D('PG6d', 'Assign a mentor')]],
+      ['PG7', 'Referral partners', 'Segments, introductions by outcome, commission by month, the standard rules HQ sets, and every partner with their terms.', [D('PG7')]],
+      ['PG8', 'Custom terms · lightbox over Referral partners', 'Drawn as a centred lightbox rather than a side drawer. An admin sends terms to HQ for approval; the Super Admin sees Approve in its place.', [D('PG8')]],
+      ['PG9', 'Refer & Earn', 'Overview with the moved notice from /admin/refer-earn, the queue that replaces Referral review, one referral opened, and who can refer.', [D('PG9', 'Overview'), D('PG9q', 'Queue tab'), D('PG9d', 'A referral, opened'), D('PG9s', 'Settings · who can refer', 640)]],
+      ['PG10', 'Perks', 'Top perks, claims by price type, the review queue the Perk listings lane opens, and credits: an admin reads; HQ grants.', [D('PG10'), D('PG10s', 'Super Admin · credits', 640)]],
+      ['PG11', 'Investor cohort access · new', 'The design for a program that does not run yet: how it would run, sample figures, investors, and the access dialog.', [D('PG11'), D('PG11d', 'Give access')]],
+      ['PG12', 'Learning', 'Completion by program, enrolments per week, the programs table, and one learner’s record without an email.', [D('PG12'), D('PG12d', 'A learner, opened')]],
+      ['PG13', 'AI-native Venture · proposed', 'Every section reads Not set and every tile Not running yet, never zero. The Super Admin edits, publishes and offers it to studios.', [D('PG13'), D('PG13s', 'Super Admin header', 1100)]],
+      ['PG14', 'Propose a program · Admin', 'Five steps on one page, with Terms the current step. The review step reads the playbook as HQ will see it.', [D('PG14')]],
+      ['PG15', 'Decisions', 'A · the Super Admin decides on a studio’s proposal. B · a Not granted card before and after requesting access (the request sheet itself is on the Program grants canvas). C · pausing a program.', [D('PG15a', 'A · Decide', 680), D('PG15b', 'B · Request access', 900), D('PG15c', 'C · Pause', 680)]],
+      ['PG16', 'Empty', 'A studio with nothing granted, a program with no people, and an empty queue.', [D('PG16a', 'A · Nothing granted'), D('PG16b', 'B · No mentors', 640), D('PG16c', 'C · Queue empty', 640)]],
+      ['PG17', 'Loading', 'Header and period control are live; every tile and card reads.', [D('PG17')]],
+      ['PG18', 'Error and refused', 'A · one block failed while the rest renders. B · a figure the studio does not record. C · a refused action.', [D('PG18a', 'A · One block failed', 1200), D('PG18b', 'B · Not recorded', 560), D('PG18c', 'C · Refused', 640)]],
+      ['PG19', 'No permission', 'A · a member who is not an admin, in their own shell. B · an admin opening HQ’s proposals page.', [D('PG19a', 'A · Not an admin', 1440, 720), D('PG19b', 'B · Admin opens proposals', 1440, 720)]],
+      ['PG20', 'Phone · 390 wide', 'The catalogue stacked, a program page with tabs that scroll sideways, People as cards, and Assign as a full-screen sheet with sticky buttons.', [P('PG20a', 'Catalogue'), P('PG20b', 'Program'), P('PG20c', 'People'), P('PG20d', 'Assign sheet')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

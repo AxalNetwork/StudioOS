@@ -137,7 +137,7 @@ row says what is drawn today.
 The owner's artifacts `W5hRpjNZ4nsGBTJ7gd71Dy` and `RYeTPyEEdrmRnuUDktJcL3`
 came from S21's prompt on #2434, as the usual pair:
 - `Pitch Deck Studio · Boards.dc.html` is the board grid (PD1 to PD28, with the
-  lettered boards: 41 in all), the output of `scripts/read-canvas.mjs` as is;
+  lettered boards: 39 in all), the output of `scripts/read-canvas.mjs` as is;
 - `Pitch Deck Studio Page.dc.html` is the page, in the copy the grid's bundle
   carries.
 
@@ -163,7 +163,15 @@ came from S21's prompt on #2454, as the usual pair:
   carries. The page artifact decodes to the same design, differing only in
   whitespace and the font link.
 
-No value was edited. S1's integration lands next and records its grade here.
+No value was edited.
+
+**Grade: UPGRADE.** `/raise/investor-narrative` is live. S1's integration
+(D906) makes the module page the tool's Home, with the canvas's tab bar under
+its header, and draws Story, Check, Versions (with Compare) and Positioning (a
+door to today's generator) from the reads that exist. The other boards wait for
+stores the Worker does not have, so this canvas stays in the queue until its
+eight parts land (#2691 to #2698; D906 §6 lists them). The `ROUTE_MAP.md` row
+says what is drawn today.
 
 ## Landed 2026-10-24 — Admin · Community · Events (#2368)
 
@@ -176,8 +184,61 @@ came from S1's prompt on #2368, as the usual pair:
   whitespace and the font link.
 
 It is the admin desk at `/admin/events`, not the member canvas `Events.dc.html`
-above. No value was edited. S1's integration lands next and records its grade
-here.
+above. No value was edited.
+
+**Grade: UPGRADE.** `/admin/events` is live. S1's integration (D915) makes it
+the desk's Overview, with Review at `/admin/events/review`, All events at
+`/admin/events/all` and one page per event at `/admin/events/:id`, and draws
+the blocks whose reads exist: the tiles and status strip, the review queue with
+Approve and Send back, the events table with its counts under Guard G, and the
+event page with its publish gate, tiles, agenda and dialogs. The other boards
+wait for reads and columns the Worker does not have, so this canvas stays in
+the queue until its seven parts land (#2699 to #2705; D915 §6 lists them). The `ROUTE_MAP.md`
+row says what is drawn today.
+
+## Landed 2026-10-24 — Admin · Community · Partner invitations (#2370)
+
+The owner's artifacts `RVjg7kcnqPJpv5v9Mp1R63` and `FuLoT1AKA9NCDwKwhrp7ZM`
+came from S1's prompt on #2370, as the usual pair:
+- `Partner Invitations · Boards.dc.html` is the board grid (PI1 to PI12, with
+  the lettered boards: 29 in all), the output of `scripts/read-canvas.mjs` as is;
+- `Partner Invitations Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and one empty attribute's spelling.
+
+It draws the desk at the proposed `/admin/partner-invitations` (Overview,
+Invitations, Deals, Referrals), the invitation and deal lightboxes (the canvas
+uses centred lightboxes where the prompt said drawers), the new-invitation
+dialog and the confirm dialogs. No value was edited.
+
+**Grade: UPGRADE.** `/admin/partner-invitations` is live. S1's integration
+(D923) makes it the desk's Overview, with Invitations, Deals and Referrals at
+their own addresses, one address per invitation and per deal (a lightbox over
+its tab, a full page on a phone), Firm links kept off the canvas at
+`/admin/partner-invitations/firm-links`, and `/admin/partners` redirecting with
+the moved notice. It draws the blocks whose reads exist: the tiles and Needs
+you, the invitations table under Guards L and I, the deals table with Top
+deals, the referrals under Guard F, the two records, New invitation and the
+Resend, Revoke and Terminate dialogs. The charts and the other boards wait for
+reads and columns the Worker does not have, so this canvas stays in the queue
+until its nine parts land (D923 §6 lists them). The `ROUTE_MAP.md` row says
+what is drawn today.
+
+## Landed 2026-10-24 — Admin · Programs (#2371)
+
+The owner's artifacts `QWsj2LjALVRBd1rsTg8bW3` and `8GEfQTVW1ebBpZsWbG8CG6`
+came from S1's prompt on #2371, as the usual pair:
+- `Programs · Boards.dc.html` is the board grid (PG1 to PG20, with the lettered
+  boards: 45 in all), the output of `scripts/read-canvas.mjs` as is;
+- `Programs Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in whitespace,
+  the font link and one empty attribute's spelling.
+
+It draws the program catalogue and one page per program (Mentor cohort access,
+Referral partners, Refer & Earn, Perks, Investor cohort access, Learning,
+AI-native Venture), the Super Admin's catalogue and proposals, and the proposal
+flow. Grant terms stay on the Licences canvas. No value was edited. S1's
+integration lands next and records its grade here.
 
 ## Landed 2026-10-20 — Licences (D795, #2228)
 

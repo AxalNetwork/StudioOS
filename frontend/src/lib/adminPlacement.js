@@ -81,7 +81,11 @@ export const ADMIN_PLACEMENT = [
   { key: '/admin/x', kind: 'row', label: 'X (Twitter)', route: '/admin/x', hqOnly: true, tier: 'parked', row: null, form: null, how: X_PARKED_REASON },
   row('Content Queue', '/admin/articles', hq('Content', 'sub-nav'), false, { how: 'Sub-navigation item.' }),
   row('Publications', '/admin/publications', hq('Content', 'sub-nav'), false, { how: 'Sub-navigation item.' }),
-  row('Partner Invitations', '/admin/partners', admin('Approvals', 'lane'), false, { how: 'A lane.' }),
+  // D923 (#2370): the console moved to /admin/partner-invitations. The key stays
+  // the legacy row's route, which H35's question pins; the route is the new
+  // address, a Community card link with Approvals lane 13 as its `also`, as Events.
+  { key: '/admin/partners', kind: 'row', label: 'Partner Invitations', route: '/admin/partner-invitations', hqOnly: false,
+    ...admin('Community', 'card link'), how: 'Card link. Approvals lane 13 is also its door.', also: [admin('Approvals', 'lane')] },
   row('Referral Review', '/admin/refer-earn', admin('Approvals', 'lane'), false, { how: 'The Referrals core lane.' }),
   row('Public Team Page', '/admin/team', hq('Content', 'sub-nav'), false, { how: 'Sub-navigation item.' }),
   row('My Licence', '/admin/my-licence', admin('Licences', 'embedded'), false, { how: 'Embedded panel.' }),
