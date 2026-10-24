@@ -472,7 +472,9 @@ r.put('/:uid/share', async (c) => {
       if (e instanceof LineError) return c.json({ detail: e.sentence, field: 'lines' }, 400);
       throw e;
     }
-    const metrics = body.metrics === undefined ? jload(u.metrics_json, []) : cleanMetrics(body.metrics);
+    const proofSnapshots = start && end ? await periodSnapshots(c.env, u.project_id, start, end) : { inPeriod: [], before: [] };
+    const verifiedMetrics = start ? buildMetrics(proofSnapshots.inPeriod, proofSnapshots.before, start) : [];
+    const metrics = cleanMetrics(body.metrics === undefined ? jload(u.metrics_json, []) : body.metrics, verifiedMetrics);
     const audience = body.audience === undefined ? jload(u.audience_json, cleanAudience({})) : cleanAudience(body.audience);
     const incl = body.network_includes_metrics === undefined ? u.network_includes_metrics : (body.network_includes_metrics === true ? 1 : 0);
     if (body.asks !== undefined) {

@@ -9,7 +9,9 @@ import {
   checkRows, checkSummary, chosenVersion, compareView, deleteLine, duplicateSentence, homeFooter, homePart, homeTiles, homeUnreadable,
   needsYou, nextVersion, readByLine, startFromHref, storyRows, tabHref, tabSearch, versionHref, versionSub, versionsOf,
 } from './narrativeModel';
+import { NarrativeNotes, NarrativeOtherVenture, NarrativeReads } from './NarrativeAdmin';
 import PositioningTab from './PositioningTab';
+
 
 /**
  * D906 (#2454) — the Investor narrative tool's tab bar and its tab pages.
@@ -96,17 +98,21 @@ function Skeleton({ testId }) {
   return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid={testId} />;
 }
 
-function NoVersion({ search }) {
+function NoVersion({ search, admin }) {
   return (
     <div className={`${CARD} flex flex-col items-start gap-3 p-5`} data-testid="narrative-no-version">
       <span className={`text-[13.5px] font-bold ${INK}`}>{NO_VERSION}</span>
-      <Link className={BTN} to={`${NEW_PATH}${tabSearch(search, null, false)}`}>New version</Link>
+      {admin ? null : <Link className={BTN} to={`${NEW_PATH}${tabSearch(search, null, false)}`}>New version</Link>}
     </div>
   );
 }
 
-/** Story: one version's words, section by section, as its record states them. */
-function StoryTab({ record, version, search }) {
+/**
+ * Story: one version's words, section by section, as its record states them.
+ * D914: beside them the notes thread the founder sees (NAR13), and, for the
+ * founder, who read the narrative and why. An admin reads; the edit link goes.
+ */
+function StoryTab({ record, version, search, projectId, admin }) {
   const rows = storyRows(record);
   return (
     <div className="flex flex-col gap-3.5" data-testid="narrative-story">
@@ -122,7 +128,9 @@ function StoryTab({ record, version, search }) {
         {WAITING_SECTIONS.join(', ')}: these sections are stored once the Investor narrative keeps its own sections.
         One-liner, Why now and The ask are edited on the version’s page.
       </p>
-      <Link className={`${LINK} text-[12.5px]`} to={versionHref(version, search)} data-testid="narrative-story-open">Open v{version} to edit it</Link>
+      <Link className={`${LINK} text-[12.5px]`} to={versionHref(version, search)} data-testid="narrative-story-open">{admin ? `Open v${version}` : `Open v${version} to edit it`}</Link>
+      <NarrativeNotes projectId={projectId} version={version} admin={admin} />
+      {admin ? null : <NarrativeReads projectId={projectId} />}
     </div>
   );
 }
@@ -226,7 +234,7 @@ function DuplicateDialog({ projectId, version, next, onClose, onDone }) {
  * side by side through D908's compare, who reads each, and Duplicate or "Make
  * vN the start of a new version". No Delete is drawn.
  */
-function VersionsTab({ projectId, versions, search, reload, onChanged }) {
+function VersionsTab({ projectId, versions, search, reload, onChanged, admin = false }) {
   const [a, setA] = useState(() => versions[1]?.value ?? null);
   const [b, setB] = useState(() => versions[0]?.value ?? null);
   const [dup, setDup] = useState(null);
@@ -309,7 +317,7 @@ function VersionsTab({ projectId, versions, search, reload, onChanged }) {
           ))}
           {!picked.length && <p className={`m-0 px-4 py-3 text-[12.5px] ${MUTED}`}>{read.status === 'loading' ? 'Reading…' : NOT_RECORDED}</p>}
         </section>
-        {b != null && (
+        {!admin && b != null && (
           <section className={`${CARD} flex flex-col gap-2 p-4`} data-testid="narrative-actions">
             <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>Actions</h2>
             {row(b) && <button type="button" className={BTN_SECONDARY} onClick={() => setDup(row(b))} data-testid="narrative-duplicate">Duplicate v{b}</button>}
@@ -318,7 +326,7 @@ function VersionsTab({ projectId, versions, search, reload, onChanged }) {
           </section>
         )}
       </div>
-      {dup && <DuplicateDialog projectId={projectId} version={dup} next={nextVersion(versions)} onClose={() => setDup(null)} onDone={onChanged} />}
+      {!admin && dup && <DuplicateDialog projectId={projectId} version={dup} next={nextVersion(versions)} onClose={() => setDup(null)} onDone={onChanged} />}
     </div>
   );
 }
@@ -378,7 +386,7 @@ export function NarrativeHome({ data, search }) {
  * `cards` are the Raise modules for the header's rail; `action` is Call for
  * Capital, as on every Raise module page.
  */
-export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, fixOn = true, search = '', cards, action, phone = false }) {
+export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, fixOn = true, search = '', cards, action, phone = false, admin = false }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const list = useVersions(projectId, reload);
@@ -392,16 +400,21 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   // No venture means no versions read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (list.status === 'loading') body = <Skeleton testId="narrative-loading" />;
-  else if (list.status === 'refused') body = <p role="status" className={`m-0 text-[13px] ${INK}`} data-testid="narrative-refused">{list.message || 'You do not have access to this venture’s narrative.'}</p>;
+  // D914, NAR14b: the Worker refuses another venture's narrative; an admin's refusal is the reason gate's, above this page.
+  else if (list.status === 'refused') body = admin
+    ? <p role="status" className={`m-0 text-[13px] ${INK}`} data-testid="narrative-refused">{list.message || 'You do not have access to this venture’s narrative.'}</p>
+    : <NarrativeOtherVenture />;
   else if (list.status === 'error') body = <Unreadable what="Your narrative versions" claim="This is not a claim that none are saved." onRetry={retry} />;
-  // D911: positioning is the venture's core first, so it needs no saved version.
-  else if (tab === 'positioning') body = <PositioningTab projectId={projectId} version={version} />;
-  else if (!list.versions.length) body = <NoVersion search={search} />;
-  else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} onChanged={retry} />;
+  // Positioning may be read without a saved narrative version; admin controls remain read only.
+  else if (tab === 'positioning') body = <PositioningTab projectId={projectId} version={version} readOnly={admin} />;
+  else if (!list.versions.length) body = <NoVersion search={search} admin={admin} />;
+
+  else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} onChanged={retry} admin={admin} />;
+
   else if (record.status === 'loading' || record.status === 'idle') body = <Skeleton testId="narrative-loading" />;
   else if (record.status === 'refused') body = <p className={`m-0 text-[13px] ${INK}`}>{record.message || 'This version could not be opened.'}</p>;
   else if (record.status === 'error') body = <Unreadable what={`Version ${version}`} claim="This is not a claim that it is empty." onRetry={retry} />;
-  else body = tab === 'story' ? <StoryTab record={record.data} version={version} search={search} /> : <CheckTab record={record.data} search={search} newest={version === list.versions[0]?.value} fixOn={fixOn} />;
+  else body = tab === 'story' ? <StoryTab record={record.data} version={version} search={search} projectId={projectId} admin={admin} /> : <CheckTab record={record.data} search={search} newest={version === list.versions[0]?.value} fixOn={fixOn && !admin} />;
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`narrative-${tab}-page`}>

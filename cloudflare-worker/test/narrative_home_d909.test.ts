@@ -20,6 +20,7 @@ import { createCycleRecords } from '../src/routes/cycle_records.ts';
 import { readersOf, readBySentence } from '../src/services/narrative/readers.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -46,6 +47,7 @@ function fixture() {
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
   db.exec(sqlOf('544_narrative_sections.sql'));
+  raiseEvidenceTables(db);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
   u.run(OTHER, 'founder', 'Bo Other', 'bo@example.test', 1002);
@@ -145,7 +147,7 @@ test('the newest version\'s mismatches name the figure and both sources; no vers
   assert.equal(n.compared, 1);
   assert.equal(n.mismatches.length, 1);
   assert.equal(n.mismatches[0].figure, 'MRR');
-  assert.match(n.mismatches[0].sentence, /\$18,400 in Narrative · traction\.takeaway, \$16,950 in Metrics · project_metrics\.mrr on 2026-09-30/);
+  assert.match(n.mismatches[0].sentence, /\$18,400 in Narrative · traction\.takeaway, \$16,950 in Metrics \(stated: manual\) · project_metrics\.mrr on 2026-09-30/);
 });
 
 test('the versions table: Audience, Based on, Read by deck and By; a version saved before 463 reads Not recorded (null)', async () => {

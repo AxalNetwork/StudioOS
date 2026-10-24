@@ -480,7 +480,7 @@ test('1: each record has a title, four facts with a value or a reason, its secti
   assert.deepEqual(team.facts.map((f: any) => [f.value, f.reason]), Array(4).fill([null, 'Not scored yet']));
   assert.equal(team.main[0].empty, 'Team is scored by a person, not by a check.');
   const reads = (await rec(db, 'fundraising-readiness', 'data_room')).body.main[0].rows;
-  assert.deepEqual(reads.map((r: any) => r.c), ['Counted', 'Partial'], 'the check\'s own reads');
+  assert.deepEqual(reads.map((r: any) => r.c), ['Missing', 'Missing'], 'ungranted files do not satisfy the readiness check');
 });
 
 test('1: Fit, Expires, Monthly and the data-room access read their stores', async () => {
@@ -564,8 +564,11 @@ test('4: only the venture\'s own writer reads a record, and another venture\'s i
   for (const m of MODULES) {
     const id = SECTIONS[m.slug].id;
     for (const who of [40, 41, 50, 20]) assert.equal((await rec(db, m.slug, id, { who })).status, 403, `${m.slug} as ${PEOPLE[who].role} ${who}`);
-    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await rec(db, m.slug, id, { who })).status, 200, `${m.slug} as ${who}`);
+    // D914 (#2698): an admin reads the narrative only after giving a reason (below).
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await rec(db, m.slug, id, { who })).status, m.slug === 'investor-narrative' && who === ADMIN ? 403 : 200, `${m.slug} as ${who}`);
   }
+  db.exec(`INSERT INTO narrative_read_reasons (project_id, reader_user_id, reader_kind, reason, expires_at) VALUES (${P}, ${ADMIN}, 'admin', 'Portfolio review', datetime('now', '+8 hours'))`);
+  assert.equal((await rec(db, 'investor-narrative', SECTIONS['investor-narrative'].id, { who: ADMIN })).status, 200, 'with a reason, the admin reads it');
   // Venture B's rows, read with ?project= the founder's own venture.
   db.exec(`INSERT INTO pitch_deck_share_tokens (id, deck_id, token_hash, expires_at, created_at) VALUES (45, 6, 'h45', '2999-01-01 00:00:00', '2026-10-01 10:00:00')`);
   db.exec(`INSERT INTO data_room_files (id, uid, project_id, name, r2_key) VALUES (15, 'f15', ${P_OTHER}, 'theirs.pdf', 'k15')`);
@@ -741,7 +744,8 @@ test('4: form-options and every action take the module\'s write gate, and an id 
       assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, 403, `${m.slug} form-options as ${who}`);
       for (const key of ACTIONS[m.slug]) assert.equal((await act(db, m.slug, id, key, {}, { who })).status, 403, `${m.slug} ${key} as ${who}`);
     }
-    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, m.slug === 'pitch-deck' && who === ADMIN ? 403 : 200, `${m.slug} form-options as ${who}`);
+    // D895: an admin writes no deck. D914: an admin lists the narrative's versions only with a reason.
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, (m.slug === 'pitch-deck' || m.slug === 'investor-narrative') && who === ADMIN ? 403 : 200, `${m.slug} form-options as ${who}`);
   }
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM activity_logs'), before, 'a refused action writes nothing');
   // Venture B's prospect (9) named in a holder's body, and its version (7) as Based on.
@@ -827,4 +831,12 @@ test('#2691: a narrative record compares current values, ignores stale check row
   assert.ok(r.body.pills.some((p:any)=>p.text==='Nothing compared yet'));
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get()?.n,before,'reads do not write');
  }finally{db.close();}
+});
+
+test('#2447: a manual score offers only evidence values its writer accepts',async()=>{
+ const db=await seeded();const team=(await rec(db,'fundraising-readiness','team')).body;
+ const choices=team.actions.find((a:any)=>a.key==='score').form.fields.find((f:any)=>f.key==='evidence').options;
+ assert.deepEqual(choices.map((x:any)=>x.value),['anecdote','pattern']);
+ for(const choice of choices) assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:choice.value,missing:''})).status,200);
+ assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:'stated',missing:''})).status,400);
 });

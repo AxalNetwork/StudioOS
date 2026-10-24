@@ -13,7 +13,7 @@
 export function roomStats(room) {
   if (!room) return [];
   const files = room.files || [];
-  const active = (room.grants || []).filter((g) => g.status === 'active');
+  const active = (room.grants || []).filter((g) => grantIsActive(g));
   const week = room.week || null;
   return [
     { k: 'Files', v: String(files.length), sub: `${(room.folders || []).length} folder${(room.folders || []).length === 1 ? '' : 's'}` },
@@ -96,10 +96,17 @@ function tierRefusal(item, now) {
  *     (`nobody`); and no one once `access_expires_at` has passed;
  *   - then the NDA gate: an NDA-marked item needs a live NDA.
  */
+export function grantIsActive(g, now = Date.now()) {
+  if (g.status !== 'active') return false;
+  if (!g.expires_at) return true;
+  const expires = expiryMs(g.expires_at);
+  return expires != null && expires > now;
+}
+
 export function accessNow(item, grants = [], now = Date.now()) {
   if (!item) return [];
   if (tierRefusal(item, now)) return [];
-  const active = grants.filter((g) => g.status === 'active');
+  const active = grants.filter((g) => grantIsActive(g, now));
   const tiered = item.access_tier === 'committed' ? active.filter((g) => g.committed) : active;
   return item.visibility === 'nda' ? tiered.filter((g) => g.nda_signed) : tiered;
 }
@@ -108,7 +115,7 @@ export function accessNow(item, grants = [], now = Date.now()) {
 export function noAccessReason(item, grants = [], now = Date.now()) {
   const refused = item ? tierRefusal(item, now) : null;
   if (refused) return refused;
-  const active = grants.filter((g) => g.status === 'active');
+  const active = grants.filter((g) => grantIsActive(g, now));
   if (!active.length) return 'No investor can open this — the room is not shared with anyone yet.';
   if (item?.access_tier === 'committed' && !active.some((g) => g.committed)) {
     return 'No investor can open this — it is for committed investors, and nobody with access has committed on this raise.';
