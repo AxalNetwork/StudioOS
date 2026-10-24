@@ -544,6 +544,9 @@ export function queueRows(events, { q = '', sort = 'starts' } = {}) {
 
 const ROLE_WORD = { admin: 'Admin', founder: 'Founder', partner: 'Operating Partner', investor: 'Investor', exploring: 'Explorer' };
 
+/** A member's role in the canvas's words; a role with no word is title-cased. */
+export const roleWord = (role) => ROLE_WORD[role] || titleCase(role) || NOT_RECORDED;
+
 /** Who may register (`mode`, `roles`, `personas`; a missing mode is "everyone", as the Worker reads it). */
 export function audienceLine(rules) {
   const mode = rules?.mode || 'everyone';

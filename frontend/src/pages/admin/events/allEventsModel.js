@@ -12,17 +12,23 @@
  * filtered list can be shared and the browser's back button undoes a choice:
  *   status=draft,published  visibility=public  when=upcoming|past|week|month|range
  *   from=YYYY-MM-DD  to=YYYY-MM-DD  price=free|paid  featured=yes|no
- *   view=week|full|attention  sort=starts|created|taken|fill|showup  per=25|50|100
+ *   host=<the host's name>
+ *   view=week|full|attention|paid_cancelled  sort=starts|created|taken|fill|showup  per=25|50|100
  * The old `?status=published` (one status, the Overview strip's door) still reads.
  *
- * WHAT IS NOT HERE, AND WHY: Type and Format wait for part 1 (#2699); the
- * host column, host search, the Host filter and "Cancelled with paid tickets"
- * wait for part 3's paged list (#2701); "Overdue" in Needs attention waits for
- * part 2's `submitted_at`.
+ * PART 3 (D918, #2701) gives each list row its host line (`host: { name, role }`,
+ * `venture: { name }`) and `waiting_hours`, so the search also matches hosts and
+ * ventures, the Host filter picks one host by name, and Needs attention lists
+ * Overdue (D918 §1: waiting more than 72 hours). The list rows carry no paid
+ * ticket count, so "Cancelled with paid tickets" reads the overview's
+ * `needs_attention` items of kind `paid_on_cancelled` (`paidOnCancelled`).
+ *
+ * WHAT IS NOT HERE, AND WHY: Type and Format wait for part 1 (#2699). "Studio
+ * team" as a host waits for the owner's O-STU.
  */
 
 import {
-  DAY_MS, STATUSES, countsFor, defaultOrder, hasEnded, isPaid, parseStamp, tableRow, titleOf,
+  DAY_MS, STATUSES, countsFor, defaultOrder, hasEnded, isPaid, parseStamp, roleWord, tableRow, titleOf,
 } from './eventsDeskModel.js';
 import { addDays, clashMap, isDayKey, mondayOf, monthOf, placeOf, todayKey } from './calendarModel.js';
 
@@ -50,6 +56,7 @@ export const LIST_VIEWS = [
   { key: 'week', label: 'This week' },
   { key: 'full', label: 'Full' },
   { key: 'attention', label: 'Needs attention' },
+  { key: 'paid_cancelled', label: 'Cancelled with paid tickets' },
 ];
 export const SORTS = [
   { key: 'starts', label: 'Starts' },
@@ -76,6 +83,7 @@ export function readQuery(search) {
     to: when === 'range' && isDayKey(q.get('to')) ? q.get('to') : null,
     price: one(q.get('price'), PRICES),
     featured: one(q.get('featured'), FEATURED),
+    host: String(q.get('host') || '').trim().slice(0, 200) || null,
     view: one(q.get('view'), LIST_VIEWS),
     sort: one(q.get('sort'), SORTS) || 'starts',
     per: PAGE_SIZES.includes(per) ? per : PAGE_SIZES[0],
@@ -101,7 +109,32 @@ export function writeQuery(search, patch) {
 }
 
 /** How many filters are set, for the phone's "Filters · [n]". The view and the sort are not filters. */
-export const filterCount = (f) => (f.statuses.length ? 1 : 0) + ['visibility', 'when', 'price', 'featured'].filter((k) => f[k]).length;
+export const filterCount = (f) => (f.statuses.length ? 1 : 0) + ['visibility', 'when', 'price', 'featured', 'host'].filter((k) => f[k]).length;
+
+/* ------------------------------------------------------------------ *
+ * The host line (D918's list rows)
+ * ------------------------------------------------------------------ */
+
+const hostName = (ev) => String(ev?.host?.name || '').trim();
+
+/**
+ * The canvas's host line under an event's title: 'Dana Ruiz · Founder ·
+ * Ledger tool'. An event with no host reads "Host not recorded"; a host with
+ * no name stored reads "Host's name not recorded". "Studio team" waits for O-STU.
+ */
+export function hostLine(ev) {
+  if (!ev?.host) return 'Host not recorded';
+  const name = hostName(ev) || 'Host\u2019s name not recorded';
+  const role = ev.host.role ? roleWord(ev.host.role) : null;
+  const venture = String(ev?.venture?.name || '').trim() || null;
+  return [name, role, venture].filter(Boolean).join(' · ');
+}
+
+/** The Host filter's choices: every host name in the list, once each, in alphabetical order. */
+export function hostOptions(events) {
+  const names = new Set((events || []).map(hostName).filter(Boolean));
+  return [...names].sort((a, b) => a.localeCompare(b)).map((n) => ({ key: n, label: n }));
+}
 
 /* ------------------------------------------------------------------ *
  * When
@@ -171,42 +204,77 @@ export function isLowSignups(ev, join, now) {
   return f.taken === null ? null : f.taken < f.cap / 4;
 }
 
+/** D918 §1: a review is overdue after 72 hours (`SLA_PAST_HOURS`), counted by the Worker into `waiting_hours`. */
+export const OVERDUE_HOURS = 72;
+
+export function isOverdue(ev) {
+  const h = Number(ev?.waiting_hours);
+  return ev?.status === 'pending_review' && ev?.waiting_hours !== null && ev?.waiting_hours !== undefined && Number.isFinite(h) && h > OVERDUE_HOURS;
+}
+
 /**
- * Needs attention (EV6's view): the reasons the page can work out, for events
- * that have not started yet. Full and Low sign-ups need the seat counts; Clash
- * is D915 §2's rule. Overdue waits for part 2's `submitted_at`, and Paid
- * tickets to refund for part 3.
+ * Needs attention (EV6's view): the reasons the page can work out. Overdue
+ * (D918's `waiting_hours`) whatever the start; then, for events that have not
+ * started yet, Full and Low sign-ups, which need the seat counts, and Clash,
+ * D915 §2's rule. Paid tickets on a cancelled event is its own view.
  */
 export function attentionReasons(ev, { join, clashes, now }) {
   if (ev?.status === 'cancelled') return [];
+  const out = isOverdue(ev) ? [{ key: 'overdue', word: 'Overdue' }] : [];
   const start = parseStamp(ev?.starts_at);
-  if (start === null || start < now) return [];
-  const out = [];
+  if (start === null || start < now) return out;
   if (ev.status === 'published' && isFull(ev, join, now) === true) out.push({ key: 'full', word: 'Full' });
   if (clashes.get(String(ev.id))?.size) out.push({ key: 'clash', word: 'Clash' });
   if (isLowSignups(ev, join, now) === true) out.push({ key: 'low', word: 'Low sign-ups' });
   return out;
 }
 
-export const ATTENTION_NOTE = 'Needs attention lists what this page can work out: full events, clashes and low sign-ups. Overdue reviews wait for the submission time, which is not recorded yet.';
-export const COUNTS_NEEDED = 'Full and Low sign-ups need seat counts, which could not be read, so only clashes are listed.';
+export const ATTENTION_NOTE = 'Needs attention lists overdue reviews, full events, clashes and low sign-ups. Paid tickets on cancelled events have their own view.';
+export const COUNTS_NEEDED = 'Full and Low sign-ups need seat counts, which could not be read, so only overdue reviews and clashes are listed.';
+
+/* ------------------------------------------------------------------ *
+ * Cancelled with paid tickets (the overview read's needs_attention)
+ * ------------------------------------------------------------------ */
+
+export const PAID_CLAIM = 'That is not a claim that no cancelled event has paid tickets.';
+export const PAID_NOTE = 'Paid tickets are not refunded automatically. HQ refunds them in Revenue › Billing.';
+
+/**
+ * Each cancelled event's paid ticket count, from `GET /api/admin/events/overview`'s
+ * `needs_attention.items` of kind `paid_on_cancelled`. A failed read, or a
+ * `needs_attention` block that says it is unreadable, is `unreadable`, never
+ * an empty list.
+ */
+export function paidOnCancelled(read) {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  const block = read.status === 'ready' ? read.data?.needs_attention : null;
+  if (!block || block.available === false || block.unreadable || !Array.isArray(block.items)) return { state: 'unreadable', reason: PAID_CLAIM };
+  const byId = new Map(block.items.filter((i) => i?.kind === 'paid_on_cancelled' && Number(i.paid_tickets) > 0)
+    .map((i) => [String(i.event_id), Number(i.paid_tickets)]));
+  return { state: 'ready', byId };
+}
+
+export const paidTicketsText = (n) => `${Number(n).toLocaleString('en-US')} paid ${n === 1 ? 'ticket' : 'tickets'}`;
 
 /* ------------------------------------------------------------------ *
  * The rows
  * ------------------------------------------------------------------ */
 
-const matchesTitle = (ev, q) => {
+/** The search: the title, the host's name or the venture's name, as D918's `q` matches them. */
+export const matchesSearch = (ev, q) => {
   const needle = String(q || '').trim().toLowerCase();
-  return !needle || titleOf(ev).toLowerCase().includes(needle);
+  if (!needle) return true;
+  return [titleOf(ev), hostName(ev), String(ev?.venture?.name || '')].some((s) => s.toLowerCase().includes(needle));
 };
 
-/** Whether an event passes the filters: Status (any of those picked), Visibility, When, Price and Featured. The Calendar uses the same test. */
+/** Whether an event passes the filters: Status (any of those picked), Visibility, When, Price, Featured and Host. The Calendar uses the same test. */
 export function matchesFilters(ev, f, now) {
   return (!f.statuses?.length || f.statuses.includes(ev?.status))
     && (!f.visibility || ev?.visibility === f.visibility)
     && whenMatches(ev, f.when, f, now)
     && priceMatches(ev, f.price)
-    && (!f.featured || Boolean(ev?.featured) === (f.featured === 'yes'));
+    && (!f.featured || Boolean(ev?.featured) === (f.featured === 'yes'))
+    && (!f.host || hostName(ev) === f.host);
 }
 
 /** Unknown last, then the default order among equals. */
@@ -228,13 +296,15 @@ function byFigure(rows, pick, now) {
  * latest); Created is newest first; Seats taken, Fill and Show-up are highest
  * first, with events whose figure is not known last.
  */
-export function filteredRows(events, { q = '', query, join, now }) {
+export function filteredRows(events, { q = '', query, join, now, paid = null }) {
   const f = query;
   const clashes = clashMap(events);
-  let rows = (events || []).filter((ev) => matchesTitle(ev, q) && matchesFilters(ev, f, now));
+  let rows = (events || []).filter((ev) => matchesSearch(ev, q) && matchesFilters(ev, f, now));
   if (f.view === 'week') rows = rows.filter((ev) => whenMatches(ev, 'week', {}, now));
   if (f.view === 'full') rows = rows.filter((ev) => isFull(ev, join, now) === true);
   if (f.view === 'attention') rows = rows.filter((ev) => attentionReasons(ev, { join, clashes, now }).length);
+  // Not read yet, or unreadable: no rows, and the page says why; never "none".
+  if (f.view === 'paid_cancelled') rows = paid?.state === 'ready' ? rows.filter((ev) => ev?.status === 'cancelled' && paid.byId.has(String(ev.id))) : [];
   const fig = (ev) => figures(ev, join, now);
   if (f.sort === 'created') return [...rows].sort((a, b) => (parseStamp(b.created_at) ?? -Infinity) - (parseStamp(a.created_at) ?? -Infinity));
   if (f.sort === 'taken') return byFigure(rows, (ev) => fig(ev).taken, now);
