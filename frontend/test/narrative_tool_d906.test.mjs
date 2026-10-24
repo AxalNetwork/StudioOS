@@ -36,8 +36,16 @@ const version = (n, oneLiner) => ({
 });
 const MODULE = { module: { slug: 'investor-narrative', name: 'Investor narrative', records_title: 'Versions' }, card: { state: 'empty', reason: 'No narrative saved yet.' }, records: { cols: [], rows: [], total: 0, page: 1, page_size: 25 } };
 
+// D908's compare (`GET /narrative/compare`), which D909 draws instead of two record reads.
+const COMPARE = { a: 3, b: 4, pairs: [
+  { key: 'problem', label: 'Problem', a: { body: 'Books close by hand.' }, b: { body: 'Books close by hand.' }, state: 'same' },
+  { key: 'traction', label: 'Traction', a: { body: null }, b: { body: 'Pilots convert to paid.' }, state: 'changed' },
+  { key: 'team', label: 'Team', a: { body: null }, b: { body: null }, state: 'not_recorded' },
+] };
+
 function handler(url) {
   if (url.includes('/form-options')) return response(OPTIONS);
+  if (url.includes('/narrative/compare?')) return response(COMPARE);
   const m = url.match(/\/records\/([^/?]+)\?/);
   if (m) return /^\d+$/.test(m[1]) ? response(version(m[1], `Close the month in a day (v${m[1]}).`)) : response({ detail: 'Not found' }, 404);
   if (url.includes('/cycles/raise/modules/')) return response(MODULE);
@@ -165,10 +173,11 @@ test('Story reads the version the address names, and draws Not recorded, never a
 test('Versions lists every version and compares the newest with the one before', async () => {
   const view = await mounted('/raise/investor-narrative/versions?project_id=3');
   try {
-    assert.ok(view.requests.some((u) => u.includes('/records/4?project=3')));
-    assert.ok(view.requests.some((u) => u.includes('/records/3?project=3')));
+    // D909: through D908's compare, which replaced D906's two record reads.
+    assert.ok(view.requests.some((u) => u.includes('/cycles/raise/narrative/compare?project=3&a=3&b=4')), view.requests.join('\n'));
+    assert.ok(!view.requests.some((u) => u.includes('/records/')), 'no record is read to compare');
     assert.ok(view.testIds().includes('narrative-compare'));
-    assert.ok(view.testIds().includes('narrative-compare-changed'), 'the one-liner differs between v4 and v3');
+    assert.ok(view.testIds().includes('narrative-compare-changed'), 'Traction differs between v3 and v4');
     for (const v of ['4', '3', '2']) assert.ok(view.hrefs().includes(`${HOME_PATH}/${v}?project_id=3`), v);
   } finally { await view.close(); }
 });
