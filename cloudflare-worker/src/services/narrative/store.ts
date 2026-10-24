@@ -217,7 +217,7 @@ async function part<T extends object>(what: string, read: () => Promise<T>): Pro
   try {
     return { state: 'ok', ...(await read()) };
   } catch (e) {
-    console.warn(`[narrative] ${what} unreadable:`, (e as Error)?.message);
+    console.warn('[narrative] %s unreadable:', what, (e as Error)?.message);
     return { state: 'unreadable' };
   }
 }
