@@ -14,6 +14,7 @@ Builds the deck payload from the venture's real records and renders it.
 | `branding.ts` | Logo, colours, lock-up. |
 | `recommend.ts` | Slide-level suggestions. |
 | `methods.ts` | Shared helpers. |
+| `sources.ts` | D896 (#2675): `DECK_SOURCES`, one read-only adapter per row of #2434's sources table, a fixed slot list, `sourceAndGrade` (the one origin → Source and grade mapping), coverage, snapshot hashes and the binding compare behind `POST /api/decks/:id/refresh`. Writes nothing; no model runs. |
 
 ## The rule
 
