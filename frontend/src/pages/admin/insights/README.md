@@ -19,8 +19,9 @@ keeps the query and hash and adds `?moved=held-insights` for the one-line notice
 
 - The page makes one read, `GET /api/admin/insights` (#2660, any admin), with
   the URL's range, profile, country and compare; the group lightbox makes the
-  same read with `group=<role>`. A plain Admin asking for another scope sees
-  INS10 and no read is made.
+  same read with `group=<role>`. A Super Admin's page also reads the Scope
+  select's list, once. A plain Admin asking for another scope sees INS10 and
+  no read is made.
 - A read that failed or has not answered is never drawn as zero. A block whose
   store failed shows the Worker's sentence; one nothing records says "Not
   recorded" with its reason.
@@ -29,4 +30,8 @@ keeps the query and hash and adds `?moved=held-insights` for the one-line notice
 - The export is the Worker's (#2661, `POST /api/admin/insights/export`): a
   logged CSV or PDF of the same read, behind a signed 24-hour link. The page
   makes no file in the browser. "This group only" needs an open group.
-- #2662 adds the Super Admin's subsidiary scope.
+  The selected subsidiary scope travels through the export read and audit,
+  so the file matches the displayed database and keeps the read's gates.
+- #2662 (D893 S08): the Super Admin's Scope select lists HQ-held and each
+  deployed subsidiary (`GET /api/admin/insights/scopes`); a pick sets
+  `?scope=<code>` and the read is made from that subsidiary's own database.

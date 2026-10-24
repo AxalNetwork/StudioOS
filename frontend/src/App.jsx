@@ -399,7 +399,9 @@ const FounderBuildThisWeek = lazy(() => import('./pages/founder/FounderBuildThis
 const FounderBuildRoadmap = lazy(() => import('./pages/founder/FounderBuildRoadmap'));
 const FounderBuildKpi = lazy(() => import('./pages/founder/FounderBuildKpi'));
 const FounderBuildCadence = lazy(() => import('./pages/founder/FounderBuildCadence'));
-const FounderRaisePitch = lazy(() => import('./pages/founder/FounderRaisePitch'));
+// D894 (#2434): the Pitch deck studio, its home and Share & analytics tabs, and the old editor address's redirect.
+const PitchStudio = lazy(() => import('./pages/raise/pitch/PitchStudio'));
+const PitchWorkspaceMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceMoved'));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -2903,13 +2905,19 @@ function AppInner() {
           /compliance) stay intact for the investor/partner personas that share
           them; /build/financials and /build/captable forward to Capital's tabs
           (#2339, #2340). */}
+      {/* D894 (#2434) — the Pitch deck studio. Its home, Review and Share &
+          analytics tabs are the studio's own; the deck builder moved to
+          /raise/pitch/edit until #2434 part 4 builds the editor, and the old
+          ?mode=workspace address redirects there with a moved notice. */}
        <Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder']),
          new URLSearchParams(location.search).get('mode') === 'workspace'
-           ? founderWorkspace('raise', founderEditor(<PitchWorkspacePage />))
-           : <FounderRaisePitch />)} />
+           ? <PitchWorkspaceMoved />
+           : founderEditor(<PitchStudio tab="decks" />))} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
+      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
+      <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />
       <Route path="/raise/pitch/positioning" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
-      <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
+      <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="review" />))} />
       <Route path="/raise/capital" element={guard(['admin', 'founder'],
         new URLSearchParams(location.search).get('mode') === 'workspace'
           ? founderWorkspace('raise', founderEditor(<CapitalWorkspacePage />))

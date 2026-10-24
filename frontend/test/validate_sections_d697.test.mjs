@@ -224,7 +224,7 @@ test('2: New theme is drawn only once its form is registered; no parts.unthemed 
   const noPanel = ssr(h(PainThemesSection, { parts: rest, onExport: noop, onAssign: noop }));
   assert.doesNotMatch(noPanel, /Unthemed quotes/);
   assert.match(without, /Export map/);
-  assert.match(without, /href="\/raise\/pitch\?mode=workspace"[^>]*>Open the Problem slide</);
+  assert.match(without, /href="\/raise\/pitch\/edit"[^>]*>Open the Problem slide</);
   assert.match(without, /title="These themes already feed the deck’s Problem slide — open the deck to read it\."/);
 });
 

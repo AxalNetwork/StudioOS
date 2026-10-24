@@ -135,8 +135,9 @@ const PROFILES = {
     actions: 'frontend/src/workspaces/founderZoneActions.js',
     // 30 → 26 (D704): the four `validate/*` zones are retired; see `excluded`.
     // 26 → 25: the owner removed `raise/liquidity` (2026-10-20), page and all.
-    zones: 25,
-    mounted: 25,
+    // 25 → 24 (D894): `raise/pitch` is the Pitch deck studio, excluded below.
+    zones: 24,
+    mounted: 24,
     bodies: { ...RESEARCH_BODIES, ...NETWORK_BODIES.founder },
     // EMPTY, AND THIS TIME THE COUNT PROVES IT RATHER THAN AGREEING WITH IT.
     // The four `validate/*` zones sat here for one release, and the note that
@@ -165,8 +166,9 @@ const PROFILES = {
     //
     // The count moved 26 → 30 in the same commit, and back to 26 when D704
     // retired the four zones, which now sit here by name (decision 4): the
-    // canvas still draws them, and no table may declare them.
-    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity'],
+    // canvas still draws them, and no table may declare them. `raise/pitch`
+    // joined them with D894: its own canvas draws the studio's tabs instead.
+    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity', 'raise/pitch'],
     // Counts welded onto a real filter — `All 14`, `All 14 mo`, `Aug 2026`.
     samples: /\b(14|2026)\b/,
     // Founder canvas routes are the live routes.

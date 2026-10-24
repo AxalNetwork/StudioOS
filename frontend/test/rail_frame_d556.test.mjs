@@ -111,7 +111,8 @@ test('every file that mounts <WorkerRail> puts it in a frame', () => {
   // D661 retired four self-framed desks; the owner also removed the Perks rail,
   // and on 2026-10-20 the Raise · Liquidity zone's self-framed rail. #2343
   // took Grow · Brand's: its read is a section of the brand builder now.
-  assert.ok(by.frame >= 18 && by.shell >= 13 && by.self >= 33 && !by.component, JSON.stringify(by));
+  // D894 retired the self-framed Raise · Pitch page; the studio uses the frame.
+  assert.ok(by.frame >= 18 && by.shell >= 13 && by.self >= 32 && !by.component, JSON.stringify(by));
 });
 
 test('WorkspaceShell draws no frame of its own; it uses the shared one', () => {

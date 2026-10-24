@@ -102,7 +102,7 @@ test('a refusal is the Worker\'s sentence; anything else is one line, never the 
 
 test('the page asks the Worker for the file, and makes none in the browser', () => {
   const src = readFileSync(resolve(root, 'frontend/src/pages/admin/insights/AdminInsights.jsx'), 'utf8');
-  assert.match(src, /insightsApi\.insightsExport\(exportBody\(\{ what, format, filters, group: groupKey \}\)\)/);
+  assert.match(src, /insightsApi\.insightsExport\(exportBody\(\{ what, format, filters, group: groupKey, scope: scopeParam\(scope\) \}\)\)/);
   assert.doesNotMatch(src, /createObjectURL|new Blob|figuresCsv/);
   assert.match(src, /data-testid="insights-group-export"/, 'the group lightbox opens the export on the group');
   const model = readFileSync(resolve(root, 'frontend/src/pages/admin/insights/insightsModel.js'), 'utf8');

@@ -283,7 +283,9 @@ test('the country filter offers the counted countries, and keeps the chosen one'
 
 test('INS10: a plain Admin asking for another studio\'s scope gets no permission; HQ gets its own', () => {
   assert.equal(scopeState('?scope=north', false).kind, 'noperm');
-  assert.equal(scopeState('?scope=north', true).kind, 'unknown');
+  // D893 S08 (#2662): a Super Admin waits for the scopes list, then a code it does not hold falls back.
+  assert.equal(scopeState('?scope=north', true).kind, 'pending');
+  assert.equal(scopeState('?scope=north', true, []).kind, 'unknown');
   assert.equal(scopeState('?scope=hq', false).kind, 'own');
   assert.equal(scopeState('', false).kind, 'own');
 });
@@ -324,6 +326,7 @@ test('INS5: the export asks the Worker for the page\'s filters, and the group on
   const filters = { ...F, profile: 'founder', country: 'Canada', compare: true };
   assert.deepEqual(exportBody({ what: 'page', format: 'csv', filters, group: 'founder' }), { what: 'page', format: 'csv', range: '8w', profile: 'founder', country: 'Canada' });
   assert.deepEqual(exportBody({ what: 'group', format: 'pdf', filters: { ...F, range: 'year' }, group: 'investor' }), { what: 'group', format: 'pdf', range: 'year', group: 'investor' });
+  assert.deepEqual(exportBody({ what: 'page', format: 'csv', filters: F, scope: 'north' }), { what: 'page', format: 'csv', range: F.range, scope: 'north' });
   assert.match(rangeLine(ok(), Date.parse('2026-10-24T12:00:00Z')), /^8 weeks · 31 Aug 2026 to 24 Oct 2026$/);
   assert.equal(dayLabel('2026-08-31'), '31 Aug');
 });
