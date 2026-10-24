@@ -68,10 +68,11 @@ function DeskTabs({ waiting }) {
 }
 
 function AdminEventsPageBody() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const tab = tabFor(pathname);
   const eventId = eventIdFor(pathname);
-  const reads = useEventsDesk(tab, eventId);
+  // D919: "Cancelled with paid tickets" is the one view that needs the overview read.
+  const reads = useEventsDesk(tab, eventId, { paidView: new URLSearchParams(search).get('view') === 'paid_cancelled' });
   const now = Date.now();
   const waiting = readyList(reads.queue)?.length || 0;
 

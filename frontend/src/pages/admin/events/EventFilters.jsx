@@ -10,9 +10,11 @@ import { INPUT } from './parts';
  * is 44 px tall. The address holds what is picked (`allEventsModel.readQuery`);
  * `onChange(patch)` writes it back.
  *
- * `fields` names the filters a tab draws: All events draws all five, the
- * Calendar draws Status, Visibility and Price (When is the calendar itself,
- * and Featured is not on EV8). Type and Format wait for part 1, Host for part 3.
+ * `fields` names the filters a tab draws: All events draws all six, the
+ * Calendar draws Status, Visibility, Price and Host (When is the calendar
+ * itself, and Featured is not on EV8). Host lists the host names in the list
+ * (`hosts`, from part 3's rows); "Studio team" waits for O-STU. Type and
+ * Format wait for part 1.
  */
 
 export const CONTROL = `${INPUT} max-sm:min-h-[44px]`;
@@ -65,7 +67,7 @@ function Pick({ label, value, options, onChange, testId }) {
   );
 }
 
-export default function EventFilters({ query, onChange, fields = ['status', 'visibility', 'when', 'price', 'featured'] }) {
+export default function EventFilters({ query, onChange, hosts = [], fields = ['status', 'visibility', 'when', 'price', 'featured'] }) {
   const has = (f) => fields.includes(f);
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="events-filters">
@@ -86,6 +88,9 @@ export default function EventFilters({ query, onChange, fields = ['status', 'vis
       ) : null}
       {has('price') ? <Pick label="Price" value={query.price} options={PRICES} onChange={(v) => onChange({ price: v })} testId="events-filter-price" /> : null}
       {has('featured') ? <Pick label="Featured" value={query.featured} options={FEATURED} onChange={(v) => onChange({ featured: v })} testId="events-filter-featured" /> : null}
+      {has('host') && (hosts.length || query.host) ? (
+        <Pick label="Host" value={query.host} options={query.host && !hosts.some((h) => h.key === query.host) ? [...hosts, { key: query.host, label: query.host }] : hosts} onChange={(v) => onChange({ host: v })} testId="events-filter-host" />
+      ) : null}
     </div>
   );
 }
