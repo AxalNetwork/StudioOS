@@ -154,8 +154,8 @@ adminEvents.get('/analytics', async (c) => {
 
   let events: any[] | null = null;
   const now = Date.now();
-  // Event timestamps without an offset are stored as UTC, like D1 timestamps.
-  const timestamp = (value: unknown) => typeof value === 'string' && value.trim() ? Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : value.replace(' ', 'T') + 'Z') : Number.NaN;
+  // The editor's localInputToIso writes UTC instants. Legacy offset-free D1 timestamps are UTC.
+  const timestamp = (value: unknown) => typeof value === 'string' && value.trim() ? Date.parse(/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(value) ? value : value.replace(' ', 'T') + 'Z') : Number.NaN;
   try {
     const rows = await c.env.DB.prepare(
       `SELECT e.id, e.slug, e.title, e.status, e.starts_at, e.ends_at, e.capacity, e.featured,
@@ -174,7 +174,8 @@ adminEvents.get('/analytics', async (c) => {
       const registrations = Number(r.registrations || 0);
       const attended = Number(r.attended || 0);
       const capacity = r.capacity != null ? Number(r.capacity) : null;
-      const endedAt = r.ends_at != null ? timestamp(r.ends_at) : timestamp(r.starts_at) + 24 * 60 * 60 * 1000;
+      const endMissing = r.ends_at == null || (typeof r.ends_at === 'string' && !r.ends_at.trim());
+      const endedAt = endMissing ? timestamp(r.starts_at) + 24 * 60 * 60 * 1000 : timestamp(r.ends_at);
       return {
         id: Number(r.id),
         slug: r.slug,
