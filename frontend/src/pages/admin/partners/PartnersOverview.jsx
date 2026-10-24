@@ -2,27 +2,27 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Chart, ChartTable, Legend, Unrecorded, actionPrimary } from '../../../ui';
 import {
-  AGREEMENT_BANNER, EMPTY_LINE, EMPTY_TITLE, LIST_CLAIM, NEEDS_YOU_SHOWN, READING, agreementReady, dealTiles, dealsByTypeState,
-  invitationTiles, invitationsAtStage, isFirstUse, stageChart, weeklyInvitations, weeklyRedemptions,
+  AGREEMENT_BANNER, EMPTY_LINE, EMPTY_TITLE, NEEDS_YOU_SHOWN, OVERVIEW_STALE, READING, dealTiles, dealsByTypeState,
+  invitationTiles, invitationsAtStage, isFirstUse, isStale, overviewAgreement, stageChart, weeklyInvitations, weeklyRedemptions,
 } from './partnersDeskModel';
 import { AMBER, CARD, Card, EYE, Failed, H2, LINK, SUB, Tile } from './parts';
 
 /**
  * D923 (#2370), completed by D929 (#2725) — Overview (PI1; PI11a on a phone,
- * PI12 in dark), on D923's reads until part 4's overview read lands:
- *   · tile row 1 from R1 (open, lapsed, signed in 90 days, the median days
- *     from first send to signed), under Guards L and I;
+ * PI12 in dark). Every tile, Needs-you row and chart comes from part 4's
+ * overview read, `GET /api/admin/partners/overview` (D927), which counts
+ * every row in D1, so nothing here is capped or fanned out:
+ *   · tile row 1: open, lapsed, signed in 90 days, and the median days from
+ *     first send to signed;
  *   · tile row 2: active deals and those ending within 30 days, awaiting
- *     signature, referral redemptions in 90 days under Guard F, and sends
- *     that failed as "Not read here yet";
- *   · Needs you, only the rows whose data exists, seven at a time, "Show all"
- *     expanding in place; cards on a phone;
- *   · C1–C4, each a block in D893's four states with "View as table": C1 and
- *     C2 from R1, C3 from the six deal lists, C4 from the fan-out. A C1 bar
+ *     signature, referral redemptions in 90 days, and sends that failed;
+ *   · Needs you, every row kind the read returns, each with its one action,
+ *     seven at a time, "Show all" expanding in place; cards on a phone;
+ *   · C1–C4, each a block in D893's states with "View as table". A C1 bar
  *     opens Invitations at its stage, a C3 segment Deals of its type and
  *     state;
- *   · PI9's banner while the agreement-ready rule says the Partner Services
- *     agreement is not ready, and PI9b's first use.
+ *   · PI9's banner while the Worker's agreement-ready rule says the Partner
+ *     Services agreement is not ready, and PI9b's first use (from R1).
  * The doors below are written out (`to="…"`) so the reachability walk finds
  * Firm links, whose only door is this row.
  */
@@ -30,17 +30,24 @@ import { AMBER, CARD, Card, EYE, Failed, H2, LINK, SUB, Tile } from './parts';
 /** One Needs-you row's action. Each target is a literal door, by kind. */
 function RowAction({ row, onResend }) {
   const cls = `${LINK} whitespace-nowrap`;
+  // A lapsed or unsent invitation outside the newest 200 opens its record instead of the Resend dialog.
+  if ((row.kind === 'Lapsed' || row.kind === 'Not sent') && !row.action.resend) {
+    return <Link to={row.action.to} className={cls} data-testid={`partners-needs-${row.key}-go`}>Open invitation</Link>;
+  }
   switch (row.kind) {
     case 'Lapsed':
+    case 'Not sent':
       return <button type="button" className={cls} onClick={() => onResend(row.action.resend)} data-testid={`partners-needs-${row.key}-go`}>Resend</button>;
     case 'Agreement':
       return <Link to="/admin/contracts?tab=templates" className={cls}>Open in Contracts</Link>;
     case 'Term ending':
       return <Link to={`/admin/partner-invitations/deals/${row.dealId}`} className={cls}>Open deal</Link>;
+    case 'Due diligence':
+      return <Link to={row.action.to} className={cls} data-testid={`partners-needs-${row.key}-go`}>Open in Due diligence</Link>;
     case 'Firms':
       return <Link to="/admin/partner-invitations/firm-links" className={cls} data-testid="partners-needs-firms-go">Open firm links</Link>;
     case 'Rev-share':
-      return <Link to="/admin/partner-invitations/referrals" className={cls}>Open Referrals</Link>;
+      return <Link to={row.action.to} className={cls}>Open Referrals</Link>;
     default:
       return null;
   }
@@ -75,7 +82,6 @@ function NeedsYou({ needs, onResend, onRetry }) {
           {`Showing ${NEEDS_YOU_SHOWN} of ${needs.rows.length.toLocaleString('en-US')} · Show all`}
         </button>
       ) : null}
-      {needs.settled ? <p className={`m-0 ${SUB}`}>Sends that failed and due diligence are not checked here yet.</p> : null}
     </Card>
   );
 }
@@ -142,30 +148,27 @@ function ClosedLine({ closed }) {
 }
 
 /** C1–C4 in a 2×2 grid; one chart per card on a phone (PI11a). */
-function Charts({ reads, fan, now }) {
+function Charts({ reads }) {
   const navigate = useNavigate();
-  const c1 = stageChart(reads.invitations, { proposed: reads.deals.proposed, now });
-  const c2 = weeklyInvitations(reads.invitations, { now });
-  const c3 = dealsByTypeState({ deals: reads.deals, invitations: reads.invitations, now });
-  const c4 = weeklyRedemptions(fan, { now });
+  const c1 = stageChart(reads.overview);
   return (
     <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2" data-testid="partners-charts">
       <ChartBlock b={c1} onRetry={reads.reload} onSelect={(stage) => navigate(invitationsAtStage(stage))}>
         <ClosedLine closed={c1.closed || []} />
       </ChartBlock>
-      <ChartBlock b={c2} onRetry={reads.reload} />
-      <ChartBlock b={c3} onRetry={reads.reload} onSelect={(row, part) => { if (part.to) navigate(part.to); }} />
-      <ChartBlock b={c4} onRetry={reads.reload} />
+      <ChartBlock b={weeklyInvitations(reads.overview)} onRetry={reads.reload} />
+      <ChartBlock b={dealsByTypeState(reads.overview)} onRetry={reads.reload} onSelect={(row, part) => { if (part.to) navigate(part.to); }} />
+      <ChartBlock b={weeklyRedemptions(reads.overview)} onRetry={reads.reload} />
     </div>
   );
 }
 
-export default function PartnersOverview({ reads, needs, fan, now, actions }) {
-  const ready = agreementReady(reads.template);
+export default function PartnersOverview({ reads, needs, actions }) {
+  const agreement = overviewAgreement(reads.overview);
   const first = isFirstUse(reads.invitations);
   return (
     <div className="flex flex-col gap-3.5" data-testid="partners-overview">
-      {ready.state === 'not_ready' ? (
+      {agreement?.state === 'not_ready' ? (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2.5 rounded-[10px] border border-amber-300 bg-amber-50 px-3.5 py-2.5 text-[13px] font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="partners-agreement-banner">
           <span>{AGREEMENT_BANNER}</span>
           <Link to="/admin/contracts?tab=templates" className="font-bold underline">Open in Contracts</Link>
@@ -182,20 +185,20 @@ export default function PartnersOverview({ reads, needs, fan, now, actions }) {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="partners-tiles-invitations">
-            {invitationTiles(reads.invitations, { proposed: reads.deals.proposed, now }).map((t) => <Tile key={t.key} t={{ ...t, reason: t.reason || LIST_CLAIM }} onRetry={reads.reload} />)}
+            {invitationTiles(reads.overview).map((t) => <Tile key={t.key} t={t} onRetry={reads.reload} />)}
           </div>
           <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="partners-tiles-deals">
-            {dealTiles({ deals: reads.deals, invitations: reads.invitations, fan, now }).map((t) => <Tile key={t.key} t={{ ...t, reason: t.reason || LIST_CLAIM }} onRetry={reads.reload} />)}
+            {dealTiles(reads.overview).map((t) => <Tile key={t.key} t={t} onRetry={reads.reload} />)}
           </div>
-          {reads.invitations.status === 'error' && reads.invitations.data ? (
-            <p className={`m-0 text-[12px] font-semibold ${AMBER}`}>Could not refresh the invitations. The tiles above are from the last read.</p>
+          {isStale(reads.overview) ? (
+            <p className={`m-0 text-[12px] font-semibold ${AMBER}`} data-testid="partners-overview-stale">{OVERVIEW_STALE}</p>
           ) : null}
         </>
       )}
 
       <NeedsYou needs={needs} onResend={actions.resend} onRetry={reads.reload} />
 
-      {first ? null : <Charts reads={reads} fan={fan} now={now} />}
+      {first ? null : <Charts reads={reads} />}
     </div>
   );
 }

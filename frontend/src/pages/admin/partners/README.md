@@ -18,6 +18,8 @@ over its tab, and the dialogs.
   (PI9e) and first use (PI9b). Each chart is a block in D893's four states
   with "View as table", drawn with `../../../ui/Charts.jsx`. A C1 bar opens
   Invitations at `?stage=`, a C3 segment Deals at `?type=&state=`.
+  Every tile, Needs-you row and chart reads part 4's overview read
+  (`GET /api/admin/partners/overview`, D927; D929 §7); only first use reads R1.
   Overview's Needs-you row is Firm links' only door.
 - `PartnersInvitations.jsx` — Invitations (PI2): the table under Guards L and
   I, its toolbar, the row menu and the pager.
@@ -58,6 +60,6 @@ over its tab, and the dialogs.
 - Every dialog is a `Lightbox` that says only what the Worker does. A result
   or a refusal sits inside it until Done: no toast, no timer.
 - Nothing D923 §3 lists under "Not drawn now" is drawn, except C1–C4, which
-  D929 draws on these reads until part 4's overview read: no Email column,
+  D929 draws from part 4's overview read: no Email column,
   no CSV, no offer text, no Adjust terms, no step dates beyond the record's
   own, no history beyond one line.

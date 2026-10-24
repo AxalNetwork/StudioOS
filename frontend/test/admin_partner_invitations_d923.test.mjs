@@ -31,15 +31,14 @@ import { codeOnly } from './_codeOnly.mjs';
 import PartnerInvitations from '../src/pages/admin/PartnerInvitations.jsx';
 import { parseStamp as uiParseStamp } from '../src/ui/parseStamp.js';
 import {
-  AGREEMENT_BANNER, AGREEMENT_LAPSE_WARNING, CAPS, COMMUNITY_PATH, DEAL_NOT_ACTIVE, DEAL_STATE_KEYS, EMPTY_TITLE,
-  FIRM_LINKS_PATH, FOUNDER_NO_PLAN, FROZEN, INVITATION_CLOSED, LINE, MOVED_LINE, MOVED_PATH, NOT_IN_READ, NOT_READ_YET,
-  STORED_EXPIRED_WORD, TABS, TITLE, TRY_AGAIN, TYPE_FULL, WITHIN_DEALS, WITHIN_INVITATIONS, agreementReady,
-  allTimeRedemptions, cameFromOldAddress, countClosing30, countLast90, countOpenWindows, createdLines, day,
-  daysLeft, daysUsed, ddFor, dealFromSearch, dealState, dealTiles, dealTypeWord, dealsCount, dotsLabel, duplicateCheck,
-  expiresCell, fanFigure, fanOut, filterInvitations, firmCounts, invitationRow, invitationTiles, isCompleteEmail,
-  isFirstUse, isLapsed, memberCheck, needsYou, noMatchLine, obligationsLine, offeredTypes, pageOf, parseStamp, rangeText,
-  redemptionDealSet, redemptionRow, refusalText, resendCopy, resentAt, revokeCopy, revokeVariant, revokedLine, routeFor,
-  signingLink, stageOf, tabCounts, tabPath, terminateCopy, terminateReady, termText, tiersText, toggleType, windowOf, withoutMoved,
+  AGREEMENT_BANNER, AGREEMENT_LAPSE_WARNING, CAPS, COMMUNITY_PATH, DEAL_NOT_ACTIVE, DEAL_STATE_KEYS, EMPTY_TITLE, FIRM_LINKS_PATH, FOUNDER_NO_PLAN,
+  FROZEN, INVITATION_CLOSED, LINE, MOVED_LINE, MOVED_PATH, NOT_IN_READ, NOT_READ_YET, STORED_EXPIRED_WORD, TABS, TITLE, TRY_AGAIN, TYPE_FULL,
+  WITHIN_DEALS, WITHIN_INVITATIONS, agreementReady, allTimeRedemptions, cameFromOldAddress, countClosing30, countLast90, countOpenWindows,
+  createdLines, day, daysLeft, daysUsed, ddFor, dealFromSearch, dealState, dealTypeWord, dealsCount, dotsLabel, duplicateCheck, expiresCell,
+  fanFigure, fanOut, filterInvitations, firmCounts, invitationRow, isCompleteEmail, isFirstUse, isLapsed, memberCheck, noMatchLine, obligationsLine,
+  offeredTypes, pageOf, parseStamp, rangeText, redemptionDealSet, redemptionRow, refusalText, resendCopy, resentAt, revokeCopy, revokeVariant,
+  revokedLine, routeFor, signingLink, stageOf, tabCounts, tabPath, terminateCopy, terminateReady, termText, tiersText, toggleType, windowOf,
+  withoutMoved,
 } from '../src/pages/admin/partners/partnersDeskModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -195,8 +194,6 @@ test('Guard L: a list at its cap says what it covers, never a total', () => {
   const some = ready(many(37, (i) => inv(i)));
   assert.equal(tabCounts({ invitations: full, deals: lists(), contracts: failed(), needs: null }).invitations.text, '200+');
   assert.equal(tabCounts({ invitations: some, deals: lists(), contracts: failed(), needs: null }).invitations.text, '37');
-  assert.equal(invitationTiles(full, { proposed: ready([]), now: NOW })[0].cover, WITHIN_INVITATIONS);
-  assert.equal(invitationTiles(some, { proposed: ready([]), now: NOW })[0].cover, null);
   assert.equal(WITHIN_INVITATIONS, 'Within the newest 200 by first send');
   // Deals: R5's total is exact; the six lists' sum is a floor at a cap, and nothing when one failed.
   assert.deepEqual(dealsCount(ready({ items: [], total: 312, complete: true }), lists()), { text: '312', title: 'Every deal, in every state' });
@@ -210,8 +207,6 @@ test('Guard L: a list at its cap says what it covers, never a total', () => {
   const accounts = many(CAPS.links, (i) => ({ id: i, email: `a${i}@x.co`, partner_id: i <= 18 ? null : 4 }));
   assert.equal(firmCounts({ accounts, firms: [{ id: 4 }] }).cover, 'Counted over the first 500 partner accounts.');
   assert.equal(firmCounts({ accounts: accounts.slice(0, 20), firms: [{ id: 4 }] }).text, '2 attached · 18 not · 1 firms on record');
-  const firms = needsYou({ invitations: ready([]), deals: lists(), links: ready({ accounts, firms: [] }), template: ready({ fields: [] }), fan: { state: 'ready', items: [], exact: true }, now: NOW }).rows.find((r) => r.kind === 'Firms');
-  assert.equal(firms.text, '18 partner accounts of the first 500 are not attached to a firm.');
   assert.equal(ddFor(deal(1), ready(many(CAPS.cases, (i) => ({ subject_id: 9000 + i, status: 'open' })))).text, NOT_IN_READ);
   assert.equal(ddFor(deal(1), ready([])).text, 'No case on record');
   assert.equal(memberCheck(ready(many(CAPS.users, (i) => ({ email: `x${i}@lio.co`, role: 'founder' }))), 'lio.co@lio.co').state, 'failed', 'a full page of matches cannot prove "not a member"');
@@ -423,62 +418,11 @@ test('New invitation: three types at most, and checks that say when they could n
   assert.equal(isCompleteEmail('lio@example.c'), false);
 });
 
-test('Needs you draws only the rows whose data exists, and names a source it could not read', () => {
-  const mara = inv(2, { recipient_name: 'Mara Example', status: 'selected', createdMs: NOW - 30 * DAY, is_expired: true });
-  const teo = inv(3, { recipient_name: 'Teo Sample', status: 'selected' });
-  const deals = lists({ active: ready([deal(7, { expires_at: isoAt(NOW + 20 * DAY) }), deal(8)]) });
-  const links = ready({ accounts: [{ id: 1, partner_id: null }, { id: 2, partner_id: null }, { id: 3, partner_id: 4 }], firms: [] });
-  const fan = { state: 'ready', items: [{ attribution_kind: 'deal_sourcing_revshare', revshare_window_remaining_days: 9, deal: { deal_type: 'deal_sourcing_revshare', status: 'active' } }], complete: true, short: [], firstOnly: [], exact: true };
-  const notReady = failed({ status: 409, code: 'template_has_no_body' });
-  const needs = needsYou({ invitations: ready([mara, teo]), deals, links, template: notReady, fan, now: NOW });
-  assert.equal(needs.settled, true);
-  assert.deepEqual(needs.rows.map((r) => [r.kind, r.text]), [
-    ['Lapsed', 'The invitation to Mara Example lapsed on 8 Oct 2026 at Offer chosen.'],
-    ['Agreement', 'Teo Sample chose an offer, but the agreement cannot be sent yet: the Partner Services agreement is not ready.'],
-    ['Term ending', 'The Services partnership with Dana 7 ends on 13 Nov 2026.'],
-    ['Firms', '2 partner accounts are not attached to a firm.'],
-    ['Rev-share', '1 rev-share window closes within 30 days.'],
-  ]);
-  assert.doesNotMatch(JSON.stringify(needs.rows), /blocked|could not be sent|not delivered/i);
-  const ready_ = needsYou({ invitations: ready([teo]), deals, links, template: ready({ fields: [] }), fan, now: NOW });
-  assert.ok(!ready_.rows.some((r) => r.kind === 'Agreement'), 'no agreement row while the template is ready');
-  const down = needsYou({ invitations: failed(), deals, links: failed(), template: notReady, fan, now: NOW });
-  assert.deepEqual(down.failed.map((f) => f.what), ['The invitations', 'The partner accounts']);
-  assert.equal(needsYou({ invitations: loading(), deals, links, template: notReady, fan, now: NOW }).settled, false);
-  assert.equal(tabCounts({ invitations: ready([mara, teo]), deals, contracts: failed(), needs }).overview.text, '5', 'Overview counts the Needs-you rows drawn');
-});
+// D929: Needs you reads part 4's overview read now; its rows are held in admin_partners_overview_d929.test.mjs.
 
-test('the Overview tiles: real figures from reads that succeeded, and words for what is not read', () => {
-  const list = ready([
-    inv(1, { createdMs: NOW - 4 * DAY }),
-    inv(3, { createdMs: NOW - 10 * DAY }),
-    inv(2, { status: 'selected', createdMs: NOW - 30 * DAY, is_expired: true }),
-    inv(4, { status: 'signed', createdMs: NOW - 40 * DAY, signed_at: d1(NOW - 28 * DAY), is_expired: true }),
-    inv(5, { status: 'signed', createdMs: NOW - 200 * DAY, signed_at: d1(NOW - 180 * DAY), is_expired: true }),
-  ]);
-  const t = Object.fromEntries(invitationTiles(list, { proposed: ready([]), now: NOW }).map((x) => [x.key, x]));
-  assert.equal(t.open.value, '2');
-  assert.equal(t.open.sub, 'oldest first sent 14 Oct 2026');
-  assert.equal(t.lapsed.value, '1');
-  assert.equal(t.lapsed.sub, 'link expired before signing');
-  assert.equal(t.signed90.value, '1');
-  assert.equal(t.median.value, '16');
-  assert.equal(t.median.sub, 'median, over the last 2 signed');
-  assert.equal(invitationTiles(ready([inv(1)]), { now: NOW })[3].value, 'None signed yet', 'never 0 with no signed rows');
-  assert.deepEqual(invitationTiles(failed(), { now: NOW }).map((x) => x.state), ['unreadable', 'unreadable', 'unreadable', 'unreadable']);
+test('first use is a read that holds no invitation, never a failed read (the tiles are D929\'s, on the overview read)', () => {
   assert.equal(isFirstUse(ready([])), true);
   assert.equal(isFirstUse(failed()), false, 'a failed read is never first use');
-  const d = Object.fromEntries(dealTiles({
-    deals: lists({ active: ready([deal(7, { expires_at: isoAt(NOW + 20 * DAY) }), deal(8), deal(9, { expires_at: isoAt(NOW - DAY) })]), awaiting_signature: ready([deal(10, { status: 'awaiting_signature', invitation_id: 2, user_id: null })]) }),
-    invitations: list, fan: { state: 'ready', items: [], complete: true, short: [], firstOnly: [], exact: true }, now: NOW,
-  }).map((x) => [x.key, x]));
-  assert.equal(d.active.value, '3');
-  assert.equal(d.active.sub, '1 end within 30 days');
-  assert.equal(d.active.extra, '1 is past its end, not yet closed');
-  assert.equal(d.awaiting.sub, '1 whose invitation has lapsed');
-  assert.equal(d.redemptions90.value, '0');
-  // D929 renamed it in part 1's words; it stays "Not read here yet" until part 4's read.
-  assert.deepEqual([d.sends.label, d.sends.state, d.sends.note.text], ['Sends that failed', 'note', 'Not read here yet']);
 });
 
 test('one deal: obligations read "No obligations recorded" with none required, never "None outstanding"', () => {
@@ -575,9 +519,26 @@ const response = (body, status = 200) => ({ ok: status < 400, status, statusText
 const LIVE = Date.now();
 const liveInv = (id, o = {}) => inv(id, o, LIVE);
 
+/** D927's overview reply, every block available and empty; `kinds` lays Needs-you rows over it. */
+function overviewReply(kinds = {}) {
+  const ok = (o) => ({ available: true, ...o });
+  const k = {
+    lapsed: ok({ rows: [] }), agreement_blocked: ok({ agreement: { state: 'ready' }, rows: [] }), failed_send: ok({ rows: [] }), deal_ending: ok({ rows: [] }),
+    unattached_account: ok({ rows: [] }), due_diligence_open: ok({ rows: [] }), revshare_closing: ok({ rows: [] }), ...kinds,
+  };
+  return {
+    as_of: new Date().toISOString(),
+    tiles: Object.fromEntries(['open', 'lapsed', 'signed_90d', 'redemptions_90d'].map((t) => [t, ok({ count: 0 })]).concat([
+      ['days_to_sign', ok({ median_days: null, over_signed: 0 })], ['active_deals', ok({ count: 0, ending_within_30d: 0, term_over_not_closed: 0 })],
+      ['awaiting_signature', ok({ count: 0, invitation_lapsed: 0 })], ['failed_sends_30d', ok({ count: 0, by_reason: {} })]])),
+    needs_you: { available: true, kinds: k, rows: Object.values(k).flatMap((x) => x.rows || []), unreadable_kinds: [] },
+    c1: ok({ stages: {}, closed: { signed: 0, lapsed: 0, revoked: 0, signed_after_lapse: 0 } }), c2: ok({ weeks: [] }), c3: ok({ by_type: {} }), c4: ok({ weeks: [] }),
+  };
+}
+
 function worker({
   invitations = [], deals = {}, contracts, links = { accounts: [], firms: [], attached: 0, unattached: 0 }, template = { doc_type: 'partner_services', fields: [] },
-  top = [], cases = [], redemptions = {}, envelopes = {}, users = [], writes = {},
+  top = [], cases = [], redemptions = {}, envelopes = {}, users = [], writes = {}, overview = overviewReply(),
 } = {}) {
   const call = (v, ...a) => (typeof v === 'function' ? v(...a) : response(v));
   return (url, options = {}) => {
@@ -589,6 +550,7 @@ function worker({
       const kind = path === '/api/admin/partners/invitations' ? 'create' : path === '/api/admin/partners/links' ? 'link' : path.split('/').pop();
       return writes[kind] ? writes[kind](options, path) : response({ ok: true });
     }
+    if (path === '/api/admin/partners/overview') return call(overview);
     if (path === '/api/admin/partners/invitations') {
       if (typeof invitations === 'function') return invitations(q);
       const email = q.get('email');
@@ -688,8 +650,7 @@ test('a failed invitations read is Unreadable with Try again, never "No partner 
   const overview = await mounted('/admin/partner-invitations', worker({ invitations: () => response({ error: 'down' }, 503) }));
   try {
     assert.ok(!overview.has('partners-first-use'), 'a failed read is never first use');
-    assert.match(overview.textOf('partners-tile-open'), /^Open invitations\s*Open invitations could not be read\. A failed list is not a claim that there are none\./);
-    assert.ok(overview.has('partners-needs-failed-invitations'));
+    assert.match(overview.textOf('partners-tile-open'), /^Open invitations0/, 'the tiles are the overview read\'s, which answered');
   } finally { await overview.close(); }
 });
 
@@ -874,7 +835,7 @@ test('Terminate is disabled until a reason is typed; its result and its refusal 
 
 test('the old address lands on Overview with the moved notice; first use draws the empty state and keeps the Firm links door', async () => {
   const links = { accounts: [{ id: 1, email: 'a@x.co', partner_id: null }, { id: 2, email: 'b@x.co', partner_id: null }], firms: [] };
-  const view = await mounted(MOVED_PATH, worker({ invitations: [], links }));
+  const view = await mounted(MOVED_PATH, worker({ invitations: [], links, overview: overviewReply({ unattached_account: { available: true, rows: [{ kind: 'unattached_account', id: 1 }, { kind: 'unattached_account', id: 2 }] } }) }));
   try {
     assert.equal(view.textOf('partners-moved'), `${MOVED_LINE}Dismiss`);
     assert.ok(view.has('partners-first-use'));
