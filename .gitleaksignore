@@ -88,3 +88,8 @@ fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources
 # The next commit replaces it with a generated test value; pin the already
 # pushed finding only, retaining all other file/commit/rule coverage.
 57b1626b52f079eb204c8a296c6085daa1b1e49d:cloudflare-worker/test/carta_oauth_2634.test.ts:generic-api-key:17
+
+# D888 (#2392): synthetic JWT signing literal in the original SQLite-only DD
+# fixture commit, never a production credential. Current fixture derives a
+# low-entropy test-only key. Scope this exception to that one historical finding.
+689cc8c3a3d5143334510e1dcfe41734bc201ded:cloudflare-worker/test/dd_advisor_subject_2392.test.ts:generic-api-key:20
