@@ -64,7 +64,8 @@ test('the old addresses redirect to the page, GitHub Sync to its section', () =>
   assert.equal(legacyContractsTarget('?tab=integration-keys'), '/admin/integration-keys');
   assert.equal(legacyContractsTarget('?tab=github'), '/admin/integration-keys#github');
   assert.equal(legacyContractsTarget('?tab=legal'), '/admin/contracts?moved=legal', 'D647 is unchanged');
-  for (const q of ['', '?tab=users', '?tab=payments', '?tab=constructor', '?tab=__proto__']) {
+  // D1008 (#2386) forwards ?tab=payments; ?tab=kyc is still a console tab.
+  for (const q of ['', '?tab=users', '?tab=kyc', '?tab=constructor', '?tab=__proto__']) {
     assert.equal(legacyContractsTarget(q), null, q);
   }
 });
