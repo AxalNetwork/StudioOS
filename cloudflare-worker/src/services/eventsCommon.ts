@@ -89,6 +89,10 @@ export function shapeEvent(row: any, opts: { includePrivate?: boolean; includeJo
   };
   if (opts.includePrivate) {
     base.admin_published = TRUTHY(row.admin_published);
+    base.submitted_at = row.submitted_at ?? null;
+    base.approved_at = row.approved_at ?? null;
+    base.review_note = row.review_note ?? null;
+    base.changed_after_approval_at = row.changed_after_approval_at ?? null;
     base.audience_rules = parseAudienceRules(row.audience_rules_json);
   }
   return base;
