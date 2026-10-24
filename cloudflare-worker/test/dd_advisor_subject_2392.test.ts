@@ -17,7 +17,7 @@ const OLD_CASE=tableFromBaseline(readFileSync(new URL('../sql/migrations/008_due
 const OLD_SCHEMA=BASELINE.replace(tableFromBaseline(BASELINE,'dd_cases'),OLD_CASE+"\nALTER TABLE dd_cases ADD COLUMN template_depth TEXT NOT NULL DEFAULT 'standard';");
 const SUBJECTS=['project','founder','advisor','investor','partner'] as const;
 const TABLES=['dd_cases','dd_sections','dd_external_sources','dd_findings','dd_attachments','dd_reviewers','dd_reports','dd_audit_log','dd_checklist_items','dd_requests','ic_decisions'] as const;
-const SECRET='synthetic-dd-regression-signing-secret-0123456789';
+const SECRET='test'.repeat(16);
 function world(fresh=false) {
   const w=makeD1(fresh?BASELINE:OLD_SCHEMA);
   w.db.exec('PRAGMA foreign_keys=ON');
@@ -97,10 +97,34 @@ async function creation(sql=REBUILD,router=dd,fresh=false) {
     assert.equal(w.db.prepare('PRAGMA foreign_key_check').all().length,0);
   }finally{w.db.close();}
 }
+function schemaCensus(w:any) {
+  const linked=w.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all()
+    .filter((r:any)=>w.db.prepare('SELECT 1 FROM pragma_foreign_key_list(?) WHERE "table" = ?').all(r.name,'dd_cases').length)
+    .map((r:any)=>String(r.name)).sort();
+  assert.deepEqual(linked,[...TABLES].slice(1).sort(),'every parent reference must be included in the preservation graph');
+  const related=new Set<string>(TABLES);
+  const custom=w.db.prepare("SELECT name,tbl_name,sql FROM sqlite_master WHERE type IN ('trigger','view')").all()
+    .filter((r:any)=>related.has(r.tbl_name) || /\bdd_cases\b/.test(r.sql || ''));
+  assert.deepEqual(custom,[],'a future DD trigger/view needs an explicit rebuild preservation plan');
+}
+test('#2392 schema census detects a newly dependent table before preservation coverage becomes stale',()=>{
+  const w=world();try{
+    schemaCensus(w);
+    w.db.exec('CREATE TABLE synthetic_new_case_link(id INTEGER PRIMARY KEY,case_id INTEGER REFERENCES dd_cases(id))');
+    assert.throws(()=>schemaCensus(w),{name:'AssertionError'});
+    w.db.exec('DROP TABLE synthetic_new_case_link');
+    schemaCensus(w);
+    w.db.exec('CREATE VIEW synthetic_case_view AS SELECT id FROM dd_cases');
+    assert.throws(()=>schemaCensus(w),{name:'AssertionError'});
+    w.db.exec('DROP VIEW synthetic_case_view');
+    schemaCensus(w);
+  }finally{w.db.close();}
+});
 async function preservation(sql=REBUILD) {
   const w=world();
   try {
     await seed(w);
+    schemaCensus(w);
     const before=snapshot(w),seq=sequences(w),idx=indexes(w),schema=shape(w);
     apply(w,sql);
     assert.deepEqual(snapshot(w),before);
