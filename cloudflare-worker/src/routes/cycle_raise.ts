@@ -31,6 +31,11 @@
  *   An admin's narrative write answers 403 `admin_read_only`; their narrative
  *   reads (this module's read, `/narrative/*`, and its records) answer 403
  *   `read_reason_required` until they give a reason.
+ *   D911 (#2695): Eadwyn's positioning proposal (`services/narrative/positioningDraft.ts`).
+ *   GET   /narrative/positioning/draft   → { read_from, segments, competitors, withheld, proposals }
+ *   POST  /narrative/positioning/draft?version=   one `rail_write` run → { proposals, removed, read_from, withheld }
+ *   POST  /narrative/positioning/proposals/:uid   { decision: 'accept' | 'discard' } → { proposal, positioning? }
+
  *   POST  /deck-links                { deck_id, prospect_id | investor_label, expires_days: 7|14|30|null, allow_download?, allow_forwarding? }
  *   PATCH /deck-links/:id            investor, the two settings, an earlier expiry
  *   POST  /holders                   { name, group, instrument, shares | ownership_pct | amount_cents, cap_cents?, discount_pct?, vesting?, prospect_id? }
@@ -80,6 +85,16 @@ import { hasRecords } from '../services/records';
 import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
 import { InputError, giveReason, isAdmin, kindOf, listNotes, listReasons, narrativeAdminGate, postNote, type Mode } from '../services/narrative/adminRead';
 import { raisePhone } from '../services/cycleFocus';
+import {
+  POSITIONING_OPTION, POSITIONING_PAGE, POSITIONING_SYSTEM, nothingToRead, positioningMaterial, positioningPrompt, readFrom, screenAnswer,
+} from '../services/narrative/positioningDraft';
+import { decideRail, getRail, listRail, proposeRail, withdrawRail, type RailProposal } from '../services/railProposals';
+import { run as aiRouterRun } from '../services/aiRouter';
+import { AI_SURFACE } from '../services/aiSurfaces';
+import { parseJsonLoose } from '../services/decks/autofill';
+import { railFor, refuseRun } from '../util/railContext';
+import { ensureTier } from '../middleware/requireTier';
+import { logCycleWrite } from '../services/cycleActivity';
 import {
   AcceptError, RAISE_PART_FOR, acceptRaiseProposal, deleteRaiseFact, dismissRaiseProposal, syncRaise,
 } from '../services/mercury/raiseFeeds';
@@ -271,6 +286,124 @@ cycleRaise.put('/narrative/positioning', async (c) => {
   } catch (e) { return writeFailed(c, e); }
 });
 
+// ---------------------------------------------------------------------------
+// D911 (#2695): Eadwyn's positioning proposal. The run reads qualitative
+// records only and drops any field that holds a digit; each field it keeps is
+// one `ai_rail_proposals` row, accepted or discarded one at a time. Accept
+// writes through `savePositioning` with Eadwyn as the source, so the store's
+// own refusal of a digit holds again. Each Accept and Discard logs one row.
+// ---------------------------------------------------------------------------
+
+const positioningRecord = (projectId: number) => `project:${projectId}`;
+
+/** A proposal as the page draws it: the field, its words, its uid. Never the model or the run. */
+const proposalView = (p: RailProposal) => ({
+  uid: p.uid,
+  kind: String(p.payload.kind ?? ''),
+  position: Number(p.payload.position ?? 0),
+  text: String(p.payload.text ?? ''),
+  version: p.payload.version == null ? null : Number(p.payload.version),
+  created_at: p.created_at,
+});
+
+const listPart = (part: { state: string; items?: string[] }) => (part.state === 'ok' ? { state: 'ok', items: part.items } : { state: 'unreadable' });
+
+cycleRaise.get('/narrative/positioning/draft', async (c) => {
+  const s = await narrativeScope(c, 'read');
+  if (s instanceof Response) return s;
+  const m = await positioningMaterial(c.env, s.projectId);
+  let proposals: ReturnType<typeof proposalView>[] | null = null;
+  try {
+    proposals = (await listRail(c.env, Number(s.user.id), { option: POSITIONING_OPTION, record: positioningRecord(s.projectId), status: 'proposed' })).map(proposalView);
+  } catch (e) {
+    console.warn('[cycle_raise] positioning proposals unreadable:', (e as Error)?.message);
+  }
+  return c.json({
+    read_from: readFrom(m),
+    segments: listPart(m.segments),
+    competitors: listPart(m.competitors),
+    withheld: m.withheld,
+    proposals: proposals === null ? { state: 'unreadable' } : { state: 'ok', items: proposals },
+  });
+});
+
+cycleRaise.post('/narrative/positioning/draft', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  // Owner question 4 (#2454) decides the plan gate. Until then, the old route's: `studio`.
+  try { ensureTier(s.user, 'studio'); } catch (e) { if (e instanceof Response) return e; throw e; }
+  const raw = c.req.query('version');
+  let version: number | null = null;
+  if (raw !== undefined && raw !== '') {
+    try { version = await readableVersion(c.env, s.projectId, raw); } catch (e) { return writeFailed(c, e); }
+    if (version === 0) return c.json({ detail: 'Version 0 is the live deck’s wording. Propose for the core, or for a saved version.' }, 409);
+  }
+  const m = await positioningMaterial(c.env, s.projectId);
+  if (nothingToRead(m)) {
+    return c.json({ code: 'nothing_to_read', detail: 'There is nothing in Validate or Build to propose from yet. Add a pain theme, a segment or your solution first.' }, 422);
+  }
+  const record = positioningRecord(s.projectId);
+  const result = await aiRouterRun(c.env, {
+    task: 'rail_write',
+    userId: Number(s.user.id),
+    surface: AI_SURFACE.raiseNarrative,
+    rail: railFor(c, { page: POSITIONING_PAGE, option: POSITIONING_OPTION }, record),
+    systemPrompt: POSITIONING_SYSTEM,
+    messages: [{ role: 'user', content: positioningPrompt(m) }],
+    temperature: 0.5,
+    maxTokens: 700,
+  });
+  if (!result.ok || !result.output) {
+    return refuseRun(c, result) || c.json({ code: 'ai_unavailable', detail: 'Eadwyn could not propose positioning just now. Try again.' }, 503);
+  }
+  const { fields, removed } = screenAnswer(parseJsonLoose<unknown>(result.output));
+  // A new run replaces what the last one left open.
+  await withdrawRail(c.env, Number(s.user.id), POSITIONING_OPTION, record);
+  const proposals = [];
+  for (const f of fields) {
+    proposals.push(proposalView(await proposeRail(c.env, {
+      userId: Number(s.user.id), page: POSITIONING_PAGE, option: POSITIONING_OPTION, record,
+      kind: 'proposal', payload: { kind: f.kind, position: f.position, text: f.text, version }, model: result.usage?.model ?? null, usageLogId: result.usageLogId ?? null,
+    })));
+  }
+  return c.json({ proposals, removed, read_from: readFrom(m), withheld: m.withheld });
+});
+
+cycleRaise.post('/narrative/positioning/proposals/:uid', async (c) => {
+  const s = await narrativeScope(c, 'write');
+  if (s instanceof Response) return s;
+  const uid = String(c.req.param('uid') || '');
+  const b = await body(c);
+  const decision = b.decision;
+  if (decision !== 'accept' && decision !== 'discard') return c.json({ detail: 'decision is accept or discard' }, 400);
+  const userId = Number(s.user.id);
+  const open = /^[0-9a-f-]{36}$/.test(uid) ? await getRail(c.env, userId, uid) : null;
+  // Another member's proposal, another venture's, or another option's is not found.
+  if (!open || open.rail_option !== POSITIONING_OPTION || open.record_ref !== positioningRecord(s.projectId)) return c.json({ detail: 'Proposal not found' }, 404);
+  if (open.status !== 'proposed') return c.json({ detail: 'This proposal was already decided.' }, 409);
+  const view = proposalView(open);
+  try {
+    if (decision === 'accept') {
+      // The store writes the words, refuses a digit in Eadwyn's wording, and logs the row.
+      const saved = await savePositioning(c.env, {
+        projectId: s.projectId, userId, version: view.version ?? undefined,
+        body: { kind: view.kind, position: view.position, text: view.text, source: { kind: 'eadwyn', ref: `ai_rail_proposals:${uid}` } },
+      });
+      const decided = await decideRail(c.env, userId, uid, 'accept');
+      return c.json({ proposal: decided ? proposalView(decided) : view, decision, positioning: saved.positioning });
+    }
+    const decided = await decideRail(c.env, userId, uid, 'discard');
+    if (!decided) return c.json({ detail: 'This proposal was already decided.' }, 409);
+    await logCycleWrite(c.env, {
+      projectId: s.projectId, userId, cycle: 'raise', module: 'investor-narrative', entityId: view.version,
+      action: 'narrative_positioning_discarded',
+      summary: `${view.version == null ? 'Core positioning' : `Version ${view.version} positioning`}: Eadwyn's ${view.kind.replace(/_/g, ' ')}${view.kind === 'line' ? ` ${view.position + 1}` : ''} discarded`,
+    });
+    return c.json({ proposal: proposalView(decided), decision });
+  } catch (e) { return writeFailed(c, e); }
+});
+
+
 // D914 (#2698): the read reasons and the notes thread. Literal paths, before `/narrative/:version`.
 const inputFailed = (c: any, e: unknown, what: string) => {
   if (e instanceof InputError) return c.json({ detail: e.sentence, code: e.code }, 400);
@@ -280,6 +413,7 @@ const inputFailed = (c: any, e: unknown, what: string) => {
 };
 
 cycleRaise.get('/narrative/reads', async (c) => {
+
   const s = await scope(c);
   if (s instanceof Response) return s;
   try {

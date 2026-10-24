@@ -142,11 +142,11 @@ export const FOUNDER_OPTIONS = [
     page: 'Founder · Raise · Investor narrative', key: 'draft:raise/narrative-fix', route: '/raise/investor-narrative', label: 'Phrase the fix', kind: 'write', handler: 'draft',
     at: [[CYCLE, "surface: 'raise/narrative-fix'"]],
   },
-  // The positioning workspace: Investor narrative's tool link opens it inside the
-  // pitch workspace, which D768's page map keys to Pitch deck.
+  // D911 (#2695): positioning moved into the Investor narrative tool, so its
+  // option moved from Pitch deck's page to the narrative's (was draft:positioning).
   {
-    page: 'Founder · Raise · Pitch deck', key: 'draft:positioning', route: '/raise/pitch/positioning', label: 'Generate positioning', kind: 'write', handler: 'draft',
-    at: [['frontend/src/pages/PitchPositioningPage.jsx', 'api.deckPositioning(']],
+    page: 'Founder · Raise · Investor narrative', key: 'draft:narrative-positioning', route: '/raise/investor-narrative/positioning', label: 'Propose positioning', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/raise/narrative/PositioningTab.jsx', 'narrativeApi.proposePositioning(']],
   },
   // The pitch deck's editor, the module's tool link, and its Review tab.
   {

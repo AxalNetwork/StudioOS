@@ -172,7 +172,7 @@ const CYCLE_DEFS = {
       ),
     }),
     tools: toFnMap({
-      'investor-narrative': () => ({ label: 'Open the positioning workspace', href: '/raise/pitch/positioning' }),
+      'investor-narrative': (q) => ({ label: 'Open positioning', href: `/raise/investor-narrative/positioning${q || ''}` }),
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
       'cap-table': () => ({ label: 'Open the cap table', href: '/raise/capital/cap-table' }),
       'use-of-funds': () => ({ label: 'Open the financial model', href: '/raise/capital/model' }),

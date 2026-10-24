@@ -195,3 +195,23 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   const api = read('frontend/src/lib/api.js');
   assert.match(api, /export \* from '\.\/api\/mercuryPersonal\.js';\nexport \* from '\.\/api\/narrative\.js';\nexport \* from '\.\/api\/newsletter\.js';/);
 });
+
+
+test('merged Positioning stays read only for admins while keeping core and version wording visible',async()=>{
+ const core=[{kind:'one_liner',position:0,text:'Core words',source:null},{kind:'category',position:0,text:'Core category',source:null}];
+ const override=[{kind:'category',position:0,text:'Version wording',source:null}];
+ const page=await mounted(h(NarrativeTabPage,{tab:'positioning',projectId:1,search:'?project_id=1',admin:true,cards:[]}), (url,options)=>{
+  if(url.includes('/narrative/positioning'))return response({core,overrides:override,effective:core});
+  return narrativeHandler(url,options);
+ });
+ try{
+  assert.ok(page.testIds().includes('narrative-positioning'));
+  assert.match(page.text(),/Core words/);
+  assert.match(page.text(),/Version wording/);
+  assert.ok(!page.testIds().some(id=>String(id).startsWith('positioning-edit-')||String(id).startsWith('positioning-adjust-')));
+  assert.ok(!page.byId('positioning-ask'));
+  assert.ok(!page.byId('positioning-review'));
+  assert.ok(!page.requests.some(r=>r[0]!=='GET'));
+  assert.ok(!page.requests.some(r=>r[1].includes('/positioning/draft')));
+ }finally{await page.close();}
+});

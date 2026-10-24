@@ -9,7 +9,10 @@ The founder's Investor narrative tool at `/raise/investor-narrative` (D906,
 |---|---|
 | `NarrativeTool.jsx` | The tool's tab bar (`NarrativeTabBar`), drawn under the module page's header on Home, and its tab pages (`NarrativeTabPage`): Story, Positioning, Check and Versions with Compare. |
 | `NarrativeAdmin.jsx` | D914 (#2698): an admin's reason gate and the NAR13 read-only banner, the notes thread, the founder's "Who read this narrative", and the NAR14a and NAR14b panels. |
-| `narrativeModel.js` | Pure: the addresses, the tabs, the words, and every derivation from the reads (the saved versions, one version's words and its consistency check, two versions side by side). |
+| `narrativeModel.js` | Pure: the addresses, the tabs, the words, and every derivation from the reads (the saved versions, one version's words and its consistency check, two versions side by side, and the positioning rows). |
+| `PositioningTab.jsx` | D911: the Positioning tab. NAR4's core positioning and "This version", NAR5's proposal lightbox (Accept or Discard, one at a time), and NAR18's moved notice. |
+| `PitchPositioningRedirect.jsx` | D911: `/raise/pitch/positioning`, now a redirect to the tab that keeps the query and hash and adds `?moved=positioning`. |
+
 
 ## Where the tool lives
 
@@ -29,7 +32,7 @@ added, so every cycle-route rule (`cyclePaths.js`, `cycle_spacing_d694`) holds.
   figure would be; a value nobody recorded reads "Not recorded", never 0. No
   canvas sample (`[Northwind Labs]`, `[$18,400]`) ever reaches a page.
 - **A board waits for its store.** Claims (#2430), bound figures and the
-  sections store, stored positioning, the deck side of the check (#2434) and
+  sections store, the deck side of the check (#2434) and
   objections (#2457) need stores the Worker does not have. Each is a slot task
   on #2454 (D906 §6). Build a board in the PR that builds its
   read, add its derivation to `narrativeModel.js`, and test it in
@@ -42,3 +45,6 @@ added, so every cycle-route rule (`cyclePaths.js`, `cycle_spacing_d694`) holds.
   page read only, with no New version, Add, edit, fill or draft. The Worker
   refuses their writes (`admin_read_only`) and their reads without a reason
   (`read_reason_required`) on its own; the page only draws what it answers.
+
+
+The D914 read-only flag also reaches D911's Positioning tab: admins read its core and version wording, with no edit, Adjust, proposal or decision controls. The corresponding draft and proposal routes use the narrative's read/write gate.

@@ -14,7 +14,6 @@ export const FOUNDER_TOOLS = [
   { path: '/build/team', cycle: 'grow', module: 'team-expansion' },
   { path: '/comarketing', cycle: 'grow', module: 'distribution' },
   { path: '/raise/pitch', cycle: 'raise', module: 'pitch-deck' },
-  { path: '/raise/pitch/positioning', cycle: 'raise', module: 'investor-narrative' },
   { path: '/raise/capital', cycle: 'raise', module: 'use-of-funds' },
   { path: '/raise/capital/cap-table', cycle: 'raise', module: 'cap-table' },
   { path: '/raise/capital/pipeline', cycle: 'raise', module: 'capital-relationships' },

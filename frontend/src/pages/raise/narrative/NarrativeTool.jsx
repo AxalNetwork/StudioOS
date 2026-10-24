@@ -5,11 +5,13 @@ import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import {
-  CHECK_RUNS, FIX_NEWEST_ONLY, HOME_PATH, LINE, NEW_PATH, NOT_RECORDED, NO_VERSION, POSITIONING_WAITS, SLUG, TABS, TITLE, WAITING_SECTIONS,
-  checkRows, checkSummary, chosenVersion, compareRows, positioningHref, previousVersion, storyRows, tabHref, tabSearch,
+  CHECK_RUNS, FIX_NEWEST_ONLY, HOME_PATH, LINE, NEW_PATH, NOT_RECORDED, NO_VERSION, SLUG, TABS, TITLE, WAITING_SECTIONS,
+  checkRows, checkSummary, chosenVersion, compareRows, previousVersion, storyRows, tabHref, tabSearch,
   versionHref, versionsOf,
 } from './narrativeModel';
 import { NarrativeNotes, NarrativeOtherVenture, NarrativeReads } from './NarrativeAdmin';
+import PositioningTab from './PositioningTab';
+
 
 /**
  * D906 (#2454) — the Investor narrative tool's tab bar and its tab pages.
@@ -230,16 +232,6 @@ function VersionsTab({ projectId, versions, search, reload }) {
   );
 }
 
-function PositioningTab({ search }) {
-  return (
-    <section className={`${CARD} flex flex-col items-start gap-3 p-5`} data-testid="narrative-positioning">
-      <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>Positioning</h2>
-      <p className={`m-0 text-[13px] leading-relaxed ${INK}`}>{POSITIONING_WAITS}</p>
-      <Link className={BTN} to={positioningHref(search)} data-testid="narrative-positioning-open">Open positioning</Link>
-    </section>
-  );
-}
-
 /**
  * One tab of the tool, under the Raise header and the tool's tab bar.
  * `cards` are the Raise modules for the header's rail; `action` is Call for
@@ -256,16 +248,18 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   const here = TABS.find((t) => t.id === tab) || TABS[0];
 
   let body;
-  if (tab === 'positioning') body = <PositioningTab search={search} />;
   // No venture means no versions read is made: say the venture list failed, never a skeleton.
-  else if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
+  if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (list.status === 'loading') body = <Skeleton testId="narrative-loading" />;
   // D914, NAR14b: the Worker refuses another venture's narrative; an admin's refusal is the reason gate's, above this page.
   else if (list.status === 'refused') body = admin
     ? <p role="status" className={`m-0 text-[13px] ${INK}`} data-testid="narrative-refused">{list.message || 'You do not have access to this venture’s narrative.'}</p>
     : <NarrativeOtherVenture />;
   else if (list.status === 'error') body = <Unreadable what="Your narrative versions" claim="This is not a claim that none are saved." onRetry={retry} />;
+  // Positioning may be read without a saved narrative version; admin controls remain read only.
+  else if (tab === 'positioning') body = <PositioningTab projectId={projectId} version={version} readOnly={admin} />;
   else if (!list.versions.length) body = <NoVersion search={search} admin={admin} />;
+
   else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} />;
   else if (record.status === 'loading' || record.status === 'idle') body = <Skeleton testId="narrative-loading" />;
   else if (record.status === 'refused') body = <p className={`m-0 text-[13px] ${INK}`}>{record.message || 'This version could not be opened.'}</p>;
