@@ -37,11 +37,12 @@ offers, are listed in `frontend/src/lib/railOptions/superAdmin.js`.
 A record view names its record as the rail's last crumb with
 `useRecordCrumb.js` (D768's contract, as a hook).
 
-`HeldZone.jsx` and the five `Held*.jsx` landings are the Admin shell on
+`HeldZone.jsx` and the four `Held*.jsx` landings are the Admin shell on
 accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
 console's Users panel; links Exploring, Personas, Trash), `HeldApprovals.jsx`
-(S22's sixteen lanes as literal rows), `HeldPrograms.jsx`, `HeldCommunity.jsx`
-and Insights (now `insights/AdminInsights.jsx`, D893). Since D555 each reads HQ's own
+(S22's sixteen lanes as literal rows) and `HeldPrograms.jsx`. Community
+(now `community/AdminCommunity.jsx`, D930) and Insights (now
+`insights/AdminInsights.jsx`, D893) left `/admin/held/` when each was rebuilt to its canvas. Since D555 each reads HQ's own
 figures from the Studio glance through `heldFigures.jsx` (`useHeldGlance`,
 `Figure`, `laneOf`): lane counts on Approvals, counts on the cards, and the
 headline figures on Insights. Mounted at `/admin/held/*` —
@@ -72,6 +73,10 @@ Assessment Studio (`/admin/assessment`) was removed at the owner’s request on 
 the Super Admin and every Admin on HQ: capital calls, distributions,
 management fees, reconciliation, bank accounts and LP reports, each control
 drawn from the Worker's act table — see its own README.
+
+`community/` is D930's Admin › Community at `/admin/community`, built to the
+Community overview canvas from the reads that exist; `/admin/held/community`
+redirects to it — see its own README.
 
 `insights/` is D893's Admin › Insights at `/admin/insights`, built to the Admin
 Insights canvas from the reads that exist; `/admin/held/insights` redirects to

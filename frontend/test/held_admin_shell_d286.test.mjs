@@ -53,10 +53,11 @@ const LANDINGS = {
   Accounts: 'frontend/src/pages/admin/HeldAccounts.jsx',
   Approvals: 'frontend/src/pages/admin/HeldApprovals.jsx',
   Programs: 'frontend/src/pages/admin/HeldPrograms.jsx',
-  Community: 'frontend/src/pages/admin/HeldCommunity.jsx',
 };
 // D893 (#2366): Insights left /admin/held/ when it was rebuilt to its canvas.
 const INSIGHTS = 'frontend/src/pages/admin/insights/AdminInsights.jsx';
+// D930 (#2367): so did Community.
+const COMMUNITY = 'frontend/src/pages/admin/community/AdminCommunity.jsx';
 const ZONE = 'frontend/src/pages/admin/HeldZone.jsx';
 const HELD_FILES = [...Object.values(LANDINGS), ZONE];
 const SRC = Object.fromEntries(HELD_FILES.map((f) => [f, read(f)]));
@@ -81,7 +82,7 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
     '/admin/held/accounts',
     '/admin/held/approvals',
     '/admin/held/programs',
-    '/admin/held/community',
+    '/admin/community',
     '/admin/contracts',
     '/admin/fund-admin',
     '/admin/insights',
@@ -99,12 +100,17 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
   assert.match(SIDEBAR_SRC, /^\s*\/\/ \{ to: '\/admin\/x', icon: Megaphone, label: 'X \(Twitter\)' \},$/m);
 });
 
-test('the four held landings and Insights are guard([\'admin\']) without hqOnly, the held four under a prefix no HQ console can collide with', () => {
-  const insights = routeLine('/admin/insights');
-  assert.ok(insights, '/admin/insights is not registered');
-  assert.match(insights, /guard\(\['admin'\], <AdminInsights \/>\)/, 'Insights is not guard([\'admin\'])');
-  assert.doesNotMatch(insights, /hqOnly\(/, 'Insights is wrapped in hqOnly — this is the plain admin\'s own shell');
-  assert.match(routeLine('/admin/held/insights'), /<HeldInsightsRedirect \/>/, 'the old Insights address no longer redirects');
+test('the three held landings, Community and Insights are guard([\'admin\']) without hqOnly, the held three under a prefix no HQ console can collide with', () => {
+  for (const [path, page, old, redirect] of [
+    ['/admin/insights', 'AdminInsights', '/admin/held/insights', 'HeldInsightsRedirect'],
+    ['/admin/community', 'AdminCommunity', '/admin/held/community', 'HeldCommunityRedirect'],
+  ]) {
+    const line = routeLine(path);
+    assert.ok(line, `${path} is not registered`);
+    assert.match(line, new RegExp(`guard\\(\\['admin'\\], <${page} \\/>\\)`), `${path} is not guard(['admin'])`);
+    assert.doesNotMatch(line, /hqOnly\(/, `${path} is wrapped in hqOnly — this is the plain admin's own shell`);
+    assert.match(routeLine(old), new RegExp(`<${redirect} \\/>`), `the old address ${old} no longer redirects`);
+  }
   for (const [label, file] of Object.entries(LANDINGS)) {
     const row = rows.find((r) => r.label === label);
     assert.ok(row, `${label} has no row`);
@@ -128,7 +134,7 @@ test('the four held landings and Insights are guard([\'admin\']) without hqOnly,
 test('every console link on a landing is literal, registered, and never under /branch/', () => {
   // Programs has four doors after the owner removed the Assessment editor.
   // D506 — Approvals gained its fifteenth door, Spinout moderation (D442's console).
-  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 4, Community: 5 };
+  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 4 };
   for (const [label, file] of Object.entries(LANDINGS)) {
     const doors = doorsIn(CODE[file]);
     assert.equal(doors.length, expectedDoors[label], `${label} draws ${doors.length} literal links, expected ${expectedDoors[label]}`);
@@ -235,12 +241,18 @@ test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation lin
  * The other landings
  * ------------------------------------------------------------------ */
 
-test('Community links its five consoles at their own routes — Advisors & Partners at the tab, never the standalone route', () => {
-  const doors = doorsIn(CODE[LANDINGS.Community]);
-  assert.deepEqual(doors, ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing']);
+test('Community (D930) links its five consoles at their own routes — Advisors & Partners at the tab, never the standalone route', () => {
+  const code = codeOnly(read(COMMUNITY));
+  const doors = [...new Set(doorsIn(code))];
+  for (const d of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing']) {
+    assert.ok(doors.includes(d), `Community has no literal door onto ${d}`);
+  }
   assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the standalone roster route would make its EXEMPT entry stale');
-  assert.match(SRC[LANDINGS.Community], /import \{ COMMUNITY_CONSOLES \} from '\.\.\/branch\/BranchCommunity'/,
-    'the console prose is BranchCommunity\'s own list, read rather than copied');
+  for (const d of doors) {
+    assert.ok(!d.startsWith('/branch'), `Community links ${d}, under /branch/`);
+    assert.ok(routeLine(pathOf(d)), `Community links ${d}, which is not a registered route`);
+  }
+  assert.doesNotMatch(code, /\.map\([^)]*<Link/, 'Community maps data into links — invisible to the reachability walk');
 });
 
 test('Programs links its four consoles; Accounts links the Users table, Exploring, Personas and Trash', () => {

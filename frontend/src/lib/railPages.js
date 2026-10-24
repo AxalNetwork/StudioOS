@@ -281,7 +281,7 @@ const ADMIN = [
   alias('/branch/programs', key(AD, 'Programs'), 'The branch’s Programs page.'),
   own('/admin/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),
   own('/admin/profiling-trends', key(AD, 'Programs', 'Profiling trends')),
-  own('/admin/held/community', key(AD, 'Community')),
+  own('/admin/community', key(AD, 'Community')),
   alias('/branch/community', key(AD, 'Community'), 'The branch’s Community page.'),
   own('/admin?tab=wellbeing', key(AD, 'Community', 'Wellbeing experts')),
   alias('/admin/wellbeing', key(AD, 'Community', 'Wellbeing experts'), 'The wellbeing resource library, Wellbeing experts’ own page.'),

@@ -122,7 +122,15 @@ came from S1's prompt on #2367, as the usual pair:
 
 One change from the prompt: CM3 to CM6 are centred lightboxes, not right
 drawers. The board's caption gives the owner's rule against side panels. No
-value was edited. S1's integration lands next and records its grade here.
+value was edited.
+
+**Grade: UPGRADE.** `/admin/community` is live, and `/admin/held/community`
+redirects to it. S1's integration (D930) draws the shell and the blocks whose
+reads exist: the queue, the next 30 days, Next up, the job board, circles and
+the roster, Needs a decision, and the consoles. The period figures, the charts,
+recent activity and the four lightboxes wait for D930's five parts (D931 to
+D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
+row says what is drawn today.
 
 ## Landed 2026-10-24 — Pitch deck studio (D894, #2434)
 

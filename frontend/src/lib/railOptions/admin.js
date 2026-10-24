@@ -63,7 +63,7 @@ export const ADMIN_BOARDS = [
   { id: 'S21', section: 'Programs', module: 'Advisor cohorts', route: '/admin/advisor-cohorts', files: ['pages/admin/AdvisorCohortAssignments.jsx'], rail: FRAME, alias: 'S18' },
   // S22: Assessment Studio was removed at the owner's request (2026-10-21); its ID stays retired.
   { id: 'S23', section: 'Programs', module: 'Profiling trends', route: '/admin/profiling-trends', files: ['pages/admin/AdminProfilingTrends.jsx'], rail: FRAME },
-  { id: 'S24', section: 'Community', module: null, route: '/admin/held/community', files: ['pages/admin/HeldCommunity.jsx'], rail: HELD },
+  { id: 'S24', section: 'Community', module: null, route: '/admin/community', files: ['pages/admin/community/AdminCommunity.jsx', 'pages/admin/community/communityModel.js'], rail: 'pages/admin/community/AdminCommunity.jsx' },
   { id: 'S25', section: 'Community', module: 'Events', route: '/admin/events', files: ['pages/admin/AdminEventsPage.jsx'], rail: FRAME, alias: 'S15' },
   { id: 'S26', section: 'Community', module: 'Jobs', route: '/admin/jobs', files: ['pages/admin/AdminJobsPage.jsx'], rail: FRAME, alias: 'S16' },
   { id: 'S27', section: 'Community', module: 'Communities', route: '/admin/circles', files: ['pages/admin/AdminCirclesPage.jsx'], rail: FRAME, alias: 'S17' },

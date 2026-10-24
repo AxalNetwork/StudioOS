@@ -227,7 +227,8 @@ export const SIDEBAR_GROUPS = {
         match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/partners', '/admin/spinout-moderation'] },
       { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
         match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
-      { to: '/admin/held/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles'] },
+      // D930 (#2367): Community's own address; /admin/held/community redirects here.
+      { to: '/admin/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles'] },
       // D647 — the shared Contracts page and template library. Not "read-only":
       // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin
       // authors templates today. Whether they should is D286's filed question.
