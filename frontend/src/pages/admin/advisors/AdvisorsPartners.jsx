@@ -6,6 +6,7 @@ import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import AdminNetworkProfiles from '../AdminNetworkProfiles';
+import FirmLinks from './FirmLinks';
 import {
   AP_TITLE, COMMUNITY_PATH, MOVED_NOTICES, NOT_YET, PAGE_LINE, RAIL_NOTE, TABS, WAITS,
   buildFirms, buildNeeds, buildTiles, pageFailed, tabOf,
@@ -185,7 +186,7 @@ function Firms({ reads, reload }) {
           {firms.unattached > 0 ? (
             <p className="m-0 flex flex-wrap items-center justify-between gap-2 rounded-[10px] bg-axal-amber/30 px-3 py-2 text-[13px] text-axal-ink dark:text-gray-100" data-testid="ap-firms-unattached">
               <span>Partner accounts with no firm: <span className={MONO}>{firms.unattached.toLocaleString('en-US')}</span></span>
-              <Link to="/admin/partner-invitations/firm-links" className={GHOST}>Attach on Partner invitations</Link>
+              <a href="#ap-firm-links" className={GHOST}>Attach below</a>
             </p>
           ) : null}
           {firms.rows.length === 0
@@ -218,10 +219,20 @@ function Firms({ reads, reload }) {
             )}
           {firms.capped ? <span className={SUB}>The first 500 firms by name.</span> : null}
           {firms.dealsCapped ? <span className={SUB}>Deals are read from the newest 200 active ones.</span> : null}
-          <span className={SUB}>Search, filters, pages and each firm's drawer come with D972's Firms part. Attaching an account to a firm moves here from Partner invitations with #2728.</span>
+          <span className={SUB}>Search, filters, pages and each firm's drawer come with D972's Firms part.</span>
         </>
       )}
     </section>
+  );
+}
+
+/** The Firms tab: the firms, then attaching an account to one (D952, moved from Partner invitations). */
+function FirmsTab({ reads, reload }) {
+  return (
+    <div className="flex flex-col gap-3.5" data-testid="ap-firms-tab">
+      <Firms reads={reads} reload={reload} />
+      <FirmLinks reads={{ links: reads.links, reload }} />
+    </div>
   );
 }
 
@@ -262,7 +273,7 @@ function AdvisorsPartnersPage() {
         data-testid="ap-header"
       />
       {tab === 'overview' && <Overview reads={reads} reload={reload} />}
-      {tab === 'firms' && <Firms reads={reads} reload={reload} />}
+      {tab === 'firms' && <FirmsTab reads={reads} reload={reload} />}
       {tab === 'deck' && <AdminNetworkProfiles embedded />}
     </div>
   );
