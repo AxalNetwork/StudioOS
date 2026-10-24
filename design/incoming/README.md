@@ -109,6 +109,29 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-24 — Admin · Community overview (#2367)
+
+The owner's artifacts `3z8Z58GFCcS8SWMv4YbWiH` and `GewVUumBA5KASoPYNGUJuB`
+came from S1's prompt on #2367, as the usual pair:
+- `Community · Boards.dc.html` is the board grid (CM1 to CM13, with the
+  lettered boards CM10 a–b and CM12 a–c), the output of
+  `scripts/read-canvas.mjs` as is;
+- `Community Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in whitespace,
+  the font link and `data-dc-script=""`.
+
+One change from the prompt: CM3 to CM6 are centred lightboxes, not right
+drawers. The board's caption gives the owner's rule against side panels. No
+value was edited.
+
+**Grade: UPGRADE.** `/admin/community` is live, and `/admin/held/community`
+redirects to it. S1's integration (D930) draws the shell and the blocks whose
+reads exist: the queue, the next 30 days, Next up, the job board, circles and
+the roster, Needs a decision, and the consoles. The period figures, the charts,
+recent activity and the four lightboxes wait for D930's five parts (D931 to
+D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
+row says what is drawn today.
+
 ## Landed 2026-10-24 — Pitch deck studio (D894, #2434)
 
 The owner's artifacts `W5hRpjNZ4nsGBTJ7gd71Dy` and `RYeTPyEEdrmRnuUDktJcL3`

@@ -99,7 +99,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 146 on 2026-10-20 (D800, #2233): `Licences`, the Administrator's licence page and its tabs.
   // 147 on 2026-10-24 (D893, #2366): `Admin Insights`, the page built to INS1–INS11 at /admin/insights.
   // 148 the same day (D894, #2434): `Pitch Deck Studio`, its shell and the Decks and Share & analytics tabs at /raise/pitch.
-  assert.equal(recs.length, 148);
+  // 149 the same day (D930, #2367): `Admin Community`, the overview integrated to CM1–CM13 at /admin/community.
+  assert.equal(recs.length, 149);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);
