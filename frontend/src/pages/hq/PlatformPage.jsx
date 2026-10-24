@@ -728,7 +728,7 @@ export function PaymentsCatalogPanel({ loading, unreadable, payments }) {
     <>
       {body}
       <Link to="/admin/platform/payments" className={CONSOLE_LINK} data-testid="hq-h16-link-payments">
-        <ConsoleLinkBody title="Payments catalog" note="Products, prices, the publishable key, and the sync." />
+        <ConsoleLinkBody title="Payments" note="Products, prices, the publishable key, the webhook and the sync." />
       </Link>
     </>
   );

@@ -243,7 +243,7 @@ test('the three decided placements hold: Wellbeing, X, Trash', () => {
   const trash = byKey('/admin/trash');
   assert.equal(trash.tier, 'Admin', 'Trash is placed on the Admin shell, not on HQ · Security');
   assert.ok(!(trash.also || []).some((a) => a.row === 'Security'), 'the Security proposal crept back in as a second placement');
-  const accounts = CONSOLE_PAGES.slice(CONSOLE_PAGES.indexOf('export function AllAccountsPage('), CONSOLE_PAGES.indexOf('export function PartnerProfilesPage('));
+  const accounts = CONSOLE_PAGES.slice(CONSOLE_PAGES.indexOf('export function AllAccountsPage('), CONSOLE_PAGES.indexOf('export function KycPage('));
   assert.ok(/<HeaderMenuItem to="\/admin\/trash"/.test(accounts),
     'All accounts\' More menu no longer carries a literal <HeaderMenuItem to="/admin/trash">; the door is gone');
 });

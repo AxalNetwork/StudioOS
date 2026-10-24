@@ -9,12 +9,9 @@ import { movedNoticesFor } from './LegacyContractsRedirect';
 // D648 (#1448) — one component per console, each in its own file under
 // ./consoles/ and each loading only its own data.
 import UsersConsole from './consoles/UsersConsole';
-import PartnerProfilesConsole from './consoles/PartnerProfilesConsole';
 import KycConsole from './consoles/KycConsole';
-import { PersonasPanel } from './consoles/PersonasConsole';
 import { DirectoryPanel } from './consoles/DirectoryConsole';
 import { WellbeingExpertsPanel } from './consoles/WellbeingConsole';
-import { PaymentsPanel } from './consoles/PaymentsConsole';
 import { BankAccountsPanel } from './consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './consoles/ProductTestingConsole';
 import { PromoCodesPanel } from './consoles/PromoCodesConsole';
@@ -36,9 +33,9 @@ import { BillingPanel } from './consoles/BillingConsole';
  * page alone.
  *
  * THE CRUMB names the section whose row the page lights in the viewer's shell
- * (#2375's route map): All accounts and Persona segments are Accounts' on the
- * Admin shell, and Team's and Content's on HQ's. The scope chip is the Admin
- * shell's only.
+ * (#2375's route map): All accounts is under Accounts on the Admin shell
+ * and Team on HQ. The scope chip is the Admin shell's only. Partner profiles,
+ * Persona segments and Payments retain their dedicated pages from main.
  */
 
 /** The board a viewer's rail is named for on `pathname`, or null for the page alone. */
@@ -108,32 +105,10 @@ export function AllAccountsPage({ onImpersonate }) {
   );
 }
 
-export function PartnerProfilesPage() {
-  return (
-    <ConsolePage crumb={{ ...APPROVALS, current: 'Partner profiles' }} title="Partner profiles" line="Partner firms' profiles waiting for review, and every profile on record." testId="admin-partner-profiles">
-      <PartnerProfilesConsole />
-    </ConsolePage>
-  );
-}
-
 export function KycPage() {
   return (
     <ConsolePage crumb={{ ...APPROVALS, current: 'KYC & KYB' }} title="KYC & KYB" line="Identity checks waiting for review, and each one's record." testId="admin-kyc">
       <KycConsole />
-    </ConsolePage>
-  );
-}
-
-export function PersonaSegmentsPage() {
-  return (
-    <ConsolePage
-      crumb={{ ...ACCOUNTS, current: 'Persona segments' }}
-      hqCrumb={{ label: 'Content', to: '/admin/content', current: 'Persona segments' }}
-      title="Persona segments"
-      line="The personas members are sorted into, and who sits in each."
-      testId="admin-persona-segments"
-    >
-      <PersonasPanel />
     </ConsolePage>
   );
 }
@@ -150,14 +125,6 @@ export function AdminWellbeingPage() {
   return (
     <ConsolePage crumb={{ ...COMMUNITY, current: 'Wellbeing' }} title="Wellbeing" line="The wellbeing experts members can book." testId="admin-wellbeing">
       <WellbeingExpertsPanel />
-    </ConsolePage>
-  );
-}
-
-export function PaymentsPage() {
-  return (
-    <ConsolePage crumb={{ ...PLATFORM, current: 'Payments' }} title="Payments" line="The product catalogue, its prices and the Stripe settings checkout uses." testId="admin-platform-payments">
-      <PaymentsPanel />
     </ConsolePage>
   );
 }

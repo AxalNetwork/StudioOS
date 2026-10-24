@@ -128,6 +128,7 @@ test('a route answers its module and every page below it; the section answers th
   // D938: the Admin Console's tools left /admin for their own addresses; the keys kept their names.
   assert.equal(pageKeyFor('/admin/accounts/all', 'super_admin'), 'Super Admin · Team · Users');
   assert.equal(pageKeyFor('/admin/partner-profiles', 'admin'), 'Admin · Approvals · Entity profiles');
+  assert.equal(pageKeyFor('/admin/partner-profiles/all', 'admin'), 'Admin · Approvals · Entity profiles');
   assert.equal(pageKeyFor('/admin/assessment', 'admin'), null);
   // An exact route never answers the pages below it.
   assert.equal(pageFor('/admin', 'admin').key, 'Admin · Admin console');

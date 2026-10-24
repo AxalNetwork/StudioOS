@@ -29,6 +29,8 @@ import { ENGAGEMENT_VIEW_ROWS } from '../../../lib/deckShareViews.js';
 
 export const STUDIO_PATH = '/raise/pitch';
 export const EDIT_PATH = '/raise/pitch/edit';
+/** D898: today's template builder, which New deck opens until part 3 (New deck) and the editor's last part replace it. */
+export const BUILDER_PATH = '/raise/pitch/builder';
 export const REVIEW_PATH = '/raise/pitch/review';
 export const ANALYTICS_PATH = '/raise/pitch/analytics';
 export const NOTES_PATH = '/raise/pitch/notes';

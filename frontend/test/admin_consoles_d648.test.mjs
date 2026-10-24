@@ -223,14 +223,11 @@ test('Billing: a failed disputes read draws Unreadable, never "No disputes loade
 // ── Each page fetches only its own console's data (D938) ────────────────────
 const OWN = [
   ['AllAccountsPage', '/admin/accounts/all', ['adminListUsers', 'trustScoreBatch']],
-  ['PartnerProfilesPage', '/admin/partner-profiles', ['adminListProfiles']],
   ['KycPage', '/admin/kyc', ['kycAdminQueue']],
-  ['PersonaSegmentsPage', '/admin/persona-segments', ['listPersonasAdmin']],
   ['DirectoryPage', '/admin/directory', ['adminListDirectoryPartners']],
   // Integration keys and GitHub Sync left the console for HQ's own page
   // (the owner's ruling, 2026-10-20); `integration_keys_hq_only.test.mjs`.
   ['PromoCodesPage', '/admin/platform/promo-codes', ['adminListPromos', 'catalogProducts']],
-  ['PaymentsPage', '/admin/platform/payments', ['adminCatalogList', 'adminStripeGetConfig', 'adminStripeListWebhooks']],
   ['AdminWellbeingPage', '/admin/wellbeing', ['wellbeingExperts']],
 ];
 /** The reads every tab used to make before it rendered anything. */

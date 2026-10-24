@@ -61,7 +61,7 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H19', section: 'Content', module: 'Content queue', route: '/admin/articles', files: ['pages/admin/ArticlesQueuePage.jsx'], rail: 'pages/admin/ArticlesQueuePage.jsx' },
   { id: 'H20', section: 'Content', module: 'Publications', route: '/admin/publications', files: ['pages/admin/Publications.jsx', 'pages/admin/PublicationNew.jsx', 'pages/admin/PublicationDetail.jsx'], rail: 'pages/admin/PublicationsFrame.jsx' },
   // H21: Assessment Studio was removed at the owner's request (2026-10-21); its ID stays retired.
-  { id: 'H22', section: 'Content', module: 'Personas', route: '/admin/persona-segments', files: ['pages/admin/consoles/PersonasConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
+  { id: 'H22', section: 'Content', module: 'Personas', route: '/admin/persona-segments', files: ['pages/admin/consoles/PersonasConsole.jsx'], rail: FRAME, host: 'pages/admin/segments/PersonaSegments.jsx' },
   { id: 'H23', section: 'Content', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
   { id: 'H24', section: 'Content', module: 'Directory', route: '/admin/directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'H25', section: 'Content', module: 'Public team page', route: '/admin/team', files: ['pages/admin/AdminTeam.jsx'], rail: 'pages/admin/AdminTeam.jsx' },
@@ -70,7 +70,7 @@ export const SUPER_ADMIN_BOARDS = [
   // 2026-10-20, GitHub sync its `#github` section; the page draws the frame.
   { id: 'H27', section: 'Platform', module: 'Integration keys', route: '/admin/integration-keys', files: ['pages/admin/consoles/IntegrationKeysConsole.jsx'], rail: FRAME, host: KEYS_PAGE },
   { id: 'H28', section: 'Platform', module: 'GitHub sync', route: '/admin/integration-keys#github', files: ['pages/admin/consoles/GithubSyncConsole.jsx'], rail: FRAME, host: KEYS_PAGE },
-  { id: 'H29', section: 'Platform', module: 'Payments catalogue', route: '/admin/platform/payments', files: ['pages/admin/consoles/PaymentsConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
+  { id: 'H29', section: 'Platform', module: 'Payments catalogue', route: '/admin/platform/payments', files: ['pages/admin/consoles/PaymentsConsole.jsx'], rail: FRAME, host: 'pages/admin/payments/Payments.jsx' },
   { id: 'H30', section: 'Platform', module: 'Promo codes', route: '/admin/platform/promo-codes', files: ['pages/admin/consoles/PromoCodesConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'H31', section: 'Platform', module: 'Credit rules', route: '/admin/credit-rules', files: ['pages/hq/CreditRulesRegistryPage.jsx'], rail: 'pages/hq/CreditRulesRegistryPage.jsx' },
   { id: 'H32', section: 'Platform', module: 'AI allowances', route: '/admin/platform/allowances', files: ['pages/hq/PlatformAllowancesPage.jsx'], rail: 'pages/hq/PlatformAllowancesPage.jsx' },

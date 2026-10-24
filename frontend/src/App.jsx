@@ -45,6 +45,7 @@ import {
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import { isCyclePath } from './pages/cycles/cyclePaths';
 import { BOUNDARY_ROLES as NARRATIVE_BOUNDARY_ROLES } from './pages/raise/narrative/narrativeModel';
+import { adminRefusal } from './pages/hq/hqNoticeModel';
 import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
@@ -151,6 +152,12 @@ const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
+// D989 (#2380): Partner profiles, out of the Admin Console, under Approvals.
+const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfiles'));
+// D997 (#2378): Persona segments, out of the Admin Console, under Accounts (HQ: Content).
+const PersonaSegments = lazy(() => import('./pages/admin/segments/PersonaSegments'));
+// D1008 (#2386): Payments, out of the Admin Console, under Platform, HQ only.
+const Payments = lazy(() => import('./pages/admin/payments/Payments'));
 const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminLab = lazy(() => import('./pages/admin/lab/AdminLab'));
@@ -172,12 +179,9 @@ const PublicInsight = lazy(() => import('./pages/insights/PublicInsight'));
 const ActivityPage = lazy(() => import('./pages/ActivityPage'));
 // D938 (#2743) — the Admin Console's tools, each a page at its own address.
 const AllAccountsPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.AllAccountsPage })));
-const PartnerProfilesPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.PartnerProfilesPage })));
 const KycPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.KycPage })));
-const PersonaSegmentsPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.PersonaSegmentsPage })));
 const DirectoryPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.DirectoryPage })));
 const AdminWellbeingPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.AdminWellbeingPage })));
-const PaymentsPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.PaymentsPage })));
 const BankAccountsPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.BankAccountsPage })));
 const ProductTestingHqPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.ProductTestingHqPage })));
 const PromoCodesPage = lazy(() => import('./pages/admin/ConsolePages').then((m) => ({ default: m.PromoCodesPage })));
@@ -263,6 +267,7 @@ const BranchAnalytics = lazy(() => import('./pages/branch/BranchAnalytics'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
+const AdminOnlyNotice = lazy(() => import('./pages/hq/AdminOnlyNotice'));
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
 const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
@@ -421,6 +426,7 @@ const FounderBuildCadence = lazy(() => import('./pages/founder/FounderBuildCaden
 const PitchStudio = lazy(() => import('./pages/raise/pitch/PitchStudio'));
 const PitchWorkspaceMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceMoved'));
 const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
+const PitchEditor = lazy(() => import('./pages/raise/pitch/PitchEditor'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
 const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
@@ -723,9 +729,9 @@ function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
   if (!persona || !Array.isArray(persona.nav_extras) || persona.nav_extras.length === 0) {
     return groups;
   }
-  // Never inject a persona group whose role_alignment differs from the
+  // Never inject a persona group whose profile differs from the
   // current user — a Founder nav extra has no place in an Investor sidebar.
-  if (persona.role_alignment && String(persona.role_alignment) !== String(role)) {
+  if (persona.profile && String(persona.profile) !== String(role)) {
     return groups;
   }
   const existingPaths = new Set();
@@ -1866,6 +1872,10 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
     // Read-only here (render must stay pure — StrictMode double-renders);
     // the AppInner effect clears the ref after the state settles.
     const pendingTarget = isImpersonating ? impersonationTargetRef?.current : null;
+    // D940 (#2745, SHL7b): a member who is not an admin, on an /admin page, is told so in their own shell.
+    if (adminRefusal({ pathname, realRole: (realUser || user)?.role, isImpersonating })) {
+      return <AdminOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;
+    }
     const defaultPath = pendingTarget || ROLE_DEFAULT_PATH[effectiveRole] || '/studio';
     return <Navigate to={defaultPath} replace />;
   }
@@ -1922,7 +1932,7 @@ function AppInner() {
   // render the lens's location while the URL and history stay put.
   const lensLocation = useLensLocation();
   // #2301 — count each opening of an old redirect address before it is retired.
-  useRedirectBeacon(location.pathname);
+  useRedirectBeacon(location.pathname, location.search);
 
   // `opts.hq` is only meaningful for mode 'admin': true is the HQ shell
   // ("Super Admin" in the list), false the plain shell ("Admin"). Other modes
@@ -2557,7 +2567,7 @@ function AppInner() {
           of the same page would let the gate and the links disagree about
           which one is canonical. */}
       <Route path="/onboarding/licence" element={<Navigate to="/onboarding" replace />} />
-      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
+      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder', 'exploring'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor', 'exploring'], <OnboardingInvestorPage />)} />
       <Route path="/onboarding/partner" element={guard(['admin', 'partner', 'exploring'], <OnboardingPartnerPage />)} />
@@ -2738,13 +2748,10 @@ function AppInner() {
           sits under /admin/accounts until #2375's question 1 is answered
           (part 4, #2746); /admin/accounts itself stays HQ › Team. */}
       <Route path="/admin/accounts/all" element={guard(['admin'], <AllAccountsPage onImpersonate={handleImpersonate} />)} />
-      <Route path="/admin/partner-profiles" element={guard(['admin'], <PartnerProfilesPage />)} />
       <Route path="/admin/kyc" element={guard(['admin'], <KycPage />)} />
-      <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegmentsPage />)} />
       <Route path="/admin/directory" element={guard(['admin'], <DirectoryPage />)} />
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />
       {/* Platform and Revenue pages are the Super Admin's, like every other (#2375). */}
-      <Route path="/admin/platform/payments" element={guard(['admin'], hqOnly(<PaymentsPage />))} />
       <Route path="/admin/platform/bank-accounts" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
       <Route path="/admin/platform/product-testing" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/promo-codes" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
@@ -2866,6 +2873,9 @@ function AppInner() {
           rows by design, and this page is reached from Platform's Feature flags
           zone by a literal link, which the reachability walk counts. */}
       <Route path="/admin/platform/switches" element={guard(['admin'], hqOnly(<HqPlatformSwitchesPage />))} />
+      {/* D1008 (#2386): Payments, its two tabs as sub-paths, HQ only; /admin?tab=payments forwards here (LegacyContractsRedirect). */}
+      <Route path="/admin/platform/payments" element={guard(['admin'], hqOnly(<Payments />))} />
+      <Route path="/admin/platform/payments/stripe" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/meeting-bots" element={guard(['admin'], hqOnly(<HqMeetingBotsPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />
@@ -2890,6 +2900,12 @@ function AppInner() {
       <Route path="/admin/advisors-partners" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/firms" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/deck" element={guard(['admin'], <AdvisorsPartners />)} />
+      {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
+      <Route path="/admin/partner-profiles" element={guard(['admin'], <PartnerProfiles />)} />
+      <Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />
+      {/* D997 (#2378): Persona segments, its two tabs as sub-paths; /admin?tab=personas forwards here (LegacyContractsRedirect). */}
+      <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
+      <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/network-profiles" element={<ApRedirect />} />
       {/* D937 (#2374) — the Spin-Out Lab under Programs, its tabs as sub-paths
           (D936's header). /admin/spinout-lab, its /preview and the Admin
@@ -3015,7 +3031,11 @@ function AppInner() {
            ? <PitchWorkspaceMoved />
            : founderEditor(<PitchStudio tab="decks" />))} />
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
-      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
+      {/* D898 (#2676): the canvas's editor (PD1) at /raise/pitch/edit. Today's
+          template builder moves to /raise/pitch/builder until the editor covers
+          its templates and fills, when #2676's last part retires it. */}
+      <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchEditor />)))} />
+      <Route path="/raise/pitch/builder" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
       <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />
       {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
       <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />

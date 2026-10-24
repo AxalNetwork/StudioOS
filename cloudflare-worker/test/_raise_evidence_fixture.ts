@@ -10,5 +10,8 @@ export function raiseEvidenceTables(db: any) {
   }
   if (!exists('revenue_entries')) db.exec(sql('311_revenue_entries.sql'));
   if (!exists('mercury_raise_facts')) db.exec(sql('520_mercury_raise_feeds.sql'));
-  if (exists('readiness_scores')) db.exec(sql('536_readiness_stated_evidence.sql'));
+  if (exists('readiness_scores')) {
+    db.exec(sql('536_readiness_stated_evidence.sql'));
+    db.exec(sql('558_readiness_scores_nullable_score.sql'));
+  }
 }

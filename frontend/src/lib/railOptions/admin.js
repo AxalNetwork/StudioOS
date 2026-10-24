@@ -47,7 +47,7 @@ export const ADMIN_BOARDS = [
   { id: 'S4', section: 'Accounts', module: 'Trash', route: '/admin/trash', files: ['pages/AdminTrashPage.jsx'], rail: FRAME },
   { id: 'S5', section: 'Approvals', module: null, route: '/admin/held/approvals', files: ['pages/admin/HeldApprovals.jsx'], rail: HELD },
   { id: 'S6', section: 'Approvals', module: 'Identity checks', route: '/admin/kyc', files: ['pages/admin/consoles/KycConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
-  { id: 'S7', section: 'Approvals', module: 'Entity profiles', route: '/admin/partner-profiles', files: ['pages/admin/consoles/PartnerProfilesConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
+  { id: 'S7', section: 'Approvals', module: 'Entity profiles', route: '/admin/partner-profiles', files: ['pages/admin/consoles/PartnerProfilesConsole.jsx'], rail: FRAME, host: 'pages/admin/profiles/PartnerProfiles.jsx' },
   { id: 'S8', section: 'Approvals', module: 'LP applications', route: '/admin/lp-applications', files: ['pages/admin/AdminLpApplications.jsx'], rail: FRAME },
   { id: 'S9', section: 'Approvals', module: 'Referrals', route: '/admin/refer-earn', files: ['pages/admin/ReferralReview.jsx'], rail: FRAME },
   { id: 'S10', section: 'Approvals', module: 'Best fit', route: '/admin/best-fit', files: ['pages/admin/AdminBestFitPage.jsx'], rail: FRAME },

@@ -33,7 +33,7 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { ADMIN_BOARDS, ADMIN_OPTIONS, ADMIN_PROFILE, ADMIN_QUIET_CONTROLS, railOptionsFor } from '../src/lib/railOptions/admin.js';
 import { SUPER_ADMIN_BOARDS } from '../src/lib/railOptions/superAdmin.js';
 import { NO_RAIL_ROUTES } from '../src/lib/railPages.js';
-import { consoleBoard, KycPage, AllAccountsPage, PersonaSegmentsPage, BillingPage } from '../src/pages/admin/ConsolePages.jsx';
+import { consoleBoard, KycPage, AllAccountsPage, DirectoryPage, BillingPage } from '../src/pages/admin/ConsolePages.jsx';
 
 const ROOT = process.cwd();
 const src = (p) => resolve(ROOT, 'frontend/src', p);
@@ -120,7 +120,7 @@ test('each Admin Console tool draws the frame once around its page, named for it
   // Every board the console's tools draw, of either profile, is hosted by ConsolePages.
   const hosted = [...ADMIN_BOARDS.map((b) => ['admin', b]), ...SUPER_ADMIN_BOARDS.map((b) => ['super_admin', b])]
     .filter(([, b]) => b.host === CONSOLE_PAGES);
-  assert.deepEqual(hosted.map(([, b]) => b.id), ['S2', 'S6', 'S7', 'S28', 'S30', 'H11', 'H22', 'H24', 'H29', 'H30']);
+  assert.deepEqual(hosted.map(([, b]) => b.id), ['S2', 'S6', 'S28', 'S30', 'H11', 'H24', 'H30']);
   for (const [role, b] of hosted) {
     assert.equal(b.rail, FRAME, `${b.id} does not draw the Admin frame`);
     assert.ok(!b.route.includes('?'), `${b.id} still lives on a query`);
@@ -150,7 +150,7 @@ test('a plain admin and a Super Admin each get the rail of their tier on a conso
   const CASES = [
     [admin, KycPage, '/admin/kyc', 'admin-board-rail', 'Identity checks'],
     [admin, AllAccountsPage, '/admin/accounts/all', 'admin-board-rail', 'Users'],
-    [hq, PersonaSegmentsPage, '/admin/persona-segments', 'hq-board-rail', 'Personas'],
+    [hq, DirectoryPage, '/admin/directory', 'hq-board-rail', 'Directory'],
     [hq, KycPage, '/admin/kyc', null, null],
     [hq, BillingPage, '/admin/revenue/billing', null, null],
   ];

@@ -25,12 +25,12 @@ const read = (p) => codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src',
 const nameOf = (b) => b.module || b.section;
 const HOST = 'pages/admin/ConsolePages.jsx';
 // Every address a console page is registered at (App.jsx, D938).
-const PAGES = ['/admin/accounts/all', '/admin/partner-profiles', '/admin/kyc', '/admin/persona-segments', '/admin/directory', '/admin/wellbeing',
-  '/admin/platform/payments', '/admin/platform/bank-accounts', '/admin/platform/product-testing', '/admin/platform/promo-codes', '/admin/revenue/billing'];
+const PAGES = ['/admin/accounts/all', '/admin/kyc', '/admin/directory', '/admin/wellbeing',
+  '/admin/platform/bank-accounts', '/admin/platform/product-testing', '/admin/platform/promo-codes', '/admin/revenue/billing'];
 
-test('the Super Admin\'s console pages are the five boards, each drawn by the frame under its name', () => {
+test('the Super Admin\'s console pages are the three remaining boards, each drawn by the frame under its name', () => {
   const boards = SUPER_ADMIN_BOARDS.filter((b) => b.host === HOST);
-  assert.deepEqual(boards.map((b) => b.id), ['H11', 'H22', 'H24', 'H29', 'H30']);
+  assert.deepEqual(boards.map((b) => b.id), ['H11', 'H24', 'H30']);
   for (const b of boards) {
     assert.equal(b.rail, 'pages/admin/AdminBoardFrame.jsx', `${b.id}'s rail is not the board frame`);
     assert.equal(b.railPending, undefined, `${b.id} still says it waits`);
@@ -38,7 +38,7 @@ test('the Super Admin\'s console pages are the five boards, each drawn by the fr
     assert.equal(consoleBoard(b.route, 'super_admin'), nameOf(b), b.route);
     assert.equal(pageKeyFor(b.route, 'super_admin'), boardPage(b));
   }
-  // No other console page draws a Super Admin rail: each one that does is one of the five.
+  // No other console page draws a Super Admin rail: each one that does is one of these three.
   const drawn = PAGES.filter((p) => consoleBoard(p, 'super_admin'));
   assert.deepEqual(drawn.sort(), boards.map((b) => b.route).sort());
 });
@@ -61,7 +61,7 @@ test('H27 and H28 are HQ\'s Integration keys page, which draws the frame named f
 
 test('an admin\'s console pages are named for the Admin profile\'s boards, from the same map', () => {
   const boards = ADMIN_BOARDS.filter((b) => b.host === HOST);
-  assert.deepEqual(boards.map((b) => b.id), ['S2', 'S6', 'S7', 'S28', 'S30']);
+  assert.deepEqual(boards.map((b) => b.id), ['S2', 'S6', 'S28', 'S30']);
   for (const b of boards) assert.equal(consoleBoard(b.route, 'admin'), nameOf(b), `${b.id} ${b.route}`);
   const drawn = PAGES.filter((p) => consoleBoard(p, 'admin'));
   assert.deepEqual(drawn.sort(), boards.map((b) => b.route).sort());

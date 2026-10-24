@@ -17,6 +17,7 @@
  *     no second write in the re-read's gap, focus kept, the menu a disclosure.
  */
 import test from 'node:test';
+import { overviewFixture } from './_events_overview_fixture.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -390,8 +391,9 @@ test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or 
   for (const imp of src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api'/g)) {
     assert.deepEqual(imp[1].split(',').map((s) => s.trim().split(/\s+as\s+/)[0]).sort(), imp[1].includes('events as') ? ['adminEvents', 'events'] : ['adminEvents'], 'only the two existing clients');
   }
-  // Nothing D915 §3 leaves undrawn: no type, format, period or chart.
-  assert.doesNotMatch(src, /location_kind|\bev\.type\b|In person|'Online'|12 weeks|recharts|<svg/);
+  // D920 uses the shared chart components and D918's overview; no extra chart library.
+  assert.ok(src.includes('adminEvents.overview(weeks)'));
+  assert.doesNotMatch(src, /recharts|<svg/);
   for (const sample of ['Northwind', 'Bluefern', 'Rua Exemplo', 'Fund I', 'Pricing Workshop', 'Demo Day Rehearsal', '[$', '[3]']) assert.ok(!src.includes(sample), `a canvas sample reached the desk: ${sample}`);
 });
 
@@ -412,11 +414,12 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 const LIVE = Date.now();
 const liveIso = (days) => new Date(LIVE + days * DAY_MS).toISOString();
 
-function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, writes = {} } = {}) {
+function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, overview = overviewFixture(), writes = {} } = {}) {
   return (url, options = {}) => {
     const method = String(options.method || 'GET').toUpperCase();
     const m = url.match(/\/api\/admin\/events\/(\d+)\/(\w+)$/);
     if (method === 'POST' && m) return writes[m[2]] ? writes[m[2]](options) : response({ event: { id: Number(m[1]) } });
+    if (url.includes('/api/admin/events/overview')) return overview instanceof Function ? overview() : response(overview);
     if (url.includes('/api/admin/events/analytics')) return analytics instanceof Function ? analytics() : response(analytics);
     if (/\/api\/admin\/events\?/.test(url)) {
       const q = new URLSearchParams(url.split('?')[1]);
@@ -590,7 +593,7 @@ test('All events joins R2 under Guard G: an empty analytics read is "Could not b
   } finally { await counted.close(); }
 });
 
-test('Overview pages R1 to the end, counts statuses from it, and says Not recorded where nothing stores a value', async () => {
+test('Overview pages the list for Next up, and reads period counts from D918, independent of capped analytics', async () => {
   // Every start is on the live clock the page reads, so no event ends while the suite ages.
   const list = [
     ...Array.from({ length: 200 }, (_, i) => ev(i + 1, { starts_at: liveIso(-30 - i / 10) })),
@@ -598,18 +601,19 @@ test('Overview pages R1 to the end, counts statuses from it, and says Not record
   ];
   // R2 as the Worker reads it: `ORDER BY e.starts_at DESC LIMIT 200`, so the three oldest ended events are not in it.
   const r2 = [...list].sort((a, b) => Date.parse(b.starts_at) - Date.parse(a.starts_at)).slice(0, 200).map((e) => ({ ...row(e.id, 2, 1), starts_at: e.starts_at }));
-  const view = await mounted('/admin/events', worker({ list, analytics: { events: r2 } }));
+  const overview = overviewFixture();
+  overview.by_status.counts = { draft: 1, pending_review: 0, published: 200, rejected: 2, cancelled: 0, other: 0 };
+  const view = await mounted('/admin/events', worker({ list, analytics: { events: r2 }, overview }));
   try {
     assert.ok(view.requests.some((r) => r.url === '/api/admin/events?limit=200&offset=200'), 'a full page asks for the next');
     assert.match(view.textOf('events-status-rejected'), /Sent back · 2/);
     assert.match(view.textOf('events-status-published'), /Published · 200/);
     assert.ok(view.hrefs().includes('/admin/events/all?status=rejected'), 'each chip opens All events with its status');
-    assert.match(view.textOf('events-unrecorded-views'), /No store counts views of an event page/);
-    assert.match(view.textOf('events-unrecorded-feedback'), /Events have no feedback form yet\./);
-    assert.equal(view.textOf('events-tile-showup'),
-      'Show-up rateNot in this read3 events are not in this read. The analytics read holds the 200 events that start latest, and some of these are older.',
-      'three of the 200 ended events start before R2\'s 200 rows: never summed as if they had none');
-    assert.match(view.textOf('events-tile-waiting'), /Waiting time not recorded yet/);
+    assert.match(view.textOf('events-block-views'), /No store counts views of an event page/);
+    assert.match(view.textOf('events-block-feedback'), /Events have no feedback form yet\./);
+    assert.match(view.textOf('events-tile-showup'), /61%/);
+    assert.match(view.textOf('events-tile-waiting'), /Overdue.*72 hours/);
+    assert.ok(!view.requests.some((r) => r.url.includes('/analytics')), 'Overview no longer reads capped analytics');
   } finally { await view.close(); }
 });
 
@@ -715,15 +719,15 @@ test('"Updated" is the oldest answer among the reads the tab draws, never a newe
   const realNow = Date.now;
   let clock = LIVE;
   Date.now = () => clock;
-  const held = { queue: deferred(), list: deferred(), analytics: deferred() };
+  const held = { queue: deferred(), list: deferred(), overview: deferred() };
   const T = [0, 10, 20, 30].map((m) => LIVE + m * 60_000);
   try {
-    const view = await mounted('/admin/events', worker({ queue: () => held.queue.promise, list: () => held.list.promise, analytics: () => held.analytics.promise }));
+    const view = await mounted('/admin/events', worker({ queue: () => held.queue.promise, list: () => held.list.promise, overview: () => held.overview.promise }));
     try {
       assert.equal(view.textOf('events-asof'), 'Reading…', 'nothing has answered yet');
       clock = T[0]; held.queue.resolve(response({ events: QUEUE })); await view.flush();
       clock = T[1]; held.list.resolve(response({ events: [ev(31, { starts_at: liveIso(4) })] })); await view.flush();
-      clock = T[2]; held.analytics.resolve(response({ events: [row(31, 4)] })); await view.flush();
+      clock = T[2]; held.overview.resolve(response(overviewFixture())); await view.flush();
       assert.equal(view.textOf('events-asof'), `Updated ${clockLabel(T[0])}`, 'the Waiting tile and the Review count are the queue read at T0');
       // Review draws the queue alone, read again on the way in: the list's and R2's times are not its.
       clock = T[3];

@@ -1,3 +1,5 @@
+import { REQUIRED_OFFICIAL_INPUTS } from './scoreIntegrity';
+
 export function scoreMarket(tam: number, urgency: number, trend: number) {
   let sizeScore = 3;
   if (tam >= 1_000_000_000) sizeScore = 10;
@@ -80,15 +82,18 @@ export function tierLabel(tier: string): string {
 }
 
 export function runFullScore(data: Record<string, number>) {
-  const market = scoreMarket(data.tam || 0, data.market_urgency || 0, data.market_trend || 0);
-  const team = scoreTeam(data.team_expertise || 0, data.team_execution || 0, data.team_network || 0);
-  const product = scoreProduct(data.mvp_time_days || 90, data.product_complexity || 3, data.product_dependencies || 2);
-  const capital = scoreCapital(data.cost_to_mvp || 100000, data.time_to_revenue_months || 12, data.burn_risk || 2);
-  const fit = scoreFit(data.fit_alignment || 0, data.fit_synergy || 0);
-  const distribution = scoreDistribution(data.distribution_channels || 0, data.distribution_virality || 0);
+  const missing = REQUIRED_OFFICIAL_INPUTS.filter(k => data[k] == null || String(data[k]).trim() === '' || !Number.isFinite(Number(data[k])));
+  if (missing.length) return { total_score: null, tier: null, tier_label: 'Not recorded', breakdown: null, ai_adjustment: null, max_possible: 100, reason: `Missing scoring inputs: ${missing.join(', ')}`, missing };
+
+  const market = scoreMarket(Number(data.tam), Number(data.market_urgency), Number(data.market_trend));
+  const team = scoreTeam(Number(data.team_expertise), Number(data.team_execution), Number(data.team_network));
+  const product = scoreProduct(Number(data.mvp_time_days), Number(data.product_complexity), Number(data.product_dependencies));
+  const capital = scoreCapital(Number(data.cost_to_mvp), Number(data.time_to_revenue_months), Number(data.burn_risk));
+  const fit = scoreFit(Number(data.fit_alignment), Number(data.fit_synergy));
+  const distribution = scoreDistribution(Number(data.distribution_channels), Number(data.distribution_virality));
 
   let total = market.total + team.total + product.total + capital.total + fit.total + distribution.total;
-  const aiAdj = data.ai_adjustment || 0;
+  const aiAdj = Number(data.ai_adjustment ?? 0);
   total = Math.min(Math.max(total + aiAdj, 0), 100);
   const tier = classifyTier(total);
 

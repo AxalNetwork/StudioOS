@@ -6,7 +6,7 @@
 // strip, then the tab the address names. The tabs, their model and their reads live in `events/` (see its
 // README). Worker-only surface (`/api/admin/events/*`): the dev FastAPI does
 // not implement it, so expect failed reads in the dev preview, each saying so.
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { AdminPageHeader, HeaderTab, actionGhost } from '../../ui';
@@ -54,9 +54,10 @@ function DeskTabs({ waiting }) {
 function AdminEventsPageBody() {
   const { pathname, search } = useLocation();
   const tab = tabFor(pathname);
+  const [weeks, setWeeks] = useState(12);
   const eventId = eventIdFor(pathname);
   // D919: "Cancelled with paid tickets" is the one view that needs the overview read.
-  const reads = useEventsDesk(tab, eventId, { paidView: new URLSearchParams(search).get('view') === 'paid_cancelled' });
+  const reads = useEventsDesk(tab, eventId, { paidView: new URLSearchParams(search).get('view') === 'paid_cancelled', weeks });
   const now = Date.now();
   const waiting = readyList(reads.queue)?.length || 0;
 
@@ -91,7 +92,7 @@ function AdminEventsPageBody() {
         />
       )}
 
-      {tab === 'overview' ? <EventsOverview reads={reads} now={now} /> : null}
+      {tab === 'overview' ? <EventsOverview reads={reads} now={now} weeks={weeks} onWeeks={setWeeks} /> : null}
       {tab === 'review' ? <EventsReview reads={reads} /> : null}
       {tab === 'all' ? <EventsAll reads={reads} now={now} /> : null}
       {tab === 'calendar' ? <EventsCalendar reads={reads} now={now} /> : null}

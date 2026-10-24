@@ -141,3 +141,19 @@ test('a page with no More draws no "⋯"', async () => {
     assert.ok(!v.nodes().some((n) => v.props(n)?.['data-testid'] === 'admin-page-more'));
   } finally { await v.unmount(); }
 });
+
+
+test('merged dedicated pages keep a single native route and their own rail host', async () => {
+  const raw = read('frontend/src/App.jsx');
+  for (const [path, component] of [['/admin/partner-profiles', 'PartnerProfiles'], ['/admin/persona-segments', 'PersonaSegments'], ['/admin/platform/payments', 'Payments']]) {
+    const rows = raw.split('\n').filter((l) => l.includes(`path="${path}"`));
+    assert.equal(rows.length, 1, `${path} must not be shadowed by a console wrapper`);
+    assert.ok(rows[0].includes(`<${component} />`), `${path} keeps its dedicated page`);
+    if (component === 'Payments') assert.ok(rows[0].includes('hqOnly('));
+  }
+  const { ADMIN_BOARDS } = await import('../src/lib/railOptions/admin.js');
+  const { SUPER_ADMIN_BOARDS } = await import('../src/lib/railOptions/superAdmin.js');
+  for (const [boards, id, host] of [[ADMIN_BOARDS, 'S7', 'pages/admin/profiles/PartnerProfiles.jsx'], [SUPER_ADMIN_BOARDS, 'H22', 'pages/admin/segments/PersonaSegments.jsx'], [SUPER_ADMIN_BOARDS, 'H29', 'pages/admin/payments/Payments.jsx']]) {
+    assert.equal(boards.find((b) => b.id === id).host, host, id);
+  }
+});
