@@ -117,6 +117,8 @@ test('parts.narrative: every version with where it started, when, by whom and wh
   db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, is_current) VALUES (?, ?, ?, ?, ?)').run(4, P, 5, JSON.stringify([{ title: 'A', binding: ref(1) }]), 0);
   db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, is_current) VALUES (?, ?, ?, ?, ?)')
     .run(5, P, 6, JSON.stringify([{ title: 'A', binding: ref(2) }, { title: 'B' }, { title: 'C', fields: [{ key: 'x', binding: ref(2) }] }]), 1);
+  // A restored deck: a higher version that is not current still reads nothing.
+  db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, is_current) VALUES (?, ?, ?, ?, ?)').run(6, P, 7, JSON.stringify([{ title: 'A', binding: ref(3) }]), 0);
   const part = (await home(db)).parts.narrative;
   assert.equal(part.state, 'ok');
   assert.deepEqual(part.versions.map((v: any) => [v.version, v.audience, v.based_on, v.by, v.read_by]), [

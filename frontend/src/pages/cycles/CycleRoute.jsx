@@ -56,7 +56,7 @@ import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { moduleToolLinks } from './founderToolNavigation.js';
-import { NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
+import { NarrativeHome, NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
 import { isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
@@ -162,6 +162,13 @@ const CYCLE_DEFS = {
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
     parts: toFnMap({
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
+      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`.
+      'investor-narrative': (data, ctx) => (
+        <>
+          <NarrativeHome data={data} search={ctx.search} />
+          {mercuryPart('investor-narrative', data, ctx)}
+        </>
+      ),
       'capital-relationships': (data, ctx) => (
         <>
           <CallsHistory calls={data?.parts?.calls} />
@@ -1019,7 +1026,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
             onDiscard={(id) => interviewSessionsApi.discard(id).then(() => setReload((n) => n + 1))}
             onAcceptAll={(batches) => acceptSuggestions(batches, interviewSessionsApi).finally(() => setReload((n) => n + 1))} />
         )}
-        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
+        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null, search: q })}
       </ModulePage>
     );
   }

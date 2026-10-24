@@ -8,7 +8,14 @@ The founder's Investor narrative tool at `/raise/investor-narrative` (D906,
 | File | What it is |
 |---|---|
 | `NarrativeTool.jsx` | The tool's tab bar (`NarrativeTabBar`), drawn under the module page's header on Home, and its tab pages (`NarrativeTabPage`): Story, Positioning, Check and Versions with Compare. |
-| `narrativeModel.js` | Pure: the addresses, the tabs, the words, and every derivation from the reads (the saved versions, one version's words and its consistency check, two versions side by side). |
+| `narrativeModel.js` | Pure: the addresses, the tabs, the words, and every derivation from the reads (the saved versions, one version's words and its consistency check, two versions side by side; D909's tiles, Needs you, footer, based-on and Read by lines, and New version's "Creates v[n] for …" line). |
+
+D909 (#2693) adds `NarrativeHome` to `NarrativeTool.jsx`: Home's tiles, Needs
+you and footer. CycleRoute draws it as the module's part
+(`CYCLE_DEFS.raise.parts`) from the module read's `parts.narrative`. The
+Versions tab reads that part for each version's based-on line and Read by,
+compares through D908's `GET /narrative/compare`, and offers Duplicate (behind
+a dialog) and "Make vN the start of a new version" (`/new?start_from=version-N`).
 
 ## Where the tool lives
 
@@ -27,6 +34,8 @@ added, so every cycle-route rule (`cyclePaths.js`, `cycle_spacing_d694`) holds.
 - **Every figure comes from a mounted read.** A read that fails says so where its
   figure would be; a value nobody recorded reads "Not recorded", never 0. No
   canvas sample (`[Northwind Labs]`, `[$18,400]`) ever reaches a page.
+- **A tile with no store is a dash with its reason, never 0** (D909). Claims
+  backed waits for #2430 and Objections answered for #2457.
 - **A board waits for its store.** Claims (#2430), bound figures and the
   sections store, stored positioning, the deck side of the check (#2434) and
   objections (#2457) need stores the Worker does not have. Each is a slot task
