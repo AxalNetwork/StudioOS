@@ -132,6 +132,30 @@ recent activity and the four lightboxes wait for D930's five parts (D931 to
 D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
 row says what is drawn today.
 
+## Landed 2026-10-24 — Founder · Raise · Cap table (#2432)
+
+The owner's artifacts `NtjTWkVfbEYkZ4xWk8n35Q` (the board grid) and
+`Lxsy595iChD3Cmwh8j4qGi` (the page) came from S21's prompt on #2432:
+- `Cap Table · Boards.dc.html` is the board grid (CT1 to CT24, with the lettered
+  boards CT1c, CT2p, CT3b, CT5c, CT11a–c, CT12a–c, CT13n, CT15o, CT15n, CT16a,
+  CT17a–b, CT18a–c, CT19a–c, CT21a–c, CT22a–b and CT23a–c), the output of
+  `scripts/read-canvas.mjs` as is;
+- `Raise Cap Table Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in the
+  font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/raise/cap-table` is the tool: Overview is the module page
+with the tool's tabs and the Modelled line, and `/instruments`, `/option-pool`
+and `/scenarios` are tab words CycleRoute reads, with no route added. S21's
+integration (D1015) draws the SAFEs sent through StudioOS, the model's
+instruments and conversion lines, the 409A, the model's pool and the scenario
+cards, each from a read on `main`. The record, the access levels, History,
+Access, Import and export, the drawers, the dialogs, the investor's panel, phone
+and dark wait for D1015's fourteen parts, so this canvas stays in the queue
+until they land. The `ROUTE_MAP.md` row says what is drawn today.
+
 ## Landed 2026-10-24 — HQ · Platform · Payments (#2386)
 
 The owner's artifacts `N9XiycCLan8HmGXX4ZoQYY` (the board grid) and
