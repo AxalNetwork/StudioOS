@@ -385,7 +385,7 @@ export const SLOW_PATHS = [
   /^\/dd\/cases\/[^/]+\/(scan|report)$/,
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
-  /^\/decks\/\d+\/review$/,             // D900: a version's review
+  /^\/decks\/[^/]+\/review$/,           // D900: a version's review
   /^\/funds\/[^/]+\/regenerate-lpa$/,
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
