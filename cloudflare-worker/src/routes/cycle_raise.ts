@@ -275,7 +275,7 @@ cycleRaise.put('/narrative/positioning', async (c) => {
 const inputFailed = (c: any, e: unknown, what: string) => {
   if (e instanceof InputError) return c.json({ detail: e.sentence, code: e.code }, 400);
   if (e instanceof WriterError) return c.json({ detail: e.sentence }, e.status as any);
-  console.error(`[cycle_raise] narrative ${what} failed:`, (e as Error)?.message);
+  console.error('[cycle_raise] narrative write failed:', what, (e as Error)?.message);
   return c.json({ detail: `The ${what} could not be saved` }, 500);
 };
 
