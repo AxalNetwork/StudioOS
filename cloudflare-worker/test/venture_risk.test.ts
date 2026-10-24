@@ -90,11 +90,11 @@ test('parseHeadcount: pulls the leading integer out of free text', () => {
   assert.equal(parseHeadcount(undefined), null);
 });
 
-test('computeAutoLayers: empty inputs -> all 10 layers, score 0, has_data false', () => {
+test('computeAutoLayers: empty inputs -> all 10 layers, null score, has_data false', () => {
   const auto = computeAutoLayers({ snapshot: null, project: null });
   assert.equal(Object.keys(auto).length, 10);
   for (const key of LAYER_KEYS) {
-    assert.equal(auto[key].score, 0, `${key} score is 0`);
+    assert.equal(auto[key].score, null, `${key} score is null`);
     assert.equal(auto[key].has_data, false, `${key} has_data is false`);
     assert.deepEqual(auto[key].signals, [], `${key} has no signals`);
   }
@@ -139,8 +139,8 @@ test('mergeLayers: analyst score override wins over the auto score', () => {
   ]);
   const merged = mergeLayers(auto, overrides);
   const founder = merged.find((l) => l.key === 'founder')!;
-  assert.equal(founder.auto_score, 0);
-  assert.equal(founder.auto_band, 'high');
+  assert.equal(founder.auto_score, null);
+  assert.equal(founder.auto_band, null);
   assert.equal(founder.score, 90); // effective = override
   assert.equal(founder.band, 'low');
   assert.equal(founder.color, 'emerald');
@@ -214,16 +214,16 @@ test('overallFromLayers: overall is the mean of the effective per-layer scores',
   ]);
   const merged = mergeLayers(auto, overrides);
   const overall = overallFromLayers(merged);
-  // (100 + 50 + eight zeros) / 10 = 15
-  assert.equal(overall.score, 15);
-  assert.equal(overall.band, scoreToBand(15));
+  // Only the two scored layers contribute: (100 + 50) / 2.
+  assert.equal(overall.score, 75);
+  assert.equal(overall.band, scoreToBand(75));
 });
 
-test('overallFromLayers: empty layer list yields a safe high-risk zero', () => {
+test('overallFromLayers: empty layer list is unscored', () => {
   const overall = overallFromLayers([]);
-  assert.equal(overall.score, 0);
-  assert.equal(overall.band, 'high');
-  assert.equal(overall.color, 'red');
+  assert.equal(overall.score, null);
+  assert.equal(overall.band, null);
+  assert.equal(overall.color, null);
 });
 
 // ---------------------------------------------------------------------------
@@ -314,8 +314,10 @@ test('by-project: admin/partner are allowed and get 10 layers + overall', async 
     const body = (await res.json()) as any;
     assert.equal(body.project_id, 1);
     assert.equal(body.layers.length, 10);
-    assert.ok(typeof body.overall_score === 'number');
-    assert.ok(['low', 'medium', 'high'].includes(body.overall_band));
+    assert.equal(body.overall_score, null);
+    assert.equal(body.overall_band, null);
+    assert.equal(body.covered_layers, 0);
+    assert.ok(body.reason);
   }
 });
 
