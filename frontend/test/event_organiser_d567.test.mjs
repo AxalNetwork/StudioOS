@@ -58,7 +58,20 @@ test('D567: signed-in numeric member detail returns its WorkspaceShell content',
   });
   const transformed = await transformWithOxc(source, pageUrl.pathname, { jsx: { runtime: 'automatic' } });
   const code = transformed.code.replace(/from ['"]react\/jsx-runtime['"]/g, `from '${import.meta.resolve('react/jsx-runtime')}'`);
-  const { default: PublicEventDetailPage, renderAgenda } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  const { default: PublicEventDetailPage, renderAgenda, renderEventLocation } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  for (const location_kind of ['virtual', 'hybrid']) {
+    const hidden = renderToStaticMarkup(renderEventLocation({ location_kind, location_url: null }));
+    assert.match(hidden, /Join link sent to ticket holders/);
+    assert.doesNotMatch(hidden, /href=/);
+    const granted = renderToStaticMarkup(renderEventLocation({ location_kind, location_url: 'https://meet.example.test/room' }));
+    assert.match(granted, /href="https:\/\/meet.example.test\/room"/);
+    assert.doesNotMatch(granted, /Join link sent to ticket holders/);
+  }
+  for (const location_kind of ['physical', 'in_person']) {
+    const physical = renderToStaticMarkup(renderEventLocation({ location_kind, location_text: 'Fixture hall' }));
+    assert.match(physical, /Fixture hall/);
+    assert.doesNotMatch(physical, /Join link sent to ticket holders/);
+  }
   assert.match(renderToStaticMarkup(renderAgenda([])), /No agenda items yet/);
   assert.match(renderToStaticMarkup(renderAgenda([{ id: 1, title: 'Fixture agenda' }])), /Not recorded — start time is absent/);
   assert.match(renderToStaticMarkup(renderAgenda([{ id: 1, title: 'Fixture agenda' }])), /Not recorded — speaker is absent/);

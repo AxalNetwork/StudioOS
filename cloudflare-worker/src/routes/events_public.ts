@@ -17,7 +17,7 @@ import { verifyTurnstile } from '../services/turnstile';
 import { ensureEventsSchema } from '../services/eventsSchema';
 import { isPrincipalCompEligible, parseAudienceRules } from '../services/eventAudience';
 import { isCapacityFull, seatsTaken, type EventSeatRow } from '../services/eventCapacity';
-import { buildEventsIcs, shapeAgendaItem, shapeEvent } from '../services/eventsCommon';
+import { buildEventsIcs, isInPersonEvent, shapeAgendaItem, shapeEvent } from '../services/eventsCommon';
 import { registerPrincipal } from './events';
 
 const eventsPublic = new Hono<{ Bindings: Env }>();
@@ -85,7 +85,7 @@ eventsPublic.get('/events.ics', async (c) => {
     `SELECT * FROM events WHERE ${FEED_PREDICATE} AND datetime(starts_at) >= datetime('now','-1 day')
        ORDER BY starts_at ASC LIMIT 200`,
   ).all();
-  const ics = buildEventsIcs(rows.results || []);
+  const ics = buildEventsIcs((rows.results || []).map((row) => shapeEvent(row)));
   return new Response(ics, {
     headers: {
       'content-type': 'text/calendar; charset=utf-8',
@@ -109,7 +109,7 @@ eventsPublic.get('/events/:slug', async (c) => {
   const taken = await seatsTaken(c.env, Number(event.id));
   return c.json({
     event: shapeEvent(event),
-    agenda: (agenda.results || []).map(shapeAgendaItem),
+    agenda: (agenda.results || []).map((row) => shapeAgendaItem(row, { includeJoinLink: isInPersonEvent(event) })),
     seats_taken: taken,
     is_full: isCapacityFull(event as EventSeatRow, taken),
   });
@@ -126,7 +126,7 @@ eventsPublic.get('/events/:slug/ics', async (c) => {
   if (!event) return c.json({ error: 'not_found' }, 404);
   // Lazy import to avoid circular reference if eventsCommon.ts is already loaded
   const { buildEventIcs } = await import('../services/eventsCommon');
-  const ics = buildEventIcs(event);
+  const ics = buildEventIcs(shapeEvent(event));
   return new Response(ics, {
     headers: {
       'content-type': 'text/calendar; charset=utf-8',
@@ -198,7 +198,7 @@ eventsPublic.get('/invite/:token', async (c) => {
       personal_message: inv.personal_message ?? null,
     },
     event: shapeEvent(event),
-    agenda: (agenda.results || []).map(shapeAgendaItem),
+    agenda: (agenda.results || []).map((row) => shapeAgendaItem(row, { includeJoinLink: isInPersonEvent(event) })),
   });
 });
 

@@ -102,7 +102,7 @@ const SOURCES: Record<string, string[]> = {
   hubspot: ['integrations/providers/hubspot.ts'],
   calendly: ['integrations/providers/calendly.ts'],
   salesforce: ['integrations/providers/salesforce.ts'],
-  carta: ['integrations/providers/carta.ts'],
+  carta: ['integrations/providers/carta.ts', 'routes/carta_investor.ts'],
   docusign: ['integrations/providers/docusign.ts'],
   stripe: ['integrations/providers/stripe.ts'],
   crunchbase: ['integrations/providers/crunchbase.ts'],
@@ -117,7 +117,7 @@ const linesOf = (file: string) => {
 };
 
 /** The sign-in's own token exchange and refresh: not tools (D753 decision 3). */
-const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint'];
+const TOKEN_EXCHANGE = ['/oauth/token', '/oauth/v1/token', '/o/token/', '/o/access_token/', '/services/oauth2/token', 'login/oauth/access_token', 'oauth.v2.access', 'GOOGLE_TOKEN_URL', 'msToken(', 'LINKEDIN_TOKEN_URL', 'server.token_endpoint'];
 /** A read that is a POST. */
 const READ_BY_POST: Record<string, string[]> = { hubspot: ["'/crm/v3/objects/deals/search'"], crunchbase: ["'/searches/organizations'"], mercury: ["jsonrpc: '2.0'"] };
 /** Connection plumbing: a revoke, a deauthorize, a webhook subscription or listener, a signing key. */
@@ -127,6 +127,7 @@ const ACCOUNT_CALLS: Record<string, string[]> = {
   hubspot: ['/oauth/v1/refresh-tokens/'],
   calendly: ['/webhook_subscriptions', "fetch(uri, { method: 'DELETE'"],
   salesforce: ['/services/oauth2/revoke'],
+  google_calendar: ['https://oauth2.googleapis.com/revoke'],
   carta: ['/o/revoke_token/'],
   docusign: ["'/connect'", '/hmac`', '`/connect/${encodeURIComponent(connectId)}`', '/oauth/revoke`'],
   stripe: ['/oauth/deauthorize'],
@@ -277,7 +278,8 @@ test('7. verified means a recorded check, and no check is recorded yet', () => {
     assert.equal(CONNECTOR_METADATA[e.key].verified, e.page.verified_on !== null, `${e.id}: verified without a recorded date, or the reverse`);
   }
   for (const k of ['hubspot', 'calendly', 'slack', 'stripe', 'google_calendar', 'microsoft_365']) assert.equal(CONNECTOR_METADATA[k].verified, false, k);
-  assert.ok(CONNECTOR_METADATA.google_calendar.permissions.includes('Gmail (read-only) is asked for at sign-in; Axal VC does not read your Gmail.'));
+  assert.equal(CONNECTOR_METADATA.google_calendar.permissions.some((p) => /Gmail/i.test(p)), false,
+    'the Google Calendar connector must not disclose or request Gmail access');
   assert.equal(CONNECTOR_METADATA.google_calendar.permissions.some((p) => /Read Gmail messages/.test(p)), false);
 });
 

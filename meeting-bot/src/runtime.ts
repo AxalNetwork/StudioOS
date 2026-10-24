@@ -8,13 +8,12 @@ import type { CallbackTransport, LogSink, MeetingAdapter, Platform, RunConfig } 
 
 export interface RuntimeOptions {
   secret: string; callbackOrigin: string;
-  adapter: (platform: Platform, context: RuntimeAdapterContext)=>Promise<MeetingAdapter>;
+  adapter: (platform: Platform)=>Promise<MeetingAdapter>;
   log?: LogSink; now?: ()=>number;
   /** Tests inject the publication decision and the callback, never an env bypass. */
   notice?: (ventureName?:string)=>string;
   transport?: (uid:string)=>CallbackTransport;
 }
-export interface RuntimeAdapterContext {uid:string;secret:string;callbackOrigin:string;transport:CallbackTransport}
 const reply=(body:object,status=200)=>Response.json(body,{status});
 const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 export class RuntimeHost {
@@ -70,7 +69,7 @@ export class RuntimeHost {
     active.done=Promise.resolve().then(async()=>{
       let adapter:MeetingAdapter|undefined;
       try{
-        adapter=await this.options.adapter(cfg.platform,{uid:cfg.runId,secret:this.options.secret,callbackOrigin:this.options.callbackOrigin,transport});
+        adapter=await this.options.adapter(cfg.platform);
         // The factory may finish after Stop or lease expiry. Own the resource
         // even if runBot rejects its config before entering its cleanup scope.
         const originalLeave=adapter.leave.bind(adapter);let leaving:Promise<void>|null=null;

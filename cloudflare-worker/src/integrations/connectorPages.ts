@@ -316,10 +316,10 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://developer.salesforce.com/docs' },
     verified_on: null,
   },
-  carta: {
+  carta: { personal: { founder: {
     tagline: 'Your Carta cap table in Founding team, refreshed every six hours. Read-only.',
     long_description: [
-      'Mirror your Carta cap table (issuer, stakeholders, securities and vesting) into Founding team on a six-hour sync.',
+      'Mirror your Carta cap table (issuer, stakeholders, securities and vesting) into Founding team on a six-hour sync. Choose Playground for a playground app, or Production for an approved production app.',
       'Read-only: Axal VC reads your cap table and never changes it in Carta. When you disconnect, it revokes its Carta sign-in.',
     ],
     tools: [
@@ -327,18 +327,43 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       tool('list_stakeholders', 'stakeholders', 'read', 'Reads each issuer’s stakeholders.', 'founding_team', ["/stakeholders`, 'stakeholders'"]),
       tool('list_securities', 'securities', 'read', 'Reads each issuer’s securities.', 'founding_team', ["/securities`, 'securities'"]),
       tool('list_vesting_schedules', 'vesting schedules', 'read', 'Reads each issuer’s vesting schedules.', null, ['/vesting-schedules`']),
-      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['`${AUTH_HOST}/o/revoke_token/`']),
+      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['/o/revoke_token/']),
     ],
     prompts: [],
     prompts_reason: notRead('Carta'),
     made_by: AXAL,
     service: { name: 'Carta', href: null },
     sign_in: { kind: 'oauth', label: 'Sign in with Carta', key_help_href: null },
-    endpoints: { sign_in: 'https://login.carta.com/o/authorize/', api: 'https://api.carta.com/v1alpha1' },
+    endpoints: { sign_in: 'https://login.playground.carta.team/o/authorize/', api: 'https://api.playground.carta.team/v1alpha1' },
     added: '2026-09',
-    links: { ...NO_LINKS, developer_docs: 'https://carta.com/api/' },
+    links: { ...NO_LINKS, developer_docs: 'https://docs.carta.com/api-platform/guides/' },
     verified_on: null,
-  },
+  }, investor: {
+    tagline: 'Your own Carta firms, funds, investments, securities and cap tables. Read-only.',
+    long_description: [
+      'For investors, sign in to your own Carta firm. Axal VC reads only the firms and funds you share, their portfolio investments, investment securities and capitalization tables. It never changes Carta or imports these records into a founder’s cap table.',
+      'Founders have a separate connection to their company’s issuer, stakeholders, securities and vesting. An investor grant never requests founder issuer permissions.',
+      'Carta returns only investments with cap-table data on Carta. Other investments are not recorded here. A denied or failed read is Unreadable, and missing figures are Not recorded.',
+      'Choose Playground for a playground app, or Production for an approved production app. Disconnect revokes this sign-in.',
+    ],
+    tools: [
+      tool('list_firms', 'your firms', 'read', 'Reads the investment firms you shared in Carta.', null, ["path: '/firms'"]),
+      tool('list_funds', 'their funds', 'read', 'Reads funds in the selected firm.', null, ["path: '/firms/:firmId/funds'"]),
+      tool('list_investments', 'portfolio investments', 'read', 'Reads the selected fund’s portfolio companies with Carta cap-table data.', null, ["path: '/firms/:firmId/funds/:fundId/investments'"]),
+      tool('list_securities', 'investment securities', 'read', 'Reads certificates, convertible notes and warrants of the selected investment.', null, ["'certificates', 'convertibleNotes', 'warrants'"]),
+      tool('read_capitalization_tables', 'capitalization tables', 'read', 'Reads a portfolio company’s cap tables and share-class summary, without stakeholder names or emails.', null, ["kind: 'capitalizationTable'"]),
+      tool('revoke_token', 'the sign-in', 'account', 'Revokes the Carta sign-in when you disconnect.', null, ['/o/revoke_token/']),
+    ],
+    prompts: [],
+    prompts_reason: notRead('Carta'),
+    made_by: AXAL,
+    service: { name: 'Carta', href: null },
+    sign_in: { kind: 'oauth', label: 'Sign in with Carta', key_help_href: null },
+    endpoints: { sign_in: 'https://login.playground.carta.team/o/authorize/', api: 'https://api.playground.carta.team/v1alpha1' },
+    added: '2026-09',
+    links: { ...NO_LINKS, developer_docs: 'https://docs.carta.com/api-platform/guides/' },
+    verified_on: null,
+  } } },
   slack: {
     tagline: 'Alerts from Axal VC in the Slack channel you choose.',
     long_description: [
@@ -524,9 +549,10 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
       'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
-      'At sign-in, Google also asks for permission to read Gmail. Axal VC does not read your Gmail.',
+      'If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
     ],
     tools: [
+      tool('remove_gmail_access', 'Google account access', 'account', 'Revokes an earlier Google grant that included Gmail, then starts a fresh consent without Gmail.', null, ['https://oauth2.googleapis.com/revoke']),
       tool('read_profile', 'your profile', 'read', 'Reads your email address and name, when you sign in.', null, ['fetchWithTimeout(GOOGLE_USERINFO_URL']),
       tool('create_event', 'calendar events', 'write', 'Adds an event to your primary calendar, when you schedule one.', null, ['`${GOOGLE_CALENDAR_API}/calendars/primary/events`,']),
       tool('update_event', 'calendar events', 'write', 'Updates an event Axal VC added, when you change it.', null, ['`${GOOGLE_CALENDAR_API}/calendars/primary/events/${googleEventId}`']),
@@ -658,7 +684,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
     long_description: [
       'What it reads: only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview. Voice notes and audio files are taken in only after the person replies YES to the recording notice, and are kept until you delete them.',
       'What it sends: only what you send from Axal (replies and the notice), plus one line confirming YES, NO or STOP, within 24 hours of the person’s last message.',
-      'What it can’t do: calls, group chats, files over 5 MB, round videos for now. For a round video, send its audio track as an audio file up to 5 MB instead.',
+      'What it can’t do: group chats, files over 5 MB, round videos for now. For a round video, send its audio track as an audio file up to 5 MB instead. Calls: Axal does not join, place or answer Telegram calls. Forwarded recordings (Send to Axal) are built but not switched on yet. When enabled, Axal waits for you to confirm everyone agreed before it downloads or transcribes the audio.',
       'Costs: transcription and translation use AI tokens. Translation keeps the original and adds your working language when needed. Up to 50 notes a day. Needs Telegram Premium: chatbots are part of Telegram Business.',
     ],
     tools: [

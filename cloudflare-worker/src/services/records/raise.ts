@@ -199,7 +199,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
       form: { title: 'Score Team', cta: 'Save score', fields: [
         { key: 'score', label: 'Score', kind: 'CH', options: Array.from({ length: 11 }, (_, n) => ({ value: String(n), label: `${n} / 10` })),
           value: s ? String(Number(s.score)) : undefined, required: true },
-        { key: 'evidence', label: 'Evidence', kind: 'CH', options: EVIDENCE.map((e) => ({ value: e, label: cap1(e) })), value: s?.evidence ?? undefined, required: true },
+        { key: 'evidence', label: 'Evidence', kind: 'CH', options: EVIDENCE.filter(e => e !== 'measured').map((e) => ({ value: e, label: cap1(e) })), value: s?.evidence ?? undefined, required: true },
         { key: 'missing', label: 'Missing', kind: 'T', value: s?.missing ?? '' },
       ] },
       execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await scoreReadinessItem(c.env, {
@@ -225,7 +225,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
       return { value: i.key, label: i.label, by_hand: i.key === 'team', last_scored: sc ? day(sc.scored_at) : null, score: sc ? Number(sc.score) : null };
     }),
     since: opts([['all', 'Everything'], ['last', 'Since the last score']]),
-    evidence: EVIDENCE.map((e) => ({ value: e, label: cap1(e) })),
+    evidence: EVIDENCE.filter(e => e !== 'measured').map((e) => ({ value: e, label: cap1(e) })),
   };
 });
 

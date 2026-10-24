@@ -45,7 +45,7 @@ async function seed(f: any, provider: string, extra: Record<string, unknown> = {
 const TOKEN_URLS: Record<string, string> = {
   hubspot: 'https://api.hubapi.com/oauth/v1/token',
   calendly: 'https://auth.calendly.com/oauth/token',
-  carta: 'https://login.carta.com/o/token/',
+  carta: 'https://login.app.carta.com/o/access_token/',
   docusign: 'https://account-d.docusign.com/oauth/token',
   salesforce: 'https://login.salesforce.com/services/oauth2/token',
 };

@@ -223,23 +223,28 @@ async function testStripe(_id: string, secret: string): Promise<ProviderTestResu
 }
 
 async function testCarta(id: string, secret: string): Promise<ProviderTestResult> {
-  const body = new URLSearchParams({
-    grant_type: 'authorization_code',
-    client_id: id, client_secret: secret,
-    code: 'axal-probe-invalid-code',
-    redirect_uri: 'https://axal.invalid/cb',
-  });
-  const res = await safeFetch('https://login.carta.com/o/token/', {
-    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body,
-  });
-  if (!res) return { ok: false, reachable: false, detail: 'Network/timeout reaching carta.com' };
-  const j = await parseJsonSafe(res);
-  const err = (j?.error || '').toLowerCase();
-  return { ok: classify(err, res.status), reachable: true, http_status: res.status,
-    provider_error: err || null,
-    detail: classify(err, res.status)
-      ? 'Carta accepted the client credentials.'
-      : `Carta rejected credentials (${err || res.status}).` };
+  // The key can belong to either environment; probe only Carta's documented
+  // token hosts, with an invalid code, and never issue a real grant.
+  let last: ProviderTestResult = { ok: false, reachable: false, detail: 'Carta could not be reached.' };
+  for (const [label, host] of [
+    ['Playground', 'https://login.playground.carta.team'],
+    ['Production', 'https://login.app.carta.com'],
+  ]) {
+    const body = new URLSearchParams({ grant_type: 'authorization_code', client_id: id,
+      code: 'axal-probe-invalid-code', redirect_uri: 'https://axal.invalid/cb' });
+    const res = await safeFetch(`${host}/o/access_token/`, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${btoa(`${id}:${secret}`)}` }, body,
+    });
+    if (!res) continue;
+    const j = await parseJsonSafe(res);
+    const err = typeof j?.error === 'string' && /^[a-z_]{1,64}$/.test(j.error) ? j.error : '';
+    const ok = classify(err, res.status);
+    last = { ok, reachable: true, http_status: res.status, provider_error: err || null,
+      detail: ok ? `Carta ${label} recognised the client credentials.` : 'Carta rejected the client credentials.' };
+    if (ok) return last;
+  }
+  return last;
 }
 
 async function testGithub(id: string, secret: string): Promise<ProviderTestResult> {

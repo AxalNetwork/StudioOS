@@ -94,6 +94,7 @@ function freshDb() {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       stage_changed_at TEXT
     );
+    CREATE TABLE commitments (id INTEGER PRIMARY KEY, deal_id INTEGER, amount REAL, status TEXT);
     CREATE TABLE partners (id INTEGER PRIMARY KEY, name TEXT);
     CREATE TABLE deal_stage_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT, deal_id INTEGER NOT NULL,

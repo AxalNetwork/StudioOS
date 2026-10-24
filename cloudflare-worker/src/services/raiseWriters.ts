@@ -29,7 +29,7 @@ import { ensureTier } from '../middleware/requireTier';
 import { createShareLink, revokeShareLink, SHARE_NEVER_EXPIRES } from '../routes/decks';
 import { createProspect, RAISE_STAGES } from '../routes/contacts';
 import {
-  READINESS_ITEMS, READINESS_KEYS, EVIDENCE, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
+  READINESS_ITEMS, READINESS_KEYS, INVESTOR_TYPES, INVESTOR_TYPE_LABEL, VERSION_MARKER_KEY, CHECKLIST_KEYS, FUND_SECTIONS,
   changedSinceScored, computeReadiness, checkInputs, consistencyCheck, type Mismatch,
 } from './raiseCycle';
 
@@ -66,10 +66,11 @@ export async function scoreReadinessItem(env: Env, a: {
 }): Promise<{ ok: true }> {
   const key = String(a.key ?? '');
   if (!READINESS_KEYS.includes(key)) throw new WriterError(400, 'Unknown readiness item');
+  if (key !== 'team') throw new WriterError(400, 'This item is scored by its check; use Re-score instead');
   const score = Number(a.score);
   if (!Number.isInteger(score) || score < 0 || score > 10) throw new WriterError(400, 'The score is a whole number from 0 to 10');
   const evidence = String(a.evidence ?? '');
-  if (!(EVIDENCE as readonly string[]).includes(evidence)) throw new WriterError(400, 'Evidence is anecdote, pattern or measured');
+  if (!['anecdote', 'pattern'].includes(evidence)) throw new WriterError(400, 'A personal score uses anecdote or pattern evidence');
   const ids = await ensureReadinessItems(env, a.projectId);
   await env.DB.prepare(
     `INSERT INTO readiness_scores (item_id, project_id, score, evidence, missing, source, scored_by) VALUES (?, ?, ?, ?, ?, 'manual', ?)`,
@@ -78,11 +79,11 @@ export async function scoreReadinessItem(env: Env, a: {
   return { ok: true };
 }
 
-/** Each item's newest score, by item key. */
+/** Each computed check's newest eligible score; manual history never sets its re-score clock. */
 async function newestScores(env: Env, projectId: number) {
   const res = await env.DB.prepare(
     `SELECT i.item_key, s.score, s.missing, s.scored_at FROM readiness_scores s JOIN readiness_items i ON i.id = s.item_id
-      WHERE s.project_id = ? ORDER BY s.scored_at, s.id`,
+      WHERE s.project_id = ? AND s.source = 'computed' ORDER BY s.scored_at, s.id`,
   ).bind(projectId).all<{ item_key: string; score: number; missing: string | null; scored_at: string }>();
   const out = new Map<string, { score: number; missing: string | null; scored_at: string }>();
   for (const r of res.results || []) out.set(r.item_key, r);

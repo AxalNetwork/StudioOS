@@ -217,13 +217,20 @@ networkfx.get('/syndicates', async (c) => {
 });
 
 networkfx.get('/syndicates/:id', async (c) => {
-  await requireAuth(c);
+  const user = await requireAuth(c);
   await ensureSchema(c.env);
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT s.*, u.name as creator_name FROM syndicates s LEFT JOIN users u ON u.id = s.created_by WHERE s.id = ${id}`;
   if (!rows.length) { await sql.end(); return c.json({ error: 'Not found' }, 404); }
-  const members = await sql`SELECT m.*, u.name, u.email FROM syndicate_members m JOIN users u ON u.id = m.user_id WHERE syndicate_id = ${id} ORDER BY joined_at`;
+  const memberRows = await sql`SELECT m.*, u.name, u.email FROM syndicate_members m JOIN users u ON u.id = m.user_id WHERE syndicate_id = ${id} ORDER BY joined_at`;
+  const mayReadMembers = user.role === 'admin' || Number(rows[0].created_by) === user.id
+    || memberRows.some(member => Number(member.user_id) === user.id);
+  const members = mayReadMembers ? memberRows.map(member => {
+    const projected = { ...member };
+    if (user.role !== 'admin') delete projected.email;
+    return projected;
+  }) : [];
   let project = null;
   if ((rows[0] as any).deal_id) {
     const p = await sql`SELECT id, name, sector, stage, status FROM projects WHERE id = ${(rows[0] as any).deal_id}`;
@@ -274,15 +281,7 @@ networkfx.post('/syndicates/:id/join', async (c) => {
   }
   await logAction(c.env, 'syndicate_joined', user.id, { syndicate_id: id, commitment_cents: commitmentCents });
 
-  // Auto-close if target reached
-  if (sRow.target_cents) {
-    const totals: any = await c.env.DB.prepare(`SELECT COALESCE(SUM(commitment_cents), 0) as c FROM syndicate_members WHERE syndicate_id = ?`).bind(id).first();
-    if ((totals?.c || 0) >= sRow.target_cents) {
-      await c.env.DB.prepare(`UPDATE syndicates SET status = 'funded', closed_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'`).bind(id).run();
-      await logAction(c.env, 'syndicate_funded', user.id, { syndicate_id: id, total_cents: totals.c });
-    }
-  }
-
+  // Pledges are not receipts. Reaching the target does not fund a syndicate.
   return c.json({ ok: true });
 });
 
@@ -299,8 +298,7 @@ networkfx.post('/syndicates/:id/close', async (c) => {
   if (s.status === 'closed') {
     return c.json({ error: 'syndicate_already_closed', detail: 'This syndicate is already closed. Nothing changed.' }, 409);
   }
-  // Funded keeps the time the target was reached in `closed_at`; closing
-  // stamps the close over it, as it always has.
+  // Closing ends pledging; it makes no claim that any money was received.
   await c.env.DB.prepare(`UPDATE syndicates SET status = 'closed', closed_at = CURRENT_TIMESTAMP WHERE id = ? AND status != 'closed'`).bind(id).run();
   await logAction(c.env, 'syndicate_closed', user.id, { syndicate_id: id });
   await logDealRoomAction(c.env, user, 'syndicate_closed', id, { from_status: s.status, project_id: s.deal_id }, 'syndicate');
@@ -327,7 +325,7 @@ networkfx.post('/syndicates/:id/recommendations', async (c) => {
   let recs: any[] = [];
   if (synd.deal_id) {
     recs = await sql`
-      SELECT u.id, u.name, u.email, u.role, ms.score, ms.explanation
+      SELECT u.id, u.name, u.role, ms.score, ms.explanation
       FROM match_scores ms JOIN users u ON u.id = ms.user_id
       WHERE ms.deal_id = ${synd.deal_id} AND ms.score_type = 'deal_flow'
         AND u.kyc_status = 'approved'
@@ -337,7 +335,7 @@ networkfx.post('/syndicates/:id/recommendations', async (c) => {
     `;
   } else {
     recs = await sql`
-      SELECT u.id, u.name, u.email, u.role, NULL as score, NULL as explanation
+      SELECT u.id, u.name, u.role, NULL as score, NULL as explanation
       FROM users u
       WHERE u.kyc_status = 'approved' AND u.role IN ('partner', 'investor', 'admin')
         AND u.id != ${synd.created_by}

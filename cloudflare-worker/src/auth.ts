@@ -811,15 +811,17 @@ export async function requireRole(
 
 /**
  * IDOR guard. Returns true if the user is allowed to read/touch a row that
- * belongs to `ownerFounderId`. Admins and partners always pass; founders only
+ * belongs to `ownerFounderId`. Admins always pass; founders only
  * pass when the row's founder_id matches their own.
  */
 export function canAccessFounderResource(user: User, ownerFounderId: number | null | undefined): boolean {
   // Relationship predicate (was a Phase-0.1 blanket admin/partner/investor
   // bypass — see the 2026-06-25 audit, M2).
   //
-  // Admin + partner are studio-wide staff: there is no per-deal assignment
-  // model, so they retain broad access by design.
+  // #2460: Operating Partners are outside members, not studio-wide staff.
+  // This synchronous founder-level predicate cannot verify a project tie.
+  // Until #2438 defines that tie, a partner receives no grant here. The
+  // separate deal-room reader retains its explicit partner permission.
   //
   // INVESTORS get NO access through this predicate. An investor's only path to
   // founder data is the NDA-gated, fail-closed `maskFounderForInvestor` view
@@ -829,7 +831,7 @@ export function canAccessFounderResource(user: User, ownerFounderId: number | nu
   // founder data regardless of any NDA — a cross-founder IDOR. The one place an
   // investor still needs a masked fallback, `projects.get('/:id')`, keeps its
   // own `user.role !== 'investor'` branch so the mask below still runs.
-  if (user.role === 'admin' || user.role === 'partner') return true;
+  if (user.role === 'admin') return true;
   if (ownerFounderId == null) return false;
   // Founder role only — and only their own row. Gating on the role (not merely
   // a matching founder_id) means a non-founder principal that happens to carry
@@ -847,8 +849,8 @@ export function canAccessFounderResource(user: User, ownerFounderId: number | nu
  * SQL) is what makes it testable — `GET /api/legal/entities` lives in
  * legal.ts, whose import graph is too heavy for the strip-types test gate.
  *
- * Same policy as `canAccessFounderResource` above: admin/partner are
- * studio-wide staff; a founder reaches only entities their own projects point
+ * Entity-list policy remains separate from the founder-resource guard:
+ * admin/partner retain its existing exemption; a founder reaches entities their projects point
  * at; everyone else gets nothing. `'none'` is the default for investor,
  * exploring and any future role, because unlike the projects list there is no
  * masked entity view to fall back on — an entity row is a company's legal

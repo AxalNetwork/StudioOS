@@ -305,8 +305,8 @@ test('by-project: founder and guest roles are forbidden (403)', async () => {
   }
 });
 
-test('by-project: admin/partner/investor are allowed and get 10 layers + overall', async () => {
-  for (const role of ['admin', 'partner', 'investor']) {
+test('by-project: admin/partner are allowed and get 10 layers + overall', async () => {
+  for (const role of ['admin', 'partner']) {
     const token = await mintToken(7, role);
     const { env } = makeEnv({ user: { id: 7, role, is_active: 1 }, project: SAMPLE_PROJECT });
     const res = await req(env, token, '/by-project/1');

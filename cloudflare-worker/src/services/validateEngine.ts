@@ -56,7 +56,7 @@ export type DigestStage = 'summarise' | 'structure';
 export type DigestOutcome =
   | { ok: true; status: 'done'; summary: SummaryResult | null; structure: StructureOutcome | null; note: string | null }
   | { ok: true; status: 'unchanged' }
-  | { ok: false; status: 'skipped'; reason: 'manual_mode' | 'no_final_transcript' | 'quiet_window'; note: string }
+  | { ok: false; status: 'skipped'; reason: 'manual_mode' | 'no_final_transcript' | 'quiet_window' | 'source_changed'; note: string }
   | {
     ok: false; status: 'refused'; reason: 'consent_not_recorded' | 'transcript_too_large' | 'refused' | 'busy';
     refusal: string | null; note: string;
@@ -277,6 +277,16 @@ export async function digestSession(env: Env, opts: {
   if ((await loadSession(env, session.id))?.consent_status === 'declined') {
     await withdrawDigest(env, session.id, opts.userId, { onlyDeclined: true });
     return { ok: false, status: 'refused', reason: 'consent_not_recorded', refusal: null, note: NOTES.withdrawn };
+  }
+  // D866: source edits/deletions can arrive during a provider call. Stores
+  // reject stale snapshots; keep a fresh run due instead of sealing the old hash.
+  if (session.submitted_via === 'telegram' && await transcriptHash(await finalSegments(env, session.id)) !== hash) {
+    const note = 'The Telegram source changed. Processing will use the current transcript.';
+    await env.DB.prepare("UPDATE interview_sessions SET status = 'transcribed' WHERE id = ? AND status = 'structured'")
+      .bind(session.id).run();
+    await writeOutcome(env, session.id, { status: 'queued', note, trigger: opts.trigger });
+    await enqueueDigest(env, session.id, opts.userId, 'chat_text_added');
+    return { ok: false, status: 'skipped', reason: 'source_changed', note };
   }
   if (prefs.dropped) notes.push(NOTES.modelDropped);
   const runId = structure?.ok ? structure.runId : undefined;

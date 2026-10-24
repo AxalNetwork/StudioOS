@@ -351,7 +351,7 @@ dd.get('/cases/:uid', async (c) => {
 // fast and the frontend can poll case GET to see status transitions
 // (queued → running → ok/error). This is the queue-backed ingestion
 // pattern without requiring a Cloudflare Queue binding.
-async function processConnector(env: Env, sourceId: number, caseId: number, meta: typeof CONNECTORS[number], subjectLabel: string, ownerUserId: number, caseUid: string): Promise<void> {
+async function processConnector(env: Env, sourceId: number, caseId: number, meta: typeof CONNECTORS[number], subjectLabel: string, ownerUserId: number, caseUid: string, progress: { findingsEmitted: number }): Promise<void> {
   const sql = getSQL(env);
   try {
     await sql`UPDATE dd_external_sources SET status = 'running', started_at = CURRENT_TIMESTAMP WHERE id = ${sourceId}`;
@@ -359,7 +359,7 @@ async function processConnector(env: Env, sourceId: number, caseId: number, meta
     try { r = await runConnector(env, meta, subjectLabel); }
     catch (e) { r = { status: 'error' as const, records_count: 0, raw_response: null, findings: [], error_message: (e as Error).message }; }
     let emitted = 0;
-    for (const f of r.findings) {
+    for (const f of r.status === 'ok' ? r.findings : []) {
       const sectionRows: any[] = await sql`SELECT id FROM dd_sections WHERE case_id = ${caseId} AND section_key = ${f.section_key || meta.default_section} LIMIT 1`;
       const sectionId = sectionRows[0]?.id || null;
       const inserted2: any[] = await sql`
@@ -367,6 +367,7 @@ async function processConnector(env: Env, sourceId: number, caseId: number, meta
         VALUES (${caseId}, ${sectionId}, ${sourceId}, ${f.source_kind}, ${f.severity}, ${f.title}, ${f.evidence_url || null})
         RETURNING id`;
       const findingId = Number(inserted2[0].id);
+      progress.findingsEmitted++;
       const detailEnc = await encField(env, 'dd_findings', 'detail', findingId, f.detail);
       const subjEnc   = await encField(env, 'dd_findings', 'subject_name', findingId, f.subject_name || null);
       const exEnc     = await encField(env, 'dd_findings', 'evidence_excerpt', findingId, f.evidence_excerpt || null);
@@ -428,10 +429,11 @@ dd.post('/cases/:uid/scan', async (c) => {
 
   // Background processing — frontend polls /cases/:uid for status updates.
   c.executionCtx.waitUntil((async () => {
+    const progress = { findingsEmitted: 0 };
     for (const q of queued) {
       const meta = CONNECTORS.find(m => m.key === q.connector);
       if (!meta) continue;
-      try { await processConnector(c.env, q.id, caseId, meta, subjectLabel, ownerUserId, caseUid); }
+      try { await processConnector(c.env, q.id, caseId, meta, subjectLabel, ownerUserId, caseUid, progress); }
       catch (e) { console.warn('[dd] connector failed', q.connector, (e as Error).message); }
     }
     try {
@@ -439,7 +441,8 @@ dd.post('/cases/:uid/scan', async (c) => {
       try {
         await sql2`UPDATE dd_cases SET external_scan_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ${caseId}`;
       } finally { await sql2.end(); }
-      await recomputeAndStoreScore(c.env, caseId);
+      // A disabled/error-only scan must not replace the stored score.
+      if (progress.findingsEmitted > 0) await recomputeAndStoreScore(c.env, caseId);
       await audit(c.env, caseId, null, 'external_scan_completed', { type: 'dd_case', id: caseId }, { connectors_run: queued.length });
     } catch (e) { console.warn('[dd] scan finalisation failed:', (e as Error).message); }
   })());

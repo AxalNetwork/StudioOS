@@ -31,7 +31,7 @@ export const CHANNEL_PAGE_TEXT = Object.freeze({
     about: Object.freeze([
       'What it reads: only the chats you choose in Telegram Business, each waiting in Interviews until you add it to an interview. Voice notes and audio files are taken in only after the person replies YES to the recording notice, and are kept until you delete them.',
       'What it sends: only what you send from Axal (replies and the notice), plus one line confirming YES, NO or STOP, within 24 hours of the person’s last message.',
-      'What it can’t do: calls, group chats, files over 5 MB, round videos for now. For a round video, send its audio track as an audio file up to 5 MB instead.',
+      'What it can’t do: group chats, files over 5 MB, round videos for now. For a round video, send its audio track as an audio file up to 5 MB instead. Calls: Axal does not join, place or answer Telegram calls. Forwarded recordings (Send to Axal) are built but not switched on yet. When enabled, Axal waits for you to confirm everyone agreed before it downloads or transcribes the audio.',
       'Costs: transcription and translation use AI tokens. Translation keeps the original and adds your working language when needed. Up to 50 notes a day. Needs Telegram Premium: chatbots are part of Telegram Business.',
     ]),
     signIn: 'Telegram bot link',

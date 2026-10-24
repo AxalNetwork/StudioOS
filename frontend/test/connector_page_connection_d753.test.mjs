@@ -16,7 +16,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 
 import { buildCatalogue, disconnectNote } from '../src/pages/account/connectorsModel.js';
-import { manageItems, pageAction } from '../src/pages/account/connectorPageModel.js';
+import { ConnectorPanel } from '../src/pages/account/ConnectorSheet.jsx';
+import { manageItems, pageAction, pageChoices } from '../src/pages/account/connectorPageModel.js';
 import { ConnectorPageView } from '../src/pages/account/ConnectorPage.jsx';
 import { RequestSheet } from '../src/pages/account/AccountConnectors.jsx';
 
@@ -308,5 +309,36 @@ test('a Settings dialog takes Escape alone; the page itself has none (moved from
     assert.ok(m.by('connector-page-connection'), 'and only the dialog: the page stays');
     await m.escape();
     assert.ok(m.by('connector-page-connection'), 'the page has no Escape of its own');
+  } finally { await m.unmount(); f.restore(); }
+});
+
+test('a legacy Carta connection remains visible with Disconnect and no reconnect, sync or settings', async () => {
+  const p = buildCatalogue({ providers: [P('carta', 'Carta', { legacy_only: true, legacy_notice: 'Your current role can disconnect this existing connection.', has_implementation: false })],
+    items: [conn('carta-legacy-fixture', 'carta', { status: 'error', last_error: 'expired' })] }).find(p => p.key === 'carta');
+  assert.deepEqual(manageItems(p), [{ id: 'disconnect', label: 'Disconnect' }]);
+  assert.equal(pageAction(p).kind, 'status');
+  assert.deepEqual(pageChoices(p), { env: null, alt: [] });
+  const f = stubFetch(readsOk);
+  const m = await mount(h(ConnectorPageView, { data: { ...ready(), catalogue: [p] }, connectorKey: 'carta' }), '/account/connectors/carta');
+  try {
+    assert.ok(m.by('connector-page-connection'));
+    assert.equal(!!m.by('connector-page-sync'), false);
+    assert.match(m.text(), /Your current role can disconnect/);
+    await m.click('connector-page-manage');
+    assert.equal(m.text(m.by('connector-page-manage-menu')).trim(), 'Disconnect');
+  } finally { await m.unmount(); f.restore(); }
+});
+
+test('the legacy Carta sheet offers Disconnect without sync, replace or reconnect', async () => {
+  const p = buildCatalogue({ providers: [P('carta', 'Carta', { legacy_only: true, legacy_notice: 'Your current role can disconnect this existing connection.', has_implementation: false })],
+    items: [conn('carta-legacy-fixture', 'carta', { status: 'error', last_error: 'expired' })] }).find(p => p.key === 'carta');
+  const f = stubFetch(readsOk);
+  const m = await mount(h(ConnectorPanel, { p, view: 'detail', setView() {}, onChanged() {}, onClose() {} }), '/account/connectors');
+  try {
+    assert.equal(!!m.by('button-sync-now'), false);
+    assert.equal(m.text().includes('Reconnect'), false);
+    assert.equal(m.text().includes('Replace'), false);
+    assert.match(m.text(), /Your current role can disconnect/);
+    assert.ok(m.by('button-disconnect'));
   } finally { await m.unmount(); f.restore(); }
 });

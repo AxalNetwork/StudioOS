@@ -396,3 +396,21 @@ test('D840: Manage on a signed-in Mercury, and "How it reads" names how it conne
   assert.ok(reasons.length >= 10);
   for (const r of reasons) assert.ok(r === 'access_denied' || Object.hasOwn(SIGN_IN_REASONS, r), r);
 });
+
+for (const production of [false, true]) {
+  test(`Carta connects in ${production ? 'Production when selected' : 'Playground by default'}`, async () => {
+    const f = stubFetch((c) => [200, c.path.includes('/oauth/') ? { authorize_url: 'https://example.test/authorize' } : {}]);
+    const catalogue = CAT.map((p) => p.key === 'carta' ? { ...p, locked_for_user: false, locked: false } : p);
+    const m = await mount(page('carta', { data: ready(catalogue) }), '/account/connectors/carta');
+    try {
+      if (production) {
+        await m.click('connector-page-choices');
+        assert.match(m.text(), /Playground/);
+        await m.click('connector-page-env-production');
+      }
+      await m.click('connector-page-connect-button');
+      assert.equal(new URL(`https://axal.test${startPath(f, 'carta')}`).searchParams.get('demo'), production ? '0' : '1');
+      assert.deepEqual(m.assigned, ['https://example.test/authorize']);
+    } finally { await m.unmount(); f.restore(); }
+  });
+}

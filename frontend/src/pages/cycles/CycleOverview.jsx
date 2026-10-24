@@ -80,6 +80,7 @@ export function FigureTile({ fig }) {
           ? <span className="text-[13px] font-semibold text-red-700 dark:text-red-300">{fig?.source ? `${fig.source} could not be read` : 'Could not be read'}</span>
           : <span className="text-[15px]"><Unrecorded reason={fig?.source ? `${fig.source} does not hold this yet.` : undefined} /></span>)}
       </span>
+      {fig?.coverage && <span className="text-xs text-axal-muted">{fig.coverage.scored} of {fig.coverage.total} items scored</span>}
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{delta || (value == null ? 'nothing recorded yet' : 'change not recorded')}</span>
         {value != null && sparkDrawable(fig.spark) && <Spark values={fig.spark} label={`${fig.label}, last points`} />}

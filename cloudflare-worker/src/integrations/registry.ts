@@ -13,6 +13,7 @@
  *   - the capability list shown as chips on each card,
  *   - the auth flow (api_key | oauth2 | webhook) the connect modal renders.
  */
+import { cartaAudience, cartaScopesFor } from './cartaScopes';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
 import type { Tier } from '../middleware/requireTier';
@@ -310,6 +311,7 @@ export const REGISTRY: ProviderDescriptor[] = [
   },
   {
     key: 'carta',
+    personal_roles: ['founder', 'investor'],
     display_name: 'Carta',
     integration_type: 'cap_table',
     description: 'Mirror your Carta cap table (issuer, stakeholders, securities) into the Capital module on a 6-hour sync.',
@@ -321,9 +323,9 @@ export const REGISTRY: ProviderDescriptor[] = [
     tier: 'studio',
     auth_type: 'oauth2',
     capabilities: ['Cap-table sync', 'Stakeholder import', 'Securities import'],
-    docs_url: 'https://carta.com/api/',
+    docs_url: 'https://docs.carta.com/api-platform/guides/',
     icon: 'PieChart',
-    oauth_scopes: ['read:cap_table', 'read:stakeholders', 'read:securities'],
+    oauth_scopes: ['read_issuer_info', 'read_issuer_stakeholders', 'read_issuer_securities'],
   },
   {
     key: 'slack',
@@ -448,7 +450,6 @@ export const REGISTRY: ProviderDescriptor[] = [
     docs_url: null, icon: 'Calendar', oauth_scopes: [
       'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/calendar.readonly',
-      'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile',
       'openid',
@@ -497,7 +498,7 @@ export const CONNECTOR_METADATA: Record<string, ConnectorMetadata> = {
   stripe: { category: 'Payments', verified: false, pulls: [{ what: 'Payments and subscriptions', module: 'revenue_and_traction' }], sends: [], feeds: ['revenue_and_traction', 'customers'], permissions: ['Read charges and subscriptions from your Stripe account.'] },
   github: { category: 'Code', verified: false, pulls: [{ what: 'Issues', module: 'product_roadmap' }, { what: 'Milestones', module: 'product_roadmap' }, { what: 'Releases', module: 'product_roadmap' }, { what: 'Pull requests', module: 'prototype_mvp' }, { what: 'Release checks', module: 'prototype_mvp' }, { what: 'The connection and each sync', module: 'operating_systems' }, { what: 'Architecture notes and decisions', module: 'solution_design' }, { what: 'Languages and topics', module: 'solution_design' }, { what: 'Contributors and their commits', module: 'founding_team' }, { what: 'Where the code sits and its licence', module: 'company_creation' }], sends: [], feeds: ['product_roadmap', 'prototype_mvp', 'operating_systems', 'solution_design', 'founding_team', 'company_creation'], permissions: ['Read issues in the repositories you choose.', 'Read pull requests in the repositories you choose.', 'Read releases, the README, the Markdown in docs/, doc/ and adr/, and the last 90 days of commits in the repositories you choose.', 'Read repository names, visibility, owners, licences, contributors, languages and topics.'] },
   zoom: { category: 'Messaging', verified: false, pulls: [{ what: 'Call transcripts', module: 'customer_research' }], sends: [{ what: 'Interview calls you schedule', target: 'Zoom meeting', default_mode: 'ask' }], feeds: ['customer_research'], used_by: [{ label: 'Validate › Record a session', href: '/validate/record' }], suggests: ['problem_discovery', 'customer_research', 'ideal_customer_profile', 'market_intelligence', 'demand_signals', 'experiments'], permissions: ['Create Zoom meetings for the interview calls you schedule.', 'Delete a Zoom meeting when you cancel its interview call.', 'Read your meetings’ cloud recording files, to download their transcripts.', 'Read a pasted meeting to confirm you host it.', 'List your past meeting instances to recover restarted calls.', 'Read your Zoom user id to identify the connection when you disconnect it.', 'Read a recording’s details, which Zoom grants with transcript notifications; Axal VC uses only the recording files above.', 'Open inside a Zoom meeting, which Zoom grants to every app of this kind; Axal VC does not use it.', 'Let Axal’s notetaker join a call on your behalf, only while you are in it.'] },
-  google_calendar: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Gmail (read-only) is asked for at sign-in; Axal VC does not read your Gmail.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
+  google_calendar: { category: 'Calendar and workspace', verified: false, pulls: [{ what: 'Events', module: 'customer_research' }], sends: [{ what: 'Calendar events', target: 'Google Calendar', default_mode: 'ask' }], feeds: ['customer_research', 'operating_systems'], permissions: ['Create and update your calendar events.', 'Read your calendar events.', 'Read your account email address.', 'Read your public account profile.', 'Confirm your Google sign-in identity.'] },
   // D879: the founder's Grow and Raise modules, read from `mercuryFeeds.ts` (D840 parts 2 and 3).
   mercury: {
     category: 'Accounting and banking', verified: false,
@@ -584,6 +585,7 @@ export function personalMercuryFor(role: string | null | undefined): Readonly<Pe
 
 /** The modules a connector feeds for this viewer: Mercury's personal variant by role, else the catalogue's. */
 export function connectorFeeds(providerKey: string, role?: string | null): string[] {
+  if (providerKey === 'carta' && role === 'investor') return ['deals_pipeline', 'investor_portfolio'];
   if (providerKey === 'mercury' && role != null && String(role).toLowerCase() !== 'admin') return [...(personalMercuryFor(role)?.feeds ?? [])];
   return CONNECTOR_METADATA[providerKey]?.feeds ?? [];
 }
@@ -745,27 +747,38 @@ export function personalHqOnlySentence(name: string): string {
   return `${name} is offered to your profile on HQ only.`;
 }
 
+/** The allowlist is selected from the authenticated member, never a request parameter. */
+export function descriptorForRole(p: ProviderDescriptor, role: string): ProviderDescriptor {
+  const audience = cartaAudience(role);
+  return p.key === 'carta' && audience ? { ...p, oauth_scopes: cartaScopesFor(audience) } : p;
+}
+
 export function publicDescriptor(p: ProviderDescriptor, viewer?: DescriptorViewer, env?: Pick<Env, 'ZOOM_APP_AUDIENCE'>) {
   const audience = viewer ? audienceFor(p, viewer) : 'open';
   // D713, D752: a founder, partner or investor reads their role's Mercury variant; D879: a previewing admin reads the founder's.
   const variant = p.key !== 'mercury' ? null
     : audience === 'personal' ? personalMercuryFor(viewer!.role) : audience === 'preview' ? PERSONAL_MERCURY.founder : null;
-  const feeds = variant ? [...variant.feeds] : CONNECTOR_METADATA[p.key]?.feeds ?? [];
+  const cartaInvestor = p.key === 'carta' && viewer?.role === 'investor';
+  const metadata = cartaInvestor ? { ...CONNECTOR_METADATA.carta, feeds: ['deals_pipeline', 'investor_portfolio'],
+    pulls: [{ what: 'Your firms, funds, portfolio investments, securities and cap tables', module: 'investor_portfolio' }],
+    permissions: ['Read your Carta firms.', 'Read funds in those firms.', 'Read their portfolio investments.', 'Read their investment securities.', 'Read their portfolio companies’ capitalization tables.'],
+    used_by: [{ label: 'Deals · Pipeline', href: '/deals/pipeline' }, { label: 'Portfolio', href: '/portfolio' }] } : CONNECTOR_METADATA[p.key];
+  const feeds = variant ? [...variant.feeds] : metadata?.feeds ?? [];
   return {
     key: p.key,
     display_name: p.display_name,
     integration_type: p.integration_type,
-    description: variant ? variant.description : p.description,
+    description: cartaInvestor ? 'Read your own Carta firms, funds, investments, securities and cap tables. Read-only.' : variant ? variant.description : p.description,
     status: p.status,
     tier: p.tier,
     auth_type: p.auth_type,
-    capabilities: variant ? [...variant.capabilities] : p.capabilities,
+    capabilities: cartaInvestor ? ['Firm and fund reads', 'Portfolio investments', 'Securities and cap tables'] : variant ? [...variant.capabilities] : p.capabilities,
     docs_url: p.docs_url,
     icon: p.icon ?? null,
     supports_pat: !!p.supports_pat,
     // Only a member's own connection is made here: a preview has no implementation (D879).
     has_implementation: PROVIDER_IMPLS.has(p.key) && !(p.key === 'mercury' && audience !== 'personal'),
-    ...CONNECTOR_METADATA[p.key],
+    ...metadata,
     ...(variant ? { permissions: [...variant.permissions] } : {}),
     // D879: the catalogue's pulls and `used_by` are the founder's Grow and Raise; a partner's card claims neither.
     // D884 (#2557): an investor's card claims its own sections, from `MERCURY_FEEDS`.

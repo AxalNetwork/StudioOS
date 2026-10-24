@@ -11,11 +11,6 @@
 # migration 302 — a whole-commit allowlist entry would hide a real finding
 # in any of those too.
 9080925048929ef222056a0e469c32d8207f86dc:cloudflare-worker/test/webpush_d335.test.ts:generic-api-key:33
-# D886 B8 (#2586): the first runtime factory test used a plainly synthetic
-# signing string, only with an injected in-memory transport. It was never a
-# credential. The test now generates a fresh random key. Pin only this finding
-# in the already-pushed commit, without excluding the file or other findings.
-7d5b835f59372243eeafc8c5e957a7df1eaece8b:meeting-bot/test/runtime_adapters.test.ts:generic-api-key:8
 # Synthetic test secret used only by the ticket creation/recovery fixture.
 4335b06fcf2231342ebe76e853398142586fdc03:cloudflare-worker/test/ticket_creation_recovery.test.ts:generic-api-key:12
 # D482 (#1022): the synthetic JWT signing string in the D482 route test's first
@@ -82,3 +77,14 @@ fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources
 # fixture now uses the low-entropy test value. Only this historical finding
 # is ignored; the file and all secret-scanning rules remain covered.
 774e90f7030ec634e23591e8e33d1d70b134423f:cloudflare-worker/test/orders_support_session_d849.test.ts:generic-api-key:31
+
+# #2391 / PR #2624: synthetic JWT signing value for an in-memory DD regression
+# fixture. It was never a provider or deployed credential; the following
+# commit replaces the literal. Ignore only this already-pushed historical
+# finding, retaining coverage for every other commit, file and secret rule.
+86bb4cb3819f07a4555f31f8850b3011e7dff3cd:cloudflare-worker/test/dd_external_evidence.test.ts:generic-api-key:13
+
+# #2634: synthetic signing value used only by the in-memory Carta fixture.
+# The next commit replaces it with a generated test value; pin the already
+# pushed finding only, retaining all other file/commit/rule coverage.
+57b1626b52f079eb204c8a296c6085daa1b1e49d:cloudflare-worker/test/carta_oauth_2634.test.ts:generic-api-key:17

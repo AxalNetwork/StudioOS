@@ -35,6 +35,8 @@ together with what the Telegram track (#2508) has merged so far:
 | A guided setup for Record a Session: six steps (linked, bot added, bot on, replies allowed, a first chat, the notice), each done, to do or blocked, read from stored rows with no Bot API call (`GET /api/channels/telegram/setup`) | #2531 (D863, #2509) |
 | The channel in the conversation analytics (each session's channel, figures per channel), and a Telegram chat's text and consented notes proven end to end into Validate's proposals | #2548 (D866, #2512) |
 | Shared working-language translation for assigned text and transcribed notes, preserving originals; the 5 MiB cap and round-video refusal retained until direct-container and larger-note support are measured | #2611 (D865, #2511), merged 2026-10-23; uses D857 (#2536, #2502) |
+| Source edits/deletions in assigned Business chats, with hashed passage references and preserved decisions | D866 §4 (#2618), migration 533 |
+| Private forwarded recordings (Send to Axal), held for the linked member’s attestation; built with `TELEGRAM_CAPTURE` off | #2615 (D867, #2513), merged 2026-10-23 |
 | The rollout readiness check (`telegram_readiness_d868.test.ts`) | D868 (#2514) |
 | Yes/No buttons on the notice | D756's buttons task, not filed: it waits on §3 step 10's probe |
 
@@ -42,8 +44,6 @@ together with what the Telegram track (#2508) has merged so far:
 
 | Part | Task |
 | --- | --- |
-| Edits and deletions of a Telegram message honoured at the source (D866 §4, waiting on S1's ruling) | D866 (#2512) |
-| Calls by forwarding a recording, and "Send to Axal" (`TELEGRAM_CAPTURE`) | D867 (#2513) |
 | The Record a Session › Telegram screens | D869 (#2515) |
 
 **What a Telegram chat holds for consent.** Unlike WhatsApp, an assigned
@@ -74,6 +74,53 @@ translation model call or AI-token hold; a refused/failed translation leaves
 the original usable and translation pending for bounded retries. Telegram's
 app-language preference is not a detected source language. Speech-to-text and
 translation both use the existing AI-token ledger, not a separate translator.
+
+**Source changes after D866 §4 (#2618).** Apply migration 533 before deploying
+this code. Edits in an assigned Business chat replace the matching passage
+and withdraw only its undecided proposals. Deletions replace its words with a
+neutral “Deleted at the source” marker; pending proposals go, while decisions
+stay with a source-deletion note and without the deleted quote. Other cited
+passages stay. Existing passages with no provable source hash cannot be
+matched and are not guessed. Summary/translation copies are invalidated and
+queued processing uses current words under the normal consent, manual-mode,
+quiet-window and AI-token rules. An unassigned chat keeps D684's pending-copy
+behavior. In the canary live check, edit and delete a synthetic text after
+assignment, and verify those outcomes, including accepted/discarded proposals.
+No real-device result is claimed by the automated tests.
+
+**Send to Axal after D867 (#2615).** Private forwarded recordings are built,
+but `TELEGRAM_CAPTURE = "off"` in all three vars blocks (development, preview
+and production). They do not arrive while it is off. `TELEGRAM_CHANNEL` stays
+`canary`; opening that channel does not enable captures. This bot never joins,
+places or answers Telegram calls: a member can forward an audio recording they
+already made with everyone's agreement when capture is enabled.
+
+The sender must have a proven, active Telegram link to Axal. This private path
+does not need a Business connection. It groups up to 20 voice notes/audio files
+within 30 minutes, each within the inclusive 5 MiB limit. Video containers are
+not admitted. Only encrypted media references wait; no file download or model
+call happens before the linked member answers **Yes, out loud** or **Yes, in
+writing** to confirm everyone agreed before recording began. These are ordinary
+private-chat keyboard replies, separate from the Business contact's YES and the
+inline-button probe below. **No** removes the waiting capture.
+
+An import rechecks the switch, current link, sender, consent and expiry, and
+stores one session through the recorder. **Saved** means stored and queued,
+not a finished transcript. Speech, translation and Validate proposals use the
+existing processing preferences and AI-token ledger; the Founder still accepts
+proposals. Unimported captures expire after seven days: Axal's retention bound,
+not a claim about Telegram file IDs. Cleanup removes abandoned partial drafts
+and audio first; imported sessions follow normal session deletion.
+Migration 528 must be applied before the capture purge runs, even with capture
+off. It is already part of D867; this follow-up adds no migration.
+
+Before enabling capture, the owner must check a real client in preview/canary
+with synthetic audio: linked and unlinked senders, a linked sender without a
+Business connection, hold before either YES method, No, one imported session
+and transcription after replay, oversize refusal, queued work while off,
+relinking and expiry. Record counts and states only. No live check is claimed
+here. Enablement needs a separate owner-reviewed configuration PR after that
+check; the three capture vars remain off in this follow-up.
 
 ## 1. Owner steps, in order
 
@@ -163,7 +210,13 @@ each has a source mutation that must make it fail:
 - pending chats are purged after 30 days;
 - message text is stored encrypted;
 - `TELEGRAM_CHANNEL`: `canary` (and anything unknown) admits Super Admins only,
-  `off` admits nobody, `on` admits everyone.
+  `off` admits nobody, `on` admits everyone;
+- `TELEGRAM_CAPTURE` absent, off or unknown admits nothing, including no reply
+  to an unlinked sender. With capture on, channel canary still excludes an
+  ordinary Founder. An admitted recording waits encrypted without downloads,
+  recorder storage or AI until the member's attestation. Queued imports stop
+  while capture is off or consent is withdrawn; an enabled, consented import
+  creates one recorder session without calling a model in the capture service.
 
 It runs in `npm run test:drift` on every PR; no CI job calls Telegram. A hand
 check from any machine:
@@ -237,6 +290,11 @@ should, do §1 step 8.
 anything else means `"canary"` (#1950). It ships `"canary"`: only Super Admins
 can link or connect, and members see "Not available yet".
 
+`TELEGRAM_CAPTURE` is a separate var in `[vars]`, `[env.preview.vars]` and
+`[env.production.vars]`, all off. It needs its own live capture check above and
+owner-reviewed enablement PR. Switching `TELEGRAM_CHANNEL` on does not switch
+capture on.
+
 **Switching on for every Founder.** Only after §3 has passed and the readiness
 check (§2) is green on `main`:
 
@@ -261,6 +319,10 @@ check (§2) is green on `main`:
   members read "Axal has switched this off for now. Your connection is kept,
   but nothing new arrives until it is back." The webhook still checks the
   secret and acknowledges, but stores nothing.
+- **Stop private captures:** keep or set `TELEGRAM_CAPTURE = "off"` in all
+  three vars blocks and deploy. New captures and queued imports stop; existing
+  imported sessions stay. Expired unimported captures and partial drafts/audio
+  still receive the seven-day cleanup above.
 - **Back to Super Admins only:** `"canary"` and a deploy.
 - **Off entirely, without a deploy:**
   `npx wrangler secret delete TELEGRAM_CHANNEL_WEBHOOK_SECRET --env production`.
@@ -275,11 +337,13 @@ not):
    downloaded.
 2. **Stop the webhook:** `npx wrangler secret delete
    TELEGRAM_CHANNEL_WEBHOOK_SECRET --env production`. It answers 503 at once.
-3. **Close it to members:** `TELEGRAM_CHANNEL = "off"` by PR and deploy.
+3. **Close it to members:** `TELEGRAM_CHANNEL = "off"` and
+   `TELEGRAM_CAPTURE = "off"` by PR and deploy, including preview's capture var.
 4. **Purge:** pending chats are purged after 30 days by the daily job (03:50
    UTC, `purgeExpired`). A member's **Disconnect** forgets their pending chats
    at once. What a member added to an interview stays until the member deletes
-   it, as their own record.
+   it, as their own record. Unimported private captures expire after seven
+   days, with abandoned partial drafts/audio removed first.
 5. Record what happened on the issue the owner names, with names and counts
    only: no token, chat id, phone number or message.
 6. To recover: a new bot token and webhook secret (§1 step 2), **Register
@@ -312,10 +376,11 @@ and transcripts stay until the member deletes them.
 - **5 MB** is the largest note Axal takes, the recorder's chunk limit, not
   Telegram's 20 MB. A larger note is refused on its declared size before any
   download.
-- **A consent answer counts only from the contact**: the chat's own user, not
+- **A Business chat consent answer counts only from the contact**: the chat's own user, not
   the member, not a business bot, not an offline auto-reply, within 7 days of
   the notice, as a reply to it or the contact's first message after it.
 - **No `file_id` expiry is documented**, so Telegram notes show no "keep by
   <date>" line. That line is WhatsApp's 7-day rule.
-- **No calls.** The Bot API has none; a Telegram call is recorded with the
-  in-app recorder (channel `phone`).
+- **No call control.** Axal does not join, place or answer Telegram calls.
+  Private forwarding of an existing audio recording is built but capture stays
+  off. Its member attestation is separate from a Business contact's YES.

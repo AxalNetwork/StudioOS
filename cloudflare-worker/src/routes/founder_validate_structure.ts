@@ -66,7 +66,7 @@ import { addInterviewPain, updateInterviewDetails } from '../services/interviewW
 import { INTERVIEW_FIELDS, isFindingKind } from '../services/interviewFindings';
 import { ASSIST_OFF_MESSAGE, budgetRefusalMessage } from '../services/aiRouter';
 import { MODULES } from '../services/cycleValidate';
-import { consentBlocks, loadSession, sessionHasAudio, sessionDigestConsentBlocks, type SessionRow } from '../services/interviewSessions';
+import { consentBlocks, loadSession, sessionHasAudio, sessionDigestConsentBlocks, SOURCE_DELETED_NOTE, type SessionRow } from '../services/interviewSessions';
 import { railFor } from '../util/railContext';
 import { DIGEST_OPTIONS, DIGEST_PAGE } from '../services/interviewProcessing';
 import {
@@ -155,6 +155,8 @@ export async function storePlacements(
     task?: 'structure_interview' | 'extract_conversation_items';
     /** D873 (#2520): how the cited words were made; a call's are 'Recorded'. Absent, nothing is said. */
     sourceLabel?: 'Recorded';
+    /** D866: reject an AI result whose source was changed while it ran. */
+    sourceSnapshot?: readonly { id: number; text: string }[];
   },
 ): Promise<{ stored: number; deduped: number }> {
   let placements = opts.placements;
@@ -174,22 +176,32 @@ export async function storePlacements(
   }
   const deduped = opts.placements.length - placements.length;
   if (!placements.length) return { stored: 0, deduped };
-  const written = await env.DB.batch(placements.map((p) => env.DB.prepare(
+  // One INSERT binds and checks the source snapshot once for the whole run.
+  // A long recording must not multiply its transcript by its placement count.
+  const written = await env.DB.batch([env.DB.prepare(
     `INSERT INTO validate_proposals
        (project_id, kind, payload_json, model, task, created_by, surface, fill_class,
         citation_json, target_ref, session_id, cite_from, cite_to, run_id)
-     SELECT ?, ?, ?, ?, ?, ?, 'validate/interview', 'restatement', ?, ?, ?, ?, ?, ?
-      WHERE NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined')`,
+     SELECT ?, json_extract(p.value, '$.kind'), json_extract(p.value, '$.payload'), ?, ?, ?,
+        'validate/interview', 'restatement', json_extract(p.value, '$.citation'), ?, ?,
+        json_extract(p.value, '$.from'), json_extract(p.value, '$.to'), ?
+       FROM json_each(?) p
+      WHERE NOT EXISTS (SELECT 1 FROM interview_sessions s WHERE s.id = ? AND s.consent_status = 'declined')
+        AND NOT EXISTS (SELECT 1 FROM json_each(?) expected
+          LEFT JOIN interview_transcript_segments current ON current.id = json_extract(expected.value, '$.id') AND current.session_id = ?
+          WHERE current.id IS NULL OR current.text IS NOT json_extract(expected.value, '$.text'))`,
   ).bind(
-    opts.projectId, p.kind, JSON.stringify(p.payload), opts.model, opts.task ?? 'structure_interview', opts.userId,
-    JSON.stringify({
-      kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote,
-      // D857: the run read a translation; the customer's own words and their language stay beside it.
-      ...(p.quoteOriginal ? { quote_original: p.quoteOriginal } : {}), ...(p.sourceLang ? { source_lang: p.sourceLang } : {}),
-      ...(opts.sourceLabel ? { source_label: opts.sourceLabel } : {}),
-    }),
-    `interview:${opts.interviewId}`, opts.sessionId, p.cite.from, p.cite.to, opts.runId, opts.sessionId,
-  )));
+    opts.projectId, opts.model, opts.task ?? 'structure_interview', opts.userId,
+    `interview:${opts.interviewId}`, opts.sessionId, opts.runId,
+    JSON.stringify(placements.map((p) => ({
+      kind: p.kind, payload: JSON.stringify(p.payload), from: p.cite.from, to: p.cite.to,
+      citation: JSON.stringify({
+        kind: 'transcript', session_id: opts.sessionId, from: p.cite.from, to: p.cite.to, quote: p.quote,
+        ...(p.quoteOriginal ? { quote_original: p.quoteOriginal } : {}), ...(p.sourceLang ? { source_lang: p.sourceLang } : {}),
+        ...(opts.sourceLabel ? { source_label: opts.sourceLabel } : {}),
+      }),
+    }))), opts.sessionId, JSON.stringify(opts.sourceSnapshot ?? []), opts.sessionId,
+  )]);
   return { stored: written.reduce((n, r) => n + Number(r.meta?.changes ?? 0), 0), deduped };
 }
 
@@ -700,7 +712,10 @@ structure.get('/sessions/:id/placements', async (c) => {
     run_id: r.run_id,
     source: r.source === 'assistant' ? 'assistant' : 'studioos',
     submitted_via_name: r.source === 'assistant' ? submittedVia : null,
-    cite: { from: r.cite_from, to: r.cite_to, quote: parse(r.citation_json)?.quote ?? null },
+    cite: {
+      from: r.cite_from, to: r.cite_to, quote: parse(r.citation_json)?.quote ?? null,
+      ...(parse(r.citation_json)?.source_deleted === true ? { source_deleted: true, source_note: SOURCE_DELETED_NOTE } : {}),
+    },
     created_at: r.created_at,
   }));
   const runs: { run_id: string; model: string; source: string; submitted_via_name: string | null; placements: typeof placements }[] = [];
