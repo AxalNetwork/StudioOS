@@ -5,8 +5,9 @@ import { insightsApi } from '../../../lib/api/insights';
 import { reportError } from '../../../lib/log';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { useAuth } from '../../../hooks/useAuthSync';
-import { Lightbox, PhoneSheet, RailFrame, WorkerRail, openEadwynPanel, usePhoneWidth } from '../../../ui';
-import { Chart, ChartTable, Legend } from './InsightsCharts';
+import {
+  Chart, ChartTable, Legend, Lightbox, PhoneSheet, RailFrame, WorkerRail, openEadwynPanel, usePhoneWidth,
+} from '../../../ui';
 import {
   EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NO_PERMISSION, NO_PERMISSION_FILTER,
   PAGE_UNREADABLE, PROFILE_FILTERS, RANGES, SCOPE_NOTE, SCOPE_TITLE, SOURCE_LINE,

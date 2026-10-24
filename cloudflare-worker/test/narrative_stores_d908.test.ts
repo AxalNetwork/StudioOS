@@ -184,7 +184,7 @@ test('refusals: an unknown section, an unknown version, nothing to change, too l
   assert.equal((await call(db, FOUNDER, 'PUT', `/narrative/${v}/sections/team`, { body: 'Grew 40% in a quarter.' })).status, 200);
 });
 
-test('who: a partner, an investor and another venture\'s founder get 403 on every read and write; an admin may', async () => {
+test('who: a partner, an investor and another venture\'s founder get 403 on every read and write; an admin reads only (D914)', async () => {
   const db = fixture();
   const v = await v1(db);
   for (const who of [PARTNER, INVESTOR, OTHER]) {
@@ -197,7 +197,9 @@ test('who: a partner, an investor and another venture\'s founder get 403 on ever
   }
   assert.equal(one(db, 'SELECT COUNT(*) AS n FROM narrative_sections').n, 0);
   assert.equal(one(db, 'SELECT COUNT(*) AS n FROM narrative_positioning').n, 0);
-  assert.equal((await call(db, ADMIN, 'PUT', `/narrative/${v}/sections/team`, { body: 'Admin' })).status, 200);
+  // D914 (#2698): an admin reads the narrative and leaves notes; their writes are refused.
+  const admin = await call(db, ADMIN, 'PUT', `/narrative/${v}/sections/team`, { body: 'Admin' });
+  assert.deepEqual([admin.status, admin.body.code], [403, 'admin_read_only']);
   // Another venture's version is not this one's.
   assert.equal((await call(db, OTHER, 'GET', `/narrative/${v}`, undefined, PB)).status, 404);
 });
