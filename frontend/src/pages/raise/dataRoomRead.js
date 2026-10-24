@@ -96,7 +96,12 @@ function tierRefusal(item, now) {
  *     (`nobody`); and no one once `access_expires_at` has passed;
  *   - then the NDA gate: an NDA-marked item needs a live NDA.
  */
-export const grantIsActive = (g, now = Date.now()) => g.status === 'active' && (!g.expires_at || (expiryMs(g.expires_at) ?? 0) > now);
+export function grantIsActive(g, now = Date.now()) {
+  if (g.status !== 'active') return false;
+  if (!g.expires_at) return true;
+  const expires = expiryMs(g.expires_at);
+  return expires != null && expires > now;
+}
 
 export function accessNow(item, grants = [], now = Date.now()) {
   if (!item) return [];

@@ -338,6 +338,7 @@ test('#2447: landing-by-project records accepted and edited fills against the ro
   ai_proposals:{tagline:'Synthetic proposed tagline',headline:'Synthetic proposed headline',not_a_column:'Synthetic ignored value'},ai_model:'synthetic-test-model',
  });
  assert.equal(result.status,200,JSON.stringify(result.body));
+ assert.ok(f.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='fill_provenance'").get(),'a landing save must record fill provenance');
  const fills=f.db.prepare("SELECT target_table,target_row_id,target_column,proposed_value,written_value,edited,decided_by FROM fill_provenance WHERE target_table='landing_pages' ORDER BY target_column").all() as any[];
  assert.deepEqual(fills.map(r=>[r.target_column,r.proposed_value,r.written_value,r.edited]),[
   ['headline','Synthetic proposed headline','Synthetic proposed headline',0],['tagline','Synthetic proposed tagline','Founder edited tagline',1],
