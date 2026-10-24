@@ -20,6 +20,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | `PITCH_DECK_WORKER_MAP_2026-10-24.md` | Every deck endpoint against the Pitch deck studio canvas's boards, and the twelve #2434 bugs on that day (D894). |
 | `INVESTOR_NARRATIVE_MAP_2026-10-24.md` | The Investor narrative canvas's boards against the code, the narrative reads and writes with their shapes, and #2454's bugs on that day (D906). |
 | `EVENTS_CONSOLE_MAP_2026-10-24.md` | The admin Events Console canvas's boards against the code, the event reads and writes with their shapes, the admin shell around `/admin/events`, and #2368's defects on that day (D915). |
+| `PARTNER_INVITATIONS_MAP_2026-10-24.md` | The Partner invitations canvas's boards against the code, the partner reads and writes with their shapes, the admin shell around `/admin/partners`, #2370's defects on that day, and a completeness critique (D923). |
 | `SPINOUT_LAB_UI_FIDELITY_AUDIT_2026-08-03.md` | Lab UI against its designs. |
 | `SIGNUP_FRICTION_AUDIT_2026-07-08.md` | Signup funnel friction. |
 | `DOCS_VISIBILITY_AUDIT.md` | Help Center coverage. |
