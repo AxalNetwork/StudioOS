@@ -402,6 +402,7 @@ const FounderBuildCadence = lazy(() => import('./pages/founder/FounderBuildCaden
 // D894 (#2434): the Pitch deck studio, its home and Share & analytics tabs, and the old editor address's redirect.
 const PitchStudio = lazy(() => import('./pages/raise/pitch/PitchStudio'));
 const PitchWorkspaceMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceMoved'));
+const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
@@ -2924,6 +2925,8 @@ function AppInner() {
       <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />
       <Route path="/raise/pitch/positioning" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
       <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="review" />))} />
+      {/* D901 (#2680) — present mode (PD16): full screen, reads one version, writes nothing. */}
+      <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchPresent />))} />
       <Route path="/raise/pitch/notes" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="notes" />))} />
       <Route path="/raise/capital" element={guard(['admin', 'founder'],
         new URLSearchParams(location.search).get('mode') === 'workspace'

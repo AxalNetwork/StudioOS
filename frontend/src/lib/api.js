@@ -2791,6 +2791,22 @@ export const api = {
       },
       body: JSON.stringify({ format }),
     }),
+  // D901 (#2680) — the version as one self-contained HTML file; the Worker
+  // records it (`deck_exports` plus an audit row) before answering. Raw
+  // Response, like deckExport: the caller reads the file or the refusal.
+  deckExportHtml: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/html`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
+  // D901 — every export of the deck's venture, newest first (50).
+  deckExportList: (id) => request(`/decks/${id}/exports`),
   // Task #2 — public, HMAC-token-gated deck payload consumed by the
   // headless Browser-Rendering session driving server-side exports.
   // No auth cookies/JWT are sent because the session has none; the

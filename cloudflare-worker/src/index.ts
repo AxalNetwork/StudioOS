@@ -189,6 +189,8 @@ import cycleGrow from './routes/cycle_grow';
 // catch-all so its `/share/:token/...` subpaths take precedence over
 // the existing /share/:token reader in decks.ts.
 import deckShareActions from './routes/deck_share_actions';
+// D901 (#2680) — the HTML export and the deck export ledger.
+import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
 import deckSources from './routes/deck_sources';
 import notificationsRoutes from './routes/notifications';
@@ -1170,6 +1172,9 @@ app.route('/api/brand', brand);
 // /api/decks/share/:token (signup, nda, feedback, deal-pack, context)
 // resolve to the new handlers before falling through to the catch-all.
 app.route('/api/decks', deckShareActions);
+// D901 (#2680): before decks.ts, so its middleware records the PDF and
+// PowerPoint file that POST /api/decks/:id/export answers.
+app.route('/api/decks', deckExports);
 // D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
 app.route('/api/decks', deckNotes);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
