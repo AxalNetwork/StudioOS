@@ -192,7 +192,26 @@ export function genPartnerReferralCode(): string {
  *     reviewer assignment, not seeding
  *   - seeds Trust Center obligations for the new partner
  */
+/** Persist a safe operational marker, never an exception message or credentials. */
+export async function recordPartnerActivationFailure(env: Env, envelopeId: number): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE partner_deals SET activation_error = 'activation_failed', activation_failed_at = ?
+      WHERE envelope_id = ? AND status = 'awaiting_signature'`,
+  ).bind(new Date().toISOString(), envelopeId).run();
+}
+
 export async function activatePartnerDealOnSignature(
+  env: Env, envelopeId: number,
+): Promise<{ activated: boolean; partner_deal_id: number; user_id: number | null } | null> {
+  try {
+    return await activateSignedPartnerDeal(env, envelopeId);
+  } catch (error) {
+    await recordPartnerActivationFailure(env, envelopeId);
+    throw error;
+  }
+}
+
+async function activateSignedPartnerDeal(
   env: Env,
   envelopeId: number,
 ): Promise<{ activated: boolean; partner_deal_id: number; user_id: number | null } | null> {
@@ -209,6 +228,9 @@ export async function activatePartnerDealOnSignature(
   if (deal.status === 'active') {
     return { activated: false, partner_deal_id: deal.id, user_id: deal.user_id };
   }
+  if (deal.status !== 'awaiting_signature') return { activated: false, partner_deal_id: deal.id, user_id: null };
+  const envelope = await env.DB.prepare(`SELECT status FROM esign_envelopes WHERE id = ?`).bind(envelopeId).first<{ status: string }>();
+  if (envelope?.status !== 'completed') return { activated: false, partner_deal_id: deal.id, user_id: null };
   // Invitation revocation/expiry must block activation even if the
   // recipient still has a stale signing token in their inbox. The
   // admin revoke path also voids the envelope, but check here too —
@@ -304,45 +326,61 @@ export async function activatePartnerDealOnSignature(
   const termMonths = Number(deal.term_months || 12);
   const expiresAt = new Date(Date.now() + termMonths * 30 * 86400 * 1000).toISOString();
 
-  if (grantedFounder) {
-    try {
-      await env.DB.prepare(
-        `UPDATE users SET subscription_tier = ?, subscription_status = 'partner_grant', subscription_renews_at = ? WHERE id = ?`,
-      ).bind(grantedFounder, expiresAt, userId).run();
-    } catch (e) { console.warn('[partnerDeals] founder tier grant failed', e); }
-  }
+  // D925: the grant, preservation record, signed invitation and active flip
+  // are one D1 transaction. A failed statement rolls them all back for retry.
+  // Only an awaiting deal may grant; concurrent retries cannot grant twice.
+  const writes: D1PreparedStatement[] = [env.DB.prepare(
+    `UPDATE partner_deals SET
+       activation_preserved_founder = CASE WHEN granted_tier_founder IS NOT NULL AND EXISTS (
+         SELECT 1 FROM users WHERE id = ? AND subscription_tier IN ('growth','studio')
+         AND (subscription_status IS NULL OR subscription_status NOT IN ('partner_grant','partner_referral','partner_revoked','partner_expired'))
+       ) THEN 1 ELSE 0 END,
+       activation_preserved_investor = CASE WHEN granted_tier_investor IS NOT NULL AND EXISTS (
+         SELECT 1 FROM users WHERE id = ? AND investor_tier IN ('professional','institutional')
+         AND (investor_subscription_status IS NULL OR investor_subscription_status NOT IN ('partner_grant','partner_referral','partner_revoked','partner_expired'))
+       ) THEN 1 ELSE 0 END
+     WHERE id = ? AND status = 'awaiting_signature'`,
+  ).bind(userId, userId, deal.id)];
+  if (grantedFounder) writes.push(env.DB.prepare(
+    `UPDATE users SET subscription_tier = ?, subscription_status = 'partner_grant', subscription_renews_at = ?
+     WHERE id = ? AND (subscription_tier IS NULL OR subscription_tier NOT IN ('growth','studio')
+       OR subscription_status IN ('partner_grant','partner_referral','partner_revoked','partner_expired'))
+       AND EXISTS (SELECT 1 FROM partner_deals pd JOIN partner_invitations pi ON pi.id = pd.invitation_id
+         WHERE pd.id = ? AND pd.status = 'awaiting_signature' AND pi.status != 'revoked'
+           AND datetime(pi.expires_at) > datetime('now'))`,
+  ).bind(grantedFounder, expiresAt, userId, deal.id));
   if (grantedInvestor) {
-    try {
-      // Task #43 — single-source the dealroom cap from INVESTOR_QUOTAS
-      // instead of the local `institutional ? 999 : 5` ternary so the
-      // grant column tracks the canonical per-tier cap (and matches the
-      // billing-flow paths in routes/billing.ts that already do this).
-      const { ensureInvestorPaywallSchema, INVESTOR_QUOTAS } = await import('../middleware/requireInvestorTier');
-      await ensureInvestorPaywallSchema(env);
-      const investorTier = grantedInvestor as 'free' | 'professional' | 'institutional';
-      const dealroomMax = INVESTOR_QUOTAS[investorTier].dealroom_max;
-      await env.DB.prepare(
-        `UPDATE users SET investor_tier = ?, investor_subscription_status = 'partner_grant',
-                          investor_subscription_renews_at = ?, investor_dealroom_max = ?
-           WHERE id = ?`,
-      ).bind(grantedInvestor, expiresAt, dealroomMax, userId).run();
-    } catch (e) { console.warn('[partnerDeals] investor tier grant failed', e); }
+    const { ensureInvestorPaywallSchema } = await import('../middleware/requireInvestorTier');
+    await ensureInvestorPaywallSchema(env);
+    const investorTier = grantedInvestor as 'free' | 'professional' | 'institutional';
+    const dealroomMax = INVESTOR_QUOTAS[investorTier].dealroom_max;
+    writes.push(env.DB.prepare(
+      `UPDATE users SET investor_tier = ?, investor_subscription_status = 'partner_grant',
+                        investor_subscription_renews_at = ?, investor_dealroom_max = ?
+       WHERE id = ? AND (investor_tier IS NULL OR investor_tier NOT IN ('professional','institutional')
+         OR investor_subscription_status IN ('partner_grant','partner_referral','partner_revoked','partner_expired'))
+         AND EXISTS (SELECT 1 FROM partner_deals pd JOIN partner_invitations pi ON pi.id = pd.invitation_id
+           WHERE pd.id = ? AND pd.status = 'awaiting_signature' AND pi.status != 'revoked'
+             AND datetime(pi.expires_at) > datetime('now'))`,
+    ).bind(grantedInvestor, expiresAt, dealroomMax, userId, deal.id));
   }
-
-  // Flip deal → active.
-  await env.DB.prepare(
-    `UPDATE partner_deals
-        SET status = 'active', user_id = ?, activated_at = CURRENT_TIMESTAMP, expires_at = ?
-      WHERE id = ?`,
-  ).bind(userId, expiresAt, deal.id).run();
-
-  // Mark invitation signed and link the resulting user.
-  await env.DB.prepare(
-    `UPDATE partner_invitations
-        SET status = 'signed', signed_at = CURRENT_TIMESTAMP,
+  writes.push(env.DB.prepare(
+    `UPDATE partner_invitations SET status = 'signed', signed_at = CURRENT_TIMESTAMP,
             resulting_user_id = ?, resulting_deal_id = ?
-      WHERE id = ?`,
-  ).bind(userId, deal.id, deal.invitation_id).run();
+      WHERE id = ? AND status != 'revoked' AND datetime(expires_at) > datetime('now')
+        AND EXISTS (SELECT 1 FROM partner_deals WHERE id = ? AND status = 'awaiting_signature')`,
+  ).bind(userId, deal.id, deal.invitation_id, deal.id));
+  writes.push(env.DB.prepare(
+    `UPDATE partner_deals SET status = 'active', user_id = ?, activated_at = CURRENT_TIMESTAMP,
+            expires_at = ?, activation_error = NULL, activation_failed_at = NULL
+      WHERE id = ? AND status = 'awaiting_signature'
+        AND EXISTS (SELECT 1 FROM partner_invitations WHERE id = partner_deals.invitation_id
+          AND status != 'revoked' AND datetime(expires_at) > datetime('now'))`,
+  ).bind(userId, expiresAt, deal.id));
+  const committed = await env.DB.batch(writes);
+  if ((committed[committed.length - 1]?.meta?.changes || 0) === 0) {
+    return { activated: false, partner_deal_id: deal.id, user_id: userId };
+  }
 
   // Link profile to the new user.
   try {

@@ -16,10 +16,10 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireBranchNotSuspended } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
 import { sendPartnerInvitationEmail } from '../services/email';
-import { ALL_PARTNER_DEAL_TYPES, type PartnerDealType } from '../services/partnerDeals';
+import { ALL_PARTNER_DEAL_TYPES, activatePartnerDealOnSignature, type PartnerDealType } from '../services/partnerDeals';
 import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchema';
 // Task #43 — revocation paths must drop investor_dealroom_max to the
 // free-tier cap, not the hardcoded `5` (which is the *professional* cap).
@@ -47,6 +47,7 @@ function appUrl(env: Env): string {
 
 admin_partners.post('/invitations', async (c) => {
   const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   const body = await c.req.json().catch(() => ({}));
   const email = String(body.recipient_email || '').trim().toLowerCase();
   const name = String(body.recipient_name || '').trim();
@@ -124,6 +125,7 @@ admin_partners.get('/invitations', async (c) => {
 
 admin_partners.post('/invitations/:id/resend', async (c) => {
   const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   const id = parseInt(c.req.param('id'), 10);
   const inv: any = await c.env.DB.prepare(
     `SELECT * FROM partner_invitations WHERE id = ?`,
@@ -152,6 +154,7 @@ admin_partners.post('/invitations/:id/resend', async (c) => {
 
 admin_partners.post('/invitations/:id/revoke', async (c) => {
   const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   const id = parseInt(c.req.param('id'), 10);
   const body = await c.req.json().catch(() => ({}));
   const reason = String(body.reason || '').slice(0, 500);
@@ -170,6 +173,7 @@ admin_partners.post('/invitations/:id/revoke', async (c) => {
   // and the envelope/recipient to a non-completable state so the
   // stale token can't activate the deal post-revocation. Activation
   // also re-checks invitation status as belt-and-braces.
+  const failures: Array<{ step: string; envelope_id?: number }> = [];
   let voidedDeals = 0;
   let voidedEnvelopes = 0;
   try {
@@ -183,7 +187,7 @@ admin_partners.post('/invitations/:id/revoke', async (c) => {
     const envIds: any = await c.env.DB.prepare(
       `SELECT envelope_id FROM partner_deals
          WHERE invitation_id = ? AND envelope_id IS NOT NULL`,
-    ).bind(id).all().catch(() => ({ results: [] }));
+    ).bind(id).all();
     for (const row of (envIds?.results || []) as any[]) {
       try {
         const er = await c.env.DB.prepare(
@@ -194,16 +198,16 @@ admin_partners.post('/invitations/:id/revoke', async (c) => {
         await c.env.DB.prepare(
           `UPDATE esign_recipients SET status = 'declined'
              WHERE envelope_id = ? AND status NOT IN ('signed','declined')`,
-        ).bind(row.envelope_id).run().catch(() => {});
-      } catch (e) { console.warn('[admin_partners] void envelope failed', row.envelope_id, e); }
+        ).bind(row.envelope_id).run().catch(() => { failures.push({ step: 'decline_recipients', envelope_id: row.envelope_id }); });
+      } catch { failures.push({ step: 'void_envelope', envelope_id: row.envelope_id }); }
     }
-  } catch (e) { console.warn('[admin_partners] revoke cascade failed', e); }
+  } catch { failures.push({ step: 'revoke_cascade' }); }
 
   await logAdminAction(c.env, admin.id, admin.email, 'partner_invitation_revoked', {
     invitation_id: id, reason,
-    voided_deals: voidedDeals, voided_envelopes: voidedEnvelopes,
+    voided_deals: voidedDeals, voided_envelopes: voidedEnvelopes, failures,
   });
-  return c.json({ ok: true, voided_deals: voidedDeals, voided_envelopes: voidedEnvelopes });
+  return c.json({ ok: true, voided_deals: voidedDeals, voided_envelopes: voidedEnvelopes, failures });
 });
 
 // ---------- Deals ----------
@@ -261,6 +265,9 @@ admin_partners.get('/deals/:id/redemptions', async (c) => {
       ORDER BY prr.redeemed_at DESC LIMIT 500`,
   ).bind(id).all();
 
+  const total = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM partner_referral_redemptions WHERE partner_deal_id = ?`,
+  ).bind(id).first<{ n: number }>();
   const isRevshare = String(deal.deal_type) === 'deal_sourcing_revshare';
   const ATTRIBUTION_DAYS = 365;
   const now = Date.now();
@@ -286,6 +293,8 @@ admin_partners.get('/deals/:id/redemptions', async (c) => {
     },
     items,
     redemptions_count: items.length,
+    redemptions_total: Number(total?.n || 0),
+    truncated: Number(total?.n || 0) > items.length,
     revshare_attribution_days: isRevshare ? ATTRIBUTION_DAYS : null,
   });
 });
@@ -298,10 +307,13 @@ admin_partners.get('/deals', async (c) => {
             pd.granted_tier_founder, pd.granted_tier_investor, pd.term_months,
             pd.referral_code, pd.envelope_id, pd.status, pd.activated_at,
             pd.expires_at, pd.terminated_at, pd.termination_reason, pd.created_at,
+            pd.activation_error, pd.activation_failed_at, pd.activation_preserved_founder,
+            pd.activation_preserved_investor, terminator.name AS terminated_by_name,
             u.email AS partner_email, u.name AS partner_name,
             (SELECT COUNT(*) FROM partner_referral_redemptions WHERE partner_deal_id = pd.id) AS redemptions_count
        FROM partner_deals pd
        LEFT JOIN users u ON u.id = pd.user_id
+       LEFT JOIN users terminator ON terminator.id = pd.terminated_by_user_id
       WHERE pd.status = ?
       ORDER BY pd.created_at DESC LIMIT 200`,
   ).bind(status).all();
@@ -313,6 +325,7 @@ admin_partners.get('/deals', async (c) => {
 
 admin_partners.post('/deals/:id/terminate', async (c) => {
   const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   const id = parseInt(c.req.param('id'), 10);
   const body = await c.req.json().catch(() => ({}));
   const reason = String(body.reason || '').slice(0, 500);
@@ -330,94 +343,82 @@ admin_partners.post('/deals/:id/terminate', async (c) => {
   ).bind(id).first();
   if (!deal) return c.json({ error: 'Deal is not active or not found' }, 409);
 
-  await c.env.DB.prepare(
+  const terminated = await c.env.DB.prepare(
     `UPDATE partner_deals
         SET status = 'terminated', terminated_at = CURRENT_TIMESTAMP,
             terminated_by_user_id = ?, termination_reason = ?
       WHERE id = ? AND status = 'active'`,
   ).bind(admin.id, reason, id).run();
+  if ((terminated.meta?.changes || 0) === 0) return c.json({ error: 'Deal is not active or not found' }, 409);
+  const failures: Array<{ step: string; user_id?: number }> = [];
+  let partnerTiersReverted = false;
 
-  // Revoke tier grants from the partner. We only revoke if the user's
-  // current tier still matches what THIS deal granted (subscription_status
-  // = 'partner_grant' / 'partner_referral'), so we don't clobber a paying
-  // subscription that may have replaced the grant during the deal's life.
-  if (deal.user_id) {
-    if (deal.granted_tier_founder) {
+  // Guard both tier and grant source: a later paid subscription is never revoked.
+  const revertedMembers = new Set<number>();
+  async function revert(userId: number, founder: string | null, investor: string | null, source: string, partner: boolean) {
+    if (founder) {
       try {
-        await c.env.DB.prepare(
-          `UPDATE users SET subscription_tier = 'free',
-                              subscription_status = 'partner_revoked',
-                              subscription_renews_at = NULL
-             WHERE id = ?
-               AND subscription_tier = ?
-               AND subscription_status = 'partner_grant'`,
-        ).bind(deal.user_id, deal.granted_tier_founder).run();
-      } catch (e) { console.warn('[admin_partners] revoke founder tier failed', e); }
+        const r = await c.env.DB.prepare(
+          `UPDATE users SET subscription_tier = 'free', subscription_status = 'partner_revoked', subscription_renews_at = NULL
+           WHERE id = ? AND subscription_tier = ? AND subscription_status = ?`,
+        ).bind(userId, founder, source).run();
+        if ((r.meta?.changes || 0) > 0) {
+          if (partner) partnerTiersReverted = true;
+          else revertedMembers.add(Number(userId));
+        }
+      } catch { failures.push({ step: partner ? 'partner_founder_revoke' : 'redeemer_founder_revoke', user_id: userId }); }
     }
-    if (deal.granted_tier_investor) {
+    if (investor) {
       try {
-        await c.env.DB.prepare(
-          `UPDATE users SET investor_tier = 'free',
-                              investor_subscription_status = 'partner_revoked',
-                              investor_subscription_renews_at = NULL,
-                              investor_dealroom_max = ?
-             WHERE id = ?
-               AND investor_tier = ?
-               AND investor_subscription_status = 'partner_grant'`,
-        ).bind(INVESTOR_QUOTAS.free.dealroom_max, deal.user_id, deal.granted_tier_investor).run();
-      } catch (e) { console.warn('[admin_partners] revoke investor tier failed', e); }
+        const r = await c.env.DB.prepare(
+          `UPDATE users SET investor_tier = 'free', investor_subscription_status = 'partner_revoked',
+                            investor_subscription_renews_at = NULL, investor_dealroom_max = ?
+           WHERE id = ? AND investor_tier = ? AND investor_subscription_status = ?`,
+        ).bind(INVESTOR_QUOTAS.free.dealroom_max, userId, investor, source).run();
+        if ((r.meta?.changes || 0) > 0) {
+          if (partner) partnerTiersReverted = true;
+          else revertedMembers.add(Number(userId));
+        }
+      } catch { failures.push({ step: partner ? 'partner_investor_revoke' : 'redeemer_investor_revoke', user_id: userId }); }
     }
   }
-
-  // Cascade revocation to every prior redeemer of this deal — same
-  // policy as the daily expiry sweep, so termination has immediate
-  // effect across the whole partner's referral chain (not just their
-  // own grant). Paid upgrades that replaced a partner_referral status
-  // mid-term are preserved by the status='partner_referral' guard.
-  let redemptionsRevoked = 0;
+  if (deal.user_id) await revert(deal.user_id, deal.granted_tier_founder, deal.granted_tier_investor, 'partner_grant', true);
   try {
-    const reds: any = await c.env.DB.prepare(
+    const reds = await c.env.DB.prepare(
       `SELECT redeemed_by_user_id, granted_tier_founder, granted_tier_investor
          FROM partner_referral_redemptions WHERE partner_deal_id = ?`,
-    ).bind(id).all().catch(() => ({ results: [] }));
-    for (const r of (reds?.results || []) as any[]) {
-      if (r.granted_tier_founder) {
-        const u = await c.env.DB.prepare(
-          `UPDATE users SET subscription_tier = 'free',
-                              subscription_status = 'partner_revoked',
-                              subscription_renews_at = NULL
-             WHERE id = ?
-               AND subscription_tier = ?
-               AND subscription_status = 'partner_referral'`,
-        ).bind(r.redeemed_by_user_id, r.granted_tier_founder).run();
-        if ((u.meta?.changes || 0) > 0) redemptionsRevoked += 1;
-      }
-      if (r.granted_tier_investor) {
-        const u = await c.env.DB.prepare(
-          `UPDATE users SET investor_tier = 'free',
-                              investor_subscription_status = 'partner_revoked',
-                              investor_subscription_renews_at = NULL,
-                              investor_dealroom_max = ?
-             WHERE id = ?
-               AND investor_tier = ?
-               AND investor_subscription_status = 'partner_referral'`,
-        ).bind(INVESTOR_QUOTAS.free.dealroom_max, r.redeemed_by_user_id, r.granted_tier_investor).run();
-        if ((u.meta?.changes || 0) > 0) redemptionsRevoked += 1;
-      }
+    ).bind(id).all();
+    for (const r of (reds.results || []) as any[]) {
+      await revert(r.redeemed_by_user_id, r.granted_tier_founder, r.granted_tier_investor, 'partner_referral', false);
     }
-  } catch (e) { console.warn('[admin_partners] terminate redemption revoke failed', e); }
+  } catch { failures.push({ step: 'redeemers_read' }); }
+  const result = { members_revoked: revertedMembers.size, partner_tiers_reverted: partnerTiersReverted, failures };
+  await logAdminAction(c.env, admin.id, admin.email, 'partner_deal_terminated', { deal_id: id, reason, ...result });
+  return c.json({ ok: true, ...result });
+});
 
-  await logAdminAction(c.env, admin.id, admin.email, 'partner_deal_terminated', {
-    deal_id: id, reason,
-    revoked_tier_founder: deal.granted_tier_founder,
-    revoked_tier_investor: deal.granted_tier_investor,
-    redemptions_revoked: redemptionsRevoked,
-  });
-  return c.json({
-    ok: true,
-    tiers_revoked: !!(deal.granted_tier_founder || deal.granted_tier_investor),
-    redemptions_revoked: redemptionsRevoked,
-  });
+// A completed signature may be retried; other lifecycle states cannot be resurrected.
+admin_partners.post('/deals/:id/activate', async (c) => {
+  const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) return c.json({ error: 'Invalid id' }, 400);
+  const deal = await c.env.DB.prepare(
+    `SELECT pd.status, pd.envelope_id, e.status AS envelope_status
+       FROM partner_deals pd LEFT JOIN esign_envelopes e ON e.id = pd.envelope_id WHERE pd.id = ?`,
+  ).bind(id).first<{ status: string; envelope_id: number; envelope_status: string }>();
+  if (!deal || deal.status !== 'awaiting_signature' || deal.envelope_status !== 'completed') {
+    return c.json({ error: 'Deal must await activation of its own completed agreement' }, 409);
+  }
+  try {
+    const result = await activatePartnerDealOnSignature(c.env, deal.envelope_id);
+    await logAdminAction(c.env, admin.id, admin.email, 'partner_deal_activation_retried', { deal_id: id, activated: result?.activated || false });
+    if (!result?.activated) return c.json({ error: 'Deal cannot be activated' }, 409);
+    return c.json(result);
+  } catch {
+    await logAdminAction(c.env, admin.id, admin.email, 'partner_deal_activation_retried', { deal_id: id, failed: true });
+    return c.json({ error: 'Activation failed; retry after resolving the failure', code: 'activation_failed' }, 503);
+  }
 });
 
 // ---------- Service Provider Directory approval (Task #53 admin tools) ----------
@@ -432,6 +433,7 @@ admin_partners.post('/deals/:id/terminate', async (c) => {
 
 admin_partners.get('/directory', async (c) => {
   const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   await ensurePartnerDirectoryColumns(c.env);
   const q = String(c.req.query('q') || '').trim().toLowerCase();
   const params: unknown[] = [];
@@ -460,6 +462,7 @@ admin_partners.get('/directory', async (c) => {
 
 admin_partners.post('/:id/directory', async (c) => {
   const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   await ensurePartnerDirectoryColumns(c.env);
   const id = Number(c.req.param('id'));
   if (!Number.isFinite(id) || id <= 0) return c.json({ error: 'invalid partner id' }, 400);
@@ -528,6 +531,7 @@ admin_partners.post('/:id/directory', async (c) => {
 
 admin_partners.get('/links', async (c) => {
   const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   void admin;
   // Unattached first: this list IS the work queue, so the rows that need a
   // decision sort above the ones that already have one.
@@ -561,6 +565,7 @@ admin_partners.get('/links', async (c) => {
 
 admin_partners.post('/links', async (c) => {
   const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
 
   const userId = Number((body as { user_id?: unknown }).user_id);
