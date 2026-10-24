@@ -220,7 +220,10 @@ test('D893 the link downloads the file once signed, through the analytics downlo
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-disposition')!, /filename=".+-page-[0-9a-f]{12}\.csv"/);
   assert.match(await res.text(), /^Axal Insights,Figures on this page/);
-  assert.equal((await w.app.request(path.replace(/.$/, (ch) => (ch === 'A' ? 'B' : 'A')), {}, w.env)).status, 403, 'a tampered link is refused');
+  // Flip the signature's first character: a last base64url character can carry only padding bits.
+  const dot = path.lastIndexOf('.') + 1;
+  const tampered = path.slice(0, dot) + (path[dot] === 'A' ? 'B' : 'A') + path.slice(dot + 1);
+  assert.equal((await w.app.request(tampered, {}, w.env)).status, 403, 'a tampered link is refused');
 });
 
 test('D893 without R2 the file is inline, and still logged', async () => {
