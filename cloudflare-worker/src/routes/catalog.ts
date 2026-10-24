@@ -54,6 +54,7 @@ import {
 import { ensureAdminAuditLogTable } from './admin';
 import { isTokenPackPrice, isTokenPackProduct, packLabel, TOKEN_PACK_LIMITS } from '../services/aiCredits';
 import { refuse } from '../util/refusal';
+import { StripeApiError } from '../util/stripeError';
 
 // ---------- public read ----------
 const catalog = new Hono<{ Bindings: Env }>();
@@ -113,6 +114,12 @@ async function productIsPack(env: Env, productId: string): Promise<boolean> {
   return mirrored?.kind === 'token_pack';
 }
 
+/** What a failed sync records (D1011): Stripe's HTTP status and error code when Stripe refused, else that it was not Stripe. */
+export function syncFailureOf(e: unknown): Record<string, unknown> {
+  if (e instanceof StripeApiError) return { failure: 'stripe', stripe_status: e.status, stripe_code: e.code };
+  return { failure: 'other' };
+}
+
 adminCatalog.post('/sync', async (c) => {
   const admin = await requireAdmin(c);
   try {
@@ -122,6 +129,10 @@ adminCatalog.post('/sync', async (c) => {
     });
     return c.json({ ok: true, ...result });
   } catch (e) {
+    // D1011 (PAY6 C): a failed sync is recorded too, with who started it and
+    // what kind of failure it was. Stripe's status and code only, never its
+    // text, so nothing the call carried can reach the log.
+    await writeAdminAudit(c.env, admin.id, 'catalog_sync_failed', syncFailureOf(e));
     return refuse(c, 502, { code: 'catalog_sync_failed', message: 'The catalogue could not be synced with Stripe. Nothing changed; try again in a moment.', raw: e, audience: 'admin' });
   }
 });

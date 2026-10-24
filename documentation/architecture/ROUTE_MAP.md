@@ -776,6 +776,18 @@ The founder's `/studio` carries Eadwyn's panel tab in `?tab=` (`tasks`, `tickets
 | `Studio · Mobile.dc.html` S6m, S7m, S9m, S10m, `Studio Mobile Page.dc.html` (both in `design/canvases/integrated/` since 2026-10-17) | `/profile`, `/profile/venture`, `/profile/preview`, `/profile/visibility` · founder (`guard(['founder'])`; `/profile` keeps D433's redirect to `/account` for every other role) | `pages/profile/` (`ProfileFrame.jsx`, `YouPage.jsx`, `VenturePage.jsx`, `PreviewPage.jsx`, `VisibilityPage.jsx`, `profileModel.js`); `lib/api/profile.js`; desktop row "Your profile" in `UserDropdown`, phone rows in `EadwynMenu.jsx` (`PROFILE_ROWS_LIVE`) and the account sheet | `founder_profile.ts`: `GET /api/profile/me`, `GET`/`PATCH /api/profile/venture`, `GET /api/profile/preview`; `settings.ts` `GET`/`PUT /api/settings/privacy` with `?project=` (`investor_findable`); `profile_history.ts` `/api/profile/archetype-published` (D702) | NEW |
 | `Account Menu · Mobile.dc.html` A1m–A10m, `Account Mobile Page.dc.html` (both in `design/canvases/integrated/` since 2026-10-17) | `/account`, `/account/usage`, `/account/connectors`, `/trust`, `/perks`, `/calendar`, `/my/events`, `/learning`, `/help`, `/plans-and-pricing` · every role that reaches each page, below 1024px | `pages/account/accountPhone.js` (titles, subs and section titles) and `AccountPhonePage.jsx` (the bar and rows); A1m–A3m in `AccountCenter.jsx`, `AccountUsage.jsx`, `AccountConnectors.jsx`; A4m–A10m in `TrustCenterPage.jsx`, `PerksPage.jsx`, `CalendarPage.jsx`, `events/MyEventsPage.jsx`, `learning/LearningHome.jsx`, `docs/DocsLayout.jsx` and `account/PricingPhone.jsx` (for `ProductsPage.jsx`). Every read is an existing route for the caller's own account; no Worker change | RESKIN (A1m UPGRADE) |
 
+### Payments change log and webhook hours Worker contract (D1011, #2830)
+
+Super Admin only, at `/api/admin/payments` (`routes/admin_payments.ts`); the client is `lib/api/payments.js`. Rows come from the audit rows the catalogue and Stripe settings already write (`services/paymentsChangeLog.ts`). A database that does not answer is a 503 with a sentence.
+
+| Route | Who | What |
+| --- | --- | --- |
+| `GET /api/admin/payments/change-log` | Super Admin | PAY7: the changes, newest first. `what`, `who`, `product`, `from`, `to`, `limit`, `offset`. |
+| `GET /api/admin/payments/change-log.csv` | Super Admin | The same rows as a CSV. `reason` (10 to 500 characters) is recorded first; no record, no file. |
+| `GET /api/admin/payments/webhook-deliveries` | Super Admin | PAY5: 24-hour totals and 24 hourly buckets. An hour with no request log is null, never 0. HQ · Platform's P3 reads the same block (`services/stripeWebhookDeliveries.ts`). |
+
+`POST /api/admin/catalog/sync` now records a failure as `catalog_sync_failed`, with who started it and Stripe's status and code (PAY6 C).
+
 ## Founder / admin / advisor / partner — part 1 (29 canvases)
 
 | Canvas | Persona | Proposed route | Live route today | Backend it wires to | STATUS | Notes |
