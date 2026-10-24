@@ -119,12 +119,15 @@ export function versionRows(versions) {
  * its `subtitle` the venture's name, so the section name comes last and the
  * venture's name, already the cover's eyebrow, never.
  */
+// The Worker fills a field nobody wrote with a dash (`autofill.ts` PLACEHOLDER).
+const written = (v) => { const t = String(v ?? '').trim(); return t === '—' ? '' : t; };
+
 export function coverOf(deck) {
   const slides = Array.isArray(deck?.slides) ? deck.slides : [];
   const first = slides[0] || {};
   const field = (key) => (Array.isArray(first.fields) ? first.fields.find((f) => f?.key === key || f?.kind === key) : null);
-  const headline = String(field('title')?.value || deck?.title || first.title || '').trim();
-  const sub = String(field('subtitle')?.value || '').trim();
+  const headline = written(field('title')?.value) || written(deck?.title) || written(first.title);
+  const sub = written(field('subtitle')?.value);
   return { headline: headline || 'Untitled deck', sub, slides: slides.length || null };
 }
 
@@ -237,8 +240,11 @@ export function funnelRows(stats) {
  * second. The engagement read's `shares` do (`exhausted`: the Worker's
  * `used_at`, or `view_count` at `view_limit`), for the current version's links,
  * and a link nobody has opened has every view left. An opened link the
- * engagement read does not list (another version's) is neither live nor dead:
- * `live` is null, and the page says its views left were not read.
+ * engagement read does not list (another version's, one past its newest 50,
+ * or any opened link while that read is running or has failed) is neither live
+ * nor dead: `live` is null. The page still offers Withdraw on it, because
+ * withdrawing a link that is already used up does no harm, and says why its
+ * views left are not shown.
  */
 export function linkRows(records, engagement = null) {
   const shares = new Map(asList(engagement, 'shares').map((s) => [String(s.id), s]));

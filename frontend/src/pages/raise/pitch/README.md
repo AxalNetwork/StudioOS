@@ -28,8 +28,10 @@ replaces it.
   browsers.
 - **A link is live only when it has not expired and is not used up.** The
   records give the first; the engagement read's `shares` give the second for
-  the current version's links. An opened link of another version says its views
-  left were not read, and offers no Withdraw.
+  the current version's links. An opened link the engagement read does not
+  answer for (another version's, or any while that read is running or has
+  failed) says why its views left are not shown, and still offers Withdraw:
+  withdrawing a link already used up does no harm.
 - **A board waits for its store.** The canvas draws boards whose Worker reads do
   not exist yet: the coverage meter and source chips, the generate flow, the
   editor, card AI tools, present mode and export, the share dialog, images and

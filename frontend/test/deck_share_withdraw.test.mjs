@@ -245,7 +245,7 @@ test('the row changes before the founder is told it did', () => {
 
 // ------------------------------------------------------- the studio (D894)
 
-test('Pitch deck studio · Share & analytics withdraws through the link record, after a dialog, and only a live link', () => {
+test('Pitch deck studio · Share & analytics withdraws through the link record, after a dialog, and never a dead link', () => {
   // The read-only Pitch page this replaced promised it "never mints, revokes, or
   // edits a share link". The studio's Share & analytics tab (PD19) draws Withdraw
   // on each live link, so the promise is now about HOW it withdraws: through the
@@ -253,7 +253,9 @@ test('Pitch deck studio · Share & analytics withdraws through the link record, 
   // `deck_link_revoked`, after a dialog that says what changes.
   const src = codeOnly(STUDIO);
   assert.match(src, /cyclesApi\.recordAction\('raise', reads\.project\.id, 'pitch-deck', withdraw\.id, 'revoke'\)/);
-  assert.match(src, /!readOnly && l\.live \? <button/, 'Withdraw is drawn for a live link, and never for a reader');
+  // 2026-10-24 (D894 review, R1): a link whose views left are not known is
+  // still offered Withdraw; withdrawing one already used up does no harm.
+  assert.match(src, /!readOnly && l\.live !== false \? <button/, 'Withdraw is drawn on every link not known to be dead, and never for a reader');
   assert.match(src, /title="Withdraw this link\?"/);
   assert.match(STUDIO, /link stops opening at once\. Its views stay listed\./);
   assert.doesNotMatch(src, /deckRevokeShare/, 'a second way to end a link is back');

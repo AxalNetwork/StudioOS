@@ -122,9 +122,15 @@ function useStudioReads() {
     return () => { live = false; };
   }, [projectId, page, tick]);
 
+  // Stable, and a no-op for the page already asked for, so the pager's own
+  // effect cannot loop while the page it asked for is still being read.
+  const setPage = useCallback(
+    (n) => setLinksPage((old) => (old.for === projectId && old.page === n ? old : { for: projectId, page: n })),
+    [projectId],
+  );
+
   return {
-    projects, project, requested, versions, module, deck, engagement,
-    setPage: (n) => setLinksPage({ for: projectId, page: n }),
+    projects, project, requested, versions, module, deck, engagement, setPage,
     reload: () => setTick((t) => t + 1),
   };
 }
@@ -396,6 +402,7 @@ export function StudioAnalytics({ reads, readOnly }) {
   const [toast, setToast] = useState(null);
   const dismiss = useRef(null);
   const heading = useRef(null);
+  const root = useRef(null);
   const versions = asList(reads.versions.data, 'versions', 'decks');
   const current = currentVersion(versions);
   const card = reads.module.data?.card;
@@ -414,6 +421,13 @@ export function StudioAnalytics({ reads, readOnly }) {
   // re-read then takes that button away: the result's own Dismiss takes focus
   // instead. This effect runs after the dialog's cleanup.
   useEffect(() => { if (toast) dismiss.current?.focus?.(); }, [toast]);
+
+  // A page the read no longer has (links were withdrawn or expired away while
+  // it was open) goes back to the read's last page, never "Links 0–0 of N".
+  const { setPage } = reads;
+  useEffect(() => {
+    if (pager && pager.total && pager.page > pager.pages) setPage?.(pager.pages);
+  }, [pager?.page, pager?.pages, pager?.total, setPage]);
 
   const confirmWithdraw = useCallback(async () => {
     if (!withdraw || !reads.project?.id) return;
@@ -487,14 +501,19 @@ export function StudioAnalytics({ reads, readOnly }) {
                     <tr key={l.id} className="border-t border-axal-hairline dark:border-gray-700" data-testid={`pitch-studio-link-${l.id}`}>
                       <td className={`px-4 py-2.5 font-semibold ${INK}`}>{l.investor}</td>
                       <td className="px-4 py-2.5"><span className={l.live ? PILL_OK : PILL_MU}>{l.expires}</span></td>
-                      <td className={`px-4 py-2.5 font-mono ${INK}`}>{l.views ?? '—'}</td>
-                      <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{l.views ? l.time ?? NOT_RECORDED : '— not opened'}</td>
-                      <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{l.mostRead ?? '—'}</td>
+                      <td className={`px-4 py-2.5 font-mono ${INK}`}>{l.views ?? NOT_RECORDED}</td>
+                      <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{l.views ? l.time ?? NOT_RECORDED : l.views === 0 ? 'Not opened' : NOT_RECORDED}</td>
+                      <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{l.mostRead ?? (l.views === 0 ? 'Not opened' : NOT_RECORDED)}</td>
                       <td className="px-4 py-2.5 text-right">
-                        {l.live === null ? (
-                          // Opened, and not a link of the version the engagement read covers.
-                          <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-link-unknown-${l.id}`}>Views left not read</span>
-                        ) : !readOnly && l.live ? <button type="button" className={DANGER_TEXT} onClick={() => { setFailed(false); setWithdraw(l); }} data-testid={`pitch-studio-withdraw-${l.id}`}>Withdraw</button> : null}
+                        <div className="flex items-center justify-end gap-3">
+                          {l.live === null ? (
+                            // Opened, and not a link the engagement read answered for.
+                            <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-link-unknown-${l.id}`}>
+                              {engState === 'error' ? 'Views left could not be read' : engState === 'ok' ? 'Views left not read' : 'Reading views left…'}
+                            </span>
+                          ) : null}
+                          {!readOnly && l.live !== false ? <button type="button" className={DANGER_TEXT} onClick={() => { setFailed(false); setWithdraw(l); }} data-testid={`pitch-studio-withdraw-${l.id}`}>Withdraw</button> : null}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -519,14 +538,14 @@ export function StudioAnalytics({ reads, readOnly }) {
   }
 
   return (
-    <div className="flex flex-col" data-testid="pitch-studio-analytics">
+    <div ref={root} tabIndex={-1} className="flex flex-col outline-none" data-testid="pitch-studio-analytics">
       <div className="flex flex-col gap-3.5">{body}</div>
       {/* Always mounted, so the line is announced when it is set, and kept through a re-read. */}
       <div role="status" className={toast ? 'mt-3.5' : undefined}>
         {toast ? (
           <div className={`${CARD} flex items-center justify-between gap-3 px-4 py-3 text-[12.5px] ${INK}`} data-testid="pitch-studio-toast">
             <span>{toast.text}</span>
-            <button ref={dismiss} type="button" aria-label="Dismiss" className="h-8 w-8 text-[16px] leading-none" onClick={() => { setToast(null); heading.current?.focus?.(); }}>×</button>
+            <button ref={dismiss} type="button" aria-label="Dismiss" className="h-8 w-8 text-[16px] leading-none" onClick={() => { setToast(null); (heading.current || root.current)?.focus?.(); }}>×</button>
           </div>
         ) : null}
       </div>
@@ -559,9 +578,9 @@ function Tile({ label, value, note, state }) {
       {state === 'loading' || state === 'idle' ? <Skeleton h="h-7" /> : state === 'error' ? (
         <span className={MUTED}>Could not be read</span>
       ) : (
-        <span className={`font-mono text-[22px] font-semibold ${INK}`}>{value ?? '—'}</span>
+        value == null ? <span className={MUTED}>{NOT_RECORDED}</span> : <span className={`font-mono text-[22px] font-semibold ${INK}`}>{value}</span>
       )}
-      <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{value == null && state === 'ok' ? NOT_RECORDED : note}</span>
+      <span className="text-[11.5px] text-axal-muted dark:text-gray-400">{note}</span>
     </div>
   );
 }
@@ -597,7 +616,7 @@ function Funnel({ stats, state }) {
       <span className={`text-[14px] font-extrabold ${INK}`}>Funnel</span>
       {state === 'error' ? <span className={MUTED}>Could not be read.</span> : rows.map(({ label, n, width }, i) => (
         <div key={label} className="flex flex-col gap-1">
-          <div className="flex justify-between text-[12.5px]"><span className={INK}>{label}</span><span className="font-mono text-axal-muted dark:text-gray-400">{n == null ? '—' : `${n}${i === 0 && stats?.capped ? '+' : ''}`}</span></div>
+          <div className="flex justify-between text-[12.5px]"><span className={INK}>{label}</span><span className="font-mono text-axal-muted dark:text-gray-400">{n == null ? (state === 'ok' ? NOT_RECORDED : 'Reading…') : `${n}${i === 0 && stats?.capped ? '+' : ''}`}</span></div>
           <div className="h-2.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800">
             <div className="h-2.5 rounded-full bg-axal-violet dark:bg-violet-400" style={{ width: `${width}%` }} data-testid={`pitch-studio-funnel-bar-${i}`} />
           </div>

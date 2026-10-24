@@ -255,7 +255,7 @@ test('NDA signed is a count of signatures, never "N of" browsers, and the funnel
   assert.match(d, /NDA signed\s*2\s*signatures on links to the current version/);
 });
 
-test('a link is live only when it has not expired and is not used up, and only a live one offers Withdraw', () => {
+test('a link is live only when it has not expired and is not used up, and only a dead one offers no Withdraw', () => {
   const rows = linkRows(records, engagement);
   assert.equal(rows.length, 6, 'a withdrawn, expired or used-up link is still listed');
   assert.deepEqual(rows.map((r) => [r.id, r.live, r.expires]), [
@@ -275,10 +275,20 @@ test('a link is live only when it has not expired and is not used up, and only a
   assert.equal(newLinkHref({ add: { text: 'Build your deck', href: '/raise/pitch' } }), null);
 
   const a = analytics(reads());
-  for (const id of [11, 16]) assert.match(a, new RegExp(`data-testid="pitch-studio-withdraw-${id}"`), `live link ${id} has no Withdraw`);
-  for (const id of [12, 13, 14, 15]) assert.doesNotMatch(a, new RegExp(`data-testid="pitch-studio-withdraw-${id}"`), `dead or unknown link ${id} offers Withdraw`);
+  // 2026-10-24 (D894 review, R1): a link whose views left are not known (15)
+  // keeps Withdraw, as before the fix: only a link known to be dead loses it.
+  for (const id of [11, 15, 16]) assert.match(a, new RegExp(`data-testid="pitch-studio-withdraw-${id}"`), `link ${id}, live or not known, has no Withdraw`);
+  for (const id of [12, 13, 14]) assert.doesNotMatch(a, new RegExp(`data-testid="pitch-studio-withdraw-${id}"`), `dead link ${id} offers Withdraw`);
   assert.match(renderedText(between(a, 'pitch-studio-link-14', 'pitch-studio-link-15')), /\[Fund 14\]\s*Used up/);
   assert.match(renderedText(between(a, 'pitch-studio-link-15', 'pitch-studio-link-16')), /Views left not read/);
+  assert.doesNotMatch(between(a, 'pitch-studio-link-15', 'pitch-studio-link-16'), /emerald/, 'a link not known to be live is drawn live');
+  // While the engagement read runs, and after it fails, the row says so instead.
+  const running = analytics(reads({ engagement: { status: 'loading', data: null } }));
+  assert.match(renderedText(between(running, 'pitch-studio-link-11', 'pitch-studio-link-12')), /Reading views left…/);
+  assert.match(running, /data-testid="pitch-studio-withdraw-11"/, 'an opened link loses Withdraw while the engagement read runs');
+  const failedEng = analytics(reads({ engagement: { status: 'error', data: null } }));
+  assert.match(renderedText(between(failedEng, 'pitch-studio-link-11', 'pitch-studio-link-12')), /Views left could not be read/);
+  assert.doesNotMatch(renderedText(failedEng), /Views left not read/, 'a failed engagement read is drawn as views left not read');
   assert.doesNotMatch(between(a, 'pitch-studio-link-14', 'pitch-studio-link-15'), /emerald/, 'a used-up link is drawn live');
 });
 
@@ -511,6 +521,46 @@ test('the pager reads the next page of links through the module read\'s own page
     assert.match(m.text(), /Links 26\s*–\s*30 of 30/);
     assert.ok(m.by('pitch-studio-withdraw-30'), 'a link past the first page cannot be withdrawn');
   } finally { await m.unmount(); }
+});
+
+test('a page of links the read no longer has goes back to the last page, never "Links 0–0 of N"', async () => {
+  // 2026-10-24 (D894 review, R2): on page 2, links are withdrawn or expire away
+  // until the read's total fits on one page; the re-read answers an empty page 2.
+  const rowsOf = (n, from) => Array.from({ length: n }, (_, i) => link(from + i, { text: '2026-11-04', tone: 'ok' }, 0));
+  let total = 30;
+  const m = await mount(h(PitchStudio, { tab: 'analytics' }), '/raise/pitch/analytics?project_id=7', {
+    listProjects: async () => [{ id: 7, name: 'Acme' }],
+    deckListVersions: async () => versions,
+    deckGet: async () => deck,
+    deckEngagement: async () => engagement,
+    'cycles.module': async (_c, _p, _s, q) => {
+      const page = q?.page || 1;
+      const rows = page === 1 ? rowsOf(Math.min(25, total), 1) : rowsOf(Math.max(0, total - 25), 26);
+      return { card: cardOk, records: { ...records, rows, total, page } };
+    },
+    // The withdraw on page 2 answers while ten other links expire away.
+    'cycles.recordAction': async () => { total = 20; return { ok: true }; },
+  });
+  try {
+    await m.press(m.by('pitch-studio-links-next'));
+    assert.match(m.text(), /Links 26\s*–\s*30 of 30/);
+    await m.press(m.by('pitch-studio-withdraw-30'));
+    await m.press(m.by('pitch-studio-withdraw-confirm'));
+    await m.settle();
+    assert.doesNotMatch(m.text(), /Links 0\s*–\s*0/, 'an empty page past the end is drawn');
+    assert.match(m.text(), /Links 1\s*–\s*20 of 20/);
+    const pages = m.calls.filter(([n]) => n === 'cycles.module').map(([, , , , q]) => q.page);
+    assert.deepEqual(pages.slice(-2), [2, 1], 'the empty page 2 is not followed by page 1');
+  } finally { await m.unmount(); }
+});
+
+test('the cover and the links table never draw a bare dash for a value nobody wrote', () => {
+  // 2026-10-24 (D894 review, R3): the Worker writes "—" into a field nobody filled.
+  assert.deepEqual(coverOf({ title: 'Acme', slides: [{ fields: [{ key: 'title', value: 'Acme' }, { key: 'subtitle', value: '—' }] }] }), { headline: 'Acme', sub: '', slides: 1 });
+  assert.equal(coverOf({ title: '—', slides: [{ title: 'Title', fields: [{ key: 'title', value: '—' }] }] }).headline, 'Title');
+  const a = renderedText(analytics(reads()));
+  assert.doesNotMatch(a, /(^|\s)—(\s|$)/, 'a bare dash in the links table or the tiles');
+  assert.match(a, /Not opened/);
 });
 
 /* ------------------------------------------------------------------ *
