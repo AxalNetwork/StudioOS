@@ -8,13 +8,13 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
-import { projectOwned } from '../middleware/projectContentAccess';
-import { ensureProjectMembershipSchema } from '../services/projectAccess';
+import { projectOwned as sharedProjectOwned } from '../middleware/projectContentAccess';
+import { ensureProjectMembershipSchema, getProjectMembershipRole } from '../services/projectAccess';
 import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
-import { autofillDeck, toEditorSlides, parseJsonLoose } from '../services/decks/autofill';
+import { autofillDeck, toEditorSlides, parseJsonLoose, recordedDeckRunway } from '../services/decks/autofill';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { formatUseOfFundsText } from '../util/useOfFunds';
@@ -35,6 +35,26 @@ import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
+
+/** D895 applies only to deck operations, not other project-content routes. */
+async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
+  if (user.role === 'advisor' || (opts.write && user.role === 'admin')) throw new Error('Forbidden');
+  const project = await sharedProjectOwned(c, user, projectId, opts);
+  const owner = user.role === 'founder' && user.founder_id != null && user.founder_id === project.founder_id;
+  if (!owner && user.role !== 'admin' && await getProjectMembershipRole(c.env, projectId, user.id) === 'advisor') throw new Error('Forbidden');
+  return project;
+}
+
+async function auditDeckWrite(c: any, user: any, projectId: number, action: string, summary: string) {
+  await logCycleWrite(c.env, { projectId, userId: Number(user.id), cycle: 'raise', module: 'pitch-deck', entityId: null, action, summary });
+}
+
+/** Export always follows the venture owner's plan, even when a cofounder exports. */
+export async function deckOwnerBrand(env: Env, projectId: number) {
+  const owner = await env.DB.prepare("SELECT u.id, u.role, u.subscription_tier FROM users u JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = ? AND u.role = 'founder' ORDER BY u.id LIMIT 1").bind(projectId).first<any>();
+  // Missing ownership never inherits a more generous exporter's plan.
+  return getDeckBrand(env, owner || { id: 0, role: 'founder', subscription_tier: 'free' } as any);
+}
 
 const decks = new Hono<{ Bindings: Env }>();
 
@@ -302,7 +322,7 @@ function heuristicSlides(p: any): any[] {
     { title: 'Team', subtitle: 'Why us', body: '', bullets: [DASH], image_url: null },
     { title: 'Ask', subtitle: 'Round', body: '', bullets: arr([
       funding ? `Raising ${funding}` : `Raise: ${DASH}`,
-      '18-24 months of runway to hit the next milestone.',
+      p._recordedRunway == null ? 'Runway: Not recorded' : `Runway: ${p._recordedRunway} months`,
       useOf,
     ]), image_url: null },
     { title: 'Financials', subtitle: 'Plan', body: '', bullets: arr([
@@ -485,11 +505,18 @@ export function sanitizeImageUrl(input: string | null | undefined): string | nul
 /** D767 — a "Fill from project" proposal as the editor shows it beside the current version. */
 function rowToProposal(row: any): any {
   let slides: any[] = [];
-  try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
+  try { slides = founderPitchSlides(JSON.parse(row.slides || '[]')); } catch { slides = []; }
   return {
     id: row.id, project_id: row.project_id, base_deck_id: row.base_deck_id,
     title: row.title, method_id: row.method_id, created_at: row.created_at, slides,
   };
+}
+
+export function founderPitchSlides(slides: any[]): any[] {
+  return slides.filter((slide) => slide && typeof slide === 'object').map((slide) => ({ ...slide, fields: Array.isArray(slide.fields) ? slide.fields.map((field: any) => {
+    if (!String(field?.key || '').startsWith('vr_')) return field;
+    return { ...field, value: field.kind === 'metric_grid' || field.kind === 'bullets' ? [] : field.key === 'vr_sandbox' ? 'false' : 'Not recorded' };
+  }) : slide.fields }));
 }
 
 function rowToDeck(row: any, withSlides = true): any {
@@ -498,7 +525,7 @@ function rowToDeck(row: any, withSlides = true): any {
     title: row.title, is_current: !!row.is_current, created_at: row.created_at,
   };
   if (withSlides) {
-    try { out.slides = JSON.parse(row.slides || '[]'); } catch { out.slides = []; }
+    try { out.slides = founderPitchSlides(JSON.parse(row.slides || '[]')); } catch { out.slides = []; }
   }
   return out;
 }
@@ -518,7 +545,7 @@ async function insertVersion(env: Env, projectId: number, slides: any[], title: 
   const res = await env.DB.prepare(
     `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by)
      VALUES (?, ?, ?, ?, 1, ?)`
-  ).bind(projectId, v, JSON.stringify(slides), title, userId).run();
+  ).bind(projectId, v, JSON.stringify(founderPitchSlides(slides)), title, userId).run();
   return Number((res as any)?.meta?.last_row_id || 0);
 }
 
@@ -539,9 +566,13 @@ decks.post('/generate', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
   await ensureSchema(c.env);
+  p._recordedRunway = await recordedDeckRunway(c.env, pid);
   const fallback = heuristicSlides(p);
   const raw = (await aiSlides(c.env, p, Number(user.id) || 0)) || fallback;
-  const aligned = enforceTen(raw, fallback);
+  // Alignment can repeat an AI slide while padding a short answer. Sanitize every Ask.
+  const aligned = enforceTen(raw, fallback).map((slide) =>
+    slide.title === 'Ask' ? fallback.find((recorded) => recorded.title === 'Ask') : slide);
+  // Eadwyn cannot invent a measured runway or change the recorded Ask.
   const slides = sanitizeSlides(aligned);
   while (slides.length < 10) slides.push(fallback[slides.length]);
   // Task #6 — inject brand kit from landing page (generic generate = 'off' theme)
@@ -550,6 +581,7 @@ decks.post('/generate', async (c) => {
   const title = `${p.name} — Pitch deck`;
   const id = await insertVersion(c.env, pid, brandedSlides, title, Number(user.id) || null);
   const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
+  await auditDeckWrite(c, user, pid, 'deck_generated', 'Deck generated from project records');
   return c.json(rowToDeck(row));
 });
 
@@ -787,7 +819,13 @@ async function bakeSpinoutFields(env: Env, row: any): Promise<Record<string, str
     // shared / printed deck would silently revert every manual edit back to the
     // module text — the founder would see one deck on screen and send another.
     const overrides = await loadSpinoutDeckOverrides(env, projectId);
-    return applySpinoutOverrides(base, overrides).fields || null;
+    const fields = { ...(applySpinoutOverrides(base, overrides).fields || {}) };
+    // The Lab's canonical assembler keeps its score; public founder-deck reads do not.
+    if (fields['validation.cards_json']) {
+      const cards = JSON.parse(fields['validation.cards_json']);
+      fields['validation.cards_json'] = JSON.stringify(cards.filter((card: any) => !String(card?.[1] || '').includes('Axal score')));
+    }
+    return fields;
   } catch (e) {
     console.error('[decks] spinout fields bake failed:', (e as Error).message);
     return null;
@@ -958,6 +996,13 @@ decks.post('/share/:token/heartbeat', async (c) => {
   return c.json({ ok: true });
 });
 
+/** D895: unknown counts and an unlimited cap are distinct from measured zero. */
+export function deckShareMetrics(token: { view_limit?: number | null; view_count?: number | null; used_at?: string | null }) {
+  const limit = token.view_limit == null || token.view_limit === SHARE_NO_VIEW_LIMIT ? null : Number(token.view_limit);
+  const count = token.view_count == null ? null : Number(token.view_count);
+  return { view_limit: limit, view_count: count, exhausted: !!token.used_at || (limit !== null && count !== null && count >= limit) };
+}
+
 /**
  * GET /api/decks/:id/engagement — founder-facing roll-up of share-link
  * activity for the Engagement panel. Returns active tokens + per-view
@@ -995,7 +1040,7 @@ decks.get('/:id/engagement', async (c) => {
   // Task #6 — surface conversion funnel alongside the existing view
   // metrics. We aggregate by type and join the latest conversion per
   // view so the engagement panel can render a per-view badge.
-  let convAgg: Record<string, number> = {};
+  let convAgg: Record<string, number> | null = {};
   const convByView = new Map<number, string>();
   try {
     const { ensureDeckShareConversionSchema } = await import('./deck_share_actions');
@@ -1011,29 +1056,28 @@ decks.get('/:id/engagement', async (c) => {
       if (r.view_id) convByView.set(Number(r.view_id), String(r.type));
     }
   } catch (e) {
+    convAgg = null;
     console.error('[decks engagement] conversion aggregation failed', (e as Error).message);
   }
 
   return c.json({
     deck_id: id,
     total_views: viewRows.length,
-    total_read_seconds: totalRead,
+    total_read_seconds: viewRows.some(v => v.read_seconds == null) ? null : totalRead,
     last_viewed_at: viewRows[0]?.created_at || null,
     conversions: {
-      signups:           convAgg.signup           || 0,
-      nda_signed:        convAgg.nda_signed       || 0,
-      feedbacks:         convAgg.feedback         || 0,
-      deal_pack_opened:  convAgg.deal_pack_opened || 0,
-      deals_signed:      convAgg.deal_signed      || 0,
+      signups:           convAgg === null ? null : (convAgg.signup ?? 0),
+      nda_signed:        convAgg === null ? null : (convAgg.nda_signed ?? 0),
+      feedbacks:         convAgg === null ? null : (convAgg.feedback ?? 0),
+      deal_pack_opened:  convAgg === null ? null : (convAgg.deal_pack_opened ?? 0),
+      deals_signed:      convAgg === null ? null : (convAgg.deal_signed ?? 0),
     },
     shares: tokRows.map((t) => ({
       id: t.id,
       created_at: t.created_at,
       expires_at: t.expires_at,
-      view_limit: Number(t.view_limit) || 1,
-      view_count: Number(t.view_count) || 0,
+      ...deckShareMetrics(t),
       last_viewed_at: t.last_viewed_at,
-      exhausted: !!t.used_at || (Number(t.view_count) || 0) >= (Number(t.view_limit) || 1),
       // Task #196 — `revoked_at` is the one thing `exhausted` cannot express, and
       // withdrawing sets `expires_at` too, so a revoked link looks neither
       // exhausted nor freshly live. Without this field the panel would report
@@ -1045,11 +1089,47 @@ decks.get('/:id/engagement', async (c) => {
     views: viewRows.map((v) => ({
       id: v.id, share_token_id: v.share_token_id,
       ip_hash: v.ip_hash, ua_fingerprint: v.ua_fingerprint,
-      read_seconds: Number(v.read_seconds) || 0,
+      read_seconds: v.read_seconds == null ? null : Number(v.read_seconds),
       created_at: v.created_at, updated_at: v.updated_at,
       conversion: convByView.get(Number(v.id)) || null,
     })),
   });
+});
+
+decks.get('/methods', async (c) => {
+  const user = await requireAuth(c);
+  const tier = String((user as any).subscription_tier || 'free').toLowerCase();
+  const isBypass = ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role));
+  const items = DECK_METHODS.map((m) => ({
+    id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
+    best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,
+    category: m.category, ai_fill_hint: m.ai_fill_hint,
+    locked: !!m.premium && !isBypass && !tierCovers(tier, 'studio'),
+    fields_from_project: m.fields_from_project,
+    fields_from_financials: m.fields_from_financials,
+    fields_from_captable: m.fields_from_captable,
+    slides: m.slides.map((s) => ({
+      id: s.id, title: s.title, appendix: !!s.appendix,
+      fields: s.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind, optional: !!f.optional })),
+    })),
+  }));
+  const brand = await getDeckBrand(c.env, user as any);
+  return c.json({
+    methods: items,
+    premium_method_ids: PREMIUM_METHOD_IDS,
+    user_tier: tier,
+    can_remove_footer: brand.can_remove_footer,
+    // Capability mirrors server-side enforcement in setStudioWatermark
+    // (studio tier required; bypass roles do NOT bypass tier here).
+    can_upload_watermark: tierCovers(tier, 'studio'),
+    watermark_url: brand.watermark_url,
+  });
+});
+
+decks.get('/brand', async (c) => {
+  const user = await requireAuth(c);
+  const brand = await getDeckBrand(c.env, user as any);
+  return c.json({ brand });
 });
 
 decks.get('/:id', async (c) => {
@@ -1175,7 +1255,8 @@ decks.put('/:id', async (c) => {
   }
 
   const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null);
-  return c.json(rowToDeck(await getDeckRow(c.env, newId)));
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_saved', 'Deck saved');
+  return c.json(rowToDeck(await getDeckRow(c.env, Number(newId))));
 });
 
 decks.post('/:id/restore', async (c) => {
@@ -1189,7 +1270,8 @@ decks.post('/:id/restore', async (c) => {
   let slides: any[] = [];
   try { slides = sanitizeSlides(JSON.parse(row.slides || '[]')); } catch {}
   const newId = await insertVersion(c.env, Number(row.project_id), slides, row.title, Number(user.id) || null);
-  return c.json(rowToDeck(await getDeckRow(c.env, newId)));
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_restored', 'Deck version restored');
+  return c.json(rowToDeck(await getDeckRow(c.env, Number(newId))));
 });
 
 decks.post('/:id/share', async (c) => {
@@ -1274,6 +1356,7 @@ decks.delete('/:id/shares/:shareId', async (c) => {
 
   const out = await revokeShareLink(c.env, id, shareId);
   if (!out) return c.json({ error: 'not found' }, 404);
+  if (out.newly_revoked) await auditDeckWrite(c, user, Number(row.project_id), 'deck_link_revoked', 'Deck link withdrawn');
   return c.json({ ok: true, ...out });
 });
 
@@ -1512,37 +1595,6 @@ async function sha256Hex(s: string): Promise<string> {
 // Task #16 (DE) — Pitch Deck Builder rewrite endpoints.
 // =====================================================================
 
-/** GET /api/decks/methods — list all 13 templates with lock status. */
-decks.get('/methods', async (c) => {
-  const user = await requireAuth(c);
-  const tier = String((user as any).subscription_tier || 'free').toLowerCase();
-  const isBypass = ['admin', 'partner', 'investor', 'advisor'].includes(String(user.role));
-  const items = DECK_METHODS.map((m) => ({
-    id: m.id, key: m.key, label: m.label, prompt_hint: m.prompt_hint,
-    best_for: m.best_for, slide_count: m.slide_count, premium: !!m.premium,
-    category: m.category, ai_fill_hint: m.ai_fill_hint,
-    locked: !!m.premium && !isBypass && !tierCovers(tier, 'studio'),
-    fields_from_project: m.fields_from_project,
-    fields_from_financials: m.fields_from_financials,
-    fields_from_captable: m.fields_from_captable,
-    slides: m.slides.map((s) => ({
-      id: s.id, title: s.title, appendix: !!s.appendix,
-      fields: s.fields.map((f) => ({ key: f.key, label: f.label, kind: f.kind, optional: !!f.optional })),
-    })),
-  }));
-  const brand = await getDeckBrand(c.env, user as any);
-  return c.json({
-    methods: items,
-    premium_method_ids: PREMIUM_METHOD_IDS,
-    user_tier: tier,
-    can_remove_footer: brand.can_remove_footer,
-    // Capability mirrors server-side enforcement in setStudioWatermark
-    // (studio tier required; bypass roles do NOT bypass tier here).
-    can_upload_watermark: tierCovers(tier, 'studio'),
-    watermark_url: brand.watermark_url,
-  });
-});
-
 /**
  * D778 part 5 (#2103): the page and option D771's inventory gives the two deck
  * form fills (`railOptions/founder.js`). A press's own headers win (`railFor`);
@@ -1603,7 +1655,7 @@ decks.post('/apply-method', async (c) => {
   // back via buildTemplateData and merges onto its canonical SAMPLE_DATA
   // via mergeShape().
   if (methodId === 'axal_spinout_demoday') {
-    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), pid);
+    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), pid, { includeInternalScore: false });
     const wrapped = buildAxalSpinoutDemoDaySlides(data);
     const safeWrapped = sanitizeSlides(wrapped);
     // Task #6 — inject brand kit for spin-out (accent_only)
@@ -1615,6 +1667,7 @@ decks.post('/apply-method', async (c) => {
     // No generic coverage metric for the custom path — report 1 when
     // the project has a name + sector, else 0. Keeps the picker's
     // "filled" badge meaningful without lying.
+    await auditDeckWrite(c, user, pid, 'deck_template_applied', 'Deck template applied');
     const coverage = data.meta.project_name !== '—' && data.meta.sector !== '—' ? 1 : 0.5;
     return c.json({
       deck: rowToDeck(row),
@@ -1657,6 +1710,7 @@ decks.post('/apply-method', async (c) => {
   const current = await c.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? AND is_current = 1 ORDER BY id DESC LIMIT 1')
     .bind(pid).first<any>();
   const proposal = await proposeFill(c.env, { id: Number(current?.id) || 0, project_id: pid, title }, branded, methodId, Number(user.id));
+  await auditDeckWrite(c, user, pid, 'deck_template_proposed', 'Deck template proposed');
   return c.json({
     proposal,
     method_id: methodId,
@@ -1706,6 +1760,7 @@ decks.post('/proposals/:id/keep', async (c) => {
   const deckId = await insertVersion(c.env, Number(row.project_id), slides, row.title || 'Pitch deck', Number(user.id) || null);
   await c.env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE id = ?').bind(row.id).run();
   const fresh = await getDeckRow(c.env, deckId);
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_kept', 'Deck proposal kept');
   return c.json({ deck: rowToDeck(fresh) });
 });
 
@@ -1716,6 +1771,7 @@ decks.delete('/proposals/:id', async (c) => {
   const row = await ownedProposal(c, user, parseInt(c.req.param('id')));
   if (row instanceof Response) return row;
   await c.env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE id = ?').bind(row.id).run();
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_proposal_discarded', 'Deck proposal discarded');
   return c.json({ ok: true });
 });
 
@@ -1776,10 +1832,11 @@ decks.post('/:id/autofill', async (c) => {
   // sync when the founder pushes "Fill from project" after logging more
   // interviews / completing more milestones).
   if (methodId === 'axal_spinout_demoday') {
-    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), Number(row.project_id));
+    const data = await fillAxalSpinoutDemoDay(c.env, Number(user.id), Number(row.project_id), { includeInternalScore: false });
     const wrapped = buildAxalSpinoutDemoDaySlides(data);
     const safeWrapped = sanitizeSlides(wrapped);
     const proposal = await proposeFill(c.env, row, safeWrapped, methodId, Number(user.id));
+    await auditDeckWrite(c, user, Number(row.project_id), 'deck_fill_proposed', 'Deck fill proposed from records');
     const coverage = data.meta.project_name !== '—' && data.meta.sector !== '—' ? 1 : 0.5;
     return c.json({
       proposal,
@@ -1815,6 +1872,7 @@ decks.post('/:id/autofill', async (c) => {
   const landingPage = await fetchLandingPageForProject(c.env, Number(row.project_id));
   const branded = applyBrandKitToSlides(safeWrapped, landingPage, method.brandTheme, projectName);
   const proposal = await proposeFill(c.env, row, branded, methodId, Number(user.id));
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_fill_proposed', 'Deck fill proposed from records');
   // Per-slide confidence — surfaced in the editor rail. `filled.slides`
   // and `editorSlides` share the same order/length.
   const slide_confidence = filled.slides.map((s, i) => ({
@@ -1862,7 +1920,7 @@ decks.post('/:id/export', async (c) => {
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
   // Re-sanitize persisted slides (defence-in-depth against legacy rows
   // pre-dating sanitizeImageUrl) before they reach Browser Rendering.
-  slides = sanitizeSlides(slides);
+  slides = founderPitchSlides(sanitizeSlides(slides));
   const renderable: RenderableDeck = {
     title: row.title || 'Pitch deck',
     project_name: row.title || '',
@@ -1881,7 +1939,7 @@ decks.post('/:id/export', async (c) => {
       return { title: s.title || 'Slide', subtitle: s.subtitle, appendix: false, fields };
     }),
   };
-  const brand = await getDeckBrand(c.env, user as any);
+  const brand = await deckOwnerBrand(c.env, Number(row.project_id));
   const fname = (row.title || 'pitch-deck').replace(/[^A-Za-z0-9_-]+/g, '-').slice(0, 80);
 
   const browser = (c.env as any).BROWSER;
@@ -1937,6 +1995,7 @@ decks.post('/:id/export', async (c) => {
       return refuse(c, 502, { code: 'pdf_render_failed', message: 'The PDF could not be produced. Try again in a moment.', raw: text, extra: { status: r.status } });
     }
     const bytes = await r.arrayBuffer();
+    await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
     return new Response(bytes, {
       status: 200,
       headers: {
@@ -1953,6 +2012,7 @@ decks.post('/:id/export', async (c) => {
     // so a download still works in dev. Production always has the
     // BROWSER binding.
     const bytes = renderDeckPPTX(renderable, brand);
+    await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
     return new Response(bytes, {
       status: 200,
       headers: {
@@ -1996,6 +2056,7 @@ decks.post('/:id/export', async (c) => {
     images.push(new Uint8Array(await r.arrayBuffer()));
   }
   const bytes = renderDeckPPTXWithImages(renderable, brand, images);
+  await auditDeckWrite(c, user, Number(row.project_id), 'deck_exported', 'Deck exported');
   return new Response(bytes, {
     status: 200,
     headers: {
@@ -2007,12 +2068,6 @@ decks.post('/:id/export', async (c) => {
 });
 
 // --- Branding endpoints (Studio tier custom watermark) ---------------
-
-decks.get('/brand', async (c) => {
-  const user = await requireAuth(c);
-  const brand = await getDeckBrand(c.env, user as any);
-  return c.json({ brand });
-});
 
 decks.put('/brand/watermark', async (c) => {
   const user = await requireAuth(c);

@@ -1306,9 +1306,8 @@ brand.get('/landing/by-project/:pid', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
   await ensureSchema(c.env);
-  // Primary page = oldest page (multi-page sites; legacy single-page callers
-  // keep working against it).
-  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1').bind(pid).first<any>();
+  // D895: the current kit comes from the newest live landing page.
+  const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1').bind(pid).first<any>();
   if (!row) return c.json(null);
   return c.json(rowToLanding(row));
 });

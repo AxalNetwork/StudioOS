@@ -42,6 +42,7 @@ const PROJECT = {
 function fixture({ funded = true } = {}) {
   __resetForTest();
   const f = aiBudgetFixture();
+  f.db.exec('ALTER TABLE users ADD COLUMN founder_id INTEGER; ALTER TABLE activity_logs ADD COLUMN project_id INTEGER; ALTER TABLE activity_logs ADD COLUMN entity_type TEXT; ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;');
   f.db.exec(`CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER, name TEXT, sector TEXT, stage TEXT,
     description TEXT, problem_statement TEXT, solution TEXT);
     CREATE TABLE financial_models (project_id INTEGER, computed_json TEXT, assumptions_json TEXT);
@@ -60,7 +61,7 @@ function fixture({ funded = true } = {}) {
       const hints = JSON.parse(prompt.match(/Hints:\s*(\[[^\]]+\])/)?.[1] || '[]') as string[];
       const response = hints.length
         ? JSON.stringify(Object.fromEntries(hints.map((h) => [h, `AI wrote ${h}`])))
-        : JSON.stringify({ slides: [{ title: 'Problem', subtitle: 'Pain', body: 'AI drafted this.', bullets: ['one', 'two'] }] });
+        : JSON.stringify({ slides: [{ title: 'Problem', subtitle: 'Pain', body: 'AI drafted this.', bullets: ['one', 'two'] }, { title: 'Ask', body: 'Invented 18–24 month runway', bullets: ['Invented 24+ months'] }] });
       return { response, usage: { prompt_tokens: 40, completion_tokens: 20 } };
     },
   });
@@ -121,15 +122,16 @@ test('with no founder to charge, the fill makes no run at all', async () => {
 
 test('the deck draft is one router run with option deck_draft', async () => {
   const f = fixture();
-  f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(500,'admin.d767@example.test','Admin','admin','studio')").run();
+  f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(500,'owner.d767@example.test','Owner','founder','studio')").run();
+  f.db.exec('UPDATE users SET founder_id = 500 WHERE id = 500; UPDATE projects SET founder_id = 500 WHERE id = 1');
   const restore = noNetwork();
   try {
     const app = new Hono<any>();
     app.route('/api/decks', decks);
-    // An admin passes projectOwned and the studio tier; the run is charged to them.
+    // The venture owner passes the project and studio-tier gates; the run is charged to them.
     f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(500,5000000)').run();
-    f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('admin:free',0,0,1)").run();
-    const jwt = await new SignJWT({ user_id: 500, role: 'admin' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+    const jwt = await new SignJWT({ user_id: 500, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
       .sign(new TextEncoder().encode(JWT_SECRET));
     const res = await app.request('/api/decks/generate', {
       method: 'POST', headers: { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' }, body: JSON.stringify({ project_id: 1 }),
@@ -141,19 +143,22 @@ test('the deck draft is one router run with option deck_draft', async () => {
     const { charged_microusd, ...who } = rows[0];
     assert.deepEqual(who, { ...ROW('deck_draft'), user_id: 500 });
     assert.match(text, /AI drafted this\./, 'the draft uses the run\'s answer');
+    assert.match(text, /Runway: Not recorded/);
+    assert.doesNotMatch(text, /Invented|18–24|24\+/);
   } finally { restore(); f.db.close(); }
 });
 
 test('"Fill from project" through its route is one run with D771\'s page and option form:deck (D778 part 5), charged to who pressed', async () => {
   const f = fixture();
-  f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(500,'admin.d767@example.test','Admin','admin','studio')").run();
+  f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(500,'owner.d767@example.test','Owner','founder','studio')").run();
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(500,5000000)').run();
-  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('admin:free',0,0,1)").run();
+  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
+  f.db.exec('UPDATE users SET founder_id = 500 WHERE id = 500; UPDATE projects SET founder_id = 500 WHERE id = 1');
   const restore = noNetwork();
   try {
     const app = new Hono<any>();
     app.route('/api/decks', decks);
-    const jwt = await new SignJWT({ user_id: 500, role: 'admin' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+    const jwt = await new SignJWT({ user_id: 500, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
       .sign(new TextEncoder().encode(JWT_SECRET));
     const headers = { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' };
     // A deck on the yc_seed template (its slides carry the method stamp the fill reads).

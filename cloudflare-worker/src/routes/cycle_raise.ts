@@ -55,7 +55,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { canWrite, type ProjectRef } from './_founder_validate_helpers';
+import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, callsHistory, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
@@ -91,7 +91,7 @@ async function scope(c: any): Promise<{ user: User; projectId: number } | Respon
   const project = (await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
     .bind(projectId).first()) as ProjectRef | null;
   if (!project) return c.json({ detail: 'Project not found' }, 404);
-  if (!canWrite(project, user)) return c.json({ detail: 'Forbidden' }, 403);
+  if (!(/\/deck-links(?:\/|$)/.test(c.req.path) ? canWritePitchDeck(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden' }, 403);
   return { user, projectId };
 }
 

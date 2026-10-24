@@ -92,6 +92,11 @@ export function canWrite(project: ProjectRef, user: User): boolean {
   return ownsVenture(project, user);
 }
 
+/** D895: the founder's deck links never inherit the bucket's admin write grant. */
+export function canWritePitchDeck(project: ProjectRef, user: User): boolean {
+  return !['admin', 'advisor'].includes(String(user.role)) && canWrite(project, user);
+}
+
 // ---------------------------------------------------------------------------
 // Evidence
 // ---------------------------------------------------------------------------

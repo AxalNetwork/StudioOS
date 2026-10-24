@@ -60,8 +60,9 @@ function fmtNum(n: any, digits = 0): string | null {
 }
 
 function fmtMonths(n: any): string | null {
+  if (n == null || n === '') return null;
   const v = Number(n);
-  if (!isFinite(v) || v <= 0) return null;
+  if (!isFinite(v) || v < 0) return null;
   return `${Math.round(v)} mo`;
 }
 
@@ -79,8 +80,7 @@ function resolveProjectSource(expr: string, project: any): string | null {
       return use ? `Raising ${f} — ${use.slice(0, 80)}` : `Raising ${f}.`;
     }
     if (k === 'runway_target') {
-      const f = Number(project.funding_needed);
-      return f > 0 ? `${f >= 5_000_000 ? '24+' : '18-24'} months runway` : null;
+      return project._recordedRunway == null ? null : `${project._recordedRunway} months runway`;
     }
     return null;
   }
@@ -264,10 +264,11 @@ function resolveMetricGrid(field: DeckSlideField, project: any, fin: any): Fille
       const r = resolveCaptableSource(src, project._holders || []);
       val = typeof r === 'string' ? r : null;
     }
+    if (!val && (src === 'project.derived.runway_target' || src === 'financials.runway_months')) val = 'Not recorded';
     if (val) cells.push({ label, value: val });
   }
   return cells.length
-    ? { kind: 'metric_grid', value: cells, source: 'data' }
+    ? { kind: 'metric_grid', value: cells, source: cells.some((cell) => cell.value !== 'Not recorded') ? 'data' : 'placeholder' }
     : emptyValueFor(field, 'placeholder');
 }
 
@@ -314,6 +315,24 @@ function resolveScalarField(
   return emptyValueFor(field, field.optional ? 'placeholder' : 'placeholder');
 }
 
+/** D895: a stored financial-model runway, otherwise the venture's measured Mercury fact. */
+export async function recordedDeckRunway(env: Env, projectId: number): Promise<number | null> {
+  const measured = (value: unknown): number | null => {
+    if (value == null || value === '' || typeof value === 'boolean') return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  };
+  try {
+    const row = await env.DB.prepare('SELECT computed_json FROM financial_models WHERE project_id = ? ORDER BY id DESC LIMIT 1').bind(projectId).first<{ computed_json: string }>();
+    const runway = measured(row?.computed_json ? JSON.parse(row.computed_json)?.runway_months : null);
+    if (runway !== null) return runway;
+  } catch { /* no readable recorded model */ }
+  try {
+    const row = await env.DB.prepare("SELECT value FROM mercury_raise_facts WHERE project_id = ? AND kind = 'runway' ORDER BY as_of DESC, id DESC LIMIT 1").bind(projectId).first<{ value: number | null }>();
+    return measured(row?.value);
+  } catch { return null; }
+}
+
 // ---------------------------------------------------------------------
 // Public entry-point.
 // ---------------------------------------------------------------------
@@ -323,6 +342,7 @@ export async function autofillDeck(
   // Load project + financials.computed_json + cap table holders.
   const project: any = await env.DB
     .prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>() || {};
+  project._recordedRunway = await recordedDeckRunway(env, projectId);
   let fin: any = null;
   try {
     const fmRow = await env.DB
@@ -335,6 +355,8 @@ export async function autofillDeck(
       try { fin = JSON.parse(fmRow.assumptions_json); } catch { fin = null; }
     }
   } catch { /* table may not exist */ }
+  // One recorded runway supplies both Ask cells, including the Mercury fallback.
+  fin = { ...(fin || {}), runway_months: project._recordedRunway };
   let holders: Array<{ name: string; shares: number; kind: string }> = [];
   try {
     const hr = await env.DB.prepare(
@@ -391,7 +413,7 @@ export async function autofillDeck(
       fields[field.key] = val;
       if (!field.optional) {
         req += 1;
-        if (val.source === 'data' || val.source === 'ai') hit += 1;
+        if (val.source === 'data') hit += 1;
       }
     }
     totalRequired += req; totalFilled += hit;

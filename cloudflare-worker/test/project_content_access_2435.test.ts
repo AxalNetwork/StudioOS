@@ -127,11 +127,11 @@ for (let index = 0; index < 10; index++) test('owning founder control for protec
   try { const [method, path, body] = writes(f)[index]; const r = await request(f, 2, method, path, body); assert.equal(r.status, 200, path + ': ' + JSON.stringify(r.body)); }
   finally { f.db.close(); }
 });
-for (const who of [1, 6, 13]) test('admin or accepted cofounder ' + who + ' retains read and write access', async () => {
+for (const who of [1, 6, 13]) test('admin reads only decks; accepted cofounder ' + who + ' retains existing writes', async () => {
   const f = await fixture();
   try {
     for (const [method, path] of reads) assert.equal((await request(f, who, method, path)).status, 200, path);
-    assert.equal((await request(f, who, 'PUT', '/api/decks/10', { slides: SLIDES })).status, 200);
+    assert.equal((await request(f, who, 'PUT', '/api/decks/10', { slides: SLIDES })).status, who === 1 ? 403 : 200);
     assert.equal((await request(f, who, 'PUT', '/api/brand/landing/by-project/1', { name: 'Synthetic member edit' })).status, 200);
     if (who !== 1) {
       const details = JSON.parse(f.db.prepare("SELECT details FROM activity_logs WHERE action = 'project_content_write_authorized' ORDER BY id DESC LIMIT 1").get().details);
@@ -141,10 +141,10 @@ for (const who of [1, 6, 13]) test('admin or accepted cofounder ' + who + ' reta
     }
   } finally { f.db.close(); }
 });
-for (const who of [11, 12]) test('accepted advisor ' + who + ' reads but cannot write or create preview credentials', async () => {
+for (const who of [11, 12]) test('accepted advisor ' + who + ' reads brand but cannot read decks, write or create preview credentials', async () => {
   const f = await fixture();
   try {
-    for (const [method, path] of reads) assert.equal((await request(f, who, method, path)).status, 200, path);
+    for (const [method, path] of reads) assert.equal((await request(f, who, method, path)).status, path.startsWith('/api/decks/') ? 403 : 200, path);
     const before = snapshot(f);
     for (const [method, path, body] of [...writes(f), ...otherWrites()]) assert.equal((await request(f, who, method, path, body)).status, 403, path);
     assert.equal(snapshot(f), before);

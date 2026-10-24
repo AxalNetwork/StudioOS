@@ -22,3 +22,8 @@ asserts every field in the payload reaches a consumer, and the deck tests assert
 that an unanswered field renders an empty state rather than a plausible number.
 A pitch deck is shown to investors; an invented figure on one is the worst place
 in the product for this to go wrong.
+
+D895: founder decks hide internal readiness scores; the Lab assembler keeps them
+by default. Ask runway comes only from stored model/Mercury records. AI-written
+fields do not count as record coverage. Exports use the venture owner's branding,
+and the newest live landing page supplies voice and both logo variants.
