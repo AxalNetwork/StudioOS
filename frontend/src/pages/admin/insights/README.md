@@ -11,9 +11,10 @@ keeps the query and hash and adds `?moved=held-insights` for the one-line notice
 - `insightsModel.js` — pure. Turns the read into tiles and blocks, each
   `ready`, `loading`, `unreadable` or `unrecorded`; the filters from and to
   the URL; definitions; the export's request and toast.
-- `InsightsCharts.jsx` — the SVG charts (bars, columns, stacked columns, the
-  weekly line with its dotted period before, the 100% bar and the Plan donut),
-  their legend and "View as table".
+- The SVG charts (bars, columns, stacked columns, the weekly line with its
+  dotted period before, the 100% bar and the Plan donut), their legend and
+  "View as table" live in `../../../ui/Charts.jsx` since D929 (#2725), so
+  Community and Partner invitations draw the same parts in the one palette.
 
 ## Rules
 

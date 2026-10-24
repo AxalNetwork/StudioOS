@@ -8,10 +8,11 @@ import { request } from '../api.js';
 // No row names a member; an admin is "An admin". A source that failed is in `unreadable` and its rows are absent.
 // D931 (#2715) — the overview's counts read. Each block is `{ available: true, … }`,
 // `{ available: false, unreadable: true, reason }` or `{ recorded: false, reason }`;
-// `queue`, `participation_by_role` and `wellbeing` are made of parts, each one of those.
+// `queue`, `events`, `participation_by_role` and `wellbeing` are made of parts, each one of those.
+// The events parts are D918's own blocks (the Events desk overview), in these keys.
 //   overview  GET /admin/community/overview  { weeks: 4|12|52 }
 //             → { weeks, week_starts, current_week, window, previous, as_of,
-//                 blocks: { queue: { events, jobs, overdue_hours }, events, jobs,
+//                 blocks: { queue: { events, jobs, overdue_hours }, events: { weekly, show_up, by_type, waitlisted }, jobs,
 //                           participation_by_role: { events, jobs }, circles, network,
 //                           wellbeing: { experts, bookings, checkins },
 //                           active_members, circle_discussions } }

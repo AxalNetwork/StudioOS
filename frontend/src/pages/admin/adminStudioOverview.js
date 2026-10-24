@@ -367,10 +367,10 @@ export function loadStudioGlance() {
 export const LANE_CONSOLES = {
   lp: '/admin/lp-applications',
   referrals: '/admin/refer-earn',
-  cohort: '/admin/spinout-lab',
+  cohort: '/admin/programs/spinout-lab/applications',
   moderation: '/admin/spinout-moderation',
   kyc: '/admin?tab=kyc',
-  partner_profiles: '/admin?tab=profiles',
+  partner_profiles: '/admin/partner-profiles',
   exploring: '/admin/exploring',
   jobs: '/admin/jobs',
   events: '/admin/events',

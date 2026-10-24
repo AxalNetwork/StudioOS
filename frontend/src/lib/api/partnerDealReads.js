@@ -1,5 +1,5 @@
 // D928 (#2724, part 5 of #2370) — the reads behind one partner deal and behind
-// Referrals. Admin only; nothing here writes. Worker: routes/admin_partners_reads.ts.
+// Referrals. Admin only; nothing here writes. Worker: routes/admin_partner_deal_reads.ts.
 import { request } from '../api.js';
 
 const qs = (o) => {

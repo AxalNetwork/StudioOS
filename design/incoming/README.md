@@ -132,6 +132,157 @@ recent activity and the four lightboxes wait for D930's five parts (D931 to
 D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
 row says what is drawn today.
 
+## Landed 2026-10-24 — HQ · Platform · Payments (#2386)
+
+The owner's artifacts `N9XiycCLan8HmGXX4ZoQYY` (the board grid) and
+`MCmPfNiemjhjW7sYZLYS45` (the page) came from S21's prompt on #2386:
+- `Payments · Boards.dc.html` is the board grid (PAY1 to PAY13, with the
+  lettered boards PAY2c, PAY3a–d, PAY4a–c, PAY6a–f, PAY8a–b, PAY10b and
+  PAY12a–d), the output of `scripts/read-canvas.mjs` as is;
+- `Payments Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in whitespace,
+  the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/platform/payments` and `/stripe` are live behind
+`hqOnly`, and `/admin?tab=payments` forwards there with the moved notice. S21's
+integration (D1008) draws the header, Needs you from the keys and the webhook,
+the tiles, the grouped catalogue, and the Stripe connection's account, key,
+webhook, deliveries and mirror, and keeps today's editor on request. The Worker
+gates, the catalogue checks, the lightbox, the dialogs, the change log, dark and
+phone wait for D1008's six parts, so this canvas stays in the queue until they
+land. The `ROUTE_MAP.md` row says what is drawn today.
+
+## Landed 2026-10-24 — Accounts · Persona segments (#2378)
+
+The owner's artifacts `JGt34N1bs5jqo9bBp2sHnq` (the page) and
+`YKKJwaY3jHiUFzjXXcv7PJ` (the board grid) came from S1's prompt on #2378:
+- `Persona Segments · Boards.dc.html` is the board grid (SEG1 to SEG14, with the
+  lettered boards SEG3i, SEG4a–c and SEG4t, SEG5d, SEG6c and SEG6s, SEG12d and
+  SEG12f, SEG13a–b and SEG14a–b), the output of `scripts/read-canvas.mjs` as is;
+- `Persona Segments Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/persona-segments` and `/unclassified` are live, and
+`/admin?tab=personas` forwards there with the moved notice. S21's integration
+(D997) draws the header in the viewer's shell, the tiles, segments by profile,
+how segments were set, the confidence bands, the segment cards and the
+Unclassified list, and keeps today's re-tag table. Needs and offers, answers,
+archetypes, a segment's page, the Move dialog, edit, suggestions, activity and
+the phone layout wait for D997's ten parts, so this canvas stays in the queue
+until they land. The `ROUTE_MAP.md` row says what is drawn today.
+
+## Landed 2026-10-24 — Approvals · Partner profiles (#2380)
+
+The owner's artifacts `VCDLJZYykybEB6hZ8oSrs8` and `59A3MvD1qSbS8dpFwZZp8f`
+came from S21's prompt on #2380, as the usual pair:
+- `Partner Profiles · Boards.dc.html` is the board grid (PRF1 to PRF12, with
+  the lettered boards PRF3b–c, PRF4a–c, PRF5a–f, PRF7a–b, PRF9a–c, PRF10a–c and
+  PRF11a–c), the output of `scripts/read-canvas.mjs` as is;
+- `Partner Profiles Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/partner-profiles` and `/all` are live, and
+`/admin?tab=profiles` forwards there with the moved notice. S21's integration
+(D989) draws the header, the Waiting tile, the queue oldest first, the status
+chips, the onboarding categories, search and pages, and keeps today's review
+dialog. Ages, sources, accounts, identity checks, Drafts, the weekly chart, the
+lightbox, the dialogs and the phone layout wait for D989's seven parts, so this
+canvas stays in the queue until they land. The `ROUTE_MAP.md` row says what is
+drawn today.
+
+## Landed 2026-10-24 — HQ · Program grants (#2376)
+
+The owner's artifacts `9bU81t2zZxckmAmhrKenc6` and `DSX8rakWCr4VBkoRddA3yU`
+came from S1's prompt on #2376, as the usual pair:
+- `Program Grants · Boards.dc.html` is the board grid (GR1 to GR15, with the
+  lettered boards GR5d, GR9a–b, GR10a–d, GR12a–b and GR15a–d), the output of
+  `scripts/read-canvas.mjs` as is;
+- `Program Grants Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/licences/programs` (Super Admin) and
+`/admin/my-licence/programs` (a licence's Administrator) are live. S21's
+integration (D981) draws the header, the Licences strip, the studios tile and
+the grid of studios against the nine programs, with the fixed facts. No grant
+is stored yet, so every grantable cell says "Not recorded"; the grants, the
+requests, the default terms, the dialogs and the charts wait for D981's seven
+parts, so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
+row says what is drawn today.
+
+## Landed 2026-10-24 — Admin · Advisors & Partners (#2369)
+
+The owner's artifacts `1CmAZBBZSUtJvnSx8mwcYQ` and `JwaxHtcBqegNPRvcKmCanF`
+came from S1's prompt on #2369, as the usual pair:
+- `Advisors Partners · Boards.dc.html` is the board grid (AP1 to AP14, with
+  the lettered boards AP8a–b, AP9a–d, AP11a–b, AP12a–c and AP13a–d), the
+  output of `scripts/read-canvas.mjs` as is;
+- `Advisors Partners Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/advisors-partners` is live with Overview, Firms
+and Deck roster. `/admin?tab=network-profiles` and `/admin/network-profiles`
+forward to the Deck roster with the moved notice. S21's integration (D972)
+draws the header, the tiles whose reads exist, Needs you, the firms table
+and today's roster. Sessions, settlements, the four charts, People, the
+drawers and dialogs, and the roster's redesign wait for D972's eight parts,
+so this canvas stays in the queue until they land. The `ROUTE_MAP.md` row
+says what is drawn today.
+
+## Landed 2026-10-24 — Admin page header (#2375)
+
+The owner's artifact `KhVPwtFC4WkDiPYCFmSdjv` came from S1's prompt on #2375.
+It is one canvas, not the usual pair: `Admin page header.dc.html` is a single
+page whose `board` switch draws SHL1 to SHL9, with SHL7 as two boards (SHL7a,
+the HQ-only notice; SHL7b, a member on an admin page). It is the output of
+`scripts/read-canvas.mjs` as is. No value was edited.
+
+**Grade: UPGRADE.** S21's integration (D936) builds the shared header,
+`frontend/src/ui/AdminPageHeader.jsx`: the breadcrumb, the title row with one
+pill and at most one primary button, the line, the scope chip, the moved
+notice and the tab bar with its three kinds of count. The Spin-Out Lab
+(#2374) is its first page. Moving every Admin Console tab to its own address
+under it, the redirect keys, the Accounts address and the stale copy wait for
+D936's parts, so this canvas stays in the queue until they land.
+
+## Landed 2026-10-24 — Admin · Spin-Out Lab (#2374)
+
+The owner's artifacts `PR6dqaBiLeUjUj84opEe86` and `SregZZjCTPU5GkUgXsukAZ`
+came from S1's prompt on #2374, as the usual pair:
+- `Spin-Out Lab Admin · Boards.dc.html` is the board grid (SL1 to SL21, with
+  the lettered boards the page's `board` switch lists: SL2b, SL3b, SL4a–g,
+  SL5l, SL8a–c, SL10d, SL11r, SL12s, SL13d, SL14s, SL16a and e, SL19a–b,
+  SL20a–d and SL21c), the output of `scripts/read-canvas.mjs` as is;
+- `Spin-Out Lab Admin Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+The page's script also defines a credits chart (`divSvg`, "spent on perk
+claims") that no board calls; it came along from the Programs canvas and
+is not part of this design. No value was edited.
+
+**Grade: UPGRADE.** `/admin/programs/spinout-lab` is live, with its tabs as
+sub-paths. `/admin/spinout-lab`, its `/preview` and the Admin Console's
+`?tab=lab-applications` forward there with the moved notice. S21's
+integration (D937) draws the header, the tabs whose consoles exist, and the
+Overview blocks whose reads exist. The charts, the paged queue, the drawers
+and dialogs, How it runs, Settings and Activity wait for D937's parts, so
+this canvas stays in the queue until they land. The `ROUTE_MAP.md` row says
+what is drawn today.
+
 ## Landed 2026-10-24 — Pitch deck studio (D894, #2434)
 
 The owner's artifacts `W5hRpjNZ4nsGBTJ7gd71Dy` and `RYeTPyEEdrmRnuUDktJcL3`

@@ -17,7 +17,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
-import reads, { ATTRIBUTION_DAYS, AGREEMENT_FILLED_KEYS, REDEMPTION_SORTS } from '../src/routes/admin_partners_reads.ts';
+import reads, { ATTRIBUTION_DAYS, AGREEMENT_FILLED_KEYS, REDEMPTION_SORTS } from '../src/routes/admin_partner_deal_reads.ts';
 import adminPartners from '../src/routes/admin_partners.ts';
 import { FINALIZE_MERGE_KEYS } from '../src/routes/partner_onboarding.ts';
 import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';

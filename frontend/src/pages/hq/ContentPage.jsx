@@ -25,7 +25,7 @@
  * The deck roster and Personas taxonomy link to their existing consoles.
  * Assessment games remain a summary with the existing push control; the
  * owner removed the authoring page on 2026-10-21. The roster links the
- * /admin?tab=network-profiles tab, never the standalone path.
+ * Deck roster tab of Advisors & Partners, /admin/advisors-partners/deck (D972).
  *
  * THE MASTER TEMPLATE LIBRARY IS A LINK, NOT A SECOND COPY. The artboard
  * draws it here, but it already lives at `/admin/contracts` over the
@@ -663,8 +663,8 @@ export function PersonasPanel({ loading, unreadable, personas }) {
   return (
     <>
       {body}
-      <Link to="/admin?tab=personas" className={CONSOLE_LINK} data-testid="hq-content-link-personas">
-        <ConsoleLinkBody title="Personas" note="Move an account from one persona to another there. No console adds, renames or retires a persona." />
+      <Link to="/admin/persona-segments" className={CONSOLE_LINK} data-testid="hq-content-link-personas">
+        <ConsoleLinkBody title="Persona segments" note="Counts by segment, members with none, and moving an account from one segment to another. No console adds, renames or retires a segment yet." />
       </Link>
     </>
   );
@@ -757,7 +757,7 @@ export function RosterPanel({ loading, unreadable, roster }) {
   return (
     <>
       {body}
-      <Link to="/admin?tab=network-profiles" className={CONSOLE_LINK} data-testid="hq-content-link-roster">
+      <Link to="/admin/advisors-partners/deck" className={CONSOLE_LINK} data-testid="hq-content-link-roster">
         <ConsoleLinkBody title="Advisors & Partners" note="Add, edit, reorder and archive people there. This panel changes none." />
       </Link>
     </>

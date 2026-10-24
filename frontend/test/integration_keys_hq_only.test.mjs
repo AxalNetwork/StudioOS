@@ -64,7 +64,8 @@ test('the old addresses redirect to the page, GitHub Sync to its section', () =>
   assert.equal(legacyContractsTarget('?tab=integration-keys'), '/admin/integration-keys');
   assert.equal(legacyContractsTarget('?tab=github'), '/admin/integration-keys#github');
   assert.equal(legacyContractsTarget('?tab=legal'), '/admin/contracts?moved=legal', 'D647 is unchanged');
-  for (const q of ['', '?tab=users', '?tab=payments', '?tab=constructor', '?tab=__proto__']) {
+  // D1008 (#2386) forwards ?tab=payments; ?tab=kyc is still a console tab.
+  for (const q of ['', '?tab=users', '?tab=kyc', '?tab=constructor', '?tab=__proto__']) {
     assert.equal(legacyContractsTarget(q), null, q);
   }
 });
@@ -77,7 +78,14 @@ test('nothing in the app links the old addresses', () => {
       const p = join(dir, entry.name);
       if (entry.isDirectory()) walk(p);
       else if (/\.(jsx?|tsx?)$/.test(entry.name) && !p.endsWith('LegacyContractsRedirect.jsx')) {
-        if (/\/admin\?tab=(integration-keys|github)\b/.test(readFileSync(p, 'utf8'))) hits.push(p.slice(root.length + 1));
+        let source = readFileSync(p, 'utf8');
+        if (p === resolve(root, 'cloudflare-worker/src/services/redirectRoutes.ts')) {
+          // D939: these two exact catalog entries are counter keys, never navigation links.
+          // Keep scanning the rest of the file so an actual old link is still caught.
+          source = source.replace(/export const ADMIN_TAB_REDIRECTS[\s\S]*?Object\.freeze\(\[([\s\S]*?)\]\);/, (catalog) =>
+            catalog.replace(/^  \{ path: '\/admin\?tab=(?:integration-keys|github)' \},$/gm, ''));
+        }
+        if (/\/admin\?tab=(integration-keys|github)\b/.test(source)) hits.push(p.slice(root.length + 1));
       }
     }
   };

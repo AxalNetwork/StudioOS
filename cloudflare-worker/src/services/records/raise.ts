@@ -24,11 +24,12 @@ import type { ActionResult, ModuleSpec, RecordAction, RecordField, RecordContent
 import { activeGrant, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
 import { ACCESS_TIERS, investorCommitted, tierAdmits } from '../dataRoomAccess';
 import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
+import { deckReaders, readBySentence } from '../narrative/readers';
 import { RAISE_STAGES } from '../../routes/contacts';
 import {
   type Ctx, type ProspectRow, READINESS_ITEMS, TOOL_HREF, DILIGENCE_CHECKLIST, EVIDENCE, FIGURES, FIGURE_LABEL, INVESTOR_TYPES,
   INVESTOR_TYPE_LABEL, FUND_SECTIONS, FIT_LABEL, LIST_STAGE_LABEL, NEVER_EXPIRES, accessText, capIdOf, capEntryOf, checkInputs, consistencyCheck,
-  checklistLabel, computeReadiness, fmtFigure, fundCells, groupOf, instrumentOf, loadCap, loadFunds, loadProspects, loadReadiness,
+  basedOnLabel, checklistLabel, computeReadiness, fmtFigure, fundCells, groupOf, instrumentOf, loadCap, loadFunds, loadProspects, loadReadiness,
   loadVersions, prospectFunds, requestTitles,
 } from '../raiseCycle';
 import {
@@ -148,12 +149,12 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   const out: RecordContent = {
     title: item.label,
     sub: s ? `Readiness item · scored ${day(s.scored_at)}` : 'Readiness item · not scored yet',
-    pills: s
-      ? [{ text: `${Number(s.score)} / 10`, tone: s.score >= 8 ? 'ok' : s.score >= 5 ? 'amb' : 'bad' }, { text: cap1(String(s.evidence)), tone: 'vio' }]
+    pills: s?.score != null
+      ? [{ text: s.score == null ? 'Not scored' : `${Number(s.score)} / 10`, tone: s.score == null ? 'grey' : s.score >= 8 ? 'ok' : s.score >= 5 ? 'amb' : 'bad' }, { text: cap1(String(s.evidence)), tone: 'vio' }]
       : [{ text: 'Not scored', tone: 'grey' }],
     facts: [
-      fact('Score', s ? `${Number(s.score)} / 10` : null, notScored),
-      fact('Evidence', s ? cap1(String(s.evidence)) : null, notScored),
+      fact('Score', s?.score != null ? `${Number(s.score)} / 10` : null, notScored),
+      fact('Evidence', s?.score != null ? cap1(String(s.evidence)) : null, s?.missing || notScored),
       fact('Missing', s ? String(s.missing ?? '').trim() || 'Nothing' : null, notScored),
       fact('Last scored', s ? day(s.scored_at) : null, notScored),
     ],
@@ -184,7 +185,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   }, { when: (id) => id === 'data_room' }),
   section('history', 'Score over time', async (_rc, _id, record) => {
     const { mine } = loadedOf(record);
-    return { rows: [...(mine ?? [])].reverse().slice(0, 12).map((s: any) => ({ a: day(s.scored_at) ?? '', b: String(Number(s.score)) })), empty: 'Not scored yet.' };
+    return { rows: [...(mine ?? [])].reverse().slice(0, 12).map((s: any) => ({ a: day(s.scored_at) ?? '', b: s.score == null ? (s.missing || 'Not scored') : String(Number(s.score)) })), empty: 'Not scored yet.' };
   }, { side: true }),
   section('opens', 'Opens', async (rc, id) => {
     const o = OPENS[id];
@@ -198,8 +199,8 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
       key: 'score', label: 'Score', kind: 'form', tone: 'primary',
       form: { title: 'Score Team', cta: 'Save score', fields: [
         { key: 'score', label: 'Score', kind: 'CH', options: Array.from({ length: 11 }, (_, n) => ({ value: String(n), label: `${n} / 10` })),
-          value: s ? String(Number(s.score)) : undefined, required: true },
-        { key: 'evidence', label: 'Evidence', kind: 'CH', options: EVIDENCE.filter(e => e !== 'measured').map((e) => ({ value: e, label: cap1(e) })), value: s?.evidence ?? undefined, required: true },
+          value: s?.score != null ? String(Number(s.score)) : undefined, required: true },
+        { key: 'evidence', label: 'Evidence', kind: 'CH', options: EVIDENCE.filter(e => e === 'anecdote' || e === 'pattern').map((e) => ({ value: e, label: cap1(e) })), value: s?.evidence ?? undefined, required: true },
         { key: 'missing', label: 'Missing', kind: 'T', value: s?.missing ?? '' },
       ] },
       execute: (c, _id, body) => refusing(async () => ({ ok: true, record: await scoreReadinessItem(c.env, {
@@ -222,10 +223,10 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   return {
     items: READINESS_ITEMS.map((i) => {
       const sc = newest.get(i.key);
-      return { value: i.key, label: i.label, by_hand: i.key === 'team', last_scored: sc ? day(sc.scored_at) : null, score: sc ? Number(sc.score) : null };
+      return { value: i.key, label: i.label, by_hand: i.key === 'team', last_scored: sc ? day(sc.scored_at) : null, score: sc?.score != null ? Number(sc.score) : null };
     }),
     since: opts([['all', 'Everything'], ['last', 'Since the last score']]),
-    evidence: EVIDENCE.filter(e => e !== 'measured').map((e) => ({ value: e, label: cap1(e) })),
+    evidence: EVIDENCE.filter(e => e === 'anecdote' || e === 'pattern').map((e) => ({ value: e, label: cap1(e) })),
   };
 });
 
@@ -247,16 +248,17 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
   ).bind(rc.projectId, n).first<{ start_from: string; based_on_version: number | null; why_now: string | null; check_against_json: string | null }>();
   const mismatches = Number(v?.mismatches ?? 0);
   const compared = Number(v?.compared ?? 0);
-  const basedOn = !meta ? null
-    : meta.start_from === 'version' && meta.based_on_version != null ? `v${meta.based_on_version}`
-      : meta.start_from === 'blank' ? 'Blank' : 'The live deck';
+  // D909: Read by is a binding on the current deck (`services/narrative/readers.ts`), never the deck at save time.
+  const readers = await deckReaders(rc.env, rc.projectId);
+  const readBy = readBySentence(readers, n);
+  const basedOn = !meta ? null : basedOnLabel({ start_from: meta.start_from, based_on_version: meta.based_on_version }, readers.spinout);
   const out: RecordContent = {
     title: `v${n} · ${typeLabel(v?.investor_type).toLowerCase()}`,
-    sub: `Saved ${day(v?.saved_at) ?? 'on an unrecorded day'} · No deck reads this version.`,
+    sub: `Saved ${day(v?.saved_at) ?? 'on an unrecorded day'} · ${readBy}`,
     pills: [{ text: typeLabel(v?.investor_type), tone: 'vio' }, { text: compared ? plural(mismatches, 'mismatch', 'mismatches') : 'Nothing compared yet', tone: !compared ? 'grey' : mismatches ? 'amb' : 'ok' }],
     facts: [
       fact('Investor type', typeLabel(v?.investor_type), ''),
-      fact('Deck use', 'No deck reads this version.', ''),
+      fact('Read by', readBy, ''),
       fact('Mismatches', compared ? mismatches : null, 'Nothing compared yet'),
       fact('Based on', basedOn, 'Saved before versions recorded their source'),
     ],
@@ -346,12 +348,16 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
   ];
 }, async (rc) => {
   // Investor types, saved versions to start from, and the two check sources (decision 7).
+  // D909: the live wording is the Spin-Out deck's, offered to Spin-Out ventures only (owner question 5 on #2454).
   const versions = await loadVersions(ctxOf(rc));
+  const { spinout } = await deckReaders(rc.env, rc.projectId);
   return {
     investor_types: INVESTOR_TYPES.map((t) => ({ value: t, label: typeLabel(t) })),
-    start_from: START_FROM.map((k) => ({ value: k, label: k === 'live' ? 'The live deck' : k === 'version' ? 'A saved version' : 'Blank' })),
+    start_from: START_FROM.filter((k) => spinout || k !== 'live')
+      .map((k) => ({ value: k, label: k === 'live' ? 'The Spin-Out deck wording' : k === 'version' ? 'A saved version' : 'Blank' })),
     versions: versions.map((x) => ({ value: String(x.version), label: `v${x.version} · ${typeLabel(x.investor_type).toLowerCase()}` })),
     check_against: opts([['deck', 'Pitch deck'], ['metrics', 'Metrics']]),
+    spinout,
   };
 });
 
