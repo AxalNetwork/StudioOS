@@ -164,7 +164,7 @@ function SaveDialog({ writes, version, onSave, onClose, saving, error }) {
 }
 
 /** The Story tab for one version, read and written through D908's stores. */
-export default function StoryTab({ projectId, version, search = '', phone = false }) {
+export default function StoryTab({ projectId, version, search = '', phone = false, readOnly: roleReadOnly = false }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const read = useNarrative(projectId, version, reload);
@@ -190,7 +190,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
   if (!sections) return <p role="alert" className="m-0 text-[13px] text-red-700 dark:text-red-300" data-testid="story-unreadable">{STORY_UNREADABLE}</p>;
   if (!draft) return null;
 
-  const readOnly = isLiveDeck(read.data);
+  const readOnly = roleReadOnly || isLiveDeck(read.data);
   const audience = audienceOf(read.data);
   const i = draft.order.indexOf(active);
   const spec = sections.find((s) => s.key === active);
@@ -221,7 +221,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
 
   return (
     <div className="flex flex-col gap-3.5" data-testid="narrative-story">
-      {readOnly ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-live-deck">{LIVE_DECK}</p> : null}
+      {isLiveDeck(read.data) ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-live-deck">{LIVE_DECK}</p> : roleReadOnly ? <p role="status" className={`m-0 text-[12.5px] ${MUTED}`} data-testid="story-read-only">Read only. Notes are visible to the founder.</p> : null}
       <div className={phone ? 'flex flex-col gap-3' : 'grid grid-cols-1 gap-3.5 lg:grid-cols-[230px_minmax(0,1fr)]'}>
         {phone ? (
           <label className={`${CARD} flex items-center gap-2 px-3 py-2`}>
@@ -282,7 +282,7 @@ export default function StoryTab({ projectId, version, search = '', phone = fals
                 <button type="button" className={BTN} onClick={() => setSaving({ open: true, busy: false, error: null })} disabled={!writes.length}>Save version</button>
               </div>
             ) : null}
-            <Link className={`${LINK} text-[12.5px]`} to={versionHref(version, search)} data-testid="narrative-story-open">One-liner, investor type and what it checks against: open v{version}</Link>
+            <Link className={`${LINK} text-[12.5px]`} to={versionHref(version, search)} data-testid="narrative-story-open">{roleReadOnly ? `Open v${version}` : `One-liner, investor type and what it checks against: open v${version}`}</Link>
           </section>
         ) : null}
       </div>

@@ -10,7 +10,9 @@ import {
   versionHref, versionsOf,
 } from './narrativeModel';
 import StoryTab from './StoryTab';
+import { NarrativeNotes, NarrativeOtherVenture, NarrativeReads } from './NarrativeAdmin';
 import PositioningTab from './PositioningTab';
+
 
 /**
  * D906 (#2454) — the Investor narrative tool's tab bar and its tab pages.
@@ -97,11 +99,11 @@ function Skeleton({ testId }) {
   return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid={testId} />;
 }
 
-function NoVersion({ search }) {
+function NoVersion({ search, admin }) {
   return (
     <div className={`${CARD} flex flex-col items-start gap-3 p-5`} data-testid="narrative-no-version">
       <span className={`text-[13.5px] font-bold ${INK}`}>{NO_VERSION}</span>
-      <Link className={BTN} to={`${NEW_PATH}${tabSearch(search, null, false)}`}>New version</Link>
+      {admin ? null : <Link className={BTN} to={`${NEW_PATH}${tabSearch(search, null, false)}`}>New version</Link>}
     </div>
   );
 }
@@ -208,7 +210,7 @@ function VersionsTab({ projectId, versions, search, reload }) {
  * `cards` are the Raise modules for the header's rail; `action` is Call for
  * Capital, as on every Raise module page.
  */
-export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, fixOn = true, search = '', cards, action, phone = false }) {
+export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, fixOn = true, search = '', cards, action, phone = false, admin = false }) {
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const list = useVersions(projectId, reload);
@@ -223,17 +225,27 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   // No venture means no versions read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (list.status === 'loading') body = <Skeleton testId="narrative-loading" />;
-  else if (list.status === 'refused') body = <p role="status" className={`m-0 text-[13px] ${INK}`} data-testid="narrative-refused">{list.message || 'You do not have access to this venture’s narrative.'}</p>;
+  // D914, NAR14b: the Worker refuses another venture's narrative; an admin's refusal is the reason gate's, above this page.
+  else if (list.status === 'refused') body = admin
+    ? <p role="status" className={`m-0 text-[13px] ${INK}`} data-testid="narrative-refused">{list.message || 'You do not have access to this venture’s narrative.'}</p>
+    : <NarrativeOtherVenture />;
   else if (list.status === 'error') body = <Unreadable what="Your narrative versions" claim="This is not a claim that none are saved." onRetry={retry} />;
-  // D911: positioning is the venture's core first, so it needs no saved version.
-  else if (tab === 'positioning') body = <PositioningTab projectId={projectId} version={version} />;
-  else if (!list.versions.length) body = <NoVersion search={search} />;
+  // Positioning may be read without a saved narrative version; admin controls remain read only.
+  else if (tab === 'positioning') body = <PositioningTab projectId={projectId} version={version} readOnly={admin} />;
+  else if (!list.versions.length) body = <NoVersion search={search} admin={admin} />;
+
   else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} />;
-  else if (tab === 'story') body = <StoryTab key={version} projectId={projectId} version={version} search={search} phone={phone} />;
+  else if (tab === 'story') body = (
+    <>
+      <StoryTab key={version} projectId={projectId} version={version} search={search} phone={phone} readOnly={admin} />
+      <NarrativeNotes projectId={projectId} version={version} admin={admin} />
+      {admin ? null : <NarrativeReads projectId={projectId} />}
+    </>
+  );
   else if (record.status === 'loading' || record.status === 'idle') body = <Skeleton testId="narrative-loading" />;
   else if (record.status === 'refused') body = <p className={`m-0 text-[13px] ${INK}`}>{record.message || 'This version could not be opened.'}</p>;
   else if (record.status === 'error') body = <Unreadable what={`Version ${version}`} claim="This is not a claim that it is empty." onRetry={retry} />;
-  else body = <CheckTab record={record.data} search={search} newest={version === list.versions[0]?.value} fixOn={fixOn} />;
+  else body = <CheckTab record={record.data} search={search} newest={version === list.versions[0]?.value} fixOn={fixOn && !admin} />;
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`narrative-${tab}-page`}>

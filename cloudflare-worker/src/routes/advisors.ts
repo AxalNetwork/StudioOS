@@ -22,6 +22,7 @@ import {
   computeWatchOuts,
 } from '../services/matchingVectors';
 import { ensureAdvisorStoresSchema } from '../services/advisorStoresSchema';
+import { ensureNetworkStatesSchema } from '../services/networkStatesSchema';
 import {
   PAYOUT_GATE, cutCents, derivePayoutState, settlementMode, takeRate, totalLines,
 } from '../services/advisorMoney';
@@ -68,6 +69,7 @@ const advisors = new Hono<{ Bindings: Env }>();
  */
 advisors.use('*', async (c, next) => {
   await ensureAdvisorStoresSchema(c.env);
+  await ensureNetworkStatesSchema(c.env);
   await next();
 });
 
@@ -261,14 +263,27 @@ async function takenForSlot(env: Env, slotId: number): Promise<number> {
 // ---------------------------------------------------------------------------
 // Advisor profile CRUD
 // ---------------------------------------------------------------------------
+/** D976: true while an admin has paused this advisor in the network. */
+async function advisorPaused(env: Env, advisorId: number): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 AS paused FROM advisors v JOIN network_member_states nms ON nms.user_id = v.user_id
+      WHERE v.id = ? AND nms.paused_at IS NOT NULL LIMIT 1`
+  ).bind(advisorId).first<{ paused: number }>();
+  return !!row;
+}
+
 advisors.get('/', async (c) => {
   try {
     await requireAuth(c);
     const q = (c.req.query('q') || '').trim().toLowerCase();
     const sector = (c.req.query('sector') || '').trim().toLowerCase();
     const expertise = (c.req.query('expertise') || '').trim().toLowerCase();
+    // D976: a paused advisor, or one an admin hid from the directory, is not listed.
     const rows = await c.env.DB.prepare(
-      'SELECT * FROM advisors WHERE is_active = 1 ORDER BY display_name ASC'
+      `SELECT * FROM advisors WHERE is_active = 1
+         AND NOT EXISTS (SELECT 1 FROM network_member_states nms WHERE nms.user_id = advisors.user_id
+           AND (nms.paused_at IS NOT NULL OR nms.directory_hidden_at IS NOT NULL))
+       ORDER BY display_name ASC`
     ).all<AdvisorRow>();
     let items = (rows.results || []).map(advisorDto);
     if (q) items = items.filter((m: any) =>
@@ -420,9 +435,12 @@ advisors.get('/match', async (c) => {
       return c.json({ detail: 'Founder role required' }, 403);
     }
 
-    // Load all active advisors
+    // Load all active advisors the directory lists (D976: not paused, not hidden)
     const rows = await c.env.DB.prepare(
-      'SELECT * FROM advisors WHERE is_active = 1 ORDER BY display_name ASC'
+      `SELECT * FROM advisors WHERE is_active = 1
+         AND NOT EXISTS (SELECT 1 FROM network_member_states nms WHERE nms.user_id = advisors.user_id
+           AND (nms.paused_at IS NOT NULL OR nms.directory_hidden_at IS NOT NULL))
+       ORDER BY display_name ASC`
     ).all<AdvisorRow>();
     const allAdvisors = (rows.results || []) as AdvisorRow[];
 
@@ -697,6 +715,10 @@ advisors.post('/slots/:id/book', async (c) => {
     const body = await c.req.json().catch(() => ({} as any));
     const slot = await c.env.DB.prepare('SELECT * FROM advisor_office_hour_slots WHERE id = ?').bind(slotId).first<SlotRow>();
     if (!slot || slot.is_cancelled) return c.json({ detail: 'Slot not available' }, 404);
+    // D976: an advisor an admin paused takes no new bookings; bookings already made stay.
+    if (await advisorPaused(c.env, slot.advisor_id)) {
+      return c.json({ detail: 'This advisor is not taking new bookings', code: 'advisor_paused' }, 409);
+    }
     const context = body.booking_link_slug === undefined ? null
       : await usableBookingLink(c, body.booking_link_slug, user);
     if (context && context.advisor.id !== slot.advisor_id) {

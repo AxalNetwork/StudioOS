@@ -8,12 +8,14 @@ The founder's Investor narrative tool at `/raise/investor-narrative` (D906,
 | File | What it is |
 |---|---|
 | `NarrativeTool.jsx` | The tool's tab bar (`NarrativeTabBar`), drawn under the module page's header on Home, and its tab pages (`NarrativeTabPage`): Story, Positioning, Check and Versions with Compare. |
+| `NarrativeAdmin.jsx` | D914 (#2698): an admin's reason gate and the NAR13 read-only banner, the notes thread, the founder's "Who read this narrative", and the NAR14a and NAR14b panels. |
 | `narrativeModel.js` | Pure: the addresses, the tabs, the words, and every derivation from the reads (the saved versions, one version's words and its consistency check, two versions side by side, and the positioning rows). |
 | `StoryTab.jsx` | Story (D910, NAR2): the sections rail, the writing surface, the audience note, Insert a figure (NAR3) and Save version, over D908's stores and PITCH's source registry. |
 | `StoryComponents.jsx` | NAR21: the bound-figure chip, the claim pills, the section dots, the source chips and the grade ramp, light and dark. |
 | `storyModel.js` | Pure: Story's derivations (sections, bound figures against the registry, typed numbers as claims, the dots, the order, the save plan and its dialog). |
 | `PositioningTab.jsx` | D911: the Positioning tab. NAR4's core positioning and "This version", NAR5's proposal lightbox (Accept or Discard, one at a time), and NAR18's moved notice. |
 | `PitchPositioningRedirect.jsx` | D911: `/raise/pitch/positioning`, now a redirect to the tab that keeps the query and hash and adds `?moved=positioning`. |
+
 
 ## Where the tool lives
 
@@ -45,3 +47,11 @@ added, so every cycle-route rule (`cyclePaths.js`, `cycle_spacing_d694`) holds.
 - **The check is drawn in the Worker's own words.** The page states each figure's
   result as the consistency section sends it and re-derives nothing; the
   check's own fixes are #2447 and D906 part 1.
+- **An admin reads, and changes nothing** (D914). `CycleRoute` wraps every
+  narrative page in `NarrativeAdminGate` for an admin: a reason first, then the
+  page read only, with no New version, Add, edit, fill or draft. The Worker
+  refuses their writes (`admin_read_only`) and their reads without a reason
+  (`read_reason_required`) on its own; the page only draws what it answers.
+
+
+The D914 read-only flag also reaches D911's Positioning tab: admins read its core and version wording, with no edit, Adjust, proposal or decision controls. The corresponding draft and proposal routes use the narrative's read/write gate.

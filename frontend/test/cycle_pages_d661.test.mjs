@@ -226,7 +226,8 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
     ['build/company-creation', 'build/founding-team', 'build/operating-systems', 'build/product-roadmap', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'grow/revenue-and-traction', 'grow/team-expansion', 'raise/cap-table', 'raise/capital-relationships', 'raise/data-room', 'raise/fundraising-readiness', 'raise/investor-narrative', 'raise/pitch-deck', 'raise/use-of-funds', 'validate/demand-signals', 'validate/experiments', 'validate/ideal-customer-profile', 'validate/market-intelligence', 'validate/problem-discovery', 'validate/verdict']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D695: each Add is a link to its `/new` address, pushed with `state.under`.
-  assert.match(route, /add=\{forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
+  // D914 (#2698): an admin reading the Investor narrative is offered no Add.
+  assert.match(route, /add=\{narrativeAdmin \? undefined : forms\.length && projectId\s*\? forms\.map\(\(entry, i\) => \(\{ text: entry\.button, href: addHref\(entry, i\), state: \{ under: `\$\{location\.pathname\}\$\{location\.search\}` \} \}\)\)\s*: fnOf\(def\.add, slug\)\?\.\(q, openAction\)\}/);
   // D693 (#1704): the Add submits through the cycles' writes plus Verdict's `record` (`formWrites`).
   assert.match(route, /onSubmit=\{\(values\) => formOpen\.submit\(formWrites, projectId, values\)\}/);
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
@@ -271,7 +272,7 @@ test('ROW EDITS: a row the route can change draws Edit, the sheet starts from th
   assert.deepEqual(Object.entries(EDITS).flatMap(([c, f]) => Object.keys(f).map((s) => `${c}/${s}`)).sort(),
     ['build/company-creation', 'build/founding-team', 'build/operating-systems', 'build/product-roadmap', 'build/prototype-mvp', 'build/solution-design', 'grow/distribution', 'grow/durable-company-building', 'grow/market-expansion', 'grow/partner-network', 'grow/product-improvement', 'grow/revenue-and-traction', 'grow/team-expansion', 'raise/cap-table', 'raise/capital-relationships', 'raise/data-room', 'raise/investor-narrative', 'raise/pitch-deck', 'raise/use-of-funds', 'validate/demand-signals', 'validate/experiments', 'validate/ideal-customer-profile', 'validate/market-intelligence', 'validate/problem-discovery']);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /rowAction=\{edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
+  assert.match(route, /rowAction=\{!narrativeAdmin && edit && projectId && !edit\.hiddenFor\?\.\(module\) \? \(row\) => \(edit\.idOf\(row\) == null \? null : \{/, 'Edit is drawn only on a row its route can change, and not on a card the module hides it for');
   assert.match(route, /<FormLightbox key=\{`edit-\$\{editing\.id\}`\} form=\{edit\} current=\{edit\.valuesOf\(editing\)\}/);
   assert.match(route, /onSubmit=\{\(values\) => edit\.submit\(cyclesWrite, projectId, edit\.idOf\(editing\), values\)\}/);
   // D695: the open Add is the address's and the open Edit the history entry's, so neither follows the founder to another module.
