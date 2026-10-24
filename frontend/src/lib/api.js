@@ -2489,6 +2489,13 @@ export const api = {
     ).toString();
     return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
   },
+  adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),
+  adminStrategicAccess: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/refer-earn/admin/strategic-access${qs ? `?${qs}` : ''}`);
+  },
+  adminStrategicAccessDecision: (userId, data) => request(`/refer-earn/admin/strategic-access/${encodeURIComponent(userId)}/decision`, { method: 'POST', body: JSON.stringify(data) }),
   adminReferralReview: (uid, data) =>
     request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`, {
       method: 'PATCH', body: JSON.stringify(data),
@@ -3431,6 +3438,11 @@ export const api = {
     request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkRate: (uid, stars) =>
     request(`/perks/${encodeURIComponent(uid)}/rating`, { method: 'POST', body: JSON.stringify({ stars }) }),
+  adminPerkClaims: (weeks = 12) => request(`/perks/admin/claims?${new URLSearchParams({ weeks })}`),
+  adminPerkListings: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/perks/admin/listings${qs ? `?${qs}` : ''}`);
+  },
   perkReviewQueue: () => request('/perks/admin/queue'),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),

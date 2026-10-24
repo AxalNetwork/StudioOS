@@ -21,7 +21,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 
 import AdminInsights, { Block, Tile } from '../src/pages/admin/insights/AdminInsights.jsx';
-import { Chart } from '../src/pages/admin/insights/InsightsCharts.jsx';
+import { Chart } from '../src/ui/Charts.jsx';
 import {
   MOVED_NOTICE, NO_PERMISSION, PROFILE_FILTERS, activationCohort, activeFilterCount, blockState, buildBlocks, buildGroup,
   buildKpis, countryOptions, dayLabel, definitionOf, exportBody, filterCountries, filtersFromSearch, groupFromSearch,

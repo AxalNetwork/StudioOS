@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  DEAL_SORTS, DEAL_STATES, DEAL_TYPES, ENDS_WITHIN, LIST_CLAIM, WITHIN_DEALS, dataOf, dealHref, dealRow, dealTypeWord,
+  DEAL_SORTS, DEAL_STATES, DEAL_TYPES, ENDS_WITHIN, LIST_CLAIM, WITHIN_DEALS, dataOf, dealFiltersFromSearch, dealHref, dealRow, dealTypeWord,
   dealsUnion, filterDeals, isFailed, isLoading, noDealLine, pageOf, rangeText, topDealRows,
 } from './partnersDeskModel';
 import {
@@ -14,6 +14,7 @@ import {
  * `invitation_id`); its Due diligence comes from R9. One cross-check is
  * drawn: an unsigned deal whose invitation has lapsed. Top deals by
  * redemptions is R3, with deals that have none left out. C5 waits for part 8.
+ * D929: `?type=&state=` (Overview's C3) sets the filters it opens with.
  */
 
 const COLS = ['Partner', 'Deal type', 'Tiers granted', 'Term', 'Days left', 'Referral code', 'Redemptions', 'State', 'Due diligence', ''];
@@ -49,9 +50,11 @@ function TopDeals({ reads }) {
 
 export default function PartnersDeals({ reads, now, actions }) {
   const navigate = useNavigate();
+  const { search } = useLocation();
+  const [linked] = useState(() => dealFiltersFromSearch(search));
   const [q, setQ] = useState('');
-  const [states, setStates] = useState(['active']);
-  const [type, setType] = useState('');
+  const [states, setStates] = useState(linked.states || ['active']);
+  const [type, setType] = useState(linked.type);
   const [endsWithin, setEndsWithin] = useState('');
   const [hasRedemptions, setHasRedemptions] = useState(false);
   const [sort, setSort] = useState('ends');
