@@ -227,7 +227,7 @@ test('Guard F: a sum over the fan-out is exact only when the set is complete, ev
   assert.deepEqual(fanFigure(fanOut(set, calls), countLast90(NOW)), { state: 'ready', n: 2, value: '2' });
   // (2) a call failed: never a smaller number, even when it holds rows from an earlier read.
   const broken = new Map([...calls, ['3', { status: 'error', data: { items: [] }, error: { status: 503 } }]]);
-  assert.deepEqual(fanFigure(fanOut(set, broken), countLast90(NOW)), { state: 'unreadable', reason: 'Could not be read for 1 of 2 deals.' });
+  assert.deepEqual(fanFigure(fanOut(set, broken), countLast90(NOW)), { state: 'unreadable', figure: 'Could not be read for 1 of 2 deals', reason: '1 of 2 deals did not answer, so no partial sum is drawn.' });
   assert.equal(fanFigure(fanOut(set, new Map([['1', calls.get('1')]])), countLast90(NOW)).state, 'loading');
   // (3) a deal's redeemers stop at 500.
   const big = redemptionDealSet(ready({ items: [{ id: 1, redemption_count: 640 }], total: 1, complete: true }), lists());
@@ -792,7 +792,11 @@ test('a check\'s late reply for an address no longer in the field is dropped', a
     await view.change('partners-new-email', { value: 'ann@example.com' });
     await view.wait(450); // Ann's check is sent; its reply takes 900 ms.
     await view.change('partners-new-email', { value: 'bob@example.com' });
-    await view.wait(1200); // Bob's check is sent and answers first; Ann's reply lands after it.
+    // Two waits: React holds a render queued inside one act() until it ends,
+    // so the first wait lets Bob's check start (and answer) before Ann's reply.
+    await view.wait(450);
+    assert.equal(view.textOf('partners-new-member'), 'This address belongs to a member (Investor). Signing keeps their role.');
+    await view.wait(1000); // Ann's late reply lands now, for an address no longer in the field.
     assert.equal(view.textOf('partners-new-member'), 'This address belongs to a member (Investor). Signing keeps their role.');
   } finally { await view.close(); }
 });
@@ -897,4 +901,36 @@ test('Deals: names before signing come from the invitation, the lapsed cross-che
     assert.match(row, /Not opened before signing/);
     assert.match(row, /Offer chosen, not sent/);
   } finally { await view.close(); }
+});
+
+test('Referrals under Guard F: one deal\'s failed read makes every fan-out figure say so, never a smaller number; all time stays exact from R5', async () => {
+  const revshare = deal(7, { deal_type: 'deal_sourcing_revshare', redemptions_count: 2 });
+  const plain = deal(8, { redemptions_count: 1 });
+  const items7 = [
+    redemption(1, LIVE - 10 * DAY, { attribution_kind: 'deal_sourcing_revshare', revshare_window_remaining_days: 20 }),
+    redemption(2, LIVE - 200 * DAY, { attribution_kind: 'deal_sourcing_revshare', revshare_window_remaining_days: 165 }),
+  ];
+  const reply7 = { deal: { id: 7, deal_type: 'deal_sourcing_revshare', status: 'active', partner_name: 'Dana 7', referral_code: 'PART-7' }, items: items7 };
+  const down = await mounted('/admin/partner-invitations/referrals', worker({ deals: { active: [revshare, plain] }, redemptions: { 7: reply7, 8: () => response({ error: 'down' }, 503) } }));
+  try {
+    assert.equal(down.textOf('partners-ref-tile-all'), 'Redemptions, all time3', 'R5 is uncapped, so its count is exact');
+    for (const key of ['last90', 'open', 'closing']) {
+      assert.match(down.textOf(`partners-ref-tile-${key}`), /Could not be read for 1 of 2 deals1 of 2 deals did not answer, so no partial sum is drawn\.Try again$/, key);
+    }
+    assert.ok(down.has('partners-ref-unreadable') && !down.has('partners-ref-table') && !down.has('partners-ref-none'), 'no partial list, and no empty-list sentence');
+    assert.match(down.textOf('partners-ref-unreadable'), /1 of 2 deals did not answer, so no partial sum is drawn\./);
+  } finally { await down.close(); }
+  const reply8 = { deal: { id: 8, deal_type: 'services_partnership', status: 'active', partner_name: 'Dana 8', referral_code: 'PART-8' }, items: [redemption(3, LIVE - 5 * DAY)] };
+  const up = await mounted('/admin/partner-invitations/referrals?deal=7', worker({ deals: { active: [revshare, plain] }, redemptions: { 7: reply7, 8: reply8 } }));
+  try {
+    assert.equal(up.textOf('partners-ref-tile-last90'), 'Last 90 days2');
+    assert.equal(up.textOf('partners-ref-tile-open'), 'Rev-share windows open2On active deals only');
+    assert.equal(up.textOf('partners-ref-tile-closing'), 'Closing within 30 days1');
+    assert.match(up.textOf('partners-referrals-deal'), /^Deal #7 only\./);
+    assert.ok(up.has('partners-ref-row-7:1') && up.has('partners-ref-row-7:2') && !up.has('partners-ref-row-8:3'), '?deal= narrows the table to one deal');
+    assert.match(up.textOf('partners-ref-row-7:1'), /Role: Not read here yet/);
+    assert.match(up.textOf('partners-ref-row-7:1'), /20 days left/);
+    assert.match(up.textOf('partners-ref-foot'), /^Payouts are handled in Contracts\.Open payouts in Contracts$/);
+    assert.ok(up.hrefs().includes('/admin/contracts?tab=partner-deals'));
+  } finally { await up.close(); }
 });

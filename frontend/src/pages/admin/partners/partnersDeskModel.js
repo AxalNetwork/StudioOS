@@ -709,7 +709,7 @@ export function redemptionDealSet(contracts, deals) {
  */
 export function fanOut(set, calls) {
   if (!set || set.state === 'loading') return { state: 'loading' };
-  if (set.state === 'unreadable') return { state: 'unreadable', text: 'The deals with redemptions could not be read' };
+  if (set.state === 'unreadable') return { state: 'unreadable', text: COULD_NOT_READ, claim: 'The deal lists it counts over did not answer.' };
   const m = set.deals.length;
   const failed = [];
   const items = [];
@@ -729,7 +729,13 @@ export function fanOut(set, calls) {
       if (rows.length >= CAPS.redemptions) firstOnly.push(d.id);
     }
   }
-  if (failed.length) return { state: 'unreadable', k: failed.length, m, text: `Could not be read for ${nf(failed.length)} of ${plural(m, 'deal', 'deals')}` };
+  if (failed.length) {
+    return {
+      state: 'unreadable', k: failed.length, m,
+      text: `Could not be read for ${nf(failed.length)} of ${plural(m, 'deal', 'deals')}`,
+      claim: `${nf(failed.length)} of ${plural(m, 'deal', 'deals')} did not answer, so no partial sum is drawn.`,
+    };
+  }
   if (waiting) return { state: 'loading' };
   return { state: 'ready', items, m, complete: set.complete, short, firstOnly, exact: set.complete && !short.length };
 }
@@ -739,7 +745,8 @@ export const FIRST_500 = 'First 500 for this deal';
 /** A count over the fan-out's rows, under Guard F. A sum with nothing to cover is a real 0. */
 export function fanFigure(fan, count) {
   if (!fan || fan.state === 'loading') return { state: 'loading' };
-  if (fan.state === 'unreadable') return { state: 'unreadable', reason: `${fan.text}.` };
+  // The figure itself says it, never a smaller number (D923 §2).
+  if (fan.state === 'unreadable') return { state: 'unreadable', figure: fan.text, reason: fan.claim };
   const n = count(fan.items);
   if (fan.exact) return { state: 'ready', n, value: nf(n) };
   let sub;

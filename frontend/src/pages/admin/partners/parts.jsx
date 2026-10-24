@@ -151,7 +151,14 @@ export function Tile({ t, onRetry, testPrefix = 'partners-tile' }) {
       {t.state === 'ready' && t.sub ? <span className={t.subTone === 'amber' ? `text-[12px] font-bold ${AMBER}` : SUB}>{t.sub}</span> : null}
       {t.state === 'ready' && t.extra ? <span className={`text-[12px] font-bold ${AMBER}`}>{t.extra}</span> : null}
       {t.state === 'ready' && t.cover ? <span className={SUB}>{t.cover}</span> : null}
-      {t.state === 'unreadable' ? <Failed what={t.label} claim={t.reason || ''} onRetry={onRetry} /> : null}
+      {t.state === 'unreadable' && t.figure ? (
+        <>
+          <span role="alert" className="text-[15px] font-bold leading-snug text-red-700 dark:text-red-300">{t.figure}</span>
+          {t.reason ? <span className={SUB}>{t.reason}</span> : null}
+          {onRetry ? <button type="button" onClick={onRetry} className="self-start text-[12px] font-semibold text-red-700 underline dark:text-red-300">Try again</button> : null}
+        </>
+      ) : null}
+      {t.state === 'unreadable' && !t.figure ? <Failed what={t.label} claim={t.reason || ''} onRetry={onRetry} /> : null}
       {t.state === 'note' ? <span className="text-[13px]"><Unrecorded reason={t.note.reason}>{t.note.text}</Unrecorded></span> : null}
     </div>
   );

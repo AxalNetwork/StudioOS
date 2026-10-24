@@ -106,7 +106,7 @@ export default function PartnersReferrals({ reads, fan, now }) {
         </div>
 
         {fan.state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">Reading…</span> : null}
-        {fan.state === 'unreadable' ? <Failed what="Every redemption" claim={`${fan.text}.`} onRetry={reads.reload} testId="partners-ref-unreadable" /> : null}
+        {fan.state === 'unreadable' ? <Failed what="The redemptions" claim={fan.claim} onRetry={reads.reload} testId="partners-ref-unreadable" /> : null}
         {fan.state === 'ready' && !fan.exact ? (
           <p className={`m-0 text-[12px] font-semibold ${AMBER}`} data-testid="partners-ref-partial">{`Not every redemption is listed. ${partial.sub}`}</p>
         ) : null}
