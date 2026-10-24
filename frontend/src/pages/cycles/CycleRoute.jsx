@@ -56,9 +56,10 @@ import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { moduleToolLinks } from './founderToolNavigation.js';
-import { NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
+import { NarrativeHome, NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
 import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
 import { NarrativeAdminGate } from '../raise/narrative/NarrativeAdmin';
+
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
 const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
@@ -163,6 +164,13 @@ const CYCLE_DEFS = {
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
     parts: toFnMap({
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
+      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`.
+      'investor-narrative': (data, ctx) => (
+        <>
+          <NarrativeHome data={data} />
+          {mercuryPart('investor-narrative', data, ctx)}
+        </>
+      ),
       'capital-relationships': (data, ctx) => (
         <>
           <CallsHistory calls={data?.parts?.calls} />

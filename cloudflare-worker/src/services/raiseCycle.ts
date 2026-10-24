@@ -32,6 +32,7 @@ import { roundCallsEnabled } from './roundCallPolicy';
 import { peerBenchmark, type PeerBenchmark } from './peerBenchmark';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
+import { deckReaders, readBySentence } from './narrative/readers';
 
 export { recordQuery };
 export type { RecordQuery };
@@ -490,7 +491,13 @@ async function narrativeMetrics(env: Env, projectId: number) {
   return metrics;
 }
 
-export type VersionRow = { version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number; compared: number };
+export type VersionRow = {
+  version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number; compared: number;
+  /** D909: where the version started (`narrative_version_meta`), null when it was saved before 463 recorded it. */
+  start_from: string | null; based_on_version: number | null;
+  /** D909: who saved it, by name; null when no name is recorded. */
+  by: string | null;
+};
 
 export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
   const res = await ctx.env.DB.prepare(
@@ -505,8 +512,12 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
     'SELECT version, field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version > 0 AND field_key != ? ORDER BY version, field_key',
   ).bind(ctx.projectId, VERSION_MARKER_KEY).all<{ version: number; field_key: string; value: string }>();
   const meta = await ctx.env.DB.prepare(
-    'SELECT version, why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version > 0',
-  ).bind(ctx.projectId).all<{ version: number; why_now: string | null; check_against_json: string | null }>();
+    `SELECT m.version, m.why_now, m.check_against_json, m.start_from, m.based_on_version, u.name AS by_name
+       FROM narrative_version_meta m LEFT JOIN users u ON u.id = m.created_by
+      WHERE m.project_id = ? AND m.version > 0`,
+  ).bind(ctx.projectId).all<{ version: number; why_now: string | null; check_against_json: string | null; start_from: string | null; based_on_version: number | null; by_name: string | null }>();
+  const metaOf = new Map((meta.results || []).map((m) => [Number(m.version), m]));
+
   const stated = new Map<number, Stated[]>();
   for (const word of words.results || []) {
     const key = Number(word.version);
@@ -522,8 +533,27 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
     const metrics = (choices.get(Number(v.version)) || ['deck', 'metrics']).includes('metrics') ? commonMetrics : {};
     const values = stated.get(Number(v.version)) || [];
     const compared = values.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
-    return { ...v, compared, mismatches: consistencyCheck(values, metrics).length };
+    const m = metaOf.get(Number(v.version));
+    return {
+      ...v, compared, mismatches: consistencyCheck(values, metrics).length,
+      start_from: m?.start_from ?? null, based_on_version: m?.based_on_version == null ? null : Number(m.based_on_version),
+      by: String(m?.by_name ?? '').trim() || null,
+    };
   });
+}
+
+/**
+ * D909: where a version started, as the versions table and the Versions tab
+ * say it: "v1", "Blank", the live wording, or null (saved before 463 recorded
+ * it, which reads "Not recorded"). The live wording is the Spin-Out deck's, so
+ * a Spin-Out venture reads it by that name; any other venture's earlier
+ * versions copied it under today's name, "The live deck".
+ */
+export function basedOnLabel(v: Pick<VersionRow, 'start_from' | 'based_on_version'>, spinout: boolean): string | null {
+  if (v.start_from === 'version' && v.based_on_version != null) return `v${v.based_on_version}`;
+  if (v.start_from === 'blank') return 'Blank';
+  if (v.start_from === 'live') return spinout ? 'The Spin-Out deck wording' : 'The live deck';
+  return null;
 }
 
 export const fmtFigure = (f: FigureKey, v: number) => (f === 'paying_customers' ? Math.round(v).toLocaleString('en-US') : usd(v));
@@ -564,24 +594,66 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/**
+ * D909 (#2693, NAR1 and NAR12): what Home's tiles, "Needs you" and the
+ * Versions tab read, in one part of the module read (`parts.narrative`):
+ *   - `versions`: every saved version, newest first, with where it started,
+ *     when and by whom it was saved, and which cards of the current deck read
+ *     it (`services/narrative/readers.ts`);
+ *   - `newest`: the newest version's check, as the card states it: how many
+ *     figures were compared and each mismatch, figure by figure;
+ *   - `deck`: the current deck, and whether any of its cards reads a version;
+ *   - `spinout`: whether New version offers the Spin-Out deck wording.
+ * Claims backed (#2430) and Objections answered (#2457) have no store, so the
+ * part carries neither; the page says why.
+ */
+export async function narrativeHome(ctx: Ctx) {
+  const [versions, readers] = await Promise.all([loadVersions(ctx), deckReaders(ctx.env, ctx.projectId)]);
+  const newest = versions[0] ?? null;
+  const inputs = newest ? await checkInputs(ctx.env, ctx.projectId, newest.version) : null;
+  const found = inputs ? consistencyCheck(inputs.stated, inputs.metrics) : [];
+  return {
+    state: 'ok' as const,
+    versions: versions.map((v) => {
+      const cards = readers.deck ? readers.byVersion.get(Number(v.version)) ?? [] : [];
+      return {
+        version: Number(v.version), audience: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
+        based_on: basedOnLabel(v, readers.spinout), saved: day(v.saved_at), by: v.by,
+        read_by: cards.length ? { deck_version: readers.deck!.version, cards } : null,
+      };
+    }),
+    newest: newest && {
+      version: Number(newest.version), compared: inputs!.compared,
+      mismatches: found.map((m) => ({ figure: FIGURE_LABEL[m.figure], sentence: mismatchSentence(m) })),
+    },
+    deck: readers.deck && { version: readers.deck.version, reads_narrative: readers.byVersion.size > 0 },
+    spinout: readers.spinout,
+  };
+}
+
 async function narrativeRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const readers = await deckReaders(ctx.env, ctx.projectId);
   let rows = (await loadVersions(ctx)).filter((v) => has(rq.q, INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'], `v${v.version}`));
   if (rq.filter.investor_type) rows = rows.filter((v) => (v.investor_type ?? 'other') === rq.filter.investor_type);
   if (rq.sort === 'oldest') rows.reverse();
+  // D909 (NAR1): the canvas's columns less Claims backed, which waits for #2430's claim check.
   return paged(
-    [col('version', 'Version'), col('investor_type', 'Investor type'), col('deck', 'Deck use'), col('mismatches', 'Mismatches'), col('date', 'Date')],
+    [col('version', 'Version'), col('investor_type', 'Audience'), col('based_on', 'Based on'), col('mismatches', 'Mismatches'),
+      col('deck', 'Read by deck'), col('date', 'Saved'), col('by', 'By')],
     rows.map((v) => ({
       id: v.version,
       cells: {
         version: `v${v.version}`, investor_type: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
-        deck: 'No deck reads this version.',
+        based_on: basedOnLabel(v, readers.spinout),
         mismatches: { text: v.compared ? String(Number(v.mismatches)) : 'Nothing compared yet', tone: !v.compared ? 'muted' : Number(v.mismatches) ? 'warn' : 'ok' },
+        deck: readBySentence(readers, Number(v.version)),
         date: day(v.saved_at),
+        by: v.by,
       },
     })),
     rq.page,
     {
-      filters: [{ key: 'investor_type', label: 'Investor type', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
+      filters: [{ key: 'investor_type', label: 'Audience', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
       sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
     },
   );
