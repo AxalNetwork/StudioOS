@@ -295,7 +295,7 @@ const ADMIN = [
   own('/admin/contracts?tab=partner-deals', key(AD, 'Contracts', 'Partner deals')),
   own('/admin/contracts?tab=templates', key(AD, 'Contracts', 'Templates')),
   own('/admin/contracts?tab=forms', key(AD, 'Contracts', 'Forms')),
-  own('/admin/held/insights', key(AD, 'Insights')),
+  own('/admin/insights', key(AD, 'Insights')),
   alias('/branch/insights', key(AD, 'Insights'), 'The branch’s Insights page and its analytics.'),
   // D796 (#2229): the Admin's "Settings" board is "Licences"; runs logged before keep `Admin · Settings`.
   own('/admin/my-licence', key(AD, 'Licences')),
