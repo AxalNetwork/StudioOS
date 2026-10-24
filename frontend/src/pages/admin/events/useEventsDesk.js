@@ -8,7 +8,7 @@ import { PAGE_LIMIT, isEventId, readEveryPage } from './eventsDeskModel';
  * the others answering (D915 §2):
  *   queue      R1 with `status=pending_review`, every page: the Review tab and
  *              the tab strip's count;
- *   all        R1, every page: Overview and All events;
+ *   all        R1, every page: Overview, All events and Calendar;
  *   analytics  R2's per-event rows, joined under Guard G by the model;
  *   event      R3, one event's page;
  *   agenda     R5, that event's agenda.
@@ -49,7 +49,7 @@ const pages = (status) => readEveryPage((offset) => adminEvents.list({ status, l
 
 export function useEventsDesk(tab, eventId) {
   const [tick, setTick] = useState(0);
-  const wantAll = tab === 'overview' || tab === 'all';
+  const wantAll = tab === 'overview' || tab === 'all' || tab === 'calendar';
   const wantEvent = tab === 'event' && isEventId(eventId);
   const withList = `${tick}:${wantAll}`;
   const queue = useRead('queue', 'queue', withList, true, () => pages('pending_review'));

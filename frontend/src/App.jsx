@@ -2856,6 +2856,7 @@ function AppInner() {
       {/* D915 (#2368): the Events desk's tabs and one page per event, behind the same guard; the static paths sit before `:id`. */}
       <Route path="/admin/events/review" element={guard(['admin'], <AdminEventsPage />)} />
       <Route path="/admin/events/all" element={guard(['admin'], <AdminEventsPage />)} />
+      <Route path="/admin/events/calendar" element={guard(['admin'], <AdminEventsPage />)} />
       <Route path="/admin/events/:id" element={guard(['admin'], <AdminEventsPage />)} />
       <Route path="/admin/jobs" element={guard(['admin'], <AdminJobsPage />)} />
       <Route path="/admin/circles" element={guard(['admin'], <AdminCirclesPage />)} />
