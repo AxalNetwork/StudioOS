@@ -629,9 +629,14 @@ test('portfolio-updates GET /:uid — founder cannot read other founder\'s updat
   assert.equal(res.status, 403);
 });
 
-test('portfolio-updates GET /:uid — related investor can read submitted update (200)', async () => {
+test('portfolio-updates GET /:uid — related investor can read submitted update its founder sent to investors (200)', async () => {
   const token = await mintToken(1, 'investor');
   const env = makeEnv(mkUser(1, 'investor'), [
+    // D889 (#2438): the founder's investor grant (audience_json or a recorded recipient), read for this update.
+    {
+      match: (s: string) => s.includes('select 1 as ok from portfolio_updates where id'),
+      results: [{ ok: 1 }],
+    },
     {
       match: (s: string, b: any[]) => s.includes('from portfolio_updates') && s.includes('where uid'),
       results: [{ id: 1, uid: 'pu-1', project_id: 20, author_user_id: 5, period: '2026-06', title: 'Submitted', body: 'Done', kpis_json: null, status: 'submitted', submitted_at: '2026-06-15', created_at: '2026-06-01', updated_at: '2026-06-15' }],

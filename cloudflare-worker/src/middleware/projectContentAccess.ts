@@ -24,9 +24,9 @@ export async function projectOwned(c: Context, user: User, projectId: number, op
     if (!await findableBy(c.env, user, project.id)) throw new Error('NotFound');
     throw new Error('Forbidden');
   }
-  // projectAccess's broad partner rule is tracked by #2438. These two
-  // management surfaces require an explicit accepted project membership for
-  // every non-owner; an advisor remains read-only, including a partner account.
+  // These two management surfaces require an explicit accepted project
+  // membership for every non-owner (canAccessProject does too since D889,
+  // #2438); an advisor remains read-only, including a partner account.
   const owner = user.role === 'founder' && !!user.founder_id && user.founder_id === project.founder_id;
   if (!owner) {
     const role = await getProjectMembershipRole(c.env, project.id, user.id);
