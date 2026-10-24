@@ -177,9 +177,13 @@ test('NAR14b: a founder refused another venture\'s narrative reads that it belon
 test('the routes and CycleRoute: NAR14a for the other profiles, and no write of any kind for an admin', () => {
   // Mutation checked: `add={narrativeAdmin ? undefined :` removed → the Add check fails.
   const app = read('frontend/src/App.jsx');
-  assert.match(app, /<Route path="\/raise\/investor-narrative" element=\{guard\(labRoles\(\['admin', 'founder', 'investor', 'advisor', 'partner', 'exploring'\]\),\s+NARRATIVE_BOUNDARY_ROLES\.has\(effectiveRole\) && user\?\.spinout_lab_active !== 1 \? <NarrativeBoundary \/> : <CycleRoute cycle="raise" slug="investor-narrative" \/>\)\} \/>/);
-  assert.match(app, /<Route path="\/raise\/investor-narrative\/:id" element=\{guard\(labRoles\(\['admin', 'founder', 'investor', 'advisor', 'partner', 'exploring'\]\),\s+NARRATIVE_BOUNDARY_ROLES\.has\(effectiveRole\)/);
-  assert.match(app, /<Route path="\/raise\/investor-narrative\/new" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="raise" slug="investor-narrative" adding \/>\)\} \/>/);
+  // No route is added (D906) and no guard changes: RoleGuard draws the boundary where it would have redirected.
+  assert.doesNotMatch(app, /path="\/raise\/investor-narrative/);
+  assert.match(app, /<Route path="\/raise\/:slug" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="raise" \/>\)\} \/>/);
+  assert.match(app, /\{ under: \/\^\\\/raise\\\/investor-narrative\(\\\/\|\$\)\/, roles: NARRATIVE_BOUNDARY_ROLES, Panel: NarrativeBoundary \}/);
+  const guard = app.slice(app.indexOf('function RoleGuard('), app.indexOf('function AuthScreen('));
+  assert.ok(guard.indexOf('if (boundary) return <boundary.Panel />;') > 0 && guard.indexOf('if (boundary) return <boundary.Panel />;') < guard.indexOf('<Navigate to={defaultPath} replace />'),
+    'the boundary is drawn instead of the redirect, only for a refused role');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin\(user\);/);
   assert.match(route, /const drafts = !record && slug && !narrativeAdmin && /);

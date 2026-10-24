@@ -20,7 +20,8 @@ import {
  *                       the founder answers. Each post opens a dialog first.
  *   NarrativeReads      the founder's list of who read the narrative, and why.
  *   NarrativeBoundary   NAR14a: Investors, Advisors, Operating Partners and
- *                       Explorers read the boundary, never a bounce.
+ *                       Explorers read the boundary, never a bounce (drawn by
+ *                       App.jsx's RoleGuard where it would have redirected).
  *   NarrativeOtherVenture  NAR14b: a founder who opened another venture's narrative.
  *
  * The Worker enforces all of it (`services/narrative/adminRead.ts`); these

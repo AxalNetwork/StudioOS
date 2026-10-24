@@ -1821,9 +1821,21 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
   );
 }
 
+/**
+ * D914 (#2698), NAR14a: a page some profiles are not for draws its boundary,
+ * inside their own shell, instead of RoleGuard's redirect. The route's guard
+ * is unchanged; only who is refused is told why.
+ */
+const ROUTE_BOUNDARIES = [
+  { under: /^\/raise\/investor-narrative(\/|$)/, roles: NARRATIVE_BOUNDARY_ROLES, Panel: NarrativeBoundary },
+];
+
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
+  const { pathname } = useLocation();
   const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);
   if (!allowedRoles.includes(effectiveRole)) {
+    const boundary = ROUTE_BOUNDARIES.find((b) => b.under.test(pathname) && b.roles.has(effectiveRole));
+    if (boundary) return <boundary.Panel />;
     // Task #102 — impersonation handoff. When an admin starts impersonating
     // from an admin-only route (e.g. /admin/spinout-lab → "Open workspace"),
     // this guard re-renders with the impersonated role BEFORE the caller's
@@ -3497,15 +3509,6 @@ function AppInner() {
       {/* D686 §5.1: Call for Capital, the Raise page with its lightbox open; /raise/calls is the history's address. */}
       <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />
       <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
-      {/* D914 (#2698), NAR14a: an Investor, an Advisor, an Operating Partner or an
-          Explorer opening the Investor narrative reads its boundary inside their own
-          shell, never a bounce; nothing of any narrative is read. Founders and
-          admins get the module as on every other Raise address. */}
-      <Route path="/raise/investor-narrative" element={guard(labRoles(['admin', 'founder', 'investor', 'advisor', 'partner', 'exploring']),
-        NARRATIVE_BOUNDARY_ROLES.has(effectiveRole) && user?.spinout_lab_active !== 1 ? <NarrativeBoundary /> : <CycleRoute cycle="raise" slug="investor-narrative" />)} />
-      <Route path="/raise/investor-narrative/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="investor-narrative" adding />)} />
-      <Route path="/raise/investor-narrative/:id" element={guard(labRoles(['admin', 'founder', 'investor', 'advisor', 'partner', 'exploring']),
-        NARRATIVE_BOUNDARY_ROLES.has(effectiveRole) && user?.spinout_lab_active !== 1 ? <NarrativeBoundary /> : <CycleRoute cycle="raise" slug="investor-narrative" record />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       <Route path="/raise/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" record />)} />
       <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />
