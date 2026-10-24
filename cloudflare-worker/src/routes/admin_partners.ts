@@ -8,6 +8,8 @@
  *   POST   /invitations            — create + email a partner invitation
  *   GET    /invitations            — list invitations: search, filters, sort, pages, total (D926)
  *   GET    /invitations/lookup     — an open invitation and a member for one address (D926)
+ *   (D927: GET /overview, GET /invitations/:id and GET /offers/preview are in
+ *   admin_partners_reads.ts, mounted beside this router.)
  *   POST   /invitations/:id/resend — re-send the magic-link email
  *   POST   /invitations/:id/revoke — revoke an unsigned invitation
  *   GET    /deals                  — list deals: states, search, filters, sort, pages, total (D926)
@@ -325,10 +327,14 @@ admin_partners.post('/invitations/:id/resend', async (c) => {
     `UPDATE partner_invitations SET last_sent_at = ?, send_count = send_count + 1, last_send_ok = ?, last_send_reason = ? WHERE id = ?`,
   ).bind(new Date().toISOString(), emailSent ? 1 : 0, sendResult.reason, id).run();
 
+  // D927: say whether the pending signing link was renewed. null: no partner
+  // signature was pending, so the onboarding email went instead. not_renewed:
+  // the renewal email failed and the link already in the inbox was restored.
+  const signingLink: 'renewed' | 'not_renewed' | null = renewed ? (renewed.ok ? 'renewed' : 'not_renewed') : null;
   await logAdminAction(c.env, admin.id, admin.email, 'partner_invitation_resent', {
-    invitation_id: id, email_sent: emailSent,
+    invitation_id: id, email_sent: emailSent, signing_link: signingLink,
   });
-  return c.json({ ok: true, email_sent: emailSent, link, expires_at: newExpires });
+  return c.json({ ok: true, email_sent: emailSent, link, expires_at: newExpires, signing_link: signingLink });
 });
 
 admin_partners.post('/invitations/:id/revoke', async (c) => {

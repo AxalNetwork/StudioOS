@@ -218,17 +218,17 @@ export const SIDEBAR_GROUPS = {
   admin: [
     { key: 'admin', label: 'Admin', items: [
       { to: '/studio', icon: LayoutDashboard, label: 'Studio' },
-      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/exploring', '/admin/trash'] },
+      { to: '/admin/held/accounts', icon: Users, label: 'Accounts', match: ['/admin/exploring', '/admin/trash', '/admin/persona-segments'] },
       // D506 — the Spin-Out moderation console joined the lanes Approvals
       // leads to (lane 4 links it), so the row stays lit inside it. `match`
       // is the complete statement of what the row owns (SidebarNav), so a
       // door the landing draws without a `match` entry lights no row.
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
-        match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation'] },
+        match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation', '/admin/partner-profiles'] },
       { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
-        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
+        match: ['/admin/programs/spinout-lab', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
       // D930 (#2367): Community's own address; /admin/held/community redirects here.
-      { to: '/admin/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/partner-invitations'] },
+      { to: '/admin/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/partner-invitations', '/admin/advisors-partners'] },
 
       // D647 — the shared Contracts page and template library. Not "read-only":
       // `requireHqAuthoring` refuses only on a branch, so a plain HQ admin

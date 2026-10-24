@@ -222,14 +222,14 @@ test('Billing: a failed disputes read draws Unreadable, never "No disputes loade
 // ── The shell fetches only the open console's data ──────────────────────────
 const OWN = {
   users: ['adminListUsers', 'trustScoreBatch'],
-  profiles: ['adminListProfiles'],
+  // D989 (#2380): ?tab=profiles forwards to /admin/partner-profiles before this page mounts.
   kyc: ['kycAdminQueue'],
-  personas: ['listPersonasAdmin'],
+  // D997 (#2378): ?tab=personas forwards to /admin/persona-segments before this page mounts.
   directory: ['adminListDirectoryPartners'],
   // Integration keys and GitHub Sync left the console for HQ's own page
   // (the owner's ruling, 2026-10-20); `integration_keys_hq_only.test.mjs`.
   promos: ['adminListPromos', 'catalogProducts'],
-  payments: ['adminCatalogList', 'adminStripeGetConfig', 'adminStripeListWebhooks'],
+  // D1008 (#2386): ?tab=payments forwards to /admin/platform/payments before this page mounts.
   wellbeing: ['wellbeingExperts'],
 };
 /** The reads every tab used to make before it rendered anything. */
@@ -272,9 +272,10 @@ test('HQ · Accounts mounts the Users console alone, not the whole Admin Console
 
 test('D647: Contracts has a real formation-orders destination and no dead Incorporation tab', () => {
   const markup = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(LegalPanel)));
-  assert.match(markup, /href="\/admin\/spinout-lab"/);
+  // D937 (#2374): the Lab's Formation tab, at the Lab's own address.
+  assert.match(markup, /href="\/admin\/programs\/spinout-lab\/formation"/);
   assert.match(markup, /Programs › Spin-Out Lab/);
-  assert.match(markup, /Open its Formation orders tab/);
+  assert.match(markup, /on its Formation tab/);
   assert.doesNotMatch(markup, /legal-sub-incorporation|legal-incorporation-placeholder|Incorporation packets will appear/);
 });
 

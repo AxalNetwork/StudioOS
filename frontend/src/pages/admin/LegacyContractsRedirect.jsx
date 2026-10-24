@@ -9,6 +9,16 @@ const MOVED_TABS = {
   legal: '/admin/contracts?moved=legal',
   'integration-keys': '/admin/integration-keys',
   github: '/admin/integration-keys#github',
+  // D937 (#2374): the Spin-Out Lab left the Admin Console for Programs.
+  'lab-applications': '/admin/programs/spinout-lab/applications?moved=lab-applications',
+  // D972 (#2369): the roster is the Deck roster tab of Advisors & Partners.
+  'network-profiles': '/admin/advisors-partners/deck?moved=network-profiles',
+  // D989 (#2380): Partner profiles has its own address under Approvals.
+  profiles: '/admin/partner-profiles?moved=profiles',
+  // D997 (#2378): Persona segments has its own address (Accounts; HQ: Content).
+  personas: '/admin/persona-segments?moved=personas',
+  // D1008 (#2386): Payments has its own address under Platform, HQ only.
+  payments: '/admin/platform/payments?moved=payments',
 };
 
 export function legacyContractsTarget(search) {

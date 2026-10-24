@@ -118,8 +118,11 @@ test('/admin draws the frame once around its tabs, each named for its board in D
   // Every board on an /admin tab, of either profile, is hosted by AdminPage.
   const tabbed = [...ADMIN_BOARDS.map((b) => ['admin', b]), ...SUPER_ADMIN_BOARDS.map((b) => ['super_admin', b])]
     .filter(([, b]) => b.route.startsWith('/admin?tab='));
-  // H27 and H28 left with the keys for HQ's own page (the owner's ruling, 2026-10-20).
-  assert.deepEqual(tabbed.map(([, b]) => b.id), ['S2', 'S6', 'S7', 'S28', 'S29', 'S30', 'H11', 'H22', 'H23', 'H24', 'H29', 'H30']);
+  // H27 and H28 left with the keys for HQ's own page (the owner's ruling, 2026-10-20);
+  // S29 and H23 for Advisors & Partners' own page (D972, #2369); S7 for
+  // Partner profiles' own page (D989, #2380); H22 for Persona segments' own
+  // page (D997, #2378); H29 for Payments' own page (D1008, #2386).
+  assert.deepEqual(tabbed.map(([, b]) => b.id), ['S2', 'S6', 'S28', 'S30', 'H11', 'H24', 'H30']);
   const code = codeOnly(read(ADMIN_PAGE));
   for (const [role, b] of tabbed) {
     assert.equal(b.host, ADMIN_PAGE, `${b.id} is not hosted by AdminPage`);
@@ -148,7 +151,8 @@ test('on /admin a plain admin and a Super Admin each get the rail of their tier,
   const CASES = [
     [{ id: 902, role: 'admin', is_super_admin: 0 }, '/admin?tab=kyc', 'admin-board-rail', 'Identity checks'],
     [{ id: 902, role: 'admin', is_super_admin: 0 }, '/admin', 'admin-board-rail', 'Users'],
-    [{ id: 901, role: 'admin', is_super_admin: 1 }, '/admin?tab=personas', 'hq-board-rail', 'Personas'],
+    // D997 (#2378): Personas left for /admin/persona-segments; Directory is HQ's tab board here now.
+    [{ id: 901, role: 'admin', is_super_admin: 1 }, '/admin?tab=directory', 'hq-board-rail', 'Directory'],
     [{ id: 902, role: 'admin', is_super_admin: 0 }, '/admin?tab=lab-applications', null, null],
   ];
   try {

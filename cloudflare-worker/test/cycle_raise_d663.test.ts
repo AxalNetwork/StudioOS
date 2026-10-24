@@ -1,3 +1,4 @@
+import { raiseEvidenceTables } from './_raise_evidence_fixture.ts';
 /**
  * D663 (#1476) — `/api/cycles/raise` on real SQLite: the baseline's own
  * tables, migration 442 applied over them, the routes mounted on a bare Hono.
@@ -55,6 +56,7 @@ function fixture() {
   db.exec(sqlOf('249_project_metrics.sql'));
   db.exec(MIG442);
   db.exec(MIG463);
+  raiseEvidenceTables(db);
   personalMatchTables(db); // D752: Capital relationships reads a raise receipt's posted date
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, founder_id) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(FOUNDER, 'founder', 'Fay Founder', 'fay@example.test', 1001);
@@ -162,8 +164,9 @@ test('readiness with no items returns empty, with the action that starts it', as
   assert.equal(bars.items.length, 7);
   assert.equal(bars.items.find((i: any) => i.label === 'Use of funds').value, 10);
   assert.equal(bars.items.find((i: any) => i.label === 'Team').value, null, 'no check measures the team: Not recorded, never 0');
-  // Mean of the six computed scores (use of funds 10, the rest 0) out of 100.
-  assert.equal(fig((await overview(db)).body, 'readiness_score').value, Math.round((10 / 6) * 10));
+  assert.equal(bars.items.find((i: any) => i.label === 'Investor narrative').value, null, 'nothing compared is unscored');
+  // The narrative has no comparison and stays unscored; mean of five numeric checks.
+  assert.equal(fig((await overview(db)).body, 'readiness_score').value, Math.round((10 / 5) * 10));
   // D691 decision 12: one row on each re-scored item's record.
   assert.deepEqual(db.prepare("SELECT entity_id FROM activity_logs WHERE entity_type = 'raise.fundraising-readiness' AND action = 'readiness_rescored' AND user_id = ? ORDER BY entity_id").all(FOUNDER).map((r: any) => r.entity_id),
     ['cap_table', 'data_room', 'deck', 'narrative', 'traction', 'use_of_funds']);
@@ -217,14 +220,14 @@ test('every mismatch cites both of its figures', async () => {
     assert.ok(Number.isFinite(m.stated_value) && Number.isFinite(m.metric_value), 'both values');
     assert.ok(m.stated_source && m.metric_source && m.stated_source !== m.metric_source, 'both sources, and they differ');
   }
-  assert.equal(found.find((m: any) => m.stated_value === 45000).metric_source, 'Metrics · project_metrics.mrr on 2026-10-01', 'the newest snapshot');
+  assert.equal(found.find((m: any) => m.stated_value === 45000).metric_source, 'Metrics (stated: manual) · project_metrics.mrr on 2026-10-01', 'the newest snapshot');
   // Stored for the version, and drawn on the card as a sentence naming both sides.
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = 1').get(P).n, 3);
   const c = card((await overview(db)).body, 'investor-narrative');
   const lines = c.series.find((s: any) => s.kind === 'rows').items.filter((i: any) => i.tone === 'warn' && i.label !== 'Comparison');
   assert.equal(lines.length, 3);
   for (const l of lines) assert.match(String(l.value), /^.+ in .+, .+ in .+$/);
-  assert.ok(lines.some((l: any) => l.value === 'MRR: $45,000 in Narrative · traction.takeaway, $38,000 in Metrics · project_metrics.mrr on 2026-10-01'));
+  assert.ok(lines.some((l: any) => l.value === 'MRR: $45,000 in Narrative · traction.takeaway, $38,000 in Metrics (stated: manual) · project_metrics.mrr on 2026-10-01'));
   assert.equal(c.next.href, `/raise/investor-narrative/check?project_id=${P}`);
   // The version is the deck wording copied, plus its marker; the live wording is untouched.
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM spinout_deck_overrides WHERE project_id = ? AND version = 0').get(P).n, 2);
@@ -383,6 +386,7 @@ test('funnelOf counts each prospect at every stage it reached', () => {
 
 test('data room: checklist coverage by area, a file matched through the writer, views by user', async () => {
   const db = fixture();
+  db.exec(`INSERT INTO data_room_grants(uid,project_id,investor_user_id,granted_by_user_id) VALUES('grant-live',${P},${INVESTOR},${FOUNDER}); INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,status) VALUES(${FOUNDER},${INVESTOR},'active')`);
   db.exec(`INSERT INTO data_room_folders (id, uid, project_id, name) VALUES (1, 'f1', ${P}, 'Legal')`);
   db.exec(`INSERT INTO data_room_files (id, uid, project_id, folder_id, name, r2_key, visibility) VALUES
            (1, 'x1', ${P}, 1, 'COI.pdf', 'k1', 'nda'), (2, 'x2', ${P}, NULL, 'Model.xlsx', 'k2', 'open')`);
@@ -449,7 +453,7 @@ test('use of funds: the split, cash over 18 months, and monthly per category not
 test('committed against target: the pair when a round has a target', async () => {
   const db = fixture();
   db.exec(`INSERT INTO raise_rounds (uid, project_id, name, target_amount, status) VALUES ('r1', ${P}, 'Seed', 1000000, 'active')`);
-  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, stage, amount) VALUES ('a', ${P}, 'A', 'committed', 250000), ('b', ${P}, 'B', 'meeting', 400000)`);
+  db.exec(`INSERT INTO raise_prospects (uid, project_id, name, stage, commit_status, amount) VALUES ('a', ${P}, 'A', 'committed', 'signed', 250000), ('b', ${P}, 'B', 'meeting', NULL, 400000)`);
   const f = fig((await overview(db)).body, 'committed');
   assert.deepEqual([f.unit, f.value], ['of', [250000, 1000000]]);
 });

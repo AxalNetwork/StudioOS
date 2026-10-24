@@ -249,9 +249,10 @@ const CHROME = (() => {
  * run short.
  */
 const SECOND_MOUNTS = new Map([
-  // The Admin Console's own tabs. These two are also the `same-component-elsewhere`
-  // exemptions, so one table feeds both and they cannot disagree.
-  ['frontend/src/pages/AdminPage.jsx', ['AdminNetworkProfiles', 'AdminSpinoutLab']],
+  // The Admin Console's own tabs stood here, and fed the `same-component-elsewhere`
+  // exemptions.
+  // D937 (#2374) and D972 (#2369): AdminSpinoutLab and AdminNetworkProfiles
+  // left the console; their tabs forward to their own pages before it mounts.
   // The founder-journey walkthrough renders the real apply page on simulated data
   // (its own comment at AdminSpinoutLab.jsx:743-745 describes the read-only tour).
   ['frontend/src/pages/admin/AdminSpinoutJourneyPreview.jsx', ['SpinoutLabApplyPage']],
@@ -265,8 +266,18 @@ const SECOND_MOUNTS = new Map([
  * file, not in AdminPage.jsx. HQ's Accounts page mounts the Users console
  * alone. Checked against the hosts' own imports below, so it cannot drift.
  */
+const PROFILES_CONSOLE = 'frontend/src/pages/admin/consoles/PartnerProfilesConsole.jsx';
+const PERSONAS_CONSOLE = 'frontend/src/pages/admin/consoles/PersonasConsole.jsx';
+const PAYMENTS_CONSOLE = 'frontend/src/pages/admin/consoles/PaymentsConsole.jsx';
 const COMPOSED = new Map([
-  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx' && !HQ_KEYS_CONSOLE_FILES.includes(f))],
+  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx' && !HQ_KEYS_CONSOLE_FILES.includes(f) && f !== PROFILES_CONSOLE && f !== PERSONAS_CONSOLE && f !== PAYMENTS_CONSOLE)],
+  // D989 (#2380): Partner profiles left the console for its own page, which
+  // opens the console's review dialog until its part 6 redraws it.
+  ['frontend/src/pages/admin/profiles/PartnerProfiles.jsx', [PROFILES_CONSOLE]],
+  // D997 (#2378): Persona segments keeps today's re-tag table until its part 8.
+  ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [PERSONAS_CONSOLE]],
+  // D1008 (#2386): Payments opens today's editor on request until its parts 4 to 6.
+  ['frontend/src/pages/admin/payments/Payments.jsx', [PAYMENTS_CONSOLE]],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
   ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],
@@ -385,17 +396,9 @@ const EXEMPT = [
        + 'X_CLIENT_ID/SECRET are bound on the prod worker (sidebarConfig.js, beside '
        + 'the Telegram row).',
   },
-  {
-    path: '/admin/network-profiles',
-    kind: 'same-component-elsewhere',
-    host: '/admin',
-    tab: 'network-profiles',
-    // Copied verbatim from ONE physical line of AdminPage.jsx, above the
-    // AdminNetworkProfiles import. Tested below (`adminPage.includes(e.cites)`).
-    cites: '/admin/network-profiles route stays wired for direct deep-links',
-    why: 'AdminPage.jsx records that this standalone route stays wired for direct '
-       + 'deep links; the roster itself is reached at /admin?tab=network-profiles.',
-  },
+  // `/admin/network-profiles`'s entry was deleted in D972 (#2369): the route
+  // forwards to Advisors & Partners' Deck roster now, so it is a redirect, not
+  // a page with no door.
   // `/admin/spinout-lab`'s entry was DELETED IN D140, by this guard's own rule:
   // `BranchPrograms` links to it as the console where grace and override are
   // actually decided, so the route has a real door and an exemption claiming it
@@ -484,7 +487,7 @@ test('every in-page /admin link points at a registered route', () => {
 test('a redirect-only /admin route is excluded, and its target is reachable', () => {
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
-  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/community', '/admin/held/insights', '/admin/news'],
+  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
@@ -493,6 +496,11 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   const COMPONENT_TARGETS = {
     HeldInsightsRedirect: ['/admin/insights', 'frontend/src/pages/admin/insights/insightsModel.js', 'INSIGHTS_PATH'],
     HeldCommunityRedirect: ['/admin/community', 'frontend/src/pages/admin/community/communityModel.js', 'COMMUNITY_PATH'],
+    // D937 (#2374): the Lab and its preview moved under Programs.
+    LabRedirect: ['/admin/programs/spinout-lab', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PATH'],
+    LabPreviewRedirect: ['/admin/programs/spinout-lab/preview', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PREVIEW_PATH'],
+    // D972 (#2369): the roster is Advisors & Partners' Deck roster tab.
+    ApRedirect: ['/admin/advisors-partners/deck', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_DECK_PATH'],
   };
   for (const path of REDIRECTS) {
     const route = BY_PATH.get(path);
@@ -660,18 +668,14 @@ test('D648: every composed console file is imported by the page it is credited t
   }
 });
 
-test('the Spin-Out Lab preview button renders in both framings', () => {
-  // The one place file-level attribution over-approximates: the scanner sees the
-  // door in the file and cannot see a conditional around it. If the button moved
-  // inside `{standalone && …}` it would only exist on a route that has no row,
-  // and nothing else here would notice.
-  const src = read('frontend/src/pages/admin/AdminSpinoutLab.jsx');
-  assert.match(src, /if \(!standalone\) return body;/,
-    'AdminSpinoutLab no longer returns `body` in the embedded framing');
-  const bodyAt = src.indexOf('const body = (');
-  const buttonAt = src.indexOf("navigate('/admin/spinout-lab/preview')");
-  const returnAt = src.indexOf('if (!standalone) return body;');
-  assert.ok(bodyAt >= 0 && buttonAt > bodyAt && buttonAt < returnAt,
-    'the preview button is no longer inside `body`, so it does not render in the '
-    + '/admin?tab=lab-applications framing and /admin/spinout-lab/preview loses its door');
+test('the Spin-Out Lab preview door is in the Lab header on every tab', () => {
+  // D937 (#2374): the preview's one door is the Lab header's action, drawn on
+  // every tab. File-level attribution cannot see a condition around it, so
+  // this pins that it is not inside the Overview-only actions.
+  const src = read('frontend/src/pages/admin/lab/AdminLab.jsx');
+  const actionsAt = src.indexOf('const actions = (');
+  const doorAt = src.indexOf('to="/admin/programs/spinout-lab/preview"');
+  const overviewOnlyAt = src.indexOf("{tab === 'overview' && (", actionsAt);
+  assert.ok(actionsAt >= 0 && doorAt > actionsAt && doorAt < overviewOnlyAt,
+    'the preview door is no longer an unconditional header action, so /admin/programs/spinout-lab/preview may lose its door');
 });

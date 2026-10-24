@@ -67,6 +67,7 @@ function Meter({ meter, children }) {
           <div className="h-full rounded-full bg-violet-700 dark:bg-violet-400" style={{ width: `${meter.pct}%` }} />
         </div>
       )}
+      {meter.detail && <p className="mt-2 text-[11.5px] text-gray-600 dark:text-gray-400" data-testid="phone-meter-detail">{meter.detail}</p>}
       {children}
     </div>
   );
