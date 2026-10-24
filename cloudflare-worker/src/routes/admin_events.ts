@@ -20,6 +20,9 @@ import { shapeEvent } from '../services/eventsCommon';
 import { mintCompInvitations, parseAudienceRules } from '../services/eventAudience';
 import { deliverEventInvite } from '../services/eventMessaging';
 import { promoteWaitlist, type EventSeatRow } from '../services/eventCapacity';
+import {
+  OVERVIEW_WEEKS, parseListQuery, readCompPreview, readEventHistory, readEventList, readEventSummary, readOverview,
+} from '../services/adminEventsReads';
 
 const adminEvents = new Hono<{ Bindings: Env }>();
 
@@ -91,21 +94,34 @@ function intParam(v: string | undefined): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-// ── GET / — admin event queue / list ───────────────────────────────────────
+// ── GET / — the paged list (D918) ──────────────────────────────────────────
+// Today's fields per event, plus its counts, host line, venture and clash flag.
+// Filters: status (several, comma-separated or repeated), visibility, when,
+// price, featured, q (title, host, venture). Sorts: starts, created,
+// seats_taken, fill, show_up, waiting. With no sort, newest created first.
 adminEvents.get('/', async (c) => {
   const a = await admin(c);
   if (a instanceof Response) return a;
-  const status = c.req.query('status');
-  const limit = Math.min(Number(c.req.query('limit') || 50) || 50, 200);
-  const offset = Math.max(Number(c.req.query('offset') || 0) || 0, 0);
-  const where: string[] = [];
-  const binds: unknown[] = [];
-  if (status) { where.push('status = ?'); binds.push(status); }
-  const rows = await c.env.DB.prepare(
-    `SELECT * FROM events ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-       ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-  ).bind(...binds, limit, offset).all();
-  return c.json({ events: (rows.results || []).map((r) => shapeEvent(r, { includePrivate: true })) });
+  const query = parseListQuery((k) => c.req.query(k), (k) => c.req.queries(k));
+  if ('error' in query) return c.json({ error: query.error }, 400);
+  const list = await readEventList(c.env, query);
+  return c.json({
+    events: list.rows.map(({ row, counts }) => ({ ...shapeEvent(row, { includePrivate: true }), ...counts })),
+    total: list.total,
+    limit: list.limit,
+    offset: list.offset,
+  });
+});
+
+// ── GET /overview?weeks=4|12|52 — the Overview tab's one read (D918) ───────
+// MUST stay registered before GET /:id, like /analytics below.
+adminEvents.get('/overview', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const raw = c.req.query('weeks');
+  const weeks = raw == null || raw === '' ? 12 : Number(raw);
+  if (!(OVERVIEW_WEEKS as readonly number[]).includes(weeks)) return c.json({ error: 'invalid_weeks' }, 400);
+  return c.json(await readOverview(c.env, weeks));
 });
 
 // ── GET /analytics — portfolio-wide event metrics ──────────────────────────
@@ -210,6 +226,39 @@ adminEvents.get('/:id', async (c) => {
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
   return c.json({ event: shapeEvent(event, { includePrivate: true }) });
+});
+
+// ── GET /:id/summary — one event's counts, no names (D918) ─────────────────
+adminEvents.get('/:id/summary', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  return c.json(await readEventSummary(c.env, event));
+});
+
+// ── GET /:id/history — the desk's actions and the host's, actors unnamed ──
+adminEvents.get('/:id/history', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  return c.json({ event_id: id, history: await readEventHistory(c.env, event) });
+});
+
+// ── GET /:id/comp-preview — what approve would invite; mints nothing ──────
+adminEvents.get('/:id/comp-preview', async (c) => {
+  const a = await admin(c);
+  if (a instanceof Response) return a;
+  const id = intParam(c.req.param('id'));
+  if (!id) return c.json({ error: 'not_found' }, 404);
+  const event = await loadEvent(c.env, id);
+  if (!event) return c.json({ error: 'not_found' }, 404);
+  return c.json(await readCompPreview(c.env, event));
 });
 
 // ── POST /:id/approve — publish to the public feed ─────────────────────────

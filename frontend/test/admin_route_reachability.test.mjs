@@ -283,6 +283,7 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/events/EventsOverview.jsx',
     'frontend/src/pages/admin/events/EventsReview.jsx',
     'frontend/src/pages/admin/events/EventsAll.jsx',
+    'frontend/src/pages/admin/events/EventsCalendar.jsx',
     'frontend/src/pages/admin/events/EventPage.jsx',
   ]],
   // D923 (2026-10-24, #2370): Partner invitations draws its tabs, its records
