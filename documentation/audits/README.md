@@ -17,6 +17,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | `SECURITY_AUDIT.md`, `SECURITY_REVIEW.md` | Security passes. |
 | `BROKEN_FEATURES_VERIFIED.md` | Features confirmed broken at the time of writing. |
 | `DECK_AUTOFILL_AUDIT.md`, `AXAL_SPINOUT_DECK_AUDIT_2026-05-30.md` | Pitch-deck data wiring. |
+| `PITCH_DECK_WORKER_MAP_2026-10-24.md` | Every deck endpoint against the Pitch deck studio canvas's boards, and the twelve #2434 bugs on that day (D894). |
 | `SPINOUT_LAB_UI_FIDELITY_AUDIT_2026-08-03.md` | Lab UI against its designs. |
 | `SIGNUP_FRICTION_AUDIT_2026-07-08.md` | Signup funnel friction. |
 | `DOCS_VISIBILITY_AUDIT.md` | Help Center coverage. |

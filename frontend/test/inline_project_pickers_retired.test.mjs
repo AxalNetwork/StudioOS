@@ -67,7 +67,7 @@ const FROM_URL = [
   'pages/founder/FounderRaiseCapital.jsx',
   'pages/founder/FounderRaiseDataRoom.jsx',
   'pages/founder/FounderRaiseLegal.jsx',
-  'pages/founder/FounderRaisePitch.jsx',
+  'pages/raise/pitch/PitchStudio.jsx',
   'pages/founder/FounderRaiseStatus.jsx',
   'pages/raise/DataRoomPage.jsx',
   // #2443: an explicit venture replaces the legacy first-fetched fallback.

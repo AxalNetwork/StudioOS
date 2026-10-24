@@ -210,26 +210,6 @@ export const FOUNDER_ZONE_ACTIONS = {
     { label: 'Export brief', kind: 'export' },
     { label: 'Share war-room', unbuilt: 'no share link is issued for this view' },
   ],
-  'raise/pitch': [
-    { label: 'New version', to: '/raise/pitch?mode=workspace' },
-    { label: 'Export PDF', to: '/raise/pitch?mode=workspace' },
-    // THIS WAS A REFUSAL AND IS NOW A LINK — task #196 built the thing it said
-    // did not exist, so the refusal became the false statement it was written to
-    // avoid. What it used to say was accurate when written: `api.deckShare`
-    // issued a link and NOTHING revoked one, anywhere, and the only limit on a
-    // leaked link was its own expiry. It also named the shape to copy —
-    // `DELETE /api/captable/shares/:id`, which revokes by expiring so the view
-    // history stays attributable — and the `revoked_at` column
-    // `pitch_deck_share_tokens` had not got. Migration 248 adds that column,
-    // `DELETE /api/decks/:id/shares/:shareId` sets it, and the Engagement panel
-    // in the deck builder carries the Withdraw control, next to the view counts
-    // that made the gap worth closing.
-    //
-    // The link goes to the workspace rather than to a zone of its own because
-    // the control lives beside the list of links it acts on; `linkNote` says
-    // which panel, so the reader is not sent to hunt for it.
-    { label: 'Revoke a link', to: '/raise/pitch?mode=workspace', linkNote: 'Withdraw sits in the deck builder’s Engagement panel, beside the link’s view count' },
-  ],
   'raise/capital': [
     { label: 'Model a round', to: '/raise/capital/model' },
     { label: 'Export to Carta', to: '/raise/capital/cap-table', linkNote: 'the cap table exports CSV; there is no Carta connection' },
