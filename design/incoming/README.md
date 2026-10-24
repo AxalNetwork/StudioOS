@@ -109,6 +109,27 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-24 — Pitch deck studio (D894, #2434)
+
+The owner's artifacts `W5hRpjNZ4nsGBTJ7gd71Dy` and `RYeTPyEEdrmRnuUDktJcL3`
+came from S21's prompt on #2434, as the usual pair:
+- `Pitch Deck Studio · Boards.dc.html` is the board grid (PD1 to PD28, with the
+  lettered boards: 41 in all), the output of `scripts/read-canvas.mjs` as is;
+- `Pitch Deck Studio Page.dc.html` is the page, in the copy the grid's bundle
+  carries.
+
+The bundle also carried a newer `AIRail` whose one change is the Pitch deck
+page's model group (`deck`: a writing model, two image models, a reading
+model). It replaced `design/canvases/integrated/AIRail.dc.html` in place,
+which moves no number. No value was edited.
+
+**Grade: UPGRADE.** `/raise/pitch` is live. S1's integration (D894) draws the
+studio's shell, Decks (PD2) and Share & analytics (PD19) from the reads that
+exist, and keeps the builder at `/raise/pitch/edit`. The other boards wait for
+stores the Worker does not have, so this canvas stays in the queue until its
+eleven parts land (#2674 to #2684; D894 §6 lists them). The `ROUTE_MAP.md` row
+says what is drawn today.
+
 ## Landed 2026-10-20 — Licences (D795, #2228)
 
 **Graduated 2026-10-20 (D800, #2233):** both files below now live in

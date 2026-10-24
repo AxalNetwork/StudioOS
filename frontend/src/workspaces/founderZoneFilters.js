@@ -252,20 +252,6 @@ export const FOUNDER_ZONE_FILTERS = {
     // the way into the row. Same shape as `/build/board`'s `Mine`.
     { canvas: 'Timeline', key: 'timeline' },
   ],
-  // Deck versions are stored and engagement is returned per version. A deck has
-  // versions rather than narrative variants, and a share link is minted and
-  // revoked in the deck builder, which is where its record lives.
-  'raise/pitch': [
-    { canvas: 'Versions', key: 'versions' },
-    { canvas: 'Variants', unbuilt: 'a deck stores versions; no narrative variant is a separate record' },
-    // ALSO FALSE, and by a wider margin: `GET /decks/:id/engagement` returns a
-    // `shares` array — id, created, expires, view_limit, view_count, exhausted and
-    // (since #196) `revoked_at` — and this page already calls that endpoint and
-    // already reads that array to build the Analytics table. The links were never
-    // "held by the deck builder"; they were on screen in a different shape.
-    { canvas: 'Shares', key: 'shares' },
-    { canvas: 'Analytics', key: 'analytics' },
-  ],
   // The one zone where the canvas asks for five views and the store has all
   // five: the ledger, the SAFE inputs, the compare variants and the 409A read
   // are separate fulfilled calls, and the waterfall is derived from the first.

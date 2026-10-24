@@ -124,7 +124,7 @@ const FOUNDER = [
     ['data-room', 'Data room'], ['cap-table', 'Cap table'], ['use-of-funds', 'Use of funds'], ['capital-relationships', 'Capital relationships'],
   ]),
   alias('/raise/status', key(F, 'Raise', 'Fundraising readiness'), 'The legacy Status zone: where the raise stands.'),
-  alias('/raise/pitch', key(F, 'Raise', 'Pitch deck'), 'The legacy Pitch zone and its workspace.'),
+  alias('/raise/pitch', key(F, 'Raise', 'Pitch deck'), 'The Pitch deck studio, its tabs and the deck builder (D894).'),
   alias('/raise/capital', key(F, 'Raise', 'Capital relationships'), 'The legacy Capital zone: investors and rounds.'),
   alias('/raise/capital-match', key(F, 'Raise', 'Capital relationships'), 'Investor match finds capital relationships.'),
   alias('/raise/calls', key(F, 'Raise', 'Capital relationships'), 'A call with an investor is a capital relationship’s record.'),

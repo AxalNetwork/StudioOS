@@ -102,8 +102,9 @@ test('A4 owns the founder Raise landing while workspace mode retains its detaile
   // D661 (#1474): the landing a founder gets is the Raise cycle overview now.
   assert.match(zone, /founderRaiseLanding\s*\?\s*guard\([^)]*\), <CycleRoute cycle="raise" \/>\)/);
   assert.match(app, /founderEditor\(<PitchWorkspacePage \/>\)/);
-  // The desk is an overview OVER the sections, not instead of them.
-  assert.match(routeBlock(app, '/raise/pitch'), /<FounderRaisePitch \/>/,
+  // The desk is an overview OVER the sections, not instead of them. D894:
+  // the Pitch section page is the Pitch deck studio's home now.
+  assert.match(routeBlock(app, '/raise/pitch'), /<PitchStudio tab="decks" \/>/,
     'the Pitch section page must survive the desk being mounted');
 });
 
@@ -293,8 +294,10 @@ test('every founder zone page\'s section row switches lenses on a phone (D575)',
   }
   // Twenty-seven until D661 (#1474) retired four desks, each with one row;
   // twenty-two until the owner removed Raise · Liquidity (2026-10-20);
-  // twenty-one until #2343 folded Grow · Brand into the brand builder.
-  assert.ok(rows.length >= 20, `only ${rows.length} founder section rows are lens switchers`);
+  // twenty-one until #2343 folded Grow · Brand into the brand builder;
+  // twenty until D894 (#2434) replaced Raise · Pitch with the Pitch deck studio,
+  // which draws the canvas's own tabs, not the Raise sections row.
+  assert.ok(rows.length >= 19, `only ${rows.length} founder section rows are lens switchers`);
 });
 
 test('the Worker AI rail is one component, and every founder workspace has it', () => {
