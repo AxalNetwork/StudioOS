@@ -443,7 +443,7 @@ function deltaRefusal(why: ReadonlySet<GapReason | null>, compareWeek: string): 
  * column scans, while an ordered walk of `idx_activity_created` stops at the
  * first middleware row, which is almost always the first row.
  */
-async function firstLoggedDay(env: Env): Promise<string | null> {
+export async function firstLoggedDay(env: Env): Promise<string | null> {
   const row = await env.DB.prepare(
     `SELECT created_at FROM activity_logs
       WHERE endpoint IS NOT NULL

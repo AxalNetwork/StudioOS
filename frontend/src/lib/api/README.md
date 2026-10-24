@@ -249,6 +249,11 @@ D780 (#2105): `railProposals.js` lists the caller's own drafts, proposals and
 notes from a rail option's run (`ai_rail_proposals`, migration 506) and decides
 one: accept, edit or discard. Deciding writes no record; the page's own Save does.
 
+D893 (#2660): `insights.js` reads Admin › Insights' one read,
+`insightsApi.adminInsights(params)` (`GET /api/admin/insights`, any admin): every
+block of the canvas as counts, filtered by range, profile and country, with the
+period before (`compare`) and one profile's lightbox (`group`).
+
 D885 (#2561): `channelKeys.js` sets, rotates (or generates) and removes the
 interview channels' Worker secrets from HQ › Integration keys › Channels
 (`/api/admin/integration-keys/channels/:channel`, Super Admin behind the write

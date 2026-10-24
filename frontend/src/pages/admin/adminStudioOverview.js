@@ -445,6 +445,22 @@ export function hqApprovalsView(approvals) {
   };
 }
 
+/**
+ * Last week's active accounts (D893): read from `activity_logs` on the glance.
+ * A week before the log began has no value, and says so rather than 0.
+ */
+export const ACTIVE_BEFORE_LOG =
+  'The request log holds nothing for that week, so it is left blank rather than shown as zero.';
+function activeView(a) {
+  if (a?.available === true) {
+    return a.value === null || a.value === undefined
+      ? { kind: 'unrecorded', reason: ACTIVE_BEFORE_LOG, week: a.week }
+      : { kind: 'ready', value: a.value, week: a.week };
+  }
+  if (a?.available === false) return { kind: 'unreadable', reason: a.reason };
+  return { kind: 'unrecorded', reason: a?.reason || 'Active accounts were not on the glance.' };
+}
+
 /** HQ's Insights block: each figure is its own state. */
 export function hqInsightsView(insights) {
   if (!insights || insights.recorded === false) {
@@ -464,7 +480,7 @@ export function hqInsightsView(insights) {
     tickets: insights.open_tickets?.available
       ? { kind: 'ready', open: insights.open_tickets.open }
       : { kind: 'unreadable', reason: insights.open_tickets?.reason },
-    active: { kind: 'unrecorded', reason: insights.active_accounts?.reason },
+    active: activeView(insights.active_accounts),
     benchmark: { kind: 'unrecorded', reason: insights.benchmark?.reason },
   };
 }

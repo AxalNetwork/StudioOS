@@ -41,7 +41,7 @@ A record view names its record as the rail's last crumb with
 accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
 console's Users panel; links Exploring, Personas, Trash), `HeldApprovals.jsx`
 (S22's sixteen lanes as literal rows), `HeldPrograms.jsx`, `HeldCommunity.jsx`
-and `HeldInsights.jsx` (links nowhere, by S20). Since D555 each reads HQ's own
+and Insights (now `insights/AdminInsights.jsx`, D893). Since D555 each reads HQ's own
 figures from the Studio glance through `heldFigures.jsx` (`useHeldGlance`,
 `Figure`, `laneOf`): lane counts on Approvals, counts on the cards, and the
 headline figures on Insights. Mounted at `/admin/held/*` —
@@ -72,6 +72,10 @@ Assessment Studio (`/admin/assessment`) was removed at the owner’s request on 
 the Super Admin and every Admin on HQ: capital calls, distributions,
 management fees, reconciliation, bank accounts and LP reports, each control
 drawn from the Worker's act table — see its own README.
+
+`insights/` is D893's Admin › Insights at `/admin/insights`, built to the Admin
+Insights canvas from the reads that exist; `/admin/held/insights` redirects to
+it — see its own README.
 
 `contracts/` owns the D647 desk, counted agreement pages, related lists,
 signing detail and guided envelope panel. Both shells reach `/admin/contracts`.
