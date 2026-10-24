@@ -129,7 +129,8 @@ test('the old ?mode=workspace address opens the editor with the moved notice, th
   assert.equal(ventureQuery(null), '');
   assert.equal(isReadOnly({ role: 'founder' }), false);
   assert.equal(isReadOnly({ role: 'admin' }), true, 'an admin reads the studio (PD21)');
-  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Decks', STUDIO_PATH], ['Review', REVIEW_PATH], ['Share & analytics', ANALYTICS_PATH]]);
+  // D905 (#2684) adds the Notes tab (PD21).
+  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Decks', STUDIO_PATH], ['Review', REVIEW_PATH], ['Share & analytics', ANALYTICS_PATH], ['Notes', '/raise/pitch/notes']]);
   assert.equal(TITLE, 'Pitch deck studio');
   assert.doesNotMatch(LINE, /Every figure shows its source/, 'the source chips are #2434 part 2; the line waits for them');
   assert.equal(NOT_RECORDED, 'Not recorded');
@@ -143,7 +144,9 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   const app = read('frontend/src/App.jsx');
   // A literal search, not a RegExp built from the path: nothing here needs a pattern.
   const route = (path) => `<Route path="${path}" element={guard(labRoles(['admin', 'founder'])`;
-  for (const p of ['/raise/pitch', '/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/positioning']) assert.ok(app.includes(route(p)), p);
+  for (const p of ['/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/positioning', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
+  // D905 (#2684), PD22: the studio's home also admits the roles it is not for, to tell them so.
+  assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
   assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*founderEditor\(<PitchStudio tab="decks" \/>\)/);
   assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchWorkspacePage \/>\)\)\)\} \/>/);
   assert.match(app, /<Route path="\/raise\/pitch\/analytics" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchStudio tab="analytics" \/>\)\)\} \/>/);

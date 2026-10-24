@@ -7,7 +7,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth } from '../auth';
+import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
 import { projectOwned as sharedProjectOwned } from '../middleware/projectContentAccess';
 import { ensureProjectMembershipSchema, getProjectMembershipRole } from '../services/projectAccess';
 import { ensureTier, tierCovers } from '../middleware/requireTier';
@@ -2108,6 +2108,8 @@ decks.get('/admin/recommend-overrides', async (c) => {
 decks.put('/admin/recommend-overrides', async (c) => {
   const user = await requireAuth(c);
   if (String(user.role) !== 'admin') return c.json({ error: 'forbidden' }, 403);
+  // D905 (#2684, PD21): the Super Admin on HQ sets the default template by sector and stage; a branch admin reads it.
+  if (!isSuperAdmin(await hydrateSuperAdmin(c.env, user))) return c.json({ error: 'super_admin_required', message: 'Only the Super Admin sets the default template by sector and stage.' }, 403);
   const body = await c.req.json().catch(() => ({} as any));
   const sector = String(body?.sector || '').trim();
   const stage = String(body?.stage || '').trim();
@@ -2122,6 +2124,8 @@ decks.put('/admin/recommend-overrides', async (c) => {
 decks.delete('/admin/recommend-overrides', async (c) => {
   const user = await requireAuth(c);
   if (String(user.role) !== 'admin') return c.json({ error: 'forbidden' }, 403);
+  // D905 (#2684, PD21): the Super Admin on HQ sets the default template by sector and stage; a branch admin reads it.
+  if (!isSuperAdmin(await hydrateSuperAdmin(c.env, user))) return c.json({ error: 'super_admin_required', message: 'Only the Super Admin sets the default template by sector and stage.' }, 403);
   const sector = c.req.query('sector') || '';
   const stage = c.req.query('stage') || '';
   if (!sector || !stage) return c.json({ error: 'sector + stage query required' }, 400);
