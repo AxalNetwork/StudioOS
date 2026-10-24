@@ -12,6 +12,8 @@
  * KYC and Exploring read `users.role`, `kyc_status`, `kyc_submitted_at` and
  * `created_at`, and only the missing ones are added.
  */
+import { readFileSync } from 'node:fs';
+
 export const S16_STORES_SQL = `
   CREATE TABLE partner_profiles (
     email TEXT PRIMARY KEY, user_id INTEGER, persona TEXT, legal_entity_name TEXT,
@@ -43,6 +45,7 @@ const USER_COLUMNS = [
 /** Create the seven stores on a `node:sqlite` DatabaseSync that already has `users`. */
 export function addS16Stores(d) {
   d.exec(S16_STORES_SQL);
+  d.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
   const have = new Set(d.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
   for (const [name, type] of USER_COLUMNS) {
     if (!have.has(name)) d.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);

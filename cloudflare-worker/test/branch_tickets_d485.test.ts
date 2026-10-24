@@ -192,7 +192,11 @@ test('the matrix cell is the whole About-Admin load: on the branch plus on axal.
 });
 
 test('the total counts every branch\'s tickets, and is withheld while any branch cannot be read', async () => {
-  const bound = await support(hqDb(), { BRANCH_FR: binding(branchDb(), 'fr'), BRANCH_DE: binding(branchDb(), 'de') });
+  const de = branchDb();
+  // Equal '-30 hours' fixtures depended on which database crossed a clock second.
+  // Make the branch this assertion names unambiguously older.
+  de.exec("UPDATE tickets SET created_at = datetime('now', '-31 hours') WHERE id = 101");
+  const bound = await support(hqDb(), { BRANCH_FR: binding(branchDb(), 'fr'), BRANCH_DE: binding(de, 'de') });
   // HQ-held 1 + About Admin on axal.vc 1 + fr 2 + de 2; no escalations.
   assert.equal(bound.body.total.value, 6, JSON.stringify(bound.body.total));
   assert.equal(bound.body.total.oldest.queue, 'branch:de', 'the oldest names the branch it came from');

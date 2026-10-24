@@ -73,3 +73,10 @@ real SQLite fixtures with every provider stubbed. Its in-process mutation checks
 run the same positive scenarios before restoring ordinary modules.
 
 D755 CR7: `checkout_order_topup_d755.test.ts` reads an owner's pack order in each webhook state, verifies the current account balance and VAT exclusion, rejects other members and failed reads, and leaves ordinary orders unchanged. It also preserves historical receipts when HQ adopts their price, bounds ordinary reads to one purchase lookup, handles absent legacy tables without hiding genuine failures, and covers authentication. It embeds thirteen mutations, with the restored scenario checked before and after each mutant. Providers are forbidden.
+
+D895: `pitch_worker_d895.test.ts` mounts the deck, branding, NDA and pitch-link
+record routes over the migrated schema with synthetic data. It covers read-only
+admins, advisor denial, admitted cofounders, measured runway, absent versus zero
+review scores/counts, owner-plan export branding, live brand-kit selection,
+founder/Lab score separation, canonical pairwise NDA state and one activity row
+per completed write. `decks.autofill.test.ts` also checks AI-only coverage is zero.

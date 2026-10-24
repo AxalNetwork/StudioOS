@@ -427,17 +427,18 @@ events.patch('/:id', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const sets: string[] = [];
   const binds: unknown[] = [];
-  const str = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ?? null); } };
-  const num = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] != null ? Number(body[k]) : null); } };
+  const reviewValues = new Map<string, unknown>();
+  const str = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ?? null); reviewValues.set(k, body[k] ?? null); } };
+  const num = (k: string) => { if (k in body) { sets.push(`${k} = ?`); const value = body[k] != null ? Number(body[k]) : null; binds.push(value); reviewValues.set(k, value); } };
   const bool = (k: string) => { if (k in body) { sets.push(`${k} = ?`); binds.push(body[k] ? 1 : 0); } };
 
   str('title'); str('summary'); str('description'); str('cover_url');
   str('starts_at'); str('ends_at'); str('timezone'); str('location_text'); str('location_url');
   if ('type' in body && isEventType(body.type)) { sets.push('type = ?'); binds.push(body.type); }
   if ('visibility' in body && EVENT_VISIBILITIES.includes(body.visibility)) { sets.push('visibility = ?'); binds.push(body.visibility); }
-  if ('location_kind' in body && LOCATION_KINDS.includes(body.location_kind)) { sets.push('location_kind = ?'); binds.push(body.location_kind); }
+  if ('location_kind' in body && LOCATION_KINDS.includes(body.location_kind)) { sets.push('location_kind = ?'); binds.push(body.location_kind); reviewValues.set('location_kind', body.location_kind); }
   num('capacity'); num('price_cents'); num('project_id');
-  if ('currency' in body) { sets.push('currency = ?'); binds.push(body.currency || 'usd'); }
+  if ('currency' in body) { sets.push('currency = ?'); binds.push(body.currency || 'usd'); reviewValues.set('currency', body.currency || 'usd'); }
   bool('waitlist_enabled'); bool('approval_required');
   if ('audience_rules' in body || 'audience_rules_json' in body) {
     let rules;
@@ -448,6 +449,15 @@ events.patch('/:id', async (c) => {
   }
 
   if (!sets.length) return c.json({ event: shapeEvent(event, { includePrivate: true }) });
+  // D917: material host edits flag an approved event; its status stays as it is.
+  const reviewFields = ['title', 'starts_at', 'ends_at', 'timezone', 'location_kind', 'location_text', 'location_url', 'price_cents', 'currency'];
+  const changed = reviewFields.some((key) => reviewValues.has(key) && (key === 'price_cents'
+    ? reviewValues.get(key) !== (event[key] != null ? Number(event[key]) : null)
+    : reviewValues.get(key) !== (event[key] ?? null)));
+  if (Number(event.host_user_id) === u.id && changed) {
+    sets.push('changed_after_approval_at = CASE WHEN approved_at IS NOT NULL OR admin_published = 1 THEN ? ELSE changed_after_approval_at END');
+    binds.push(new Date().toISOString());
+  }
   sets.push(`updated_at = datetime('now')`);
   binds.push(id);
   await c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
@@ -459,8 +469,9 @@ events.patch('/:id', async (c) => {
     const cur = await loadEvent(c.env, id);
     if (Number(cur.admin_published) !== 1 && cur.status === 'published') {
       await c.env.DB.prepare(
-        `UPDATE events SET status = 'pending_review', updated_at = datetime('now') WHERE id = ?`,
-      ).bind(id).run();
+        `UPDATE events SET status = 'pending_review', submitted_at = ?, updated_at = datetime('now')
+           WHERE id = ? AND status = 'published' AND admin_published = 0`,
+      ).bind(new Date().toISOString(), id).run();
     }
   }
 
@@ -494,15 +505,24 @@ events.post('/:id/submit-review', async (c) => {
   if (!event) return c.json({ error: 'not_found' }, 404);
   if (!canManage(event, u)) return c.json({ error: 'forbidden' }, 403);
 
-  if (event.visibility === 'public') {
-    await c.env.DB.prepare(
-      `UPDATE events SET status = 'pending_review', updated_at = datetime('now') WHERE id = ?`,
-    ).bind(id).run();
-  } else {
-    await c.env.DB.prepare(
-      `UPDATE events SET status = 'published', updated_at = datetime('now') WHERE id = ?`,
-    ).bind(id).run();
+  // Repeated submissions must not reset queue age or revive a cancelled event.
+  if (event.status === 'pending_review' || (event.status === 'published'
+      && Number(event.admin_published) !== 1 && event.visibility !== 'public')) {
+    return c.json({ event: shapeEvent(event, { includePrivate: true }) });
   }
+  if (!['draft', 'rejected'].includes(event.status)) return c.json({ error: 'not_submittable' }, 409);
+
+  let submitted: unknown;
+  if (event.visibility === 'public') {
+    submitted = await c.env.DB.prepare(
+      `UPDATE events SET status = 'pending_review', submitted_at = ?, updated_at = datetime('now') WHERE id = ? AND status IN ('draft', 'rejected') RETURNING id`,
+    ).bind(new Date().toISOString(), id).first();
+  } else {
+    submitted = await c.env.DB.prepare(
+      `UPDATE events SET status = 'published', updated_at = datetime('now') WHERE id = ? AND status IN ('draft', 'rejected') RETURNING id`,
+    ).bind(id).first();
+  }
+  if (!submitted) return c.json({ error: 'not_submittable' }, 409);
   await logAdminAction(c.env, u.id, u.email, 'event_submitted', { event_id: id });
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
 });

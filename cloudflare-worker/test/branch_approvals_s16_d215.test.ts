@@ -33,6 +33,7 @@ const at = (h: number) => new Date(NOW - h * 3_600_000).toISOString().replace('T
 function db() {
   const d = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   for (const t of TABLES) d.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
+  d.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
   // NOT IN THE BASELINE: `spinout_moderation.ts` creates it lazily on first
   // use. Trimmed from that route's own DDL.
   d.exec(`CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -29,6 +29,7 @@ const PAGE = 'Founder · Raise · Pitch deck';
 async function fixture({ deck = true } = {}) {
   __resetForTest();
   const f = aiBudgetFixture();
+  f.db.exec('ALTER TABLE users ADD COLUMN founder_id INTEGER; ALTER TABLE activity_logs ADD COLUMN project_id INTEGER; ALTER TABLE activity_logs ADD COLUMN entity_type TEXT; ALTER TABLE activity_logs ADD COLUMN entity_id TEXT;');
   f.db.exec(`CREATE TABLE projects (id INTEGER PRIMARY KEY, founder_id INTEGER, company_id INTEGER, name TEXT, sector TEXT, stage TEXT,
     description TEXT, problem_statement TEXT, solution TEXT);
     CREATE TABLE financial_models (project_id INTEGER, computed_json TEXT, assumptions_json TEXT);
@@ -37,9 +38,11 @@ async function fixture({ deck = true } = {}) {
     CREATE TABLE landing_pages (id INTEGER PRIMARY KEY, project_id INTEGER);`);
   f.db.prepare("INSERT INTO projects (id, name, sector, stage, description, problem_statement, solution) VALUES (1, 'Kestrel Labs', 'Logistics', 'Seed', 'Freight ops.', 'Reconciling by hand.', 'An agent.')").run();
   setFixtureAllowance(f.db, 0);
-  f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(?,'founder.d778@example.test','Fay Founder','admin','studio')").run(FOUNDER);
+  f.db.prepare("INSERT INTO users(id,email,name,role,subscription_tier) VALUES(?,'founder.d778@example.test','Fay Founder','founder','studio')").run(FOUNDER);
+  f.db.prepare('UPDATE users SET founder_id = 100 WHERE id = ?').run(FOUNDER);
+  f.db.exec('UPDATE projects SET founder_id = 100 WHERE id = 1');
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,5000000)').run(FOUNDER);
-  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('admin:free',0,0,1)").run();
+  f.db.prepare("INSERT INTO ai_licence_caps(licence_key,daily_microusd,monthly_microusd,recorded_by) VALUES('founder:free',0,0,1)").run();
   const AI = withGuard({
     run: async (_model: string, input: any) => {
       const prompt = (input?.messages || []).map((m: any) => (typeof m?.content === 'string' ? m.content : '')).join('\n');
@@ -50,7 +53,7 @@ async function fixture({ deck = true } = {}) {
   const env: any = { DB: f.DB, ENVIRONMENT: 'development', JWT_SECRET, AI };
   const app = new Hono<any>();
   app.route('/api/decks', decks);
-  const jwt = await new SignJWT({ user_id: FOUNDER, role: 'admin' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
+  const jwt = await new SignJWT({ user_id: FOUNDER, role: 'founder' }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h')
     .sign(new TextEncoder().encode(JWT_SECRET));
   const auth = { Authorization: `Bearer ${jwt}`, 'content-type': 'application/json' };
   await app.request('/api/decks/by-project/1', { headers: auth }, env); // creates the deck tables

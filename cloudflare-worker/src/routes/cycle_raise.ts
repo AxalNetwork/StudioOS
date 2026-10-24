@@ -16,6 +16,13 @@
  *   POST  /readiness/rescore         { items?, since? }
  *   POST  /narrative-versions        { investor_type, start_from?, based_on_version?, one_liner?, why_now?, ask?, check_against? }
  *   PATCH /narrative-versions/:version   the same fields but start_from
+ *   D908 (#2692): the narrative's own stores (`services/narrative/store.ts`).
+ *   GET   /narrative/compare?a=&b=   → { a, b, pairs: [{ key, label, a: { body }, b: { body }, state }] }
+ *   GET   /narrative/positioning?version=   → { core, overrides, effective }
+ *   PUT   /narrative/positioning?version=   { kind, position?, text | null, source? }
+ *   GET   /narrative/:version        → { version, meta, sections, positioning, bindings }, each part
+ *                                      { state: 'ok', … } or { state: 'unreadable' }; 0 is the live deck
+ *   PUT   /narrative/:version/sections/:section   { body?, audience_note?, position?, source?, bindings? }
  *   POST  /deck-links                { deck_id, prospect_id | investor_label, expires_days: 7|14|30|null, allow_download?, allow_forwarding? }
  *   PATCH /deck-links/:id            investor, the two settings, an earlier expiry
  *   POST  /holders                   { name, group, instrument, shares | ownership_pct | amount_cents, cap_cents?, discount_pct?, vesting?, prospect_id? }
@@ -55,13 +62,14 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { canWrite, type ProjectRef } from './_founder_validate_helpers';
+import { canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { CYCLE, QUESTION, MODULES, CARD_FOR, RECORDS_FOR, figures, cards, callsHistory, recordQuery, type Ctx, type ModuleSlug } from '../services/raiseCycle';
 import {
   WriterError, scoreReadinessItem, rescoreReadiness, saveNarrativeVersion, updateNarrativeVersion, createDeckLink, updateDeckLink,
   addCapHolder, updateCapHolder, saveUseOfFunds, addProspect, updateProspect, setFileChecklistItem, setProspectNextStep,
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
+import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
 import { raisePhone } from '../services/cycleFocus';
 import {
   AcceptError, RAISE_PART_FOR, acceptRaiseProposal, deleteRaiseFact, dismissRaiseProposal, syncRaise,
@@ -91,7 +99,7 @@ async function scope(c: any): Promise<{ user: User; projectId: number } | Respon
   const project = (await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
     .bind(projectId).first()) as ProjectRef | null;
   if (!project) return c.json({ detail: 'Project not found' }, 404);
-  if (!canWrite(project, user)) return c.json({ detail: 'Forbidden' }, 403);
+  if (!(/\/deck-links(?:\/|$)/.test(c.req.path) ? canWritePitchDeck(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden' }, 403);
   return { user, projectId };
 }
 
@@ -207,6 +215,70 @@ cycleRaise.patch('/narrative-versions/:version', async (c) => {
   try {
     return c.json(await updateNarrativeVersion(c.env, { projectId: s.projectId, userId: Number(s.user.id), version, ...narrativeFields(b) }));
   } catch (e) { return writeFailed(c, e); }
+});
+
+// ---------------------------------------------------------------------------
+// D908 (#2692): the Investor narrative's sections, positioning and bindings
+// ---------------------------------------------------------------------------
+
+const unreadable = (c: any, e: unknown) => {
+  if (e instanceof WriterError) return c.json({ detail: e.sentence }, e.status as any);
+  console.error('[cycle_raise] narrative read failed:', (e as Error)?.message);
+  return c.json({ detail: 'The narrative could not be read', code: 'unreadable' }, 503);
+};
+
+// Literal paths first: `compare` and `positioning` are not version numbers.
+cycleRaise.get('/narrative/compare', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try {
+    return c.json(await compareNarrative(c.env, s.projectId, c.req.query('a'), c.req.query('b')));
+  } catch (e) { return unreadable(c, e); }
+});
+
+cycleRaise.get('/narrative/positioning', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  try {
+    const raw = c.req.query('version');
+    const version = raw === undefined || raw === '' ? null : await readableVersion(c.env, s.projectId, raw);
+    return c.json({ version, ...(await readPositioning(c.env, s.projectId, version === 0 ? null : version)) });
+  } catch (e) { return unreadable(c, e); }
+});
+
+cycleRaise.put('/narrative/positioning', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    return c.json(await savePositioning(c.env, { projectId: s.projectId, userId: Number(s.user.id), version: c.req.query('version'), body: b }));
+  } catch (e) { return writeFailed(c, e); }
+});
+
+cycleRaise.get('/narrative/:version', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const raw = c.req.param('version');
+  if (!/^(0|[1-9][0-9]{0,8})$/.test(raw)) return c.json({ detail: 'Version not found' }, 404);
+  try {
+    return c.json(await readNarrative(c.env, s.projectId, raw));
+  } catch (e) { return unreadable(c, e); }
+});
+
+cycleRaise.put('/narrative/:version/sections/:section', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  const raw = c.req.param('version');
+  if (!/^(0|[1-9][0-9]{0,8})$/.test(raw)) return c.json({ detail: 'Version not found' }, 404);
+  const b = await body(c);
+  try {
+    return c.json(await saveNarrativeSection(c.env, { projectId: s.projectId, userId: Number(s.user.id), version: raw, section: c.req.param('section'), body: b }));
+  } catch (e) {
+    if (e instanceof WriterError && e.sentence === 'Unknown section') {
+      return c.json({ detail: 'Unknown section', sections: NARRATIVE_SECTIONS.map((x) => x.key) }, 404);
+    }
+    return writeFailed(c, e);
+  }
 });
 
 cycleRaise.post('/deck-links', async (c) => {

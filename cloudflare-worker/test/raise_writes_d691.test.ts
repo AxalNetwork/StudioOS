@@ -61,6 +61,7 @@ function fixture() {
   db.exec(sqlOf('410_safe_issuances.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  db.exec(sqlOf('544_narrative_sections.sql')); // D908: a version based on another copies its narrative stores
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
   db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)').run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test');
   db.exec(`INSERT INTO projects (id, name, founder_id) VALUES (${P}, 'Kestrel Labs', 1001)`);
@@ -776,6 +777,7 @@ function cycleFixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  db.exec(sqlOf('544_narrative_sections.sql'));
   personalMatchTables(db); // D752: the trigger on raise_prospects
   addColumnsFrom(db, sqlOf('441_build_cycle_stores.sql'), 'cap_table_holders');
   // The fund directory: the CREATE statements only, and 406 whole, with made-up funds.

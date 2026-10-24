@@ -18,7 +18,7 @@ Three independent fields on `events` govern who can see an event:
 | Field | Values | Meaning |
 |---|---|---|
 | `visibility` | `public` \| `unlisted` \| `private` | Who is *allowed* to discover it. |
-| `status` | `draft` \| `pending_review` \| `published` \| `cancelled` | Lifecycle state. |
+| `status` | `draft` \| `pending_review` \| `published` \| `rejected` (Sent back) \| `cancelled` | Lifecycle state. |
 | `admin_published` | `0` \| `1` | The **admin gate** — only an admin can set this to 1. |
 
 ### 1.1 The publish gate
@@ -43,10 +43,11 @@ The public feed query MUST use exactly this; never surface `pending_review`,
 - **`public`** events go through **review**: a founder choosing "publish public"
   sets `status='pending_review'` (NOT published). An admin **approve**
   transitions to `status='published'` AND `admin_published=1`. Admin
-  **reject** returns to `draft` (with a reason). This prevents an unvetted
+  **reject** sends it back with a required reason: `rejected` is the stored
+  status ("Sent back"), distinct from draft. This prevents an unvetted
   founder event from appearing on the public Axal calendar.
-- **Official Axal events** created by an admin can be published + admin_published
-  in one step.
+- **Studio-hosted / official events** remain owner decision **O-STU**;
+  this specification does not authorize creating or publishing them.
 - `cancelled` is terminal for visibility (hidden from the feed; existing
   registrants are notified, §6).
 
@@ -56,6 +57,17 @@ override) writes `admin_audit_log` with `report_type='events'`.
 ---
 
 ## §2 Invitations
+
+**D917 review status:** "Sent back" is a separate event status stored as
+`rejected`, not `draft`. The host sees the last send-back reason in
+`review_note` and can submit it again. `submitted_at` and `approved_at` record
+ISO timestamps. A material host edit after approval sets
+`changed_after_approval_at` without re-queuing the event.
+
+**Featured** ranks members' event suggestions only; it does not change approval,
+visibility or the public feed gate. Studio-hosted events remain owner decision
+**O-STU**.
+
 
 `event_invitations` is one row per invited principal. Exactly one of
 `invited_user_id` / `invited_email` identifies the recipient; `token` is the
@@ -143,12 +155,21 @@ Spec for Prompt E4 admin surface. `/api/admin/events` (`requireAdmin`), mounted
 **BEFORE** the catch-all `/api/admin`.
 
 - **Review queue**: list `status='pending_review'` public events; **approve**
-  (→ published + admin_published=1) / **reject** (→ draft + reason).
+  (→ published + admin_published=1, setting `approved_at`) / **send back**
+  (stored `rejected`, with a required reason of at most 1000 characters in
+  `review_note`). Both require `pending_review`, otherwise 409 `not_waiting`.
+  Waiting age uses `submitted_at`, falling back to `created_at` for old events.
 - **Lifecycle**: publish/unpublish, **feature** (`featured=1`), **cancel**
   (notifies registrants, §6), **capacity override** (triggers waitlist
   promotion, §3).
-- **Official events**: create Axal-hosted events (`host_user_id` NULL) and
-  publish in one step.
+- **Featured** ranks members' suggestions only, without bypassing review.
+- **Studio-hosted events**: owner decision **O-STU**, not enabled by D917.
+- **Unpublish** requires `published`, returns it to `draft`, and tells the host
+  with an optional note (up to 1000 characters).
+- **Cancel** refuses an already-cancelled event, includes the optional note
+  (up to 1000 characters) in registrant notices, and returns the count of
+  `payment_status='paid'` registrations and their recorded cents grouped by
+  currency. It makes no refunds; those remain owner decision **O-REF**.
 - **Analytics** (recharts): registrations, attendance, capacity utilisation,
   conversion (views → registrations → attended) per event and across the
   calendar.

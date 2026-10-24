@@ -13,7 +13,9 @@ const allowed=new Set(['integrations/providers/mercury.ts','services/mercuryPers
   // D840 part 3 (#2348): the founder's own Mercury, read on their own sync into their Grow modules.
   'services/mercury/growFeeds.ts','services/mercury/growPresence.ts',
   // D882 (#2555): the founder's own row's state for Grow and Raise (its status and how it connected, never a credential).
-  'services/mercury/memberConnection.ts']);
+  'services/mercury/memberConnection.ts',
+  // D895 (#2674): cached runway only, after owner/company/support checks; no provider or credential read.
+  'services/decks/autofill.ts']);
 const callers=new Set(['routes/revenue.ts','routes/mercury_personal.ts','routes/needs.ts','routes/network.ts','services/capitalAttestations.ts',
   // D840 part 3: the founder's confirmed raise receipts are financing in their Grow months.
   'services/mercury/growFeeds.ts']);
