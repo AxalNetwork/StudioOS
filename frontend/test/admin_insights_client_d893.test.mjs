@@ -34,12 +34,19 @@ test('adminInsights calls GET /api/admin/insights with only the filters that are
   ]);
 });
 
-test('the module is one line in api.js\'s alphabetical block, and calls only its one route', () => {
+test('insightsScopes calls GET /api/admin/insights/scopes, and a picked scope travels on the read (D893 S08)', async () => {
+  seen.length = 0;
+  await insightsApi.insightsScopes();
+  await insightsApi.adminInsights({ range: 'year', scope: 'north' });
+  assert.deepEqual(seen.map((u) => u.replace(/^https?:\/\/[^/]+/, '')), ['/api/admin/insights/scopes', '/api/admin/insights?range=year&scope=north']);
+});
+
+test('the module is one line in api.js\'s alphabetical block, and calls only its two routes', () => {
   const api = read('frontend/src/lib/api.js');
   const block = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end'));
   const lines = block.split('\n').filter((l) => l.startsWith('export * from'));
   assert.ok(lines.includes("export * from './api/insights.js';"));
   assert.deepEqual(lines, [...lines].sort(), 'alphabetical');
   const client = read('frontend/src/lib/api/insights.js');
-  assert.deepEqual([...client.matchAll(/request\(`([^`$]+)/g)].map((m) => m[1]), ['/admin/insights']);
+  assert.deepEqual([...client.matchAll(/request\(`([^`$]+)/g)].map((m) => m[1]), ['/admin/insights', '/admin/insights/scopes']);
 });

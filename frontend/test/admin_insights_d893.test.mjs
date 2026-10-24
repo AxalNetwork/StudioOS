@@ -283,7 +283,9 @@ test('the country filter offers the counted countries, and keeps the chosen one'
 
 test('INS10: a plain Admin asking for another studio\'s scope gets no permission; HQ gets its own', () => {
   assert.equal(scopeState('?scope=north', false).kind, 'noperm');
-  assert.equal(scopeState('?scope=north', true).kind, 'unknown');
+  // D893 S08 (#2662): a Super Admin waits for the scopes list, then a code it does not hold falls back.
+  assert.equal(scopeState('?scope=north', true).kind, 'pending');
+  assert.equal(scopeState('?scope=north', true, []).kind, 'unknown');
   assert.equal(scopeState('?scope=hq', false).kind, 'own');
   assert.equal(scopeState('', false).kind, 'own');
 });

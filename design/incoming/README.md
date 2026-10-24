@@ -142,6 +142,20 @@ came from S21's prompt on #2454, as the usual pair:
 
 No value was edited. S1's integration lands next and records its grade here.
 
+## Landed 2026-10-24 — Admin · Community · Events (#2368)
+
+The owner's artifacts `6RLtJiyzxKwuknTBk2wjBU` and `76AGQxpRVoEjQGqDXchcHn`
+came from S1's prompt on #2368, as the usual pair:
+- `Events Console · Boards.dc.html` is the board grid (EV1 to EV17, with the
+  lettered boards: 32 in all), the output of `scripts/read-canvas.mjs` as is;
+- `Events Console Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace and the font link.
+
+It is the admin desk at `/admin/events`, not the member canvas `Events.dc.html`
+above. No value was edited. S1's integration lands next and records its grade
+here.
+
 ## Landed 2026-10-20 — Licences (D795, #2228)
 
 **Graduated 2026-10-20 (D800, #2233):** both files below now live in

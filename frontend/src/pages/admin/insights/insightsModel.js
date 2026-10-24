@@ -26,6 +26,10 @@ export const MOVED_NOTICE = 'Insights has a new address. Update your bookmark.';
 export const SCOPE_LABEL = 'HQ-held accounts · axal.vc';
 export const SCOPE_TITLE = 'No subsidiary is deployed yet, so these are the accounts HQ holds directly.';
 export const SCOPE_NOTE = 'Today only HQ-held accounts exist. Subsidiaries appear here once they are deployed.';
+/** D893 S08 (#2662): what the chip adds to a picked subsidiary's name (INS2). */
+export const SCOPE_SOURCE = 'counts read from its own database';
+export const SCOPE_READING = 'Reading the scope…';
+export const HQ_SCOPE = { code: 'hq', label: 'HQ-held accounts', kind: 'hq' };
 export const NO_PERMISSION = 'This view is for HQ. You see the accounts you manage.';
 export const NO_PERMISSION_FILTER = 'Only HQ can look at another studio’s accounts.';
 export const PAGE_UNREADABLE = 'Insights could not be read. Try again.';
@@ -617,14 +621,39 @@ export function countryOptions(insights, chosen) {
 
 /**
  * What `?scope=` asks for. A plain Admin may only see their own accounts, so
- * any other scope is INS10's "no permission". A Super Admin may ask for HQ's
- * accounts; no subsidiary is deployed yet (#2662), so any other value falls back.
+ * any other scope is INS10's "no permission". A Super Admin may pick a
+ * subsidiary the scopes read listed (D893 S08, #2662): `branch`, read from
+ * that subsidiary's own database. Until the list answers the scope is
+ * `pending`, and no read is made, so HQ's figures never sit under a
+ * subsidiary's name. A code the list does not hold falls back to HQ's own.
  */
-export function scopeState(search, superAdmin) {
+export function scopeState(search, superAdmin, scopes = null) {
   const raw = new URLSearchParams(search || '').get('scope');
   const asked = raw ? raw.trim() : '';
   if (!asked || asked === 'hq') return { kind: 'own', asked };
-  return superAdmin ? { kind: 'unknown', asked } : { kind: 'noperm', asked };
+  if (!superAdmin) return { kind: 'noperm', asked };
+  if (!Array.isArray(scopes)) return { kind: 'pending', asked };
+  const code = asked.toLowerCase();
+  const line = scopes.find((s) => s && s.kind === 'branch' && s.code === code);
+  return line ? { kind: 'branch', asked, code, label: line.label || code } : { kind: 'unknown', asked };
+}
+
+/** The `scope` the read carries: a picked subsidiary's code, else none (this deployment's own). */
+export function scopeParam(scope) {
+  return scope?.kind === 'branch' ? scope.code : undefined;
+}
+
+/** The chip under the title (INS2): HQ-held, or "[Branch North] · counts read from its own database". */
+export function scopeChip(scope) {
+  if (scope?.kind === 'branch') return `${scope.label} · ${SCOPE_SOURCE}`;
+  if (scope?.kind === 'pending') return SCOPE_READING;
+  return SCOPE_LABEL;
+}
+
+/** The Scope select's lines: the scopes read's, or HQ-held alone until it answers. */
+export function scopeLines(scopes) {
+  const list = Array.isArray(scopes) ? scopes.filter((s) => s && (s.kind === 'hq' || s.kind === 'branch')) : [];
+  return list.some((s) => s.kind === 'hq') ? list : [HQ_SCOPE, ...list];
 }
 
 /** The group the URL opens (INS3): `?group=founders`, matched to a profile. */

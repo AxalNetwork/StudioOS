@@ -234,6 +234,7 @@ import learningWebinarsRoutes from './routes/learning_webinars';
 import adminLearningWebinarsRoutes from './routes/admin_learning_webinars';
 import { adminLearningVideo, learningVideo } from './routes/learning_video';
 import adminHq from './routes/admin_hq';
+import adminInsightsScopes from './routes/admin_insights_scopes';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
 import adminPlatform from './routes/admin_platform';
@@ -241,6 +242,7 @@ import adminSecurity from './routes/admin_security';
 import adminHqSupport from './routes/admin_hq_support';
 import adminStudioGlance from './routes/admin_studio_glance';
 import adminInsights from './routes/admin_insights';
+import adminInsightsExport from './routes/admin_insights_export';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
 import licence from './routes/licence';
@@ -1076,6 +1078,9 @@ app.route('/api/admin/ticket-reviews', adminTicketReviews);
 // HQ · Home — the franchisor's overview. Super-admin-only, mounted before
 // the catch-all like everything else in the HQ tier.
 app.route('/api/admin/hq', adminHq);
+// D893 — Admin › Insights' Scope select: HQ-held and each deployed
+// subsidiary. Super Admin on HQ, before the catch-all.
+app.route('/api/admin/insights/scopes', adminInsightsScopes);
 // HQ · Revenue — the money rails. Super-admin-only, and before the
 // catch-all for the same reason as the rest of the HQ tier.
 app.route('/api/admin/revenue', adminRevenue);
@@ -1092,6 +1097,8 @@ app.route('/api/admin/security', adminSecurity);
 app.route('/api/admin/hq-support', adminHqSupport);
 // Studio glance — both tiers, before the /api/admin catch-all (D443).
 app.route('/api/admin/studio', adminStudioGlance);
+// D893 (#2661): the logged, counts-only export of the Insights read below. Mounted first, so /export never reaches the read's router.
+app.route('/api/admin/insights/export', adminInsightsExport);
 app.route('/api/admin/insights', adminInsights);
 app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licence);
