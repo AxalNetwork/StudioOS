@@ -47,3 +47,7 @@ verification are the owner's final live check. Nothing here selects the adapter
 in a factory, changes a feature flag or enables live dispatch.
 
 Reference: https://github.com/noah-duncan/py-zoom-meeting-sdk
+
+B8 packages pinned `requirements.txt` into the Linux image. `check_runtime.py`
+checks native SDK callbacks at build time; the isolated CI boot verifies the
+installed SDK and GLib. Real Zoom join/OBF behavior remains unverified.

@@ -290,7 +290,7 @@ Rollback reverts the worker (and with it the SPA), not D1 — see
 Before any canary, apply migration 531 and the appended `v2-meeting-bot` Durable
 Object migration. Keep the existing `v1-realtime` migration. `MEETING_BOT_RUN`
 binds class `MeetingBotRun` in default, production and preview environments.
-B8 supplies the `MEETING_BOT_RUNTIME` start/stop binding; runtime must enforce
+B8 supplies the runtime factory through `MEETING_BOT_CONTAINER`; runtime must enforce
 the budget lease locally and acknowledge commands without awaiting callbacks.
 Provision a distinct `MEETING_BOT_SECRET` (32+ random characters) in each
 environment; never put its value in configuration, logs or review material.
@@ -305,28 +305,66 @@ only rolling two-minute bot-fee holds are taken. B6 charges Nova through aiRoute
 See D886 §12 for the HMAC protocol, final-part drain and recovery. No live call,
 price measurement, switch change or deployment is performed by B1.
 
-## Meeting bot deployment prerequisites (#2586, D886 B8 — partial)
+## Meeting bot deployment (#2586, D886 B8)
 
-The standalone image workflow is a pipeline skeleton, not a deployed bot.
-It validates commit-scoped image names and builds before registry login.
-PRs build a labelled scratch fixture and, once B2 supplies it, the real
-runtime image. Publication requires an owner-triggered main workflow run;
-it uses the built-in `GITHUB_TOKEN`, scoped to package writes for that job.
-No registry password, PAT or VM credential is introduced by this partial.
-Use the published image digest, rather than a mutable SHA tag, for eventual
-runtime configuration and rollback. Images contain code only: never bake
-meeting links, passcodes, run tokens, participant names or transcripts into
-a build context or a log. B2 must review its ignore file and copy allowlist.
+The bot is a separate private Worker, `studioos-meeting-bot`, configured in
+`wrangler.meeting-bot.toml`. Its preview is `studioos-meeting-bot-preview`.
+Only this config owns the container image and `v1-meeting-bot-container` DO
+migration. The runtime uses cross-script DO bindings named `MEETING_BOT_CONTAINER`
+in default, production and preview once provisioned. The shipped site config
+omits them until the remote hosts exist, so merging this cannot break site
+deployment on an unresolved namespace. It has no image or preflight.
+Site deploys retain their normal timeout and migration hook. A bot image or
+registry failure cannot fail the site deployment workflow.
 
-`MEETING_BOT_SECRET` is the callback HMAC secret reserved by #2579/#2586.
-Provision it through the existing Worker/runtime secret mechanisms only
-after B1's signing contract and B0's host are settled. It must never be an
-image build argument, label or logged value. No value is recorded here.
-Any host/registry pull credentials will be named only after the host is chosen.
+The runtime factory preserves B1's start/stop/heartbeat interface. Missing host
+binding refuses dispatch before billing. Branch configs deliberately omit the
+HQ host binding: a branch needs its own host, callback origin and HMAC secret
+before it can dispatch. Do not share HQ's secret with a branch.
 
-Remaining release gates: B0 host/instance/cost decision and its D886 file;
-B2 runtime Dockerfile and tests; B1 BotRuntime/callback contract; start,
-stop and heartbeat against a stub; host-specific health checks; binding
-parity in production and preview; and a failed image build stopping both
-`npm run deploy` and the Worker deploy workflow **before migrations**.
-Until then the existing Worker deploy path and meeting-bot flags stay as-is.
+### Owner-only first deployment
+
+1. Enable Cloudflare Containers for the account. Provision the dedicated
+   `MEETING_BOT_CLOUDFLARE_API_TOKEN` Actions secret, scoped to this deployment
+   with Containers registry access and Worker/DO deployment permissions. The
+   existing site token is not widened. `CLOUDFLARE_ACCOUNT_ID` is reused.
+2. Provision the same random `MEETING_BOT_SECRET` (32+ characters) separately
+   on the site and corresponding bot host through Wrangler secrets. Preview
+   uses a different pair. On first creation, deploy the bot hosts before adding the site
+   cross-script binding; the rollout/notice gates stay closed throughout.
+   The config fixes the callback `APP_URL` per host; verify the preview origin.
+3. On the site only, provision `MEETING_BOT_ZOOM_CLIENT_ID` and
+   `MEETING_BOT_ZOOM_CLIENT_SECRET` for the approved Zoom Meeting SDK app.
+   Its OBF permission and founder OAuth grant remain separate prerequisites.
+   SDK JWT expiry follows the run deadline, capped at two hours, subject to
+   Zoom's 30-minute minimum. The container receives a derived run-only key;
+   it never receives the master secret or long-lived SDK/OAuth credentials.
+4. After merge and owner verification, set the Actions variable
+   `MEETING_BOT_DEPLOY_ENABLED=true`, then manually dispatch
+   `meeting-bot-deploy.yml` on main. It builds/tests the image before deploying
+   only the bot config. Later main changes under `meeting-bot/` trigger it.
+   Disabling this variable freezes bot deployments without affecting the site.
+5. After both production and preview hosts exist, run
+   `node scripts/configure-meeting-bot-binding.mjs` to review the full site
+   config, then use `--write` in a follow-up owner PR. Run the binding parity
+   and branch guards before its normal site deployment. This adds all three
+   remote bindings together; absent bindings keep `botConfigured` false.
+6. Record first deployment and remaining live checks on #1008. No production
+   bot deployment was performed by this implementation. First deployment,
+   container sandbox compatibility, D886 §7 memory/CPU/size and two-hour soak,
+   and real calls remain owner follow-up, not implementation prerequisites.
+
+`meeting-bot-image.yml` builds and boots the real Linux image on PRs without
+provider network, checks the Python SDK load, and dry-runs both bot configs.
+A manual main run can publish a commit-tagged GHCR image using `GITHUB_TOKEN`.
+Wrangler builds/pushes its own container image during bot deployment; retain
+that deployment's digest and Worker version for rollback. Roll back only the
+bot Worker/config and its image, never the site as part of bot rollback.
+
+No secret is an image build argument or label. Never log meeting links,
+passcodes, names, transcripts or signed material. Container Stop records a
+persistent tombstone before waiting for startup; SIGTERM uses B2's bounded
+drain, with destruction after 30 seconds. Expired funded leases stop the
+container. Replacement/rejoin stays refused until a durable resume contract
+exists. Publication, canary/price switches and actual meetings remain gated
+by B9 and the owner; deployment alone enables none of them.

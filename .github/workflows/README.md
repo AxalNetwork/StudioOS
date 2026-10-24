@@ -123,3 +123,11 @@ blocked by a missing bot image. Nothing here turns on meeting capture.
 Sources read 22 October 2026:
 [GitHub image publishing](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images),
 [Docker build command](https://docs.docker.com/reference/cli/docker/buildx/build/).
+
+## Independent meeting bot release (D886 B8)
+
+`meeting-bot-deploy.yml` handles main bot changes and manual main dispatch,
+behind the owner-set `MEETING_BOT_DEPLOY_ENABLED` Actions variable. It uses
+`MEETING_BOT_CLOUDFLARE_API_TOKEN` and deploys only the bot Worker config.
+`meeting-bot-image.yml` validates the real image/native load and bot config
+dry runs on PRs. Site deployment never builds or publishes a bot image.

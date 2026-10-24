@@ -209,3 +209,12 @@ the exact comparison from the previous active day's final commit to this
 one. Publishing still triggers `release-published.yml` for the logo badge.
 `lib/releaseDraft.test.mjs` covers the date counters, historical backfill,
 pagination, fixed published versions and idempotent draft updates.
+
+`dry-run-meeting-bot-deploy.mjs` validates only the separate bot Worker configs
+with an isolated scratch image; Docker is required. It never deploys.
+`lib/meetingBotDeploy.test.mjs` protects independent site releases, remote
+binding targets and branch isolation.
+
+`configure-meeting-bot-binding.mjs` prints the prospective site config; only
+`--write` changes it, after the owner deploys both bot hosts. Its pure helper
+`lib/meetingBotBinding.mjs` adds all three remote bindings idempotently.

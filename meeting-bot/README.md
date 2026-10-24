@@ -273,3 +273,11 @@ UNVERIFIED. The existing ZoomAdapter accepts it as its `sdk` dependency.
 The merged B4 Python sidecar source and pinned requirement file are copied into
 the image. Its native SDK binding/GLib/PulseAudio installation and live loading
 remain B8's verification gate; the factory does not activate it prematurely.
+
+## Independent deployment (B8)
+
+`worker/` hosts the private container Durable Object; its README explains the
+control boundary. `wrangler.meeting-bot.toml` and `meeting-bot-deploy.yml` own
+the image release independently of the site. `container-entry.sh` supplies
+Xvfb/PulseAudio for the SDK sidecar. The packaged factory now connects Teams
+and Zoom; no real-platform measurement or publication is implied.
