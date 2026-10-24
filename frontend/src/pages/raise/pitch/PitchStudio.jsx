@@ -11,11 +11,13 @@ import PitchNotes from './PitchNotes';
 import PitchReview from './PitchReview';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import {
-  EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
-  asList, coverOf, currentVersion, dayLabel, funnelRows, isReadOnly, linkPage, linkRows, mmss, newLinkHref,
-  readerStats, slideCaption, slideSeconds, ventureQuery, versionLabel, versionRows, viewsState, weeklyViews,
+  BUILDER_PATH, EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
+  asList, coverOf, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, mmss,
+  readerStats, slideSeconds, ventureQuery, versionLabel, versionRows, viewsState, weeklyViews,
 } from './pitchStudioModel';
 import { presentHref } from './presentExportModel';
+import ShareDialog from './ShareDialog';
+import { NEW_LINK, analyticsOf, cardSeries, ndaCell, settingsLine, shareFunnel } from './shareModel';
 
 /**
  * D894 (#2434) — the Pitch deck studio's shell and the two tabs whose reads are
@@ -201,7 +203,7 @@ function StudioHeader({ tab, q, readOnly, showNew }) {
           <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400">{LINE}</p>
         </div>
         {/* PD3 (/raise/pitch/new) is #2434 part 3; until then a new deck starts in the builder. */}
-        {showNew ? <Link to={`${EDIT_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-new">New deck</Link> : null}
+        {showNew ? <Link to={`${BUILDER_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-new">New deck</Link> : null}
       </div>
       {/* The reviewer is its own tool, and its writes are its own: Review draws no banner. */}
       {readOnly && tab !== 'review' ? (
@@ -257,7 +259,7 @@ export function StudioDecks({ reads, readOnly, q }) {
     left = (
       <div className={`${CARD} flex flex-col items-center gap-3 px-5 py-7 text-center`} data-testid="pitch-studio-empty">
         <span className={`text-[15px] font-extrabold ${INK}`}>{EMPTY_DECK}</span>
-        {!readOnly ? <Link to={`${EDIT_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-empty-new">New deck</Link> : null}
+        {!readOnly ? <Link to={`${BUILDER_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-empty-new">New deck</Link> : null}
       </div>
     );
   } else {
@@ -440,13 +442,19 @@ export function StudioAnalytics({ reads, readOnly }) {
   const records = reads.module.data?.records;
   const links = useMemo(() => linkRows(records, reads.engagement.data), [records, reads.engagement.data]);
   const pager = linkPage(records);
-  const slides = useMemo(() => slideSeconds(card), [card]);
   const stats = reads.engagement.status === 'ok' ? readerStats(reads.engagement.data) : null;
+  // D902 — PD19 for this version: the Worker's per-viewer median, seconds per
+  // card against the version before, the ask, and each link's settings.
+  const analytics = reads.engagement.status === 'ok' ? analyticsOf(reads.engagement.data) : null;
+  const series = useMemo(() => cardSeries(analytics), [analytics]);
+  const shares = useMemo(() => new Map(asList(reads.engagement.data, 'shares').map((x) => [String(x.id), x])), [reads.engagement.data]);
+  const [sharing, setSharing] = useState(false);
   // Engagement is read once the versions read names a current version, so a
   // failed versions read is a failed engagement read here, never a skeleton
   // waiting on a read that was never made.
   const engState = reads.versions.status === 'error' ? 'error' : reads.versions.status === 'ok' && !current ? 'ok' : reads.engagement.status;
-  const addHref = !readOnly ? newLinkHref(records) : null;
+  // D902 — New link opens the share dialog (PD18), the one link writer.
+  const canShare = !readOnly && Boolean(current?.id) && Boolean(reads.project?.id);
 
   // The dialog hands focus back to the Withdraw button as it closes, and the
   // re-read then takes that button away: the result's own Dismiss takes focus
@@ -500,19 +508,24 @@ export function StudioAnalytics({ reads, readOnly }) {
             <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4" data-testid="pitch-studio-tiles">
               <Tile label="Views" value={stats ? `${stats.views}${stats.capped ? '+' : ''}` : null} note={current ? `on ${versionLabel(current)}` : ''} state={engState} />
               <Tile label="Unique viewers" value={stats ? String(stats.viewers) : null} note={stats?.capped ? `one per browser, in the latest ${ENGAGEMENT_VIEW_ROWS} views` : 'one per browser'} state={engState} />
-              <Tile label="Median time" value={stats ? mmss(stats.medianSeconds) : null} note={stats?.capped ? `per view, over the latest ${ENGAGEMENT_VIEW_ROWS}` : 'per view'} state={engState} />
+              <Tile
+                label="Median time"
+                value={analytics ? mmss(analytics.median_seconds_per_viewer) : stats ? mmss(stats.medianSeconds) : null}
+                note={analytics ? 'per viewer, every view of this version' : stats?.capped ? `per view, over the latest ${ENGAGEMENT_VIEW_ROWS}` : 'per view'}
+                state={engState}
+              />
               <Tile label="NDA signed" value={stats && stats.ndaSigned != null ? String(stats.ndaSigned) : null} note="signatures on this version's links" state={engState} />
             </div>
             <div className="grid gap-3.5 lg:grid-cols-[1.6fr_1fr]">
-              <SecondsPerSlide rows={slides} />
-              <Funnel stats={stats} state={engState} />
+              <SecondsPerCard series={series} unreadable={engState === 'ok' && !analytics} />
+              <Funnel stats={stats} analytics={analytics} state={engState} />
             </div>
           </>
         )}
         <section className={`${CARD} overflow-hidden`} data-testid="pitch-studio-links">
           <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
             <h2 ref={heading} tabIndex={-1} className={`m-0 text-[14px] font-extrabold ${INK}`}>By investor</h2>
-            {addHref ? <Link to={addHref} className={GHOST} data-testid="pitch-studio-new-link">New link</Link> : null}
+            {canShare ? <button type="button" className={GHOST} onClick={() => setSharing(true)} data-testid="pitch-studio-new-link">{NEW_LINK}</button> : null}
           </div>
           {records?.state === 'unreadable' ? (
             <p className={`${MUTED} px-4 pb-4`}>Your investor links could not be read.</p>
@@ -530,6 +543,9 @@ export function StudioAnalytics({ reads, readOnly }) {
                     <th className="px-4 py-2 font-semibold">Views</th>
                     <th className="px-4 py-2 font-semibold">Time on deck</th>
                     <th className="px-4 py-2 font-semibold">Most read</th>
+                    <th className="px-4 py-2 font-semibold">NDA</th>
+                    <th className="px-4 py-2 font-semibold">Settings</th>
+                    <th className="px-4 py-2 font-semibold">Last opened</th>
                     <th className="px-4 py-2"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
@@ -541,6 +557,9 @@ export function StudioAnalytics({ reads, readOnly }) {
                       <td className={`px-4 py-2.5 font-mono ${INK}`}>{l.views ?? NOT_RECORDED}</td>
                       <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{l.views ? (l.time && !/^0\s*min$/.test(l.time) ? l.time : NOT_RECORDED) : l.views === 0 ? 'Not opened' : NOT_RECORDED}</td>
                       <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{l.mostRead ?? (l.views === 0 ? 'Not opened' : NOT_RECORDED)}</td>
+                      <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-link-nda-${l.id}`}>{ndaCell(shares.get(String(l.id)))}</td>
+                      <td className="px-4 py-2.5 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-link-settings-${l.id}`}>{settingsLine(shares.get(String(l.id)))}</td>
+                      <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{shares.get(String(l.id))?.last_viewed_at ? dayLabel(shares.get(String(l.id)).last_viewed_at) : l.views === 0 ? 'Not opened' : NOT_RECORDED}</td>
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-3">
                           {l.live === null ? (
@@ -610,6 +629,9 @@ export function StudioAnalytics({ reads, readOnly }) {
           {failed ? <p role="alert" className="m-0 mt-2 text-[12.5px] font-semibold text-axal-destructive dark:text-red-400">The link could not be withdrawn. Try again.</p> : null}
         </Lightbox>
       ) : null}
+      {sharing && canShare ? (
+        <ShareDialog projectId={reads.project.id} deck={current} onClose={() => setSharing(false)} onCreated={() => reads.reload()} />
+      ) : null}
     </div>
   );
 }
@@ -628,47 +650,65 @@ function Tile({ label, value, note, state }) {
   );
 }
 
-function SecondsPerSlide({ rows }) {
-  const peak = Math.max(...rows.map((r) => r.seconds), 1);
-  const caption = slideCaption(rows);
+function SecondsPerCard({ series, unreadable }) {
+  // D902 — this version only, with the version before it dotted. The Raise
+  // module's card summed every version together.
+  if (unreadable || !series) {
+    return (
+      <section className={`${CARD} flex min-w-0 flex-col gap-2 p-4`} data-testid="pitch-studio-seconds">
+        <span className={`text-[14px] font-extrabold ${INK}`}>Seconds per card</span>
+        <span className={MUTED}>{unreadable ? 'Seconds per card on this version could not be read.' : 'Reading…'}</span>
+      </section>
+    );
+  }
+  const { rows, max, version, previousVersion } = series;
   return (
     // min-w-0: a grid item, so a long deck's bars scroll inside the card rather
     // than widening the column, and the page, at phone width.
     <section className={`${CARD} flex min-w-0 flex-col gap-2 p-4`} data-testid="pitch-studio-seconds">
-      <span className={`text-[14px] font-extrabold ${INK}`}>Seconds per slide</span>
-      <span className="text-[12px] text-axal-muted dark:text-gray-400">{caption || 'Seconds per slide are not recorded yet.'} Every version together.</span>
+      <span className={`text-[14px] font-extrabold ${INK}`}>Seconds per card</span>
+      <span className="text-[12px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-seconds-legend">
+        {previousVersion == null ? `v${version}. No version before it to compare.` : `v${version}, with v${previousVersion} dotted.`}
+      </span>
       {rows.length ? (
-        <div className="flex h-40 items-end gap-2 overflow-x-auto pt-4" role="img" aria-label={rows.map((r) => `Slide ${r.index}: ${r.seconds} seconds`).join(', ')}>
+        <div className="flex h-40 items-end gap-2 overflow-x-auto pt-4" role="img"
+          aria-label={rows.map((r) => `Card ${r.label}: ${r.seconds} seconds${r.previous == null ? '' : `, ${r.previous} on v${previousVersion}`}`).join(', ')}>
           {rows.map((r) => (
             <div key={r.index} className="flex flex-1 flex-col items-center gap-1">
               <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">{Math.round(r.seconds)}</span>
-              <span className="w-full max-w-[30px] rounded-t-[3px] bg-axal-violet dark:bg-violet-400" style={{ height: `${Math.max(4, Math.round((r.seconds / peak) * 110))}px` }} />
-              <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">{String(r.index).padStart(2, '0')}</span>
+              <div className="flex w-full max-w-[34px] items-end gap-0.5">
+                <span className="flex-1 rounded-t-[3px] bg-axal-violet dark:bg-violet-400" style={{ height: `${Math.max(4, Math.round((r.seconds / max) * 110))}px` }} />
+                {r.previous == null ? null : (
+                  <span className="flex-1 rounded-t-[3px] border border-dashed border-axal-violet dark:border-violet-400" style={{ height: `${Math.max(4, Math.round((r.previous / max) * 110))}px` }} data-testid={`pitch-studio-previous-${r.index}`} />
+                )}
+              </div>
+              <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">{r.label}</span>
             </div>
           ))}
         </div>
-      ) : null}
+      ) : <span className={MUTED}>No card on this version has been read yet.</span>}
     </section>
   );
 }
 
-function Funnel({ stats, state }) {
-  const rows = funnelRows(stats);
+function Funnel({ stats, analytics, state }) {
+  const rows = shareFunnel(stats, analytics);
   return (
     <section className={`${CARD} flex flex-col gap-3 p-4`} data-testid="pitch-studio-funnel">
       <span className={`text-[14px] font-extrabold ${INK}`}>Funnel</span>
-      {state === 'error' ? <span className={MUTED}>Could not be read.</span> : rows.map(({ label, n, width }, i) => (
+      {state === 'error' ? <span className={MUTED}>Could not be read.</span> : rows.map(({ label, n, width, reason }, i) => (
         <div key={label} className="flex flex-col gap-1">
-          <div className="flex justify-between text-[12.5px]"><span className={INK}>{label}</span><span className="font-mono text-axal-muted dark:text-gray-400">{n == null ? (state === 'ok' ? NOT_RECORDED : 'Reading…') : `${n}${i === 0 && stats?.capped ? '+' : ''}`}</span></div>
+          <div className="flex justify-between text-[12.5px]"><span className={INK}>{label}</span><span className="font-mono text-axal-muted dark:text-gray-400">{n == null ? (state === 'ok' ? NOT_RECORDED : 'Reading…') : String(n)}</span></div>
           <div className="h-2.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800">
             <div className="h-2.5 rounded-full bg-axal-violet dark:bg-violet-400" style={{ width: `${width}%` }} data-testid={`pitch-studio-funnel-bar-${i}`} />
           </div>
+          {reason ? <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="pitch-studio-funnel-no-ask">{reason}</span> : null}
         </div>
       ))}
       <span className="text-[11.5px] text-axal-muted dark:text-gray-400">
-        {stats?.capped
-          ? `On the current version, as a share of its latest ${ENGAGEMENT_VIEW_ROWS} views; the NDA count is every signature.`
-          : 'On the current version, as a share of its views.'}
+        {!analytics && stats?.capped
+          ? `On the current version, as a share of the unique viewers in its latest ${ENGAGEMENT_VIEW_ROWS} views; the NDA count is every signature.`
+          : 'On the current version, as a share of its unique viewers; the NDA count is every signature.'}
       </span>
     </section>
   );

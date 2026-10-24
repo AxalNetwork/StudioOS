@@ -12,6 +12,10 @@ Partners, under Community."):
 - `/admin?tab=network-profiles`, in `../LegacyContractsRedirect.jsx`;
 - `/admin/network-profiles`, in `ApRedirect.jsx`.
 
+D952 (#2728): `/admin/partner-invitations/firm-links` (Partner invitations'
+Firm links, D923) forwards to the Firms tab with `?moved=firm-links`, in
+`FirmLinksRedirect.jsx`.
+
 - `AdvisorsPartners.jsx` — the page inside `AdminBoardFrame` (its rail): the
   header, Overview's tiles, Needs you and the charts waiting, the Firms table,
   and the Deck roster, which is today's `../AdminNetworkProfiles.jsx` embedded.
@@ -19,6 +23,11 @@ Partners, under Community."):
   tiles, Needs you and the firms table from the reads, each `ready`,
   `loading`, `unreadable` or `notyet`.
 - `ApRedirect.jsx` — the old bare address.
+- `FirmLinks.jsx` — on the Firms tab, below the table: attaching a partner
+  account to its firm, or detaching it, with a confirm before every save and
+  the result as a line on the page. Moved from Partner invitations (D952);
+  its copy and helpers stay in `../partners/partnersDeskModel.js`.
+- `FirmLinksRedirect.jsx` — the old Firm links address.
 
 ## Rules
 
@@ -29,6 +38,10 @@ Partners, under Community."):
   "the newest 200").
 - Nothing is decided here that another page decides (the canvas's DO NOT
   DRAW): attaching a firm, a deal, a host decision and an account each open
-  the page that decides. Attaching moves to the Firms tab with #2728.
-- No email reaches this page; the partner directory read carries them.
+  the page that decides. Attaching an account to a firm is the one decision
+  made here, on the Firms tab (D952), and it asks before it saves.
+- No email reaches the page file or `apModel.js`; the partner directory read
+  carries them. The one exception is `FirmLinks.jsx` (D952): an account with
+  no name is known by its email in the attach table, from the same admin-only
+  `links` read.
 - Each tab is a literal `HeaderTab`, so the reachability walk finds its door.

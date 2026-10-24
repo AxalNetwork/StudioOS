@@ -151,11 +151,11 @@ export const FOUNDER_OPTIONS = [
   },
   // The pitch deck's editor, the module's tool link, and its Review tab.
   {
-    page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch/edit', label: 'Fill from project', kind: 'write', handler: 'form',
+    page: 'Founder · Raise · Pitch deck', key: 'form:deck', route: '/raise/pitch/builder', label: 'Fill from project', kind: 'write', handler: 'form',
     at: [[DECK, 'api.deckAutofill(']],
   },
   {
-    page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch/edit', label: 'Use this template', kind: 'write', handler: 'form',
+    page: 'Founder · Raise · Pitch deck', key: 'form:deck-template', route: '/raise/pitch/builder', label: 'Use this template', kind: 'write', handler: 'form',
     at: [[DECK, 'api.deckApplyMethod(']],
   },
   {

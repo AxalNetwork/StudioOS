@@ -15,6 +15,7 @@ import { downloadDeckPdf } from '../lib/deckPdf.jsx';
 import { useAuth } from '../hooks/useAuthSync';
 import { useSpinoutDeckFields } from '../hooks/useSpinoutDeckFields';
 import UseOfFundsEditor from '../components/UseOfFundsEditor';
+import ShareDialog from './raise/pitch/ShareDialog';
 import SpinoutSlideEditor from '../components/SpinoutSlideEditor';
 import { useToast } from '../components/useToast';
 import { useEscapeClose } from '../components/useEscapeClose';
@@ -82,7 +83,8 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   // Shape: { gaps: string[], draft: boolean, programDay: number } | null.
   const [deckPreview, setDeckPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [shareUrl, setShareUrl] = useState('');
+  // D902 — Share opens the share dialog (PD18), the one link writer (bug 8).
+  const [sharing, setSharing] = useState(false);
   const [engagement, setEngagement] = useState(null);
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
@@ -146,7 +148,7 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
 
   useEffect(() => {
     if (!projectId) return;
-    setShareUrl(''); setError(''); setExportMenuOpen(false); setProposal(null);
+    setSharing(false); setError(''); setExportMenuOpen(false); setProposal(null);
     (async () => {
       try {
         const r = await api.deckListVersions(projectId);
@@ -532,23 +534,11 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
   };
 
   // ---------------- share + restore ----------------
-  const onShare = async () => {
-    if (!deck?.id) return;
-    try {
-      // Task #53 — canonical share URL shape is /share/deck/<token>.
-      // Server returns share_path in the new shape; older clients fall
-      // back to legacy /deck/share/<token>.
-      const r = await api.deckShare(deck.id, { expires_in_hours: 24, view_limit: 1 });
-      const path = r?.share_path || (r?.token && `/share/deck/${r.token}`);
-      const url = r?.url || (path && `${window.location.origin}${path}`);
-      setShareUrl(url || '');
-      if (url && navigator.clipboard) {
-        await navigator.clipboard.writeText(url).catch(() => {});
-        addToast('Share link copied to clipboard.', 'success');
-      }
-      // Refresh engagement so the new share row shows up in the panel.
-      api.deckEngagement(deck.id).then(setEngagement).catch(() => {});
-    } catch (e) { setError(e.message || 'Share failed'); }
+  const onShare = () => {
+    // D902 — the share dialog asks for the investor, expiry, view limit, the
+    // two settings, the NDA and what is included, then writes through the one
+    // link writer. The editor's old fixed 24-hour, one-view link is gone.
+    if (deck?.id && projectId) setSharing(true);
   };
 
   // Task #53 — load engagement stats whenever the active deck changes.
@@ -941,13 +931,17 @@ export default function PitchDeckPage({ embedded = false, initialProjects = [], 
                   onClick={onShare}
                   className="w-full mt-2 px-2 py-1.5 text-sm border dark:border-slate-700 rounded flex items-center justify-center gap-2 hover:bg-gray-50 dark:hover:bg-slate-800"
                 >
-                  <Share2 className="w-4 h-4" /> One-time share link
+                  <Share2 className="w-4 h-4" /> Share
                 </button>
-                {shareUrl && (
-                  <div className="mt-2 text-[11px] break-all text-gray-500 dark:text-slate-400">
-                    {shareUrl}
-                  </div>
-                )}
+                {sharing && deck?.id && projectId ? (
+                  <ShareDialog
+                    projectId={projectId}
+                    deck={deck}
+                    onClose={() => setSharing(false)}
+                    // Refresh engagement so the new link's row shows up in the panel.
+                    onCreated={() => api.deckEngagement(deck.id).then(setEngagement).catch(() => {})}
+                  />
+                ) : null}
               </div>
 
               {/* Task #42 — pre-flight readiness checklist. Shows what's still
