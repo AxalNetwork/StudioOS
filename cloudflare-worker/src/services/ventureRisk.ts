@@ -313,15 +313,15 @@ export function computeAutoLayers(inputs: RiskInputs): Record<LayerKey, AutoLaye
     [100, 30],
   ], num(proj?.revenue) > 0 ? 15 : 0);
   const productHas =
-    proj != null && (num(proj.users_count) > 0 || num(proj.revenue) > 0 || hasText(proj.growth_signals));
+    proj != null && (recorded(proj.users_count) || recorded(proj.revenue) || hasText(proj.growth_signals));
   let product = 0;
   if (productHas) {
     const parts: number[] = [];
-    if (num(proj?.users_count) > 0) {
+    if (recorded(proj?.users_count)) {
       parts.push(userPts);
       productSignals.push('Active users');
     }
-    if (num(proj?.revenue) > 0) {
+    if (recorded(proj?.revenue)) {
       parts.push(revPts);
       productSignals.push('Revenue');
     }
@@ -692,9 +692,9 @@ export async function buildMatrix(env: Env, limit = 200, ctx?: ReadContext): Pro
       overall_score: overall.score,
       overall_band: overall.band,
       overall_color: overall.color,
-    covered_layers: overall.covered_layers,
-    total_layers: overall.total_layers,
-    reason: overall.reason,
+      covered_layers: overall.covered_layers,
+      total_layers: overall.total_layers,
+      reason: overall.reason,
       layers: layerMap,
     });
   }

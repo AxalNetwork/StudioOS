@@ -232,10 +232,10 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
       reads: [{ a: 'Narrative versions', b: 'none saved', ...met(false) }],
     });
   } else {
-    const m = await env.DB.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = ?')
-      .bind(projectId, v).first<{ n: number }>();
-    const mismatches = Number(m?.n ?? 0);
-    const { compared } = await checkInputs(env, projectId, v);
+    const { stated, metrics, compared } = await checkInputs(env, projectId, v);
+    // Re-score compares the current evidence itself; an empty or stale stored
+    // mismatch list is not proof that a version agrees with today's figures.
+    const mismatches = consistencyCheck(stated, metrics).length;
     out.push({
       compared_count: compared, key: 'narrative', score: compared > 0 ? Math.max(0, 10 - 2 * mismatches) : null, evidence: compared > 0 ? 'measured' : 'pattern',
       missing: compared === 0 ? 'Not enough recorded' : mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
@@ -367,7 +367,7 @@ async function readinessRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
       // D691 decision 3: the item's key, the same in every list, record and write.
       id: READINESS_KEYS.includes(i.item_key) ? i.item_key : null,
       cells: {
-        item: i.label, score: s?.score != null ? Number(s.score) : null, evidence: s?.evidence ?? null,
+        item: i.label, score: s?.score != null ? Number(s.score) : null, evidence: s?.score != null ? s.evidence : null,
         missing: s ? s.missing ?? '' : null, updated: s ? day(s.scored_at) : null,
       },
     })),

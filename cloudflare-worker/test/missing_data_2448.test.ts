@@ -22,7 +22,7 @@ import { BASELINE_CUTOFF, compareMigrations, migrationNumber } from '../../scrip
 import { runFullScore } from '../src/services/scoring.ts';
 import { REQUIRED_OFFICIAL_INPUTS } from '../src/services/scoreIntegrity.ts';
 import { computeAutoLayers, mergeLayers, overallFromLayers } from '../src/services/ventureRisk.ts';
-import { computeReadiness, overallReadiness, loadReadiness } from '../src/services/raiseCycle.ts';
+import { computeReadiness, overallReadiness, loadReadiness, RECORDS_FOR } from '../src/services/raiseCycle.ts';
 import { rescoreReadiness } from '../src/services/raiseWriters.ts';
 import trust from '../src/routes/trust.ts';
 import projects from '../src/routes/projects.ts';
@@ -51,6 +51,8 @@ test('2448: incomplete scores stay null; explicit zero inputs are retained',()=>
  const result=runFullScore(all);assert.equal(result.breakdown!.product.mvp_time,7);assert.equal(result.breakdown!.capital.cost_mvp,7);assert.ok(result.total_score!>0);
 });
 test('2448: risk excludes missing layers, keeps recorded zero, and reports coverage',()=>{
+ assert.equal(computeAutoLayers({snapshot:null,project:{users_count:0,revenue:0}}).product.score,0);
+ const partial=computeAutoLayers({snapshot:{market_total:10},project:null});assert.equal(partial.founder.score,null);
  const auto=computeAutoLayers({snapshot:{team_total:0},project:null});
  assert.equal(auto.market.score,null);assert.equal(auto.founder.score,0);
  const layers=mergeLayers(auto,new Map([['market',{layer_key:'market',analyst_score:100}]]));
@@ -59,9 +61,20 @@ test('2448: risk excludes missing layers, keeps recorded zero, and reports cover
 });
 test('2448: incomplete intake refuses before creating any records',async()=>{
  const {db,env}=fixture();try {const before=db.prepare('SELECT count(*) n FROM projects').get()!.n;
- const response=await request(projects,env,'/submit',{name:'Incomplete',founder_email:'new@example.test'});
+ for(const inputs of [{}, {...Object.fromEntries(REQUIRED_OFFICIAL_INPUTS.map(k=>[k,0])), market_trend:'   '}]) {
+ const response=await request(projects,env,'/submit',{name:'Incomplete',founder_email:'new@example.test',...inputs});
  assert.equal(response.status,400);assert.equal((await response.json() as any).code,'missing_official_inputs');
+ }
  assert.equal(db.prepare('SELECT count(*) n FROM projects').get()!.n,before);assert.equal(db.prepare('SELECT count(*) n FROM founders').get()!.n,0);
+ }finally{db.close();}
+});
+test('2448: complete intake records zero inputs and computes a real score',async()=>{
+ const {db,env}=fixture();try {
+ const inputs=Object.fromEntries(REQUIRED_OFFICIAL_INPUTS.map(k=>[k,0]));
+ const response=await request(projects,env,'/submit',{...inputs,name:'Zero-input venture',founder_name:'Synthetic founder',founder_email:'zero@example.test',funding_needed:0});
+ const body:any=await response.json();assert.equal(response.status,200,JSON.stringify(body));assert.equal(body.score.total_score,runFullScore(inputs).total_score);
+ assert.equal(body.project.tam,0);assert.equal(body.project.cost_to_mvp,0);assert.equal(body.project.funding_needed,0);
+ assert.equal(db.prepare('SELECT count(*) n FROM score_snapshots').get()!.n,1);
  }finally{db.close();}
 });
 test('2448: trust batch is unscored until obligations are recorded, then preserves zero and full compliance',async()=>{
@@ -87,7 +100,35 @@ test('2448: narrative readiness without a comparison is unscored and omitted fro
  await rescoreReadiness(env,{projectId:1,userId:1,items:['narrative']});
  const row=db.prepare('SELECT score,evidence,missing FROM readiness_scores').get()!;assert.equal(row.score,null);assert.notEqual(row.evidence,'measured');
  assert.equal((await loadReadiness({env,projectId:1} as any)).scores[0].score,null);
+ const ctx:any={env,projectId:1,today:'2026-10-24'};const query:any={q:'',sort:'order',filter:{},page:1};
+ const records=await RECORDS_FOR['fundraising-readiness'](ctx,query);const narrative=records.rows.find(r=>r.id==='narrative')!;assert.equal(narrative.cells.score,null);assert.equal(narrative.cells.evidence,null);
+ assert.equal((await RECORDS_FOR['fundraising-readiness'](ctx,{...query,filter:{state:'scored'}})).total,0);
+ assert.ok((await RECORDS_FOR['fundraising-readiness'](ctx,{...query,filter:{state:'not_scored'}})).rows.some(r=>r.id==='narrative'));
  db.exec("UPDATE spinout_deck_overrides SET value='$900 MRR'; INSERT INTO project_metrics(project_id,snapshot_date,source,mrr) VALUES(1,'2026-10-24','manual',900)");
  n=(await computeReadiness(env,1)).find(x=>x.key==='narrative')!;assert.equal(n.score,10);assert.equal(n.evidence,'measured');
+ db.exec('UPDATE project_metrics SET mrr=1000');n=(await computeReadiness(env,1)).find(x=>x.key==='narrative')!;assert.equal(n.score,8);
  }finally{db.close();}
+});
+
+test('2448: migration 558 preserves rows, defaults, indexes and deleted ID high-water marks',()=>{
+ for(const empty of [false,true]) {
+ const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});try{
+ db.exec(readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8'));
+ for(const n of readdirSync(new URL('../sql/migrations/',import.meta.url)).filter(n=>/^\d+_.*\.sql$/.test(n)).sort(compareMigrations))
+  if(migrationNumber(n)>BASELINE_CUTOFF && !n.startsWith('558_')) db.exec(readFileSync(new URL('../sql/migrations/'+n,import.meta.url),'utf8'));
+ db.exec("INSERT INTO users(id,name,email,role) VALUES(1,'Synthetic','migration@example.test','admin'); INSERT INTO projects(id,name) VALUES(1,'Synthetic'); INSERT INTO readiness_items(id,project_id,item_key,label) VALUES(1,1,'narrative','Narrative'); INSERT INTO readiness_scores(id,item_id,project_id,score,evidence,source,scored_by,scored_at,missing) VALUES(41,1,1,0,'stated','computed',1,'2026-09-02','Synthetic reason'),(900,1,1,10,'measured','manual',1,'2026-09-03',NULL); DELETE FROM readiness_scores WHERE id=900;");
+ if(empty) db.exec('DELETE FROM readiness_scores');
+ const before=db.prepare('SELECT * FROM readiness_scores').all();
+ const columns=db.prepare('PRAGMA table_info(readiness_scores)').all() as any[];
+ const indexes=db.prepare("SELECT name,sql FROM sqlite_master WHERE tbl_name='readiness_scores' AND type='index' ORDER BY name").all();
+ db.exec(readFileSync(new URL('../sql/migrations/558_readiness_scores_nullable_score.sql',import.meta.url),'utf8'));
+ assert.deepEqual(db.prepare('SELECT * FROM readiness_scores').all(),before);
+ assert.deepEqual(db.prepare('PRAGMA table_info(readiness_scores)').all().map(c=>({...c})),columns.map(c=>({...c,notnull:c.name==='score'?0:c.notnull})));
+ assert.deepEqual(db.prepare("SELECT name,sql FROM sqlite_master WHERE tbl_name='readiness_scores' AND type='index' ORDER BY name").all(),indexes);
+ db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence,missing) VALUES(1,1,NULL,'pattern','Not enough recorded')");
+ const added=db.prepare('SELECT * FROM readiness_scores ORDER BY id DESC LIMIT 1').get()!;assert.equal(added.id,901);assert.equal(added.score,null);assert.equal(added.source,'manual');assert.ok(added.scored_at);
+ assert.deepEqual(db.prepare('PRAGMA foreign_key_check(readiness_scores)').all(),[]);
+ for(const bad of ["11,'stated'","0,'invented'"]) assert.throws(()=>db.exec(`INSERT INTO readiness_scores(item_id,project_id,score,evidence) VALUES(1,1,${bad})`),/CHECK/);
+ }finally{db.close();}
+ }
 });

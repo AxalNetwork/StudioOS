@@ -629,7 +629,7 @@ projects.post('/submit', async (c) => {
     assertNoReservedFields(data);
     assertOfficialInputsComplete(data);
   } catch (e) {
-    if (e instanceof MissingOfficialInputsError) return c.json({ error: e.message, missing: e.missing, code: 'missing_official_inputs' }, 400);
+    if (e instanceof MissingOfficialInputsError) return c.json({ error: 'Complete all scoring inputs before submitting.', missing: e.missing, code: 'missing_official_inputs' }, 400);
     const message = e instanceof Error ? e.message : 'Reserved field rejected';
     return c.json({ error: message, code: 'reserved_field' }, 400);
   }
@@ -639,6 +639,12 @@ projects.post('/submit', async (c) => {
   const uof = normalizeUseOfFunds(data.use_of_funds);
   if (uof.error) return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400);
   const useOfFunds = uof.value;
+
+  const result = runFullScore(data);
+  if (result.total_score == null || !result.breakdown) {
+    return c.json({ error: 'Complete all scoring inputs before submitting.', missing: result.missing, code: 'missing_official_inputs' }, 400);
+  }
+  const b = result.breakdown;
 
   const sql = getSQL(c.env);
 
@@ -653,11 +659,7 @@ projects.post('/submit', async (c) => {
 
   const submitCompanyId = await resolveActiveCompany(
     c.env, submitUser as any, c.req.header(ACTIVE_COMPANY_HEADER));
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${submitCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${useOfFunds}) RETURNING *`;
-
-  const result = runFullScore(data);
-  if (result.total_score == null || !result.breakdown) throw new Error('Validated intake inputs were not scored');
-  const b = result.breakdown;
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${submitCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam ?? null}, ${data.sam ?? null}, ${data.cost_to_mvp ?? null}, ${data.funding_needed ?? null}, ${useOfFunds}) RETURNING *`;
 
   // Snapshot the scoring inputs so the nightly audit + admin queue can
   // reproduce the math, and so anomaly detection can compare to history.

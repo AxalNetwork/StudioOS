@@ -198,8 +198,8 @@ trust.get('/score/:userId', async (c) => {
     .filter(o => o.status !== 'satisfied' && o.status !== 'waived')
     .map(o => o.obligation_key);
   return c.json(isSelf || caller.role === 'admin'
-    ? { user_id: target, score, missing, required_total: required.length }
-    : { user_id: target, score });
+    ? { user_id: target, score, missing, required_total: required.length, ...(score == null ? { reason: 'No trust obligations recorded' } : {}) }
+    : { user_id: target, score, ...(score == null ? { reason: 'No trust obligations recorded' } : {}) });
 });
 
 // ---------------------------------------------------------------------------

@@ -287,7 +287,8 @@ export default function SpinoutLabScoringPage() {
           payload[f.key] = Number.isFinite(v) ? v : 0;
         }
       }
-      await api.scoreStartup(payload);
+      const result = await api.scoreStartup(payload);
+      if (result?.total_score === null) { setRunError(result.reason || 'Scoring inputs not recorded'); return; }
       // Completing a scoring run is a Week-3 lab milestone — but lab
       // milestones are user-scoped, so only the project's own founder marks
       // it (same ownership guard as the roadmap OKR milestone).

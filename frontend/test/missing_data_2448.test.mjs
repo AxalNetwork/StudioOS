@@ -38,3 +38,15 @@ test('2448: desktop failed trust read shows unreadable without a perfect score',
   assert.ok(!view.text().includes('Trust score unreadable'));
  } finally {if(view)await view.unmount();Object.assign(api,originals);}
 });
+
+import TrustScoreBadge from '../src/components/TrustScoreBadge.jsx';
+import RiskRadar from '../src/components/RiskRadar.jsx';
+test('2448: unscored trust badge is neutral; zero and 100 remain recorded scores',()=>{
+ const empty=renderToStaticMarkup(React.createElement(TrustScoreBadge,{score:null}));
+ assert.ok(empty.includes('Trust score not recorded'));assert.ok(empty.includes('—'));assert.ok(!empty.includes('All required obligations satisfied'));
+ for(const score of [0,100]){const html=renderToStaticMarkup(React.createElement(TrustScoreBadge,{score}));assert.ok(html.includes(`data-trust-score="${score}"`));assert.ok(!html.includes('Trust score not recorded'));}
+});
+test('2448: risk radar leaves missing axes blank instead of plotting zero',()=>{
+ const html=renderToStaticMarkup(React.createElement(RiskRadar,{layers:[{key:'founder',label:'Founder',score:null},{key:'market',label:'Market',score:0,band:'high'}]}));
+ assert.equal((html.match(/r="3.5"/g)||[]).length,1);assert.ok(html.includes('fill-opacity="0"'));
+});

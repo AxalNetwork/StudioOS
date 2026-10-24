@@ -449,7 +449,7 @@ function DealDrawer({ dealId, canEdit, onClose, onChanged, onAdvance }) {
 
   const triggerReview = async () => {
     setBusy(true); setErr('');
-    try { await api.pipelineTriggerReview(dealId); await load(); onChanged?.(); }
+    try { const result = await api.pipelineTriggerReview(dealId); if (result?.status === 'not_recorded') { setErr(result.reason || 'Traction not recorded'); return; } await load(); onChanged?.(); }
     catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };

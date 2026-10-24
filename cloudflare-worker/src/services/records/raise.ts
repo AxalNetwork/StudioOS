@@ -148,12 +148,12 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   const out: RecordContent = {
     title: item.label,
     sub: s ? `Readiness item · scored ${day(s.scored_at)}` : 'Readiness item · not scored yet',
-    pills: s
+    pills: s?.score != null
       ? [{ text: s.score == null ? 'Not scored' : `${Number(s.score)} / 10`, tone: s.score == null ? 'grey' : s.score >= 8 ? 'ok' : s.score >= 5 ? 'amb' : 'bad' }, { text: cap1(String(s.evidence)), tone: 'vio' }]
       : [{ text: 'Not scored', tone: 'grey' }],
     facts: [
       fact('Score', s?.score != null ? `${Number(s.score)} / 10` : null, notScored),
-      fact('Evidence', s ? cap1(String(s.evidence)) : null, notScored),
+      fact('Evidence', s?.score != null ? cap1(String(s.evidence)) : null, s?.missing || notScored),
       fact('Missing', s ? String(s.missing ?? '').trim() || 'Nothing' : null, notScored),
       fact('Last scored', s ? day(s.scored_at) : null, notScored),
     ],
