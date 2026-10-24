@@ -1,5 +1,9 @@
 import { request } from '../api.js';
 
+// D908 (#2692), D910 (#2694) and D911 (#2695) — the Investor narrative's Story and Positioning, on routes/cycle_raise.ts.
+// Every call names the venture (`?project=`); the venture's founder or an admin.
+//   read               GET  /cycles/raise/narrative/:version → sections and bindings
+//   saveSection        PUT  /cycles/raise/narrative/:version/sections/:section → changed fields
 // D914 (#2698) — the Investor narrative's admin read: the reasons an admin
 // gives for opening a venture's narrative, and its notes thread. Worker:
 // routes/cycle_raise.ts (`services/narrative/adminRead.ts`).
@@ -19,14 +23,21 @@ const q = (projectId) => `project=${encodeURIComponent(projectId)}`;
 //   positioningDraft   GET  /cycles/raise/narrative/positioning/draft      → { read_from, segments, competitors, withheld, proposals }
 //   proposePositioning POST /cycles/raise/narrative/positioning/draft?version=   one Eadwyn run → { proposals, removed, read_from, withheld }
 //   decidePositioning  POST /cycles/raise/narrative/positioning/proposals/:uid  { decision: 'accept' | 'discard' }
-// No version is the venture's core positioning. A proposal is decided one at a time.
+// In Positioning, no version is the venture's core positioning. A proposal is decided one at a time.
 function query(projectId, version) {
   const q = new URLSearchParams({ project: String(projectId) });
   if (version !== undefined && version !== null && version !== '') q.set('version', String(version));
   return `?${q.toString()}`;
 }
 
+// Story reads and section saves use D908; version 0 (the live deck) is read only.
+const enc = encodeURIComponent;
+
 export const narrativeApi = {
+  read: (projectId, version) => request(`/cycles/raise/narrative/${enc(version)}?project=${enc(projectId)}`),
+  saveSection: (projectId, version, section, body) => request(`/cycles/raise/narrative/${enc(version)}/sections/${enc(section)}?project=${enc(projectId)}`, {
+    method: 'PUT', body: JSON.stringify(body),
+  }),
   narrativeReads: (projectId) => request(`/cycles/raise/narrative/reads?${q(projectId)}`),
   narrativeGiveReason: (projectId, reason) => request(`/cycles/raise/narrative/reads?${q(projectId)}`, { method: 'POST', body: JSON.stringify({ reason }) }),
   narrativeNotes: (projectId) => request(`/cycles/raise/narrative/notes?${q(projectId)}`),

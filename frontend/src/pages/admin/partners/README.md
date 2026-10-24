@@ -6,9 +6,11 @@ D923 (#2370): the admin Partner invitations desk, built to the owner's
 is the routed page, in `AdminBoardFrame` workspace "Partner invitations", at
 `/admin/partner-invitations` (Overview), `/admin/partner-invitations/invitations`,
 `/admin/partner-invitations/invitations/:id`, `/admin/partner-invitations/deals`,
-`/admin/partner-invitations/deals/:id`, `/admin/partner-invitations/referrals`
-and `/admin/partner-invitations/firm-links`. `/admin/partners` redirects to
-`/admin/partner-invitations?moved=partners`. It draws the shell: the crumb
+`/admin/partner-invitations/deals/:id` and `/admin/partner-invitations/referrals`.
+`/admin/partners` redirects to `/admin/partner-invitations?moved=partners`.
+`/admin/partner-invitations/firm-links` forwards to Advisors & Partners ›
+Firms with `?moved=firm-links` (D952): attaching an account to its firm
+lives there now, in `../advisors/FirmLinks.jsx`. It draws the shell: the crumb
 "Community › Partner invitations", the moved notice, the header, the literal
 tab strip with its counts, then the tab the address names, the record drawn
 over its tab, and the dialogs.
@@ -18,7 +20,7 @@ over its tab, and the dialogs.
   (PI9e) and first use (PI9b). Each chart is a block in D893's four states
   with "View as table", drawn with `../../../ui/Charts.jsx`. A C1 bar opens
   Invitations at `?stage=`, a C3 segment Deals at `?type=&state=`.
-  Overview's Needs-you row is Firm links' only door.
+  Overview's Needs-you row about unattached accounts opens the Firms tab.
 - `PartnersInvitations.jsx` — Invitations (PI2): the table under Guards L and
   I, its toolbar, the row menu and the pager.
 - `InvitationRecord.jsx` — one invitation (PI3; PI11c on a phone).
@@ -27,7 +29,6 @@ over its tab, and the dialogs.
 - `DealRecord.jsx` — one deal (PI6).
 - `PartnersReferrals.jsx` — Referrals (PI7), under Guard F; `?deal=<id>`
   narrows it to one deal.
-- `FirmLinks.jsx` — Firm links, off the canvas, until #2369 takes it.
 - `PartnerDialogs.jsx` — Resend (PI8a), Revoke (PI8b) and Terminate (PI8c).
 - `parts.jsx` — the card, pills, stage dots, tiles, read states, copy button,
   row menu, pager and refusal line the tabs share.
