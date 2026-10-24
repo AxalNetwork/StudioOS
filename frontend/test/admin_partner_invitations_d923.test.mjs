@@ -39,7 +39,7 @@ import {
   expiresCell, fanFigure, fanOut, filterInvitations, firmCounts, invitationRow, invitationTiles, isCompleteEmail,
   isFirstUse, isLapsed, memberCheck, needsYou, noMatchLine, obligationsLine, offeredTypes, pageOf, parseStamp, rangeText,
   redemptionDealSet, redemptionRow, refusalText, resendCopy, resentAt, revokeCopy, revokeVariant, revokedLine, routeFor,
-  stageOf, tabCounts, tabPath, terminateCopy, terminateReady, termText, tiersText, toggleType, windowOf, withoutMoved,
+  signingLink, stageOf, tabCounts, tabPath, terminateCopy, terminateReady, termText, tiersText, toggleType, windowOf, withoutMoved,
 } from '../src/pages/admin/partners/partnersDeskModel.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -319,6 +319,15 @@ test('Resend says the renewed date, then one line by stage; at Agreement out it 
   assert.equal(expired.lines[1], 'The signing link expired on 20 Oct 2026. Resending does not renew it. The original sender can send a reminder from the envelope page.');
   assert.equal(expired.expiredSigning, true);
   assert.equal(copy({ status: 'finalized', envelope_id: 77 }, failed()).lines[1], 'Whether the agreement’s signing link is still open could not be read.');
+  // A future token date does not make a signed or voided envelope's link live.
+  const closed = (status) => ready({ id: 77, status, created_at: '2026-10-20 10:00:00', recipients: [{ status: 'pending', token_expires_at: '2026-10-28T10:00:00.000Z' }] });
+  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed('completed')).lines[1], 'The agreement already sent is signed. Resending does not change it.');
+  for (const status of ['voided', 'declined']) {
+    assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed(status)).lines[1], 'The agreement already sent was voided. Resending does not send a new one.', status);
+  }
+  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed('draft')).lines[1], 'The agreement already sent is not out for signature. Resending does not change it.');
+  assert.equal(copy({ status: 'finalized', envelope_id: 77 }, closed('partially_signed')).lines[1], 'The agreement already sent stays open to signature until 28 Oct 2026.');
+  assert.deepEqual(['completed', 'voided', 'draft'].map((s) => signingLink(closed(s), NOW).state), ['signed', 'voided', 'other']);
   assert.equal(resendCopy(inv(1, { recipient_name: null }), stageOf(inv(1), { now: NOW }), loading(), NOW).title, 'Resend the invitation to p1@example.com?');
   assert.doesNotMatch(JSON.stringify(copy({ status: 'selected' })), /Her progress|Delivered/);
 });
