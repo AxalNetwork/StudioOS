@@ -104,6 +104,10 @@ test('D920: the canvas blocks show their recorded values, action targets, limits
   assert.match(text(section(empty, 'events-tile-waiting')), /0.*Nothing waits/);
   assert.match(text(section(empty, 'events-tile-showup')), /No event has ended yet/);
   assert.match(text(section(empty, 'events-block-next')), /No upcoming events/);
+  f.by_role.counts = { founder: 0, investor: 0, advisor: 0, partner: 0, exploring: 0, guest: 0, admin: 0, not_recorded: 4 };
+  const unknownOnly = markup(reads(f)).split('data-testid="events-who-profile"')[1].split('data-testid="events-who-source"')[0];
+  assert.match(text(unknownOnly), /No recorded profiles this period/);
+  assert.doesNotMatch(text(unknownOnly), /No seats taken/);
 });
 
 test('D920: chart/table toggles preserve zero, missing values and the current week, and Show all reveals twelve types', async () => {

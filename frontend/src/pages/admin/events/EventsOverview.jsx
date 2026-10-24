@@ -100,7 +100,7 @@ function Who({ b, source = false, retry }) {
     <State b={b} label={title} onRetry={retry}>
       <Toggle table={table} setTable={setTable} id={source ? 'source' : 'profile'} />
       {table ? <ChartTable chart={{ type: 'hbar', rows: parts.map((p) => ({ ...p, text: count(p.value) })) }} caption={title} /> : <>
-        {total > 0 ? <div role="img" aria-label={parts.map((p) => `${p.label}: ${count(p.value)}`).join('; ')}><Bar100 parts={parts} /></div> : <p className={SUB}>{total === 0 ? 'No seats taken this period.' : 'Counts not recorded.'}</p>}
+        {total > 0 ? <div role="img" aria-label={parts.map((p) => `${p.label}: ${count(p.value)}`).join('; ')}><Bar100 parts={parts} /></div> : <p className={SUB}>{total === 0 ? (!source && b.counts?.not_recorded > 0 ? 'No recorded profiles this period.' : 'No seats taken this period.') : 'Counts not recorded.'}</p>}
         <Legend items={parts.map((p) => ({ ...p, label: `${p.label} · ${count(p.value)}` }))} />
       </>}
       {!source ? <p className={SUB}>Other includes explorers, guests and admins. Unknown profiles: {count(b.counts?.not_recorded)}. The bar covers recorded profiles.</p> : <p className={SUB}>Added by an admin · <Unrecorded reason={b.added_by_admin?.reason} /></p>}
