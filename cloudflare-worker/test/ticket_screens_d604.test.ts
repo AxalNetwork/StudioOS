@@ -299,6 +299,8 @@ test('a retry does not race another one, and says so when GitHub is not configur
   const nc = await bare.call('POST', '/1/mirror', ADMIN.id);
   assert.equal(nc.status, 409);
   assert.equal(nc.body.error, 'github_not_configured');
+  assert.match(nc.body.message, /HQ › Integration keys › GitHub Sync/);
+  assert.doesNotMatch(nc.body.message, /Admin Console/);
   assert.equal(bare.calls.length, 0);
 });
 

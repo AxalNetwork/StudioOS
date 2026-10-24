@@ -45,6 +45,7 @@ import {
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import { isCyclePath } from './pages/cycles/cyclePaths';
 import { BOUNDARY_ROLES as NARRATIVE_BOUNDARY_ROLES } from './pages/raise/narrative/narrativeModel';
+import { adminRefusal } from './pages/hq/hqNoticeModel';
 import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
@@ -258,6 +259,7 @@ const BranchAnalytics = lazy(() => import('./pages/branch/BranchAnalytics'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
+const AdminOnlyNotice = lazy(() => import('./pages/hq/AdminOnlyNotice'));
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
 const HqHomePage = lazy(() => import('./pages/hq/HqHomePage'));
@@ -719,9 +721,9 @@ function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
   if (!persona || !Array.isArray(persona.nav_extras) || persona.nav_extras.length === 0) {
     return groups;
   }
-  // Never inject a persona group whose role_alignment differs from the
+  // Never inject a persona group whose profile differs from the
   // current user — a Founder nav extra has no place in an Investor sidebar.
-  if (persona.role_alignment && String(persona.role_alignment) !== String(role)) {
+  if (persona.profile && String(persona.profile) !== String(role)) {
     return groups;
   }
   const existingPaths = new Set();
@@ -1862,6 +1864,10 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
     // Read-only here (render must stay pure — StrictMode double-renders);
     // the AppInner effect clears the ref after the state settles.
     const pendingTarget = isImpersonating ? impersonationTargetRef?.current : null;
+    // D940 (#2745, SHL7b): a member who is not an admin, on an /admin page, is told so in their own shell.
+    if (adminRefusal({ pathname, realRole: (realUser || user)?.role, isImpersonating })) {
+      return <AdminOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;
+    }
     const defaultPath = pendingTarget || ROLE_DEFAULT_PATH[effectiveRole] || '/studio';
     return <Navigate to={defaultPath} replace />;
   }
@@ -1918,7 +1924,7 @@ function AppInner() {
   // render the lens's location while the URL and history stay put.
   const lensLocation = useLensLocation();
   // #2301 — count each opening of an old redirect address before it is retired.
-  useRedirectBeacon(location.pathname);
+  useRedirectBeacon(location.pathname, location.search);
 
   // `opts.hq` is only meaningful for mode 'admin': true is the HQ shell
   // ("Super Admin" in the list), false the plain shell ("Admin"). Other modes
@@ -2553,7 +2559,7 @@ function AppInner() {
           of the same page would let the gate and the links disagree about
           which one is canonical. */}
       <Route path="/onboarding/licence" element={<Navigate to="/onboarding" replace />} />
-      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor'], <OnboardingPersonaPage />)} />
+      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder', 'exploring'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor', 'exploring'], <OnboardingInvestorPage />)} />
       <Route path="/onboarding/partner" element={guard(['admin', 'partner', 'exploring'], <OnboardingPartnerPage />)} />

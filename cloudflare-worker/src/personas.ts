@@ -43,8 +43,8 @@ export interface Persona {
   id: PersonaId;
   label: string;
   short_description: string;
-  /** Coarse role this persona maps onto in the existing users.role enum. */
-  role_alignment: 'founder' | 'partner' | 'admin';
+  /** D998: the segment's profile. Descriptive; never changes an account's role. */
+  profile: 'founder' | 'investor' | 'advisor' | 'partner' | 'exploring';
   /** Lower-cased email-domain substrings that boost confidence. */
   email_domain_hints: string[];
   /** Persona-specific 3–5 question bank asked after detection. */
@@ -58,7 +58,7 @@ export const PERSONAS: Persona[] = [
     id: 'lp_individual',
     label: 'LP — Individual',
     short_description: 'Individual limited partner committing personal capital to the main fund.',
-    role_alignment: 'partner',
+    profile: 'investor',
     email_domain_hints: ['gmail.com', 'yahoo.com', 'outlook.com', 'icloud.com', 'hotmail.com', 'me.com'],
     follow_up_questions: [
       { key: 'check_size_usd', prompt: 'Typical check size you write per fund (USD)?', type: 'number' },
@@ -72,7 +72,7 @@ export const PERSONAS: Persona[] = [
     id: 'lp_institutional',
     label: 'LP — Institutional',
     short_description: 'Institutional LP (endowment, foundation, pension, fund-of-funds).',
-    role_alignment: 'partner',
+    profile: 'investor',
     email_domain_hints: [],
     follow_up_questions: [
       { key: 'institution_name', prompt: 'Institution name?', type: 'text' },
@@ -86,7 +86,7 @@ export const PERSONAS: Persona[] = [
     id: 'gp_external',
     label: 'GP — External Fund',
     short_description: 'GP running an external fund interested in deal-by-deal collaboration.',
-    role_alignment: 'partner',
+    profile: 'investor',
     email_domain_hints: ['vc', 'capital', 'ventures', 'partners'],
     follow_up_questions: [
       { key: 'fund_name', prompt: 'Fund name?', type: 'text' },
@@ -100,7 +100,7 @@ export const PERSONAS: Persona[] = [
     id: 'angel_scout',
     label: 'Angel / Scout',
     short_description: 'Individual angel or scout sourcing and writing small early checks.',
-    role_alignment: 'partner',
+    profile: 'investor',
     email_domain_hints: [],
     follow_up_questions: [
       { key: 'check_size_usd', prompt: 'Typical angel check size (USD)?', type: 'number' },
@@ -114,7 +114,7 @@ export const PERSONAS: Persona[] = [
     id: 'corporate_vc',
     label: 'Corporate VC',
     short_description: 'Strategic / corporate VC arm of an operating company.',
-    role_alignment: 'partner',
+    profile: 'investor',
     email_domain_hints: [],
     follow_up_questions: [
       { key: 'parent_company', prompt: 'Parent company?', type: 'text' },
@@ -128,7 +128,7 @@ export const PERSONAS: Persona[] = [
     id: 'sovereign_family_office',
     label: 'Sovereign / Family Office',
     short_description: 'Sovereign wealth, family office, or multi-family office investor.',
-    role_alignment: 'partner',
+    profile: 'investor',
     email_domain_hints: ['fo', 'family', 'office'],
     follow_up_questions: [
       { key: 'office_name', prompt: 'Office name?', type: 'text' },
@@ -142,7 +142,7 @@ export const PERSONAS: Persona[] = [
     id: 'academic',
     label: 'Academic / Lab',
     short_description: 'Academic researcher, university tech-transfer office, or research lab.',
-    role_alignment: 'partner',
+    profile: 'exploring',
     email_domain_hints: ['edu', 'ac.uk', 'edu.sg', 'edu.au', 'mit.edu', 'stanford.edu', 'ox.ac.uk', 'cam.ac.uk'],
     follow_up_questions: [
       { key: 'institution', prompt: 'Institution / lab name?', type: 'text' },
@@ -155,7 +155,7 @@ export const PERSONAS: Persona[] = [
     id: 'founder_new',
     label: 'Founder — New Venture',
     short_description: 'Founder spinning out a brand-new venture through the 28-day engine.',
-    role_alignment: 'founder',
+    profile: 'founder',
     email_domain_hints: [],
     follow_up_questions: [
       { key: 'venture_idea', prompt: 'One-line description of the venture?', type: 'text' },
@@ -169,7 +169,7 @@ export const PERSONAS: Persona[] = [
     id: 'founder_existing',
     label: 'Founder — Existing Company',
     short_description: 'Founder of an existing company on the Strategic Scale partnership track.',
-    role_alignment: 'founder',
+    profile: 'founder',
     email_domain_hints: [],
     follow_up_questions: [
       { key: 'company_name', prompt: 'Company name?', type: 'text' },
@@ -186,7 +186,7 @@ export const PERSONAS: Persona[] = [
     id: 'operator_advisor',
     label: 'Operator / Advisor',
     short_description: 'Operating partner or advisor offering sweat-equity expertise to spin-outs.',
-    role_alignment: 'partner',
+    profile: 'advisor',
     email_domain_hints: [],
     follow_up_questions: [
       { key: 'expertise', prompt: 'Primary expertise area (e.g. GTM, eng, finance, product)?', type: 'text' },
@@ -194,15 +194,14 @@ export const PERSONAS: Persona[] = [
       { key: 'time_per_week_hours', prompt: 'Hours per week you can commit?', type: 'number' },
       { key: 'compensation_pref', prompt: 'Compensation preference (equity / cash / hybrid)?', type: 'choice', choices: ['equity', 'cash', 'hybrid'] },
     ],
-    // D254 — was `/projects`, which only redirects to `/build`. Taken from
-    // the frontend mirror, which pointed at `/build` directly.
-    nav_extras: [{ to: '/build', label: 'Startups' }],
+    // D998: the Advisor workspace; /build is a Founder-only route.
+    nav_extras: [{ to: '/practice', label: 'Practice' }],
   },
   {
     id: 'service_provider',
     label: 'Service Provider',
     short_description: 'Legal, technical, or other service provider to the studio.',
-    role_alignment: 'partner',
+    profile: 'partner',
     email_domain_hints: ['law', 'legal', 'consulting', 'cpa'],
     follow_up_questions: [
       { key: 'service_type', prompt: 'Type of service (Legal / Technical / Accounting / Other)?', type: 'choice', choices: ['Legal', 'Technical', 'Accounting', 'Other'] },
@@ -215,7 +214,7 @@ export const PERSONAS: Persona[] = [
     id: 'press_analyst',
     label: 'Press / Analyst',
     short_description: 'Journalist, industry analyst, or research publication.',
-    role_alignment: 'partner',
+    profile: 'exploring',
     email_domain_hints: ['press', 'media', 'news', 'journal', 'gartner', 'forrester'],
     follow_up_questions: [
       { key: 'outlet', prompt: 'Outlet / publication?', type: 'text' },
