@@ -13,6 +13,7 @@ import { railBody } from './railPages.js';
 export * from './api/adminAiUsage.js';
 export * from './api/adminCapitalAttestations.js';
 export * from './api/adminIncorporations.js';
+export * from './api/adminLab.js';
 export * from './api/adminLearning.js';
 export * from './api/adminMeetingBots.js';
 export * from './api/adminMercury.js';
