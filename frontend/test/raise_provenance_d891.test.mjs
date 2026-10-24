@@ -26,13 +26,17 @@ test('access requires an unexpired readable grant as well as file tier, expiry a
 });
 test('the founder matrix refuses hidden files and file activity excludes blocked and room-open events',async()=>{
  const prior={listProjects:api.listProjects,dataRoom:api.dataRoom};
- const g={uid:'g',status:'active',investor_name:'Synthetic investor',nda_signed:true,committed:false};
+ const g={uid:'g',status:'active',investor_name:'Synthetic investor',nda_signed:false,committed:false};
  api.listProjects=async()=>[{id:1,uid:'synthetic-venture',name:'Synthetic venture'}];
  api.dataRoom=async()=>({files:[
   {uid:'private',name:'Private file',visibility:'open',access_tier:'nobody'},
   {uid:'expired',name:'Expired file',visibility:'open',access_expires_at:'2000-01-01'},
   {uid:'committed',name:'Committed file',visibility:'open',access_tier:'committed'},
   {uid:'public',name:'Downloadable file',visibility:'open',access_tier:'invited'},
+  {uid:'private-nda',name:'Private NDA file',visibility:'nda',access_tier:'nobody'},
+  {uid:'expired-nda',name:'Expired NDA file',visibility:'nda',access_expires_at:'2000-01-01'},
+  {uid:'committed-nda',name:'Committed NDA file',visibility:'nda',access_tier:'committed'},
+  {uid:'only-nda',name:'NDA only file',visibility:'nda',access_tier:'invited'},
  ],grants:[g,{...g,uid:'expired-grant',expires_at:'2000-01-01'}],folders:[],recent_access:[
   {action:'blocked',file_name:'Private file'},{action:'blocked',file_name:'Private file'},
   {action:'open_room',file_name:'Private file'},{action:'download',file_name:'Downloadable file'},
@@ -40,8 +44,9 @@ test('the founder matrix refuses hidden files and file activity excludes blocked
  const m=await mountContracts(React.createElement(FounderRaiseDataRoom),'/raise/data-room?project_id=1');
  try {await m.flush();const nodeText=n=>n.nodeType===3?n.textContent:n.childNodes?.map(nodeText).join('')||n.textContent||'';
   const row=id=>m.nodes().find(n=>m.props(n)?.['data-testid']===`row-data-room-file-${id}`);
-  for(const id of ['private','expired','committed']){assert.match(nodeText(row(id)),/None/);assert.doesNotMatch(nodeText(row(id)),/Granted/);}
+  for(const id of ['private','expired','committed','private-nda','expired-nda','committed-nda']){assert.match(nodeText(row(id)),/None/);assert.doesNotMatch(nodeText(row(id)),/Granted/);}
   assert.match(nodeText(row('public')),/Granted/);
+  assert.match(nodeText(row('only-nda')),/NDA gated/);assert.doesNotMatch(nodeText(row('only-nda')),/Granted/);
   const stat=m.nodes().find(n=>n.tagName==='DIV' && n.className==='fr-capital-stat-strip');
   // The label and count travel together in the same mounted tile.
   const tiles=m.nodes().filter(n=>m.props(n)?.className?.includes('fr-capital-stat'));

@@ -25,7 +25,7 @@ const formatDate = (value) => {
 const fileAccess = (file, grant) => {
   if (!grantIsActive(grant)) return { label: 'None', tone: 'neutral' };
   if (accessNow(file, [grant]).length) return { label: 'Granted', tone: 'good' };
-  if (file.visibility === 'nda' && !grant.nda_signed) return { label: 'NDA gated', tone: 'warn' };
+  if (file.visibility === 'nda' && !grant.nda_signed && accessNow({ ...file, visibility: 'open' }, [grant]).length) return { label: 'NDA gated', tone: 'warn' };
   return { label: 'None', tone: 'neutral' };
 };
 
