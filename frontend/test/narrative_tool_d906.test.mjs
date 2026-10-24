@@ -148,18 +148,15 @@ test('Check reads the saved versions and the newest version, never a record call
   } finally { await view.close(); }
 });
 
-test('Story reads the version the address names, and draws Not recorded, never a blank', async () => {
+test('Story reads the version the address names, from the narrative\'s own stores', async () => {
+  // D910 (#2694): Story reads D908's sections and bindings, not the record;
+  // what it draws is tested in narrative_story_d910.test.mjs.
   const view = await mounted('/raise/investor-narrative/story?project_id=3&version=2');
   try {
-    assert.ok(view.requests.some((u) => u.includes('/records/2?project=3')));
-    assert.ok(!view.requests.some((u) => u.includes('/records/4?')), 'only the chosen version');
-    const t = view.text();
-    assert.match(t, /Close the month in a day \(v2\)\./);
-    // 2026-10-24 (D906 review): read Story's own mark, not the page; the rail says "Not recorded" too.
-    assert.equal(view.testIds().filter((id) => id === 'narrative-story-not-recorded').length, 2, 'Problem and Traction draw Not recorded, never a blank');
-    assert.match(t, /ProblemNot recorded/, 'an empty section draws its heading over a blank');
-    assert.match(t, /TractionNot recorded/);
-    assert.ok(view.hrefs().includes(`${HOME_PATH}/2?project_id=3`), 'the version\'s own page, to edit it');
+    assert.ok(view.requests.some((u) => u.includes('/cycles/raise/narrative/2?project=3')));
+    assert.ok(!view.requests.some((u) => u.includes('/cycles/raise/narrative/4?')), 'only the chosen version');
+    assert.ok(!view.requests.some((u) => u.includes('/records/2?')), 'Story no longer reads the record');
+    assert.ok(view.testIds().includes('narrative-story-page'));
   } finally { await view.close(); }
 });
 

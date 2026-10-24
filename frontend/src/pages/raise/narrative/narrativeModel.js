@@ -18,10 +18,13 @@
  *     narrative rows and its consistency check, as the Worker states them.
  * Nothing is a sample. A read that fails says so where its figure would be.
  *
- * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. Claims, bound figures, the sections
- * store, stored positioning, the deck side of the check and objections need
- * stores the Worker does not have. Each is a slot task on #2454 (D906 §6);
- * this file grows the derivation when its read lands.
+ * Story (D910, #2694) reads the narrative's own stores, D908's sections and
+ * bound figures, and PITCH's source registry; its derivations are in
+ * `storyModel.js`.
+ *
+ * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. Claims' states, stored
+ * positioning, the deck side of the check and objections are slot tasks on
+ * #2454 (D906 §6); this file grows the derivation when its read lands.
  */
 
 import { NOT_RECORDED } from '../../../lib/absence.js';
@@ -110,12 +113,6 @@ export function storyRows(record) {
     .map((r) => ({ label: String(r?.a ?? '').trim(), text: String(r?.b ?? '').trim() || null }))
     .filter((r) => r.label);
 }
-
-/**
- * The canvas's story sections that no store holds yet (D906 §3): the sections
- * store is part 2. Listed so the Story tab says what waits, never drawn empty.
- */
-export const WAITING_SECTIONS = ['Solution', 'Market', 'Business model', 'Competition', 'Team'];
 
 const RESULTS = { Mismatch: 'bad', OK: 'ok', 'Not compared': 'grey' };
 
