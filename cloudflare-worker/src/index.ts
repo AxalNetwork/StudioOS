@@ -42,6 +42,7 @@ import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
+import adminPartnersReads from './routes/admin_partners_reads';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
@@ -851,6 +852,9 @@ app.route('/api/partners', partners);
 // Task #8 (X-1) — Partner deal engine. Admin endpoints under
 // /api/admin/partners (separate from legacy /api/partners) and the
 // public token-gated onboarding flow under /api/partner-onboard.
+// D928 (#2724): one deal's read, the terminate preview, the cross-deal redemptions and the
+// agreement-ready signal. Before `adminPartners`; its deal ids match digits only, so `/deals/top` stays there.
+app.route('/api/admin/partners', adminPartnersReads);
 app.route('/api/admin/partners', adminPartners);
 app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);

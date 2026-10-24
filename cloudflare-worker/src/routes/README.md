@@ -45,6 +45,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/legal         → legal.ts
 /api/legalcap      → legalcap.ts
 /api/partners      → partners.ts
+/api/admin/partners → admin_partners_reads.ts (D928: one deal in full, terminate preview, redemptions across deals, agreement ready; read only, mounted before admin_partners.ts)
 /api/partnernet    → partnernet.ts
 /api/partner/…     → partner_pipeline.ts  (the partner WORKSPACE's own stores)
 /api/capital       → capital.ts
