@@ -153,7 +153,7 @@ function Field({ row, onEdit }) {
             : <span className={NOT_SET}>{NOT_RECORDED}</span>}
         {row.provenance ? <span className={`text-[11.5px] ${MUTED}`}>{row.provenance}</span> : null}
       </div>
-      <button type="button" className={GHOST} onClick={() => onEdit(row)} data-testid={`positioning-edit-${row.kind}-${row.position}`}>{row.text ? 'Edit' : 'Write'}</button>
+      {onEdit ? <button type="button" className={GHOST} onClick={() => onEdit(row)} data-testid={`positioning-edit-${row.kind}-${row.position}`}>{row.text ? 'Edit' : 'Write'}</button> : null}
     </div>
   );
 }
@@ -170,11 +170,11 @@ function FromValidate({ label, from, items }) {
   );
 }
 
-export default function PositioningTab({ projectId, version = null }) {
+export default function PositioningTab({ projectId, version = null, readOnly = false }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const pos = useRead(() => narrativeApi.positioning(projectId, version), `${projectId}:${version}`);
-  const draft = useRead(() => narrativeApi.positioningDraft(projectId), String(projectId));
+  const draft = useRead(() => readOnly ? Promise.resolve({}) : narrativeApi.positioningDraft(projectId), `${projectId}:${readOnly}`);
   const [editing, setEditing] = useState(null);
   const [run, setRun] = useState(null);
   const [asking, setAsking] = useState(false);
@@ -186,6 +186,7 @@ export default function PositioningTab({ projectId, version = null }) {
   const dismissMoved = () => navigate({ pathname: loc.pathname, search: tabSearch(loc.search), hash: loc.hash }, { replace: true });
   const saved = () => { setEditing(null); pos.reload(); };
   const ask = async () => {
+    if (readOnly) return;
     setAsking(true); setAskError(null);
     try {
       setRun(await narrativeApi.proposePositioning(projectId, null, railPressHeaders(POSITIONING_OPTION)));
@@ -212,14 +213,14 @@ export default function PositioningTab({ projectId, version = null }) {
           {pos.read.status === 'error' && <Unreadable what="Your positioning" claim="This is not a claim that none is written." onRetry={pos.reload} />}
           {pos.read.status === 'ready' && (
             <div className="flex flex-col">
-              {coreRows(p.core).filter((r) => r.kind !== 'for_whom' && r.kind !== 'instead_of').map((r) => <Field key={`${r.kind}-${r.position}`} row={r} onEdit={(row) => setEditing({ field: row, version: null })} />)}
-              <FromValidate label="For whom" from="segments" items={draft.read.status === 'ready' ? partItems(draft.read.data.segments) : draft.read.status === 'error' ? null : []} />
-              {coreRows(p.core).filter((r) => r.kind === 'for_whom').map((r) => <Field key={r.kind} row={{ ...r, label: 'For whom, in your words' }} onEdit={(row) => setEditing({ field: row, version: null })} />)}
-              <FromValidate label="Instead of" from="competitors" items={draft.read.status === 'ready' ? partItems(draft.read.data.competitors) : draft.read.status === 'error' ? null : []} />
-              {coreRows(p.core).filter((r) => r.kind === 'instead_of').map((r) => <Field key={r.kind} row={{ ...r, label: 'Instead of, in your words' }} onEdit={(row) => setEditing({ field: row, version: null })} />)}
+              {coreRows(p.core).filter((r) => r.kind !== 'for_whom' && r.kind !== 'instead_of').map((r) => <Field key={`${r.kind}-${r.position}`} row={r} onEdit={readOnly ? null : (row) => setEditing({ field: row, version: null })} />)}
+              {!readOnly && <FromValidate label="For whom" from="segments" items={draft.read.status === 'ready' ? partItems(draft.read.data.segments) : draft.read.status === 'error' ? null : []} />}
+              {coreRows(p.core).filter((r) => r.kind === 'for_whom').map((r) => <Field key={r.kind} row={{ ...r, label: 'For whom, in your words' }} onEdit={readOnly ? null : (row) => setEditing({ field: row, version: null })} />)}
+              {!readOnly && <FromValidate label="Instead of" from="competitors" items={draft.read.status === 'ready' ? partItems(draft.read.data.competitors) : draft.read.status === 'error' ? null : []} />}
+              {coreRows(p.core).filter((r) => r.kind === 'instead_of').map((r) => <Field key={r.kind} row={{ ...r, label: 'Instead of, in your words' }} onEdit={readOnly ? null : (row) => setEditing({ field: row, version: null })} />)}
             </div>
           )}
-          <div className="flex flex-col gap-2 pt-2">
+          {!readOnly && <div className="flex flex-col gap-2 pt-2">
             <button type="button" className={BTN} disabled={asking} onClick={ask} data-testid="positioning-ask">{asking ? 'Eadwyn is proposing…' : 'Ask Eadwyn to propose positioning'}</button>
             <span className={`text-[12px] ${MUTED}`}>{PROPOSE_FOOT}</span>
             {askError ? <p role="alert" className="m-0 text-[12.5px] text-axal-destructive dark:text-red-400" data-testid="positioning-ask-error">{askError}</p> : null}
@@ -229,28 +230,29 @@ export default function PositioningTab({ projectId, version = null }) {
                 <button type="button" className={GHOST} onClick={() => setRun({ proposals: openProposals, read_from: draft.read.data.read_from, removed: 0, withheld: draft.read.data.withheld })} data-testid="positioning-review">Review</button>
               </span>
             ) : null}
-          </div>
+          </div>}
         </section>
         {version != null && pos.read.status === 'ready' && (
           <section className={`${CARD} flex flex-col gap-2 p-5`} data-testid="positioning-version">
             <span className={EYEBROW}>This version</span>
             <h2 className={`m-0 text-[15px] font-extrabold tracking-[-.015em] ${INK}`}>{`Version ${version}`}</h2>
-            <p className={`m-0 text-[12px] ${MUTED}`}>Switch on Adjust to word a field for this version without changing the core.</p>
+            {!readOnly && <p className={`m-0 text-[12px] ${MUTED}`}>Switch on Adjust to word a field for this version without changing the core.</p>}
             {versionRows(p.core, p.overrides).map((r) => (
               <label key={`${r.kind}-${r.position}`} className="flex items-start justify-between gap-3 border-t border-axal-hairline py-2 dark:border-gray-800" data-testid={`positioning-version-${r.kind}-${r.position}`}>
                 <span className="flex min-w-0 flex-col">
                   <span className={`text-[12.5px] font-bold ${INK}`}>{r.label}</span>
                   <span className={`text-[11.5px] ${MUTED}`}>{r.adjusted ? 'Adjusted for this version' : 'Uses the core wording'}</span>
+                  {readOnly && <span className={`text-[13px] ${INK}`}>{r.text || NOT_RECORDED}</span>}
                 </span>
-                <input type="checkbox" role="switch" aria-label={`Adjust ${r.label} for this audience`} checked={r.adjusted}
-                  onChange={() => setEditing({ field: r, version, clearing: r.adjusted })} data-testid={`positioning-adjust-${r.kind}-${r.position}`} />
+                {!readOnly && <input type="checkbox" role="switch" aria-label={`Adjust ${r.label} for this audience`} checked={r.adjusted}
+                  onChange={() => setEditing({ field: r, version, clearing: r.adjusted })} data-testid={`positioning-adjust-${r.kind}-${r.position}`} />}
               </label>
             ))}
           </section>
         )}
       </div>
-      {editing && <SaveDialog projectId={projectId} field={editing.field} version={editing.version} clearing={Boolean(editing.clearing)} onClose={() => setEditing(null)} onSaved={saved} />}
-      {run && <ProposalLightbox projectId={projectId} run={run} onClose={() => setRun(null)} onDecided={() => { pos.reload(); draft.reload(); }} />}
+      {!readOnly && editing && <SaveDialog projectId={projectId} field={editing.field} version={editing.version} clearing={Boolean(editing.clearing)} onClose={() => setEditing(null)} onSaved={saved} />}
+      {!readOnly && run && <ProposalLightbox projectId={projectId} run={run} onClose={() => setRun(null)} onDecided={() => { pos.reload(); draft.reload(); }} />}
     </div>
   );
 }
