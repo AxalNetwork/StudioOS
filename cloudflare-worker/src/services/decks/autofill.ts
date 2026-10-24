@@ -59,11 +59,11 @@ function fmtNum(n: any, digits = 0): string | null {
   return v.toLocaleString(undefined, { maximumFractionDigits: digits });
 }
 
-function fmtMonths(n: any): string | null {
+export function formatDeckRunway(n: any, unit: 'months' | 'mo' = 'months'): string | null {
   if (n == null || n === '') return null;
   const v = Number(n);
   if (!isFinite(v) || v < 0) return null;
-  return `${Math.round(v)} mo`;
+  return `${Math.round(v)} ${unit}`;
 }
 
 // ---------------------------------------------------------------------
@@ -80,7 +80,8 @@ function resolveProjectSource(expr: string, project: any): string | null {
       return use ? `Raising ${f} — ${use.slice(0, 80)}` : `Raising ${f}.`;
     }
     if (k === 'runway_target') {
-      return project._recordedRunway == null ? null : `${project._recordedRunway} months runway`;
+      const runway = formatDeckRunway(project._recordedRunway);
+      return runway ? `${runway} runway` : null;
     }
     return null;
   }
@@ -105,7 +106,7 @@ function resolveFinancialsSource(expr: string, fin: any): string | null {
   const k = expr.replace(/^financials\./, '');
   const v = fin?.[k];
   if (v == null) return null;
-  if (k === 'runway_months') return fmtMonths(v);
+  if (k === 'runway_months') return formatDeckRunway(v, 'mo');
   if (k === 'breakeven_month') return v ? `month ${v}` : null;
   if (k === 'avg_monthly_burn' || k === 'ending_cash' || k === 'total_revenue_horizon' || k === 'ltv') {
     return fmtMoney(v);

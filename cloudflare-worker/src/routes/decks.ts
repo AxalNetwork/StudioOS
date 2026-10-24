@@ -14,7 +14,7 @@ import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
-import { autofillDeck, toEditorSlides, parseJsonLoose, recordedDeckRunway } from '../services/decks/autofill';
+import { autofillDeck, toEditorSlides, parseJsonLoose, recordedDeckRunway, formatDeckRunway } from '../services/decks/autofill';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
 import { formatUseOfFundsText } from '../util/useOfFunds';
@@ -322,7 +322,7 @@ function heuristicSlides(p: any): any[] {
     { title: 'Team', subtitle: 'Why us', body: '', bullets: [DASH], image_url: null },
     { title: 'Ask', subtitle: 'Round', body: '', bullets: arr([
       funding ? `Raising ${funding}` : `Raise: ${DASH}`,
-      p._recordedRunway == null ? 'Runway: Not recorded' : `Runway: ${p._recordedRunway} months`,
+      `Runway: ${formatDeckRunway(p._recordedRunway) || 'Not recorded'}`,
       useOf,
     ]), image_url: null },
     { title: 'Financials', subtitle: 'Plan', body: '', bullets: arr([

@@ -416,11 +416,23 @@ deckShareActions.post('/share/:token/nda', async (c) => {
   }
 
   if (!docId) return c.json({ error: 'NDA acceptance could not be recorded. Try again.' }, 503);
-  const acceptance = await c.env.DB.prepare('SELECT uid FROM documents WHERE id = ?').bind(docId).first<{ uid: string }>();
-  if (!acceptance?.uid) return c.json({ error: 'NDA acceptance could not be linked. Try again.' }, 503);
-  await upsertPairwiseNda(c.env, Number(founder.id), userId, acceptance.uid);
-  await activatePairwiseNda(c.env, acceptance.uid);
-  if (!await hasActivePairwiseNda(c.env, Number(founder.id), userId)) return c.json({ error: 'The NDA could not be linked to this venture. Try again.' }, 503);
+  try {
+    const acceptance = await c.env.DB.prepare('SELECT uid FROM documents WHERE id = ?').bind(docId).first<{ uid: string }>();
+    if (!acceptance?.uid) throw new Error('acceptance_uid_missing');
+    await upsertPairwiseNda(c.env, Number(founder.id), userId, acceptance.uid);
+    await activatePairwiseNda(c.env, acceptance.uid);
+    const linked = await c.env.DB.prepare('SELECT nda_envelope_uuid FROM pairwise_ndas WHERE party_a_user_id = ? AND party_b_user_id = ?').bind(Number(founder.id), userId).first<{ nda_envelope_uuid: string }>();
+    if (linked?.nda_envelope_uuid !== acceptance.uid || !await hasActivePairwiseNda(c.env, Number(founder.id), userId)) throw new Error('pairwise_link_incomplete');
+  } catch (e) {
+    // Compensate only this request's unfinished acceptance. A completed active
+    // agreement is retained if a later read failed; never remove another NDA.
+    try {
+      await c.env.DB.prepare("DELETE FROM pairwise_ndas WHERE nda_envelope_uuid = (SELECT uid FROM documents WHERE id = ?) AND status = 'pending'").bind(docId).run();
+      await c.env.DB.prepare("DELETE FROM documents WHERE id = ? AND NOT EXISTS (SELECT 1 FROM pairwise_ndas WHERE nda_envelope_uuid = documents.uid AND status = 'active')").bind(docId).run();
+    } catch { console.error('[deck_share] incomplete NDA cleanup failed'); }
+    console.error('[deck_share] NDA link incomplete', (e as Error).message);
+    return c.json({ error: 'The NDA could not be completed. Try again.' }, 503);
+  }
   await logConversion(c.env, {
     deckId: tok.deckId, tokenId: tok.tokenId, viewId,
     projectId: ctx.project_id, userId,

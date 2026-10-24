@@ -12,7 +12,7 @@ import brand from '../src/routes/brand.ts';
 import shareActions from '../src/routes/deck_share_actions.ts';
 import cycleRaise from '../src/routes/cycle_raise.ts';
 import cycleRecords from '../src/routes/cycle_records.ts';
-import { recordedDeckRunway, autofillDeck } from '../src/services/decks/autofill.ts';
+import { recordedDeckRunway, autofillDeck, formatDeckRunway } from '../src/services/decks/autofill.ts';
 import { getMethod } from '../src/services/decks/methods.ts';
 import { fetchLandingPageForProject, applyBrandKitToSlides } from '../src/services/decks/branding.ts';
 import { generateReview, normalizeReview, DECK_SECTIONS } from '../src/services/deckExtract.ts';
@@ -258,5 +258,44 @@ test('D895: template Ask runway cells use records, including Mercury, rather tha
   f.db.prepare("INSERT INTO mercury_raise_facts(integration_id,project_id,kind,fact_key,value,as_of) VALUES(99,1,'runway','runway',4,'2026-10-20')").run();
   assert.deepEqual(await runway(),['4 months runway','4 mo']);
   f.db.exec("UPDATE mercury_raise_facts SET value=0");assert.deepEqual(await runway(),['0 months runway','0 mo']);
+ }finally{f.db.close()}
+});
+
+
+test('D895: fractional recorded runway has consistent whole-month display without changing the stored measurement',async()=>{
+ const f=await fixture();try{
+  if(!(f.db.prepare('PRAGMA table_info(financial_models)').all() as any[]).some(x=>x.name==='computed_json'))f.db.exec('ALTER TABLE financial_models ADD COLUMN computed_json TEXT');
+  f.db.prepare('INSERT INTO financial_models(project_id,computed_json) VALUES(1,?)').run(JSON.stringify({runway_months:13.846153846}));
+  assert.equal(await recordedDeckRunway(f.env,1),13.846153846);
+  assert.equal(formatDeckRunway(13.846153846),'14 months');assert.equal(formatDeckRunway(13.846153846,'mo'),'14 mo');assert.equal(formatDeckRunway(0),'0 months');assert.equal(formatDeckRunway(null),null);
+  const generated=await call(f,2,'POST','/api/decks/generate',{project_id:1});assert.equal(generated.status,200);assert.match(JSON.stringify(generated.body.slides),/Runway: 14 months/);assert.doesNotMatch(JSON.stringify(generated.body.slides),/13\.846/);
+ }finally{f.db.close()}
+});
+for(const failing of ['upsert','activate'])test(`D895: failed pairwise ${failing} leaves no unfinished acceptance or conversion; retry completes one NDA`,async()=>{
+ const f=await fixture();try{
+  const link=await createShareLink(f.env,{deckId:10,deckVersion:1,userId:2,actorEmail:null,ttlSeconds:null,projectId:1});
+  const original=f.env.DB;
+  const pattern=failing==='upsert'?/INSERT INTO pairwise_ndas/:/UPDATE pairwise_ndas/;
+  f.env.DB={...original,prepare(sql:string){if(pattern.test(sql))throw new Error('Synthetic pairwise failure');return original.prepare(sql)}};
+  const path='/api/deck-share/share/'+link.token+'/nda';const failed=await call(f,6,'POST',path,{signed_by:'Synthetic'});assert.equal(failed.status,503);
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM documents WHERE doc_type='nda_acceptance'").get()!.n,0);
+  assert.equal(f.db.prepare('SELECT count(*) AS n FROM pairwise_ndas').get()!.n,0);
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM deck_share_conversions WHERE type='nda_signed'").get()!.n,0);
+  f.env.DB=original;const retry=await call(f,6,'POST',path,{signed_by:'Synthetic'});assert.equal(retry.status,200,JSON.stringify(retry.body));
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM documents WHERE doc_type='nda_acceptance'").get()!.n,1);
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM pairwise_ndas WHERE status='active'").get()!.n,1);
+ }finally{f.db.close()}
+});
+
+test('D895: failure to replace an existing NDA preserves the previous active agreement',async()=>{
+ const f=await fixture();try{
+  f.db.exec("INSERT INTO documents(uid,project_id,title,doc_type,status) VALUES('synthetic-existing-nda',1,'Existing synthetic NDA','nda_acceptance','signed'); INSERT INTO pairwise_ndas(party_a_user_id,party_b_user_id,nda_envelope_uuid,status,valid_until) VALUES(2,6,'synthetic-existing-nda','active','2099-01-01')");
+  const before=f.db.prepare('SELECT * FROM pairwise_ndas').all();
+  const link=await createShareLink(f.env,{deckId:10,deckVersion:1,userId:2,actorEmail:null,ttlSeconds:null,projectId:1});const original=f.env.DB;
+  f.env.DB={...original,prepare(sql:string){if(/INSERT INTO pairwise_ndas/.test(sql))throw new Error('Synthetic upsert failure');return original.prepare(sql)}};
+  const failed=await call(f,6,'POST','/api/deck-share/share/'+link.token+'/nda',{signed_by:'Synthetic'});assert.equal(failed.status,503);
+  assert.deepEqual(f.db.prepare('SELECT * FROM pairwise_ndas').all(),before);
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM documents WHERE doc_type='nda_acceptance'").get()!.n,1);
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM deck_share_conversions WHERE type='nda_signed'").get()!.n,0);
  }finally{f.db.close()}
 });
