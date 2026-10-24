@@ -27,5 +27,5 @@ function query(params = {}) {
 
 export const insightsApi = {
   adminInsights: (params) => request(`/admin/insights${query(params)}`),
-  insightsScopes: () => request('/admin/insights/scopes'),
+  insightsScopes: () => request(`/admin/insights/scopes`),
 };
