@@ -31,7 +31,7 @@ import {
   ALL_PATH, COMMUNITY_PATH, DAY_MS, DESK_PATH, FROZEN, GONE, LINE, NOT_HELD, NOT_IN_READ, NO_CAP, QUICK_REASONS, REVIEW_PATH,
   SCOPE_LABEL, STATUSES, SUSPENDED, TABS, TITLE, allRows, analyticsJoin, approveLine3, approveLines, approvedLine,
   attendedText, cancelCopy, capacityPreview, clockLabel, countText, countsFor, eventIdFor, factsOf, featureCopy, fillText, hasEnded,
-  isEventId, money, moneyTotals, onPublicCalendar, overviewTiles, pageOf, publishGate, queueFlags, queueRows, rangeText,
+  isEventId, money, moneyTotals, onPublicCalendar, overviewTiles, pageOf, publishGate, queueFlags, rangeText,
   readEveryPage, refusalText, showUpText, statusCounts, statusFromSearch, statusWord, tabFor, unpublishCopy, whenLine,
 } from '../src/pages/admin/events/eventsDeskModel.js';
 import { SCOPE_LABEL as INSIGHTS_SCOPE_LABEL } from '../src/pages/admin/insights/insightsModel.js';
@@ -195,15 +195,14 @@ test('"What approving does": line 3 names the two sources approve invites, and s
   assert.match(approvedLine(ev(1, { title: 'A' }), { featureError: { status: 423, code: 'branch_suspended' } }), /It is not featured: This studio’s licence is suspended/);
 });
 
-test('the review queue: titles only, sorted by start or by creation, with the Paid and Free seats flags', () => {
+// D921 (#2704) moved the queue's search, filters and sorts to `reviewModel.js`
+// (`frontend/test/events_review_d921.test.mjs`); D915's flags and facts stay here.
+test('the review queue\'s Paid and Free seats flags, and the facts from the event\'s own row', () => {
   const list = [
     ev(1, { title: 'Breakfast', starts_at: iso(9), created_at: '2026-10-01 09:00:00', price_cents: 4000 }),
     ev(2, { title: 'Workshop', starts_at: iso(2), created_at: '2026-10-05 09:00:00', audience_rules: { comp_invested_lps: true } }),
     ev(3, { title: 'Roundtable', starts_at: null, created_at: '2026-10-03 09:00:00' }),
   ];
-  assert.deepEqual(queueRows(list).map((e) => e.id), [2, 1, 3], 'starts soonest; no start last');
-  assert.deepEqual(queueRows(list, { sort: 'created' }).map((e) => e.id), [2, 3, 1], 'newest created');
-  assert.deepEqual(queueRows(list, { q: 'work' }).map((e) => e.id), [2]);
   assert.deepEqual(queueFlags(list[0]), ['Paid $40']);
   assert.deepEqual(queueFlags(list[1]), ['Free seats']);
   assert.deepEqual(queueFlags(list[2]), []);
@@ -212,7 +211,7 @@ test('the review queue: titles only, sorted by start or by creation, with the Pa
   assert.equal(facts['Free seats for'], 'Official partners');
   assert.equal(facts.Capacity, '60 seats · waitlist on');
   assert.equal(facts.Place, 'Not recorded');
-  assert.equal(facts.Submitted, 'Not recorded yet', 'submitted_at is part 2');
+  assert.equal(facts.Submitted, undefined, 'Submitted is D921\'s, read from part 2\'s submitted_at');
   assert.equal(Object.fromEntries(factsOf(ev(1, { capacity: null })).map((f) => [f.label, f.value]))['Capacity'], NO_CAP);
   assert.equal(whenLine(ev(1, { starts_at: '2026-11-14T18:30:00Z', ends_at: '2026-11-14T21:00:00Z', timezone: 'Europe/Lisbon' })), 'Sat 14 Nov 2026, 18:30–21:00 · Europe/Lisbon');
   assert.equal(whenLine(ev(1, { starts_at: null })), 'Date not recorded');
@@ -377,17 +376,22 @@ test('the page keeps its frame, its crumb and its literal tab doors', () => {
 test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or conversion', () => {
   // The comments say why each of these is not read; the code must not read it.
   const src = DESK_FILES.map((f) => codeOnly(read(f))).join('\n');
-  for (const call of ['adminEvents.list(', 'adminEvents.analytics()', 'adminEvents.get(', 'eventsApi.agenda(']) assert.ok(src.includes(call), `the desk no longer calls ${call}`);
+  // D921 adds the selected review event's history and free-seat preview (D918 §6, §7).
+  for (const call of ['adminEvents.list(', 'adminEvents.analytics()', 'adminEvents.get(', 'eventsApi.agenda(', 'adminEvents.history(', 'adminEvents.compPreview(']) assert.ok(src.includes(call), `the desk no longer calls ${call}`);
   for (const write of ['adminEvents.approve(', 'adminEvents.reject(', 'adminEvents.feature(', 'adminEvents.unpublish(', 'adminEvents.cancel(', 'adminEvents.setCapacity(']) assert.ok(src.includes(write), write);
   assert.doesNotMatch(src, /\.roster\(|roster\(/, 'the roster carries names and emails');
-  assert.doesNotMatch(src, /\.summary\b|\bsummary\./, 'R2\'s summary is all-time and hides its failure');
+  // An event's own `summary` column is drawn by D921's preview (`ev?.summary`); R2's is not.
+  assert.doesNotMatch(src, /(?<!\bev\??)\.summary\b|\bsummary\./, 'R2\'s summary is all-time and hides its failure');
   assert.doesNotMatch(src, /conversion/, 'R2\'s conversion is 0 for every upcoming event');
   assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML/);
   for (const imp of src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api'/g)) {
     assert.deepEqual(imp[1].split(',').map((s) => s.trim().split(/\s+as\s+/)[0]).sort(), imp[1].includes('events as') ? ['adminEvents', 'events'] : ['adminEvents'], 'only the two existing clients');
   }
-  // Nothing D915 §3 leaves undrawn: no type, format, period or chart.
-  assert.doesNotMatch(src, /location_kind|\bev\.type\b|In person|'Online'|12 weeks|recharts|<svg/);
+  // Nothing D915 §3 leaves undrawn: no period or chart. Type and format are
+  // drawn since part 1 (D916) by D921's Review, from `reviewModel.js` only.
+  assert.doesNotMatch(src, /12 weeks|recharts|<svg/);
+  const outsideReview = DESK_FILES.filter((f) => !/reviewModel\.js$/.test(f)).map((f) => codeOnly(read(f))).join('\n');
+  assert.doesNotMatch(outsideReview, /location_kind|In person|'Online'/);
   for (const sample of ['Northwind', 'Bluefern', 'Rua Exemplo', 'Fund I', 'Pricing Workshop', 'Demo Day Rehearsal', '[$', '[3]']) assert.ok(!src.includes(sample), `a canvas sample reached the desk: ${sample}`);
 });
 
@@ -721,10 +725,12 @@ test('"Updated" is the oldest answer among the reads the tab draws, never a newe
       clock = T[1]; held.list.resolve(response({ events: [ev(31, { starts_at: liveIso(4) })] })); await view.flush();
       clock = T[2]; held.analytics.resolve(response({ events: [row(31, 4)] })); await view.flush();
       assert.equal(view.textOf('events-asof'), `Updated ${clockLabel(T[0])}`, 'the Waiting tile and the Review count are the queue read at T0');
-      // Review draws the queue alone, read again on the way in: the list's and R2's times are not its.
+      // D921: Review draws the queue and the list (its Clashes card), both the
+      // reads Overview already holds, so "Updated" is still the queue at T0;
+      // R2 is not Review's, so its time is not either.
       clock = T[3];
       await view.follow('/admin/events/review');
-      assert.equal(view.textOf('events-asof'), `Updated ${clockLabel(T[3])}`);
+      assert.equal(view.textOf('events-asof'), `Updated ${clockLabel(T[0])}`);
     } finally { await view.close(); }
   } finally { Date.now = realNow; }
 });
@@ -759,7 +765,8 @@ test('Review: a decided event leaves the queue at once, so it cannot be approved
     assert.ok(!view.testIds().includes('events-queue-row-22'), 'the approved event is out of the queue');
     assert.ok(view.testIds().includes('events-queue-row-21'));
     assert.match(view.text(), /Waiting for review · 1/);
-    assert.equal(view.textOf('events-approving-does'), 'What approving doesPuts the event on the public calendar at axal.vc/events.Tells the host it is live.Sends free-seat invitations to official partners not invited yet.',
+    // D921 counts line 3 from the free-seat preview, which this stub does not answer.
+    assert.match(view.textOf('events-approving-does'), /^What approving doesPuts the event on the public calendar at axal\.vc\/events\.Tells the host it is live\.Sends free-seat invitations to official partners not invited yet\./,
       'the action bar acts on the next event, Breakfast for founders');
     assert.equal(view.focused(), 'events-done', 'focus moves to the confirmation line');
     // A read newer than the decision is the truth again, whatever it holds.

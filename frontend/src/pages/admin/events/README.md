@@ -10,8 +10,14 @@ strip, then the tab the address names.
 
 - `EventsOverview.jsx` — Overview (EV1): the four tiles, the status strip from
   the events list, and Page views and Feedback as "Not recorded".
-- `EventsReview.jsx` — Review (EV3): the queue, the selected event's facts,
-  "What approving does" and the action bar; Approve (EV4) and Send back (EV5).
+- `EventsReview.jsx` — Review (EV3, D921): the queue with its search over
+  title, host and venture, filters, sorts (Waiting longest first) and J/K; the
+  selected event's preview, facts, "What approving does" counted from the
+  free-seat preview, Clashes and History; Approve (EV4) and Send back (EV5);
+  the phone's full-screen sheet (EV17b, EV17c).
+- `reviewModel.js` — pure (D921). The wait, the queue's filters and sorts, the
+  type and format words, the preview, the Submitted and Venture facts, the
+  Clashes card, the History card and approve's counted third line.
 - `EventsAll.jsx` — All events (EV6, EV17d): the table, searched by title, with
   D919's filters, views, sorts, 25, 50 or 100 rows a page, the CSV of the rows
   on screen and the phone cards; each title opens the event's page.
@@ -26,7 +32,8 @@ strip, then the tab the address names.
 - `EventDialogs.jsx` — the dialogs (EV4, EV5, EV9–EV11), each a `Lightbox`.
 - `parts.jsx` — the card, pills, tile, refusal line and confirmation line the
   tabs share.
-- `useEventsDesk.js` — the reads, each made alone. R2 and the queue are read
+- `useEventsDesk.js` — the reads, each made alone; `useReviewReads` reads the
+  selected review event's history and free-seat preview (D921). R2 and the queue are read
   again whenever the list is switched on or off, so they are read together;
   "Updated" is the oldest answer among the reads the tab draws.
 - `eventsDeskModel.js` — pure. The tabs, the status words, Guard G, the
@@ -42,8 +49,10 @@ strip, then the tab the address names.
 
 - The desk reads `GET /api/admin/events` (every page, at `limit=200`),
   `GET /api/admin/events/analytics` (its per-event rows only, under Guard G),
-  `GET /api/admin/events/:id` and `GET /api/events/:id/agenda`. It never reads
-  the roster (names and emails), the analytics `summary`, or `conversion`.
+  `GET /api/admin/events/:id` and `GET /api/events/:id/agenda`, and for the
+  selected review event `GET /api/admin/events/:id/history` and
+  `/comp-preview` (D921). It never reads the roster (names and emails), the
+  analytics `summary`, or `conversion`.
 - A read that failed says what could not be read; it is never drawn as zero.
   A value no store holds says "Not recorded", one stored but not summed yet
   "Not read here yet", an event that has not ended "Not held yet", and an
@@ -52,8 +61,8 @@ strip, then the tab the address names.
 - The Worker checks no status on a write, so after one the event just decided
   leaves the queue, and the event page's actions wait, until a read newer
   than the write lands. Focus then sits on the confirmation line.
-- No type, format, period control or chart is drawn until the part of D915 §6
-  that builds it lands. Part 3's list (D918) gives the host line, host search
+- No period control or chart is drawn until the part of D915 §6 that builds
+  it lands. Type and format are drawn by Review (D921) since part 1. Part 3's list (D918) gives the host line, host search
   and the Host filter; "Cancelled with paid tickets" reads D918's overview,
   only while that view is on (`useEventsDesk`'s `paidView`).
 - Two events clash when neither is cancelled and their times overlap; an
