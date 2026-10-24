@@ -295,6 +295,13 @@ Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
 drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
 as `fee_invoices`.
 
+D976 (#2762): `network.js` is the advisor and partner network's admin side on
+`/api/admin/network/people/:userId`: one person's standing (stage, pause,
+directory, ratings, sessions, engagement counts per lane, payout readiness, a
+studio agreement on file and Lab host status), Pause and Resume, each with a
+required reason, and the advisor directory switch. No client name and no rating
+comment is on the wire.
+
 D990 (#2801): `partnerProfiles.js` is HQ's Partner profiles on
 `/api/admin/partner-profiles`: the list (search, filters, sort and pages, with
 totals over the filtered set and the filters' options), the counts for the tiles
