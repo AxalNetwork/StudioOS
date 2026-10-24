@@ -39,6 +39,7 @@ import { isSupportSession } from '../integrations/providers/mercury';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
+  user = { ...user, role: String(user.role || '').toLowerCase() };
   if (user.role === 'advisor' || (opts.write && user.role === 'admin')) throw new Error('Forbidden');
   const project = await sharedProjectOwned(c, user, projectId, opts);
   const owner = user.role === 'founder' && user.founder_id != null && user.founder_id === project.founder_id;

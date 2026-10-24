@@ -10,6 +10,7 @@ import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
+import { canWrite, canWritePitchDeck } from '../src/routes/_founder_validate_helpers.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -310,4 +311,22 @@ test('a refused payload records authorization context rather than a completed ch
     assert.equal(rows.length, 1);
     assert.deepEqual(JSON.parse(rows[0].details), { permission: 'write', phase: 'authorization', method: 'PUT', route: '/api/decks/:id' });
   } finally { f.db.close(); }
+});
+
+
+test('D895: legacy admin/advisor casing stays blocked on decks without changing other module ownership',async()=>{
+ const f=await fixture();try{
+  // This fixture deliberately supports legacy/malformed roles; canonical D1
+  // constrains role values and the other D895 fixtures retain that constraint.
+  f.db.exec("UPDATE users SET role='ADMIN' WHERE id=1; UPDATE users SET role='ADVISOR' WHERE id=6");
+  assert.equal((await request(f,1,'GET','/api/decks/10')).status,200);
+  assert.equal((await request(f,6,'GET','/api/decks/10')).status,403);
+  for(const who of [1,6])for(const [method,path,body]of [...writes(f),...otherWrites()].filter(([,path])=>path.startsWith('/api/decks/'))){const r=await request(f,who,method,path,body);assert.ok([403,404].includes(r.status),`${who} ${method} ${path}: ${r.status}`)}
+  assert.equal((await request(f,1,'PUT','/api/brand/landing/by-project/1',{name:'Synthetic existing brand policy'})).status,200);
+  for(const role of ['ADMIN','ADVISOR']){
+   const actor={id:1,role,founder_id:20,spinout_lab_active:1} as any;
+   assert.equal(canWrite({id:1,founder_id:20},actor),true);
+   assert.equal(canWritePitchDeck({id:1,founder_id:20},actor),false);
+  }
+ }finally{f.db.close()}
 });
