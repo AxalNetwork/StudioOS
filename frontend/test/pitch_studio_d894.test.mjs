@@ -663,7 +663,9 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
   assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*founderEditor\(<PitchStudio tab="decks" \/>\)/);
-  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchWorkspacePage \/>\)\)\)\} \/>/);
+  // D898 (#2676): the canvas's editor at /raise/pitch/edit; the template builder at /raise/pitch/builder until it retires.
+  assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchEditor \/>\)\)\)\} \/>/);
+  assert.match(app, /<Route path="\/raise\/pitch\/builder" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchWorkspacePage \/>\)\)\)\} \/>/);
   assert.match(app, /<Route path="\/raise\/pitch\/analytics" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchStudio tab="analytics" \/>\)\)\} \/>/);
   assert.match(app, /<Route path="\/raise\/pitch\/review" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchStudio tab="review" \/>\)\)\} \/>/);
   assert.ok(!existsSync(resolve(root, 'frontend/src/pages/founder/FounderRaisePitch.jsx')), 'the read-only Pitch page is still on disk');
@@ -672,14 +674,15 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   assert.match(moved, /<Navigate to=\{movedTarget\(loc\.search, loc\.hash\)\} replace \/>/);
   const workspace = read('frontend/src/pages/PitchWorkspacePage.jsx');
   assert.match(workspace, /navigate\(`\$\{t\.to\}\$\{keep\}`\)/, 'a tab drops the venture again');
-  assert.match(workspace, /\{ id: 'deck', to: EDIT_PATH,/, 'the Deck Builder tab lands on the studio home again (bug 3)');
+  assert.match(workspace, /\{ id: 'deck', to: BUILDER_PATH,/, 'the Deck Builder tab lands on the studio home again (bug 3)');
 });
 
 test('every link that carried the old address carries the new one', () => {
   assert.match(read('frontend/src/pages/cycles/ValidateSections.jsx'), /<Link to="\/raise\/pitch\/edit" title=\{PROBLEM_SLIDE_NOTE\}/);
   const rail = read('frontend/src/lib/railOptions/founder.js');
   assert.doesNotMatch(rail, /\/raise\/pitch\?mode=workspace/);
-  assert.equal((rail.match(/route: '\/raise\/pitch\/edit'/g) || []).length, 2);
+  // D898: the two template actions belong to the builder, which moved to /raise/pitch/builder.
+  assert.equal((rail.match(/route: '\/raise\/pitch\/builder'/g) || []).length, 2);
   for (const f of ['frontend/src/workspaces/founderZoneActions.js', 'frontend/src/workspaces/founderZoneFilters.js']) {
     assert.doesNotMatch(read(f), /'raise\/pitch'/, `${f} still holds the retired Pitch zone`);
   }
@@ -693,7 +696,9 @@ test('the studio reads only mounted routes, and no figure it draws is a sample',
     assert.ok(src.includes(call), `the studio no longer calls ${call}`);
   }
   for (const sample of ['Northwind', '[$', '16,950', '0:66', '[128]']) assert.ok(!src.includes(sample), `a canvas sample reached the page: ${sample}`);
-  assert.match(src, /<DeckReviewerPage embedded \/>/, 'the Review tab mounts the reviewer until #2434 part 6');
+  // D900 (#2434 part 6): the Review tab is the version's own review; the reviewer stays inside it for uploads.
+  assert.match(src, /<PitchReview reads=\{reads\} readOnly=\{readOnly\} \/>/, 'the Review tab mounts the version review');
+  assert.match(read('frontend/src/pages/raise/pitch/PitchReview.jsx'), /<DeckReviewerPage embedded \/>/, 'uploads and pasted text stay available');
 });
 
 test('the canvas is committed in the intake queue, the rail canvas carries the deck models, and the decision exists', () => {
