@@ -123,7 +123,7 @@ test('the offers an invitee saw quote none of their answers; each profile-depend
 test('the overview: every tile, Needs you, C1 to C4, from one read of each store', async () => {
   const f = fixture();
   try {
-    const sent = invite(f, { status: 'sent', created: d1(20) });
+    invite(f, { status: 'sent', created: d1(20) });
     const chosen = invite(f, { status: 'selected', created: d1(8) });
     step(f, chosen, 'partner_proposal_selected', 3);
     invite(f, { status: 'viewed', created: d1(15), expires: ago(1) }); // lapsed at Opened
