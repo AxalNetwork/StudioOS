@@ -132,7 +132,7 @@ test('the old ?mode=workspace address opens the editor with the moved notice, th
   // D905 (#2684) adds the Notes tab (PD21).
   assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Decks', STUDIO_PATH], ['Review', REVIEW_PATH], ['Share & analytics', ANALYTICS_PATH], ['Notes', '/raise/pitch/notes']]);
   assert.equal(TITLE, 'Pitch deck studio');
-  assert.doesNotMatch(LINE, /Every figure shows its source/, 'the source chips are #2434 part 2; the line waits for them');
+  assert.equal(LINE, 'Build your deck from what StudioOS already knows. Every figure shows its source.', 'the canvas line, restored with the source chips (D896)');
   assert.equal(NOT_RECORDED, 'Not recorded');
 });
 

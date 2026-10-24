@@ -12,8 +12,11 @@
  * Nothing is a sample. A read that fails says so where its figure would be, and
  * a value nobody recorded reads "Not recorded", never 0.
  *
- * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. The canvas's coverage meter, checks,
- * source chips, audience and round columns, the fast-path build, "New in your
+ * The coverage meter on the current deck reads `GET /api/decks/sources`
+ * through `SourcesBoards.jsx` (D896, #2675); its words are `sourcesModel.js`.
+ *
+ * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. The canvas's checks,
+ * audience and round columns, the fast-path build, "New in your
  * data", per-version seconds, present mode and the share dialog need stores the
  * Worker does not have. Each is a slot task on #2434; this file grows the
  * derivation when its read lands.
@@ -32,9 +35,8 @@ export const MOVED_KEY = 'pitch-workspace';
 export const MOVED_NOTICE = 'Pitch deck has a new address. Update your bookmark.';
 
 export const TITLE = 'Pitch deck studio';
-// The canvas's second sentence, "Every figure shows its source.", waits for the
-// source chips (#2434 part 2): it is not true of the builder yet.
-export const LINE = 'Build your deck from what StudioOS already knows.';
+// D896 (#2675): the second sentence is back now that every source read carries its chip.
+export const LINE = 'Build your deck from what StudioOS already knows. Every figure shows its source.';
 // PD21: an admin reads the studio and leaves notes (D905).
 export const READ_ONLY = 'Read only. Notes are visible to the founder.';
 
