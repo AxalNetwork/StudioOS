@@ -1409,3 +1409,21 @@ test('#2445: a hidden newer manual override cannot suppress since-last rescoring
   assert.equal(r.status,200);assert.deepEqual(r.body.items,['deck']);
  }finally{db.close();}
 });
+
+
+test('#2691: copies preserve version metadata, explicit overrides win, and saving never claims deck use',async()=>{
+ const db=cycleFixture(); const env=envOf(db);
+ try {
+  db.exec(`INSERT INTO pitch_decks(project_id,version,slides) VALUES(${C_P},77,'[]')`);
+  const original=await saveNarrativeVersion(env,{projectId:C_P,userId:C_FOUNDER,investorType:'angel',startFrom:'blank',oneLiner:'A story',whyNow:'Timing matters',checkAgainst:['metrics']});
+  const based=await saveNarrativeVersion(env,{projectId:C_P,userId:C_FOUNDER,investorType:'seed_fund',startFrom:'version',basedOnVersion:original.version});
+  const duplicate=await duplicateNarrativeVersion(env,{projectId:C_P,userId:C_FOUNDER,version:original.version});
+  for(const v of [based.version,duplicate.version]) {
+   assert.deepEqual({...db.prepare('SELECT why_now,check_against_json FROM narrative_version_meta WHERE project_id=? AND version=?').get(C_P,v)}, {why_now:'Timing matters',check_against_json:'["metrics"]'});
+   assert.equal(db.prepare('SELECT deck_version FROM spinout_deck_overrides WHERE project_id=? AND version=? LIMIT 1').get(C_P,v)?.deck_version,null);
+  }
+  const override=await saveNarrativeVersion(env,{projectId:C_P,userId:C_FOUNDER,investorType:'angel',startFrom:'version',basedOnVersion:original.version,whyNow:null,checkAgainst:['deck']});
+  assert.deepEqual({...db.prepare('SELECT why_now,check_against_json FROM narrative_version_meta WHERE project_id=? AND version=?').get(C_P,override.version)}, {why_now:null,check_against_json:'["deck"]'});
+  assert.equal(logs(db,"entity_type='raise.investor-narrative'").length,4,'one cycle write per save/duplicate');
+ }finally{db.close();}
+});

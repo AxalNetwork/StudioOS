@@ -200,14 +200,15 @@ export async function saveNarrativeVersion(env: Env, a: { projectId: number; use
   if (startFrom === 'version') basedOn = await ownVersion(env, a.projectId, a.basedOnVersion, 'The version to start from');
   else if (a.basedOnVersion != null) throw new WriterError(400, 'based_on_version goes with start_from: version');
   const checkAgainst = checkSources(a.checkAgainst);
-  const whyNow = a.whyNow === undefined ? null : trimOrNull(a.whyNow, 2000);
+  const inherited = basedOn == null ? null : await env.DB.prepare(
+    'SELECT why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?',
+  ).bind(a.projectId, basedOn).first<{ why_now: string | null; check_against_json: string | null }>();
+  const whyNow = a.whyNow === undefined ? inherited?.why_now ?? null : trimOrNull(a.whyNow, 2000);
   const max = await env.DB.prepare('SELECT COALESCE(MAX(version), 0) AS v FROM spinout_deck_overrides WHERE project_id = ?')
     .bind(a.projectId).first<{ v: number }>();
   const version = Number(max?.v ?? 0) + 1;
-  const deck = await env.DB.prepare(
-    'SELECT version FROM pitch_decks WHERE project_id = ? ORDER BY COALESCE(is_current, 0) DESC, version DESC, id DESC LIMIT 1',
-  ).bind(a.projectId).first<{ version: number }>();
-  const deckVersion = deck ? Number(deck.version) : null;
+  // Saving words is not evidence that a deck reads this version.
+  const deckVersion = null;
   if (startFrom !== 'blank') {
     await env.DB.prepare(
       `INSERT INTO spinout_deck_overrides (project_id, field_key, value, updated_by, updated_at, version, investor_type, deck_version)
@@ -228,7 +229,7 @@ export async function saveNarrativeVersion(env: Env, a: { projectId: number; use
   await env.DB.prepare(
     `INSERT INTO narrative_version_meta (project_id, version, start_from, based_on_version, why_now, check_against_json, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  ).bind(a.projectId, version, startFrom, basedOn, whyNow, checkAgainst ?? null, a.userId).run();
+  ).bind(a.projectId, version, startFrom, basedOn, whyNow, checkAgainst === undefined ? inherited?.check_against_json ?? null : checkAgainst, a.userId).run();
   const mismatches = await runCheck(env, a.projectId, version);
   const label = INVESTOR_TYPE_LABEL[investorType] ?? investorType;
   await logRaise(env, a.userId, a.projectId, 'investor-narrative', version, 'narrative_version_created',
