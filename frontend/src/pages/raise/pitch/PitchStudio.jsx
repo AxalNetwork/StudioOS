@@ -216,7 +216,9 @@ function StudioDecks({ reads, readOnly, q }) {
   }
 
   return (
-    <div className="grid gap-3.5 lg:grid-cols-[minmax(0,1fr)_300px]">
+    // A proportional aside, not a fixed track: the rail already takes its own
+    // column beside the frame, and a fixed 300px here would read as a second one.
+    <div className="grid gap-3.5 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <div className="flex min-w-0 flex-col gap-3.5">{left}</div>
       <aside className="flex flex-col gap-3.5" aria-label="Readers">
         <ReadersAside reads={reads} hasDeck={Boolean(current)} />

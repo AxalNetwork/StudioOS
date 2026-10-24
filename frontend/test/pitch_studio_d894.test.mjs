@@ -141,8 +141,9 @@ test('the old ?mode=workspace address opens the editor with the moved notice, th
 
 test('the routes: the studio\'s three tabs, the editor at its new address, and the old address redirecting', () => {
   const app = read('frontend/src/App.jsx');
-  const route = (path) => new RegExp(`<Route path="${path.replace(/\//g, '\\/')}" element=\\{guard\\(labRoles\\(\\['admin', 'founder'\\]\\)`);
-  for (const p of ['/raise/pitch', '/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/positioning']) assert.match(app, route(p), p);
+  // A literal search, not a RegExp built from the path: nothing here needs a pattern.
+  const route = (path) => `<Route path="${path}" element={guard(labRoles(['admin', 'founder'])`;
+  for (const p of ['/raise/pitch', '/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/positioning']) assert.ok(app.includes(route(p)), p);
   assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*founderEditor\(<PitchStudio tab="decks" \/>\)/);
   assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchWorkspacePage \/>\)\)\)\} \/>/);
   assert.match(app, /<Route path="\/raise\/pitch\/analytics" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchStudio tab="analytics" \/>\)\)\} \/>/);

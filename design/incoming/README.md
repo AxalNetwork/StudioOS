@@ -130,6 +130,18 @@ stores the Worker does not have, so this canvas stays in the queue until its
 eleven parts land (#2674 to #2684; D894 §6 lists them). The `ROUTE_MAP.md` row
 says what is drawn today.
 
+## Landed 2026-10-24 — Investor narrative (#2454)
+
+The owner's artifacts `7vsSgDnajKcbZLcv1KAT3K` and `7sRjYom236PZz4ydGqooxQ`
+came from S21's prompt on #2454, as the usual pair:
+- `Investor Narrative · Boards.dc.html` is the board grid (NAR1 to NAR21, with
+  the lettered boards: 33 in all), the output of `scripts/read-canvas.mjs` as is;
+- `Investor Narrative Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace and the font link.
+
+No value was edited. S1's integration lands next and records its grade here.
+
 ## Landed 2026-10-20 — Licences (D795, #2228)
 
 **Graduated 2026-10-20 (D800, #2233):** both files below now live in
