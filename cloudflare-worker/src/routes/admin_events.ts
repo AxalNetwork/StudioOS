@@ -117,10 +117,8 @@ adminEvents.get('/analytics', async (c) => {
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
 
-  let summary = {
-    total_events: 0, published: 0, pending_review: 0, draft: 0, cancelled: 0,
-    total_registrations: 0, total_attended: 0, total_waitlisted: 0,
-  };
+  const unreadable: string[] = [];
+  let summary: Record<string, number> | null = null;
   try {
     const ev: any = await c.env.DB.prepare(
       `SELECT
@@ -138,6 +136,7 @@ adminEvents.get('/analytics', async (c) => {
          COUNT(CASE WHEN status='waitlisted' THEN 1 END) AS waitlisted
        FROM event_registrations`,
     ).first();
+    if (!ev || !reg) throw new Error('Analytics summary was not returned');
     summary = {
       total_events: Number(ev?.total_events || 0),
       published: Number(ev?.published || 0),
@@ -149,13 +148,17 @@ adminEvents.get('/analytics', async (c) => {
       total_waitlisted: Number(reg?.waitlisted || 0),
     };
   } catch (e) {
+    unreadable.push('summary');
     console.warn('[admin_events] analytics summary failed:', (e as Error).message);
   }
 
-  let events: any[] = [];
+  let events: any[] | null = null;
+  const now = Date.now();
+  // The editor's localInputToIso writes UTC instants. Legacy offset-free D1 timestamps are UTC.
+  const timestamp = (value: unknown) => typeof value === 'string' && value.trim() ? Date.parse(/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(value) ? value : value.replace(' ', 'T') + 'Z') : Number.NaN;
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT e.id, e.slug, e.title, e.status, e.starts_at, e.capacity, e.featured,
+      `SELECT e.id, e.slug, e.title, e.status, e.starts_at, e.ends_at, e.capacity, e.featured,
               COUNT(CASE WHEN r.status IN ('registered','confirmed','attended') THEN 1 END) AS registrations,
               COUNT(CASE WHEN r.status='attended' THEN 1 END) AS attended,
               COUNT(CASE WHEN r.status='waitlisted' THEN 1 END) AS waitlisted,
@@ -166,16 +169,20 @@ adminEvents.get('/analytics', async (c) => {
         ORDER BY e.starts_at DESC
         LIMIT 200`,
     ).all();
-    events = ((rows.results || []) as any[]).map((r) => {
+    if (('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Analytics events were not returned');
+    events = (rows.results as any[]).map((r) => {
       const registrations = Number(r.registrations || 0);
       const attended = Number(r.attended || 0);
       const capacity = r.capacity != null ? Number(r.capacity) : null;
+      const endMissing = r.ends_at == null || (typeof r.ends_at === 'string' && !r.ends_at.trim());
+      const endedAt = endMissing ? timestamp(r.starts_at) + 24 * 60 * 60 * 1000 : timestamp(r.ends_at);
       return {
         id: Number(r.id),
         slug: r.slug,
         title: r.title,
         status: r.status,
         starts_at: r.starts_at,
+        ends_at: r.ends_at ?? null,
         featured: !!r.featured,
         capacity,
         registrations,
@@ -183,14 +190,15 @@ adminEvents.get('/analytics', async (c) => {
         waitlisted: Number(r.waitlisted || 0),
         cancelled: Number(r.cancelled || 0),
         capacity_util: capacity && capacity > 0 ? round2(registrations / capacity) : null,
-        conversion: registrations > 0 ? round2(attended / registrations) : null,
+        conversion: endedAt < now && registrations > 0 ? round2(attended / registrations) : null,
       };
     });
   } catch (e) {
+    unreadable.push('events');
     console.warn('[admin_events] analytics rows failed:', (e as Error).message);
   }
 
-  return c.json({ summary, events });
+  return c.json({ summary, events, unreadable });
 });
 
 // ── GET /:id — admin event detail ──────────────────────────────────────────
