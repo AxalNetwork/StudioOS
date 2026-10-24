@@ -165,7 +165,7 @@ const CYCLE_DEFS = {
       // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`.
       'investor-narrative': (data, ctx) => (
         <>
-          <NarrativeHome data={data} search={ctx.search} />
+          <NarrativeHome data={data} />
           {mercuryPart('investor-narrative', data, ctx)}
         </>
       ),
@@ -1026,7 +1026,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
             onDiscard={(id) => interviewSessionsApi.discard(id).then(() => setReload((n) => n + 1))}
             onAcceptAll={(batches) => acceptSuggestions(batches, interviewSessionsApi).finally(() => setReload((n) => n + 1))} />
         )}
-        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null, search: q })}
+        {moduleStatus === 'ready' && fnOf(def.parts, slug)?.(module, { projectId, reload: () => setReload((n) => n + 1), openAction, query, openDialog, role: user?.role ?? null })}
       </ModulePage>
     );
   }

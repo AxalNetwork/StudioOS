@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cyclesApi, cyclesWrite } from '../../../lib/api/cycles';
 import { Lightbox, Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
@@ -327,13 +327,15 @@ function VersionsTab({ projectId, versions, search, reload, onChanged }) {
  * tiles, "Needs you" and the footer, from the module read's `parts.narrative`.
  * CycleRoute draws it as the module's part (D909); it reads nothing itself.
  */
-export function NarrativeHome({ data, search = '' }) {
+export function NarrativeHome({ data, search }) {
+  // The module page's address: the venture is kept on Needs you's links.
+  const here = useLocation().search;
   if (homeUnreadable(data)) {
     return <div className={`${CARD} p-4`} data-testid="narrative-home-unreadable"><Unreadable what="Your narrative versions" claim="This is not a claim that none are saved." /></div>;
   }
   const part = homePart(data);
   if (!part) return null;
-  const needs = needsYou(part, search);
+  const needs = needsYou(part, search ?? here);
   return (
     <div className="flex flex-col gap-3.5" data-testid="narrative-home">
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">

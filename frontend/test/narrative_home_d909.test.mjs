@@ -199,7 +199,7 @@ test('Versions: a failed compare says so, never "the same"', async () => {
 
 test('the wiring: Home is the module part, never a fork; /new is today\'s address; the client calls D908\'s compare', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.match(route, /'investor-narrative': \(data, ctx\) => \(\s*<>\s*<NarrativeHome data=\{data\} search=\{ctx\.search\} \/>\s*\{mercuryPart\('investor-narrative', data, ctx\)\}/);
+  assert.match(route, /'investor-narrative': \(data, ctx\) => \(\s*<>\s*<NarrativeHome data=\{data\} \/>\s*\{mercuryPart\('investor-narrative', data, ctx\)\}/);
   assert.equal((route.match(/<CycleModulePage|<ModulePage/g) || []).length >= 1, true);
   const api = read('frontend/src/lib/api/cycles.js');
   assert.ok(api.includes('narrativeCompare: (projectId, a, b) => request(`/cycles/raise/narrative/compare?project=${encodeURIComponent(projectId)}&a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`)'));
