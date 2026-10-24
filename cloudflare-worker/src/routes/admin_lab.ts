@@ -17,7 +17,7 @@ const value = (n: number) => ({ available: true as const, value: n });
 const INTERVIEW_REASON = 'Interview scheduling is recorded, but attendance or completion is not. A scheduled time does not prove an interview happened.';
 async function read(db: D1Database, sql: string, reason: string, binds: any[] = []): Promise<Read> {
   try {
-    const result = await db.prepare(sql).bind(...binds).all<Row>();
+    const result: { success?: boolean; results?: Row[] } = await db.prepare(sql).bind(...binds).all<Row>();
     if (result.success === false || !Array.isArray(result.results)) return unreadable(reason);
     return { available: true, rows: result.results };
   }
