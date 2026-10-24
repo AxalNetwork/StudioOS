@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter, useLocation } from 'react-router-dom';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import AdminCommunity from '../src/pages/admin/community/AdminCommunity.jsx';
 import {
@@ -145,7 +145,8 @@ async function mounted(url, handle, { phone = false } = {}) {
   globalThis.matchMedia = () => ({ matches: phone, addEventListener() {}, removeEventListener() {} });
   document.body.style = { overflow: 'auto', paddingRight: '' };
   let where = null;
-  function Spy() { const l = useLocation(); where = `${l.pathname}${l.search}`; return null; }
+  let nav = null;
+  function Spy() { const l = useLocation(); nav = useNavigate(); where = `${l.pathname}${l.search}`; return null; }
   const container = document.createElement('div'); document.body.appendChild(container);
   const root = createRoot(container);
   await act(async () => root.render(h(MemoryRouter, { initialEntries: [url] }, h(AdminCommunity), h(Spy))));
@@ -158,6 +159,7 @@ async function mounted(url, handle, { phone = false } = {}) {
   const view = {
     requests, flush,
     where: () => where,
+    async back() { await act(async () => { nav(-1); }); await flush(); },
     text: () => text(container),
     has: (id) => Boolean(byId(id)),
     textOf: (id) => { const n = byId(id); assert.ok(n, `no ${id}`); return text(n); },
@@ -205,7 +207,7 @@ test('paging is 25 a page, clamped, and an unknown count sorts after every known
   assert.equal(pageOf(rows, 9).page, 2, 'clamped to the last page');
   assert.equal(pageOf([], 1).from, 0);
   // A posting whose applications were not recorded is not ranked as 0.
-  const out = listView(JOBS, [{ id: 2, title: 'B', application_count: null }, { id: 1, title: 'A', application_count: 0 }], initialState(JOBS));
+  const out = listView(JOBS, [{ id: 2, title: 'A', application_count: null }, { id: 1, title: 'B', application_count: 0 }], initialState(JOBS));
   assert.deepEqual(out.rows.map((r) => r.id), [1, 2]);
   // D918's list: only what is set travels, and the sort carries its own direction.
   assert.deepEqual(eventsQuery(initialState(EVENTS)), { limit: 25, offset: 0, sort: 'starts', dir: 'asc' });
@@ -218,6 +220,7 @@ test('paging is 25 a page, clamped, and an unknown count sorts after every known
 test('the activity query carries only what is set, and its paging stops where the Worker does', () => {
   assert.deepEqual(activityQuery({ page: 1 }), { limit: 25, offset: 0 });
   assert.deepEqual(activityQuery({ page: 3, kind: 'jobs', from: '2026-10-01', to: '2026-10-2', q: '  Ops ' }), { limit: 25, offset: 50, kind: 'jobs', from: '2026-10-01', q: 'Ops' }, 'a half-typed date does not travel');
+  assert.deepEqual(activityQuery({ page: 1, from: '2026-1', to: '2026-10-24' }), { limit: 25, offset: 0, to: '2026-10-24' }, 'nor a half-typed start');
   const p = activityPage({ rows: [], total: 4000, unreadable: [] }, 1);
   assert.equal(p.pages, ACTIVITY_CAP / 25);
   assert.match(p.capped, /Pages stop at 1,000 rows/);
@@ -321,6 +324,9 @@ test('CM3 Events: Esc closes it, takes it off the address, and puts focus back o
     assert.ok(!v.has('community-box-events'));
     assert.equal(v.where(), '/admin/community?moved=held-community');
     assert.equal(v.focused(), 'community-open-events');
+    // Closing replaced the lightbox's entry, so Back does not open it again.
+    await v.back();
+    assert.ok(!v.has('community-box-events'), 'Back reopened a closed lightbox');
   } finally { await v.close(); }
 });
 

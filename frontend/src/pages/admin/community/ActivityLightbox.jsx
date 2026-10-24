@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { communityApi } from '../../../lib/api';
+import { communityApi } from '../../../lib/api/community';
 import { BoxShell, CTRL, Failed, LINK, MONO, Pager, Reading, SUB, TAG, useBoxRead } from './CommunityLightbox';
 import { ACTIVITY_KINDS, ACTIVITY_LINE, activityPage, activityQuery } from './lightboxModel';
 
