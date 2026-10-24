@@ -51,6 +51,8 @@ const REQUIRED_EVENTS: string[] = [
   'customer.subscription.deleted',
   'payment_intent.succeeded',
   'payment_intent.payment_failed',
+  // D892 (#2453): a failed renewal tells the member.
+  'invoice.payment_failed',
   'invoice.finalized',
   'invoice.paid',
   'charge.succeeded',
