@@ -78,7 +78,14 @@ test('nothing in the app links the old addresses', () => {
       const p = join(dir, entry.name);
       if (entry.isDirectory()) walk(p);
       else if (/\.(jsx?|tsx?)$/.test(entry.name) && !p.endsWith('LegacyContractsRedirect.jsx')) {
-        if (/\/admin\?tab=(integration-keys|github)\b/.test(readFileSync(p, 'utf8'))) hits.push(p.slice(root.length + 1));
+        let source = readFileSync(p, 'utf8');
+        if (p === resolve(root, 'cloudflare-worker/src/services/redirectRoutes.ts')) {
+          // D939: these two exact catalog entries are counter keys, never navigation links.
+          // Keep scanning the rest of the file so an actual old link is still caught.
+          source = source.replace(/export const ADMIN_TAB_REDIRECTS[\s\S]*?Object\.freeze\(\[([\s\S]*?)\]\);/, (catalog) =>
+            catalog.replace(/^  \{ path: '\/admin\?tab=(?:integration-keys|github)' \},$/gm, ''));
+        }
+        if (/\/admin\?tab=(integration-keys|github)\b/.test(source)) hits.push(p.slice(root.length + 1));
       }
     }
   };

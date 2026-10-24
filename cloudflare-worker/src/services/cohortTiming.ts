@@ -399,7 +399,7 @@ async function notifyAdmins(env: Env, type: string, title: string, body: string)
     const admins = await env.DB.prepare(`SELECT id FROM users WHERE role = 'admin' AND is_active = 1`).all<{ id: number }>();
     const { notify } = await import('./notify');
     for (const a of admins.results || []) {
-      await notify(env, { userId: a.id, type, title, body, link: '/admin/spinout-lab', channels: ['in_app', 'email'], category: 'deals' });
+      await notify(env, { userId: a.id, type, title, body, link: '/admin/programs/spinout-lab/cohorts', channels: ['in_app', 'email'], category: 'deals' });
     }
   } catch (e) { console.warn('[cohort] admin notify failed', e); }
 }
