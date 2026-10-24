@@ -188,7 +188,7 @@ export function parseJsonLoose<T>(raw: string | undefined): T | null {
  * part 5: a route that read the press's own context passes it as `rail`
  * (`railFor`), which wins over the surface page and `railOption`.
  */
-export interface DeckFillRun { userId: number; projectId: number; railOption?: string; rail?: RailContext }
+export interface DeckFillRun { userId: number; projectId: number; railOption?: string; rail?: RailContext; mercuryOwnerUserId?: number | null }
 
 async function aiBatchFill(
   env: Env, project: any, hints: string[], aiHint: string, who: DeckFillRun | null,
@@ -317,7 +317,7 @@ function resolveScalarField(
 }
 
 /** D895: a stored financial-model runway, otherwise the venture's measured Mercury fact. */
-export async function recordedDeckRunway(env: Env, projectId: number): Promise<number | null> {
+export async function recordedDeckRunway(env: Env, projectId: number, mercuryOwnerUserId: number | null = null): Promise<number | null> {
   const measured = (value: unknown): number | null => {
     if (value == null || value === '' || typeof value === 'boolean') return null;
     const number = Number(value);
@@ -328,8 +328,9 @@ export async function recordedDeckRunway(env: Env, projectId: number): Promise<n
     const runway = measured(row?.computed_json ? JSON.parse(row.computed_json)?.runway_months : null);
     if (runway !== null) return runway;
   } catch { /* no readable recorded model */ }
+  if (mercuryOwnerUserId == null) return null;
   try {
-    const row = await env.DB.prepare("SELECT value FROM mercury_raise_facts WHERE project_id = ? AND kind = 'runway' ORDER BY as_of DESC, id DESC LIMIT 1").bind(projectId).first<{ value: number | null }>();
+    const row = await env.DB.prepare("SELECT f.value FROM mercury_raise_facts f JOIN integrations i ON i.id = f.integration_id JOIN projects p ON p.id = f.project_id JOIN users u ON u.id = i.user_id AND u.founder_id = p.founder_id WHERE f.project_id = ? AND f.kind = 'runway' AND i.user_id = ? AND i.provider_key = 'mercury' AND i.status = 'active' AND u.role = 'founder' ORDER BY f.as_of DESC, f.id DESC LIMIT 1").bind(projectId, mercuryOwnerUserId).first<{ value: number | null }>();
     return measured(row?.value);
   } catch { return null; }
 }
@@ -343,7 +344,7 @@ export async function autofillDeck(
   // Load project + financials.computed_json + cap table holders.
   const project: any = await env.DB
     .prepare('SELECT * FROM projects WHERE id = ?').bind(projectId).first<any>() || {};
-  project._recordedRunway = await recordedDeckRunway(env, projectId);
+  project._recordedRunway = await recordedDeckRunway(env, projectId, who?.mercuryOwnerUserId ?? null);
   let fin: any = null;
   try {
     const fmRow = await env.DB

@@ -61,7 +61,7 @@ function fixture({ funded = true } = {}) {
       const hints = JSON.parse(prompt.match(/Hints:\s*(\[[^\]]+\])/)?.[1] || '[]') as string[];
       const response = hints.length
         ? JSON.stringify(Object.fromEntries(hints.map((h) => [h, `AI wrote ${h}`])))
-        : JSON.stringify({ slides: [{ title: 'Problem', subtitle: 'Pain', body: 'AI drafted this.', bullets: ['one', 'two'] }, { title: 'Ask', body: 'Invented 18–24 month runway', bullets: ['Invented 24+ months'] }, ...['The Ask', 'Ask & Use of Funds', 'ask'].map(title => ({ title, body: 'Invented 18–24 month runway', bullets: ['Invented 24+ months'] }))] });
+        : JSON.stringify({ slides: [{ title: 'problem', subtitle: 'Pain', body: 'AI drafted this.', bullets: ['one', 'two'] }, { title: 'Ask', body: 'Invented 18–24 month runway', bullets: ['Invented 24+ months'] }, ...['The Ask', 'Ask & Use of Funds', 'ask'].map(title => ({ title, body: 'Invented 18–24 month runway', bullets: ['Invented 24+ months'] }))] });
       return { response, usage: { prompt_tokens: 40, completion_tokens: 20 } };
     },
   });
@@ -145,6 +145,7 @@ test('the deck draft is one router run with option deck_draft', async () => {
     assert.match(text, /AI drafted this\./, 'the draft uses the run\'s answer');
     assert.match(text, /Runway: Not recorded/);
     assert.doesNotMatch(text, /Invented|18–24|24\+/);
+    assert.deepEqual(JSON.parse(text).slides.map((slide:any)=>slide.title),['Problem','Solution','Market','Traction','Business model','Go-to-market','Competition','Team','Ask','Financials']);
   } finally { restore(); f.db.close(); }
 });
 

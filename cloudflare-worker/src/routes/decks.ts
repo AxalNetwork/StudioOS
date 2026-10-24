@@ -35,6 +35,7 @@ import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
+import { isSupportSession } from '../integrations/providers/mercury';
 
 /** D895 applies only to deck operations, not other project-content routes. */
 async function projectOwned(c: any, user: any, projectId: number, opts: { write?: boolean; audit?: boolean; contactData?: boolean } = {}) {
@@ -43,6 +44,13 @@ async function projectOwned(c: any, user: any, projectId: number, opts: { write?
   const owner = user.role === 'founder' && user.founder_id != null && user.founder_id === project.founder_id;
   if (!owner && user.role !== 'admin' && await getProjectMembershipRole(c.env, projectId, user.id) === 'advisor') throw new Error('Forbidden');
   return project;
+}
+
+/** Called after projectOwned has verified this request's active-company scope. */
+async function mercuryRunwayOwner(c: any, user: any, projectId: number): Promise<number | null> {
+  if (user.role !== 'founder' || user.founder_id == null || await isSupportSession(c)) return null;
+  const project = await c.env.DB.prepare('SELECT founder_id FROM projects WHERE id = ?').bind(projectId).first() as { founder_id: number | null } | null;
+  return project?.founder_id === user.founder_id ? Number(user.id) : null;
 }
 
 async function auditDeckWrite(c: any, user: any, projectId: number, action: string, summary: string) {
@@ -375,22 +383,19 @@ Startup data: ${JSON.stringify(ctx)}`;
 // slide title where possible.
 function enforceTen(slides: any[], fallback: any[]): any[] {
   const byTitle = new Map<string, any>();
-  for (const s of slides || []) {
-    if (!s || typeof s !== 'object') continue;
-    const t = String(s.title || '').trim().toLowerCase();
-    if (t && !byTitle.has(t)) byTitle.set(t, s);
+  const fallbackByTitle = new Map(fallback.map(slide => [String(slide.title).trim().toLowerCase(), slide]));
+  for (const slide of slides || []) {
+    if (!slide || typeof slide !== 'object') continue;
+    const title = String(slide.title || '').trim().toLowerCase();
+    if (title && !byTitle.has(title)) byTitle.set(title, slide);
   }
-  const out: any[] = [];
-  for (let i = 0; i < SLIDE_TITLES.length; i++) {
-    const canonical = SLIDE_TITLES[i];
-    let s = byTitle.get(canonical.toLowerCase());
-    if (!s && i < slides.length && slides[i] && typeof slides[i] === 'object') s = slides[i];
-    if (!s) s = fallback[i];
-    s = { ...s };
-    if (!s.title) s.title = canonical;
-    out.push(s);
-  }
-  return out;
+  return SLIDE_TITLES.map(title => {
+    const key = title.toLowerCase();
+    // Ask figures always come from records. Unmatched AI slides cannot be
+    // reused in another slot while padding, so aliases cannot invent runway.
+    const slide = (key === 'ask' ? null : byTitle.get(key)) || fallbackByTitle.get(key) || {};
+    return { ...slide, title };
+  });
 }
 
 // Task #16 — must accept *both* the legacy {title,body,bullets,image_url}
@@ -566,13 +571,10 @@ decks.post('/generate', async (c) => {
     return c.json({ error: 'forbidden' }, 403);
   }
   await ensureSchema(c.env);
-  p._recordedRunway = await recordedDeckRunway(c.env, pid);
+  p._recordedRunway = await recordedDeckRunway(c.env, pid, await mercuryRunwayOwner(c, user, pid));
   const fallback = heuristicSlides(p);
   const raw = (await aiSlides(c.env, p, Number(user.id) || 0)) || fallback;
-  // Alignment can repeat an AI slide while padding a short answer. Sanitize every Ask.
-  const aligned = enforceTen(raw, fallback).map((slide) =>
-    /\bask\b/i.test(String(slide.title || '')) ? fallback.find((recorded) => recorded.title === 'Ask') : slide);
-  // Eadwyn cannot invent a measured runway or change the recorded Ask.
+  const aligned = enforceTen(raw, fallback);
   const slides = sanitizeSlides(aligned);
   while (slides.length < 10) slides.push(fallback[slides.length]);
   // Task #6 — inject brand kit from landing page (generic generate = 'off' theme)
@@ -1688,7 +1690,7 @@ decks.post('/apply-method', async (c) => {
   // pitch_decks.slides. We also stash the method_id + spec_id on each
   // slide so the editor can re-render the right field controls.
   const rail = railFor(c, { page: DECK_FORM_RAIL.page, option: DECK_FORM_RAIL.template }, `project:${pid}`);
-  const filled = await autofillDeck(c.env, method, pid, { userId: Number(user.id) || 0, projectId: pid, rail });
+  const filled = await autofillDeck(c.env, method, pid, { userId: Number(user.id) || 0, projectId: pid, rail, mercuryOwnerUserId: await mercuryRunwayOwner(c, user, pid) });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,
@@ -1857,7 +1859,7 @@ decks.post('/:id/autofill', async (c) => {
   }
 
   const rail = railFor(c, { page: DECK_FORM_RAIL.page, option: DECK_FORM_RAIL.fill }, `project:${Number(row.project_id)}`);
-  const filled = await autofillDeck(c.env, method, Number(row.project_id), { userId: Number(user.id) || 0, projectId: Number(row.project_id), rail });
+  const filled = await autofillDeck(c.env, method, Number(row.project_id), { userId: Number(user.id) || 0, projectId: Number(row.project_id), rail, mercuryOwnerUserId: await mercuryRunwayOwner(c, user, Number(row.project_id)) });
   const editorSlides = toEditorSlides(method, filled);
   const wrapped = editorSlides.map((s) => ({
     title: s.title,

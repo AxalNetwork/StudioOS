@@ -47,14 +47,15 @@ async function fixture() {
   db.exec("INSERT INTO project_members(project_id,user_id,role,status) VALUES(1,3,'cofounder','accepted'),(1,4,'advisor','accepted'),(1,5,'advisor','accepted'),(1,9,'cofounder','accepted')");
   db.prepare('INSERT INTO pitch_decks(id,project_id,version,slides,title,is_current,created_by) VALUES(10,1,1,?,?,1,2)').run(JSON.stringify(SLIDES),'Synthetic deck');
   db.prepare("INSERT INTO pitch_deck_proposals(id,project_id,base_deck_id,slides,title,method_id,created_by) VALUES(20,1,10,?,'Synthetic proposal','yc_seed',2)").run(JSON.stringify(SLIDES));
+  db.exec("INSERT INTO integrations(id,uid,user_id,provider_key,status,auth_type) VALUES(99,'synthetic-mercury',2,'mercury','active','oauth_mcp')");
   const app = new Hono<any>().route('/api/decks',decks).route('/api/brand',brand).route('/api/deck-share',shareActions).route('/api/cycles/raise',cycleRaise).route('/api/cycles',cycleRecords);
   app.onError((err,c) => c.json({detail:err.message}, (AUTH_ERROR_STATUSES[err.message] || 500) as any));
   return {db, env, app};
 }
 type F = Awaited<ReturnType<typeof fixture>>;
-async function call(f:F, who:number|null, method:string, path:string, json?:any) {
-  const headers:Record<string,string>={'Content-Type':'application/json'};
-  if(who) headers.Authorization='Bearer '+await new SignJWT({user_id:who}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+async function call(f:F, who:number|null, method:string, path:string, json?:any, extra: {claims?:Record<string,any>;headers?:Record<string,string>} = {}) {
+  const headers:Record<string,string>={'Content-Type':'application/json',...extra.headers};
+  if(who) headers.Authorization='Bearer '+await new SignJWT({...extra.claims,user_id:who}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
   const res=await f.app.request(path,{method,headers,...(json===undefined?{}:{body:JSON.stringify(json)})},f.env);
   const bytes=await res.arrayBuffer();let body:any;try{body=JSON.parse(new TextDecoder().decode(bytes))}catch{body=null}
   return {status:res.status,body,headers:res.headers,bytes};
@@ -100,19 +101,19 @@ for(const [method,path,body,action] of [
 });
 test('D895: measured runway comes from the model or Mercury, never funding size',async()=>{
  const f=await fixture();try{
-  assert.equal(await recordedDeckRunway(f.env,1),null);
+  assert.equal(await recordedDeckRunway(f.env,1,2),null);
   if(!(f.db.prepare('PRAGMA table_info(financial_models)').all() as any[]).some(x=>x.name==='computed_json'))f.db.exec('ALTER TABLE financial_models ADD COLUMN computed_json TEXT');
   f.db.prepare("INSERT INTO financial_models(project_id,computed_json,updated_by) VALUES(1,?,2)").run(JSON.stringify({runway_months:7}));
-  assert.equal(await recordedDeckRunway(f.env,1),7);
+  assert.equal(await recordedDeckRunway(f.env,1,2),7);
   f.db.prepare('UPDATE financial_models SET computed_json=?,updated_by=NULL WHERE project_id=1').run(JSON.stringify({runway_months:99}));
-  assert.equal(await recordedDeckRunway(f.env,1),null,'an unsaved model is not a recorded runway');
+  assert.equal(await recordedDeckRunway(f.env,1,2),null,'an unsaved model is not a recorded runway');
   f.db.prepare('UPDATE financial_models SET computed_json=?,updated_by=2 WHERE project_id=1').run(JSON.stringify({runway_months:7}));
-  assert.equal(await recordedDeckRunway(f.env,1),7);
+  assert.equal(await recordedDeckRunway(f.env,1,2),7);
   f.db.exec("UPDATE financial_models SET computed_json='{}'");
   // Use the real canonical Mercury fact table, without making a provider request.
   f.db.prepare("INSERT INTO mercury_raise_facts(integration_id,project_id,kind,fact_key,value,as_of) VALUES(99,1,'runway','runway',4,'2026-10-20')").run();
-  assert.equal(await recordedDeckRunway(f.env,1),4);
-  f.db.exec("UPDATE financial_models SET computed_json='{\"runway_months\":0}'");assert.equal(await recordedDeckRunway(f.env,1),0);
+  assert.equal(await recordedDeckRunway(f.env,1,2),4);
+  f.db.exec("UPDATE financial_models SET computed_json='{\"runway_months\":0}'");assert.equal(await recordedDeckRunway(f.env,1,2),0);
  }finally{f.db.close()}
 });
 test('D895: missing review output supplies neither a fabricated score nor a fabricated first fix',async()=>{
@@ -257,7 +258,7 @@ test('D895: template Ask runway cells use records, including Mercury, rather tha
   f.db.exec('UPDATE projects SET funding_needed=5000000 WHERE id=1');
   const method={...getMethod('yc_seed')!,slides:getMethod('yc_seed')!.slides.filter(s=>s.id==='ask')};
   const runway=async()=>{
-   const filled=await autofillDeck(f.env,method,1);
+   const filled=await autofillDeck(f.env,method,1,{userId:2,projectId:1,mercuryOwnerUserId:2});
    return (filled.slides[0].fields.round.value as any[]).filter(cell=>/Runway/.test(cell.label)).map(cell=>cell.value);
   };
   assert.deepEqual(await runway(),['Not recorded','Not recorded']);
@@ -272,7 +273,7 @@ test('D895: fractional recorded runway has consistent whole-month display withou
  const f=await fixture();try{
   if(!(f.db.prepare('PRAGMA table_info(financial_models)').all() as any[]).some(x=>x.name==='computed_json'))f.db.exec('ALTER TABLE financial_models ADD COLUMN computed_json TEXT');
   f.db.prepare('INSERT INTO financial_models(project_id,computed_json,updated_by) VALUES(1,?,2)').run(JSON.stringify({runway_months:13.846153846}));
-  assert.equal(await recordedDeckRunway(f.env,1),13.846153846);
+  assert.equal(await recordedDeckRunway(f.env,1,2),13.846153846);
   assert.equal(formatDeckRunway(13.846153846),'14 months');assert.equal(formatDeckRunway(13.846153846,'mo'),'14 mo');assert.equal(formatDeckRunway(0),'0 months');assert.equal(formatDeckRunway(null),null);
   const generated=await call(f,2,'POST','/api/decks/generate',{project_id:1});assert.equal(generated.status,200);assert.match(JSON.stringify(generated.body.slides),/Runway: 14 months/);assert.doesNotMatch(JSON.stringify(generated.body.slides),/13\.846/);
  }finally{f.db.close()}
@@ -314,4 +315,31 @@ test('D895: malformed or non-array readiness cards cannot hide unrelated public 
  const cards=[['internal','Axal score','91/100'],['recorded','Interviews','7'],null,'Axal score: 91/100',['internal','AXAL SCORE','91/100']];const fields={'cover.title':'Synthetic venture','validation.cards_json':JSON.stringify(cards)};
  assert.deepEqual(JSON.parse(founderSpinoutFields(fields)['validation.cards_json']),[cards[1]]);assert.deepEqual(JSON.parse(fields['validation.cards_json']),cards);
  assert.deepEqual(founderSpinoutFields({'cover.title':'Synthetic venture'}),{'cover.title':'Synthetic venture'});
+});
+
+test('D895: only the owning founder outside support can copy their active Mercury runway into a deck',async()=>{
+ const f=await fixture();try{
+  f.db.exec("INSERT INTO mercury_raise_facts(integration_id,project_id,kind,fact_key,value,as_of) VALUES(99,1,'runway','runway',4,'2026-10-20')");
+  assert.equal(await recordedDeckRunway(f.env,1),null,'an unscoped service call cannot read Mercury');
+  assert.equal(await recordedDeckRunway(f.env,1,3),null,'a cofounder is not the bank owner');
+  assert.equal(await recordedDeckRunway(f.env,1,2),4);
+  for(const [who,extra,allowed] of [[2,{},true],[3,{},false],[2,{claims:{impersonated_by:1}},false]] as const){
+   const generated=await call(f,who,'POST','/api/decks/generate',{project_id:1},extra);assert.equal(generated.status,200,JSON.stringify(generated.body));
+   const filled=await call(f,who,'POST','/api/decks/10/autofill',undefined,extra);assert.equal(filled.status,200,JSON.stringify(filled.body));
+   if(allowed){assert.match(JSON.stringify(generated.body.slides),/Runway: 4 months/);assert.match(JSON.stringify(filled.body.proposal.slides),/4 months runway/)}
+   else {assert.match(JSON.stringify(generated.body.slides),/Runway: Not recorded/);assert.doesNotMatch(JSON.stringify(filled.body.proposal.slides),/4 months runway|4 mo/)}
+  }
+  f.db.exec("UPDATE integrations SET user_id=8 WHERE id=99");assert.equal(await recordedDeckRunway(f.env,1,2),null);assert.equal(await recordedDeckRunway(f.env,1,8),null);
+  f.db.exec("UPDATE integrations SET user_id=2,status='disconnected' WHERE id=99");assert.equal(await recordedDeckRunway(f.env,1,2),null);
+ }finally{f.db.close()}
+});
+
+test('D895: canonical NDA linkage also works when the viewer id is lower than the founder id',async()=>{
+ const f=await fixture();try{
+  f.db.exec("UPDATE users SET role='investor' WHERE id=1");
+  const link=await createShareLink(f.env,{deckId:10,deckVersion:1,userId:2,actorEmail:null,ttlSeconds:null,projectId:1});
+  const accepted=await call(f,1,'POST','/api/deck-share/share/'+link.token+'/nda',{signed_by:'Synthetic'});assert.equal(accepted.status,200,JSON.stringify(accepted.body));
+  const pair=f.db.prepare('SELECT party_a_user_id,party_b_user_id,status FROM pairwise_ndas').get();assert.deepEqual({...pair},{party_a_user_id:2,party_b_user_id:1,status:'active'});
+  assert.equal(f.db.prepare("SELECT count(*) AS n FROM deck_share_conversions WHERE type='nda_signed'").get()!.n,1);
+ }finally{f.db.close()}
 });
