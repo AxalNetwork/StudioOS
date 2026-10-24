@@ -32,6 +32,12 @@
  */
 export const FROZEN = [
   {
+    // D925: all partner administration writes freeze, including termination.
+    row: 'Partner invitations',
+    note: 'Creating, resending and revoking invitations, activating or terminating deals, changing firm links and directory decisions are frozen. Invitations, agreements and deals remain readable.',
+    gatedIn: ['admin_partners.ts'],
+  },
+  {
     // D260 — "Every queue frozen" was never true: Approvals has eleven lanes
     // since D215, and four of them have no gate. The row now names both sides.
     row: 'Approvals',
@@ -82,7 +88,7 @@ export const FROZEN = [
  * pages stay up."*
  */
 export const FREEZE_RULE =
-  'A suspended branch cannot publish, approve or feature anything new. Taking something down still works.';
+  'A suspended branch cannot publish, approve or feature anything new. Taking something down in Community still works. Partner administration changes, including deal termination, remain frozen.';
 
 /** Still readable: where a branch admin looks while the suspension stands. */
 export const STILL_READABLE = [
