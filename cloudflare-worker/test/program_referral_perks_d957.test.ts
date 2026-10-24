@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { freshDb, makeD1, token, ADMIN, FOUNDER, PARTNER, addPerk } from './_perks_harness.ts';
+import { ensureAdminAuditLogTable } from '../src/routes/admin.ts';
 import refer from '../src/routes/refer_earn.ts';
 import perks from '../src/routes/perks.ts';
 import { mapError } from '../src/routes/_t13t14t15_helpers.ts';
@@ -15,6 +16,7 @@ async function harness() {
   const hooks = { beforeBatch: null as ((db: any) => void) | null };
   const env: any = { JWT_SECRET: 'unit-test-jwt-secret-0123456789-abcdef', ENVIRONMENT: 'development', DB: makeD1(db, hooks) };
   await ensureReferralSubmissionsSchema(env);
+  await ensureAdminAuditLogTable(env);
   const app = new Hono().route('/refer', refer).route('/perks', perks);
   app.onError((e, c) => mapError(c as any, e));
   const call = async (path: string, method = 'GET', data?: any, who = ADMIN) => {
@@ -215,5 +217,6 @@ test('perk and strategic decisions refuse a competing decision without an audit 
     const s=await h.call(`/refer/admin/strategic-access/${FOUNDER}/decision`,'POST',{decision:'granted'});
     assert.equal(s.status,409); assert.equal(s.body.error,'already_decided'); assert.equal(races,2);
     assert.equal(h.db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get()?.n,0);
+    assert.equal(h.db.prepare('SELECT COUNT(*) AS n FROM admin_audit_log').get()?.n,0);
   }finally{h.db.close();}
 });
