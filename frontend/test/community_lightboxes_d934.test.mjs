@@ -19,9 +19,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import AdminCommunity from '../src/pages/admin/community/AdminCommunity.jsx';
 import {
-  ACTIVITY_CAP, EVENTS, activityPage, activityQuery, initialState, listView, openFrom, pageOf, searchWith,
+  ACTIVITY_CAP, EVENTS, JOBS, activityPage, activityQuery, eventsPage, eventsQuery, initialState, listView, openFrom, pageOf, searchWith,
 } from '../src/pages/admin/community/lightboxModel.js';
-import { analyticsJoin } from '../src/pages/admin/events/eventsDeskModel.js';
 
 const h = React.createElement;
 const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
@@ -85,8 +84,18 @@ function worker(opt = {}) {
     if (p === '/api/admin/events/analytics') return down('analytics') ? json({ detail: 'down' }, 503) : json(opt.analytics || ANALYTICS);
     if (p === '/api/admin/events') {
       if (down('events')) return json({ detail: 'down' }, 503);
-      const status = u.searchParams.get('status');
-      return json({ events: EVENTS_ROWS.filter((e) => !status || e.status === status).slice(offset, offset + limit) });
+      // D918's list: its own counts on each row, filtered, sorted and paged in the Worker, with a total.
+      const qp = u.searchParams;
+      const counts = new Map(ANALYTICS.events.map((r) => [r.id, r]));
+      let rows = EVENTS_ROWS.map((e) => ({ ...e, seats_taken: counts.get(e.id)?.registrations ?? 0, attended: counts.get(e.id)?.attended ?? 0, waitlisted: counts.get(e.id)?.waitlisted ?? 0, host: { name: 'Secret Host Person', role: 'founder' } }));
+      if (qp.get('status')) rows = rows.filter((e) => qp.get('status').split(',').includes(e.status));
+      if (qp.get('when') === 'upcoming') rows = rows.filter((e) => Date.parse(e.starts_at) > NOW);
+      if (qp.get('when') === 'ended') rows = rows.filter((e) => Date.parse(e.starts_at) + DAY < NOW);
+      if (qp.get('q')) rows = rows.filter((e) => e.title.toLowerCase().includes(qp.get('q').toLowerCase()));
+      const sort = qp.get('sort');
+      if (sort === 'starts') rows.sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at));
+      if (sort === 'seats_taken') rows.sort((a, b) => b.seats_taken - a.seats_taken);
+      return json({ events: rows.slice(offset, offset + limit), total: rows.length, limit, offset });
     }
     if (p === '/api/admin/jobs') return down('jobs') ? json({ detail: 'down' }, 503) : json({ jobs: JOBS_ROWS.slice(offset, offset + limit) });
     if (p === '/api/admin/circles') return down('circles') ? json({ detail: 'down' }, 503) : json({ circles: CIRCLES_ROWS });
@@ -195,10 +204,15 @@ test('paging is 25 a page, clamped, and an unknown count sorts after every known
   assert.deepEqual({ ...pageOf(rows, 2), rows: undefined }, { rows: undefined, page: 2, pages: 2, from: 26, to: 31, total: 31 });
   assert.equal(pageOf(rows, 9).page, 2, 'clamped to the last page');
   assert.equal(pageOf([], 1).from, 0);
-  // Guard G: an event missing from the analytics rows has no count, and is not ranked as 0.
-  const join = analyticsJoin({ status: 'ready', data: { events: [{ id: 1, registrations: 0 }] } }, 2);
-  const out = listView(EVENTS, [{ id: 2, title: 'B', starts_at: at(1) }, { id: 1, title: 'A', starts_at: at(2) }], { ...initialState(EVENTS), sort: 'registered' }, { now: NOW, join });
+  // A posting whose applications were not recorded is not ranked as 0.
+  const out = listView(JOBS, [{ id: 2, title: 'B', application_count: null }, { id: 1, title: 'A', application_count: 0 }], initialState(JOBS));
   assert.deepEqual(out.rows.map((r) => r.id), [1, 2]);
+  // D918's list: only what is set travels, and the sort carries its own direction.
+  assert.deepEqual(eventsQuery(initialState(EVENTS)), { limit: 25, offset: 0, sort: 'starts', dir: 'asc' });
+  assert.deepEqual(eventsQuery({ ...initialState(EVENTS), page: 2, q: ' demo ', sort: 'fill', filters: { status: 'published', when: '', visibility: '', price: 'free', featured: 'no' } }),
+    { limit: 25, offset: 25, sort: 'fill', dir: 'desc', status: 'published', price: 'free', featured: false, q: 'demo' });
+  assert.equal(eventsPage({ events: [] }, 1), null, 'no total is not a list');
+  assert.deepEqual({ ...eventsPage({ events: [1, 2], total: 27 }, 2), rows: undefined }, { rows: undefined, page: 2, pages: 2, from: 26, to: 27, total: 27 });
 });
 
 test('the activity query carries only what is set, and its paging stops where the Worker does', () => {
@@ -214,83 +228,86 @@ test('the activity query carries only what is set, and its paging stops where th
 
 // ---------------------------------------------------------------- CM3 · Events
 
-test('CM3 Events: opened from the card, every event and status read, D915\'s words, and the console link', async () => {
+test('CM3 Events: D918\'s paged list, one page per read, D915\'s words, no analytics read, and the console link', async () => {
   const v = await mounted('/admin/community', worker());
   try {
+    const before = v.requests.length;
     await v.click('community-open-events');
     assert.equal(v.where(), '/admin/community?open=events');
     assert.ok(v.has('community-box-events'), 'a Lightbox, centred over the overview');
     assert.ok(v.has('admin-community-page'), 'the overview stays under it');
-    assert.ok(v.requests.includes('/api/admin/events?limit=200&offset=0'), 'every status, the first page');
+    const mine = v.requests.slice(before);
+    assert.deepEqual(mine, ['/api/admin/events?sort=starts&dir=asc&limit=25&offset=0'], 'one page of D918\'s list, and no analytics read: Guard G is retired');
     assert.equal(range(v, 'events'), '1–25 of 31');
     const rows = v.rows('events');
-    assert.match(rows[0], /^Demo Night.*Featured.*Workshop.*Published.*60.*42.*Not held yet.*3.*70%.*Not held yet/s);
-    assert.match(rows[1], /^Pricing Clinic.*Waiting for review/s, 'the Events desk\'s order: upcoming soonest first');
-    assert.match(rows[2], /^Open Lab.*No cap.*12.*No cap/s, 'no cap: fill reads No cap');
+    assert.match(rows[0], /^Old Summit.*Conference.*Cancelled.*100.*0.*Not held.*0.*0%.*Not held/s, 'the Worker\'s order: start date, earliest first');
+    assert.match(rows[1], /^Last Week Social.*Social.*Published.*30.*30.*24.*0.*100%.*80%/s, 'show-up once held');
+    assert.match(rows[2], /^Demo Night.*Featured.*Workshop.*Published.*60.*42.*Not held yet.*3.*70%.*Not held yet/s);
+    assert.match(rows[4], /^Open Lab.*Meetup.*No cap.*12.*No cap/s, 'no cap: fill reads No cap');
+    assert.doesNotMatch(v.textOf('community-box-events'), /Secret Host Person/, 'the host\'s name is never drawn');
     assert.ok(v.hrefs('community-box-events').includes('/admin/events/1'), 'a row opens the event in the Events console');
-    // Paging.
     assert.equal(v.props('community-box-events-prev').disabled, true);
     await v.click('community-box-events-next');
+    assert.equal(v.requests.at(-1), '/api/admin/events?sort=starts&dir=asc&limit=25&offset=25');
     assert.equal(range(v, 'events'), '26–31 of 31');
-    const last = v.rows('events');
-    assert.match(last.at(-2), /^Last Week Social.*Social.*Published.*30.*30.*24.*100%.*80%/s, 'show-up once held');
-    assert.match(last.at(-1), /^Old Summit.*Cancelled.*Not in this read.*Not held.*Not in this read.*Not in this read.*Not held/s, 'missing from the analytics rows: never 0');
+    assert.equal(v.rows('events').length, 6);
     assert.equal(v.props('community-box-events-next').disabled, true);
   } finally { await v.close(); }
 });
 
-test('CM3 Events: search, each filter and each sort', async () => {
+test('CM3 Events: the search, each filter and each sort go to the Worker, and each goes back to page 1', async () => {
   const v = await mounted('/admin/community?open=events', worker());
   try {
+    const last = () => v.requests.at(-1);
     await v.click('community-box-events-next');
     await v.change('community-box-events-search', 'clinic');
-    assert.equal(range(v, 'events'), '1–1 of 1', 'a search goes back to page 1');
-    assert.match(v.rows('events')[0], /^Pricing Clinic/);
+    assert.equal(last(), '/api/admin/events?q=clinic&sort=starts&dir=asc&limit=25&offset=0');
+    assert.equal(range(v, 'events'), '1–1 of 1');
+    assert.deepEqual(v.titles('events'), ['Pricing Clinic']);
     await v.change('community-box-events-search', 'zzz');
     assert.equal(range(v, 'events'), 'No events');
     assert.ok(v.has('community-box-events-empty'));
     await v.change('community-box-events-search', '');
     await v.change('community-box-events-filter-status', 'published');
-    assert.deepEqual(v.titles('events'), ['Demo Night', 'Open Lab', 'Last Week Social']);
-    await v.change('community-box-events-sort', 'title');
-    assert.deepEqual(v.titles('events'), ['Demo Night', 'Last Week Social', 'Open Lab']);
+    assert.equal(last(), '/api/admin/events?status=published&sort=starts&dir=asc&limit=25&offset=0');
+    assert.deepEqual(v.titles('events'), ['Last Week Social', 'Demo Night', 'Open Lab']);
     await v.change('community-box-events-filter-status', '');
-    await v.change('community-box-events-filter-type', 'workshop');
-    assert.equal(range(v, 'events'), '1–2 of 2');
-    await v.change('community-box-events-filter-type', '');
-    await v.change('community-box-events-filter-starts', 'past');
-    assert.deepEqual(v.titles('events'), ['Last Week Social', 'Old Summit']);
-    await v.change('community-box-events-filter-starts', 'upcoming');
-    assert.equal(range(v, 'events'), '1–25 of 29');
-    await v.change('community-box-events-filter-starts', '');
-    await v.change('community-box-events-sort', 'registered');
-    assert.match(v.rows('events')[0], /^Demo Night/, 'most registered first');
-    assert.match(v.rows('events')[1], /^Last Week Social/);
-    await v.change('community-box-events-sort', 'fill');
-    assert.match(v.rows('events')[0], /^Last Week Social/, 'highest fill first');
+    await v.change('community-box-events-filter-when', 'ended');
+    assert.match(last(), /[?&]when=ended&/);
+    assert.deepEqual(v.titles('events'), ['Old Summit', 'Last Week Social']);
+    await v.change('community-box-events-filter-when', '');
+    await v.change('community-box-events-filter-visibility', 'unlisted');
+    assert.match(last(), /[?&]visibility=unlisted&/);
+    await v.change('community-box-events-filter-visibility', '');
+    await v.change('community-box-events-filter-price', 'paid');
+    assert.match(last(), /[?&]price=paid&/);
+    await v.change('community-box-events-filter-price', '');
+    await v.change('community-box-events-filter-featured', 'yes');
+    assert.match(last(), /[?&]featured=1&/);
+    await v.change('community-box-events-filter-featured', 'no');
+    assert.match(last(), /[?&]featured=0&/);
+    await v.change('community-box-events-filter-featured', '');
+    for (const [sort, dir] of [['created', 'desc'], ['fill', 'desc'], ['show_up', 'desc'], ['seats_taken', 'desc']]) {
+      await v.change('community-box-events-sort', sort);
+      assert.equal(last(), `/api/admin/events?sort=${sort}&dir=${dir}&limit=25&offset=0`);
+    }
+    assert.deepEqual(v.titles('events').slice(0, 2), ['Demo Night', 'Last Week Social'], 'most registered first, as the Worker sorts');
   } finally { await v.close(); }
 });
 
-test('CM3 Events: Guard G, a failed counts read, a failed list, and Try again', async () => {
-  // No analytics rows while events exist: the counts could not be read.
-  let v = await mounted('/admin/community?open=events', worker({ analytics: { events: [], unreadable: [] } }));
-  try {
-    assert.match(v.textOf('community-box-events-counts-unreadable'), /That is not a claim that nobody registered\./);
-    assert.match(v.rows('events')[0], /^Demo Night.*Could not be read/s);
-    assert.doesNotMatch(v.rows('events')[0], /\b0%/);
-  } finally { await v.close(); }
-  v = await mounted('/admin/community?open=events', worker({ fail: ['analytics'] }));
-  try {
-    assert.ok(v.has('community-box-events-counts-unreadable'), 'a failed analytics read costs only the counts');
-    assert.equal(range(v, 'events'), '1–25 of 31');
-  } finally { await v.close(); }
-  v = await mounted('/admin/community?open=events', worker({ fail: ['events'] }));
+test('CM3 Events: a failed list, or an answer with no total, is not "no events"; Try again reads again', async () => {
+  let v = await mounted('/admin/community?open=events', worker({ fail: ['events'] }));
   try {
     assert.match(v.textOf('community-box-events-unreadable'), /The events could not be read\. That is not the same as no events\./);
     assert.ok(!v.has('community-box-events-rows'));
-    const before = v.requests.filter((r) => r.startsWith('/api/admin/events?limit=200')).length;
+    const before = v.requests.filter((r) => r.startsWith('/api/admin/events?sort=')).length;
     await v.click('community-box-events-retry');
-    assert.equal(v.requests.filter((r) => r.startsWith('/api/admin/events?limit=200')).length, before + 1, 'Try again reads again');
+    assert.equal(v.requests.filter((r) => r.startsWith('/api/admin/events?sort=')).length, before + 1, 'Try again reads again');
+  } finally { await v.close(); }
+  const base = worker();
+  v = await mounted('/admin/community?open=events', (url) => (url.startsWith('/api/admin/events?sort=') ? json({ events: [] }) : base(url)));
+  try {
+    assert.ok(v.has('community-box-events-unreadable'), 'a list with no total is not drawn as none');
   } finally { await v.close(); }
 });
 
@@ -465,8 +482,8 @@ test('CM12 phone: a lightbox is the page, with a back link to Community, and a l
     assert.ok(!v.has('community-box-events-table'));
     assert.match(v.textOf('community-box-events-back'), /‹ Community/);
     assert.match(v.textOf('community-box-events-filters-on'), /Filters · 0/);
-    assert.match(v.rows('events')[0], /^Demo Night.*Workshop · Published.*42 \/ 60/s);
-    assert.match(v.rows('events')[2], /12 · no cap/);
+    assert.match(v.rows('events')[2], /^Demo Night.*Workshop · Published.*42 \/ 60/s);
+    assert.match(v.rows('events')[4], /^Open Lab.*12 · no cap/s);
     await v.change('community-box-events-filter-status', 'published');
     assert.match(v.textOf('community-box-events-filters-on'), /Filters · 1/);
     await v.click('community-box-events-back');

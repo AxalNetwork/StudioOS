@@ -7,28 +7,26 @@
  * that decides: the Events desk, the job board or circles.
  *
  * THE READS. Each lightbox makes its own when it opens, so it answers alone:
- *   - Events     `GET /api/admin/events`, every page and every status, and
- *                `GET /api/admin/events/analytics`, its rows only, joined
- *                under D915's Guard G (`analyticsJoin`). D918's paged list
- *                (#2701) retires the guard when it merges; it has not.
+ *   - Events     `GET /api/admin/events`, D918's paged list (#2701): the
+ *                Worker filters, sorts and pages, 25 rows a page, and each
+ *                row carries its own counts. D915's Guard G is retired here.
  *   - Jobs       `GET /api/admin/jobs`, every page, every status.
  *   - Circles    `GET /api/admin/circles`. Members and Activity are typed by
  *                an admin, so they carry the "As entered" tag.
  *   - Activity   `GET /api/admin/community/activity` (D932), paged by the
  *                Worker, 25 rows a page. It names no member.
- * The three lists are read whole and paged here, 25 rows a page.
+ * Jobs and Circles are read whole and paged here, 25 rows a page.
  */
 
 import { EVENT_TYPES } from '../../../lib/eventTypes.js';
 import { SENIORITY_LABELS } from '../../../lib/siteNetwork2.js';
 import { ACCESS_TYPES, ACTIVITY_LEVELS, CIRCLE_TYPES } from '../../../data/network.js';
 import {
-  NOT_RECORDED, STATUSES as EVENT_STATUSES, analyticsJoin, attendedText, capacityText, countText, countsFor,
-  defaultOrder, eventHref, fillText, parseStamp, showUpText, startCell, statusWord, titleOf,
+  NOT_RECORDED, STATUSES as EVENT_STATUSES, attendedText, capacityText, countText, eventHref, fillText, showUpText, startCell, statusWord, titleOf,
 } from '../events/eventsDeskModel.js';
 import { dayLabel, stamp } from './communityModel.js';
 
-export { NOT_RECORDED, analyticsJoin };
+export { NOT_RECORDED };
 
 /** The boxes, by the value `?open=` takes. */
 export const BOXES = ['events', 'jobs', 'circles', 'activity'];
@@ -94,7 +92,7 @@ export const initialState = (spec) => ({ q: '', filters: Object.fromEntries(spec
 export const filtersOn = (state) => Object.values(state.filters || {}).filter(Boolean).length;
 
 /* ------------------------------------------------------------------ *
- * CM3 · Events
+ * CM3 · Events (D918's paged list)
  * ------------------------------------------------------------------ */
 
 const EVENT_TYPE_LABEL = Object.fromEntries(EVENT_TYPES.map((t) => [t.id, t.label]));
@@ -103,11 +101,52 @@ export const eventTypeWord = (t) => EVENT_TYPE_LABEL[t] || 'Type not recorded';
 export const EVENTS_LINE = 'Every event, as of now. A row opens it in the Events console; nothing is changed here.';
 
 /**
- * One table row: R1's own fields, R2's counts under Guard G, in D915's words.
- * Registered is D915's seats taken (Registered + Confirmed + Attended).
+ * D918's list filters, sorts and pages in the Worker, and each row carries its
+ * own counts (`seats_taken`, `attended`, `waitlisted`), so D915's Guard G is
+ * retired here: no analytics read is joined. The words are still D915's,
+ * through its own functions, so this lightbox and the Events desk agree.
  */
-export function eventRow(ev, join, now) {
-  const c = countsFor(join, ev.id);
+export const EVENTS = {
+  key: 'events',
+  title: 'Events',
+  placeholder: 'Search title, host or venture',
+  none: 'No events',
+  filters: [
+    { key: 'status', label: 'Status', all: 'All statuses', options: EVENT_STATUSES.map((s) => ({ value: s.key, label: s.word })) },
+    { key: 'when', label: 'Starts', all: 'Starts: All', options: [
+      { value: 'upcoming', label: 'Upcoming' }, { value: 'this_week', label: 'This week' }, { value: 'next_30d', label: 'Next 30 days' }, { value: 'ended', label: 'Ended' },
+    ] },
+    { key: 'visibility', label: 'Visibility', all: 'All visibility', options: [{ value: 'public', label: 'Public' }, { value: 'unlisted', label: 'Unlisted' }, { value: 'private', label: 'Private' }] },
+    { key: 'price', label: 'Price', all: 'Free or paid', options: [{ value: 'free', label: 'Free' }, { value: 'paid', label: 'Paid' }] },
+    { key: 'featured', label: 'Featured', all: 'Featured or not', options: [{ value: 'yes', label: 'Featured' }, { value: 'no', label: 'Not featured' }] },
+  ],
+  sorts: [
+    { key: 'starts', label: 'Start date', sort: 'starts', dir: 'asc' },
+    { key: 'created', label: 'Newest', sort: 'created', dir: 'desc' },
+    { key: 'seats_taken', label: 'Most registered', sort: 'seats_taken', dir: 'desc' },
+    { key: 'fill', label: 'Fill', sort: 'fill', dir: 'desc' },
+    { key: 'show_up', label: 'Show-up', sort: 'show_up', dir: 'desc' },
+  ],
+};
+
+/** One page of D918's list: the query the client sends. Only what is set travels. */
+export function eventsQuery(state) {
+  const page = Math.max(1, Number(state.page) || 1);
+  const f = state.filters || {};
+  const sort = EVENTS.sorts.find((s) => s.key === state.sort) || EVENTS.sorts[0];
+  const out = { limit: ROWS, offset: (page - 1) * ROWS, sort: sort.sort, dir: sort.dir };
+  for (const k of ['status', 'when', 'visibility', 'price']) if (f[k]) out[k] = f[k];
+  if (f.featured) out.featured = f.featured === 'yes';
+  const q = String(state.q || '').trim();
+  if (q) out.q = q;
+  return out;
+}
+
+const count = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+
+/** One row, in D915's words, from D918's own counts. The host's name is not drawn: never a member's name. */
+export function eventRow(ev, now) {
+  const c = { state: 'ready', taken: count(ev.seats_taken), attended: count(ev.attended), waitlisted: count(ev.waitlisted) };
   const start = startCell(ev);
   return {
     id: ev.id,
@@ -124,39 +163,17 @@ export function eventRow(ev, join, now) {
     waitlisted: countText(c, 'waitlisted'),
     fill: fillText(ev.capacity, c),
     showUp: showUpText(ev, c, now),
-    counts: c,
   };
 }
 
-const takenOf = (ev, ctx) => { const c = countsFor(ctx.join, ev.id); return c.state === 'ready' ? c.taken : null; };
-const fillOf = (ev, ctx) => {
-  const t = takenOf(ev, ctx);
-  return t === null || ev.capacity == null || Number(ev.capacity) <= 0 ? null : t / Number(ev.capacity);
-};
-
-export const EVENTS = {
-  key: 'events',
-  title: 'Events',
-  placeholder: 'Search by title',
-  none: 'No events',
-  search: (ev, needle) => has(needle, titleOf(ev)),
-  filters: [
-    { key: 'status', label: 'Status', all: 'All statuses', options: EVENT_STATUSES.map((s) => ({ value: s.key, label: s.word })), test: (ev, v) => ev.status === v },
-    { key: 'type', label: 'Type', all: 'All types', options: EVENT_TYPES.map((t) => ({ value: t.id, label: t.label })), test: (ev, v) => ev.type === v },
-    {
-      key: 'starts', label: 'Starts', all: 'Starts: All',
-      options: [{ value: 'upcoming', label: 'Upcoming' }, { value: 'past', label: 'Started' }],
-      test: (ev, v, ctx) => { const t = parseStamp(ev.starts_at); return t !== null && (v === 'upcoming' ? t >= ctx.now : t < ctx.now); },
-    },
-  ],
-  sorts: [
-    // D915's order: upcoming soonest first, then started latest first, then any with no start.
-    { key: 'start', label: 'Start date', order: (rows, ctx) => defaultOrder(rows, ctx.now) },
-    { key: 'title', label: 'Title', compare: (a, b) => byText(titleOf(a), titleOf(b)) },
-    { key: 'registered', label: 'Most registered', compare: (a, b, ctx) => byCount(takenOf(a, ctx), takenOf(b, ctx)) },
-    { key: 'fill', label: 'Fill', compare: (a, b, ctx) => byCount(fillOf(a, ctx), fillOf(b, ctx)) },
-  ],
-};
+/** D918's answer as a page, or unreadable when it is not a list with a total. */
+export function eventsPage(answer, page) {
+  if (!answer || !Array.isArray(answer.events) || !Number.isFinite(Number(answer.total))) return null;
+  const total = Number(answer.total);
+  const at = Math.max(1, Number(page) || 1);
+  const from = answer.events.length ? (at - 1) * ROWS + 1 : 0;
+  return { rows: answer.events, page: at, pages: Math.max(1, Math.ceil(total / ROWS)), from, to: from ? from + answer.events.length - 1 : 0, total };
+}
 
 /* ------------------------------------------------------------------ *
  * CM4 · Job postings
