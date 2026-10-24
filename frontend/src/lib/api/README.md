@@ -294,3 +294,10 @@ record the total received or void, and the PDF (`pdfBlob`, and the
 Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
 drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
 as `fee_invoices`.
+
+D990 (#2801): `partnerProfiles.js` is HQ's Partner profiles on
+`/api/admin/partner-profiles`: the list (search, filters, sort and pages, with
+totals over the filtered set and the filters' options), the counts for the tiles
+and the weekly series, and one profile by its reference (`pp_…`), never by
+email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
+that read them.
