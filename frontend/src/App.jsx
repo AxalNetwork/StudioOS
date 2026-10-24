@@ -147,6 +147,7 @@ const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'))
 const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsightsRedirect'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
+const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
 const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
@@ -1106,6 +1107,12 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin?tab=promos">Promo codes</StripLink>
           <StripLink to="/monitoring">Monitoring</StripLink>
           <StripLink to="/admin/telegram">Telegram</StripLink>
+        </HqSubNavStrip>
+      )}
+      {hqStrip === 'Licences' && (
+        <HqSubNavStrip label="Licences">
+          <StripLink to="/admin/licences">Ledger</StripLink>
+          <StripLink to="/admin/licences/programs">Program grants</StripLink>
         </HqSubNavStrip>
       )}
       {hqStrip === 'Content' && (
@@ -2723,6 +2730,8 @@ function AppInner() {
       {/* Territory licence ledger (migration 187). Admin only — it carries the
           fee, the revenue share and an exclusive grant over whole countries. */}
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
+      {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
+      <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
@@ -2730,6 +2739,7 @@ function AppInner() {
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       {/* D800 (#2233): the Licences page's tabs, each a sub-path of the page, behind the same guard. */}
       <Route path="/admin/my-licence/terms" element={guard(['admin'], <MyLicencePage />)} />
+      <Route path="/admin/my-licence/programs" element={guard(['admin'], <MyLicencePage />)} />
       <Route path="/admin/my-licence/contract" element={guard(['admin'], <MyLicencePage />)} />
       <Route path="/admin/my-licence/statements" element={guard(['admin'], <MyLicencePage />)} />
       <Route path="/admin/my-licence/requests" element={guard(['admin'], <MyLicencePage />)} />
@@ -2874,6 +2884,7 @@ function AppInner() {
       {/* D915 (#2368): the Events desk's tabs and one page per event, behind the same guard; the static paths sit before `:id`. */}
       <Route path="/admin/events/review" element={guard(['admin'], <AdminEventsPage />)} />
       <Route path="/admin/events/all" element={guard(['admin'], <AdminEventsPage />)} />
+      <Route path="/admin/events/calendar" element={guard(['admin'], <AdminEventsPage />)} />
       <Route path="/admin/events/:id" element={guard(['admin'], <AdminEventsPage />)} />
       <Route path="/admin/jobs" element={guard(['admin'], <AdminJobsPage />)} />
       <Route path="/admin/circles" element={guard(['admin'], <AdminCirclesPage />)} />

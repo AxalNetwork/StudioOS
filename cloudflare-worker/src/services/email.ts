@@ -264,6 +264,10 @@ export function escapeHtml(s: string): string {
 // as a Send-As alias. Without that, Gmail rewrites the From header to the
 // authenticated user's primary address (the email still sends).
 // ---------------------------------------------------------------------------
+export type EmailSendResult =
+  | { ok: true; reason: null }
+  | { ok: false; reason: 'suppressed' | 'not_configured' | 'refused' | 'failed' };
+
 export async function sendAgreementAssignedEmail(
   env: Env,
   to: string,
@@ -272,11 +276,23 @@ export async function sendAgreementAssignedEmail(
   signLink: string,
   adminName: string,
 ): Promise<boolean> {
+  return (await sendAgreementAssignedEmailResult(env, to, recipientName, agreementLabel, signLink, adminName)).ok;
+}
+
+export async function sendAgreementAssignedEmailResult(
+  env: Env,
+  to: string,
+  recipientName: string,
+  agreementLabel: string,
+  signLink: string,
+  adminName: string,
+  linkExpiryDays = 7,
+): Promise<EmailSendResult> {
   // D810 — the suppression list, by reason (transactional).
-  if (await isSuppressed(env, to, 'transactional')) return false;
+  if (await isSuppressed(env, to, 'transactional')) return { ok: false, reason: 'suppressed' };
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing — agreement email not sent');
-    return false;
+    return { ok: false, reason: 'not_configured' };
   }
   try {
     const accessToken = await getGmailAccessToken(env);
@@ -321,12 +337,12 @@ export async function sendAgreementAssignedEmail(
     <a href="${signLink}" style="color:#2563eb;word-break:break-all;font-size:12px;">${signLink}</a>
   </div>
   <p style="font-size:11px;color:#9ca3af;margin:20px 0 0;line-height:1.6;">
-    This link is unique to you and expires in 7 days. Every access is logged for compliance.
+    This link is unique to you and expires in ${linkExpiryDays} days. Every access is logged for compliance.
     Reply to this email if anything looks incorrect — we'll re-issue.
   </p>
 </td></tr>
 </table></td></tr></table></body></html>`;
-    const text = `${greet}\n\n${adminName} has verified your partner profile and assigned your Closing Binder:\n\n  ${agreementLabel}\n\nReview and sign here: ${signLink}\n\nThis link expires in 7 days. Every access is logged.\n\n— Axal Deals`;
+    const text = `${greet}\n\n${adminName} has verified your partner profile and assigned your Closing Binder:\n\n  ${agreementLabel}\n\nReview and sign here: ${signLink}\n\nThis link expires in ${linkExpiryDays} days. Every access is logged.\n\n— Axal Deals`;
     const subject = `Your Closing Binder is ready: ${agreementLabel}`;
     const rawEmail = buildRawEmail(to, subject, html, text, 'Axal Deals <deal@axal.vc>');
     const raw = btoa(unescape(encodeURIComponent(rawEmail))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -339,12 +355,12 @@ export async function sendAgreementAssignedEmail(
     if (!res.ok) {
       const err: any = await res.json().catch(() => ({}));
       console.error('[EMAIL] Agreement email send failed:', err);
-      return false;
+      return { ok: false, reason: 'refused' };
     }
-    return true;
+    return { ok: true, reason: null };
   } catch (e: any) {
     console.error(`[EMAIL] Agreement email failed for ${to}: ${e?.message || 'Unknown error'}`);
-    return false;
+    return { ok: false, reason: 'failed' };
   }
 }
 
@@ -362,11 +378,22 @@ export async function sendPartnerInvitationEmail(
   link: string,
   personalMessage: string,
 ): Promise<boolean> {
+  return (await sendPartnerInvitationEmailResult(env, to, recipientName, adminName, link, personalMessage)).ok;
+}
+
+export async function sendPartnerInvitationEmailResult(
+  env: Env,
+  to: string,
+  recipientName: string,
+  adminName: string,
+  link: string,
+  personalMessage: string,
+): Promise<EmailSendResult> {
   // D810 — the suppression list, by reason (transactional).
-  if (await isSuppressed(env, to, 'transactional')) return false;
+  if (await isSuppressed(env, to, 'transactional')) return { ok: false, reason: 'suppressed' };
   if (!env.GMAIL_CLIENT_ID || !env.GMAIL_CLIENT_SECRET || !env.GMAIL_REFRESH_TOKEN) {
     console.error('[EMAIL] Gmail credentials missing — partner invitation not sent');
-    return false;
+    return { ok: false, reason: 'not_configured' };
   }
   try {
     const accessToken = await getGmailAccessToken(env);
@@ -432,12 +459,12 @@ ${noteBlock}
     if (!res.ok) {
       const err: any = await res.json().catch(() => ({}));
       console.error('[EMAIL] Partner invitation send failed:', err);
-      return false;
+      return { ok: false, reason: 'refused' };
     }
-    return true;
+    return { ok: true, reason: null };
   } catch (e: any) {
     console.error(`[EMAIL] Partner invitation failed for ${to}: ${e?.message || 'Unknown error'}`);
-    return false;
+    return { ok: false, reason: 'failed' };
   }
 }
 

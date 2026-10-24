@@ -68,6 +68,8 @@ const CONTENT = [
   ['Personas', '/admin?tab=personas'],
   ['Advisors & Partners', '/admin/advisors-partners'], ['Public team page', '/admin/team'],
 ];
+// D981 (#2376) — #2375's Licences strip: the ledger and Program grants.
+const LICENCES = [['Ledger', '/admin/licences'], ['Program grants', '/admin/licences/programs']];
 const pairs = (items) => items.map((i) => [i.label, i.route]);
 
 /** The literal links inside one `<HqSubNavStrip label="…">` block in the chrome. */
@@ -87,12 +89,14 @@ function chromeStrip(label) {
 test('the strips are H36\'s, in H36\'s order, in the list the highlight reads', () => {
   assert.deepEqual(pairs(HQ_STRIPS.Platform), PLATFORM);
   assert.deepEqual(pairs(HQ_STRIPS.Content), CONTENT);
-  assert.deepEqual(Object.keys(HQ_STRIPS), ['Platform', 'Content']);
+  assert.deepEqual(pairs(HQ_STRIPS.Licences), LICENCES);
+  assert.deepEqual(Object.keys(HQ_STRIPS), ['Licences', 'Platform', 'Content']);
 });
 
 test('the shell renders both strips as literal links, in the same order, and only in the HQ shell', () => {
   assert.deepEqual(chromeStrip('Platform'), PLATFORM, 'the Platform strip in App.jsx is not H36\'s');
   assert.deepEqual(chromeStrip('Content'), CONTENT, 'the Content strip in App.jsx is not H36\'s');
+  assert.deepEqual(chromeStrip('Licences'), LICENCES, 'the Licences strip in App.jsx is not #2375\'s');
   assert.match(CHROME, /const hqStrip = shellRole === 'super_admin' \? stripFor\(location\.pathname, location\.search\) : null;/,
     'the strip is no longer decided by the location, in the HQ shell only');
   assert.match(CHROME, /\{hqStrip === 'Platform' && \(\s*<HqSubNavStrip label="Platform">/);

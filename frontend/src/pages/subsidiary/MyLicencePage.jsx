@@ -24,6 +24,7 @@ import LicenceSummary from './LicenceSummary';
 import LicenceTerms from './LicenceTerms';
 import ContractTab from './licence/ContractTab';
 import RequestsTab from './licence/RequestsTab';
+import ProgramsTab from './licence/ProgramsTab';
 import StatementsTab from './licence/StatementsTab';
 
 /**
@@ -549,6 +550,12 @@ function MyLicencePageBody() {
             Licences are issued and linked by Axal VC HQ. Once yours is linked, its terms, contract
             and statements appear here.
           </p>
+          {/* D981 (#2376), board GR11 C: today's case on HQ-held accounts. */}
+          {tab === 'programs' && (
+            <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="licence-programs-none">
+              On HQ-held accounts, HQ runs every program.
+            </p>
+          )}
           <Link to="/help" className="rounded-md bg-slate-700 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800">
             Contact HQ
           </Link>
@@ -727,6 +734,8 @@ function MyLicencePageBody() {
       {tab === 'contract' && <ContractTab />}
       {tab === 'statements' && <StatementsTab />}
       {tab === 'requests' && <RequestsTab />}
+      {/* D981 (#2376): the programs HQ lets this studio run (GR7), read only. */}
+      {tab === 'programs' && <ProgramsTab />}
 
       {tab === 'history' && (
         <div className="space-y-4" data-testid="licence-history">

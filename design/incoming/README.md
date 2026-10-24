@@ -132,6 +132,28 @@ recent activity and the four lightboxes wait for D930's five parts (D931 to
 D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
 row says what is drawn today.
 
+## Landed 2026-10-24 — HQ · Program grants (#2376)
+
+The owner's artifacts `9bU81t2zZxckmAmhrKenc6` and `DSX8rakWCr4VBkoRddA3yU`
+came from S1's prompt on #2376, as the usual pair:
+- `Program Grants · Boards.dc.html` is the board grid (GR1 to GR15, with the
+  lettered boards GR5d, GR9a–b, GR10a–d, GR12a–b and GR15a–d), the output of
+  `scripts/read-canvas.mjs` as is;
+- `Program Grants Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/licences/programs` (Super Admin) and
+`/admin/my-licence/programs` (a licence's Administrator) are live. S21's
+integration (D981) draws the header, the Licences strip, the studios tile and
+the grid of studios against the nine programs, with the fixed facts. No grant
+is stored yet, so every grantable cell says "Not recorded"; the grants, the
+requests, the default terms, the dialogs and the charts wait for D981's seven
+parts, so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
+row says what is drawn today.
+
 ## Landed 2026-10-24 — Admin · Advisors & Partners (#2369)
 
 The owner's artifacts `1CmAZBBZSUtJvnSx8mwcYQ` and `JwaxHtcBqegNPRvcKmCanF`

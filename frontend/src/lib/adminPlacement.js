@@ -68,7 +68,7 @@ export const ADMIN_PLACEMENT = [
   row('Job Board Admin', '/admin/jobs', admin('Community', 'card link'), false,
     { how: 'Card link. Also an Approvals lane.', also: [admin('Approvals', 'lane')] }),
   row('Communities Admin', '/admin/circles', admin('Community', 'card link'), false,
-    { how: 'Card link. Also an Approvals lane.', also: [admin('Approvals', 'lane')] }),
+    { how: 'Card link. Circles have no approval queue.' }),
   row('Advisor Cohort Access', '/admin/advisor-cohorts', admin('Programs', 'card link'), false,
     { how: 'Card link. Also an Approvals lane.', also: [admin('Approvals', 'lane')] }),
   row('Exploring Users', '/admin/exploring', admin('Accounts', 'embedded'), false,
