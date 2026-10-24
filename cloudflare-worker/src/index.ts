@@ -46,6 +46,7 @@ import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
+import adminNetwork from './routes/admin_network';
 import profileHistoryRoutes from './routes/profile_history';
 import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
@@ -938,6 +939,7 @@ app.route('/api/admin/team', adminTeam);
 // Task #1 — Network profiles. Mounted BEFORE catch-all /api/admin so
 // /api/admin/network-profiles/* resolves here.
 app.route('/api/admin/network-profiles', adminNetworkProfiles);
+app.route('/api/admin/network', adminNetwork);
 // Task #3 — mount Telegram BEFORE the catch-all `/api/admin` so the
 // nested `/api/admin/telegram/*` routes resolve here rather than 404ing
 // inside the generic admin router.
