@@ -167,6 +167,13 @@ export const dataOf = (read) => (read && read.data !== undefined && read.data !=
 export const isLoading = (read) => !read || (read.status === 'loading' && dataOf(read) === null);
 export const isFailed = (read) => Boolean(read) && read.status === 'error' && dataOf(read) === null;
 export const isStale = (read) => Boolean(read) && read.status === 'error' && dataOf(read) !== null;
+/**
+ * A stale read being read again: the hook keeps its rows, marks it
+ * `refreshing` and sets its status to `loading` (a read that last answered
+ * keeps `ready`). Until the reply its rows are still the ones from before the
+ * failed refresh, so the page is as unsure as when it was stale.
+ */
+export const isRetrying = (read) => Boolean(read?.refreshing) && read.status === 'loading' && dataOf(read) !== null;
 export const listOf = (read) => (Array.isArray(dataOf(read)) ? dataOf(read) : null);
 /** A 423 `recovery_cool_off_active`: R5, R7, R8 and R9 pause for 24 hours after an account recovery. */
 export const isCoolOff = (error) => Number(error?.status) === 423 && (error?.code === 'recovery_cool_off_active' || error?.data?.error === 'recovery_cool_off_active');
@@ -560,13 +567,14 @@ export function noMatchLine(q, isCapped) {
 
 /**
  * The six lists as one: their rows, and which lists are loading, being read
- * again (`refreshing`), failed, stale or at their cap. A deal that changed
+ * again (`refreshing`; `retrying` when that follows a failed refresh), failed,
+ * stale or at their cap. A deal that changed
  * state can sit in two lists read at different moments (an old `active` and a
  * fresh `terminated`), so each id is kept once: the copy from a list that
  * answered beats a stale or still-refreshing one, then the later read wins.
  */
 export function dealsUnion(deals, states = DEAL_STATE_KEYS) {
-  const out = { rows: [], loading: [], failed: [], capped: [], stale: [], refreshing: [] };
+  const out = { rows: [], loading: [], failed: [], capped: [], stale: [], refreshing: [], retrying: [] };
   const byId = new Map();
   for (const s of states) {
     const read = deals?.[s];
@@ -582,6 +590,7 @@ export function dealsUnion(deals, states = DEAL_STATE_KEYS) {
       if (atCap(list, CAPS.deals)) out.capped.push(s);
       if (isStale(read)) out.stale.push(s);
       if (read?.refreshing) out.refreshing.push(s);
+      if (isRetrying(read)) out.retrying.push(s);
     } else if (isLoading(read)) out.loading.push(s);
     else out.failed.push(s);
   }
@@ -607,23 +616,29 @@ export function dealsCount(contracts, deals) {
   };
 }
 
-/** A partner's name and address. Before signing they come from the invitation, by `invitation_id`. */
+/**
+ * A partner's name and address. Before signing they come from the invitation,
+ * by `invitation_id`. "Not recorded" only when R1 answered on its latest read:
+ * a list whose refresh failed (or that is read again after one) did not hold
+ * an invitation newer than its last good read, so it is no claim either way.
+ */
 export function dealPartner(deal, invitations) {
   if (deal?.user_id !== null && deal?.user_id !== undefined && (deal.partner_name || deal.partner_email)) {
     return { name: String(deal.partner_name || '').trim() || String(deal.partner_email), email: deal.partner_email || NOT_RECORDED };
   }
-  const list = listOf(invitations);
-  const inv = list?.find((i) => String(i?.id) === String(deal?.invitation_id));
-  if (inv) return { name: nameOf(inv), email: inv.recipient_email || NOT_RECORDED, inv };
-  if (list) return { name: atCap(list, CAPS.invitations) ? NOT_IN_READ : NOT_RECORDED, email: null };
-  return { name: isLoading(invitations) ? READING : COULD_NOT_READ, email: null };
+  const via = invitationForDeal(deal, invitations);
+  if (via.state === 'ready') return { name: nameOf(via.inv), email: via.inv.recipient_email || NOT_RECORDED, inv: via.inv };
+  const name = { missing: NOT_IN_READ, none: NOT_RECORDED, loading: READING }[via.state] || COULD_NOT_READ;
+  return { name, email: null };
 }
 
-/** The invitation a deal came from, by `invitation_id`, from R1. */
+/** The invitation a deal came from, by `invitation_id`, from R1; `none` only when R1 answered on its latest read (`dealPartner`). */
 export function invitationForDeal(deal, invitations) {
   const list = listOf(invitations);
   const inv = list?.find((i) => String(i?.id) === String(deal?.invitation_id));
   if (inv) return { state: 'ready', inv };
+  if (isRetrying(invitations)) return { state: 'loading' };
+  if (isStale(invitations)) return { state: 'unreadable' };
   if (list) return { state: atCap(list, CAPS.invitations) ? 'missing' : 'none' };
   return { state: isLoading(invitations) ? 'loading' : 'unreadable' };
 }
@@ -971,7 +986,7 @@ export function dealTiles({ deals, invitations, fan, now = Date.now() }) {
   else {
     const inv = listOf(invitations);
     let sub = null;
-    // A deal whose invitation is outside R1's newest 200 cannot be checked for a lapse (Guard L): it is counted and said, never dropped.
+    // A deal whose invitation is outside R1's newest 200, or past a refresh that failed, cannot be checked for a lapse (Guard L): it is counted and said, never dropped.
     let unseen = 0;
     if (!inv && !isLoading(invitations)) sub = 'Lapsed invitations could not be checked';
     else if (inv) {
@@ -979,7 +994,7 @@ export function dealTiles({ deals, invitations, fan, now = Date.now() }) {
       for (const d of awaiting) {
         const via = invitationForDeal(d, invitations);
         if (via.state === 'ready' && isLapsed(via.inv, now)) lapsed += 1;
-        else if (via.state === 'missing') unseen += 1;
+        else if (via.state === 'missing' || via.state === 'unreadable' || via.state === 'loading') unseen += 1;
       }
       if (lapsed) sub = `${capped(lapsed, unseen > 0)} whose invitation has lapsed`;
     }
@@ -1104,12 +1119,18 @@ export function tabCounts({ invitations, deals, contracts, needs }) {
  * `none` when the list is complete, or the address is no record id at all, so
  * no invitation has it. A list whose refresh failed is `unreadable`, never
  * either claim.
+ *
+ * `extra` holds the rows read for one address, each as a read (`useRead`'s
+ * shape). A copy from a read that answered beats one whose refresh failed;
+ * a record drawn from a failed refresh is `stale`, and says so (D923 §2).
  */
 export function findInvitation(id, invitations, extra = null) {
   if (!isRecordId(id)) return { state: 'none' };
   const list = listOf(invitations);
-  const hit = list?.find((i) => String(i?.id) === String(id)) || extra?.get?.(String(id)) || null;
-  if (hit) return { state: 'ready', inv: hit };
+  const adopted = extra?.get?.(String(id)) || null;
+  const hits = [[list?.find((i) => String(i?.id) === String(id)), invitations], [dataOf(adopted), adopted]].filter(([row]) => row);
+  const [hit, from] = hits.find(([, read]) => !isStale(read)) || hits[0] || [];
+  if (hit) return { state: 'ready', inv: hit, stale: isStale(from) };
   if (isLoading(invitations) || invitations?.refreshing) return { state: 'loading' };
   if (invitations?.status === 'error') return { state: 'unreadable' };
   return { state: atCap(list, CAPS.invitations) ? 'missing' : 'none' };
@@ -1337,59 +1358,57 @@ const ONBOARDING_INSTEAD = 'so no signing link is renewed. Resending sends the o
 
 /**
  * PI8a. Line one is the renewed link; line two depends on the stage. Resend
- * keeps the stored stage at every step (D924). `renews` says whether the
- * agreement's signing link is renewed too: true, false, or null while that is
- * not known.
+ * keeps the stored stage at every step (D924). At Agreement out the line says
+ * what the Worker does, read from R7 as the dialog opens; it is not a claim
+ * about the write, which `resentResult` reads from the reply alone.
  */
 export function resendCopy(inv, stage, envelope, now) {
   const who = whoOf(inv);
   const until = day(now + INVITE_TTL_DAYS * DAY_MS);
   const lines = [`The link gets a new 14 days, until ${until}.`];
-  let renews = false;
   if (stage.step === 5) lines.push(`${who}’s chosen offer is kept.`);
   else if (stage.step === 3 || stage.step === 4) lines.push(`Their answers are kept. The stage stays at ${stage.stageWord}.`);
   else if (stage.step === 6) {
     const link = inv?.envelope_id ? signingLink(envelope, now) : { state: 'no_envelope' };
     if (['live', 'expired', 'none'].includes(link.state) && signaturePending(inv, envelope)) {
-      renews = true;
       lines.push(`The agreement’s signing link is renewed too, until ${until}, and the email carries it.`);
     } else if (link.state === 'signed') lines.push(`The agreement already sent is signed, ${ONBOARDING_INSTEAD}`);
     else if (link.state === 'voided') lines.push(`The agreement already sent was voided, ${ONBOARDING_INSTEAD}`);
-    else if (link.state === 'loading') { renews = null; lines.push('Reading whether the agreement is still out for signature…'); }
-    else if (link.state === 'paused') { renews = null; lines.push(`${pausedLine('The agreement’s envelope')} Until then, whether its signing link is renewed too is not shown.`); }
-    else if (link.state === 'unreadable') { renews = null; lines.push('The agreement’s envelope could not be read, so whether its signing link is renewed too is not known.'); }
+    else if (link.state === 'loading') lines.push('Reading whether the agreement is still out for signature…');
+    else if (link.state === 'paused') lines.push(`${pausedLine('The agreement’s envelope')} Until then, whether its signing link is renewed too is not shown.`);
+    else if (link.state === 'unreadable') lines.push('The agreement’s envelope could not be read, so whether its signing link is renewed too is not known.');
     else lines.push(`No signature from ${who} is pending on the agreement, ${ONBOARDING_INSTEAD}`);
   }
-  return { title: `Resend the invitation to ${who}?`, lines, renews };
+  return { title: `Resend the invitation to ${who}?`, lines };
 }
 
 export const RESENT_SENT = 'Sent.';
 export const RESENT_NOT_SENT = 'Not sent. Copy the link instead.';
-export const RENEW_NOT_SENT = 'Not sent, so the agreement’s signing link was not renewed. The original sender can send a reminder from the envelope page.';
 
 /**
- * The resend result. The reply's `email_sent` is the agreement email's when
- * the signing link was renewed: a failed send leaves that link unrenewed (the
- * Worker puts the earlier one back), and the envelope page is the way on.
+ * The resend result, from the reply alone. The Worker's reply is `{ ok,
+ * email_sent, link, expires_at }` whether it renewed the agreement's signing
+ * link or sent the onboarding email instead (the envelope can change while
+ * the dialog is open), so the result says nothing about a renewal. When no
+ * email went, the reply's `link` (the invitation's own) is offered to copy.
+ * #2723 (part 4) adds a `signing_link` answer to this reply; part 7 (#2726)
+ * reads it.
  */
-export function resentResult(reply, renews) {
-  if (reply?.email_sent === true) {
-    const d = renews ? day(reply?.expires_at) : null;
-    return { text: renews ? `Sent, with the agreement’s signing link renewed${d ? ` until ${d}` : ''}.` : RESENT_SENT, sent: true };
-  }
-  return renews ? { text: RENEW_NOT_SENT, sent: false, envelope: true } : { text: RESENT_NOT_SENT, sent: false, copy: true };
+export function resentResult(reply) {
+  return reply?.email_sent === true ? { text: RESENT_SENT, sent: true } : { text: RESENT_NOT_SENT, sent: false, copy: true };
 }
 
 /**
  * PI8b. The long variant when there is an `envelope_id` or a deal row; also
- * when R2's `proposed` or `awaiting_signature` list failed (or could not
- * refresh) or is at its cap, because a deal row may then be out of sight.
+ * when R2's `proposed` or `awaiting_signature` list failed, could not refresh
+ * (or is being read again after that), is loading or is at its cap, because a
+ * deal row may then be out of sight: the long one when unsure.
  */
 export function revokeVariant(inv, deals) {
   if (inv?.envelope_id) return 'long';
   const u = dealsUnion(deals, ['proposed', 'awaiting_signature']);
   if (u.rows.some((d) => String(d?.invitation_id) === String(inv?.id))) return 'long';
-  if (u.failed.length || u.stale.length || u.capped.length || u.loading.length) return 'long';
+  if (u.failed.length || u.stale.length || u.retrying.length || u.capped.length || u.loading.length) return 'long';
   return 'short';
 }
 
@@ -1402,15 +1421,22 @@ export function revokeCopy(inv, variant) {
   };
 }
 
-/** D925's `failures`: the steps of a write's cascade that did not complete. Only their presence is read; no exception text is ever in them. */
+/** D925's `failures`: the steps of a write's cascade that did not complete. Only their `step` is read; no exception text is ever printed. */
 const failuresOf = (reply) => (Array.isArray(reply?.failures) ? reply.failures : []);
+/** `void_envelope`: the envelope's own update failed, so that agreement is not voided. */
 export const REVOKE_PARTIAL = 'Some agreements could not be voided. Check them in Contracts.';
-export const REVOKE_CASCADE_FAILED = 'The chosen offer and its agreement could not all be voided. Check them in Contracts.';
+/** `decline_recipients` runs only after the envelope was voided: the agreement is voided, its signers' rows are not all declined. */
+export const REVOKE_UNDECLINED = 'An agreement was voided, but its signers were not all marked declined. Check it in Contracts.';
+export const REVOKE_UNDECLINED_MANY = 'Some agreements were voided, but their signers were not all marked declined. Check them in Contracts.';
+/** `revoke_cascade`: the voiding could not run or be finished, whether or not there was an offer or an agreement to void. */
+export const REVOKE_CASCADE_FAILED = 'Any chosen offer or agreement out for signature could not be voided. Check them in Contracts.';
+/** A step this page does not know yet. */
+export const REVOKE_OTHER = 'Some of the voiding did not complete. Check the agreements in Contracts.';
 
 /**
  * The revoke result. The voided counts show only when above zero: a zero is
- * never read as "nothing was voided". A cascade step that failed (D925) is
- * said beside the counts.
+ * never read as "nothing was voided". Each cascade step that failed (D925) is
+ * said beside the counts, for what that step means.
  */
 export function revokedLine(reply) {
   const parts = ['Invitation revoked.'];
@@ -1418,9 +1444,12 @@ export function revokedLine(reply) {
   const envelopes = Number(reply?.voided_envelopes);
   if (deals > 0) parts.push(`${plural(deals, 'deal', 'deals')} voided.`);
   if (envelopes > 0) parts.push(`${plural(envelopes, 'agreement', 'agreements')} voided.`);
-  const failures = failuresOf(reply);
-  if (failures.some((f) => f?.step === 'revoke_cascade')) parts.push(REVOKE_CASCADE_FAILED);
-  else if (failures.length) parts.push(REVOKE_PARTIAL);
+  const steps = failuresOf(reply).map((f) => f?.step);
+  const undeclined = steps.filter((s) => s === 'decline_recipients').length;
+  if (steps.includes('void_envelope')) parts.push(REVOKE_PARTIAL);
+  if (undeclined) parts.push(undeclined === 1 ? REVOKE_UNDECLINED : REVOKE_UNDECLINED_MANY);
+  if (steps.includes('revoke_cascade')) parts.push(REVOKE_CASCADE_FAILED);
+  if (steps.some((s) => !['void_envelope', 'decline_recipients', 'revoke_cascade'].includes(s))) parts.push(REVOKE_OTHER);
   return parts.join(' ');
 }
 

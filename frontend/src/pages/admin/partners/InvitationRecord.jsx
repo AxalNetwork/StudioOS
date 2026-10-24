@@ -21,7 +21,8 @@ import {
  *
  * It is found in R1's loaded rows (or a row this page read for its address);
  * one outside them reads "Not in this read" until part 4's single read, with
- * its reason: R1 stopped at its cap, or no invitation in it has the address. R7
+ * its reason: R1 stopped at its cap, or no invitation in it has the address.
+ * A record whose read could not refresh stays under "Could not refresh". R7
  * gives the envelope; R12, their answers, is read only when the admin asks,
  * because each read is logged.
  */
@@ -98,6 +99,8 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
     <Lightbox label={`Invitation for ${name}`} title={row.name} sub={`${row.email} · ${sentBy}`} eyebrow="Invitations" onClose={onClose}
       width={940} pageBelow="lg" testId="partners-invitation" footer={footer}>
       <div className="flex flex-col gap-4 px-5 py-4" data-testid="partners-invitation-body">
+        {/* The read this record came from could not refresh: the record stays, from that read, under the line (D923 §2). */}
+        {found.stale ? <ReadState read={{ status: 'error', data: inv }} what="this invitation" kept="The record below is from the last read." onRetry={reads.reload} testId="partners-invitation-read" /> : null}
         <div className="flex flex-wrap items-center gap-3"><StageCell stage={stage} testId="partners-invitation-stage" /></div>
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="flex flex-col gap-4">

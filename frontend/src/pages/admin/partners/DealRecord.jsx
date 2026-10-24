@@ -83,7 +83,7 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
   ) : null;
 
   return (
-    // "address not recorded" only when the invitations were read in full and hold none for this deal; otherwise the title already says the read's state.
+    // "address not recorded" only when R1 answered on its latest read, below its cap, and holds none for this deal (`dealPartner`); otherwise the title already says the read's state.
     <Lightbox label={`Deal ${deal.id} with ${partner.name}`} title={partner.name}
       sub={`Deal #${deal.id}${partner.email ? ` · ${partner.email}` : partner.name === NOT_RECORDED ? ' · address not recorded' : ''}`} eyebrow="Deals"
       onClose={onClose} width={940} pageBelow="lg" testId="partners-deal" footer={footer}>
@@ -154,7 +154,8 @@ export default function DealRecord({ id, reads, now, onClose, actions }) {
               {via.state === 'missing' ? <span className={SUB}>{NOT_IN_READ}</span> : null}
               {via.state === 'none' ? <Unread>Not recorded</Unread> : null}
               {via.state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{READING}</span> : null}
-              {via.state === 'unreadable' ? <ReadState read={reads.invitations} what="The invitations" claim={LIST_CLAIM} onRetry={reads.reload} /> : null}
+              {/* A refresh that failed is drawn as failed: its old rows did not hold this deal's invitation. */}
+              {via.state === 'unreadable' ? <ReadState read={{ ...reads.invitations, data: null }} what="The invitations" claim={LIST_CLAIM} onRetry={reads.reload} testId="partners-deal-invitation-read" /> : null}
             </Section>
           </div>
 

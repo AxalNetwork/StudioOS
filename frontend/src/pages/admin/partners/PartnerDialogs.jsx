@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
 import {
-  REASON_MAX, counter, envelopeHref, partialWrite, refusalText, resendCopy, resentResult, revokeCopy, revokeVariant,
+  REASON_MAX, counter, partialWrite, refusalText, resendCopy, resentResult, revokeCopy, revokeVariant,
   revokedLine, stageOf, terminateCopy, terminateReady, terminatedLine,
 } from './partnersDeskModel';
 import { useRead } from './usePartnerDesk';
-import { CopyButton, Done, EYE, INPUT, LINK, Refusal } from './parts';
+import { CopyButton, Done, EYE, INPUT, Refusal } from './parts';
 
 /**
  * D923 (#2370) — the confirm dialogs (PI8a Resend, PI8b Revoke, PI8c
@@ -60,7 +60,8 @@ function useWrite(reads, kind) {
 /**
  * PI8a. The line by stage; at Agreement out it reads R7, because resend then
  * renews the agreement's signing link too when the invitee's signature is
- * pending (D924). A renewal whose email failed points to the envelope page.
+ * pending (D924). That line says what the Worker does; the result says only
+ * what its reply reports, which is whether the email went (`resentResult`).
  */
 export function ResendDialog({ inv, reads, now, onClose }) {
   const stage = stageOf(inv, { proposed: reads.deals.proposed, now });
@@ -68,20 +69,17 @@ export function ResendDialog({ inv, reads, now, onClose }) {
   const envelope = useRead('envelope', `envelope:${envelopeId}`, reads.tick, stage.step === 6 && envelopeId !== null, () => api.esignDetail(envelopeId));
   const w = useWrite(reads, 'invitation');
   const copy = resendCopy(inv, stage, envelope, now);
-  // The result is read against what the dialog said before the write.
-  const [renews, setRenews] = useState(null);
-  const result = w.reply ? resentResult(w.reply, renews) : null;
+  const result = w.reply ? resentResult(w.reply) : null;
   const close = w.finish(onClose);
   return (
     <Lightbox label={copy.title} title={copy.title} onClose={close} testId="partners-resend-dialog"
-      footer={<Buttons done={Boolean(w.reply)} onClose={close} action="Resend" busy={w.busy} refusal={w.refusal} onAction={() => { setRenews(copy.renews); w.run(() => api.adminPartners.resendInvitation(inv.id)); }} testId="partners-resend-go" />}>
+      footer={<Buttons done={Boolean(w.reply)} onClose={close} action="Resend" busy={w.busy} refusal={w.refusal} onAction={() => w.run(() => api.adminPartners.resendInvitation(inv.id))} testId="partners-resend-go" />}>
       <div className={BODY}>
         <ul className={LINES} data-testid="partners-resend-lines">{copy.lines.map((l) => <li key={l}>{l}</li>)}</ul>
         {result ? (
           <Done testId="partners-resend-result" tone={result.sent ? 'violet' : 'amber'}>
             <span className="flex min-w-0 flex-1 flex-col gap-2">
               <span>{result.text}</span>
-              {result.envelope && envelopeId !== null ? <a href={envelopeHref(envelopeId)} className={`${LINK} self-start`} data-testid="partners-resend-envelope">Open the envelope</a> : null}
               {result.copy && w.reply.link ? <CopyButton text={w.reply.link} label="Copy link" testId="partners-resend-copy" showField /> : null}
             </span>
           </Done>
@@ -91,7 +89,7 @@ export function ResendDialog({ inv, reads, now, onClose }) {
   );
 }
 
-/** PI8b. The long or the short variant by the `envelope_id` or a deal row; the long one when unsure. */
+/** PI8b. The long or the short variant by the `envelope_id` or a deal row; the long one when unsure, as while a list that could not refresh is read again. */
 export function RevokeDialog({ inv, reads, onClose }) {
   const [reason, setReason] = useState('');
   const copy = revokeCopy(inv, revokeVariant(inv, reads.deals));
