@@ -105,7 +105,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 152 the same day (D930, #2367): `Admin Community`, the overview at /admin/community.
   // 154 the same day (D936, #2375; D937, #2374): `Admin page header`, the shared header, and
   // `Spin-Out Lab (admin)`, the Lab's page at /admin/programs/spinout-lab.
-  assert.equal(recs.length, 154);
+  // 155 the same day (D972, #2369): `Advisors & Partners`, the network's page at /admin/advisors-partners.
+  assert.equal(recs.length, 155);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');

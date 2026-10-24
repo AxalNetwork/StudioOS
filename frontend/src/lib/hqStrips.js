@@ -42,7 +42,7 @@ export const HQ_STRIPS = {
     ['Content queue', '/admin/articles'],
     ['Publications', '/admin/publications'],
     ['Personas', '/admin?tab=personas'],
-    ['Advisors & Partners', '/admin?tab=network-profiles'],
+    ['Advisors & Partners', '/admin/advisors-partners'],
     ['Public team page', '/admin/team'],
   ]),
 };
@@ -62,7 +62,9 @@ export function hereFrom(pathname, search = '') {
 export function stripFor(pathname, search = '') {
   const here = hereFrom(pathname, search);
   for (const [row, items] of Object.entries(HQ_STRIPS)) {
-    if (items.some((i) => i.route === here)) return row;
+    // A page's tabs are sub-paths of its address (D936), so an item that is a
+    // plain path also owns its subtree; a `?tab=` item matches exactly.
+    if (items.some((i) => i.route === here || (!i.route.includes('?') && here.startsWith(`${i.route}/`)))) return row;
   }
   return null;
 }

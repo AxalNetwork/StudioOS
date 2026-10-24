@@ -66,7 +66,7 @@ PLATFORM.splice(PLATFORM.findIndex(([l]) => l === 'Bank accounts') + 1, 0, ['Pro
 const CONTENT = [
   ['Overview', '/admin/content'], ['Content queue', '/admin/articles'], ['Publications', '/admin/publications'],
   ['Personas', '/admin?tab=personas'],
-  ['Advisors & Partners', '/admin?tab=network-profiles'], ['Public team page', '/admin/team'],
+  ['Advisors & Partners', '/admin/advisors-partners'], ['Public team page', '/admin/team'],
 ];
 const pairs = (items) => items.map((i) => [i.label, i.route]);
 

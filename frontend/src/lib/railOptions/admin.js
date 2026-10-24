@@ -68,7 +68,7 @@ export const ADMIN_BOARDS = [
   { id: 'S26', section: 'Community', module: 'Jobs', route: '/admin/jobs', files: ['pages/admin/AdminJobsPage.jsx'], rail: FRAME, alias: 'S16' },
   { id: 'S27', section: 'Community', module: 'Communities', route: '/admin/circles', files: ['pages/admin/AdminCirclesPage.jsx'], rail: FRAME, alias: 'S17' },
   { id: 'S28', section: 'Community', module: 'Wellbeing experts', route: '/admin?tab=wellbeing', files: ['pages/admin/consoles/WellbeingConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
-  { id: 'S29', section: 'Community', module: 'Advisors and partners', route: '/admin?tab=network-profiles', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'S29', section: 'Community', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
   { id: 'S30', section: 'Community', module: 'Directory', route: '/admin?tab=directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
   { id: 'S31', section: 'Community', module: 'Partner invitations', route: '/admin/partner-invitations', files: ['pages/admin/PartnerInvitations.jsx'], rail: FRAME },
   { id: 'S32', section: 'Contracts', module: null, route: '/admin/contracts', files: [CONTRACTS], rail: CONTRACTS },
