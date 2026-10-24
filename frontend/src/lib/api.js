@@ -5316,7 +5316,16 @@ export const adminExploring = {
 // Task #1 — Admin advisor & partner network profiles (drives Spin-Out
 // Demo Day deck's Advisors & Network slide).
 export const adminNetworkProfiles = {
-  list: () => request('/admin/network-profiles'),
+  // D974: `{ state: 'shown' | 'hidden' | 'archived', q, limit }`; with no
+  // state the Worker lists shown and hidden rows.
+  list: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['state', 'q', 'limit']) if (params[k] != null && params[k] !== '') qs.set(k, String(params[k]));
+    const tail = qs.toString();
+    return request(`/admin/network-profiles${tail ? `?${tail}` : ''}`);
+  },
+  archive: (id) => request(`/admin/network-profiles/${id}/archive`, { method: 'POST' }),
+  restore: (id) => request(`/admin/network-profiles/${id}/restore`, { method: 'POST' }),
   create: (payload) => request('/admin/network-profiles', { method: 'POST', body: JSON.stringify(payload) }),
   update: (id, patch) => request(`/admin/network-profiles/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
   remove: (id) => request(`/admin/network-profiles/${id}`, { method: 'DELETE' }),
