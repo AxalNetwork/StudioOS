@@ -182,7 +182,7 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(app, /<Route path="\/raise\/:slug" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="raise" \/>\)\} \/>/);
   assert.match(app, /\{ under: \/\^\\\/raise\\\/investor-narrative\(\\\/\|\$\)\/, roles: NARRATIVE_BOUNDARY_ROLES, Panel: NarrativeBoundary \}/);
   const guard = app.slice(app.indexOf('function RoleGuard('), app.indexOf('function AuthScreen('));
-  assert.ok(guard.indexOf('if (boundary) return <boundary.Panel />;') > 0 && guard.indexOf('if (boundary) return <boundary.Panel />;') < guard.indexOf('<Navigate to={defaultPath} replace />'),
+  assert.ok(guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} />;') > 0 && guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} />;') < guard.indexOf('<Navigate to={defaultPath} replace />'),
     'the boundary is drawn instead of the redirect, only for a refused role');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const narrativeAdmin = cycle === 'raise' && slug === NARRATIVE && isNarrativeAdmin\(user\);/);
