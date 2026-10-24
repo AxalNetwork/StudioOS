@@ -729,7 +729,6 @@ export function agendaRows(reply, ev) {
 }
 
 export const ROSTER_LINE = 'Names and emails are on the host’s roster.';
-export const HISTORY_REST = { text: NOT_READ_YET, reason: 'Approvals, send-backs and changes are stored, but no read returns them yet.' };
 export const GONE = 'This event no longer exists.';
 
 /* ------------------------------------------------------------------ *
@@ -800,27 +799,43 @@ export function capacitySavedLine(promoted) {
   return n > 0 ? `Capacity saved. ${plural(n, 'person', 'people')} moved off the waitlist.` : 'Capacity saved.';
 }
 
+/** The longest note the Worker keeps (D917): it trims and caps at 1,000 characters. */
+export const NOTE_MAX = 1000;
+
 /**
- * EV10, in the Worker's words: no "every calendar", no "cannot be undone", no
- * note field until part 2. "It leaves the public calendar" only for an event
- * that is on it (the feed's predicate), never for a draft or a waiting event.
+ * EV10, in the Worker's words: no "every calendar", and no "cannot be undone",
+ * because part 2's 409 stops an approve reviving a cancelled event (D917).
+ * "It leaves the public calendar" only for an event that is on it (the feed's
+ * predicate), never for a draft or a waiting event. The note reaches
+ * registrants with an account. The paid box comes from the summary's paid
+ * count (D922): it names how many paid and how much; while the summary is
+ * unreadable it falls back to the event's price, and says so.
  */
-export function cancelCopy(ev) {
+export function cancelCopy(ev, payments = { state: 'loading' }) {
+  let paid = null;
+  if (payments.state === 'ready') {
+    const n = Number(payments.data.paid?.count || 0);
+    if (n > 0) paid = `${plural(n, 'paid ticket', 'paid tickets')} (${amounts(payments.data.paid)}) ${n === 1 ? 'is' : 'are'} not refunded automatically. HQ refunds them in Revenue › Billing.`;
+  } else if (isPaid(ev)) {
+    paid = 'This is a paid event. Its paid tickets could not be counted here; any that were paid are not refunded automatically. HQ refunds them in Revenue › Billing.';
+  }
   return {
     title: `Cancel ${titleOf(ev)}?`,
     lines: [
       onPublicCalendar(ev) ? 'It leaves the public calendar.' : 'It is marked cancelled.',
-      'People with an account who hold a seat or wait for one are told in StudioOS. People who signed up with an email only are not told.',
+      'People with an account who hold a seat or wait for one are told in StudioOS, with your note. People who signed up with an email only are not told.',
     ],
-    paid: isPaid(ev) ? 'Paid tickets are not refunded automatically. HQ refunds them in Revenue › Billing.' : null,
+    noteLabel: 'Note to registrants · optional',
+    paid,
     confirm: 'I understand these tickets need a refund',
   };
 }
 
-/** EV11a: unpublish sends no notice, and has no note until part 2. */
+/** EV11a: the host is told, with the note (D917). */
 export const unpublishCopy = (ev) => ({
   title: `Take ${titleOf(ev)} off the calendar?`,
-  body: 'It goes back to the host as a draft. Registrations stay. The host is not told automatically.',
+  body: 'It goes back to the host as a draft. Registrations stay. The host is told, with your note.',
+  noteLabel: 'Note to the host · optional',
 });
 
 /** EV11b: Feature, or Stop featuring with the same dialog. */
@@ -846,4 +861,221 @@ export function refusalText(err, fallback = 'That did not go through. Try again.
   if (status === 404 || code === 'not_found') return GONE;
   if (code === 'invalid_capacity') return CAPACITY_ERROR;
   return fallback;
+}
+
+/* ------------------------------------------------------------------ *
+ * One event, complete (D922, #2705): part 3's summary and history
+ * ------------------------------------------------------------------ *
+ * Every figure here is a count from `GET /api/admin/events/:id/summary`
+ * (D918 §5); the roster, with its names and emails, is never read. Each of the
+ * summary's blocks answers alone: `{ available: true, … }`, or
+ * `{ available: false, unreadable: true, reason }`. A block that failed is
+ * drawn as failed, never as zero, and the others still draw.
+ */
+
+/** One block of the summary as `{ state, data | reason }`: loading, ready, unreadable or missing. */
+export function summaryBlock(read, key) {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (read.status === 'error') return { state: 'unreadable', reason: 'The event’s counts could not be read. That is not the same as none.' };
+  const b = read.data?.[key];
+  if (!b || typeof b !== 'object') return { state: 'unreadable', reason: 'The answer held no such block. That is not the same as none.' };
+  if (b.available === false) return { state: 'unreadable', reason: String(b.reason || 'It could not be read. That is not the same as none.') };
+  return { state: 'ready', data: b };
+}
+
+/** The event's type, in the canvas's words (D916's twelve), or null. */
+export function typeWord(ev, types) {
+  const t = (types || []).find((x) => x.id === ev?.type);
+  return t ? t.label : null;
+}
+
+const FORMAT_WORD = { in_person: 'In person', virtual: 'Online', hybrid: 'Hybrid' };
+/** 'In person', 'Online' or 'Hybrid', from `location_kind`; null when it is something else. */
+export const formatWord = (ev) => FORMAT_WORD[ev?.location_kind] || null;
+
+/**
+ * "Hosted by [name] · [role] · [venture]". A host with no name, role or
+ * venture leaves that part out; no host at all is "Host not recorded".
+ * "Hosted by the studio team" waits for O-STU.
+ */
+export function hostLine(block) {
+  if (block.state !== 'ready') return null;
+  const host = block.data.host;
+  if (!host) return { text: 'Host not recorded', recorded: false };
+  const parts = [String(host.name || '').trim() || 'A member', host.role ? roleWord(host.role) : null, String(block.data.venture?.name || '').trim() || null].filter(Boolean);
+  return { text: `Hosted by ${parts.join(' · ')}`, recorded: true };
+}
+
+const amounts = (paid) => {
+  const rows = (paid?.by_currency || []).filter((r) => r.count > 0);
+  if (!rows.length) return null;
+  return rows.map((r) => {
+    if (r.amount_not_recorded >= r.count) return `amount not recorded${r.currency ? ` (${r.currency.toUpperCase()})` : ''}`;
+    const sum = money(r.amount_cents, r.currency);
+    return r.amount_not_recorded ? `${sum} + ${nf(r.amount_not_recorded)} not recorded` : sum;
+  }).join(' · ');
+};
+
+/** The second row of tiles (EV7): Paid tickets, Free seats, Invitations. Each from its own block. */
+export function summaryTiles(read) {
+  const pay = summaryBlock(read, 'payments');
+  const free = summaryBlock(read, 'free_seats');
+  const inv = summaryBlock(read, 'invitations');
+  const tile = (key, label, block, ready) => {
+    if (block.state === 'loading') return { key, label, value: READING, words: true };
+    if (block.state !== 'ready') return { key, label, value: COULD_NOT_READ, words: true, sub: block.reason, failed: true };
+    return { key, label, ...ready(block.data) };
+  };
+  return [
+    tile('paid', 'Paid tickets', pay, (p) => ({ value: nf(p.paid?.count ?? 0), sub: amounts(p.paid) || (Number(p.price_cents) > 0 ? 'None paid yet' : 'A free event') })),
+    tile('free', 'Free seats', free, (f) => ({ value: nf(f.count ?? 0), sub: 'From audience rules or free invitations' })),
+    tile('invitations', 'Invitations', inv, (i) => ({ value: nf(i.total ?? 0), sub: `sent · ${nf(i.by_status?.accepted ?? 0)} accepted` })),
+  ];
+}
+
+/**
+ * Chart A, "Seats taken over time": the running total of current seat holders
+ * by the day each registered. Cancellations and promotions carry no date, so
+ * the label says what it counts. A capacity line, and a Today marker when today
+ * falls inside the series.
+ */
+export const SEATS_CHART_LABEL = 'By the date each current seat holder registered. Cancellations and promotions are not dated.';
+export function seatsSeries(block, ev, now) {
+  if (block.state !== 'ready') return null;
+  const days = Array.isArray(block.data.days) ? block.data.days : [];
+  const cap = ev?.capacity === null || ev?.capacity === undefined ? null : Number(ev.capacity);
+  const today = new Date(now).toISOString().slice(0, 10);
+  const points = days.map((d) => ({ day: d.day, total: Number(d.total) }));
+  const last = points.length ? points[points.length - 1].day : null;
+  return {
+    points,
+    capacity: Number.isFinite(cap) ? cap : null,
+    today: points.length && today >= points[0].day ? today : null,
+    todayAfter: Boolean(last && today > last),
+    undated: Number(block.data.registered_at_not_recorded || 0),
+    alt: points.length
+      ? `${nf(points[points.length - 1].total)} seats taken by ${dateLabel(last)}${cap !== null ? `, of ${nf(cap)}` : ''}.`
+      : 'No seat holder has a registration date yet.',
+  };
+}
+
+/**
+ * Chart B, the funnel: Registered → Confirmed → Attended. Registered is every
+ * current seat (registered, confirmed and attended); Confirmed is confirmed
+ * plus attended, because an attendee was confirmed first. Waitlisted,
+ * Cancelled and Declined sit beside it as figures, not steps. Attended before
+ * the event is held reads "Not held yet", never 0.
+ */
+export function funnelOf(block, ev, now) {
+  if (block.state !== 'ready') return null;
+  const s = block.data.by_status || {};
+  const n = (k) => Number(s[k] || 0);
+  const registered = n('registered') + n('confirmed') + n('attended');
+  const confirmed = n('confirmed') + n('attended');
+  const held = ev?.status !== 'cancelled' && hasEnded(ev, now) === true;
+  const steps = [
+    { key: 'registered', label: 'Registered', value: registered },
+    { key: 'confirmed', label: 'Confirmed', value: confirmed },
+    held || n('attended') > 0
+      ? { key: 'attended', label: 'Attended', value: n('attended') }
+      : { key: 'attended', label: 'Attended', value: 0, text: ev?.status === 'cancelled' ? 'Not held' : NOT_HELD, dash: true },
+  ];
+  const beside = [['waitlisted', 'Waitlisted'], ['cancelled', 'Cancelled'], ['declined', 'Declined']].map(([k, label]) => ({ key: k, label, value: n(k) }));
+  return { steps, beside, other: n('other') };
+}
+
+const PROFILE_ORDER = [
+  ['founder', 'Founder'], ['investor', 'Investor'], ['advisor', 'Advisor'], ['partner', 'Operating Partner'],
+  ['exploring', 'Explorer'], ['admin', 'Admin'], ['guest', 'Guest (no account)'], ['not_recorded', 'Profile not recorded'],
+];
+const SOURCE_ORDER = [['signed_up', 'Signed up'], ['invitation', 'Invitation'], ['free_seat', 'Free seat']];
+
+/** Who registered (EV7): seated registrations by profile, and by how the seat was got (D915's order). */
+export function registrantRows(roleBlock, sourceBlock) {
+  const profile = roleBlock.state === 'ready'
+    ? PROFILE_ORDER.map(([k, label]) => ({ key: k, label, value: Number(roleBlock.data.counts?.[k] || 0) })).filter((r) => r.value > 0 || ['founder', 'investor'].includes(r.key))
+    : null;
+  const source = sourceBlock.state === 'ready'
+    ? SOURCE_ORDER.map(([k, label]) => ({ key: k, label, value: Number(sourceBlock.data.counts?.[k] || 0) }))
+    : null;
+  const added = sourceBlock.state === 'ready' && sourceBlock.data.added_by_admin?.recorded === false ? sourceBlock.data.added_by_admin.reason : null;
+  return { profile, source, added };
+}
+
+const INVITE_SOURCES = [['manual', 'Sent by the host or an admin'], ['auto_partner', 'Official partners'], ['auto_lp', 'Invested LPs']];
+/**
+ * Invitations by status and by source. Only these three sources are ever
+ * minted as invitations; Investors, Founders and Host's contacts are not, so
+ * they are not drawn (map A, EV7).
+ */
+export function invitationRows(block) {
+  if (block.state !== 'ready') return null;
+  const st = block.data.by_status || {};
+  const src = block.data.by_source || {};
+  const status = [['pending', 'Pending'], ['accepted', 'Accepted'], ['declined', 'Declined'], ['revoked', 'Revoked']].map(([k, label]) => ({ key: k, label, value: Number(st[k] || 0) }));
+  const source = INVITE_SOURCES.map(([k, label]) => ({ key: k, label, value: Number(src[k] || 0) }));
+  if (Number(src.other || 0) > 0) source.push({ key: 'other', label: 'Another source', value: Number(src.other) });
+  return { total: Number(block.data.total || 0), status, source };
+}
+
+/** Payments (EV7): price, paid and payment pending. Refunds are "Not recorded", with the canvas's line (O-REF). */
+export function paymentRows(block) {
+  if (block.state !== 'ready') return null;
+  const p = block.data;
+  const paid = p.paid || { count: 0 };
+  return [
+    { key: 'price', label: 'Price', value: money(p.price_cents, p.currency) },
+    { key: 'paid', label: 'Paid', value: paid.count ? `${nf(paid.count)} · ${amounts(paid)}` : '0' },
+    { key: 'pending', label: 'Payment pending', value: nf(p.payment_pending ?? 0) },
+    { key: 'refunds', label: 'Refunds', value: NOT_RECORDED, reason: p.refunds?.reason || 'A refunded ticket is not marked here. HQ refunds a ticket’s payment in Revenue › Billing.', unrecorded: true },
+  ];
+}
+
+const REMINDERS = [['reminder_24h', '24-hour reminder', 24], ['reminder_1h', '1-hour reminder', 1]];
+/** Reminders: each one's due time from the event's start, and how many were sent, from the summary. */
+export function reminderRows(block, ev, now) {
+  if (block.state !== 'ready') return null;
+  const start = parseStamp(ev?.starts_at);
+  return REMINDERS.map(([kind, label, hours]) => {
+    const sent = Number(block.data.by_kind?.[kind] || 0);
+    const due = start === null ? null : start - hours * 3600_000;
+    const when = due === null ? 'due time not recorded' : `due ${startShort({ ...ev, starts_at: new Date(due).toISOString() })}`;
+    let line;
+    if (sent > 0) line = `Sent to ${nf(sent)}`;
+    else if (ev?.status === 'cancelled') line = 'Not sent: the event is cancelled';
+    else if (due !== null && due <= now) line = `Not sent · was ${when}`;
+    else line = `Not sent yet · ${when}`;
+    return { key: kind, label, line, sent: sent > 0 };
+  });
+}
+
+const actorWord = (a) => (a === 'host' ? 'the host' : 'an admin');
+const ACTION_WORD = {
+  event_submitted: (i) => `Submitted for review by ${actorWord(i.actor)}`,
+  event_updated: (i) => `Edited by ${actorWord(i.actor)}${Array.isArray(i.fields) && i.fields.length ? `: ${i.fields.map((f) => String(f).replace(/_/g, ' ')).join(', ')}` : ''}`,
+  event_approved: (i) => `Approved by ${actorWord(i.actor)}`,
+  event_rejected: (i) => `Sent back by ${actorWord(i.actor)}${i.reason ? `: ‘${i.reason}’` : ''}`,
+  event_unpublished: (i) => `Unpublished by ${actorWord(i.actor)}`,
+  event_featured: (i) => (i.featured ? `Featured by ${actorWord(i.actor)}` : `No longer featured, by ${actorWord(i.actor)}`),
+  event_cancelled: (i) => `Cancelled by ${actorWord(i.actor)}`,
+  event_capacity_override: (i) => `Capacity set to ${i.capacity === null || i.capacity === undefined ? 'no cap' : nf(i.capacity)} by ${actorWord(i.actor)}`,
+};
+
+/**
+ * History, newest first: part 3's items, then Created. Actors are "an admin"
+ * or "the host", never a name. The host's change after approval
+ * (`changed_after_approval_at`) is the amber row.
+ */
+export function historyRows(read) {
+  if (!read || read.status === 'loading') return { state: 'loading' };
+  if (read.status === 'error') return { state: 'unreadable', reason: 'The history could not be read. That is not a claim that nothing happened.' };
+  const h = read.data?.history;
+  if (!h || h.available === false) return { state: 'unreadable', reason: String(h?.reason || 'The history could not be read. That is not a claim that nothing happened.') };
+  const rows = (Array.isArray(h.items) ? h.items : []).map((i, n) => ({
+    key: `i${n}`, at: i.at, text: (ACTION_WORD[i.action] || ((x) => `${titleCase(String(x.action || '').replace(/^event_/, '').replace(/_/g, ' '))} by ${actorWord(x.actor)}`))(i),
+  }));
+  if (h.changed_after_approval_at) rows.push({ key: 'changed', at: h.changed_after_approval_at, text: 'The host changed the event after it was approved', amber: true });
+  rows.sort((a, b) => (parseStamp(b.at) ?? -Infinity) - (parseStamp(a.at) ?? -Infinity));
+  rows.push({ key: 'created', at: h.created_at, text: 'Created' });
+  return { state: 'ready', rows: rows.map((r) => ({ ...r, date: dateLabel(r.at) })) };
 }

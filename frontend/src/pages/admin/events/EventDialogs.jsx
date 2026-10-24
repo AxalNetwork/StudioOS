@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
 import {
   FEATURE_LINE, QUICK_REASONS, REASON_MAX, SEND_BACK_NOTE, approveLines, approveTitle, cancelCopy, capacityNow,
-  capacityPreview, featureCopy, sendBackReady, sendBackTitle, unpublishCopy,
+  NOTE_MAX, capacityPreview, featureCopy, sendBackReady, sendBackTitle, unpublishCopy,
 } from './eventsDeskModel';
 import { EYE, INPUT, Refusal, SUB } from './parts';
 
@@ -121,15 +121,17 @@ export function CapacityDialog({ ev, counts, busy, refusal, onClose, onConfirm }
 }
 
 /** EV10: a paid event waits for the refund checkbox, because HQ refunds by hand (O-REF). */
-export function CancelDialog({ ev, busy, refusal, onClose, onConfirm }) {
-  const copy = cancelCopy(ev);
+export function CancelDialog({ ev, payments, busy, refusal, onClose, onConfirm }) {
+  const copy = cancelCopy(ev, payments);
   const [understood, setUnderstood] = useState(false);
+  const [note, setNote] = useState('');
   return (
     <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId="events-cancel-dialog"
-      footer={<Buttons back="Keep event" onClose={onClose} action="Cancel event" tone="danger" busy={busy} disabled={Boolean(copy.paid) && !understood} onAction={() => onConfirm()} refusal={refusal} testId="events-cancel-go" />}>
+      footer={<Buttons back="Keep event" onClose={onClose} action="Cancel event" tone="danger" busy={busy} disabled={Boolean(copy.paid) && !understood} onAction={() => onConfirm(note.trim())} refusal={refusal} testId="events-cancel-go" />}>
       <div className={BODY}>
         <span className={EYE}>What happens</span>
         <ul className={LINES}>{copy.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+        <NoteField label={copy.noteLabel} value={note} onChange={setNote} testId="events-cancel-note" />
         {copy.paid ? (
           <div className="flex flex-col gap-2 rounded-[10px] border border-amber-300 bg-amber-50 p-3 text-[13px] font-semibold leading-normal text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="events-cancel-paid">
             <span>{copy.paid}</span>
@@ -144,14 +146,28 @@ export function CancelDialog({ ev, busy, refusal, onClose, onConfirm }) {
   );
 }
 
-/** EV11a: the host is not told, and there is no note until part 2. */
+/** A note the Worker passes on as it is, at most NOTE_MAX characters (D917). */
+function NoteField({ label, value, onChange, testId }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className={EYE}>{label}</span>
+      <textarea value={value} maxLength={NOTE_MAX} placeholder="Write a note…" onChange={(e) => onChange(e.target.value)}
+        className="min-h-[64px] rounded-[8px] border border-axal-hairline bg-white p-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+        data-testid={testId} />
+    </label>
+  );
+}
+
+/** EV11a: the host is told, with the note (D917). */
 export function UnpublishDialog({ ev, busy, refusal, onClose, onConfirm }) {
   const copy = unpublishCopy(ev);
+  const [note, setNote] = useState('');
   return (
     <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId="events-unpublish-dialog"
-      footer={<Buttons onClose={onClose} action="Unpublish" busy={busy} onAction={() => onConfirm()} refusal={refusal} testId="events-unpublish-go" />}>
+      footer={<Buttons onClose={onClose} action="Unpublish" busy={busy} onAction={() => onConfirm(note.trim())} refusal={refusal} testId="events-unpublish-go" />}>
       <div className={BODY}>
         <p className="m-0 text-[13px] leading-normal text-axal-ink dark:text-gray-100">{copy.body}</p>
+        <NoteField label={copy.noteLabel} value={note} onChange={setNote} testId="events-unpublish-note" />
       </div>
     </Lightbox>
   );
