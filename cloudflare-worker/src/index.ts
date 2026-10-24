@@ -210,6 +210,7 @@ import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
+import adminProgramGrants from './routes/admin_program_grants';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
@@ -1073,6 +1074,8 @@ app.route('/api/branch', branchInvitationRoutes);
 // database recorded. Same prefix as the other branch reads.
 app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
+// D982 (#2773): which programs HQ grants each licensed studio, on what terms.
+app.route('/api/admin/program-grants', adminProgramGrants);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
 app.route('/api/admin/super-admins', adminSuperAdmins);
