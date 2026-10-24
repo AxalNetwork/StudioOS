@@ -189,6 +189,7 @@ import cycleGrow from './routes/cycle_grow';
 // catch-all so its `/share/:token/...` subpaths take precedence over
 // the existing /share/:token reader in decks.ts.
 import deckShareActions from './routes/deck_share_actions';
+import deckNotes from './routes/deck_notes';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1160,6 +1161,8 @@ app.route('/api/brand', brand);
 // /api/decks/share/:token (signup, nda, feedback, deal-pack, context)
 // resolve to the new handlers before falling through to the catch-all.
 app.route('/api/decks', deckShareActions);
+// D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
+app.route('/api/decks', deckNotes);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

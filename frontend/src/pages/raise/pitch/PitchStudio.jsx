@@ -7,6 +7,7 @@ import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
 import DeckReviewerPage from '../../DeckReviewerPage';
+import PitchNotes from './PitchNotes';
 import {
   EDIT_PATH, EMPTY_DECK, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
   asList, coverOf, currentVersion, dayLabel, isReadOnly, linkRows, mmss, newLinkHref, noViewsYet,
@@ -24,12 +25,16 @@ import {
  *   /raise/pitch/analytics  Share & analytics (PD19): one version's readers,
  *                           seconds per slide, and every investor link with
  *                           Withdraw.
+ *   /raise/pitch/notes      Notes (PD21, D905): the thread from the venture's
+ *                           admins to its founders, and the composer.
  *   /raise/pitch/edit       the deck builder (PitchWorkspacePage), until #2434
  *                           part 4 builds the editor (PD1).
  *
  * WHO. The venture's founder works here. An admin (and anyone else the route
- * admits) reads it: no New deck, no New link, no Withdraw (PD21). The Worker
- * still lets an admin write; #2434 part 1 closes that.
+ * admits) reads it and leaves notes: no New deck, no New link, no Withdraw
+ * (PD21). The Worker still lets an admin write the deck; #2434 part 1 closes
+ * that. An Advisor, an Operating Partner or an Explorer gets PitchBoundary
+ * (PD22) from the route instead.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -131,6 +136,8 @@ export default function PitchStudio({ tab = 'decks' }) {
           <DeckReviewerPage embedded />
         ) : tab === 'analytics' ? (
           <StudioAnalytics reads={reads} readOnly={readOnly} />
+        ) : tab === 'notes' ? (
+          <PitchNotes reads={reads} />
         ) : (
           <StudioDecks reads={reads} readOnly={readOnly} q={q} />
         )}
