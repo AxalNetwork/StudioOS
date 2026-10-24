@@ -53,7 +53,7 @@ type Reason = { id: number; reason: string; created_at: string; expires_at: stri
 export async function activeReason(env: Env, projectId: number, userId: number): Promise<Reason | null> {
   return env.DB.prepare(
     `SELECT id, reason, created_at, expires_at FROM narrative_read_reasons
-      WHERE project_id = ? AND reader_user_id = ? AND expires_at > datetime('now')
+      WHERE project_id = ? AND reader_user_id = ? AND datetime(expires_at) > datetime('now')
       ORDER BY id DESC LIMIT 1`,
   ).bind(projectId, userId).first<Reason>();
 }
@@ -130,13 +130,13 @@ const noteView = (r: NoteRow) => ({
   id: r.id, version: r.version ?? null, body: r.body, author: { name: r.author_name ?? null, kind: r.author_kind }, created_at: r.created_at,
 });
 
-const NOTE_SELECT = `SELECT n.id, n.version, n.body, n.author_kind, n.created_at, u.name AS author_name
-  FROM narrative_notes n LEFT JOIN users u ON u.id = n.author_user_id`;
-
 /** The venture's notes thread, every version, oldest first. */
 export async function listNotes(env: Env, projectId: number) {
-  const { results } = await env.DB.prepare(`${NOTE_SELECT} WHERE n.project_id = ? ORDER BY n.created_at, n.id LIMIT ?`)
-    .bind(projectId, LIST_MAX).all<NoteRow>();
+  const { results } = await env.DB.prepare(
+    `SELECT n.id, n.version, n.body, n.author_kind, n.created_at, u.name AS author_name
+       FROM narrative_notes n LEFT JOIN users u ON u.id = n.author_user_id
+      WHERE n.project_id = ? ORDER BY n.created_at, n.id LIMIT ?`,
+  ).bind(projectId, LIST_MAX).all<NoteRow>();
   return (results || []).map(noteView);
 }
 
@@ -154,8 +154,10 @@ export async function postNote(env: Env, projectId: number, user: User, raw: unk
       action: 'narrative_note_posted', summary: version == null ? 'Note posted on the narrative' : `Note posted on v${version}`,
     }),
   ]);
-  const row = await env.DB.prepare(`${NOTE_SELECT} WHERE n.id = ? AND n.project_id = ?`)
-    .bind(Number(insert?.meta?.last_row_id), projectId).first<NoteRow>();
+  const row = await env.DB.prepare(
+    `SELECT n.id, n.version, n.body, n.author_kind, n.created_at, u.name AS author_name
+       FROM narrative_notes n LEFT JOIN users u ON u.id = n.author_user_id WHERE n.id = ? AND n.project_id = ?`,
+  ).bind(Number(insert?.meta?.last_row_id), projectId).first<NoteRow>();
   if (!row) throw new Error('note saved but unreadable');
   return noteView(row);
 }
