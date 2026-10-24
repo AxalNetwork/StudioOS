@@ -308,3 +308,9 @@ totals over the filtered set and the filters' options), the counts for the tiles
 and the weekly series, and one profile by its reference (`pp_…`), never by
 email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
 that read them.
+
+D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
+(`GET /api/admin/partner-profiles/agreements`, each Ready or "Not ready: no
+text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
+with a recent step-up and a reason). Each list row and profile carries its
+agreement's envelope state on `envelope`.
