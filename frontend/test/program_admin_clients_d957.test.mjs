@@ -17,12 +17,15 @@ test('the new admin clients preserve query values, identifiers, decision body an
     await api.adminStrategicAccessDecision(7, { decision: 'granted', note: 'reviewed' });
     await api.adminPerkClaims(12);
     await api.adminPerkListings({ status: 'paused', offset: 10 });
+    await api.adminStrategicAccess({ status: undefined, limit: null, offset: '' });
+    await api.adminPerkListings({ status: undefined, sort: null, limit: '' });
     assert.deepEqual(seen.map((x) => x.url), [
       '/api/refer-earn/admin/submissions?status=submitted%2Cunder_review&offset=200&sort=oldest',
       '/api/refer-earn/admin/submissions/r%2F1', '/api/refer-earn/admin/submissions/weekly?weeks=4',
       '/api/refer-earn/admin/strategic-access?status=requested&limit=1&offset=1',
       '/api/refer-earn/admin/strategic-access/7/decision', '/api/perks/admin/claims?weeks=12',
       '/api/perks/admin/listings?status=paused&offset=10',
+      '/api/refer-earn/admin/strategic-access', '/api/perks/admin/listings',
     ]);
     assert.equal(seen[4].method,'POST'); assert.deepEqual(JSON.parse(seen[4].body), { decision: 'granted', note: 'reviewed' });
   } finally { globalThis.fetch = previous; globalThis.localStorage = previousStorage; }
