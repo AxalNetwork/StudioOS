@@ -78,7 +78,9 @@ test('typed traction is stated; only verified ledger receipts justify measured t
 });
 test('readiness and coverage require a downloadable file: tier, expiry, active grant, active investor and NDA', async () => {
  const {db,env,ctx}=fixture(); file(db,1); file(db,2,'nobody'); file(db,3,'committed'); file(db,4,'invited','nda'); file(db,5,'invited','open','2000-01-01');
- assert.equal((await readableRoomFiles(env,1)).length,0); grant(db,'2000-01-01'); assert.equal((await readableRoomFiles(env,1)).length,0);
+ assert.equal((await readableRoomFiles(env,1)).length,0);
+ assert.deepEqual((await dataRoomCard(ctx)).next,{text:'Manage access',href:'/raise/data-room?mode=workspace&project_id=1'});
+ grant(db,'2000-01-01'); assert.equal((await readableRoomFiles(env,1)).length,0);
  db.exec('UPDATE data_room_grants SET expires_at=NULL'); assert.deepEqual((await readableRoomFiles(env,1)).map(f=>f.id),[1]);
  const ready=(await computeReadiness(env,1)).find(x=>x.key==='data_room')!; assert.match(ready.reads[0].b,/^1 in/);
  const before=await dataRoomCard(ctx); assert.notEqual(before.state,'empty');

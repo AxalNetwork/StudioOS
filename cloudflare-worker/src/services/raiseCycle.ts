@@ -726,7 +726,13 @@ export function checklistCoverage(mapped: Iterable<string>): Array<{ area: strin
 export async function dataRoomCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('data-room', 'Last 90 days', 'How much of each diligence area the files answer, and who opened the room.', 'Data room'), async (): Promise<CardBody> => {
     const accessible = await readableRoomFiles(ctx.env, ctx.projectId);
-    if (!accessible.length) return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason: 'No files are currently downloadable by a granted investor.' };
+    if (!accessible.length) {
+      const staged = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+      const next = Number(staged?.n ?? 0) > 0
+        ? { text: 'Manage access', href: `${TOOL_HREF.dataRoom}&project_id=${ctx.projectId}` }
+        : { text: 'Upload', href: addHref(ctx, 'data-room') };
+      return { state: 'empty', series: null, next, reason: 'No files are currently downloadable by a granted investor.' };
+    }
     const mapped = { results: accessible.filter(f => f.checklist_item != null) };
     const viewers = await ctx.env.DB.prepare(
       `SELECT l.user_id, u.name, COUNT(*) AS n FROM data_room_access_log l LEFT JOIN users u ON u.id = l.user_id
