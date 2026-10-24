@@ -9,7 +9,8 @@ import { PAGE_LIMIT, isEventId, readEveryPage } from './eventsDeskModel';
  *   queue      R1 with `status=pending_review`, every page: the Review tab and
  *              the tab strip's count;
  *   all        R1, every page: Overview, All events and Calendar;
- *   analytics  R2's per-event rows, joined under Guard G by the model;
+ *   analytics  R2's per-event rows on the other tabs, under Guard G;
+ *   overview   D920's period blocks; Overview draws no capped analytics;
  *   event      R3, one event's page;
  *   agenda     R5, that event's agenda;
  *   paid       D918's `GET /api/admin/events/overview`, only while All events
@@ -45,29 +46,31 @@ function useRead(scope, what, tick, enabled, load) {
     return () => { live = false; };
     // `load` is rebuilt on every render; `what` and `tick` say when to call it.
   }, [what, tick, enabled]);
-  return read;
+  return enabled && read.what !== what ? idle : read;
 }
 
 const pages = (status) => readEveryPage((offset) => adminEvents.list({ status, limit: PAGE_LIMIT, offset }));
 
-export function useEventsDesk(tab, eventId, { paidView = false } = {}) {
+export function useEventsDesk(tab, eventId, { paidView = false, weeks = 12 } = {}) {
   const [tick, setTick] = useState(0);
   const wantAll = tab === 'overview' || tab === 'all' || tab === 'calendar';
   const wantEvent = tab === 'event' && isEventId(eventId);
   const withList = `${tick}:${wantAll}`;
   const queue = useRead('queue', 'queue', withList, true, () => pages('pending_review'));
   const all = useRead('list', 'all', tick, wantAll, () => pages(undefined));
-  const analytics = useRead('analytics', 'analytics', withList, wantAll || wantEvent, () => adminEvents.analytics());
+  const wantAnalytics = (wantAll && tab !== 'overview') || wantEvent;
+  const analytics = useRead('analytics', 'analytics', withList, wantAnalytics, () => adminEvents.analytics());
   const event = useRead('event', `event:${eventId}`, tick, wantEvent, () => adminEvents.get(eventId));
   const agenda = useRead('agenda', `agenda:${eventId}`, tick, wantEvent, () => eventsApi.agenda(eventId));
   const wantPaid = tab === 'all' && paidView;
   const paid = useRead('overview', 'paid', withList, wantPaid, () => adminEvents.overview());
+  const overview = useRead('overview', `overview:${weeks}`, tick, tab === 'overview', () => adminEvents.overview(weeks));
   const reload = useCallback(() => setTick((t) => t + 1), []);
   // The queue is drawn on every tab: the tab strip's Review count.
-  const drawn = [[queue, true], [all, wantAll], [analytics, wantAll || wantEvent], [event, wantEvent], [agenda, wantEvent], [paid, wantPaid]]
+  const drawn = [[queue, true], [all, wantAll], [analytics, wantAnalytics], [overview, tab === 'overview'], [event, wantEvent], [agenda, wantEvent], [paid, wantPaid]]
     .filter(([, on]) => on).map(([r]) => r);
   const stamps = drawn.map((r) => r.at).filter(Boolean);
   const asOf = stamps.length ? Math.min(...stamps) : null;
   const reading = drawn.some((r) => r.status === 'loading');
-  return { queue, all, analytics, event, agenda, paid, reload, asOf, reading };
+  return { queue, all, analytics, event, agenda, paid, overview, reload, asOf, reading };
 }

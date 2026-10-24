@@ -20,7 +20,11 @@ const scratch = mkdtempSync(join(tmpdir(),'deck-null-d895-'));
 const seed = join(scratch,'schema.sqlite');
 const schema = new DatabaseSync(seed,{enableForeignKeyConstraints:false});
 schema.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
-for(const name of readdirSync('cloudflare-worker/sql/migrations').filter(n=>/^\d+_.*\.sql$/.test(n)&&migrationNumber(n)>BASELINE_CUTOFF&&migrationNumber(n)!==549).sort())schema.exec(read('cloudflare-worker/sql/migrations/'+name));
+// The seed is the schema just before 549; the upgrade runs 549, then every later
+// migration in order, as production does (D902's 567 adds columns 549's rebuild would drop).
+const numbered=readdirSync('cloudflare-worker/sql/migrations').filter(n=>/^\d+_.*\.sql$/.test(n)&&migrationNumber(n)>BASELINE_CUTOFF).sort();
+for(const name of numbered.filter(n=>migrationNumber(n)<549))schema.exec(read('cloudflare-worker/sql/migrations/'+name));
+const later=numbered.filter(n=>migrationNumber(n)>549).map(n=>read('cloudflare-worker/sql/migrations/'+n));
 schema.close();
 after(()=>rmSync(scratch,{recursive:true,force:true}));
 let serial=0;
@@ -29,7 +33,7 @@ function fixture(upgrade=true){
  const path=join(scratch,`${++serial}.sqlite`);copyFileSync(seed,path);
  const db=new DatabaseSync(path,{enableForeignKeyConstraints:true});
  db.exec("INSERT INTO founders(id,name,email) VALUES(1001,'Synthetic Founder','founder@example.invalid'); INSERT INTO users(id,role,founder_id,name,email,is_active,subscription_tier) VALUES(2,'founder',1001,'Synthetic Founder','founder@example.invalid',1,'studio'); INSERT INTO projects(id,name,founder_id) VALUES(1,'Synthetic Venture',1001); INSERT INTO pitch_decks(id,project_id,version,slides,title,is_current,created_by) VALUES(10,1,1,'[]','Synthetic Deck',1,2)");
- if(upgrade)db.exec(migration);
+ if(upgrade){db.exec(migration);for(const sql of later)db.exec(sql);}
  const env:any={DB:d1Over(db),JWT_SECRET,ENVIRONMENT:'development'};
  const app=new Hono<any>().route('/api/decks',decks).route('/api/cycles/raise',cycleRaise);
  app.onError((err,c)=>c.json({error:err.message},(AUTH_ERROR_STATUSES[err.message]||500) as any));
