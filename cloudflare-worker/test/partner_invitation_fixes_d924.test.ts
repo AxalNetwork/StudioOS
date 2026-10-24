@@ -240,7 +240,7 @@ test('D924 backfill preserves distinct same-second attempts when one audit store
  const good=JSON.stringify({invitation_id:id,email_sent:true}),bad=JSON.stringify({invitation_id:id,email_sent:false});
  f.db.prepare("INSERT INTO admin_audit_log(admin_user_id,action,filters_json,exported_at) VALUES(5,'partner_invitation_resent',?,'2026-01-01 12:00:00')").run(good);
  const add=f.db.prepare("INSERT INTO activity_logs(action,details,created_at) VALUES('partner_invitation_resent',?,'2026-01-01 12:00:00')");add.run(good);add.run(good);add.run(bad);
- f.db.exec(migration);assert.equal(row(f,id).send_count,4);
+ f.db.exec(migration);assert.equal(row(f,id).send_count,4);assert.equal(row(f,id).last_send_ok,null,'conflicting outcomes at the same latest second have no reliable cross-store order');
  }finally{f.db.close();}
 });
 
@@ -271,6 +271,11 @@ test('D924 stored expired stage survives resend and the renewed public onboardin
  f.db.prepare("UPDATE partner_deals SET status='voided',void_reason='link_lapsed' WHERE envelope_id=?").run(envId);
  const sent=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(sent.status,200);assert.equal(sent.body.email_sent,true);assert.equal(row(f,id).status,'expired');assert.equal(row(f,id).last_send_ok,1);
  const publicApp=new Hono<any>().route('/',onboard);const opened=await publicApp.request('/'+row(f,id).token,{},f.env);assert.equal(opened.status,200);const body:any=await opened.json();assert.equal(body.invitation.status,'expired');assert.equal(body.deal.status,'voided');assert.equal((f.db.prepare('SELECT void_reason FROM partner_deals WHERE envelope_id=?').get(envId) as any).void_reason,'link_lapsed');
+ // The existing Back to proposals path can select a fresh deal; the old one
+ // stays voided and is never silently revived by resend.
+ f.db.prepare("INSERT INTO partner_profiles(email,invitation_id,full_name) VALUES('partner@example.invalid',?,'Synthetic Partner')").run(id);
+ const proposed=await publicApp.request('/'+row(f,id).token+'/propose',{method:'POST'},f.env);assert.equal(proposed.status,200);
+ const selected=await publicApp.request('/'+row(f,id).token+'/select',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({deal_type:'custom'})},f.env);assert.equal(selected.status,200);const fresh:any=await selected.json();assert.notEqual(fresh.deal_id,body.deal.id);assert.equal((f.db.prepare('SELECT status FROM partner_deals WHERE id=?').get(fresh.deal_id) as any).status,'proposed');assert.equal((f.db.prepare('SELECT status FROM partner_deals WHERE id=?').get(body.deal.id) as any).status,'voided');
  }finally{tx.restore();f.db.close();}
 });
 
@@ -282,4 +287,12 @@ test('D924 assigned migration 547 also applies after already-recorded migration 
  f.db.exec(migration);
  const deal:any=f.db.prepare('SELECT activation_error,void_reason FROM partner_deals WHERE invitation_id=?').get(id);assert.equal(deal.activation_error,'activation_failed');assert.equal(deal.void_reason,null);assert.equal(row(f,id).send_count,1);
  }finally{f.db.close();}
+});
+
+test('D924 unnamed resender uses Axal VC in mail while the audit retains the actual actor',async()=>{
+ const f=fixture();const {id,envId}=await agreement(f);credentials(f);f.db.prepare("UPDATE users SET name='' WHERE id=8").run();const tx=transport('ok');try{
+ const r=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(r.body.email_sent,true);
+ const text=Buffer.from(tx.mails[0].split('Content-Transfer-Encoding: base64')[1].split('\r\n\r\n')[1].split('\r\n--')[0].replace(/\s/g,''),'base64').toString('utf8');assert.match(text,/Axal VC/);assert.doesNotMatch(text,/resender@example.invalid/);
+ const audit:any=f.db.prepare("SELECT signer_id,signer_email FROM esign_audit_events WHERE envelope_id=? AND action='partner_signing_link_renewed'").get(envId);assert.equal(audit.signer_id,8);assert.equal(audit.signer_email,'resender@example.invalid');
+ }finally{tx.restore();f.db.close();}
 });

@@ -1965,7 +1965,7 @@ export async function renewPartnerInvitationSigningLink(
   if (!changed.meta?.changes) return null;
   const result = await sendAgreementAssignedEmailResult(
     env, recipient.recipient_email, recipient.recipient_name || '', envelope.document_title || 'Agreement',
-    `${env.APP_URL || 'https://axal.vc'}/esign/${token}`, actor.name || actor.email, 14,
+    `${env.APP_URL || 'https://axal.vc'}/esign/${token}`, actor.name || 'Axal VC', 14,
   );
   let previousLinkRestored = false;
   if (!result.ok) {

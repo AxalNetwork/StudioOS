@@ -10,6 +10,8 @@ ALTER TABLE partner_deals ADD COLUMN void_reason TEXT CHECK (void_reason IN ('in
 -- for the same invitation/action/time, with activity-only entries as fallback.
 -- Malformed audit JSON cannot identify an attempt. Missing outcomes stay unknown;
 -- an invitation itself records its initial attempt, plus each audited resend.
+-- Opposite outcomes in the newest second cannot be ordered across two stores;
+-- leave that historical last outcome unknown instead of choosing one.
 WITH activity_sends AS (
   SELECT *, ROW_NUMBER() OVER (
     PARTITION BY action, datetime(created_at), json_extract(details, '$.invitation_id'), json_extract(details, '$.email_sent')
@@ -46,5 +48,10 @@ WITH activity_sends AS (
 UPDATE partner_invitations
    SET last_sent_at = (SELECT strftime('%Y-%m-%dT%H:%M:%fZ', sent_at) FROM known WHERE invitation_id = partner_invitations.id AND latest = 1),
        send_count = 1 + (SELECT COUNT(*) FROM known WHERE invitation_id = partner_invitations.id AND action = 'partner_invitation_resent'),
-       last_send_ok = (SELECT ok FROM known WHERE invitation_id = partner_invitations.id AND latest = 1)
+       last_send_ok = (
+         SELECT CASE WHEN COUNT(*) = COUNT(ok) AND COUNT(DISTINCT ok) = 1 THEN MAX(ok) ELSE NULL END
+           FROM known
+          WHERE invitation_id = partner_invitations.id
+            AND datetime(sent_at) = (SELECT MAX(datetime(sent_at)) FROM known WHERE invitation_id = partner_invitations.id)
+       )
  WHERE id IN (SELECT invitation_id FROM known);
