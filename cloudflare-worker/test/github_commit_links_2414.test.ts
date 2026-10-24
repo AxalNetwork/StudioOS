@@ -131,3 +131,17 @@ test('#2414: a long annotated chain cannot read beyond the six-request cap', asy
   assert.deepEqual(result, { sha: null, partial: false });
   assert.equal(calls, 6);
 });
+
+
+test('#2414: migration 534 preserves existing rows with unknown commit evidence', () => {
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  try {
+    const baseline = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
+    for (const table of ['mvp_features', 'roadmap_okrs']) db.exec(tableFromBaseline(baseline, table));
+    db.exec(readFileSync(new URL('../sql/migrations/499_github_roadmap.sql', import.meta.url), 'utf8'));
+    db.exec("INSERT INTO mvp_features(id, project_id, title) VALUES(7, 101, 'Existing feature'); INSERT INTO roadmap_releases(id, project_id, repository, tag) VALUES(9, 101, 'acme/app', 'v1')");
+    db.exec(readFileSync(new URL('../sql/migrations/534_github_commit_links.sql', import.meta.url), 'utf8'));
+    assert.deepEqual({ ...db.prepare('SELECT title, merge_commit_sha FROM mvp_features WHERE id = 7').get() }, { title: 'Existing feature', merge_commit_sha: null });
+    assert.deepEqual({ ...db.prepare('SELECT tag, commit_sha FROM roadmap_releases WHERE id = 9').get() }, { tag: 'v1', commit_sha: null });
+  } finally { db.close(); }
+});
