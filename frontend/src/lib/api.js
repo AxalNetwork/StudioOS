@@ -60,6 +60,7 @@ export * from './api/memberCredits.js';
 export * from './api/mercuryAttestations.js';
 export * from './api/mercuryInvestor.js';
 export * from './api/mercuryPersonal.js';
+export * from './api/narrative.js';
 export * from './api/newsletter.js';
 export * from './api/partnerSettlements.js';
 export * from './api/productTesting.js';
@@ -5682,13 +5683,21 @@ export const eventsPublic = {
 
 // Admin event review queue (§8.3).
 export const adminEvents = {
-  list: ({ status, limit = 50, offset = 0 } = {}) => {
+  // D918: status takes one word or a list; the other filters and the sort are
+  // the Worker's words (visibility, when, price, featured, q, sort, dir).
+  list: ({ status, visibility, when, price, featured, q, sort, dir, limit = 50, offset = 0 } = {}) => {
     const qs = new URLSearchParams();
-    if (status) qs.set('status', status);
+    if (status) qs.set('status', Array.isArray(status) ? status.join(',') : status);
+    for (const [k, v] of Object.entries({ visibility, when, price, q, sort, dir })) if (v) qs.set(k, v);
+    if (featured != null) qs.set('featured', featured ? '1' : '0');
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     return request(`/admin/events?${qs.toString()}`);
   },
+  overview: (weeks = 12) => request(`/admin/events/overview?weeks=${encodeURIComponent(weeks)}`),
+  summary: (id) => request(`/admin/events/${id}/summary`),
+  history: (id) => request(`/admin/events/${id}/history`),
+  compPreview: (id) => request(`/admin/events/${id}/comp-preview`),
   get: (id) => request(`/admin/events/${id}`),
   approve: (id) => request(`/admin/events/${id}/approve`, { method: 'POST', body: '{}' }),
   reject: (id, reason) => request(`/admin/events/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),

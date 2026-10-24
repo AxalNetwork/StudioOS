@@ -202,7 +202,7 @@ export async function recordPartnerActivationFailure(env: Env, envelopeId: numbe
 
 export async function activatePartnerDealOnSignature(
   env: Env, envelopeId: number,
-): Promise<{ activated: boolean; partner_deal_id: number; user_id: number | null } | null> {
+): Promise<{ activated: boolean; partner_deal_id: number; user_id: number | null; void_reason?: 'invitation_revoked' | 'link_lapsed' | 'admin_revoked' } | null> {
   try {
     return await activateSignedPartnerDeal(env, envelopeId);
   } catch (error) {
@@ -214,7 +214,7 @@ export async function activatePartnerDealOnSignature(
 async function activateSignedPartnerDeal(
   env: Env,
   envelopeId: number,
-): Promise<{ activated: boolean; partner_deal_id: number; user_id: number | null } | null> {
+): Promise<{ activated: boolean; partner_deal_id: number; user_id: number | null; void_reason?: 'invitation_revoked' | 'link_lapsed' | 'admin_revoked' } | null> {
   const deal: any = await env.DB.prepare(
     `SELECT pd.*, pi.recipient_email, pi.recipient_name, pi.invited_by_user_id,
             pi.status AS invitation_status, pi.expires_at AS invitation_expires_at,
@@ -239,11 +239,11 @@ async function activateSignedPartnerDeal(
   if (deal.invitation_status === 'revoked') {
     try {
       await env.DB.prepare(
-        `UPDATE partner_deals SET status = 'voided' WHERE id = ? AND status != 'active'`,
+        `UPDATE partner_deals SET status = 'voided', void_reason = COALESCE(void_reason, 'invitation_revoked') WHERE id = ? AND status != 'active'`,
       ).bind(deal.id).run();
     } catch { /* best-effort */ }
     console.warn('[partnerDeals] activation blocked — invitation revoked', { deal_id: deal.id });
-    return { activated: false, partner_deal_id: deal.id, user_id: null };
+    return { activated: false, partner_deal_id: deal.id, user_id: null, void_reason: deal.void_reason || 'invitation_revoked' };
   }
   if (deal.invitation_expires_at &&
       new Date(deal.invitation_expires_at).getTime() <= Date.now()) {
@@ -252,11 +252,11 @@ async function activateSignedPartnerDeal(
         `UPDATE partner_invitations SET status = 'expired' WHERE id = ? AND status NOT IN ('signed','revoked')`,
       ).bind(deal.invitation_id).run();
       await env.DB.prepare(
-        `UPDATE partner_deals SET status = 'voided' WHERE id = ? AND status != 'active'`,
+        `UPDATE partner_deals SET status = 'voided', void_reason = COALESCE(void_reason, 'link_lapsed') WHERE id = ? AND status != 'active'`,
       ).bind(deal.id).run();
     } catch { /* best-effort */ }
     console.warn('[partnerDeals] activation blocked — invitation expired', { deal_id: deal.id });
-    return { activated: false, partner_deal_id: deal.id, user_id: null };
+    return { activated: false, partner_deal_id: deal.id, user_id: null, void_reason: deal.void_reason || 'link_lapsed' };
   }
 
   // Ensure partner user exists. Match by email (case-insensitive). If found,
