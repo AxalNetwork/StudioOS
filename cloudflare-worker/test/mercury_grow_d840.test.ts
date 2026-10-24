@@ -307,6 +307,8 @@ test('route: each fed module carries its Mercury part; the team reads figures, a
     for (const who of [ADMIN, PARTNER, ADVISOR, INVESTOR]) {
       const theirs = await call(env, who, 'GET', `/api/cycles/grow/modules/${slug}?project=${PID}`);
       if (who === INVESTOR && theirs.status === 403) continue; // an investor may read nothing of the venture at all
+      // D889 (#2438): a partner with no tie to the venture reads nothing of it either.
+      if (who === PARTNER) { assert.equal(theirs.status, 403, `untied partner on ${slug}`); continue; }
       assert.equal(theirs.status, 200, `${who} reads ${slug}`);
       assert.deepEqual(theirs.body.parts.from_mercury, { state: 'team_only', reason: TEAM_ONLY }, `${who} on ${slug}`);
       assert.doesNotMatch(JSON.stringify(theirs.body), /610000|1000000|"cents":800000/, `no Mercury figure reaches ${who} on ${slug}`);

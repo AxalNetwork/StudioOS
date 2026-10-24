@@ -504,8 +504,8 @@ async function growIndex(x: GrowCtx, figures: Figure[], cards: Card[]): Promise<
 
 /**
  * Grow's focus and index; no meter (the canvas draws none). The write gate is
- * Grow's own (`canAccessProject(…, { write: true })`): it admits partners, as
- * Grow's writes do, and refuses an advisor member.
+ * Grow's own (`canAccessProject(…, { write: true })`): it admits an owner or
+ * co-founder member, a partner only as one (D889), and refuses an advisor member.
  */
 export async function growPhone(x: GrowCtx, user: User, figures: Figure[], cards: Card[]): Promise<Phone> {
   const [focus, index] = await Promise.all([
