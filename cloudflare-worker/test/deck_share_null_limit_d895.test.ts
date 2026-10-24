@@ -61,7 +61,10 @@ test('549 preserves every token field and telemetry reference, changing only the
  const before=f.db.prepare('SELECT * FROM pitch_deck_share_tokens ORDER BY id').all() as any[];
  const columns=f.db.prepare('PRAGMA table_info(pitch_deck_share_tokens)').all() as any[];
  const views=f.db.prepare('SELECT * FROM deck_share_views').all(),conversions=f.db.prepare('SELECT * FROM deck_share_conversions').all();
- f.db.exec(migration);
+ const indexes=()=> (f.db.prepare('PRAGMA index_list(pitch_deck_share_tokens)').all() as any[]).map(i=>({name:i.origin==='u'?'unique constraint':i.name,unique:i.unique,origin:i.origin,partial:i.partial,columns:(f.db.prepare('SELECT name FROM pragma_index_info(?) ORDER BY seqno').all(i.name) as any[]).map(c=>c.name)})).sort((a,b)=>a.name.localeCompare(b.name));
+ const oldIndexes=indexes();
+ assert.doesNotThrow(()=>f.db.exec(migration));
+ assert.deepEqual(indexes(),oldIndexes);
  assert.deepEqual((f.db.prepare('SELECT * FROM pitch_deck_share_tokens ORDER BY id').all() as any[]).map(r=>({...r})),before.map(r=>({...r,view_limit:r.view_limit===2147483647?null:r.view_limit})));
  assert.deepEqual((f.db.prepare('PRAGMA table_info(pitch_deck_share_tokens)').all() as any[]).map(r=>({...r})),columns.map(c=>({...c,notnull:c.name==='view_limit'?0:c.notnull})));
  assert.deepEqual(f.db.prepare('SELECT * FROM deck_share_views').all(),views);assert.deepEqual(f.db.prepare('SELECT * FROM deck_share_conversions').all(),conversions);
@@ -147,4 +150,10 @@ test('549 metric compatibility keeps historical sentinel NULL and real finite va
  assert.deepEqual(deckShareMetrics({view_limit:2147483647,view_count:0}),{view_limit:null,view_count:0,exhausted:false});
  assert.deepEqual(deckShareMetrics({view_limit:null,view_count:2147483648}),{view_limit:null,view_count:2147483648,exhausted:false});
  assert.deepEqual(deckShareMetrics({view_limit:1,view_count:1,used_at:'2020-01-01'}),{view_limit:1,view_count:1,exhausted:true});
+});
+
+test('549 a finite cap rejects an exhausted count even when used_at is missing',async()=>{
+ const f=fixture();try{const link=await make(f,{viewLimit:3});f.db.prepare('UPDATE pitch_deck_share_tokens SET view_count=3,used_at=NULL WHERE id=?').run(link.id);
+ assert.equal((await open(f,link.token)).status,410);assert.equal(row(f,link.id).view_count,3);assert.equal(row(f,link.id).used_at,null);assert.equal(nviews(f),0);
+ }finally{f.db.close();}
 });
