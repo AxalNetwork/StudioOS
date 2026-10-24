@@ -251,7 +251,9 @@ const CHROME = (() => {
 const SECOND_MOUNTS = new Map([
   // The Admin Console's own tabs. These two are also the `same-component-elsewhere`
   // exemptions, so one table feeds both and they cannot disagree.
-  ['frontend/src/pages/AdminPage.jsx', ['AdminNetworkProfiles', 'AdminSpinoutLab']],
+  // D937 (#2374): AdminSpinoutLab left the console; ?tab=lab-applications
+  // forwards to the Lab's own page before the console mounts.
+  ['frontend/src/pages/AdminPage.jsx', ['AdminNetworkProfiles']],
   // The founder-journey walkthrough renders the real apply page on simulated data
   // (its own comment at AdminSpinoutLab.jsx:743-745 describes the read-only tour).
   ['frontend/src/pages/admin/AdminSpinoutJourneyPreview.jsx', ['SpinoutLabApplyPage']],
@@ -483,7 +485,7 @@ test('every in-page /admin link points at a registered route', () => {
 test('a redirect-only /admin route is excluded, and its target is reachable', () => {
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
-  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/community', '/admin/held/insights', '/admin/news'],
+  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/community', '/admin/held/insights', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
@@ -492,6 +494,9 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   const COMPONENT_TARGETS = {
     HeldInsightsRedirect: ['/admin/insights', 'frontend/src/pages/admin/insights/insightsModel.js', 'INSIGHTS_PATH'],
     HeldCommunityRedirect: ['/admin/community', 'frontend/src/pages/admin/community/communityModel.js', 'COMMUNITY_PATH'],
+    // D937 (#2374): the Lab and its preview moved under Programs.
+    LabRedirect: ['/admin/programs/spinout-lab', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PATH'],
+    LabPreviewRedirect: ['/admin/programs/spinout-lab/preview', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PREVIEW_PATH'],
   };
   for (const path of REDIRECTS) {
     const route = BY_PATH.get(path);
@@ -659,18 +664,14 @@ test('D648: every composed console file is imported by the page it is credited t
   }
 });
 
-test('the Spin-Out Lab preview button renders in both framings', () => {
-  // The one place file-level attribution over-approximates: the scanner sees the
-  // door in the file and cannot see a conditional around it. If the button moved
-  // inside `{standalone && …}` it would only exist on a route that has no row,
-  // and nothing else here would notice.
-  const src = read('frontend/src/pages/admin/AdminSpinoutLab.jsx');
-  assert.match(src, /if \(!standalone\) return body;/,
-    'AdminSpinoutLab no longer returns `body` in the embedded framing');
-  const bodyAt = src.indexOf('const body = (');
-  const buttonAt = src.indexOf("navigate('/admin/spinout-lab/preview')");
-  const returnAt = src.indexOf('if (!standalone) return body;');
-  assert.ok(bodyAt >= 0 && buttonAt > bodyAt && buttonAt < returnAt,
-    'the preview button is no longer inside `body`, so it does not render in the '
-    + '/admin?tab=lab-applications framing and /admin/spinout-lab/preview loses its door');
+test('the Spin-Out Lab preview door is in the Lab header on every tab', () => {
+  // D937 (#2374): the preview's one door is the Lab header's action, drawn on
+  // every tab. File-level attribution cannot see a condition around it, so
+  // this pins that it is not inside the Overview-only actions.
+  const src = read('frontend/src/pages/admin/lab/AdminLab.jsx');
+  const actionsAt = src.indexOf('const actions = (');
+  const doorAt = src.indexOf('to="/admin/programs/spinout-lab/preview"');
+  const overviewOnlyAt = src.indexOf("{tab === 'overview' && (", actionsAt);
+  assert.ok(actionsAt >= 0 && doorAt > actionsAt && doorAt < overviewOnlyAt,
+    'the preview door is no longer an unconditional header action, so /admin/programs/spinout-lab/preview may lose its door');
 });

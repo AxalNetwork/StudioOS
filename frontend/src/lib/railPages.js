@@ -271,7 +271,9 @@ const ADMIN = [
   own('/admin/best-fit', key(AD, 'Approvals', 'Best fit')),
   own('/admin/due-diligence', key(AD, 'Approvals', 'Due diligence')),
   alias('/due-diligence', key(AD, 'Approvals', 'Due diligence'), 'The same Due diligence list and cases at the path the other profiles share (D774).'),
-  own('/admin?tab=lab-applications', key(AD, 'Approvals', 'Spin-Out applications')),
+  // D937 (#2374): the Lab left the Admin Console for Programs. The keys keep
+  // their canvas names (#2375); the addresses are the Lab's.
+  own('/admin/programs/spinout-lab/applications', key(AD, 'Approvals', 'Spin-Out applications')),
   own('/admin/spinout-moderation', key(AD, 'Approvals', 'Spin-Out moderation')),
   own('/admin/events', key(AD, 'Approvals', 'Events')),
   own('/admin/jobs', key(AD, 'Approvals', 'Jobs')),
@@ -279,7 +281,7 @@ const ADMIN = [
   own('/admin/advisor-cohorts', key(AD, 'Approvals', 'Advisor cohort access')),
   own('/admin/held/programs', key(AD, 'Programs')),
   alias('/branch/programs', key(AD, 'Programs'), 'The branch’s Programs page.'),
-  own('/admin/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),
+  own('/admin/programs/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),
   own('/admin/profiling-trends', key(AD, 'Programs', 'Profiling trends')),
   own('/admin/community', key(AD, 'Community')),
   alias('/branch/community', key(AD, 'Community'), 'The branch’s Community page.'),
@@ -460,8 +462,7 @@ export const NO_RAIL_ROUTES = [
   { route: '/due-diligence/:uid', roles: ['partner', 'investor', 'advisor'], why: 'Due diligence’s rail is the Admin board’s (D774, AdminBoardFrame); a partner, investor or advisor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/partner/insights', roles: ['investor'], why: 'Demand’s rail is the operating partner’s (D773: PartnerWorkspaceTabs draws it for a partner only); an investor on it gets the page alone until their profile’s rollout gives them one.' },
   { route: '/comarketing', roles: ['founder', 'investor'], why: 'Visibility’s rail is the operating partner’s (D773: PartnerWorkspaceTabs draws it for a partner only); a founder gets the Grow editor and an investor the page alone, and neither profile’s map has a co-marketing board.' },
-  { route: '/admin/spinout-lab', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
-  { route: '/admin/spinout-lab/preview', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
+  { route: '/admin/programs/spinout-lab', prefix: true, roles: ['admin'], why: 'A Spin-Out Lab page: D317 keeps Eadwyn out of the Lab (D774), and D937 (#2374) keeps it so at the Lab’s address under Programs. The boards keep their keys.' },
   { route: '/admin/spinout-moderation', roles: ['admin'], why: 'A Spin-Out Lab console: D317 keeps Eadwyn out of the Lab (D774). The board keeps its key; `/admin`’s Spin-Out Lab tab draws the page alone too.' },
 ];
 

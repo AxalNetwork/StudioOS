@@ -84,6 +84,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/consoles',       'one file per Admin Console tool (D648)'],
   ['frontend/src/pages/admin/contracts',      'the Contracts desk (D647), its Structure of the Fund sheet and the template editor (D717)'],
   ['frontend/src/pages/admin/events',         'the admin Events desk (D915): its tabs, the event page, the dialogs and the model they read'],
+  ['frontend/src/pages/admin/lab',            'the Spin-Out Lab\'s admin page under Programs (D937)'],
   ['frontend/src/pages/admin/fundAdmin',      'the fund administration console (D714) and, since D880, Axal VC\'s own Mercury connections'],
   ['frontend/src/pages/admin/partners',       'the admin Partner invitations desk (D923): its tabs, the records, the dialogs and the model they read'],
   ['frontend/src/pages/account',              'the Account center\'s sections, one file per canvas section (D568, D642)'],

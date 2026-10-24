@@ -226,7 +226,7 @@ export const SIDEBAR_GROUPS = {
       { to: '/admin/held/approvals', icon: Inbox, label: 'Approvals',
         match: ['/admin/lp-applications', '/admin/refer-earn', '/admin/best-fit', '/admin/due-diligence', '/admin/spinout-moderation'] },
       { to: '/admin/held/programs', icon: Calendar, label: 'Programs',
-        match: ['/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
+        match: ['/admin/programs/spinout-lab', '/admin/spinout-lab', '/admin/advisor-cohorts', '/admin/profiling-trends'] },
       // D930 (#2367): Community's own address; /admin/held/community redirects here.
       { to: '/admin/community', icon: Network, label: 'Community', match: ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/partner-invitations'] },
 

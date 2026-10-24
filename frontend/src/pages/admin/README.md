@@ -78,6 +78,11 @@ drawn from the Worker's act table — see its own README.
 Community overview canvas from the reads that exist; `/admin/held/community`
 redirects to it — see its own README.
 
+`lab/` is D937's Spin-Out Lab page at `/admin/programs/spinout-lab`, built to
+the Spin-Out Lab canvas under the shared admin page header (D936). Its tabs
+mount `AdminSpinoutLab.jsx`'s consoles one section at a time;
+`/admin/spinout-lab` and its `/preview` redirect to it — see its own README.
+
 `insights/` is D893's Admin › Insights at `/admin/insights`, built to the Admin
 Insights canvas from the reads that exist; `/admin/held/insights` redirects to
 it — see its own README.

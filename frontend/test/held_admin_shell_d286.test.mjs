@@ -188,7 +188,7 @@ test('off a branch, Studio card Open links are the S20 rows and never /branch/*'
 const S22_LANES = [
   [1, 'Core', 'LP applications', '/admin/lp-applications', '<LaneState glance={glance} laneKey="lp" />'],
   [2, 'Core', 'Referrals', '/admin/refer-earn', '<LaneState glance={glance} laneKey="referrals" />'],
-  [3, 'Core', 'Cohort applications', '/admin/spinout-lab', '<LaneState glance={glance} laneKey="cohort" />'],
+  [3, 'Core', 'Cohort applications', '/admin/programs/spinout-lab/applications', '<LaneState glance={glance} laneKey="cohort" />'],
   // D506 — lane 4 links the console D442 built; HQ-held accounts reach held cases from here.
   [4, 'Core', 'Spinout moderation', '/admin/spinout-moderation', '<LaneState glance={glance} laneKey="moderation" />'],
   [5, 'Core', 'Content to HQ', null, 'Not applicable to HQ-held accounts'],
@@ -230,7 +230,7 @@ test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation lin
     .filter((e) => [e, ...(e.also || [])].some((p) => p.tier === 'Admin' && p.row === 'Approvals'))
     .map((e) => e.route));
   for (const [, , lane, route] of S22_LANES) {
-    if (!route || route === '/admin/spinout-lab') continue; // the Lab console is reached through its tab's placement
+    if (!route || route === '/admin/programs/spinout-lab/applications') continue; // the Lab's queue is placed on Programs (D937), not Approvals
     // D506 — the moderation console (D442) was built after the H35 map was drawn and is
     // not a legacy row, so the map does not place it (admin_placement_h35 pins the map
     // to H35's question); this lane and the branch board are its two doors.

@@ -9,6 +9,8 @@ const MOVED_TABS = {
   legal: '/admin/contracts?moved=legal',
   'integration-keys': '/admin/integration-keys',
   github: '/admin/integration-keys#github',
+  // D937 (#2374): the Spin-Out Lab left the Admin Console for Programs.
+  'lab-applications': '/admin/programs/spinout-lab/applications?moved=lab-applications',
 };
 
 export function legacyContractsTarget(search) {

@@ -170,9 +170,9 @@ export const RENDER_NOT_YET = {
   2100: [
     'Admin /branch',
     'Admin /admin/fund-admin',
-    'Admin /admin?tab=lab-applications',
+    'Admin /admin/programs/spinout-lab/applications',
     'Admin /admin/spinout-moderation',
-    'Admin /admin/spinout-lab',
+    'Admin /admin/programs/spinout-lab',
     'Admin /admin/wellbeing',
   ],
   2101: [

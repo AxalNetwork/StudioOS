@@ -137,6 +137,8 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/held/insights' }, // D893 (#2366): Insights moved to /admin/insights
   { path: '/admin/partners' }, // D923 (#2370): Partner invitations moved to /admin/partner-invitations
   { path: '/admin/held/community' }, // D930 (#2367): Community moved to /admin/community
+  { path: '/admin/spinout-lab', keep: true }, // D937 (#2374): the Lab moved under Programs; sent cohort notices carry it (#2375)
+  { path: '/admin/spinout-lab/preview' }, // D937 (#2374): the preview moved with the Lab
 
 ]);
 

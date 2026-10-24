@@ -51,7 +51,7 @@ export const ADMIN_BOARDS = [
   { id: 'S9', section: 'Approvals', module: 'Referrals', route: '/admin/refer-earn', files: ['pages/admin/ReferralReview.jsx'], rail: FRAME },
   { id: 'S10', section: 'Approvals', module: 'Best fit', route: '/admin/best-fit', files: ['pages/admin/AdminBestFitPage.jsx'], rail: FRAME },
   { id: 'S11', section: 'Approvals', module: 'Due diligence', route: '/admin/due-diligence', files: ['pages/AdminDueDiligencePage.jsx', 'pages/AdminDueDiligenceCasePage.jsx'], rail: FRAME },
-  { id: 'S12', section: 'Approvals', module: 'Spin-Out applications', route: '/admin/spinout-lab', files: ['pages/admin/AdminSpinoutLab.jsx'], rail: null, noRail: SPINOUT },
+  { id: 'S12', section: 'Approvals', module: 'Spin-Out applications', route: '/admin/programs/spinout-lab', files: ['pages/admin/lab/AdminLab.jsx', 'pages/admin/AdminSpinoutLab.jsx'], rail: null, noRail: SPINOUT },
   { id: 'S13', section: 'Approvals', module: 'Spin-Out moderation', route: '/admin/spinout-moderation', files: ['pages/admin/SpinoutModerationPage.jsx'], rail: null, noRail: SPINOUT },
   { id: 'S14', section: 'Approvals', module: 'Exploring members', route: '/admin/exploring', files: ['pages/admin/AdminExploring.jsx'], rail: FRAME, alias: 'S3' },
   { id: 'S15', section: 'Approvals', module: 'Events', route: '/admin/events', files: ['pages/admin/AdminEventsPage.jsx'], rail: FRAME },
@@ -59,7 +59,7 @@ export const ADMIN_BOARDS = [
   { id: 'S17', section: 'Approvals', module: 'Communities', route: '/admin/circles', files: ['pages/admin/AdminCirclesPage.jsx'], rail: FRAME },
   { id: 'S18', section: 'Approvals', module: 'Advisor cohort access', route: '/admin/advisor-cohorts', files: ['pages/admin/AdvisorCohortAssignments.jsx'], rail: FRAME },
   { id: 'S19', section: 'Programs', module: null, route: '/admin/held/programs', files: ['pages/admin/HeldPrograms.jsx'], rail: HELD },
-  { id: 'S20', section: 'Programs', module: 'Spin-Out Lab', route: '/admin/spinout-lab', files: ['pages/admin/AdminSpinoutLab.jsx'], rail: null, noRail: SPINOUT, alias: 'S12' },
+  { id: 'S20', section: 'Programs', module: 'Spin-Out Lab', route: '/admin/programs/spinout-lab', files: ['pages/admin/lab/AdminLab.jsx', 'pages/admin/AdminSpinoutLab.jsx'], rail: null, noRail: SPINOUT, alias: 'S12' },
   { id: 'S21', section: 'Programs', module: 'Advisor cohorts', route: '/admin/advisor-cohorts', files: ['pages/admin/AdvisorCohortAssignments.jsx'], rail: FRAME, alias: 'S18' },
   // S22: Assessment Studio was removed at the owner's request (2026-10-21); its ID stays retired.
   { id: 'S23', section: 'Programs', module: 'Profiling trends', route: '/admin/profiling-trends', files: ['pages/admin/AdminProfilingTrends.jsx'], rail: FRAME },
