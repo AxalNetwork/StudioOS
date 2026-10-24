@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Community</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Community</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One overview, with charts, of what members do in Community: events, jobs, circles, the advisors and partners roster, and wellbeing, and what waits on the admin. One studio’s figures, HQ-held accounts on axal.vc. The page decides nothing; every Review opens the console that decides.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="20">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Community Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['CM1', 'Community overview · desktop 1440 · light', 'Eight tiles, activity by week, then events and who takes part, jobs and circles, wellbeing and what needs a decision, recent activity, the two figures no store holds, and the consoles strip.', [D('CM1')]],
+      ['CM2', 'Community overview · desktop 1440 · dark', 'CM1 in the dark colours; violet becomes #a78bfa in the charts.', [D('CM2')]],
+      ['CM3', 'Events · lightbox over the overview', 'A centred lightbox rather than a right drawer, per your rule against side panels. Search, filters, sort and pages; a row opens the event in the Events console.', [D('CM3', false, 1100)]],
+      ['CM4', 'Job postings · lightbox', 'Every posting with status, posted date, days open and applications. A row opens it in the job board.', [D('CM4', false, 1100)]],
+      ['CM5', 'Circles · lightbox', 'Members and activity carry the As entered tag: an admin types them on each circle.', [D('CM5', false, 1100)]],
+      ['CM6', 'Recent activity · lightbox', 'Everything that happened, newest first, with kind and date filters. No member is named.', [D('CM6', false, 1100)]],
+      ['CM7', 'Chart as table', 'The weekly chart with Table on. The current week says so far; the week with no expert bookings shows a dash.', [D('CM7', false, 1200)]],
+      ['CM8', 'Empty', 'A studio where nothing has happened: real zeros in the tiles and one line in each chart card.', [D('CM8')]],
+      ['CM9', 'Loading', 'Header, scope chip and period control are live; every tile and card reads.', [D('CM9')]],
+      ['CM10', 'Error', 'A · the job board failed: its card and tile say Unreadable while every other card renders. B · the whole read failed; the consoles strip still works.', [D('CM10a', 'A · One block failed'), D('CM10b', 'B · Whole read failed', 1440, 640)]],
+      ['CM11', 'No permission', 'A member who is not an admin, in their own shell.', [D('CM11', false, 1440, 720)]],
+      ['CM12', 'Phone · 390 wide', 'Tiles two to a row and charts stacked with the legend above; a lightbox becomes a full-screen page with a back link.', [P('CM12a', 'Overview'), P('CM12b', 'Events'), P('CM12c', 'Needs a decision · activity')]],
+      ['CM13', 'Moved notice', 'Arriving from /admin/held/community: one dismissible line under the title.', [D('CM13', false, 1440, 760)]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

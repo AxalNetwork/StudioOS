@@ -109,6 +109,21 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-24 — Admin · Community overview (#2367)
+
+The owner's artifacts `3z8Z58GFCcS8SWMv4YbWiH` and `GewVUumBA5KASoPYNGUJuB`
+came from S1's prompt on #2367, as the usual pair:
+- `Community · Boards.dc.html` is the board grid (CM1 to CM13, with the
+  lettered boards CM10 a–b and CM12 a–c), the output of
+  `scripts/read-canvas.mjs` as is;
+- `Community Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in whitespace,
+  the font link and `data-dc-script=""`.
+
+One change from the prompt: CM3 to CM6 are centred lightboxes, not right
+drawers. The board's caption gives the owner's rule against side panels. No
+value was edited. S1's integration lands next and records its grade here.
+
 ## Landed 2026-10-24 — Pitch deck studio (D894, #2434)
 
 The owner's artifacts `W5hRpjNZ4nsGBTJ7gd71Dy` and `RYeTPyEEdrmRnuUDktJcL3`
