@@ -114,7 +114,7 @@ strength of a live route would empty the queue of the work it exists to track.
 The owner's artifacts `W5hRpjNZ4nsGBTJ7gd71Dy` and `RYeTPyEEdrmRnuUDktJcL3`
 came from S21's prompt on #2434, as the usual pair:
 - `Pitch Deck Studio · Boards.dc.html` is the board grid (PD1 to PD28, with the
-  lettered boards: 41 in all), the output of `scripts/read-canvas.mjs` as is;
+  lettered boards: 39 in all), the output of `scripts/read-canvas.mjs` as is;
 - `Pitch Deck Studio Page.dc.html` is the page, in the copy the grid's bundle
   carries.
 

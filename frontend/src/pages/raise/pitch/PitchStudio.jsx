@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -8,9 +8,9 @@ import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
 import DeckReviewerPage from '../../DeckReviewerPage';
 import {
-  EDIT_PATH, EMPTY_DECK, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
-  asList, coverOf, currentVersion, dayLabel, isReadOnly, linkRows, mmss, newLinkHref, noViewsYet,
-  readerStats, slideCaption, slideSeconds, ventureQuery, versionLabel, versionRows, weeklyViews,
+  EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
+  asList, coverOf, currentVersion, dayLabel, funnelRows, isReadOnly, linkPage, linkRows, mmss, newLinkHref,
+  readerStats, slideCaption, slideSeconds, ventureQuery, versionLabel, versionRows, viewsState, weeklyViews,
 } from './pitchStudioModel';
 
 /**
@@ -22,14 +22,16 @@ import {
  *   /raise/pitch/review     Review (PD14): today's reviewer, until #2434 part 6
  *                           reviews a version of the deck itself.
  *   /raise/pitch/analytics  Share & analytics (PD19): one version's readers,
- *                           seconds per slide, and every investor link with
- *                           Withdraw.
+ *                           seconds per slide, and every investor link, a page
+ *                           at a time, with Withdraw on a live one.
  *   /raise/pitch/edit       the deck builder (PitchWorkspacePage), until #2434
  *                           part 4 builds the editor (PD1).
  *
- * WHO. The venture's founder works here. An admin (and anyone else the route
- * admits) reads it: no New deck, no New link, no Withdraw (PD21). The Worker
- * still lets an admin write; #2434 part 1 closes that.
+ * WHO. The venture's founder works here, as does anyone else the route admits
+ * who is not an admin. An admin reads it: no New deck, no New link, no Withdraw,
+ * and a "Read only." banner (PD21). Review is the reviewer's own tool, with its
+ * own writes, so it draws no banner. The Worker still lets an admin write;
+ * #2434 part 1 closes that.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -49,9 +51,21 @@ const SKEL = 'animate-pulse rounded-[9px] bg-axal-hairline dark:bg-gray-800';
 const idle = { status: 'idle', data: null };
 const loading = { status: 'loading', data: null };
 
+/** A re-read of the same thing keeps what is on screen until it answers; anything else starts from loading. */
+const again = (key) => (s) => (s.status === 'ok' && s.for === key ? { ...s, reading: true } : { ...loading, for: key });
+
+/** One read into its state, unless the run that started it is no longer current (`alive()` false). */
+const settle = (alive, set, key) => (p) => p.then(
+  (data) => { if (alive()) set({ status: 'ok', data, for: key }); return data; },
+  (e) => { if (alive()) set({ status: 'error', data: null, error: e, for: key }); reportError('pitch-studio:read', e); return undefined; },
+);
+
 /**
  * The studio's reads. The venture comes from `?project_id=` (else the first
  * one, written back); each read answers alone, and `reload()` reads them again.
+ * A re-read of the same venture (Try again, a page of links, the re-read after
+ * a Withdraw) keeps the tab on screen until it answers. A run that has been
+ * superseded writes nothing, so a late answer never overwrites a newer one.
  */
 function useStudioReads() {
   const [params, setParams] = useSearchParams();
@@ -61,42 +75,58 @@ function useStudioReads() {
   const [module, setModule] = useState(idle);
   const [deck, setDeck] = useState(idle);
   const [engagement, setEngagement] = useState(idle);
+  const [linksPage, setLinksPage] = useState({ for: null, page: 1 });
   const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    let live = true;
-    const settle = (set) => (p) => p.then(
-      (data) => { if (live) set({ status: 'ok', data }); return data; },
-      (e) => { if (live) set({ status: 'error', data: null, error: e }); reportError('pitch-studio:read', e); return undefined; },
-    );
-    (async () => {
-      setProjects(loading);
-      const listed = await settle(setProjects)(api.listProjects());
-      const list = asList(listed, 'items', 'projects');
-      const chosen = list.find((p) => String(p.id) === String(requested)) || list[0] || null;
-      if (!chosen) { setVersions(idle); setModule(idle); setDeck(idle); setEngagement(idle); return; }
-      if (String(chosen.id) !== String(requested)) {
-        setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(chosen.id)); return next; }, { replace: true });
-      }
-      setVersions(loading); setModule(loading);
-      const [v] = await Promise.all([
-        settle(setVersions)(api.deckListVersions(chosen.id)),
-        settle(setModule)(cyclesApi.module('raise', chosen.id, 'pitch-deck')),
-      ]);
-      const current = currentVersion(asList(v, 'versions', 'decks'));
-      if (!current?.id) { setDeck(idle); setEngagement(idle); return; }
-      setDeck(loading); setEngagement(loading);
-      await Promise.all([
-        settle(setDeck)(api.deckGet(current.id).then((r) => r?.deck || r)),
-        settle(setEngagement)(api.deckEngagement(current.id)),
-      ]);
-    })();
-    return () => { live = false; };
-  }, [requested, tick]);
 
   const list = asList(projects.data, 'items', 'projects');
   const project = list.find((p) => String(p.id) === String(requested)) || list[0] || null;
-  return { projects, project, versions, module, deck, engagement, reload: () => setTick((t) => t + 1) };
+  const projectId = project?.id ?? null;
+  const page = linksPage.for === projectId ? linksPage.page : 1;
+
+  useEffect(() => {
+    let live = true;
+    setProjects(again('ventures'));
+    settle(() => live, setProjects, 'ventures')(api.listProjects());
+    return () => { live = false; };
+  }, [tick]);
+
+  useEffect(() => {
+    if (projectId == null || String(projectId) === String(requested)) return;
+    setParams((old) => { const next = new URLSearchParams(old); next.set('project_id', String(projectId)); return next; }, { replace: true });
+  }, [projectId, requested, setParams]);
+
+  useEffect(() => {
+    if (projectId == null) { setVersions(idle); setDeck(idle); setEngagement(idle); return undefined; }
+    let live = true;
+    const alive = () => live;
+    (async () => {
+      setVersions(again(projectId));
+      const v = await settle(alive, setVersions, projectId)(api.deckListVersions(projectId));
+      if (!live) return;
+      const current = currentVersion(asList(v, 'versions', 'decks'));
+      if (!current?.id) { setDeck(idle); setEngagement(idle); return; }
+      setDeck(again(current.id)); setEngagement(again(current.id));
+      await Promise.all([
+        settle(alive, setDeck, current.id)(api.deckGet(current.id).then((r) => r?.deck || r)),
+        settle(alive, setEngagement, current.id)(api.deckEngagement(current.id)),
+      ]);
+    })();
+    return () => { live = false; };
+  }, [projectId, tick]);
+
+  useEffect(() => {
+    if (projectId == null) { setModule(idle); return undefined; }
+    let live = true;
+    setModule(again(projectId));
+    settle(() => live, setModule, projectId)(cyclesApi.module('raise', projectId, 'pitch-deck', { page }));
+    return () => { live = false; };
+  }, [projectId, page, tick]);
+
+  return {
+    projects, project, requested, versions, module, deck, engagement,
+    setPage: (n) => setLinksPage({ for: projectId, page: n }),
+    reload: () => setTick((t) => t + 1),
+  };
 }
 
 export default function PitchStudio({ tab = 'decks' }) {
@@ -104,7 +134,9 @@ export default function PitchStudio({ tab = 'decks' }) {
   const readOnly = isReadOnly(user);
   const reads = useStudioReads();
   const projectId = reads.project?.id || null;
-  const q = ventureQuery(projectId);
+  // Until the ventures read answers, or when it fails, the venture in the
+  // address: a tab never drops it and lands on another one.
+  const q = ventureQuery(projectId || reads.requested);
 
   const rail = (
     <WorkerRail
@@ -120,15 +152,17 @@ export default function PitchStudio({ tab = 'decks' }) {
     <RailFrame rail={rail} data-testid="pitch-studio">
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid={`pitch-studio-${tab}`}>
         <StudioHeader tab={tab} q={q} readOnly={readOnly} showNew={tab === 'decks' && !readOnly && Boolean(projectId)} />
-        {reads.projects.status === 'error' ? (
+        {tab === 'review' ? (
+          // The reviewer does its own reads, and works with no venture, as it
+          // did before D894: the studio's ventures read never stands in its way.
+          <DeckReviewerPage embedded />
+        ) : reads.projects.status === 'error' ? (
           <ReadFailed text="Your ventures could not be read." onRetry={reads.reload} testId="pitch-studio-projects-error" />
         ) : reads.projects.status === 'ok' && !reads.project ? (
           <div className={`${CARD} flex flex-col items-start gap-3 p-7`} data-testid="pitch-studio-no-venture">
             <span className={`text-[15px] font-extrabold ${INK}`}>{NO_VENTURE}</span>
             <Link to="/studio" className="text-[12.5px] font-bold text-axal-violet dark:text-violet-300">Open Studio</Link>
           </div>
-        ) : tab === 'review' ? (
-          <DeckReviewerPage embedded />
         ) : tab === 'analytics' ? (
           <StudioAnalytics reads={reads} readOnly={readOnly} />
         ) : (
@@ -150,7 +184,8 @@ function StudioHeader({ tab, q, readOnly, showNew }) {
         {/* PD3 (/raise/pitch/new) is #2434 part 3; until then a new deck starts in the builder. */}
         {showNew ? <Link to={`${EDIT_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-new">New deck</Link> : null}
       </div>
-      {readOnly ? (
+      {/* The reviewer is its own tool, and its writes are its own: Review draws no banner. */}
+      {readOnly && tab !== 'review' ? (
         <div role="note" className="rounded-[10px] bg-amber-100 px-3 py-2 text-[12.5px] font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pitch-studio-readonly">
           {READ_ONLY}
         </div>
@@ -189,7 +224,7 @@ function Skeleton({ h = 'h-24', testId }) {
 // Decks (PD2)
 // ---------------------------------------------------------------------------
 
-function StudioDecks({ reads, readOnly, q }) {
+export function StudioDecks({ reads, readOnly, q }) {
   const phone = usePhoneWidth();
   const versions = asList(reads.versions.data, 'versions', 'decks');
   const current = currentVersion(versions);
@@ -203,7 +238,7 @@ function StudioDecks({ reads, readOnly, q }) {
     left = (
       <div className={`${CARD} flex flex-col items-center gap-3 px-5 py-7 text-center`} data-testid="pitch-studio-empty">
         <span className={`text-[15px] font-extrabold ${INK}`}>{EMPTY_DECK}</span>
-        {!readOnly ? <Link to={`${EDIT_PATH}${q}`} className={PRIMARY}>New deck</Link> : null}
+        {!readOnly ? <Link to={`${EDIT_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-empty-new">New deck</Link> : null}
       </div>
     );
   } else {
@@ -302,12 +337,14 @@ function Versions({ rows, phone }) {
 function ReadersAside({ reads, hasDeck }) {
   const card = reads.module.data?.card;
   if (reads.module.status === 'loading' || reads.module.status === 'idle') return <><Skeleton h="h-28" /><Skeleton h="h-20" /></>;
-  if (reads.module.status === 'error' || card?.state === 'unreadable') return <ReadFailed text="Views on your links could not be read." onRetry={reads.reload} testId="pitch-studio-views-error" />;
-  if (!hasDeck) return null;
-  const weeks = weeklyViews(card);
-  if (!weeks || noViewsYet(card) || weeks.total === 0) {
+  const state = viewsState(card, reads.module.status);
+  if (state === 'failed') return <ReadFailed text="Views on your links could not be read." onRetry={reads.reload} testId="pitch-studio-views-error" />;
+  if (!hasDeck || state === 'no-deck') return null;
+  if (state === 'unopened') {
     return <div className={`${CARD} p-5 text-center text-[13px] text-axal-muted dark:text-gray-400`} data-testid="pitch-studio-no-views">{NO_VIEWS}</div>;
   }
+  // Views exist. Eight zero weeks is a real count, and the rest still shows.
+  const weeks = weeklyViews(card);
   const peak = Math.max(...weeks.values, 1);
   const slides = slideSeconds(card);
   const top = slides.length ? [...slides].sort((a, b) => b.seconds - a.seconds || a.index - b.index)[0] : null;
@@ -321,7 +358,7 @@ function ReadersAside({ reads, hasDeck }) {
             <span key={i} title={String(n)} className="flex-1 rounded-t-[3px] bg-axal-violet dark:bg-violet-400" style={{ height: `${Math.max(n ? 6 : 1, Math.round((n / peak) * 64))}px`, opacity: n ? 1 : 0.25 }} />
           ))}
         </div>
-        <span className={MUTED}><span className="font-mono">{weeks.total}</span> view{weeks.total === 1 ? '' : 's'} in {weeks.weeks} weeks, every version</span>
+        <span className={MUTED}><span className="font-mono">{weeks.total}</span> view{weeks.total === 1 ? '' : 's'} in the last {weeks.weeks} weeks, every version</span>
       </section>
       <section className={`${CARD} flex flex-col gap-1 p-4`} data-testid="pitch-studio-most-read">
         <span className={EYE}>Most read slide</span>
@@ -338,8 +375,9 @@ function ReadersAside({ reads, hasDeck }) {
           <span className={MUTED}>{NOT_RECORDED}</span>
         ) : (
           <>
-            <span className={`font-mono text-[20px] font-semibold ${INK}`}>{stats.ndaSigned} of {stats.viewers}</span>
-            <span className={MUTED}>readers who opened a link to the current version</span>
+            {/* Signatures, counted as the Worker counts them: never a share of browsers. */}
+            <span className={`font-mono text-[20px] font-semibold ${INK}`}>{stats.ndaSigned}</span>
+            <span className={MUTED}>signatures on links to the current version</span>
           </>
         )}
       </section>
@@ -351,19 +389,31 @@ function ReadersAside({ reads, hasDeck }) {
 // Share & analytics (PD19)
 // ---------------------------------------------------------------------------
 
-function StudioAnalytics({ reads, readOnly }) {
+export function StudioAnalytics({ reads, readOnly }) {
   const [withdraw, setWithdraw] = useState(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const [toast, setToast] = useState(null);
+  const dismiss = useRef(null);
+  const heading = useRef(null);
   const versions = asList(reads.versions.data, 'versions', 'decks');
   const current = currentVersion(versions);
   const card = reads.module.data?.card;
   const records = reads.module.data?.records;
-  const links = useMemo(() => linkRows(records), [records]);
+  const links = useMemo(() => linkRows(records, reads.engagement.data), [records, reads.engagement.data]);
+  const pager = linkPage(records);
   const slides = useMemo(() => slideSeconds(card), [card]);
   const stats = reads.engagement.status === 'ok' ? readerStats(reads.engagement.data) : null;
+  // Engagement is read once the versions read names a current version, so a
+  // failed versions read is a failed engagement read here, never a skeleton
+  // waiting on a read that was never made.
+  const engState = reads.versions.status === 'error' ? 'error' : reads.versions.status === 'ok' && !current ? 'ok' : reads.engagement.status;
   const addHref = !readOnly ? newLinkHref(records) : null;
+
+  // The dialog hands focus back to the Withdraw button as it closes, and the
+  // re-read then takes that button away: the result's own Dismiss takes focus
+  // instead. This effect runs after the dialog's cleanup.
+  useEffect(() => { if (toast) dismiss.current?.focus?.(); }, [toast]);
 
   const confirmWithdraw = useCallback(async () => {
     if (!withdraw || !reads.project?.id) return;
@@ -371,7 +421,7 @@ function StudioAnalytics({ reads, readOnly }) {
     try {
       await cyclesApi.recordAction('raise', reads.project.id, 'pitch-deck', withdraw.id, 'revoke');
       setWithdraw(null);
-      setToast(`${withdraw.investor}: the link no longer opens.`);
+      setToast({ text: `${withdraw.investor}: the link no longer opens.` });
       reads.reload();
     } catch (e) {
       reportError('pitch-studio:withdraw', e);
@@ -381,76 +431,105 @@ function StudioAnalytics({ reads, readOnly }) {
     }
   }, [withdraw, reads]);
 
+  const views = viewsState(card, reads.module.status);
+  let body;
   if (reads.projects.status === 'loading' || reads.module.status === 'loading' || reads.module.status === 'idle') {
-    return <div className="flex flex-col gap-3.5"><Skeleton h="h-24" testId="pitch-studio-loading" /><Skeleton h="h-56" /></div>;
-  }
-  if (reads.module.status === 'error') return <ReadFailed text="Your investor links could not be read." onRetry={reads.reload} testId="pitch-studio-links-error" />;
-
-  const unopened = noViewsYet(card) || (weeklyViews(card)?.total ?? 0) === 0;
-  return (
-    <div className="flex flex-col gap-3.5" data-testid="pitch-studio-analytics">
-      {unopened ? (
-        <div className={`${CARD} p-6 text-center text-[13px] text-axal-muted dark:text-gray-400`} data-testid="pitch-studio-no-views">{NO_VIEWS}</div>
-      ) : (
-        <>
-          <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4" data-testid="pitch-studio-tiles">
-            <Tile label="Views" value={stats ? String(stats.views) : null} note={current ? `on ${versionLabel(current)}` : ''} state={reads.engagement.status} />
-            <Tile label="Unique viewers" value={stats ? String(stats.viewers) : null} note="one per browser" state={reads.engagement.status} />
-            <Tile label="Median time" value={stats ? mmss(stats.medianSeconds) : null} note="per view" state={reads.engagement.status} />
-            <Tile label="NDA signed" value={stats && stats.ndaSigned != null ? `${stats.ndaSigned} of ${stats.viewers}` : null} note="readers who opened a link" state={reads.engagement.status} />
+    body = <><Skeleton h="h-24" testId="pitch-studio-loading" /><Skeleton h="h-56" /></>;
+  } else if (reads.module.status === 'error') {
+    body = <ReadFailed text="Your investor links and the views on them could not be read." onRetry={reads.reload} testId="pitch-studio-links-error" />;
+  } else {
+    body = (
+      <>
+        {views === 'failed' ? (
+          <ReadFailed text="Views on your links could not be read." onRetry={reads.reload} testId="pitch-studio-views-error" />
+        ) : views === 'unopened' || views === 'no-deck' ? (
+          <div className={`${CARD} p-6 text-center text-[13px] text-axal-muted dark:text-gray-400`} data-testid={views === 'unopened' ? 'pitch-studio-no-views' : 'pitch-studio-empty'}>
+            {views === 'unopened' ? NO_VIEWS : EMPTY_DECK}
           </div>
-          <div className="grid gap-3.5 lg:grid-cols-[1.6fr_1fr]">
-            <SecondsPerSlide rows={slides} />
-            <Funnel stats={stats} state={reads.engagement.status} />
-          </div>
-        </>
-      )}
-      <section className={`${CARD} overflow-hidden`} data-testid="pitch-studio-links">
-        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <span className={`text-[14px] font-extrabold ${INK}`}>By investor</span>
-          {addHref ? <Link to={addHref} className={GHOST} data-testid="pitch-studio-new-link">New link</Link> : null}
-        </div>
-        {records?.state === 'unreadable' ? (
-          <p className={`${MUTED} px-4 pb-4`}>Your investor links could not be read.</p>
-        ) : !links.length ? (
-          <p className={`${MUTED} px-4 pb-4`}>No investor link yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
-              <thead>
-                <tr className="bg-axal-ground font-mono text-[9.5px] font-semibold uppercase tracking-[.07em] text-axal-muted dark:bg-gray-800 dark:text-gray-400">
-                  <th className="px-4 py-2 font-semibold">Investor</th>
-                  <th className="px-4 py-2 font-semibold">Expiry</th>
-                  <th className="px-4 py-2 font-semibold">Views</th>
-                  <th className="px-4 py-2 font-semibold">Time on deck</th>
-                  <th className="px-4 py-2 font-semibold">Most read</th>
-                  <th className="px-4 py-2"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {links.map((l) => (
-                  <tr key={l.id} className="border-t border-axal-hairline dark:border-gray-700" data-testid={`pitch-studio-link-${l.id}`}>
-                    <td className={`px-4 py-2.5 font-semibold ${INK}`}>{l.investor}</td>
-                    <td className="px-4 py-2.5"><span className={l.live ? PILL_OK : PILL_MU}>{l.expires}</span></td>
-                    <td className={`px-4 py-2.5 font-mono ${INK}`}>{l.views ?? '—'}</td>
-                    <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{l.views ? l.time ?? NOT_RECORDED : '— not opened'}</td>
-                    <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{l.mostRead ?? '—'}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      {!readOnly && l.live ? <button type="button" className={DANGER_TEXT} onClick={() => { setFailed(false); setWithdraw(l); }} data-testid={`pitch-studio-withdraw-${l.id}`}>Withdraw</button> : null}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4" data-testid="pitch-studio-tiles">
+              <Tile label="Views" value={stats ? `${stats.views}${stats.capped ? '+' : ''}` : null} note={current ? `on ${versionLabel(current)}` : ''} state={engState} />
+              <Tile label="Unique viewers" value={stats ? String(stats.viewers) : null} note={stats?.capped ? `one per browser, in the latest ${ENGAGEMENT_VIEW_ROWS} views` : 'one per browser'} state={engState} />
+              <Tile label="Median time" value={stats ? mmss(stats.medianSeconds) : null} note={stats?.capped ? `per view, over the latest ${ENGAGEMENT_VIEW_ROWS}` : 'per view'} state={engState} />
+              <Tile label="NDA signed" value={stats && stats.ndaSigned != null ? String(stats.ndaSigned) : null} note="signatures on this version's links" state={engState} />
+            </div>
+            <div className="grid gap-3.5 lg:grid-cols-[1.6fr_1fr]">
+              <SecondsPerSlide rows={slides} />
+              <Funnel stats={stats} state={engState} />
+            </div>
+          </>
         )}
-      </section>
-      {toast ? (
-        <div role="status" className={`${CARD} flex items-center justify-between gap-3 px-4 py-3 text-[12.5px] ${INK}`} data-testid="pitch-studio-toast">
-          <span>{toast}</span>
-          <button type="button" aria-label="Dismiss" className="h-8 w-8 text-[16px] leading-none" onClick={() => setToast(null)}>×</button>
-        </div>
-      ) : null}
+        <section className={`${CARD} overflow-hidden`} data-testid="pitch-studio-links">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+            <h2 ref={heading} tabIndex={-1} className={`m-0 text-[14px] font-extrabold ${INK}`}>By investor</h2>
+            {addHref ? <Link to={addHref} className={GHOST} data-testid="pitch-studio-new-link">New link</Link> : null}
+          </div>
+          {records?.state === 'unreadable' ? (
+            <p className={`${MUTED} px-4 pb-4`}>Your investor links could not be read.</p>
+          ) : !links.length ? (
+            <p className={`${MUTED} px-4 pb-4`}>No investor link yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse text-left text-[12.5px]">
+                <thead>
+                  <tr className="bg-axal-ground font-mono text-[9.5px] font-semibold uppercase tracking-[.07em] text-axal-muted dark:bg-gray-800 dark:text-gray-400">
+                    <th className="px-4 py-2 font-semibold">Investor</th>
+                    <th className="px-4 py-2 font-semibold">Expiry</th>
+                    <th className="px-4 py-2 font-semibold">Views</th>
+                    <th className="px-4 py-2 font-semibold">Time on deck</th>
+                    <th className="px-4 py-2 font-semibold">Most read</th>
+                    <th className="px-4 py-2"><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {links.map((l) => (
+                    <tr key={l.id} className="border-t border-axal-hairline dark:border-gray-700" data-testid={`pitch-studio-link-${l.id}`}>
+                      <td className={`px-4 py-2.5 font-semibold ${INK}`}>{l.investor}</td>
+                      <td className="px-4 py-2.5"><span className={l.live ? PILL_OK : PILL_MU}>{l.expires}</span></td>
+                      <td className={`px-4 py-2.5 font-mono ${INK}`}>{l.views ?? '—'}</td>
+                      <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{l.views ? l.time ?? NOT_RECORDED : '— not opened'}</td>
+                      <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{l.mostRead ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        {l.live === null ? (
+                          // Opened, and not a link of the version the engagement read covers.
+                          <span className="text-[11.5px] text-axal-muted dark:text-gray-400" data-testid={`pitch-studio-link-unknown-${l.id}`}>Views left not read</span>
+                        ) : !readOnly && l.live ? <button type="button" className={DANGER_TEXT} onClick={() => { setFailed(false); setWithdraw(l); }} data-testid={`pitch-studio-withdraw-${l.id}`}>Withdraw</button> : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {pager && pager.total ? (
+            <nav aria-label="Investor links" className="flex flex-wrap items-center justify-between gap-2 border-t border-axal-hairline px-4 py-3 dark:border-gray-700" data-testid="pitch-studio-links-pager">
+              <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400">Links {pager.from}–{pager.to} of {pager.total}</span>
+              {pager.pages > 1 ? (
+                <div className="flex gap-2">
+                  <button type="button" className={`${GHOST} disabled:opacity-50`} disabled={pager.page <= 1 || Boolean(reads.module.reading)} onClick={() => reads.setPage(pager.page - 1)} data-testid="pitch-studio-links-prev">Previous</button>
+                  <button type="button" className={`${GHOST} disabled:opacity-50`} disabled={pager.page >= pager.pages || Boolean(reads.module.reading)} onClick={() => reads.setPage(pager.page + 1)} data-testid="pitch-studio-links-next">Next</button>
+                </div>
+              ) : null}
+            </nav>
+          ) : null}
+        </section>
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-col" data-testid="pitch-studio-analytics">
+      <div className="flex flex-col gap-3.5">{body}</div>
+      {/* Always mounted, so the line is announced when it is set, and kept through a re-read. */}
+      <div role="status" className={toast ? 'mt-3.5' : undefined}>
+        {toast ? (
+          <div className={`${CARD} flex items-center justify-between gap-3 px-4 py-3 text-[12.5px] ${INK}`} data-testid="pitch-studio-toast">
+            <span>{toast.text}</span>
+            <button ref={dismiss} type="button" aria-label="Dismiss" className="h-8 w-8 text-[16px] leading-none" onClick={() => { setToast(null); heading.current?.focus?.(); }}>×</button>
+          </div>
+        ) : null}
+      </div>
       {withdraw ? (
         <Lightbox
           label="Withdraw this link"
@@ -491,11 +570,13 @@ function SecondsPerSlide({ rows }) {
   const peak = Math.max(...rows.map((r) => r.seconds), 1);
   const caption = slideCaption(rows);
   return (
-    <section className={`${CARD} flex flex-col gap-2 p-4`} data-testid="pitch-studio-seconds">
+    // min-w-0: a grid item, so a long deck's bars scroll inside the card rather
+    // than widening the column, and the page, at phone width.
+    <section className={`${CARD} flex min-w-0 flex-col gap-2 p-4`} data-testid="pitch-studio-seconds">
       <span className={`text-[14px] font-extrabold ${INK}`}>Seconds per slide</span>
       <span className="text-[12px] text-axal-muted dark:text-gray-400">{caption || 'Seconds per slide are not recorded yet.'} Every version together.</span>
       {rows.length ? (
-        <div className="flex h-40 items-end gap-2 pt-4" role="img" aria-label={rows.map((r) => `Slide ${r.index}: ${r.seconds} seconds`).join(', ')}>
+        <div className="flex h-40 items-end gap-2 overflow-x-auto pt-4" role="img" aria-label={rows.map((r) => `Slide ${r.index}: ${r.seconds} seconds`).join(', ')}>
           {rows.map((r) => (
             <div key={r.index} className="flex flex-1 flex-col items-center gap-1">
               <span className="font-mono text-[10px] text-axal-muted dark:text-gray-400">{Math.round(r.seconds)}</span>
@@ -510,20 +591,23 @@ function SecondsPerSlide({ rows }) {
 }
 
 function Funnel({ stats, state }) {
-  const opened = stats?.viewers ?? null;
-  const rows = [['Opened', opened], ['Accepted the NDA', stats?.ndaSigned ?? null]];
+  const rows = funnelRows(stats);
   return (
     <section className={`${CARD} flex flex-col gap-3 p-4`} data-testid="pitch-studio-funnel">
       <span className={`text-[14px] font-extrabold ${INK}`}>Funnel</span>
-      {state === 'error' ? <span className={MUTED}>Could not be read.</span> : rows.map(([label, n]) => (
+      {state === 'error' ? <span className={MUTED}>Could not be read.</span> : rows.map(({ label, n, width }, i) => (
         <div key={label} className="flex flex-col gap-1">
-          <div className="flex justify-between text-[12.5px]"><span className={INK}>{label}</span><span className="font-mono text-axal-muted dark:text-gray-400">{n ?? '—'}</span></div>
-          <div className="h-2.5 rounded-full bg-axal-ground dark:bg-gray-800">
-            <div className="h-2.5 rounded-full bg-axal-violet dark:bg-violet-400" style={{ width: `${opened ? Math.round(((n ?? 0) / opened) * 100) : 0}%` }} />
+          <div className="flex justify-between text-[12.5px]"><span className={INK}>{label}</span><span className="font-mono text-axal-muted dark:text-gray-400">{n == null ? '—' : `${n}${i === 0 && stats?.capped ? '+' : ''}`}</span></div>
+          <div className="h-2.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800">
+            <div className="h-2.5 rounded-full bg-axal-violet dark:bg-violet-400" style={{ width: `${width}%` }} data-testid={`pitch-studio-funnel-bar-${i}`} />
           </div>
         </div>
       ))}
-      <span className="text-[11.5px] text-axal-muted dark:text-gray-400">On the current version.</span>
+      <span className="text-[11.5px] text-axal-muted dark:text-gray-400">
+        {stats?.capped
+          ? `On the current version, as a share of its latest ${ENGAGEMENT_VIEW_ROWS} views; the NDA count is every signature.`
+          : 'On the current version, as a share of its views.'}
+      </span>
     </section>
   );
 }
