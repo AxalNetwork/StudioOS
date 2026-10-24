@@ -51,7 +51,7 @@ export const MOVED_PATH = `${DESK_PATH}?moved=${MOVED}`;
 export const COMMUNITY_PATH = '/admin/community';
 export const CONTRACTS_TEMPLATES_PATH = '/admin/contracts?tab=templates';
 export const CONTRACTS_PAYOUTS_PATH = '/admin/contracts?tab=partner-deals';
-export const PROFILES_PATH = '/admin?tab=profiles';
+export const PROFILES_PATH = '/admin/partner-profiles';
 
 export const TITLE = 'Partner invitations';
 export const LINE = 'Bring operating partners in, see where each invitee stands, and keep their deals healthy.';

@@ -42,7 +42,9 @@ test('the list is App.jsx\'s redirect-only routes, no more and no fewer', () => 
   assert.deepEqual([...new Set(routes)].sort(), REDIRECT_ROUTES.map((r) => r.path).sort(),
     'a redirect route added, removed or turned into a page: update cloudflare-worker/src/services/redirectRoutes.ts');
   // A route that redirects for some roles only is a page, and is not listed.
-  for (const page of ['/raise/data-room', '/build', '/raise', '/profile', '/admin']) assert.equal(routes.includes(page), false, page);
+  for (const page of ['/raise/data-room', '/build', '/raise', '/profile']) assert.equal(routes.includes(page), false, page);
+  // D938: the Admin Console is retired, so /admin only forwards now, and is kept for good (#2375).
+  assert.ok(routes.includes('/admin'));
   // #2337, #2338, #2342: the pages removed on 2026-10-21 forward everyone now,
   // so they are counted until #2319 retires them. `/needs` stood in the list
   // above while it still rendered the board for a partner.

@@ -151,7 +151,7 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
                   </dl>
                   <p className="m-0 flex flex-wrap items-center gap-2 text-[13px] text-axal-ink dark:text-gray-100">
                     {`Profile check: ${answers.check}`}
-                    <Link to="/admin?tab=profiles" className={LINK}>Open in Partner profiles</Link>
+                    <Link to="/admin/partner-profiles" className={LINK}>Open in Partner profiles</Link>
                   </p>
                 </>
               ) : null}

@@ -193,7 +193,8 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
   const api = read('frontend/src/lib/api.js');
-  assert.match(api, /export \* from '\.\/api\/mercuryPersonal\.js';\nexport \* from '\.\/api\/narrative\.js';\nexport \* from '\.\/api\/newsletter\.js';/);
+  // In the alphabetical block (D527); later modules (network.js) may sit between its neighbours.
+  assert.match(api, /export \* from '\.\/api\/mercuryPersonal\.js';\nexport \* from '\.\/api\/narrative\.js';\n(?:export \* from '\.\/api\/n[a-d][\w]*\.js';\n|export \* from '\.\/api\/ne[a-v][\w]*\.js';\n)*export \* from '\.\/api\/newsletter\.js';/);
 });
 
 

@@ -1,8 +1,11 @@
 # pages/admin/consoles — one file per Admin Console tool
 
-`../../AdminPage.jsx` is a shell: the header, the section dropdown (its
-`?tab=` links and `admin-tab-*` hooks), and the one console it mounts. Each
-console lives here, in its own file, and reads only its own data (D648):
+Each console lives here, in its own file, and reads only its own data (D648).
+The Admin Console shell that mounted one at a time is retired (D938, #2743):
+`../ConsolePages.jsx` mounts each console at its own address under the shared
+header, and `/admin?tab=` forwards there (`../LegacyContractsRedirect.jsx`).
+`LegalConsole.jsx` is mounted by no page: its tab has forwarded to Contracts
+since D647, and the Contracts work retires it.
 
 | File | Console | Reads |
 | --- | --- | --- |
@@ -23,8 +26,8 @@ console lives here, in its own file, and reads only its own data (D648):
 | `shared.jsx` | the pieces more than one console draws: `ROLE_BADGES`, `Field`, `KV`, `fmtDate`, `ConsoleUnreadable`, `CONSOLE_LOADING` | — |
 
 Spin-Out Lab and Advisors & Partners were already their own components
-(`../AdminSpinoutLab.jsx`, `../AdminNetworkProfiles.jsx`); the shell mounts
-them directly.
+(`../AdminSpinoutLab.jsx`, `../AdminNetworkProfiles.jsx`), and have their own
+pages (D937, D972).
 
 ## Rules
 

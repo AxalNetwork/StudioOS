@@ -143,7 +143,7 @@ test('the tabs, the redirects\' targets, the strip on a tab, and the whole-page 
   assert.equal(tabOf(`${AP_PATH}/people`), null, 'People is not a tab until its read exists');
   assert.equal(legacyContractsTarget('?tab=network-profiles'), '/admin/advisors-partners/deck?moved=network-profiles');
   assert.equal(stripFor('/admin/advisors-partners/deck'), 'Content', 'the Content strip is lost on a tab');
-  assert.equal(stripFor('/admin?tab=personas'), 'Content');
+  assert.equal(stripFor('/admin/persona-segments'), 'Content', 'D938: Persona segments left the console for its own address');
   assert.equal(stripFor('/admin/advisors-partnersx'), null, 'a sibling path took the strip');
   assert.equal(pageFailed(ALL), false);
   assert.equal(pageFailed(Object.fromEntries(Object.keys(ALL).map((k) => [k, bad]))), true);
@@ -269,7 +269,8 @@ test('the routes, the redirects, the row, the strip and the reads the page must 
   assert.ok(app.includes('<Route path="/admin/network-profiles" element={<ApRedirect />} />'));
   assert.ok(app.includes('<StripLink to="/admin/advisors-partners">Advisors &amp; Partners</StripLink>'));
   assert.match(read('cloudflare-worker/src/services/redirectRoutes.ts'), /\{ path: '\/admin\/network-profiles' \}/);
-  assert.match(read('frontend/src/sidebarConfig.js'), /'\/admin\/partner-invitations', '\/admin\/advisors-partners'\] \}/);
+  // D938 added Directory and Wellbeing after it.
+  assert.match(read('frontend/src/sidebarConfig.js'), /'\/admin\/partner-invitations', '\/admin\/advisors-partners'(, '[^']+')*\] \}/);
   const page = read('frontend/src/pages/admin/advisors/AdvisorsPartners.jsx');
   // Nothing is decided here that another page decides (AP "DO NOT DRAW").
   assert.doesNotMatch(page, /setFirmLink|terminateDeal|adminSetPartnerDirectory|adminLabHostDecide|adminImpersonate/);

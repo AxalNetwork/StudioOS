@@ -10,9 +10,11 @@
  *     none;
  *   · the boards with a page of their own sit in `AdminBoardFrame` under
  *     their name, and that frame is a `RailFrame` with the viewer's tier;
- *   · `/admin` draws that frame once around its tabs, each tab named for the
- *     board D768's map gives it, for the Admin's boards and the Super Admin's
- *     alike, and its Spin-Out Lab tab draws none (D317);
+ *   · the Admin Console's tools, each a page since D938 (`ConsolePages.jsx`),
+ *     draw that frame once around the page, named for the board D768's map
+ *     gives its address in the viewer's profile, for the Admin's boards and
+ *     the Super Admin's alike; a page that is no board of the viewer draws
+ *     none;
  *   · every option exists where it says, in the shape #2097 gives, and a
  *     control that runs no model is a quiet control with its reason;
  *   · every upload, draft or report control in a board's files is in one
@@ -31,7 +33,7 @@ import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { ADMIN_BOARDS, ADMIN_OPTIONS, ADMIN_PROFILE, ADMIN_QUIET_CONTROLS, railOptionsFor } from '../src/lib/railOptions/admin.js';
 import { SUPER_ADMIN_BOARDS } from '../src/lib/railOptions/superAdmin.js';
 import { NO_RAIL_ROUTES } from '../src/lib/railPages.js';
-import AdminPage, { tabBoard } from '../src/pages/AdminPage.jsx';
+import { consoleBoard, KycPage, AllAccountsPage, PersonaSegmentsPage, BillingPage } from '../src/pages/admin/ConsolePages.jsx';
 
 const ROOT = process.cwd();
 const src = (p) => resolve(ROOT, 'frontend/src', p);
@@ -40,7 +42,7 @@ const CANVAS = JSON.parse(readFileSync(resolve(ROOT, 'design/incoming/airail-eve
 const KINDS = new Set(Object.values(CANVAS.task_kind));
 const HANDLERS = new Set(['form', 'upload', 'draft', 'transcribe']);
 const FRAME = 'pages/admin/AdminBoardFrame.jsx';
-const ADMIN_PAGE = 'pages/AdminPage.jsx';
+const CONSOLE_PAGES = 'pages/admin/ConsolePages.jsx';
 
 /** The `<WorkerRail …/>` tags in a file's code. */
 const railMounts = (file) => [...codeOnly(read(file)).matchAll(/<WorkerRail\b[^>]*?\/>/gs)].map((m) => m[0]);
@@ -114,53 +116,54 @@ test('the boards with a page of their own sit in AdminBoardFrame under their own
   }
 });
 
-test('/admin draws the frame once around its tabs, each named for its board in D768\'s map', () => {
-  // Every board on an /admin tab, of either profile, is hosted by AdminPage.
-  const tabbed = [...ADMIN_BOARDS.map((b) => ['admin', b]), ...SUPER_ADMIN_BOARDS.map((b) => ['super_admin', b])]
-    .filter(([, b]) => b.route.startsWith('/admin?tab='));
-  // H27 and H28 left with the keys for HQ's own page (the owner's ruling, 2026-10-20);
-  // S29 and H23 for Advisors & Partners' own page (D972, #2369).
-  assert.deepEqual(tabbed.map(([, b]) => b.id), ['S2', 'S6', 'S7', 'S28', 'S30', 'H11', 'H22', 'H24', 'H29', 'H30']);
-  const code = codeOnly(read(ADMIN_PAGE));
-  for (const [role, b] of tabbed) {
-    assert.equal(b.host, ADMIN_PAGE, `${b.id} is not hosted by AdminPage`);
+test('each Admin Console tool draws the frame once around its page, named for its board in D768\'s map (D938)', () => {
+  // Every board the console's tools draw, of either profile, is hosted by ConsolePages.
+  const hosted = [...ADMIN_BOARDS.map((b) => ['admin', b]), ...SUPER_ADMIN_BOARDS.map((b) => ['super_admin', b])]
+    .filter(([, b]) => b.host === CONSOLE_PAGES);
+  assert.deepEqual(hosted.map(([, b]) => b.id), ['S2', 'S6', 'S7', 'S28', 'S30', 'H11', 'H22', 'H24', 'H29', 'H30']);
+  for (const [role, b] of hosted) {
     assert.equal(b.rail, FRAME, `${b.id} does not draw the Admin frame`);
-    const tab = new URLSearchParams(b.route.split('?')[1]).get('tab');
-    assert.match(code, new RegExp(`\\{ value: '${tab}',`), `${b.id}: ${tab} is not one of AdminPage's sections`);
-    assert.equal(tabBoard(tab, role), b.module || b.section, `${b.id}: /admin?tab=${tab} is not named for its board`);
+    assert.ok(!b.route.includes('?'), `${b.id} still lives on a query`);
+    assert.equal(consoleBoard(b.route, role), b.module || b.section, `${b.id}: ${b.route} is not named for its board`);
   }
-  // One frame, named from the tab, around the whole page unless a host locked it to one section.
-  assert.equal([...code.matchAll(/<AdminBoardFrame\b/g)].length, 1, 'AdminPage draws the frame more than once');
-  assert.match(code, /const board = section \? null : tabBoard\(tab, isSuperAdminUser\(user\) \? 'super_admin' : user\?\.role\);/,
-    'the board is not the open tab\'s, in the viewer\'s tier');
-  assert.match(code, /if \(!board\) return page;\s*return \(\s*<AdminBoardFrame workspace=\{board\} [^>]*data-testid="admin-tab-frame">\s*\{page\}\s*<\/AdminBoardFrame>/,
+  const code = codeOnly(read(CONSOLE_PAGES));
+  assert.equal([...code.matchAll(/<AdminBoardFrame\b/g)].length, 1, 'the console pages draw the frame more than once');
+  assert.match(code, /const board = consoleBoard\(pathname, hq \? 'super_admin' : user\?\.role\);/,
+    'the board is not the address\'s, in the viewer\'s tier');
+  assert.match(code, /if \(!board\) return page;\s*return \(\s*<AdminBoardFrame workspace=\{board\} [^>]*data-testid="admin-console-frame">\s*\{page\}\s*<\/AdminBoardFrame>/,
     'the frame is not the outermost element around the whole page');
-  // Off-canvas tabs and the Lab retain D775's page-alone contract.
+  // A page that is no board of the viewer's profile draws the page alone.
   for (const role of ['admin', 'super_admin']) {
-    assert.equal(tabBoard('billing', role), null);
-    assert.equal(tabBoard('bank-accounts', role), null);
-    assert.equal(tabBoard('lab-applications', role), null);
+    assert.equal(consoleBoard('/admin/revenue/billing', role), null);
+    assert.equal(consoleBoard('/admin/platform/bank-accounts', role), null);
   }
+  assert.equal(consoleBoard('/admin/kyc', 'super_admin'), null, 'Identity checks is no Super Admin board');
+  assert.equal(consoleBoard('/admin/persona-segments', 'admin'), null, 'Personas is no Admin board');
+  assert.equal(consoleBoard('/admin/kyc', 'founder'), null);
 });
 
-test('on /admin a plain admin and a Super Admin each get the rail of their tier, named for the tab\'s board; the Lab tab gets none', async () => {
+test('a plain admin and a Super Admin each get the rail of their tier on a console page, named for its board; a page that is no board gets none', async () => {
   const fetchWas = globalThis.fetch;
   globalThis.fetch = () => new Promise(() => {});
+  const admin = { id: 902, role: 'admin', is_super_admin: 0 };
+  const hq = { id: 901, role: 'admin', is_super_admin: 1 };
   const CASES = [
-    [{ id: 902, role: 'admin', is_super_admin: 0 }, '/admin?tab=kyc', 'admin-board-rail', 'Identity checks'],
-    [{ id: 902, role: 'admin', is_super_admin: 0 }, '/admin', 'admin-board-rail', 'Users'],
-    [{ id: 901, role: 'admin', is_super_admin: 1 }, '/admin?tab=personas', 'hq-board-rail', 'Personas'],
-    [{ id: 902, role: 'admin', is_super_admin: 0 }, '/admin?tab=lab-applications', null, null],
+    [admin, KycPage, '/admin/kyc', 'admin-board-rail', 'Identity checks'],
+    [admin, AllAccountsPage, '/admin/accounts/all', 'admin-board-rail', 'Users'],
+    [hq, PersonaSegmentsPage, '/admin/persona-segments', 'hq-board-rail', 'Personas'],
+    [hq, KycPage, '/admin/kyc', null, null],
+    [hq, BillingPage, '/admin/revenue/billing', null, null],
   ];
   try {
-    for (const [user, url, rail, name] of CASES) {
-      const v = await mountContracts(React.createElement(AuthProvider, null, React.createElement(AdminPage)), url, user);
+    for (const [user, Page, url, rail, name] of CASES) {
+      const v = await mountContracts(React.createElement(AuthProvider, null, React.createElement(Page)), url, user);
       try {
         await v.flush();
         const tagged = (id) => v.nodes().filter((n) => v.props(n)?.['data-testid'] === id);
-        assert.equal(tagged('admin-tab-frame').length, rail ? 1 : 0, `${url}: wrong frame count`);
+        assert.equal(tagged('admin-console-frame').length, rail ? 1 : 0, `${url}: wrong frame count`);
+        assert.equal(tagged('admin-page-header').length, 1, `${url}: the header is missing`);
         const rails = v.nodes().filter((n) => /^(admin|hq)-board-rail$/.test(v.props(n)?.['data-testid'] || ''));
-        if (!rail) { assert.equal(rails.length, 0, `${url}: the Spin-Out Lab tab draws a rail`); continue; }
+        if (!rail) { assert.equal(rails.length, 0, `${url}: a page that is no board draws a rail`); continue; }
         assert.equal(rails.length, 1, `${url}: ${rails.length} rails`);
         assert.equal(v.props(rails[0])['data-testid'], rail, `${url}: the rail is not the viewer's tier`);
         assert.equal(v.props(rails[0])['aria-label'], `Eadwyn AI · ${name}`, `${url}: the rail is not named for its board`);

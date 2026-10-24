@@ -58,7 +58,7 @@ export default function HeldAccounts() {
             <Figure state={glance} value={ready ? acc.total : unreadAcc} unit="active accounts" reason={acc?.reason} testId="held-accounts-users-count">
               {ready && acc.byRole.length ? <span className="text-axal-muted"> · {acc.byRole.map((r) => `${r.count.toLocaleString('en-US')} ${r.role}`).join(' · ')}</span> : null}
             </Figure>
-            <p className="mt-2 text-[11.5px]"><Link to="/admin" className={OPEN}>Open the Users table</Link></p>
+            <p className="mt-2 text-[11.5px]"><Link to="/admin/accounts/all" className={OPEN}>Open the Users table</Link></p>
           </Card>
         </li>
         <li>
@@ -78,7 +78,7 @@ export default function HeldAccounts() {
               Retags one person’s persona; the taxonomy itself is HQ’s.
             </p>
             <Figure state={glance} value={undefined} reason={NOT_ON_GLANCE} testId="held-accounts-personas-count" />
-            <p className="mt-2 text-[11.5px]"><Link to="/admin?tab=personas" className={OPEN}>Open personas</Link></p>
+            <p className="mt-2 text-[11.5px]"><Link to="/admin/persona-segments" className={OPEN}>Open personas</Link></p>
           </Card>
         </li>
         <li>

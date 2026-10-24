@@ -141,6 +141,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/spinout-lab', keep: true }, // D937 (#2374): the Lab moved under Programs; sent cohort notices carry it (#2375)
   { path: '/admin/spinout-lab/preview' }, // D937 (#2374): the preview moved with the Lab
   { path: '/admin/network-profiles' }, // D972 (#2369): the roster is Advisors & Partners › Deck roster
+  { path: '/admin', keep: true }, // D938 (#2743): the Admin Console is retired; every ?tab= forwards to its own page (#2375 keeps /admin)
 
 ]);
 

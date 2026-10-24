@@ -663,7 +663,7 @@ export function PersonasPanel({ loading, unreadable, personas }) {
   return (
     <>
       {body}
-      <Link to="/admin?tab=personas" className={CONSOLE_LINK} data-testid="hq-content-link-personas">
+      <Link to="/admin/persona-segments" className={CONSOLE_LINK} data-testid="hq-content-link-personas">
         <ConsoleLinkBody title="Personas" note="Move an account from one persona to another there. No console adds, renames or retires a persona." />
       </Link>
     </>

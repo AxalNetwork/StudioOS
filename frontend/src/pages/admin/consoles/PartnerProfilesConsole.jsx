@@ -12,10 +12,8 @@ import { CONSOLE_LOADING, ConsoleUnreadable } from './shared';
  * D648 (#1448) — the Partner Profiles console: every captured entity profile
  * and its review drawer. It reads the profiles list only when this console is
  * open (the read writes an audit row), and a failed read says so rather than
- * drawing "No profiles captured yet".
- *
- * `onPendingCount` tells the Admin Console's section dropdown how many
- * profiles wait for review, once this console has read them.
+ * drawing "No profiles captured yet". D938: it is the Partner profiles
+ * page's body, at /admin/partner-profiles.
  */
 
 const STATUS_BADGES = {
@@ -58,7 +56,7 @@ const TRACK_BADGES = {
   'Strategic Scale (Existing)': 'bg-indigo-100 text-indigo-700',
 };
 
-export default function PartnerProfilesConsole({ onPendingCount }) {
+export default function PartnerProfilesConsole() {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -71,12 +69,11 @@ export default function PartnerProfilesConsole({ onPendingCount }) {
       const rows = Array.isArray(p) ? p : [];
       setProfiles(rows);
       setFailed(false);
-      onPendingCount?.(rows.filter(r => r.admin_status === 'pending').length);
     } catch (e) {
       reportError('AdminPage:loadProfiles', e);
       setFailed(true);
     } finally { setLoading(false); }
-  }, [onPendingCount]);
+  }, []);
   useEffect(() => { load(); }, [load]);
 
   const openPartnerProfile = async (p) => {

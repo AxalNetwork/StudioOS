@@ -138,7 +138,7 @@ it, where in their nav, and how do they get there.*
 | Grow · Share an update | `/grow/update` · `/updates/:uid` · `/grow/updates` · `/grow/durable-company-building#updates` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Investor LP Canvas | `/studio` · `/deals` · `/portfolio` · `/funds` · `/network` · `/research` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | InvRail | — | — (not routed) | Embedded rail | Not reachable yet | NEW | Low |
-| Legal Documents · Templates | `/admin/contracts?tab=templates` · `/admin?tab=bank-accounts` · `/esign/:token` · `/spinout-lab/investor-workspace` | Headerless | Full page (proposed) | Sidebar → Headerless → Axal VC Fund | UPGRADE | Low |
+| Legal Documents · Templates | `/admin/contracts?tab=templates` · `/admin/platform/bank-accounts` · `/esign/:token` · `/spinout-lab/investor-workspace` | Headerless | Full page (proposed) | Sidebar → Headerless → Axal VC Fund | UPGRADE | Low |
 | Liquidity & Secondaries | `/liquidity` · `/raise/liquidity?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | LP Investor Workspace | `/spinout-lab/investor-workspace` · `/lp-portal` · `/funds/lp-workspace` | Headerless | Full page | Sidebar → Headerless → Axal VC Fund | UPGRADE | High |
 | Pages · Diligence file | `/research/diligence/:grantUid/files/:fileUid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -218,13 +218,13 @@ it, where in their nav, and how do they get there.*
 | Founder Journey Map | — | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Fund Administration | `/funds/performance` · `/funds/lp-workspace` · `/spinout-lab/investor-workspace` · `/lp-reports` · `/portfolio/waterfall` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Funds · Fabric | `/admin/fabric` · `/funds` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
-| Legal Documents · Templates | `/admin/contracts?tab=templates` · `/admin?tab=bank-accounts` · `/esign/:token` · `/spinout-lab/investor-workspace` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| Legal Documents · Templates | `/admin/contracts?tab=templates` · `/admin/platform/bank-accounts` · `/esign/:token` · `/spinout-lab/investor-workspace` | HQ | Full page (proposed) | Sidebar → HQ → Platform | UPGRADE | Low |
 | Ops Page · HQ tools (Q1–Q3, D633) | `/admin/contracts` · `/admin/accounts/credits/:userId` · `/admin/security/obligations` | HQ | Full page | Sidebar → HQ → Contracts | CURRENT | High |
 | Partner invitations | `/admin/partner-invitations` · `/admin/partner-invitations/invitations` · `/admin/partner-invitations/invitations/:id` · `/admin/partner-invitations/deals` · `/admin/partner-invitations/deals/:id` · `/admin/partner-invitations/referrals` · `/admin/partner-invitations/firm-links` · `/admin/partners` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Program grants | `/admin/licences/programs` · `/admin/my-licence/programs` | HQ | Full page (proposed) | Sidebar → HQ → Licences | UPGRADE | Low |
 | Spin-Out Lab (admin) | `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support Security · Super | `/admin/security` · `/admin/hq-support` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
-| Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
+| Team · Authority | `/admin/team` · `/ic` · `/ic/:uid` | HQ | Full page | Sidebar → HQ → Content | NEW | High |
 
 ## Shell (all workspaces) — 12 canvases
 
@@ -294,8 +294,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 104 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 61 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 105 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 60 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 48 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

@@ -448,15 +448,13 @@ test('every link is literal and lands on a registered route', () => {
   assert.ok(count(ACTIONS, 'to="') >= 3, 'the action cards lost a link');
 
   const all = [...new Set([...hrefs(PLAIN), ...hrefs(OVERLAY)])].sort();
-  assert.deepEqual(all, ['/admin/licences', '/admin/security', '/admin?tab=kyc']);
+  assert.deepEqual(all, ['/admin/kyc', '/admin/licences', '/admin/security']);
   for (const href of all) {
     const path = href.split('?')[0];
     assert.ok(APP.includes(`<Route path="${path}" element=`), `${path} is not a registered route`);
   }
-  // `?tab=kyc` resolves to /admin and opens its KYC section only if the Admin
-  // Console knows the section by that value.
-  assert.match(ADMIN, /\{ value: 'kyc', label: 'KYC Queue'/, 'the Admin Console has no kyc section for the link to open');
-  assert.match(ADMIN, /get\('tab'\);\s*return t && ADMIN_SECTION_VALUES\.has\(t\)/, 'the Admin Console no longer honours ?tab=');
+  // D938: the KYC link opens KYC & KYB's own page, which mounts the KYC console.
+  assert.match(ADMIN, /export function KycPage\(\) \{[\s\S]*?<KycConsole \/>/, 'the KYC page no longer mounts the KYC console');
 });
 
 test('drawsAccountControls: an admin row is the Super Admin\'s alone, and the viewer\'s own row draws neither', () => {

@@ -613,8 +613,8 @@ const LANE_CONSOLE = {
   // S16 (D215). Each is the page that already decides that store — checked
   // against App.jsx's routes; KYC and partner profiles are tabs of `/admin`,
   // which honours `?tab=`.
-  kyc: { to: '/admin?tab=kyc', label: 'KYC queue' },
-  partner_profiles: { to: '/admin?tab=profiles', label: 'Partner profiles' },
+  kyc: { to: '/admin/kyc', label: 'KYC queue' },
+  partner_profiles: { to: '/admin/partner-profiles', label: 'Partner profiles' },
   exploring: { to: '/admin/exploring', label: 'Exploring queue' },
   jobs: { to: '/admin/jobs', label: 'Jobs console' },
   events: { to: '/admin/events', label: 'Events console' },

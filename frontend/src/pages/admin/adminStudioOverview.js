@@ -369,8 +369,8 @@ export const LANE_CONSOLES = {
   referrals: '/admin/refer-earn',
   cohort: '/admin/programs/spinout-lab/applications',
   moderation: '/admin/spinout-moderation',
-  kyc: '/admin?tab=kyc',
-  partner_profiles: '/admin?tab=profiles',
+  kyc: '/admin/kyc',
+  partner_profiles: '/admin/partner-profiles',
   exploring: '/admin/exploring',
   jobs: '/admin/jobs',
   events: '/admin/events',
@@ -380,7 +380,7 @@ export const LANE_CONSOLES = {
 
 /** The lanes with no pending notion (`NOT_LANED`), by label, with their consoles. */
 export const NO_QUEUE_CONSOLES = {
-  Directory: '/admin?tab=directory',
+  Directory: '/admin/directory',
   Circles: '/admin/circles',
   // D923 (#2370): lane 13 and this door move together.
   'Partner invitations': '/admin/partner-invitations',

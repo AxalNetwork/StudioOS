@@ -11,11 +11,12 @@
  *
  * BOARDS. `id`, `section` and `module` are the canvas's (`module` is null on a
  * section board). `route` is where the board is drawn today; D720 §11's table
- * places H11 on the Users tab of `/admin` and H13 on H12's page. `files` are
- * the components the board renders, the board's own first. `rail` is the file
- * that mounts the board's `<WorkerRail>`, which may be a parent's: the
- * `/admin` tabs draw the Admin profile's `AdminBoardFrame` (D774, #2100). `host` is the page
- * that draws the frame around a board's files when they are a tab of it.
+ * placed H11 on the Users tab of `/admin`, which is All accounts since D938,
+ * and H13 on H12's page. `files` are the components the board renders, the
+ * board's own first. `rail` is the file that mounts the board's `<WorkerRail>`,
+ * which may be a parent's: the Admin Console's tools draw the Admin profile's
+ * `AdminBoardFrame` (D774, #2100). `host` is the page that draws the frame
+ * around a board's files when they are its body.
  *
  * OPTIONS follow this folder's rules (`README.md`): one row per control that
  * runs a model, in the siblings' shape: `page` (the canvas board, "Super
@@ -34,7 +35,8 @@
 export const SUPER_ADMIN_PROFILE = 'Super Admin';
 
 const FRAME = 'pages/admin/AdminBoardFrame.jsx';
-const ADMIN_PAGE = 'pages/AdminPage.jsx';
+// D938 (#2743): the Admin Console's tools are pages at their own addresses.
+const CONSOLE_PAGES = 'pages/admin/ConsolePages.jsx';
 const KEYS_PAGE = 'pages/hq/IntegrationKeysPage.jsx';
 
 export const SUPER_ADMIN_BOARDS = [
@@ -48,7 +50,7 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H8', section: 'Contracts', module: 'Forms', route: '/admin/contracts?tab=forms', files: ['pages/admin/AdminForms.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
   { id: 'H9', section: 'Contracts', module: 'Document types', route: '/admin/contracts?tab=document-types', files: ['pages/hq/ContractRegistry.jsx'], rail: 'pages/admin/contracts/ContractsDesk.jsx' },
   { id: 'H10', section: 'Team', module: null, route: '/admin/accounts', files: ['pages/hq/AccountsPage.jsx'], rail: 'pages/hq/AccountsPage.jsx' },
-  { id: 'H11', section: 'Team', module: 'Users', route: '/admin?tab=users', files: ['pages/admin/consoles/UsersConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'H11', section: 'Team', module: 'Users', route: '/admin/accounts/all', files: ['pages/admin/consoles/UsersConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'H12', section: 'Revenue', module: null, route: '/admin/revenue', files: ['pages/hq/RevenuePage.jsx'], rail: 'pages/hq/RevenuePage.jsx' },
   { id: 'H13', section: 'Revenue', module: 'Overview', route: '/admin/revenue', files: ['pages/hq/RevenuePage.jsx'], rail: 'pages/hq/RevenuePage.jsx' },
   { id: 'H14', section: 'Revenue', module: 'Disputes', route: '/admin/revenue#disputes', files: ['pages/hq/RevenuePage.jsx', 'pages/hq/DisputePage.jsx'], rail: 'pages/hq/RevenuePage.jsx' },
@@ -59,17 +61,17 @@ export const SUPER_ADMIN_BOARDS = [
   { id: 'H19', section: 'Content', module: 'Content queue', route: '/admin/articles', files: ['pages/admin/ArticlesQueuePage.jsx'], rail: 'pages/admin/ArticlesQueuePage.jsx' },
   { id: 'H20', section: 'Content', module: 'Publications', route: '/admin/publications', files: ['pages/admin/Publications.jsx', 'pages/admin/PublicationNew.jsx', 'pages/admin/PublicationDetail.jsx'], rail: 'pages/admin/PublicationsFrame.jsx' },
   // H21: Assessment Studio was removed at the owner's request (2026-10-21); its ID stays retired.
-  { id: 'H22', section: 'Content', module: 'Personas', route: '/admin?tab=personas', files: ['pages/admin/consoles/PersonasConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'H22', section: 'Content', module: 'Personas', route: '/admin/persona-segments', files: ['pages/admin/consoles/PersonasConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'H23', section: 'Content', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
-  { id: 'H24', section: 'Content', module: 'Directory', route: '/admin?tab=directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'H24', section: 'Content', module: 'Directory', route: '/admin/directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'H25', section: 'Content', module: 'Public team page', route: '/admin/team', files: ['pages/admin/AdminTeam.jsx'], rail: 'pages/admin/AdminTeam.jsx' },
   { id: 'H26', section: 'Platform', module: null, route: '/admin/platform', files: ['pages/hq/PlatformPage.jsx'], rail: 'pages/hq/PlatformPage.jsx' },
   // H27 and H28 are one Super Admin page since the owner's ruling of
   // 2026-10-20, GitHub sync its `#github` section; the page draws the frame.
   { id: 'H27', section: 'Platform', module: 'Integration keys', route: '/admin/integration-keys', files: ['pages/admin/consoles/IntegrationKeysConsole.jsx'], rail: FRAME, host: KEYS_PAGE },
   { id: 'H28', section: 'Platform', module: 'GitHub sync', route: '/admin/integration-keys#github', files: ['pages/admin/consoles/GithubSyncConsole.jsx'], rail: FRAME, host: KEYS_PAGE },
-  { id: 'H29', section: 'Platform', module: 'Payments catalogue', route: '/admin?tab=payments', files: ['pages/admin/consoles/PaymentsConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
-  { id: 'H30', section: 'Platform', module: 'Promo codes', route: '/admin?tab=promos', files: ['pages/admin/consoles/PromoCodesConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'H29', section: 'Platform', module: 'Payments catalogue', route: '/admin/platform/payments', files: ['pages/admin/consoles/PaymentsConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
+  { id: 'H30', section: 'Platform', module: 'Promo codes', route: '/admin/platform/promo-codes', files: ['pages/admin/consoles/PromoCodesConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'H31', section: 'Platform', module: 'Credit rules', route: '/admin/credit-rules', files: ['pages/hq/CreditRulesRegistryPage.jsx'], rail: 'pages/hq/CreditRulesRegistryPage.jsx' },
   { id: 'H32', section: 'Platform', module: 'AI allowances', route: '/admin/platform/allowances', files: ['pages/hq/PlatformAllowancesPage.jsx'], rail: 'pages/hq/PlatformAllowancesPage.jsx' },
   { id: 'H33', section: 'Platform', module: 'Monitoring', route: '/monitoring', files: ['pages/MonitoringPage.jsx'], rail: 'pages/MonitoringPage.jsx' },

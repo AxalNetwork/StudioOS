@@ -1,9 +1,11 @@
 # pages/admin — the admin console
 
-Screens under `/admin` and `/admin/*`, plus the tabs `AdminPage.jsx` composes.
-Since D648 each of those tabs is its own component under `consoles/` (see its
-README), loading only its own data; `AdminPage.jsx` is the shell that mounts
-the chosen one.
+Screens under `/admin/*`. The Admin Console is retired (D938, #2743): each of
+its tools is its own component under `consoles/` (D648, see its README),
+loading only its own data, and `ConsolePages.jsx` mounts each one at its own
+address (#2375's route map) under the shared header, `../../ui/AdminPageHeader.jsx`.
+`/admin` and every `/admin?tab=` forward before anything mounts
+(`LegacyContractsRedirect.jsx`, one map: `ADMIN_TAB_MOVES`).
 Everything here is gated to the `admin` role in `App.jsx`; the guard is on the
 route, not in the component.
 
@@ -55,9 +57,10 @@ Worker AI rail mount.
 `AdminBoardFrame.jsx` is the rail on the Admin boards that drew none (D774,
 #2100): each wraps its whole page in it, named for its board, and the rail
 takes the viewer's tier (HQ's for a Super Admin, the admin's otherwise; none
-outside the admin tier). `../AdminPage.jsx` draws it once around `/admin`, named
-for the open tab's board from D768's page map, for both profiles' tab boards;
-its Spin-Out Lab tab, like the Lab's own consoles, draws none (D317).
+outside the admin tier). `ConsolePages.jsx` draws it once around each console
+page, named for the board D768's page map gives the address in the viewer's
+profile; a page that is no board of the viewer draws none. The Spin-Out Lab
+draws none (D317).
 `../../lib/railOptions/admin.js` lists the Admin's boards, S1–S39, with the
 file that mounts each one's rail.
 
@@ -120,4 +123,4 @@ signing detail and guided envelope panel. Both shells reach `/admin/contracts`.
 - Being admin-only is not a reason to invent data. These screens show real rows
   or say the list is empty.
 
-D647: `LegacyContractsRedirect.jsx` sends `/admin?tab=legal` to `/admin/contracts?moved=legal` before the console mounts, preserving other console sections.
+D647, D938: `LegacyContractsRedirect.jsx` sends every `/admin?tab=` to its own page before anything mounts — `legal` to `/admin/contracts?moved=legal` — keeping the rest of the query and the hash.
