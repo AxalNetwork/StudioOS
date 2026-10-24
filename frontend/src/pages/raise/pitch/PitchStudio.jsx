@@ -7,11 +7,14 @@ import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
 import DeckReviewerPage from '../../DeckReviewerPage';
+import ExportDialog from './ExportDialog';
+import PitchNotes from './PitchNotes';
 import {
   EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
   asList, coverOf, currentVersion, dayLabel, funnelRows, isReadOnly, linkPage, linkRows, mmss, newLinkHref,
   readerStats, slideCaption, slideSeconds, ventureQuery, versionLabel, versionRows, viewsState, weeklyViews,
 } from './pitchStudioModel';
+import { presentHref } from './presentExportModel';
 
 /**
  * D894 (#2434) — the Pitch deck studio's shell and the two tabs whose reads are
@@ -25,14 +28,17 @@ import {
  *                           seconds per slide, and every investor link, a page
  *                           at a time, with Withdraw on every link not
  *                           known to be dead.
+ *   /raise/pitch/notes      Notes (PD21, D905): the thread from the venture's
+ *                           admins to its founders, and the composer.
  *   /raise/pitch/edit       the deck builder (PitchWorkspacePage), until #2434
  *                           part 4 builds the editor (PD1).
  *
  * WHO. The venture's founder works here, as does anyone else the route admits
- * who is not an admin. An admin reads it: no New deck, no New link, no Withdraw,
- * and a "Read only." banner (PD21). Review is the reviewer's own tool, with its
- * own writes, so it draws no banner. The Worker still lets an admin write;
- * #2434 part 1 closes that.
+ * who is not an admin. An admin reads it and leaves notes: no New deck, no New
+ * link, no Withdraw, and a "Read only." banner (PD21). Review is the reviewer's
+ * own tool, with its own writes, so it draws no banner. The Worker still lets an
+ * admin write the deck; #2434 part 1 closes that. An Advisor, an Operating
+ * Partner or an Explorer gets PitchBoundary (PD22) from the route instead.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -172,6 +178,8 @@ export default function PitchStudio({ tab = 'decks' }) {
           </div>
         ) : tab === 'analytics' ? (
           <StudioAnalytics reads={reads} readOnly={readOnly} />
+        ) : tab === 'notes' ? (
+          <PitchNotes reads={reads} />
         ) : (
           <StudioDecks reads={reads} readOnly={readOnly} q={q} />
         )}
@@ -251,7 +259,7 @@ export function StudioDecks({ reads, readOnly, q }) {
   } else {
     left = (
       <>
-        <CurrentDeck project={reads.project} current={current} deck={reads.deck} q={q} phone={phone} />
+        <CurrentDeck project={reads.project} current={current} versions={versions} deck={reads.deck} q={q} phone={phone} readOnly={readOnly} />
         <Versions rows={rows} phone={phone} />
       </>
     );
@@ -269,7 +277,8 @@ export function StudioDecks({ reads, readOnly, q }) {
   );
 }
 
-function CurrentDeck({ project, current, deck, q, phone }) {
+function CurrentDeck({ project, current, versions, deck, q, phone, readOnly }) {
+  const [exporting, setExporting] = useState(false);
   const cover = deck.status === 'ok' ? coverOf(deck.data) : null;
   const title = `${String(project?.name || '').trim() || 'Your venture'} · ${versionLabel(current)}`;
   return (
@@ -295,8 +304,12 @@ function CurrentDeck({ project, current, deck, q, phone }) {
         </span>
         <div className="mt-auto flex flex-wrap gap-2">
           <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-open">Open</Link>
+          {/* D901 (#2680): present reads, so a read-only viewer presents too (PD21); export writes the ledger. */}
+          <Link to={presentHref(project?.id, current.id)} className={GHOST} data-testid="pitch-studio-present">Present</Link>
+          {!readOnly ? <button type="button" className={GHOST} onClick={() => setExporting(true)} data-testid="pitch-studio-export">Export</button> : null}
         </div>
       </div>
+      {exporting ? <ExportDialog versions={versions} current={current} onClose={() => setExporting(false)} /> : null}
     </section>
   );
 }

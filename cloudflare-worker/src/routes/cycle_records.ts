@@ -2,7 +2,7 @@
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
-import { canReadBoard, canWrite, type ProjectRef } from './_founder_validate_helpers';
+import { canReadBoard, canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
 import { activityFor } from '../services/cycleActivity';
 import { hasRecords, RECORD_SPECS, specFor } from '../services/records';
 import { ownedRow, RECORD_ID } from '../services/records/owned';
@@ -68,14 +68,21 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
     const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
       .bind(projectId).first() as ProjectRef | null;
     if (!project) return c.json({ detail: 'Project not found' }, 404);
-    const gate = c.req.method === 'GET' && !c.req.path.endsWith('/form-options') ? spec.read : spec.write;
-    if (!await allowed(gate, project, user, c.env)) return c.json({ detail: 'Forbidden' }, 403);
+    const reading = c.req.method === 'GET' && !c.req.path.endsWith('/form-options');
+    const ctx: RecordContext = { env: c.env, projectId, project, user };
+    if (reading) {
+      if (!await allowed(spec.read, project, user, c.env)) return c.json({ detail: 'Forbidden' }, 403);
+    } else {
+      const refusal = await writerAllowed(c, ctx, spec);
+      if (refusal) return refusal;
+    }
     if (withId && !await ownedRow(c.env, spec.store, id, projectId)) return c.json({ detail: 'Record not found.' }, 404);
     return { ctx: { env: c.env, projectId, project, user }, spec, cycle, slug, id };
   })();
 }
 
 async function writerAllowed(c: any, ctx: RecordContext, spec: ModuleSpec): Promise<Response | null> {
+  if (c.req.param('cycle') === 'raise' && c.req.param('slug') === 'pitch-deck' && !canWritePitchDeck(ctx.project, ctx.user)) return c.json({ detail: 'Forbidden' }, 403);
   return await allowed(spec.write, ctx.project, ctx.user, ctx.env) ? null : c.json({ detail: 'Forbidden' }, 403);
 }
 
@@ -124,7 +131,7 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
     const s = await scoped(c, registry, true);
     if (s instanceof Response) return s;
     const record = await s.spec.record(s.ctx, s.id);
-    const canWrite = await allowed(s.spec.write, s.ctx.project, s.ctx.user, s.ctx.env);
+    const canWrite = await writerAllowed(c, s.ctx, s.spec) === null;
     const sections: RecordSection[] = [];
     for (const section of s.spec.sections) {
       if (section.gate && !await allowed(section.gate, s.ctx.project, s.ctx.user, s.ctx.env)) continue;

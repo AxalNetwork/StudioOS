@@ -28,6 +28,7 @@ export const STUDIO_PATH = '/raise/pitch';
 export const EDIT_PATH = '/raise/pitch/edit';
 export const REVIEW_PATH = '/raise/pitch/review';
 export const ANALYTICS_PATH = '/raise/pitch/analytics';
+export const NOTES_PATH = '/raise/pitch/notes';
 
 /** The old `?mode=workspace` address now redirects to the editor with this key. */
 export const MOVED_KEY = 'pitch-workspace';
@@ -37,12 +38,14 @@ export const TITLE = 'Pitch deck studio';
 // The canvas's second sentence, "Every figure shows its source.", waits for the
 // source chips (#2434 part 2): it is not true of the builder yet.
 export const LINE = 'Build your deck from what StudioOS already knows.';
-export const READ_ONLY = 'Read only.';
+// PD21: an admin reads the studio and leaves notes (D905).
+export const READ_ONLY = 'Read only. Notes are visible to the founder.';
 
 export const TABS = [
   { id: 'decks', label: 'Decks', path: STUDIO_PATH },
   { id: 'review', label: 'Review', path: REVIEW_PATH },
   { id: 'analytics', label: 'Share & analytics', path: ANALYTICS_PATH },
+  { id: 'notes', label: 'Notes', path: NOTES_PATH },
 ];
 
 export const EMPTY_DECK = 'No deck yet. Start from your records.';
@@ -286,3 +289,68 @@ export const newLinkHref = (records) => (records?.add?.href && /^\/raise\/pitch-
 
 /** Whether the module says nobody has opened a link yet (an empty card with a deck). */
 export const noViewsYet = (card) => card?.state === 'empty' && /No one has opened/i.test(String(card?.reason || ''));
+
+// ---------------------------------------------------------------------------
+// D905 (#2684) — notes (PD21) and the studio's boundary (PD22)
+// ---------------------------------------------------------------------------
+
+/** The Worker's limit on one note (`routes/deck_notes.ts` NOTE_MAX). */
+export const NOTE_MAX = 2000;
+export const NOTES_EYEBROW = 'Notes · visible to the founder';
+export const NOTES_EMPTY = 'No notes yet.';
+export const NOTE_PLACEHOLDER_ADMIN = 'Write a note for the founder…';
+export const NOTE_PLACEHOLDER_FOUNDER = 'Answer your admins…';
+
+const KIND_LABEL = { admin: 'Admin', super_admin: 'Axal VC HQ', founder: 'founder' };
+
+/** A card pill's words: "Card 8", or the whole deck. */
+export const cardLabel = (index) => (Number.isInteger(index) && index >= 0 ? `Card ${index + 1}` : 'Whole deck');
+
+/**
+ * The thread, oldest first, as the Notes tab draws it. A name nobody recorded
+ * reads "Not recorded"; the kind is what the author was when they wrote it.
+ */
+export function noteRows(notes) {
+  return asList(notes, 'notes').map((n) => {
+    const name = String(n?.author?.name || '').trim() || NOT_RECORDED;
+    return {
+      id: n.id,
+      who: `${name} · ${KIND_LABEL[n?.author?.kind] || NOT_RECORDED}`,
+      when: dayLabel(n.created_at),
+      text: String(n.body || ''),
+      card: cardLabel(n.card_index),
+      version: Number.isInteger(n.deck_version) ? `v${n.deck_version}` : NOT_RECORDED,
+    };
+  });
+}
+
+/** What posting does, in the confirm dialog's words. */
+export function postNoteSentence(viewer, cardIndex) {
+  const where = cardLabel(cardIndex) === 'Whole deck' ? 'the whole deck' : cardLabel(cardIndex).toLowerCase();
+  return viewer === 'founder'
+    ? `Your answer is added to the thread on ${where}. Your admins and your cofounders read it.`
+    : `Your note is added to the thread on ${where}. The founder reads it in the studio. Investors never see it, and it is in no export or share.`;
+}
+
+/**
+ * PD22: the roles the studio is not for. An Advisor, an Operating Partner and
+ * an Explorer see a boundary inside their own shell, never a bounce; a member
+ * of an active Spin-Out Lab cohort uses the studio as a founder does.
+ */
+export const BOUNDARY_ROLES = ['advisor', 'partner', 'exploring'];
+export const BOUNDARY_TITLE = 'The Pitch deck studio is for the venture\u2019s founders.';
+export function boundaryFor(role, labActive = false) {
+  if (labActive || !BOUNDARY_ROLES.includes(String(role || ''))) return null;
+  return role === 'advisor'
+    ? { title: BOUNDARY_TITLE, line: 'Ask them to share a link. A shared deck opens in the viewer, with the NDA if they ask for one.' }
+    : { title: BOUNDARY_TITLE, line: 'Ask them to share a link.' };
+}
+
+/** The Super Admin's defaults, one row per sector and stage, with the template's name when the list was read. */
+export function overrideRows(overrides, methods) {
+  const names = new Map(asList(methods, 'methods', 'items').map((m) => [m.id, m.label]));
+  return asList(overrides, 'overrides').map((o) => ({
+    key: `${o.sector}|${o.stage}`, sector: o.sector, stage: o.stage, methodId: o.method_id,
+    template: names.get(o.method_id) || o.method_id,
+  }));
+}

@@ -8,6 +8,13 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 |---|---|
 | `PitchStudio.jsx` | The studio's shell and the tabs whose reads exist: Decks (PD2) at `/raise/pitch`, Review at `/raise/pitch/review` (today's reviewer, embedded), Share & analytics (PD19) at `/raise/pitch/analytics`. |
 | `pitchStudioModel.js` | Pure: the addresses, the words, and every derivation from the reads (views by week, seconds per slide, one version's readers and its funnel, the investor links and their pages). |
+| `PitchPresent.jsx` | Present mode at `/raise/pitch/present` (D901, PD16 and PD26 frame 2): the presenter view, the audience view and the phone viewer. Reads one version; writes nothing. |
+| `ExportDialog.jsx` | The export dialog (D901, PD17 and PD25): PDF, PowerPoint and HTML, with Google Slides drawn as unavailable. It says what the export records before it runs. |
+| `presentExportModel.js` | Pure: present mode's cards, keys, timer and dots, and the export dialog's formats, sentences and ledger line. |
+| `PitchNotes.jsx` | D905 (#2684), PD21: the Notes tab at `/raise/pitch/notes`: the thread from the venture's admins to its founders (`GET /api/decks/:id/notes`), a card pill on each note, the composer (posting opens a dialog), and the Super Admin's default template by sector and stage. Who may post is the Worker's `viewer`. |
+| `PitchBoundary.jsx` | D905, PD22: what an Advisor, an Operating Partner or an Explorer reads at `/raise/pitch`, inside their own shell. Nothing from a deck is read. |
+| `sourcesModel.js` | D896 (#2675): pure words and derivations of the deck's sources — value wording by unit, chips, grouping and filters, the coverage meter, Missing, the scorecard dialog. |
+| `SourcesBoards.jsx` | D896: `CoverageMeter` (PD11), `SourceChip`, `SourcesLegend` (PD10b), `ScorecardDialog`, `SourcesPanel` (PD10), `SourcesStep` (PD4) and `useDeckSources`, over `GET /api/decks/sources`. Built here, mounted by part 3 (New deck) and part 4 (the editor). |
 | `PitchWorkspaceMoved.jsx` | The old `/raise/pitch?mode=workspace` address: it opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`, the venture and the hash kept. |
 
 The deck builder itself stays `../../PitchWorkspacePage.jsx` (with
@@ -43,4 +50,8 @@ replaces it.
   admin account only (viewing as a founder included) and hides New deck, New
   link and Withdraw; everyone else the route admits works here. Review draws no
   "Read only." banner: the reviewer is its own tool, with its own writes. The
-  Worker's own refusal is #2434's fixes part.
+  Worker's own refusal is #2434's fixes part. An admin leaves notes on the Notes
+  tab (D905); a note is never in a share or an export.
+- **The roles the studio is not for see a boundary** (PD22). An Advisor, an
+  Operating Partner or an Explorer opening `/raise/pitch` reads
+  `PitchBoundary`, never a bounce; the other studio addresses keep their guard.

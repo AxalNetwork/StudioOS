@@ -14,7 +14,7 @@ each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
 **Corpus:** 151 canonical canvases at `design/canvases/`, listed
-201 times below — a canvas serving two workspaces appears under both.
+203 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -102,7 +102,7 @@ it, where in their nav, and how do they get there.*
 | Use of Funds | `/spinout-lab/use-of-funds` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | NEW | Low |
 
-## Advisor — 17 canvases
+## Advisor — 18 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -116,6 +116,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Advisor Expertise | `/expertise` · `/expertise/{profile` | Headerless | Full page (proposed) | Sidebar → Headerless → Expertise | UPGRADE | Low |
 | Pages · Advisor Network | `/network/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Network | UPGRADE | Low |
 | Pages · Advisor Research | `/research/*` | Headerless | Full page (proposed) | Sidebar → Headerless → Research | UPGRADE | Low |
+| Pitch Deck Studio | `/raise/pitch/edit` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Research · Companies | `/research/companies` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Company | `/research/companies/company/:uid` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -156,7 +157,7 @@ it, where in their nav, and how do they get there.*
 | Research · Sector | `/research/markets/sector/:slug` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Scoring Engine v2 | `/scoring` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 
-## Partner / Operator — 12 canvases
+## Partner / Operator — 13 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -167,6 +168,7 @@ it, where in their nav, and how do they get there.*
 | Pages · Partner Pipeline | `/needs` · `/partner/operations/*` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Partner Operator Canvas | `/studio` · `/spinout-lab` · `/needs` · `/partner/insights` · `/partner/operations/*` · `/services` · `/perks` · `/comarketing` · `/partner/office-hours` · `/network` · `/market-intel` | Headerless | Full page | Sidebar → Headerless → Studio | UPGRADE | High |
 | Perks & Products | `/perks` | Headerless | Full page | Sidebar → Headerless → Offers | NEW | High |
+| Pitch Deck Studio | `/raise/pitch/edit` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Research · Geography | `/research/geographies` · `/research/geographies/:code` · `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
 | Research · Main | `/research` | Headerless | Full page | Sidebar → Headerless → Research | UPGRADE | High |
 | Research · Markets | `/research/markets` | Headerless | Full page | Sidebar → Headerless → Research | CURRENT | High |
@@ -283,7 +285,7 @@ it, where in their nav, and how do they get there.*
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
 | High | 103 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 54 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| Medium | 56 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 44 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts

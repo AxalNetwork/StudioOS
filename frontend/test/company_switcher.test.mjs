@@ -112,8 +112,9 @@ test('the scope notice stands exactly as long as scoping is incomplete', () => {
       // #2435 moves the real request-aware gate into shared middleware.
       // Follow its import and call; an unscoped router gains no exemption.
       if (f === 'decks.ts' || f === 'brand.ts') {
-        assert.match(src, /import \{ projectOwned \} from '\.\.\/middleware\/projectContentAccess'/, `${f} must import its shared gate`);
+        assert.match(src, /import \{ projectOwned(?: as sharedProjectOwned)? \} from '\.\.\/middleware\/projectContentAccess'/, `${f} must import its shared gate`);
         assert.match(src, /await projectOwned\(c, user,/, `${f} must call its shared gate`);
+        if (src.includes('projectOwned as sharedProjectOwned')) assert.match(src, /await sharedProjectOwned\(c, user, projectId, opts\)/, `${f} must delegate every scoped option`);
         src += codeOnly(read('cloudflare-worker/src/middleware/projectContentAccess.ts'));
       }
       return { f, src };

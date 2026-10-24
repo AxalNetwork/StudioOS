@@ -24,7 +24,7 @@ export const HELP_SURFACES = {
   "/validate": {"label": "Validate", "roles": ["admin", "founder"], "lab": true},
   "/build/roadmap": {"label": "Roadmap", "roles": ["admin", "founder"], "lab": true},
   "/build/brand": {"label": "Brand Builder", "roles": ["admin", "founder"], "lab": true},
-  "/raise/pitch": {"label": "Pitch Deck", "roles": ["admin", "founder"], "lab": true},
+  "/raise/pitch": {"label": "Pitch Deck", "roles": ["admin", "founder", "advisor", "partner", "exploring"], "lab": true},
   "/raise/capital/model": {"label": "Financial Model", "roles": ["admin", "founder"], "lab": false},
   "/trust": {"label": "Trust Center", "roles": ["admin", "founder", "partner", "investor", "advisor", "exploring"], "lab": false},
   "/raise/data-room": {"label": "Data Room", "roles": ["admin", "founder", "investor"], "lab": false},

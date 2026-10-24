@@ -355,7 +355,8 @@ test('the old ?mode=workspace address opens the editor with the moved notice dra
   assert.ok(!editor('/raise/pitch/edit?project_id=12').includes(MOVED_NOTICE), 'the notice shows without the moved key');
   assert.equal(ventureQuery(12), '?project_id=12');
   assert.equal(ventureQuery(null), '');
-  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Decks', STUDIO_PATH], ['Review', REVIEW_PATH], ['Share & analytics', ANALYTICS_PATH]]);
+  // D905 (#2684) adds the Notes tab (PD21).
+  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Decks', STUDIO_PATH], ['Review', REVIEW_PATH], ['Share & analytics', ANALYTICS_PATH], ['Notes', '/raise/pitch/notes']]);
   assert.equal(TITLE, 'Pitch deck studio');
   assert.doesNotMatch(LINE, /Every figure shows its source/, 'the source chips are #2434 part 2; the line waits for them');
   assert.equal(NOT_RECORDED, 'Not recorded');
@@ -446,7 +447,7 @@ test('Review mounts the reviewer whatever the ventures read says, and draws no "
 test('the tabs keep the venture in the address while the ventures read is loading, and after it fails', async () => {
   const hrefs = (html) => [...html.matchAll(/data-testid="pitch-studio-tab-\w+" href="([^"]*)"/g)].map((x) => x[1]);
   const loading = renderToStaticMarkup(h(MemoryRouter, { initialEntries: ['/raise/pitch?project_id=12'] }, h(PitchStudio, { tab: 'decks' })));
-  assert.deepEqual(hrefs(loading), ['/raise/pitch?project_id=12', '/raise/pitch/review?project_id=12', '/raise/pitch/analytics?project_id=12']);
+  assert.deepEqual(hrefs(loading), ['/raise/pitch?project_id=12', '/raise/pitch/review?project_id=12', '/raise/pitch/analytics?project_id=12', '/raise/pitch/notes?project_id=12']);
   const m = await mount(h(PitchStudio, { tab: 'analytics' }), '/raise/pitch/analytics?project_id=12', { listProjects: async () => { throw new Error('read failed'); } });
   try {
     assert.match(m.text(), /Your ventures could not be read/);
@@ -636,7 +637,9 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   const app = read('frontend/src/App.jsx');
   // A literal search, not a RegExp built from the path: nothing here needs a pattern.
   const route = (path) => `<Route path="${path}" element={guard(labRoles(['admin', 'founder'])`;
-  for (const p of ['/raise/pitch', '/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/positioning']) assert.ok(app.includes(route(p)), p);
+  for (const p of ['/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/positioning', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
+  // D905 (#2684), PD22: the studio's home also admits the roles it is not for, to tell them so.
+  assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
   assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*founderEditor\(<PitchStudio tab="decks" \/>\)/);
   assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchWorkspacePage \/>\)\)\)\} \/>/);
   assert.match(app, /<Route path="\/raise\/pitch\/analytics" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderEditor\(<PitchStudio tab="analytics" \/>\)\)\} \/>/);

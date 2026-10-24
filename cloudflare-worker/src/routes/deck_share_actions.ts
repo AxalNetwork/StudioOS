@@ -16,6 +16,7 @@ import { verifyTurnstile } from '../services/turnstile';
 import { ipPrefix } from '../services/securityEvents';
 import { applyMergeFields, mergeTokensIn } from '../services/mergeFields';
 import { refuse } from '../util/refusal';
+import { upsertPairwiseNda, activatePairwiseNda, hasActivePairwiseNda } from '../services/trust';
 import { bindingKey } from '../util/schemaBootstrap';
 
 const deckShareActions = new Hono<{ Bindings: Env }>();
@@ -392,6 +393,10 @@ deckShareActions.post('/share/:token/nda', async (c) => {
     return refuse(c, 503, { code: 'template_unreadable', message: 'The NDA could not be read, so nothing was recorded. Try again in a moment.' });
   }
 
+  const founder = ctx.project_id ? await c.env.DB.prepare("SELECT u.id FROM users u JOIN projects p ON p.founder_id = u.founder_id WHERE p.id = ? AND u.role = 'founder' ORDER BY u.id LIMIT 1").bind(ctx.project_id).first<{ id: number }>() : null;
+  if (!founder) return c.json({ error: 'The venture founder could not be resolved. Nothing was signed.' }, 503);
+  if (Number(founder.id) === userId) return c.json({ error: 'The venture founder cannot sign as the outside viewer.' }, 403);
+
   // Persist as nda_acceptance (non-contract type — safe to insert).
   let docId: number | null = null;
   try {
@@ -411,13 +416,30 @@ deckShareActions.post('/share/:token/nda', async (c) => {
   }
 
   if (!docId) return c.json({ error: 'NDA acceptance could not be recorded. Try again.' }, 503);
+  try {
+    const acceptance = await c.env.DB.prepare('SELECT uid FROM documents WHERE id = ?').bind(docId).first<{ uid: string }>();
+    if (!acceptance?.uid) throw new Error('acceptance_uid_missing');
+    await upsertPairwiseNda(c.env, Number(founder.id), userId, acceptance.uid);
+    await activatePairwiseNda(c.env, acceptance.uid);
+    const linked = await c.env.DB.prepare('SELECT nda_envelope_uuid FROM pairwise_ndas WHERE party_a_user_id = ? AND party_b_user_id = ?').bind(Number(founder.id), userId).first<{ nda_envelope_uuid: string }>();
+    if (linked?.nda_envelope_uuid !== acceptance.uid || !await hasActivePairwiseNda(c.env, Number(founder.id), userId)) throw new Error('pairwise_link_incomplete');
+  } catch (e) {
+    // Compensate only this request's unfinished acceptance. A completed active
+    // agreement is retained if a later read failed; never remove another NDA.
+    try {
+      await c.env.DB.prepare("DELETE FROM pairwise_ndas WHERE nda_envelope_uuid = (SELECT uid FROM documents WHERE id = ?) AND status = 'pending'").bind(docId).run();
+      await c.env.DB.prepare("DELETE FROM documents WHERE id = ? AND NOT EXISTS (SELECT 1 FROM pairwise_ndas WHERE nda_envelope_uuid = documents.uid AND status = 'active')").bind(docId).run();
+    } catch { console.error('[deck_share] incomplete NDA cleanup failed'); }
+    console.error('[deck_share] NDA link incomplete', (e as Error).message);
+    return c.json({ error: 'The NDA could not be completed. Try again.' }, 503);
+  }
   await logConversion(c.env, {
     deckId: tok.deckId, tokenId: tok.tokenId, viewId,
     projectId: ctx.project_id, userId,
     type: 'nda_signed', refId: docId ? String(docId) : null,
   });
 
-  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG, data_room_access_granted: false, message: 'NDA acceptance recorded. This does not grant data-room access; a separate founder grant and the data room NDA checks still apply.' });
+  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG, data_room_access_granted: false, message: 'NDA recorded with the venture founder. This does not grant data-room access; a separate founder grant is required.' });
 });
 
 // ─────────────────────────────────────────────────────────────────────
