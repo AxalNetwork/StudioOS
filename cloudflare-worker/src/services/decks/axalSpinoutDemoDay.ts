@@ -1,3 +1,4 @@
+import { readableRoomFiles } from '../raiseEvidence';
 /**
  * axalSpinoutDemoDay.ts — Task #15
  *
@@ -439,7 +440,8 @@ export type SpinoutDemoDayData = {
     deal_access: {
       deal_room_url: string;
       nda_required: boolean;
-      data_room_ready: boolean;
+      data_room_ready: boolean | null;
+      data_room_reason?: string | null;
       cta_label: string;
     };
   };
@@ -1262,10 +1264,14 @@ export async function fillAxalSpinoutDemoDay(
   const dataRoomNdaRequired = p.data_room_nda_required != null
     ? !!p.data_room_nda_required
     : !doneMap.has('incorporation_completed');
+  const roomReadiness = await readableRoomFiles(env, projectId)
+    .then(files => ({ ready: files.length > 0, reason: null as string | null }))
+    .catch(() => ({ ready: null, reason: 'Data room could not be read.' }));
   const dealAccess = {
     deal_room_url: dataRoomUrl,
     nda_required: dataRoomNdaRequired,
-    data_room_ready: !!dataRoomUrl || (doneMap.has('pitch_deck_v1') && doneMap.has('captable_seed')),
+    data_room_ready: roomReadiness.ready,
+    data_room_reason: roomReadiness.reason,
     cta_label: 'Review the deal',
   };
 

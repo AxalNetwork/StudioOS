@@ -143,6 +143,7 @@ const HeldApprovals = lazy(() => import('./pages/admin/HeldApprovals'));
 const HeldPrograms = lazy(() => import('./pages/admin/HeldPrograms'));
 const AdminCommunity = lazy(() => import('./pages/admin/community/AdminCommunity'));
 const HeldCommunityRedirect = lazy(() => import('./pages/admin/community/HeldCommunityRedirect'));
+const PitchPositioningRedirect = lazy(() => import('./pages/raise/narrative/PitchPositioningRedirect'));
 const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'));
 const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsightsRedirect'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
@@ -2972,7 +2973,8 @@ function AppInner() {
        <Route path="/raise/status" element={guard(labRoles(['admin', 'founder']), <FounderRaiseStatus />)} />
       <Route path="/raise/pitch/edit" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
       <Route path="/raise/pitch/analytics" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="analytics" />))} />
-      <Route path="/raise/pitch/positioning" element={guard(labRoles(['admin', 'founder']), founderWorkspace('raise', founderEditor(<PitchWorkspacePage />)))} />
+      {/* D911 (#2695): Positioning moved into Investor narrative › Positioning (NAR18). */}
+      <Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />
       <Route path="/raise/pitch/review" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchStudio tab="review" />))} />
       {/* D901 (#2680) — present mode (PD16): full screen, reads one version, writes nothing. */}
       <Route path="/raise/pitch/present" element={guard(labRoles(['admin', 'founder']), founderEditor(<PitchPresent />))} />

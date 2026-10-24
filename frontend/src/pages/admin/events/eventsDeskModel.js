@@ -43,8 +43,8 @@ export const REVIEW_PATH = '/admin/events/review';
 export const ALL_PATH = '/admin/events/all';
 /** D919 (#2702): the Calendar tab. */
 export const CALENDAR_TAB_PATH = '/admin/events/calendar';
-/** Where the sidebar's Community row lands; the canvas's `/admin/community` is not a route. */
-export const COMMUNITY_PATH = '/admin/held/community';
+/** Community's own address since D930 (#2367); `/admin/held/community` only redirects there. */
+export const COMMUNITY_PATH = '/admin/community';
 
 export const TITLE = 'Events';
 export const LINE = 'Approve public events, keep the calendar healthy and see how events perform.';
@@ -543,6 +543,9 @@ export function queueRows(events, { q = '', sort = 'starts' } = {}) {
 }
 
 const ROLE_WORD = { admin: 'Admin', founder: 'Founder', partner: 'Operating Partner', investor: 'Investor', exploring: 'Explorer' };
+
+/** A member's role in the canvas's words; a role with no word is title-cased. */
+export const roleWord = (role) => ROLE_WORD[role] || titleCase(role) || NOT_RECORDED;
 
 /** Who may register (`mode`, `roles`, `personas`; a missing mode is "everyone", as the Worker reads it). */
 export function audienceLine(rules) {
