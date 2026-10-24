@@ -12,7 +12,7 @@ import { EVENT_TYPES, isInPersonEvent } from '../src/services/eventsCommon.ts';
 import { registrationEligibility } from '../src/services/eventOrganiser.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 
-const SECRET = 'd916-synthetic-fixture-'.repeat(3);
+const SECRET = 'test'.repeat(16);
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   for (const name of ['109_events_core.sql', '392_event_organiser.sql']) db.exec(readFileSync(new URL(`../sql/migrations/${name}`, import.meta.url), 'utf8'));
