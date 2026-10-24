@@ -20,7 +20,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  COMMUNITY_PATH, MOVED_KEY, MOVED_NOTICE, NOT_YET, PAGE_UNREADABLE,
+  COMMUNITY_PATH, MOVED_KEY, MOVED_NOTICE, PAGE_UNREADABLE,
   buildCircles, buildConsoles, buildJobs, buildNeeds, buildNextUp, buildTiles,
   isEmptyCommunity, pageFailed, readAllPages, seatsRead, seatsText, upcomingEvents,
 } from '../src/pages/admin/community/communityModel.js';
@@ -73,12 +73,12 @@ const tile = (tiles, key) => tiles.find((t) => t.key === key);
 
 // ---------------------------------------------------------------- the model
 
-test('Waiting on you adds the glance\'s events and jobs lanes, and never claims how long they waited', () => {
+test('Waiting on you adds the glance\'s events and jobs lanes, and claims no wait before the Community read answers', () => {
   const t = tile(buildTiles(ALL, NOW), 'waiting');
   assert.equal(t.state, 'ready');
   assert.equal(t.value, '7');
-  assert.equal(t.sub, '4 events · 3 jobs');
-  assert.match(t.note, /not recorded yet/);
+  assert.equal(t.sub, '4 events · 3 jobs', 'no oldest wait without the Community read (D933 adds it)');
+  assert.equal(t.overdue, false);
   // A lane that failed is a missing total, never a partial sum.
   const failedLane = { ...ALL, glance: ok({ approvals: { lanes: [{ key: 'events', count: null }, { key: 'jobs', count: 3 }] } }) };
   assert.equal(tile(buildTiles(failedLane, NOW), 'waiting').state, 'unreadable');
@@ -111,14 +111,13 @@ test('Next up is the three soonest published events, each with its seats', () =>
   assert.deepEqual(n.rows.map((r) => [r.title, r.seats.text]), [['Founder Breakfast', '42 / 60'], ['Open Lab', 'No cap · 12 registered']]);
 });
 
-test('the figures with no read yet say so, never a zero', () => {
+test('the period figures wait for the Community read, and are never a zero before it answers (D933 draws them)', () => {
   const tiles = buildTiles(ALL, NOW);
   for (const key of ['registrations', 'applications', 'show-up', 'experts']) {
-    assert.equal(tile(tiles, key).state, 'notyet', key);
-    assert.ok(tile(tiles, key).reason.length > 20, key);
+    assert.equal(tile(tiles, key).state, 'loading', key);
     assert.equal(tile(tiles, key).value, undefined, key);
   }
-  assert.equal(buildConsoles(ALL).wellbeing.state, 'notyet');
+  assert.equal(buildConsoles(ALL).wellbeing.state, 'loading');
 });
 
 test('Jobs: postings by status in the canvas\'s order, and the five with most applications', () => {
@@ -139,9 +138,10 @@ test('Circles count as stored, members are as entered, and a legacy mentor is an
   assert.equal(tile(buildTiles(ALL, NOW), 'roster').value, '3');
 });
 
-test('Needs a decision: waiting events and jobs, oldest created first, and a half that failed says so', () => {
-  const n = buildNeeds(ALL);
-  assert.deepEqual(n.rows.map((r) => `${r.kind} ${r.title}`), ['Job Founding Engineer', 'Event Pricing Clinic', 'Job Finance Lead']);
+test('Needs a decision: waiting events and jobs, oldest first, and a half that failed says so', () => {
+  const n = buildNeeds(ALL, NOW);
+  // D933: these jobs carry no submitted_at, so their wait is not recorded and they list after every dated row.
+  assert.deepEqual(n.rows.map((r) => `${r.kind} ${r.title}`), ['Event Pricing Clinic', 'Job Founding Engineer', 'Job Finance Lead']);
   assert.equal(n.total, 3);
   const half = buildNeeds({ ...ALL, jobs: bad });
   assert.deepEqual(half.rows.map((r) => r.title), ['Pricing Clinic']);
@@ -150,7 +150,7 @@ test('Needs a decision: waiting events and jobs, oldest created first, and a hal
 });
 
 test('the whole page fails only when every read failed; an empty studio is real zeros', () => {
-  const none = Object.fromEntries(Object.keys(ALL).map((k) => [k, bad]));
+  const none = Object.fromEntries([...Object.keys(ALL), 'overview'].map((k) => [k, bad]));
   assert.equal(pageFailed(none), true);
   assert.equal(pageFailed({ ...none, circles: ok([]) }), false);
   const noRows = ok({ events: [], unreadable: [] });
@@ -229,7 +229,8 @@ test('mounted: each block is drawn from its own read, and no roster name reaches
     assert.match(m.of('community-tile-waiting'), /2.*1 events · 1 jobs.*Open Approvals/s);
     assert.match(m.of('community-tile-circles'), /3 of 4/);
     assert.match(m.of('community-tile-roster'), /1.*active on the roster/s);
-    assert.match(m.of('community-tile-registrations'), new RegExp(NOT_YET));
+    // This stub has no Community read, so the period figures say they could not be read (D933 draws them).
+    assert.match(m.of('community-tile-registrations'), /Unreadable/);
     assert.match(m.of('community-card-jobs'), /Backend Engineer.*14 applications/s);
     assert.match(m.of('community-circle-counts'), /3 published · 1 draft · 2 featured/);
     assert.match(m.of('community-members-entered'), /212.*As entered/s);
@@ -239,9 +240,12 @@ test('mounted: each block is drawn from its own read, and no roster name reaches
     assert.ok(!m.has('community-moved'));
     // Every read the page made, by path. The wellbeing reads are not among them.
     // The rail makes its own /api/ai* reads; those are its, not the page's.
-    const paths = new Set(m.seen.map((s) => s.split('?')[0]).filter((p) => !/^\/api\/ai(-budget)?\//.test(p)));
+    const paths = new Set(m.seen.map((s) => s.split('?')[0]).filter((p) => !/^\/api\/ai(-budget)?\//.test(p) && p !== '/api/client-error'));
     assert.ok(!m.seen.some((s) => s.startsWith('/api/wellbeing')), 'the page read a wellbeing route');
-    assert.deepEqual([...paths].sort(), ['/api/admin/circles', '/api/admin/events', '/api/admin/events/analytics', '/api/admin/jobs', '/api/admin/network-profiles', '/api/admin/studio/glance']);
+    assert.deepEqual([...paths].sort(), [
+      '/api/admin/circles', '/api/admin/community/activity', '/api/admin/community/overview', '/api/admin/events', '/api/admin/events/analytics',
+      '/api/admin/jobs', '/api/admin/network-profiles', '/api/admin/studio/glance',
+    ]);
     assert.ok(m.seen.includes('/api/admin/events?status=published&limit=200&offset=0'));
     assert.ok(m.seen.includes('/api/admin/events?status=pending_review&limit=200&offset=0'));
   } finally { await m.unmount(); }
