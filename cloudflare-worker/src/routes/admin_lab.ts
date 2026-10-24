@@ -101,7 +101,7 @@ r.get('/overview', async (c) => {
       carried_in: metric('carried_in'), started: metric('started'),
       interview_set: interviews.available ? value(Number(iv?.interview_set || 0)) : interviews,
       interviewed: missing(INTERVIEW_REASON),
-      waiting: !pools.available ? pools : !interviews.available ? interviews : value(Number(iv?.waiting || 0)),
+      waiting: interviews.available ? value(Number(iv?.waiting || 0)) : interviews,
       in_grace: outcomes.available ? value(Number(ws[0]?.in_grace || 0)) : outcomes,
       weeks: !outcomes.available ? outcomes : !windows.available ? windows : {
         available: true, items: windows.rows.filter(w => w.cohort_cycle_id === cycle.id).map(w => ({

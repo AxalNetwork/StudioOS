@@ -204,3 +204,9 @@ test('D944: large application pages respect D1’s per-row size limit instead of
   };return st;}};
   const r=await f.call('/applications/list?q=Large%20payload&limit=100');assert.equal(r.body.available,true);assert.equal(r.body.total,100);assert.equal(r.body.items.length,100);assert.equal(r.body.items[0].answers.why_axal.length,4000);f.db.close();
 });
+
+test('D944: a pool-summary query failure does not discard independently readable waiting and interview counts',async()=>{
+  const f=fixture();const original=f.env.DB;
+  f.env.DB={...original,prepare(sql:string){const st=original.prepare(sql);if(sql.includes('COUNT(*) AS applied'))st.all=async()=>{throw new Error('synthetic pool summary failure');};return st;}};
+  const c=october(await f.call('/overview'));assert.equal(c.applied.available,false);assert.equal(c.waiting.value,1);assert.equal(c.interview_set.value,1);assert.equal(c.weeks.available,true);f.db.close();
+});
