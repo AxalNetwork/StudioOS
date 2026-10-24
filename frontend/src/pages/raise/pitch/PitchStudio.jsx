@@ -11,7 +11,7 @@ import ExportDialog from './ExportDialog';
 import PitchNotes from './PitchNotes';
 import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import {
-  EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
+  BUILDER_PATH, EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
   asList, coverOf, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, mmss,
   readerStats, slideSeconds, ventureQuery, versionLabel, versionRows, viewsState, weeklyViews,
 } from './pitchStudioModel';
@@ -200,7 +200,7 @@ function StudioHeader({ tab, q, readOnly, showNew }) {
           <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400">{LINE}</p>
         </div>
         {/* PD3 (/raise/pitch/new) is #2434 part 3; until then a new deck starts in the builder. */}
-        {showNew ? <Link to={`${EDIT_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-new">New deck</Link> : null}
+        {showNew ? <Link to={`${BUILDER_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-new">New deck</Link> : null}
       </div>
       {/* The reviewer is its own tool, and its writes are its own: Review draws no banner. */}
       {readOnly && tab !== 'review' ? (
@@ -256,7 +256,7 @@ export function StudioDecks({ reads, readOnly, q }) {
     left = (
       <div className={`${CARD} flex flex-col items-center gap-3 px-5 py-7 text-center`} data-testid="pitch-studio-empty">
         <span className={`text-[15px] font-extrabold ${INK}`}>{EMPTY_DECK}</span>
-        {!readOnly ? <Link to={`${EDIT_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-empty-new">New deck</Link> : null}
+        {!readOnly ? <Link to={`${BUILDER_PATH}${q}`} className={PRIMARY} data-testid="pitch-studio-empty-new">New deck</Link> : null}
       </div>
     );
   } else {

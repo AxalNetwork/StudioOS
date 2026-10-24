@@ -42,7 +42,8 @@ export const DESK_PATH = '/admin/partner-invitations';
 export const INVITATIONS_PATH = '/admin/partner-invitations/invitations';
 export const DEALS_PATH = '/admin/partner-invitations/deals';
 export const REFERRALS_PATH = '/admin/partner-invitations/referrals';
-export const FIRM_LINKS_PATH = '/admin/partner-invitations/firm-links';
+/** D952 (#2728): attaching an account to its firm is on Advisors & Partners › Firms; the old /firm-links forwards there. */
+export const FIRMS_TAB_PATH = '/admin/advisors-partners/firms';
 /** The old address. App.jsx redirects it to `MOVED_PATH`. */
 export const OLD_PATH = '/admin/partners';
 export const MOVED = 'partners';
@@ -57,7 +58,7 @@ export const TITLE = 'Partner invitations';
 export const LINE = 'Bring operating partners in, see where each invitee stands, and keep their deals healthy.';
 export const MOVED_LINE = 'Partner invitations has a new address. Update your bookmark.';
 
-/** The tab strip (PI1). Firm links has an address and no tab (D923 §1). */
+/** The tab strip (PI1). */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: DESK_PATH },
   { key: 'invitations', label: 'Invitations', path: INVITATIONS_PATH },
@@ -71,7 +72,6 @@ export const isRecordId = (id) => /^[1-9]\d*$/.test(String(id ?? ''));
 /** What a path opens: the tab, and the record drawn over it. */
 export function routeFor(pathname) {
   const path = String(pathname || '').replace(/\/+$/, '');
-  if (path === FIRM_LINKS_PATH) return { tab: 'firm-links', record: null };
   const hit = TABS.find((t) => t.path === path);
   if (hit) return { tab: hit.key, record: null };
   const m = /^\/admin\/partner-invitations\/(invitations|deals)\/([^/]+)$/.exec(path);
@@ -79,7 +79,7 @@ export function routeFor(pathname) {
   return { tab: 'overview', record: null };
 }
 
-export const tabPath = (tab) => (tab === 'firm-links' ? FIRM_LINKS_PATH : (TABS.find((t) => t.key === tab) || TABS[0]).path);
+export const tabPath = (tab) => (TABS.find((t) => t.key === tab) || TABS[0]).path;
 export const invitationHref = (id) => `${INVITATIONS_PATH}/${encodeURIComponent(id)}`;
 export const dealHref = (id) => `${DEALS_PATH}/${encodeURIComponent(id)}`;
 export const referralsForDeal = (id) => `${REFERRALS_PATH}?deal=${encodeURIComponent(id)}`;
@@ -1023,7 +1023,7 @@ export function needsYou({ invitations, deals, links, template, fan, now = Date.
       const text = atCap(l.accounts, CAPS.links)
         ? `${plural(n, 'partner account', 'partner accounts')} of the first 500 ${n === 1 ? 'is' : 'are'} not attached to a firm.`
         : `${plural(n, 'partner account is', 'partner accounts are')} not attached to a firm.`;
-      rows.push({ key: 'firms', kind: 'Firms', text, action: { label: 'Open firm links', to: FIRM_LINKS_PATH } });
+      rows.push({ key: 'firms', kind: 'Firms', text, action: { label: 'Open Firms', to: FIRMS_TAB_PATH } });
     }
   } else if (isLoading(links)) loading = true;
   else failed.push({ key: 'links', what: 'The partner accounts' });
@@ -1632,7 +1632,7 @@ export const COPIED = 'Copied';
 export const COPY_FAILED = 'Copy failed. Select the link and copy it.';
 
 /* ------------------------------------------------------------------ *
- * Firm links (off the canvas; #2369 takes it in part 9)
+ * Attaching accounts to firms (drawn on Advisors & Partners › Firms since D952)
  * ------------------------------------------------------------------ */
 
 export function firmCounts(data) {
