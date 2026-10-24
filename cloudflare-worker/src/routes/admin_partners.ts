@@ -18,7 +18,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin, requireBranchNotSuspended } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
-import { sendPartnerInvitationEmail } from '../services/email';
+import { sendPartnerInvitationEmailResult } from '../services/email';
 import { ALL_PARTNER_DEAL_TYPES, activatePartnerDealOnSignature, type PartnerDealType } from '../services/partnerDeals';
 import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchema';
 // Task #43 — revocation paths must drop investor_dealroom_max to the
@@ -28,6 +28,8 @@ import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchem
 import { INVESTOR_QUOTAS } from '../middleware/requireInvestorTier';
 import { clampLimit } from '../util/pagination';
 import { likeNeedleLower } from '../util/likeSearch';
+import { renewPartnerInvitationSigningLink } from './esign';
+import { clientIp } from '../util/clientIp';
 
 const admin_partners = new Hono<{ Bindings: Env }>();
 
@@ -53,9 +55,9 @@ admin_partners.post('/invitations', async (c) => {
   const name = String(body.recipient_name || '').trim();
   const personalMessage = String(body.personal_message || '').slice(0, 2000);
   const allowedRaw = Array.isArray(body.allowed_deal_types) ? body.allowed_deal_types : [];
-  const allowed = allowedRaw
+  const allowed = [...new Set<string>(allowedRaw
     .map((t: unknown) => String(t).toLowerCase())
-    .filter((t: string) => (ALL_PARTNER_DEAL_TYPES as string[]).includes(t)) as PartnerDealType[];
+    .filter((t: string) => (ALL_PARTNER_DEAL_TYPES as string[]).includes(t)))] as PartnerDealType[];
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
     return c.json({ error: 'Valid recipient_email required' }, 400);
@@ -63,6 +65,8 @@ admin_partners.post('/invitations', async (c) => {
   if (allowed.length === 0) {
     return c.json({ error: 'allowed_deal_types must include at least one valid type', valid: ALL_PARTNER_DEAL_TYPES }, 400);
   }
+
+  if (allowed.length > 3) return c.json({ error: 'too_many_deal_types' }, 400);
 
   const token = genInviteToken();
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86400 * 1000).toISOString();
@@ -80,9 +84,14 @@ admin_partners.post('/invitations', async (c) => {
 
   const invitationId = Number(ins.id);
   const link = `${appUrl(c.env)}/partners/onboard?token=${token}`;
-  const emailSent = await sendPartnerInvitationEmail(
+  const sendResult = await sendPartnerInvitationEmailResult(
     c.env, email, name, admin.name || 'Axal VC', link, personalMessage,
   );
+
+  const emailSent = sendResult.ok;
+  await c.env.DB.prepare(
+    `UPDATE partner_invitations SET last_sent_at = ?, send_count = 1, last_send_ok = ?, last_send_reason = ? WHERE id = ?`,
+  ).bind(new Date().toISOString(), emailSent ? 1 : 0, sendResult.reason, invitationId).run();
 
   await logAdminAction(c.env, admin.id, admin.email, 'partner_invitation_created', {
     invitation_id: invitationId, recipient_email: email, allowed_deal_types: allowed,
@@ -102,12 +111,16 @@ admin_partners.get('/invitations', async (c) => {
   const conds: string[] = [];
   const params: unknown[] = [];
   if (status) { conds.push('status = ?'); params.push(status); }
-  if (emailQ) { conds.push('LOWER(recipient_email) LIKE ?'); params.push(`%${emailQ.toLowerCase()}%`); }
+  if (emailQ) {
+    conds.push("LOWER(recipient_email) LIKE ? ESCAPE '\\'");
+    params.push(`%${emailQ.toLowerCase().replace(/[\\%_]/g, m => `\\${m}`)}%`);
+  }
   const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
   const rows = await c.env.DB.prepare(
     `SELECT pi.id, pi.token, pi.recipient_email, pi.recipient_name, pi.allowed_deal_types,
             pi.status, pi.expires_at, pi.created_at, pi.viewed_at, pi.signed_at,
             pi.resulting_user_id, pi.resulting_deal_id, pi.envelope_id, pi.revoked_at,
+            pi.last_sent_at, pi.send_count, pi.last_send_ok, pi.last_send_reason,
             u.name AS invited_by_name
        FROM partner_invitations pi
        LEFT JOIN users u ON u.id = pi.invited_by_user_id
@@ -118,7 +131,7 @@ admin_partners.get('/invitations', async (c) => {
     ...r,
     allowed_deal_types: safeJsonArray(r.allowed_deal_types),
     link: `${appUrl(c.env)}/partners/onboard?token=${r.token}`,
-    is_expired: new Date(r.expires_at).getTime() < Date.now(),
+    is_expired: !['signed', 'revoked'].includes(r.status) && new Date(r.expires_at).getTime() < Date.now(),
   }));
   return c.json({ items });
 });
@@ -136,15 +149,37 @@ admin_partners.post('/invitations/:id/resend', async (c) => {
 
   // Bump expiry on resend so the recipient gets a fresh 14-day window.
   const newExpires = new Date(Date.now() + INVITE_TTL_DAYS * 86400 * 1000).toISOString();
-  await c.env.DB.prepare(
-    `UPDATE partner_invitations SET expires_at = ?, status = 'sent' WHERE id = ?`,
+  const extended = await c.env.DB.prepare(
+    `UPDATE partner_invitations SET expires_at = ? WHERE id = ? AND status NOT IN ('signed','revoked')`,
   ).bind(newExpires, id).run();
+  if (!extended.meta?.changes) {
+    const current: any = await c.env.DB.prepare('SELECT status FROM partner_invitations WHERE id = ?').bind(id).first();
+    if (!current) return c.json({ error: 'Invitation not found' }, 404);
+    return current.status === 'signed'
+      ? c.json({ error: 'Already signed' }, 409)
+      : c.json({ error: 'Invitation has been revoked' }, 409);
+  }
 
   const link = `${appUrl(c.env)}/partners/onboard?token=${inv.token}`;
-  const emailSent = await sendPartnerInvitationEmail(
+  const renewed = inv.envelope_id
+    ? await renewPartnerInvitationSigningLink(c.env, id, admin, newExpires, clientIp(c.req.raw))
+    : null;
+  if (!renewed) {
+    // Renewal can lose a race with revocation. Do not turn that refusal into
+    // an onboarding email for a link that is no longer usable.
+    const current: any = await c.env.DB.prepare('SELECT status FROM partner_invitations WHERE id = ?').bind(id).first();
+    if (!current) return c.json({ error: 'Invitation not found' }, 404);
+    if (current.status === 'signed') return c.json({ error: 'Already signed' }, 409);
+    if (current.status === 'revoked') return c.json({ error: 'Invitation has been revoked' }, 409);
+  }
+  const sendResult = renewed ?? await sendPartnerInvitationEmailResult(
     c.env, inv.recipient_email, inv.recipient_name || '',
     admin.name || 'Axal VC', link, inv.personal_message || '',
   );
+  const emailSent = sendResult.ok;
+  await c.env.DB.prepare(
+    `UPDATE partner_invitations SET last_sent_at = ?, send_count = send_count + 1, last_send_ok = ?, last_send_reason = ? WHERE id = ?`,
+  ).bind(new Date().toISOString(), emailSent ? 1 : 0, sendResult.reason, id).run();
 
   await logAdminAction(c.env, admin.id, admin.email, 'partner_invitation_resent', {
     invitation_id: id, email_sent: emailSent,
@@ -178,7 +213,7 @@ admin_partners.post('/invitations/:id/revoke', async (c) => {
   let voidedEnvelopes = 0;
   try {
     const dr = await c.env.DB.prepare(
-      `UPDATE partner_deals SET status = 'voided'
+      `UPDATE partner_deals SET status = 'voided', void_reason = 'admin_revoked'
          WHERE invitation_id = ?
            AND status IN ('proposed','awaiting_signature')`,
     ).bind(id).run();
@@ -306,7 +341,7 @@ admin_partners.get('/deals', async (c) => {
     `SELECT pd.id, pd.invitation_id, pd.user_id, pd.deal_type, pd.proposal_json,
             pd.granted_tier_founder, pd.granted_tier_investor, pd.term_months,
             pd.referral_code, pd.envelope_id, pd.status, pd.activated_at,
-            pd.expires_at, pd.terminated_at, pd.termination_reason, pd.created_at,
+            pd.expires_at, pd.terminated_at, pd.termination_reason, pd.created_at, pd.void_reason,
             pd.activation_error, pd.activation_failed_at, pd.activation_preserved_founder,
             pd.activation_preserved_investor, terminator.name AS terminated_by_name,
             u.email AS partner_email, u.name AS partner_name,

@@ -816,7 +816,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
     ['Founder equity issued', holders.some((h) => /found/i.test(String(h.kind || h.role || ''))) ? 'done' : 'pending'],
     ['Brand kit ready', src.brand?.brand_kit_ready ? 'done' : 'pending'],
     ['Pitch deck ready', src.brand?.pitch_deck_ready ? 'done' : 'pending'],
-    ['Data room ready', src.contact?.deal_access?.data_room_ready ? 'done' : 'pending'],
+    [src.contact?.deal_access?.data_room_ready === null ? 'Data room ready — Unreadable' : 'Data room ready', src.contact?.deal_access?.data_room_ready ? 'done' : 'pending'],
   ];
 
   // Task #28 — prefer the project's Cap-Table Simulator segments (fully-diluted
@@ -928,7 +928,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
   const da = src.contact?.deal_access || ({} as NonNullable<SpinoutDemoDayData['contact']>['deal_access']);
   const contactEmail = has(m.contact_email) ? m.contact_email : (has(src.contact?.contact_email) ? src.contact.contact_email : '');
   const ready: Array<[string, string]> = [
-    ['Data room', da.data_room_ready ? 'Open' : 'Pending'],
+    ['Data room', da.data_room_ready === null ? 'Unreadable' : da.data_room_ready ? 'Open' : 'Pending'],
     ['Financial model', 'On request'],
     ['Cap table & legal docs', holders.length ? 'Included' : 'Pending'],
     ['Customer references', interviewN > 0 ? 'On request' : 'Pending'],
@@ -938,7 +938,7 @@ export function mapToSpinoutDeckData(src: SpinoutDemoDayData): SpinoutDeckBundle
 
   const deal: SpinoutDeckData['deal'] = {
     eyebrow: 'Deal readiness', idx: '11',
-    title: has(src.contact?.headline) ? src.contact.headline : 'Data room open. Ready to move.',
+    title: has(src.contact?.headline) ? src.contact.headline : 'Review the deal.',
     diligenceLabel: 'DILIGENCE PACKAGE',
     ready,
     nextLabel: 'NEXT STEPS',

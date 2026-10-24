@@ -4,6 +4,7 @@ D908 (#2692), part 2 of #2454. These are the Worker stores and reads that the na
 
 | File | What it does |
 | --- | --- |
+| `positioningDraft.ts` | D911: Eadwyn's positioning proposal. `positioningMaterial` reads only qualitative records and holds back any with a digit; `screenAnswer` drops any answer field with a digit. The route stores each kept field as an `ai_rail_proposals` row. |
 | `store.ts` | Holds four things. `NARRATIVE_SECTIONS` is the story's sections and where each one's words live. `readNarrative` returns a version's meta, sections, positioning and bindings, each part either `ok` or `unreadable`. `compareNarrative` gives two versions section by section. `saveNarrativeSection` and `savePositioning` write, each logging one `raise.investor-narrative` row. |
 
 ## The rules

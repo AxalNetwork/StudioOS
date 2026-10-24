@@ -8,7 +8,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
-  CHECK_RUNS, HOME_PATH, TABS, checkRows, checkSummary, chosenVersion, compareRows, isNarrativeTab, positioningHref, previousVersion,
+  CHECK_RUNS, HOME_PATH, TABS, checkRows, checkSummary, chosenVersion, compareRows, isNarrativeTab, previousVersion,
   storyRows, tabHref, tabSearch, versionHref, versionsOf,
 } from '../src/pages/raise/narrative/narrativeModel.js';
 
@@ -91,7 +91,6 @@ test('addresses keep the venture, a tab keeps the chosen version, and a version 
   assert.equal(tabHref(TABS[1], '?project_id=7', '3'), `${HOME_PATH}/story?project_id=7&version=3`);
   assert.equal(tabHref(TABS[0], '?project_id=7'), `${HOME_PATH}?project_id=7`);
   assert.equal(versionHref('4', '?project_id=7&version=2'), `${HOME_PATH}/4?project_id=7`);
-  assert.equal(positioningHref('?project_id=7&version=2'), '/raise/pitch/positioning?project_id=7');
 });
 
 test('versions sort newest first; the address\'s version wins only when it is saved', () => {
@@ -171,10 +170,12 @@ test('Versions lists every version and compares the newest with the one before',
   } finally { await view.close(); }
 });
 
-test('Positioning links today\'s generator with the venture and reads no version', async () => {
+test('Positioning draws the stored positioning in the tool (D911) and reads no version record', async () => {
   const view = await mounted('/raise/investor-narrative/positioning?project_id=3');
   try {
-    assert.ok(view.hrefs().includes('/raise/pitch/positioning?project_id=3'));
+    assert.ok(view.testIds().includes('narrative-positioning'));
+    assert.ok(view.requests.some((u) => u.includes('/narrative/positioning?project=3')));
+    assert.ok(!view.hrefs().some((h) => String(h).startsWith('/raise/pitch/positioning')), 'the old address is not linked');
     assert.ok(!view.requests.some((u) => u.includes('/records/')));
   } finally { await view.close(); }
 });
