@@ -52,8 +52,9 @@ const PROFILES = {
     buckets: /^(validate|build|grow|network|raise|research)\//,
     // 30 → 26 (D704): the four `validate/*` zones are retired and listed in
     // `excluded` below. 30 artboard zones − 4 retired = 26. 26 → 25: the owner
-    // removed `raise/liquidity` (2026-10-20), also excluded below.
-    zones: 25,
+    // removed `raise/liquidity` (2026-10-20), also excluded below. 25 → 24
+    // (D894): `raise/pitch` became the Pitch deck studio, excluded below.
+    zones: 24,
     // 17 → 22 → 23. Five ops that were `unbuilt` became links because their
     // destination already existed and the reader may open it: `Send to Problem
     // slide` on two zones, `Configure zone`, `Edit templates` and `Send for
@@ -86,7 +87,8 @@ const PROFILES = {
     // `build/kpi`'s `Bulk entry` and `Stripe sync` linked `/build/metrics`'s
     // editor, retired with its hand entry and Stripe import (#2336); both
     // are stated gaps now. `grow/focus`'s `Change metric` links `/build/kpi`.
-    links: 18,
+    // 18 → 15 (D894): `raise/pitch`'s three links went with that zone.
+    links: 15,
     // 20 → 21 with `build/cadence`'s `Export archive`. Migration 250 gave the
     // zone a review archive, so an export over the rows the page is showing is
     // the same `kind: 'export'` every other zone uses. 21 → 20: `raise/liquidity`'s
@@ -143,7 +145,10 @@ const PROFILES = {
     // D704 (decision 4): the canvas is retired in place, so the guard still
     // checks that the artboard draws these four and that no table declares them.
     // The owner removed Liquidity & Exits on 2026-10-20; its artboard stays drawn.
-    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity'],
+    // D894: `raise/pitch` is the Pitch deck studio, drawn by its own canvas
+    // ("Pitch Deck Studio", PD1-PD28) with its own tabs and actions; the zone
+    // artboard stays drawn and no table may declare it.
+    excluded: ['validate/hypotheses', 'validate/interviews', 'validate/pain-map', 'validate/verdict', 'raise/liquidity', 'raise/pitch'],
     embeddedGuards: 3,
     // Founder canvas routes are the live routes.
     // #1539 moves FG5's existing body/controls to Raise; its artboard remains the visual source.

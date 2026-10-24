@@ -106,7 +106,8 @@ test('every rail track keeps its own width as the fallback', () => {
     }
   }
   // D661 retired three tracks; the owner also removed the Perks rail track.
-  assert.ok(tracks.length >= 16, `expected the known host grids, found ${tracks.length}`);
+  // D894 retired Raise · Pitch's, with its stylesheet.
+  assert.ok(tracks.length >= 15, `expected the known host grids, found ${tracks.length}`);
   for (const t of tracks) {
     assert.match(t.inner, /^--fwr-track,\s*\d{3}px$/,
       `${t.file} must fall back to its own pixel width`);
