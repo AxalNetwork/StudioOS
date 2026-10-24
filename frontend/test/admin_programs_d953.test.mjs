@@ -460,7 +460,7 @@ async function mounted(url, page, handle, { user = null } = {}) {
   };
 }
 
-const PROGRAM_DOORS = ['/admin/spinout-lab', '/admin/programs/ai-native-venture', '/admin/programs/mentor-cohorts', '/admin/programs/investor-cohorts',
+const PROGRAM_DOORS = ['/admin/programs/spinout-lab', '/admin/programs/ai-native-venture', '/admin/programs/mentor-cohorts', '/admin/programs/investor-cohorts',
   '/admin/programs/referral-partners', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning'];
 
 test('the catalogue for an Admin: the header, the three tiles, nine cards with their figures, Needs you and doors, and the foot', async () => {
@@ -617,7 +617,7 @@ test('Mentor cohort access · Overview: S-CNT and S-COV tiles with their lines, 
     assert.match(view.textOf('programs-mentor-needs-row-3'), /Ana Former is no longer an Advisor\. Their access is already refused, but the assignment is still open\./);
     assert.equal(view.textOf('programs-mentor-hosts-line'), '4 approved · 1 waiting, every host');
     assert.ok(view.hrefs().includes('/admin/programs/mentor-cohorts/people'));
-    assert.ok(view.hrefs().includes('/admin/spinout-lab'));
+    assert.ok(view.hrefs().includes('/admin/programs/spinout-lab'));
   } finally { await view.close(); }
   const hostsDown = await mounted('/admin/programs/mentor-cohorts', MentorCohortAccess, worker({ hosts: down }));
   try {
@@ -894,7 +894,7 @@ test('the rail boards: S19 is framed on the catalogue, S9 and S18 take the Queue
 
 test('the rail keys: /admin/programs owns Admin · Programs exactly, the held row is gone, and the subtrees are aliases', () => {
   assert.equal(pageKeyFor('/admin/programs', 'admin'), 'Admin · Programs');
-  assert.equal(pageKeyFor('/admin/programs/spinout-lab', 'admin'), null, 'the exact owner keeps the Lab\'s sub-path off Programs (D317)');
+  assert.equal(pageKeyFor('/admin/programs/spinout-lab', 'admin'), 'Admin · Programs · Spin-Out Lab', 'D937 keeps the Lab board identity separate from the catalogue; D317 still suppresses its rail');
   for (const p of ['/admin/programs/perks', '/admin/programs/perks/queue', '/admin/programs/learning/people', '/admin/programs/referral-partners',
     '/admin/programs/investor-cohorts', '/admin/programs/ai-native-venture']) assert.equal(pageKeyFor(p, 'admin'), 'Admin · Programs', p);
   for (const p of ['/admin/programs/mentor-cohorts', '/admin/programs/mentor-cohorts/people']) assert.equal(pageKeyFor(p, 'admin'), 'Admin · Approvals · Advisor cohort access', p);

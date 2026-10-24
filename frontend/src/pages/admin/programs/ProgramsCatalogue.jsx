@@ -158,7 +158,7 @@ function CatalogueBody() {
                 </div>
               </>
             )}
-            door={<Link to="/admin/spinout-lab" className={OPEN} aria-label="Open Spin-Out Lab">Open</Link>}
+            door={<Link to="/admin/programs/spinout-lab" className={OPEN} aria-label="Open Spin-Out Lab">Open</Link>}
           />
         ) : null}
         {shown.has('ai-native-venture') ? (

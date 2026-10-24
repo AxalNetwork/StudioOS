@@ -193,7 +193,7 @@ const S22_LANES = [
   [1, 'Core', 'LP applications', '/admin/lp-applications', '<LaneState glance={glance} laneKey="lp" />'],
   // D953 — lane 2 takes Refer & Earn's Queue, where the review now lives.
   [2, 'Core', 'Referrals', '/admin/programs/refer-and-earn/queue', '<LaneState glance={glance} laneKey="referrals" />'],
-  [3, 'Core', 'Cohort applications', '/admin/spinout-lab', '<LaneState glance={glance} laneKey="cohort" />'],
+  [3, 'Core', 'Cohort applications', '/admin/programs/spinout-lab/applications', '<LaneState glance={glance} laneKey="cohort" />'],
   // D506 — lane 4 links the console D442 built; HQ-held accounts reach held cases from here.
   [4, 'Core', 'Spinout moderation', '/admin/spinout-moderation', '<LaneState glance={glance} laneKey="moderation" />'],
   [5, 'Core', 'Content to HQ', null, 'Not applicable to HQ-held accounts'],
@@ -238,7 +238,7 @@ test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation lin
     .map((e) => e.route));
   const adminConsoles = new Set(ADMIN_PLACEMENT.filter((e) => e.tier === 'Admin').map((e) => e.route));
   for (const [, , lane, route, state] of S22_LANES) {
-    if (!route || route === '/admin/spinout-lab') continue; // the Lab console is reached through its tab's placement
+    if (!route || route === '/admin/programs/spinout-lab/applications') continue; // the Lab's queue is placed on Programs (D937), not Approvals
     if (state.includes('noQueue=')) {
       assert.ok(adminConsoles.has(route), `${lane} references ${route}, which has no Admin console placement`);
       continue;
@@ -255,14 +255,14 @@ test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation lin
  * The other landings
  * ------------------------------------------------------------------ */
 
-test('Community (D930) links its six consoles at their own routes — Advisors & Partners at the tab, never the standalone route', () => {
+test('Community (D930) links its six consoles at their own routes — Advisors & Partners at its own page (D972), never the old roster address', () => {
   const code = codeOnly(read(COMMUNITY));
   const doors = [...new Set(doorsIn(code))];
-  for (const d of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing', '/admin/partner-invitations']) {
+  for (const d of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/advisors-partners', '/admin?tab=wellbeing', '/admin/partner-invitations']) {
     assert.ok(doors.includes(d), `Community has no literal door onto ${d}`);
   }
 
-  assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the standalone roster route would make its EXEMPT entry stale');
+  assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the old roster address, which only forwards now (D972)');
   for (const d of doors) {
     assert.ok(!d.startsWith('/branch'), `Community links ${d}, under /branch/`);
     assert.ok(routeLine(pathOf(d)), `Community links ${d}, which is not a registered route`);
@@ -274,7 +274,7 @@ test('Programs (D953) opens the Lab console and Profiling trends, never the Admi
   // Defect 1 of #2371: two cards opened one console. One Spin-Out Lab card
   // now, and Programs no longer links the Admin Console's Lab tab.
   const programs = doorsIn(codeOnly(read(PROGRAMS)));
-  for (const d of ['/admin/spinout-lab', '/admin/profiling-trends']) assert.ok(programs.includes(d), `Programs has no literal door onto ${d}`);
+  for (const d of ['/admin/programs/spinout-lab', '/admin/profiling-trends']) assert.ok(programs.includes(d), `Programs has no literal door onto ${d}`);
   assert.ok(!programs.includes('/admin?tab=lab-applications'), 'Programs links the Lab tab and the Lab console, one console twice');
   assert.ok(!programs.includes('/admin/advisor-cohorts'), 'Programs links the old address, which only redirects');
   assert.deepEqual(doorsIn(CODE[LANDINGS.Accounts]),

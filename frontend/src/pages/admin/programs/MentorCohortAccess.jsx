@@ -69,7 +69,7 @@ function MentorOverview({ reads }) {
           {hosts.state === 'loading' ? <Skeleton lines={1} /> : null}
           {hosts.state === 'unreadable' ? <BlockFailed what="The office-hours hosts" onRetry={reads.reload} testId="programs-mentor-hosts-unreadable" /> : null}
           {hosts.state === 'ready' ? <span className="font-mono text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="programs-mentor-hosts-line">{hostsLine(hosts)}</span> : null}
-          <Link to="/admin/spinout-lab" className={`${LINK} self-start`}>Open Spin-Out Lab</Link>
+          <Link to="/admin/programs/spinout-lab" className={`${LINK} self-start`}>Open Spin-Out Lab</Link>
         </Card>
       </div>
     </div>

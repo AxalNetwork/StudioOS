@@ -108,7 +108,8 @@ export const ADMIN_PLACEMENT = [
   tab('profiles', 'Partner Profiles', admin('Approvals', 'lane'), { how: 'A lane.' }),
   tab('kyc', 'KYC Queue', admin('Approvals', 'lane'),
     { how: 'A lane. HQ · Team carries a card link to it.', also: [hq('Team', 'card link')] }),
-  tab('lab-applications', 'Spin-Out Lab', admin('Programs', 'embedded'), { how: 'Embedded panel.' }),
+  tab('lab-applications', 'Spin-Out Lab', admin('Programs', 'embedded'),
+    { route: '/admin/programs/spinout-lab/applications', how: 'Its own page under Programs (D937); the legacy tab redirects here.' }),
   tab('legal', 'Contracts', hq('Contracts', 'embedded'),
     { route: '/admin/contracts', how: 'One Contracts page in both shells; the legacy Legal link redirects here.', also: [admin('Contracts', 'embedded')] }),
   tab('personas', 'Personas', hq('Content', 'sub-nav'),
@@ -128,7 +129,7 @@ export const ADMIN_PLACEMENT = [
   // roster is curated where the community it serves is run.
   tab('wellbeing', 'Wellbeing', admin('Community', 'card link'), { how: 'Card link, beside Events, Jobs and Circles.' }),
   tab('network-profiles', 'Advisors & Partners', hq('Content', 'sub-nav'),
-    { how: 'Sub-navigation item on Content (the deck roster); card link on Community.', also: [admin('Community', 'card link')] }),
+    { route: '/admin/advisors-partners', how: 'Its own page under Community (D972); Sub-navigation item on Content; the legacy tab redirects to its Deck roster.', also: [admin('Community', 'card link')] }),
 
   // ── The 28 working pages (S23 · H37) → the profile sidebars (D563) ──────
   // H37 drew them in a Workspaces launcher on the admin shells; D563 retired

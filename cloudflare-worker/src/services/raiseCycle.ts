@@ -1,3 +1,4 @@
+import { readableRoomFiles, mercuryRunway, mercuryFacts, verifiedMonthlyRevenue, selectedCheckSources } from './raiseEvidence';
 /**
  * D663 — the Raise cycle's reads: four figures, seven cards, seven record
  * tables. Mounted by `routes/cycle_raise.ts` at `/api/cycles/raise`.
@@ -31,6 +32,7 @@ import { roundCallsEnabled } from './roundCallPolicy';
 import { peerBenchmark, type PeerBenchmark } from './peerBenchmark';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
+import { deckReaders, readBySentence } from './narrative/readers';
 
 export { recordQuery };
 export type { RecordQuery };
@@ -100,8 +102,8 @@ export const READINESS_ITEMS = [
 ] as const;
 export type ReadinessKey = (typeof READINESS_ITEMS)[number]['key'];
 export const READINESS_KEYS: readonly string[] = READINESS_ITEMS.map((i) => i.key);
-export const EVIDENCE = ['anecdote', 'pattern', 'measured'] as const;
-const EVIDENCE_TONE: Record<string, string> = { measured: 'v1', pattern: 'v2', anecdote: 'v3' };
+export const EVIDENCE = ['anecdote', 'pattern', 'stated', 'measured'] as const;
+const EVIDENCE_TONE: Record<string, string> = { measured: 'v1', stated: 'v2', pattern: 'v2', anecdote: 'v3' };
 
 export type ScoreRow = { item_id: number; item_key: string; score: number; evidence: string; missing: string | null; source: string; scored_at: string };
 export type ItemRow = { id: number; item_key: string; label: string; position: number };
@@ -148,7 +150,7 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
-export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number; evidence: 'measured'; missing: string | null; reads: ReadRow[] };
+export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number; evidence: 'measured' | 'stated'; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
 /**
@@ -164,15 +166,12 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   const scen = await env.DB.prepare(
     'SELECT COUNT(*) AS n FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0',
   ).bind(projectId).first<{ n: number }>();
-  const mapped = await env.DB.prepare(
-    `SELECT DISTINCT checklist_item FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL`,
-  ).bind(projectId).all<{ checklist_item: string }>();
+  const accessible = await readableRoomFiles(env, projectId);
+  const mapped = { results: accessible.filter(f => f.checklist_item != null) };
   const latestVersion = await env.DB.prepare(
     `SELECT MAX(version) AS v FROM spinout_deck_overrides WHERE project_id = ? AND version > 0`,
   ).bind(projectId).first<{ v: number | null }>();
-  const staged = await env.DB.prepare(
-    'SELECT COUNT(*) AS files, COUNT(DISTINCT folder_id) AS folders FROM data_room_files WHERE project_id = ?',
-  ).bind(projectId).first<{ files: number; folders: number }>();
+  const staged = { files: accessible.length, folders: new Set(accessible.map(f => f.folder_id).filter(f => f != null)).size };
 
   // Each check says what it read beside its score (decision 8); no score changes.
   const out: ComputedScore[] = [];
@@ -202,13 +201,16 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
   });
 
   const fieldOf = (v: unknown) => (num(v) ?? 0) > 0;
-  const traction = fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
+  const verifiedRevenue = await verifiedMonthlyRevenue(env, projectId);
+  const measuredRevenue = verifiedRevenue != null && Number(verifiedRevenue.cents) > 0;
+  const traction = measuredRevenue || fieldOf(p?.revenue) || fieldOf(p?.mrr) || fieldOf(p?.paying_customers);
   out.push({
-    key: 'traction', score: traction ? 10 : 0, evidence: 'measured', missing: traction ? null : 'Log revenue or update your proof fields.',
+    key: 'traction', score: traction ? 10 : 0, evidence: measuredRevenue ? 'measured' : 'stated', missing: traction ? null : 'Log revenue or update your proof fields.',
     reads: [
-      { a: 'Revenue', b: fieldOf(p?.revenue) ? usd(Number(p!.revenue)) : 'not recorded', ...met(fieldOf(p?.revenue), traction) },
-      { a: 'MRR', b: fieldOf(p?.mrr) ? usd(Number(p!.mrr)) : 'not recorded', ...met(fieldOf(p?.mrr), traction) },
-      { a: 'Paying customers', b: fieldOf(p?.paying_customers) ? String(Math.round(Number(p!.paying_customers))) : 'not recorded', ...met(fieldOf(p?.paying_customers), traction) },
+      { a: 'Verified revenue', b: verifiedRevenue ? `${usd(verifiedRevenue.cents / 100)} · ${verifiedRevenue.month}` : 'not recorded', ...met(measuredRevenue) },
+      { a: 'Revenue (stated)', b: fieldOf(p?.revenue) ? usd(Number(p!.revenue)) : 'not recorded', ...met(fieldOf(p?.revenue), traction) },
+      { a: 'MRR (stated)', b: fieldOf(p?.mrr) ? usd(Number(p!.mrr)) : 'not recorded', ...met(fieldOf(p?.mrr), traction) },
+      { a: 'Paying customers (stated)', b: fieldOf(p?.paying_customers) ? String(Math.round(Number(p!.paying_customers))) : 'not recorded', ...met(fieldOf(p?.paying_customers), traction) },
     ],
   });
 
@@ -219,7 +221,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     key: 'data_room', score: Math.round((known.size / DILIGENCE_CHECKLIST.length) * 10), evidence: 'measured',
     missing: open === 0 ? null : `${plural(open, 'checklist item has', 'checklist items have')} no file.`,
     reads: [
-      { a: 'Files staged', b: files ? `${files} in ${plural(Number(staged?.folders ?? 0), 'folder', 'folders')}` : 'none uploaded', ...met(files > 0) },
+      { a: 'Files investors can download', b: files ? `${files} in ${plural(Number(staged?.folders ?? 0), 'folder', 'folders')}` : 'none downloadable', ...met(files > 0) },
       { a: 'Diligence checklist covered', b: `${known.size} of ${DILIGENCE_CHECKLIST.length} items`, ...met(open === 0, known.size > 0) },
     ],
   });
@@ -390,9 +392,9 @@ export const INVESTOR_TYPE_LABEL: Record<string, string> = {
 /** The marker row every saved version carries, so a version with no override still exists. */
 export const VERSION_MARKER_KEY = '_version';
 
-export const FIGURES = ['mrr', 'paying_customers', 'raise'] as const;
+export const FIGURES = ['mrr', 'paying_customers', 'raise', 'revenue'] as const;
 export type FigureKey = (typeof FIGURES)[number];
-export const FIGURE_LABEL: Record<FigureKey, string> = { mrr: 'MRR', paying_customers: 'Paying customers', raise: 'The raise' };
+export const FIGURE_LABEL: Record<FigureKey, string> = { mrr: 'MRR', paying_customers: 'Paying customers', raise: 'The raise', revenue: 'Monthly revenue' };
 
 export type Stated = { figure: FigureKey; value: number; source: string };
 export type Mismatch = { figure: FigureKey; stated_value: number; stated_source: string; metric_value: number; metric_source: string };
@@ -420,6 +422,9 @@ export function parseStatedFigures(fieldKey: string, text: string): Stated[] {
   if (cust) { const v = amount(cust[1]); if (Number.isFinite(v)) out.push({ figure: 'paying_customers', value: v, source: src }); }
   const raise = new RegExp(`rais(?:e|ing)\\s+(?:a\\s+|an\\s+|our\\s+)?${MONEY}`, 'i').exec(t);
   if (raise) { const v = amount(raise[1], raise[2]); if (Number.isFinite(v)) out.push({ figure: 'raise', value: v, source: src }); }
+  const revenue = new RegExp(`${MONEY}\\s*(?:in\\s+)?monthly revenue`, 'i').exec(t)
+    || new RegExp(`monthly revenue\\s*(?:of|is|at|:|=)?\\s*${MONEY}`, 'i').exec(t);
+  if (revenue) { const v = amount(revenue[1], revenue[2]); if (Number.isFinite(v)) out.push({ figure: 'revenue', value: v, source: src }); }
   return out;
 }
 
@@ -453,11 +458,11 @@ export async function checkInputs(env: Env, projectId: number, version: number) 
   ).bind(projectId, version, VERSION_MARKER_KEY).all<{ field_key: string; value: string }>();
   for (const w of words.results || []) stated.push(...parseStatedFigures(w.field_key, w.value));
   // Why now has no deck key: it lives in the version's meta (D691 decision 7).
-  const meta = await env.DB.prepare('SELECT why_now FROM narrative_version_meta WHERE project_id = ? AND version = ?')
-    .bind(projectId, version).first<{ why_now: string | null }>();
+  const meta = await env.DB.prepare('SELECT why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?')
+    .bind(projectId, version).first<{ why_now: string | null; check_against_json: string | null }>();
   if (meta?.why_now) stated.push(...parseStatedFigures('why_now', meta.why_now));
 
-  const metrics = await narrativeMetrics(env, projectId);
+  const metrics = selectedCheckSources(meta?.check_against_json).includes('metrics') ? await narrativeMetrics(env, projectId) : {};
   const compared = stated.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
   return { stated, metrics, compared };
 }
@@ -466,21 +471,33 @@ export async function checkInputs(env: Env, projectId: number, version: number) 
 async function narrativeMetrics(env: Env, projectId: number) {
   const metrics: Partial<Record<FigureKey, { value: number; source: string }>> = {};
   const mrr = await env.DB.prepare(
-    'SELECT mrr, snapshot_date FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 1',
-  ).bind(projectId).first<{ mrr: number; snapshot_date: string }>();
-  if (mrr) metrics.mrr = { value: Number(mrr.mrr), source: `Metrics · project_metrics.mrr on ${mrr.snapshot_date}` };
+    `SELECT mrr, snapshot_date, source FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 1`,
+  ).bind(projectId).first<{ mrr: number; snapshot_date: string; source: string | null }>();
+  if (mrr) metrics.mrr = { value: Number(mrr.mrr), source: `${mrr.source === 'stripe' ? 'Stripe (measured)' : 'Metrics (stated: ' + (mrr.source || 'manual') + ')'} · project_metrics.mrr on ${mrr.snapshot_date}` };
   const pay = await env.DB.prepare(
-    'SELECT paying_accounts, snapshot_date FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 1',
-  ).bind(projectId).first<{ paying_accounts: number; snapshot_date: string }>();
-  if (pay) metrics.paying_customers = { value: Number(pay.paying_accounts), source: `Metrics · project_metrics.paying_accounts on ${pay.snapshot_date}` };
+    `SELECT paying_accounts, snapshot_date, source FROM project_metrics WHERE project_id = ? AND paying_accounts IS NOT NULL ORDER BY CASE WHEN source = 'stripe' THEN 0 ELSE 1 END, snapshot_date DESC, id DESC LIMIT 1`,
+  ).bind(projectId).first<{ paying_accounts: number; snapshot_date: string; source: string | null }>();
+  if (pay) metrics.paying_customers = { value: Number(pay.paying_accounts), source: `${pay.source === 'stripe' ? 'Stripe (measured)' : 'Metrics (stated: ' + (pay.source || 'manual') + ')'} · project_metrics.paying_accounts on ${pay.snapshot_date}` };
   const round = await env.DB.prepare(
     `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' AND target_amount IS NOT NULL LIMIT 1`,
   ).bind(projectId).first<{ target_amount: number }>();
   if (round) metrics.raise = { value: Number(round.target_amount), source: 'Pipeline · raise_rounds.target_amount (active round)' };
+  const verified = await verifiedMonthlyRevenue(env, projectId);
+  if (verified) metrics.revenue = { value: verified.cents / 100, source: `Verified revenue · ${verified.month}` };
+  else {
+    const bank = (await mercuryFacts(env, projectId, 'revenue')).filter(f => f.fact_key !== 'revenue:growth' && f.amount_cents != null).sort((a,b) => String(b.label).localeCompare(String(a.label)))[0];
+    if (bank) metrics.revenue = { value: Number(bank.amount_cents) / 100, source: `Mercury revenue credits · ${bank.label} · measured ${bank.as_of}` };
+  }
   return metrics;
 }
 
-export type VersionRow = { version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number; compared: number };
+export type VersionRow = {
+  version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number; compared: number;
+  /** D909: where the version started (`narrative_version_meta`), null when it was saved before 463 recorded it. */
+  start_from: string | null; based_on_version: number | null;
+  /** D909: who saved it, by name; null when no name is recorded. */
+  by: string | null;
+};
 
 export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
   const res = await ctx.env.DB.prepare(
@@ -495,8 +512,12 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
     'SELECT version, field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version > 0 AND field_key != ? ORDER BY version, field_key',
   ).bind(ctx.projectId, VERSION_MARKER_KEY).all<{ version: number; field_key: string; value: string }>();
   const meta = await ctx.env.DB.prepare(
-    'SELECT version, why_now FROM narrative_version_meta WHERE project_id = ? AND version > 0',
-  ).bind(ctx.projectId).all<{ version: number; why_now: string | null }>();
+    `SELECT m.version, m.why_now, m.check_against_json, m.start_from, m.based_on_version, u.name AS by_name
+       FROM narrative_version_meta m LEFT JOIN users u ON u.id = m.created_by
+      WHERE m.project_id = ? AND m.version > 0`,
+  ).bind(ctx.projectId).all<{ version: number; why_now: string | null; check_against_json: string | null; start_from: string | null; based_on_version: number | null; by_name: string | null }>();
+  const metaOf = new Map((meta.results || []).map((m) => [Number(m.version), m]));
+
   const stated = new Map<number, Stated[]>();
   for (const word of words.results || []) {
     const key = Number(word.version);
@@ -506,12 +527,33 @@ export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
     const key = Number(row.version);
     stated.set(key, [...(stated.get(key) || []), ...parseStatedFigures('why_now', row.why_now)]);
   }
-  const metrics = await narrativeMetrics(ctx.env, ctx.projectId);
+  const choices = new Map((meta.results || []).map(m => [Number(m.version), selectedCheckSources(m.check_against_json)]));
+  const commonMetrics = versions.some(v => (choices.get(Number(v.version)) || ['deck', 'metrics']).includes('metrics')) ? await narrativeMetrics(ctx.env, ctx.projectId) : {};
   return versions.map((v) => {
+    const metrics = (choices.get(Number(v.version)) || ['deck', 'metrics']).includes('metrics') ? commonMetrics : {};
     const values = stated.get(Number(v.version)) || [];
     const compared = values.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
-    return { ...v, compared, mismatches: consistencyCheck(values, metrics).length };
+    const m = metaOf.get(Number(v.version));
+    return {
+      ...v, compared, mismatches: consistencyCheck(values, metrics).length,
+      start_from: m?.start_from ?? null, based_on_version: m?.based_on_version == null ? null : Number(m.based_on_version),
+      by: String(m?.by_name ?? '').trim() || null,
+    };
   });
+}
+
+/**
+ * D909: where a version started, as the versions table and the Versions tab
+ * say it: "v1", "Blank", the live wording, or null (saved before 463 recorded
+ * it, which reads "Not recorded"). The live wording is the Spin-Out deck's, so
+ * a Spin-Out venture reads it by that name; any other venture's earlier
+ * versions copied it under today's name, "The live deck".
+ */
+export function basedOnLabel(v: Pick<VersionRow, 'start_from' | 'based_on_version'>, spinout: boolean): string | null {
+  if (v.start_from === 'version' && v.based_on_version != null) return `v${v.based_on_version}`;
+  if (v.start_from === 'blank') return 'Blank';
+  if (v.start_from === 'live') return spinout ? 'The Spin-Out deck wording' : 'The live deck';
+  return null;
 }
 
 export const fmtFigure = (f: FigureKey, v: number) => (f === 'paying_customers' ? Math.round(v).toLocaleString('en-US') : usd(v));
@@ -552,24 +594,66 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/**
+ * D909 (#2693, NAR1 and NAR12): what Home's tiles, "Needs you" and the
+ * Versions tab read, in one part of the module read (`parts.narrative`):
+ *   - `versions`: every saved version, newest first, with where it started,
+ *     when and by whom it was saved, and which cards of the current deck read
+ *     it (`services/narrative/readers.ts`);
+ *   - `newest`: the newest version's check, as the card states it: how many
+ *     figures were compared and each mismatch, figure by figure;
+ *   - `deck`: the current deck, and whether any of its cards reads a version;
+ *   - `spinout`: whether New version offers the Spin-Out deck wording.
+ * Claims backed (#2430) and Objections answered (#2457) have no store, so the
+ * part carries neither; the page says why.
+ */
+export async function narrativeHome(ctx: Ctx) {
+  const [versions, readers] = await Promise.all([loadVersions(ctx), deckReaders(ctx.env, ctx.projectId)]);
+  const newest = versions[0] ?? null;
+  const inputs = newest ? await checkInputs(ctx.env, ctx.projectId, newest.version) : null;
+  const found = inputs ? consistencyCheck(inputs.stated, inputs.metrics) : [];
+  return {
+    state: 'ok' as const,
+    versions: versions.map((v) => {
+      const cards = readers.deck ? readers.byVersion.get(Number(v.version)) ?? [] : [];
+      return {
+        version: Number(v.version), audience: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
+        based_on: basedOnLabel(v, readers.spinout), saved: day(v.saved_at), by: v.by,
+        read_by: cards.length ? { deck_version: readers.deck!.version, cards } : null,
+      };
+    }),
+    newest: newest && {
+      version: Number(newest.version), compared: inputs!.compared,
+      mismatches: found.map((m) => ({ figure: FIGURE_LABEL[m.figure], sentence: mismatchSentence(m) })),
+    },
+    deck: readers.deck && { version: readers.deck.version, reads_narrative: readers.byVersion.size > 0 },
+    spinout: readers.spinout,
+  };
+}
+
 async function narrativeRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
+  const readers = await deckReaders(ctx.env, ctx.projectId);
   let rows = (await loadVersions(ctx)).filter((v) => has(rq.q, INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'], `v${v.version}`));
   if (rq.filter.investor_type) rows = rows.filter((v) => (v.investor_type ?? 'other') === rq.filter.investor_type);
   if (rq.sort === 'oldest') rows.reverse();
+  // D909 (NAR1): the canvas's columns less Claims backed, which waits for #2430's claim check.
   return paged(
-    [col('version', 'Version'), col('investor_type', 'Investor type'), col('deck', 'Deck use'), col('mismatches', 'Mismatches'), col('date', 'Date')],
+    [col('version', 'Version'), col('investor_type', 'Audience'), col('based_on', 'Based on'), col('mismatches', 'Mismatches'),
+      col('deck', 'Read by deck'), col('date', 'Saved'), col('by', 'By')],
     rows.map((v) => ({
       id: v.version,
       cells: {
         version: `v${v.version}`, investor_type: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
-        deck: 'No deck reads this version.',
+        based_on: basedOnLabel(v, readers.spinout),
         mismatches: { text: v.compared ? String(Number(v.mismatches)) : 'Nothing compared yet', tone: !v.compared ? 'muted' : Number(v.mismatches) ? 'warn' : 'ok' },
+        deck: readBySentence(readers, Number(v.version)),
         date: day(v.saved_at),
+        by: v.by,
       },
     })),
     rq.page,
     {
-      filters: [{ key: 'investor_type', label: 'Investor type', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
+      filters: [{ key: 'investor_type', label: 'Audience', options: INVESTOR_TYPES.map((t) => ({ value: t, label: INVESTOR_TYPE_LABEL[t] })) }],
       sorts: [{ key: 'newest', label: 'Newest' }, { key: 'oldest', label: 'Oldest' }],
     },
   );
@@ -713,24 +797,21 @@ export function checklistCoverage(mapped: Iterable<string>): Array<{ area: strin
 
 export async function dataRoomCard(ctx: Ctx): Promise<Card> {
   return safeCard(meta('data-room', 'Last 90 days', 'How much of each diligence area the files answer, and who opened the room.', 'Data room'), async (): Promise<CardBody> => {
-    const files = await ctx.env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?',
-    ).bind(ctx.projectId).first<{ n: number }>();
-    if (Number(files?.n ?? 0) === 0) {
-      return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason: 'No files yet. Coverage of the diligence checklist appears here.' };
+    const accessible = await readableRoomFiles(ctx.env, ctx.projectId);
+    if (!accessible.length) {
+      const staged = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
+      const reason = 'No files are currently downloadable by a granted investor.';
+      if (Number(staged?.n ?? 0) > 0) return { state: 'empty', series: null, next: { text: 'Manage access', href: `${TOOL_HREF.dataRoom}&project_id=${ctx.projectId}` }, reason };
+      return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason };
     }
-    const mapped = await ctx.env.DB.prepare(
-      'SELECT DISTINCT checklist_item FROM data_room_files WHERE project_id = ? AND checklist_item IS NOT NULL',
-    ).bind(ctx.projectId).all<{ checklist_item: string }>();
+    const mapped = { results: accessible.filter(f => f.checklist_item != null) };
     const viewers = await ctx.env.DB.prepare(
       `SELECT l.user_id, u.name, COUNT(*) AS n FROM data_room_access_log l LEFT JOIN users u ON u.id = l.user_id
-        WHERE l.project_id = ? AND substr(l.created_at, 1, 10) > ?
+        WHERE l.project_id = ? AND l.action = 'download' AND substr(l.created_at, 1, 10) > ?
         GROUP BY l.user_id ORDER BY n DESC, l.user_id LIMIT 6`,
     ).bind(ctx.projectId, daysBefore(ctx.today, 90)).all<{ user_id: number; name: string | null; n: number }>();
     const coverage = checklistCoverage((mapped.results || []).map((r) => r.checklist_item));
-    const unmapped = await ctx.env.DB.prepare(
-      'SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ? AND checklist_item IS NULL',
-    ).bind(ctx.projectId).first<{ n: number }>();
+    const unmapped = { n: accessible.filter(f => f.checklist_item == null).length };
     const v = viewers.results || [];
     const series = [
       { kind: 'progress', items: coverage.map((c) => ({ label: c.area, pct: c.pct })) },
@@ -1341,20 +1422,25 @@ async function readinessFigure(ctx: Ctx): Promise<Figure> {
 }
 
 async function committedFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'committed', label: 'Committed against target', unit: 'of', source: 'raise_prospects · raise_rounds' }, async () => {
+  return safeFigure({ key: 'committed', label: 'Signed or received against target', unit: 'of', source: 'raise_prospects · raise_rounds' }, async () => {
     const c = await ctx.env.DB.prepare(
-      `SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS amt FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
-    ).bind(ctx.projectId).first<{ n: number; amt: number }>();
+      `SELECT COUNT(*) AS n, SUM(CASE WHEN commit_status = 'signed' THEN amount END) AS amt, SUM(CASE WHEN commit_status = 'soft' THEN amount END) AS soft, SUM(CASE WHEN commit_status = 'wired' THEN amount END) AS received, SUM(CASE WHEN commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN amount END) AS unclassified, SUM(CASE WHEN commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN 1 ELSE 0 END) AS unclassified_n, SUM(CASE WHEN commit_status IN ('signed','wired') AND amount IS NULL THEN 1 ELSE 0 END) AS firm_missing, SUM(CASE WHEN amount IS NULL OR commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN 1 ELSE 0 END) AS unrecorded FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
+    ).bind(ctx.projectId).first<{ n: number; amt: number|null; soft:number|null; received:number|null; unclassified:number|null; unclassified_n:number; firm_missing:number; unrecorded:number }>();
     const r = await ctx.env.DB.prepare(
       `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' LIMIT 1`,
     ).bind(ctx.projectId).first<{ target_amount: number | null }>();
-    const amt = Number(c?.amt ?? 0);
+    const amt = Number(c?.firm_missing ?? 0) > 0 ? null
+      : c?.amt == null && c?.received == null
+        ? Number(c?.unclassified_n ?? 0) > 0 ? null : 0
+        : Number(c?.amt ?? 0) + Number(c?.received ?? 0);
+    const split = `Soft: ${c?.soft == null ? "Not recorded" : usd(c.soft)} · Signed: ${c?.amt == null ? "Not recorded" : usd(c.amt)} · Received: ${c?.received == null ? "Not recorded" : usd(c.received)} · Status not recorded: ${c?.unclassified == null ? 'Not recorded' : usd(c.unclassified)} · Firm amounts not recorded: ${c?.firm_missing ?? 0} · Incomplete commitments: ${c?.unrecorded ?? 0}`;
     const target = num(r?.target_amount);
     if (target == null || target <= 0) {
       if (Number(c?.n ?? 0) === 0) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No active round and no commitment yet' };
-      return { value: amt, unit: 'usd', delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: 'No active round target is recorded' };
+      return { value: amt, unit: 'usd', delta_30d: null, spark: [], state: amt == null ? 'not_recorded' : 'ok', as_of: ctx.today, reason: `${split}; no active round target is recorded` };
     }
-    return { value: [Math.round(amt), Math.round(target)] as any, delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: null };
+    if (amt == null) return { value: null, delta_30d: null, spark: [], state: 'not_recorded', as_of: ctx.today, reason: split };
+    return { value: [Math.round(amt), Math.round(target)] as any, delta_30d: null, spark: [], state: 'ok', as_of: ctx.today, reason: split };
   });
 }
 
@@ -1377,7 +1463,12 @@ export function runwayMonths(cash: number | null, burn: number | null): number |
 }
 
 async function runwayFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'runway_months', label: 'Months of runway', unit: 'months', source: 'project_metrics' }, async () => {
+  return safeFigure({ key: 'runway_months', label: 'Months of runway', unit: 'months', source: 'project_metrics · stated' }, async () => {
+    const bank = await mercuryRunway(ctx.env, ctx.projectId);
+    if (bank) {
+      const value = runwayMonths(bank.amount_cents, bank.burn_cents);
+      return { value, source: 'Mercury · measured cash and net burn', delta_30d: null, spark: [], state: value == null ? 'not_recorded' : 'ok', as_of: bank.as_of, reason: value == null ? 'Mercury has no positive recorded net burn' : null };
+    }
     const res = await ctx.env.DB.prepare(
       `SELECT cash_balance, net_burn, snapshot_date FROM project_metrics
         WHERE project_id = ? AND cash_balance IS NOT NULL AND net_burn IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 8`,

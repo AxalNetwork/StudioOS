@@ -99,7 +99,7 @@ export function withoutMoved(search) {
 const trimPath = (p) => String(p || '').replace(/\/+$/, '') || '/';
 
 /** The other pages these pages link to. */
-export const SPINOUT_LAB_PATH = '/admin/spinout-lab';
+export const SPINOUT_LAB_PATH = '/admin/programs/spinout-lab';
 export const PROFILING_TRENDS_PATH = '/admin/profiling-trends';
 export const PRODUCT_TESTING_PATH = '/admin?tab=product-testing';
 export const COMMISSIONS_PATH = '/admin/commissions';
