@@ -61,12 +61,17 @@ export function tabFor(pathname) {
   return eventIdFor(path) === null ? 'overview' : 'event';
 }
 
-/** The segment after `/admin/events/` on an event's page, or null on a tab. */
+/**
+ * The segment after `/admin/events/` on an event's page, or null on a tab. A
+ * segment that cannot be decoded (`/admin/events/%E0`) comes back raw, so it
+ * fails `isEventId` and the page says the event no longer exists.
+ */
 export function eventIdFor(pathname) {
   const path = String(pathname || '').replace(/\/+$/, '');
   if (TABS.some((t) => t.path === path)) return null;
   const m = /^\/admin\/events\/([^/]+)$/.exec(path);
-  return m ? decodeURIComponent(m[1]) : null;
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return m[1]; }
 }
 
 /** The Worker's `intParam`: an event id is a positive whole number, and anything else is a 404. */
@@ -278,14 +283,24 @@ export const PAGE_LIMIT = 200;
  * Every page of R1. `fetchPage(offset)` answers `{ events: [] }`; a page
  * shorter than the limit is the last. An answer with no list is a failed
  * read, not an empty one, so it throws.
+ *
+ * R1 pages by OFFSET over `created_at DESC`, so an event created between two
+ * page requests pushes the last row of one page onto the next. Each id is kept
+ * once, so no event is counted or drawn twice; the new one is in the next read.
  */
 export async function readEveryPage(fetchPage, limit = PAGE_LIMIT, maxPages = 500) {
   const out = [];
+  const seen = new Set();
   for (let i = 0; i < maxPages; i += 1) {
     const reply = await fetchPage(i * limit);
     const page = reply?.events;
     if (!Array.isArray(page)) throw new Error('The events list did not come back as a list.');
-    out.push(...page);
+    for (const ev of page) {
+      const id = ev?.id === null || ev?.id === undefined ? null : String(ev.id);
+      if (id !== null && seen.has(id)) continue;
+      if (id !== null) seen.add(id);
+      out.push(ev);
+    }
     if (page.length < limit) return out;
   }
   return out;
@@ -784,12 +799,16 @@ export function capacitySavedLine(promoted) {
   return n > 0 ? `Capacity saved. ${plural(n, 'person', 'people')} moved off the waitlist.` : 'Capacity saved.';
 }
 
-/** EV10, in the Worker's words: no "every calendar", no "cannot be undone", no note field until part 2. */
+/**
+ * EV10, in the Worker's words: no "every calendar", no "cannot be undone", no
+ * note field until part 2. "It leaves the public calendar" only for an event
+ * that is on it (the feed's predicate), never for a draft or a waiting event.
+ */
 export function cancelCopy(ev) {
   return {
     title: `Cancel ${titleOf(ev)}?`,
     lines: [
-      ev?.visibility === 'public' ? 'It leaves the public calendar.' : 'It is marked cancelled.',
+      onPublicCalendar(ev) ? 'It leaves the public calendar.' : 'It is marked cancelled.',
       'People with an account who hold a seat or wait for one are told in StudioOS. People who signed up with an email only are not told.',
     ],
     paid: isPaid(ev) ? 'Paid tickets are not refunded automatically. HQ refunds them in Revenue › Billing.' : null,

@@ -17,7 +17,7 @@ import EventsOverview from './events/EventsOverview';
 import EventsReview from './events/EventsReview';
 import { useEventsDesk } from './events/useEventsDesk';
 import {
-  LINE, SCOPE_LABEL, SCOPE_TITLE, TITLE, clockLabel, eventIdFor, readyList, tabFor,
+  COULD_NOT_READ, LINE, READING, SCOPE_LABEL, SCOPE_TITLE, TITLE, clockLabel, eventIdFor, readyList, tabFor,
 } from './events/eventsDeskModel';
 
 const CRUMB = 'font-mono text-[11px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
@@ -90,7 +90,7 @@ function AdminEventsPageBody() {
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
             <Link to="/events/new" className={actionGhost} data-testid="events-new">New event</Link>
-            <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400" data-testid="events-asof">{reads.asOf ? `Updated ${clockLabel(reads.asOf)}` : 'Reading…'}</span>
+            <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400" data-testid="events-asof">{reads.asOf ? `Updated ${clockLabel(reads.asOf)}` : reads.reading ? READING : COULD_NOT_READ}</span>
             <button type="button" aria-label="Refresh" onClick={reads.reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100" data-testid="events-refresh">
               <RefreshCw size={16} aria-hidden="true" />
             </button>

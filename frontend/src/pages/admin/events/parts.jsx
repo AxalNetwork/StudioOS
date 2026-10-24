@@ -88,10 +88,14 @@ export function Refusal({ text, testId = 'events-refusal' }) {
   return <p role="alert" className="m-0 text-[12.5px] font-semibold leading-normal text-red-700 dark:text-red-300" data-testid={testId}>{text}</p>;
 }
 
-/** A confirmation line over a list, in place of a toast (EV4b). */
-export function Done({ children, testId = 'events-done' }) {
+/**
+ * A confirmation line over a list, in place of a toast (EV4b). `focusRef`
+ * makes it a focus target: after a write, focus moves here, so it is read out
+ * and is not lost when the re-read removes the button that opened the dialog.
+ */
+export function Done({ children, testId = 'events-done', focusRef = null }) {
   return (
-    <div role="status" className="flex flex-wrap items-center justify-between gap-2.5 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3.5 py-2.5 text-[13px] font-semibold text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid={testId}>
+    <div ref={focusRef} tabIndex={focusRef ? -1 : undefined} role="status" className="flex flex-wrap items-center justify-between gap-2.5 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3.5 py-2.5 text-[13px] font-semibold text-axal-ink outline-none dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid={testId}>
       {children}
     </div>
   );

@@ -12,7 +12,9 @@
  *   · the routes, the guard and the literal tab doors; the frame stays pinned;
  *   · the desk never reads the roster, R2's summary or `conversion`;
  *   · mounted against a stubbed Worker, each tab reads what it draws and no
- *     failed read shows a zero.
+ *     failed read shows a zero;
+ *   · the review's fixes (D915 §7): reads made together, an honest "Updated",
+ *     no second write in the re-read's gap, focus kept, the menu a disclosure.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -28,7 +30,7 @@ import AdminEventsPage from '../src/pages/admin/AdminEventsPage.jsx';
 import {
   ALL_PATH, COMMUNITY_PATH, DAY_MS, DESK_PATH, FROZEN, GONE, LINE, NOT_HELD, NOT_IN_READ, NO_CAP, QUICK_REASONS, REVIEW_PATH,
   SCOPE_LABEL, STATUSES, SUSPENDED, TABS, TITLE, allRows, analyticsJoin, approveLine3, approveLines, approvedLine,
-  attendedText, cancelCopy, capacityPreview, countText, countsFor, eventIdFor, factsOf, featureCopy, fillText, hasEnded,
+  attendedText, cancelCopy, capacityPreview, clockLabel, countText, countsFor, eventIdFor, factsOf, featureCopy, fillText, hasEnded,
   isEventId, money, moneyTotals, onPublicCalendar, overviewTiles, pageOf, publishGate, queueFlags, queueRows, rangeText,
   readEveryPage, refusalText, showUpText, statusCounts, statusFromSearch, statusWord, tabFor, unpublishCopy, whenLine,
 } from '../src/pages/admin/events/eventsDeskModel.js';
@@ -78,6 +80,15 @@ test('the tabs and addresses: three tabs, one page per event, and no Calendar un
   assert.equal(SCOPE_LABEL, INSIGHTS_SCOPE_LABEL, 'the scope chip is Insights\' own');
   assert.equal(TITLE, 'Events');
   assert.equal(LINE, 'Approve public events, keep the calendar healthy and see how events perform.');
+});
+
+test('a path segment that cannot be decoded is an event page with no event, not a crash', () => {
+  for (const path of ['/admin/events/%E0', '/admin/events/100%']) {
+    assert.equal(tabFor(path), 'event', path);
+    assert.equal(eventIdFor(path), path.slice('/admin/events/'.length), 'the raw segment comes back');
+    assert.equal(isEventId(eventIdFor(path)), false, 'so no read starts and the page says the event no longer exists');
+  }
+  assert.equal(eventIdFor('/admin/events/%31%32'), '12', 'a segment that decodes is still decoded');
 });
 
 test('the status words are the canvas\'s, and the stored `rejected` reads "Sent back"', () => {
@@ -224,16 +235,20 @@ test('the Overview tiles: real zeros on a read that succeeded, and words for eve
     ev(3, { starts_at: iso(-5), ends_at: iso(-5 + 0.1) }),
     ev(4, { starts_at: iso(45), status: 'draft' }),
     ev(5, { starts_at: iso(-20), status: 'cancelled' }),
+    // Inside the 30 days, with seats and waitlists, but not live (D915 §3): never counted ahead.
+    ev(6, { starts_at: iso(3), status: 'rejected' }),
+    ev(7, { starts_at: iso(4), status: 'draft' }),
+    ev(8, { starts_at: iso(6), status: 'cancelled' }),
   ];
   const all = ready(list);
   const queue = ready([list[1]]);
-  const join = analyticsJoin(ready({ events: [row(1, 10, 0, 3), row(2, 0, 0, 1), row(3, 8, 6), row(4, 0), row(5, 9)] }), list.length);
+  const join = analyticsJoin(ready({ events: [row(1, 10, 0, 3), row(2, 0, 0, 1), row(3, 8, 6), row(4, 0), row(5, 9), row(6, 5, 0, 2), row(7, 1, 0, 1), row(8, 4, 0, 2)] }), list.length);
   const t = Object.fromEntries(overviewTiles({ all, queue, join, now: NOW }).map((x) => [x.key, x]));
   assert.equal(t.waiting.value, '1');
   assert.equal(t.waiting.note.text, 'Waiting time not recorded yet', 'waiting time counts from submission, which part 2 records');
-  assert.equal(t.next30.value, '2', 'published and waiting, starting in the next 30 days');
+  assert.equal(t.next30.value, '2', 'published and waiting, starting in the next 30 days; not the draft, the sent-back or the cancelled one');
   assert.equal(t.next30.sub, '10 seats taken · 1 full');
-  assert.equal(t.waitlists.value, '4', 'waitlisted on upcoming events');
+  assert.equal(t.waitlists.value, '4', 'waitlisted on upcoming live events only');
   assert.equal(t.showup.value, '75%', 'ended and not cancelled');
   // R2 failed: every count says so, R1's own counts still answer.
   const failed = Object.fromEntries(overviewTiles({ all, queue, join: analyticsJoin(ready({ events: [] }), list.length), now: NOW }).map((x) => [x.key, x]));
@@ -264,6 +279,21 @@ test('R1 is read page by page at 200 until a short page; a reply with no list is
   await assert.rejects(readEveryPage(async () => ({})), /did not come back as a list/);
 });
 
+test('R1 pages by offset, so an event created between two pages pushes a row onto the next; each id is kept once', async () => {
+  // 250 events, newest created first, as R1 orders them. A draft is created
+  // after the first page is read, so every row moves down one.
+  const table = Array.from({ length: 250 }, (_, i) => ev(250 - i));
+  const rows = await readEveryPage(async (offset) => {
+    if (offset === 200) table.unshift(ev(251, { status: 'draft' }));
+    return { events: table.slice(offset, offset + 200) };
+  });
+  const ids = rows.map((r) => r.id);
+  assert.equal(ids.length, new Set(ids).size, 'no event twice');
+  assert.equal(rows.length, 250, 'the 250 events the read began with; the new draft is in the next read');
+  const published = statusCounts(rows).find((s) => s.key === 'published').count;
+  assert.equal(published, 250, 'counted once each');
+});
+
 test('the dialogs say only what the Worker does', () => {
   const counts = (taken, waitlisted) => ({ state: 'ready', taken, attended: 0, waitlisted });
   const e = ev(1, { capacity: 60, waitlist_enabled: true });
@@ -291,6 +321,13 @@ test('the dialogs say only what the Worker does', () => {
   assert.equal(featureCopy(ev(1)).next, true);
   assert.equal(featureCopy(ev(1, { featured: true })).action, 'Stop featuring');
   assert.equal(featureCopy(ev(1, { featured: true })).next, false, 'the body is sent explicitly; a missing body unfeatures');
+});
+
+test('Cancel says "It leaves the public calendar" only for an event that is on it', () => {
+  assert.equal(cancelCopy(ev(1)).lines[0], 'It leaves the public calendar.', 'public, published and approved');
+  for (const o of [{ status: 'pending_review', admin_published: false }, { status: 'draft', admin_published: false }, { status: 'rejected', admin_published: false }, { admin_published: false }, { visibility: 'private' }]) {
+    assert.equal(cancelCopy(ev(1, o)).lines[0], 'It is marked cancelled.', JSON.stringify(o));
+  }
 });
 
 test('refusals are one sentence: suspended licence, frozen account, gone event', () => {
@@ -390,8 +427,28 @@ function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }
   };
 }
 
+/** A promise the test settles by hand, to hold a read open. */
+function deferred() {
+  let resolve;
+  const promise = new Promise((r) => { resolve = r; });
+  return { promise, resolve };
+}
+
 async function mounted(url, handle) {
   const restore = installDocument();
+  // The test DOM has no focus, no containment and no document events. The
+  // desk moves focus and its menu listens on the document, so each node gets
+  // `focus()` and `contains()`, and document listeners are kept to dispatch.
+  const make = document.createElement.bind(document);
+  document.createElement = (tag) => {
+    const n = make(tag);
+    n.focus = function focus() { document.activeElement = this; };
+    n.contains = function contains(other) { for (let x = other; x; x = x.parentNode) if (x === this) return true; return false; };
+    return n;
+  };
+  const listeners = new Map();
+  document.addEventListener = (type, fn) => { listeners.set(type, [...(listeners.get(type) || []), fn]); };
+  document.removeEventListener = (type, fn) => { listeners.set(type, (listeners.get(type) || []).filter((f) => f !== fn)); };
   const previous = { fetch: globalThis.fetch, matchMedia: globalThis.matchMedia };
   const requests = [];
   globalThis.fetch = async (u, options = {}) => { requests.push({ url: String(u), method: String(options.method || 'GET'), body: options.body }); return handle(String(u), options); };
@@ -407,12 +464,29 @@ async function mounted(url, handle) {
   // The test DOM keeps no attributes, so each node's React props are read instead.
   const props = (n) => Object.entries(n).find(([key]) => key.startsWith('__reactProps$'))?.[1] || {};
   const byId = (id) => nodes().find((n) => props(n)['data-testid'] === id);
+  const buttonNode = (label) => nodes().find((n) => String(n.tagName).toUpperCase() === 'BUTTON' && text(n).trim() === label);
   return {
     requests, flush, text: () => text(container),
     textOf: (id) => text(byId(id)),
     testIds: () => nodes().map((n) => props(n)['data-testid']).filter(Boolean),
     hrefs: () => nodes().filter((n) => String(n.tagName).toUpperCase() === 'A').map((n) => props(n).href),
     props: (id) => props(byId(id)),
+    node: byId,
+    nodeProps: props,
+    /** A button's props by its words, or null when no such button is drawn. */
+    button: (label) => { const n = buttonNode(label); return n ? props(n) : null; },
+    /** The test id of the focused node, or of its nearest ancestor that has one. */
+    focused: () => { for (let n = document.activeElement; n; n = n.parentNode) { const id = props(n)['data-testid']; if (id) return id; } return null; },
+    /** A left click on a router link, which navigates inside the MemoryRouter. */
+    async follow(href) {
+      const node = nodes().find((n) => String(n.tagName).toUpperCase() === 'A' && props(n).href === href);
+      assert.ok(node, `no link to ${href}`);
+      const e = { button: 0, metaKey: false, altKey: false, ctrlKey: false, shiftKey: false, defaultPrevented: false, target: node, currentTarget: node, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} };
+      await act(async () => { props(node).onClick(e); });
+      await flush();
+    },
+    /** An event on the document, to each listener the page added. */
+    async dispatch(type, event) { await act(async () => { for (const fn of listeners.get(type) || []) fn({ preventDefault() {}, ...event }); }); await flush(); },
     async click(id) { const p = props(byId(id)); assert.ok(p.onClick, `no ${id} to click`); assert.ok(!p.disabled, `${id} is disabled`); await act(async () => { p.onClick({ preventDefault() {}, stopPropagation() {} }); }); await flush(); },
     /** A button by its words. */
     async press(label) {
@@ -513,8 +587,14 @@ test('All events joins R2 under Guard G: an empty analytics read is "Could not b
 });
 
 test('Overview pages R1 to the end, counts statuses from it, and says Not recorded where nothing stores a value', async () => {
-  const list = [...Array.from({ length: 200 }, (_, i) => ev(i + 1, { starts_at: liveIso(-60) })), ev(201, { status: 'rejected' }), ev(202, { status: 'rejected' }), ev(203, { status: 'draft' })];
-  const view = await mounted('/admin/events', worker({ list, analytics: { events: list.slice(0, 200).map((e) => row(e.id, 2, 1)) } }));
+  // Every start is on the live clock the page reads, so no event ends while the suite ages.
+  const list = [
+    ...Array.from({ length: 200 }, (_, i) => ev(i + 1, { starts_at: liveIso(-30 - i / 10) })),
+    ev(201, { status: 'rejected', starts_at: liveIso(10) }), ev(202, { status: 'rejected', starts_at: liveIso(10) }), ev(203, { status: 'draft', starts_at: liveIso(10) }),
+  ];
+  // R2 as the Worker reads it: `ORDER BY e.starts_at DESC LIMIT 200`, so the three oldest ended events are not in it.
+  const r2 = [...list].sort((a, b) => Date.parse(b.starts_at) - Date.parse(a.starts_at)).slice(0, 200).map((e) => ({ ...row(e.id, 2, 1), starts_at: e.starts_at }));
+  const view = await mounted('/admin/events', worker({ list, analytics: { events: r2 } }));
   try {
     assert.ok(view.requests.some((r) => r.url === '/api/admin/events?limit=200&offset=200'), 'a full page asks for the next');
     assert.match(view.textOf('events-status-rejected'), /Sent back · 2/);
@@ -522,7 +602,9 @@ test('Overview pages R1 to the end, counts statuses from it, and says Not record
     assert.ok(view.hrefs().includes('/admin/events/all?status=rejected'), 'each chip opens All events with its status');
     assert.match(view.textOf('events-unrecorded-views'), /No store counts views of an event page/);
     assert.match(view.textOf('events-unrecorded-feedback'), /Events have no feedback form yet\./);
-    assert.match(view.textOf('events-tile-showup'), /50%/);
+    assert.equal(view.textOf('events-tile-showup'),
+      'Show-up rateNot in this read3 events are not in this read. The analytics read holds the 200 events that start latest, and some of these are older.',
+      'three of the 200 ended events start before R2\'s 200 rows: never summed as if they had none');
     assert.match(view.textOf('events-tile-waiting'), /Waiting time not recorded yet/);
   } finally { await view.close(); }
 });
@@ -592,5 +674,179 @@ test('one event\'s cancel waits for the refund box on a paid event, and the capa
     await view.change('events-cancel-understood', { checked: true });
     assert.equal(view.props('events-cancel-go').disabled, false);
     assert.equal(view.requests.filter((r) => r.method === 'POST').length, 1);
+  } finally { await view.close(); }
+});
+
+/* ------------------------------------------------------------------ *
+ * The review (2026-10-24): D915 §7
+ * ------------------------------------------------------------------ */
+
+test('coming back from an event\'s page reads the list, R2 and the queue again together, so a new event has its counts', async () => {
+  const base = [ev(31, { title: 'Breakfast', starts_at: liveIso(4) }), ev(32, { title: 'Roundtable', starts_at: liveIso(8) })];
+  let lists = 0;
+  let counts = 0;
+  // Event 33 is created while the admin is on event 31's page.
+  const list = () => { lists += 1; return response({ events: lists === 1 ? base : [ev(33, { title: 'Supper', starts_at: liveIso(2) }), ...base] }); };
+  const analytics = () => { counts += 1; return response({ events: [row(31, 4), row(32, 5), ...(counts === 1 ? [] : [row(33, 7)])] }); };
+  const view = await mounted('/admin/events/all', worker({ list, analytics, event: base[0] }));
+  const made = (path) => view.requests.filter((r) => r.url === path).length;
+  const R1 = '/api/admin/events?limit=200&offset=0';
+  const R2 = '/api/admin/events/analytics';
+  const QUEUE_READ = '/api/admin/events?status=pending_review&limit=200&offset=0';
+  try {
+    assert.deepEqual([made(R1), made(R2), made(QUEUE_READ)], [1, 1, 1]);
+    await view.follow('/admin/events/31');
+    assert.ok(view.testIds().includes('events-event'));
+    await view.follow('/admin/events/all');
+    assert.equal(made(R1), 2, 'the list is read again on the way back');
+    assert.equal(made(R2), 3, 'and R2 with it, as it was with the event page');
+    assert.equal(made(QUEUE_READ), 3, 'and the queue');
+    const r33 = view.textOf('events-all-row-33');
+    assert.doesNotMatch(r33, new RegExp(NOT_IN_READ), 'a new event is joined to counts read at the same moment');
+    assert.match(r33, /18%/, 'fill = 7 of 40');
+  } finally { await view.close(); }
+});
+
+test('"Updated" is the oldest answer among the reads the tab draws, never a newer one', async () => {
+  const realNow = Date.now;
+  let clock = LIVE;
+  Date.now = () => clock;
+  const held = { queue: deferred(), list: deferred(), analytics: deferred() };
+  const T = [0, 10, 20, 30].map((m) => LIVE + m * 60_000);
+  try {
+    const view = await mounted('/admin/events', worker({ queue: () => held.queue.promise, list: () => held.list.promise, analytics: () => held.analytics.promise }));
+    try {
+      assert.equal(view.textOf('events-asof'), 'Reading…', 'nothing has answered yet');
+      clock = T[0]; held.queue.resolve(response({ events: QUEUE })); await view.flush();
+      clock = T[1]; held.list.resolve(response({ events: [ev(31, { starts_at: liveIso(4) })] })); await view.flush();
+      clock = T[2]; held.analytics.resolve(response({ events: [row(31, 4)] })); await view.flush();
+      assert.equal(view.textOf('events-asof'), `Updated ${clockLabel(T[0])}`, 'the Waiting tile and the Review count are the queue read at T0');
+      // Review draws the queue alone, read again on the way in: the list's and R2's times are not its.
+      clock = T[3];
+      await view.follow('/admin/events/review');
+      assert.equal(view.textOf('events-asof'), `Updated ${clockLabel(T[3])}`);
+    } finally { await view.close(); }
+  } finally { Date.now = realNow; }
+});
+
+test('the header says "Could not be read" once every read the tab makes has failed, and "Reading…" only while one is out', async () => {
+  for (const url of ['/admin/events', '/admin/events/review', '/admin/events/all']) {
+    const view = await mounted(url, () => response({ error: 'down' }, 503));
+    try {
+      assert.equal(view.textOf('events-asof'), 'Could not be read', url);
+    } finally { await view.close(); }
+  }
+  const out = deferred();
+  const view = await mounted('/admin/events/review', () => out.promise);
+  try {
+    assert.equal(view.textOf('events-asof'), 'Reading…', 'the queue read is still out');
+    out.resolve(response({ error: 'down' }, 503));
+    await view.flush();
+    assert.equal(view.textOf('events-asof'), 'Could not be read');
+  } finally { await view.close(); }
+});
+
+test('Review: a decided event leaves the queue at once, so it cannot be approved or sent back again before the re-read lands', async () => {
+  const later = deferred();
+  let reads = 0;
+  const queue = () => { reads += 1; return reads === 1 ? response({ events: QUEUE }) : later.promise; };
+  const view = await mounted('/admin/events/review', worker({ queue }));
+  try {
+    assert.ok(view.testIds().includes('events-queue-row-22'));
+    await view.click('events-approve');
+    await view.click('events-approve-go');
+    assert.equal(reads, 2, 'the approve reads the queue again, and that read is still out');
+    assert.ok(!view.testIds().includes('events-queue-row-22'), 'the approved event is out of the queue');
+    assert.ok(view.testIds().includes('events-queue-row-21'));
+    assert.match(view.text(), /Waiting for review · 1/);
+    assert.equal(view.textOf('events-approving-does'), 'What approving doesPuts the event on the public calendar at axal.vc/events.Tells the host it is live.Sends free-seat invitations to official partners not invited yet.',
+      'the action bar acts on the next event, Breakfast for founders');
+    assert.equal(view.focused(), 'events-done', 'focus moves to the confirmation line');
+    // A read newer than the decision is the truth again, whatever it holds.
+    later.resolve(response({ events: QUEUE }));
+    await view.flush();
+    assert.ok(view.testIds().includes('events-queue-row-22'), 'once a newer read lands, the queue is that read');
+  } finally { await view.close(); }
+});
+
+test('one event: after Cancel, focus moves to the confirmation line and the actions wait for the re-read', async () => {
+  const event = ev(61, { title: 'Supper club', starts_at: liveIso(6) });
+  const later = deferred();
+  let gets = 0;
+  const base = worker({ event, analytics: { events: [row(61, 3)] } });
+  const handle = (url, options = {}) => {
+    if (url === '/api/admin/events/61' && String(options.method || 'GET').toUpperCase() === 'GET') {
+      gets += 1;
+      return gets === 1 ? response({ event }) : later.promise;
+    }
+    return base(url, options);
+  };
+  const view = await mounted('/admin/events/61', handle);
+  try {
+    await view.press('Cancel event');
+    await view.click('events-cancel-go');
+    assert.deepEqual(view.requests.filter((r) => r.method === 'POST').map((r) => r.url), ['/api/admin/events/61/cancel']);
+    assert.equal(view.textOf('events-done'), 'Supper club is cancelled.');
+    assert.equal(view.focused(), 'events-done', 'focus moves to the confirmation line');
+    for (const label of ['Change capacity', 'Feature', 'Unpublish', 'Cancel event']) assert.equal(view.button(label)?.disabled, true, `${label} waits for the re-read`);
+    later.resolve(response({ event: { ...event, status: 'cancelled', admin_published: false } }));
+    await view.flush();
+    assert.equal(view.button('Cancel event'), null, 'the re-read removes the button that opened the dialog');
+    assert.equal(view.button('Unpublish'), null);
+    assert.equal(view.focused(), 'events-done', 'and focus is still on the line, not lost to the page');
+    assert.equal(view.button('Change capacity').disabled, false, 'a read newer than the write frees the actions');
+  } finally { await view.close(); }
+});
+
+test('More actions is a disclosure hung from the actions row; Escape, a click outside, focus leaving and a pick close it', async () => {
+  const event = ev(71, { title: 'Demo night', starts_at: liveIso(6) });
+  const view = await mounted('/admin/events/71', worker({ event, analytics: { events: [row(71, 1)] } }));
+  const open = () => view.testIds().includes('events-event-menu-list');
+  try {
+    const btn = view.props('events-event-menu');
+    assert.equal(btn['aria-haspopup'], undefined, 'not announced as a menu: its items are links');
+    assert.equal(btn['aria-expanded'], false);
+    await view.click('events-event-menu');
+    const list = view.props('events-event-menu-list');
+    assert.equal(view.props('events-event-menu')['aria-expanded'], true);
+    assert.ok(list.id, 'the list has an id');
+    assert.equal(view.props('events-event-menu')['aria-controls'], list.id);
+    // On a phone ⋯ wraps to the left; the list hangs from the row, which spans the content width.
+    assert.ok(view.props('events-event-actions').className.split(/\s+/).includes('relative'), 'the actions row places the list');
+    const wrapper = view.node('events-event-menu').parentNode;
+    assert.ok(!String(view.nodeProps(wrapper).className || '').split(/\s+/).includes('relative'), '⋯\'s own wrapper does not');
+    const cls = list.className.split(/\s+/);
+    for (const c of ['absolute', 'right-0', 'top-full', 'max-w-full', 'w-[240px]']) assert.ok(cls.includes(c), c);
+    // Escape closes it and puts focus back on ⋯.
+    await view.dispatch('keydown', { key: 'Escape' });
+    assert.equal(open(), false, 'Escape closes it');
+    assert.equal(view.focused(), 'events-event-menu');
+    // A click inside keeps it; a click outside closes it.
+    await view.click('events-event-menu');
+    await view.dispatch('mousedown', { target: view.node('events-event-menu-roster') });
+    assert.equal(open(), true, 'a click inside keeps it open');
+    await view.dispatch('mousedown', { target: view.node('events-event-gate') });
+    assert.equal(open(), false, 'a click outside closes it');
+    // Focus moving to another item keeps it; focus moving out of it closes it.
+    await view.click('events-event-menu');
+    await act(async () => { view.nodeProps(wrapper).onBlur({ relatedTarget: view.node('events-event-menu-roster') }); });
+    assert.equal(open(), true, 'focus moving inside keeps it open');
+    await act(async () => { view.nodeProps(wrapper).onBlur({ relatedTarget: view.node('events-event-gate') }); });
+    assert.equal(open(), false, 'focus moving out closes it');
+    // Picking an item closes it, and focus goes back to ⋯ rather than to the removed link.
+    await view.click('events-event-menu');
+    view.node('events-event-gate').focus();
+    await view.click('events-event-menu-roster');
+    assert.equal(open(), false, 'a pick closes it');
+    assert.equal(view.focused(), 'events-event-menu');
+  } finally { await view.close(); }
+});
+
+test('an event address that cannot be decoded draws "This event no longer exists." inside the desk, and reads nothing for it', async () => {
+  const view = await mounted('/admin/events/%E0', worker({}));
+  try {
+    assert.equal(view.textOf('events-event-gone'), `${GONE}All events`);
+    assert.ok(view.testIds().includes('events-tabs'), 'the desk\'s frame is drawn, not the error boundary');
+    assert.ok(!view.requests.some((r) => /\/api\/admin\/events\/[^?]/.test(r.url) && !r.url.endsWith('/analytics')), 'no R3 read');
   } finally { await view.close(); }
 });

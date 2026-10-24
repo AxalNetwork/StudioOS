@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminEvents, events as eventsApi } from '../../../lib/api';
 import { Unreadable, Unrecorded, actionDanger, actionGhost } from '../../../ui';
@@ -26,19 +26,39 @@ const GATE_TONE = {
 };
 const GATE_MARK = { ok: '✓', wait: '◷', muted: '·', last: '→' };
 
+/**
+ * "More actions": a disclosure, not an ARIA menu, because its items are plain
+ * links. Escape, a click outside and focus moving out close it; Escape and
+ * picking an item put focus back on ⋯. The list hangs from the actions row
+ * (`relative` there), never from ⋯, so on a phone, where ⋯ wraps to the left,
+ * it stays inside the gutters.
+ */
 function Menu({ ev }) {
   const [open, setOpen] = useState(false);
+  const wrap = useRef(null);
+  const button = useRef(null);
+  const listId = useId();
+  useEffect(() => {
+    if (!open || typeof document === 'undefined') return undefined;
+    const away = (e) => { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); };
+    const esc = (e) => { if (e.key === 'Escape') { setOpen(false); button.current?.focus?.(); } };
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
+  }, [open]);
+  const pick = () => { setOpen(false); button.current?.focus?.(); };
+  const leave = (e) => { if (e.relatedTarget && wrap.current && !wrap.current.contains(e.relatedTarget)) setOpen(false); };
   const item = 'block rounded-[7px] px-2.5 py-2 text-[13px] font-semibold text-axal-ink hover:bg-axal-ground dark:text-gray-100 dark:hover:bg-gray-800';
   return (
-    <div className="relative">
-      <button type="button" aria-haspopup="true" aria-expanded={open} aria-label="More actions"
+    <div ref={wrap} onBlur={leave}>
+      <button ref={button} type="button" aria-expanded={open} aria-controls={listId} aria-label="More actions"
         onClick={() => setOpen((o) => !o)} className={`${actionGhost} min-w-[36px]`} data-testid="events-event-menu">⋯</button>
       {open ? (
-        <div className={`${CARD} absolute right-0 top-11 z-10 flex w-[240px] flex-col gap-0.5 p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`} data-testid="events-event-menu-list">
-          <Link to={`/events/${ev.id}/manage`} className={item}>Open as host</Link>
-          <a href={eventsApi.exportUrl(ev.id)} download className={item}>Download roster (CSV)</a>
-          {onPublicCalendar(ev) && ev.slug ? <Link to={`/events/${encodeURIComponent(ev.slug)}`} className={item}>Open public page</Link> : null}
-          <a href={eventsApi.icsUrl(ev.id)} download className={item}>Add to calendar</a>
+        <div id={listId} className={`${CARD} absolute right-0 top-full z-10 mt-1.5 flex w-[240px] max-w-full flex-col gap-0.5 p-1.5 shadow-[0_12px_30px_rgba(24,24,27,.14)]`} data-testid="events-event-menu-list">
+          <Link to={`/events/${ev.id}/manage`} className={item} onClick={pick}>Open as host</Link>
+          <a href={eventsApi.exportUrl(ev.id)} download className={item} onClick={pick} data-testid="events-event-menu-roster">Download roster (CSV)</a>
+          {onPublicCalendar(ev) && ev.slug ? <Link to={`/events/${encodeURIComponent(ev.slug)}`} className={item} onClick={pick}>Open public page</Link> : null}
+          <a href={eventsApi.icsUrl(ev.id)} download className={item} onClick={pick}>Add to calendar</a>
         </div>
       ) : null}
     </div>
@@ -61,7 +81,10 @@ export default function EventPage({ id, reads, now }) {
   const [dialog, setDialog] = useState(null);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
+  // `{ line, at }`: a fresh object per write, so focus moves to the line every time.
   const [done, setDone] = useState(null);
+  const doneRef = useRef(null);
+  useEffect(() => { if (done) doneRef.current?.focus?.(); }, [done]);
 
   if (!isEventId(id)) return <EventGone />;
   if (reads.event.status === 'loading') return <p className="m-0 font-mono text-[12px] text-axal-muted dark:text-gray-400">Reading…</p>;
@@ -75,12 +98,14 @@ export default function EventPage({ id, reads, now }) {
   const counts = countsFor(analyticsJoin(reads.analytics, 1), ev.id);
   const agenda = reads.agenda.status === 'ready' ? agendaRows(reads.agenda.data, ev) : null;
   const close = () => { if (!busy) { setDialog(null); setRefusal(null); } };
+  // The Worker checks no status, so the actions wait for a read newer than the last write.
+  const settling = Boolean(done) && (reads.event.at || 0) < done.at;
 
   const run = async (write, line) => {
     setBusy(true); setRefusal(null);
     try {
       const reply = await write();
-      setDone(typeof line === 'function' ? line(reply) : line);
+      setDone({ line: typeof line === 'function' ? line(reply) : line, at: Date.now() });
       setDialog(null);
       reads.reload();
     } catch (e) {
@@ -107,16 +132,16 @@ export default function EventPage({ id, reads, now }) {
               {String(ev.location_text || '').trim() || <Unrecorded>Place not recorded</Unrecorded>}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2" data-testid="events-event-actions">
-            <button type="button" className={actionGhost} onClick={() => setDialog('capacity')}>Change capacity</button>
-            <button type="button" className={actionGhost} onClick={() => setDialog('feature')}>{ev.featured ? 'Stop featuring' : 'Feature'}</button>
-            {ev.status === 'published' ? <button type="button" className={actionGhost} onClick={() => setDialog('unpublish')}>Unpublish</button> : null}
-            {ev.status !== 'cancelled' ? <button type="button" className={actionDanger} onClick={() => setDialog('cancel')}>Cancel event</button> : null}
+          <div className="relative flex flex-wrap items-center gap-2" data-testid="events-event-actions">
+            <button type="button" className={actionGhost} disabled={settling} onClick={() => setDialog('capacity')}>Change capacity</button>
+            <button type="button" className={actionGhost} disabled={settling} onClick={() => setDialog('feature')}>{ev.featured ? 'Stop featuring' : 'Feature'}</button>
+            {ev.status === 'published' ? <button type="button" className={actionGhost} disabled={settling} onClick={() => setDialog('unpublish')}>Unpublish</button> : null}
+            {ev.status !== 'cancelled' ? <button type="button" className={actionDanger} disabled={settling} onClick={() => setDialog('cancel')}>Cancel event</button> : null}
             <Menu ev={ev} />
           </div>
         </div>
         <Gate ev={ev} />
-        {done ? <Done><span>{done}</span></Done> : null}
+        {done ? <Done focusRef={doneRef}><span>{done.line}</span></Done> : null}
       </header>
 
       {counts.state === 'unreadable' ? <Unreadable what="Seat counts" claim={counts.reason} onRetry={reads.reload} /> : null}

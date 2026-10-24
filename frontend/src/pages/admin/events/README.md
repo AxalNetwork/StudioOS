@@ -15,10 +15,14 @@ strip, then the tab the address names.
 - `EventsAll.jsx` — All events (EV6): the table, searched by title, filtered by
   `?status=`, 25 rows a page; each title opens the event's page.
 - `EventPage.jsx` — one event (EV7): header, publish gate, tiles, agenda,
-  the roster line, history, the actions and the menu.
+  the roster line, history, the actions and "More actions", a disclosure of
+  links (not an ARIA menu).
 - `EventDialogs.jsx` — the dialogs (EV4, EV5, EV9–EV11), each a `Lightbox`.
-- `parts.jsx` — the card, pills, tile and refusal line the tabs share.
-- `useEventsDesk.js` — the reads, each made alone.
+- `parts.jsx` — the card, pills, tile, refusal line and confirmation line the
+  tabs share.
+- `useEventsDesk.js` — the reads, each made alone. R2 and the queue are read
+  again whenever the list is switched on or off, so they are read together;
+  "Updated" is the oldest answer among the reads the tab draws.
 - `eventsDeskModel.js` — pure. The tabs, the status words, Guard G, the
   derivations (ended, fill, show-up, the tiles), money, the publish gate, the
   facts, the dialogs' words and the refusal sentences.
@@ -34,5 +38,8 @@ strip, then the tab the address names.
   "Not read here yet", an event that has not ended "Not held yet", and an
   event missing from the analytics read "Not in this read".
 - Every dialog says only what the Worker does, and none is a browser pop-up.
+- The Worker checks no status on a write, so after one the event just decided
+  leaves the queue, and the event page's actions wait, until a read newer
+  than the write lands. Focus then sits on the confirmation line.
 - No type, format, period control or chart is drawn until the part of D915 §6
   that builds it lands. Calendar is part 4.

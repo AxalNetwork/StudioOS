@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminEvents } from '../../../lib/api';
 import { Unreadable, Unrecorded, actionGhost, actionPrimary } from '../../../ui';
@@ -71,9 +71,17 @@ export default function EventsReview({ reads }) {
   const [dialog, setDialog] = useState(null);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState(null);
+  // `{ id, line, at }`: the event just decided, and when.
   const [done, setDone] = useState(null);
+  const doneRef = useRef(null);
+  useEffect(() => { if (done) doneRef.current?.focus?.(); }, [done]);
 
-  const list = readyList(reads.queue);
+  // The Worker checks no status, so the event just decided stays out of the
+  // queue until a queue read newer than the decision lands: it cannot be
+  // approved or sent back a second time in that gap.
+  const read = readyList(reads.queue);
+  const settling = Boolean(done) && (reads.queue.at || 0) < done.at;
+  const list = read && settling ? read.filter((r) => String(r.id) !== String(done.id)) : read;
   const rows = list ? queueRows(list, { q, sort }) : [];
   const ev = rows.find((r) => String(r.id) === String(picked)) || rows[0] || null;
 
@@ -91,7 +99,7 @@ export default function EventsReview({ reads }) {
     if (feature) {
       try { await adminEvents.feature(ev.id, true); } catch (e) { featureError = e; }
     }
-    setDone({ id: ev.id, line: approvedLine(ev, { featured: feature && !featureError, featureError }) });
+    setDone({ id: ev.id, line: approvedLine(ev, { featured: feature && !featureError, featureError }), at: Date.now() });
     setBusy(false); setDialog(null); setPicked(null);
     reads.reload();
   };
@@ -104,7 +112,7 @@ export default function EventsReview({ reads }) {
       setRefusal(refusalText(e)); setBusy(false);
       return;
     }
-    setDone({ id: ev.id, line: sentBackLine(ev) });
+    setDone({ id: ev.id, line: sentBackLine(ev), at: Date.now() });
     setBusy(false); setDialog(null); setPicked(null);
     reads.reload();
   };
@@ -113,7 +121,7 @@ export default function EventsReview({ reads }) {
     <div className="grid items-start gap-3.5 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]" data-testid="events-review">
       <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} aria-labelledby="events-queue-h" data-testid="events-queue">
         {done ? (
-          <Done>
+          <Done focusRef={doneRef}>
             <span>{done.line}</span>
             <Link to={`/admin/events/${done.id}`} className={LINK}>Open event</Link>
           </Done>

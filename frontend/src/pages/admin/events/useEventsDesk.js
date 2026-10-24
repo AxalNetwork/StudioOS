@@ -15,6 +15,12 @@ import { PAGE_LIMIT, isEventId, readEveryPage } from './eventsDeskModel';
  * A read is made only on the tabs that draw it. `reload()` reads them again
  * after a write; a read that already answered keeps its rows on screen until
  * the new answer lands, so a refresh never blanks the page.
+ *
+ * R2 and the queue are read again whenever the list (R1) is switched on or
+ * off, so coming back from an event's page re-reads all three together and
+ * Guard G never joins a fresh list to old counts. `asOf` is the OLDEST answer
+ * among the reads the tab draws, so "Updated" is never newer than what is on
+ * screen; `reading` is true only while one of those reads is still loading.
  */
 
 const idle = { status: 'loading', data: null, error: null, at: null, what: null };
@@ -45,12 +51,18 @@ export function useEventsDesk(tab, eventId) {
   const [tick, setTick] = useState(0);
   const wantAll = tab === 'overview' || tab === 'all';
   const wantEvent = tab === 'event' && isEventId(eventId);
-  const queue = useRead('queue', 'queue', tick, true, () => pages('pending_review'));
+  const withList = `${tick}:${wantAll}`;
+  const queue = useRead('queue', 'queue', withList, true, () => pages('pending_review'));
   const all = useRead('list', 'all', tick, wantAll, () => pages(undefined));
-  const analytics = useRead('analytics', 'analytics', tick, wantAll || wantEvent, () => adminEvents.analytics());
+  const analytics = useRead('analytics', 'analytics', withList, wantAll || wantEvent, () => adminEvents.analytics());
   const event = useRead('event', `event:${eventId}`, tick, wantEvent, () => adminEvents.get(eventId));
   const agenda = useRead('agenda', `agenda:${eventId}`, tick, wantEvent, () => eventsApi.agenda(eventId));
   const reload = useCallback(() => setTick((t) => t + 1), []);
-  const asOf = Math.max(0, ...[queue, all, analytics, event, agenda].map((r) => r.at || 0)) || null;
-  return { queue, all, analytics, event, agenda, reload, asOf };
+  // The queue is drawn on every tab: the tab strip's Review count.
+  const drawn = [[queue, true], [all, wantAll], [analytics, wantAll || wantEvent], [event, wantEvent], [agenda, wantEvent]]
+    .filter(([, on]) => on).map(([r]) => r);
+  const stamps = drawn.map((r) => r.at).filter(Boolean);
+  const asOf = stamps.length ? Math.min(...stamps) : null;
+  const reading = drawn.some((r) => r.status === 'loading');
+  return { queue, all, analytics, event, agenda, reload, asOf, reading };
 }
