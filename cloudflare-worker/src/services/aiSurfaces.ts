@@ -46,6 +46,8 @@ export const AI_SURFACE = {
   raisePitch: '/raise/pitch',
   /** Raise · Pitch · Review — the deck reviewer's section map and review (`/api/deck-reviewer/*`). */
   raisePitchReview: '/raise/pitch/review',
+  /** Raise · Investor narrative — Eadwyn's positioning proposal (`POST /api/cycles/raise/narrative/positioning/draft`), D911. */
+  raiseNarrative: '/raise/investor-narrative',
   /** Studio — Eadwyn's interview: answers, explain, tool routing, rerank, dictation, and their safety pass. */
   studio: '/studio',
   /** Onboarding · Chat — the profiling conversation and its extraction (`/api/profiling/*`). */
