@@ -26,6 +26,10 @@ function fixture() {
         (fail === 'events' && sql.includes('FROM events e'))) throw new Error('Synthetic analytics read failure');
     if (fail === 'missing-summary' && sql.includes('COUNT(*) AS total_events')) return { first: async () => null };
     if (sql.includes('FROM events e')) {
+      if (fail === 'non-string-dates') return { all: async () => {
+        const result = await base.prepare(sql).all();
+        return { ...result, results: result.results.map((row: any, index: number) => index === 0 ? { ...row, starts_at: 123, ends_at: 456 } : { ...row, starts_at: null, ends_at: null }) };
+      } };
       if (fail === 'failed-result') return { all: async () => ({ success: false, results: [] }) };
       if (fail === 'missing-result') return { all: async () => ({ success: true }) };
     }
@@ -189,4 +193,20 @@ test('D916: conversion waits for the recorded end or a full day after start, and
     assert.equal(result.body.events.find((r: any) => r.id === empty.body.event.id).conversion, null);
     assert.equal(result.body.events.find((r: any) => r.id === zero.body.event.id).conversion, 0);
   } finally { Date.now = originalNow; f.db.close(); }
+});
+
+
+test('D916: malformed timestamp values leave the portfolio rows readable with unknown conversion', async () => {
+  const f = fixture();
+  try {
+    await f.create({ title: 'Malformed end fixture' });
+    await f.create({ title: 'Malformed start fixture' });
+    f.fail('non-string-dates');
+    const r = await f.analytics();
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.body.unreadable, []);
+    assert.equal(r.body.summary.total_events, 2);
+    assert.equal(r.body.events.length, 2);
+    assert.deepEqual(r.body.events.map((row: any) => row.conversion), [null, null]);
+  } finally { f.db.close(); }
 });

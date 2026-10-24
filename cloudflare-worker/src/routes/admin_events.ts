@@ -155,7 +155,7 @@ adminEvents.get('/analytics', async (c) => {
   let events: any[] | null = null;
   const now = Date.now();
   // Event timestamps without an offset are stored as UTC, like D1 timestamps.
-  const timestamp = (value: string) => Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : value.replace(' ', 'T') + 'Z');
+  const timestamp = (value: unknown) => typeof value === 'string' && value.trim() ? Date.parse(/[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : value.replace(' ', 'T') + 'Z') : Number.NaN;
   try {
     const rows = await c.env.DB.prepare(
       `SELECT e.id, e.slug, e.title, e.status, e.starts_at, e.ends_at, e.capacity, e.featured,
