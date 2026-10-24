@@ -13,6 +13,17 @@ keeps the query and hash and adds `?moved=held-community` for CM13's notice.
   `ready`, `loading`, `unreadable`, `notyet` or `unrecorded`; the copy the
   canvas fixes; D915's Guard G for seats taken.
 - `HeldCommunityRedirect.jsx` — the old address.
+- D934 (#2718), the four lightboxes (CM3–CM6), opened from the cards or by
+  `?open=events|jobs|circles|activity`:
+  - `CommunityLightbox.jsx` — the shell they share. It is a `Lightbox` that
+    becomes the page below 1024px, and it holds the toolbar, the pager, the
+    table or phone list, and each lightbox's own read.
+  - `EventsLightbox.jsx` — CM3, D918's paged list.
+  - `JobsLightbox.jsx` — CM4.
+  - `CirclesLightbox.jsx` — CM5.
+  - `ActivityLightbox.jsx` — CM6, D932's activity read.
+  - `lightboxModel.js` — pure. The addresses, the search, filters, sorts and
+    25-row pages, and the Events and activity queries.
 
 The charts are D893's (`../../../ui/Charts.jsx`): one palette, and
 only violet changes in dark mode.

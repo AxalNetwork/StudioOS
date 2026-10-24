@@ -479,7 +479,7 @@ test('1: each record has a title, four facts with a value or a reason, its secti
   assert.deepEqual(team.facts.map((f: any) => [f.value, f.reason]), Array(4).fill([null, 'Not scored yet']));
   assert.equal(team.main[0].empty, 'Team is scored by a person, not by a check.');
   const reads = (await rec(db, 'fundraising-readiness', 'data_room')).body.main[0].rows;
-  assert.deepEqual(reads.map((r: any) => r.c), ['Counted', 'Partial'], 'the check\'s own reads');
+  assert.deepEqual(reads.map((r: any) => r.c), ['Missing', 'Missing'], 'ungranted files do not satisfy the readiness check');
 });
 
 test('1: Fit, Expires, Monthly and the data-room access read their stores', async () => {
@@ -826,4 +826,12 @@ test('#2691: a narrative record compares current values, ignores stale check row
   assert.ok(r.body.pills.some((p:any)=>p.text==='Nothing compared yet'));
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get()?.n,before,'reads do not write');
  }finally{db.close();}
+});
+
+test('#2447: a manual score offers only evidence values its writer accepts',async()=>{
+ const db=await seeded();const team=(await rec(db,'fundraising-readiness','team')).body;
+ const choices=team.actions.find((a:any)=>a.key==='score').form.fields.find((f:any)=>f.key==='evidence').options;
+ assert.deepEqual(choices.map((x:any)=>x.value),['anecdote','pattern']);
+ for(const choice of choices) assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:choice.value,missing:''})).status,200);
+ assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:'stated',missing:''})).status,400);
 });

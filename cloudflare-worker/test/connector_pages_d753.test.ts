@@ -512,3 +512,24 @@ test('16. WhatsApp Calls copy keeps coexistence closed and recorder consent expl
   assert.throws(() => check([...description, description.find((line) => line.startsWith('Calls'))!]), assert.AssertionError);
   check(description);
 });
+
+
+test('17. WhatsApp translation is stated once, with AI tokens and the original kept', () => {
+  const check = (description: string[]) => {
+    const lines = description.filter(line => /translation/i.test(line));
+    assert.equal(lines.length, 1, 'one translation paragraph');
+    assert.match(lines[0], /transcription and translation use AI tokens/);
+    assert.match(lines[0], /Translation keeps the original/);
+    assert.match(lines[0], /adds your working language when needed/);
+  };
+  const description = CHANNEL_PAGES.whatsapp.long_description;
+  check(description);
+  for (const [before, after] of [
+    ['use AI tokens', 'are free'],
+    ['keeps the original', 'replaces the original'],
+    ['your working language when needed', 'English every time'],
+  ]) assert.throws(() => check(description.map(line => line.replace(before, after))), assert.AssertionError);
+  assert.throws(() => check(description.filter(line => !/translation/i.test(line))), assert.AssertionError);
+  assert.throws(() => check([...description, description.find(line => /translation/i.test(line))!]), assert.AssertionError);
+  check(description);
+});

@@ -63,8 +63,8 @@ const ready = (data) => ({ status: 'ready', data });
  * The model
  * ------------------------------------------------------------------ */
 
-test('the tabs and addresses: three tabs, one page per event, and no Calendar until part 4', () => {
-  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Overview', DESK_PATH], ['Review', REVIEW_PATH], ['All events', ALL_PATH]]);
+test('the tabs and addresses: four tabs (Calendar from part 4, D919), and one page per event', () => {
+  assert.deepEqual(TABS.map((t) => [t.label, t.path]), [['Overview', DESK_PATH], ['Review', REVIEW_PATH], ['All events', ALL_PATH], ['Calendar', '/admin/events/calendar']]);
   assert.equal(tabFor('/admin/events'), 'overview');
   assert.equal(tabFor('/admin/events/'), 'overview');
   assert.equal(tabFor('/admin/events/review'), 'review');
@@ -75,8 +75,9 @@ test('the tabs and addresses: three tabs, one page per event, and no Calendar un
   assert.equal(eventIdFor('/admin/events'), null);
   assert.equal(isEventId('12'), true);
   for (const bad of ['0', '-1', 'abc', '1.5', '']) assert.equal(isEventId(bad), false, bad);
-  assert.ok(!TABS.some((t) => /calendar/i.test(t.label)), 'Calendar joins with part 4');
-  assert.equal(COMMUNITY_PATH, '/admin/held/community', 'the canvas\'s /admin/community is not a route');
+  assert.equal(tabFor('/admin/events/calendar'), 'calendar');
+  assert.equal(eventIdFor('/admin/events/calendar'), null, 'Calendar is a tab, never an event');
+  assert.equal(COMMUNITY_PATH, '/admin/community', 'the crumb links Community\'s own address (D930), not the redirect');
   assert.equal(SCOPE_LABEL, INSIGHTS_SCOPE_LABEL, 'the scope chip is Insights\' own');
   assert.equal(TITLE, 'Events');
   assert.equal(LINE, 'Approve public events, keep the calendar healthy and see how events perform.');
@@ -349,13 +350,12 @@ const DESK_FILES = ['frontend/src/pages/admin/AdminEventsPage.jsx',
 
 test('the routes: each address under the same guard, at App.jsx\'s six-space indent, static paths before :id', () => {
   const app = read('frontend/src/App.jsx');
-  const lines = ['/admin/events', '/admin/events/review', '/admin/events/all', '/admin/events/:id']
+  const lines = ['/admin/events', '/admin/events/review', '/admin/events/all', '/admin/events/calendar', '/admin/events/:id']
     .map((p) => `\n      <Route path="${p}" element={guard(['admin'], <AdminEventsPage />)} />`);
   for (const l of lines) assert.ok(app.includes(l), l.trim());
   const at = lines.map((l) => app.indexOf(l));
-  assert.deepEqual([...at].sort((a, b) => a - b), at, 'Overview, Review, All events, then :id');
-  assert.doesNotMatch(app, /path="\/admin\/events\/calendar"/, 'part 4 adds Calendar');
-  assert.equal((app.match(/<AdminEventsPage \/>/g) || []).length, 4);
+  assert.deepEqual([...at].sort((a, b) => a - b), at, 'Overview, Review, All events, Calendar, then :id');
+  assert.equal((app.match(/<AdminEventsPage \/>/g) || []).length, 5);
 });
 
 test('the page keeps its frame, its crumb and its literal tab doors', () => {
@@ -363,12 +363,12 @@ test('the page keeps its frame, its crumb and its literal tab doors', () => {
   assert.match(page, /export default function AdminEventsPage\(\) \{\s*return \(\s*<AdminBoardFrame workspace="Events" note="Eadwyn reads the events listed here\. An event is approved or published only when you do it\." data-testid="admin-board-events">/);
   assert.equal((page.match(/<AdminBoardFrame\b/g) || []).length, 1);
   const doors = [...page.matchAll(/<DeskTab to="([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(doors, TABS.map((t) => t.path), 'the strip and TABS list the same three doors');
+  assert.deepEqual(doors, TABS.map((t) => t.path), 'the strip and TABS list the same four doors');
   assert.match(page, /<DeskTab to="\/admin\/events" end /, 'Overview is lit only on its own address');
-  assert.match(page, /<Link to="\/admin\/held\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Events/);
+  assert.match(page, /<Link to="\/admin\/community" className=\{CRUMB_LINK\}>Community<\/Link> › Events/);
   assert.match(page, /<Link to="\/admin\/events\/all" className=\{CRUMB_LINK\}>‹ All events<\/Link>/);
   assert.match(page, /<Link to="\/events\/new" className=\{actionGhost\} data-testid="events-new">New event<\/Link>/, 'New event, not "New studio event" (O-STU)');
-  assert.doesNotMatch(page, /to="\/admin\/community"/);
+  assert.doesNotMatch(page, /to="\/admin\/held\/community"/, 'the crumb links Community itself, not its redirect');
   // The approvals lane and the Community doors keep /admin/events.
   assert.match(read('frontend/src/pages/admin/HeldApprovals.jsx'), /to="\/admin\/events"/);
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /to="\/admin\/events"/);

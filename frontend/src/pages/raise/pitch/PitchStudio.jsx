@@ -9,6 +9,7 @@ import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
 import DeckReviewerPage from '../../DeckReviewerPage';
 import ExportDialog from './ExportDialog';
 import PitchNotes from './PitchNotes';
+import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import {
   EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
   asList, coverOf, currentVersion, dayLabel, funnelRows, isReadOnly, linkPage, linkRows, mmss, newLinkHref,
@@ -279,6 +280,7 @@ export function StudioDecks({ reads, readOnly, q }) {
 
 function CurrentDeck({ project, current, versions, deck, q, phone, readOnly }) {
   const [exporting, setExporting] = useState(false);
+  const sources = useDeckSources(project?.id);
   const cover = deck.status === 'ok' ? coverOf(deck.data) : null;
   const title = `${String(project?.name || '').trim() || 'Your venture'} · ${versionLabel(current)}`;
   return (
@@ -302,6 +304,12 @@ function CurrentDeck({ project, current, versions, deck, q, phone, readOnly }) {
         <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">
           {versionLabel(current)} · saved {dayLabel(current.created_at)}{cover?.slides ? ` · ${cover.slides} slide${cover.slides === 1 ? '' : 's'}` : ''}
         </span>
+        {/* D896 (#2675): PD2's coverage meter, from the sources read; loading and error draw no counts. */}
+        {sources.status !== 'idle' ? (
+          <div data-testid="pitch-studio-coverage">
+            <CoverageMeter coverage={sources.data?.coverage} status={sources.status} size="M" onRetry={sources.retry} />
+          </div>
+        ) : null}
         <div className="mt-auto flex flex-wrap gap-2">
           <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-open">Open</Link>
           {/* D901 (#2680): present reads, so a read-only viewer presents too (PD21); export writes the ledger. */}
@@ -325,7 +333,7 @@ function Versions({ rows, phone }) {
         <ul className="m-0 list-none border-t border-axal-hairline p-0 dark:border-gray-700">
           {rows.map((r) => (
             <li key={r.id} className="flex min-h-[44px] items-center justify-between gap-3 border-b border-axal-hairline px-4 text-[12.5px] last:border-b-0 dark:border-gray-700">
-              <span className={INK}><b>{r.label}</b> · {r.title}</span>
+              <span className={INK}><b>{r.label}</b> · {r.title} <span className="text-axal-muted dark:text-gray-400">· {r.audience}</span></span>
               <span className="font-mono text-axal-muted dark:text-gray-400">{r.saved}</span>
             </li>
           ))}
@@ -336,7 +344,10 @@ function Versions({ rows, phone }) {
             <tr className="bg-axal-ground font-mono text-[9.5px] font-semibold uppercase tracking-[.07em] text-axal-muted dark:bg-gray-800 dark:text-gray-400">
               <th className="px-4 py-2 font-semibold">Version</th>
               <th className="px-4 py-2 font-semibold">Title</th>
+              <th className="px-4 py-2 font-semibold">Audience</th>
+              <th className="px-4 py-2 font-semibold">Round</th>
               <th className="px-4 py-2 font-semibold">Saved</th>
+              <th className="px-4 py-2 font-semibold">By</th>
             </tr>
           </thead>
           <tbody>
@@ -344,7 +355,10 @@ function Versions({ rows, phone }) {
               <tr key={r.id} className="border-t border-axal-hairline dark:border-gray-700" data-testid={`pitch-studio-version-${r.id}`}>
                 <td className={`px-4 py-2.5 font-bold ${INK}`}>{r.label}{r.current ? <span className={`${PILL_VIO} ml-2`}>Current</span> : null}</td>
                 <td className={`px-4 py-2.5 ${INK}`}>{r.title}</td>
+                <td className={`px-4 py-2.5 ${INK}`}>{r.audience}</td>
+                <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{r.round}</td>
                 <td className="px-4 py-2.5 font-mono text-axal-muted dark:text-gray-400">{r.saved}</td>
+                <td className="px-4 py-2.5 text-axal-muted dark:text-gray-400">{r.by}</td>
               </tr>
             ))}
           </tbody>

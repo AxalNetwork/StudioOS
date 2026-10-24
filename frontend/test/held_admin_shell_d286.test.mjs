@@ -188,7 +188,7 @@ test('off a branch, Studio card Open links are the S20 rows and never /branch/*'
 const S22_LANES = [
   [1, 'Core', 'LP applications', '/admin/lp-applications', '<LaneState glance={glance} laneKey="lp" />'],
   [2, 'Core', 'Referrals', '/admin/refer-earn', '<LaneState glance={glance} laneKey="referrals" />'],
-  [3, 'Core', 'Cohort applications', '/admin/spinout-lab', '<LaneState glance={glance} laneKey="cohort" />'],
+  [3, 'Core', 'Cohort applications', '/admin/programs/spinout-lab/applications', '<LaneState glance={glance} laneKey="cohort" />'],
   // D506 — lane 4 links the console D442 built; HQ-held accounts reach held cases from here.
   [4, 'Core', 'Spinout moderation', '/admin/spinout-moderation', '<LaneState glance={glance} laneKey="moderation" />'],
   [5, 'Core', 'Content to HQ', null, 'Not applicable to HQ-held accounts'],
@@ -225,12 +225,18 @@ test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation lin
   assert.deepEqual(drawnLanes(), S22_LANES);
   const moderation = drawnLanes().find((l) => l[2] === 'Spinout moderation');
   assert.equal(moderation[3], '/admin/spinout-moderation', 'Spinout moderation lost its console — D442 built it and D506 made this lane its HQ door');
-  // Held to the map: every route S22 links is a console the H35 map places on Admin · Approvals, or a tab S22 absorbs.
+  // Queued consoles belong on Approvals. A No queue row is a reference to
+  // an Admin console, whose actual placement can be another shell row.
   const laned = new Set(ADMIN_PLACEMENT
     .filter((e) => [e, ...(e.also || [])].some((p) => p.tier === 'Admin' && p.row === 'Approvals'))
     .map((e) => e.route));
-  for (const [, , lane, route] of S22_LANES) {
-    if (!route || route === '/admin/spinout-lab') continue; // the Lab console is reached through its tab's placement
+  const adminConsoles = new Set(ADMIN_PLACEMENT.filter((e) => e.tier === 'Admin').map((e) => e.route));
+  for (const [, , lane, route, state] of S22_LANES) {
+    if (!route || route === '/admin/programs/spinout-lab/applications') continue; // the Lab's queue is placed on Programs (D937), not Approvals
+    if (state.includes('noQueue=')) {
+      assert.ok(adminConsoles.has(route), `${lane} references ${route}, which has no Admin console placement`);
+      continue;
+    }
     // D506 — the moderation console (D442) was built after the H35 map was drawn and is
     // not a legacy row, so the map does not place it (admin_placement_h35 pins the map
     // to H35's question); this lane and the branch board are its two doors.
@@ -243,14 +249,14 @@ test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation lin
  * The other landings
  * ------------------------------------------------------------------ */
 
-test('Community (D930) links its six consoles at their own routes — Advisors & Partners at the tab, never the standalone route', () => {
+test('Community (D930) links its six consoles at their own routes — Advisors & Partners at its own page (D972), never the old roster address', () => {
   const code = codeOnly(read(COMMUNITY));
   const doors = [...new Set(doorsIn(code))];
-  for (const d of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing', '/admin/partner-invitations']) {
+  for (const d of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/advisors-partners', '/admin?tab=wellbeing', '/admin/partner-invitations']) {
     assert.ok(doors.includes(d), `Community has no literal door onto ${d}`);
   }
 
-  assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the standalone roster route would make its EXEMPT entry stale');
+  assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the old roster address, which only forwards now (D972)');
   for (const d of doors) {
     assert.ok(!d.startsWith('/branch'), `Community links ${d}, under /branch/`);
     assert.ok(routeLine(pathOf(d)), `Community links ${d}, which is not a registered route`);
