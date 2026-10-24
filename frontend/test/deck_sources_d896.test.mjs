@@ -273,3 +273,13 @@ test('dark mode: every light surface in the boards carries its dark pair', () =>
     }
   }
 });
+
+test('PD2: the current-deck card mounts the coverage meter from the sources read, and the studio line is the canvas\u2019s', () => {
+  const studio = read('frontend/src/pages/raise/pitch/PitchStudio.jsx');
+  const card = studio.slice(studio.indexOf('function CurrentDeck('), studio.indexOf('function Versions('));
+  assert.ok(card.length > 0, 'CurrentDeck is found');
+  assert.match(card, /const sources = useDeckSources\(project\?\.id\);/);
+  assert.match(card, /<CoverageMeter coverage=\{sources\.data\?\.coverage\} status=\{sources\.status\} size="M" onRetry=\{sources\.retry\} \/>/);
+  assert.match(studio, /import \{ CoverageMeter, useDeckSources \} from '\.\/SourcesBoards';/);
+  assert.match(read('frontend/src/pages/raise/pitch/pitchStudioModel.js'), /export const LINE = 'Build your deck from what StudioOS already knows\. Every figure shows its source\.';/);
+});
