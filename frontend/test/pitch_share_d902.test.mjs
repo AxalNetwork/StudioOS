@@ -265,6 +265,10 @@ test('each figure carries the chip of its recorded source, and a value nobody re
   assert.equal(chipOf({ source: 'ai' }), 'Drafted');
   assert.equal(chipOf({ source: 'placeholder' }), NOT_RECORDED_CHIP);
   assert.equal(chipOf({}), null);
+  // D896: a figure bound to a record carries that record's grade.
+  assert.equal(chipOf({ source: 'ai', binding: { grade: 'Measured', as_of: '2026-10-20' } }), 'Measured');
+  assert.equal(chipOf({ source: 'data', binding: { grade: 'Not recorded' } }), NOT_RECORDED_CHIP);
+  assert.equal(chipOf({ source: 'data', binding: { grade: 'Made up' } }), 'From records', 'a grade the Worker does not send falls back to the source');
   const slides = [
     { title: 'Title', fields: [{ key: 'headline', kind: 'title', value: 'Acme' }] },
     { title: 'Traction', fields: [{ key: 'kpis', kind: 'metric_grid', source: 'data', value: [{ label: 'MRR', value: '$12k' }, { label: 'Churn', value: '' }] }] },

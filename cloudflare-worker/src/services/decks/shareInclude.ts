@@ -17,7 +17,10 @@
  *   · a bank balance, an account or a counterparty: a field whose key names
  *     one (`BANK_KEY`);
  *   · a quote without its consent recorded (`consent: true` on the field).
- *     No editor records consent yet, so today no quote goes out on a link.
+ *     No editor records consent yet, so today no quote goes out on a link;
+ *   · a figure's record: a D896 binding goes out as its grade and date only,
+ *     and a field bound to a score, a bank slot or a band is judged by that
+ *     slot as by its own key.
  *
  * A link made before 540 has no `include_json` and gets the default. A field
  * this removes is gone from the card, not blanked: the viewer shows what is
@@ -64,14 +67,38 @@ export function shareIncludeFromBody(v: unknown): ShareInclude | null {
   return parseShareInclude(o);
 }
 
+/** The slot a D896 binding names (`area.slot`), lower-cased; '' with none. */
+function boundSlot(b: any): string {
+  const k = b && typeof b === 'object' && typeof b.source_key === 'string' ? b.source_key.toLowerCase() : '';
+  return k.includes('.') ? k.slice(k.indexOf('.') + 1) : '';
+}
+
+/** What a link may say of a binding: its grade and its date. Its record and snapshot are the venture's. */
+function shareBinding(b: any): { grade: string | null; as_of: string | null } | undefined {
+  if (!b || typeof b !== 'object') return undefined;
+  return { grade: typeof b.grade === 'string' ? b.grade : null, as_of: typeof b.as_of === 'string' ? b.as_of : null };
+}
+
 function fieldKept(f: any, inc: ShareInclude): boolean {
   if (!f || typeof f !== 'object') return false;
-  const key = String(f.key || '').toLowerCase();
-  if (INTERNAL_SCORE_KEY.test(key) || BANK_KEY.test(key)) return false;
+  // A field is judged by its own key and by the slot it is bound to (D896).
+  for (const key of [String(f.key || '').toLowerCase(), boundSlot(f.binding)]) {
+    if (!key) continue;
+    if (INTERNAL_SCORE_KEY.test(key) || BANK_KEY.test(key)) return false;
+    if (BAND_KEY.test(key) && !inc.bands) return false;
+  }
   if (f.kind === 'quote' && f.consent !== true) return false;
-  if (BAND_KEY.test(key) && !inc.bands) return false;
   if (f.kind === 'metric_grid' && !inc.figures) return false;
   return true;
+}
+
+/** A field, a slide or a block as a link sends it: its binding cut to grade and date. */
+function withSharedBinding<T extends Record<string, any>>(x: T): T {
+  if (!x || typeof x !== 'object' || !('binding' in x)) return x;
+  const out: any = { ...x };
+  const b = shareBinding(x.binding);
+  if (b) out.binding = b; else delete out.binding;
+  return out;
 }
 
 /** One version's cards as a link may send them. */
@@ -80,15 +107,17 @@ export function shareSlides(slides: unknown, include: ShareInclude): any[] {
   return slides
     .filter((s) => s && typeof s === 'object' && (include.sources || !(s as any).appendix))
     .map((s: any) => {
-      const out: any = { ...s };
+      const out: any = withSharedBinding({ ...s });
       if (!include.notes) delete out.notes;
       if (Array.isArray(s.fields)) {
         out.fields = s.fields.filter((f: any) => fieldKept(f, include)).map((f: any) => {
-          if (include.notes || !f || typeof f !== 'object' || !('notes' in f)) return f;
-          const { notes: _n, ...rest } = f;
+          const g = withSharedBinding(f);
+          if (include.notes || !('notes' in g)) return g;
+          const { notes: _n, ...rest } = g;
           return rest;
         });
       }
+      if (Array.isArray(s.blocks)) out.blocks = s.blocks.map((b: any) => withSharedBinding(b));
       return out;
     });
 }

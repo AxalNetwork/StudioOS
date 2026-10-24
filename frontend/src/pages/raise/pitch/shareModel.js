@@ -138,8 +138,15 @@ export function closedCard(error) {
   return { title: LINK_CLOSED, line: venture ? `Ask ${venture} for a new one.` : 'Ask the venture for a new one.' };
 }
 
-/** The chip under a figure, from the field's recorded source. */
+const BINDING_GRADES = new Set(['Measured', 'Reviewed', 'Sourced', 'Stated', NOT_RECORDED]);
+
+/**
+ * The chip under a figure: the grade of the record it is bound to (D896),
+ * else the field's recorded source.
+ */
 export function chipOf(field) {
+  const grade = field?.binding?.grade;
+  if (typeof grade === 'string' && BINDING_GRADES.has(grade)) return grade;
   switch (field?.source) {
     case 'data': return 'From records';
     case 'auto': return 'Computed';

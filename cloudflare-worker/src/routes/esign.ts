@@ -1590,7 +1590,14 @@ esign.post('/sign/:token', async (c) => {
       try {
         const { activatePartnerDealOnSignature } = await import('../services/partnerDeals');
         await activatePartnerDealOnSignature(c.env, rec.envelope_id);
-      } catch (e) { console.warn('[esign] activatePartnerDealOnSignature failed', e); }
+      } catch {
+        // D925: the signature stands even when activation fails. The admin
+        // retry route uses this marker and the deal's own completed envelope.
+        try {
+          const { recordPartnerActivationFailure } = await import('../services/partnerDeals');
+          await recordPartnerActivationFailure(c.env, rec.envelope_id);
+        } catch { console.warn('[esign] partner activation failure could not be recorded'); }
+      }
       // Record the signature against the obligation it satisfies — the three
       // NDAs and the advisor disclaimer. Until this hook existed, all four had
       // a signable document, a wired template and a send route, and nothing

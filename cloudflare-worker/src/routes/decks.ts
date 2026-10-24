@@ -37,6 +37,7 @@ import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
 import { DEFAULT_SHARE_INCLUDE, parseShareInclude, shareSlides, shareSpinoutFields, type ShareInclude } from '../services/decks/shareInclude';
+import { sanitizeBinding } from '../services/decks/sources';
 import { isSupportSession } from '../integrations/providers/mercury';
 
 /** D895 applies only to deck operations, not other project-content routes. */
@@ -429,6 +430,9 @@ function sanitizeSlides(input: any[]): any[] {
     if (s?.method_id) out.method_id = String(s.method_id).slice(0, 80);
     if (s?.appendix) out.appendix = !!s.appendix;
     if (Array.isArray(s?.fields)) out.fields = sanitizeFields(s.fields);
+    // D896 (#2675): a figure bound to its store keeps the binding, so refresh can find it.
+    const binding = sanitizeBinding(s?.binding);
+    if (binding) out.binding = binding;
     return out;
   });
 }
@@ -475,6 +479,8 @@ function sanitizeFields(input: any[]): any[] {
     if (f?.readonly) out.readonly = true;
     // D902 — a quote's consent, recorded on the field, is what lets a link carry it.
     if (f?.consent === true) out.consent = true;
+    const binding = sanitizeBinding(f?.binding);
+    if (binding) out.binding = binding;
     return out;
   });
 }

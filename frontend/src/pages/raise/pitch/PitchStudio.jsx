@@ -9,6 +9,7 @@ import { Lightbox, RailFrame, WorkerRail, usePhoneWidth } from '../../../ui';
 import DeckReviewerPage from '../../DeckReviewerPage';
 import ExportDialog from './ExportDialog';
 import PitchNotes from './PitchNotes';
+import { CoverageMeter, useDeckSources } from './SourcesBoards';
 import {
   EDIT_PATH, EMPTY_DECK, ENGAGEMENT_VIEW_ROWS, LINE, NOT_RECORDED, NO_VENTURE, NO_VIEWS, READ_ONLY, TABS, TITLE,
   asList, coverOf, currentVersion, dayLabel, isReadOnly, linkPage, linkRows, mmss,
@@ -281,6 +282,7 @@ export function StudioDecks({ reads, readOnly, q }) {
 
 function CurrentDeck({ project, current, versions, deck, q, phone, readOnly }) {
   const [exporting, setExporting] = useState(false);
+  const sources = useDeckSources(project?.id);
   const cover = deck.status === 'ok' ? coverOf(deck.data) : null;
   const title = `${String(project?.name || '').trim() || 'Your venture'} · ${versionLabel(current)}`;
   return (
@@ -304,6 +306,12 @@ function CurrentDeck({ project, current, versions, deck, q, phone, readOnly }) {
         <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">
           {versionLabel(current)} · saved {dayLabel(current.created_at)}{cover?.slides ? ` · ${cover.slides} slide${cover.slides === 1 ? '' : 's'}` : ''}
         </span>
+        {/* D896 (#2675): PD2's coverage meter, from the sources read; loading and error draw no counts. */}
+        {sources.status !== 'idle' ? (
+          <div data-testid="pitch-studio-coverage">
+            <CoverageMeter coverage={sources.data?.coverage} status={sources.status} size="M" onRetry={sources.retry} />
+          </div>
+        ) : null}
         <div className="mt-auto flex flex-wrap gap-2">
           <Link to={`${EDIT_PATH}${q}`} className={GHOST} data-testid="pitch-studio-open">Open</Link>
           {/* D901 (#2680): present reads, so a read-only viewer presents too (PD21); export writes the ledger. */}

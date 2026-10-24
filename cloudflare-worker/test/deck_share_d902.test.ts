@@ -141,6 +141,28 @@ test('each switch: figures, the Sources appendix, speaker notes and the bands', 
   assert.deepEqual(shareSpinoutFields({ vr_total_score: '72', team_founder: 'Fay', bank_balance: '1' }), { team_founder: 'Fay' });
 });
 
+test('a D896 binding leaves as its grade and date only, and a field bound to a score, a bank slot or a band is judged by that slot', () => {
+  const binding = (source_key: string) => ({ source_key, record_ref: 'rec-41', as_of: '2026-10-20', grade: 'Measured', snapshot_hash: 'a'.repeat(24) });
+  const slides = [{
+    title: 'Traction', binding: binding('raise.mrr'),
+    fields: [
+      { key: 'mrr', kind: 'metric_grid', value: [{ label: 'MRR', value: '$12k' }], binding: binding('grow.mrr') },
+      { key: 'runway', kind: 'paragraph', value: '14 months', binding: binding('raise.bank_balance') },
+      { key: 'score', kind: 'paragraph', value: '71', binding: binding('scoring.vr_total') },
+      { key: 'fit', kind: 'paragraph', value: 'Strong', binding: binding('scoring.pmf_band') },
+    ],
+    blocks: [{ kind: 'chart', binding: binding('grow.mrr') }],
+  }];
+  const [out] = shareSlides(slides, DEFAULT_SHARE_INCLUDE);
+  assert.deepEqual(out.fields.map((f: any) => f.key), ['mrr'], 'the bank slot, the score and the band are not on the link');
+  assert.deepEqual(out.fields[0].binding, { grade: 'Measured', as_of: '2026-10-20' });
+  assert.deepEqual(out.binding, { grade: 'Measured', as_of: '2026-10-20' });
+  assert.deepEqual(out.blocks[0].binding, { grade: 'Measured', as_of: '2026-10-20' });
+  assert.doesNotMatch(JSON.stringify(out), /rec-41|aaaaaaaa|source_key/);
+  const [banded] = shareSlides(slides, { ...DEFAULT_SHARE_INCLUDE, bands: true });
+  assert.deepEqual(banded.fields.map((f: any) => f.key), ['mrr', 'fit'], 'bands on: the band, never the score or the bank');
+});
+
 test('the stored include and the body\'s include', () => {
   assert.deepEqual(parseShareInclude(null), DEFAULT_SHARE_INCLUDE);
   assert.deepEqual(parseShareInclude('not json'), DEFAULT_SHARE_INCLUDE);
