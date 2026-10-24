@@ -86,8 +86,10 @@ test('D943: legacy requires a real current cohort and rejects a free-text cohort
     assert.equal((await post(w,legacyPath(),{ decision:'accepted', reason:'Synthetic', cohort:'Cohort 99' })).status,400);
     w.db.exec('DELETE FROM cohort_applicants');
     const before = rows(w);
-    const r = await post(w,legacyPath(),{ decision:'accepted', reason:'Synthetic' });
-    assert.equal(r.status,400);assert.equal(r.body.error,'cohort_required');assert.equal(rows(w),before);
+    for (const decision of ['accepted','refused']) {
+      const r = await post(w,legacyPath(),{ decision, reason:'Synthetic' });
+      assert.equal(r.status,400);assert.equal(r.body.error,'cohort_required');assert.equal(rows(w),before);
+    }
     assert.equal((await post(w,legacyPath(999),{ decision:'accepted', reason:'Synthetic' })).status,404);
   } finally { w.db.close(); }
 });
