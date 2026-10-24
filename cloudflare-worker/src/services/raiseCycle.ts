@@ -1337,7 +1337,7 @@ async function readinessFigure(ctx: Ctx): Promise<Figure> {
   return safeFigure({ key: 'readiness_score', label: 'Readiness score', unit: 'score', source: 'readiness_scores' }, async () => {
     const { scores } = await loadReadiness(ctx);
     const latest = latestScores(scores);
-    const coverage = { scored: latest.size, total: READINESS_ITEMS.length };
+    const coverage = { scored: [...latest.values()].filter(s => s.score != null && Number.isFinite(Number(s.score))).length, total: READINESS_ITEMS.length };
     const now = overallReadiness(latest.values());
     if (now == null) return { value: null, coverage, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No readiness item scored yet' };
     const cut = daysBefore(ctx.today, 30);
