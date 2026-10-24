@@ -7,7 +7,12 @@
 //   - accepted project_members rows (co-founders + advisors).
 //
 // Access rules (prod / Worker):
-//   - admin + partner   → studio staff, full read + write (unchanged).
+//   - admin             → studio staff, full read + write.
+//   - partner           → D889 (#2438): an Operating Partner, an outside role an
+//                         admin approves, not studio staff. Treated like any
+//                         other user: an accepted project_members row is the
+//                         only way in, with that row's role (owner or
+//                         cofounder edits, advisor reads).
 //   - investor          → NO access here; their ONLY path is the fail-closed,
 //                         NDA-gated maskFounderForInvestor view. Never granted
 //                         membership-based read/write.
@@ -16,8 +21,8 @@
 //                         stage/status/playbook_week fields).
 //   - advisor member    → read + advisory access; NOT a project-data editor.
 //
-// Member MANAGEMENT (invite/add/remove) is owner + admin/partner only — a
-// co-founder or advisor can never alter the roster.
+// Member MANAGEMENT (invite/add/remove) is the founder-owner + admin only — a
+// co-founder, an advisor or a partner can never alter the roster (D889).
 
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
@@ -144,7 +149,7 @@ export async function canAccessProject(
   project: { id: number; founder_id: number | null },
   opts: { write?: boolean } = {},
 ): Promise<boolean> {
-  if (user.role === 'admin' || user.role === 'partner') return true;
+  if (user.role === 'admin') return true;
   if (user.role === 'investor') return false;
   if (user.role === 'founder' && !!user.founder_id && project.founder_id === user.founder_id) return true;
   const role = await getProjectMembershipRole(env, project.id, user.id);
@@ -153,12 +158,12 @@ export async function canAccessProject(
   return true;
 }
 
-/** True iff the user may MANAGE the roster (invite/add/remove): owner or staff. */
+/** True iff the user may MANAGE the roster (invite/add/remove): the founder-owner or an admin (D889). */
 export function isProjectManager(
   user: Pick<User, 'role' | 'founder_id'>,
   project: { founder_id: number | null },
 ): boolean {
-  if (user.role === 'admin' || user.role === 'partner') return true;
+  if (user.role === 'admin') return true;
   return user.role === 'founder' && !!user.founder_id && project.founder_id === user.founder_id;
 }
 
@@ -167,7 +172,7 @@ export function isProjectManager(
  * yet incorporated) cannot build a team until they reach TEAM_BUILDING_MIN_LAB_WEEK;
  * EXISTING founders (lab inactive) and studio staff are unlocked immediately.
  *
- * `user` is the calling MANAGER (owner). Staff bypass the gate entirely.
+ * `user` is the calling MANAGER (owner). An admin bypasses the gate entirely.
  */
 export function evaluateTeamGate(user: {
   role: string;
@@ -175,7 +180,7 @@ export function evaluateTeamGate(user: {
   spinout_lab_week?: number | null;
   is_incorporated?: number | null;
 }): { locked: boolean; reason: string | null; unlock_week: number } {
-  if (user.role === 'admin' || user.role === 'partner') {
+  if (user.role === 'admin') {
     return { locked: false, reason: null, unlock_week: TEAM_BUILDING_MIN_LAB_WEEK };
   }
   const labActive = Number(user.spinout_lab_active ?? 0) === 1;

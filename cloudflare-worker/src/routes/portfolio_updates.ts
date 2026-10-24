@@ -15,7 +15,7 @@ import { isAdmin, isInvestor, isPartner, isFounder, mapError, nowIso, newUid, jl
 import { notify } from '../services/notify';
 import { ensureFollowsSchema } from './follows';
 import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
-import { canAccessProject } from '../services/projectAccess';
+import { canAccessProject, getMemberProjectIds } from '../services/projectAccess';
 import { roundCallsEnabled } from '../services/roundCallPolicy';
 import {
   ASK_KINDS, ASK_MODULE, LineError, buildMetrics, canAskAgain, cleanAudience, cleanLines, cleanMetrics,
@@ -67,6 +67,35 @@ function isInvestorSide(user: User): boolean {
   return isAdmin(user) || isInvestor(user) || isPartner(user);
 }
 
+/*
+ * D889 (#2438): who reads a submitted update besides its founder and an admin.
+ * Two things must hold, or it fails closed:
+ *  - the relationship: an investor sees the company (`investorProjectIds`); a
+ *    partner is an accepted member of the venture (`project_members`);
+ *  - the founder chose them: their audience is switched on in `audience_json`
+ *    as an explicit JSON `true`, or they are a recorded recipient of that
+ *    audience in `update_recipients`. A missing, malformed or partial grant is
+ *    no grant, so an update with no audience recorded (one made before the
+ *    share sheet) stays with its founder and admins until it is shared again.
+ * Each fragment takes one bound parameter: the reader's user id.
+ */
+const INVESTOR_GRANT = `(EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'investor')
+  OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.investors') END) = 'true')`;
+const TEAM_GRANT = `(EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'team')
+  OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.team') END) = 'true')`;
+// The one-row checks, written out in full (as `_investorProjectScope.ts` does) so no query text is assembled.
+const INVESTOR_GRANTED = `SELECT 1 AS ok FROM portfolio_updates WHERE id = ? AND (EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'investor')
+  OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.investors') END) = 'true')`;
+const TEAM_GRANTED = `SELECT 1 AS ok FROM portfolio_updates WHERE id = ? AND (EXISTS (SELECT 1 FROM update_recipients ur WHERE ur.update_id = portfolio_updates.id AND ur.user_id = ? AND ur.audience = 'team')
+  OR (CASE WHEN json_valid(portfolio_updates.audience_json) THEN json_type(portfolio_updates.audience_json, '$.team') END) = 'true')`;
+
+/** The ventures whose updates this non-admin reader may be shown, by their relationship (D889). */
+async function readerProjectIds(c: any, user: User): Promise<number[]> {
+  if (isInvestor(user)) return (await investorProjectIds(c.env, user, await investorActiveCompany(c, user))) || [];
+  if (isPartner(user)) return getMemberProjectIds(c.env, user.id);
+  return [];
+}
+
 async function projectFounderId(env: Env, projectId: number): Promise<number | null> {
   const p = await env.DB.prepare('SELECT founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(projectId).first<{ founder_id: number | null }>();
   return p ? (p.founder_id ?? null) : undefined as any;
@@ -99,13 +128,15 @@ r.get('/', async (c) => {
     const params: any[] = [];
     if (isInvestorSide(user)) {
       where += " AND status = 'submitted'";
-      if (isInvestor(user)) {
-        const visible = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
-        const ids = visible || [];
+      // D889: an admin reads every submitted update; anyone else needs the relationship and the founder's grant.
+      if (!isAdmin(user)) {
+        const ids = await readerProjectIds(c, user);
         if (ids.length === 0) where += ' AND 1 = 0';
         else {
           where += ` AND project_id IN (${ids.map(() => '?').join(',')})`;
           params.push(...ids);
+          where += ` AND ${isInvestor(user) ? INVESTOR_GRANT : TEAM_GRANT}`;
+          params.push(user.id);
         }
       }
     } else if (isFounder(user) && user.founder_id) {
@@ -165,12 +196,12 @@ async function loadOwned(c: any, user: User): Promise<UpdateRow | null | { _forb
   const u = await c.env.DB.prepare('SELECT * FROM portfolio_updates WHERE uid = ?').bind(c.req.param('uid')).first() as UpdateRow | null;
   if (!u) return { _notfound: true };
   if (isInvestorSide(user)) {
-    // Investor side may only read submitted updates.
-    if (u.status !== 'submitted' && !isAdmin(user)) return { _forbidden: true };
-    if (isInvestor(user)) {
-      const visible = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
-      if (!visible?.includes(Number(u.project_id))) return { _forbidden: true };
-    }
+    if (isAdmin(user)) return u;
+    // Investor side may only read submitted updates, of a venture they are tied to, that its founder chose them for (D889).
+    if (u.status !== 'submitted') return { _forbidden: true };
+    if (!(await readerProjectIds(c, user)).includes(Number(u.project_id))) return { _forbidden: true };
+    const granted = await c.env.DB.prepare(isInvestor(user) ? INVESTOR_GRANTED : TEAM_GRANTED).bind(u.id, user.id).first();
+    if (!granted) return { _forbidden: true };
     return u;
   }
   // Founder: must own the project.

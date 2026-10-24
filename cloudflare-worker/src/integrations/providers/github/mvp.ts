@@ -32,7 +32,7 @@
  * requests: Read, releases are Contents: Read.
  */
 import type { Env } from '../../../types';
-import { packBatches, releaseExternalId } from './roadmap';
+import { commitSha, packBatches, releaseExternalId } from './roadmap';
 
 type GhFetch = (path: string) => Promise<Response>;
 export type PrState = 'planned' | 'in_progress' | 'in_review' | 'built' | 'dropped';
@@ -186,20 +186,21 @@ export function mvpRun(env: Env, integrationId: number, projectId: number) {
           }
           const state = prState(pr, approved);
           const url = pullUrl(pr.html_url);
+          const mergeSha = state === 'built' ? commitSha(pr.merge_commit_sha) : null;
           stmts.push([state === 'dropped'
             ? env.DB.prepare(
               `UPDATE mvp_features SET is_must_have = CASE WHEN pr_state IS NOT ? THEN 0 ELSE is_must_have END,
-                      updated_at = CASE WHEN pr_state IS NOT ? THEN CURRENT_TIMESTAMP ELSE updated_at END, pr_state = ?, pr_url = ?
+                      updated_at = CASE WHEN pr_state IS NOT ? THEN CURRENT_TIMESTAMP ELSE updated_at END, pr_state = ?, pr_url = ?, merge_commit_sha = ?
                 WHERE id = ? AND project_id = ?`,
-            ).bind(state, state, state, url, feature, projectId)
+            ).bind(state, state, state, url, mergeSha, feature, projectId)
             : env.DB.prepare(
               `UPDATE mvp_features SET delivery_status = CASE WHEN pr_state IS NOT ? THEN ? ELSE delivery_status END,
                       is_must_have = CASE WHEN pr_state IS NOT ? THEN 1 ELSE is_must_have END,
                       done_at = CASE WHEN pr_state IS NOT ? AND ? IS NOT NULL THEN COALESCE(done_at, ?) ELSE done_at END,
-                      updated_at = CASE WHEN pr_state IS NOT ? THEN CURRENT_TIMESTAMP ELSE updated_at END, pr_state = ?, pr_url = ?
+                      updated_at = CASE WHEN pr_state IS NOT ? THEN CURRENT_TIMESTAMP ELSE updated_at END, pr_state = ?, pr_url = ?, merge_commit_sha = ?
                 WHERE id = ? AND project_id = ?`,
             ).bind(state, DELIVERY[state], state, state, state === 'built' ? isoOrNull(pr.merged_at) : null,
-              state === 'built' ? isoOrNull(pr.merged_at) : null, state, state, url, feature, projectId)]);
+              state === 'built' ? isoOrNull(pr.merged_at) : null, state, state, url, mergeSha, feature, projectId)]);
           counts.must_haves_moved = Number(counts.must_haves_moved) + 1;
         }
 

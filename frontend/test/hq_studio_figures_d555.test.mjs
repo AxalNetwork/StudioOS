@@ -184,8 +184,8 @@ test('a held card\'s figure: a number (0 included), Unreadable, Not recorded, Re
 });
 
 test('the held pages read the glance and no longer say "none counted here"', () => {
-  // D893 (#2366): Insights is rebuilt at pages/admin/insights/ and reads the glance through its own model.
-  assert.match(read('frontend/src/pages/admin/insights/AdminInsights.jsx'), /api\.adminStudioGlance\(\)/);
+  // D893 (#2366, #2660): Insights is rebuilt at pages/admin/insights/ and reads its own read, not the glance.
+  assert.match(read('frontend/src/pages/admin/insights/AdminInsights.jsx'), /insightsApi\.adminInsights\(/);
   for (const f of ['HeldApprovals', 'HeldAccounts', 'HeldCommunity', 'HeldPrograms']) {
     const src = read(`frontend/src/pages/admin/${f}.jsx`);
     assert.match(src, /useHeldGlance\(\)/, `${f} does not read the glance`);

@@ -315,7 +315,9 @@ async function listProjectsHandler(c: any) {
   const user = await requireAuth(c);
   const status = c.req.query('status');
   const sql = getSQL(c.env);
-  const isPrivileged = user.role === 'admin' || user.role === 'partner' || user.role === 'investor';
+  // D889 (#2438): a partner is not privileged here; like a founder, they list
+  // only the ventures they own or are an accepted member of.
+  const isPrivileged = user.role === 'admin' || user.role === 'investor';
   // IDOR guard: founders can only see their OWN projects.
   // Task #3 (Y-1) — investor list rows JOIN to users so we can per-row
   // mask via maskFounderForInvestor (no active pairwise NDA → public
@@ -741,18 +743,19 @@ projects.put('/:id', async (c) => {
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
 
-  // RBAC: admins/partners can edit any project; founders can only edit their own.
+  // RBAC: admins can edit any project; founders can only edit their own; a
+  // partner edits only as an accepted owner or co-founder member (D889).
   // Investors are NOT editors (audit M2) — their project access is the read-only,
   // NDA-masked view in GET '/:id'. Letting an investor through here is a
   // write-IDOR (they could mutate any founder's project, incl. the
   // admin/partner-only stage/status/playbook_week fields below).
   const project = rows[0];
-  const isPrivileged = user.role === 'admin' || user.role === 'partner';
+  const isPrivileged = user.role === 'admin';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
   // Task #1 — accepted co-founders may also edit project DATA. Advisors are
   // read-only (membership role 'advisor' is NOT granted write), and investors
   // are never editors. privilegedFields (stage/status/playbook_week) stay
-  // admin/partner-only via the `isPrivileged` gate further below.
+  // admin-only via the `isPrivileged` gate further below (D889: not a partner's).
   let isCofounderEditor = false;
   if (!isPrivileged && !isOwner && user.role !== 'investor') {
     const memberRole = await getProjectMembershipRole(c.env, id, user.id);
@@ -952,16 +955,15 @@ projects.delete('/:id', async (c) => {
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Project not found' }, 404); }
   const project = rows[0];
   const isAdmin = user.role === 'admin';
-  const isPartner = user.role === 'partner';
-  const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
-  // Task #7 (AM) — admins + partners may soft-delete any project (partners
-  // routinely manage portfolio hygiene); founders may only delete their own.
-  if (!isAdmin && !isPartner && !isOwner) {
+  const isOwner = user.role === 'founder' && !!user.founder_id && project.founder_id === user.founder_id;
+  // D889 (#2438): an admin may delete any project; a founder only their own.
+  // No other role deletes a venture, a partner or a member included.
+  if (!isAdmin && !isOwner) {
     await sql.end();
     return c.json({ detail: 'Forbidden: you do not own this project' }, 403);
   }
   if (hard && !isAdmin) {
-    // Hard-delete is irreversible → admin-only, even partners can't bypass.
+    // Hard-delete is irreversible → admin-only.
     await sql.end();
     return c.json({ detail: 'Forbidden: hard delete is admin-only' }, 403);
   }
@@ -996,7 +998,8 @@ projects.delete('/:id', async (c) => {
 });
 
 projects.post('/:id/advance-week', async (c) => {
-  await requireRole(c, 'partner', 'investor');
+  // D889 (#2438): no longer a partner's, on any venture. Admins pass requireRole.
+  await requireRole(c, 'investor');
   const id = parseInt(c.req.param('id'));
   const sql = getSQL(c.env);
   const rows = await sql`SELECT * FROM projects WHERE id = ${id}`;
@@ -1072,7 +1075,8 @@ async function resolveSpinoutDeckAccess(
   } finally {
     await sql.end();
   }
-  const isStaff = user.role === 'admin' || user.role === 'partner';
+  // D889 (#2438): a partner generates a deck only as an accepted owner or co-founder member.
+  const isStaff = user.role === 'admin';
   const isOwner = !!user.founder_id && project.founder_id === user.founder_id;
   // Task #1 — accepted co-founders may also generate the deck (advisors are
   // read-only on data; investors/advisors stay excluded). The deck is ALWAYS
@@ -1217,7 +1221,8 @@ projects.put('/:projectId/spinout-deck/overrides', async (c) => {
 async function canEditProjectData(
   env: Env, project: { id: number; founder_id: number | null }, user: User,
 ): Promise<boolean> {
-  if (user.role === 'admin' || user.role === 'partner') return true;
+  // D889 (#2438): only an admin bypasses membership; a partner edits as an accepted owner or co-founder.
+  if (user.role === 'admin') return true;
   if (user.role === 'investor') return false;
   if (user.founder_id && project.founder_id === user.founder_id) return true;
   const memberRole = await getProjectMembershipRole(env, project.id, user.id);

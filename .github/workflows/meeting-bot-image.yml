@@ -4,10 +4,14 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - '.github/workflows/meeting-bot-image.yml'
-      - 'scripts/build-meeting-bot-image.mjs'
-      - 'scripts/lib/meetingBotImage*'
+      - '.github/workflows/meeting-bot*.yml'
+      - 'wrangler.meeting-bot.toml'
+      - 'scripts/*meeting-bot*'
+      - 'scripts/lib/meetingBot*'
       - 'meeting-bot/**'
+      - 'cloudflare-worker/src/services/meetingBot*'
+      - 'cloudflare-worker/src/durable-objects/meeting-bot-run.ts'
+      - 'cloudflare-worker/test/meeting_bot*'
 
 permissions:
   contents: read
@@ -15,7 +19,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -24,18 +28,41 @@ jobs:
         with:
           node-version: '22'
       - name: Test image pipeline contracts
-        run: node --test scripts/lib/meetingBotImage.test.mjs
+        run: node --test scripts/lib/meetingBotImage.test.mjs scripts/lib/meetingBotDeploy.test.mjs
       - name: Build fixture image (pipeline smoke only, no runtime or registry access)
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
         run: node scripts/build-meeting-bot-image.mjs --fixture
-      - name: Build B2 runtime image when supplied (never publish from a PR)
-        if: hashFiles('meeting-bot/Dockerfile') != ''
+      - name: Install Worker dependencies for offline configuration validation
+        run: npm ci --prefix cloudflare-worker
+      - name: Check private runtime, authorization and supervisor contracts
+        run: node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/meeting_bot_container_d886.test.ts cloudflare-worker/test/meeting_bot_zoom_runtime_d886.test.ts cloudflare-worker/test/meeting_bot_control_d886.test.ts
+      - name: Validate production and preview container deployment configuration
+        run: node scripts/dry-run-meeting-bot-deploy.mjs
+      - name: Build actual runtime image (never publish from a PR)
+        id: runtime
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_SHA: ${{ github.sha }}
-        run: node scripts/build-meeting-bot-image.mjs
+        run: node scripts/build-meeting-bot-image.mjs >> "$GITHUB_OUTPUT"
+      - name: Boot the real image without provider network access
+        env:
+          IMAGE: ${{ steps.runtime.outputs.image }}
+          MEETING_BOT_SECRET: synthetic-image-smoke-only-key-01234567890123456789
+        run: |
+          docker run --detach --network none --name meeting-bot-smoke --env MEETING_BOT_SECRET --env MEETING_BOT_CALLBACK_ORIGIN=https://worker.example.test "$IMAGE"
+          for attempt in $(seq 1 30); do
+            if docker exec meeting-bot-smoke node -e "fetch('http://127.0.0.1:8080/healthz').then(async r=>{const b=await r.json();process.exit(r.ok&&typeof b.ready==='boolean'?0:1)}).catch(()=>process.exit(1))"; then
+              docker exec meeting-bot-smoke python3 -c "from gi.repository import GLib; import zoom_meeting_sdk as z; from importlib.metadata import version; assert version('zoom-meeting-sdk') == '0.0.27'; assert hasattr(z, 'InitSDK')"
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+      - name: Remove the isolated smoke container
+        if: always()
+        run: docker rm --force meeting-bot-smoke || true
 
   publish:
     # No PR code ever receives package-write permission or registry credentials.

@@ -3,9 +3,10 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 /**
  * D893 (#2366) — the chart shapes the Insights canvas draws, as plain SVG:
  * horizontal bars, columns (the current week hatched, an unfinished week
- * dashed), a weekly line (its last segment dashed to a hollow point) and a
- * 100% bar. The canvas's Plan donut waits for the plan read, so it is not here. Each chart sizes to its box, so a phone gets readable text
- * rather than a scaled-down desktop drawing.
+ * dashed), columns stacked by profile (Growth), a weekly line (its last
+ * segment dashed to a hollow point, and the period before as a dotted line
+ * when Compare is on), a 100% bar and the Plan donut. Each chart sizes to its
+ * box, so a phone gets readable text rather than a scaled-down desktop drawing.
  *
  * COLOUR IS #2375's ONE PALETTE: violet, sky, amber, emerald, muted. Only
  * violet changes in dark mode (#a78bfa), as INS6 says.
@@ -25,6 +26,13 @@ const INK = 'fill-axal-ink dark:fill-gray-200';
 const MUTE = 'fill-axal-muted dark:fill-gray-400';
 const GRID = 'stroke-axal-hairline dark:stroke-gray-700';
 const STROKE_V = 'stroke-axal-violet dark:stroke-[#a78bfa]';
+const STROKE = {
+  violet: STROKE_V,
+  sky: 'stroke-[#0ea5e9]',
+  amber: 'stroke-[#f59e0b]',
+  emerald: 'stroke-[#10b981]',
+  muted: 'stroke-axal-muted',
+};
 
 const nf = (n) => Number(n).toLocaleString('en-US');
 
@@ -138,6 +146,18 @@ export function Columns({ rows, height = 220, pct = false, max: maxIn }) {
             bar = <rect x={x} y={top + ch - h} width={bw} height={h} fill="none" strokeDasharray="3 3" className="stroke-axal-muted" />;
           } else if (r.toDate) {
             bar = <rect x={x} y={top + ch - h} width={bw} height={h} fill={`url(#${hatch})`} className={STROKE_V} />;
+          } else if (r.parts?.length) {
+            // Stacked by profile, bottom up, in the legend's order.
+            let y0 = top + ch;
+            bar = (
+              <>
+                {r.parts.map((p, k) => {
+                  const ph = (ch * p.value) / max;
+                  y0 -= ph;
+                  return ph > 0 ? <rect key={k} x={x} y={y0} width={bw} height={ph} className={FILL[p.tone] || FILL.violet} /> : null;
+                })}
+              </>
+            );
           } else {
             bar = <rect x={x} y={top + ch - h} width={bw} height={h} className={FILL[r.tone] || FILL.violet} />;
           }
@@ -155,16 +175,18 @@ export function Columns({ rows, height = 220, pct = false, max: maxIn }) {
 }
 
 /** A weekly line: the last segment dashed to a hollow point, which is the current week to date. */
-export function WeekLine({ values, labels, height = 220 }) {
+export function WeekLine({ values, labels, previous = null, height = 220 }) {
   const [ref, W] = useBoxWidth();
   const pts = values.map((v, i) => ({ v, i })).filter((p) => p.v !== null && p.v !== undefined);
+  // The period before, drawn dotted under the line; its blanks stay blank.
+  const prev = (previous || []).map((v, i) => ({ v, i })).filter((p) => p.v !== null && p.v !== undefined);
   const Lx = 36;
   const R = 34;
   const B = 22;
   const top = 16;
   const ch = height - B - top;
   const n = Math.max(2, values.length);
-  const vs = pts.map((p) => p.v);
+  const vs = [...pts, ...prev].map((p) => p.v);
   const lo = vs.length ? Math.min(...vs) : 0;
   const hi = vs.length ? Math.max(...vs) : 1;
   const pad = Math.max(1, Math.round((hi - lo) * 0.25));
@@ -189,6 +211,9 @@ export function WeekLine({ values, labels, height = 220 }) {
             </g>
           );
         })}
+        {prev.length > 1 && (
+          <polyline points={prev.map((p) => `${X(p.i)},${Y(p.v)}`).join(' ')} fill="none" strokeWidth="1.6" strokeDasharray="1.5 3.5" strokeLinecap="round" className="stroke-axal-muted dark:stroke-gray-400" data-testid="insights-previous-line" />
+        )}
         {solid.length > 1 && (
           <polyline points={solid.map((p) => `${X(p.i)},${Y(p.v)}`).join(' ')} fill="none" strokeWidth="2.2" className={STROKE_V} />
         )}
@@ -226,12 +251,42 @@ export function Bar100({ parts }) {
   );
 }
 
+/** The Plan donut: one arc per tier, the paid share in the middle. */
+export function Donut({ parts, center = '', centerSub = '' }) {
+  const size = 168;
+  const r = 62;
+  const sw = 22;
+  const c = 2 * Math.PI * r;
+  const tot = parts.reduce((t, p) => t + p.value, 0);
+  let off = 0;
+  return (
+    <div className="flex w-full justify-center">
+      <Svg width={size} height={size}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={sw} className={GRID} />
+        {tot > 0 && parts.map((p) => {
+          const len = (c * p.value) / tot;
+          const arc = (
+            <circle key={p.label} cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={sw}
+              strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-off}
+              transform={`rotate(-90 ${size / 2} ${size / 2})`} className={STROKE[p.tone] || STROKE.violet} />
+          );
+          off += len;
+          return arc;
+        })}
+        <text x={size / 2} y={size / 2 + 4} textAnchor="middle" className={`${INK} text-[22px]`} fontWeight="600">{center}</text>
+        <text x={size / 2} y={size / 2 + 22} textAnchor="middle" className={MUTE}>{centerSub}</text>
+      </Svg>
+    </div>
+  );
+}
+
 /** The legend under a chart. `tone` is a palette name, or `hatch`, `dash` or `hollow`. */
 export function Legend({ items }) {
   const dot = (tone) => {
     if (tone === 'hatch') return 'border border-axal-violet bg-[repeating-linear-gradient(45deg,#7c3aed_0_2px,transparent_2px_4px)]';
     if (tone === 'dash') return 'border-[1.5px] border-dashed border-axal-muted';
     if (tone === 'hollow') return 'rounded-full border-2 border-axal-violet dark:border-[#a78bfa]';
+    if (tone === 'dotted') return 'h-0 rounded-none border-t-2 border-dotted border-axal-muted';
     return {
       violet: 'bg-axal-violet dark:bg-[#a78bfa]', sky: 'bg-[#0ea5e9]', amber: 'bg-[#f59e0b]', emerald: 'bg-[#10b981]', muted: 'bg-axal-muted',
     }[tone] || 'bg-axal-violet';
@@ -251,9 +306,14 @@ export function Legend({ items }) {
 /** "View as table": the same rows a chart draws, as a table. */
 export function ChartTable({ chart, caption }) {
   let rows = [];
-  if (chart?.type === 'hbar' || chart?.type === 'columns') rows = chart.rows.map((r) => [r.label, r.text ?? nf(r.value)]);
-  else if (chart?.type === 'line') rows = chart.values.map((v, i) => [chart.labels[i] || String(i + 1), v === null || v === undefined ? 'not recorded' : nf(v)]);
-  else if (chart?.type === 'bar100') rows = chart.parts.map((p) => [p.label, nf(p.value)]);
+  const cell = (v) => (v === null || v === undefined ? 'not recorded' : nf(v));
+  if (chart?.type === 'hbar' || chart?.type === 'columns' || chart?.type === 'stack') rows = chart.rows.map((r) => [r.label, r.text ?? nf(r.value)]);
+  else if (chart?.type === 'line') {
+    rows = chart.values.map((v, i) => [
+      chart.labels[i] || String(i + 1),
+      chart.previous ? `${cell(v)} · period before ${cell(chart.previous[i])}` : cell(v),
+    ]);
+  } else if (chart?.type === 'bar100' || chart?.type === 'donut') rows = chart.parts.map((p) => [p.label, nf(p.value)]);
   return (
     <table className="w-full border-collapse text-[12.5px]">
       <caption className="sr-only">{caption}</caption>
@@ -279,8 +339,9 @@ export function ChartTable({ chart, caption }) {
 export function Chart({ chart, onSelect }) {
   if (!chart) return null;
   if (chart.type === 'hbar') return <HBars rows={chart.rows} axis={chart.axis} onSelect={chart.clickable ? onSelect : undefined} />;
-  if (chart.type === 'columns') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} />;
-  if (chart.type === 'line') return <WeekLine values={chart.values} labels={chart.labels} />;
+  if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} />;
+  if (chart.type === 'line') return <WeekLine values={chart.values} labels={chart.labels} previous={chart.previous} />;
   if (chart.type === 'bar100') return <Bar100 parts={chart.parts} />;
+  if (chart.type === 'donut') return <Donut parts={chart.parts} center={chart.center} centerSub={chart.centerSub} />;
   return null;
 }

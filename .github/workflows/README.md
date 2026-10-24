@@ -15,7 +15,8 @@ Task #48.
 | `form-lightbox-contracts.yml` | D695 canonical/legacy form and responsive page contracts with modal effects and mutation/restoration; guards, root build then full drift | PR to `main` touching form/lightbox contracts | none (`contents: read`) |
 | `release-draft.yml` | Maintains daily drafts from the complete first-parent history of main; active month totals, monthly zero-based week (0–4) and active day (1–31) counters, UTC. Published daily tags/releases stay fixed; missing days are backfilled and only matching drafts refresh | push to `main`; manual dispatch | none (`GITHUB_TOKEN` with `contents: write`) |
 | `release-published.yml` | When the owner publishes a release, dispatches `cloudflare-worker-deploy.yml` on `main`, so the build picks up the new tag and the version beside the logo shows it; never deploys the tag's own commit | release published | none (`GITHUB_TOKEN` with `actions: write`) |
-| `meeting-bot-image.yml` | D886 B8 (#2586): tests the meeting-bot image helper and builds the scratch fixture, plus B2's real image once its Dockerfile exists, without publishing; an owner-triggered run on `main` publishes to GHCR (see "Meeting bot image skeleton" below) | PR to `main` touching the meeting bot or its helper; manual dispatch | none (`GITHUB_TOKEN` with `packages: write` on the manual run only) |
+| `meeting-bot-deploy.yml` | D886 B8: builds the runtime image, then deploys only the private preview and production bot hosts; never site migrations | bot/shared-helper changes in a push to `main`; manual main dispatch; `MEETING_BOT_DEPLOY_ENABLED=true` required | `MEETING_BOT_CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
+| `meeting-bot-image.yml` | D886 B8 (#2586): tests the image helper/deployment isolation, validates config and builds/boots the real image without publishing; an owner-triggered run on `main` publishes to GHCR (see "Meeting bot image" below) | PR to `main` touching the meeting bot or its helper; manual dispatch | none (`GITHUB_TOKEN` with `packages: write` on the manual run only) |
 | `ci.yml` | Frontend build, worker typecheck, API↔Worker drift, dev-backend import smoke, npm + pip audits | push/PR to `main` | none (uses `GITHUB_TOKEN` only) |
 | `meeting-worker-contracts.yml` | Mocked meeting reliability, mutation/restoration and hosted-attach contracts, alongside the full drift gate | PR to `main` touching meeting Worker code or tests | none (`contents: read`) |
 | `build-worker-contracts.yml` | Focused D686 connector, Workspace mapping and local Wrangler D1 tests with mocked provider I/O; supplements the root build and full drift gate | PR to `main` touching the Build Worker contracts | none (`contents: read`; local scratch D1 only) |
@@ -98,28 +99,20 @@ change and the digest may not: Semgrep's image is pulled through
 Do NOT use floating refs like `@main`, `:latest`, or unreleased majors
 (e.g. `@v5` for `actions/checkout` doesn't exist as of 2026-05-21).
 
-## Meeting bot image skeleton (#2586, D886 B8)
+## Meeting bot image (#2586, D886 B8)
 
-`meeting-bot-image.yml` tests the image helper and builds a clearly labelled
-scratch fixture on relevant pull requests. When B2 supplies a Dockerfile it
-also builds that real image without publishing. A missing runtime is not a
-successful runtime build: only the fixture is certified until B2 lands.
+`meeting-bot-image.yml` tests image naming/deployment isolation, builds a labelled
+scratch fixture, dry-runs the independent host configuration, then builds and
+boots the real runtime without provider network access. The native SDK must
+load. PR jobs never log into a registry. A manual main run can publish a
+commit-tagged GHCR image with the job-scoped `GITHUB_TOKEN`; its digest is
+recorded in the job summary. The bot deploy workflow builds its own image for
+Wrangler's registry and never runs site D1 migrations.
 
-An owner-triggered run on main builds the actual B2 image first, then uses
-the job-scoped `GITHUB_TOKEN` with `packages: write` to publish to GHCR under
-`ghcr.io/axalnetwork/studioos/meeting-bot:sha-<full-commit>`. The digest is
-recorded in the job summary. PR jobs have read permission only and do not
-log into a registry. No new registry credential is needed. The SHA tag is
-a version label, not a claim that a mutable registry tag cannot be replaced;
-future deployments must pin the published digest.
+## Independent meeting bot release (D886 B8)
 
-This is the independent pipeline part only. #2578 still owns the host,
-instance measurements and creation of D886; #2580 owns the runtime image;
-#2579 owns BotRuntime. Worker binding/config changes, start/stop/heartbeat,
-and an image-build gate before migrations in **both** deploy paths wait for
-those contracts. The current Worker deploy is deliberately not changed or
-blocked by a missing bot image. Nothing here turns on meeting capture.
-
-Sources read 22 October 2026:
-[GitHub image publishing](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images),
-[Docker build command](https://docs.docker.com/reference/cli/docker/buildx/build/).
+`meeting-bot-deploy.yml` handles main bot changes and manual main dispatch,
+behind the owner-set `MEETING_BOT_DEPLOY_ENABLED` Actions variable. It uses
+`MEETING_BOT_CLOUDFLARE_API_TOKEN` and deploys only the preview and production bot hosts, in that order.
+`meeting-bot-image.yml` validates the real image/native load and bot config
+dry runs on PRs. Site deployment never builds or publishes a bot image.

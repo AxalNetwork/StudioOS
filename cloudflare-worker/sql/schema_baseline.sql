@@ -1235,7 +1235,7 @@ CREATE TABLE dd_audit_log (
 CREATE TABLE dd_cases (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
-  subject_type TEXT NOT NULL CHECK(subject_type IN ('project','founder','mentor','investor','partner')),
+  subject_type TEXT NOT NULL CHECK(subject_type IN ('project','founder','mentor','advisor','investor','partner')),
   subject_id INTEGER NOT NULL,
   subject_label TEXT NOT NULL,
   subject_email_enc TEXT,

@@ -23,7 +23,7 @@ GitHub's per-module feeds (D782, #2110) live in `github/`, one file per
 part, each called by one line from `github.ts`'s sync: `github/roadmap.ts`
 gives Product roadmap its milestones, release rows and Shipped marks (#2111). `github/mvp.ts`
 makes each must-have follow its pull request, and records each release's checks
-on the must-haves (#2112).
+on the must-haves (#2112). Both retain exact commit evidence for deployment joins: merged PRs store their merge commit SHA and releases resolve their tag to its commit (#2414, migration 534).
 
 The module is then imported once from the worker entry point
 (`cloudflare-worker/src/index.ts`) so its top-level `registerProvider`
