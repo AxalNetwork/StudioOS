@@ -35,7 +35,9 @@ import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
-import { AUDIENCES, bindingOf, contentHash, ensureDeckVersionColumns, modelProblems, sanitizeModel, sanitizeTheme } from '../services/decks/slideModel';
+import { sanitizeBinding } from '../services/decks/sources';
+import { AUDIENCES, contentHash, modelProblems, sanitizeModel, sanitizeTheme } from '../services/decks/slideModel';
+import { ensureDeckVersionColumns } from '../services/decks/deckVersionColumns';
 import { isSupportSession } from '../integrations/providers/mercury';
 
 /** D895 applies only to deck operations, not other project-content routes. */
@@ -424,7 +426,8 @@ function sanitizeSlides(input: any[]): any[] {
     if (s?.method_id) out.method_id = String(s.method_id).slice(0, 80);
     if (s?.appendix) out.appendix = !!s.appendix;
     if (Array.isArray(s?.fields)) out.fields = sanitizeFields(s.fields);
-    // D898: the editor's layout, notes, background, blocks and binding.
+    // D898: the editor's layout, notes, background and blocks, and (D896,
+    // #2675) the card's own binding, so refresh can find it.
     Object.assign(out, sanitizeModel(s, sanitizeImageUrl));
     return out;
   });
@@ -470,9 +473,8 @@ function sanitizeFields(input: any[]): any[] {
     // Preserve the read-only flag so auto-computed fields stay non-editable
     // after a save/reload round-trip.
     if (f?.readonly) out.readonly = true;
-    // D896/D898: a field bound to a source keeps its binding.
-    const bd = bindingOf(f?.binding);
-    if (bd) out.binding = bd;
+    const binding = sanitizeBinding(f?.binding);
+    if (binding) out.binding = binding;
     return out;
   });
 }

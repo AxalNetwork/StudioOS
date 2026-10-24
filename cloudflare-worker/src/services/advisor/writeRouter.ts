@@ -450,7 +450,7 @@ const SLOT_INDEXES_READY = new WeakMap<object, boolean>();
 // the advisor scenario test under --experimental-strip-types).
 import { MILESTONES, weekMet as canonicalWeekMet } from '../spinoutLabCatalog.ts';
 import { bindingKey } from '../../util/schemaBootstrap';
-import { ensureDeckVersionColumns } from '../decks/slideModel';
+import { ensureDeckVersionColumns } from '../decks/deckVersionColumns';
 
 function weekForMilestoneKey(key: string): number | null {
   for (const w of MILESTONES) {

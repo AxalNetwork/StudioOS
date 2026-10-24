@@ -29,8 +29,8 @@ import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
-import { BINDING_GRADES, CHART_TYPES, LAYOUTS, contentHash, sanitizeBlocks, videoOf } from '../src/services/decks/slideModel.ts';
-import { GRADES, bindingsOf } from '../src/services/decks/sources.ts';
+import { CHART_TYPES, LAYOUTS, bindingOf, contentHash, sanitizeBlocks, videoOf } from '../src/services/decks/slideModel.ts';
+import { bindingsOf, sanitizeBinding } from '../src/services/decks/sources.ts';
 import { sanitizeImageUrl } from '../src/routes/decks.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -241,7 +241,7 @@ test('6. the versions list carries Audience, Round and By; a version from before
 
 test('7. the twelve layouts fit the grid; video links are read without a fetch; the compare sees a chart\'s series', async () => {
   assert.equal(LAYOUTS.length, 12);
-  assert.deepEqual([...BINDING_GRADES], [...GRADES], "the model's grades are D896's");
+  assert.equal(bindingOf, sanitizeBinding, "a block's binding follows D896's one rule");
   assert.equal(CHART_TYPES.length, 12);
   for (const l of LAYOUTS) {
     assert.equal(sanitizeBlocks(l.blocks, sanitizeImageUrl).length, l.blocks.length, `${l.id}: every preset block sits on the grid, none overlapping`);

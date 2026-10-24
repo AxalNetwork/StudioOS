@@ -179,6 +179,15 @@ test business number, phone 2 plays the interviewee.
 4. On phone 2, tap **Yes, I agree**. See in Axal: "Agreed in WhatsApp at
    <time>", and the text and the voice note's transcript on the session page.
    On the interview's page, **Open recording** plays the voice note.
+   For D857 translation, use synthetic test text and a voice note clearly in a
+   language different from the test founder's working language. After consent
+   and structuring, check both the original and its translation on the session
+   page. The working language is the founder's setting, otherwise the account
+   language, otherwise English. Check AI-token usage for translation; a passage
+   already in the working language needs no translation call. If translation
+   is pending, check that the original stays usable and retry after restoring
+   AI access. Do not copy the test content or
+   account identifiers into the public verification report.
 5. From phone 2, send `STOP`. Send another text. See: "<Name> withdrew
    consent", nothing new in the session, and **Discard this chat's recording**.
    Press it ("This deletes the session and its transcript."), then **Discard**.
@@ -284,7 +293,9 @@ They are also rows in `documentation/architecture/GOTCHAS.md`.
 ## 7. General-availability release gates (D861, #2506)
 
 **Do not change canary to on yet.** This section is a release checklist, not
-an approval. W1 (#2501, setup) and W2 (#2502, translation) must merge first.
+an approval. W2 (#2502, translation) shipped as #2536 on 22 October 2026
+(D857). W1 (#2501, setup) is still open; its merge and combined integration
+evidence remain required before general availability.
 W5 (#2505, merged through #2530 / D860) keeps calls closed on coexistence
 numbers. `WHATSAPP_CALLS` remains `"false"`; API-only calling is future work
 after D860’s official-source, approved-notice, live-spike and all-party-consent
@@ -320,12 +331,19 @@ gates. No live call capture is advertised.
    A media lookup can expire earlier (7 days). An imported, consented
    transcript/recording stays until the member deletes the session; the
    pending-copy purge is not deletion of an interview.
-5. Pending text and media references use the column cipher. Production needs
-   its encryption key provisioned. Never use a fixture test's key, print a
+5. Pending text and media references use the column cipher. D857's stored
+   translation also uses the column cipher, bound to its own transcript-segment
+   row. The readiness test covers both pending text and that translated copy,
+   including plaintext/corruption mutations. Imported original transcript
+   segments retain D857's existing plaintext storage; this gate does not claim
+   all transcript content is encrypted. Production needs its encryption key
+   provisioned. Never use a fixture test's key, print a
    decrypted message, or export rows to prove this.
-6. Repeat the real-device canary exercise after W1/W2 merge, including a
-   declined/withdrawn consent, a waiting voice note, the shipped translation
-   behaviour and one accepted proposal. Nothing populates Validate without
+6. Repeat the real-device canary exercise after W1 merges with the shipped
+   W2 code. Include declined/withdrawn consent, a waiting voice note, the text
+   and voice-transcript translation checks in §3 (original kept, working
+   language, AI tokens and pending/retry), and one accepted proposal. Nothing populates
+   Validate without
    the founder's Accept.
 7. S1 records runbook review and the remaining decisions on #2506. The owner
    verifies the four Meta requirements in D861 §3 from official pages and

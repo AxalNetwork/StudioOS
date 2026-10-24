@@ -25,15 +25,7 @@
  * (`services/decks/sources.ts`). A metric tile with no value is `value: null`,
  * which every reader shows as "Not recorded", never 0.
  */
-import type { Env } from '../../types';
-
-/**
- * D896's four grades (`sources.ts` GRADES), repeated here so this module stays
- * import-free: the advisor's write router awaits `ensureDeckVersionColumns`,
- * and `sources.ts` would pull every store adapter in behind it. The D898 test
- * asserts the two lists agree.
- */
-export const BINDING_GRADES = ['Measured', 'Reviewed', 'Sourced', 'Stated'] as const;
+import { sanitizeBinding } from './sources';
 
 export const GRID_COLS = 12;
 export const GRID_ROWS = 6;
@@ -75,9 +67,6 @@ export const LAYOUTS = [
 ] as const;
 export const LAYOUT_IDS = LAYOUTS.map((l) => l.id) as string[];
 
-const SOURCE_KEY = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const HASH = /^[0-9a-f]{24}$/;
 const COLOUR = /^#[0-9a-f]{6}$/i;
 const ID = /^[A-Za-z0-9_-]{1,40}$/;
 
@@ -87,17 +76,8 @@ const oneOf = <T extends string>(v: unknown, list: readonly T[]): T | null => (t
 /** An https URL on a public host; the same rule as slide images (sanitizeImageUrl), passed in to avoid a cycle. */
 export type UrlGuard = (u: string | null | undefined) => string | null;
 
-/** D896's binding, or null when it is not one. */
-export function bindingOf(v: any): { source_key: string; record_ref: string | null; as_of: string | null; grade: string | null; snapshot_hash: string | null } | null {
-  if (!v || typeof v !== 'object' || typeof v.source_key !== 'string' || !SOURCE_KEY.test(v.source_key)) return null;
-  return {
-    source_key: v.source_key,
-    record_ref: typeof v.record_ref === 'string' && v.record_ref ? v.record_ref.slice(0, 200) : null,
-    as_of: typeof v.as_of === 'string' && ISO_DATE.test(v.as_of) ? v.as_of : null,
-    grade: oneOf(v.grade, BINDING_GRADES),
-    snapshot_hash: typeof v.snapshot_hash === 'string' && HASH.test(v.snapshot_hash) ? v.snapshot_hash : null,
-  };
-}
+/** D896's binding, or null when it is not one: `sources.ts`'s one rule, so a save and a refresh agree. */
+export const bindingOf = sanitizeBinding;
 
 export function gridOf(v: any): Grid | null {
   if (!v || typeof v !== 'object') return null;
@@ -253,26 +233,3 @@ export async function contentHash(slides: unknown, theme: unknown): Promise<stri
   return Array.from(digest, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-/**
- * Migration 539's four columns, added where it has not run. D1 has no
- * `ADD COLUMN IF NOT EXISTS`, so the table is probed first. Every runtime
- * `CREATE TABLE pitch_decks` awaits this right after, so whichever bootstrap
- * wins, the columns exist.
- */
-export async function ensureDeckVersionColumns(env: Env): Promise<void> {
-  try {
-    const cols = await env.DB.prepare('PRAGMA table_info(pitch_decks)').all<any>();
-    const have = new Set(((cols.results || []) as any[]).map((r) => String(r.name)));
-    const add539: Array<[string, string]> = [
-      ['audience', `ALTER TABLE pitch_decks ADD COLUMN audience TEXT CHECK (audience IS NULL OR audience IN ('angel', 'pre_seed_fund', 'seed_fund', 'series_a_fund', 'strategic', 'grant', 'other'))`],
-      ['round_ref', 'ALTER TABLE pitch_decks ADD COLUMN round_ref TEXT'],
-      ['theme_json', 'ALTER TABLE pitch_decks ADD COLUMN theme_json TEXT'],
-      ['content_hash', `ALTER TABLE pitch_decks ADD COLUMN content_hash TEXT CHECK (content_hash IS NULL OR (length(content_hash) = 64 AND content_hash NOT GLOB '*[^0-9a-f]*'))`],
-    ];
-    for (const [col, ddl] of add539) {
-      if (!have.has(col)) {
-        try { await env.DB.prepare(ddl).run(); } catch {}
-      }
-    }
-  } catch {}
-}
