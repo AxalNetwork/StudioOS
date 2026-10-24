@@ -287,6 +287,8 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
     // the grant of limited access, Lab admission and the application decide.
     'cloudflare-worker/src/routes/admin.ts',
     'cloudflare-worker/src/routes/kyc.ts',
+    // D960 — granting and ending a mentor's access to a cohort's founders.
+    'cloudflare-worker/src/routes/advisors.ts',
   ];
   let checked = 0;
   for (const f of FILES) {

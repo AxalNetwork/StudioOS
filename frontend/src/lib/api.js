@@ -2591,6 +2591,16 @@ export const api = {
     request('/advisors/admin/cohort-assignments', { method: 'POST', body: JSON.stringify(data) }),
   adminEndAdvisorCohortAssignment: (id) =>
     request(`/advisors/admin/cohort-assignments/${id}`, { method: 'DELETE' }),
+  // D960 — every grant and end (migration 565), newest first: { items, total }.
+  // `params`: assignment_id, cohort_cycle_id, limit (1–200), offset.
+  adminAdvisorCohortHistory: (params = {}) => {
+    const q = new URLSearchParams();
+    for (const k of ['assignment_id', 'cohort_cycle_id', 'limit', 'offset']) {
+      if (params[k] != null && params[k] !== '') q.set(k, String(params[k]));
+    }
+    const qs = q.toString();
+    return request(`/advisors/admin/cohort-assignments/history${qs ? `?${qs}` : ''}`);
+  },
 
   adminCohortTimeline: () => request('/admin/cohort/timeline'),
   adminCohortReview: (cycleId) => request(`/admin/cohort/review${cycleId ? `?cycle_id=${cycleId}` : ''}`),
