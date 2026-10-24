@@ -44,7 +44,7 @@ import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { templatesFor, mayOriginate, notOfferedFor, originatorName, SEND_ABSENCES, ENVELOPE_ABSENCES } from '../services/esignOriginators';
 import { esignEnvelopeScope } from '../services/tenancyScope';
-import { sendAgreementAssignedEmail } from '../services/email';
+import { sendAgreementAssignedEmail, sendAgreementAssignedEmailResult, type EmailSendResult } from '../services/email';
 import { sha256Hex, sha256HexBytes } from '../services/pdf';
 import { paperModel, paperHtml, paperSha256, PART_STUB, STUB_LINE, type PaperRecipient } from '../services/legalPaper';
 import { structureForPaper } from '../services/fundStructure';
@@ -1587,9 +1587,11 @@ esign.post('/sign/:token', async (c) => {
       // tier grants, referral-code activation, DD case open, and Trust
       // Center seeding. Idempotent: a second pass on the same envelope is
       // a no-op once status='active'.
+      let partnerVoidReason: string | null = null;
       try {
         const { activatePartnerDealOnSignature } = await import('../services/partnerDeals');
-        await activatePartnerDealOnSignature(c.env, rec.envelope_id);
+        const activation = await activatePartnerDealOnSignature(c.env, rec.envelope_id);
+        partnerVoidReason = activation?.void_reason || null;
       } catch (e) { console.warn('[esign] activatePartnerDealOnSignature failed', e); }
       // Record the signature against the obligation it satisfies — the three
       // NDAs and the advisor disclaimer. Until this hook existed, all four had
@@ -1643,8 +1645,12 @@ esign.post('/sign/:token', async (c) => {
           await notify(c.env, {
             userId: envelopeRow.created_by,
             type: 'contract_signed',
-            title: `Signed and executed: ${envelopeRow.document_title || 'Agreement'}`,
-            body: 'Every signer has signed the agreement you sent. The executed PDF and the audit trail are on the envelope.',
+            title: partnerVoidReason
+              ? `Signed, deal voided: ${envelopeRow.document_title || 'Agreement'}`
+              : `Signed and executed: ${envelopeRow.document_title || 'Agreement'}`,
+            body: partnerVoidReason
+              ? `The agreement was signed, but the deal was voided because ${partnerVoidReason === 'link_lapsed' ? 'the invitation link lapsed before signing' : partnerVoidReason === 'admin_revoked' ? 'an admin revoked the deal' : 'the invitation was revoked'}. No partner benefits were activated.`
+              : 'Every signer has signed the agreement you sent. The executed PDF and the audit trail are on the envelope.',
             link: statusView,
             payload: { envelope_uuid: envelopeRow.envelope_uuid, envelope_id: rec.envelope_id, role: 'sender' },
             channels: ['in_app', 'email', 'slack'],
@@ -1909,6 +1915,50 @@ esign.post('/:id{[0-9]+}/void', async (c) => {
   });
   return c.json({ voided: true, envelope_id: id });
 });
+
+/** D924: called only after the invitation route's admin gate. Scope the
+ * recipient through the invitation, never through the resending admin's id.
+ * Tokens go only to the matching recipient's inbox, never the route response.
+ */
+export async function renewPartnerInvitationSigningLink(
+  env: Env,
+  invitationId: number,
+  actor: { id: number; email: string; name?: string | null },
+  expiresAt: string,
+  actorIp: string,
+): Promise<EmailSendResult | null> {
+  const envelope = await env.DB.prepare(
+    `SELECT ee.id, ee.document_title, pi.recipient_email
+       FROM partner_invitations pi JOIN esign_envelopes ee ON ee.id = pi.envelope_id
+      WHERE pi.id = ? AND pi.status NOT IN ('signed','revoked')
+        AND ee.status IN ('sent','partially_signed')`,
+  ).bind(invitationId).first<{ id: number; document_title: string; recipient_email: string }>();
+  if (!envelope) return null;
+  const recipient = await env.DB.prepare(
+    `SELECT id, recipient_email, recipient_name FROM esign_recipients
+      WHERE envelope_id = ? AND LOWER(recipient_email) = LOWER(?)
+        AND status = 'pending' ORDER BY id LIMIT 1`,
+  ).bind(envelope.id, envelope.recipient_email).first<{ id: number; recipient_email: string; recipient_name: string | null }>();
+  if (!recipient) return { ok: false, reason: 'failed' };
+  const token = genToken();
+  const changed = await env.DB.prepare(
+    `UPDATE esign_recipients SET signing_token = ?, token_expires_at = ?
+      WHERE id = ? AND status = 'pending'
+        AND EXISTS (SELECT 1 FROM esign_envelopes WHERE id = ? AND status IN ('sent','partially_signed'))
+        AND EXISTS (SELECT 1 FROM partner_invitations WHERE id = ? AND status NOT IN ('signed','revoked'))`,
+  ).bind(token, expiresAt, recipient.id, envelope.id, invitationId).run();
+  if (!changed.meta?.changes) return { ok: false, reason: 'failed' };
+  const result = await sendAgreementAssignedEmailResult(
+    env, recipient.recipient_email, recipient.recipient_name || '', envelope.document_title || 'Agreement',
+    `${env.APP_URL || 'https://axal.vc'}/esign/${token}`, actor.name || actor.email, 14,
+  );
+  await appendAudit(env, envelope.id, {
+    ts: new Date().toISOString(), signer_id: actor.id, signer_email: actor.email,
+    action: result.ok ? 'reminder_sent' : 'reminder_failed', ip: actorIp,
+    meta: { to: recipient.recipient_email, link_renewed: true, invitation_id: invitationId },
+  });
+  return result;
+}
 
 // POST /api/legal/esign/:id/remind — re-send the signing email to every
 // recipient who has not signed. The link goes to their inbox, never into the
