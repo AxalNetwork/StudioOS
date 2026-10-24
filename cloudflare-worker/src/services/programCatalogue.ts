@@ -66,7 +66,8 @@ export const PROGRAM_DEFINITIONS = {
   learning: 'Published Learning programs, and the active enrolments in them. A person in two programs is two enrolments.',
 } as const;
 
-export type Viewer = { id: number; superAdmin: boolean };
+/** D955: `licenceUid` is the viewer's studio, which decides the studio-only programs they read. */
+export type Viewer = { id: number; superAdmin: boolean; licenceUid?: string | null };
 
 type Unreadable = { available: false; unreadable: true; reason: string };
 type Pending = { available: false; pending: true; reason: string };
@@ -468,7 +469,7 @@ function needs(parts: Array<{ available: boolean; count?: number } & Record<stri
   return { available: true as const, count: parts.reduce((t, p) => t + n(p.count), 0), ...extra };
 }
 
-function cardFigures(key: ProgramKey, viewer: Viewer, q: Queues, b: {
+function cardFigures(key: string, viewer: Viewer, q: Queues, b: {
   mentors: Read<{ count: number; reason: string }>;
   coverage: Read<{ cohorts: number; covered: number; uncovered: number }>;
   notAdvisor: Read<{ count: number }>;
@@ -550,7 +551,7 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
     mentors, coverage, notAdvisor, live, learning, testing,
     people, joinsReferrals, joinsLearning, joinsLab, credits,
   ] = await Promise.all([
-    block('The program registry', async () => ({ rows: await listPrograms(env) })),
+    block('The program registry', async () => ({ rows: await listPrograms(env, { superAdmin: viewer.superAdmin, licenceUid: viewer.licenceUid ?? null }) })),
     block('Cohort applications', () => cohortQueue(env, nowMs)),
     block('Refer & Earn reviews', () => referralQueue(env, nowMs)),
     block('Perk listings in review', () => perkQueue(env, nowMs)),

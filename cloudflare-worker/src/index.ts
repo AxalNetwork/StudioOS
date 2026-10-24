@@ -250,6 +250,7 @@ import adminHqSupport from './routes/admin_hq_support';
 import adminStudioGlance from './routes/admin_studio_glance';
 import adminInsights from './routes/admin_insights';
 import adminPrograms from './routes/admin_programs';
+import adminProgramProposals from './routes/admin_program_proposals';
 import adminInsightsExport from './routes/admin_insights_export';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
@@ -1118,6 +1119,8 @@ app.route('/api/admin/studio', adminStudioGlance);
 app.route('/api/admin/insights/export', adminInsightsExport);
 app.route('/api/admin/insights', adminInsights);
 // D954 (#2787): Admin › Programs — the registry, the playbook, the catalogue read and each program's activity.
+// D955: proposals before the programs router, whose `/:key` would otherwise answer `proposals`.
+app.route('/api/admin/programs/proposals', adminProgramProposals);
 app.route('/api/admin/programs', adminPrograms);
 app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licence);
