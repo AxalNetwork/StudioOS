@@ -97,7 +97,7 @@ export function overviewStatuses(b) {
 }
 
 const ATTENTION = {
-  overdue: ['Overdue', 'Review', 'amber'], full: ['Full', 'Change capacity', 'muted'],
+  overdue: ['Overdue', 'Review queue', 'amber'], full: ['Full', 'Change capacity', 'muted'],
   low_signups: ['Low sign-ups', 'Open', 'muted'], clash: ['Clash', 'See calendar', 'amber'],
   changed_after_approval: ['Changed after approval', 'Open', 'amber'], paid_on_cancelled: ['Paid tickets', 'Open', 'red'],
 };

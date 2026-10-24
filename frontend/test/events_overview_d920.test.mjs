@@ -33,7 +33,7 @@ async function mount(element, fetcher = null) {
   const props = (n) => Object.entries(n || {}).find(([k]) => k.startsWith('__reactProps$'))?.[1] || {};
   const by = (id) => walk(container).find((n) => props(n)['data-testid'] === id);
   const nodeText = (n) => n?.nodeType === 3 ? n.textContent : n?.childNodes?.length ? n.childNodes.map(nodeText).join(' ') : n?.textContent || '';
-  return { by, props, flush, text: (id) => nodeText(id ? by(id) : container).replace(/\s+/g, ' '),
+  return { by, props, flush, async render(next) { await act(async () => root.render(h(MemoryRouter, { initialEntries: ['/admin/events'] }, next))); await flush(); }, text: (id) => nodeText(id ? by(id) : container).replace(/\s+/g, ' '),
     async click(id) { assert.ok(by(id), id); await act(async () => { const p = props(by(id)); (p.onClick || p.onChange)(); }); await flush(); },
     async close() { await act(async () => root.unmount()); globalThis.fetch = before; restore(); },
   };
@@ -86,7 +86,7 @@ test('D920: the canvas blocks show their recorded values, action targets, limits
   assert.ok(s.includes('/admin/events/calendar?month=2026-11'));
   assert.ok(section(s, 'events-block-attention').includes('href="/admin/events/review"'));
   assert.match(text(section(s, 'events-block-next')), /No cap/);
-  assert.ok(s.includes('/admin/events/all?view=attention'));
+  assert.match(section(s, 'events-block-attention'), /href="\/admin\/events\/all"[^>]*>Browse all events/);
   assert.equal((s.match(/data-testid="events-next-\d"/g) || []).length, 5);
   assert.match(text(section(s, 'events-block-next')), /Workshop.*In person.*Sign-ups open once approved/);
   assert.match(text(section(s, 'events-block-showup')), /All events 61%/);
@@ -215,4 +215,23 @@ test('D920 review: a missing type count leaves known bars intact, incomplete eve
   assert.doesNotMatch(complete, /r="4.5"/);
   assert.doesNotMatch(renderToStaticMarkup(h(ChartTable, { chart, caption: 'Completed weeks' })), /so far/);
   assert.match(text(section(markup(reads(f)), 'events-block-weekly')), /These weeks are complete/);
+});
+
+
+test('D920: recurring event titles keep distinct chart rows when their order and values change', async () => {
+  const warnings = [];
+  const original = console.error;
+  console.error = (...args) => { if (String(args[0]).includes('same key')) warnings.push(args); else original(...args); };
+  let m;
+  try {
+    const f = overviewFixture();
+    f.show_up.recent = [{ id: 1, title: 'Synthetic recurring', attended: 6, seats_taken: 10, rate: 0.6 }, { id: 2, title: 'Synthetic recurring', attended: 8, seats_taken: 10, rate: 0.8 }];
+    m = await mount(h(EventsOverview, { reads: reads(f), now: NOW }));
+    assert.match(m.text('events-block-showup'), /6 of 10.*8 of 10/);
+    f.show_up.recent = [{ ...f.show_up.recent[1], attended: 2, rate: 0.2 }, { ...f.show_up.recent[0], attended: 4, rate: 0.4 }];
+    await m.render(h(EventsOverview, { reads: reads(f), now: NOW }));
+    assert.match(m.text('events-block-showup'), /2 of 10.*4 of 10/);
+    assert.doesNotMatch(m.text('events-block-showup'), /6 of 10|8 of 10/);
+    assert.deepEqual(warnings, [], 'same-named events must not share a React key');
+  } finally { if (m) await m.close(); console.error = original; }
 });

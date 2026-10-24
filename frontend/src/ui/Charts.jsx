@@ -98,9 +98,9 @@ export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar'
               <text x={LW + Math.max(w, r.dash ? 24 : 0) + 6} y={y + 14} className={INK}>{r.text ?? (Number.isFinite(r.value) ? nf(r.value) : 'Not recorded')}</text>
             </>
           );
-          if (!r.group || !onSelect) return <g key={r.label}>{body}</g>;
+          if (!r.group || !onSelect) return <g key={r.key ?? `${r.label}-${i}`}>{body}</g>;
           return (
-            <g key={r.label} role="button" tabIndex={0} aria-label={r.aria || `Open the ${r.label} group, ${nf(r.value)} accounts`}
+            <g key={r.key ?? `${r.label}-${i}`} role="button" tabIndex={0} aria-label={r.aria || `Open the ${r.label} group, ${nf(r.value)} accounts`}
               className="cursor-pointer outline-none focus-visible:[&>rect]:stroke-axal-ink focus-visible:[&>rect]:stroke-2"
               onClick={() => onSelect(r.group)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(r.group); } }}

@@ -76,7 +76,7 @@ function Types({ b, retry }) {
 
 function ShowUp({ b, retry }) {
   const [table, setTable] = useState(false);
-  const rows = (b.recent || []).slice(0, 8).map((r) => ({ label: r.title, value: Number.isFinite(r.rate) ? r.rate * 100 : null, text: `${count(r.attended)} of ${count(r.seats_taken)} · ${r.seats_taken === 0 ? 'No seats taken' : percent(r.rate)}`, tone: 'violet' }));
+  const rows = (b.recent || []).slice(0, 8).map((r) => ({ key: r.id, label: r.title, value: Number.isFinite(r.rate) ? r.rate * 100 : null, text: `${count(r.attended)} of ${count(r.seats_taken)} · ${r.seats_taken === 0 ? 'No seats taken' : percent(r.rate)}`, tone: 'violet' }));
   return <Block title="Show-up by event" b={b} id="showup" onRetry={retry}>
     {b.state === 'ready' ? <>
       <span className={SUB}>Last eight events that ended in this period. The reference line marks all ended events.</span>
@@ -137,7 +137,7 @@ export default function EventsOverview({ reads, now, weeks = 12, onWeeks }) {
           <div className="min-w-0 flex-1"><Pill tone={r.tone}>{r.label}</Pill><p className="my-1 text-[13px] text-axal-ink dark:text-gray-100">{r.title} {r.detail}</p></div>
           <Link className={`${LINK} min-h-10 py-2`} to={r.href}>{r.action}</Link>
         </div>)}
-        {attention.state === 'ready' ? <><p className={SUB}>{attention.total === 0 ? 'Nothing needs attention.' : `Showing ${Math.min(6, attention.items?.length || 0)} of ${count(attention.total)} items.`}</p><Link className={LINK} to="/admin/events/all?view=attention">See all</Link></> : null}
+        {attention.state === 'ready' ? <><p className={SUB}>{attention.total === 0 ? 'Nothing needs attention.' : `Showing ${Math.min(6, attention.items?.length || 0)} of ${count(attention.total)} items.`}</p><Link className={LINK} to="/admin/events/all">Browse all events</Link></> : null}
       </Block>
       <Block title="Next up" b={next} id="next" meta="Next five events" onRetry={reads.reload}>
         {(next.rows || []).map((e) => <div key={e.id} className="flex flex-col gap-1.5 border-b border-axal-hairline pb-3 dark:border-gray-700" data-testid={`events-next-${e.id}`}>
