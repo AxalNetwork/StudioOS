@@ -14,7 +14,7 @@ exists for each — not by how far each has been built. Counts as of 2026-10-20:
 
 | Folder | Meaning |
 | --- | --- |
-| `canvases/integrated/` | 100 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
+| `canvases/integrated/` | 102 — a live route exists for this canvas. **Not "it is finished"** — most are `UPGRADE`, meaning the route runs and the canvas asks for more than it does. `design/canvases/README.md` has a section on exactly this misreading; the gloss here read "the canvas is built" until 2026-09-07, which is what caused it. |
 | `canvases/backlog/` | 28 — graded `NEW` or `DEFERRED`: no route yet. |
 | `canvases/out-of-scope/` | 26 — deliberately not being built. |
 
@@ -53,7 +53,9 @@ and 95 / 28 / 26 until `Cycle Overviews · Mobile` and `Cycle Modules · Mobile`
 moved there on 2026-10-17, with the cycle roots, module pages, add pages and
 action pages built on a phone (D703), and 97 / 28 / 26 until
 `Legal Documents · Templates` moved there on 2026-10-19, with D717's screens
-built (#1782).
+built (#1782), and 100 / 28 / 26 until `Admin Insights Page` and
+`Admin Insights · Boards` arrived on 2026-10-24 with their page built (D893,
+#2366).
 **If you move a file, move the number.**)
 
 **A canvas whose bodies are built does not belong in this folder.** Move it to

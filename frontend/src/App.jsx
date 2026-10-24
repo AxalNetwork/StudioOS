@@ -142,7 +142,8 @@ const HeldAccounts = lazy(() => import('./pages/admin/HeldAccounts'));
 const HeldApprovals = lazy(() => import('./pages/admin/HeldApprovals'));
 const HeldPrograms = lazy(() => import('./pages/admin/HeldPrograms'));
 const HeldCommunity = lazy(() => import('./pages/admin/HeldCommunity'));
-const HeldInsights = lazy(() => import('./pages/admin/HeldInsights'));
+const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'));
+const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsightsRedirect'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
@@ -2721,7 +2722,10 @@ function AppInner() {
       <Route path="/admin/held/approvals" element={guard(['admin'], <HeldApprovals />)} />
       <Route path="/admin/held/programs" element={guard(['admin'], <HeldPrograms />)} />
       <Route path="/admin/held/community" element={guard(['admin'], <HeldCommunity />)} />
-      <Route path="/admin/held/insights" element={guard(['admin'], <HeldInsights />)} />
+      {/* D893 (#2366) — Insights left /admin/held/ when it was rebuilt to its
+          canvas. The old address keeps its query and hash and adds ?moved=. */}
+      <Route path="/admin/insights" element={guard(['admin'], <AdminInsights />)} />
+      <Route path="/admin/held/insights" element={<HeldInsightsRedirect />} />
       {/* D107 — the eight subsidiary rows (Admin · Subsidiary S0–S6). Each one
           has a route so no sidebar row can 404; the ones whose artboards are
           not built state what they will show and which PR builds them.

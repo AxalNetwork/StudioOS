@@ -220,5 +220,6 @@ test('D375: none of the canvas\'s sample data, and none of the words the program
 test('D375: one WorkerRail, and no /admin/fabric alias — the redirect set stays pinned', () => {
   assert.equal(PAGE.match(/<WorkerRail\b/g).length, 1);
   assert.ok(!APP.includes('/admin/fabric'), 'an /admin/fabric route appeared');
-  assert.match(read('frontend/test/admin_route_reachability.test.mjs'), /assert\.deepEqual\(REDIRECTS, \['\/admin\/news'\],/);
+  // D893 (#2366) added /admin/held/insights; the pin is that /admin/fabric never joins the set.
+  assert.match(read('frontend/test/admin_route_reachability.test.mjs'), /assert\.deepEqual\(REDIRECTS, \['\/admin\/held\/insights', '\/admin\/news'\],/);
 });

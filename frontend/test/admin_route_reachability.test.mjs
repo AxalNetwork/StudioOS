@@ -86,7 +86,10 @@ function routes(src) {
     out.push({
       path: p[1],
       body,
-      redirect: els[0] === 'Navigate',
+      // A `*Redirect` element that is the route's whole body is a redirect too,
+      // as `redirect_hits_2301.test.mjs` counts it (D893's HeldInsightsRedirect).
+      // LegacyContractsRedirect is not: it wraps the console it renders.
+      redirect: els[0] === 'Navigate' || (/Redirect$/.test(els[0] || '') && els[0] !== 'LegacyContractsRedirect' && els.length === 1),
       component: els.find((e) => e !== 'Navigate' && e !== 'LegacyContractsRedirect') ?? null,
     });
   }
@@ -458,10 +461,19 @@ test('every in-page /admin link points at a registered route', () => {
 test('a redirect-only /admin route is excluded, and its target is reachable', () => {
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
-  assert.deepEqual(REDIRECTS, ['/admin/news'],
+  assert.deepEqual(REDIRECTS, ['/admin/held/insights', '/admin/news'],
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
+  // A `*Redirect` component names its target in its own file, not in App.jsx
+  // (D893: HeldInsightsRedirect sends /admin/held/insights to INSIGHTS_PATH).
+  const COMPONENT_TARGETS = { HeldInsightsRedirect: '/admin/insights' };
   for (const path of REDIRECTS) {
-    const { redirects } = doorsIn(BY_PATH.get(path).body);
+    const route = BY_PATH.get(path);
+    let { redirects } = doorsIn(route.body);
+    if (!redirects.length && COMPONENT_TARGETS[route.component]) {
+      const model = read('frontend/src/pages/admin/insights/insightsModel.js');
+      assert.match(model, new RegExp(`INSIGHTS_PATH = '${COMPONENT_TARGETS[route.component]}'`), `${route.component}'s target moved`);
+      redirects = [COMPONENT_TARGETS[route.component]];
+    }
     assert.equal(redirects.length, 1, `${path} should name exactly one redirect target`);
     const target = toRoute(redirects[0]);
     assert.ok(typeof target === 'string', `${path} redirects to ${redirects[0]}, which is not a route`);
