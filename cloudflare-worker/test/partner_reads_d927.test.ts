@@ -130,24 +130,26 @@ test('the overview: every tile, Needs you, C1 to C4, from one read of each store
     invite(f, { status: 'signed', created: d1(40), signed: d1(30) });
     invite(f, { status: 'signed', created: d1(200), signed: d1(100) }); // signed outside 90 days
     invite(f, { status: 'revoked', created: d1(5) });
-    invite(f, { status: 'expired', created: d1(60) });
+    invite(f, { status: 'expired', created: d1(60), expires: ago(30) }); // signed after the link lapsed: never Lapsed
     invite(f, { status: 'profiled', created: d1(4), lastOk: 0, lastSent: ago(2) }); // a failed send, no profile row
+    invite(f, { status: 'sent', created: d1(70), lastOk: 0, lastSent: ago(40) }); // failed 40 days ago: Needs you, not the 30-day tile
     f.db.exec(`INSERT INTO partner_deals(id, invitation_id, user_id, deal_type, proposal_json, status, expires_at, created_at) VALUES
       (1, NULL, 20, 'services_partnership', '{}', 'active', '${new Date(NOW + 10 * DAY).toISOString()}', '${d1(100)}'),
       (2, NULL, 21, 'deal_sourcing_revshare', '{}', 'active', '${new Date(NOW + 200 * DAY).toISOString()}', '${d1(100)}'),
       (3, NULL, 22, 'equity_partnership', '{}', 'active', '${ago(2)}', '${d1(400)}'),
-      (4, ${chosen}, NULL, 'equity_partnership', '{}', 'awaiting_signature', NULL, '${d1(3)}')`);
+      (4, ${chosen}, NULL, 'equity_partnership', '{}', 'awaiting_signature', NULL, '${d1(3)}'),
+      (5, NULL, 23, 'custom', '{}', 'terminated', NULL, '${d1(300)}')`);
     f.db.exec(`INSERT INTO partner_referral_redemptions(partner_deal_id, redeemed_by_user_id, attribution_kind, redeemed_at) VALUES
       (1, 30, 'referral', '${d1(3)}'), (2, 31, 'deal_sourcing_revshare', '${d1(350)}'), (2, 32, 'deal_sourcing_revshare', '${d1(10)}')`);
-    f.db.exec(`INSERT INTO dd_cases(uid, subject_type, subject_id, subject_label, status, owner_user_id) VALUES ('case-a', 'partner', 20, 'Partner A', 'open', 5)`);
+    f.db.exec(`INSERT INTO dd_cases(uid, subject_type, subject_id, subject_label, status, owner_user_id) VALUES ('case-a', 'partner', 20, 'Partner A', 'open', 5), ('case-b', 'partner', 23, 'Ended partner', 'open', 5)`);
     const before = changes(f);
     const r = await call(f, 'GET', '/overview');
     assert.equal(r.status, 200, JSON.stringify(r.body));
     assert.equal(changes(f), before, 'the overview wrote a row');
     const t = r.body.tiles;
     assert.equal(t.available, true);
-    assert.deepEqual([t.open.count, t.lapsed.count, t.signed_90d.count], [3, 1, 1]);
-    assert.equal(t.open.oldest_first_send.slice(0, 10), ago(20).slice(0, 10));
+    assert.deepEqual([t.open.count, t.lapsed.count, t.signed_90d.count], [4, 1, 1]);
+    assert.equal(t.open.oldest_first_send.slice(0, 10), ago(70).slice(0, 10));
     assert.equal(t.median_days_to_sign.over, 2);
     assert.equal(t.median_days_to_sign.median_days, 55, 'median of 10 and 100 days');
     assert.deepEqual([t.active_deals.count, t.active_deals.ending_30d, t.active_deals.term_over], [3, 1, 1]);
@@ -155,20 +157,20 @@ test('the overview: every tile, Needs you, C1 to C4, from one read of each store
     assert.equal(t.redemptions_90d.count, 2);
     assert.equal(t.failed_sends_30d.count, 1);
     const kinds = Object.fromEntries(Object.entries(r.body.needs_you.kinds).map(([k, v]: any) => [k, v.count]));
-    assert.deepEqual(kinds, { lapsed: 1, agreement_blocked: 0, send_failed: 1, deal_ending: 1, unattached_account: 2, dd_open: 1, revshare_closing: 1 },
+    assert.deepEqual(kinds, { lapsed: 1, agreement_blocked: 0, send_failed: 2, deal_ending: 1, unattached_account: 2, dd_open: 1, revshare_closing: 1 },
       'the bundled Partner Services file has no field finalize leaves empty, so Offer chosen is not blocked');
-    assert.equal(r.body.needs_you.total, 7);
+    assert.equal(r.body.needs_you.total, 8);
     assert.ok(r.body.needs_you.items.every((i: any) => i.kind && i.id != null), 'each row has its kind and its record\'s id');
     assert.deepEqual(r.body.needs_you.items.find((i: any) => i.kind === 'dd_open'), { kind: 'dd_open', id: 1, case_uid: 'case-a', case_status: 'open' });
     const stages = Object.fromEntries(r.body.c1.stages.map((s: any) => [s.stage, s]));
-    assert.equal(stages.sent.count, 1);
-    assert.equal(stages.sent.oldest_in_stage_since.slice(0, 10), ago(20).slice(0, 10));
+    assert.equal(stages.sent.count, 2);
+    assert.equal(stages.sent.oldest_in_stage_since.slice(0, 10), ago(70).slice(0, 10));
     assert.equal(stages.selected.oldest_in_stage_since.slice(0, 10), ago(3).slice(0, 10), 'time in a stage comes from its activity row');
     assert.deepEqual([stages.profiled.count, stages.profiled.oldest_in_stage_since, stages.profiled.undated], [1, null, 1], 'no activity row: not dated, never now');
     assert.deepEqual(r.body.c1.closed, { signed: 2, lapsed: 1, revoked: 1, signed_after_lapse: 1 });
     assert.equal(r.body.c2.weeks.length, 12);
     assert.equal(r.body.c2.weeks.at(-1).current, true);
-    assert.equal(r.body.c2.weeks.reduce((n: number, w: any) => n + w.sent, 0), 7, 'first sends within the 12 weeks: not the one 200 days ago');
+    assert.equal(r.body.c2.weeks.reduce((n: number, w: any) => n + w.sent, 0), 8, 'first sends within the 12 weeks: not the one 200 days ago');
     assert.equal(r.body.c2.weeks.reduce((n: number, w: any) => n + w.signed, 0), 1, 'signed within the 12 weeks: not the one 100 days ago');
     assert.ok(r.body.c3.rows.some((x: any) => x.deal_type === 'equity_partnership' && x.state === 'term_over' && x.count === 1), 'an active deal past its end is Term over');
     assert.equal(r.body.c4.weeks.reduce((n: number, w: any) => n + w.referral + w.deal_sourcing_revshare, 0), 2);
@@ -240,7 +242,7 @@ test('one invitation: its message, each step date from its activity row, the off
     step(f, id, 'partner_proposal_selected', 6);
     step(f, id, 'partner_envelope_refused', 7, { code: 'template_fields_unfilled', fields: ['counterparty.title'] });
     step(f, id, 'partner_envelope_started', 5);
-    step(f, id + 1000, 'partner_profile_saved', 1); // another invitation's row is not read
+    step(f, id + 1000, 'partner_profile_saved', 30); // another invitation's earlier row is not read
     f.db.prepare(`INSERT INTO partner_profiles(invitation_id, email, full_name, capacity_per_month, capital_capacity_usd) VALUES (?, ?, 'Synthetic Partner', '7 hrs/month', 250000)`).run(id, email);
     await esignCall(f.env, 'GET', '/99999', ADMIN);
     const envId = Number(f.db.prepare(`INSERT INTO esign_envelopes(envelope_uuid, document_type, document_title, document_body, body_sha256, status, created_by) VALUES (?, 'partner_services', 'Synthetic', 'Body', 'sha', 'sent', 5)`).run(crypto.randomUUID()).lastInsertRowid);
