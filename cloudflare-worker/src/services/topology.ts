@@ -216,6 +216,11 @@ export const DEPLOY_WORKFLOWS = [
     deploys: 'one new branch; it refuses a code that is already provisioned',
   },
   {
+    file: 'meeting-bot-deploy.yml',
+    trigger: 'on bot changes in a push to main, or by hand; owner deployment gate required',
+    deploys: 'the private studioos-meeting-bot Worker and its runtime image, independently of HQ and branches',
+  },
+  {
     file: 'pr-preview.yml',
     trigger: 'on each pull request',
     deploys: 'a preview Worker per pull request, serving the SPA with no bindings',

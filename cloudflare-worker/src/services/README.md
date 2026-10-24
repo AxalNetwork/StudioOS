@@ -381,3 +381,7 @@ attendees against that exact deal (venture owner/member/advisor, invited or
 committed investor, or assigned lead); the organiser explicitly opts themselves in. Passed investor invitations and
 withdrawn commitments confer no scheduling rights; investor organisers need a
 current relationship too, beyond the legacy deal-reader gate.
+
+D886 B8: `meetingBotRuntime.ts` routes commands to a private cross-script DO
+host and derives run-scoped keys. `meetingBotZoom.ts` mints credentials from
+the reauthorized stored run, with a run-bounded SDK JWT. No credentials log.

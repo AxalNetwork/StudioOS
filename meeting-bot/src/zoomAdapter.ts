@@ -33,7 +33,7 @@ export interface ZoomSdkBridge {
 export function zoomMeeting(raw: string): { meetingId: string; passcode: string } {
   try {
     const u = new URL(raw);
-    const path = /^\/j\/(\d{6,20})\/?$/.exec(u.pathname);
+    const path = /^\/(?:j\/|wc\/join\/)(\d{6,20})\/?$/.exec(u.pathname);
     if (u.protocol !== 'https:' || u.username || u.password || u.port ||
         !(u.hostname === 'zoom.us' || u.hostname.endsWith('.zoom.us')) || !path) throw 0;
     const passcode = u.searchParams.get('pwd') ?? '';
