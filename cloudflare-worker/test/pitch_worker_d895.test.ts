@@ -102,7 +102,11 @@ test('D895: measured runway comes from the model or Mercury, never funding size'
  const f=await fixture();try{
   assert.equal(await recordedDeckRunway(f.env,1),null);
   if(!(f.db.prepare('PRAGMA table_info(financial_models)').all() as any[]).some(x=>x.name==='computed_json'))f.db.exec('ALTER TABLE financial_models ADD COLUMN computed_json TEXT');
-  f.db.prepare("INSERT INTO financial_models(project_id,computed_json) VALUES(1,?)").run(JSON.stringify({runway_months:7}));
+  f.db.prepare("INSERT INTO financial_models(project_id,computed_json,updated_by) VALUES(1,?,2)").run(JSON.stringify({runway_months:7}));
+  assert.equal(await recordedDeckRunway(f.env,1),7);
+  f.db.prepare('UPDATE financial_models SET computed_json=?,updated_by=NULL WHERE project_id=1').run(JSON.stringify({runway_months:99}));
+  assert.equal(await recordedDeckRunway(f.env,1),null,'an unsaved model is not a recorded runway');
+  f.db.prepare('UPDATE financial_models SET computed_json=?,updated_by=2 WHERE project_id=1').run(JSON.stringify({runway_months:7}));
   assert.equal(await recordedDeckRunway(f.env,1),7);
   f.db.exec("UPDATE financial_models SET computed_json='{}'");
   // Use the real canonical Mercury fact table, without making a provider request.
@@ -231,7 +235,9 @@ test('D895: admin deck-link records are read-only, including their action metada
 });
 test('D895: review normalization distinguishes an absent score from returned zero and retains only returned first fixes',()=>{
  const sections=DECK_SECTIONS.map(s=>({...s,content:'Synthetic text'}));
- for(const value of [undefined,null,'',true])assert.equal(normalizeReview({overall_score:value} as any,sections).overall_score,null);
+ for(const value of [undefined,null,'','   ',true,false,'Not recorded'])assert.equal(normalizeReview({overall_score:value} as any,sections).overall_score,null);
+ assert.equal(normalizeReview({overall_score:'72'} as any,sections).overall_score,72);
+ assert.equal(normalizeReview({overall_score:'0'} as any,sections).overall_score,0);
  assert.equal(normalizeReview({overall_score:0},sections).overall_score,0);
  assert.equal(normalizeReview({overall_score:67.4,fix_first:'Recorded model feedback'},sections).overall_score,67);
  assert.equal(normalizeReview({overall_score:67.4,fix_first:'Recorded model feedback'},sections).fix_first,'Recorded model feedback');
@@ -265,7 +271,7 @@ test('D895: template Ask runway cells use records, including Mercury, rather tha
 test('D895: fractional recorded runway has consistent whole-month display without changing the stored measurement',async()=>{
  const f=await fixture();try{
   if(!(f.db.prepare('PRAGMA table_info(financial_models)').all() as any[]).some(x=>x.name==='computed_json'))f.db.exec('ALTER TABLE financial_models ADD COLUMN computed_json TEXT');
-  f.db.prepare('INSERT INTO financial_models(project_id,computed_json) VALUES(1,?)').run(JSON.stringify({runway_months:13.846153846}));
+  f.db.prepare('INSERT INTO financial_models(project_id,computed_json,updated_by) VALUES(1,?,2)').run(JSON.stringify({runway_months:13.846153846}));
   assert.equal(await recordedDeckRunway(f.env,1),13.846153846);
   assert.equal(formatDeckRunway(13.846153846),'14 months');assert.equal(formatDeckRunway(13.846153846,'mo'),'14 mo');assert.equal(formatDeckRunway(0),'0 months');assert.equal(formatDeckRunway(null),null);
   const generated=await call(f,2,'POST','/api/decks/generate',{project_id:1});assert.equal(generated.status,200);assert.match(JSON.stringify(generated.body.slides),/Runway: 14 months/);assert.doesNotMatch(JSON.stringify(generated.body.slides),/13\.846/);

@@ -324,7 +324,7 @@ export async function recordedDeckRunway(env: Env, projectId: number): Promise<n
     return Number.isFinite(number) && number >= 0 ? number : null;
   };
   try {
-    const row = await env.DB.prepare('SELECT computed_json FROM financial_models WHERE project_id = ? ORDER BY id DESC LIMIT 1').bind(projectId).first<{ computed_json: string }>();
+    const row = await env.DB.prepare('SELECT computed_json FROM financial_models WHERE project_id = ? AND updated_by IS NOT NULL ORDER BY id DESC LIMIT 1').bind(projectId).first<{ computed_json: string }>();
     const runway = measured(row?.computed_json ? JSON.parse(row.computed_json)?.runway_months : null);
     if (runway !== null) return runway;
   } catch { /* no readable recorded model */ }

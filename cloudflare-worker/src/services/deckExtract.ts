@@ -207,7 +207,9 @@ export function normalizeReview(ai: Partial<DeckReview> | null, sections: DeckSe
   const present = sections.filter((s) => s.key !== 'other' && s.content.trim()).map((s) => s.key);
   const missing = DECK_SECTIONS.filter((s) => s.key !== 'other' && !present.includes(s.key)).map((s) => s.label);
   const strArr = (v: unknown): string[] => (Array.isArray(v) ? v.map((x) => String(x)).filter(Boolean).slice(0, 12) : []);
-  const score = typeof ai?.overall_score === 'number' ? ai.overall_score : NaN;
+  const returnedScore: unknown = ai?.overall_score;
+  const score = typeof returnedScore === 'number' || (typeof returnedScore === 'string' && returnedScore.trim() !== '')
+    ? Number(returnedScore) : NaN;
   return {
     overall_score: Number.isFinite(score) ? Math.max(0, Math.min(100, Math.round(score))) : null,
     summary: typeof ai?.summary === 'string' && ai.summary.trim() ? ai.summary.trim() : `Deck covers ${present.length}/${DECK_SECTIONS.length - 1} standard sections.`,
