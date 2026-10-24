@@ -10,6 +10,7 @@ import { aiBudgetFixture } from './_ai_budget_fixture.mjs';
 import { tableFromBaseline, stripForeignKeys } from './_baseline.mjs';
 import { withGuard } from './_guard_stub.mjs';
 import { ensureProjectMembershipSchema } from '../src/services/projectAccess.ts';
+import { canWrite, canWritePitchDeck } from '../src/routes/_founder_validate_helpers.ts';
 import { __resetForTest } from '../src/services/aiRouter.ts';
 
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
@@ -127,11 +128,11 @@ for (let index = 0; index < 10; index++) test('owning founder control for protec
   try { const [method, path, body] = writes(f)[index]; const r = await request(f, 2, method, path, body); assert.equal(r.status, 200, path + ': ' + JSON.stringify(r.body)); }
   finally { f.db.close(); }
 });
-for (const who of [1, 6, 13]) test('admin or accepted cofounder ' + who + ' retains read and write access', async () => {
+for (const who of [1, 6, 13]) test('admin reads only decks; accepted cofounder ' + who + ' retains existing writes', async () => {
   const f = await fixture();
   try {
     for (const [method, path] of reads) assert.equal((await request(f, who, method, path)).status, 200, path);
-    assert.equal((await request(f, who, 'PUT', '/api/decks/10', { slides: SLIDES })).status, 200);
+    assert.equal((await request(f, who, 'PUT', '/api/decks/10', { slides: SLIDES })).status, who === 1 ? 403 : 200);
     assert.equal((await request(f, who, 'PUT', '/api/brand/landing/by-project/1', { name: 'Synthetic member edit' })).status, 200);
     if (who !== 1) {
       const details = JSON.parse(f.db.prepare("SELECT details FROM activity_logs WHERE action = 'project_content_write_authorized' ORDER BY id DESC LIMIT 1").get().details);
@@ -141,10 +142,10 @@ for (const who of [1, 6, 13]) test('admin or accepted cofounder ' + who + ' reta
     }
   } finally { f.db.close(); }
 });
-for (const who of [11, 12]) test('accepted advisor ' + who + ' reads but cannot write or create preview credentials', async () => {
+for (const who of [11, 12]) test('accepted advisor ' + who + ' reads brand but cannot read decks, write or create preview credentials', async () => {
   const f = await fixture();
   try {
-    for (const [method, path] of reads) assert.equal((await request(f, who, method, path)).status, 200, path);
+    for (const [method, path] of reads) assert.equal((await request(f, who, method, path)).status, path.startsWith('/api/decks/') ? 403 : 200, path);
     const before = snapshot(f);
     for (const [method, path, body] of [...writes(f), ...otherWrites()]) assert.equal((await request(f, who, method, path, body)).status, 403, path);
     assert.equal(snapshot(f), before);
@@ -223,7 +224,7 @@ test('an investor membership and role casing do not create management access', a
 
 const allocatingReads = [
   { path: '/api/brand/site/by-project/1', clear: 'DELETE FROM brand_sites WHERE project_id = 1' },
-  { path: '/api/brand/landing/by-project/1/preview-url', clear: 'UPDATE landing_pages SET preview_token = NULL WHERE id = 1' },
+  { path: '/api/brand/landing/by-project/1/preview-url', clear: 'UPDATE landing_pages SET preview_token = NULL WHERE project_id = 1' },
   { path: '/api/brand/landing/pages/1/preview-url', clear: 'UPDATE landing_pages SET preview_token = NULL WHERE id = 1' },
 ];
 for (const { path, clear } of allocatingReads) {
@@ -310,4 +311,22 @@ test('a refused payload records authorization context rather than a completed ch
     assert.equal(rows.length, 1);
     assert.deepEqual(JSON.parse(rows[0].details), { permission: 'write', phase: 'authorization', method: 'PUT', route: '/api/decks/:id' });
   } finally { f.db.close(); }
+});
+
+
+test('D895: legacy admin/advisor casing stays blocked on decks without changing other module ownership',async()=>{
+ const f=await fixture();try{
+  // This fixture deliberately supports legacy/malformed roles; canonical D1
+  // constrains role values and the other D895 fixtures retain that constraint.
+  f.db.exec("UPDATE users SET role='ADMIN' WHERE id=1; UPDATE users SET role='ADVISOR' WHERE id=6");
+  assert.equal((await request(f,1,'GET','/api/decks/10')).status,200);
+  assert.equal((await request(f,6,'GET','/api/decks/10')).status,403);
+  for(const who of [1,6])for(const [method,path,body]of [...writes(f),...otherWrites()].filter(([,path])=>path.startsWith('/api/decks/'))){const r=await request(f,who,method,path,body);assert.ok([403,404].includes(r.status),`${who} ${method} ${path}: ${r.status}`)}
+  assert.equal((await request(f,1,'PUT','/api/brand/landing/by-project/1',{name:'Synthetic existing brand policy'})).status,200);
+  for(const role of ['ADMIN','ADVISOR']){
+   const actor={id:1,role,founder_id:20,spinout_lab_active:1} as any;
+   assert.equal(canWrite({id:1,founder_id:20},actor),true);
+   assert.equal(canWritePitchDeck({id:1,founder_id:20},actor),false);
+  }
+ }finally{f.db.close()}
 });

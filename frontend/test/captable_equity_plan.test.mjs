@@ -44,11 +44,19 @@ test('cap-table vesting readers remain scoped to their intended audience', () =>
   // and the page says so) rather than duplicating this per-caller endpoint.
   // It is a SELECT joined through the membership, names only the pools table,
   // and writes nothing — pinned below so the list can grow only that way.
+  // D896 (#2675) added one more on purpose: the pitch deck's sources count
+  // the venture's vesting schedules through its own cap-table holders, as a
+  // number for a card, read only — pinned below.
   assert.deepEqual(
     readers.sort(),
-    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableWrites.ts', 'services/records/build.ts'],
+    ['integrations/providers/carta.ts', 'routes/captable.ts', 'routes/company.ts', 'routes/cycle_build.ts', 'services/capTableWrites.ts', 'services/decks/sources.ts', 'services/records/build.ts'],
     'only the Carta importer, the four reviewed readers and the one reviewed writer should touch these tables',
   );
+  const deck = read('cloudflare-worker/src/services/decks/sources.ts');
+  assert.doesNotMatch(deck, /cap_table_option_pools/, 'the deck counts vesting rows, not pools');
+  assert.doesNotMatch(deck, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_/, 'a read, never a write');
+  assert.match(deck, /FROM cap_table_vesting v\s*WHERE v\.holder_id IN \(SELECT h\.id FROM cap_table_holders h WHERE h\.project_id = \?/,
+    'vesting is reached only through this venture\u2019s holders');
   const company = read('cloudflare-worker/src/routes/company.ts');
   assert.doesNotMatch(company, /cap_table_vesting/, 'the Team page reads pools, not vesting rows');
   assert.doesNotMatch(company, /(INSERT INTO|UPDATE|DELETE FROM)\s+cap_table_option_pools/, 'a read, never a write');

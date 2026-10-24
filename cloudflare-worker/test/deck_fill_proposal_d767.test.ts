@@ -34,7 +34,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const MIGRATION = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/migrations/498_pitch_deck_proposals.sql'), 'utf8');
 const JWT_SECRET = 'unit-test-jwt-secret-d767-0123456789-abcdef';
-const TABLES = ['users', 'projects', 'pitch_decks', 'financial_models', 'cap_table_holders', 'landing_pages'];
+const TABLES = ['users', 'projects', 'pitch_decks', 'financial_models', 'cap_table_holders', 'landing_pages', 'activity_logs'];
 
 const SLIDES_V1 = JSON.stringify([{ title: 'Problem', method_id: 'yc_seed', spec_id: 'problem', body: 'The founder wrote this.', fields: [] }]);
 
@@ -45,10 +45,11 @@ function fixture() {
     if (ddl) db.exec(stripForeignKeys(ddl));
   }
   db.exec(MIGRATION);
-  db.prepare(`INSERT INTO users (id, email, name, role, is_active) VALUES (1, 'admin.d767@example.test', 'Admin', 'admin', 1)`).run();
+  db.prepare(`INSERT INTO users (id, email, name, role, is_active) VALUES (1, 'owner.d767@example.test', 'Owner', 'founder', 1)`).run();
   db.prepare(`INSERT INTO users (id, email, name, role, is_active) VALUES (2, 'other.d767@example.test', 'Other', 'founder', 1)`).run();
-  db.prepare(`INSERT INTO projects (id, name, sector) VALUES (1, 'Testventure Labs', 'Climate')`).run();
+  db.prepare(`INSERT INTO projects (id, name, sector, founder_id) VALUES (1, 'Testventure Labs', 'Climate', 100)`).run();
   db.prepare(`INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_by) VALUES (10, 1, 1, ?, 'Seed deck', 1, 1)`).run(SLIDES_V1);
+  db.exec('UPDATE users SET founder_id = 100 WHERE id = 1');
   const env: any = { DB: d1Over(db), JWT_SECRET };
   const app = new Hono<any>();
   app.route('/api/decks', decks);
@@ -81,7 +82,7 @@ test('a fill makes a proposal and leaves every deck version byte-identical', asy
   const restore = noNetwork();
   try {
     const before = decksOf(f.db);
-    const r = await call(f, 1, 'admin', 'POST', '/10/autofill');
+    const r = await call(f, 1, 'founder', 'POST', '/10/autofill');
     assert.equal(r.status, 200, r.text);
     assert.ok(r.body.proposal?.id, 'the answer carries the proposal');
     assert.equal(r.body.proposal.base_deck_id, 10);
@@ -89,7 +90,7 @@ test('a fill makes a proposal and leaves every deck version byte-identical', asy
     assert.equal(r.body.deck, undefined, 'no deck is answered: none was written');
     assert.deepEqual(decksOf(f.db), before, 'pitch_decks is untouched');
     assert.equal(proposalsOf(f.db).length, 1);
-    const list = await call(f, 1, 'admin', 'GET', '/by-project/1');
+    const list = await call(f, 1, 'founder', 'GET', '/by-project/1');
     assert.equal(list.body.versions.length, 1, 'the version list does not grow');
     assert.equal(list.body.proposal.id, r.body.proposal.id, 'the editor reads the unkept proposal back');
   } finally { restore(); }
@@ -100,8 +101,8 @@ test('Keep makes the proposal the new current version; the first stays as it was
   const restore = noNetwork();
   try {
     const first = decksOf(f.db)[0];
-    const { body } = await call(f, 1, 'admin', 'POST', '/10/autofill');
-    const kept = await call(f, 1, 'admin', 'POST', `/proposals/${body.proposal.id}/keep`);
+    const { body } = await call(f, 1, 'founder', 'POST', '/10/autofill');
+    const kept = await call(f, 1, 'founder', 'POST', `/proposals/${body.proposal.id}/keep`);
     assert.equal(kept.status, 200, kept.text);
     assert.equal(kept.body.deck.version, 2);
     assert.equal(kept.body.deck.is_current, true);
@@ -111,7 +112,7 @@ test('Keep makes the proposal the new current version; the first stays as it was
     assert.deepEqual({ ...rows[0], is_current: 1 }, { ...(first as any) }, 'v1 is byte-identical but for is_current');
     assert.equal(rows[0].is_current, 0);
     assert.equal(proposalsOf(f.db).length, 0, 'the proposal is gone once kept');
-    assert.equal((await call(f, 1, 'admin', 'POST', `/proposals/${body.proposal.id}/keep`)).status, 404, 'a kept proposal cannot be kept twice');
+    assert.equal((await call(f, 1, 'founder', 'POST', `/proposals/${body.proposal.id}/keep`)).status, 404, 'a kept proposal cannot be kept twice');
   } finally { restore(); }
 });
 
@@ -124,8 +125,8 @@ test('Discard deletes only the proposal: not an older version, not another proje
   const restore = noNetwork();
   try {
     const before = decksOf(f.db);
-    const { body } = await call(f, 1, 'admin', 'POST', '/10/autofill');
-    const d = await call(f, 1, 'admin', 'DELETE', `/proposals/${body.proposal.id}`);
+    const { body } = await call(f, 1, 'founder', 'POST', '/10/autofill');
+    const d = await call(f, 1, 'founder', 'DELETE', `/proposals/${body.proposal.id}`);
     assert.equal(d.status, 200, d.text);
     assert.deepEqual(decksOf(f.db), before, 'every version, current or older, is untouched');
     assert.deepEqual(proposalsOf(f.db).map((p: any) => p.id), [500], 'only the discarded proposal is gone');
@@ -136,8 +137,8 @@ test('a second fill replaces the unkept proposal; another member gets 403', asyn
   const f = fixture();
   const restore = noNetwork();
   try {
-    const one = await call(f, 1, 'admin', 'POST', '/10/autofill');
-    const two = await call(f, 1, 'admin', 'POST', '/10/autofill');
+    const one = await call(f, 1, 'founder', 'POST', '/10/autofill');
+    const two = await call(f, 1, 'founder', 'POST', '/10/autofill');
     const left: any[] = proposalsOf(f.db);
     assert.deepEqual(left.map((p) => p.id), [two.body.proposal.id], 'one unkept proposal per project');
     assert.notEqual(one.body.proposal.id, two.body.proposal.id);

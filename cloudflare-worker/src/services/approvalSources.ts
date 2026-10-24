@@ -218,12 +218,12 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
     key: 'events',
     label: 'Events',
     countSql:
-      'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM events WHERE status = \'pending_review\'',
+      'SELECT COUNT(*) AS n, MIN(datetime(COALESCE(submitted_at, created_at))) AS oldest FROM events WHERE status = \'pending_review\'',
     rowsSql:
       "SELECT e.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || e.host_user_id, 'no host') AS who, "
-      + "'Event · ' || e.title AS what, e.created_at AS created_at "
+      + "'Event · ' || e.title AS what, COALESCE(e.submitted_at, e.created_at) AS created_at "
       + 'FROM events e LEFT JOIN users u ON u.id = e.host_user_id '
-      + "WHERE e.status = 'pending_review' ORDER BY e.created_at ASC LIMIT ?",
+      + "WHERE e.status = 'pending_review' ORDER BY julianday(COALESCE(e.submitted_at, e.created_at)) ASC LIMIT ?",
   },
   {
     key: 'best_fit',

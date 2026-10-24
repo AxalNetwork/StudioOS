@@ -735,6 +735,7 @@ export async function fillAxalSpinoutDemoDay(
   env: Env,
   userId: number,
   projectId: number,
+  options: { includeInternalScore?: boolean } = {},
 ): Promise<SpinoutDemoDayData> {
   await ensureSpinoutDeckSchema(env);
   // Task #14 — migration 074 adds discovery_interviews.validation_rating /
@@ -756,7 +757,7 @@ export async function fillAxalSpinoutDemoDay(
   const DB = env.DB;
 
   const [
-    proj, user, score, financial, holders,
+    proj, user, storedScore, financial, holders,
     interviews, interviewCount, okrs, milestones, advisorAnswers,
     landingPage,
   ] = await Promise.all([
@@ -817,6 +818,7 @@ export async function fillAxalSpinoutDemoDay(
       palette_ink: string | null; font_pairing: string | null;
     }>().catch(() => null),
   ]);
+  const score = options.includeInternalScore === false ? null : storedScore;
 
   const p = (proj || {}) as Partial<ProjectRow>;
   const u = (user || {}) as Partial<UserRow>;
@@ -1381,7 +1383,7 @@ export async function fillAxalSpinoutDemoDay(
 
     venture_readiness: {
       eyebrow: '07 · Venture readiness',
-      headline: (score?.tier && score?.total_score != null)
+      headline: options.includeInternalScore === false ? 'Not recorded' : (score?.tier && score?.total_score != null)
         ? `Axal score: ${Math.round(Number(score.total_score))}/100 — ${score.tier}.`
         : 'Axal score — to be run in Week 2.',
       total_score: score?.total_score != null ? `${Math.round(Number(score.total_score))}/100` : DASH,

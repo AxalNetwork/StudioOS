@@ -33,6 +33,7 @@ export * from './api/creditRules.js';
 export * from './api/cycleValidate.js';
 export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
+export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
 export * from './api/eadwyn.js';
@@ -2700,6 +2701,12 @@ export const api = {
     { method: 'POST', body: JSON.stringify(slides ? { view_id: viewId, seconds, slides } : { view_id: viewId, seconds }) },
   ),
   deckEngagement: (id) => request(`/decks/${id}/engagement`),
+  // D905 (#2684) — a deck's notes, from its admins to its founders (PD21).
+  deckNotes: (id) => request(`/decks/${id}/notes`),
+  deckPostNote: (id, payload) => request(`/decks/${id}/notes`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  // The Super Admin's default template by sector and stage; an admin reads it.
+  deckRecommendOverrides: () => request('/decks/admin/recommend-overrides'),
+  deckSetRecommendOverride: (payload) => request('/decks/admin/recommend-overrides', { method: 'PUT', body: JSON.stringify(payload || {}) }),
   // Task #196 — withdraw a share link. Revoking EXPIRES the row rather than
   // deleting it, so the impression history stays attributable to a link the
   // founder can still see they created; idempotent, so a double-click or a
@@ -2784,6 +2791,22 @@ export const api = {
       },
       body: JSON.stringify({ format }),
     }),
+  // D901 (#2680) — the version as one self-contained HTML file; the Worker
+  // records it (`deck_exports` plus an audit row) before answering. Raw
+  // Response, like deckExport: the caller reads the file or the refusal.
+  deckExportHtml: (id, { notes = false, sources = false } = {}) =>
+    fetch(`${BASE}/decks/${id}/export/html`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+        ...getCsrfHeader('POST'),
+      },
+      body: JSON.stringify({ notes: Boolean(notes), sources: Boolean(sources) }),
+    }),
+  // D901 — every export of the deck's venture, newest first (50).
+  deckExportList: (id) => request(`/decks/${id}/exports`),
   // Task #2 — public, HMAC-token-gated deck payload consumed by the
   // headless Browser-Rendering session driving server-side exports.
   // No auth cookies/JWT are sent because the session has none; the
