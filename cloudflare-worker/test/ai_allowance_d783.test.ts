@@ -83,7 +83,7 @@ test('each plan in the issue gives 25% of its monthly-equivalent price, rounded 
     { quantity: 2, price: { unit_amount: 1000, currency: 'usd', recurring: { interval: 'month' } } },
     { quantity: 1, price: { unit_amount: 500, currency: 'usd', recurring: { interval: 'month' } } },
     { quantity: 1, price: { unit_amount: 9999, currency: 'usd', recurring: { interval: 'year' } } },
-  ] } }), { amount_cents: 2500, currency: 'usd', interval: 'month', interval_count: 1 }, 'unit × quantity, at the first item\'s interval');
+  ] } }), { amount_cents: 2500, currency: 'usd', interval: 'month', interval_count: 1, price_id: null }, 'unit × quantity, at the first item\'s interval');
 });
 
 test('the webhook records what each member plan pays, and nothing for Registered Agent', async () => {
