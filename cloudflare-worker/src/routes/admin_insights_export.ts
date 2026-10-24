@@ -2,7 +2,7 @@
  * D893 (#2661) — POST /api/admin/insights/export: the Insights figures as a
  * logged, counts-only CSV or PDF.
  *
- *   body  { what: 'page' | 'group', format: 'csv' | 'pdf', range, profile, country, group }
+ *   body  { what: 'page' | 'group', format: 'csv' | 'pdf', range, profile, country, group, scope }
  *   200   { download_url, expires_in_seconds, format, what, range }
  *
  * - `requireAdmin`. The figures come from the Insights read (#2660), called
@@ -71,7 +71,7 @@ export function insightsExportRoutes(read: InsightsReader = pageRead) {
     const range = String(body.range ?? '8w');
     if (!(INSIGHTS_RANGES as readonly string[]).includes(range)) return bad(c, 'invalid_range', 'Choose 8 weeks, a quarter or a year.');
     const filters: Record<string, string | null> = { range, profile: null, country: null, group: null };
-    for (const k of ['profile', 'country', 'group'] as const) {
+    for (const k of ['profile', 'country', 'group', 'scope'] as const) {
       const v = body[k];
       if (v == null || v === '') continue;
       if (typeof v !== 'string' || !FILTER.test(v)) return bad(c, 'invalid_filter', `That ${k} cannot be read.`);

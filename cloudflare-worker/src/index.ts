@@ -190,6 +190,7 @@ import cycleGrow from './routes/cycle_grow';
 // the existing /share/:token reader in decks.ts.
 import deckShareActions from './routes/deck_share_actions';
 import deckNotes from './routes/deck_notes';
+import deckSources from './routes/deck_sources';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1167,6 +1168,8 @@ app.route('/api/brand', brand);
 app.route('/api/decks', deckShareActions);
 // D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
 app.route('/api/decks', deckNotes);
+// D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
+app.route('/api/decks', deckSources);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

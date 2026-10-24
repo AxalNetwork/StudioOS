@@ -143,7 +143,7 @@ export type LinkRow = { id: number; hypothesis_id: number; pain_group_id: number
  * The venture's open claims, or (D690 decision 10) its retired ones, which
  * only Experiments' `status:retired` filter asks for. Never both at once.
  */
-async function loadHypotheses(ctx: Ctx, which: 'open' | 'retired' = 'open'): Promise<{ hyps: HypRow[]; links: LinkRow[] }> {
+export async function loadHypotheses(ctx: Ctx, which: 'open' | 'retired' = 'open'): Promise<{ hyps: HypRow[]; links: LinkRow[] }> {
   const hyps = await ctx.env.DB.prepare(
     `SELECT h.id, h.code, h.claim, h.sort_order, h.retired_at, h.sprint, h.owner_user_id,
             u.name AS owner_name, h.inconclusive_at, h.updated_at

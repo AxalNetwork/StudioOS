@@ -106,6 +106,10 @@ export type BrandKitRow = {
   logo_url: string | null;
   logo_svg: string | null;
   logo_asset_id: string | null;
+  logo_dark_url?: string | null;
+  logo_dark_svg?: string | null;
+  logo_dark_asset_id?: string | null;
+  voice_json?: string | null;
   theme_color: string | null;
   palette_bg: string | null;
   palette_ink: string | null;
@@ -118,9 +122,9 @@ export type BrandKitRow = {
 export async function fetchLandingPageForProject(env: Env, projectId: number): Promise<BrandKitRow | null> {
   try {
     const row = await env.DB.prepare(
-      `SELECT logo_url, logo_svg, logo_asset_id, theme_color, palette_bg, palette_ink,
+      `SELECT logo_url, logo_svg, logo_asset_id, logo_dark_url, logo_dark_svg, logo_dark_asset_id, voice_json, theme_color, palette_bg, palette_ink,
               palette_secondary, palette_accent, font_pairing, name
-       FROM landing_pages WHERE project_id = ? ORDER BY id LIMIT 1`
+       FROM landing_pages WHERE project_id = ? AND archived_at IS NULL ORDER BY id DESC LIMIT 1`
     ).bind(projectId).first<BrandKitRow>();
     return row || null;
   } catch {
@@ -173,6 +177,10 @@ export function applyBrandKitToSlides(
     { kind: 'paragraph', key: 'brandkit_logo_url', value: kit.logo_url || '' },
     { kind: 'paragraph', key: 'brandkit_logo_svg', value: kit.logo_svg || '' },
     { kind: 'paragraph', key: 'brandkit_logo_asset_id', value: kit.logo_asset_id || '' },
+    { kind: 'paragraph', key: 'brandkit_logo_dark_url', value: landingPage?.logo_dark_url || '' },
+    { kind: 'paragraph', key: 'brandkit_logo_dark_svg', value: landingPage?.logo_dark_svg || '' },
+    { kind: 'paragraph', key: 'brandkit_logo_dark_asset_id', value: landingPage?.logo_dark_asset_id || '' },
+    { kind: 'paragraph', key: 'brandkit_voice_json', value: landingPage?.voice_json || '' },
     { kind: 'paragraph', key: 'brandkit_theme_color', value: kit.theme_color || '' },
     { kind: 'paragraph', key: 'brandkit_bg', value: kit.bg || '' },
     { kind: 'paragraph', key: 'brandkit_ink', value: kit.ink || '' },

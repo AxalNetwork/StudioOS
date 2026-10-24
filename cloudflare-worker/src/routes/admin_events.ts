@@ -117,10 +117,8 @@ adminEvents.get('/analytics', async (c) => {
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
 
-  let summary = {
-    total_events: 0, published: 0, pending_review: 0, draft: 0, cancelled: 0,
-    total_registrations: 0, total_attended: 0, total_waitlisted: 0,
-  };
+  const unreadable: string[] = [];
+  let summary: Record<string, number> | null = null;
   try {
     const ev: any = await c.env.DB.prepare(
       `SELECT
@@ -138,6 +136,7 @@ adminEvents.get('/analytics', async (c) => {
          COUNT(CASE WHEN status='waitlisted' THEN 1 END) AS waitlisted
        FROM event_registrations`,
     ).first();
+    if (!ev || !reg) throw new Error('Analytics summary was not returned');
     summary = {
       total_events: Number(ev?.total_events || 0),
       published: Number(ev?.published || 0),
@@ -149,13 +148,17 @@ adminEvents.get('/analytics', async (c) => {
       total_waitlisted: Number(reg?.waitlisted || 0),
     };
   } catch (e) {
+    unreadable.push('summary');
     console.warn('[admin_events] analytics summary failed:', (e as Error).message);
   }
 
-  let events: any[] = [];
+  let events: any[] | null = null;
+  const now = Date.now();
+  // The editor's localInputToIso writes UTC instants. Legacy offset-free D1 timestamps are UTC.
+  const timestamp = (value: unknown) => typeof value === 'string' && value.trim() ? Date.parse(/(?:[zZ]|[+-]\d{2}:?\d{2})$/.test(value) ? value : value.replace(' ', 'T') + 'Z') : Number.NaN;
   try {
     const rows = await c.env.DB.prepare(
-      `SELECT e.id, e.slug, e.title, e.status, e.starts_at, e.capacity, e.featured,
+      `SELECT e.id, e.slug, e.title, e.status, e.starts_at, e.ends_at, e.capacity, e.featured,
               COUNT(CASE WHEN r.status IN ('registered','confirmed','attended') THEN 1 END) AS registrations,
               COUNT(CASE WHEN r.status='attended' THEN 1 END) AS attended,
               COUNT(CASE WHEN r.status='waitlisted' THEN 1 END) AS waitlisted,
@@ -166,16 +169,20 @@ adminEvents.get('/analytics', async (c) => {
         ORDER BY e.starts_at DESC
         LIMIT 200`,
     ).all();
-    events = ((rows.results || []) as any[]).map((r) => {
+    if (('success' in rows && !rows.success) || !Array.isArray(rows.results)) throw new Error('Analytics events were not returned');
+    events = (rows.results as any[]).map((r) => {
       const registrations = Number(r.registrations || 0);
       const attended = Number(r.attended || 0);
       const capacity = r.capacity != null ? Number(r.capacity) : null;
+      const endMissing = r.ends_at == null || (typeof r.ends_at === 'string' && !r.ends_at.trim());
+      const endedAt = endMissing ? timestamp(r.starts_at) + 24 * 60 * 60 * 1000 : timestamp(r.ends_at);
       return {
         id: Number(r.id),
         slug: r.slug,
         title: r.title,
         status: r.status,
         starts_at: r.starts_at,
+        ends_at: r.ends_at ?? null,
         featured: !!r.featured,
         capacity,
         registrations,
@@ -183,14 +190,15 @@ adminEvents.get('/analytics', async (c) => {
         waitlisted: Number(r.waitlisted || 0),
         cancelled: Number(r.cancelled || 0),
         capacity_util: capacity && capacity > 0 ? round2(registrations / capacity) : null,
-        conversion: registrations > 0 ? round2(attended / registrations) : null,
+        conversion: endedAt < now && registrations > 0 ? round2(attended / registrations) : null,
       };
     });
   } catch (e) {
+    unreadable.push('events');
     console.warn('[admin_events] analytics rows failed:', (e as Error).message);
   }
 
-  return c.json({ summary, events });
+  return c.json({ summary, events, unreadable });
 });
 
 // ── GET /:id — admin event detail ──────────────────────────────────────────
@@ -216,9 +224,13 @@ adminEvents.post('/:id/approve', async (c) => {
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
-  await c.env.DB.prepare(
-    `UPDATE events SET status = 'published', admin_published = 1, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
+  if (event.status !== 'pending_review') return c.json({ error: 'not_waiting' }, 409);
+  const approved = await c.env.DB.prepare(
+    `UPDATE events SET status = 'published', admin_published = 1, approved_at = ?,
+       changed_after_approval_at = NULL, updated_at = datetime('now')
+       WHERE id = ? AND status = 'pending_review' RETURNING id`,
+  ).bind(new Date().toISOString(), id).first();
+  if (!approved) return c.json({ error: 'not_waiting' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_approved', eventId: id });
   const fresh = await loadEvent(c.env, id);
   if (event.host_user_id) {
@@ -257,10 +269,14 @@ adminEvents.post('/:id/reject', async (c) => {
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
   const body = await c.req.json().catch(() => ({} as any));
-  const reason = body.reason ? String(body.reason).slice(0, 1000) : null;
-  await c.env.DB.prepare(
-    `UPDATE events SET status = 'rejected', admin_published = 0, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
+  if (event.status !== 'pending_review') return c.json({ error: 'not_waiting' }, 409);
+  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 1000) : '';
+  if (!reason) return c.json({ error: 'reason_required' }, 400);
+  const rejected = await c.env.DB.prepare(
+    `UPDATE events SET status = 'rejected', admin_published = 0, review_note = ?,
+       updated_at = datetime('now') WHERE id = ? AND status = 'pending_review' RETURNING id`,
+  ).bind(reason, id).first();
+  if (!rejected) return c.json({ error: 'not_waiting' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_rejected', eventId: id, extra: { reason } });
   if (event.host_user_id) {
     await notify(c.env, {
@@ -280,10 +296,22 @@ adminEvents.post('/:id/unpublish', async (c) => {
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
-  await c.env.DB.prepare(
-    `UPDATE events SET admin_published = 0, status = 'draft', updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
+  if (event.status !== 'published') return c.json({ error: 'not_published' }, 409);
+  const body = await c.req.json().catch(() => ({} as any));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : '';
+  const unpublished = await c.env.DB.prepare(
+    `UPDATE events SET admin_published = 0, status = 'draft', updated_at = datetime('now')
+       WHERE id = ? AND status = 'published' RETURNING id`,
+  ).bind(id).first();
+  if (!unpublished) return c.json({ error: 'not_published' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_unpublished', eventId: id });
+  if (event.host_user_id) {
+    await notify(c.env, {
+      userId: event.host_user_id, type: 'event_unpublished', category: 'events',
+      title: `Your event is back with you as a draft: ${event.title}`,
+      body: note || undefined, link: `/events/${event.slug}`, payload: { event_id: id },
+    }).catch(() => {});
+  }
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
 });
 
@@ -316,9 +344,22 @@ adminEvents.post('/:id/cancel', async (c) => {
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
-  await c.env.DB.prepare(
-    `UPDATE events SET status = 'cancelled', admin_published = 0, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
+  if (event.status === 'cancelled') return c.json({ error: 'already_cancelled' }, 409);
+  const body = await c.req.json().catch(() => ({} as any));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : '';
+  // Read before changing state: an unreadable payment ledger must not look like zero.
+  const paid = await c.env.DB.prepare(
+    `SELECT e.currency, COUNT(*) AS count, SUM(r.amount_cents) AS amount_cents
+       FROM event_registrations r JOIN events e ON e.id = r.event_id
+       WHERE r.event_id = ? AND r.payment_status = 'paid'
+       GROUP BY e.currency ORDER BY e.currency`,
+  ).bind(id).all<{ currency: string; count: number; amount_cents: number }>();
+  const paidRows = paid.results || [];
+  const cancelled = await c.env.DB.prepare(
+    `UPDATE events SET status = 'cancelled', admin_published = 0, updated_at = datetime('now')
+       WHERE id = ? AND status != 'cancelled' RETURNING id`,
+  ).bind(id).first();
+  if (!cancelled) return c.json({ error: 'already_cancelled' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_cancelled', eventId: id });
   // Notify seated registrants (best-effort).
   const seated = await c.env.DB.prepare(
@@ -328,10 +369,16 @@ adminEvents.post('/:id/cancel', async (c) => {
   for (const r of (seated.results || []) as any[]) {
     await notify(c.env, {
       userId: Number(r.user_id), type: 'event_cancelled', category: 'events',
-      title: `Event cancelled: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `Event cancelled: ${event.title}`, body: note || undefined, link: `/events/${event.slug}`, payload: { event_id: id },
     }).catch(() => {});
   }
-  return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+  return c.json({
+    event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }),
+    paid_tickets: {
+      count: paidRows.reduce((total, row) => total + Number(row.count), 0),
+      by_currency: paidRows.map((row) => ({ currency: row.currency, amount_cents: Number(row.amount_cents) })),
+    },
+  });
 });
 
 // ── POST /:id/capacity — admin capacity override ───────────────────────────

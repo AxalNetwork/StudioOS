@@ -27,7 +27,7 @@ import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
 import { RAISE_STAGES } from '../../routes/contacts';
 import {
   type Ctx, type ProspectRow, READINESS_ITEMS, TOOL_HREF, DILIGENCE_CHECKLIST, EVIDENCE, FIGURES, FIGURE_LABEL, INVESTOR_TYPES,
-  INVESTOR_TYPE_LABEL, FUND_SECTIONS, FIT_LABEL, LIST_STAGE_LABEL, NEVER_EXPIRES, accessText, capIdOf, capEntryOf, checkInputs,
+  INVESTOR_TYPE_LABEL, FUND_SECTIONS, FIT_LABEL, LIST_STAGE_LABEL, NEVER_EXPIRES, accessText, capIdOf, capEntryOf, checkInputs, consistencyCheck,
   checklistLabel, computeReadiness, fmtFigure, fundCells, groupOf, instrumentOf, loadCap, loadFunds, loadProspects, loadReadiness,
   loadVersions, prospectFunds, requestTitles,
 } from '../raiseCycle';
@@ -246,18 +246,18 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
     'SELECT start_from, based_on_version, why_now, check_against_json FROM narrative_version_meta WHERE project_id = ? AND version = ?',
   ).bind(rc.projectId, n).first<{ start_from: string; based_on_version: number | null; why_now: string | null; check_against_json: string | null }>();
   const mismatches = Number(v?.mismatches ?? 0);
-  const deck = v?.deck_version != null ? Number(v.deck_version) : null;
+  const compared = Number(v?.compared ?? 0);
   const basedOn = !meta ? null
     : meta.start_from === 'version' && meta.based_on_version != null ? `v${meta.based_on_version}`
       : meta.start_from === 'blank' ? 'Blank' : 'The live deck';
   const out: RecordContent = {
     title: `v${n} · ${typeLabel(v?.investor_type).toLowerCase()}`,
-    sub: [`Saved ${day(v?.saved_at) ?? 'on an unrecorded day'}`, deck != null ? `used by deck v${deck}` : null].filter(Boolean).join(' · '),
-    pills: [{ text: typeLabel(v?.investor_type), tone: 'vio' }, { text: plural(mismatches, 'mismatch', 'mismatches'), tone: mismatches ? 'amb' : 'ok' }],
+    sub: `Saved ${day(v?.saved_at) ?? 'on an unrecorded day'} · No deck reads this version.`,
+    pills: [{ text: typeLabel(v?.investor_type), tone: 'vio' }, { text: compared ? plural(mismatches, 'mismatch', 'mismatches') : 'Nothing compared yet', tone: !compared ? 'grey' : mismatches ? 'amb' : 'ok' }],
     facts: [
       fact('Investor type', typeLabel(v?.investor_type), ''),
-      fact('Used by', deck != null ? `Pitch deck v${deck}` : null, 'No deck version was recorded with it'),
-      fact('Mismatches', mismatches, ''),
+      fact('Deck use', 'No deck reads this version.', ''),
+      fact('Mismatches', compared ? mismatches : null, 'Nothing compared yet'),
       fact('Based on', basedOn, 'Saved before versions recorded their source'),
     ],
   };
@@ -278,21 +278,18 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
       action: 'edit',
     };
   }),
-  // Each figure as the stored check found it: a mismatch, consistent, or not compared (decision 7).
+  // Each current stated/metric comparison: mismatch, agreement, or not compared (D907).
   section('consistency', 'Consistency check', async (rc, id) => {
     const n = Number(id);
-    const checks = await rc.env.DB.prepare(
-      'SELECT figure, stated_value, metric_value FROM narrative_checks WHERE project_id = ? AND version = ? ORDER BY id',
-    ).bind(rc.projectId, n).all<{ figure: string; stated_value: number; metric_value: number }>();
-    const found = new Map((checks.results || []).map((c) => [c.figure, c]));
     const { stated, metrics } = await checkInputs(rc.env, rc.projectId, n);
+    const found = consistencyCheck(stated, metrics);
     return {
-      rows: FIGURES.map((f) => {
-        const m = found.get(f);
+      rows: [{ a: 'Pitch deck', b: 'No deck bindings are recorded.', c: 'Not compared', tone: 'grey' }, ...FIGURES.map((f) => {
+        const m = found.find(m => m.figure === f);
         if (m) return { a: FIGURE_LABEL[f], b: `stated ${fmtFigure(f, Number(m.stated_value))} · metrics ${fmtFigure(f, Number(m.metric_value))}`, c: 'Mismatch', tone: 'bad' };
-        if (stated.some((s) => s.figure === f) && metrics[f]) return { a: FIGURE_LABEL[f], b: 'consistent everywhere', c: 'OK', tone: 'ok' };
+        if (stated.some((s) => s.figure === f && Number.isFinite(s.value)) && Number.isFinite(metrics[f]?.value)) return { a: FIGURE_LABEL[f], b: 'consistent everywhere', c: 'OK', tone: 'ok' };
         return { a: FIGURE_LABEL[f], b: 'stated or stored in one place only', c: 'Not compared', tone: 'grey' };
-      }),
+      })],
     };
   }),
   section('feedback', 'Investor feedback', async (rc) => {

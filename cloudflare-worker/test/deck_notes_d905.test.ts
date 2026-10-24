@@ -120,8 +120,8 @@ test('an advisor member, an investor, an Explorer and another venture\'s founder
   }
   assert.equal((await call(f, null, 'GET', '/api/decks/10/notes')).status, 401);
   assert.equal(notesIn(f).length, 1, 'nothing was written');
-  // The advisor can read the deck itself (projectOwned), but not its notes.
-  assert.equal((await call(f, ADVISOR, 'GET', '/api/decks/10')).status, 200);
+  // D895 now refuses advisor deck reads too; merging notes must retain that boundary.
+  assert.equal((await call(f, ADVISOR, 'GET', '/api/decks/10')).status, 403);
   // Another venture's deck is not this founder's to read.
   assert.equal((await call(f, OWNER, 'GET', '/api/decks/11/notes')).status, 404);
   assert.equal((await call(f, OWNER, 'GET', '/api/decks/999/notes')).status, 404);
