@@ -68,7 +68,7 @@ function Tab({ to, tab, children }) {
 /**
  * The tab row. On a phone (board L8) it is one scrolling row of pills rather
  * than a wrap, so the page below starts at the same height on every tab. THE
- * SIX PATHS ARE WRITTEN OUT, not mapped from `LICENCE_TABS`, because the
+ * SEVEN PATHS ARE WRITTEN OUT, not mapped from `LICENCE_TABS`, because the
  * reachability walk (`admin_route_reachability.test.mjs`) counts a literal
  * `to="…"` as a door; `licences_page_d800.test.mjs` holds the two lists equal.
  */
@@ -78,6 +78,7 @@ export function LicenceTabs() {
       <ul className="flex flex-nowrap gap-1.5 pb-0.5 sm:flex-wrap">
         <Tab to="/admin/my-licence" tab="summary">Summary</Tab>
         <Tab to="/admin/my-licence/terms" tab="terms">Terms</Tab>
+        <Tab to="/admin/my-licence/programs" tab="programs">Programs</Tab>
         <Tab to="/admin/my-licence/contract" tab="contract">Contract</Tab>
         <Tab to="/admin/my-licence/statements" tab="statements">Statements</Tab>
         <Tab to="/admin/my-licence/requests" tab="requests">Requests</Tab>

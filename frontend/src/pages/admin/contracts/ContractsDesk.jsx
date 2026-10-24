@@ -52,7 +52,7 @@ export default function ContractsDesk() {
       : tab === 'ndas' || tab === 'partner-deals' ? <RelatedLists key={tab} kind={tab} onOpen={setSelected} superAdmin={superAdmin} />
         : tab === 'templates' ? <AdminTemplates recordedPublication onOpenUsage={slug => navigate('agreements', { template: slug })} />
           : tab === 'forms' ? <AdminForms /> : <ContractRegistryTab />}
-    <p className="text-xs text-axal-muted">Formation orders live in Programs › Spin-Out Lab. <Link to="/admin/spinout-lab" className="underline">Open its Formation orders tab.</Link></p>
+    <p className="text-xs text-axal-muted">Formation orders live in Programs › Spin-Out Lab. <Link to="/admin/programs/spinout-lab/formation" className="underline">Open its Formation tab.</Link></p>
     {selected && <AgreementDetail uid={selected} onClose={() => setSelected(null)} onChanged={() => setRevision(n => n + 1)} />}
     {params.has('new') && <EnvelopeWizard onClose={() => { const next = new URLSearchParams(params); next.delete('new'); setParams(next); }} onTemplates={() => navigate('templates')} onSent={() => setRevision(n => n + 1)} />}
   </div></RailFrame>;

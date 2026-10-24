@@ -13,9 +13,12 @@ and `/admin/partner-invitations/firm-links`. `/admin/partners` redirects to
 tab strip with its counts, then the tab the address names, the record drawn
 over its tab, and the dialogs.
 
-- `PartnersOverview.jsx` — Overview (PI1): the two tile rows, Needs you, the
-  agreement-not-ready banner (PI9e) and first use (PI9b). Overview's Needs-you
-  row is Firm links' only door.
+- `PartnersOverview.jsx` — Overview (PI1; PI11a on a phone, PI12 in dark):
+  the two tile rows, Needs you, C1–C4 (D929), the agreement-not-ready banner
+  (PI9e) and first use (PI9b). Each chart is a block in D893's four states
+  with "View as table", drawn with `../../../ui/Charts.jsx`. A C1 bar opens
+  Invitations at `?stage=`, a C3 segment Deals at `?type=&state=`.
+  Overview's Needs-you row is Firm links' only door.
 - `PartnersInvitations.jsx` — Invitations (PI2): the table under Guards L and
   I, its toolbar, the row menu and the pager.
 - `InvitationRecord.jsx` — one invitation (PI3; PI11c on a phone).
@@ -33,7 +36,8 @@ over its tab, and the dialogs.
 - `partnersDeskModel.js` — pure. Addresses, the words, Guard L (lists that
   stop at their cap), Guard F (sums over the redemptions fan-out), Guard I
   (the stage word and its repair after a resend), the agreement-ready rule,
-  tiers and term, each tab's derivations, the dialogs' words and the refusals.
+  tiers and term, each tab's derivations, C1–C4's blocks and their links
+  (D929), the dialogs' words and the refusals.
   Dates go through `../../../ui/parseStamp.js`.
 
 ## Rules
@@ -53,6 +57,7 @@ over its tab, and the dialogs.
   says "Not in this read".
 - Every dialog is a `Lightbox` that says only what the Worker does. A result
   or a refusal sits inside it until Done: no toast, no timer.
-- Nothing D923 §3 lists under "Not drawn now" is drawn: no chart, no Email
-  column, no CSV, no offer text, no Adjust terms, no step dates beyond the
-  record's own, no history beyond one line.
+- Nothing D923 §3 lists under "Not drawn now" is drawn, except C1–C4, which
+  D929 draws on these reads until part 4's overview read: no Email column,
+  no CSV, no offer text, no Adjust terms, no step dates beyond the record's
+  own, no history beyond one line.

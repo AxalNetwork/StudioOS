@@ -1,24 +1,30 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { actionPrimary } from '../../../ui';
+import { Link, useNavigate } from 'react-router-dom';
+import { Chart, ChartTable, Legend, Unrecorded, actionPrimary } from '../../../ui';
 import {
-  AGREEMENT_BANNER, EMPTY_LINE, EMPTY_TITLE, LIST_CLAIM, NEEDS_YOU_SHOWN, agreementReady, dealTiles, invitationTiles,
-  isFirstUse,
+  AGREEMENT_BANNER, EMPTY_LINE, EMPTY_TITLE, LIST_CLAIM, NEEDS_YOU_SHOWN, READING, agreementReady, dealTiles, dealsByTypeState,
+  invitationTiles, invitationsAtStage, isFirstUse, stageChart, weeklyInvitations, weeklyRedemptions,
 } from './partnersDeskModel';
-import { AMBER, CARD, Card, EYE, Failed, LINK, SUB, Tile } from './parts';
+import { AMBER, CARD, Card, EYE, Failed, H2, LINK, SUB, Tile } from './parts';
 
 /**
- * D923 (#2370) — Overview (PI1), the blocks whose reads exist (D923 §3):
+ * D923 (#2370), completed by D929 (#2725) — Overview (PI1; PI11a on a phone,
+ * PI12 in dark), on D923's reads until part 4's overview read lands:
  *   · tile row 1 from R1 (open, lapsed, signed in 90 days, the median days
  *     from first send to signed), under Guards L and I;
  *   · tile row 2: active deals and those ending within 30 days, awaiting
- *     signature, referral redemptions in 90 days under Guard F, and emails
- *     not delivered as "Not read here yet";
- *   · Needs you, only the rows whose data exists, seven at a time;
+ *     signature, referral redemptions in 90 days under Guard F, and sends
+ *     that failed as "Not read here yet";
+ *   · Needs you, only the rows whose data exists, seven at a time, "Show all"
+ *     expanding in place; cards on a phone;
+ *   · C1–C4, each a block in D893's four states with "View as table": C1 and
+ *     C2 from R1, C3 from the six deal lists, C4 from the fan-out. A C1 bar
+ *     opens Invitations at its stage, a C3 segment Deals of its type and
+ *     state;
  *   · PI9's banner while the agreement-ready rule says the Partner Services
  *     agreement is not ready, and PI9b's first use.
- * C1–C4 wait for part 6. The doors below are written out (`to="…"`) so the
- * reachability walk finds Firm links, whose only door is this row.
+ * The doors below are written out (`to="…"`) so the reachability walk finds
+ * Firm links, whose only door is this row.
  */
 
 /** One Needs-you row's action. Each target is a literal door, by kind. */
@@ -54,7 +60,7 @@ function NeedsYou({ needs, onResend, onRetry }) {
       {rows.length ? (
         <ul className="m-0 flex list-none flex-col p-0">
           {rows.map((row) => (
-            <li key={row.key} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-t border-axal-hairline py-2.5 first:border-t-0 dark:border-gray-700" data-testid={`partners-needs-${row.key}`}>
+            <li key={row.key} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-axal-hairline py-2.5 max-lg:mb-2 max-lg:rounded-[10px] max-lg:border max-lg:px-3 lg:border-t lg:first:border-t-0 dark:border-gray-700" data-testid={`partners-needs-${row.key}`}>
               <span className="flex min-w-0 flex-col gap-0.5">
                 <span className={EYE}>{row.kind}</span>
                 <span className="text-[13px] leading-snug text-axal-ink dark:text-gray-100">{row.text}</span>
@@ -69,8 +75,88 @@ function NeedsYou({ needs, onResend, onRetry }) {
           {`Showing ${NEEDS_YOU_SHOWN} of ${needs.rows.length.toLocaleString('en-US')} · Show all`}
         </button>
       ) : null}
-      {needs.settled ? <p className={`m-0 ${SUB}`}>Undelivered emails and due diligence are not checked here yet.</p> : null}
+      {needs.settled ? <p className={`m-0 ${SUB}`}>Sends that failed and due diligence are not checked here yet.</p> : null}
     </Card>
+  );
+}
+
+/**
+ * One chart block in D893's four states (Tile and Block, `AdminInsights.jsx`):
+ * Reading…, could not be read with Try again, Not recorded with its reason,
+ * or the chart with its one sentence, "View as table", its legend, what it
+ * covers and its foot. A zero is drawn only when the block was read.
+ */
+export function ChartBlock({ b, onRetry, onSelect, children }) {
+  const [table, setTable] = useState(false);
+  const ready = b.state === 'ready';
+  return (
+    <section className={`${CARD} flex min-w-0 flex-col gap-3 px-[18px] py-4`} aria-labelledby={`partners-h-${b.key}`} data-testid={`partners-${b.key}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2.5">
+        <h2 id={`partners-h-${b.key}`} className={H2}>{b.title}</h2>
+        {ready ? (
+          <button type="button" className={LINK} aria-pressed={table} onClick={() => setTable((t) => !t)} data-testid={`partners-${b.key}-table-toggle`}>
+            {table ? 'View as chart' : 'View as table'}
+          </button>
+        ) : null}
+      </div>
+      {b.state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400" data-testid={`partners-${b.key}-loading`}>{READING}</span> : null}
+      {b.state === 'unreadable' ? (
+        <div data-testid={`partners-${b.key}-unreadable`}><Failed what={b.title} claim={b.reason} onRetry={onRetry} /></div>
+      ) : null}
+      {b.state === 'unrecorded' ? (
+        <span className="flex flex-col gap-0.5" data-testid={`partners-${b.key}-unrecorded`}>
+          <span className="text-[13px]"><Unrecorded reason={b.reason} /></span>
+          <span className={SUB}>{b.reason}</span>
+        </span>
+      ) : null}
+      {ready ? (
+        <>
+          {table
+            ? <div data-testid={`partners-${b.key}-table`}><ChartTable chart={b.chart} caption={b.alt} /></div>
+            : <div role="img" aria-label={b.alt} data-testid={`partners-${b.key}-chart`}><Chart chart={b.chart} onSelect={onSelect} /></div>}
+          {children}
+          {b.legend?.length ? <Legend items={b.legend} /> : null}
+          {b.lines?.map((l) => <p key={l} className={`m-0 text-[12px] font-semibold ${AMBER}`}>{l}</p>)}
+          {b.foot ? <p className="m-0 text-[11.5px] leading-normal text-axal-muted dark:text-gray-400">{b.foot}</p> : null}
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+/** C1's closed line: Signed · Lapsed · Revoked, each opening Invitations at it. */
+function ClosedLine({ closed }) {
+  return (
+    <p className="m-0 font-mono text-[12px] text-axal-ink dark:text-gray-100" data-testid="partners-c1-closed">
+      <span className="font-display font-bold">Closed:</span>
+      {closed.map((c, i) => (
+        <React.Fragment key={c.key}>
+          {i ? ' · ' : ' '}
+          <Link to={invitationsAtStage(c.key)} className="underline decoration-dotted underline-offset-2 hover:text-axal-violet dark:hover:text-violet-300" data-testid={`partners-c1-closed-${c.key}`}>
+            {`${c.word} ${c.n.toLocaleString('en-US')}`}
+          </Link>
+        </React.Fragment>
+      ))}
+    </p>
+  );
+}
+
+/** C1–C4 in a 2×2 grid; one chart per card on a phone (PI11a). */
+function Charts({ reads, fan, now }) {
+  const navigate = useNavigate();
+  const c1 = stageChart(reads.invitations, { proposed: reads.deals.proposed, now });
+  const c2 = weeklyInvitations(reads.invitations, { now });
+  const c3 = dealsByTypeState({ deals: reads.deals, invitations: reads.invitations, now });
+  const c4 = weeklyRedemptions(fan, { now });
+  return (
+    <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2" data-testid="partners-charts">
+      <ChartBlock b={c1} onRetry={reads.reload} onSelect={(stage) => navigate(invitationsAtStage(stage))}>
+        <ClosedLine closed={c1.closed || []} />
+      </ChartBlock>
+      <ChartBlock b={c2} onRetry={reads.reload} />
+      <ChartBlock b={c3} onRetry={reads.reload} onSelect={(row, part) => { if (part.to) navigate(part.to); }} />
+      <ChartBlock b={c4} onRetry={reads.reload} />
+    </div>
   );
 }
 
@@ -108,6 +194,8 @@ export default function PartnersOverview({ reads, needs, fan, now, actions }) {
       )}
 
       <NeedsYou needs={needs} onResend={actions.resend} onRetry={reads.reload} />
+
+      {first ? null : <Charts reads={reads} fan={fan} now={now} />}
     </div>
   );
 }
