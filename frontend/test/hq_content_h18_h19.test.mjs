@@ -263,7 +263,7 @@ test('the route builds its six lanes in the canvas\'s order, with the canvas\'s 
 });
 
 test('every console is linked by a literal path, once, and the network-profiles route is never linked', () => {
-  for (const to of ['/admin/articles', '/admin/publications', '/admin?tab=personas', '/admin/advisors-partners/deck']) {
+  for (const to of ['/admin/articles', '/admin/publications', '/admin/persona-segments', '/admin/advisors-partners/deck']) {
     assert.equal(count(P, `to="${to}"`), 1, `${to} is linked ${count(P, `to="${to}"`)} times`);
   }
   // Its reachability exemption says nothing links it; a link here would make that stale.
@@ -503,7 +503,7 @@ test('C2: loading, the summary failing and the block failing draw no list, and a
   for (const [html, expected] of states) {
     assert.match(text(html), expected);
     assert.ok(!html.includes('data-testid="hq-personas-list"'));
-    assert.deepEqual(hrefs(html), ['/admin?tab=personas']);
+    assert.deepEqual(hrefs(html), ['/admin/persona-segments']);
   }
 });
 
