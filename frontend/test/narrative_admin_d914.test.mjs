@@ -193,7 +193,9 @@ test('the routes and CycleRoute: NAR14a for the other profiles, and no write of 
   assert.match(route, /if \(narrativeAdmin && projectStatus !== 'none' && !actionPage\) \{\n\s+body = <NarrativeAdminGate projectId=\{projectId\} onOpened=/);
   assert.match(route, /admin=\{narrativeAdmin\} \/>/);
   const api = read('frontend/src/lib/api.js');
-  assert.match(api, /export \* from '\.\/api\/mercuryPersonal\.js';\nexport \* from '\.\/api\/narrative\.js';\nexport \* from '\.\/api\/network\.js';\nexport \* from '\.\/api\/newsletter\.js';/);
+  const exports = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end')).split('\n').filter(line => line.startsWith('export * from'));
+  assert.equal(exports.filter(line => line === "export * from './api/narrative.js';").length, 1);
+  assert.deepEqual(exports, [...exports].sort(), 'API modules stay alphabetical as new domains land');
 });
 
 
@@ -214,4 +216,27 @@ test('merged Positioning stays read only for admins while keeping core and versi
   assert.ok(!page.requests.some(r=>r[0]!=='GET'));
   assert.ok(!page.requests.some(r=>r[1].includes('/positioning/draft')));
  }finally{await page.close();}
+});
+
+
+test('merged Versions keeps reads visible to admins and creation controls for founders only', async () => {
+  const saved = [{ value: '4', label: 'v4 · seed fund' }, { value: '3', label: 'v3 · angel' }];
+  const versionRows = saved.map(v => ({ version: Number(v.value), audience: v.label, based_on: 'Blank', saved: '2026-10-24', by: 'Fay Founder', read_by: null }));
+  const handle = (url) => {
+    if (url.includes('/form-options')) return response({ versions: saved });
+    if (url.includes('/narrative/compare')) return response({ pairs: [{ key: 'problem', label: 'Problem', a: { body: 'Before' }, b: { body: 'After' }, state: 'changed' }] });
+    if (url.includes('/modules/investor-narrative')) return response({ parts: { narrative: { state: 'ok', versions: versionRows } } });
+    return narrativeHandler(url);
+  };
+  for (const admin of [true, false]) {
+    const page = await mounted(h(NarrativeTabPage, { tab: 'versions', projectId: 1, search: '?project_id=1', admin, cards: [] }), handle);
+    try {
+      assert.ok(page.testIds().includes('narrative-read-by'));
+      assert.match(page.text(), /from Blank/);
+      assert.match(page.text(), /Before/);
+      assert.equal(page.testIds().includes('narrative-duplicate'), !admin);
+      assert.equal(page.testIds().includes('narrative-start-from'), !admin);
+      assert.ok(page.requests.every(([method]) => method === 'GET'));
+    } finally { await page.close(); }
+  }
 });

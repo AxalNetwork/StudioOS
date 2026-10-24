@@ -274,6 +274,7 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
     // D107 — the four approval lanes.
     'cloudflare-worker/src/routes/admin_lp_applications.ts',
     'cloudflare-worker/src/routes/refer_earn.ts',
+    'cloudflare-worker/src/routes/perks.ts',
     'cloudflare-worker/src/routes/admin_cohort.ts',
     'cloudflare-worker/src/routes/spinout_moderation.ts',
     // D142 — the community publish-and-promote writes.

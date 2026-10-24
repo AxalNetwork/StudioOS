@@ -1819,13 +1819,7 @@ const Slide21Ops: React.FC<DeckProps> = ({ data = {} }) => {
 // SECTION VII — INVESTMENT ───────────────────────────────────────
 
 const Slide22Fundraise: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) => {
-  const uof = data.use_of_funds?.length ? data.use_of_funds : [
-    { label: 'Engineering', pct: 38, subuses: ['Platform layers · 22', 'Reliability · 8', 'Security · 8'] },
-    { label: 'GTM',         pct: 32, subuses: ['Enterprise AE · 16', 'Inside sales · 8', 'Marketing · 8'] },
-    { label: 'CS + Services', pct: 12, subuses: ['Onboarding · 6', 'Renewal · 6'] },
-    { label: 'Ops + Infra',  pct: 10, subuses: ['Edge spend · 4', 'Tooling · 3', 'Data · 3'] },
-    { label: 'Reserve',      pct: 8 },
-  ];
+  const uof = data.use_of_funds?.length ? data.use_of_funds : [];
   const milestones = data.milestones?.length ? data.milestones : [
     { quarter: 'Now',    goal: 'Live · 320+ logos', metric: '$8M ARR' },
     { quarter: '+6 mo',  goal: 'Repeatable enterprise motion', metric: '$18M ARR' },
@@ -1884,6 +1878,7 @@ const Slide22Fundraise: React.FC<DeckProps> = ({ data = {}, editable, onEdit }) 
         <div className="col-span-5 grid grid-rows-2 gap-3">
           <Card title="USE OF FUNDS" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: PAPER }}>
             <div className="space-y-2 mt-1">
+              {!uof.length && <p>Use of funds not recorded</p>}
               {uof.map((u, i) => (
                 <div key={i}>
                   <div className="flex justify-between" style={{ fontSize: 12 }}>
@@ -2684,7 +2679,7 @@ export const Deck_series_b_diligence_app: React.FC<RegistryDeckProps> = ({ data,
 
 const Deck_series_b_diligence_app_inner: React.FC<RegistryDeckProps> = ({ data, editable, onEdit }) => {
   const merged = useMemo(
-    () => mergeShape(SAMPLE_DATA, data || {}) as SeriesBData,
+    () => ({ ...mergeShape(SAMPLE_DATA, data || {}), use_of_funds: data?.use_of_funds ?? [] }) as SeriesBData,
     [data],
   );
   return (

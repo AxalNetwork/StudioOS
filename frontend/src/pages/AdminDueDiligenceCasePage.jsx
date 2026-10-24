@@ -142,7 +142,7 @@ function AdminDueDiligenceCasePageBody() {
 
   const cs = data.case;
   const score = cs.risk_score != null ? Math.round(cs.risk_score * 100) : null;
-  const band = cs.risk_band || 'green';
+  const band = cs.risk_band || 'Not recorded';
   const scanInFlight = (data.sources || []).some(s => s.status === 'queued' || s.status === 'running');
 
   return (
@@ -194,7 +194,7 @@ function AdminDueDiligenceCasePageBody() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className={`md:col-span-1 p-5 rounded-xl text-white ${BAND_STYLES[band]}`}>
+        <div className={`md:col-span-1 p-5 rounded-xl text-white ${BAND_STYLES[band] || 'bg-slate-600 dark:bg-slate-700'}`}>
           <div className="text-xs uppercase tracking-wider opacity-80">Risk band</div>
           <div className="text-3xl font-bold mt-1">{band.toUpperCase()}</div>
           <div className="text-sm opacity-90 mt-1">Score {score ?? '—'}/100</div>
