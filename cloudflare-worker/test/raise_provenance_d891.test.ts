@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { BASELINE_CUTOFF, migrationNumber, compareMigrations } from '../../scripts/lib/migrationPlan.mjs';
+import { BASELINE_CUTOFF, migrationNumber, compareMigrations, listMigrationFiles, planActions } from '../../scripts/lib/migrationPlan.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { checkInputs, computeReadiness, dataRoomCard, figures, loadVersions } from '../src/services/raiseCycle.ts';
 import { projectNdaActive } from '../src/routes/data_room.ts';
@@ -129,13 +129,24 @@ test('an update source needs an exact server fact, including key, unit, value, d
 test('demo-day readiness reads downloadable files, never a URL; failed reads are Unreadable', async () => {
  const {db,env}=fixture(); db.exec("UPDATE projects SET data_room_url='https://example.invalid/room' WHERE id=1");
  const deck=()=>fillAxalSpinoutDemoDay(env,1,1);
- assert.equal((await deck()).contact.deal_access.data_room_ready,false);
+ const initial=await deck(); assert.equal(initial.contact.deal_access.data_room_ready,false);
+ const legacy=structuredClone(initial) as any;delete legacy.contact.deal_access;delete legacy.contact.headline;
+ const legacyMapped=mapToSpinoutDeckData(legacy).data;
+ assert.equal(legacyMapped.deal.ready.find(x=>x[0]==='Data room')![1],'Pending');
+ assert.equal(legacyMapped.deal.title,'Review the deal.');
+ assert.equal(legacyMapped.captable.items.find(x=>x[0]==='Data room ready')![1],'pending');
  file(db,1); grant(db); assert.equal((await deck()).contact.deal_access.data_room_ready,true);
  db.exec("UPDATE data_room_files SET access_tier='nobody'"); assert.equal((await deck()).contact.deal_access.data_room_ready,false);
  db.exec('DROP TABLE data_room_grants'); const unreadable=await deck(); assert.equal(unreadable.contact.deal_access.data_room_ready,null);
- assert.match(JSON.stringify(mapToSpinoutDeckData(unreadable)),/Unreadable/);
+ const mapped=mapToSpinoutDeckData(unreadable).data;
+ assert.equal(mapped.deal.ready.find(x=>x[0]==='Data room')![1],'Unreadable');
+ assert.ok(mapped.captable.items.some(x=>x[0]==='Data room ready — Unreadable'));
 });
 test('migration 536 relabels historical computed traction only and preserves score history, actors and constraints', () => {
+ const files=listMigrationFiles(process.cwd()+'/cloudflare-worker/sql/migrations');
+ const allocated=files.find(f=>f.name==='536_readiness_stated_evidence.sql')!;
+ const later=files.find(f=>f.name==='544_narrative_sections.sql')!;
+ assert.deepEqual(planActions([allocated,later],new Map([[later.name,later.checksum]])).map(a=>a.action),['apply','skip'],'the filename ledger applies 536 even after 544 is recorded');
  const {db}=fixture(); db.exec('DROP TABLE readiness_scores');
  // Recreate just the old table from its original migration, without replaying ALTERs.
  const old=sql('442_raise_cycle_stores.sql'); const at=old.indexOf('CREATE TABLE IF NOT EXISTS readiness_scores'); db.exec(old.slice(at,old.indexOf('\n);',at)+4));
