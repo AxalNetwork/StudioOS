@@ -34,7 +34,7 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAuth, requireAdmin } from '../auth';
+import { requireAuth, requireAdmin, requireBranchNotSuspended } from '../auth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
 
@@ -223,6 +223,7 @@ adminLabHosts.get('/', async (c) => {
 
 adminLabHosts.post('/:uid/decision', async (c) => {
   const admin = await requireAdmin(c);
+  await requireBranchNotSuspended(c);
   const uid = c.req.param('uid');
   const b = await body(c);
   const decision = typeof b.decision === 'string' && b.decision in DECISIONS

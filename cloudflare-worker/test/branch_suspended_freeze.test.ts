@@ -305,7 +305,7 @@ test('every gated write sits AFTER its own admin gate, in every file', () => {
       // reversed. Mutation-checked by swapping the pair in admin_cohort.ts: the
       // file-offset version did not notice.
       const open = Math.max(
-        ...['.post(', '.patch(', '.put(', '.delete('].map((m) => src.lastIndexOf(m, gate)),
+        ...['.post(', '.patch(', '.put(', '.delete(', 'export async function decideCohortApplication('].map((m) => src.lastIndexOf(m, gate)),
       );
       assert.ok(open > 0 && open < gate, `${f}: could not locate the handler around a freeze gate`);
       const handler = src.slice(open, gate);
