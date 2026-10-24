@@ -83,7 +83,9 @@ export function ReferralReviewBody({ embedded = false, open = null } = {}) {
 
   useEffect(() => { load(); }, [load]);
 
-  const reload = () => { if (merged) open.reload(); else load(); };
+  // The open sets feed the Queue tab's count and Overview's figures, so a save
+  // or refresh under any chip re-reads them; the chip's own list follows.
+  const reload = () => { if (open) open.reload(); if (!merged) load(); };
   const loading = merged ? merged.state === 'loading' : own.loading;
   const error = merged
     ? (merged.state === 'unreadable' ? 'One of the open statuses could not be read, so the open referrals are not listed.' : '')

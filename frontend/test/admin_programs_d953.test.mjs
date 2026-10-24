@@ -703,6 +703,20 @@ test('Refer & Earn · Queue: the open statuses merged, "Not recorded" for a name
   } finally { await hq.close(); }
 });
 
+test('Refer & Earn · Queue: a review saved under another chip re-reads the open statuses, so the Open view and the tab count follow', async () => {
+  const view = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker());
+  try {
+    await view.click('referral-review-chip-submitted');
+    await view.click('referral-review-open-s1');
+    const before = view.requests.length;
+    await view.press('Save', 'referral-review-form-s1');
+    const after = view.requests.slice(before).filter((r) => r.method === 'GET' && r.url.startsWith('/api/refer-earn/admin/submissions'));
+    for (const status of ['submitted', 'under_review', 'more_info_needed']) {
+      assert.ok(after.some((r) => new URLSearchParams(r.url.split('?')[1]).get('status') === status), `${status} is read again after the save`);
+    }
+  } finally { await view.close(); }
+});
+
 test('Refer & Earn · Queue: a failed read never also says the queue is empty; a full call says "The newest 200"', async () => {
   const view = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({ referrals: { submitted: [], under_review: down, more_info_needed: [] } }));
   try {
