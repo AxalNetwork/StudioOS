@@ -28,7 +28,14 @@ const dialog = (props) => renderToStaticMarkup(h(MemoryRouter, null, h(ExportDia
   group: null, groupLabel: '', rangeText: '8 weeks · 31 Aug 2026 to 24 Oct 2026', busy: false, onCancel: noop, onExport: noop, ...props,
 })));
 const toast = (t) => renderToStaticMarkup(h(ExportToast, { toast: t, onClose: noop }));
-const input = (html, id) => html.match(new RegExp(`<input[^>]*data-testid="${id}"[^>]*>`))?.[0] || '';
+/** The `<input …>` tag carrying `data-testid="<id>"`, found by plain string search. */
+const input = (html, id) => {
+  const at = html.indexOf(`data-testid="${id}"`);
+  if (at < 0) return '';
+  const start = html.lastIndexOf('<input', at);
+  const end = html.indexOf('>', at);
+  return start < 0 || end < 0 || html.slice(start, at).includes('>') ? '' : html.slice(start, end + 1);
+};
 
 test('"This group only" waits for an open group; the page\'s figures are the default', () => {
   const m = dialog({});
