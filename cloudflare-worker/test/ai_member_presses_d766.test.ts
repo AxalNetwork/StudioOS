@@ -42,7 +42,9 @@ function world(ai: any, { balance = 5_000_000 } = {}) {
   f.db.exec(RAIL_PREFS);
   f.db.exec(RAIL_PROPOSALS);
   f.db.exec(`CREATE TABLE projects(id INTEGER PRIMARY KEY, name TEXT, sector TEXT, stage TEXT, problem_statement TEXT, solution TEXT, score REAL, founder_id INTEGER, company_id INTEGER);
-             INSERT INTO projects(id,name,sector,stage) VALUES(7,'Harbour','logistics','mvp');`);
+             INSERT INTO projects(id,name,sector,stage) VALUES(7,'Harbour','logistics','mvp');
+             CREATE TABLE metrics_snapshots(id INTEGER PRIMARY KEY,deal_id INTEGER,snapshot_date TEXT,key_metrics TEXT,traction_score REAL,ai_review TEXT,created_by INTEGER);
+             INSERT INTO metrics_snapshots(deal_id,snapshot_date,key_metrics,traction_score) VALUES(7,'2026-10-24','{}',0);`);
   f.db.prepare("UPDATE users SET role = 'partner' WHERE id = ?").run(MEMBER);
   setFixtureAllowance(f.db, 0); // D783: no plan, and no tokens
   f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,?)').run(MEMBER, balance);
@@ -121,6 +123,7 @@ test('a budget stop answers 402 in the budget\'s words; a model that cannot be r
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
   const gate = w.f.db.prepare('SELECT status, ai_recommendation, ai_explanation FROM decision_gates').get();
   assert.equal(gate.status, 'pending', 'a gate is a recommendation for a person to decide');
+  assert.equal(gate.ai_recommendation, 'iterate', 'a recorded zero still supports the rule-based gate');
   assert.match(gate.ai_explanation, /^Rule-based: traction score 0\/100/);
   assert.deepEqual(rows(w).map((x: any) => [x.task, x.rail_option, x.record_ref, x.surface]), [['rail_reason', 'review:decision-gate', 'deal:7', '/pipeline']]);
 });
