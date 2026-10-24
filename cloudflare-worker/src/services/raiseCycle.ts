@@ -728,10 +728,9 @@ export async function dataRoomCard(ctx: Ctx): Promise<Card> {
     const accessible = await readableRoomFiles(ctx.env, ctx.projectId);
     if (!accessible.length) {
       const staged = await ctx.env.DB.prepare('SELECT COUNT(*) AS n FROM data_room_files WHERE project_id = ?').bind(ctx.projectId).first<{ n: number }>();
-      const next = Number(staged?.n ?? 0) > 0
-        ? { text: 'Manage access', href: `${TOOL_HREF.dataRoom}&project_id=${ctx.projectId}` }
-        : { text: 'Upload', href: addHref(ctx, 'data-room') };
-      return { state: 'empty', series: null, next, reason: 'No files are currently downloadable by a granted investor.' };
+      const reason = 'No files are currently downloadable by a granted investor.';
+      if (Number(staged?.n ?? 0) > 0) return { state: 'empty', series: null, next: { text: 'Manage access', href: `${TOOL_HREF.dataRoom}&project_id=${ctx.projectId}` }, reason };
+      return { state: 'empty', series: null, next: { text: 'Upload', href: addHref(ctx, 'data-room') }, reason };
     }
     const mapped = { results: accessible.filter(f => f.checklist_item != null) };
     const viewers = await ctx.env.DB.prepare(
