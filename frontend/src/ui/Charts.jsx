@@ -448,7 +448,7 @@ export function RunningTotal({ points, capacity = null, today = null, height = 2
         {todayX !== null ? (
           <g>
             <line x1={todayX} x2={todayX} y1={top} y2={top + ch} strokeDasharray="3 3" className="stroke-[#f59e0b]" />
-            <text x={todayX} y={top - 3} textAnchor="middle" className="fill-[#b45309] dark:fill-amber-300">Today</text>
+            <text x={todayX} y={top - 3} textAnchor="middle" className="fill-amber-700 dark:fill-amber-300">Today</text>
           </g>
         ) : null}
         {points.length ? <path d={d} fill="none" strokeWidth="2.25" className={STROKE_V} /> : null}
