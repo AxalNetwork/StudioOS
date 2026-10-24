@@ -236,7 +236,8 @@ export const SIDEBAR_GROUPS = {
       // Contracts. A plain Admin prepares there; the Worker refuses the acts
       // only a Super Admin takes.
       { to: '/admin/fund-admin', icon: Banknote, label: 'Fund admin' },
-      { to: '/admin/held/insights', icon: TrendingUp, label: 'Insights' },
+      // D893 (#2366): Insights' own address; /admin/held/insights redirects here.
+      { to: '/admin/insights', icon: TrendingUp, label: 'Insights' },
       // Licensing appears only here, as the administrator's own read of their
       // licence (S20's wall rule 4). HQ's ledger of every licence
       // (/admin/licences) is super-admin-only server-side and lives in the HQ

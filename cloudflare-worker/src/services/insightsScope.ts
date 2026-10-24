@@ -51,13 +51,6 @@ export type InsightsParams = Partial<Record<typeof INSIGHTS_PARAM_KEYS[number], 
 /** The read a branch runs over its own D1: #2660's loader, as the RPC is handed it. */
 export type InsightsLoader = (env: Env, params: InsightsParams) => Promise<Record<string, unknown>>;
 
-/**
- * What the branch's `insights()` RPC runs until #2660's loader is on the same
- * deploy: a refusal HQ shows as the unreadable blocks, with this reason.
- */
-export const INSIGHTS_READ_PENDING = 'This deploy does not carry the Insights read yet (#2660).';
-export const pendingInsightsLoader: InsightsLoader = async () => { throw new Error(INSIGHTS_READ_PENDING); };
-
 export type InsightsScope = { code: string; label: string; kind: 'hq' | 'branch' };
 
 /**
@@ -169,7 +162,8 @@ export function unreadableInsights(scope: Record<string, unknown>, reason: strin
  */
 export async function branchScopedInsights(env: Env, code: string, params: InsightsParams) {
   const label = await labelOf(env, code);
-  const scope = { code, label, kind: 'branch' as const, source: BRANCH_SCOPE_SOURCE };
+  // `key` and `label`, as #2660's own `scope`; `kind` and `source` for the chip.
+  const scope = { key: code, label, kind: 'branch' as const, source: BRANCH_SCOPE_SOURCE };
   const r = await branchRead<{ insights?: Record<string, unknown>; as_of?: string }>(env, code, 'insights', [params]);
   const read = r.status === 'ok' && r.data?.insights && typeof r.data.insights === 'object' ? r.data.insights : null;
   if (!read) {

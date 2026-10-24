@@ -19,8 +19,9 @@
  *     with no pending notion (`NOT_LANED`) says so; Content to HQ is not
  *     applicable; a lane whose read fails is unreadable and the rest answer.
  *   · `insights` — sign-ups per week, AI spend this month, open tickets
- *     (`ticketBacklog`, HQ Support's read). Active accounts are not recorded:
- *     nothing on this database records a sign-in per account.
+ *     (`ticketBacklog`, HQ Support's read), and the accounts active last week
+ *     on `ACTIVE_ACCOUNT_BASIS` (D893: `activity_logs` records every signed-in
+ *     request, so the old "not recorded" sentence was no longer true).
  *
  * WHAT STAYS UNREAD ON HQ. Seat use and the share rate are terms of one
  * subsidiary's licence, and no row on HQ names a licence (U1). They stay
@@ -65,6 +66,7 @@ import { listTemplates } from './legalTemplateStore';
 import { queuePressure } from './branchHome';
 import { NOT_LANED } from './approvalSources';
 import { ticketBacklog } from './supportQueues';
+import { ACTIVE_ACCOUNT_BASIS, loadBranchWeeklyActives, weekAxis } from './activeAccounts';
 
 export const HQ_SEATS_REASON =
   'Seat use is a subsidiary figure. No account on HQ names the licence it sits under (U1), '
@@ -83,10 +85,6 @@ export const HQ_LICENCE_REASON =
 
 export const HQ_BENCHMARK_REASON =
   'HQ pushes the territory median and keeps no copy (D148).';
-
-export const ACTIVE_ACCOUNTS_REASON =
-  'No store on this database records a sign-in per account, so active accounts are not counted here. '
-  + '`users.last_active` is written only on a path that fails before it reaches that column.';
 
 export const CONTENT_TO_HQ_REASON =
   'Not applicable to HQ-held accounts: there is no branch to raise content from.';
@@ -228,7 +226,8 @@ export async function hqInsights(env: Env, now: number) {
   for (let i = SIGNUP_WEEKS - 1; i >= 0; i -= 1) weeks.push(weekStart(Date.parse(`${thisWeek}T00:00:00Z`) - i * 7 * 86_400_000));
   const monthKey = new Date(now).toISOString().slice(0, 7);
 
-  const [signups, spend, tickets] = await Promise.all([
+  const activeAxis = weekAxis(new Date(now).toISOString(), 2);
+  const [signups, spend, tickets, active] = await Promise.all([
     env.DB.prepare(
       `SELECT date(created_at, '-6 days', 'weekday 1') AS wk, COUNT(*) AS n
          FROM users WHERE datetime(created_at) >= datetime(?) GROUP BY wk`,
@@ -254,12 +253,16 @@ export async function hqInsights(env: Env, now: number) {
     ticketBacklog(env)
       .then((b) => ({ available: true as const, open: b.open, by_status: b.by_status }))
       .catch(() => ({ available: false as const, reason: 'The support ticket table could not be read on this database. That is not the same as no open tickets.' })),
+    // The last complete week, on the branch line's own rule (D210), which runs on any D1.
+    loadBranchWeeklyActives(env, activeAxis).then((r) => (r.available
+      ? { available: true as const, week: activeAxis.last_complete, value: r.values[0], basis: ACTIVE_ACCOUNT_BASIS }
+      : { available: false as const, reason: 'The request log could not be read on this database. That is not the same as nobody active.' })),
   ]);
   return {
     recorded: true as const,
     label: HQ_SCOPE_LABEL,
     signups_by_week: signups,
-    active_accounts: { recorded: false as const, reason: ACTIVE_ACCOUNTS_REASON },
+    active_accounts: active,
     ai_spend_month: spend,
     open_tickets: tickets,
     benchmark: { recorded: false as const, reason: HQ_BENCHMARK_REASON },

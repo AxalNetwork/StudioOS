@@ -38,7 +38,7 @@ import {
   recordEscalation, licenceForBranch, reportUsage,
   type EscalationInput, type UsageFigure, type EscalationAnswer,
 } from './hqOps';
-import { pendingInsightsLoader } from '../services/insightsScope';
+import { loadInsightsForBranch } from '../routes/admin_insights';
 
 /** Exported by a branch Worker; called by HQ over `BRANCH_<CODE>`. */
 export class HqEntrypoint extends WorkerEntrypoint<Env> {
@@ -65,9 +65,9 @@ export class HqEntrypoint extends WorkerEntrypoint<Env> {
   activation() { return branchActivation(this.env); }
 
   // D893 — Admin › Insights over this branch's own database, for HQ's
-  // Super Admin scope. Counts only, so no secret, on the rule above. The
-  // loader becomes #2660's `loadAdminInsights` once it is on this deploy.
-  insights(params?: Record<string, string>) { return branchInsights(this.env, params, pendingInsightsLoader); }
+  // Super Admin scope: #2660's read over this branch's database. Counts
+  // only, so no secret, on the rule above.
+  insights(params?: Record<string, string>) { return branchInsights(this.env, params, loadInsightsForBranch); }
 
   // D487 — the games this branch holds and their completed runs, for H18.
   // A read, so no secret, on the rule above.

@@ -2,9 +2,10 @@
  * D893 (#2662) — the Super Admin scope of Admin › Insights: each deployed
  * subsidiary's counts, read from its own database through the fan-out.
  *
- * Real SQLite at HQ (the registry, the admins). The branch is the real
- * `branchInsights` RPC over a stubbed loader, standing in for #2660's read,
- * so what HQ shows is what the branch answered after its own strip.
+ * Real SQLite at HQ (the registry, the admins) behind #2660's real route.
+ * The branch is the real `branchInsights` RPC: over a stubbed loader where a
+ * test needs exact counts, and over #2660's own read (`loadInsightsForBranch`)
+ * to prove the wiring. What HQ shows is what the branch answered.
  *
  *   node --experimental-strip-types --no-warnings --import ./cloudflare-worker/test/_ts-loader.mjs --test cloudflare-worker/test/insights_scope_d893.test.ts
  */
@@ -16,10 +17,11 @@ import { resolve } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
-import scopesRoute, { insightsScopeGate, scopedInsightsRead } from '../src/routes/admin_insights_scopes.ts';
+import scopesRoute from '../src/routes/admin_insights_scopes.ts';
+import insightsRoute, { loadInsightsForBranch } from '../src/routes/admin_insights.ts';
 import { branchInsights } from '../src/rpc/branchOps.ts';
 import {
-  countsOnly, insightsParams, pendingInsightsLoader, INSIGHTS_READ_PENDING,
+  countsOnly,
   INSIGHTS_KPI_KEYS, INSIGHTS_BLOCK_KEYS, HQ_ONLY_MESSAGE, BRANCH_SCOPE_SOURCE,
 } from '../src/services/insightsScope.ts';
 import { d1Over } from './_d1_sqlite.mjs';
@@ -89,12 +91,7 @@ const binding = (code: string) => ({ insights: (p: unknown) => branchInsights(br
 
 const app = new Hono<any>();
 app.route('/scopes', scopesRoute);
-app.get('/read', async (c) => {
-  const gate = await insightsScopeGate(c, c.req.query('scope'));
-  if (gate.refusal) return gate.refusal;
-  if (gate.scope === 'hq') return c.json({ own: true });
-  return c.json(await scopedInsightsRead(c, gate.scope, insightsParams(c.req.query())));
-});
+app.route('/read', insightsRoute);
 app.onError((err: any, c) => {
   const s = ({ Unauthorized: 401, 'Admin required': 403, 'Super admin required': 403, 'HQ only': 403 } as any)[err?.message];
   if (s) return c.json({ detail: err.message }, s);
@@ -139,9 +136,15 @@ test('the branch answers its own read, with the contract\'s parameters only, and
   assertCountsOnly(ans);
 });
 
-test('HQ\'s tier refuses to answer as a branch, and a deploy without #2660\'s read says so', async () => {
+test('HQ\'s tier refuses to answer as a branch; the branch runs #2660\'s read, and refuses a filter it cannot use', async () => {
   await assert.rejects(() => branchInsights({ DB: d1Over(db0()) } as any, {}, loader as any), /only live on a branch/);
-  await assert.rejects(() => branchInsights(branchEnv(), {}, pendingInsightsLoader), (e: Error) => e.message === INSIGHTS_READ_PENDING);
+  await assert.rejects(() => branchInsights(branchEnv(), { range: 'decade' }, loadInsightsForBranch), /range must be 8w, quarter or year/);
+  // An empty branch database: #2660's read answers, every block failing alone with its own reason.
+  const ans = await branchInsights(branchEnv('no'), { range: 'quarter' }, loadInsightsForBranch);
+  assert.equal(ans.insights.range, 'quarter');
+  assert.equal((ans.insights.scope as any).key, 'no', 'the branch answers for its own scope');
+  assert.equal((ans.insights.kpis as any).accounts.unreadable, true);
+  assertCountsOnly(ans);
 });
 
 test('countsOnly keeps counts, profiles, countries and labels, and removes ids, names and emails at any depth', () => {
@@ -155,7 +158,7 @@ test('countsOnly keeps counts, profiles, countries and labels, and removes ids, 
 test('a Super Admin reads one subsidiary\'s counts, from its own database, under HQ\'s label', async () => {
   const { status, body } = await call('/read?scope=no&range=year&country=SE', hqDb(), { env: { BRANCH_NO: binding('no') } });
   assert.equal(status, 200, JSON.stringify(body));
-  assert.deepEqual(body.scope, { code: 'no', label: 'Branch North', kind: 'branch', source: BRANCH_SCOPE_SOURCE });
+  assert.deepEqual(body.scope, { key: 'no', label: 'Branch North', kind: 'branch', source: BRANCH_SCOPE_SOURCE });
   assert.equal(body.range, 'year');
   assert.equal(body.kpis.accounts.total, 42);
   assert.equal(body.kpis.active_last_week.value, 17);
@@ -163,6 +166,22 @@ test('a Super Admin reads one subsidiary\'s counts, from its own database, under
   assert.deepEqual(body.branch, { status: 'ok' });
   assert.ok(body.as_of, 'the branch\'s own as_of travels');
   assertCountsOnly(body);
+  assert.deepEqual(seen.at(-1), { range: 'year', country: 'SE' }, 'HQ forwards the filters, and only them');
+
+  const wired = { insights: (p: unknown) => branchInsights(branchEnv('no'), p, loadInsightsForBranch) };
+  const real = await call('/read?scope=no', hqDb(), { env: { BRANCH_NO: wired } });
+  assert.equal(real.status, 200);
+  assert.deepEqual(real.body.branch, { status: 'ok' }, 'the branch answered with #2660\'s read');
+  assert.equal(real.body.scope.label, 'Branch North');
+  assert.match(real.body.kpis.accounts.reason, /could not be read/, 'its own block reasons travel');
+});
+
+test('a filter HQ cannot use is a 400 before any branch is asked', async () => {
+  seen.length = 0;
+  const r = await call('/read?scope=no&range=decade', hqDb(), { env: { BRANCH_NO: binding('no') } });
+  assert.equal(r.status, 400);
+  assert.equal(r.body.code, 'bad_range');
+  assert.equal(seen.length, 0);
 });
 
 test('HQ strips again: a branch on an older deploy that answers with personal fields leaks none', async () => {
@@ -198,15 +217,16 @@ test('a branch that does not answer gives every KPI and block unreadable with it
 test('a plain Admin, or any admin on a branch, is refused another scope with 403 hq_only and INS10\'s words', async () => {
   const plain = await call('/read?scope=no', hqDb(), { as: PLAIN, env: { BRANCH_NO: binding('no') } });
   assert.equal(plain.status, 403);
-  assert.equal(plain.body.error, 'hq_only');
-  assert.equal(plain.body.message, HQ_ONLY_MESSAGE);
+  assert.equal(plain.body.code, 'hq_only');
+  assert.equal(plain.body.detail, HQ_ONLY_MESSAGE);
   const own = await call('/read?scope=hq', hqDb(), { as: PLAIN });
-  assert.deepEqual(own.body, { own: true }, 'their own deployment is always theirs');
+  assert.equal(own.status, 200, 'their own deployment is always theirs');
+  assert.equal(own.body.scope.key, 'hq');
   const none = await call('/read', hqDb(), { as: PLAIN });
-  assert.deepEqual(none.body, { own: true });
+  assert.equal(none.body.scope.key, 'hq');
   const bad = await call('/read?scope=../etc', hqDb());
   assert.equal(bad.status, 400);
-  assert.equal(bad.body.error, 'bad_scope');
+  assert.equal(bad.body.code, 'bad_scope');
 });
 
 test('the scopes list: HQ-held first, then each deployed subsidiary by code, from the registry', async () => {

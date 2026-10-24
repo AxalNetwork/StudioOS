@@ -83,6 +83,7 @@ function fakeGithub(repo: Repo) {
   const real = globalThis.fetch;
   globalThis.fetch = (async (input: any) => {
     const url = new URL(String(input));
+    if (url.hostname === 'api.github.com' && /^\/repos\/[^/]+\/[^/]+\/git\/ref\/tags\//.test(url.pathname)) return new Response('{}', { status: 404 });
     calls.push(url.pathname);
     const j = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
     const rv = url.pathname.match(/^\/repos\/acme\/app\/pulls\/(\d+)\/reviews$/);

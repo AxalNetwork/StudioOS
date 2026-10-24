@@ -97,7 +97,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // the Cycle Overview canvas draws (CO:244-247), now a route of its own.
   // 145 on 2026-10-19 (D717, #1782): `Legal Documents · Templates`, graduated when #1782 closed.
   // 146 on 2026-10-20 (D800, #2233): `Licences`, the Administrator's licence page and its tabs.
-  assert.equal(recs.length, 146);
+  // 147 on 2026-10-24 (D893, #2366): `Admin Insights`, the page built to INS1–INS11 at /admin/insights.
+  assert.equal(recs.length, 147);
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
     assert.ok(r.status.length > 0, `row "${r.canvas}" has no status`);
