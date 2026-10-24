@@ -274,7 +274,7 @@ function triggersOf(src: string): string[] {
   return out;
 }
 
-test('exactly the three listed workflows run wrangler deploy, and nothing deploys any other way', () => {
+test('exactly the listed workflows run wrangler deploy, and nothing deploys any other way', () => {
   const deploying = WORKFLOWS.filter((w) => deployLines(w.src).length > 0).map((w) => w.file);
   assert.deepEqual(deploying, DEPLOY_WORKFLOWS.map((w) => w.file).sort());
   for (const w of WORKFLOWS) {
@@ -309,6 +309,9 @@ test('each workflow deploys what the page says, on the trigger it says', () => {
   // once, and the push-to-main redeploy, every time after. S14 names the
   // second as what deployed the branch it is shown on, and the first as what
   // provisioned it.
+  const bot = deployLines(byFile['meeting-bot-deploy.yml']);
+  assert.equal(bot.length,1);assert.match(bot[0],/--config wrangler\.meeting-bot\.toml/);
+  assert.doesNotMatch(bot[0],/--config wrangler\.toml/);
   const branchDeployers = WORKFLOWS.filter((w) => deployLines(w.src).some((l) => l.includes('wrangler.branch.'))).map((w) => w.file);
   assert.deepEqual(branchDeployers, [BRANCH_DEPLOYED_BY, BRANCH_PROVISIONED_BY].sort());
   assert.equal(BRANCH_DEPLOYED_BY, 'cloudflare-worker-deploy.yml');
