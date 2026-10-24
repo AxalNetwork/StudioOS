@@ -14,7 +14,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
-import { insightsExportRoutes, type InsightsReader } from '../src/routes/admin_insights_export.ts';
+import adminInsightsExport, { insightsExportRoutes, type InsightsReader } from '../src/routes/admin_insights_export.ts';
 import { cell, pageRows, groupRows, label, refusesCountsOnly } from '../src/services/insightsExport.ts';
 import analytics from '../src/routes/monitoring_analytics.ts';
 import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
@@ -73,7 +73,7 @@ function world({ reader, r2 = true, browser, real = false }: { reader?: Insights
   const env: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db), FILES, ...(browser ? { BROWSER: browser } : {}) };
   const app = new Hono<any>();
   // `real`: the route as index.ts mounts it, on its default reader, the page's own read.
-  app.route('/api/admin/insights/export', real ? insightsExportRoutes() : insightsExportRoutes(read));
+  app.route('/api/admin/insights/export', real ? adminInsightsExport : insightsExportRoutes(read));
   app.route('/api/monitoring/analytics', analytics);
   app.onError((err: any, c) => {
     const status = AUTH_ERROR_STATUSES[String(err?.message || '')];
