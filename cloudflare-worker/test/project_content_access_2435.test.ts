@@ -348,3 +348,10 @@ test('#2447: landing-by-project records accepted and edited fills against the ro
  assert.equal((await request(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Typed brand',tagline:'Typed tagline'})).status,200);
  assert.equal(f.db.prepare("SELECT count(*) n FROM fill_provenance WHERE target_table='landing_pages'").get()!.n,before);
 });
+
+test('#2447: malformed fill metadata cannot turn a stored landing save into a false failure',async()=>{
+ const f=await fixture();
+ const r=await request(f,2,'PUT','/api/brand/landing/by-project/1',{name:'Synthetic saved page',tagline:'Synthetic saved tagline',ai_proposals:{tagline:{toString:1}}});
+ assert.equal(r.status,200);assert.equal(r.body.tagline,'Synthetic saved tagline');
+ assert.equal((f.db.prepare('SELECT tagline FROM landing_pages WHERE id=?').get(r.body.id) as any).tagline,'Synthetic saved tagline');
+});

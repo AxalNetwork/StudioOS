@@ -1345,15 +1345,15 @@ async function readinessFigure(ctx: Ctx): Promise<Figure> {
 }
 
 async function committedFigure(ctx: Ctx): Promise<Figure> {
-  return safeFigure({ key: 'committed', label: 'Signed against target', unit: 'of', source: 'raise_prospects · raise_rounds' }, async () => {
+  return safeFigure({ key: 'committed', label: 'Signed or received against target', unit: 'of', source: 'raise_prospects · raise_rounds' }, async () => {
     const c = await ctx.env.DB.prepare(
-      `SELECT COUNT(*) AS n, SUM(CASE WHEN commit_status = 'signed' THEN amount END) AS amt, SUM(CASE WHEN commit_status = 'soft' THEN amount END) AS soft, SUM(CASE WHEN commit_status = 'wired' THEN amount END) AS received, SUM(CASE WHEN amount IS NULL OR commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN 1 ELSE 0 END) AS unrecorded FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
-    ).bind(ctx.projectId).first<{ n: number; amt: number|null; soft:number|null; received:number|null; unrecorded:number }>();
+      `SELECT COUNT(*) AS n, SUM(CASE WHEN commit_status = 'signed' THEN amount END) AS amt, SUM(CASE WHEN commit_status = 'soft' THEN amount END) AS soft, SUM(CASE WHEN commit_status = 'wired' THEN amount END) AS received, SUM(CASE WHEN commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN amount END) AS unclassified, SUM(CASE WHEN amount IS NULL OR commit_status IS NULL OR commit_status NOT IN ('signed','soft','wired') THEN 1 ELSE 0 END) AS unrecorded FROM raise_prospects WHERE project_id = ? AND stage = 'committed'`,
+    ).bind(ctx.projectId).first<{ n: number; amt: number|null; soft:number|null; received:number|null; unclassified:number|null; unrecorded:number }>();
     const r = await ctx.env.DB.prepare(
       `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' LIMIT 1`,
     ).bind(ctx.projectId).first<{ target_amount: number | null }>();
-    const amt = c?.amt == null ? null : Number(c.amt);
-    const split = `Soft: ${c?.soft == null ? "Not recorded" : usd(c.soft)} · Signed: ${c?.amt == null ? "Not recorded" : usd(c.amt)} · Received: ${c?.received == null ? "Not recorded" : usd(c.received)} · Incomplete commitments: ${c?.unrecorded ?? 0}`;
+    const amt = c?.amt == null && c?.received == null ? null : Number(c?.amt ?? 0) + Number(c?.received ?? 0);
+    const split = `Soft: ${c?.soft == null ? "Not recorded" : usd(c.soft)} · Signed: ${c?.amt == null ? "Not recorded" : usd(c.amt)} · Received: ${c?.received == null ? "Not recorded" : usd(c.received)} · Status not recorded: ${c?.unclassified == null ? 'Not recorded' : usd(c.unclassified)} · Incomplete commitments: ${c?.unrecorded ?? 0}`;
     const target = num(r?.target_amount);
     if (target == null || target <= 0) {
       if (Number(c?.n ?? 0) === 0) return { value: null, delta_30d: null, spark: [], state: 'empty', as_of: ctx.today, reason: 'No active round and no commitment yet' };

@@ -40,11 +40,13 @@ export async function mercuryRunway(env: Env, projectId: number): Promise<BankFa
   return (await mercuryFacts(env, projectId, 'runway')).find(f => f.fact_key === 'runway') ?? null;
 }
 
-/** Verified revenue is a receipt measure, never relabelled as recurring revenue (MRR). */
+/** Verified receipts for the last complete UTC month; never relabelled as MRR. */
 export async function verifiedMonthlyRevenue(env: Env, projectId: number) {
   return env.DB.prepare(
     `SELECT substr(received_on, 1, 7) AS month, SUM(amount_cents) AS cents
        FROM revenue_entries WHERE project_id = ? AND verification = 'verified' AND currency = 'usd'
+         AND received_on >= date('now', 'start of month', '-1 month')
+         AND received_on < date('now', 'start of month')
        GROUP BY substr(received_on, 1, 7) ORDER BY month DESC LIMIT 1`,
   ).bind(projectId).first<{ month: string; cents: number }>();
 }

@@ -61,15 +61,18 @@ test('metrics name stored typed, Mercury and verified revenue sources; credits a
  const {db,env}=fixture(); narrative(db); db.exec("DELETE FROM project_metrics WHERE source='stripe'");
  let result=await checkInputs(env,1,1); assert.match(result.metrics.mrr!.source,/stated: manual/); assert.equal(result.metrics.revenue,undefined);
  bank(db); result=await checkInputs(env,1,1); assert.equal(result.metrics.revenue!.value,1500); assert.match(result.metrics.revenue!.source,/Mercury revenue credits/); assert.equal(result.metrics.mrr!.value,900);
- db.exec("INSERT INTO revenue_entries(uid,project_id,customer,amount_cents,revenue_type,received_on,source,verification) VALUES('synthetic-revenue',1,'Synthetic customer',70000,'one_time','2026-09-18','stripe','verified')");
+ db.exec("INSERT INTO revenue_entries(uid,project_id,customer,amount_cents,revenue_type,received_on,source,verification) VALUES('synthetic-revenue',1,'Synthetic customer',70000,'one_time',date('now','start of month','-1 month','+17 days'),'stripe','verified')");
  result=await checkInputs(env,1,1); assert.equal(result.metrics.revenue!.value,700); assert.match(result.metrics.revenue!.source,/Verified revenue/);
+ db.exec("UPDATE revenue_entries SET received_on=date('now','start of month')"); assert.match((await checkInputs(env,1,1)).metrics.revenue!.source,/Mercury/);
+ db.exec("UPDATE revenue_entries SET received_on='2000-01-01'"); assert.match((await checkInputs(env,1,1)).metrics.revenue!.source,/Mercury/);
  db.exec("UPDATE revenue_entries SET verification='supported'"); assert.match((await checkInputs(env,1,1)).metrics.revenue!.source,/Mercury/);
 });
 test('typed traction is stated; only verified ledger receipts justify measured traction', async () => {
  const {db,env}=fixture(); db.exec('UPDATE projects SET mrr=123,revenue=456,paying_customers=7 WHERE id=1');
  let traction=(await computeReadiness(env,1)).find(x=>x.key==='traction')!; assert.equal(traction.evidence,'stated'); assert.equal(traction.score,10);
- db.exec("INSERT INTO revenue_entries(uid,project_id,customer,amount_cents,revenue_type,received_on,source,verification) VALUES('synthetic-revenue',1,'Customer',50000,'one_time','2026-09-18','stripe','verified')");
+ db.exec("INSERT INTO revenue_entries(uid,project_id,customer,amount_cents,revenue_type,received_on,source,verification) VALUES('synthetic-revenue',1,'Customer',50000,'one_time',date('now','start of month','-1 month','+17 days'),'stripe','verified')");
  traction=(await computeReadiness(env,1)).find(x=>x.key==='traction')!; assert.equal(traction.evidence,'measured'); assert.match(traction.reads[0].b,/500/);
+ db.exec("UPDATE revenue_entries SET received_on='2000-01-01'"); assert.equal((await computeReadiness(env,1)).find(x=>x.key==='traction')!.evidence,'stated');
  db.exec("UPDATE revenue_entries SET verification='manual'"); assert.equal((await computeReadiness(env,1)).find(x=>x.key==='traction')!.evidence,'stated');
 });
 test('readiness and coverage require a downloadable file: tier, expiry, active grant, active investor and NDA', async () => {
@@ -96,8 +99,11 @@ test('soft, signed and received amounts are disjoint, with unknown amounts kept 
  const {db,ctx}=fixture(); db.exec("INSERT INTO raise_rounds(uid,project_id,name,status,target_amount) VALUES('synthetic-round',1,'Seed','active',1000000)");
  const insert=db.prepare("INSERT INTO raise_prospects(uid,project_id,name,stage,commit_status,amount) VALUES(?,1,'Investor','committed',?,?)");
  insert.run('soft','soft',100000); insert.run('signed','signed',200000); insert.run('received','wired',300000); insert.run('missing',null,null);
- let f=await figure(ctx,'committed'); assert.deepEqual(f.value,[200000,1000000]); assert.equal(f.label,'Signed against target'); assert.match(f.reason!,/Soft: \$100,000.*Signed: \$200,000.*Received: \$300,000.*Incomplete commitments: 1/);
- db.exec("DELETE FROM raise_prospects WHERE commit_status='signed'"); f=await figure(ctx,'committed'); assert.equal(f.value,null); assert.equal(f.state,'not_recorded');
+ let f=await figure(ctx,'committed'); assert.deepEqual(f.value,[500000,1000000]); assert.equal(f.label,'Signed or received against target'); assert.match(f.reason!,/Soft: \$100,000.*Signed: \$200,000.*Received: \$300,000.*Incomplete commitments: 1/);
+ db.exec("DELETE FROM raise_prospects WHERE commit_status='signed'"); f=await figure(ctx,'committed'); assert.deepEqual(f.value,[300000,1000000]);
+ db.exec("DELETE FROM raise_prospects WHERE commit_status='wired'");
+ f=await figure(ctx,'committed'); assert.equal(f.value,null); assert.equal(f.state,'not_recorded');
+ insert.run('legacy',null,400000); assert.match((await figure(ctx,'committed')).reason!,/Status not recorded: \$400,000/);
  insert.run('zero','signed',0); assert.deepEqual((await figure(ctx,'committed')).value,[0,1000000]);
 });
 test('runway prefers measured Mercury facts and fails visibly when a fact cannot be read', async () => {
