@@ -9,7 +9,12 @@ import { request } from '../api.js';
 //                      blocks: { who, plan, growth, activity, activation, retention, countries, identity,
 //                                completeness, dormant, tickets, spend },
 //                      group?, definitions }
-// Another scope answers 403 `hq_only` (a plain Admin) or 400 `scope_unavailable` (#2662).
+//                  `scope=<code>` (Super Admin on HQ, D893 S08): that subsidiary's counts from its own
+//                  database, `scope: { key, label, kind: 'branch', source }`; a branch that does not answer
+//                  gives every KPI and block `{ available: false, unreadable: true, reason }`. Anyone else
+//                  asking for another scope gets 403 `hq_only`.
+//   insightsScopes  GET /admin/insights/scopes  (Super Admin on HQ; otherwise 403 `hq_only`)
+//                  → { scopes: [{ code, label, kind: 'hq'|'branch', bound }], reason? }
 function query(params = {}) {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -22,4 +27,5 @@ function query(params = {}) {
 
 export const insightsApi = {
   adminInsights: (params) => request(`/admin/insights${query(params)}`),
+  insightsScopes: () => request(`/admin/insights/scopes`),
 };

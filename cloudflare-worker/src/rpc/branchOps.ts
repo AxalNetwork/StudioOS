@@ -42,6 +42,7 @@ import { readBranchAdminTickets, type BranchTicketsRead } from '../services/supp
 import { activationFunnel, type ActivationRead } from '../services/activationFunnel';
 import { applyGameSet, readGameHoldings, type GameSet, type GameHoldings } from '../services/gameLibrary';
 import { notifyRequestAnswer } from '../services/escalationAnswerNotice';
+import { countsOnly, insightsParams, type InsightsLoader } from '../services/insightsScope';
 
 /** Every branch answer carries the code, because a binding does not (D.7). */
 export type BranchAnswer<T> = T & { branch: string; as_of: string };
@@ -1213,6 +1214,24 @@ export async function branchActivation(env: Env): Promise<BranchAnswer<{ activat
   const branch = requireBranch(env);
   const nowMs = Date.now();
   return { branch, as_of: new Date(nowMs).toISOString(), activation: await activationFunnel(env, nowMs) };
+}
+
+/**
+ * D893 (#2662) — Admin › Insights over this branch's own database, for HQ's
+ * Super Admin scope. The same read HQ makes over its own (`load`, #2660's
+ * loader), with the contract's parameters only, and counts only: the read is
+ * stripped of every personal key before it leaves (`countsOnly`). A read, so
+ * no secret, on `rpc/index.ts`'s rule.
+ */
+export async function branchInsights(
+  env: Env,
+  params: unknown,
+  load: InsightsLoader,
+): Promise<BranchAnswer<{ insights: Record<string, unknown> }>> {
+  const branch = requireBranch(env);
+  const query = params && typeof params === 'object' ? params as Record<string, string | undefined> : {};
+  const read = await load(env, insightsParams(query));
+  return { branch, as_of: nowIso(), insights: countsOnly(read) as Record<string, unknown> };
 }
 
 /**

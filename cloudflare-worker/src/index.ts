@@ -234,6 +234,7 @@ import learningWebinarsRoutes from './routes/learning_webinars';
 import adminLearningWebinarsRoutes from './routes/admin_learning_webinars';
 import { adminLearningVideo, learningVideo } from './routes/learning_video';
 import adminHq from './routes/admin_hq';
+import adminInsightsScopes from './routes/admin_insights_scopes';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
 import adminPlatform from './routes/admin_platform';
@@ -1077,6 +1078,9 @@ app.route('/api/admin/ticket-reviews', adminTicketReviews);
 // HQ · Home — the franchisor's overview. Super-admin-only, mounted before
 // the catch-all like everything else in the HQ tier.
 app.route('/api/admin/hq', adminHq);
+// D893 — Admin › Insights' Scope select: HQ-held and each deployed
+// subsidiary. Super Admin on HQ, before the catch-all.
+app.route('/api/admin/insights/scopes', adminInsightsScopes);
 // HQ · Revenue — the money rails. Super-admin-only, and before the
 // catch-all for the same reason as the rest of the HQ tier.
 app.route('/api/admin/revenue', adminRevenue);
