@@ -37,6 +37,7 @@ import type { Env } from '../types';
 import { requireAuth, requireAdmin, requireBranchNotSuspended } from '../auth';
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
+import { ensureNetworkStatesSchema } from '../services/networkStatesSchema';
 
 export const HOST_CAPACITIES = ['investor', 'advisor', 'partner'] as const;
 export const STATEMENT_MAX = 1000;
@@ -158,13 +159,15 @@ labHosts.post('/me/:uid/withdraw', async (c) => {
 /**
  * GET /directory — approved hosts only. Each is still checked against its own
  * profile: a partner whose profile is inactive, or an advisor marked inactive,
- * is not bookable and is left out even while approved.
+ * is not bookable and is left out even while approved. An advisor an admin
+ * paused in the network (D976) is left out the same way.
  */
 labHosts.get('/directory', async (c) => {
   const user = await requireAuth(c);
   if (!readsDirectory(user)) {
     return refuse(c, 403, { code: 'lab_only', message: 'The Spin-Out Lab office-hours directory is for Lab founders.' });
   }
+  await ensureNetworkStatesSchema(c.env);
   const partnerRows = await c.env.DB.prepare(
     `SELECT a.capacity, a.reviewed_at AS approved_at,
             p.id AS host_id, p.uid, p.name, p.company, p.specialization,
@@ -181,6 +184,7 @@ labHosts.get('/directory', async (c) => {
        FROM lab_host_applications a
        JOIN advisors v ON v.id = a.host_id
       WHERE a.status = 'approved' AND a.host_kind = 'advisor' AND v.is_active = 1
+        AND NOT EXISTS (SELECT 1 FROM network_member_states nms WHERE nms.user_id = v.user_id AND nms.paused_at IS NOT NULL)
       ORDER BY v.display_name COLLATE NOCASE, v.id
       LIMIT ?`,
   ).bind(DIRECTORY_CAP).all<any>();

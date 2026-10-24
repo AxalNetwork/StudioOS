@@ -14,6 +14,7 @@
  * grace_until; the cron's grace-expiry sweep finalizes them.
  */
 import { Hono, type Context } from 'hono';
+import adminLabReads from './admin_lab';
 import type { Env } from '../types';
 import { requireAdmin, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
 import { hashEmail } from '../util/hashEmail';
@@ -26,6 +27,7 @@ import {
 import { MILESTONES } from '../services/spinoutLabCatalog';
 
 const r = new Hono<{ Bindings: Env }>();
+r.route('/', adminLabReads);
 
 const isoNow = (): string => new Date().toISOString().replace('T', ' ').slice(0, 19);
 

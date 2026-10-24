@@ -171,6 +171,119 @@ export function compareRows(a, b) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// D909 (#2693): Home's tiles and lists (NAR1), New version (NAR11) and
+// Versions (NAR12), from the module read's `parts.narrative` and D908's compare.
+// ---------------------------------------------------------------------------
+
+/** The Worker's Home part when it read, else null (unreadable, refused or absent). */
+export const homePart = (data) => (data?.parts?.narrative?.state === 'ok' ? data.parts.narrative : null);
+export const homeUnreadable = (data) => data?.parts?.narrative?.state === 'unreadable';
+
+export const CLAIMS_WAIT = 'Claims are counted once StudioOS checks each claim against its record.';
+export const OBJECTIONS_WAIT = 'Answers to objections are not recorded yet.';
+const DASH = '—';
+
+const versionName = (v) => `v${v.version} · ${v.audience || NOT_RECORDED}`;
+
+/**
+ * NAR1's four tiles: Versions and Open mismatches from the part; Claims backed
+ * (#2430) and Objections answered (#2457) a dash with the reason, never 0.
+ */
+export function homeTiles(part) {
+  const versions = Array.isArray(part?.versions) ? part.versions : [];
+  const newest = part?.newest ?? null;
+  const mismatches = Array.isArray(newest?.mismatches) ? newest.mismatches : [];
+  return [
+    { key: 'versions', label: 'Versions', value: String(versions.length), sub: versions[0] ? `Newest ${versionName(versions[0])}` : 'No version yet' },
+    { key: 'claims', label: 'Claims backed', value: DASH, sub: CLAIMS_WAIT, waits: true },
+    {
+      key: 'mismatches', label: 'Open mismatches',
+      value: !newest || !newest.compared ? DASH : String(mismatches.length),
+      sub: !newest ? 'No version yet'
+        : !newest.compared ? `Nothing compared yet in v${newest.version}`
+          : mismatches.length ? `${[...new Set(mismatches.map((m) => m.figure))].join(', ')}, in v${newest.version}` : `None in v${newest.version}`,
+      waits: !newest || !newest.compared,
+    },
+    { key: 'objections', label: 'Objections answered', value: DASH, sub: OBJECTIONS_WAIT, waits: true },
+  ];
+}
+
+/** NAR1's "Needs you": each mismatch in the newest version, opened on its Check. */
+export function needsYou(part, search = '') {
+  const newest = part?.newest;
+  return (Array.isArray(newest?.mismatches) ? newest.mismatches : []).map((m, i) => ({
+    key: `${m.figure}-${i}`, pill: 'Mismatch', title: m.figure, sub: m.sentence,
+    href: tabHref(TABS.find((t) => t.id === 'check'), search, newest.version),
+  }));
+}
+export const NEEDS_NONE = 'Nothing needs you in the newest version.';
+
+/** The footer: the deck reads the narrative only when one of its cards binds a version. */
+export function homeFooter(part) {
+  if (!part?.deck) return 'No pitch deck yet, so nothing reads your narrative.';
+  return part.deck.reads_narrative ? 'The Pitch deck studio reads your narrative.' : 'No card of your pitch deck reads your narrative yet.';
+}
+
+/** NAR12's based-on line: "from v1 · saved 2026-10-20 · by Fay Founder", "Not recorded" for what was not. */
+export function versionSub(v) {
+  return `from ${v?.based_on || NOT_RECORDED} · saved ${v?.saved || NOT_RECORDED} · by ${v?.by || NOT_RECORDED}`;
+}
+
+/** NAR12's Read by: "Pitch deck v6 · cards 1, 2", or the sentence that no deck reads it. */
+export function readByLine(v) {
+  const cards = Array.isArray(v?.read_by?.cards) ? v.read_by.cards : [];
+  if (!cards.length) return 'No deck reads this version.';
+  return `Pitch deck v${v.read_by.deck_version} · ${cards.length === 1 ? 'card' : 'cards'} ${cards.join(', ')}`;
+}
+
+/** No Delete is drawn; a version a deck reads says why it could not be one. */
+export const deleteLine = (v) => (v?.read_by?.cards?.length
+  ? `v${v.version} cannot be deleted while Pitch deck v${v.read_by.deck_version} reads it.`
+  : null);
+
+/** D908's compare, as the page draws it: every section, each side's words or null, and whether it changed. */
+export function compareView(res) {
+  return (Array.isArray(res?.pairs) ? res.pairs : []).map((p) => ({
+    key: String(p?.key ?? ''), label: String(p?.label ?? ''),
+    a: p?.a?.body ?? null, b: p?.b?.body ?? null, changed: p?.state === 'changed',
+  })).filter((r) => r.key && r.label);
+}
+
+/** Duplicate's dialog sentence. */
+export const duplicateSentence = (v, next) => `Creates v${next}, a copy of v${v.version} for ${v.audience || 'the same audience'}. Nothing in v${v.version} changes.`;
+
+/** The next version number: one past the newest saved. */
+export const nextVersion = (versions) => (Array.isArray(versions) && versions.length ? Math.max(...versions.map((v) => Number(v.version ?? v.value) || 0)) + 1 : 1);
+
+const AUDIENCE = {
+  angel: 'angels', pre_seed_fund: 'pre-seed funds', seed_fund: 'seed funds', series_a_fund: 'Series A funds',
+  strategic: 'strategic investors', grant: 'a grant', other: 'other investors',
+};
+
+/**
+ * NAR11's line: "Creates v5 for Series A funds. Nothing in v4 changes." The
+ * version kept is the one started from, else the newest; with none saved, only
+ * the first sentence.
+ */
+export function newVersionLine(values, versions) {
+  const saved = Array.isArray(versions) ? versions : [];
+  const n = nextVersion(saved);
+  const who = AUDIENCE[String(values?.investor_type ?? '')];
+  const from = /^version-([1-9][0-9]{0,8})$/.exec(String(values?.start_from ?? ''));
+  const kept = from ? from[1] : saved.length ? String(Math.max(...saved.map((v) => Number(v.version ?? v.value) || 0))) : null;
+  return [`Creates v${n}${who ? ` for ${who}` : ''}.`, kept ? `Nothing in v${kept} changes.` : null].filter(Boolean).join(' ');
+}
+
+/** The New version address with a saved version chosen to start from (NAR12's "Make vN the start of a new version"). */
+export const startFromHref = (version, search = '') => {
+  const q = tabSearch(search, null, false);
+  return `${NEW_PATH}${q ? `${q}&` : '?'}start_from=version-${encodeURIComponent(String(version))}`;
+};
+
+/** D911: the positioning tab, with the venture query kept. */
+export const positioningHref = (search = '') => `${POSITIONING_PATH}${tabSearch(search, null, false)}`;
+
 export const NO_VERSION = 'No narrative yet. Start a version for one kind of investor.';
 // What the Worker's check reads today (raiseCycle.ts checkInputs): the figures
 // the version states, and the venture profile's MRR, paying customers and
@@ -179,6 +292,96 @@ export const CHECK_RUNS = 'The check runs each time a version is saved. It compa
 export const FIX_NEWEST_ONLY = 'Eadwyn phrases a fix for the first mismatch in the newest version only.';
 
 export { NOT_RECORDED };
+
+// ── D914 (#2698): Admin and Super Admin read only (NAR13), and the no-permission panels (NAR14) ──
+//
+// The owner's answer to #2459 decision 3 for the narrative: an Admin on this
+// deployment, or the Super Admin on HQ, reads the whole narrative read only and
+// leaves notes; they give a reason first, which the founder sees. Reads:
+//   - `GET /api/cycles/raise/narrative/reads`  → the reasons, and the caller's own unexpired one;
+//   - `GET /api/cycles/raise/narrative/notes`  → the notes thread.
+// An admin's other narrative reads answer 403 `read_reason_required` until a
+// reason is given; their writes answer 403 `admin_read_only`.
+
+/** An admin reads the narrative read only. Admins previewing another role through "View as" are that role here. */
+export const isNarrativeAdmin = (user, viewMode = null) => String(user?.role || '') === 'admin' && (!viewMode || viewMode === 'admin');
+
+export const READ_ONLY = 'Read only. Notes are visible to the founder.';
+export const REASON_TITLE = 'Why are you opening this narrative?';
+export const REASON_HELP = 'The founder sees this reason, who gave it and when. It lets you read the narrative for 8 hours.';
+export const REASON_PLACEHOLDER = 'For example: quarterly portfolio review';
+export const REASON_MIN = 3;
+export const REASON_MAX = 200;
+export const READS_TITLE = 'Who read this narrative';
+export const NO_READS = 'No admin has opened this narrative.';
+export const NOTES_TITLE = 'Notes';
+export const NOTES_META = 'Visible to the founder';
+export const NO_NOTES = 'No notes yet.';
+export const NOTE_MAX = 2000;
+export const NOTE_PLACEHOLDER = 'Write a note for the founder…';
+export const NOTE_ANSWER_PLACEHOLDER = 'Answer the note…';
+
+/** The reason an admin typed, checked as the Worker checks it; null when it may be sent. */
+export function reasonProblem(text) {
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (t.length < REASON_MIN) return `Write a reason of at least ${REASON_MIN} characters.`;
+  if (t.length > REASON_MAX) return `A reason is at most ${REASON_MAX} characters.`;
+  return null;
+}
+
+const KIND = { admin: 'Studio admin', super_admin: 'HQ', founder: 'Founder' };
+export const kindLabel = (kind) => KIND[kind] || NOT_RECORDED;
+
+const when = (value) => {
+  if (!value) return null;
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(String(value)) ? `${String(value).replace(' ', 'T')}Z` : String(value);
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+};
+
+/** The line under the read-only banner: who opened it, for what, and that the founder sees it. */
+export function openedLine(read, viewer) {
+  if (!read?.reason) return null;
+  const who = viewer === 'super_admin' ? 'Opened by HQ' : 'Opened by an admin';
+  return `${who} for “${read.reason}”. The founder sees this reason.`;
+}
+
+/** One reason, as the founder reads it. A missing name is never invented. */
+export function readRow(r) {
+  return {
+    id: r?.id,
+    who: `${r?.by?.name || NOT_RECORDED} · ${kindLabel(r?.by?.kind)}`,
+    reason: String(r?.reason || '').trim() || NOT_RECORDED,
+    when: when(r?.created_at) || NOT_RECORDED,
+  };
+}
+
+/** One note, as the thread draws it: its eyebrow (who, what, when, which version) and its words. */
+export function noteRow(n) {
+  const on = n?.version == null ? 'the narrative' : `v${n.version}`;
+  return {
+    id: n?.id,
+    eye: `${n?.author?.name || NOT_RECORDED} · ${kindLabel(n?.author?.kind)} · ${when(n?.created_at) || NOT_RECORDED} · on ${on}`,
+    body: String(n?.body ?? ''),
+  };
+}
+
+/** What posting a note changes, said before it happens. */
+export const notePosts = (version) => `This posts your note on ${version == null ? 'the narrative' : `v${version}`}. The founder and the venture’s admins see it. It changes nothing in the narrative.`;
+
+// NAR14a: Investors, Advisors, Operating Partners and Explorers do not open the narrative.
+export const BOUNDARY = {
+  title: 'The Investor narrative is for the venture’s founders.',
+  line: 'Ask them to share their deck.',
+  action: 'Go to your home',
+};
+export const BOUNDARY_ROLES = new Set(['investor', 'advisor', 'partner', 'exploring']);
+// NAR14b: a founder who opens another venture's narrative.
+export const OTHER_VENTURE = {
+  title: 'This narrative belongs to another venture.',
+  line: 'You can open the narrative of a venture you found.',
+  action: 'Open your own narrative',
+};
 
 /* ------------------------------------------------------------------ *
  * D911 (#2695) — Positioning (NAR4, NAR5, NAR18, NAR19d)

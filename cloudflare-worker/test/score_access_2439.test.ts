@@ -85,9 +85,9 @@ test('risk and screening: flagged/rejected/unsigned/tampered rows supply no comp
       assert.equal('review_status' in row, false);
       assert.equal(screening.flags.available, false);
       const investorAssessment: any = await (await request(risk, f.env, 3, '/by-project/10')).json();
-      assert.equal(investorAssessment.layers.find((l: any) => l.key === 'founder').auto_score, kind === 'approved' ? 100 : 0, kind);
+      assert.equal(investorAssessment.layers.find((l: any) => l.key === 'founder').auto_score, kind === 'approved' ? 100 : null, kind);
       const founder = assessment.layers.find((l: any) => l.key === 'founder');
-      assert.equal(founder.auto_score, kind === 'approved' ? 100 : 0, kind);
+      assert.equal(founder.auto_score, kind === 'approved' ? 100 : null, kind);
       const logs: any[] = f.db.prepare("SELECT * FROM activity_logs WHERE action='score_read'").all();
       if (['approved', 'unsigned', 'tampered'].includes(kind)) assert.equal(logs.length, 3, kind);
       if (kind === 'approved') assert.ok(logs.every(row => JSON.parse(row.details).integrity_valid === true));
