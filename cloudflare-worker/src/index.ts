@@ -688,6 +688,8 @@ const COOL_OFF_PREFIXES = [
   // D755 — the catalog's writes, token packs included, sell what members pay
   // for and can mint a pack. Same class as promos.
   '/api/admin/catalog',
+  // D1009 — checkout keys and webhook settings share the Payments cool-off.
+  '/api/admin/stripe',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -981,7 +983,7 @@ app.route('/api/admin/articles', adminArticles);
 // generic admin router. Step-up + requireAdmin enforced per-route.
 app.route('/api/admin/billing', adminBilling);
 // Task — Stripe product catalog admin sync. Mounted BEFORE the catch-all
-// /api/admin so /api/admin/catalog/* resolves here. requireAdmin per-route.
+// /api/admin so /api/admin/catalog/* resolves here. Super Admin gates per-route (D1009).
 app.route('/api/admin/catalog', adminCatalog);
 // Task #16 — Admin Stripe management (webhook + publishable key). Mounted
 // BEFORE the catch-all /api/admin so /api/admin/stripe/* resolves here.
