@@ -249,11 +249,10 @@ const CHROME = (() => {
  * run short.
  */
 const SECOND_MOUNTS = new Map([
-  // The Admin Console's own tabs. These two are also the `same-component-elsewhere`
-  // exemptions, so one table feeds both and they cannot disagree.
-  // D937 (#2374): AdminSpinoutLab left the console; ?tab=lab-applications
-  // forwards to the Lab's own page before the console mounts.
-  ['frontend/src/pages/AdminPage.jsx', ['AdminNetworkProfiles']],
+  // The Admin Console's own tabs stood here, and fed the `same-component-elsewhere`
+  // exemptions.
+  // D937 (#2374) and D972 (#2369): AdminSpinoutLab and AdminNetworkProfiles
+  // left the console; their tabs forward to their own pages before it mounts.
   // The founder-journey walkthrough renders the real apply page on simulated data
   // (its own comment at AdminSpinoutLab.jsx:743-745 describes the read-only tour).
   ['frontend/src/pages/admin/AdminSpinoutJourneyPreview.jsx', ['SpinoutLabApplyPage']],
@@ -386,17 +385,9 @@ const EXEMPT = [
        + 'X_CLIENT_ID/SECRET are bound on the prod worker (sidebarConfig.js, beside '
        + 'the Telegram row).',
   },
-  {
-    path: '/admin/network-profiles',
-    kind: 'same-component-elsewhere',
-    host: '/admin',
-    tab: 'network-profiles',
-    // Copied verbatim from ONE physical line of AdminPage.jsx, above the
-    // AdminNetworkProfiles import. Tested below (`adminPage.includes(e.cites)`).
-    cites: '/admin/network-profiles route stays wired for direct deep-links',
-    why: 'AdminPage.jsx records that this standalone route stays wired for direct '
-       + 'deep links; the roster itself is reached at /admin?tab=network-profiles.',
-  },
+  // `/admin/network-profiles`'s entry was deleted in D972 (#2369): the route
+  // forwards to Advisors & Partners' Deck roster now, so it is a redirect, not
+  // a page with no door.
   // `/admin/spinout-lab`'s entry was DELETED IN D140, by this guard's own rule:
   // `BranchPrograms` links to it as the console where grace and override are
   // actually decided, so the route has a real door and an exemption claiming it
@@ -485,7 +476,7 @@ test('every in-page /admin link points at a registered route', () => {
 test('a redirect-only /admin route is excluded, and its target is reachable', () => {
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
-  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/community', '/admin/held/insights', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news'],
+  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
@@ -497,6 +488,8 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
     // D937 (#2374): the Lab and its preview moved under Programs.
     LabRedirect: ['/admin/programs/spinout-lab', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PATH'],
     LabPreviewRedirect: ['/admin/programs/spinout-lab/preview', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PREVIEW_PATH'],
+    // D972 (#2369): the roster is Advisors & Partners' Deck roster tab.
+    ApRedirect: ['/admin/advisors-partners/deck', 'frontend/src/pages/admin/advisors/apModel.js', 'AP_DECK_PATH'],
   };
   for (const path of REDIRECTS) {
     const route = BY_PATH.get(path);

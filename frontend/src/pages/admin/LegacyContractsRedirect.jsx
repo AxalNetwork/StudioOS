@@ -11,6 +11,8 @@ const MOVED_TABS = {
   github: '/admin/integration-keys#github',
   // D937 (#2374): the Spin-Out Lab left the Admin Console for Programs.
   'lab-applications': '/admin/programs/spinout-lab/applications?moved=lab-applications',
+  // D972 (#2369): the roster is the Deck roster tab of Advisors & Partners.
+  'network-profiles': '/admin/advisors-partners/deck?moved=network-profiles',
 };
 
 export function legacyContractsTarget(search) {

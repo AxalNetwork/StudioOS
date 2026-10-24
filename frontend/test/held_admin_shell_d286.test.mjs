@@ -243,14 +243,14 @@ test('Approvals draws S22\'s sixteen lanes verbatim and in order; moderation lin
  * The other landings
  * ------------------------------------------------------------------ */
 
-test('Community (D930) links its six consoles at their own routes — Advisors & Partners at the tab, never the standalone route', () => {
+test('Community (D930) links its six consoles at their own routes — Advisors & Partners at its own page (D972), never the old roster address', () => {
   const code = codeOnly(read(COMMUNITY));
   const doors = [...new Set(doorsIn(code))];
-  for (const d of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin?tab=network-profiles', '/admin?tab=wellbeing', '/admin/partner-invitations']) {
+  for (const d of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/advisors-partners', '/admin?tab=wellbeing', '/admin/partner-invitations']) {
     assert.ok(doors.includes(d), `Community has no literal door onto ${d}`);
   }
 
-  assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the standalone roster route would make its EXEMPT entry stale');
+  assert.ok(!doors.includes('/admin/network-profiles'), 'a door onto the old roster address, which only forwards now (D972)');
   for (const d of doors) {
     assert.ok(!d.startsWith('/branch'), `Community links ${d}, under /branch/`);
     assert.ok(routeLine(pathOf(d)), `Community links ${d}, which is not a registered route`);

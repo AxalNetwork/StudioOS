@@ -287,7 +287,8 @@ const ADMIN = [
   alias('/branch/community', key(AD, 'Community'), 'The branch’s Community page.'),
   own('/admin?tab=wellbeing', key(AD, 'Community', 'Wellbeing experts')),
   alias('/admin/wellbeing', key(AD, 'Community', 'Wellbeing experts'), 'The wellbeing resource library, Wellbeing experts’ own page.'),
-  own('/admin?tab=network-profiles', key(AD, 'Community', 'Advisors and partners')),
+  // D972 (#2369): re-rooted at the page's address; the prefix covers its tabs.
+  own('/admin/advisors-partners', key(AD, 'Community', 'Advisors and partners')),
   own('/admin?tab=directory', key(AD, 'Community', 'Directory')),
   // D923 (#2370): re-rooted at the new address; the prefix covers the tabs and
   // the records. `/admin/partners` only redirects, so it draws no rail.
@@ -343,7 +344,7 @@ const SUPER = [
   own('/admin/articles', key(SA, 'Content', 'Content queue')),
   own('/admin/publications', key(SA, 'Content', 'Publications')),
   own('/admin?tab=personas', key(SA, 'Content', 'Personas')),
-  own('/admin?tab=network-profiles', key(SA, 'Content', 'Advisors and partners')),
+  own('/admin/advisors-partners', key(SA, 'Content', 'Advisors and partners')),
   own('/admin?tab=directory', key(SA, 'Content', 'Directory')),
   own('/admin/team', key(SA, 'Content', 'Public team page')),
   own('/admin/platform', key(SA, 'Platform')),

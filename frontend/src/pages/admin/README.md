@@ -78,6 +78,11 @@ drawn from the Worker's act table — see its own README.
 Community overview canvas from the reads that exist; `/admin/held/community`
 redirects to it — see its own README.
 
+`advisors/` is D972's Advisors & Partners at `/admin/advisors-partners`, built
+to its canvas under the shared admin page header (D936). Its Deck roster tab
+embeds `AdminNetworkProfiles.jsx`; `/admin/network-profiles` and
+`/admin?tab=network-profiles` redirect to it — see its own README.
+
 `lab/` is D937's Spin-Out Lab page at `/admin/programs/spinout-lab`, built to
 the Spin-Out Lab canvas under the shared admin page header (D936). Its tabs
 mount `AdminSpinoutLab.jsx`'s consoles one section at a time;

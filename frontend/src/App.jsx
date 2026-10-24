@@ -147,7 +147,8 @@ const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'))
 const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsightsRedirect'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
-const AdminNetworkProfiles = lazy(() => import('./pages/admin/AdminNetworkProfiles'));
+const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
+const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
 // Task #102 — Spin-Out Lab admin dashboard (applications + participants).
 const AdminLab = lazy(() => import('./pages/admin/lab/AdminLab'));
 const LabRedirect = lazy(() => import('./pages/admin/lab/LabRedirect'));
@@ -1113,7 +1114,7 @@ function ProtectedLayout({ children, user, onLogout, viewMode, onViewModeChange,
           <StripLink to="/admin/articles">Content queue</StripLink>
           <StripLink to="/admin/publications">Publications</StripLink>
           <StripLink to="/admin?tab=personas">Personas</StripLink>
-          <StripLink to="/admin?tab=network-profiles">Advisors &amp; Partners</StripLink>
+          <StripLink to="/admin/advisors-partners">Advisors &amp; Partners</StripLink>
           <StripLink to="/admin/team">Public team page</StripLink>
         </HqSubNavStrip>
       )}
@@ -2828,7 +2829,13 @@ function AppInner() {
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       {/* D633 (#1391, Q3) — trust obligations by role, read-only; HQ Security links to it. */}
       <Route path="/admin/security/obligations" element={guard(['admin'], hqOnly(<TrustObligationsPage />))} />
-      <Route path="/admin/network-profiles" element={guard(['admin'], <AdminNetworkProfiles />)} />
+      {/* D972 (#2369) — Advisors & Partners under Community, its tabs as
+          sub-paths (D936's header). /admin/network-profiles and the Admin
+          Console's ?tab=network-profiles forward to the Deck roster tab. */}
+      <Route path="/admin/advisors-partners" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/firms" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/deck" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/network-profiles" element={<ApRedirect />} />
       {/* D937 (#2374) — the Spin-Out Lab under Programs, its tabs as sub-paths
           (D936's header). /admin/spinout-lab, its /preview and the Admin
           Console's ?tab=lab-applications forward here with the moved notice. */}

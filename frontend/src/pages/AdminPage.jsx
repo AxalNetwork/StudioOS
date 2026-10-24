@@ -20,10 +20,9 @@ import { BankAccountsPanel } from './admin/consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './admin/consoles/ProductTestingConsole';
 import { BillingPanel } from './admin/consoles/BillingConsole';
 import { WellbeingExpertsPanel } from './admin/consoles/WellbeingConsole';
-// Task #1 — embedded as a tab inside Admin Console so admins land on
-// the network roster via /admin?tab=network-profiles. The standalone
-// /admin/network-profiles route stays wired for direct deep-links.
-import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
+// D972 (#2369) — the network roster left this console for Advisors &
+// Partners; ?tab=network-profiles forwards to its Deck roster tab in
+// LegacyContractsRedirect before this console mounts.
 
 // The Legal console's panel. Contracts (`pages/hq/ContractsPage.jsx`, D647)
 // renders its own desk, `pages/admin/contracts/ContractsDesk.jsx`, not this,
@@ -226,10 +225,6 @@ export default function AdminPage({ onImpersonate, section = null }) {
             }}
           />
         </>
-      )}
-
-      {tab === 'network-profiles' && (
-        <div data-testid="admin-network-profiles-panel"><AdminNetworkProfiles /></div>
       )}
 
       {tab === 'legal' && <div data-testid="admin-legal-panel"><LegalPanel /></div>}

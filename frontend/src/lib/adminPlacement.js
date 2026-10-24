@@ -123,7 +123,7 @@ export const ADMIN_PLACEMENT = [
   // roster is curated where the community it serves is run.
   tab('wellbeing', 'Wellbeing', admin('Community', 'card link'), { how: 'Card link, beside Events, Jobs and Circles.' }),
   tab('network-profiles', 'Advisors & Partners', hq('Content', 'sub-nav'),
-    { how: 'Sub-navigation item on Content (the deck roster); card link on Community.', also: [admin('Community', 'card link')] }),
+    { route: '/admin/advisors-partners', how: 'Its own page under Community (D972); Sub-navigation item on Content; the legacy tab redirects to its Deck roster.', also: [admin('Community', 'card link')] }),
 
   // ── The 28 working pages (S23 · H37) → the profile sidebars (D563) ──────
   // H37 drew them in a Workspaces launcher on the admin shells; D563 retired

@@ -258,7 +258,7 @@ function CirclesCard({ circles, roster, onRetry }) {
       )}
       <span className="flex flex-wrap gap-4">
         <Link to="/admin/circles" className={LINK}>Open circles</Link>
-        <Link to="/admin?tab=network-profiles" className={LINK}>Open advisors &amp; partners</Link>
+        <Link to="/admin/advisors-partners" className={LINK}>Open advisors &amp; partners</Link>
       </span>
     </section>
   );
@@ -435,7 +435,7 @@ export default function AdminCommunity() {
               <Link to="/admin/circles" className={LINK}>Open circles</Link>
             </Console>
             <Console testId="community-console-roster" name="Advisors & Partners" what="The roster shown on decks and pages" figure={doors.roster}>
-              <Link to="/admin?tab=network-profiles" className={LINK}>Open advisors &amp; partners</Link>
+              <Link to="/admin/advisors-partners" className={LINK}>Open advisors &amp; partners</Link>
             </Console>
             <Console testId="community-console-wellbeing" name="Wellbeing" what="Verify experts and keep the library" figure={doors.wellbeing}>
               <Link to="/admin?tab=wellbeing" className={LINK}>Open wellbeing</Link>

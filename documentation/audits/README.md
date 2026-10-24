@@ -18,6 +18,7 @@ code. Reading an old audit as a to-do list is how work gets redone.
 | `BROKEN_FEATURES_VERIFIED.md` | Features confirmed broken at the time of writing. |
 | `DECK_AUTOFILL_AUDIT.md`, `AXAL_SPINOUT_DECK_AUDIT_2026-05-30.md` | Pitch-deck data wiring. |
 | `COMMUNITY_OVERVIEW_MAP_2026-10-24.md` | Every read behind the Admin · Community canvas (CM1–CM13), board by board, and its defects on that day (D930). |
+| `ADVISORS_PARTNERS_MAP_2026-10-24.md` | The Advisors & Partners canvas (AP1–AP14) read board by board against the reads that existed that day, and its defects re-checked at HEAD (D972). |
 | `ADMIN_PAGE_HEADER_MAP_2026-10-24.md` | The Admin page header canvas (SHL1–SHL9) read against what each board can reuse that day (D936). |
 | `SPINOUT_LAB_ADMIN_MAP_2026-10-24.md` | Every read behind the Spin-Out Lab admin canvas (SL1–SL21), board by board, its defects re-checked at HEAD, and production's calendar that day (D937). |
 | `PITCH_DECK_WORKER_MAP_2026-10-24.md` | Every deck endpoint against the Pitch deck studio canvas's boards, and the twelve #2434 bugs on that day (D894). |

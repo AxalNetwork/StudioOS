@@ -132,6 +132,28 @@ recent activity and the four lightboxes wait for D930's five parts (D931 to
 D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
 row says what is drawn today.
 
+## Landed 2026-10-24 — Admin · Advisors & Partners (#2369)
+
+The owner's artifacts `1CmAZBBZSUtJvnSx8mwcYQ` and `JwaxHtcBqegNPRvcKmCanF`
+came from S1's prompt on #2369, as the usual pair:
+- `Advisors Partners · Boards.dc.html` is the board grid (AP1 to AP14, with
+  the lettered boards AP8a–b, AP9a–d, AP11a–b, AP12a–c and AP13a–d), the
+  output of `scripts/read-canvas.mjs` as is;
+- `Advisors Partners Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in
+  whitespace, the font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/advisors-partners` is live with Overview, Firms
+and Deck roster. `/admin?tab=network-profiles` and `/admin/network-profiles`
+forward to the Deck roster with the moved notice. S21's integration (D972)
+draws the header, the tiles whose reads exist, Needs you, the firms table
+and today's roster. Sessions, settlements, the four charts, People, the
+drawers and dialogs, and the roster's redesign wait for D972's eight parts,
+so this canvas stays in the queue until they land. The `ROUTE_MAP.md` row
+says what is drawn today.
+
 ## Landed 2026-10-24 — Admin page header (#2375)
 
 The owner's artifact `KhVPwtFC4WkDiPYCFmSdjv` came from S1's prompt on #2375.
