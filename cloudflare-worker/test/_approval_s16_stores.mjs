@@ -18,6 +18,21 @@ export const S16_STORES_SQL = `
   CREATE TABLE partner_profiles (
     email TEXT PRIMARY KEY, user_id INTEGER, persona TEXT, legal_entity_name TEXT,
     admin_status TEXT DEFAULT 'pending', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+  -- D990: lane 7 leaves Drafts out, and a Draft is read off every answer
+  -- column and the chat, so this table carries them (the baseline's and 275's).
+  ALTER TABLE partner_profiles ADD COLUMN entity_type TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN ein TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN signatory_name TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN signatory_title TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN company_established INTEGER;
+  ALTER TABLE partner_profiles ADD COLUMN chat_history TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN extracted_data TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN founder_track TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN current_stage TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN partnership_goal TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN existing_jurisdiction TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN product_strategy TEXT;
+  ALTER TABLE partner_profiles ADD COLUMN existing_investors TEXT;
   CREATE TABLE user_role_review (
     user_id INTEGER PRIMARY KEY, suggested_role TEXT, onboarded_at TEXT);
   CREATE TABLE job_postings (
@@ -45,6 +60,7 @@ const USER_COLUMNS = [
 /** Create the seven stores on a `node:sqlite` DatabaseSync that already has `users`. */
 export function addS16Stores(d) {
   d.exec(S16_STORES_SQL);
+  d.exec(readFileSync(new URL('../sql/migrations/275_partner_profiles_columns.sql', import.meta.url), 'utf8'));
   d.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
   const have = new Set(d.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
   for (const [name, type] of USER_COLUMNS) {

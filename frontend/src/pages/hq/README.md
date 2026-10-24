@@ -10,9 +10,9 @@ only its registry controls and routes require the elevation.
 
 | File | What it is |
 | --- | --- |
-| `SuperAdminOnlyNotice.jsx` | What an admin WITHOUT the elevation sees on an HQ-only route — a stated boundary inside the shell, never a bounce. Since D940 it is canvas SHL7a: the dashed "HQ only" card, its title the page's one h1, with Go to Studio and My licence and no Admin Console link. |
-| `AdminBoundary.jsx` | D940, canvas SHL7b: what a member who is not an admin (Founder, Operating Partner, Investor, Advisor, Explorer) sees on an `/admin` address, drawn by `RoleGuard`'s route boundaries in place of the silent redirect: "This page is for studio admins" and Go to your home. Reads nothing. An unnamed `/admin/...` address reaches it through the `/admin/*` route, where an admin reads Not found. |
-| `adminBoundaryModel.js` | `AdminBoundary`'s roles and words, pure, so `App.jsx` reads the roles without loading the card. |
+| `SuperAdminOnlyNotice.jsx` | What an admin WITHOUT the elevation sees on an HQ-only route — a stated boundary inside the shell, never a bounce. D940 (#2745): SHL7a's dashed card, with Go to Studio and My licence and no Admin Console link. |
+| `AdminOnlyNotice.jsx` | D940 (#2745, SHL7b): what a member who is not an admin sees on an `/admin` page, in their own shell, instead of RoleGuard's silent redirect. |
+| `hqNoticeModel.js` | D940: the two cards' words, and `adminRefusal`, the rule RoleGuard reads for who sees SHL7b. |
 | `SuperAdminHolders.jsx` | The holder console: who holds the elevation, grant, revoke. Writes need TOTP + a recent step-up; the last active holder cannot be revoked. |
 | `AccountsPage.jsx` | The HQ "Team" row (canvas H4, and since D221 H20) at `/admin/accounts`, in H20's order: the holder console, the Team table, the two action cards, then the Admin Console's Users panel locked to that section. Under the view-as overlay the holder console and the directory are not drawn, because both read HQ's own database; the rail reads what the Team table read. |
 | `HqTeamActions.jsx` | H20's two action cards (D221): **HQ-only actions** (five rows, one of them marked as every admin's) and **Admin's actions** (four). The names are the canvas's; every note was read against the route that performs the act, so each row says what gates it, where it is done and whether Security records it — never the canvas's notes that describe a platform that does not exist. Pure, and drawing no control of its own; its links are literal and land on registered routes. |

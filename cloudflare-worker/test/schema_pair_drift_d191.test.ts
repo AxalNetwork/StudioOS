@@ -173,7 +173,7 @@ test('every ledger entry carries one of the four kinds and a reviewed reason', (
 
 test('partner_profiles is NOT reported at all — D187 converged it, through an ALTER loop', () => {
   // The case that shaped the guard, and the one it must stay silent about:
-  // routes/profiling.ts's 24-entry loop reaches migration 275's shape exactly.
+  // routes/profiling.ts's 25-entry loop reaches migrations 275's and 556's shape exactly.
   // A CREATE-only comparison calls it divergent; a pair parser that cannot read
   // a type carrying its own quotes — ['raw_chat_json', "TEXT NOT NULL DEFAULT
   // '{}'"] — calls it a one-column superset, which is what this gate did until
@@ -185,7 +185,8 @@ test('partner_profiles is NOT reported at all — D187 converged it, through an 
   const profiling = (runtimeDefinitions().get('partner_profiles') || [])
     .find((d: any) => d.where.startsWith('cloudflare-worker/src/routes/profiling.ts'));
   assert.ok(profiling, 'profiling.ts no longer defines partner_profiles');
-  assert.equal(profiling.alters.length, 24, 'NEW_COLUMNS lost an entry to the parser');
+  // 25 since D990: migration 556's `ref` joined the loop beside 275's columns.
+  assert.equal(profiling.alters.length, 25, 'NEW_COLUMNS lost an entry to the parser');
   assert.ok(profiling.alters.some((a: string[]) => a[0] === 'raw_chat_json'),
     "the entry whose TYPE carries quotes is being dropped again");
 });

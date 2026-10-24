@@ -22,9 +22,9 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
-import SuperAdminOnlyNotice, { SUPER_ADMIN_ONLY } from '../src/pages/hq/SuperAdminOnlyNotice.jsx';
-import AdminBoundary from '../src/pages/hq/AdminBoundary.jsx';
-import { ADMIN_BOUNDARY, ADMIN_BOUNDARY_ROLES } from '../src/pages/hq/adminBoundaryModel.js';
+import SuperAdminOnlyNotice from '../src/pages/hq/SuperAdminOnlyNotice.jsx';
+import AdminOnlyNotice from '../src/pages/hq/AdminOnlyNotice.jsx';
+import { ADMIN_TITLE, ADMIN_LINE, ADMIN_HOME_LABEL, HQ_TITLE, HQ_EYEBROW, hqLine, adminRefusal } from '../src/pages/hq/hqNoticeModel.js';
 
 const h = React.createElement;
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -58,8 +58,8 @@ test('SHL7a: the HQ-only card, its one h1, Go to Studio and My licence, and no A
   try {
     assert.ok(page.byTestId('super-admin-only-notice'));
     assert.deepEqual(page.headings(), [['h1', 'This page belongs to the Super Admin']]);
-    assert.equal(SUPER_ADMIN_ONLY.title, 'This page belongs to the Super Admin');
-    assert.equal(page.text(), 'HQ onlyThis page belongs to the Super AdminYou are signed in as a studio admin, so this page stays closed rather than opening and refusing each action.Go to StudioMy licence');
+    assert.equal(HQ_TITLE, 'This page belongs to the Super Admin');
+    assert.equal(page.text(), `${HQ_EYEBROW}${HQ_TITLE}${hqLine('/admin/licences')}Go to StudioMy licence`);
     assert.deepEqual(page.links(), [{ text: 'Go to Studio', href: '/studio' }, { text: 'My licence', href: '/admin/my-licence' }]);
     assert.doesNotMatch(page.text(), /Admin Console/);
     const card = page.byTestId('super-admin-only-notice');
@@ -71,30 +71,34 @@ test('SHL7a: the HQ-only card, its one h1, Go to Studio and My licence, and no A
 
 test('SHL7b: the member card, its one h1, and Go to your home to the member’s own home', async () => {
   // Mutation checked: the action linked to "/" instead of `home` → the href differs; the line changed → the text check fails.
-  const page = await mounted(h(AdminBoundary, { home: '/exploring' }));
+  const page = await mounted(h(AdminOnlyNotice, { home: '/exploring' }));
   try {
     assert.deepEqual(page.headings(), [['h1', 'This page is for studio admins']]);
     assert.equal(page.text(), '⊘This page is for studio adminsIf you run a studio, ask HQ for admin access.Go to your home');
     assert.deepEqual(page.links(), [{ text: 'Go to your home', href: '/exploring' }]);
-    assert.deepEqual(ADMIN_BOUNDARY, { title: 'This page is for studio admins', line: 'If you run a studio, ask HQ for admin access.', action: 'Go to your home' });
-    assert.match(page.props(page.byTestId('admin-boundary')).className, /dark:bg-gray-900/, 'drawn in dark too');
+    assert.deepEqual([ADMIN_TITLE, ADMIN_LINE, ADMIN_HOME_LABEL], ['This page is for studio admins', 'If you run a studio, ask HQ for admin access.', 'Go to your home']);
+    assert.equal(page.props(page.byTestId('admin-only-notice'))['aria-labelledby'], 'admin-only-title');
+    assert.match(page.props(page.byTestId('admin-only-notice')).className, /dark:bg-gray-900/, 'drawn in dark too');
   } finally { await page.close(); }
-  const fallback = await mounted(h(AdminBoundary));
+  const fallback = await mounted(h(AdminOnlyNotice));
   try { assert.deepEqual(fallback.links(), [{ text: 'Go to your home', href: '/studio' }]); } finally { await fallback.close(); }
 });
 
 test('the guard: only /admin routes and only non-admin members, after a pending handoff, in place of the redirect', () => {
-  // Mutation checked: the /admin entry removed → the source check fails; `!pendingTarget &&` dropped → the order check fails.
-  assert.deepEqual([...ADMIN_BOUNDARY_ROLES].sort(), ['advisor', 'exploring', 'founder', 'investor', 'partner']);
-  assert.ok(!ADMIN_BOUNDARY_ROLES.has('admin') && !ADMIN_BOUNDARY_ROLES.has('pending'));
-  assert.match(APP, /\{ under: \/\^\\\/admin\(\\\/\|\$\)\/, roles: ADMIN_BOUNDARY_ROLES, Panel: AdminBoundary \}/);
+  // The canonical policy and the pending-handoff check both precede the redirect.
+  for (const realRole of ['founder', 'partner', 'investor', 'advisor', 'exploring']) {
+    assert.equal(adminRefusal({ pathname: '/admin/kyc', realRole, isImpersonating: false }), true);
+  }
+  assert.equal(adminRefusal({ pathname: '/admin/kyc', realRole: 'admin', isImpersonating: false }), false);
+  assert.equal(adminRefusal({ pathname: '/admin/kyc', realRole: 'founder', isImpersonating: true }), false);
   assert.match(APP, /<Route path="\/admin\/\*" element=\{guard\(\['admin'\], <NotFoundPage \/>\)\} \/>/);
   const guard = APP.slice(APP.indexOf('function RoleGuard('), APP.indexOf('function AuthScreen('));
   const pending = guard.indexOf('const pendingTarget = isImpersonating ? impersonationTargetRef?.current : null;');
   const boundary = guard.indexOf('const boundary = !pendingTarget && ROUTE_BOUNDARIES.find(');
   const drawn = guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} />;');
+  const refused = guard.indexOf('if (adminRefusal(');
   const redirect = guard.indexOf('return <Navigate to={defaultPath} replace />;');
-  assert.ok(pending > 0 && pending < boundary && boundary < drawn && drawn < redirect, 'the handoff is read first, and the card is drawn instead of the redirect');
+  assert.ok(pending > 0 && pending < boundary && boundary < drawn && drawn < refused && refused < redirect, 'the handoff is read first, and the card is drawn instead of the redirect');
   // The /admin pattern does not catch a neighbour that only starts with the letters.
   const under = /^\/admin(\/|$)/;
   assert.ok(under.test('/admin') && under.test('/admin/kyc') && !under.test('/administrator') && !under.test('/studio'));
@@ -116,7 +120,7 @@ async function appAt(member, route) {
   const { useLocation } = await import('react-router-dom');
   const App = (await import('../src/App.jsx')).default;
   // The two cards are lazy in App; loaded now so they resolve in a microtask.
-  await import('../src/pages/hq/AdminBoundary.jsx');
+  await import('../src/pages/hq/AdminOnlyNotice.jsx');
   await import('../src/pages/hq/SuperAdminOnlyNotice.jsx');
   localStorage.clear(); sessionStorage.clear();
   localStorage.setItem('user', JSON.stringify(member));
@@ -129,11 +133,11 @@ async function appAt(member, route) {
     await act(async () => { root.render(h(MemoryRouter, { initialEntries: [route] }, h(App), h(Landed))); });
     for (let i = 0; i < 120; i += 1) {
       await act(() => new Promise((r) => setImmediate(() => setTimeout(r, 5))));
-      if (select(dom.document, '[data-testid="admin-boundary"]').length || (at && at.pathname !== route)) break;
+      if (select(dom.document, '[data-testid="admin-only-notice"]').length || (at && at.pathname !== route)) break;
     }
     return {
       landed: at?.pathname,
-      boundary: select(dom.document, '[data-testid="admin-boundary"]').length,
+      boundary: select(dom.document, '[data-testid="admin-only-notice"]').length,
       h1s: select(dom.document, 'h1').map((n) => n.textContent.trim()),
     };
   } finally {
@@ -146,7 +150,7 @@ async function appAt(member, route) {
 const settled = { kyc_status: 'approved', access_level: 'full', onboarding_complete: 1, terms_acceptance_pending: false };
 
 test('in the app: a founder on /admin/kyc stays there and reads the card; on another guarded route the redirect stands', async () => {
-  // Mutation checked: the /admin boundary entry removed → the founder lands on /studio with no card.
+  // The canonical refusal policy covers the splat as well as named admin pages.
   const founder = { id: 9401, role: 'founder', email: 'founder@d940.test', name: 'Founder D940', ...settled };
   const kyc = await appAt(founder, '/admin/kyc');
   assert.equal(kyc.landed, '/admin/kyc', 'no silent bounce');
@@ -164,7 +168,7 @@ test('in the app: a founder on /admin/kyc stays there and reads the card; on ano
 
 test('in the app: an admin on an /admin address no route names reads Not found, never the member card', async () => {
   // Mutation checked: the /admin/* route given `['admin', 'founder']` → the founder reads Not found, not the card (test above);
-  // ADMIN_BOUNDARY_ROLES given 'admin' → never drawn for an admin, because the guard admits them first.
+  // Admins are admitted by the guard and never receive the member refusal.
   const admin = { id: 9402, role: 'admin', is_super_admin: 0, email: 'admin@d940.test', name: 'Admin D940', ...settled };
   const unknown = await appAt(admin, '/admin/kyc');
   assert.equal(unknown.landed, '/admin/kyc');

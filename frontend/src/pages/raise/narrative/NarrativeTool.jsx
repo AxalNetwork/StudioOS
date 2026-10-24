@@ -5,10 +5,11 @@ import { Lightbox, Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import {
-  CHECK_RUNS, FIX_NEWEST_ONLY, HOME_PATH, LINE, NEEDS_NONE, NEW_PATH, NOT_RECORDED, NO_VERSION, SLUG, TABS, TITLE, WAITING_SECTIONS,
+  CHECK_RUNS, FIX_NEWEST_ONLY, HOME_PATH, LINE, NEEDS_NONE, NEW_PATH, NOT_RECORDED, NO_VERSION, SLUG, TABS, TITLE,
   checkRows, checkSummary, chosenVersion, compareView, deleteLine, duplicateSentence, homeFooter, homePart, homeTiles, homeUnreadable,
-  needsYou, nextVersion, readByLine, startFromHref, storyRows, tabHref, tabSearch, versionHref, versionSub, versionsOf,
+  needsYou, nextVersion, readByLine, startFromHref, tabHref, tabSearch, versionHref, versionSub, versionsOf,
 } from './narrativeModel';
+import StoryTab from './StoryTab';
 import { NarrativeNotes, NarrativeOtherVenture, NarrativeReads } from './NarrativeAdmin';
 import PositioningTab from './PositioningTab';
 
@@ -103,34 +104,6 @@ function NoVersion({ search, admin }) {
     <div className={`${CARD} flex flex-col items-start gap-3 p-5`} data-testid="narrative-no-version">
       <span className={`text-[13.5px] font-bold ${INK}`}>{NO_VERSION}</span>
       {admin ? null : <Link className={BTN} to={`${NEW_PATH}${tabSearch(search, null, false)}`}>New version</Link>}
-    </div>
-  );
-}
-
-/**
- * Story: one version's words, section by section, as its record states them.
- * D914: beside them the notes thread the founder sees (NAR13), and, for the
- * founder, who read the narrative and why. An admin reads; the edit link goes.
- */
-function StoryTab({ record, version, search, projectId, admin }) {
-  const rows = storyRows(record);
-  return (
-    <div className="flex flex-col gap-3.5" data-testid="narrative-story">
-      {rows.map((r) => (
-        <section key={r.label} className={`${CARD} flex flex-col gap-1.5 px-4 py-3.5`}>
-          <h2 className={`m-0 text-[13.5px] font-extrabold tracking-[-.01em] ${INK}`}>{r.label}</h2>
-          {r.text
-            ? <p className={`m-0 whitespace-pre-line text-[13px] leading-relaxed ${INK}`}>{r.text}</p>
-            : <span className={`${NOT_SET} w-fit`} data-testid="narrative-story-not-recorded">{NOT_RECORDED}</span>}
-        </section>
-      ))}
-      <p className={`m-0 text-[12.5px] leading-relaxed ${MUTED}`} data-testid="narrative-story-waiting">
-        {WAITING_SECTIONS.join(', ')}: these sections are stored once the Investor narrative keeps its own sections.
-        One-liner, Why now and The ask are edited on the version’s page.
-      </p>
-      <Link className={`${LINK} text-[12.5px]`} to={versionHref(version, search)} data-testid="narrative-story-open">{admin ? `Open v${version}` : `Open v${version} to edit it`}</Link>
-      <NarrativeNotes projectId={projectId} version={version} admin={admin} />
-      {admin ? null : <NarrativeReads projectId={projectId} />}
     </div>
   );
 }
@@ -392,7 +365,8 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   const list = useVersions(projectId, reload);
   const wanted = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('version');
   const version = chosenVersion(list.versions, wanted);
-  const needsRecord = tab === 'story' || tab === 'check';
+  // Story reads the narrative's own stores (D910, StoryTab); Check reads the version's record.
+  const needsRecord = tab === 'check';
   const record = useVersionRecord(projectId, needsRecord ? version : null, reload);
   const here = TABS.find((t) => t.id === tab) || TABS[0];
 
@@ -410,11 +384,17 @@ export function NarrativeTabPage({ tab, projectId, projectStatus = 'ready', onRe
   else if (!list.versions.length) body = <NoVersion search={search} admin={admin} />;
 
   else if (tab === 'versions') body = <VersionsTab key={list.versions.map((v) => v.value).join(',')} projectId={projectId} versions={list.versions} search={search} reload={reload} onChanged={retry} admin={admin} />;
-
+  else if (tab === 'story') body = (
+    <>
+      <StoryTab key={version} projectId={projectId} version={version} search={search} phone={phone} readOnly={admin} />
+      <NarrativeNotes projectId={projectId} version={version} admin={admin} />
+      {admin ? null : <NarrativeReads projectId={projectId} />}
+    </>
+  );
   else if (record.status === 'loading' || record.status === 'idle') body = <Skeleton testId="narrative-loading" />;
   else if (record.status === 'refused') body = <p className={`m-0 text-[13px] ${INK}`}>{record.message || 'This version could not be opened.'}</p>;
   else if (record.status === 'error') body = <Unreadable what={`Version ${version}`} claim="This is not a claim that it is empty." onRetry={retry} />;
-  else body = tab === 'story' ? <StoryTab record={record.data} version={version} search={search} projectId={projectId} admin={admin} /> : <CheckTab record={record.data} search={search} newest={version === list.versions[0]?.value} fixOn={fixOn && !admin} />;
+  else body = <CheckTab record={record.data} search={search} newest={version === list.versions[0]?.value} fixOn={fixOn && !admin} />;
 
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`narrative-${tab}-page`}>

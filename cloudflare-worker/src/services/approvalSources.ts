@@ -42,6 +42,7 @@ import type { Env } from '../types';
 import { SLA_DUE_SOON_HOURS } from './slaWindow';
 import { MODERATION_AWAITING_SQL } from './moderationOpen';
 import { PRE_VERDICT_STATUSES } from './referralSubmissions';
+import { IS_WAITING_SQL } from './partnerProfiles';
 
 /** A lane's stable key. The UI orders by this list, so the order is the canvas's. */
 export type ApprovalLaneKey =
@@ -177,14 +178,17 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
     label: 'Partner profiles',
     // PK is `email` and `user_id` may be null (migration 275's header), so the
     // row id is SQLite's `rowid` and the join is on email, as profiling.ts does.
+    // D990 — a Draft (no chat, no answers: Eadwyn's name-only rows) is not
+    // waiting, so the lane counts and lists `IS_WAITING_SQL`, the same rule
+    // as the Partner profiles queue (services/partnerProfiles.ts).
     countSql:
-      'SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM partner_profiles WHERE admin_status = \'pending\'',
+      'SELECT COUNT(*) AS n, MIN(p.created_at) AS oldest FROM partner_profiles p WHERE ' + IS_WAITING_SQL,
     rowsSql:
       "SELECT p.rowid AS id, COALESCE(NULLIF(u.name, ''), p.email) AS who, "
       + "'Partner profile · ' || COALESCE(NULLIF(p.legal_entity_name, ''), p.persona, 'unnamed') AS what, "
       + 'p.created_at AS created_at '
       + 'FROM partner_profiles p LEFT JOIN users u ON u.email = p.email '
-      + "WHERE p.admin_status = 'pending' ORDER BY p.created_at ASC LIMIT ?",
+      + 'WHERE ' + IS_WAITING_SQL + ' ORDER BY p.created_at ASC LIMIT ?',
   },
   {
     key: 'exploring',

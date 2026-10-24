@@ -14,9 +14,24 @@ and hash and adding `?moved=`:
 - `/admin/spinout-lab/preview` → `/preview` (`LabPreviewRedirect.jsx`).
 
 - `AdminLab.jsx` — the page: the header (crumb, pills, line, facts, scope chip,
-  moved notice, tabs with their counts) and the Overview's blocks. Every other
-  tab is today's console, asked for one section through `AdminSpinoutLab`'s
-  `section` prop.
+  moved notice, tabs with their counts) and the Overview's blocks.
+  Applications, Cohorts and Participants are today's console, asked for one
+  section through `AdminSpinoutLab`'s `section` prop; Hosts, Formation and
+  Graduation mount the three files below.
+- `LabHosts.jsx` — Hosts (SL9, D970): status chips with the Worker's counts,
+  search, Applied as and the sort, the table (cards on a phone), and the
+  Approve, Decline and Remove dialogs with a note the host sees.
+- `LabFormation.jsx` — Formation (SL10, SL10d; D970): the 83(b) operator
+  review (assign, record a review) and the formation orders (mark the packet
+  ready, record the filing date), each read alone, each write in a dialog with
+  nothing preselected. The "Lab ventures" switch waits for part 4 (#2751).
+- `LabGraduation.jsx` — Graduation (SL11, SL11r; D970): the four tiles
+  (Emailed and Downloaded "Not recorded"), Issue all eligible with its
+  result, the table, and the Issue and Revoke dialogs (a reason required).
+- `labDesksModel.js` — pure. Those three tabs' words, rows, filters, sorts,
+  dialog copy and refusals, and the Lab's day (ET; stored stamps are UTC).
+- `labParts.jsx` — what the three tabs draw with: pills, chips, selects, the
+  read hook and its state line, tiles, the pager and the in-page dialog.
 - `labModel.js` — pure. The address and tabs, the moved sentences, and the
   Overview's tiles, cohort table and Needs you from the reads, each `ready`,
   `loading` or `unreadable`.

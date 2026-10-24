@@ -8,8 +8,11 @@ D915 (#2368): the admin Events desk at `/admin/events`, built to the owner's
 draws the shell: the crumb "Community › Events", the header, the literal tab
 strip, then the tab the address names.
 
-- `EventsOverview.jsx` — Overview (EV1): the four tiles, the status strip from
-  the events list, and Page views and Feedback as "Not recorded".
+- `EventsOverview.jsx` — D920 Overview (EV1/2, EV12–15, EV17a): period radios,
+  eight tiles, weekly chart/table, attention and upcoming rows, types, show-up,
+  profiles/sources and status counts, with independent block states.
+- `overviewModel.js` — D920's pure overview block states and derivations over
+  D918: money by currency, period comparison, chart rows, profiles and links.
 - `EventsReview.jsx` — Review (EV3): the queue, the selected event's facts,
   "What approving does" and the action bar; Approve (EV4) and Send back (EV5).
 - `EventsAll.jsx` — All events (EV6, EV17d): the table, searched by title, with
@@ -52,8 +55,10 @@ strip, then the tab the address names.
 - The Worker checks no status on a write, so after one the event just decided
   leaves the queue, and the event page's actions wait, until a read newer
   than the write lands. Focus then sits on the confirmation line.
-- No type, format, period control or chart is drawn until the part of D915 §6
-  that builds it lands. Part 3's list (D918) gives the host line, host search
+- D920's Overview reads `GET /api/admin/events/overview?weeks=4|12|52`;
+  its Next-up card reads the enriched list, with no capped analytics read.
+  Charts reuse `../../../ui/Charts.jsx` and its one palette. Other tabs retain their
+  own reads. Part 3's list (D918) gives the host line, host search
   and the Host filter; "Cancelled with paid tickets" reads D918's overview,
   only while that view is on (`useEventsDesk`'s `paidView`).
 - Two events clash when neither is cancelled and their times overlap; an
