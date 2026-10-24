@@ -102,7 +102,16 @@ export function mmss(seconds) {
 
 export const versionLabel = (v) => (v?.version == null ? 'Version not recorded' : `v${v.version}`);
 
-/** The versions table, newest first, as the canvas sorts it by default. */
+/** Who a version is written for (PD3), as the Worker stores it (D898, migration 539). */
+export const AUDIENCE_LABELS = {
+  angel: 'Angel', pre_seed_fund: 'Pre-seed fund', seed_fund: 'Seed fund', series_a_fund: 'Series A fund',
+  strategic: 'Strategic', grant: 'Grant', other: 'Other',
+};
+
+/**
+ * The versions table, newest first, as the canvas sorts it by default. A
+ * version saved before D898 has no audience or round: "Not recorded".
+ */
 export function versionRows(versions) {
   return [...versions]
     .sort((a, b) => Number(b.version ?? -1) - Number(a.version ?? -1))
@@ -110,6 +119,9 @@ export function versionRows(versions) {
       id: v.id,
       label: versionLabel(v),
       title: String(v.title || '').trim() || 'Untitled deck',
+      audience: AUDIENCE_LABELS[v.audience] || NOT_RECORDED,
+      round: String(v.round?.name || '').trim() || NOT_RECORDED,
+      by: String(v.by?.name || '').trim() || NOT_RECORDED,
       saved: dayLabel(v.created_at),
       current: Boolean(v.is_current || v.current),
     }));

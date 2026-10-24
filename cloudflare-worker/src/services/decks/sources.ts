@@ -506,7 +506,11 @@ export function bindingsOf(slides: unknown): Array<{ slide: number; field: strin
   (Array.isArray(slides) ? slides : []).forEach((s: any, i) => {
     if (ok(s?.binding)) out.push({ slide: i, field: null, binding: s.binding });
     for (const f of Array.isArray(s?.fields) ? s.fields : []) if (ok(f?.binding)) out.push({ slide: i, field: String(f.key ?? ''), binding: f.binding });
-    for (const [j, b] of (Array.isArray(s?.blocks) ? s.blocks : []).entries()) if (ok(b?.binding)) out.push({ slide: i, field: `block:${j}`, binding: b.binding });
+    for (const [j, b] of (Array.isArray(s?.blocks) ? s.blocks : []).entries()) {
+      if (ok(b?.binding)) out.push({ slide: i, field: `block:${j}`, binding: b.binding });
+      // D898: a chart binds each of its series.
+      for (const [k, sr] of (Array.isArray(b?.series) ? b.series : []).entries()) if (ok(sr?.binding)) out.push({ slide: i, field: `block:${j}:series:${k}`, binding: sr.binding });
+    }
   });
   return out;
 }

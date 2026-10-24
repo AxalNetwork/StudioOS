@@ -35,6 +35,7 @@ import { refuse } from '../util/refusal';
 import { railFor, refuseRun } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
+import { AUDIENCES, bindingOf, contentHash, ensureDeckVersionColumns, modelProblems, sanitizeModel, sanitizeTheme } from '../services/decks/slideModel';
 import { isSupportSession } from '../integrations/providers/mercury';
 
 /** D895 applies only to deck operations, not other project-content routes. */
@@ -169,6 +170,8 @@ async function ensureSchema(env: Env): Promise<void> {
       }
     }
   } catch {}
+  // Migration 539 — D898: what a version records about itself, for the editor.
+  await ensureDeckVersionColumns(env);
   MIGRATED.set(bindingKey(env), true);
 }
 
@@ -421,6 +424,8 @@ function sanitizeSlides(input: any[]): any[] {
     if (s?.method_id) out.method_id = String(s.method_id).slice(0, 80);
     if (s?.appendix) out.appendix = !!s.appendix;
     if (Array.isArray(s?.fields)) out.fields = sanitizeFields(s.fields);
+    // D898: the editor's layout, notes, background, blocks and binding.
+    Object.assign(out, sanitizeModel(s, sanitizeImageUrl));
     return out;
   });
 }
@@ -465,6 +470,9 @@ function sanitizeFields(input: any[]): any[] {
     // Preserve the read-only flag so auto-computed fields stay non-editable
     // after a save/reload round-trip.
     if (f?.readonly) out.readonly = true;
+    // D896/D898: a field bound to a source keeps its binding.
+    const bd = bindingOf(f?.binding);
+    if (bd) out.binding = bd;
     return out;
   });
 }
@@ -529,11 +537,93 @@ function rowToDeck(row: any, withSlides = true): any {
   const out: any = {
     id: row.id, project_id: row.project_id, version: row.version,
     title: row.title, is_current: !!row.is_current, created_at: row.created_at,
+    // D898: who the version is for, its round, its theme and who saved it.
+    // A version saved before D898 reads null for each: "Not recorded".
+    audience: row.audience ?? null,
+    round: row.round_ref ? { uid: row.round_ref, name: row.round_name ?? null } : null,
+    theme: themeOfRow(row),
+    content_hash: row.content_hash ?? null,
+    by: row.created_by != null ? { id: Number(row.created_by), name: row.created_by_name ?? null } : null,
   };
   if (withSlides) {
     try { out.slides = founderPitchSlides(JSON.parse(row.slides || '[]')); } catch { out.slides = []; }
   }
   return out;
+}
+
+/**
+ * D898 — a version as someone outside the venture reads it: the share link and
+ * the headless print export. The speaker notes, who saved it, and who and which
+ * round it was written for stay with the venture; the theme stays, because the
+ * cards render on it.
+ */
+function publicDeckOf(row: any): any {
+  const { audience, round, by, content_hash, ...deck } = rowToDeck(row);
+  void audience; void round; void by; void content_hash;
+  deck.slides = (deck.slides || []).map((s: any) => {
+    const { notes, ...card } = s || {};
+    void notes;
+    return card;
+  });
+  return deck;
+}
+
+function themeOfRow(row: any): any {
+  if (!row?.theme_json) return null;
+  try { return sanitizeTheme(JSON.parse(row.theme_json), sanitizeImageUrl); } catch { return null; }
+}
+
+/** What a version records about itself besides its slides (D898). */
+type VersionMeta = { audience?: string | null; round_ref?: string | null; theme?: any };
+
+/**
+ * The audience, round and theme a save asks for, checked: an unknown audience,
+ * or a round that is not this venture's, is refused. A field the request
+ * leaves out keeps the version's own (`base`).
+ */
+async function versionMetaOf(env: Env, projectId: number, body: any, base: any): Promise<VersionMeta | string> {
+  const has = (k: string) => body && Object.prototype.hasOwnProperty.call(body, k);
+  const audience = has('audience') ? body.audience : base?.audience ?? null;
+  if (audience != null && !(AUDIENCES as readonly string[]).includes(audience)) return `audience must be one of ${AUDIENCES.join(', ')}`;
+  const round_ref = has('round_ref') ? body.round_ref : base?.round_ref ?? null;
+  if (round_ref != null) {
+    if (typeof round_ref !== 'string' || round_ref.length > 64) return 'round_ref must be a round of this venture';
+    const r = await env.DB.prepare('SELECT 1 AS ok FROM raise_rounds WHERE uid = ? AND project_id = ?').bind(round_ref, projectId).first<any>().catch(() => null);
+    if (!r) return 'round_ref must be a round of this venture';
+  }
+  let theme = has('theme') ? body.theme : themeOfRow(base);
+  if (theme != null) {
+    theme = sanitizeTheme(theme, sanitizeImageUrl);
+    if (!theme) return 'theme.kind must be brand, neutral_light or neutral_dark';
+  }
+  return { audience, round_ref, theme };
+}
+
+/**
+ * Adds each version's round name and saver's name, for the deck read and the
+ * versions list. A lookup that fails leaves the name null ("Not recorded"); the
+ * version itself still reads.
+ */
+async function withNames(env: Env, rows: any[]): Promise<any[]> {
+  const rounds = [...new Set(rows.map((r) => r.round_ref).filter((x) => typeof x === 'string'))];
+  const users = [...new Set(rows.map((r) => r.created_by).filter((x) => x != null).map(Number))];
+  const roundName = new Map<string, string | null>();
+  const userName = new Map<number, string | null>();
+  if (rounds.length && rows.length) {
+    try {
+      const res = await env.DB.prepare(
+        `SELECT uid, name FROM raise_rounds WHERE project_id = ? AND uid IN (SELECT value FROM json_each(?))`,
+      ).bind(Number(rows[0].project_id), JSON.stringify(rounds)).all<any>();
+      for (const r of (res.results || []) as any[]) roundName.set(String(r.uid), r.name ?? null);
+    } catch {}
+  }
+  if (users.length) {
+    try {
+      const res = await env.DB.prepare('SELECT id, name FROM users WHERE id IN (SELECT value FROM json_each(?))').bind(JSON.stringify(users)).all<any>();
+      for (const u of (res.results || []) as any[]) userName.set(Number(u.id), u.name ?? null);
+    } catch {}
+  }
+  return rows.map((r) => ({ ...r, round_name: roundName.get(r.round_ref) ?? null, created_by_name: userName.get(Number(r.created_by)) ?? null }));
 }
 
 async function nextVersion(env: Env, projectId: number): Promise<number> {
@@ -543,15 +633,18 @@ async function nextVersion(env: Env, projectId: number): Promise<number> {
   return (Number(row?.v) || 0) + 1;
 }
 
-async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null): Promise<number> {
+async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null, meta: VersionMeta = {}): Promise<number> {
   await env.DB.prepare(
     'UPDATE pitch_decks SET is_current = 0 WHERE project_id = ? AND is_current = 1'
   ).bind(projectId).run();
   const v = await nextVersion(env, projectId);
+  const stored = founderPitchSlides(slides);
+  const theme = meta.theme ?? null;
   const res = await env.DB.prepare(
-    `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by)
-     VALUES (?, ?, ?, ?, 1, ?)`
-  ).bind(projectId, v, JSON.stringify(founderPitchSlides(slides)), title, userId).run();
+    `INSERT INTO pitch_decks (project_id, version, slides, title, is_current, created_by, audience, round_ref, theme_json, content_hash)
+     VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`
+  ).bind(projectId, v, JSON.stringify(stored), title, userId, meta.audience ?? null, meta.round_ref ?? null,
+    theme ? JSON.stringify(theme) : null, await contentHash(stored, theme)).run();
   return Number((res as any)?.meta?.last_row_id || 0);
 }
 
@@ -768,14 +861,14 @@ decks.get('/by-project/:pid', async (c) => {
   try { await projectOwned(c, user, pid); } catch { return c.json({ error: 'forbidden' }, 403); }
   await ensureSchema(c.env);
   const rows = await c.env.DB.prepare(
-    `SELECT id, project_id, version, title, is_current, created_at FROM pitch_decks
-     WHERE project_id = ? ORDER BY version DESC`
+    `SELECT id, project_id, version, title, is_current, created_at, audience, round_ref, theme_json, content_hash, created_by
+       FROM pitch_decks WHERE project_id = ? ORDER BY version DESC`
   ).bind(pid).all<any>();
   const proposal = await c.env.DB.prepare(
     'SELECT * FROM pitch_deck_proposals WHERE project_id = ? ORDER BY id DESC LIMIT 1',
   ).bind(pid).first<any>();
   return c.json({
-    versions: ((rows.results ?? []) as any[]).map((r) => rowToDeck(r, false)),
+    versions: (await withNames(c.env, (rows.results ?? []) as any[])).map((r) => rowToDeck(r, false)),
     proposal: proposal ? rowToProposal(proposal) : null,
   });
 });
@@ -783,7 +876,7 @@ decks.get('/by-project/:pid', async (c) => {
 async function getDeckRow(env: Env, id: number): Promise<any> {
   const row = await env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   if (!row) throw new Error('NotFound');
-  return row;
+  return (await withNames(env, [row]))[0];
 }
 
 // ---------------------------------------------------------------------
@@ -860,7 +953,7 @@ decks.get('/print-export/:token', async (c) => {
     if (pr?.name) projectName = String(pr.name).slice(0, 200);
   } catch {}
   return c.json({
-    ...rowToDeck(row),
+    ...publicDeckOf(row),
     method_id: methodId,
     project_id: Number(row.project_id) || null,
     project_name: projectName,
@@ -959,7 +1052,7 @@ decks.get('/share/:token', async (c) => {
   } catch {}
   if (bind.setCookie) c.header('Set-Cookie', bind.setCookie);
   return c.json({
-    ...rowToDeck(row),
+    ...publicDeckOf(row),
     view_id: viewId,
     method_id: methodId,
     project_id: Number(row.project_id) || null,
@@ -1170,6 +1263,12 @@ decks.put('/:id', async (c) => {
     catch { return c.json({ error: 'paywall', code: 'PAYWALL_PREMIUM_METHOD', method_id: persistedMethod, required_tier: 'studio' }, 402); }
   }
   const body = await c.req.json().catch(() => ({} as any));
+  // D898: a save the model cannot keep whole is refused with what is wrong,
+  // never trimmed, so no block is lost without the founder being told.
+  const problems = modelProblems(body?.slides, sanitizeImageUrl);
+  if (problems.length) return c.json({ error: problems[0], code: 'SLIDE_MODEL', problems }, 400);
+  const meta = await versionMetaOf(c.env, Number(row.project_id), body, row);
+  if (typeof meta === 'string') return c.json({ error: meta, code: 'VERSION_META' }, 400);
   const slides = sanitizeSlides(body?.slides || []);
   // Refuse client-side attempts to escalate a non-premium deck into a
   // premium one via PUT — apply-method is the only way to switch templates.
@@ -1263,7 +1362,7 @@ decks.put('/:id', async (c) => {
     }
   }
 
-  const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null);
+  const newId = await insertVersion(c.env, Number(row.project_id), slides, title, Number(user.id) || null, meta);
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_saved', 'Deck saved');
   return c.json(rowToDeck(await getDeckRow(c.env, Number(newId))));
 });
@@ -1278,7 +1377,8 @@ decks.post('/:id/restore', async (c) => {
   catch { return c.json({ error: 'forbidden' }, 403); }
   let slides: any[] = [];
   try { slides = sanitizeSlides(JSON.parse(row.slides || '[]')); } catch {}
-  const newId = await insertVersion(c.env, Number(row.project_id), slides, row.title, Number(user.id) || null);
+  const newId = await insertVersion(c.env, Number(row.project_id), slides, row.title, Number(user.id) || null,
+    { audience: row.audience ?? null, round_ref: row.round_ref ?? null, theme: themeOfRow(row) });
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_restored', 'Deck version restored');
   return c.json(rowToDeck(await getDeckRow(c.env, Number(newId))));
 });
@@ -1766,7 +1866,11 @@ decks.post('/proposals/:id/keep', async (c) => {
   if (row instanceof Response) return row;
   let slides: any[] = [];
   try { slides = JSON.parse(row.slides || '[]'); } catch { slides = []; }
-  const deckId = await insertVersion(c.env, Number(row.project_id), slides, row.title || 'Pitch deck', Number(user.id) || null);
+  // D898: the kept version is for the same audience, round and theme as the version it was proposed over.
+  const base = await c.env.DB.prepare('SELECT audience, round_ref, theme_json FROM pitch_decks WHERE id = ? AND project_id = ?')
+    .bind(row.base_deck_id, row.project_id).first<any>().catch(() => null);
+  const deckId = await insertVersion(c.env, Number(row.project_id), slides, row.title || 'Pitch deck', Number(user.id) || null,
+    base ? { audience: base.audience ?? null, round_ref: base.round_ref ?? null, theme: themeOfRow(base) } : {});
   await c.env.DB.prepare('DELETE FROM pitch_deck_proposals WHERE id = ?').bind(row.id).run();
   const fresh = await getDeckRow(c.env, deckId);
   await auditDeckWrite(c, user, Number(row.project_id), 'deck_kept', 'Deck proposal kept');

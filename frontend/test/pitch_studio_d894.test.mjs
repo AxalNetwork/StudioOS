@@ -330,6 +330,17 @@ test('versions newest first, and a missing date says so', () => {
     ['v4', 'Seed', '20 Oct', true], ['v2', 'Untitled deck', '2 Oct', false], ['v1', 'First', 'Date not recorded', false],
   ]);
   assert.equal(dayLabel('not a date'), 'Date not recorded');
+  // D898: Audience, Round and By. A version saved before migration 539 reads each as Not recorded.
+  const withMeta = [
+    { id: 5, version: 5, audience: 'seed_fund', round: { uid: 'r1', name: 'Seed' }, by: { id: 2, name: 'Fay Founder' }, created_at: '2026-10-21T09:00:00Z' },
+    { id: 1, version: 1, audience: null, round: null, by: null, created_at: '2026-08-14T09:00:00Z' },
+    { id: 3, version: 3, audience: 'family_office', round: { uid: 'r2', name: ' ' }, by: { id: 4, name: '' }, created_at: '2026-09-01T09:00:00Z' },
+  ];
+  assert.deepEqual(versionRows(withMeta).map((r) => [r.label, r.audience, r.round, r.by]), [
+    ['v5', 'Seed fund', 'Seed', 'Fay Founder'],
+    ['v3', 'Not recorded', 'Not recorded', 'Not recorded'],
+    ['v1', 'Not recorded', 'Not recorded', 'Not recorded'],
+  ]);
 });
 
 test('an admin reads; everyone else the route admits works here', () => {
