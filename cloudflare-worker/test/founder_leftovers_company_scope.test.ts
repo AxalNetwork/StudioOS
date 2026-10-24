@@ -252,8 +252,9 @@ test('every founder surface identified by the measurement now narrows', () => {
       // #2435 shares the actual gate with brand; follow that import rather
       // than requiring the removed duplicate company predicate in the router.
       for (const router of [route, read('cloudflare-worker/src/routes/brand.ts')]) {
-        assert.match(router, /import \{ projectOwned \} from '\.\.\/middleware\/projectContentAccess'/);
+        assert.match(router, /import \{ projectOwned(?: as sharedProjectOwned)? \} from '\.\.\/middleware\/projectContentAccess'/);
         assert.match(router, /await projectOwned\(c, user,/);
+        if (router.includes('projectOwned as sharedProjectOwned')) assert.match(router, /await sharedProjectOwned\(c, user, projectId, opts\)/);
       }
       src += read('cloudflare-worker/src/middleware/projectContentAccess.ts');
     }

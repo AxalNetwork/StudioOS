@@ -427,7 +427,7 @@ deckShareActions.post('/share/:token/nda', async (c) => {
     type: 'nda_signed', refId: docId ? String(docId) : null,
   });
 
-  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG, data_room_access_granted: false, message: 'NDA recorded with the venture founder. Data-room access still requires a separate founder grant.' });
+  return c.json({ ok: true, document_id: docId, template_key: DECK_SHARE_NDA_SLUG, data_room_access_granted: false, message: 'NDA recorded with the venture founder. This does not grant data-room access; a separate founder grant is required.' });
 });
 
 // ─────────────────────────────────────────────────────────────────────

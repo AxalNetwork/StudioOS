@@ -137,7 +137,8 @@ test('deck generation: fallback uses project facts without internal scores', asy
   const f = fixture();
   try {
     await snapshot(f);
-    const response = await request(decks, f.env, 1, '/generate', { project_id: 10 });
+    f.db.exec("UPDATE users SET subscription_tier='studio' WHERE id=4");
+    const response = await request(decks, f.env, 4, '/generate', { project_id: 10 });
     assert.equal(response.status, 200, await response.clone().text());
     const deck: any = await response.json();
     assert.equal(deck.slides.length, 10);
