@@ -3,10 +3,11 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { adminCircles, adminEvents, adminJobs, adminNetworkProfiles } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
-import { RailFrame, WorkerRail } from '../../../ui';
+import {
+  Bar100, ChartTable, HBars, Legend, RailFrame, WorkerRail,
+} from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
 import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
-import { Bar100, ChartTable, HBars, Legend } from '../insights/InsightsCharts';
 import {
   AS_ENTERED_TIP, EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NOT_RECORDED, NOT_YET, PAGE_LINE, PAGE_UNREADABLE,
   PERIOD_WAITS, PERIODS, SCOPE_LABEL, SCOPE_TITLE, WAITED_UNRECORDED, WAITS,
@@ -276,7 +277,7 @@ function CirclesCard({ circles, roster, onRetry, onOpen }) {
       <span className="flex flex-wrap gap-4">
         <Opener box="circles" onOpen={onOpen}>See all circles</Opener>
         <Link to="/admin/circles" className={LINK}>Open circles</Link>
-        <Link to="/admin?tab=network-profiles" className={LINK}>Open advisors &amp; partners</Link>
+        <Link to="/admin/advisors-partners" className={LINK}>Open advisors &amp; partners</Link>
       </span>
     </section>
   );
@@ -463,7 +464,7 @@ export default function AdminCommunity() {
               <Link to="/admin/circles" className={LINK}>Open circles</Link>
             </Console>
             <Console testId="community-console-roster" name="Advisors & Partners" what="The roster shown on decks and pages" figure={doors.roster}>
-              <Link to="/admin?tab=network-profiles" className={LINK}>Open advisors &amp; partners</Link>
+              <Link to="/admin/advisors-partners" className={LINK}>Open advisors &amp; partners</Link>
             </Console>
             <Console testId="community-console-wellbeing" name="Wellbeing" what="Verify experts and keep the library" figure={doors.wellbeing}>
               <Link to="/admin?tab=wellbeing" className={LINK}>Open wellbeing</Link>

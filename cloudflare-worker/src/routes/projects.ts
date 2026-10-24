@@ -623,13 +623,25 @@ projects.post('/submit', async (c) => {
   // DB writes. The /submit path is wide-open intake; a malicious founder
   // could otherwise send a pre-built TIER_1 payload AND have a project row
   // created as a side effect even when the request is rejected.
-  const { assertNoReservedFields, signScore, detectAnomalies, INTEGRITY_VERSION } =
+  const { assertNoReservedFields, assertOfficialInputsComplete, MissingOfficialInputsError, signScore, detectAnomalies, INTEGRITY_VERSION } =
     await import('../services/scoreIntegrity');
   try {
     assertNoReservedFields(data);
+    assertOfficialInputsComplete(data);
   } catch (e) {
+    if (e instanceof MissingOfficialInputsError) return c.json({ error: 'Complete all scoring inputs before submitting.', missing: e.missing, code: 'missing_official_inputs' }, 400);
     const message = e instanceof Error ? e.message : 'Reserved field rejected';
     return c.json({ error: message, code: 'reserved_field' }, 400);
+  }
+
+  for (const field of ['sam', 'funding_needed']) {
+    const raw = data[field];
+    if (raw == null || (typeof raw === 'string' && raw.trim() === '')) { data[field] = null; continue; }
+    const value = Number(raw);
+    if (!['number', 'string'].includes(typeof raw) || !Number.isFinite(value)) {
+      return c.json({ error: 'Optional numeric inputs must be finite numbers.', field, code: 'invalid_numeric_input' }, 400);
+    }
+    data[field] = value;
   }
 
   // Task #2 — validate + canonicalize the structured Use-of-Funds allocation
@@ -637,6 +649,12 @@ projects.post('/submit', async (c) => {
   const uof = normalizeUseOfFunds(data.use_of_funds);
   if (uof.error) return c.json({ error: uof.error, code: 'invalid_use_of_funds' }, 400);
   const useOfFunds = uof.value;
+
+  const result = runFullScore(data);
+  if (result.total_score == null || !result.breakdown) {
+    return c.json({ error: 'Complete all scoring inputs before submitting.', missing: result.missing, code: 'missing_official_inputs' }, 400);
+  }
+  const b = result.breakdown;
 
   const sql = getSQL(c.env);
 
@@ -651,10 +669,7 @@ projects.post('/submit', async (c) => {
 
   const submitCompanyId = await resolveActiveCompany(
     c.env, submitUser as any, c.req.header(ACTIVE_COMPANY_HEADER));
-  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${submitCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam || null}, ${data.sam || null}, ${data.cost_to_mvp || null}, ${data.funding_needed || null}, ${useOfFunds}) RETURNING *`;
-
-  const result = runFullScore(data);
-  const b = result.breakdown;
+  const [project] = await sql`INSERT INTO projects (name, description, sector, stage, founder_id, company_id, problem_statement, solution, why_now, tam, sam, cost_to_mvp, funding_needed, use_of_funds) VALUES (${data.name}, ${data.description || null}, ${data.sector || null}, 'idea', ${founderId}, ${submitCompanyId}, ${data.problem_statement || null}, ${data.solution || null}, ${data.why_now || null}, ${data.tam ?? null}, ${data.sam ?? null}, ${data.cost_to_mvp ?? null}, ${data.funding_needed ?? null}, ${useOfFunds}) RETURNING *`;
 
   // Snapshot the scoring inputs so the nightly audit + admin queue can
   // reproduce the math, and so anomaly detection can compare to history.

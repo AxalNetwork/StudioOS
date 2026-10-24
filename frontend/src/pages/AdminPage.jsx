@@ -9,22 +9,23 @@ import AdminBoardFrame from './admin/AdminBoardFrame';
 // ./admin/consoles/ and each loading only its own data. This page is the
 // shell: the header, the section dropdown, and the one console it mounts.
 import UsersConsole from './admin/consoles/UsersConsole';
-import PartnerProfilesConsole from './admin/consoles/PartnerProfilesConsole';
 import KycConsole from './admin/consoles/KycConsole';
 import { LegalPanel } from './admin/consoles/LegalConsole';
-import { PersonasPanel } from './admin/consoles/PersonasConsole';
 import { DirectoryPanel } from './admin/consoles/DirectoryConsole';
 import { PromoCodesPanel } from './admin/consoles/PromoCodesConsole';
-import { PaymentsPanel } from './admin/consoles/PaymentsConsole';
 import { BankAccountsPanel } from './admin/consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './admin/consoles/ProductTestingConsole';
 import { BillingPanel } from './admin/consoles/BillingConsole';
 import { WellbeingExpertsPanel } from './admin/consoles/WellbeingConsole';
-// Task #1 — embedded as a tab inside Admin Console so admins land on
-// the network roster via /admin?tab=network-profiles. The standalone
-// /admin/network-profiles route stays wired for direct deep-links.
-import AdminNetworkProfiles from './admin/AdminNetworkProfiles';
-import AdminSpinoutLab from './admin/AdminSpinoutLab';
+// D1008 (#2386) — Payments left this console for its own page under
+// Platform; ?tab=payments forwards there in LegacyContractsRedirect.
+// D997 (#2378) — Persona segments left this console for its own page;
+// ?tab=personas forwards there in LegacyContractsRedirect.
+// D989 (#2380) — Partner profiles left this console for its own page under
+// Approvals; ?tab=profiles forwards there in LegacyContractsRedirect.
+// D972 (#2369) — the network roster left this console for Advisors &
+// Partners; ?tab=network-profiles forwards to its Deck roster tab in
+// LegacyContractsRedirect before this console mounts.
 
 // The Legal console's panel. Contracts (`pages/hq/ContractsPage.jsx`, D647)
 // renders its own desk, `pages/admin/contracts/ContractsDesk.jsx`, not this,
@@ -45,6 +46,8 @@ const ADMIN_SECTIONS = [
   { value: 'users', label: 'Users', Icon: Users },
   { value: 'profiles', label: 'Partner Profiles', Icon: Briefcase },
   { value: 'kyc', label: 'KYC Queue', Icon: ShieldCheck },
+  // D937 (#2374): picking it opens /admin/programs/spinout-lab/applications,
+  // through LegacyContractsRedirect, as Legal opens Contracts.
   { value: 'lab-applications', label: 'Spin-Out Lab', Icon: FlaskConical },
   { value: 'legal', label: 'Legal', Icon: FileText },
   { value: 'personas', label: 'Personas', Icon: Sparkles },
@@ -62,10 +65,9 @@ const ADMIN_SECTIONS = [
 
 const ADMIN_SECTION_VALUES = new Set(ADMIN_SECTIONS.map(s => s.value));
 
-// Task #102 — the old inline LabApplicationsPanel was replaced by the full
-// Spin-Out Lab admin dashboard (applications inbox + cohort participants +
-// workspace access) in ./admin/AdminSpinoutLab, rendered as the
-// 'lab-applications' tab below and standalone at /admin/spinout-lab.
+// D937 (#2374) — the Spin-Out Lab left this console for its own page,
+// /admin/programs/spinout-lab. `?tab=lab-applications` forwards there in
+// LegacyContractsRedirect before this console mounts.
 
 // Dropdown replacing the old horizontal tab row. Closes on selection, outside
 // click, and Escape; full light/dark support. Preserves the `admin-page` and
@@ -153,11 +155,8 @@ function AdminSectionNav({ value, onChange, badges }) {
  * `?tab=personas` is a Super Admin board and `?tab=kyc` an Admin one. A tab
  * that is no board of the viewer's profile (the map answers the off-canvas
  * Admin console) is null, as is every tab for a tier with no board here.
- * So is Spin-Out applications, which D317 keeps rail-less
- * (`workspace_frame_contract.test.mjs`).
  */
 export function tabBoard(tab, role) {
-  if (tab === 'lab-applications') return null;
   const page = pageFor('/admin', role, { search: `?tab=${tab}` });
   return page && !page.offCanvas ? crumbsOfKey(page.key).module : null;
 }
@@ -196,7 +195,6 @@ export default function AdminPage({ onImpersonate, section = null }) {
   // D648 — the dropdown's "N pending" badges. Each comes from its console's
   // own read, so a count is known once that console has been opened; the shell
   // no longer reads every console's data to draw two badges.
-  const [pendingProfiles, setPendingProfiles] = useState(0);
   const [pendingKyc, setPendingKyc] = useState(0);
 
   // D775 — the one rail on this page sits around the whole page, named for
@@ -224,29 +222,20 @@ export default function AdminPage({ onImpersonate, section = null }) {
             value={tab}
             onChange={pickTab}
             badges={{
-              profiles: pendingProfiles,
               kyc: pendingKyc,
             }}
           />
         </>
       )}
 
-      {tab === 'network-profiles' && (
-        <div data-testid="admin-network-profiles-panel"><AdminNetworkProfiles /></div>
-      )}
-
-      {tab === 'lab-applications' && <AdminSpinoutLab onImpersonate={onImpersonate} />}
       {tab === 'legal' && <div data-testid="admin-legal-panel"><LegalPanel /></div>}
-      {tab === 'personas' && <PersonasPanel />}
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}
       {tab === 'promos' && <div data-testid="admin-promos-panel"><PromoCodesPanel /></div>}
-      {tab === 'payments' && <div data-testid="admin-payments-panel"><PaymentsPanel /></div>}
       {tab === 'bank-accounts' && <div data-testid="admin-bank-accounts-panel"><BankAccountsPanel /></div>}
       {tab === 'product-testing' && <div data-testid="admin-product-testing-panel"><ProductTestingPanel /></div>}
       {tab === 'billing' && <div data-testid="admin-billing-panel"><BillingPanel /></div>}
       {tab === 'wellbeing' && <div data-testid="admin-wellbeing-panel"><WellbeingExpertsPanel /></div>}
       {tab === 'users' && <UsersConsole onImpersonate={onImpersonate} />}
-      {tab === 'profiles' && <PartnerProfilesConsole onPendingCount={setPendingProfiles} />}
       {tab === 'kyc' && <KycConsole onPendingCount={setPendingKyc} />}
     </div>
   );

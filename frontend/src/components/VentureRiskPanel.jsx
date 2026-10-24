@@ -168,10 +168,10 @@ export default function VentureRiskPanel({ projectId, canWrite = false }) {
         <>
           <div className="grid lg:grid-cols-[auto_1fr] gap-6 items-center mb-6">
             <div className="flex items-center gap-4 justify-center lg:justify-start">
-              <RiskGauge score={data.overall_score} band={data.overall_band} muted={!hasAnyData} />
+              <RiskGauge score={data.overall_score} band={data.overall_band} muted={data.overall_score == null} />
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Overall derisking</div>
-                {hasAnyData ? (
+                {data.overall_score != null ? (
                   <span className={`inline-flex items-center px-2 py-0.5 mt-1 rounded-full text-xs font-medium border ${RISK_BAND_CHIP[data.overall_band] || RISK_BAND_CHIP.medium}`}>
                     {RISK_BAND_LABEL[data.overall_band] || 'Unknown'}
                   </span>
@@ -180,6 +180,7 @@ export default function VentureRiskPanel({ projectId, canWrite = false }) {
                     Not enough platform data yet to score this company. Add an analyst override or capture signals to begin.
                   </div>
                 )}
+                <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{data.covered_layers ?? 0} of {data.total_layers ?? 10} layers scored</div>
                 {hasAnyData && data.computed_at && (
                   <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
                     Computed {new Date(data.computed_at).toLocaleString()}

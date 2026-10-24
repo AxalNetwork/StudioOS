@@ -193,13 +193,13 @@ trust.get('/score/:userId', async (c) => {
   const obligations = (rows?.results || []) as any[];
   const required = obligations.filter(o => o.required);
   const satisfied = required.filter(o => o.status === 'satisfied' || o.status === 'waived').length;
-  const score = required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
+  const score = obligations.length === 0 ? null : required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
   const missing = required
     .filter(o => o.status !== 'satisfied' && o.status !== 'waived')
     .map(o => o.obligation_key);
   return c.json(isSelf || caller.role === 'admin'
-    ? { user_id: target, score, missing, required_total: required.length }
-    : { user_id: target, score });
+    ? { user_id: target, score, missing, required_total: required.length, ...(score == null ? { reason: 'No trust obligations recorded' } : {}) }
+    : { user_id: target, score, ...(score == null ? { reason: 'No trust obligations recorded' } : {}) });
 });
 
 // ---------------------------------------------------------------------------
@@ -217,14 +217,8 @@ trust.get('/score/:userId', async (c) => {
 // per-user GET /score/:userId fallback.
 //
 // Performance notes:
-//   - We deliberately SKIP the per-user `seedObligations(role)` self-heal
-//     that the single-user route runs. That self-heal exists to top up
-//     legacy unseeded users on profile views; in a 50-row admin table,
-//     calling it 50× would burn the latency this endpoint is here to
-//     save. New signups go through `seedObligations` at registration,
-//     and any unseeded legacy user falls back to score=100 (correct
-//     "no required obligations" semantics) here, then gets re-seeded
-//     the next time their profile page calls /score/:userId.
+//   - Batch does not seed legacy members; members with no stored obligations
+//     return null with a reason until the single-user self-heal runs.
 //   - Batch is capped at 200 user_ids per call (worker request body is
 //     1MB; this is well under the practical bound but stops accidental
 //     "send me every user" calls).
@@ -260,13 +254,13 @@ trust.post('/score/batch', async (c) => {
     const satisfied = required.filter(
       (o: any) => o.status === 'satisfied' || o.status === 'waived',
     ).length;
-    const score = required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
+    const score = obligations.length === 0 ? null : required.length === 0 ? 100 : Math.round((satisfied / required.length) * 100);
     const missing = required
       .filter((o: any) => o.status !== 'satisfied' && o.status !== 'waived')
       .map((o: any) => o.obligation_key);
     return caller.role === 'admin' || caller.id === id
-      ? { user_id: id, score, missing, required_total: required.length }
-      : { user_id: id, score };
+      ? { user_id: id, score, missing, required_total: required.length, reason: score == null ? 'No trust obligations recorded' : null }
+      : { user_id: id, score, reason: score == null ? 'No trust obligations recorded' : null };
   });
   return c.json({ scores });
 });
