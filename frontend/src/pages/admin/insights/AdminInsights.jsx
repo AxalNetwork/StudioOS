@@ -209,7 +209,7 @@ function Filters({ vertical = false }) {
       {vertical && <span className={EYE}>Country</span>}
       <span aria-disabled="true" title={FILTER_WAITS} className="rounded-[7px] border border-axal-hairline px-2.5 py-1.5 text-[12.5px] font-semibold text-axal-faint dark:border-gray-700">All countries ▾</span>
       <span aria-disabled="true" title={FILTER_WAITS} className="flex items-center gap-2 text-[12.5px] font-semibold text-axal-faint">
-        <span className="relative h-5 w-[34px] flex-none rounded-full bg-axal-hairline dark:bg-gray-700"><span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white" /></span>
+        <span className="relative h-5 w-[34px] flex-none rounded-full bg-axal-hairline dark:bg-gray-700"><span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white dark:bg-gray-300" /></span>
         Compare with previous period
       </span>
     </>
