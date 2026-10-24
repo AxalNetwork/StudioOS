@@ -37,7 +37,9 @@ const INTERNAL_SCORE_KEY = /^vr_/;
 /** A field that names a bank balance, an account or a counterparty. Never on a link. */
 const BANK_KEY = /(^|_)(bank|balance|balances|account|accounts|iban|routing|counterparty|counterparties)(_|$)/;
 /** A scorecard or product-market fit band: only when the link includes bands. */
-const BAND_KEY = /^(scorecard|pmf|band)_|_band$/;
+const BAND_PREFIX = /^(scorecard|pmf|band)_/;
+const BAND_SUFFIX = /_band$/;
+const isBandKey = (key: string) => BAND_PREFIX.test(key) || BAND_SUFFIX.test(key);
 
 /** The stored `include_json`, or the default for a link that has none or one that cannot be read. */
 export function parseShareInclude(raw: unknown): ShareInclude {
@@ -85,7 +87,7 @@ function fieldKept(f: any, inc: ShareInclude): boolean {
   for (const key of [String(f.key || '').toLowerCase(), boundSlot(f.binding)]) {
     if (!key) continue;
     if (INTERNAL_SCORE_KEY.test(key) || BANK_KEY.test(key)) return false;
-    if (BAND_KEY.test(key) && !inc.bands) return false;
+    if (isBandKey(key) && !inc.bands) return false;
   }
   if (f.kind === 'quote' && f.consent !== true) return false;
   if (f.kind === 'metric_grid' && !inc.figures) return false;

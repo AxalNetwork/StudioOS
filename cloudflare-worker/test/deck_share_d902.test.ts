@@ -138,6 +138,15 @@ test('each switch: figures, the Sources appendix, speaker notes and the bands', 
   assert.equal(shareSlides(notes, DEFAULT_SHARE_INCLUDE)[0].fields.length, 0, 'a band only when bands are on');
   const both = shareSlides(notes, { ...DEFAULT_SHARE_INCLUDE, bands: true, notes: false })[0].fields[0];
   assert.equal('notes' in both, false, 'a field\'s notes go only with notes on');
+  // A band is named by its prefix or by its suffix; each alone is enough.
+  for (const key of ['pmf_score', 'band_summary', 'market_band']) {
+    const one = [{ title: 'B', fields: [{ key, kind: 'paragraph', value: 'x' }] }];
+    assert.equal(shareSlides(one, DEFAULT_SHARE_INCLUDE)[0].fields.length, 0, key);
+    assert.equal(shareSlides(one, { ...DEFAULT_SHARE_INCLUDE, bands: true })[0].fields.length, 1, key);
+  }
+  for (const key of ['bandwidth', 'team_pmf_note']) {
+    assert.equal(shareSlides([{ title: 'C', fields: [{ key, kind: 'paragraph', value: 'x' }] }], DEFAULT_SHARE_INCLUDE)[0].fields.length, 1, `${key} is not a band`);
+  }
   assert.deepEqual(shareSpinoutFields({ vr_total_score: '72', team_founder: 'Fay', bank_balance: '1' }), { team_founder: 'Fay' });
 });
 
