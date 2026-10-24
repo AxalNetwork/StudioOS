@@ -17,7 +17,6 @@ const asList = (value, ...keys) => {
   for (const key of keys) if (Array.isArray(value?.[key])) return value[key];
   return [];
 };
-const clean = (value) => String(value ?? '').trim();
 const formatDate = (value) => {
   if (!value) return 'Date not recorded';
   const parsed = new Date(value);

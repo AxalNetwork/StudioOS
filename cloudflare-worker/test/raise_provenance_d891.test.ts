@@ -112,6 +112,10 @@ test('soft, signed and received amounts are disjoint, with unknown amounts kept 
  f=await figure(ctx,'committed'); assert.equal(f.value,null); assert.equal(f.state,'not_recorded');
  insert.run('legacy',null,400000); assert.match((await figure(ctx,'committed')).reason!,/Status not recorded: \$400,000/);
  insert.run('zero','signed',0); assert.deepEqual((await figure(ctx,'committed')).value,[0,1000000]);
+ db.exec('DELETE FROM raise_prospects'); assert.deepEqual((await figure(ctx,'committed')).value,[0,1000000],'no commitments is a recorded zero against an existing target');
+ insert.run('soft-only','soft',1000); assert.deepEqual((await figure(ctx,'committed')).value,[0,1000000]);
+ insert.run('unknown-firm','signed',null); assert.equal((await figure(ctx,'committed')).value,null);
+ insert.run('known-firm','signed',1000); assert.equal((await figure(ctx,'committed')).value,null,'a missing firm amount does not become a complete subtotal');
 });
 test('runway prefers measured Mercury facts and fails visibly when a fact cannot be read', async () => {
  const {db,env,ctx}=fixture(); db.exec("INSERT INTO project_metrics(project_id,snapshot_date,source,cash_balance,net_burn) VALUES(1,'2026-10-24','manual',10,10)");
@@ -149,12 +153,18 @@ test('migration 536 relabels historical computed traction only and preserves sco
  const allocated=files.find(f=>f.name==='536_readiness_stated_evidence.sql')!;
  const later=files.find(f=>f.name==='544_narrative_sections.sql')!;
  assert.deepEqual(planActions([allocated,later],new Map([[later.name,later.checksum]])).map(a=>a.action),['apply','skip'],'the filename ledger applies 536 even after 544 is recorded');
- const {db}=fixture(); db.exec('DROP TABLE readiness_scores');
- // Recreate just the old table from its original migration, without replaying ALTERs.
- const old=sql('442_raise_cycle_stores.sql'); const at=old.indexOf('CREATE TABLE IF NOT EXISTS readiness_scores'); db.exec(old.slice(at,old.indexOf('\n);',at)+4));
+ const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});
+ db.exec(baseline);
+ // Production can already have higher-numbered files: replay every other delta first.
+ for(const f of files) if(migrationNumber(f.name)>BASELINE_CUTOFF && f.name!==allocated.name) db.exec(f.sql);
+ db.exec("INSERT INTO users(id,role,name,email,is_active) VALUES(1,'founder','Synthetic founder','fixture@example.test',1); INSERT INTO projects(id,name) VALUES(1,'Synthetic venture')");
+ const columnsBefore=db.prepare('PRAGMA table_info(readiness_scores)').all();
+ const objectsBefore=db.prepare("SELECT name,type FROM sqlite_master WHERE tbl_name='readiness_scores' AND type IN ('index','trigger') ORDER BY name").all();
  db.exec("INSERT INTO readiness_items(id,project_id,item_key,label) VALUES(1,1,'traction','Traction'),(2,1,'deck','Deck')");
  db.exec("INSERT INTO readiness_scores(id,item_id,project_id,score,evidence,source,scored_by,scored_at,missing) VALUES(91,1,1,7,'measured','computed',1,'2026-09-01','Synthetic missing'),(92,1,1,8,'pattern','manual',1,'2026-09-02',NULL),(93,2,1,10,'measured','computed',1,'2026-09-03',NULL)");
  const before=db.prepare('SELECT * FROM readiness_scores ORDER BY id').all() as any[]; db.exec(sql('536_readiness_stated_evidence.sql'));
+ assert.deepEqual(db.prepare('PRAGMA table_info(readiness_scores)').all(),columnsBefore);
+ assert.deepEqual(db.prepare("SELECT name,type FROM sqlite_master WHERE tbl_name='readiness_scores' AND type IN ('index','trigger') ORDER BY name").all(),objectsBefore);
  assert.deepEqual(db.prepare('SELECT * FROM readiness_scores ORDER BY id').all().map(r=>({...r})),before.map(r=>({...r,evidence:r.id===91?'stated':r.evidence})));
  assert.throws(()=>db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence) VALUES(1,1,7,'invented')"),/CHECK/);
  assert.throws(()=>db.exec("INSERT INTO readiness_scores(item_id,project_id,score,evidence) VALUES(1,1,11,'stated')"),/CHECK/);
