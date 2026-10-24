@@ -449,6 +449,15 @@ events.patch('/:id', async (c) => {
   }
 
   if (!sets.length) return c.json({ event: shapeEvent(event, { includePrivate: true }) });
+  // D917: material host edits flag an approved event; its status stays as it is.
+  const reviewFields = ['title', 'starts_at', 'ends_at', 'timezone', 'location_kind', 'location_text', 'location_url', 'price_cents', 'currency'];
+  const changed = reviewFields.some((key) => key in body && (key === 'price_cents'
+    ? Number(body[key]) !== Number(event[key])
+    : (body[key] ?? null) !== (event[key] ?? null)));
+  if (Number(event.host_user_id) === u.id && changed) {
+    sets.push('changed_after_approval_at = CASE WHEN approved_at IS NOT NULL OR admin_published = 1 THEN ? ELSE changed_after_approval_at END');
+    binds.push(new Date().toISOString());
+  }
   sets.push(`updated_at = datetime('now')`);
   binds.push(id);
   await c.env.DB.prepare(`UPDATE events SET ${sets.join(', ')} WHERE id = ?`).bind(...binds).run();
@@ -497,8 +506,8 @@ events.post('/:id/submit-review', async (c) => {
 
   if (event.visibility === 'public') {
     await c.env.DB.prepare(
-      `UPDATE events SET status = 'pending_review', updated_at = datetime('now') WHERE id = ?`,
-    ).bind(id).run();
+      `UPDATE events SET status = 'pending_review', submitted_at = ?, updated_at = datetime('now') WHERE id = ?`,
+    ).bind(new Date().toISOString(), id).run();
   } else {
     await c.env.DB.prepare(
       `UPDATE events SET status = 'published', updated_at = datetime('now') WHERE id = ?`,

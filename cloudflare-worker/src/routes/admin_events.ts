@@ -216,9 +216,13 @@ adminEvents.post('/:id/approve', async (c) => {
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
-  await c.env.DB.prepare(
-    `UPDATE events SET status = 'published', admin_published = 1, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
+  if (event.status !== 'pending_review') return c.json({ error: 'not_waiting' }, 409);
+  const approved = await c.env.DB.prepare(
+    `UPDATE events SET status = 'published', admin_published = 1, approved_at = ?,
+       changed_after_approval_at = NULL, updated_at = datetime('now')
+       WHERE id = ? AND status = 'pending_review' RETURNING id`,
+  ).bind(new Date().toISOString(), id).first();
+  if (!approved) return c.json({ error: 'not_waiting' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_approved', eventId: id });
   const fresh = await loadEvent(c.env, id);
   if (event.host_user_id) {
@@ -257,10 +261,14 @@ adminEvents.post('/:id/reject', async (c) => {
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
   const body = await c.req.json().catch(() => ({} as any));
-  const reason = body.reason ? String(body.reason).slice(0, 1000) : null;
-  await c.env.DB.prepare(
-    `UPDATE events SET status = 'rejected', admin_published = 0, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
+  if (event.status !== 'pending_review') return c.json({ error: 'not_waiting' }, 409);
+  const reason = typeof body.reason === 'string' ? body.reason.trim().slice(0, 1000) : '';
+  if (!reason) return c.json({ error: 'reason_required' }, 400);
+  const rejected = await c.env.DB.prepare(
+    `UPDATE events SET status = 'rejected', admin_published = 0, review_note = ?,
+       updated_at = datetime('now') WHERE id = ? AND status = 'pending_review' RETURNING id`,
+  ).bind(reason, id).first();
+  if (!rejected) return c.json({ error: 'not_waiting' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_rejected', eventId: id, extra: { reason } });
   if (event.host_user_id) {
     await notify(c.env, {
@@ -280,10 +288,22 @@ adminEvents.post('/:id/unpublish', async (c) => {
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
-  await c.env.DB.prepare(
-    `UPDATE events SET admin_published = 0, status = 'draft', updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
+  if (event.status !== 'published') return c.json({ error: 'not_published' }, 409);
+  const body = await c.req.json().catch(() => ({} as any));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : '';
+  const unpublished = await c.env.DB.prepare(
+    `UPDATE events SET admin_published = 0, status = 'draft', updated_at = datetime('now')
+       WHERE id = ? AND status = 'published' RETURNING id`,
+  ).bind(id).first();
+  if (!unpublished) return c.json({ error: 'not_published' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_unpublished', eventId: id });
+  if (event.host_user_id) {
+    await notify(c.env, {
+      userId: event.host_user_id, type: 'event_unpublished', category: 'events',
+      title: `Your event is back with you as a draft: ${event.title}`,
+      body: note || undefined, link: `/events/${event.slug}`, payload: { event_id: id },
+    }).catch(() => {});
+  }
   return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
 });
 
@@ -316,9 +336,22 @@ adminEvents.post('/:id/cancel', async (c) => {
   if (!id) return c.json({ error: 'not_found' }, 404);
   const event = await loadEvent(c.env, id);
   if (!event) return c.json({ error: 'not_found' }, 404);
-  await c.env.DB.prepare(
-    `UPDATE events SET status = 'cancelled', admin_published = 0, updated_at = datetime('now') WHERE id = ?`,
-  ).bind(id).run();
+  if (event.status === 'cancelled') return c.json({ error: 'already_cancelled' }, 409);
+  const body = await c.req.json().catch(() => ({} as any));
+  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 1000) : '';
+  // Read before changing state: an unreadable payment ledger must not look like zero.
+  const paid = await c.env.DB.prepare(
+    `SELECT e.currency, COUNT(*) AS count, SUM(r.amount_cents) AS amount_cents
+       FROM event_registrations r JOIN events e ON e.id = r.event_id
+       WHERE r.event_id = ? AND r.payment_status = 'paid'
+       GROUP BY e.currency ORDER BY e.currency`,
+  ).bind(id).all<{ currency: string; count: number; amount_cents: number }>();
+  const paidRows = paid.results || [];
+  const cancelled = await c.env.DB.prepare(
+    `UPDATE events SET status = 'cancelled', admin_published = 0, updated_at = datetime('now')
+       WHERE id = ? AND status != 'cancelled' RETURNING id`,
+  ).bind(id).first();
+  if (!cancelled) return c.json({ error: 'already_cancelled' }, 409);
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'event_cancelled', eventId: id });
   // Notify seated registrants (best-effort).
   const seated = await c.env.DB.prepare(
@@ -328,10 +361,16 @@ adminEvents.post('/:id/cancel', async (c) => {
   for (const r of (seated.results || []) as any[]) {
     await notify(c.env, {
       userId: Number(r.user_id), type: 'event_cancelled', category: 'events',
-      title: `Event cancelled: ${event.title}`, link: `/events/${event.slug}`, payload: { event_id: id },
+      title: `Event cancelled: ${event.title}`, body: note || undefined, link: `/events/${event.slug}`, payload: { event_id: id },
     }).catch(() => {});
   }
-  return c.json({ event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }) });
+  return c.json({
+    event: shapeEvent(await loadEvent(c.env, id), { includePrivate: true }),
+    paid_tickets: {
+      count: paidRows.reduce((total, row) => total + Number(row.count), 0),
+      by_currency: paidRows.map((row) => ({ currency: row.currency, amount_cents: Number(row.amount_cents) })),
+    },
+  });
 });
 
 // ── POST /:id/capacity — admin capacity override ───────────────────────────
