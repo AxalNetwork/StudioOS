@@ -134,8 +134,8 @@ function freshDb() {
   db.exec(ddlFromBaseline('raise_prospects'));
   for (const stmt of read('sql/migrations/463_raise_record_stores.sql').replace(/^\s*--[^\n]*$/gm, '')
     .split(';').map((x) => x.trim()).filter((x) => x.startsWith('ALTER TABLE pitch_deck_share_tokens'))) db.exec(stmt);
-  // D902 — migration 551's NDA flag and what the link includes, which the share read now reads.
-  db.exec(read('sql/migrations/551_deck_share_nda_include.sql'));
+  // D902 — migration 567's NDA flag and what the link includes, which the share read now reads.
+  db.exec(read('sql/migrations/567_deck_share_nda_include.sql'));
   return db;
 }
 

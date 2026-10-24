@@ -1,7 +1,8 @@
--- 551 — a pitch deck link's NDA and what it includes (D902, #2681).
+-- 567 — a pitch deck link's NDA and what it includes (D902, #2681).
 -- Reserved by S1 as 540 on #2681 (Pitch deck studio part 8), 2026-10-24, and
 -- numbered after 549 (D895): 549 rebuilds pitch_deck_share_tokens from a fixed
--- column list, so these two columns, added before it, would be dropped.
+-- column list, so these two columns, added before it, would be dropped. 551,
+-- the first number tried after it, is D974's (S21's range); 567 is in S1's.
 --
 -- nda_required  1: the share read returns no card until the person opening
 --               the link has accepted the NDA on this link

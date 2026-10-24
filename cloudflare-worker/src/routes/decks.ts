@@ -119,7 +119,7 @@ async function ensureSchema(env: Env): Promise<void> {
        allow_download INTEGER NOT NULL DEFAULT 1 CHECK (allow_download IN (0, 1)),
        allow_forwarding INTEGER NOT NULL DEFAULT 1 CHECK (allow_forwarding IN (0, 1)),
        bound_viewer_hash TEXT,
-       -- Migration 551 (D902): the NDA gate and what the link includes.
+       -- Migration 567 (D902): the NDA gate and what the link includes.
        nda_required INTEGER NOT NULL DEFAULT 0 CHECK (nda_required IN (0, 1)),
        include_json TEXT
      )`,
@@ -170,7 +170,7 @@ async function ensureSchema(env: Env): Promise<void> {
       ['allow_download', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_download INTEGER NOT NULL DEFAULT 1 CHECK (allow_download IN (0, 1))`],
       ['allow_forwarding', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_forwarding INTEGER NOT NULL DEFAULT 1 CHECK (allow_forwarding IN (0, 1))`],
       ['bound_viewer_hash', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN bound_viewer_hash TEXT`],
-      // Migration 551 — D902: the NDA gate and what the link includes.
+      // Migration 567 — D902: the NDA gate and what the link includes.
       ['nda_required', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN nda_required INTEGER NOT NULL DEFAULT 0 CHECK (nda_required IN (0, 1))`],
       ['include_json', `ALTER TABLE pitch_deck_share_tokens ADD COLUMN include_json TEXT`],
     ];

@@ -21,7 +21,7 @@ const seed = join(scratch,'schema.sqlite');
 const schema = new DatabaseSync(seed,{enableForeignKeyConstraints:false});
 schema.exec(read('cloudflare-worker/sql/schema_baseline.sql'));
 // The seed is the schema just before 549; the upgrade runs 549, then every later
-// migration in order, as production does (D902's 551 adds columns 549's rebuild would drop).
+// migration in order, as production does (D902's 567 adds columns 549's rebuild would drop).
 const numbered=readdirSync('cloudflare-worker/sql/migrations').filter(n=>/^\d+_.*\.sql$/.test(n)&&migrationNumber(n)>BASELINE_CUTOFF).sort();
 for(const name of numbered.filter(n=>migrationNumber(n)<549))schema.exec(read('cloudflare-worker/sql/migrations/'+name));
 const later=numbered.filter(n=>migrationNumber(n)>549).map(n=>read('cloudflare-worker/sql/migrations/'+n));
