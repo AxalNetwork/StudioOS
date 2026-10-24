@@ -9,17 +9,20 @@ import AdminBoardFrame from './admin/AdminBoardFrame';
 // ./admin/consoles/ and each loading only its own data. This page is the
 // shell: the header, the section dropdown, and the one console it mounts.
 import UsersConsole from './admin/consoles/UsersConsole';
-import PartnerProfilesConsole from './admin/consoles/PartnerProfilesConsole';
 import KycConsole from './admin/consoles/KycConsole';
 import { LegalPanel } from './admin/consoles/LegalConsole';
-import { PersonasPanel } from './admin/consoles/PersonasConsole';
 import { DirectoryPanel } from './admin/consoles/DirectoryConsole';
 import { PromoCodesPanel } from './admin/consoles/PromoCodesConsole';
-import { PaymentsPanel } from './admin/consoles/PaymentsConsole';
 import { BankAccountsPanel } from './admin/consoles/BankAccountsConsole';
 import { ProductTestingPanel } from './admin/consoles/ProductTestingConsole';
 import { BillingPanel } from './admin/consoles/BillingConsole';
 import { WellbeingExpertsPanel } from './admin/consoles/WellbeingConsole';
+// D1008 (#2386) — Payments left this console for its own page under
+// Platform; ?tab=payments forwards there in LegacyContractsRedirect.
+// D997 (#2378) — Persona segments left this console for its own page;
+// ?tab=personas forwards there in LegacyContractsRedirect.
+// D989 (#2380) — Partner profiles left this console for its own page under
+// Approvals; ?tab=profiles forwards there in LegacyContractsRedirect.
 // D972 (#2369) — the network roster left this console for Advisors &
 // Partners; ?tab=network-profiles forwards to its Deck roster tab in
 // LegacyContractsRedirect before this console mounts.
@@ -192,7 +195,6 @@ export default function AdminPage({ onImpersonate, section = null }) {
   // D648 — the dropdown's "N pending" badges. Each comes from its console's
   // own read, so a count is known once that console has been opened; the shell
   // no longer reads every console's data to draw two badges.
-  const [pendingProfiles, setPendingProfiles] = useState(0);
   const [pendingKyc, setPendingKyc] = useState(0);
 
   // D775 — the one rail on this page sits around the whole page, named for
@@ -220,7 +222,6 @@ export default function AdminPage({ onImpersonate, section = null }) {
             value={tab}
             onChange={pickTab}
             badges={{
-              profiles: pendingProfiles,
               kyc: pendingKyc,
             }}
           />
@@ -228,16 +229,13 @@ export default function AdminPage({ onImpersonate, section = null }) {
       )}
 
       {tab === 'legal' && <div data-testid="admin-legal-panel"><LegalPanel /></div>}
-      {tab === 'personas' && <PersonasPanel />}
       {tab === 'directory' && <div data-testid="admin-directory-panel"><DirectoryPanel /></div>}
       {tab === 'promos' && <div data-testid="admin-promos-panel"><PromoCodesPanel /></div>}
-      {tab === 'payments' && <div data-testid="admin-payments-panel"><PaymentsPanel /></div>}
       {tab === 'bank-accounts' && <div data-testid="admin-bank-accounts-panel"><BankAccountsPanel /></div>}
       {tab === 'product-testing' && <div data-testid="admin-product-testing-panel"><ProductTestingPanel /></div>}
       {tab === 'billing' && <div data-testid="admin-billing-panel"><BillingPanel /></div>}
       {tab === 'wellbeing' && <div data-testid="admin-wellbeing-panel"><WellbeingExpertsPanel /></div>}
       {tab === 'users' && <UsersConsole onImpersonate={onImpersonate} />}
-      {tab === 'profiles' && <PartnerProfilesConsole onPendingCount={setPendingProfiles} />}
       {tab === 'kyc' && <KycConsole onPendingCount={setPendingKyc} />}
     </div>
   );

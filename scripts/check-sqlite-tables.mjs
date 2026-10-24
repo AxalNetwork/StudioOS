@@ -140,6 +140,16 @@ export function stripSqlLiterals(sql) {
 
 const REF = /\b(?:FROM|JOIN|INSERT\s+(?:OR\s+\w+\s+)?INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+([`"[]?[A-Za-z_]\w*[`"\]]?)/gi;
 
+/** Physical references, excluding CTE aliases declared by this SQL statement. */
+export function referencedTables(sql) {
+  const clean = stripSqlLiterals(sql);
+  // The boundary belongs to WITH, not the comma after a closing parenthesis.
+  // SQLite also permits an explicit column list before AS (VALUES CTEs).
+  const ctes = new Set([...clean.matchAll(/(?:\bWITH|,)\s+(\w+)(?:\s*\([^)]*\))?\s+AS\s*\(/gi)]
+    .map((m) => norm(m[1])));
+  return [...clean.matchAll(REF)].map((m) => norm(m[1])).filter((t) => !ctes.has(t));
+}
+
 /** Table references the worker makes that nothing in the repo creates. */
 export function unknownReferences() {
   const known = knownTables();
@@ -147,19 +157,14 @@ export function unknownReferences() {
   for (const file of walk(SRC, '.ts')) {
     const rel = path.relative(ROOT, file);
     for (const { body, line } of sqlStrings(fs.readFileSync(file, 'utf8'))) {
-      const clean = stripSqlLiterals(body);
-      const ctes = new Set(
-        [...clean.matchAll(/\b(?:WITH|,)\s+(\w+)\s+AS\s*\(/gi)].map((m) => norm(m[1])),
-      );
-      for (const m of clean.matchAll(REF)) {
-        const t = norm(m[1]);
+      for (const t of referencedTables(body)) {
         // sqlite_master / sqlite_sequence are the engine's own tables, and
         // `pragma_*` are SQLite's built-in table-valued functions
         // (`SELECT name FROM pragma_table_info(?)`), which no migration
         // creates and none ever will. `json_each` and `json_tree` are the
         // JSON1 table-valued functions D1 ships (`IN (SELECT value FROM
         // json_each(?))`), in the same position for the same reason.
-        if (known.has(t) || ctes.has(t) || NOT_A_TABLE.has(t)
+        if (known.has(t) || NOT_A_TABLE.has(t)
             || t.startsWith('sqlite_') || t.startsWith('pragma_')
             || t === 'json_each' || t === 'json_tree') continue;
         if (!hits.has(t)) hits.set(t, []);

@@ -26,12 +26,13 @@ const tabOf = (route) => new URLSearchParams(route.split('?')[1] || '').get('tab
 const TABS = [...read('pages/AdminPage.jsx').matchAll(/value: '([a-z-]+)'/g)].map((m) => m[1]);
 const nameOf = (b) => b.module || b.section;
 
-test('the Super Admin\'s /admin tabs are the five boards, each drawn by the frame under its name', () => {
+test('the Super Admin\'s /admin tabs are the three boards, each drawn by the frame under its name', () => {
   // H27 Integration keys and H28 GitHub sync were tabs here until the owner's
   // ruling (2026-10-20) moved both to HQ's own page; the next test holds them.
-  // H23 Advisors and partners left with D972 (#2369) for its own page.
+  // H23 Advisors and partners left with D972 (#2369) for its own page, and
+  // H22 Personas with D997 (#2378), and H29 Payments catalogue with D1008 (#2386).
   const boards = SUPER_ADMIN_BOARDS.filter((b) => b.route.startsWith('/admin?tab='));
-  assert.deepEqual(boards.map((b) => b.id), ['H11', 'H22', 'H24', 'H29', 'H30']);
+  assert.deepEqual(boards.map((b) => b.id), ['H11', 'H24', 'H30']);
   for (const b of boards) {
     assert.equal(b.rail, 'pages/admin/AdminBoardFrame.jsx', `${b.id}'s rail is not the tab frame`);
     assert.equal(b.railPending, undefined, `${b.id} still says it waits`);
@@ -63,8 +64,9 @@ test('H27 and H28 are HQ\'s Integration keys page, which draws the frame named f
 
 test('an admin\'s tabs are named for the Admin profile\'s boards, from the same map', () => {
   const boards = ADMIN_BOARDS.filter((b) => b.route.startsWith('/admin?tab=') && tabOf(b.route) !== 'lab-applications');
-  // Six until D972 (#2369) moved S29 Advisors and partners to its own page.
-  assert.ok(boards.length >= 5, 'the Admin profile lists fewer /admin tabs than it did');
+  // Six until D972 (#2369) moved S29 Advisors and partners to its own page,
+  // five until D989 (#2380) moved S7 Entity profiles to /admin/partner-profiles.
+  assert.ok(boards.length >= 4, 'the Admin profile lists fewer /admin tabs than it did');
   for (const b of boards) assert.equal(tabBoard(tabOf(b.route), 'admin'), nameOf(b), `${b.id} ?tab=${tabOf(b.route)}`);
   const drawn = TABS.filter((t) => tabBoard(t, 'admin'));
   assert.deepEqual(drawn.sort(), [...new Set(boards.map((b) => tabOf(b.route)))].sort());

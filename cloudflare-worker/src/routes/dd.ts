@@ -569,7 +569,7 @@ dd.post('/cases/:uid/sections/:sectionId/verdict', async (c) => {
 
 // ---------- score recompute ----------
 
-async function recomputeAndStoreScore(env: Env, caseId: number): Promise<{ score: number; band: string }> {
+async function recomputeAndStoreScore(env: Env, caseId: number): Promise<{ score: number | null; band: string | null; reason: string | null }> {
   const sql = getSQL(env);
   try {
     const sections: any[] = await sql`SELECT * FROM dd_sections WHERE case_id = ${caseId}`;
@@ -598,9 +598,9 @@ async function recomputeAndStoreScore(env: Env, caseId: number): Promise<{ score
       verdict: s.verdict || null,
       worst_severity: worstSeverity(bySection.get(s.id) || []),
     }));
-    const { score, band } = computeScore(inputs);
+    const { score, band, reason } = computeScore(inputs);
     await sql`UPDATE dd_cases SET risk_score = ${score}, risk_band = ${band}, updated_at = CURRENT_TIMESTAMP WHERE id = ${caseId}`;
-    return { score, band };
+    return { score, band, reason };
   } finally { await sql.end(); }
 }
 
