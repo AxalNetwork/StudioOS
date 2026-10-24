@@ -42,6 +42,7 @@ import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
+import adminNetwork from './routes/admin_network';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
@@ -853,6 +854,8 @@ app.route('/api/partners', partners);
 // /api/admin/partners (separate from legacy /api/partners) and the
 // public token-gated onboarding flow under /api/partner-onboard.
 app.route('/api/admin/partners', adminPartners);
+// D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
+app.route('/api/admin/network', adminNetwork);
 app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);
 app.route('/api/partner-portal', partnerPortal);
