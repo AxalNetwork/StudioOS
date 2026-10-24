@@ -1634,11 +1634,10 @@ test('the resend result is the reply\'s, whatever the dialog read before the wri
   assert.equal(RESENT_SENT, 'Sent.');
   assert.equal(RESENT_NOT_SENT, 'Not sent. Copy the link instead.');
   const reply = (sent) => ({ ok: true, email_sent: sent, link: 'https://axal.vc/partners/onboard?token=tok3', expires_at: '2026-11-07T12:00:00.000Z' });
-  // A second argument is what the dialog used to pass: its read of R7 before the write. It changes nothing.
-  for (const before of [true, false, null]) {
-    assert.deepEqual(resentResult(reply(true), before), { text: RESENT_SENT, sent: true });
-    assert.deepEqual(resentResult(reply(false), before), { text: RESENT_NOT_SENT, sent: false, copy: true });
-  }
+  // The result reads the reply alone: the dialog's read of R7 before the write no longer reaches it.
+  assert.equal(resentResult.length, 1);
+  assert.deepEqual(resentResult(reply(true)), { text: RESENT_SENT, sent: true });
+  assert.deepEqual(resentResult(reply(false)), { text: RESENT_NOT_SENT, sent: false, copy: true });
   assert.match(read('frontend/src/pages/admin/partners/partnersDeskModel.js'), /#2723 \(part 4\) adds a `signing_link` answer to this reply; part 7 \(#2726\)/);
 });
 
