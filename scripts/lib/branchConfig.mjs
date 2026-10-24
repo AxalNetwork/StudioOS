@@ -292,6 +292,10 @@ export function renderBranchConfig(tomlSrc, entry) {
     const table = s.name.slice('env.production.'.length);
     const kv = new Map(s.kv);
     switch (table) {
+      case 'durable_objects.bindings':
+        // B8's host has HQ callback origin/key; branches need their own host.
+        if (kv.get('name') === q('MEETING_BOT_CONTAINER')) continue;
+        break;
       case 'routes':
         continue; // replaced above
       case 'services':
@@ -451,7 +455,9 @@ export function checkRendered(tomlSrc, entry, rendered) {
     // D681: the one HQ-only OAuth binding is intentionally absent on branches.
     const list = table === 'kv_namespaces'
       ? declared.filter((s) => s.kv.get('binding') !== q('OAUTH_KV'))
-      : declared;
+      : table === 'durable_objects.bindings'
+        ? declared.filter((s) => s.kv.get('name') !== q('MEETING_BOT_CONTAINER'))
+        : declared;
     // `services` is checked on its own below, and must never be matched
     // against HQ's: HQ's service bindings are its lines to branches, so a
     // branch config carrying the same set is exactly the defect (D207).

@@ -250,10 +250,10 @@ test('Programs links its four consoles; Accounts links the Users table, Explorin
     ['/admin', '/admin/exploring', '/admin?tab=personas', '/admin/trash']);
 });
 
-test('Insights (D893) reads the glance and the analytics reads, and links only registered routes, never /branch/', () => {
+test('Insights (D893) reads the Insights read, and links only registered routes, never /branch/', () => {
   const src = read(INSIGHTS);
   const code = codeOnly(src);
-  assert.match(src, /api\.adminStudioGlance\(\)/, 'Insights no longer reads the Studio glance');
+  assert.match(src, /insightsApi\.adminInsights\(/, 'Insights no longer reads GET /api/admin/insights (#2660)');
   assert.doesNotMatch(src, /No console fits yet for HQ-held accounts/);
   for (const d of doorsIn(code)) {
     assert.ok(!d.startsWith('/branch'), `Insights links ${d}, under /branch/`);

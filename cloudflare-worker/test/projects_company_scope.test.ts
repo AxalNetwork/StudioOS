@@ -173,8 +173,11 @@ test('no company selected, and a forged one, both list every owned project', asy
   assert.deepEqual(await list(founder, 'not-a-number'), all, 'unparseable');
 });
 
-test('privileged roles are unscoped — they never owned a company_id to match', async () => {
+test('an admin is unscoped — they never owned a company_id to match', async () => {
   const all = [OWNED_A, OWNED_B, OWNED_NONE, MEMBER_OF];
   assert.deepEqual(await list(admin, COMPANY_A), all, 'admin');
-  assert.deepEqual(await list(partner, AGENCY), all, "partner, under their own agency");
+});
+
+test('D889 (#2438): a partner is not privileged; under their own agency they list only the ventures they are a member of', async () => {
+  assert.deepEqual(await list(partner, AGENCY), [], 'no membership: nothing');
 });

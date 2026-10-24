@@ -418,8 +418,11 @@ export function previewNotes(audience: Audience, startup: Read, app: Read, ventu
     else if (app.status === 200 && app.body.__masked === true) notes.push('In the app, figures stay masked until an NDA is signed through an introduction.');
   } else if (audience === 'founders') {
     notes.push('Other founders cannot open your venture in the app.');
-  } else {
+  } else if (app.status === 200) {
     notes.push('Partners can open your venture in the app and read every figure.');
+  } else {
+    // D889 (#2438): an Operating Partner opens a venture only as a member of its team.
+    notes.push('Partners cannot open your venture in the app unless you add them to its team.');
   }
   return notes;
 }
