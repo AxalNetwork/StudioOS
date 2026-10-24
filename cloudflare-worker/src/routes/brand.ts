@@ -1344,6 +1344,12 @@ brand.put('/landing/by-project/:pid', async (c) => {
   try { await ensureSite(c.env, pid, name); }
   catch (e: any) { console.error('brand ensureSite:', e?.message); }
   const row = await c.env.DB.prepare('SELECT * FROM landing_pages WHERE id = ?').bind(rowId).first<any>();
+  await recordCompositionFills(c.env, {
+    table: 'landing_pages', rowId,
+    proposals: body?.ai_proposals && typeof body.ai_proposals === 'object' ? body.ai_proposals : {},
+    written: row || {}, model: body?.ai_model ? String(body.ai_model).slice(0, 120) : null,
+    task: 'brand_autofill', decidedBy: Number(user.id),
+  });
   return c.json(rowToLanding(row));
 });
 
