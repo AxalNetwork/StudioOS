@@ -224,8 +224,13 @@ test('figures from the capped view list say so: 200 views is "200+", and viewers
   assert.match(t, /Unique viewers\s*150\s*one per browser, in the latest 200 views/);
   assert.match(t, /Median time\s*0:30\s*per view, over the latest 200/);
   assert.match(t, /NDA signed\s*250\s*signatures/, 'the NDA count is every signature, and is not capped');
-  assert.match(t, /Opened\s*200\+/);
-  assert.match(t, /as a share of its latest 200 views; the NDA count is every signature\./);
+  // D902: the funnel counts unique viewers. Without the Worker's per-version
+  // block it falls back to the capped list, and says so.
+  assert.match(t, /Opened\s*150/);
+  assert.match(t, /as a share of the unique viewers in its latest 200 views; the NDA count is every signature\./);
+  const whole = renderedText(analytics(reads({ engagement: ok({ ...capped, analytics: { available: true, viewers: 180, median_seconds_per_viewer: 30, cards: { version: 4, seconds: [] }, previous: null, reached_ask: { recorded: true, ask_index: 1, viewers: 90 } } }) })));
+  assert.match(whole, /Opened\s*180\s*Accepted the NDA\s*250\s*Reached the ask\s*90/, 'the per-version block counts every view, not the latest 200');
+  assert.match(whole, /as a share of its unique viewers; the NDA count is every signature\./);
   assert.doesNotMatch(renderedText(analytics(reads())), /\+|latest 200/, 'under the cap nothing says "at least"');
 });
 
@@ -247,9 +252,11 @@ test('NDA signed is a count of signatures, never "N of" browsers, and the funnel
   const t = renderedText(a);
   assert.doesNotMatch(t, /2 of 1/, 'a signature count is divided by browsers');
   assert.match(t, /NDA signed\s*2\s*signatures on this version's links/);
-  assert.match(t, /Opened\s*2\s*Accepted the NDA\s*2\s*On the current version, as a share of its views\./);
+  // D902: the funnel's denominator is unique viewers, and the ask row with no
+  // per-version block is Not recorded, never 0.
+  assert.match(t, /Opened\s*1\s*Accepted the NDA\s*2\s*Reached the ask\s*Not recorded\s*On the current version, as a share of its unique viewers;/);
   const widths = [...a.matchAll(/width:(\d+)%/g)].map((m) => Number(m[1]));
-  assert.deepEqual(widths, [100, 100]);
+  assert.deepEqual(widths, [100, 100, 0]);
   assert.match(between(a, 'pitch-studio-funnel'), /class="h-2\.5 overflow-hidden rounded-full/, 'the track clips its bar');
   const d = renderedText(decks(reads({ engagement: ok(twoSigners) })));
   assert.doesNotMatch(d, /2 of 1/);
@@ -407,11 +414,13 @@ test('a failed versions read says so on the tiles and the funnel, and leaves no 
   assert.match(renderedText(between(a, 'pitch-studio-funnel', 'pitch-studio-links')), /Funnel\s*Could not be read\./);
 });
 
-test('the seconds-per-slide chart scrolls inside its card at phone width instead of widening the page', () => {
-  const many = { ...cardOk, series: [cardOk.series[0], { kind: 'hbar', items: Array.from({ length: 20 }, (_, i) => ({ label: `Slide ${i + 1}`, value: 300 + i })) }] };
-  const a = analytics(reads({ module: ok({ card: many, records }) }));
+test('the seconds-per-card chart scrolls inside its card at phone width instead of widening the page', () => {
+  // D902: the chart is this version's, from the engagement read's per-version block.
+  const cards = { version: 4, seconds: Array.from({ length: 20 }, (_, i) => ({ index: i, seconds: 300 + i })) };
+  const block = { available: true, viewers: 3, median_seconds_per_viewer: 60, cards, previous: null, reached_ask: { recorded: false, reason: 'none' } };
+  const a = analytics(reads({ engagement: ok({ ...engagement, analytics: block }) }));
   assert.match(a, /<section class="[^"]*\bmin-w-0\b[^"]*" data-testid="pitch-studio-seconds"/, 'the grid item grows to the chart\'s width');
-  assert.match(a, /<div class="[^"]*\boverflow-x-auto\b[^"]*" role="img" aria-label="Slide 1: 300 seconds/, 'the bars do not scroll inside the card');
+  assert.match(a, /<div class="[^"]*\boverflow-x-auto\b[^"]*" role="img" aria-label="Card 01: 300 seconds/, 'the bars do not scroll inside the card');
 });
 
 /* ------------------------------------------------------------------ *

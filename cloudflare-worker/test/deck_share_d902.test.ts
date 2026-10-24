@@ -240,6 +240,7 @@ test('a link without the NDA opens at once, sends only what it includes, and say
   assert.doesNotMatch(JSON.stringify(r.body), /410,000|vr_total_score|saved us a week/);
   assert.deepEqual(r.body.included, { ...DEFAULT_SHARE_INCLUDE, sources: false });
   assert.equal(r.body.nda_required, false);
+  assert.equal(r.body.offers_deal_pack, false, 'a studio link offers no deal pack');
   assert.deepEqual(r.body.frozen, { version: 2, as_of: '2026-10-21 09:00:00' });
 });
 
@@ -317,6 +318,7 @@ test('a studio link says it needs the NDA and offers no deal pack; the deal-pack
   const lab = await createShareLink(envOf(db), { deckId: V2, deckVersion: 2, userId: ADMIN, actorEmail: null, ttlSeconds: null, projectId: P });
   const labCtx = await req(db, 'GET', `/api/decks/share/${lab.token}/context`);
   assert.equal(labCtx.body.offers_deal_pack, true);
+  assert.equal((await req(db, 'GET', `/api/decks/share/${lab.token}`)).body.offers_deal_pack, true, 'the share read agrees with the context');
   assert.equal(labCtx.body.nda_required, false);
 });
 
@@ -378,6 +380,11 @@ test('engagement adds, for this version: viewers, the median per viewer, seconds
   // The first version has no version before it; a version nobody opened has no median.
   const first = (await req(db, 'GET', `/api/decks/${V1}/engagement`, ADMIN)).body.analytics;
   assert.equal(first.previous, null);
+  // The version before is the nearest one, not the first.
+  db.prepare('INSERT INTO pitch_decks (id, project_id, version, slides, title, is_current, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(V2 + 100, P, 3, '[]', 'Seed', 0, '2026-10-23 09:00:00');
+  const third = (await req(db, 'GET', `/api/decks/${V2 + 100}/engagement`, ADMIN)).body.analytics;
+  assert.deepEqual([third.previous.version, third.previous.deck_id], [2, V2]);
   db.exec('DELETE FROM deck_share_views');
   assert.equal((await req(db, 'GET', `/api/decks/${V2}/engagement`, ADMIN)).body.analytics.median_seconds_per_viewer, null);
 });

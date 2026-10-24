@@ -902,8 +902,8 @@ decks.get('/share/:token', async (c) => {
   // link sends no card, and uses no view, until the person opening it has
   // accepted the NDA on this link; the gate carries only what the NDA names.
   const link = await c.env.DB.prepare(
-    'SELECT id, nda_required, include_json FROM pitch_deck_share_tokens WHERE token_hash = ?',
-  ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null }>();
+    'SELECT id, nda_required, include_json, prospect_id, investor_label FROM pitch_deck_share_tokens WHERE token_hash = ?',
+  ).bind(await sha256Hex(token)).first<{ id: number; nda_required: number | null; include_json: string | null; prospect_id: number | null; investor_label: string | null }>();
   const ndaRequired = Number(link?.nda_required ?? 0) === 1;
   if (link && ndaRequired && await shareLinkLive(c.env, await sha256Hex(token), bind.viewerHash)) {
     const gate = await ndaGate(c, Number(link.id), parseInt(m[1]));
@@ -997,6 +997,8 @@ decks.get('/share/:token', async (c) => {
     // does not stop a screenshot or the browser's own print.
     allow_download: bind.allowDownload,
     nda_required: ndaRequired,
+    // D902 — a studio link names its investor and offers no deal pack (bug 12; `deck_share_actions.ts`).
+    offers_deal_pack: !(link && (link.prospect_id != null || String(link.investor_label || '').trim() !== '')),
     included,
     // A link is frozen to the version it was made from (D902; the token's scope).
     frozen: { version: Number(row.version), as_of: row.created_at ?? null },
