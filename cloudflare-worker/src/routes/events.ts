@@ -33,14 +33,13 @@ import {
   isPrincipalCompEligible,
   mintCompInvitations,
   parseAudienceRules,
-  serializeAudienceRules,
   type AudienceRules,
 } from '../services/eventAudience';
+import { isEventType } from '../services/eventTypes';
 import { deliverEventInvite } from '../services/eventMessaging';
 import { createEventTicketPaymentIntent } from '../services/eventTickets';
 import {
   buildEventIcs,
-  EVENT_TYPES,
   EVENT_VISIBILITIES,
   LOCATION_KINDS,
   ensureUniqueEventSlug,
@@ -213,13 +212,13 @@ events.post('/', async (c) => {
   if (!title) return c.json({ error: 'title_required' }, 400);
   if (!body.starts_at) return c.json({ error: 'starts_at_required' }, 400);
 
-  const type = EVENT_TYPES.includes(body.type) ? body.type : 'meetup';
+  const type = isEventType(body.type) ? body.type : 'meetup';
   const visibility = EVENT_VISIBILITIES.includes(body.visibility) ? body.visibility : 'private';
   const locationKind = LOCATION_KINDS.includes(body.location_kind) ? body.location_kind : 'virtual';
   const slug = await ensureUniqueEventSlug(c.env, title);
-  const audienceRules = serializeAudienceRules(parseAudienceRules(
-    body.audience_rules ? JSON.stringify(body.audience_rules) : null,
-  ));
+  let audienceRules;
+  try { audienceRules = JSON.stringify(validateRegistrationRules(body.audience_rules_json ?? body.audience_rules ?? {})); }
+  catch { return c.json({ error: 'invalid_audience_rules' }, 400); }
 
   const ins: any = await c.env.DB.prepare(
     `INSERT INTO events
@@ -434,7 +433,7 @@ events.patch('/:id', async (c) => {
 
   str('title'); str('summary'); str('description'); str('cover_url');
   str('starts_at'); str('ends_at'); str('timezone'); str('location_text'); str('location_url');
-  if ('type' in body && EVENT_TYPES.includes(body.type)) { sets.push('type = ?'); binds.push(body.type); }
+  if ('type' in body && isEventType(body.type)) { sets.push('type = ?'); binds.push(body.type); }
   if ('visibility' in body && EVENT_VISIBILITIES.includes(body.visibility)) { sets.push('visibility = ?'); binds.push(body.visibility); }
   if ('location_kind' in body && LOCATION_KINDS.includes(body.location_kind)) { sets.push('location_kind = ?'); binds.push(body.location_kind); }
   num('capacity'); num('price_cents'); num('project_id');

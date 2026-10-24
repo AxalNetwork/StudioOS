@@ -4,19 +4,10 @@
 import type { Env } from '../types';
 import { parseAudienceRules } from './eventAudience';
 
-export const EVENT_TYPES = [
-  'meetup',
-  'workshop',
-  'webinar',
-  'demo_day',
-  'office_hours',
-  'conference',
-  'social',
-  'other',
-] as const;
+export { EVENT_TYPE_IDS as EVENT_TYPES } from './eventTypes';
 
 export const EVENT_VISIBILITIES = ['public', 'unlisted', 'private'] as const;
-export const LOCATION_KINDS = ['virtual', 'physical', 'hybrid'] as const;
+export const LOCATION_KINDS = ['virtual', 'physical', 'in_person', 'hybrid'] as const;
 
 export function slugify(input: string): string {
   const base = (input || '')

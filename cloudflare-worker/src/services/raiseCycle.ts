@@ -148,7 +148,7 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
-export type ComputedScore = { key: ReadinessKey; score: number; evidence: 'measured'; missing: string | null; reads: ReadRow[] };
+export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number; evidence: 'measured'; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
 /**
@@ -234,12 +234,13 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
     const m = await env.DB.prepare('SELECT COUNT(*) AS n FROM narrative_checks WHERE project_id = ? AND version = ?')
       .bind(projectId, v).first<{ n: number }>();
     const mismatches = Number(m?.n ?? 0);
+    const { compared } = await checkInputs(env, projectId, v);
     out.push({
-      key: 'narrative', score: Math.max(0, 10 - 2 * mismatches), evidence: 'measured',
-      missing: mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
+      compared_count: compared, key: 'narrative', score: Math.max(0, 10 - 2 * mismatches), evidence: 'measured',
+      missing: compared === 0 ? 'Not enough recorded' : mismatches === 0 ? null : `${plural(mismatches, 'figure differs', 'figures differ')} from the stored metrics.`,
       reads: [
         { a: 'Newest version', b: `v${v}`, ...met(true) },
-        { a: 'Consistency check', b: mismatches ? plural(mismatches, 'mismatch', 'mismatches') : 'no mismatch', ...met(mismatches === 0, true) },
+        { a: 'Consistency check', b: compared === 0 ? 'Not enough recorded · nothing compared yet' : `${compared} compared · ${plural(mismatches, 'mismatch', 'mismatches')}`, ...met(compared > 0 && mismatches === 0, compared > 0) },
       ],
     });
   }
@@ -443,15 +444,10 @@ export function consistencyCheck(stated: Stated[], metrics: Partial<Record<Figur
   return out;
 }
 
-/** What the deck and a narrative version state, and what the stores hold, for one project. */
+/** What this narrative version states and what its metric stores hold. */
 export async function checkInputs(env: Env, projectId: number, version: number) {
-  const p = await env.DB.prepare('SELECT mrr, paying_customers, funding_needed FROM projects WHERE id = ?')
-    .bind(projectId).first<{ mrr: number | null; paying_customers: number | null; funding_needed: number | null }>();
   const stated: Stated[] = [];
-  // The deck's own traction and ask slides read these three fields.
-  if ((num(p?.mrr) ?? 0) > 0) stated.push({ figure: 'mrr', value: Number(p!.mrr), source: 'Deck · projects.mrr' });
-  if ((num(p?.paying_customers) ?? 0) > 0) stated.push({ figure: 'paying_customers', value: Number(p!.paying_customers), source: 'Deck · projects.paying_customers' });
-  if ((num(p?.funding_needed) ?? 0) > 0) stated.push({ figure: 'raise', value: Number(p!.funding_needed), source: 'Deck · projects.funding_needed' });
+  // A deck is not compared until it binds a narrative version (#2434).
   const words = await env.DB.prepare(
     'SELECT field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version = ? AND field_key != ? ORDER BY field_key',
   ).bind(projectId, version, VERSION_MARKER_KEY).all<{ field_key: string; value: string }>();
@@ -461,6 +457,13 @@ export async function checkInputs(env: Env, projectId: number, version: number) 
     .bind(projectId, version).first<{ why_now: string | null }>();
   if (meta?.why_now) stated.push(...parseStatedFigures('why_now', meta.why_now));
 
+  const metrics = await narrativeMetrics(env, projectId);
+  const compared = stated.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
+  return { stated, metrics, compared };
+}
+
+/** Read the common metric side once when several versions are listed. */
+async function narrativeMetrics(env: Env, projectId: number) {
   const metrics: Partial<Record<FigureKey, { value: number; source: string }>> = {};
   const mrr = await env.DB.prepare(
     'SELECT mrr, snapshot_date FROM project_metrics WHERE project_id = ? AND mrr IS NOT NULL ORDER BY snapshot_date DESC, id DESC LIMIT 1',
@@ -474,20 +477,41 @@ export async function checkInputs(env: Env, projectId: number, version: number) 
     `SELECT target_amount FROM raise_rounds WHERE project_id = ? AND status = 'active' AND target_amount IS NOT NULL LIMIT 1`,
   ).bind(projectId).first<{ target_amount: number }>();
   if (round) metrics.raise = { value: Number(round.target_amount), source: 'Pipeline · raise_rounds.target_amount (active round)' };
-  return { stated, metrics };
+  return metrics;
 }
 
-export type VersionRow = { version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number };
+export type VersionRow = { version: number; investor_type: string | null; deck_version: number | null; saved_at: string; mismatches: number; compared: number };
 
 export async function loadVersions(ctx: Ctx): Promise<VersionRow[]> {
   const res = await ctx.env.DB.prepare(
-    `SELECT o.version, MAX(o.investor_type) AS investor_type, MAX(o.deck_version) AS deck_version, MAX(o.updated_at) AS saved_at,
-            (SELECT COUNT(*) FROM narrative_checks c WHERE c.project_id = o.project_id AND c.version = o.version) AS mismatches
+    `SELECT o.version, MAX(o.investor_type) AS investor_type, MAX(o.deck_version) AS deck_version, MAX(o.updated_at) AS saved_at
        FROM spinout_deck_overrides o
       WHERE o.project_id = ? AND o.version > 0
       GROUP BY o.version ORDER BY o.version DESC`,
-  ).bind(ctx.projectId).all<VersionRow>();
-  return res.results || [];
+  ).bind(ctx.projectId).all<Pick<VersionRow, 'version' | 'investor_type' | 'deck_version' | 'saved_at'>>();
+  const versions = res.results || [];
+  if (!versions.length) return [];
+  const words = await ctx.env.DB.prepare(
+    'SELECT version, field_key, value FROM spinout_deck_overrides WHERE project_id = ? AND version > 0 AND field_key != ? ORDER BY version, field_key',
+  ).bind(ctx.projectId, VERSION_MARKER_KEY).all<{ version: number; field_key: string; value: string }>();
+  const meta = await ctx.env.DB.prepare(
+    'SELECT version, why_now FROM narrative_version_meta WHERE project_id = ? AND version > 0',
+  ).bind(ctx.projectId).all<{ version: number; why_now: string | null }>();
+  const stated = new Map<number, Stated[]>();
+  for (const word of words.results || []) {
+    const key = Number(word.version);
+    stated.set(key, [...(stated.get(key) || []), ...parseStatedFigures(word.field_key, word.value)]);
+  }
+  for (const row of meta.results || []) if (row.why_now) {
+    const key = Number(row.version);
+    stated.set(key, [...(stated.get(key) || []), ...parseStatedFigures('why_now', row.why_now)]);
+  }
+  const metrics = await narrativeMetrics(ctx.env, ctx.projectId);
+  return versions.map((v) => {
+    const values = stated.get(Number(v.version)) || [];
+    const compared = values.filter(s => Number.isFinite(s.value) && Number.isFinite(metrics[s.figure]?.value)).length;
+    return { ...v, compared, mismatches: consistencyCheck(values, metrics).length };
+  });
 }
 
 export const fmtFigure = (f: FigureKey, v: number) => (f === 'paying_customers' ? Math.round(v).toLocaleString('en-US') : usd(v));
@@ -508,24 +532,21 @@ export async function narrativeCard(ctx: Ctx): Promise<Card> {
       byType.set(k, (byType.get(k) ?? 0) + 1);
     }
     const newest = versions[0];
-    const checks = await ctx.env.DB.prepare(
-      `SELECT figure, stated_value, stated_source, metric_value, metric_source FROM narrative_checks
-        WHERE project_id = ? AND version = ? ORDER BY id`,
-    ).bind(ctx.projectId, newest.version).all<Mismatch>();
-    const found = checks.results || [];
+    const inputs = await checkInputs(ctx.env, ctx.projectId, newest.version);
+    const found = consistencyCheck(inputs.stated, inputs.metrics);
     const series: unknown[] = [
       { kind: 'hbar', items: [...byType.entries()].map(([k, n]) => ({ label: INVESTOR_TYPE_LABEL[k] ?? k, value: n, tone: 'v1' })) },
       {
         kind: 'rows',
         items: [
           { label: `Newest · v${newest.version} · ${INVESTOR_TYPE_LABEL[newest.investor_type ?? 'other'] ?? 'Other'}`, value: day(newest.saved_at) },
-          { label: 'Mismatches', value: found.length, tone: found.length ? 'warn' : 'ok' },
+          { label: 'Comparison', value: inputs.compared ? `${inputs.compared} compared · ${plural(found.length, 'mismatch', 'mismatches')}` : 'Nothing compared yet', tone: !inputs.compared ? 'muted' : found.length ? 'warn' : 'ok' },
           ...found.map((m) => ({ label: FIGURE_LABEL[m.figure as FigureKey] ?? m.figure, value: mismatchSentence(m), tone: 'warn' })),
         ],
       },
     ];
     const next = found.length
-      ? { text: `Reconcile ${plural(found.length, 'figure', 'figures')} the narrative states differently from the metrics`, href: href(ctx, 'investor-narrative') }
+      ? { text: `Reconcile ${plural(found.length, 'figure', 'figures')} the narrative states differently from the metrics`, href: `/raise/investor-narrative/check?project_id=${ctx.projectId}` }
       : null;
     return { state: 'ok', series, next, reason: null };
   });
@@ -536,13 +557,13 @@ async function narrativeRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   if (rq.filter.investor_type) rows = rows.filter((v) => (v.investor_type ?? 'other') === rq.filter.investor_type);
   if (rq.sort === 'oldest') rows.reverse();
   return paged(
-    [col('version', 'Version'), col('investor_type', 'Investor type'), col('deck', 'Used by deck'), col('mismatches', 'Mismatches'), col('date', 'Date')],
+    [col('version', 'Version'), col('investor_type', 'Investor type'), col('deck', 'Deck use'), col('mismatches', 'Mismatches'), col('date', 'Date')],
     rows.map((v) => ({
       id: v.version,
       cells: {
         version: `v${v.version}`, investor_type: INVESTOR_TYPE_LABEL[v.investor_type ?? 'other'] ?? null,
-        deck: v.deck_version != null ? `v${v.deck_version}` : null,
-        mismatches: { text: String(Number(v.mismatches)), tone: Number(v.mismatches) ? 'warn' : 'ok' },
+        deck: 'No deck reads this version.',
+        mismatches: { text: v.compared ? String(Number(v.mismatches)) : 'Nothing compared yet', tone: !v.compared ? 'muted' : Number(v.mismatches) ? 'warn' : 'ok' },
         date: day(v.saved_at),
       },
     })),

@@ -79,3 +79,40 @@ test('lp_briefing exists, and investors are offered it', () => {
   const src = read('cloudflare-worker/src/routes/events.ts');
   assert.match(src, /startsWith\('investor'\)[^;]*'lp_briefing'/);
 });
+
+test('D916: create and edit validate against the canonical Worker type guard', () => {
+  const common = read('cloudflare-worker/src/services/eventsCommon.ts');
+  assert.match(common, /export \{ EVENT_TYPE_IDS as EVENT_TYPES \} from '\.\/eventTypes'/,
+    'the compatibility export must alias the canonical list');
+  const route = read('cloudflare-worker/src/routes/events.ts');
+  assert.match(route, /import \{ isEventType \} from '\.\.\/services\/eventTypes'/);
+  const create = route.slice(route.indexOf("events.post('/',"), route.indexOf('// ── GET /suggested'));
+  const edit = route.slice(route.indexOf("events.patch('/:id',"), route.indexOf('// ──', route.indexOf("events.patch('/:id',") + 1));
+  assert.match(create, /const type = isEventType\(body.type\) \? body.type : 'meetup'/);
+  assert.match(edit, /'type' in body && isEventType\(body.type\)/);
+  assert.doesNotMatch(route, /EVENT_TYPES\.includes\(body.type\)/);
+});
+
+test('D916: the public Format filter categorises new and legacy in-person events as In person', () => {
+  const src = read('frontend/src/pages/events/PublicEventsPage.jsx');
+  const format = src.match(/function eventFormat\(ev\) \{([\s\S]*?)\n\}/);
+  assert.ok(format);
+  const eventFormat = new Function('ev', format[1]);
+  assert.equal(eventFormat({ location_kind: 'in_person' }), 'in_person');
+  assert.equal(eventFormat({ location_kind: 'physical' }), 'in_person');
+  assert.equal(eventFormat({ location_kind: 'virtual' }), 'online');
+  assert.equal(eventFormat({ location_kind: 'hybrid' }), 'hybrid');
+  assert.match(src, /events\.filter\(\(ev\) => eventFormat\(ev\) === filterFormat\)/);
+});
+
+test('D916: editor schedule writes UTC instants, not timezone-local wall-clock strings', () => {
+  const src = read('frontend/src/pages/events/EventEditorPage.jsx');
+  const convert = src.match(/function localInputToIso\(value\) \{([\s\S]*?)\n\}/);
+  assert.ok(convert);
+  const toIso = new Function('value', convert[1]);
+  assert.equal(toIso(''), null);
+  assert.equal(toIso('2026-10-24T10:00'), new Date('2026-10-24T10:00').toISOString());
+  assert.match(toIso('2026-10-24T10:00'), /Z$/);
+  assert.match(src, /starts_at: localInputToIso\(form.starts_at\)/);
+  assert.match(src, /ends_at: localInputToIso\(form.ends_at\)/);
+});

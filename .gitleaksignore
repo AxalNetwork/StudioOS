@@ -93,3 +93,8 @@ fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources
 # fixture commit, never a production credential. Current fixture derives a
 # low-entropy test-only key. Scope this exception to that one historical finding.
 689cc8c3a3d5143334510e1dcfe41734bc201ded:cloudflare-worker/test/dd_advisor_subject_2392.test.ts:generic-api-key:20
+
+# D916 (#2699): synthetic signing value in the in-memory event fixture only.
+# The next commit uses a generated low-entropy test value. Pin this already
+# pushed finding; keep every other commit, file and secret rule covered.
+65b2ef75d7337fe242f14526403d6781752ac0a7:cloudflare-worker/test/events_d916.test.ts:generic-api-key:15

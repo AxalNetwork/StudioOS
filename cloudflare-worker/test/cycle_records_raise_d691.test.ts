@@ -200,7 +200,7 @@ const overview = async (db: DatabaseSync) => {
 /** Step 3's table: title, columns, filters, default sort. */
 const CANVAS: Record<string, { title: string; cols: string[]; filters: string[]; sort: string }> = {
   'fundraising-readiness': { title: 'Readiness items', cols: ['Item', 'Score', 'Evidence', 'Missing', 'Updated'], filters: ['State'], sort: 'Score' },
-  'investor-narrative': { title: 'Versions', cols: ['Version', 'Investor type', 'Used by deck', 'Mismatches', 'Date'], filters: ['Investor type'], sort: 'Newest' },
+  'investor-narrative': { title: 'Versions', cols: ['Version', 'Investor type', 'Deck use', 'Mismatches', 'Date'], filters: ['Investor type'], sort: 'Newest' },
   'pitch-deck': { title: 'Investor links', cols: ['Investor', 'Expires', 'Views', 'Time on deck', 'Most read'], filters: ['State'], sort: 'Last viewed' },
   'data-room': { title: 'Files', cols: ['File', 'Folder', 'Answers request', 'Access', 'Updated'], filters: ['Folder', 'Access', 'Answers', 'Area'], sort: 'Updated' },
   'cap-table': { title: 'Holders', cols: ['Holder', 'Group', 'Instrument', 'Before', 'After round'], filters: ['Group', 'Instrument'], sort: 'Ownership' },
@@ -290,7 +290,7 @@ test('1: the cells read the stores 463 added and say Not recorded where nothing 
   assert.deepEqual(funds.product, { category: 'Product & engineering', share: 30, amount: 360000, monthly: 30000, milestone: 'Launch v2 by 2027-03' });
   assert.equal(funds.reserve.milestone, null);
   const versions = await cells('investor-narrative');
-  assert.equal(versions[2].deck, 'v4');
+  assert.equal(versions[2].deck, 'No deck reads this version.');
   const investors = await cells('capital-relationships');
   assert.equal(investors[6].stage, 'Identified', 'to_contact reads Identified');
   const holders = (await read(db, 'cap-table')).body.records.rows;
@@ -802,4 +802,28 @@ test('9 (form-options): each module serves its Add form; funds only by name from
   assert.deepEqual((await fo('capital-relationships', '&q=100%25')).funds.map((f: any) => f.value), ['fund-pct'], '% matches itself');
   assert.deepEqual((await fo('capital-relationships', '&q=Gridline_AI')).funds, [], '_ matches itself, not any character');
   assert.deepEqual((await fo('capital-relationships', `&q=${'g'.repeat(500)}`)).funds, []);
+});
+
+
+test('#2691: a narrative record compares current values, ignores stale check rows, and never claims a deck reads it',async()=>{
+ const db=await seeded();
+ try {
+  db.exec(`INSERT INTO spinout_deck_overrides(project_id,field_key,value,version) VALUES(${P},'traction.takeaway','We have $45k MRR',2)`);
+  db.exec(`INSERT INTO project_metrics(project_id,snapshot_date,mrr) VALUES(${P},'2026-10-01',38000)`);
+  const before=db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get()?.n;
+  let r=await rec(db,'investor-narrative',2); assert.equal(r.status,200);
+  let rows=r.body.main.find((s:any)=>s.key==='consistency').rows;
+  assert.equal(rows.find((x:any)=>x.a==='MRR').c,'Mismatch','even without a saved mismatch');
+  assert.equal(rows.find((x:any)=>x.a==='Pitch deck').c,'Not compared');
+  assert.match(r.body.sub,/No deck reads this version/);
+  db.exec(`UPDATE project_metrics SET mrr=45000 WHERE project_id=${P}`);
+  db.exec(`INSERT INTO narrative_checks(project_id,version,figure,stated_value,stated_source,metric_value,metric_source) VALUES(${P},2,'mrr',45000,'Narrative',38000,'Old snapshot')`);
+  r=await rec(db,'investor-narrative',2);
+  rows=r.body.main.find((s:any)=>s.key==='consistency').rows;
+  assert.equal(rows.find((x:any)=>x.a==='MRR').c,'OK','stale mismatches do not overrule the actual comparison');
+  db.exec(`DELETE FROM spinout_deck_overrides WHERE project_id=${P} AND field_key='traction.takeaway'`);
+  r=await rec(db,'investor-narrative',2);
+  assert.ok(r.body.pills.some((p:any)=>p.text==='Nothing compared yet'));
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get()?.n,before,'reads do not write');
+ }finally{db.close();}
 });
