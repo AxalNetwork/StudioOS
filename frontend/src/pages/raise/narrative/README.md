@@ -8,6 +8,7 @@ The founder's Investor narrative tool at `/raise/investor-narrative` (D906,
 | File | What it is |
 |---|---|
 | `NarrativeTool.jsx` | The tool's tab bar (`NarrativeTabBar`), drawn under the module page's header on Home, and its tab pages (`NarrativeTabPage`): Story, Positioning, Check and Versions with Compare. |
+| `NarrativeAdmin.jsx` | D914 (#2698): an admin's reason gate and the NAR13 read-only banner, the notes thread, the founder's "Who read this narrative", and the NAR14a and NAR14b panels. |
 | `narrativeModel.js` | Pure: the addresses, the tabs, the words, and every derivation from the reads (the saved versions, one version's words and its consistency check, two versions side by side). |
 
 ## Where the tool lives
@@ -36,3 +37,8 @@ added, so every cycle-route rule (`cyclePaths.js`, `cycle_spacing_d694`) holds.
 - **The check is drawn in the Worker's own words.** The page states each figure's
   result as the consistency section sends it and re-derives nothing; the
   check's own fixes are #2447 and D906 part 1.
+- **An admin reads, and changes nothing** (D914). `CycleRoute` wraps every
+  narrative page in `NarrativeAdminGate` for an admin: a reason first, then the
+  page read only, with no New version, Add, edit, fill or draft. The Worker
+  refuses their writes (`admin_read_only`) and their reads without a reason
+  (`read_reason_required`) on its own; the page only draws what it answers.

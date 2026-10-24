@@ -3,12 +3,15 @@ import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { canReadBoard, canWrite, canWritePitchDeck, type ProjectRef } from './_founder_validate_helpers';
+import { ADMIN_READ_ONLY, isAdmin, narrativeAdminGate } from '../services/narrative/adminRead';
 import { activityFor } from '../services/cycleActivity';
 import { hasRecords, RECORD_SPECS, specFor } from '../services/records';
 import { ownedRow, RECORD_ID } from '../services/records/owned';
 import type { Gate, ModuleSpec, Next, RecordAction, RecordContext, RecordRegistry, RecordSection } from '../services/records/types';
 
 const CYCLES = new Set(['validate', 'build', 'raise', 'grow']);
+// D914 (#2698): an admin reads the Investor narrative's records read only, and only with a reason.
+const isNarrative = (c: any) => c.req.param('cycle') === 'raise' && c.req.param('slug') === 'investor-narrative';
 // The canvas's pattern exactly: unanchored and case-sensitive (CO:265).
 const STATUS_NEXT = /Open|Pending|Missing|Due|Failed|Next|Planned|To confirm|Needs/;
 
@@ -68,7 +71,12 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
     const project = await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
       .bind(projectId).first() as ProjectRef | null;
     if (!project) return c.json({ detail: 'Project not found' }, 404);
-    const reading = c.req.method === 'GET' && !c.req.path.endsWith('/form-options');
+    if (isNarrative(c)) {
+      const gate = await narrativeAdminGate(c, user, projectId, c.req.method === 'GET' ? 'read' : 'write');
+      if (gate) return gate;
+    }
+    // D914: for an admin with a reason, the narrative's versions list is a read.
+    const reading = c.req.method === 'GET' && (!c.req.path.endsWith('/form-options') || (isNarrative(c) && isAdmin(user)));
     const ctx: RecordContext = { env: c.env, projectId, project, user };
     if (reading) {
       if (!await allowed(spec.read, project, user, c.env)) return c.json({ detail: 'Forbidden' }, 403);
@@ -83,6 +91,8 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
 
 async function writerAllowed(c: any, ctx: RecordContext, spec: ModuleSpec): Promise<Response | null> {
   if (c.req.param('cycle') === 'raise' && c.req.param('slug') === 'pitch-deck' && !canWritePitchDeck(ctx.project, ctx.user)) return c.json({ detail: 'Forbidden' }, 403);
+  // A version's record, read by an admin, carries no action: its writes are refused.
+  if (isNarrative(c) && isAdmin(ctx.user)) return c.json({ detail: ADMIN_READ_ONLY, code: 'admin_read_only' }, 403);
   return await allowed(spec.write, ctx.project, ctx.user, ctx.env) ? null : c.json({ detail: 'Forbidden' }, 403);
 }
 
@@ -161,7 +171,8 @@ export function createCycleRecords(registry: RecordRegistry = RECORD_SPECS) {
   route.get('/:cycle/modules/:slug/form-options', async (c) => {
     const s = await scoped(c, registry, false);
     if (s instanceof Response) return s;
-    const refusal = await writerAllowed(c, s.ctx, s.spec);
+    // D914: the versions list is how an admin with a reason reads the narrative's tabs (`scoped` checked their read).
+    const refusal = isNarrative(c) && isAdmin(s.ctx.user) ? null : await writerAllowed(c, s.ctx, s.spec);
     if (refusal) return refusal;
     if (!s.spec.formOptions) return c.json({});
     const query = Object.fromEntries(new URL(c.req.url).searchParams.entries());

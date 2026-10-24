@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { SIDEBAR_GROUPS, filterItemsByTier, hasInvestorTier, FOUNDER_FULL_BLEED, INVESTOR_FULL_BLEED, ADVISOR_FULL_BLEED, PARTNER_FULL_BLEED, SHARED_FULL_BLEED, SHARED_FULL_BLEED_PREFIXES, ONBOARDING_CANVAS_PATHS } from './sidebarConfig';
 import { isCyclePath } from './pages/cycles/cyclePaths';
+import { BOUNDARY_ROLES as NARRATIVE_BOUNDARY_ROLES } from './pages/raise/narrative/narrativeModel';
 import PaywallModal from './components/PaywallModal';
 import AdminFrozenBar from './components/AdminFrozenBar';
 import BranchSuspendedBar from './components/BranchSuspendedBar';
@@ -405,6 +406,7 @@ const PitchStudio = lazy(() => import('./pages/raise/pitch/PitchStudio'));
 const PitchWorkspaceMoved = lazy(() => import('./pages/raise/pitch/PitchWorkspaceMoved'));
 const PitchPresent = lazy(() => import('./pages/raise/pitch/PitchPresent'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
+const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -3495,6 +3497,15 @@ function AppInner() {
       {/* D686 §5.1: Call for Capital, the Raise page with its lightbox open; /raise/calls is the history's address. */}
       <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />
       <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
+      {/* D914 (#2698), NAR14a: an Investor, an Advisor, an Operating Partner or an
+          Explorer opening the Investor narrative reads its boundary inside their own
+          shell, never a bounce; nothing of any narrative is read. Founders and
+          admins get the module as on every other Raise address. */}
+      <Route path="/raise/investor-narrative" element={guard(labRoles(['admin', 'founder', 'investor', 'advisor', 'partner', 'exploring']),
+        NARRATIVE_BOUNDARY_ROLES.has(effectiveRole) && user?.spinout_lab_active !== 1 ? <NarrativeBoundary /> : <CycleRoute cycle="raise" slug="investor-narrative" />)} />
+      <Route path="/raise/investor-narrative/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="investor-narrative" adding />)} />
+      <Route path="/raise/investor-narrative/:id" element={guard(labRoles(['admin', 'founder', 'investor', 'advisor', 'partner', 'exploring']),
+        NARRATIVE_BOUNDARY_ROLES.has(effectiveRole) && user?.spinout_lab_active !== 1 ? <NarrativeBoundary /> : <CycleRoute cycle="raise" slug="investor-narrative" record />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       <Route path="/raise/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" record />)} />
       <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />

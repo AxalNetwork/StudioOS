@@ -23,6 +23,14 @@
  *   GET   /narrative/:version        → { version, meta, sections, positioning, bindings }, each part
  *                                      { state: 'ok', … } or { state: 'unreadable' }; 0 is the live deck
  *   PUT   /narrative/:version/sections/:section   { body?, audience_note?, position?, source?, bindings? }
+ *   D914 (#2698): an admin reads the narrative read only (`services/narrative/adminRead.ts`).
+ *   GET   /narrative/reads           → { reads: [{ id, reason, by: { name, kind }, created_at, expires_at }], mine, viewer }
+ *   POST  /narrative/reads           { reason } an admin's reason for opening it; the founder sees it
+ *   GET   /narrative/notes           → { notes: [{ id, version, body, author: { name, kind }, created_at }], viewer }
+ *   POST  /narrative/notes           { body, version? } an admin's note, or the founder's answer
+ *   An admin's narrative write answers 403 `admin_read_only`; their narrative
+ *   reads (this module's read, `/narrative/*`, and its records) answer 403
+ *   `read_reason_required` until they give a reason.
  *   POST  /deck-links                { deck_id, prospect_id | investor_label, expires_days: 7|14|30|null, allow_download?, allow_forwarding? }
  *   PATCH /deck-links/:id            investor, the two settings, an earlier expiry
  *   POST  /holders                   { name, group, instrument, shares | ownership_pct | amount_cents, cap_cents?, discount_pct?, vesting?, prospect_id? }
@@ -70,6 +78,7 @@ import {
 } from '../services/raiseWriters';
 import { hasRecords } from '../services/records';
 import { NARRATIVE_SECTIONS, compareNarrative, readNarrative, readPositioning, readableVersion, saveNarrativeSection, savePositioning } from '../services/narrative/store';
+import { InputError, giveReason, isAdmin, kindOf, listNotes, listReasons, narrativeAdminGate, postNote, type Mode } from '../services/narrative/adminRead';
 import { raisePhone } from '../services/cycleFocus';
 import {
   AcceptError, RAISE_PART_FOR, acceptRaiseProposal, deleteRaiseFact, dismissRaiseProposal, syncRaise,
@@ -101,6 +110,13 @@ async function scope(c: any): Promise<{ user: User; projectId: number } | Respon
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   if (!(/\/deck-links(?:\/|$)/.test(c.req.path) ? canWritePitchDeck(project, user) : canWrite(project, user))) return c.json({ detail: 'Forbidden' }, 403);
   return { user, projectId };
+}
+
+/** D914: `scope`, then the narrative's rule for an admin (read only, and only with a reason). */
+async function narrativeScope(c: any, mode: Mode): Promise<{ user: User; projectId: number } | Response> {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  return (await narrativeAdminGate(c, s.user, s.projectId, mode)) ?? s;
 }
 
 const ctxOf = (c: any, projectId: number): Ctx => ({ env: c.env, projectId, today: today() });
@@ -136,7 +152,7 @@ cycleRaise.get('/modules/:slug', async (c) => {
   const slug = c.req.param('slug') as ModuleSlug;
   const mod = MODULES.find((m) => m.slug === slug);
   if (!mod) return c.json({ detail: 'No such module', modules: MODULES.map((m) => m.slug) }, 404);
-  const s = await scope(c);
+  const s = slug === 'investor-narrative' ? await narrativeScope(c, 'read') : await scope(c);
   if (s instanceof Response) return s;
   const ctx = ctxOf(c, s.projectId);
   const rq = recordQuery({ q: c.req.query('q'), filter: c.req.query('filter'), sort: c.req.query('sort'), page: c.req.query('page') });
@@ -196,7 +212,7 @@ const narrativeFields = (b: Record<string, unknown>) => ({
 });
 
 cycleRaise.post('/narrative-versions', async (c) => {
-  const s = await scope(c);
+  const s = await narrativeScope(c, 'write');
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
@@ -206,7 +222,7 @@ cycleRaise.post('/narrative-versions', async (c) => {
 });
 
 cycleRaise.patch('/narrative-versions/:version', async (c) => {
-  const s = await scope(c);
+  const s = await narrativeScope(c, 'write');
   if (s instanceof Response) return s;
   const version = idParam(c.req.param('version'));
   if (version == null) return c.json({ detail: 'Version not found' }, 404);
@@ -229,7 +245,7 @@ const unreadable = (c: any, e: unknown) => {
 
 // Literal paths first: `compare` and `positioning` are not version numbers.
 cycleRaise.get('/narrative/compare', async (c) => {
-  const s = await scope(c);
+  const s = await narrativeScope(c, 'read');
   if (s instanceof Response) return s;
   try {
     return c.json(await compareNarrative(c.env, s.projectId, c.req.query('a'), c.req.query('b')));
@@ -237,7 +253,7 @@ cycleRaise.get('/narrative/compare', async (c) => {
 });
 
 cycleRaise.get('/narrative/positioning', async (c) => {
-  const s = await scope(c);
+  const s = await narrativeScope(c, 'read');
   if (s instanceof Response) return s;
   try {
     const raw = c.req.query('version');
@@ -247,7 +263,7 @@ cycleRaise.get('/narrative/positioning', async (c) => {
 });
 
 cycleRaise.put('/narrative/positioning', async (c) => {
-  const s = await scope(c);
+  const s = await narrativeScope(c, 'write');
   if (s instanceof Response) return s;
   const b = await body(c);
   try {
@@ -255,8 +271,54 @@ cycleRaise.put('/narrative/positioning', async (c) => {
   } catch (e) { return writeFailed(c, e); }
 });
 
-cycleRaise.get('/narrative/:version', async (c) => {
+// D914 (#2698): the read reasons and the notes thread. Literal paths, before `/narrative/:version`.
+const inputFailed = (c: any, e: unknown, what: string) => {
+  if (e instanceof InputError) return c.json({ detail: e.sentence, code: e.code }, 400);
+  if (e instanceof WriterError) return c.json({ detail: e.sentence }, e.status as any);
+  console.error(`[cycle_raise] narrative ${what} failed:`, (e as Error)?.message);
+  return c.json({ detail: `The ${what} could not be saved` }, 500);
+};
+
+cycleRaise.get('/narrative/reads', async (c) => {
   const s = await scope(c);
+  if (s instanceof Response) return s;
+  try {
+    return c.json({ ...(await listReasons(c.env, s.projectId, s.user)), viewer: await kindOf(c.env, s.user) });
+  } catch (e) { return unreadable(c, e); }
+});
+
+cycleRaise.post('/narrative/reads', async (c) => {
+  const s = await scope(c);
+  if (s instanceof Response) return s;
+  if (!isAdmin(s.user)) return c.json({ detail: 'Only an admin gives a reason for reading a narrative.' }, 403);
+  const b = await body(c);
+  try {
+    return c.json({ read: await giveReason(c.env, s.projectId, s.user, b.reason) }, 201);
+  } catch (e) { return inputFailed(c, e, 'reason'); }
+});
+
+cycleRaise.get('/narrative/notes', async (c) => {
+  const s = await narrativeScope(c, 'read');
+  if (s instanceof Response) return s;
+  try {
+    return c.json({ notes: await listNotes(c.env, s.projectId), viewer: await kindOf(c.env, s.user) });
+  } catch (e) { return unreadable(c, e); }
+});
+
+// A note is not a narrative write: an admin with a reason posts it, as the founder answers it.
+cycleRaise.post('/narrative/notes', async (c) => {
+  const s = await narrativeScope(c, 'read');
+  if (s instanceof Response) return s;
+  const b = await body(c);
+  try {
+    const version = b.version === undefined || b.version === null ? null : await readableVersion(c.env, s.projectId, b.version);
+    if (version === 0) return c.json({ detail: 'A note is on a saved version, or on the narrative as a whole.', code: 'invalid_version' }, 400);
+    return c.json({ note: await postNote(c.env, s.projectId, s.user, b.body, version) }, 201);
+  } catch (e) { return inputFailed(c, e, 'note'); }
+});
+
+cycleRaise.get('/narrative/:version', async (c) => {
+  const s = await narrativeScope(c, 'read');
   if (s instanceof Response) return s;
   const raw = c.req.param('version');
   if (!/^(0|[1-9][0-9]{0,8})$/.test(raw)) return c.json({ detail: 'Version not found' }, 404);
@@ -266,7 +328,7 @@ cycleRaise.get('/narrative/:version', async (c) => {
 });
 
 cycleRaise.put('/narrative/:version/sections/:section', async (c) => {
-  const s = await scope(c);
+  const s = await narrativeScope(c, 'write');
   if (s instanceof Response) return s;
   const raw = c.req.param('version');
   if (!/^(0|[1-9][0-9]{0,8})$/.test(raw)) return c.json({ detail: 'Version not found' }, 404);
