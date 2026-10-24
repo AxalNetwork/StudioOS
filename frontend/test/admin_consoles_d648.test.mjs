@@ -272,9 +272,10 @@ test('HQ · Accounts mounts the Users console alone, not the whole Admin Console
 
 test('D647: Contracts has a real formation-orders destination and no dead Incorporation tab', () => {
   const markup = renderToStaticMarkup(React.createElement(MemoryRouter, null, React.createElement(LegalPanel)));
-  assert.match(markup, /href="\/admin\/spinout-lab"/);
+  // D937 (#2374): the Lab's Formation tab, at the Lab's own address.
+  assert.match(markup, /href="\/admin\/programs\/spinout-lab\/formation"/);
   assert.match(markup, /Programs › Spin-Out Lab/);
-  assert.match(markup, /Open its Formation orders tab/);
+  assert.match(markup, /on its Formation tab/);
   assert.doesNotMatch(markup, /legal-sub-incorporation|legal-incorporation-placeholder|Incorporation packets will appear/);
 });
 

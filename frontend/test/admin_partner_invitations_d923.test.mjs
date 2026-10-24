@@ -523,7 +523,8 @@ test('the page keeps its frame and today\'s rail note, its crumb and its literal
 
 test('every wiring place D923 §1 names follows the page', () => {
   const sidebar = read('frontend/src/sidebarConfig.js');
-  assert.match(sidebar, /label: 'Community', match: \['\/admin\/events', '\/admin\/jobs', '\/admin\/circles', '\/admin\/partner-invitations'\]/);
+  // Later pages may follow it in the list (D972 added /admin/advisors-partners).
+  assert.match(sidebar, /label: 'Community', match: \['\/admin\/events', '\/admin\/jobs', '\/admin\/circles', '\/admin\/partner-invitations'(, '[^']+')*\]/);
   assert.doesNotMatch(sidebar, /'\/admin\/partners'/, 'Approvals no longer lights the page: exactly one row does');
   const placement = read('frontend/src/lib/adminPlacement.js');
   assert.match(placement, /\{ key: '\/admin\/partners', kind: 'row', label: 'Partner Invitations', route: '\/admin\/partner-invitations', hqOnly: false,\s*\.\.\.admin\('Community', 'card link'\), how: [^}]*also: \[admin\('Approvals', 'lane'\)\] \}/);
