@@ -9,21 +9,30 @@ ALTER TABLE partner_deals ADD COLUMN void_reason TEXT CHECK (void_reason IN ('in
 -- logAdminAction writes both stores. Prefer the canonical admin audit entry
 -- for the same invitation/action/time, with activity-only entries as fallback.
 -- Malformed audit JSON and entries without a recorded boolean are not facts.
-WITH sends AS (
+WITH activity_sends AS (
+  SELECT *, ROW_NUMBER() OVER (
+    PARTITION BY action, datetime(created_at), json_extract(details, '$.invitation_id'), json_extract(details, '$.email_sent')
+    ORDER BY id
+  ) AS occurrence
+    FROM activity_logs
+   WHERE action IN ('partner_invitation_created','partner_invitation_resent')
+     AND json_valid(details)
+), sends AS (
   SELECT id, action, exported_at AS sent_at, filters_json AS details, 1 AS source
     FROM admin_audit_log
    WHERE action IN ('partner_invitation_created','partner_invitation_resent')
      AND json_valid(filters_json)
   UNION ALL
   SELECT a.id, a.action, a.created_at, a.details, 0
-    FROM activity_logs a
+    FROM activity_sends a
    WHERE a.action IN ('partner_invitation_created','partner_invitation_resent')
      AND json_valid(a.details)
-     AND NOT EXISTS (
-       SELECT 1 FROM admin_audit_log b
+     AND a.occurrence > (
+       SELECT COUNT(*) FROM admin_audit_log b
         WHERE b.action = a.action AND datetime(b.exported_at) = datetime(a.created_at)
           AND json_extract(CASE WHEN json_valid(b.filters_json) THEN b.filters_json ELSE '{}' END, '$.invitation_id') = json_extract(a.details, '$.invitation_id')
           AND json_type(CASE WHEN json_valid(b.filters_json) THEN b.filters_json ELSE '{}' END, '$.email_sent') IN ('true','false')
+          AND json_extract(CASE WHEN json_valid(b.filters_json) THEN b.filters_json ELSE '{}' END, '$.email_sent') = json_extract(a.details, '$.email_sent')
      )
 ), known AS (
   SELECT *, json_extract(details, '$.invitation_id') AS invitation_id,

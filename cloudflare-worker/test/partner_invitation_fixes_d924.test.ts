@@ -135,7 +135,7 @@ test('D924 a different admin renews the matching agreement link for the full 14 
  assert.equal(tx.mails.length,1);assert.match(tx.mails[0],/PARTNER@example.invalid/);const decoded=Buffer.from(tx.mails[0].split('Content-Transfer-Encoding: base64')[1].split('\r\n\r\n')[1].split('\r\n--')[0].replace(/\s/g,''),'base64').toString('utf8');assert.ok(decoded.includes(recipient.signing_token));assert.match(decoded,/expires in 14 days/);
  assert.ok(!JSON.stringify(r.body).includes(recipient.signing_token));assert.ok(!JSON.stringify(f.db.prepare('SELECT * FROM esign_audit_events').all()).includes(recipient.signing_token));
  assert.equal((f.db.prepare("SELECT signing_token FROM esign_recipients WHERE recipient_email='other@example.invalid'").get() as any).signing_token,'b'.repeat(64));
- assert.equal((f.db.prepare("SELECT signer_id FROM esign_audit_events WHERE action='reminder_sent'").get() as any).signer_id,8);
+ assert.equal((f.db.prepare("SELECT signer_id FROM esign_audit_events WHERE action='partner_signing_link_renewed'").get() as any).signer_id,8);
  assert.equal((await esignCall(f.env,'GET','/sign/'+ 'a'.repeat(64),null)).status,404);
  assert.equal((await esignCall(f.env,'GET','/sign/'+recipient.signing_token,null)).status,200);
  }finally{tx.restore();f.db.close();}
@@ -191,5 +191,48 @@ test('D924 detailed missing configuration and boolean false agree',async()=>{
 for(const kind of ['refused','failed'] as const) test(`D924 agreement resend records ${kind} and still preserves progress`,async()=>{
  const f=fixture();const {id}=await agreement(f);credentials(f);const tx=transport(kind);try{
  const r=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(r.status,200);assert.equal(r.body.email_sent,false);assert.equal(row(f,id).last_send_reason,kind);assert.equal(row(f,id).last_send_ok,0);assert.equal(row(f,id).status,'finalized');
+ const previous:any=f.db.prepare("SELECT signing_token,token_expires_at FROM esign_recipients WHERE envelope_id=(SELECT envelope_id FROM partner_invitations WHERE id=?)").get(id);assert.equal(previous.signing_token,'a'.repeat(64));assert.equal(previous.token_expires_at,'2000-01-01');
  }finally{tx.restore();f.db.close();}
+});
+
+test('D924 failed renewal keeps a still-valid prior signing link and Remind has a separate throttle',async()=>{
+ const f=fixture();const {id,envId}=await agreement(f);credentials(f);const tx=transport('refused');try{
+ f.db.prepare("UPDATE esign_recipients SET token_expires_at='2999-01-01' WHERE envelope_id=?").run(envId);
+ const resent=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(resent.body.email_sent,false);
+ assert.equal((await esignCall(f.env,'GET','/sign/'+'a'.repeat(64),null)).status,200);
+ assert.equal((f.db.prepare('SELECT token_expires_at FROM esign_recipients WHERE envelope_id=?').get(envId) as any).token_expires_at,'2999-01-01');
+ }finally{tx.restore();f.db.close();}
+ const g=fixture();const other=await agreement(g);credentials(g);const ok=transport('ok');try{
+ await call(g,'POST',`/invitations/${other.id}/resend`);
+ const reminded=await esignCall(g.env,'POST',`/${other.envId}/remind`,5);assert.equal(reminded.status,200,JSON.stringify(reminded.body));
+ }finally{ok.restore();g.db.close();}
+});
+
+test('D924 no pending partner signature falls back to invitation mail and does not touch a countersigner',async()=>{
+ const f=fixture();const {id,envId}=await agreement(f);credentials(f);const tx=transport('ok');try{
+ f.db.prepare("UPDATE esign_recipients SET status='signed' WHERE envelope_id=?").run(envId);
+ f.db.prepare(`INSERT INTO esign_recipients(envelope_id,recipient_email,signing_token,token_expires_at,status) VALUES(?,'counter@example.invalid',?,'2999-01-01','pending')`).run(envId,'c'.repeat(64));
+ const resent=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(resent.body.email_sent,true);assert.equal(row(f,id).last_send_reason,null);assert.equal(tx.mails.length,1);assert.match(tx.mails[0],/To: partner@example.invalid/);assert.equal((f.db.prepare("SELECT signing_token FROM esign_recipients WHERE recipient_email='counter@example.invalid'").get() as any).signing_token,'c'.repeat(64));
+ }finally{tx.restore();f.db.close();}
+});
+
+test('D924 concurrent failed resend cannot restore over a newer successful signing link',async()=>{
+ const f=fixture();const {id,envId}=await agreement(f);credentials(f);const original=globalThis.fetch;let sends=0;let newer='';
+ globalThis.fetch=async(input:any)=>{
+  if(String(input)==='https://oauth2.googleapis.com/token')return Response.json({access_token:'synthetic'});
+  assert.equal(String(input),'https://gmail.googleapis.com/gmail/v1/users/me/messages/send');
+  if(++sends===1){const second=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(second.body.email_sent,true);newer=(f.db.prepare('SELECT signing_token FROM esign_recipients WHERE envelope_id=?').get(envId) as any).signing_token;return Response.json({error:'synthetic refusal'},{status:403});}
+  return Response.json({id:'synthetic-message'});
+ };
+ try{const first=await call(f,'POST',`/invitations/${id}/resend`);assert.equal(first.body.email_sent,false);assert.equal(sends,2);assert.notEqual(newer,'a'.repeat(64));assert.equal((f.db.prepare('SELECT signing_token FROM esign_recipients WHERE envelope_id=?').get(envId) as any).signing_token,newer);assert.equal(row(f,id).send_count,3);assert.equal((await esignCall(f.env,'GET','/sign/'+newer,null)).status,200);
+ }finally{globalThis.fetch=original;f.db.close();}
+});
+
+test('D924 backfill preserves distinct same-second attempts when one audit store missed a write',()=>{
+ const f=fixture(false);try{const id=invite(f);
+ const good=JSON.stringify({invitation_id:id,email_sent:true}),bad=JSON.stringify({invitation_id:id,email_sent:false});
+ f.db.prepare("INSERT INTO admin_audit_log(admin_user_id,action,filters_json,exported_at) VALUES(5,'partner_invitation_resent',?,'2026-01-01 12:00:00')").run(good);
+ const add=f.db.prepare("INSERT INTO activity_logs(action,details,created_at) VALUES('partner_invitation_resent',?,'2026-01-01 12:00:00')");add.run(good);add.run(good);add.run(bad);
+ f.db.exec(migration);assert.equal(row(f,id).send_count,3);
+ }finally{f.db.close();}
 });

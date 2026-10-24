@@ -1935,11 +1935,11 @@ export async function renewPartnerInvitationSigningLink(
   ).bind(invitationId).first<{ id: number; document_title: string; recipient_email: string }>();
   if (!envelope) return null;
   const recipient = await env.DB.prepare(
-    `SELECT id, recipient_email, recipient_name FROM esign_recipients
+    `SELECT id, recipient_email, recipient_name, signing_token, token_expires_at FROM esign_recipients
       WHERE envelope_id = ? AND LOWER(recipient_email) = LOWER(?)
         AND status = 'pending' ORDER BY id LIMIT 1`,
-  ).bind(envelope.id, envelope.recipient_email).first<{ id: number; recipient_email: string; recipient_name: string | null }>();
-  if (!recipient) return { ok: false, reason: 'failed' };
+  ).bind(envelope.id, envelope.recipient_email).first<{ id: number; recipient_email: string; recipient_name: string | null; signing_token: string; token_expires_at: string }>();
+  if (!recipient) return null;
   const token = genToken();
   const changed = await env.DB.prepare(
     `UPDATE esign_recipients SET signing_token = ?, token_expires_at = ?
@@ -1947,14 +1947,22 @@ export async function renewPartnerInvitationSigningLink(
         AND EXISTS (SELECT 1 FROM esign_envelopes WHERE id = ? AND status IN ('sent','partially_signed'))
         AND EXISTS (SELECT 1 FROM partner_invitations WHERE id = ? AND status NOT IN ('signed','revoked'))`,
   ).bind(token, expiresAt, recipient.id, envelope.id, invitationId).run();
-  if (!changed.meta?.changes) return { ok: false, reason: 'failed' };
+  if (!changed.meta?.changes) return null;
   const result = await sendAgreementAssignedEmailResult(
     env, recipient.recipient_email, recipient.recipient_name || '', envelope.document_title || 'Agreement',
     `${env.APP_URL || 'https://axal.vc'}/esign/${token}`, actor.name || actor.email, 14,
   );
+  if (!result.ok) {
+    // Keep the link already in the recipient's inbox usable after a failed
+    // send. Compare the fresh token so a concurrent resend is never undone.
+    await env.DB.prepare(
+      `UPDATE esign_recipients SET signing_token = ?, token_expires_at = ?
+        WHERE id = ? AND signing_token = ? AND status = 'pending'`,
+    ).bind(recipient.signing_token, recipient.token_expires_at, recipient.id, token).run();
+  }
   await appendAudit(env, envelope.id, {
     ts: new Date().toISOString(), signer_id: actor.id, signer_email: actor.email,
-    action: result.ok ? 'reminder_sent' : 'reminder_failed', ip: actorIp,
+    action: result.ok ? 'partner_signing_link_renewed' : 'partner_signing_link_renewal_failed', ip: actorIp,
     meta: { to: recipient.recipient_email, link_renewed: true, invitation_id: invitationId },
   });
   return result;
