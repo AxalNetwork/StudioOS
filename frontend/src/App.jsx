@@ -1854,8 +1854,6 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
   const { pathname } = useLocation();
   const effectiveRole = isImpersonating ? user?.role : ((realUser || user)?.role === 'admin' ? viewMode : user?.role);
   if (!allowedRoles.includes(effectiveRole)) {
-    const boundary = ROUTE_BOUNDARIES.find((b) => b.under.test(pathname) && b.roles.has(effectiveRole));
-    if (boundary) return <boundary.Panel />;
     // Task #102 — impersonation handoff. When an admin starts impersonating
     // from an admin-only route (e.g. /admin/spinout-lab → "Open workspace"),
     // this guard re-renders with the impersonated role BEFORE the caller's
@@ -1864,11 +1862,14 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
     // Read-only here (render must stay pure — StrictMode double-renders);
     // the AppInner effect clears the ref after the state settles.
     const pendingTarget = isImpersonating ? impersonationTargetRef?.current : null;
-    // D940 (#2745, SHL7b): a member who is not an admin, on an /admin page, is told so in their own shell.
+    const defaultPath = pendingTarget || ROLE_DEFAULT_PATH[effectiveRole] || '/studio';
+    // A pending handoff still wins: the boundary is drawn only when nothing is on its way.
+    const boundary = !pendingTarget && ROUTE_BOUNDARIES.find((b) => b.under.test(pathname) && b.roles.has(effectiveRole));
+    if (boundary) return <boundary.Panel home={defaultPath} />;
+    // D940: retain the canonical policy, including preview and impersonation exceptions.
     if (adminRefusal({ pathname, realRole: (realUser || user)?.role, isImpersonating })) {
       return <AdminOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;
     }
-    const defaultPath = pendingTarget || ROLE_DEFAULT_PATH[effectiveRole] || '/studio';
     return <Navigate to={defaultPath} replace />;
   }
   return children;
@@ -2733,6 +2734,8 @@ function AppInner() {
       <Route path="/deck/print-export/:token" element={<PitchDeckPrintPage exportMode />} />
       <Route path="/admin" element={guard(['admin'], <LegacyContractsRedirect><AdminPage onImpersonate={handleImpersonate} /></LegacyContractsRedirect>)} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
+      {/* D940 (#2745), SHL7b: an /admin address no route names. An admin reads Not found; a member reads that admin pages are for studio admins (RoleGuard's /admin boundary), not a silent bounce. Ranked below every named /admin route. */}
+      <Route path="/admin/*" element={guard(['admin'], <NotFoundPage />)} />
       <Route path="/admin/refer-earn" element={guard(['admin'], <AdminReferralReview />)} />
       {/* D569 — every read on it is `requireAdmin` and answers on either tier,
           so the guard is `['admin']` and never `hqOnly`. Its one HQ-only

@@ -68,7 +68,8 @@ test('the wiring: RoleGuard draws SHL7b after the impersonation handoff is read 
   const guard = app.slice(app.indexOf('function RoleGuard('), app.indexOf('function AuthScreen('));
   const refusal = guard.indexOf("if (adminRefusal({ pathname, realRole: (realUser || user)?.role, isImpersonating })) {");
   assert.ok(refusal > 0);
-  assert.ok(guard.indexOf('if (boundary) return <boundary.Panel />;') < refusal, 'a route boundary still comes first');
+  const boundary = guard.indexOf('if (boundary) return <boundary.Panel home={defaultPath} />;');
+  assert.ok(boundary >= 0 && boundary < refusal, 'a route boundary still comes first');
   assert.ok(guard.indexOf('const pendingTarget =') < refusal && refusal < guard.indexOf('<Navigate to={defaultPath} replace />'));
   assert.match(guard, /return <AdminOnlyNotice home=\{ROLE_DEFAULT_PATH\[effectiveRole\] \|\| '\/studio'\} \/>;/);
   assert.match(app, /const hqOnly = \(component\) => \(\s*isSuperAdminUser\(user\) \? component : <SuperAdminOnlyNotice \/>/);
