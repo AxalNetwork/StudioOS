@@ -141,7 +141,8 @@ const AdminExploring = lazy(() => import('./pages/admin/AdminExploring'));
 const HeldAccounts = lazy(() => import('./pages/admin/HeldAccounts'));
 const HeldApprovals = lazy(() => import('./pages/admin/HeldApprovals'));
 const HeldPrograms = lazy(() => import('./pages/admin/HeldPrograms'));
-const HeldCommunity = lazy(() => import('./pages/admin/HeldCommunity'));
+const AdminCommunity = lazy(() => import('./pages/admin/community/AdminCommunity'));
+const HeldCommunityRedirect = lazy(() => import('./pages/admin/community/HeldCommunityRedirect'));
 const AdminInsights = lazy(() => import('./pages/admin/insights/AdminInsights'));
 const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsightsRedirect'));
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
@@ -2736,7 +2737,11 @@ function AppInner() {
       <Route path="/admin/held/accounts" element={guard(['admin'], <HeldAccounts />)} />
       <Route path="/admin/held/approvals" element={guard(['admin'], <HeldApprovals />)} />
       <Route path="/admin/held/programs" element={guard(['admin'], <HeldPrograms />)} />
-      <Route path="/admin/held/community" element={guard(['admin'], <HeldCommunity />)} />
+      {/* D930 (#2367) — Community left /admin/held/ when it was rebuilt to its
+          canvas, as Insights did. The old address keeps its query and hash
+          and adds ?moved=held-community. */}
+      <Route path="/admin/community" element={guard(['admin'], <AdminCommunity />)} />
+      <Route path="/admin/held/community" element={<HeldCommunityRedirect />} />
       {/* D893 (#2366) — Insights left /admin/held/ when it was rebuilt to its
           canvas. The old address keeps its query and hash and adds ?moved=. */}
       <Route path="/admin/insights" element={guard(['admin'], <AdminInsights />)} />

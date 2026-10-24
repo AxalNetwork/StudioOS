@@ -483,19 +483,23 @@ test('every in-page /admin link points at a registered route', () => {
 test('a redirect-only /admin route is excluded, and its target is reachable', () => {
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
-  // D923 (#2370): `/admin/partners` forwards to `/admin/partner-invitations?moved=partners`.
-  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/insights', '/admin/news'],
+  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/held/community', '/admin/held/insights', '/admin/news'],
+
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
-  // (D893: HeldInsightsRedirect sends /admin/held/insights to INSIGHTS_PATH).
-  const COMPONENT_TARGETS = { HeldInsightsRedirect: '/admin/insights' };
+  // (D893: HeldInsightsRedirect sends /admin/held/insights to INSIGHTS_PATH;
+  // D930: HeldCommunityRedirect sends /admin/held/community to COMMUNITY_PATH).
+  const COMPONENT_TARGETS = {
+    HeldInsightsRedirect: ['/admin/insights', 'frontend/src/pages/admin/insights/insightsModel.js', 'INSIGHTS_PATH'],
+    HeldCommunityRedirect: ['/admin/community', 'frontend/src/pages/admin/community/communityModel.js', 'COMMUNITY_PATH'],
+  };
   for (const path of REDIRECTS) {
     const route = BY_PATH.get(path);
     let { redirects } = doorsIn(route.body);
     if (!redirects.length && COMPONENT_TARGETS[route.component]) {
-      const model = read('frontend/src/pages/admin/insights/insightsModel.js');
-      assert.match(model, new RegExp(`INSIGHTS_PATH = '${COMPONENT_TARGETS[route.component]}'`), `${route.component}'s target moved`);
-      redirects = [COMPONENT_TARGETS[route.component]];
+      const [target, file, name] = COMPONENT_TARGETS[route.component];
+      assert.match(read(file), new RegExp(`${name} = '${target}'`), `${route.component}'s target moved`);
+      redirects = [target];
     }
     assert.equal(redirects.length, 1, `${path} should name exactly one redirect target`);
     const target = toRoute(redirects[0]);

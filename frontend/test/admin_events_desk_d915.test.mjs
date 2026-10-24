@@ -371,7 +371,7 @@ test('the page keeps its frame, its crumb and its literal tab doors', () => {
   assert.doesNotMatch(page, /to="\/admin\/community"/);
   // The approvals lane and the Community doors keep /admin/events.
   assert.match(read('frontend/src/pages/admin/HeldApprovals.jsx'), /to="\/admin\/events"/);
-  assert.match(read('frontend/src/pages/admin/HeldCommunity.jsx'), /to="\/admin\/events"/);
+  assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /to="\/admin\/events"/);
 });
 
 test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or conversion', () => {
