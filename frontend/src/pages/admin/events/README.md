@@ -3,8 +3,8 @@
 D915 (#2368): the admin Events desk at `/admin/events`, built to the owner's
 "Events Console" canvas (EV1–EV17, `design/incoming/Events Console Page.dc.html`).
 `../AdminEventsPage.jsx` is the routed page at `/admin/events` (Overview),
-`/admin/events/review` (Review), `/admin/events/all` (All events) and
-`/admin/events/:id` (one event), in `AdminBoardFrame` workspace "Events". It
+`/admin/events/review` (Review), `/admin/events/all` (All events),
+`/admin/events/calendar` (Calendar, D919) and `/admin/events/:id` (one event), in `AdminBoardFrame` workspace "Events". It
 draws the shell: the crumb "Community › Events", the header, the literal tab
 strip, then the tab the address names.
 
@@ -12,8 +12,14 @@ strip, then the tab the address names.
   the events list, and Page views and Feedback as "Not recorded".
 - `EventsReview.jsx` — Review (EV3): the queue, the selected event's facts,
   "What approving does" and the action bar; Approve (EV4) and Send back (EV5).
-- `EventsAll.jsx` — All events (EV6): the table, searched by title, filtered by
-  `?status=`, 25 rows a page; each title opens the event's page.
+- `EventsAll.jsx` — All events (EV6, EV17d): the table, searched by title, with
+  D919's filters, views, sorts, 25, 50 or 100 rows a page, the CSV of the rows
+  on screen and the phone cards; each title opens the event's page.
+- `EventsCalendar.jsx` — Calendar (EV8, EV8w, EV17e, D919): Month (Monday to
+  Sunday, three chips a day, "+n more"), Week (a time grid, overlaps side by
+  side) and List (the phone's default); the chip card; the address keeps the
+  month, the view and the filters.
+- `EventFilters.jsx` — the filters All events and the Calendar share.
 - `EventPage.jsx` — one event (EV7): header, publish gate, tiles, agenda,
   the roster line, history, the actions and "More actions", a disclosure of
   links (not an ARIA menu).
@@ -26,6 +32,11 @@ strip, then the tab the address names.
 - `eventsDeskModel.js` — pure. The tabs, the status words, Guard G, the
   derivations (ended, fill, show-up, the tiles), money, the publish gate, the
   facts, the dialogs' words and the refusal sentences.
+- `calendarModel.js` — pure (D919). Where an event sits (its day and time
+  where it happens), D915 §2's clash rule, the month, week and list layouts,
+  the chips and the address.
+- `allEventsModel.js` — pure (D919). All events' filters, views, sorts, page
+  sizes, Needs attention's reasons and the CSV.
 
 ## Rules
 
@@ -42,4 +53,8 @@ strip, then the tab the address names.
   leaves the queue, and the event page's actions wait, until a read newer
   than the write lands. Focus then sits on the confirmation line.
 - No type, format, period control or chart is drawn until the part of D915 §6
-  that builds it lands. Calendar is part 4.
+  that builds it lands. The host column, host search, the Host filter and
+  "Cancelled with paid tickets" wait for part 3's paged list.
+- Two events clash when neither is cancelled and their times overlap; an
+  event with no `ends_at` lasts one hour (D915 §2). The Calendar and Needs
+  attention use the one rule, `calendarModel.clashMap`.

@@ -337,6 +337,17 @@ test('versions newest first, and a missing date says so', () => {
     ['v4', 'Seed', '20 Oct', true], ['v2', 'Untitled deck', '2 Oct', false], ['v1', 'First', 'Date not recorded', false],
   ]);
   assert.equal(dayLabel('not a date'), 'Date not recorded');
+  // D898: Audience, Round and By. A version saved before migration 539 reads each as Not recorded.
+  const withMeta = [
+    { id: 5, version: 5, audience: 'seed_fund', round: { uid: 'r1', name: 'Seed' }, by: { id: 2, name: 'Fay Founder' }, created_at: '2026-10-21T09:00:00Z' },
+    { id: 1, version: 1, audience: null, round: null, by: null, created_at: '2026-08-14T09:00:00Z' },
+    { id: 3, version: 3, audience: 'family_office', round: { uid: 'r2', name: ' ' }, by: { id: 4, name: '' }, created_at: '2026-09-01T09:00:00Z' },
+  ];
+  assert.deepEqual(versionRows(withMeta).map((r) => [r.label, r.audience, r.round, r.by]), [
+    ['v5', 'Seed fund', 'Seed', 'Fay Founder'],
+    ['v3', 'Not recorded', 'Not recorded', 'Not recorded'],
+    ['v1', 'Not recorded', 'Not recorded', 'Not recorded'],
+  ]);
 });
 
 test('an admin reads; everyone else the route admits works here', () => {
@@ -646,8 +657,10 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   const app = read('frontend/src/App.jsx');
   // A literal search, not a RegExp built from the path: nothing here needs a pattern.
   const route = (path) => `<Route path="${path}" element={guard(labRoles(['admin', 'founder'])`;
-  for (const p of ['/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/positioning', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
+  for (const p of ['/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
   // D905 (#2684), PD22: the studio's home also admits the roles it is not for, to tell them so.
+  // D911 (#2695): positioning moved into Investor narrative › Positioning; its old address redirects.
+  assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
   assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*founderEditor\(<PitchStudio tab="decks" \/>\)/);
   assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchWorkspacePage \/>\)\)\)\} \/>/);

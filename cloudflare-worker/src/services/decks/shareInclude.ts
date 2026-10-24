@@ -2,7 +2,7 @@
  * D902 (#2681) — WHAT A PITCH DECK LINK INCLUDES.
  *
  * The share dialog's "What is included" (PD18) is stored on the link as
- * `include_json` (migration 540), and the share read sends the version's cards
+ * `include_json` (migration 551), and the share read sends the version's cards
  * through `shareSlides()` before anything leaves the Worker. The owner's
  * question 3 (#2434) is not answered, so this is answer A, as the canvas
  * draws it:
@@ -22,7 +22,7 @@
  *     and a field bound to a score, a bank slot or a band is judged by that
  *     slot as by its own key.
  *
- * A link made before 540 has no `include_json` and gets the default. A field
+ * A link made before 551 has no `include_json` and gets the default. A field
  * this removes is gone from the card, not blanked: the viewer shows what is
  * there and says nothing about what is not.
  */

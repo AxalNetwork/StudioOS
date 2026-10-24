@@ -3,7 +3,7 @@
  * a link includes, and the analytics per version.
  *
  * On node:sqlite with the tables cut from `schema_baseline.sql` and the link
- * migrations as written (248, 442, 463, 540). Every name, firm and figure here
+ * migrations as written (248, 442, 463, 549, 551). Every name, firm and figure here
  * is invented.
  *
  * Run with:
@@ -64,7 +64,8 @@ function fixture() {
   }
   db.exec(sqlOf('248_deck_share_revoked_at.sql'));
   addColumnsFrom(db, stripForeignKeys(sqlOf('463_raise_record_stores.sql')), 'pitch_deck_share_tokens');
-  db.exec(sqlOf('540_deck_share_nda_include.sql'));
+  db.exec(sqlOf('549_deck_share_nullable_view_limit.sql')); // D895: NULL is no view cap
+  db.exec(sqlOf('551_deck_share_nda_include.sql')); // after 549's rebuild, as production runs them
   db.exec(/CREATE TABLE IF NOT EXISTS deck_view_slides \([\s\S]*?\n\);/.exec(sqlOf('442_raise_cycle_stores.sql'))![0]);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test');
