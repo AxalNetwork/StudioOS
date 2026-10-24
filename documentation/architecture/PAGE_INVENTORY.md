@@ -70,7 +70,7 @@ canvas behind it still shows up here.
 | Admin | Community | `/admin/held/community` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Contracts | `/admin/contracts` | Contracts · Subsidiary |
 | Admin | Fund admin | `/admin/fund-admin` | — (no canvas; shipped ahead of the design corpus) |
-| Admin | Insights | `/admin/held/insights` | — (no canvas; shipped ahead of the design corpus) |
+| Admin | Insights | `/admin/insights` | — (no canvas; shipped ahead of the design corpus) |
 | Admin | Licences | `/admin/my-licence` | Licences |
 
 ## `exploring` — 4 destinations in 2 groups
@@ -134,7 +134,7 @@ rather than merely absent.
 - admin · Admin · Programs (`/admin/held/programs`)
 - admin · Admin · Community (`/admin/held/community`)
 - admin · Admin · Fund admin (`/admin/fund-admin`)
-- admin · Admin · Insights (`/admin/held/insights`)
+- admin · Admin · Insights (`/admin/insights`)
 - exploring · Home · Studio (`/exploring`)
 - exploring · Home · Spin-Out Lab (`/spinout-lab`)
 - exploring · Home · Messages (`/messages`)
@@ -154,4 +154,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Licences (`/admin/my-licence`)
 
-**Canvas corpus:** 146. **Workspace assignments:** 191.
+**Canvas corpus:** 147. **Workspace assignments:** 193.

@@ -54,8 +54,9 @@ const LANDINGS = {
   Approvals: 'frontend/src/pages/admin/HeldApprovals.jsx',
   Programs: 'frontend/src/pages/admin/HeldPrograms.jsx',
   Community: 'frontend/src/pages/admin/HeldCommunity.jsx',
-  Insights: 'frontend/src/pages/admin/HeldInsights.jsx',
 };
+// D893 (#2366): Insights left /admin/held/ when it was rebuilt to its canvas.
+const INSIGHTS = 'frontend/src/pages/admin/insights/AdminInsights.jsx';
 const ZONE = 'frontend/src/pages/admin/HeldZone.jsx';
 const HELD_FILES = [...Object.values(LANDINGS), ZONE];
 const SRC = Object.fromEntries(HELD_FILES.map((f) => [f, read(f)]));
@@ -83,7 +84,7 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
     '/admin/held/community',
     '/admin/contracts',
     '/admin/fund-admin',
-    '/admin/held/insights',
+    '/admin/insights',
     '/admin/my-licence',
   ]);
   for (const r of rows) {
@@ -98,7 +99,12 @@ test('the nine rows are S20\'s eight, in S20\'s order, with D714\'s Fund admin a
   assert.match(SIDEBAR_SRC, /^\s*\/\/ \{ to: '\/admin\/x', icon: Megaphone, label: 'X \(Twitter\)' \},$/m);
 });
 
-test('the five landings are guard([\'admin\']) without hqOnly, under a prefix no HQ console can collide with', () => {
+test('the four held landings and Insights are guard([\'admin\']) without hqOnly, the held four under a prefix no HQ console can collide with', () => {
+  const insights = routeLine('/admin/insights');
+  assert.ok(insights, '/admin/insights is not registered');
+  assert.match(insights, /guard\(\['admin'\], <AdminInsights \/>\)/, 'Insights is not guard([\'admin\'])');
+  assert.doesNotMatch(insights, /hqOnly\(/, 'Insights is wrapped in hqOnly — this is the plain admin\'s own shell');
+  assert.match(routeLine('/admin/held/insights'), /<HeldInsightsRedirect \/>/, 'the old Insights address no longer redirects');
   for (const [label, file] of Object.entries(LANDINGS)) {
     const row = rows.find((r) => r.label === label);
     assert.ok(row, `${label} has no row`);
@@ -122,7 +128,7 @@ test('the five landings are guard([\'admin\']) without hqOnly, under a prefix no
 test('every console link on a landing is literal, registered, and never under /branch/', () => {
   // Programs has four doors after the owner removed the Assessment editor.
   // D506 — Approvals gained its fifteenth door, Spinout moderation (D442's console).
-  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 4, Community: 5, Insights: 0 };
+  const expectedDoors = { Accounts: 4, Approvals: 15, Programs: 4, Community: 5 };
   for (const [label, file] of Object.entries(LANDINGS)) {
     const doors = doorsIn(CODE[file]);
     assert.equal(doors.length, expectedDoors[label], `${label} draws ${doors.length} literal links, expected ${expectedDoors[label]}`);
@@ -244,12 +250,16 @@ test('Programs links its four consoles; Accounts links the Users table, Explorin
     ['/admin', '/admin/exploring', '/admin?tab=personas', '/admin/trash']);
 });
 
-test('Insights draws HQ\'s figures (D555), not S20\'s sentence, and links nowhere', () => {
-  // D555 replaced S20's "No console fits yet" with the figures the owner asked for.
-  assert.doesNotMatch(SRC[LANDINGS.Insights], /No console fits yet for HQ-held accounts/);
-  assert.match(SRC[LANDINGS.Insights], /useHeldGlance\(\)/);
-  assert.doesNotMatch(CODE[LANDINGS.Insights], /<Link\b|\bto="\//, 'Insights borrowed a page');
-  assert.doesNotMatch(CODE[LANDINGS.Insights], /admin\/analytics|branch\/insights/, 'Insights borrowed an HQ-only or branch page');
+test('Insights (D893) reads the glance and the analytics reads, and links only registered routes, never /branch/', () => {
+  const src = read(INSIGHTS);
+  const code = codeOnly(src);
+  assert.match(src, /api\.adminStudioGlance\(\)/, 'Insights no longer reads the Studio glance');
+  assert.doesNotMatch(src, /No console fits yet for HQ-held accounts/);
+  for (const d of doorsIn(code)) {
+    assert.ok(!d.startsWith('/branch'), `Insights links ${d}, under /branch/`);
+    assert.ok(routeLine(pathOf(d)), `Insights links ${d}, which is not a registered route`);
+  }
+  assert.doesNotMatch(code, /branch\/insights/, 'Insights borrowed the branch page');
 });
 
 test('the three false labels are not rendered, and no gate was narrowed or raised', () => {
