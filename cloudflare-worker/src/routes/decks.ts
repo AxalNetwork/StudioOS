@@ -105,7 +105,7 @@ async function ensureSchema(env: Env): Promise<void> {
        token_hash TEXT NOT NULL UNIQUE,
        expires_at TEXT NOT NULL,
        used_at TEXT,
-       view_limit INTEGER NOT NULL DEFAULT 1,
+       view_limit INTEGER DEFAULT 1,
        view_count INTEGER NOT NULL DEFAULT 0,
        last_viewed_at TEXT,
        revoked_at TEXT,
@@ -143,7 +143,7 @@ async function ensureSchema(env: Env): Promise<void> {
     const cols = await env.DB.prepare(`PRAGMA table_info(pitch_deck_share_tokens)`).all<any>();
     const have = new Set(((cols.results || []) as any[]).map((r) => String(r.name)));
     if (!have.has('view_limit')) {
-      try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN view_limit INTEGER NOT NULL DEFAULT 1`).run(); } catch {}
+      try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN view_limit INTEGER DEFAULT 1`).run(); } catch {}
     }
     if (!have.has('view_count')) {
       try { await env.DB.prepare(`ALTER TABLE pitch_deck_share_tokens ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0`).run(); } catch {}
@@ -991,9 +991,10 @@ decks.get('/share/:token', async (c) => {
     `UPDATE pitch_deck_share_tokens
         SET view_count = view_count + 1,
             last_viewed_at = datetime('now'),
-            used_at = CASE WHEN view_count + 1 >= view_limit THEN datetime('now') ELSE used_at END
+            used_at = CASE WHEN view_limit IS NOT NULL AND view_count + 1 >= view_limit THEN datetime('now') ELSE used_at END
       WHERE token_hash = ?
-        AND view_count < view_limit
+        AND (view_limit IS NULL OR view_count < view_limit)
+        AND used_at IS NULL
         AND datetime(expires_at) > datetime('now')
         -- Task #196. Revoking sets expires_at too, so this predicate is
         -- belt-and-braces, deliberately: without it the guarantee would depend on
@@ -1102,7 +1103,7 @@ decks.post('/share/:token/heartbeat', async (c) => {
 
 /** D895: unknown counts and an unlimited cap are distinct from measured zero. */
 export function deckShareMetrics(token: { view_limit?: number | null; view_count?: number | null; used_at?: string | null }) {
-  const limit = token.view_limit == null || token.view_limit === SHARE_NO_VIEW_LIMIT ? null : Number(token.view_limit);
+  const limit = token.view_limit == null || token.view_limit === LEGACY_SHARE_NO_VIEW_LIMIT ? null : Number(token.view_limit);
   const count = token.view_count == null ? null : Number(token.view_count);
   return { view_limit: limit, view_count: count, exhausted: !!token.used_at || (limit !== null && count !== null && count >= limit) };
 }
@@ -1512,7 +1513,8 @@ export async function revokeShareLink(env: Env, deckId: number, shareId: number)
 export const SHARE_NEVER_EXPIRES = '9999-12-31 23:59:59';
 const SHARE_NEVER_EPOCH = Math.floor(Date.parse('9999-12-31T23:59:59Z') / 1000);
 /** No view cap on a new link; old links keep theirs. */
-export const SHARE_NO_VIEW_LIMIT = 2147483647;
+export const SHARE_NO_VIEW_LIMIT = null;
+const LEGACY_SHARE_NO_VIEW_LIMIT = 2147483647;
 export const SHARE_SENT_TO_SOMEONE_ELSE = 'This link was sent to someone else.';
 /** The browser's id for bound links: random, HttpOnly, never readable by the page. */
 export const SHARE_VIEWER_COOKIE = 'axal_deck_viewer';
@@ -1524,7 +1526,7 @@ export type CreateShareLinkArgs = {
   actorEmail: string | null;
   /** Seconds the link lives; null is "Never". */
   ttlSeconds: number | null;
-  viewLimit?: number;
+  viewLimit?: number | null;
   prospectId?: number | null;
   investorLabel?: string | null;
   allowDownload?: boolean;
@@ -1553,7 +1555,7 @@ export async function createShareLink(env: Env, a: CreateShareLinkArgs): Promise
        (deck_id, token_hash, expires_at, view_limit, view_count, created_by, prospect_id, investor_label, allow_download, allow_forwarding)
      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`
   ).bind(
-    a.deckId, await sha256Hex(token), expiresAt, a.viewLimit ?? SHARE_NO_VIEW_LIMIT, a.userId,
+    a.deckId, await sha256Hex(token), expiresAt, a.viewLimit === LEGACY_SHARE_NO_VIEW_LIMIT ? null : a.viewLimit ?? SHARE_NO_VIEW_LIMIT, a.userId,
     a.prospectId ?? null, a.prospectId ? null : label,
     a.allowDownload === false ? 0 : 1, a.allowForwarding === false ? 0 : 1,
   ).run();
