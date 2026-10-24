@@ -236,6 +236,7 @@ import adminLearningWebinarsRoutes from './routes/admin_learning_webinars';
 import { adminLearningVideo, learningVideo } from './routes/learning_video';
 import adminHq from './routes/admin_hq';
 import adminInsightsScopes from './routes/admin_insights_scopes';
+import adminCommunityRoutes from './routes/admin_community';
 import adminRevenue from './routes/admin_revenue';
 import adminContent from './routes/admin_content';
 import adminPlatform from './routes/admin_platform';
@@ -1007,6 +1008,9 @@ app.route('/api/admin/jobs', adminJobsRoutes);
 // Task #9 — Communities & Circles admin. Mount BEFORE the catch-all /api/admin
 // so /api/admin/circles/* resolves here, not in the generic admin router.
 app.route('/api/admin/circles', adminCirclesRoutes);
+// D932 — Admin · Community's reads (Recent activity). Any admin; before the
+// catch-all like the consoles above.
+app.route('/api/admin/community', adminCommunityRoutes);
 app.route('/api/admin/assessment', adminAssessmentRoutes);
 // Task #19 — Best-Fit admin surfaces. Mount BEFORE the catch-all /api/admin so
 // the specific prefixes resolve here, not in the generic admin router.

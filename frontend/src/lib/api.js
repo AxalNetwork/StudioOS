@@ -22,6 +22,7 @@ export * from './api/bankAccounts.js';
 export * from './api/billingInvoices.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
+export * from './api/community.js';
 export * from './api/communityTasks.js';
 export * from './api/companyEin.js';
 export * from './api/companySheet.js';
