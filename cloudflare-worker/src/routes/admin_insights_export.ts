@@ -144,3 +144,7 @@ export function insightsExportRoutes(read: InsightsReader = pageRead) {
 
   return r;
 }
+
+/** The mounted instance, on the page's own read (built here so the drift guard can follow it, as D690's factories are). */
+const adminInsightsExport = insightsExportRoutes();
+export default adminInsightsExport;
