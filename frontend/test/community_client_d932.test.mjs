@@ -35,12 +35,13 @@ test('activity calls GET /api/admin/community/activity with only the filters tha
   ]);
 });
 
-test('the module is one line in api.js\'s alphabetical block, and calls only its one route', () => {
+test('the module is one line in api.js\'s alphabetical block, and calls only Community\'s two routes', () => {
   const api = read('frontend/src/lib/api.js');
   const block = api.slice(api.indexOf('// api-modules:begin'), api.indexOf('// api-modules:end'));
   const lines = block.split('\n').filter((l) => l.startsWith('export * from'));
   assert.ok(lines.includes("export * from './api/community.js';"));
   assert.deepEqual(lines, [...lines].sort(), 'alphabetical');
   const client = read('frontend/src/lib/api/community.js');
-  assert.deepEqual([...client.matchAll(/request\(`([^`$]+)/g)].map((m) => m[1]), ['/admin/community/activity']);
+  // D931 (#2715) adds the overview read to the same module.
+  assert.deepEqual([...client.matchAll(/request\(`([^`$]+)/g)].map((m) => m[1]), ['/admin/community/activity', '/admin/community/overview']);
 });
