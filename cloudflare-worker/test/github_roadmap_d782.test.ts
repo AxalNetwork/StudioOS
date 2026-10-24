@@ -84,6 +84,7 @@ function fakeGithub(repo: Repo) {
   const real = globalThis.fetch;
   globalThis.fetch = (async (input: any) => {
     const url = new URL(String(input));
+    if (url.hostname === 'api.github.com' && /^\/repos\/[^/]+\/[^/]+\/git\/ref\/tags\//.test(url.pathname)) return new Response('{}', { status: 404 });
     calls.push(`${url.pathname}?${url.searchParams.get('state') ?? ''}`);
     const m = url.pathname.match(/^\/repos\/acme\/app\/(issues|pulls|releases|milestones)$/);
     // #2114: Solution design reads each repository first; this one is not served, so it reads nothing more.

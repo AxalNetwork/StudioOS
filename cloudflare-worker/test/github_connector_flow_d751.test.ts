@@ -98,6 +98,7 @@ function fakeGithub(opts: { perms?: Record<string, string>; installations?: numb
   const j = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
   globalThis.fetch = (async (input: any, init: any = {}) => {
     const url = new URL(String(input));
+    if (url.hostname === 'api.github.com' && /^\/repos\/[^/]+\/[^/]+\/git\/ref\/tags\//.test(url.pathname)) return new Response('{}', { status: 404 });
     const method = String(init.method || 'GET').toUpperCase();
     calls.push(`${method} ${url.host}${url.pathname}${url.search}`);
     if (url.host === 'github.com' && method === 'POST' && url.pathname === '/login/oauth/access_token') {

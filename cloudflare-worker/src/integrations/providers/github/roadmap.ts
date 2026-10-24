@@ -161,6 +161,38 @@ const LEDGER_OF = `SELECT external_id, local_table, local_id FROM connector_fed_
 // The item and the release rows are found through the ledger, written out in
 // each statement so the SQL guards read it whole (no interpolation).
 
+/** GitHub commit/object IDs are full SHA-1s; abbreviated or malformed values are not evidence. */
+export function commitSha(value: unknown): string | null {
+  return typeof value === 'string' && /^[a-f0-9]{40}$/i.test(value) ? value.toLowerCase() : null;
+}
+
+/** Resolve a lightweight or annotated tag to a commit, never the tag object's SHA. */
+export async function releaseCommitSha(
+  ghFetch: GhFetch, repoPath: string, tag: string, spend: () => boolean,
+): Promise<{ sha: string | null; partial: boolean }> {
+  // Tag names come from GitHub, but still must not become URL path segments unchecked.
+  if (!/^[\p{L}\p{N}._/@+%-]+$/u.test(tag) || tag.split('/').some((part) => !part || part === '.' || part === '..')) {
+    return { sha: null, partial: false };
+  }
+  let path = `${repoPath}/git/ref/tags/${encodeURIComponent(tag)}`;
+  const visited = new Set<string>();
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (!spend()) return { sha: null, partial: true };
+    const res = await ghFetch(path);
+    if (res.status === 404 || res.status === 409) return { sha: null, partial: false };
+    if (!res.ok) throw new Error(`github_api_failed: ${res.status} ${repoPath}/git/tag-commit`);
+    const payload: any = await res.json();
+    const object = payload?.object;
+    const sha = commitSha(object?.sha);
+    if (!sha) return { sha: null, partial: false };
+    if (object.type === 'commit') return { sha, partial: false };
+    if (object.type !== 'tag' || visited.has(sha)) return { sha: null, partial: false };
+    visited.add(sha);
+    path = `${repoPath}/git/tags/${sha}`;
+  }
+  return { sha: null, partial: false };
+}
+
 /** One sync's roadmap work: `saw` during the loop, `finish` once after it. */
 export function roadmapRun(env: Env, integrationId: number, projectId: number) {
   const seen = new Map<string, Seen>();
@@ -228,26 +260,31 @@ export function roadmapRun(env: Env, integrationId: number, projectId: number) {
         }
         for (const rel of releases) {
           const externalId = releaseExternalId(repo, rel.id);
+          const known = ledger.get(externalId);
+          if (known?.local_table === 'roadmap_releases' && known.local_id == null) {
+            stmts.push([env.DB.prepare(RELEASE_LEDGER_TOUCH).bind(integrationId, externalId)]);
+            continue;
+          }
+          const resolved = await releaseCommitSha(ghFetch, path, String(rel.tag_name).trim(), spend);
+          if (resolved.partial) { counts.roadmap_partial = true; return counts; }
           const fields = [
             String(rel.tag_name).trim().slice(0, 200),
             typeof rel.name === 'string' && rel.name.trim() ? rel.name.trim().slice(0, 300) : null,
             isoOrNull(rel.published_at),
             releaseUrl(rel.html_url),
             rel.prerelease === true ? 1 : 0,
+            resolved.sha,
           ];
-          const known = ledger.get(externalId);
-          if (known?.local_table === 'roadmap_releases' && known.local_id == null) {
-            stmts.push([env.DB.prepare(RELEASE_LEDGER_TOUCH).bind(integrationId, externalId)]);
-          } else if (known?.local_id != null) {
+          if (known?.local_id != null) {
             stmts.push([
-              env.DB.prepare(`UPDATE roadmap_releases SET tag = ?, name = ?, published_at = ?, url = ?, prerelease = ?, updated_at = CURRENT_TIMESTAMP
+              env.DB.prepare(`UPDATE roadmap_releases SET tag = ?, name = ?, published_at = ?, url = ?, prerelease = ?, commit_sha = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND project_id = ?`).bind(...fields, known.local_id, projectId),
               env.DB.prepare(RELEASE_LEDGER_TOUCH).bind(integrationId, externalId),
               env.DB.prepare(UNLINK_DELETED_RELEASE).bind(integrationId, externalId, known.local_id, projectId),
             ]);
           } else {
             stmts.push([
-              env.DB.prepare(`INSERT INTO roadmap_releases (project_id, repository, tag, name, published_at, url, prerelease) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+              env.DB.prepare(`INSERT INTO roadmap_releases (project_id, repository, tag, name, published_at, url, prerelease, commit_sha) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
                 .bind(projectId, repo, ...fields),
               env.DB.prepare(RELEASE_LEDGER_NEW).bind(integrationId, projectId, externalId),
             ]);
