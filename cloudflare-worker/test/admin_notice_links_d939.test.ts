@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { tabOf } from '../../frontend/src/pages/admin/lab/labModel.js';
 
 test('application notices link Applications and week-outcome notices link Cohorts, with old sent links kept', () => {
   const apps = readFileSync('cloudflare-worker/src/services/cohortApplications.ts', 'utf8');
@@ -14,5 +15,10 @@ test('application notices link Applications and week-outcome notices link Cohort
   // The publishers use one link for both existing channels; no channel change.
   assert.match(weekPublisher, /channels: \['in_app', 'email'\]/);
   const app = readFileSync('frontend/src/App.jsx', 'utf8');
-  assert.match(app, /path="\/admin\/programs\/spinout-lab\/*/);
+  for (const [publisher, tab] of [[appPublisher, 'applications'], [weekPublisher, 'cohorts']]) {
+    const link = publisher.match(/link: '([^']+)'/)?.[1];
+    assert.ok(link, `missing ${tab} notice link`);
+    assert.ok(app.includes(`path="${link}"`), `${link} has no exact App route`);
+    assert.equal(tabOf(link), tab, `${link} opens the wrong Lab tab`);
+  }
 });

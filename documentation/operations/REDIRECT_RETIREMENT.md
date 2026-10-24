@@ -34,6 +34,13 @@ The owner ticked "the internal redirects (§12), after 90 days" on #2297 on
   is reviewed separately, not as `/admin`. Extra query fields and hashes never
   enter these keys. A query key must match the complete allowlist entry at the
   Worker; arbitrary or augmented values are ignored.
+  Before a section moves, these counts include ordinary console use as well
+  as old links. Record each section's actual move deployment date in the
+  retirement report. Exclude its move day and all earlier counts when judging
+  redirect use; the daily store cannot separate live-console and redirect
+  visits within that day. Require thirty complete UTC days after the move
+  before interpreting a zero as a retirement candidate. If that window is not
+  available on the review date, defer that key's retirement.
 - **Keep.** Entries marked `keep` stay whatever their count: the addresses an
   email or an external link can carry (#2297 §12: `/settings`,
   `/settings/:section`, `/notifications`, `/notifications/*`, `/tickets/:id`,
