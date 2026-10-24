@@ -637,8 +637,10 @@ test('the routes: the studio\'s three tabs, the editor at its new address, and t
   const app = read('frontend/src/App.jsx');
   // A literal search, not a RegExp built from the path: nothing here needs a pattern.
   const route = (path) => `<Route path="${path}" element={guard(labRoles(['admin', 'founder'])`;
-  for (const p of ['/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/positioning', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
+  for (const p of ['/raise/pitch/edit', '/raise/pitch/analytics', '/raise/pitch/review', '/raise/pitch/notes']) assert.ok(app.includes(route(p)), p);
   // D905 (#2684), PD22: the studio's home also admits the roles it is not for, to tell them so.
+  // D911 (#2695): positioning moved into Investor narrative › Positioning; its old address redirects.
+  assert.ok(app.includes('<Route path="/raise/pitch/positioning" element={<PitchPositioningRedirect />} />'));
   assert.ok(app.includes(`<Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring'])`), '/raise/pitch');
   assert.match(app, /get\('mode'\) === 'workspace'\s*\?\s*<PitchWorkspaceMoved \/>\s*:\s*founderEditor\(<PitchStudio tab="decks" \/>\)/);
   assert.match(app, /<Route path="\/raise\/pitch\/edit" element=\{guard\(labRoles\(\['admin', 'founder'\]\), founderWorkspace\('raise', founderEditor\(<PitchWorkspacePage \/>\)\)\)\} \/>/);
