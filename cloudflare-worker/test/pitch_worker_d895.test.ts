@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import decks, { createShareLink, deckOwnerBrand, founderPitchSlides, deckShareMetrics } from '../src/routes/decks.ts';
+import decks, { createShareLink, deckOwnerBrand, founderPitchSlides, deckShareMetrics, founderSpinoutFields } from '../src/routes/decks.ts';
 import brand from '../src/routes/brand.ts';
 import shareActions from '../src/routes/deck_share_actions.ts';
 import cycleRaise from '../src/routes/cycle_raise.ts';
@@ -298,4 +298,14 @@ test('D895: failure to replace an existing NDA preserves the previous active agr
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM documents WHERE doc_type='nda_acceptance'").get()!.n,1);
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM deck_share_conversions WHERE type='nda_signed'").get()!.n,0);
  }finally{f.db.close()}
+});
+
+test('D895: malformed or non-array readiness cards cannot hide unrelated public fields',()=>{
+ for(const raw of ['broken-json','{}','null','42','']){
+  const fields={'cover.title':'Synthetic venture','validation.cards_json':raw};
+  assert.deepEqual(founderSpinoutFields(fields),{'cover.title':'Synthetic venture','validation.cards_json':'[]'});assert.equal(fields['validation.cards_json'],raw);
+ }
+ const cards=[['internal','Axal score','91/100'],['recorded','Interviews','7'],null,'Axal score: 91/100',['internal','AXAL SCORE','91/100']];const fields={'cover.title':'Synthetic venture','validation.cards_json':JSON.stringify(cards)};
+ assert.deepEqual(JSON.parse(founderSpinoutFields(fields)['validation.cards_json']),[cards[1]]);assert.deepEqual(JSON.parse(fields['validation.cards_json']),cards);
+ assert.deepEqual(founderSpinoutFields({'cover.title':'Synthetic venture'}),{'cover.title':'Synthetic venture'});
 });

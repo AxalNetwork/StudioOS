@@ -571,7 +571,7 @@ decks.post('/generate', async (c) => {
   const raw = (await aiSlides(c.env, p, Number(user.id) || 0)) || fallback;
   // Alignment can repeat an AI slide while padding a short answer. Sanitize every Ask.
   const aligned = enforceTen(raw, fallback).map((slide) =>
-    slide.title === 'Ask' ? fallback.find((recorded) => recorded.title === 'Ask') : slide);
+    /\bask\b/i.test(String(slide.title || '')) ? fallback.find((recorded) => recorded.title === 'Ask') : slide);
   // Eadwyn cannot invent a measured runway or change the recorded Ask.
   const slides = sanitizeSlides(aligned);
   while (slides.length < 10) slides.push(fallback[slides.length]);
@@ -795,6 +795,18 @@ async function getDeckRow(env: Env, id: number): Promise<any> {
 // never the viewer, mirroring POST /projects/:id/spinout-deck. Any failure
 // returns null so the viewer degrades to the sample instead of erroring.
 // ---------------------------------------------------------------------
+/** A malformed readiness card never discards unrelated public deck fields. */
+export function founderSpinoutFields(fields: Record<string, string>): Record<string, string> {
+  const safe = { ...fields };
+  if ('validation.cards_json' in safe) {
+    let cards: unknown;
+    try { cards = JSON.parse(safe['validation.cards_json']); } catch { /* unreadable card data */ }
+    safe['validation.cards_json'] = JSON.stringify(Array.isArray(cards)
+      ? cards.filter((card: any) => Array.isArray(card) && !/axal\s+score/i.test(String(card[1] || ''))) : []);
+  }
+  return safe;
+}
+
 async function bakeSpinoutFields(env: Env, row: any): Promise<Record<string, string> | null> {
   if (extractDeckMethodId(row) !== 'axal_spinout_demoday') return null;
   const projectId = Number(row?.project_id);
@@ -819,13 +831,7 @@ async function bakeSpinoutFields(env: Env, row: any): Promise<Record<string, str
     // shared / printed deck would silently revert every manual edit back to the
     // module text — the founder would see one deck on screen and send another.
     const overrides = await loadSpinoutDeckOverrides(env, projectId);
-    const fields = { ...(applySpinoutOverrides(base, overrides).fields || {}) };
-    // The Lab's canonical assembler keeps its score; public founder-deck reads do not.
-    if (fields['validation.cards_json']) {
-      const cards = JSON.parse(fields['validation.cards_json']);
-      fields['validation.cards_json'] = JSON.stringify(cards.filter((card: any) => !String(card?.[1] || '').includes('Axal score')));
-    }
-    return fields;
+    return founderSpinoutFields(applySpinoutOverrides(base, overrides).fields || {});
   } catch (e) {
     console.error('[decks] spinout fields bake failed:', (e as Error).message);
     return null;
