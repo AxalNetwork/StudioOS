@@ -1,32 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { api } from '../../../lib/api';
+import { insightsApi } from '../../../lib/api/insights';
 import { reportError } from '../../../lib/log';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, PhoneSheet, RailFrame, WorkerRail, openEadwynPanel, usePhoneWidth } from '../../../ui';
 import { Chart, ChartTable, Legend } from './InsightsCharts';
 import {
-  DEFINITIONS, EMPTY_LINE, FILTER_WAITS, MOVED_KEY, MOVED_NOTICE, NO_PERMISSION, NO_PERMISSION_FILTER,
+  EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NO_PERMISSION, NO_PERMISSION_FILTER,
   PAGE_UNREADABLE, PROFILE_FILTERS, RANGES, SCOPE_LABEL, SCOPE_NOTE, SCOPE_TITLE, SOURCE_LINE,
-  asOfLabel, buildBlocks, buildGroup, buildKpis, figuresCsv, groupFromSearch, isEmptyStudio, lastTwoWeeks,
-  pageFailed, rangeLine, scopeState,
+  activeFilterCount, asOfLabel, buildBlocks, buildGroup, buildKpis, countryOptions, definitionOf, figuresCsv,
+  filterCountries, filtersFromSearch, groupFromSearch, isEmptyStudio, pageFailed, rangeLabel, rangeLine,
+  readParams, scopeState,
 } from './insightsModel';
 
 /**
  * D893 (#2366) — Admin › Insights at /admin/insights, built to the "Admin
  * Insights" canvas (INS1–INS11).
  *
- * Every figure comes from a read that already exists (see insightsModel.js);
- * a block no read counts yet says "Not recorded" with its reason, and the
- * range, profile, country and compare controls are drawn but wait for the
- * Insights read, which says so under the bar. Nothing here is a sample.
+ * ONE READ (#2660). Every tile and block comes from `GET /api/admin/insights`,
+ * made with the URL's range, profile, country and compare. The group lightbox
+ * makes the same read with `group=<role>`. A block whose store failed says so
+ * and the others answer; nothing here is a sample.
  *
- * WHO SEES WHAT. Any admin opens it (`guard(['admin'])`). The Super Admin also
- * reads HQ analytics (`requireSuperAdmin` in the Worker), which gives the
- * weekly activity line and the activation funnel, and gets the Scope select.
- * A plain Admin who opens a `?scope=` link for another studio sees INS10.
+ * WHO SEES WHAT. Any admin opens it (`guard(['admin'])`) and reads the same
+ * blocks. The Super Admin also gets the Scope select. A plain Admin who opens
+ * a `?scope=` link for another studio sees INS10, and no read is made.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -41,51 +41,50 @@ const NR = 'self-start rounded-full border border-dashed border-axal-muted px-2 
 
 const idle = { status: 'loading', data: null };
 
-/** The page's reads. Each one answers alone; `reload(key)` reads one again. */
-function useInsightsReads(superAdmin) {
-  const [reads, setReads] = useState({ glance: idle, cohorts: idle, overview: { last: idle, before: idle }, hq: superAdmin ? idle : null });
+/**
+ * The page's read, and the group lightbox's. Each is made again when the
+ * filters it carries change; `reload()` reads both again. A read answered
+ * after a newer one was asked is dropped, so a quick change of filter cannot
+ * draw the older answer.
+ */
+function useInsightsReads(filters, groupKey, enabled) {
+  const [insights, setInsights] = useState(idle);
+  const [group, setGroup] = useState(idle);
   const [asOf, setAsOf] = useState(null);
-  const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  const [tick, setTick] = useState(0);
+  const params = JSON.stringify(readParams(filters));
 
-  const run = useCallback((key) => {
-    const set = (patch) => { if (alive.current) setReads((r) => ({ ...r, ...patch })); };
-    const one = (label, p, place) => p.then(
-      (data) => place({ status: 'ready', data }),
-      (e) => { reportError(`admin-insights:${label}`, e); place({ status: 'error', data: null }); },
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let live = true;
+    setInsights(idle);
+    insightsApi.adminInsights(JSON.parse(params)).then(
+      (data) => { if (live) { setInsights({ status: 'ready', data }); setAsOf(Date.now()); } },
+      (e) => { reportError('admin-insights:read', e); if (live) setInsights({ status: 'error', data: null }); },
     );
-    const jobs = [];
-    if (!key || key === 'glance') {
-      set({ glance: idle });
-      jobs.push(one('glance', api.adminStudioGlance(), (v) => set({ glance: v })));
-    }
-    if (!key || key === 'cohorts') {
-      set({ cohorts: idle });
-      jobs.push(one('cohorts', api.analyticsCohorts('retention', 'week'), (v) => set({ cohorts: v })));
-    }
-    if (!key || key === 'overview') {
-      const w = lastTwoWeeks(Date.now());
-      setReads((r) => ({ ...r, overview: { last: idle, before: idle } }));
-      const place = (slot) => (v) => { if (alive.current) setReads((r) => ({ ...r, overview: { ...r.overview, [slot]: v } })); };
-      jobs.push(one('overview-last', api.analyticsOverview(w.last.from, w.last.to), place('last')));
-      jobs.push(one('overview-before', api.analyticsOverview(w.before.from, w.before.to), place('before')));
-    }
-    if (superAdmin && (!key || key === 'hq')) {
-      set({ hq: idle });
-      jobs.push(one('hq', api.hqAnalytics('8w'), (v) => set({ hq: v })));
-    }
-    Promise.allSettled(jobs).then(() => { if (alive.current) setAsOf(Date.now()); });
-  }, [superAdmin]);
+    return () => { live = false; };
+  }, [params, enabled, tick]);
 
-  useEffect(() => { run(); }, [run]);
-  return { reads, asOf, reload: run };
+  useEffect(() => {
+    if (!enabled || !groupKey) return undefined;
+    let live = true;
+    setGroup(idle);
+    insightsApi.adminInsights({ ...JSON.parse(params), group: groupKey }).then(
+      (data) => { if (live) setGroup({ status: 'ready', data }); },
+      (e) => { reportError('admin-insights:group', e); if (live) setGroup({ status: 'error', data: null }); },
+    );
+    return () => { live = false; };
+  }, [params, groupKey, enabled, tick]);
+
+  const reload = useCallback(() => setTick((t) => t + 1), []);
+  return { reads: { insights, group }, asOf, reload };
 }
 
-/** Which read feeds each tile and block, so Try again reads only that one. */
-const READ_OF = {
-  accounts: 'glance', new: 'glance', active: 'overview', activated: 'hq',
-  who: 'glance', growth: 'glance', tickets: 'glance', spend: 'glance', retention: 'cohorts', activity: 'hq', activation: 'hq',
-};
+/** The line under the filter bar: what the page is showing. */
+function filterLine(f) {
+  const profile = f.profile ? PROFILE_FILTERS.find((p) => p.role === f.profile)?.label : '';
+  return [rangeLabel(f.range), profile, f.country, f.compare ? 'compared with the period before' : ''].filter(Boolean).join(' · ');
+}
 
 function Skeleton({ box }) {
   return box
@@ -184,34 +183,55 @@ export function Block({ b, onRetry, onCount, onSelect, onPick, phone }) {
   );
 }
 
-/** The filter bar's controls. Only 8 weeks and All answer today; the rest say why they wait. */
-function Filters({ vertical = false }) {
+/** The filter bar's controls. Each one writes the URL, and the read follows it. */
+function Filters({ filters, countries, onChange, vertical = false }) {
+  const chip = (on) => `whitespace-nowrap rounded-full border px-2.5 py-1 text-[12px] font-semibold ${on
+    ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300'
+    : 'border-axal-hairline text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800'}`;
   return (
     <>
       {vertical && <span className={EYE}>Range</span>}
       <div role="radiogroup" aria-label="Range" className={`flex gap-[3px] rounded-[9px] bg-axal-ground p-[3px] dark:bg-gray-800 ${vertical ? 'w-full' : ''}`}>
         {RANGES.map((r) => (
-          <span key={r.key} role="radio" aria-checked={r.key === '8w'} aria-disabled={!r.ready} title={r.ready ? undefined : FILTER_WAITS}
-            className={`whitespace-nowrap rounded-[7px] px-2.5 py-1.5 text-[12px] font-bold ${vertical ? 'flex-1 text-center' : ''} ${r.key === '8w' ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-faint'}`}>
+          <button key={r.key} type="button" role="radio" aria-checked={filters.range === r.key} data-testid={`insights-range-${r.key}`}
+            onClick={() => onChange({ range: r.key === '8w' ? null : r.key })}
+            className={`whitespace-nowrap rounded-[7px] px-2.5 py-1.5 text-[12px] font-bold ${vertical ? 'flex-1 text-center' : ''} ${filters.range === r.key ? 'bg-white text-axal-ink shadow-sm dark:bg-gray-900 dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`}>
             {r.label}
-          </span>
+          </button>
         ))}
       </div>
       {vertical && <span className={EYE}>Profile</span>}
       <div className="flex flex-wrap gap-[7px]" role="group" aria-label="Profile">
-        {PROFILE_FILTERS.map((p) => (
-          <span key={p} role="button" aria-pressed={p === 'All'} aria-disabled={p !== 'All'} title={p === 'All' ? undefined : FILTER_WAITS}
-            className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[12px] font-semibold ${p === 'All' ? 'border-axal-lavender-edge bg-axal-lavender text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300' : 'border-axal-hairline text-axal-faint dark:border-gray-700'}`}>
-            {p}
-          </span>
-        ))}
+        {PROFILE_FILTERS.map((p) => {
+          if (p.waits) {
+            return <span key={p.label} aria-disabled="true" title={p.waits} className="whitespace-nowrap rounded-full border border-dashed border-axal-hairline px-2.5 py-1 text-[12px] font-semibold text-axal-faint dark:border-gray-700">{p.label}</span>;
+          }
+          const on = p.role ? filters.profile === p.role : !filters.profile;
+          return (
+            <button key={p.label} type="button" aria-pressed={on} className={chip(on)} data-testid={`insights-profile-${p.role || 'all'}`}
+              onClick={() => onChange({ profile: p.role })}>
+              {p.label}
+            </button>
+          );
+        })}
       </div>
       {vertical && <span className={EYE}>Country</span>}
-      <span aria-disabled="true" title={FILTER_WAITS} className="rounded-[7px] border border-axal-hairline px-2.5 py-1.5 text-[12.5px] font-semibold text-axal-faint dark:border-gray-700">All countries ▾</span>
-      <span aria-disabled="true" title={FILTER_WAITS} className="flex items-center gap-2 text-[12.5px] font-semibold text-axal-faint">
-        <span className="relative h-5 w-[34px] flex-none rounded-full bg-axal-hairline dark:bg-gray-700"><span className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white dark:bg-gray-300" /></span>
+      <label className="flex items-center">
+        <span className="sr-only">Country</span>
+        <select value={filters.country || ''} onChange={(e) => onChange({ country: e.target.value || null })} data-testid="insights-country"
+          className="min-h-[32px] rounded-[7px] border border-axal-hairline bg-white px-2.5 text-[12.5px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+          <option value="">All countries</option>
+          {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </label>
+      <label className="flex cursor-pointer items-center gap-2 text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">
+        <input type="checkbox" role="switch" className="peer sr-only" checked={filters.compare} data-testid="insights-compare"
+          onChange={(e) => onChange({ compare: e.target.checked ? '1' : null })} />
+        <span className="relative h-5 w-[34px] flex-none rounded-full bg-axal-hairline peer-checked:bg-axal-violet peer-focus-visible:ring-2 peer-focus-visible:ring-axal-violet dark:bg-gray-700">
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white dark:bg-gray-300 ${filters.compare ? 'left-4' : 'left-0.5'}`} />
+        </span>
         Compare with previous period
-      </span>
+      </label>
     </>
   );
 }
@@ -239,7 +259,6 @@ export default function AdminInsights() {
   const navigate = useNavigate();
   const phone = usePhoneWidth();
   const superAdmin = isSuperAdminUser(useAuth()?.user);
-  const { reads, asOf, reload } = useInsightsReads(superAdmin);
   const [pick, setPick] = useState(null);
   const [count, setCount] = useState(null);
   const [exporting, setExporting] = useState(false);
@@ -251,6 +270,10 @@ export default function AdminInsights() {
   const moved = params.get('moved') === MOVED_KEY;
   const scope = scopeState(loc.search, superAdmin);
   const groupKey = groupFromSearch(loc.search);
+  const filters = useMemo(() => filtersFromSearch(loc.search), [loc.search]);
+  const noperm = scope.kind === 'noperm';
+  const { reads, asOf, reload } = useInsightsReads(filters, groupKey, !noperm);
+  const [countryQ, setCountryQ] = useState('');
 
   const setParam = useCallback((key, value) => {
     const next = new URLSearchParams(loc.search);
@@ -259,25 +282,33 @@ export default function AdminInsights() {
     navigate({ pathname: loc.pathname, search: s ? `?${s}` : '', hash: loc.hash }, { replace: true });
   }, [loc.search, loc.pathname, loc.hash, navigate]);
 
-  const kpis = useMemo(() => buildKpis({ glance: reads.glance, overview: reads.overview, hq: reads.hq, superAdmin }), [reads, superAdmin]);
-  const blocks = useMemo(() => buildBlocks({ glance: reads.glance, cohorts: reads.cohorts, hq: reads.hq, superAdmin, pick }), [reads, superAdmin, pick]);
-  const group = useMemo(() => buildGroup(groupKey, reads.glance), [groupKey, reads.glance]);
-  const failed = pageFailed(reads, superAdmin);
-  const empty = isEmptyStudio(reads.glance);
-  const noperm = scope.kind === 'noperm';
+  /** Several filters at once: `null` removes one, so the default never sits in the URL. */
+  const setFilters = useCallback((patch) => {
+    const next = new URLSearchParams(loc.search);
+    for (const [k, v] of Object.entries(patch)) { if (v === null || v === undefined) next.delete(k); else next.set(k, v); }
+    const q = next.toString();
+    navigate({ pathname: loc.pathname, search: q ? `?${q}` : '', hash: loc.hash }, { replace: true });
+  }, [loc.search, loc.pathname, loc.hash, navigate]);
+
+  const kpis = useMemo(() => buildKpis({ insights: reads.insights }), [reads.insights]);
+  const blocks = useMemo(() => buildBlocks({ insights: reads.insights, filters, pick }), [reads.insights, filters, pick]);
+  const group = useMemo(() => buildGroup(groupKey, reads.group), [groupKey, reads.group]);
+  const countries = useMemo(() => countryOptions(reads.insights, filters.country), [reads.insights, filters.country]);
+  const failed = pageFailed(reads.insights);
+  const empty = isEmptyStudio(reads.insights, filters);
   const asOfText = asOf ? `As of ${asOfLabel(asOf)}` : 'Reading…';
 
   useEffect(() => () => { if (toast?.url) URL.revokeObjectURL(toast.url); }, [toast]);
 
   const doExport = () => {
-    const csv = figuresCsv({ kpis, blocks, asOf: asOf ? asOfLabel(asOf) : '' });
+    const csv = figuresCsv({ kpis, blocks, asOf: asOf ? asOfLabel(asOf) : '', filters });
     let url = null;
     try { url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); } catch (e) { reportError('admin-insights:export', e); }
     setExporting(false);
     setToast(url ? { url, name: `insights-${new Date().toISOString().slice(0, 10)}.csv` } : { error: true });
   };
 
-  const def = count ? DEFINITIONS[count] : null;
+  const def = count ? definitionOf(count, reads.insights) : null;
 
   const rail = (
     <WorkerRail
@@ -285,9 +316,9 @@ export default function AdminInsights() {
       role="admin"
       stance="The accounts you manage, as counts"
       note="This rail reads HQ’s own database, the accounts HQ holds on axal.vc, and no other. No subsidiary is deployed yet."
-      coverage={['Accounts by profile, sign-ups per week, open tickets and AI spend, from the Studio glance', 'Active accounts last week and retention by sign-up week, from the analytics reads']}
+      coverage={['Accounts by profile, plan, country, identity check and completeness; sign-ups, activity, activation and retention by week; dormant accounts, open tickets and AI spend, from the Insights read']}
       coverageNote="Each figure is read alone; one that cannot be read says so and the others still answer."
-      unavailable={[['Plans, countries, identity checks, completeness and dormant accounts', 'Counted once the Insights read is built.']]}
+      unavailable={[['Product testers', 'A sub-account #2377 has not defined yet.'], ['Other subsidiaries', 'HQ reads them once they are deployed (#2662).']]}
       data-testid="insights-rail"
     />
   );
@@ -310,7 +341,7 @@ export default function AdminInsights() {
         {!phone ? (
           <div className={`${CARD} sticky top-0 z-[2] flex flex-col gap-2 px-3.5 py-[11px]`} data-testid="insights-filters">
             <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
-              <Filters />
+              <Filters filters={filters} countries={countries} onChange={setFilters} />
               {superAdmin ? <ScopeSelect /> : null}
               {noperm ? <span className="text-[13.5px] text-axal-muted dark:text-gray-400">{NO_PERMISSION_FILTER}</span> : null}
               <span className="ml-auto flex flex-wrap items-center gap-2.5">
@@ -320,12 +351,12 @@ export default function AdminInsights() {
                 <button type="button" className={GHOST} onClick={() => setExporting(true)} disabled={noperm} data-testid="insights-export">Export</button>
               </span>
             </div>
-            <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400">{FILTER_WAITS}</p>
+            <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="insights-filter-line">{filterLine(filters)}</p>
           </div>
         ) : (
           <div className="flex items-center gap-2.5">
             <button type="button" ref={filtersBtn} className={`${GHOST} min-h-[44px]`} onClick={() => setSheet(true)} data-testid="insights-filters-open">
-              Filters <span className="rounded-full bg-axal-violet px-[7px] py-px font-mono text-[10.5px] font-semibold text-white">2</span>
+              Filters {activeFilterCount(filters) ? <span className="rounded-full bg-axal-violet px-[7px] py-px font-mono text-[10.5px] font-semibold text-white">{activeFilterCount(filters)}</span> : null}
             </button>
             <span className="font-mono text-[11.5px] text-axal-muted">{asOfText}</span>
           </div>
@@ -344,7 +375,7 @@ export default function AdminInsights() {
         ) : (
           <>
             <div className={`grid gap-3.5 ${phone ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`} data-testid="insights-kpis">
-              {kpis.map((k) => <Tile key={k.key} k={k} onRetry={() => reload(READ_OF[k.key])} />)}
+              {kpis.map((k) => <Tile key={k.key} k={k} onRetry={reload} />)}
             </div>
             {empty ? (
               <>
@@ -362,7 +393,7 @@ export default function AdminInsights() {
               <div className="grid grid-cols-12 gap-3.5" data-testid="insights-blocks">
                 {blocks.map((b) => (
                   <Block key={b.key} b={b} phone={phone}
-                    onRetry={() => reload(READ_OF[b.key])}
+                    onRetry={reload}
                     onCount={setCount}
                     onSelect={(key) => setParam('group', key)}
                     onPick={setPick} />
@@ -376,9 +407,8 @@ export default function AdminInsights() {
       {sheet && (
         <PhoneSheet label="Filters" title="Filters" onClose={() => setSheet(false)} opener={filtersBtn}>
           <div className="flex flex-col gap-2.5 px-4 pb-6">
-            <Filters vertical />
+            <Filters vertical filters={filters} countries={countries} onChange={setFilters} />
             {superAdmin ? <ScopeSelect /> : null}
-            <p className={SUB}>{FILTER_WAITS}</p>
             <button type="button" className={`${PRIMARY} min-h-[44px]`} onClick={() => setSheet(false)}>Show results</button>
           </div>
         </PhoneSheet>
@@ -412,7 +442,7 @@ export default function AdminInsights() {
             </fieldset>
             <div className="flex flex-col gap-1">
               <span className={EYE}>Range</span>
-              <span className="font-mono text-[13px] text-axal-ink dark:text-gray-100">{rangeLine(reads.glance, Date.now())}</span>
+              <span className="font-mono text-[13px] text-axal-ink dark:text-gray-100">{rangeLine(reads.insights, Date.now())}</span>
             </div>
             <p className={`m-0 ${SUB}`}>The file holds counts only, never names or emails.</p>
             <div className="flex justify-end gap-2">
@@ -437,25 +467,75 @@ export default function AdminInsights() {
 
       {group && !noperm && (
         <Lightbox label={`${group.label} group`} eyebrow="Group" width={760}
-          title={group.count === null ? group.label : `${group.label} · ${group.count.toLocaleString('en-US')} accounts`}
-          onClose={() => setParam('group', null)} testId="insights-group">
+          title={group.count === null || group.count === undefined ? group.label : `${group.label} · ${group.count.toLocaleString('en-US')} accounts`}
+          onClose={() => { setCountryQ(''); setParam('group', null); }} testId="insights-group">
           <div className="flex flex-col gap-3.5 px-1 pb-1">
             <div className="flex flex-wrap gap-[7px]">
-              {['8 weeks', group.label, 'All countries'].map((c) => (
+              {[rangeLabel(filters.range), group.label, filters.country || 'All countries'].map((c) => (
                 <span key={c} className="rounded-full border border-axal-lavender-edge bg-axal-lavender px-2.5 py-1 text-[12px] font-semibold text-axal-violet dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-300">{c}</span>
               ))}
             </div>
-            <div className={`grid gap-2.5 ${phone ? 'grid-cols-2' : 'grid-cols-4'}`}>
-              {group.tiles.map((t) => (
-                <div key={t} className="flex flex-col gap-1 rounded-[10px] border border-axal-hairline p-[11px] dark:border-gray-700">
-                  <span className={EYE}>{t}</span>
-                  <span className={NR}>Not recorded</span>
+            {group.state === 'loading' && <><span className="font-mono text-[12px] text-axal-muted">Reading…</span><Skeleton box /></>}
+            {group.state === 'unreadable' && (
+              <div className="flex flex-col gap-2.5 rounded-[10px] border border-axal-destructive-edge bg-axal-destructive-tint p-3.5 text-[13px] text-axal-destructive dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" role="alert">
+                <span>{`Could not be read. ${group.reason || ''}`.trim()}</span>
+                <button type="button" className={DANGER} onClick={reload}>Try again</button>
+              </div>
+            )}
+            {group.state === 'unrecorded' && <><span className={NR}>Not recorded</span><span className={SUB}>{group.reason}</span></>}
+            {group.state === 'ready' && (
+              <>
+                <div className={`grid gap-2.5 ${phone ? 'grid-cols-2' : 'grid-cols-4'}`} data-testid="insights-group-tiles">
+                  {group.tiles.map(([t, v]) => (
+                    <div key={t} className="flex flex-col gap-1 rounded-[10px] border border-axal-hairline p-[11px] dark:border-gray-700">
+                      <span className={EYE}>{t}</span>
+                      {v.missing ? <span className={NR}>Not recorded</span> : <span className="font-mono text-[20px] font-medium text-axal-ink dark:text-gray-100">{v.text}</span>}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <p className={`m-0 ${SUB}`}>{group.waits}</p>
+                <div className={`grid gap-3.5 ${phone ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  <div className="flex flex-col gap-1.5">
+                    <span className={EYE}>Sign-ups per week</span>
+                    <div role="img" aria-label={`${group.label} sign-ups per week: ${group.signups.rows.map((r) => r.value).join(', ')}.`}><Chart chart={{ ...group.signups, height: 160 }} /></div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className={EYE}>Active per week</span>
+                    <div role="img" aria-label={`${group.label} active per week: ${group.active.values.map((v) => v ?? 'none').join(', ')}.`}><Chart chart={group.active} /></div>
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="flex flex-col gap-1">
+                    <span className={EYE}>By country</span>
+                    <input type="search" value={countryQ} onChange={(e) => setCountryQ(e.target.value)} placeholder="Search countries" data-testid="insights-group-search"
+                      className="min-h-[36px] rounded-[7px] border border-axal-hairline bg-white px-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
+                  </label>
+                  <table className="w-full border-collapse text-[12.5px]" data-testid="insights-group-countries">
+                    <caption className="sr-only">{`${group.label} by country`}</caption>
+                    <thead>
+                      <tr className="bg-[#faf9fc] text-left text-[10.5px] font-bold uppercase tracking-[.06em] text-axal-muted dark:bg-gray-800 dark:text-gray-400">
+                        <th scope="col" className="px-3 py-2">Country</th>
+                        <th scope="col" className="px-3 py-2 text-right">Accounts</th>
+                        <th scope="col" className="px-3 py-2 text-right">New in 30 days</th>
+                        <th scope="col" className="px-3 py-2 text-right">Active last week</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filterCountries(group.countries, countryQ).map((r) => (
+                        <tr key={r.country ?? 'none'} className="border-t border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100">
+                          <td className="px-3 py-2 font-semibold">{r.country ?? 'Not stated'}</td>
+                          <td className="px-3 py-2 text-right font-mono tabular-nums">{r.accounts.toLocaleString('en-US')}</td>
+                          <td className="px-3 py-2 text-right font-mono tabular-nums">{r.new_30d.toLocaleString('en-US')}</td>
+                          <td className="px-3 py-2 text-right font-mono tabular-nums">{r.active_last_week === null ? 'not recorded' : r.active_last_week.toLocaleString('en-US')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {group.countries.length > 0 && filterCountries(group.countries, countryQ).length === 0 ? <p className={`m-0 ${SUB}`}>No country matches.</p> : null}
+                </div>
+              </>
+            )}
             <div className="flex flex-col gap-2">
-              {group.count === null ? null : (
+              {group.count === null || group.count === undefined ? null : (
                 <Link to={group.accountsHref} className={PRIMARY}>{`Open these ${group.count.toLocaleString('en-US')} accounts in Accounts`}</Link>
               )}
               <button type="button" className={GHOST} onClick={() => openEadwynPanel(`Insights · ${group.label}`)}>Ask Eadwyn about this group</button>
