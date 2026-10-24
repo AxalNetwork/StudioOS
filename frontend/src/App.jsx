@@ -462,7 +462,6 @@ import { buildCompetitorsRedirect } from './lib/companyDirectoryView';
 import { connectorsRedirect } from './pages/account/connectorsModel';
 import { signInPath as assistantSignInPath } from './pages/connect/assistantConsentModel';
 import { InvestorPricingRedirect, PlansAndPricingRedirect } from './pages/pricingRedirects.jsx';
-import { boundaryFor } from './pages/raise/pitch/pitchStudioModel';
 import {
   PREVIEW_SHELLS, PREVIEW_TRIGGER, PREVIEW_HEADER, PREVIEW_FOOTER,
   previewOptionsFor, selectedPreviewKey, homePreviewKey, previewChip, previewNote,
@@ -2915,7 +2914,7 @@ function AppInner() {
           reads the studio's boundary inside their own shell, never a bounce
           (as `hqOnly`'s notice is drawn). Nothing from a deck is read. */}
        <Route path="/raise/pitch" element={guard(labRoles(['admin', 'founder', 'advisor', 'partner', 'exploring']),
-         boundaryFor(effectiveRole, user?.spinout_lab_active === 1)
+         (effectiveRole === 'advisor' || effectiveRole === 'partner' || effectiveRole === 'exploring') && user?.spinout_lab_active !== 1
            ? <PitchBoundary role={effectiveRole} />
            : new URLSearchParams(location.search).get('mode') === 'workspace'
            ? <PitchWorkspaceMoved />
