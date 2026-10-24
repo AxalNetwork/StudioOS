@@ -1237,6 +1237,15 @@ export const api = {
     },
     createInvitation: (data) =>
       request('/admin/partners/invitations', { method: 'POST', body: JSON.stringify(data) }),
+    // D927 (#2723) — read only. The Overview's blocks (each `{ available, … }`
+    // alone), one invitation (message, step dates, offers seen, chosen deal,
+    // refusals, admin history), and the offers a set of types makes over a
+    // neutral profile. None writes a row or logs a view.
+    overview: () => request('/admin/partners/overview'),
+    getInvitation: (id) => request(`/admin/partners/invitations/${encodeURIComponent(id)}`),
+    previewOffers: (types = []) =>
+      request(`/admin/partners/offers/preview?types=${encodeURIComponent([].concat(types).join(','))}`),
+    // The reply carries `signing_link`: 'renewed' | 'not_renewed' | null (D927).
     resendInvitation: (id) =>
       request(`/admin/partners/invitations/${id}/resend`, { method: 'POST' }),
     revokeInvitation: (id, reason) =>
