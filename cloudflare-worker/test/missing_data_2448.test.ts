@@ -75,6 +75,10 @@ test('2448: complete intake records zero inputs and computes a real score',async
  const body:any=await response.json();assert.equal(response.status,200,JSON.stringify(body));assert.equal(body.score.total_score,runFullScore(inputs).total_score);
  assert.equal(body.project.tam,0);assert.equal(body.project.cost_to_mvp,0);assert.equal(body.project.funding_needed,0);
  assert.equal(db.prepare('SELECT count(*) n FROM score_snapshots').get()!.n,1);
+ const blank=await request(projects,env,'/submit',{...inputs,name:'Optional blanks',founder_name:'Synthetic blank founder',founder_email:'blank@example.test',sam:'   ',funding_needed:''});
+ const blankBody:any=await blank.json();assert.equal(blank.status,200,JSON.stringify(blankBody));assert.equal(blankBody.project.sam,null);assert.equal(blankBody.project.funding_needed,null);
+ const count=db.prepare('SELECT count(*) n FROM projects').get()!.n;
+ const invalid=await request(projects,env,'/submit',{...inputs,name:'Invalid optional',sam:'invalid'});assert.equal(invalid.status,400);assert.equal(db.prepare('SELECT count(*) n FROM projects').get()!.n,count);
  }finally{db.close();}
 });
 test('2448: trust batch is unscored until obligations are recorded, then preserves zero and full compliance',async()=>{

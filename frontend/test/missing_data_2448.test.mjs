@@ -50,3 +50,9 @@ test('2448: risk radar leaves missing axes blank instead of plotting zero',()=>{
  const html=renderToStaticMarkup(React.createElement(RiskRadar,{layers:[{key:'founder',label:'Founder',score:null},{key:'market',label:'Market',score:0,band:'high'}]}));
  assert.equal((html.match(/r="3.5"/g)||[]).length,1);assert.ok(html.includes('fill-opacity="0"'));
 });
+
+import { scoringInputsOf } from '../src/lib/scoringViewModel.js';
+test('2448: cleared and invalid practice fields stay absent; numeric zero is explicit',()=>{
+ const form={empty:'',space:'  ',nil:null,absent:undefined,bad:'invalid',zero:0,textZero:'0',value:'12'};
+ assert.deepEqual(scoringInputsOf(form,Object.keys(form)),{zero:0,textZero:0,value:12});
+});

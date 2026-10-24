@@ -634,6 +634,16 @@ projects.post('/submit', async (c) => {
     return c.json({ error: message, code: 'reserved_field' }, 400);
   }
 
+  for (const field of ['sam', 'funding_needed']) {
+    const raw = data[field];
+    if (raw == null || (typeof raw === 'string' && raw.trim() === '')) { data[field] = null; continue; }
+    const value = Number(raw);
+    if (!['number', 'string'].includes(typeof raw) || !Number.isFinite(value)) {
+      return c.json({ error: 'Optional numeric inputs must be finite numbers.', field, code: 'invalid_numeric_input' }, 400);
+    }
+    data[field] = value;
+  }
+
   // Task #2 — validate + canonicalize the structured Use-of-Funds allocation
   // before any DB writes (defense in depth; the intake UI also enforces this).
   const uof = normalizeUseOfFunds(data.use_of_funds);

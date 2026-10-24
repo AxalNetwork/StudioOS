@@ -53,7 +53,7 @@ import { exportScoringReportPdf } from '../lib/scoringReportPdf';
 import { pickLabProject } from './SpinoutLabStartupPage';
 import {
   TIER_THRESHOLDS, TIER_LABELS, DIMENSIONS, levelFor,
-  buildDimensions, buildTrajectory, buildScoringEngineViewModel,
+  buildDimensions, buildTrajectory, buildScoringEngineViewModel, scoringInputsOf,
 } from '../lib/scoringViewModel';
 import useCountUp from '../components/scoring/useCountUp';
 import RadarChart from '../components/scoring/RadarChart';
@@ -281,12 +281,7 @@ export default function SpinoutLabScoringPage() {
     setRunError('');
     try {
       const payload = { project_id: project.id, is_sandbox: true, startup_name: project.name || '' };
-      for (const g of FORM_GROUPS) {
-        for (const f of g.fields) {
-          const v = Number(form[f.key]);
-          payload[f.key] = Number.isFinite(v) ? v : 0;
-        }
-      }
+      Object.assign(payload, scoringInputsOf(form, FORM_GROUPS.flatMap(g => g.fields.map(f => f.key))));
       const result = await api.scoreStartup(payload);
       if (result?.total_score === null) { setRunError(result.reason || 'Scoring inputs not recorded'); return; }
       // Completing a scoring run is a Week-3 lab milestone — but lab
