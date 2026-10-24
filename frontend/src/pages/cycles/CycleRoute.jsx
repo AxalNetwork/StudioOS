@@ -56,6 +56,8 @@ import { cellView, cycleOf } from './cycleModel';
 import { MODULES } from './modules';
 import { useAuth } from '../../hooks/useAuthSync';
 import { moduleToolLinks } from './founderToolNavigation.js';
+import { NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
+import { isNarrativeTab, SLUG as NARRATIVE } from '../raise/narrative/narrativeModel';
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
 const fromMercury = (slug, data, ctx) => <GrowFromMercury slug={slug} part={data?.parts?.from_mercury} projectId={ctx.projectId} reload={ctx.reload} />;
@@ -734,7 +736,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   useEffect(() => { setDialog(null); }, [cycle, slug, recordId]);
   const known = !slug || (def?.modules || []).some((m) => m.slug === slug);
   const validRecord = RECORD_ID.test(recordId ?? '') && recordId !== 'new';
-  const recordState = useCycleRecord({ enabled: record && known && validRecord && !!projectId && !!def,
+  // D906 (#2454): under Investor narrative a record id that is a tab word
+  // (`/story`, `/check`, …) is the tool's tab, never a version (versions are numbers).
+  const narrativeTab = record && cycle === 'raise' && isNarrativeTab(slug, recordId) ? recordId : null;
+  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !!projectId && !!def,
     cycle, projectId, slug, id: recordId, reload, edit, navigate, back: `/${cycle}/${slug}${q}` });
   useScrollToHash(record ? recordState.status !== 'ready' : moduleStatus !== 'ready');
   // The page re-reads once the lightbox is gone, however it went: ×, Escape and
@@ -917,6 +922,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           : <Link className={createBtn} to="/build?new=1" data-testid="cycle-create-venture">Create your startup</Link>}
       </div>
     );
+  } else if (narrativeTab) {
+    body = <NarrativeTabPage tab={narrativeTab} projectId={projectId} search={location.search} cards={tabs} action={action} phone={phone} />;
   } else if (record) {
     const recordTitle = recordState.data?.title || moduleName;
     body = <div className="space-y-4" data-testid="cycle-record-page">
@@ -993,6 +1000,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
+        subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={q} /> : undefined}
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
@@ -1060,7 +1068,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
-      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={recordId ?? null} />
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab ? null : recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
   );

@@ -72,7 +72,7 @@ function Cta({ add }) {
 
 export default function PhoneModulePage({
   cycle, slug, moduleName, data, status = data ? 'ready' : 'loading', message = '', onRetry,
-  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '',
+  records, recordsStatus, recordsMessage, query = {}, onQuery, onRetryRecords, add, rowAction, tool, tools = [], children, search = '', subnav = null,
 }) {
   const [text, setText] = useState(query.q || '');
   const meta = cycleOf(cycle);
@@ -131,6 +131,8 @@ export default function PhoneModulePage({
   return (
     <div className="flex min-w-0 flex-col" data-testid="phone-module" data-cycle={meta.key} data-module={slug}>
       {bar}
+      {/* A module that is also a tool draws its own tabs here (D906: Investor narrative). */}
+      {subnav && <div className="mb-[14px] min-w-0">{subnav}</div>}
       {headline && (
         <section data-testid="phone-module-next" aria-labelledby="phone-module-next-title">
           <p className="m-0 flex min-h-[40px] items-center text-[10px] font-extrabold uppercase tracking-[.12em] text-violet-700 dark:text-violet-300">One next thing</p>

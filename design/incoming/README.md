@@ -140,7 +140,15 @@ came from S21's prompt on #2454, as the usual pair:
   carries. The page artifact decodes to the same design, differing only in
   whitespace and the font link.
 
-No value was edited. S1's integration lands next and records its grade here.
+No value was edited.
+
+**Grade: UPGRADE.** `/raise/investor-narrative` is live. S1's integration
+(D906) makes the module page the tool's Home, with the canvas's tab bar under
+its header, and draws Story, Check, Versions (with Compare) and Positioning (a
+door to today's generator) from the reads that exist. The other boards wait for
+stores the Worker does not have, so this canvas stays in the queue until its
+eight parts land (#2691 to #2698; D906 §6 lists them). The `ROUTE_MAP.md` row
+says what is drawn today.
 
 ## Landed 2026-10-24 — Admin · Community · Events (#2368)
 
