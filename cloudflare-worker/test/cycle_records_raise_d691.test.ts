@@ -827,3 +827,11 @@ test('#2691: a narrative record compares current values, ignores stale check row
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM activity_logs').get()?.n,before,'reads do not write');
  }finally{db.close();}
 });
+
+test('#2447: a manual score offers only evidence values its writer accepts',async()=>{
+ const db=await seeded();const team=(await rec(db,'fundraising-readiness','team')).body;
+ const choices=team.actions.find((a:any)=>a.key==='score').form.fields.find((f:any)=>f.key==='evidence').options;
+ assert.deepEqual(choices.map((x:any)=>x.value),['anecdote','pattern']);
+ for(const choice of choices) assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:choice.value,missing:''})).status,200);
+ assert.equal((await act(db,'fundraising-readiness','team','score',{score:'7',evidence:'stated',missing:''})).status,400);
+});
