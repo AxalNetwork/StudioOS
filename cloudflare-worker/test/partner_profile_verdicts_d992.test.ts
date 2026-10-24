@@ -30,6 +30,8 @@ function fixture() {
   const path = join(dir, 'db.sqlite');
   writeFileSync(path, schemaBytes);
   const db = new DatabaseSync(path);
+  // Durability is outside this test: avoid disk journal fsyncs for disposable copies.
+  db.exec('PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF');
   const close = db.close.bind(db);
   db.close = () => { close(); rmSync(dir, { recursive: true }); };
   db.prepare("INSERT INTO users(id,email,name,role,email_verified) VALUES(1,'admin@example.test','Synthetic admin','admin',1),(2,?,'Synthetic member','founder',1)").run(email);

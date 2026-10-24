@@ -570,6 +570,7 @@ profiling.post('/admin/:email/verify', async (c) => {
   if (newStatus === 'verified' && agreement_type && viaProvider === 'docusign') {
     const { userMeetsTier } = await import('../middleware/requireTier');
     if (!userMeetsTier(adminUser, 'studio')) {
+      await sql.end();
       return c.json({ error: 'tier_required', required: 'studio', message: 'DocuSign sends require the Raise + Grow plan.' }, 402);
     }
   }
