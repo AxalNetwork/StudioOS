@@ -213,7 +213,7 @@ test('Google disconnect revokes before deleting its saved connection', async () 
   const order: string[] = [];
   const DB = {
     prepare(sql: string) {
-      return { bind() { return { async all() {
+      return { bind() { return { async first() { return null; }, async all() {
         if (/SELECT refresh_token FROM google_oauth_tokens/.test(sql)) return { results: [{ refresh_token: 'plain-refresh-token' }] };
         order.push(`db:${sql.trim().split(/\s+/).slice(0, 2).join(' ')}`);
         return { results: [] };
@@ -234,7 +234,7 @@ test('Google disconnect revokes before deleting its saved connection', async () 
 
 test('a confirmed Google identity switch clears the old sign-in link', async () => {
   const writes: string[] = [];
-  const DB = { prepare(sql: string) { return { bind() { return { async all() {
+  const DB = { prepare(sql: string) { return { bind() { return { async first() { return null; }, async all() {
     writes.push(sql);
     return { results: [] };
   } }; } }; } };
@@ -246,7 +246,7 @@ test('Google disconnect keeps the saved connection when revocation fails', async
   const writes: string[] = [];
   const DB = {
     prepare(sql: string) {
-      return { bind() { return { async all() {
+      return { bind() { return { async first() { return null; }, async all() {
         if (/SELECT refresh_token FROM google_oauth_tokens/.test(sql)) return { results: [{ refresh_token: 'plain-refresh-token' }] };
         writes.push(sql);
         return { results: [] };
@@ -272,7 +272,7 @@ test('removing Gmail preserves Google event mappings for the immediate reconnect
   const deletes: string[] = [];
   const DB = {
     prepare(sql: string) {
-      return { bind() { return { async all() {
+      return { bind() { return { async first() { return null; }, async all() {
         if (/SELECT refresh_token FROM google_oauth_tokens/.test(sql)) return { results: [{ refresh_token: 'plain-refresh-token' }] };
         deletes.push(sql);
         return { results: [] };

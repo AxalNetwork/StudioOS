@@ -105,14 +105,5 @@ test('D916: the public Format filter categorises new and legacy in-person events
   assert.match(src, /events\.filter\(\(ev\) => eventFormat\(ev\) === filterFormat\)/);
 });
 
-test('D916: editor schedule writes UTC instants, not timezone-local wall-clock strings', () => {
-  const src = read('frontend/src/pages/events/EventEditorPage.jsx');
-  const convert = src.match(/function localInputToIso\(value\) \{([\s\S]*?)\n\}/);
-  assert.ok(convert);
-  const toIso = new Function('value', convert[1]);
-  assert.equal(toIso(''), null);
-  assert.equal(toIso('2026-10-24T10:00'), new Date('2026-10-24T10:00').toISOString());
-  assert.match(toIso('2026-10-24T10:00'), /Z$/);
-  assert.match(src, /starts_at: localInputToIso\(form.starts_at\)/);
-  assert.match(src, /ends_at: localInputToIso\(form.ends_at\)/);
-});
+// D1115 replaces the browser-zone converter: mounted Worker/editor regressions
+// in events_time_d1115.test.ts and event_time_editor_d1115.test.mjs cover storage.

@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { AdminRoomSummary } from '../DataRoomPage';
 import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
+import DataRoomFiles from './DataRoomFiles.jsx';
+import DataRoomFile from './DataRoomFile.jsx';
+import DataRoomHome from './DataRoomHome.jsx';
 import {
   HOME_PATH, LINE, TABS, TITLE, WAITS, WORKSPACE_LINE,
-  activityRows, day, fileRows, grantRows, projectUidOf, tabHref, tabSearch, weekTiles, workspaceHref,
+  activityRows, day, grantRows, projectUidOf, tabHref, tabSearch, weekTiles, workspaceHref,
 } from './dataRoomModel';
 
 /**
@@ -45,14 +48,20 @@ export function DataRoomTabBar({ active, search = '' }) {
   );
 }
 
-/** Home's tab bar, and where today's files tool still is. */
+/** The venture in the query, as CycleRoute passes it (`?project_id=N`). */
+const projectOf = (search) => { const m = /[?&]project_id=([1-9]\d*)/.exec(String(search || '')); return m ? m[1] : null; };
+
+/** Home's tab bar, its own blocks (D1106, DR1), and where today's access tool still is. */
 export function DataRoomHomeNav({ search = '' }) {
+  const [reload, setReload] = useState(0);
+  const read = useRoom(projectOf(search), reload);
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <DataRoomTabBar active="home" search={search} />
       <p className={`m-0 text-[12px] ${MUTED}`} data-testid="dataroom-home-note">
         {WORKSPACE_LINE} <Link className={LINK} to={workspaceHref(search)}>Open the files tool</Link>
       </p>
+      {projectOf(search) ? <DataRoomHome read={read} retry={() => setReload((n) => n + 1)} search={search} /> : null}
     </div>
   );
 }
@@ -94,14 +103,16 @@ function useRoom(projectId, reload) {
   useEffect(() => {
     if (!projectId) return undefined;
     let alive = true;
-    setState({ status: 'loading', room: null });
+    // A re-read after a change keeps the room drawn until the new one arrives (D1106), so a
+    // dialog's result line is not lost and nothing flashes. Another venture's room is never kept.
+    setState((s) => (s.status === 'ready' && s.projectId === projectId ? { ...s, refreshing: true } : { status: 'loading', room: null }));
     Promise.resolve().then(() => api.listProjects())
       .then((projects) => {
         const uid = projectUidOf(projects, projectId);
         if (!uid) { const e = new Error('This venture’s data room was not found.'); e.status = 404; throw e; }
-        return api.dataRoom(uid);
+        return api.dataRoom(uid).then((room) => ({ room, uid }));
       })
-      .then((room) => { if (alive) setState({ status: 'ready', room }); })
+      .then(({ room, uid }) => { if (alive) setState({ status: 'ready', room, uid, projectId }); })
       .catch((error) => { if (alive) setState({ status: [403, 404].includes(error?.status) ? 'refused' : 'error', room: null, message: error?.message || '' }); });
     return () => { alive = false; };
   }, [projectId, reload]);
@@ -115,31 +126,11 @@ function RoomState({ read, onRetry, testId, children }) {
   return children;
 }
 
-function FilesTab({ read, retry, search }) {
-  const rows = read.status === 'ready' ? fileRows(read.room) : [];
+function FilesTab({ read, retry, search, projectId }) {
   return (
-    <Section title="Files" testId="dataroom-files"
-      aside={<Link className={`text-[12px] ${LINK}`} to={workspaceHref(search)}>Upload and manage files</Link>}>
-      <RoomState read={read} onRetry={retry} testId="dataroom-files">
-        {rows.length === 0
-          ? <p className={`m-0 text-[12.5px] ${MUTED}`} data-testid="dataroom-files-none">No files yet. Upload them in the files tool.</p>
-          : (
-            <Table cols={['File', 'Folder', 'Gate', 'Who it is for', 'Until', 'Links issued', 'Who can open it now']} testId="dataroom-files-table">
-              {rows.map((r) => (
-                <tr key={r.uid} className="border-b border-axal-hairline last:border-0 dark:border-gray-800" data-testid="dataroom-file-row">
-                  <td className={TD}>{r.name}</td>
-                  <td className={TD}>{r.folder}</td>
-                  <td className={TD}>{r.gate}</td>
-                  <td className={TD}>{r.tier}</td>
-                  <td className={`${TD} ${MONO}`}>{r.until}</td>
-                  <td className={`${TD} ${MONO}`}>{r.downloads}</td>
-                  <td className={TD}>{r.opens}{r.why && <span className={`block text-[11.5px] ${MUTED}`}>{r.why}</span>}</td>
-                </tr>
-              ))}
-            </Table>
-          )}
-      </RoomState>
-    </Section>
+    <RoomState read={read} onRetry={retry} testId="dataroom-files">
+      <DataRoomFiles room={read.room} projectUid={read.uid} projectId={projectId} reload={retry} search={tabSearch(search)} />
+    </RoomState>
   );
 }
 
@@ -220,7 +211,8 @@ function Waits({ tab }) {
   );
 }
 
-export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false }) {
+export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRetryProject, search = '', cards, action, phone = false, fileId = null }) {
+  const navigate = useNavigate();
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const reads = tab === 'files' || tab === 'access' || tab === 'activity';
@@ -231,7 +223,7 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <Skeleton testId="dataroom-loading" />;
   else if (read.status === 'ready' && read.room?.mode === 'summary') body = <AdminRoomSummary room={read.room} reload={retry} />;
-  else if (tab === 'files') body = <FilesTab read={read} retry={retry} search={search} />;
+  else if (tab === 'files') body = <FilesTab read={read} retry={retry} search={search} projectId={projectId} />;
   else if (tab === 'access') body = <AccessTab read={read} retry={retry} search={search} />;
   else if (tab === 'activity') body = <ActivityTab read={read} retry={retry} />;
   else body = <Waits tab={tab} />;
@@ -242,6 +234,11 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
         : <CycleHeader cycle="raise" cards={cards} active="data-room" action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
       <DataRoomTabBar active={tab} search={search} />
       {body}
+      {/* D1106 (#2986): DR3, a file's lightbox over Files at /raise/data-room/file/<id>. */}
+      {tab === 'files' && fileId && read.status === 'ready' && read.room?.mode !== 'summary' ? (
+        <DataRoomFile fileId={fileId} room={read.room} projectUid={read.uid} projectId={projectId} onChanged={retry}
+          onClose={() => navigate(`${HOME_PATH}/files${tabSearch(search)}`)} />
+      ) : null}
     </div>
   );
 }

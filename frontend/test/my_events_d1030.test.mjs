@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { Routes, Route } from 'react-router-dom';
 import { h, mountForm, sourceModule } from './_form_d695.mjs';
 import {
-  TABS, discoverAction, goingGroups, hostAction, hostingGroups, isExplorer, isPast, needsYou, nextEvent, pastRows, placeOf,
+  JOIN_NOTE, joinState, seatSourceLabel, isMyEventsPath, TABS, discoverAction, goingGroups, hostAction, hostingGroups, isExplorer, isPast, needsYou, nextEvent, pastRows, placeOf,
   priceOf, splitTickets, statusOf, tabCounts, tabOf, tabsFor, whereOf,
 } from '../src/pages/events/myEventsModel.js';
 
@@ -18,7 +18,7 @@ const NOW = Date.parse('2026-11-10T12:00:00Z');
 const at = (iso) => ({ starts_at: iso, ends_at: null, timezone: 'UTC' });
 
 const ATTENDING = [
-  { id: 1, title: 'Pricing Workshop', ...at('2026-11-12T18:00:00Z'), location_kind: 'virtual', location_url: 'https://example.test/join', reg_status: 'confirmed', comp: true, checkin_code: 'K7Q2-9X4M' },
+  { id: 1, title: 'Pricing Workshop', ...at('2026-11-12T18:00:00Z'), location_kind: 'virtual', location_url: 'https://example.test/join', reg_status: 'confirmed', payment_status: 'none', comp: true, checkin_code: 'K7Q2-9X4M' },
   { id: 2, title: 'Operators Social', ...at('2026-11-28T18:00:00Z'), location_kind: 'in_person', location_text: 'Rua Exemplo 10', reg_status: 'waitlisted', reg_waitlist_position: 3, comp: false, checkin_code: null },
   { id: 3, title: 'Climate Roundtable', ...at('2027-01-20T18:00:00Z'), location_kind: 'hybrid', reg_status: 'registered', comp: false, checkin_code: null },
   { id: 4, title: 'Founder Breakfast', ...at('2026-10-01T08:00:00Z'), reg_status: 'attended', comp: false, checkin_code: 'OLD-CODE' },
@@ -142,6 +142,7 @@ test('Upcoming: the tabs with counts, the next event with its code, Going, Needs
     const text = ui.text();
     assert.match(text, /Pricing Workshop/);
     assert.match(text, /Free seat/);
+    assert.equal(ui.count('my-events-presenting'),0);
     assert.match(text, /K7Q2-9X4M/);
     assert.match(text, /Waitlist · #3/);
     assert.match(text, /Waiting for the host/);
@@ -149,7 +150,8 @@ test('Upcoming: the tabs with counts, the next event with its code, Going, Needs
     assert.equal(ui.nodes().filter((n) => ui.props(n)['data-ticket-code']).length, 1, 'only the next event shows its code');
     assert.ok(!text.includes('OLD-CODE'), 'a past ticket is not on Upcoming');
     assert.ok(ui.hrefs().includes('/api/events/1/ics'));
-    assert.ok(ui.hrefs().some((href) => href === 'https://example.test/join'));
+    assert.ok(!ui.hrefs().some(href => href === 'https://example.test/join'), 'Join is quiet before its window');
+    assert.match(text,/The join link opens 15 minutes before the start/);
     assert.ok(ui.hrefs().includes('/my/events/discover'));
   } finally { await ui.unmount(); }
 });
@@ -238,4 +240,73 @@ test('the wiring: four routes under one guard with Explorers in, the phone view 
   }
   assert.match(read('design/incoming/My Events · Boards.dc.html'), /dc-import name="My Events Page"/);
   assert.ok(existsSync(new URL('../../documentation/architecture/decisions/D1030.md', import.meta.url)));
+});
+
+
+test('D1131: Join opens exactly 15 minutes before start and requires the existing seat entitlement',()=>{
+  const start=Date.parse('2026-11-10T12:00:00Z');const ticket={starts_at:'2026-11-10 12:00:00',ends_at:'2026-11-10T13:00:00Z',reg_status:'confirmed',payment_status:'paid',location_url:'https://example.test/join'};
+  assert.deepEqual(joinState(ticket,start-900001),{available:false,note:JOIN_NOTE});
+  assert.equal(joinState(ticket,start-900000).available,true);assert.equal(joinState(ticket,start+3600000).available,false);
+  for(const payment_status of ['pending','refunded',null,'unknown']) assert.equal(joinState({...ticket,payment_status},start).available,false);
+  for(const payment_status of ['none','free','paid']) assert.equal(joinState({...ticket,payment_status},start).available,true);
+  assert.equal(joinState({...ticket,reg_status:'waitlisted'},start).available,false);
+  assert.equal(joinState({...ticket,status:'cancelled'},start).available,false);
+  assert.equal(joinState({...ticket,starts_at:null},start).available,false);
+  assert.equal(joinState({...ticket,location_url:null},start).available,false);
+});
+
+test('D1131: only stored seat sources are named; account Current respects the path boundary',()=>{
+  assert.equal(seatSourceLabel({comp:true,comp_source:'startup_founder'}),'Free seat · Startup founder');
+  assert.equal(seatSourceLabel({comp:true,comp_source:'official_partner'}),'Free seat · Official partner');
+  assert.equal(seatSourceLabel({comp:true,role:'founder'}),'Free seat · Source not recorded');assert.equal(seatSourceLabel({comp:false,comp_source:'startup_founder'}),null);
+  for(const path of ['/my/events','/my/events/hosting','/my/events/past','/my/events/ticket/1']) assert.equal(isMyEventsPath(path),true);
+  for(const path of ['/events','/my/events-other','/calendar']) assert.equal(isMyEventsPath(path),false);
+});
+
+test('D1131: a durable promotion makes the off-waitlist row; a current status alone never does',()=>{
+  const t={...ATTENDING[0],registration_id:21,promoted_at:'2026-11-09T12:00:00Z'};
+  const rows=needsYou([],[t],NOW);assert.equal(rows[0].pill,'Off the waitlist');assert.match(rows[0].text,/A seat opened at Pricing Workshop.*You’re going/);assert.equal(rows[0].action.to,'/events/1');
+  assert.equal(needsYou([],[{...t,promoted_at:null}],NOW).length,0);
+  assert.equal(needsYou([],[{...t,reg_status:'cancelled'}],NOW).length,0);
+  assert.equal(needsYou([],[{...t,status:'cancelled'}],NOW).length,0);
+  assert.equal(needsYou([],[{...t,starts_at:'2020-01-01T00:00:00Z'}],NOW).length,0);
+  assert.match(needsYou([],[{...t,payment_status:'pending'}],NOW)[0].text,/Pay to confirm/);
+  assert.match(needsYou([],[{...t,reg_status:'registered'}],NOW)[0].text,/Waiting for the host/);
+  assert.equal(needsYou([],[{...t,reg_status:'registered',payment_status:'pending'}],NOW)[0].action.label,'View ticket','approval still precedes payment');
+});
+
+test('D1131: the desktop join control, speaker and seat-source pills use the recorded fields',async()=>{
+  const original=Date.now;const start=Date.parse('2026-11-12T18:00:00Z');
+  for(const offset of [-900001,-900000]){
+    Date.now=()=>start+offset;
+    prepare({list:async()=>({hosting:[],attending:[{...ATTENDING[0],ends_at:'2026-11-12T19:00:00Z',comp_source:'startup_founder',is_speaker:true}]})});
+    const ui=await mount('/my/events');
+    try{
+      assert.equal(ui.count('my-events-presenting'),1);assert.match(ui.text(),/Free seat · Startup founder/);
+      assert.equal(ui.hrefs().some(href => href === 'https://example.test/join'),offset===-900000);
+      if(offset===-900001) assert.match(ui.text(),/The join link opens 15 minutes before the start/);
+    }finally{await ui.unmount();Date.now=original;}
+  }
+});
+
+test('D1131: Hosting and Hosting soon show Check in only on the published event’s own day',async()=>{
+  const original=Date.now;Date.now=()=>Date.parse('2026-11-15T12:00:00Z');
+  try{
+    for(const path of ['/my/events','/my/events/hosting']){
+      prepare();const ui=await mount(path);
+      try{assert.ok(ui.hrefs().includes('/events/13/manage/check-in'));assert.match(ui.text(),/Check in/);assert.ok(!ui.hrefs().includes('/events/10/manage/check-in'));}finally{await ui.unmount();}
+    }
+    const event={id:99,status:'published',starts_at:'2026-11-10T16:00:00Z',timezone:'Asia/Tokyo'};
+    assert.equal(hostAction(event,Date.parse('2026-11-10T15:00:00Z')).label,'Check in');
+    assert.equal(hostAction(event,Date.parse('2026-11-10T14:59:59Z')).label,'Manage');
+  }finally{Date.now=original;}
+});
+
+test('D1131: Explorer suggestions separate closed, eligible and unknown; failures keep the next event readable',async()=>{
+  prepare({user:{role:'exploring'},suggested:async()=>({events:[{id:40,title:'Closed',registration_eligible:false,suggestion_reason:'Popular with new members'},{id:41,title:'Open',registration_eligible:true,suggestion_reason:'Popular with new members'},{id:42,title:'Unknown'}]})});
+  const ui=await mount('/my/events');
+  try{assert.equal(ui.count('my-events-suggested-closed'),1);assert.equal(ui.count('my-events-suggested-register'),1);assert.match(ui.text(),/Not open to Explorers/);assert.match(ui.text(),/The host opened this event to selected profiles/);assert.match(ui.text(),/Popular with new members/);assert.match(ui.text(),/Eligibility not recorded/);}finally{await ui.unmount();}
+  let reads=0;prepare({suggested:async()=>{reads++;if(reads===1)throw Error('synthetic');return {events:[]};}});
+  const failed=await mount('/my/events');
+  try{assert.match(failed.text(),/Suggested events/);assert.ok(!failed.text().includes('Nothing to suggest right now.'));assert.equal(failed.count('my-events-next'),1);await failed.click('Retry');await failed.flush();assert.equal(reads,2);assert.match(failed.text(),/Nothing to suggest right now/);}finally{await failed.unmount();}
 });

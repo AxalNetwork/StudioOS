@@ -257,7 +257,7 @@ test('unmatched rows: five newest across entities, text not HTML, every link to 
     assert.ok(!v.nodes().some((n) => n.tagName === 'B' || n.tagName === 'I'), 'a counterparty rendered as HTML');
     const links = v.nodes().filter((n) => n.tagName === 'A' && /Reconciliation/.test(textOf(n)));
     assert.equal(links.length, 6);
-    assert.ok(links.every((a) => v.props(a).href === '/admin/fund-admin?tab=reconciliation'));
+    assert.ok(links.every((a) => v.props(a).href === '/admin/fund-admin/banking/reconciliation'));
     assert.doesNotMatch(v.text(), /Match to…|Not ours/);
     assert.ok(!calls.mercury.some(([k]) => k === 'proposeMatch' || k === 'markNotOurs'));
     assert.match(v.text(), /Axal VC GP LLC: 4 unmatched/);

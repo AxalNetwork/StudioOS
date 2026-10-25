@@ -44,7 +44,8 @@ const src = codeOnly(PAGE);
 function dropdown() {
   const a = src.indexOf('function RoleDropdown(');
   assert.ok(a >= 0, 'RoleDropdown is gone');
-  const b = src.indexOf('const STATUS_BADGES', a);
+  // D995 retired the console that followed this file; the dialog after it bounds the slice now.
+  const b = src.indexOf('function RoleOverrideDialog(', a);
   assert.ok(b > a, "RoleDropdown's end marker is gone — this slice would run past it");
   return src.slice(a, b);
 }
