@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
+import { AdminRoomSummary } from '../DataRoomPage';
 import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
@@ -229,6 +230,7 @@ export function DataRoomTabPage({ tab, projectId, projectStatus = 'ready', onRet
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <Skeleton testId="dataroom-loading" />;
+  else if (read.status === 'ready' && read.room?.mode === 'summary') body = <AdminRoomSummary room={read.room} reload={retry} />;
   else if (tab === 'files') body = <FilesTab read={read} retry={retry} search={search} />;
   else if (tab === 'access') body = <AccessTab read={read} retry={retry} search={search} />;
   else if (tab === 'activity') body = <ActivityTab read={read} retry={retry} />;

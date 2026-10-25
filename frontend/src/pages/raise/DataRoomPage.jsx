@@ -462,7 +462,7 @@ function ActivityLog({ events }) {
 
 // D1102 — the legacy files workspace must not treat an admin's aggregate
 // response as arrays or draw owner actions over a read-only summary.
-function AdminRoomSummary({ room, reload }) {
+export function AdminRoomSummary({ room, reload }) {
   const count = (block, key) => block?.available === true && typeof block[key] === 'number' ? block[key] : 'Unreadable';
   const covered = count(room.coverage, 'covered_items'), total = count(room.coverage, 'total_items');
   const coverage = typeof covered === 'number' && typeof total === 'number' ? `${covered} of ${total}` : 'Unreadable';

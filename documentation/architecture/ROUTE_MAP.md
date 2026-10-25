@@ -1589,3 +1589,9 @@ a support read. Admin investor grants cannot bypass support auditing via
 normal NDA/tier checks. An omitted upload visibility now means NDA, matching both
 upload forms' defaults. The deck NDA default remains pending explicit-choice
 provenance and a migration number; see D1102.
+
+D1102 follow-up: the owner-approved minimal guard in `dataroom/DataRoomTool.jsx`
+also renders the aggregate response on the new Files, Access and Activity tabs,
+before any owner-detail derivation. It reuses `AdminRoomSummary` from the files
+workspace, preserves Unreadable/Try again, and offers no owner actions. The full
+admin/support tab design remains #2987's.
