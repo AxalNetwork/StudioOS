@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import MemberOverview, { MemberUnreadable } from './trust/MemberOverview';
 import RequirementDialog from './trust/RequirementDialog';
 import MemberData from './trust/MemberData';
-import { memberRequirements, requirementCounts, REQUIREMENTS } from './trust/memberTrustModel';
+import { memberRequirements, requirementCounts, signingRequirement, REQUIREMENTS } from './trust/memberTrustModel';
 import {
   ShieldCheck, Lock, FileText, CheckCircle2, Loader2,
   Globe, IdCard, Building2, BadgeCheck, FileSignature,
@@ -426,12 +426,12 @@ function ObligationList({ obligations, emptyText, rowAction = null }) {
           <li
             key={o.obligation_key}
             data-testid={`requirement-${o.obligation_key}`}
-            className={`flex items-center justify-between bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(o.status)].bar} rounded px-3 py-2`}
+            className={`flex flex-wrap items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(o.status)].bar} rounded px-3 py-2`}
           >
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex w-full items-center gap-3 min-w-0 sm:w-auto">
               <FileText size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />
               <div className="min-w-0">
-                <div className="text-sm text-slate-900 dark:text-slate-100 truncate">{meta.label}</div>
+                <div className="text-sm text-slate-900 dark:text-slate-100 break-words">{meta.label}</div>
                 <div className="text-xs text-slate-600 dark:text-slate-400">
                   {o.required ? 'Required' : 'Optional'}
                   {exp ? ' · ' : ''}
@@ -456,7 +456,7 @@ function ObligationList({ obligations, emptyText, rowAction = null }) {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="ml-auto flex flex-wrap items-center gap-3">
               <StatusPill status={o.status} />
               {rowAction ? rowAction(o) : null}
 
@@ -529,7 +529,7 @@ function pairwiseTitle(row, meId, isAdmin) {
   return `Mutual NDA · ${partyLabel(row, other)}`;
 }
 
-function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
+function AgreementsTab({ obligations, role, requiredNdas = [], onChanged, requirementsFailed = false }) {
   const [items, setItems] = useState([]);
   const [pending, setPending] = useState([]);
   const [documents, setDocuments] = useState([]);
@@ -543,7 +543,6 @@ function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('newest');
-  const isAdmin = role === 'admin';
 
   async function reload() {
     setErr(null); setLoading(true); setDocumentsFailed(false);
@@ -577,21 +576,20 @@ function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
   // says, per role NDA, whether it is still open and which envelope to sign;
   // the row draws "Open to sign" when there is an envelope and says "Not
   // issued yet" when the obligation is open but no envelope exists.
-  const ndaByKey = new Map((requiredNdas || []).map((it) => [it.obligation_key, it]));
   const roleNdaAction = (o) => {
-    const it = ndaByKey.get(o.obligation_key) || (o.evidence_envelope_uuid ? { ...o, open: Number(o.required) === 1 && !['satisfied', 'waived', 'in_review'].includes(o.status) } : null);
+    const it = signingRequirement(o, requiredNdas);
     if (!it || !it.open) return null;
     if (it.evidence_envelope_uuid) return <OpenToSignButton item={it} onChanged={onChanged} />;
     return <span className="text-xs text-slate-500 dark:text-slate-400">Not issued yet</span>;
   };
   const meId = safeReadJSON('user', {})?.id;
-  const visibleItems = items.filter((r) => pairwiseTitle(r, meId, isAdmin).toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || r.status === filter)).sort((a, b) => (sort === 'oldest' ? 1 : -1) * (String(a.created_at || '').localeCompare(String(b.created_at || ''))));
+  const visibleItems = items.filter((r) => pairwiseTitle(r, meId, false).toLowerCase().includes(query.toLowerCase()) && (filter === 'all' || r.status === filter)).sort((a, b) => (sort === 'oldest' ? 1 : -1) * (String(a.created_at || '').localeCompare(String(b.created_at || ''))));
 
   return (
     <>
       <Section icon={FileSignature} title="Role agreements" subtitle="Standing NDAs and disclosures required for your role.">
         {requiredNdas === null && <MemberUnreadable what="Your signing requirements" onRetry={onChanged} />}
-        <ObligationList obligations={ndaObligations} emptyText="No role-level agreements required." rowAction={roleNdaAction} />
+        {requirementsFailed ? <MemberUnreadable what="Your role requirements" onRetry={onChanged} /> : <ObligationList obligations={ndaObligations} emptyText="No role-level agreements required." rowAction={roleNdaAction} />}
       </Section>
       {<Section icon={Lock} title="Agreements with other members" subtitle="Active and pending mutual NDAs between you and other parties.">
         {loading && <p className="text-sm text-slate-600">Loading…</p>}
@@ -630,11 +628,11 @@ function AgreementsTab({ obligations, role, requiredNdas = [], onChanged }) {
                   className={`bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 border-l-4 ${TONE[toneOf(display)].bar} rounded px-3 py-2`}
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex w-full items-center gap-3 min-w-0 sm:w-auto">
                     <Lock size={16} className="text-slate-500 dark:text-slate-400 shrink-0" />
                     <div className="min-w-0">
                       <div className="text-sm text-slate-900 dark:text-slate-100 truncate" data-testid="pairwise-title">
-                        {pairwiseTitle(a, meId, isAdmin)}
+                        {pairwiseTitle(a, meId, false)}
                       </div>
                       <div className="text-xs text-slate-500">
                         envelope {a.nda_envelope_uuid?.slice(0, 8)}…
@@ -853,7 +851,7 @@ function RequirementsUnreadable({ reload }) {
 }
 
 export function trustPhoneGroups({ status, obligations = [], reload, onSelect }) {
-  if (status === 'loading') return [{ label: 'Requirements', rows: [], note: phonePending('Reading requirements…') }];
+  if (status === 'loading') return [{ label: 'Requirements', rows: [], note: phonePending('loading', 'Your requirements', '', reload) }];
   if (status === 'unreadable') return [{ label: 'Requirements', rows: [], note: <RequirementsUnreadable reload={reload} /> }];
   const { done, total } = requirementCounts(obligations);
   return [{ label: 'Requirements', rows: [{ title: `Requirements met: ${done} of ${total}`, description: total ? 'From your recorded required items.' : 'Nothing is asked of you right now.', testid: 'trust-phone-summary-row' }] },
@@ -891,7 +889,7 @@ export default function TrustCenterPage({ chromeless = false }) {
   const role = matrix?.role || cachedRole || 'member';
 
   async function load() {
-    setErr(null); setLoading(true);
+    setErr(null); if (matrix == null) setLoading(true);
     try {
       // /api/trust/me is the canonical obligation matrix. Every call here is
       // resilient — we render whatever loaded successfully.
@@ -928,7 +926,7 @@ export default function TrustCenterPage({ chromeless = false }) {
 
   const obligations = memberRequirements(matrix?.obligations || [], role);
   const tabs = tabsForRole(role, obligations);
-  const phone = usePhoneWidth() && !chromeless;
+  const phone = usePhoneWidth();
   if (matrix?.unauthorized) return <div className="p-6 text-slate-900 dark:text-slate-100"><h1>Sign in to see what is asked of you.</h1><p>Your trust lists your own agreements, verifications and data.</p><a className="mr-5 underline" href="/login">Sign in</a><a className="underline" href="/trust">Read the public trust center</a></div>;
   if (loading) return <div className="p-8 text-slate-600 dark:text-slate-400">Reading your requirements…</div>;
   const selected = search.get('requirement');
@@ -1120,7 +1118,7 @@ export default function TrustCenterPage({ chromeless = false }) {
     if (['satisfied', 'waived'].includes(selectedRow.status)) return <p className="text-sm text-slate-600 dark:text-slate-400">No action is required.</p>;
     if (selectedRow.status === 'in_review') return <p className="text-sm text-slate-600 dark:text-slate-400">The platform records this requirement as in review. No action is required here while it is checked.</p>;
     const isAgreement = /nda|msa|disclaimer/.test(selectedRow.obligation_key);
-    const entry = (requiredNdas || []).find((r) => r.obligation_key === selectedRow.obligation_key) || (isAgreement && selectedRow.evidence_envelope_uuid ? { ...selectedRow, open: true } : null);
+    const entry = isAgreement ? signingRequirement(selectedRow, requiredNdas) : null;
     if (requiredNdas === null && isAgreement && !entry?.evidence_envelope_uuid) return <span className="text-sm">Unreadable. Signing requirements could not be read. <button className="underline" onClick={load}>Try again</button></span>;
     if (entry?.open && entry.evidence_envelope_uuid) return <OpenToSignButton item={entry} onChanged={load} />;
     if (entry && !entry.open) return <p className="text-sm text-slate-600 dark:text-slate-400">Signing is not currently required for this agreement.</p>;
@@ -1134,11 +1132,11 @@ export default function TrustCenterPage({ chromeless = false }) {
         {tabs.map((t) => { const Icon = t.icon; const active = tab === t.key; return <button type="button" key={t.key} role="tab" aria-selected={active} data-testid={`trust-tab-${t.key}`} onClick={() => setTab(t.key)} className={`inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm ${active ? 'border-violet-600 font-semibold text-violet-700 dark:text-violet-300' : 'border-transparent text-slate-600 dark:text-slate-400'}`}><Icon size={14} />{t.label}</button>; })}
       </div>
       {tab === 'overview' && overview}
-      {tab === 'agreements' && <div data-testid="trust-agreements-panel"><AgreementsTab obligations={obligations} role={role} requiredNdas={requiredNdas} onChanged={load} /></div>}
+      {tab === 'agreements' && <div data-testid="trust-agreements-panel"><AgreementsTab obligations={obligations} role={role} requiredNdas={requiredNdas} onChanged={load} requirementsFailed={!!(matrix?.failed || err)} /></div>}
       {tab === 'verifications' && <div className="space-y-4">{matrix?.failed ? <RequirementsUnreadable reload={load} /> : <>{KYC_ELIGIBLE_ROLES.has(role) && (kycFailed ? <Section icon={IdCard} title="Identity check">{renderRows(obligations.filter((o) => o.obligation_key === 'kyc_v1'))}<MemberUnreadable what="Your identity check" claim="The requirements above come from a different read." onRetry={load} /></Section> : identity)}{entity}{accreditation}{!entity && !accreditation && !KYC_ELIGIBLE_ROLES.has(role) && <p className="text-sm text-slate-600 dark:text-slate-400">No verification is required for your profile today.</p>}</>}</div>}
       {tab === 'data' && <MemberData role={role} />}
       {role === 'admin' && <TrustAdminTools />}
-      {(selected || search.has('member')) && <RequirementDialog row={selectedRow} onClose={closeRequirement} action={requirementAction} status={selectedRow && <StatusPill status={selectedRow.status} />} />}
+      {(selected || search.has('member')) && <RequirementDialog row={selectedRow} unreadable={!!(matrix?.failed || err)} onRetry={load} onClose={closeRequirement} action={requirementAction} status={selectedRow && <StatusPill status={selectedRow.status} />} />}
     </>
   );
   return (

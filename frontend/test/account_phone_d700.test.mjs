@@ -589,7 +589,8 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
   // Trust, Help and Products are read as source: each branches on the phone
   // before its desktop return, which keeps its heading.
   const trust = read('frontend/src/pages/TrustCenterPage.jsx');
-  assert.match(trust, /const phone = usePhoneWidth\(\) && !chromeless;/, 'the investor workspace keeps its chromeless frame');
+  assert.match(trust, /const phone = usePhoneWidth\(\);/, 'phone gutters apply in the investor frame too');
+  assert.match(trust, /\{chromeless \? <div \/> : \(/, 'the investor heading still belongs to its outer frame');
   assert.match(trust, /className=\{phone \? 'p-4' : 'p-6'\}/);
   assert.match(trust, /Your trust<\/h1>/);
   const docs = read('frontend/src/pages/docs/DocsLayout.jsx');

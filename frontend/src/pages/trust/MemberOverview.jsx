@@ -1,7 +1,7 @@
 import React from 'react';
 import { day, met, profileName, requirementCounts, requirementLabel } from './memberTrustModel';
 
-export const CARD = 'rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900';
+export const CARD = 'min-w-0 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900';
 export const SUB = 'text-sm text-slate-600 dark:text-slate-400';
 export const LINK = 'inline-flex min-h-11 items-center text-sm font-semibold text-violet-700 underline dark:text-violet-300';
 export function MemberUnreadable({ what, claim, onRetry }) {
@@ -30,7 +30,7 @@ export default function MemberOverview({ role, obligations, acceptances, renderR
   const acceptanceMap = new Map((Array.isArray(acceptances) ? acceptances : []).map((r) => [r.obligation_key, r]));
   return <div className="space-y-4" data-testid="member-trust-overview">
     <p className={SUB}>{profileName(role)}</p>
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <RequirementsSummary obligations={obligations} />
       <section className={CARD} data-testid="trust-needs-you"><h2 className="mb-3 font-bold">Needs you</h2>{needed.length ? renderRows(needed) : <p className={SUB}>{obligations.some((r) => Number(r.required) === 1 && r.status === 'in_review') ? 'Your remaining requirements are under review.' : obligations.length ? 'No requirements need your action right now.' : 'Nothing is asked of you right now. New requirements appear here when the platform records them.'}</p>}</section>
       <section className={CARD}><h2 className="mb-3 font-bold">{role === 'investor' ? 'Before you can invest' : 'Requirements'}</h2>{checks.length ? renderRows(checks) : <p className={SUB}>No other requirements recorded for your profile.</p>}{role !== 'investor' && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">An investor identity check is not required for this profile today.</p>}</section>

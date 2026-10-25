@@ -27,3 +27,13 @@ export function day(value) {
   const date = new Date(/^[0-9]{4}-[0-9]{2}-[0-9]{2} /.test(value) ? value.replace(' ', 'T') + 'Z' : value);
   return Number.isNaN(date.getTime()) ? 'Not recorded' : date.toLocaleDateString('en-GB', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+/** D1078: one signing decision for the list and the requirement lightbox. */
+export function signingRequirement(row, requiredNdas) {
+  const issued = (requiredNdas || []).find((entry) => entry.obligation_key === row.obligation_key);
+  const evidence = issued || (row.evidence_envelope_uuid ? row : null);
+  if (!evidence) return null;
+  return { ...evidence, obligation_key: row.obligation_key, open: Number(row.required) === 1
+    && !['satisfied', 'waived', 'in_review'].includes(row.status)
+    && (issued ? issued.open === true : Boolean(row.evidence_envelope_uuid)) };
+}

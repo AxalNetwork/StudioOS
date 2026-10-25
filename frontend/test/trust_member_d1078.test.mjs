@@ -2,17 +2,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { h, mountForm, textOf } from './_form_d695.mjs';
-import { useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import TrustCenterPage, { TrustAdminTools } from '../src/pages/TrustCenterPage.jsx';
-import { requirementCounts } from '../src/pages/trust/memberTrustModel.js';
+import { useEffect, act } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+import TrustCenterPage, { TrustAdminTools, TrustPhoneView } from '../src/pages/TrustCenterPage.jsx';
+import { requirementCounts, signingRequirement } from '../src/pages/trust/memberTrustModel.js';
 
 const row = (key, status = 'pending', required = 1) => ({ obligation_key: key, status, required, created_at: '2026-01-03 12:00:00', source: 'Synthetic evidence source' });
 const matrix = (role) => [row('tos_v1','satisfied'), row('privacy_v1','satisfied'), ...({ founder: [row('founder_nda_v1')], investor: [row('investor_nda_v1'),row('kyc_v1','satisfied'),row('accreditation_v1','expired'),row('kyb_v1','pending',0)], advisor: [row('mentor_nda_v1','satisfied'),row('mentor_disclaimer_v1')], partner: [], admin: [], exploring: [] }[role] || [])];
 const response = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 function Probe() { return h('output',{ 'data-testid': 'url' }, useLocation().search); }
-function Boot({ initial }) { const navigate=useNavigate(); useEffect(()=>{ if(initial) navigate(initial); },[]); return h('div',null,h(TrustCenterPage),h(Probe)); }
-async function mounted({ role='investor', phone=false, initial, obligations=matrix(role), fails=[], unauth=false, pairs, malformed=false }={}) {
+function Boot({ initial, chromeless }) { const navigate=useNavigate(); useEffect(()=>{ if(initial) navigate(initial); },[]); return h('div',null,h(TrustCenterPage,{chromeless}),h(Probe)); }
+async function mounted({ role='investor', phone=false, initial, obligations=matrix(role), fails=[], unauth=false, pairs, malformed=false,chromeless=false }={}) {
   const original=globalThis.fetch; const calls=[]; const state={fails:new Set(fails),requested:null};
   globalThis.fetch=async(url,init={})=>{
     const p=new URL(url,'https://fixture.example.test').pathname; const method=init.method||'GET'; calls.push([method,p]);
@@ -35,7 +36,7 @@ async function mounted({ role='investor', phone=false, initial, obligations=matr
     return response({});
   };
   let v;
-  try {v=await mountForm(h(Boot,{initial}),{phone,modal:true}); await v.flush(); localStorage.setItem('user',JSON.stringify({id:1,role}));return {...v,calls,state,async unmount(){await v.unmount();globalThis.fetch=original;}};}
+  try {v=await mountForm(h(Boot,{initial,chromeless}),{phone,modal:true}); await v.flush(); localStorage.setItem('user',JSON.stringify({id:1,role}));return {...v,calls,state,async unmount(){await v.unmount();globalThis.fetch=original;}};}
   catch(e){globalThis.fetch=original;throw e;}
 }
 
@@ -78,6 +79,7 @@ test('another member or unknown requirement address never reads a foreign requir
 test('an unreadable matrix is not an empty success and does not prevent other tabs',async()=>{
   const v=await mounted({fails:['/api/trust/me']});try{
     assert.match(v.text(),/Unreadable.*Your requirements could not be read/s);assert.doesNotMatch(v.text(),/Requirements met: 0|Nothing is asked/);
+    await v.click('Agreements');await v.flush();assert.match(v.text(),/Synthetic counterparty/);assert.doesNotMatch(v.text(),/No role-level agreements required/);
     await v.click('Your data');await v.flush();assert.match(v.text(),/Download your data/);
     v.state.fails.clear();await v.click('Overview');await v.click('Try again');await v.flush();assert.match(v.text(),/Requirements met: 3 of 5/);
   }finally{await v.unmount();}
@@ -97,7 +99,7 @@ test('deletion and cancellation require dialogs and read the server’s after-st
   const v=await mounted();try{
     await v.click('Your data');await v.flush();assert.match(v.text(),/You have not opted into matching/);await v.click('Ask to delete');
     assert.equal(v.calls.some(([m])=>m==='POST'),false);assert.match(v.text(),/revokes connected AI assistants/);
-    await v.click('Confirm deletion request');await v.flush();await v.flush();assert.match(v.text(),/Deletion requested 25 Oct 2026/);assert.doesNotMatch(v.text(),/account has been deleted\.$/);
+    await v.click('Confirm deletion request');await v.flush();await v.flush();assert.match(v.text(),/Deletion requested 25 Oct 2026/);assert.match(v.text(),/Your deletion request is recorded\. This does not mean your account has been deleted\./);
     await v.click('Cancel request');await v.click('Confirm cancellation');await v.flush();await v.flush();assert.match(v.text(),/No open deletion request is recorded/);
     assert.equal(v.calls.filter(([m,p])=>m==='POST'&&p==='/api/settings/account/delete-request').length,1);
     assert.equal(v.calls.filter(([m,p])=>m==='POST'&&p.endsWith('/cancel')).length,1);
@@ -165,6 +167,37 @@ test('unreadable signing requirements do not claim that no envelope was issued',
 test('partner and advisor envelopes use their matrix evidence even though /nda/required lists only NDAs',async()=>{
   for(const [role,key] of [['partner','partner_msa_v1'],['advisor','mentor_disclaimer_v1']])for(const failed of [false,true]){
     const v=await mounted({role,initial:'/trust/me?requirement='+key,obligations:[{...row(key),evidence_envelope_uuid:'synthetic-role'}],fails:failed?['/api/trust/nda/required']:[]});
-    try{assert.match(textOf(v.by('trust-requirement-dialog')),/Open to sign/);assert.doesNotMatch(textOf(v.by('trust-requirement-dialog')),/No signing envelope/);await v.click('Open to sign');await v.flush();assert.ok(v.calls.some(([,p])=>p==='/api/trust/agreements/synthetic-role/my_signing_url'));assert.ok(v.calls.every(([m])=>m==='GET'));}finally{await v.unmount();}
+    try{assert.match(textOf(v.by('trust-requirement-dialog')),/Open to sign/);assert.doesNotMatch(textOf(v.by('trust-requirement-dialog')),/No signing envelope/);await v.click('Open to sign');await v.flush();assert.ok(v.calls.some(([,p])=>p==='/api/trust/agreements/synthetic-role/my_signing_url'));assert.match(textOf(v.by('trust-requirement-dialog')),/already signed/);assert.ok(v.calls.every(([m])=>m==='GET'));}finally{await v.unmount();}
   }
+});
+
+
+test('non-required or reviewed envelopes are not offered for signing in either surface',()=>{
+  for(const [required,status,open] of [[0,'pending',false],[1,'in_review',false],[1,'satisfied',false],[1,'pending',true]]){
+    const item={...row('partner_msa_v1',status,required),evidence_envelope_uuid:'synthetic-role'};
+    assert.equal(signingRequirement(item,[]).open,open);
+    assert.equal(signingRequirement(item,[{...item,open:true}]).open,open);
+  }
+});
+
+
+test('the legacy phone view renders a loading skeleton, not an unreadable note',()=>{
+  const html=renderToStaticMarkup(h(MemoryRouter,null,h(TrustPhoneView,{status:'loading'})));
+  assert.match(html,/data-testid="account-loading"/);assert.doesNotMatch(html,/could not be read/);
+});
+
+test('admin own pairs name and search only the counterparty',async()=>{
+  const v=await mounted({role:'admin',pairs:[{id:1,party_a_user_id:1,party_a_name:'Synthetic admin',party_b_user_id:2,party_b_name:'Synthetic counterparty',status:'pending',nda_envelope_uuid:'synthetic-pair'}]});
+  try{await v.click('Agreements');await v.flush();assert.equal(textOf(v.nodes().find(n=>v.props(n)['data-testid']==='pairwise-title')),'Mutual NDA · Synthetic counterparty');const input=v.nodes().find(n=>n.tagName==='INPUT');await act(async()=>v.props(input).onChange({target:{value:'Synthetic admin'}}));assert.match(v.text(),/No recorded agreements match these filters/);}finally{await v.unmount();}
+});
+
+
+test('the investor’s chromeless phone frame keeps phone gutters and no second heading',async()=>{
+  const v=await mounted({phone:true,chromeless:true});try{assert.equal(v.nodes().some(n=>n.tagName==='H1'),false);assert.ok(v.nodes().some(n=>v.props(n).className==='p-4'));assert.match(v.text(),/Requirements met: 3 of 5/);}finally{await v.unmount();}
+});
+
+
+test('a requirement read failure is not presented as a foreign or absent requirement',async()=>{
+  const v=await mounted({initial:'/trust/me?requirement=investor_nda_v1',fails:['/api/trust/me']});
+  try{assert.match(textOf(v.by('trust-requirement-dialog')),/Unreadable.*Your requirements could not be read/s);assert.doesNotMatch(textOf(v.by('trust-requirement-dialog')),/Only your own|does not identify/);}finally{await v.unmount();}
 });

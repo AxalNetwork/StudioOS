@@ -92,7 +92,7 @@ test('an admin reads A ↔ B; a member reads the OTHER party, whichever side the
 
 test('the row draws that title, from the signed-in user id, and nothing else titles it', () => {
   assert.match(CODE, /data-testid="pairwise-title"/);
-  assert.match(CODE, /\{pairwiseTitle\(a, meId, isAdmin\)\}/);
+  assert.match(CODE, /\{pairwiseTitle\(a, meId, false\)\}/);
   assert.match(CODE, /const meId = safeReadJSON\('user', \{\}\)\?\.id;/);
   // The old title — a document type with an email in brackets — is gone.
   assert.doesNotMatch(CODE, /party_b_email\}\)/);
@@ -139,7 +139,7 @@ test('the Role agreements rows carry Open to sign, fed by /nda/required', () => 
   assert.match(CODE, /function ObligationList\(\{ obligations, emptyText, rowAction = null \}\)/);
   assert.match(CODE, /\{rowAction \? rowAction\(o\) : null\}/);
   const tab = slice(CODE, 'function AgreementsTab(', 'function CompanyKybCard()');
-  assert.match(tab, /const ndaByKey = new Map\(\(requiredNdas \|\| \[\]\)\.map\(\(it\) => \[it\.obligation_key, it\]\)\);/);
+  assert.match(tab, /const it = signingRequirement\(o, requiredNdas\);/);
   assert.match(tab, /if \(!it \|\| !it\.open\) return null;/, 'a satisfied NDA gets no button');
   assert.match(tab, /if \(it\.evidence_envelope_uuid\) return <OpenToSignButton item=\{it\} onChanged=\{onChanged\} \/>;/);
   assert.match(tab, /Not issued yet/, 'open with no envelope says so instead of a button that cannot work');
