@@ -270,8 +270,9 @@ test('item 3: a failed renewal tells the member once per attempt; a failed first
 
 // ── The gates are unchanged ─────────────────────────────────────────────────
 
-test('the tier gates still drop past_due: what a retrying renewal may use is #2451\'s owner question 4', () => {
-  assert.match(read('cloudflare-worker/src/middleware/requireTier.ts'), /if \(status === 'past_due' \|\| status === 'unpaid'\) return false;/);
-  assert.match(read('cloudflare-worker/src/middleware/requireInvestorTier.ts'), /status === 'past_due' \|\| status === 'unpaid' \|\| status === 'cancelled'/);
+test('D1052 answers #2451\'s owner question 4 as proposed: past_due keeps the tier gates while Stripe retries, unpaid drops them', () => {
+  assert.match(read('cloudflare-worker/src/middleware/requireTier.ts'), /if \(status === 'unpaid'\) return false;/);
+  assert.doesNotMatch(read('cloudflare-worker/src/middleware/requireTier.ts'), /status === 'past_due'/);
+  assert.match(read('cloudflare-worker/src/middleware/requireInvestorTier.ts'), /if \(status === 'unpaid' \|\| status === 'cancelled'\) return 'free';/);
   assert.match(read('documentation/architecture/decisions/D892.md'), /^## D892 — /);
 });

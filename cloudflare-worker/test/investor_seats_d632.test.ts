@@ -159,8 +159,11 @@ test('D632: each invitation state, including the wrong account', async () => {
   assert.equal(wrong.body.invited_email, 'se***@firm.test');
   assert.ok(!JSON.stringify(wrong.body).includes('seat@firm.test'));
 
-  db.prepare(`UPDATE users SET investor_subscription_status = 'past_due' WHERE id = 1`).run();
+  db.prepare(`UPDATE users SET investor_subscription_status = 'unpaid' WHERE id = 1`).run();
   assert.equal((await call(db, 'POST', '/investor-seats/invitation', 4, { token })).body.state, 'plan_lapsed');
+  // D1052: a renewal Stripe is still retrying keeps the plan's seats.
+  db.prepare(`UPDATE users SET investor_subscription_status = 'past_due' WHERE id = 1`).run();
+  assert.notEqual((await call(db, 'POST', '/investor-seats/invitation', 4, { token })).body.state, 'plan_lapsed');
   db.prepare(`UPDATE users SET investor_subscription_status = 'active' WHERE id = 1`).run();
 
   assert.equal((await call(db, 'POST', '/investor-seats/accept', 4, { token })).status, 200);
