@@ -70,7 +70,7 @@ export default function PartnerProfilesConsole() {
       setProfiles(rows);
       setFailed(false);
     } catch (e) {
-      reportError('AdminPage:loadProfiles', e);
+      reportError('PartnerProfilesConsole:loadProfiles', e);
       setFailed(true);
     } finally { setLoading(false); }
   }, []);
@@ -80,7 +80,7 @@ export default function PartnerProfilesConsole() {
     try {
       setOpenProfile(await api.adminGetProfile(p.email));
     } catch (e) {
-      reportError('AdminPage:partnerProfile', e);
+      reportError('PartnerProfilesConsole:partnerProfile', e);
       alert(e.message || 'The partner profile could not be read.');
     }
   };
