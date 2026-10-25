@@ -19,6 +19,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
+import { format } from 'node:util';
 import { SignJWT } from 'jose';
 import events from '../src/routes/events.ts';
 import adminEvents from '../src/routes/admin_events.ts';
@@ -430,7 +431,7 @@ test('D1131: provider failure keeps its mapping for retry and never exposes resp
       if(!recovered&&mode==='refresh'&&String(url).includes('googleapis.com'))throw Error('synthetic-private-response');
       return Response.json({access_token:'synthetic-access'});
     };
-    console.warn=(...args:any[])=>logs.push(JSON.stringify(args));
+    console.warn=(...args:any[])=>logs.push(format(...args));
     try{
       const r=await f.call('/1/registration',3,{method:'DELETE'});assert.equal(r.status,200);
       const row:any=f.db.prepare('SELECT last_error FROM calendar_sync_records WHERE external_event_id=?').get(failedId);
