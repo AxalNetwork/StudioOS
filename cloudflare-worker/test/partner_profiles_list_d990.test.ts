@@ -185,7 +185,9 @@ test('each row carries its reference, date, ids, names, derived source, account 
   assert.equal(chat.created_at, ago(120));
   assert.equal(chat.user_id, CHATTER);
   assert.deepEqual(chat.sources, ['chat']);
-  assert.deepEqual(chat.account, { user_id: CHATTER, name: 'Cleo Chat', role: 'exploring', exploring: true, suggested_role: 'founder', assigned_role: null, assigned_at: null });
+  // D1127: an Explorer's account also carries the Exploring board's binding agreement (none sent here).
+  assert.deepEqual(chat.account, { user_id: CHATTER, name: 'Cleo Chat', role: 'exploring', exploring: true, suggested_role: 'founder', assigned_role: null, assigned_at: null,
+    binding: { state: 'not_sent', sent_at: null, signed_at: null } });
   assert.deepEqual(chat.identity_check, { state: 'pending', label: 'Pending' });
   assert.equal('ein' in chat, false, 'the list carries the tax ID');
   const inv: any = rows.get('inv@example.test');
