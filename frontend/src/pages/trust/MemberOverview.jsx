@@ -24,7 +24,7 @@ function Acceptance({ row }) {
   </div>;
 }
 export default function MemberOverview({ role, obligations, acceptances, renderRows, companies, onAgreements }) {
-  const needed = obligations.filter((r) => Number(r.required) === 1 && !met(r));
+  const needed = obligations.filter((r) => Number(r.required) === 1 && !met(r) && r.status !== 'in_review');
   const terms = obligations.filter((r) => ['tos_v1', 'privacy_v1'].includes(r.obligation_key));
   const checks = obligations.filter((r) => !['tos_v1', 'privacy_v1'].includes(r.obligation_key));
   const acceptanceMap = new Map((Array.isArray(acceptances) ? acceptances : []).map((r) => [r.obligation_key, r]));
@@ -32,7 +32,7 @@ export default function MemberOverview({ role, obligations, acceptances, renderR
     <p className={SUB}>{profileName(role)}</p>
     <div className="grid gap-4 lg:grid-cols-2">
       <RequirementsSummary obligations={obligations} />
-      <section className={CARD}><h2 className="mb-3 font-bold">Needs you</h2>{needed.length ? renderRows(needed) : <p className={SUB}>{obligations.length ? 'No requirements need your action right now.' : 'Nothing is asked of you right now. New requirements appear here when the platform records them.'}</p>}</section>
+      <section className={CARD} data-testid="trust-needs-you"><h2 className="mb-3 font-bold">Needs you</h2>{needed.length ? renderRows(needed) : <p className={SUB}>{obligations.some((r) => Number(r.required) === 1 && r.status === 'in_review') ? 'Your remaining requirements are under review.' : obligations.length ? 'No requirements need your action right now.' : 'Nothing is asked of you right now. New requirements appear here when the platform records them.'}</p>}</section>
       <section className={CARD}><h2 className="mb-3 font-bold">{role === 'investor' ? 'Before you can invest' : 'Requirements'}</h2>{checks.length ? renderRows(checks) : <p className={SUB}>No other requirements recorded for your profile.</p>}{role !== 'investor' && <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">An investor identity check is not required for this profile today.</p>}</section>
       <section className={CARD}><h2 className="mb-3 font-bold">Agreements you accepted</h2>{terms.map((r) => <div key={r.obligation_key} className="border-b border-slate-100 py-3 last:border-0 dark:border-slate-800"><h3 className="text-sm font-semibold">{requirementLabel(r)}</h3>{acceptances === null ? <p className={SUB}>Unreadable. Acceptance records could not be read.</p> : <Acceptance row={acceptanceMap.get(r.obligation_key)} />}</div>)}{!terms.length && <p className={SUB}>No acceptance requirements recorded.</p>}</section>
     </div>

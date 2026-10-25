@@ -118,6 +118,7 @@ test('requirement variants keep the recorded state and do not invent dates or ac
     const v=await mounted({initial:'/trust/me?requirement='+key,obligations:[row(key,status,required)]});try{
       assert.match(textOf(v.by('trust-requirement-dialog')),new RegExp(status.replace('_',' ')));
       assert.match(textOf(v.by('trust-requirement-dialog')),/completion date is not returned/);
+      if(status==='in_review')assert.doesNotMatch(textOf(v.by('trust-needs-you')),/Investor NDA/);
       if(status==='in_review'||status==='satisfied')assert.doesNotMatch(textOf(v.by('trust-requirement-dialog')),/Open to sign/);
       if(status==='expired')assert.match(textOf(v.by('trust-requirement-dialog')),/Evidence upload is not available/);
       if(!required)assert.match(textOf(v.by('trust-requirement-dialog')),/Not required for your account/);
