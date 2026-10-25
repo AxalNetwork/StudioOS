@@ -265,7 +265,8 @@ export const SHELLS = {
           // `positions` carries no `legacy` — it used to name
           // `/portfolio/health`, which is the overview, not this zone.
           { slug: 'positions', label: 'Positions', archetype: A.LEDGER },
-          { slug: 'updates', label: 'Updates', archetype: A.FEED },
+          // D1056 (#2427): the canvas names this zone Reports; the address stays.
+          { slug: 'updates', label: 'Reports', archetype: A.FEED },
           { slug: 'value-add', label: 'Value-add', archetype: A.FEED },
         ] },
       // Axal VC Fund — LP participation in Axal's own fund. Not the GP add-on

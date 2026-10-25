@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { WorkerRail } from '../../ui';
 import ZoneNav from '../../workspaces/ZoneNav';
 import { bucketForPath } from '../../workspaces/shellConfig';
@@ -11,6 +12,7 @@ import ZoneDraft from '../../workspaces/ZoneDraft';
 import { investorZoneActions } from '../../workspaces/investorZoneActions';
 import { investorZoneFilters } from '../../workspaces/investorZoneFilters';
 import { titleCase } from '../../lib/absence';
+import { companyHref } from '../cycles/reportingModel';
 
 const money = (value) => value == null || !Number.isFinite(Number(value)) ? '—' : `$${Math.round(Number(value)).toLocaleString()}`;
 const title = (value, fallback = 'Not recorded') => titleCase(value) || fallback;
@@ -208,7 +210,7 @@ export default function InvestorPortfolioUpdates() {
 function UpdateTable({ rows, updatesUnavailable, complianceUnavailable, lastChaseByProject, onChase, chasing }) {
   if (updatesUnavailable) return <div className="i4-empty"><AlertCircle size={16} />Portfolio update source unavailable. No empty-reporting claim is being made.</div>;
   if (!rows.length) return <div className="i4-empty"><Inbox size={16} />No accessible portfolio companies are recorded for this investor.</div>;
-  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Arrived</th><th>State</th><th>What came in</th><th>Chase</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-update-${row.project_id}`}><td><strong>{row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.project?.stage || 'Stage not recorded'}</small></td><td>{row.arrived ? dateLabel(row.arrived) : '—'}{row.update && !row.current && !complianceUnavailable && <small>Last stored update: {dateLabel(row.update.submitted_at || row.update.updated_at)}</small>}</td><td><span className={`ip2-state is-${row.status.toLowerCase().replace(/\s+/g, '-')}`}>{row.status}</span></td><td>{row.update ? <><strong>{row.update.title || 'Untitled update'}</strong><small>{kpiText(row.update) || 'No KPI values recorded'}</small></> : <span className="ip2-muted">{complianceUnavailable ? 'Cadence status unavailable' : 'No current update recorded'}</span>}</td><td>{row.current === false ? <><button type="button" onClick={() => onChase(row)} disabled={chasing} data-testid={`button-chase-${row.project_id}`} className="ip2-chase">Chase</button>{lastChaseByProject?.get(String(row.project_id)) && <small className="ip2-muted"> asked {dateLabel(lastChaseByProject.get(String(row.project_id)))}</small>}</> : null}</td></tr>)}</tbody></table></div>;
+  return <div className="i4-table-wrap"><table><thead><tr><th>Company</th><th>Arrived</th><th>State</th><th>What came in</th><th>Chase</th></tr></thead><tbody>{rows.map((row) => <tr key={row.project_id} data-testid={`row-investor-update-${row.project_id}`}><td><strong>{companyHref(row.project?.uid) ? <Link to={companyHref(row.project.uid)} data-testid={`link-company-${row.project_id}`}>{row.project?.name || `Startup ${row.project_id}`}</Link> : row.project?.name || `Startup ${row.project_id}`}</strong><small>{row.project?.stage || 'Stage not recorded'}</small></td><td>{row.arrived ? dateLabel(row.arrived) : '—'}{row.update && !row.current && !complianceUnavailable && <small>Last stored update: {dateLabel(row.update.submitted_at || row.update.updated_at)}</small>}</td><td><span className={`ip2-state is-${row.status.toLowerCase().replace(/\s+/g, '-')}`}>{row.status}</span></td><td>{row.update ? <><strong>{row.update.title || 'Untitled update'}</strong><small>{kpiText(row.update) || 'No KPI values recorded'}</small></> : <span className="ip2-muted">{complianceUnavailable ? 'Cadence status unavailable' : 'No current update recorded'}</span>}</td><td>{row.current === false ? <><button type="button" onClick={() => onChase(row)} disabled={chasing} data-testid={`button-chase-${row.project_id}`} className="ip2-chase">Chase</button>{lastChaseByProject?.get(String(row.project_id)) && <small className="ip2-muted"> asked {dateLabel(lastChaseByProject.get(String(row.project_id)))}</small>}</> : null}</td></tr>)}</tbody></table></div>;
 }
 /**
  * The KPI rule set — what accessible companies are asked for, in the wording

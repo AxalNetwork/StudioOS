@@ -14,6 +14,12 @@ the generic route wrapper once a canvas has graduated.
   commitment for an investor on HQ only. It never draws a balance, and the
   account id lives in state only. `proofOfFundsModel.js` holds its words and
   rules, pure, and fills in the Worker's own consent and statement words.
+- `PortfolioCompanyPage.jsx` (D1056, #2427) is the investor's page per
+  portfolio company at `/portfolio/companies/:uid`, with Figures, Reports
+  (`/reports`) and Terms (`/terms`). The header is the caller's own position
+  (`GET /api/positions`); Reports lists the company's readable updates; Figures
+  and Terms say what they wait for. Its rules live in
+  `../cycles/reportingModel.js`, beside the founder's Reporting desk.
 - `InvestorWorkspacePage.jsx` is the shared investor workspace frame — it
   wraps a page with the investor chrome and, on the Deals route, renders
   `InvestorDealsWorkspace` inline rather than handing off to a separate page.

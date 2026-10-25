@@ -109,6 +109,27 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Grow · Reporting to investors (#2427)
+
+The owner's artifacts `1WS19b5qYpQdJSN1XXowQd` (the board grid) and
+`AR3kPgNmC1WTvo1xqnERMr` (the page) came from S21's prompt on #2427, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Reporting · Boards.dc.html` is the board grid (RPT1 to RPT21, with the
+  lettered boards RPT5d, RPT7a–b, RPT10r–t, RPT11l–w, RPT13a–c, RPT14b, RPT15b,
+  RPT17a–b, RPT19a–b, RPT20a–c and RPT21a–c);
+- `Reporting Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** Grow's Updates tab becomes Reporting at `/grow/reporting`
+(with Duties at `/duties`; `/grow/updates` forwards there), Portfolio's Updates
+becomes Reports, and each held company has a page at
+`/portfolio/companies/:uid`. S21's integration (D1056) draws the History and
+the investor's Reports from today's reads. Every block that needs a duty, a
+period or a frozen figure says what it waits for until D1056's parts land, so
+this canvas stays in the queue until then. The `ROUTE_MAP.md` row says what is
+drawn today.
+
 ## Landed 2026-10-25 — Pricing · Checkout (#2451)
 
 The owner's artifacts `UHZdASErjSvAZVJE5W5iAZ` (the board grid) and

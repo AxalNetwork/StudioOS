@@ -42,6 +42,7 @@ import MercuryRaiseFeed from './MercuryRaiseFeed';
 import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
+import ReportingDesk from './ReportingDesk';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
@@ -665,7 +666,7 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug }) {
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null }) {
   const { slug: routeSlug, id: recordId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
@@ -775,7 +776,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
 
   useEffect(() => {
-    if (record || slug || !projectId || !def) return undefined;
+    // D1056: the Reporting desk makes its own read, never the overview's.
+    if (record || slug || reporting || !projectId || !def) return undefined;
     let alive = true;
     setOverviewStatus('loading');
     cyclesApi.overview(cycle, projectId)
@@ -786,7 +788,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       })
       .catch(() => { if (alive) setOverviewStatus('unreadable'); });
     return () => { alive = false; };
-  }, [record, cycle, slug, projectId, reload, def]);
+  }, [record, cycle, slug, reporting, projectId, reload, def]);
 
   useEffect(() => {
     if (record || !slug || !known || !projectId || !def) return undefined;
@@ -942,6 +944,12 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     body = (
       <NarrativeTabPage tab={narrativeTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         fixOn={fillsOn} search={location.search} cards={tabs} action={action} phone={phone} admin={narrativeAdmin} />
+    );
+  } else if (reporting && cycle === 'grow') {
+    // D1056 (#2427): Grow's Reporting desk, under the tab row with Reporting lit.
+    body = (
+      <ReportingDesk tab={reporting} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
     );
   } else if (capTableTab) {
     body = (

@@ -380,6 +380,7 @@ const PublicCertificateVerifyPage = lazy(() => import('./pages/PublicCertificate
 const MonitoringPage = lazy(() => import('./pages/MonitoringPage'));
 const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
 const PortfolioWorkspace = lazy(() => import('./pages/PortfolioWorkspace'));
+const PortfolioCompanyPage = lazy(() => import('./pages/investor/PortfolioCompanyPage'));
 const PipelineWorkspace = lazy(() => import('./pages/PipelineWorkspace'));
 // Exit Waterfall renders on its own: Fund Modeling's other tab, Reserve
 // Allocation, was removed on the owner's instruction (2026-10-20).
@@ -3317,7 +3318,10 @@ function AppInner() {
         : <Navigate to="/grow/focus" replace />} />
       {/* D686 §5.1: Share an update, the Grow page with its lightbox open; /grow/updates is the history's address. */}
       <Route path="/grow/update" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" lightbox />)} />
-      <Route path="/grow/updates" element={guard(['admin', 'founder'], <HistoryRedirect to="/grow/durable-company-building" hash="#updates" />)} />
+      {/* D1056 (#2427): the Reporting desk, Grow's history tab; /grow/updates is its old address. */}
+      <Route path="/grow/reporting" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" reporting="desk" />)} />
+      <Route path="/grow/reporting/duties" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" reporting="duties" />)} />
+      <Route path="/grow/updates" element={guard(['admin', 'founder'], <HistoryRedirect to="/grow/reporting" hash="" />)} />
       <Route path="/grow/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" />)} />
       <Route path="/grow/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" record />)} />
       <Route path="/grow/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="grow" adding />)} />
@@ -3417,6 +3421,10 @@ function AppInner() {
           founder composes in Grow · Share an update (D654; the card on
           /build/metrics left with that page, #2336). */}
       <Route path="/portfolio/updates" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
+      {/* D1056 (#2427): the investor's page per portfolio company: Figures, Reports and Terms. */}
+      <Route path="/portfolio/companies/:uid" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/reports" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
+      <Route path="/portfolio/companies/:uid/terms" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioCompanyPage />))} />
       <Route path="/portfolio/positions" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       {/* Advisor sections shell — three tabbed workspaces (Network, Advisory,
           Research) scoped to the advisor (and admin) roles. Each tab deep-links

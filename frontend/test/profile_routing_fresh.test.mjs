@@ -115,7 +115,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 162 (D953, #2371): Admin · Programs, the catalogue and program pages.
   // 163 (D1038, #2390): `Approvals (admin)`, out of /admin/held/ at /admin/approvals.
   // 164 (D1048, #2451): `Checkout`, the sheet over /pricing.
-  assert.equal(recs.length, 164);
+  // 165 (D1056, #2427): `Reporting to investors`, the desk and the company page.
+  assert.equal(recs.length, 165);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
