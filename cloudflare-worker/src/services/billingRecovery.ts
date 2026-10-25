@@ -32,7 +32,9 @@ export async function prepareRenewal(env: Env, userId: number, alertId: number, 
   if (invoice.id !== row.invoice_id || ref(invoice.subscription) !== row.subscription_id || !customer || !customerId.test(customer)
     || ![user?.stripe_customer_id, user?.investor_stripe_customer_id].includes(customer)) return { ok: false, status: 404, error: 'alert_not_found' };
   if (invoice.paid || invoice.status !== 'open') return { ok: false, status: 409, error: 'payment_not_needed' };
-  const scope = row.subscription_id === user?.investor_stripe_subscription_id ? 'investor' : 'founder';
+  const scope = user?.stripe_customer_id !== user?.investor_stripe_customer_id
+    ? (customer === user?.investor_stripe_customer_id ? 'investor' : 'founder')
+    : (row.subscription_id === user?.investor_stripe_subscription_id ? 'investor' : 'founder');
   if (action === 'pay') {
     const pi = invoice.payment_intent;
     if (!pi?.id || !/^pi_[A-Za-z0-9]+$/.test(pi.id) || !pi.client_secret || ref(pi.customer) !== customer

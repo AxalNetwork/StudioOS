@@ -556,3 +556,22 @@ test('D1133 permanent provider object refusals are acknowledged without invented
     assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, { id: 'evt_badParameter', type: 'payment_intent.payment_failed', data: { object: { invoice: 'in_missing' } } })).status, 500, 'configuration errors are not silently discarded');
   } finally { db.close(); }
 });
+
+test('D1133 a separate investor customer used by an account plan selects that same default-card customer', async () => {
+  const db = database();
+  try {
+    db.prepare("UPDATE users SET investor_stripe_customer_id='cus_patInvestor' WHERE id=?").run(PAT);
+    await hook(db, 'invoice.payment_failed', renewal({ id: 'in_patInvestor', subscription: 'sub_pat', customer: 'cus_patInvestor' }));
+    stripe['/invoices/in_patInvestor'] = { body: recoveryInvoice({ id: 'in_patInvestor', subscription: 'sub_pat', customer: 'cus_patInvestor' }) };
+    stripe['/setup_intents'] = { body: { client_secret: 'seti_fixture_secret_synthetic' } };
+    const setup = await strong(db, `/api/billing/alerts/${alerts(db)[0].id}/update-card`, PAT);
+    assert.equal(setup.status, 200); assert.equal(setup.body.scope, 'investor');
+    stripe['/payment_methods/pm_new'] = { body: { id: 'pm_new', customer: 'cus_patInvestor' } };
+    stripe['/customers/cus_patInvestor'] = { body: { id: 'cus_patInvestor' } };
+    stripe['/subscriptions'] = { body: { data: [{ id: 'sub_pat', status: 'active' }] } };
+    stripe['/subscriptions/sub_pat'] = { body: { id: 'sub_pat' } };
+    assert.equal((await strong(db, '/api/billing/payment-method/default', PAT, true, 'totp', { scope: setup.body.scope, payment_method_id: 'pm_new' })).status, 200);
+    assert.ok(calls.includes('POST /customers/cus_patInvestor'));
+    assert.ok(!calls.includes('POST /customers/cus_pat'));
+  } finally { db.close(); }
+});
