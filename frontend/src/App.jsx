@@ -2785,6 +2785,8 @@ function AppInner() {
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />
       {/* Platform and Revenue pages are the Super Admin's, like every other (#2375). */}
       <Route path="/admin/platform/bank-accounts" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
+      <Route path="/admin/platform/bank-accounts/cash" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
+      <Route path="/admin/platform/bank-accounts/history" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
       <Route path="/admin/platform/product-testing" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/promo-codes" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
       <Route path="/admin/revenue/billing" element={guard(['admin'], hqOnly(<BillingPage />))} />
@@ -2829,6 +2831,8 @@ function AppInner() {
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
+      <Route path="/admin/fund-admin/:tab" element={guard(['admin'], <FundAdminConsole />)} />
+      <Route path="/admin/fund-admin/:tab/:sub" element={guard(['admin'], <FundAdminConsole />)} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       {/* D800 (#2233): the Licences page's tabs, each a sub-path of the page, behind the same guard. */}
@@ -3334,6 +3338,8 @@ function AppInner() {
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
+      {/* D1148 (#2421): each deal tab at its own address; a word the role does not draw opens Overview. */}
+      <Route path="/deals/:dealId/:tab" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
       {/* D670 — the Market intelligence page is retired, with its sector
           digest email. Research reads the same market data, so an old link
           (and a link in a digest already sent) lands there. */}
