@@ -1607,6 +1607,8 @@ before any owner-detail derivation. It reuses `AdminRoomSummary` from the files
 workspace, preserves Unreadable/Try again, and offers no owner actions. The full
 admin/support tab design remains #2987's.
 
+D1091 (#2956, partial foundation): `/api/connectors/google-workspace` mounts `routes/google_workspace.ts` for `GET /picker-config?project=`, `GET /files?project=`, `POST /files`, `PUT /files/:uid/mapping`, `DELETE /files/:uid` (Stop using) and `POST /files/:uid/preview`. Calendar mounts `POST /api/calendar/google/workspace-files/connect`. All refuse support sessions; file routes re-check venture access and company enablement. The D753 `google_workspace` directory entry stays Coming soon while GW1/GW2/GW7/GW8 await approved design; no new screen ships.
+
 D1133 (#3013): Pricing’s in-place checkout sheet uses D1049’s held-plan read and retries it independently. Worker `/api/billing/alerts/:id/pay` and `/update-card` prepare only the caller’s failed renewal, behind a fresh TOTP. D1054 owns the still-unbuilt app-wide banner; D1051’s #2902 contract now includes recorded post-payment changes.
 
 D1135 (#3015): Company Settings' existing Leave company confirmation now posts
