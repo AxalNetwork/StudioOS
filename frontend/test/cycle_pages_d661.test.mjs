@@ -144,7 +144,9 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   // 4 → 5 (D1015, #2432): the Cap table tool's tab bar on its module page keeps it too.
   // 5 → 6 (D1063, #2426): the Build overview's door to the plan keeps it too.
   // 6 → 7 (D1101, #2456): the Data room tool's tab bar on its module page keeps it too.
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 8, 'the overview, module, record header, Validate\'s phone focus, the Cap table and Data room tabs, the plan door and the readiness door keep the venture');
+  // 8 → 9 (D1173, #2455): the Use of funds tool's tab bar on its module page keeps it too.
+  // 9 → 10 (D1188, #2457): the Capital relationships tool's tab bar on its module page keeps it too.
+  assert.equal((route.match(/search=\{q\}/g) || []).length, 10, 'the overview, module, record header, Validate\'s phone focus, the Cap table, Data room, Use of funds and Capital relationships tabs, the plan door and the readiness door keep the venture');
   assert.match(route, /search=\{tabSearch\(q, searchParams\.get\('version'\)\)\}/, 'the narrative tabs keep the venture, and the version');
 });
 

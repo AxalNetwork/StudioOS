@@ -205,7 +205,8 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D1106 (#2986): the same line also takes a file's lightbox (`/raise/data-room/file/<id>`) to Files.
   assert.ok(route.includes("const dataRoomTab = record && cycle === 'raise' && (dataRoomFile ? 'files' : isDataRoomTab(slug, recordId) ? recordId : null);"));
-  assert.ok(route.includes('!narrativeTab && !capTableTab && !dataRoomTab && !!projectId'));
+  // D1173 (#2455) adds Use of funds' tab words beside these.
+  assert.ok(route.includes('!narrativeTab && !capTableTab && !dataRoomTab && !uofTab && !capRelTab && !!projectId'));
   assert.ok(route.includes("slug === DATA_ROOM ? <DataRoomHomeNav search={q} />"));
   const tool = read('frontend/src/pages/raise/dataroom/DataRoomTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm|prompt)\(/);

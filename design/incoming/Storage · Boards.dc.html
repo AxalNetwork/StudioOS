@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Account · Usage · Storage</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Storage</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">Account › Usage › Storage at /account/usage/storage, the Storage group on Pricing, and HQ’s totals. 1 GB = 1,024 MB on every board. Sizes and counts are bracketed placeholders; the founder’s sample is [3.2 GB] of [10 GB]. No board has an Eadwyn rail, a delete action, or a way to buy extra storage.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="20">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Account Storage Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['STG1', 'Storage · Founder · desktop 1440 · light', 'A founder on Validate + Build: [3.2 GB] of [10 GB], by kind, by company with its ventures, the ten largest files, and what counts. [12] older files have no size yet; they are dashed, never zero.', [D('STG1')]],
+      ['STG2', 'Near the limit', 'At 80% the bar turns amber past the tick and uploads keep working. At 95% the notice says uploads pause at 100%.', [D('STG2a', '80% · Near your limit', 1100), D('STG2b', '95% · Almost full', 1100)]],
+      ['STG3', 'Storage full', 'New uploads pause; opening and downloading keep working. A recording already in progress finishes and is kept.', [D('STG3')]],
+      ['STG4', 'An upload refused, where it happens', 'One message, the same everywhere: the data room upload, the message composer, and Record a Session before Start.', [D('STG4a', 'Data room upload', 760), D('STG4b', 'Message composer', 760), D('STG4c', 'Record a Session', 760)]],
+      ['STG5', 'Over your plan after a change', 'After a move to [Validate + Build], [62 GB] sit on a [10 GB] plan. Nothing was deleted. The overflow is hatched and not to scale, and Largest files comes first.', [D('STG5')]],
+      ['STG6', 'Free · Founder Free', '[640 MB] of [1 GB], with what each plan includes. An Explorer sees the same page.', [D('STG6')]],
+      ['STG7', 'LP Access · Investor shell', '[1.1 GB] of [10 GB] personal storage. Fund documents never count; the fund keeps them.', [D('STG7')]],
+      ['STG8', 'Investor · Investor Pro', '[38 GB] of [250 GB]: the research library, deck reviews and messages. Kinds with no files say None.', [D('STG8', false, 1440, 1220)]],
+      ['STG9', 'Advisor and Operating Partner', 'Advisor Basic with the shortened upgrade card, and Operating Partner Pro.', [D('STG9a', 'Advisor Basic', 1440, 1040), D('STG9b', 'Operating Partner Pro', 1440, 920)]],
+      ['STG10', 'Admin and Super Admin', 'Staff accounts have no allowance, and uploads never pause for space. The Super Admin can open platform storage.', [D('STG10a', 'Admin', 1440, 780), D('STG10b', 'Super Admin', 1440, 780)]],
+      ['STG11', 'Empty', 'A measured 0 B of [10 GB], and one card in place of the lists.', [D('STG11', false, 1440, 900)]],
+      ['STG12', 'Loading', 'The header, section column and pane title at once; every card reads.', [D('STG12', false, 1440, 1000)]],
+      ['STG13', 'Error', 'The whole read failed, and one kind could not be read, so no total is shown.', [D('STG13a', 'Whole read failed', 900), D('STG13b', 'Recordings could not be read', 1000)]],
+      ['STG14', 'No permission', 'A studio admin on HQ’s platform storage, and a signed-out visitor.', [D('STG14a', 'Studio admin', 1440, 660), D('STG14b', 'Signed out', 760)]],
+      ['STG15', 'Phone · 390 wide', 'Your storage, then by kind and by company, then the largest files as cards.', [P('STG15a', 'Your storage'), P('STG15b', 'By kind and company'), P('STG15c', 'Largest files')]],
+      ['STG16', 'Dark', 'STG1 in the dark colours at [9.6 GB] of [10 GB], with the 95% notice.', [D('STG16')]],
+      ['STG17', 'Usage hand-off', 'Usage › Overview gains a Storage card; the Cost page’s details now end at last run.', [D('STG17a', 'Usage › Overview', 1100), D('STG17b', 'Usage › Cost', 760)]],
+      ['STG18', 'Pricing · desktop', 'Only the changed area of Compare plans: a new Storage group at the end of each table, and the LP band’s storage line.', [D('STG18a', 'Founder tab', 1100), D('STG18b', 'Investor tab', 1100), D('STG18c', 'Advisors tab', 1000)]],
+      ['STG19', 'Pricing · phone 390', 'The one-plan table with the Storage group at the end, and the LP band stacked.', [P('STG19', 'Investor tab')]],
+      ['STG20', 'HQ › Platform › Storage · Super Admin', 'Totals only: stored by plan and kind, members by state, and each plan’s figures. No member or file is named.', [D('STG20')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>
