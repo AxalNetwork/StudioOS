@@ -134,9 +134,46 @@ const MERCURY = mcpProvider({
   callback_path: '/api/integrations/mercury/oauth/callback',
 });
 
+/**
+ * D1085 (#2950, #2405 part 1): Notion's hosted MCP server. Notion's own grant
+ * reads and writes, so READ-ONLY IS THIS RECORD: `read_tools` is the three
+ * tools `services/notion/reads.ts` calls, `write_tools` is empty, and the
+ * session refuses every other name before a request. It signs in through the
+ * generic routes (D1080): a client ID metadata document published here, else
+ * DCR, whichever the server's metadata offers at start.
+ *
+ * SCOPES: none asked for, none accepted. Notion's MCP documentation names no
+ * OAuth scope, so the authorize URL and the registration carry none, and a
+ * grant that reports any scope is refused and revoked until a live sign-in
+ * shows what Notion reports (UNVERIFIED, D1085.md §6). The era, the tools'
+ * schemas (`tool_pins`) and each tool's arguments wait for that sign-in too.
+ */
+const NOTION = mcpProvider({
+  key: 'notion',
+  resources: ['https://mcp.notion.com/mcp'],
+  hosts: ['notion.com'],
+  scopes: [],
+  accepted_scopes: [],
+  read_tools: ['notion-search', 'notion-fetch', 'notion-query-data-sources'],
+  write_tools: [],
+  publish_issue: null,
+  registration: ['cimd', 'dcr'],
+  cimd_url: 'https://axal.vc/api/integrations/mcp/notion/client.json',
+  era: 'auto',
+  budget: 16,
+  headers: {},
+  session: 'per_request',
+  tool_pins: null,
+  lease: 'mcp:notion',
+  state_provider: 'mcp_notion',
+  client_key_prefix: 'mcp_client:notion:',
+  callback_path: '/api/integrations/mcp/notion/callback',
+});
+
 /** Every MCP provider, Mercury first. */
 export const MCP_PROVIDERS: Readonly<Record<string, McpProvider>> = Object.freeze({
   mercury: MERCURY,
+  notion: NOTION,
 });
 
 export function mcpProviderFor(key: string): McpProvider | null {

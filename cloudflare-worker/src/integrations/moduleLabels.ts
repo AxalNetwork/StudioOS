@@ -37,6 +37,8 @@ export const MODULE_LABELS: Record<string, string> = {
   team_expansion: 'Team expansion',
   distribution: 'Distribution',
   partner_network: 'Partner network',
+  // D1085 (#2950): the Grow module Notion parts 3–6 feed.
+  product_improvement: 'Product improvement',
 };
 
 
@@ -77,6 +79,7 @@ export const MODULE_HREFS: Record<string, string> = {
   team_expansion: '/grow/team-expansion',
   distribution: '/grow/distribution',
   partner_network: '/grow/partner-network',
+  product_improvement: '/grow/product-improvement',
 };
 
 export function moduleHref(key: string): string | null {

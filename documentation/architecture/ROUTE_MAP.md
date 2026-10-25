@@ -113,6 +113,8 @@ D751 (#1880), for all nine OAuth connectors (Calendly, Carta, DocuSign, GitHub, 
 
 D1080 (#2945): `GET /api/integrations/mcp/:key/start`, `GET /api/integrations/mcp/:key/callback` and the public `GET /api/integrations/mcp/:key/client.json` (`routes/connector_mcp_oauth.ts`, mounted ahead of the integrations router) sign a member in to any record in `MCP_PROVIDERS` but Mercury's, which keeps `/api/integrations/mercury/oauth` (D840). The start answers `{ ok, authorize_url }` and the CSRF cookie `__Host-axal_mcp_oauth`; the callback answers a redirect to the connector's page (`/account/connectors/<key>`, or the start's `return_to` path) with `oauth=ok|error`, `provider` and a reason word only. Disconnect (`DELETE /api/connectors/:uid`) revokes such a sign-in at the provider before the row is deleted. See `decisions/D1080.md`.
 
+D1085 (#2950): Notion is the first record those routes serve: `/api/integrations/mcp/notion/start`, `/callback` and `/client.json`, and its directory page `/account/connectors/notion` ("Sign in with Notion", read-only). `POST /api/connectors/connect` for `notion` is 410 `sign_in_only`, or 403 `support_session_refused` in a support session; `DELETE /api/connectors/:uid` revokes the grant at Notion, best effort, before the row is deleted. Every read is `services/notion/reads.ts`; nothing lands in a module yet.
+
 ### Fund notices and booklets Worker contract (D716, #1781)
 
 The Subscription Booklet's store is mounted at `/api/fund-booklets` (`routes/fund_booklets.ts`, `services/subscriptionBooklet.ts`, migration 478).

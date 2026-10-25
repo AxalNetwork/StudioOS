@@ -11,7 +11,7 @@ import { GITHUB_READ_BY } from './githubFeeds';
  * before D655) gets each module it feeds with `count: null` and a reason,
  * never 0: zero would say "nothing arrived", which nobody measured.
  */
-export const FED_LEDGER_PROVIDERS = new Set(['github', 'mercury']);
+export const FED_LEDGER_PROVIDERS = new Set(['github', 'mercury', 'notion']);
 
 import { MODULE_LABELS, moduleHref } from './moduleLabels';
 export { MODULE_LABELS } from './moduleLabels';
