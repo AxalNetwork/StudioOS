@@ -65,6 +65,7 @@ import { NarrativeAdminGate } from '../raise/narrative/NarrativeAdmin';
 import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool';
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
 import { DataRoomHomeNav, DataRoomTabPage } from '../raise/dataroom/DataRoomTool';
+import DataRoomUpload from '../raise/dataroom/DataRoomUpload.jsx';
 import { isDataRoomTab, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
 import { UseOfFundsHomeNav, UseOfFundsTabPage } from '../raise/useoffunds/UseOfFundsTool';
 import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
@@ -682,7 +683,7 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, capTableProposal = false, capTableScenario = false }) {
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false, capTableScenario = false }) {
   const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId, scenario: scenarioId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
@@ -783,7 +784,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     : capTableAdding ? 'new'
       : record && cycle === 'raise' && isCapTableTab(slug, recordId) ? recordId : null;
   // D1101 (#2456): the Data room tool's tabs are words under its module, never file records.
-  const dataRoomTab = record && cycle === 'raise' && isDataRoomTab(slug, recordId) ? recordId : null;
+  // D1106 (#2986): `/raise/data-room/file/<id>` is a file's lightbox over Files.
+  const dataRoomTab = record && cycle === 'raise' && (dataRoomFile ? 'files' : isDataRoomTab(slug, recordId) ? recordId : null);
   // D1173 (#2455): the Use of funds tool's tabs are words under its module, never section records.
   const uofTab = record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
   // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
@@ -899,7 +901,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const saved = () => { dirty.current = true; };
   const openForm = record ? recordState.form
     : !projectId ? null
-    : formOpen ? (
+    // D1106 (#2986): DR4, Data room's Upload is its own sheet, the queue in states.
+    : formOpen && cycle === 'raise' && slug === DATA_ROOM ? (
+      <DataRoomUpload key="dataroom-upload" projectId={projectId} onSaved={saved} onClose={closeAdd} />
+    ) : formOpen ? (
       <FormLightbox key={`add-${formOpen.key}`} form={formOpen} cycle={cycle} slug={slug} search={location.search}
         // An Add whose choices are the Worker's (Record a decision's For and Evidence, D693) reads them here.
         loadOptions={formOpen.loadOptions ? () => formOpen.loadOptions(formWrites, projectId) : null}
@@ -997,7 +1002,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   } else if (dataRoomTab) {
     body = (
       <DataRoomTabPage tab={dataRoomTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
-        search={location.search} cards={tabs} action={action} phone={phone} />
+        search={location.search} cards={tabs} action={action} phone={phone} fileId={dataRoomFile ? recordId : null} />
     );
   } else if (uofTab) {
     body = (
