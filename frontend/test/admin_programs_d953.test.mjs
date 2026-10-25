@@ -45,8 +45,8 @@ import HeldProgramsRedirect from '../src/pages/admin/programs/HeldProgramsRedire
 import AdvisorCohortsRedirect from '../src/pages/admin/programs/AdvisorCohortsRedirect.jsx';
 import ReferEarnRedirect from '../src/pages/admin/programs/ReferEarnRedirect.jsx';
 import {
-  ACTIVE_MENTORS_LINE, ASSIGNED_LINE, CAPS, FROZEN, HQ_READS_COMMISSIONS, LINE_ADMIN, LINE_SUPER, MOVED_NOTICES, NOTHING_WAITING,
-  NOT_READ_YET, NOT_RECORDED, PAGES, PERK_APPROVED, PROGRAMS, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_PICK_STUDIO,
+  ACTIVE_MENTORS_LINE, ASSIGNED_LINE, CAPS, FROZEN, HQ_READS_COMMISSIONS, MOVED_NOTICES,
+  NOT_RECORDED, PAGES, PERK_APPROVED, PROGRAMS, SCOPE_LABEL, SCOPE_PICK_STUDIO,
   SCOPE_TITLE, SCOPE_UNREAD, SUSPENDED, TRY_AGAIN, WAITING_LABEL, ageText, approveBody, bandOf, cohortName, cycleForStrip,
   etStamp, laneFrom, learningFigures, learningJoin, mentorFigures, mentorNeeds, movedNotice, openReferrals, perkPrice,
   perkQueueFrom, referralOverview, refusalText, rejectBody, routeFor, scopeChip, waitingForYou, weekLines, withoutMoved,
