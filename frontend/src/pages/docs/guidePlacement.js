@@ -63,7 +63,8 @@ export const HELP_SURFACES = {
   "/account/appearance": {"label": "Appearance", "roles": ["admin", "founder", "partner", "investor", "advisor", "exploring"], "lab": false},
   "/activity": {"label": "Activity", "roles": ["admin", "founder", "partner", "investor", "advisor", "exploring"], "lab": false},
   "/help/tickets": {"label": "Tickets", "roles": ["admin", "founder", "partner", "investor", "advisor", "exploring"], "lab": false},
-  "/admin": {"label": "Admin Console", "roles": ["admin"], "lab": false},
+  "/admin/accounts/all": {"label": "All accounts", "roles": ["admin"], "lab": false},
+  "/admin/security": {"label": "Security", "roles": ["admin"], "lab": false},
   "/login": {"label": "Sign in", "roles": null, "lab": false}
 };
 
@@ -152,13 +153,13 @@ export const GUIDE_PLACEMENT = {
   "troubleshooting/customer-chat": {"area": "getting-started", "surface": "/studio", "appliesTo": null},
   "troubleshooting/contact-support": {"area": "getting-started", "surface": "/help/tickets", "appliesTo": null},
   "changelog/release-notes": {"area": "getting-started", "surface": null, "appliesTo": null},
-  "admin/overview": {"area": "admin", "surface": "/admin", "appliesTo": null},
-  "admin/users": {"area": "admin", "surface": "/admin", "appliesTo": null},
-  "admin/trust": {"area": "admin", "surface": "/admin", "appliesTo": null},
-  "admin/audit": {"area": "admin", "surface": "/admin", "appliesTo": null},
+  "admin/overview": {"area": "admin", "surface": "/admin/accounts/all", "appliesTo": null},
+  "admin/users": {"area": "admin", "surface": "/admin/accounts/all", "appliesTo": null},
+  "admin/trust": {"area": "admin", "surface": "/admin/accounts/all", "appliesTo": null},
+  "admin/audit": {"area": "admin", "surface": "/admin/security", "appliesTo": null},
   "admin/feature-flags": {"area": "admin", "surface": null, "appliesTo": null},
   "admin/events-ops": {"area": "admin", "surface": null, "appliesTo": null},
-  "admin/assessment-ops": {"area": "admin", "surface": "/admin", "appliesTo": null}
+  "admin/assessment-ops": {"area": "admin", "surface": null, "appliesTo": null}
 };
 
 export function guidePlacement(anchor) {

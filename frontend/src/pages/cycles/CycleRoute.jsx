@@ -766,6 +766,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   const narrativeTab = record && cycle === 'raise' && isNarrativeTab(slug, recordId) ? recordId : null;
   // D1015 (#2432): under Cap table a record id that is a tab word (`/instruments`, …)
   // is the tool's tab, never a row (rows are `h-<n>`, `e-<n>` and `pool`).
+  // D1022 (#2859): `h-<n>` is the tool's too, the holder drawer over Overview.
   const capTableTab = record && cycle === 'raise' && isCapTableTab(slug, recordId) ? recordId : null;
   // D1101 (#2456): the Data room tool's tabs are words under its module, never file records.
   const dataRoomTab = record && cycle === 'raise' && isDataRoomTab(slug, recordId) ? recordId : null;
@@ -1061,7 +1062,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
-          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} />
+          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
           : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} /> : undefined}
       >
         {fillKind && projectId && (

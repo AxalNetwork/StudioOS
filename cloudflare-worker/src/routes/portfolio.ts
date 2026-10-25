@@ -415,7 +415,8 @@ r.post('/chase', async (c) => {
             type: 'portfolio_update_chase',
             title: `Update requested${project.name ? ` for ${project.name}` : ''}`,
             body: 'Your investor is asking for this period’s update.',
-            link: '/build/kpi',
+            // D1057 (#2427 finding 6): the founder answers from Grow's Reporting desk (D1056), not the KPI board.
+            link: '/grow/reporting',
             payload: { project_id: pid },
             channels: ['in_app', 'email'],
             category: 'portfolio',

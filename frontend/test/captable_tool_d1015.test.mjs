@@ -96,7 +96,9 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
 test('the tabs are the canvas\'s with a read, and only their words are tabs; a row is still a record', () => {
   assert.deepEqual(TABS.map((t) => t.id), ['overview', 'instruments', 'option-pool', 'scenarios']);
   for (const word of ['instruments', 'option-pool', 'scenarios']) assert.ok(isCapTableTab('cap-table', word), word);
-  for (const id of ['h-12', 'e-3', 'pool', 'new', 'history', 'access', 'import-export', '']) assert.ok(!isCapTableTab('cap-table', id), id);
+  // D1022 (#2859): a holder's address is the tool's holder drawer; `e-<n>` and `pool` stay records.
+  assert.ok(isCapTableTab('cap-table', 'h-12'), 'h-12 opens the holder drawer');
+  for (const id of ['h-0', 'h-x', 'e-3', 'pool', 'new', 'history', 'access', 'import-export', '']) assert.ok(!isCapTableTab('cap-table', id), id);
   assert.ok(!isCapTableTab('investor-narrative', 'instruments'), 'only Cap table has these words');
   assert.equal(tabSearch('?project=7&mode=workspace#x'), '?project_id=7');
   assert.equal(tabSearch('?project_id=0'), '');
@@ -219,11 +221,17 @@ test('Overview is the module page with the tabs and the Modelled line; a row is 
     assert.ok(ids.includes('cycle-module') && ids.includes('captable-tabs') && ids.includes('captable-home-note'));
     assert.match(home.text(), new RegExp(HOME_NOTE.slice(0, 40)));
   } finally { await home.close(); }
+  // D1022 (#2859): a holder is the drawer over Overview, read from the record; an instrument row is still its record page.
   const row = await mounted('/raise/cap-table/h-12?project_id=3');
   try {
-    assert.ok(row.requests.some((u) => u.includes('/records/h-12?project=3')));
-    assert.ok(row.testIds().includes('cycle-record-page') && !row.testIds().includes('captable-tabs'));
+    assert.ok(!row.requests.some((u) => u.includes('/records/h-12')), 'the holder is not read as a cycle record');
+    assert.ok(row.testIds().includes('captable-holder-page') && row.testIds().includes('captable-tabs'));
   } finally { await row.close(); }
+  const entry = await mounted('/raise/cap-table/e-3?project_id=3');
+  try {
+    assert.ok(entry.requests.some((u) => u.includes('/records/e-3?project=3')));
+    assert.ok(entry.testIds().includes('cycle-record-page') && !entry.testIds().includes('captable-tabs'));
+  } finally { await entry.close(); }
   const other = await mounted('/raise/use-of-funds?project_id=3');
   try {
     assert.ok(!other.testIds().includes('captable-tabs'), 'only Cap table is this tool');
@@ -260,7 +268,7 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const capTableTab = record && cycle === 'raise' && isCapTableTab\(slug, recordId\) \? recordId : null;/);
   assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?!!projectId/);
-  assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} \/>/);
+  assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>/);
   const tool = read('frontend/src/pages/raise/captable/CapTableTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm)\(/);
   assert.doesNotMatch(tool, /equity-plan|getEquityPlan/, 'pools and vesting are per account today');

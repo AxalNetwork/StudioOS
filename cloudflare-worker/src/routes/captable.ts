@@ -13,6 +13,10 @@ import { canAccessProject, getProjectMembershipRole } from '../services/projectA
  *   DELETE /scenarios/{uid}              — delete
  *   GET    /scenarios/{uid}/export.csv   — 409A-friendly CSV export
  *
+ * D1018 (#2855) — scenarios from the record (part 3):
+ *   GET    /scenarios/by-project/{projectId}/today    — Today from the record, the model as "Cap table · model", its rows offered as proposals
+ *   POST   /scenarios/by-project/{projectId}/simulate — a scenario from Today: { rounds, exit_values (≤4), converting? }
+ *
  * D1020 (#2857) — the recorded register, per venture:
  *   GET    /equity-plan?project_id=      — one venture's pools and grants (none: the account's)
  *   GET    /live?project_id=             — one venture's holders and securities (none: the account's)
@@ -51,6 +55,7 @@ import {
   RecordError, acceptProposal, createClass, dismissProposal, historyPage, propose, readHistory, readRecord, recordIssuance,
   setCurrency, updateClass, voidIssuance, type RecordActor,
 } from '../services/capTableRecord';
+import { MODEL_SCENARIO_NAME, inputsFrom, offerFromModel, startFromRecord } from '../services/capTableToday';
 import {
   actorHash, auditStatement, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
   type RegisterScope,
@@ -469,6 +474,80 @@ captable.get('/scenarios/by-project/:projectId/compare', async (c) => {
     canonical: canonical ? serialize(canonical) : null,
     variants: variants.map((r) => serialize(r)),
   });
+});
+
+// D1018 (#2855) — what every scenario states it assumes (CT9).
+const SCENARIO_ASSUMPTIONS = [
+  '1× non-participating preferred, no participation, no seniority stack.',
+  'The unallocated pool takes no proceeds; granted options are counted as if exercised.',
+  'A SAFE that has not converted takes cash back or converts at its cap, whichever pays more.',
+];
+
+async function readableVenture(c: Ctx, user: AuthUser): Promise<number> {
+  const projectId = Number(c.req.param('projectId'));
+  if (!Number.isSafeInteger(projectId) || projectId < 1) throw new HttpError(400, 'Invalid project_id');
+  const proj = await loadProject(c, projectId, user);
+  if (!proj) throw new HttpError(404, 'Project not found');
+  if (!canReadProject(user, proj)) throw new HttpError(403, "You don't have access to that project");
+  return projectId;
+}
+
+/**
+ * D1018 — Today from the record, and the saved model beside it. A venture
+ * with nothing recorded answers `today.available: false` with the record's
+ * reason; its model is "Cap table · model" and its rows are offered as
+ * part 2's proposals, never written here.
+ */
+captable.get('/scenarios/by-project/:projectId/today', async (c) => {
+  const user = await requireAuth(c);
+  let projectId: number;
+  try { projectId = await readableVenture(c, user); } catch (e) { return asJsonError(c, e); }
+  const record = await readRecord(c.env, projectId);
+  const start = startFromRecord(record);
+  const model = await c.env.DB.prepare(
+    'SELECT * FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant,0) = 0 ORDER BY updated_at DESC LIMIT 1',
+  ).bind(projectId).first<ScenarioRow>();
+  const modelInputs = model ? safeJson<Inputs | null>(model.inputs_json, null) : null;
+  let today: Record<string, unknown>;
+  if (start.available) {
+    const inputs = inputsFrom(start);
+    today = { available: true, reason: null, source: 'record', inputs, result: simulate(inputs), not_modelled: start.not_modelled };
+  } else today = { available: false, reason: start.reason, sentence: start.sentence };
+  return c.json({
+    project_id: projectId,
+    currency: record.currency,
+    today,
+    model: model ? { ...serialize(model), name: MODEL_SCENARIO_NAME, stored_name: model.name, source: 'model' } : null,
+    offer: offerFromModel(modelInputs, record),
+    assumptions: SCENARIO_ASSUMPTIONS,
+  });
+});
+
+/**
+ * D1018 — a scenario from Today: the record's holders and instruments with
+ * the caller's rounds (each with its `top_up_payer`), up to four exit values
+ * and the instruments that convert (all by default). Computes, saves nothing.
+ */
+captable.post('/scenarios/by-project/:projectId/simulate', async (c) => {
+  const user = await requireAuth(c);
+  let projectId: number;
+  try { projectId = await readableVenture(c, user); } catch (e) { return asJsonError(c, e); }
+  const body = await c.req.json().catch(() => ({})) as Record<string, any>;
+  if (body.converting != null && !(Array.isArray(body.converting) && body.converting.every((n: unknown) => typeof n === 'string'))) {
+    return refuse(c, 400, { code: 'bad_converting', message: 'converting must be a list of instrument names.', extra: { code: 'bad_converting' } });
+  }
+  const start = startFromRecord(await readRecord(c.env, projectId));
+  if (!start.available) return refuse(c, 409, { code: start.reason, message: start.sentence, extra: { code: start.reason } });
+  const unknown = (body.converting ?? []).filter((n: string) => !start.safes.some((s) => s.name === n));
+  if (unknown.length) return refuse(c, 400, { code: 'unknown_instrument', message: 'One of the instruments named to convert is not on the record.', extra: { code: 'unknown_instrument', names: unknown } });
+  const inputs = inputsFrom(start, {
+    rounds: Array.isArray(body.rounds) ? body.rounds : [],
+    exit_values: Array.isArray(body.exit_values) ? body.exit_values : undefined,
+    converting: body.converting ?? null,
+  });
+  const errs = validateInputs(inputs);
+  if (errs.length) return c.json({ detail: { code: 'invalid_inputs', errors: errs } }, 400);
+  return c.json({ source: 'record', currency: start.currency, inputs, result: simulate(inputs), not_modelled: start.not_modelled, assumptions: SCENARIO_ASSUMPTIONS });
 });
 
 captable.get('/scenarios/:uid', async (c) => {

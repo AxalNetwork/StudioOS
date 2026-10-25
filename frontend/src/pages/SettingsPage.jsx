@@ -46,6 +46,7 @@ import ColleagueSeatsPanel from './ColleagueSeatsPanel';
 // Task #4 — Axal-branded embedded checkout (Stripe Elements, no redirect).
 import AxalCheckout from '../components/AxalCheckout';
 import { TIER_PLANS } from '../components/PaywallModal';
+import { FREE, priceText, usePlansRead } from '../lib/planPrices';
 import BillingDashboard from '../components/BillingDashboard';
 import AuthorCard from '../components/AuthorCard';
 // Task #11 — shared first-time optional TOTP enrolment wizard (also used on
@@ -4664,26 +4665,28 @@ function GenericBillingPanel({ flash }) {
   );
 }
 
-// Persona plan catalog (display copy). Names / prices / features mirror the
+// Persona plan catalog (display copy). Names / features mirror the
 // marketing pricing pages; the paid "Pro" tier resolves its real Stripe price
 // server-side at checkout (or a keyless dev-upgrade), so this stays display-only
 // and never hardcodes a price id. Keyed by the plan_group the backend derives
 // from the role (partner → 'partner', advisor → 'advisor').
+// D1050 (#2901): no price is typed here. Pro's price is the plans read's
+// (`lib/planPrices.js`), under the plan group's licence key; Starter is free.
 const PERSONA_PLANS = {
   partner: {
     label: 'Partner',
-    starter: { name: 'Starter', price: '$0', tagline: 'Get listed and answer posted needs.',
+    starter: { name: 'Starter', tagline: 'Get listed and answer posted needs.',
       features: ['Marketplace + directory listing', 'Manage up to 3 service offers', 'Respond to Needs Board posts', 'Stripe Connect payouts'] },
-    pro: { name: 'Pro', price: '$99', tagline: 'For partners who want inbound demand on tap.',
+    pro: { name: 'Pro', tagline: 'For partners who want inbound demand on tap.',
       features: ['Unlimited service offers', 'Priority placement in search + directory', 'Full partner analytics dashboard', 'Verified partner badge', 'Partner deal portal access'] },
     enterprise: { name: 'Enterprise / Custom', tagline: 'Firms and agencies scaling across the network.',
       features: ['Featured marketplace placement', 'Multiple seats + team profiles', 'Dedicated partner manager'] },
   },
   advisor: {
     label: 'Advisor',
-    starter: { name: 'Starter', price: '$0', tagline: 'Publish a profile and take founder matches.',
+    starter: { name: 'Starter', tagline: 'Publish a profile and take founder matches.',
       features: ['Public advisor profile + expertise tags', 'Founder matching', 'Office Hours workspace', 'Ratings + trust badge'] },
-    pro: { name: 'Pro', price: '$29', tagline: 'For advisors who want more reach and better matches.',
+    pro: { name: 'Pro', tagline: 'For advisors who want more reach and better matches.',
       features: ['Priority founder matching', 'Boosted directory visibility', 'Featured advisor placement'] },
     enterprise: { name: 'Enterprise / Custom', tagline: 'Advisory firms and expert networks.',
       features: ['Multiple advisor seats + team profiles', 'Programmatic founder matching', 'Dedicated relationship manager'] },
@@ -4706,6 +4709,7 @@ function PersonaBillingPanel({ flash, billing }) {
   const refresh = billing.reload;
   const [checkout, setCheckout] = useState(null); // { clientSecret } once checkout starts
   const [busy, setBusy] = useState(false);
+  const prices = usePlansRead();
 
   // Flash on return from a (dev-upgrade) redirect, mirroring the other panels.
   useEffect(() => {
@@ -4790,7 +4794,7 @@ function PersonaBillingPanel({ flash, billing }) {
                   className={`rounded-lg border p-4 flex flex-col ${key === 'pro' ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/20' : 'border-gray-200 dark:border-gray-700'}`}>
                   <div className="font-semibold text-gray-900 dark:text-gray-100">{plan.name}</div>
                   <div className="text-sm text-gray-900 dark:text-gray-100 mt-0.5">
-                    {plan.price ? <><span className="font-semibold">{plan.price}</span><span className="text-gray-500 dark:text-gray-400 text-xs"> / mo</span></> : <span className="font-semibold">Custom</span>}
+                    <span className="font-semibold" data-testid={`persona-price-${key}`}>{key === 'starter' ? FREE : key === 'pro' ? priceText(prices, group) : 'Custom'}</span>
                   </div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{plan.tagline}</div>
                   <ul className="mt-3 space-y-1.5 flex-1">
@@ -4826,7 +4830,7 @@ function PersonaBillingPanel({ flash, billing }) {
           {checkout?.clientSecret && (
             <div className="mt-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
               <div className="flex items-center justify-between mb-3">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{defs.pro.name} — {defs.pro.price}/mo</div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{defs.pro.name} — {priceText(prices, group)}</div>
                 <button type="button" onClick={() => setCheckout(null)} className="text-xs text-gray-500 dark:text-gray-400 hover:underline">Cancel</button>
               </div>
               <AxalCheckout
@@ -4855,6 +4859,7 @@ function FounderBillingPanel({ flash, billing }) {
   // it could not be read and offers a retry.
   const status = billing.status === 'ready' ? billing.data : null;
   const [busy, setBusy] = useState(null);
+  const prices = usePlansRead();
 
   // Auto-flash when the URL carries an upgrade-completion param.
   useEffect(() => {
@@ -4894,7 +4899,11 @@ function FounderBillingPanel({ flash, billing }) {
 
   const refreshStatus = billing.reload;
 
-  const TIER_LABEL = { free: 'Free', growth: `${TIER_PLANS.growth.label} — ${TIER_PLANS.growth.price}/mo`, studio: `${TIER_PLANS.studio.label} — ${TIER_PLANS.studio.price}/mo` };
+  const TIER_LABEL = {
+    free: FREE,
+    growth: `${TIER_PLANS.growth.label} — ${priceText(prices, TIER_PLANS.growth.key)}`,
+    studio: `${TIER_PLANS.studio.label} — ${priceText(prices, TIER_PLANS.studio.key)}`,
+  };
   const ladder = ['free', 'growth', 'studio'];
   const RANK = { free: 0, growth: 1, studio: 2 };
 
@@ -4988,8 +4997,8 @@ function FounderBillingPanel({ flash, billing }) {
                     <div className="font-semibold text-gray-900 dark:text-gray-100">{t === 'free' ? 'Free' : TIER_PLANS[t].label}</div>
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       {t === 'free' && '1 project · 5 interviews · 3 OKRs'}
-                      {t === 'growth' && `${TIER_PLANS.growth.price}/mo · Unlimited startups, interviews and OKRs, scoring`}
-                      {t === 'studio' && `${TIER_PLANS.studio.price}/mo · + Pitch deck, cap table, capital, legal, partner tools`}
+                      {t === 'growth' && `${priceText(prices, TIER_PLANS.growth.key)} · Unlimited startups, interviews and OKRs, scoring`}
+                      {t === 'studio' && `${priceText(prices, TIER_PLANS.studio.key)} · + Pitch deck, cap table, capital, legal, partner tools`}
                     </div>
                     <div className="mt-3">
                       {current && (
@@ -5126,6 +5135,7 @@ function InvestorBillingPanel({ flash, billing }) {
   const refresh = billing.reload;
   const [billingCycle, setBillingCycle] = useState('monthly');
   const [busy, setBusy] = useState(null);
+  const prices = usePlansRead();
 
   // Stripe-redirect flash banners (mirrors FounderBillingPanel).
   useEffect(() => {
@@ -5159,8 +5169,9 @@ function InvestorBillingPanel({ flash, billing }) {
 
   const TIER_LABEL = {
     free: 'Free',
-    professional: billingCycle === 'yearly' ? 'Professional — $1,490/yr' : 'Professional — $149/mo',
-    institutional: billingCycle === 'yearly' ? 'Institutional — $5,990/yr' : 'Institutional — $599/mo',
+    // D1050: the names are the plan catalogue's and the prices the plans read's, per the cycle shown.
+    professional: `${TIER_PLANS.professional.label} — ${priceText(prices, TIER_PLANS.professional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
+    institutional: `${TIER_PLANS.institutional.label} — ${priceText(prices, TIER_PLANS.institutional.key, billingCycle === 'yearly' ? 'year' : 'month')}`,
   };
   const ladder = ['free', 'professional', 'institutional'];
   const RANK = { free: 0, professional: 1, institutional: 2 };

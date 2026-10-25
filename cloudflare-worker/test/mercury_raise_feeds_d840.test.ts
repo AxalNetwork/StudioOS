@@ -219,6 +219,21 @@ test('3. Accept lands each row in its module, with its ledger row; Dismiss write
   assert.equal(f.one(`SELECT COUNT(*) AS n FROM connector_fed_items WHERE kind = 'fund_mapping'`).n, 2);
 });
 
+test('3c. D1018: once the record holds the cap table, Accept records the SAFE and writes no model entry', async () => {
+  // Mutation checked: the model written whatever the reader says (a second, Modelled copy beside the record).
+  const f = await fixture();
+  await withFake(f, () => sync(f.env));
+  f.db.exec(`INSERT INTO cap_table_share_classes (uid, project_id, name, kind) VALUES ('cls-common', 101, 'Common', 'common');
+    INSERT INTO cap_table_issuances (uid, project_id, kind, holder_name, class_id, shares, issued_on, source, origin, status, recorded_at)
+      VALUES ('iss-founding', 101, 'founding', 'One', (SELECT id FROM cap_table_share_classes WHERE uid = 'cls-common'), 1000000, '2026-01-01', 'typed', 'owner', 'recorded', datetime('now'));`);
+  const safe = f.one(`SELECT id FROM mercury_raise_proposals WHERE kind = 'safe'`);
+  const s = await accept(f.env, safe.id);
+  assert.equal(s.status, 200, s.text);
+  assert.equal(f.one(`SELECT COUNT(*) AS n FROM cap_table_issuances WHERE project_id = 101 AND kind = 'safe' AND status = 'recorded'`).n, 1);
+  assert.equal(f.one('SELECT COUNT(*) AS n FROM cap_table_scenarios WHERE project_id = 101').n, 0, 'the record is the cap table: no model entry is written');
+  assert.equal(f.one(`SELECT local_table FROM connector_fed_items WHERE kind = 'safe'`).local_table, 'cap_table_issuances');
+});
+
 test('3b. an accepted statement is stored in the data room, NDA and seen by nobody, through part 1\'s statementPdf', async () => {
   // Mutations checked: the file stored open or `invited`; the bytes not stored; the checklist item dropped; the
   // statement's account not carried on its proposal (no read can find it).

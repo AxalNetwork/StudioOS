@@ -300,7 +300,7 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   // D1015 (#2432) adds the Cap table tool's tab words beside the narrative's; D1101 (#2456) the Data room's.
   assert.match(route, /enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !!projectId && !!def/);
   // 2026-10-24 (D906 review): Home's tabs keep the address's version, as every other tab page does.
-  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{tabSearch\(q, searchParams\.get\('version'\)\)\} \/>\s+: cycle === 'raise' && slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} \/>\s+: cycle === 'raise' && slug === DATA_ROOM \? <DataRoomHomeNav search=\{q\} \/> : undefined\}/);
+  assert.match(route, /subnav=\{cycle === 'raise' && slug === NARRATIVE \? <NarrativeTabBar active="home" search=\{tabSearch\(q, searchParams\.get\('version'\)\)\} \/>\s+: cycle === 'raise' && slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>\s+: cycle === 'raise' && slug === DATA_ROOM \? <DataRoomHomeNav search=\{q\} \/> : undefined\}/);
   for (const f of ['Investor Narrative Page.dc.html', 'Investor Narrative · Boards.dc.html']) {
     const src = read(`design/incoming/${f}`);
     assert.match(src, /<script src="\.\/support\.js"><\/script>/, f);
