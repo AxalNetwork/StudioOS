@@ -281,8 +281,10 @@ async function loadAdvisorGate(env: Env, user: User): Promise<AdvisorGate> {
     const sub = await env.DB.prepare(
       `SELECT investor_subscription_status, subscription_status FROM users WHERE id = ?`,
     ).bind(user.id).first<{ investor_subscription_status: string | null; subscription_status: string | null }>();
-    if (sub?.investor_subscription_status === 'active') tiers.add('investor_pro');
-    if (sub?.subscription_status === 'active') tiers.add('subscriber');
+    // D1052 (#2903): past_due, a renewal Stripe is still retrying, keeps the plan.
+    const paid = (s: string | null | undefined) => s === 'active' || s === 'past_due';
+    if (paid(sub?.investor_subscription_status)) tiers.add('investor_pro');
+    if (paid(sub?.subscription_status)) tiers.add('subscriber');
   } catch { /* columns may be missing on older dev DBs */ }
 
   if (persona !== 'founder') {

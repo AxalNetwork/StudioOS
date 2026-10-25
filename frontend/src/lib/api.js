@@ -23,6 +23,7 @@ export * from './api/adminPayments.js';
 export * from './api/aiBudget.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
+export * from './api/billingAlerts.js';
 export * from './api/billingInvoices.js';
 export * from './api/capTableAccess.js';
 export * from './api/capTableRecord.js';
@@ -77,6 +78,7 @@ export * from './api/partnerDealTypes.js';
 export * from './api/partnerProfiles.js';
 export * from './api/partnerSettlements.js';
 export * from './api/payments.js';
+export * from './api/personaSegments.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
 export * from './api/programGrants.js';
@@ -5756,11 +5758,14 @@ export const events = {
 
 // Public (no-auth) event surface — feed, detail, register, invite response.
 export const eventsPublic = {
-  list: ({ limit = 20, offset = 0, type, from, to, q, past } = {}) => {
+  // D1032: `format` (virtual, in_person, hybrid) and `price` (free, paid); the reply carries an exact `total`.
+  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price } = {}) => {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     if (type) qs.set('type', type);
+    if (format) qs.set('format', format);
+    if (price) qs.set('price', price);
     if (from) qs.set('from', from);
     if (to) qs.set('to', to);
     if (q) qs.set('q', q);
