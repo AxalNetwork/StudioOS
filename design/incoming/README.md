@@ -109,6 +109,23 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Account · Usage · Storage (#2449)
+
+The owner's artifacts `BGAhQ7BJjYZqecV3KSbauq` (the board grid) and
+`YYDnkAx3NdxTZ3pA5QhJaE` (the page) came from S21's prompt on #2449. Each was
+decoded by `scripts/read-canvas.mjs` as is:
+- `Storage · Boards.dc.html` is the board grid (STG1 to STG20); it imports the
+  page by name;
+- `Account Storage Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** The page is `/account/usage/storage`, Usage's fourth page.
+S21's integration (D1166) draws today's storage read by place and says Not read
+here yet on the allowance, kinds, companies and largest files. The allowance,
+the guard, Pricing's Storage group and HQ's totals wait for D1166's six parts,
+so this canvas stays in the queue until they land.
+
 ## Landed 2026-10-25 — Admin · Fund admin (#2388)
 
 The owner's artifacts `59ZPJbfN7dvmbpovwhZcWi` (the board grid) and

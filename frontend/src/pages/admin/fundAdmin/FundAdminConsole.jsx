@@ -11,7 +11,7 @@ import { fundPerformanceApi } from '../../../lib/api/fundPerformance';
 import { FundPerformanceView } from '../../FundPerformancePage';
 import { Banner } from '../../account/ConnectorSheet';
 import { Landmark, LayoutDashboard, HandCoins, ArrowRightLeft, Percent, FileText, Briefcase, Users, TrendingUp } from 'lucide-react';
-import { BANKING_PARTS, HQ_ONLY, LEGACY_TABS, NOT_YET, TABS, WAITS, administeredFunds, legacyHref, pickFund, tabFlags, tabOfView, viewFrom, viewHref } from './fundAdminModel';
+import { BANKING_PARTS, HQ_ONLY, LEGACY_TABS, NOT_YET, TABS, WAITS, administeredFunds, keepFund, legacyHref, pickFund, tabFlags, tabOfView, viewFrom, viewHref } from './fundAdminModel';
 import { useRead } from './useRead';
 import { OverviewTab } from './OverviewTab';
 import { BankingTab, ReconciliationTab } from './BankingTabs';
@@ -84,6 +84,7 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   };
   const fundProps = { apis, access: acts, funds, fund, overview, onFund: (id) => go({ fund: id }) };
   const flags = tabFlags(overview.status === 'ready' ? overview.data : null);
+  const keep = keepFund(location.search);
   const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
   const role = acts ? (acts.super_admin === true ? 'Super Admin' : 'Admin') : null;
 
@@ -99,20 +100,22 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
             const Icon = ICONS[t.key];
             const on = t.key === tab;
             const flag = t.key === 'banking' ? flags.reconciliation : flags[t.key];
-            return (
-              <Link key={t.key} to={viewHref(t.path, location.search)} aria-current={on ? 'page' : undefined}
-                data-testid={`fund-admin-tab-${t.key}`}
-                className={`flex shrink-0 items-center gap-[7px] border-b-2 pb-[11px] text-[13px] ${on
-                  ? 'border-axal-violet font-bold text-axal-violet-deep dark:text-violet-300'
-                  : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}>
-                <Icon aria-hidden="true" className="h-3.5 w-3.5" />
-                <span>{t.label}</span>
-                {flag > 0 && (
-                  <span data-testid={`fund-admin-flag-${t.key}`} className={`inline-flex h-4 min-w-4 items-center justify-center rounded-axal-pill px-1 text-[9px] font-extrabold ${on
-                    ? 'bg-axal-violet text-white' : 'bg-amber-700/15 text-amber-700 dark:text-amber-300'}`}>{flag}</span>
-                )}
-              </Link>
-            );
+            const props = { 'aria-current': on ? 'page' : undefined, 'data-testid': `fund-admin-tab-${t.key}`,
+              className: `flex shrink-0 items-center gap-[7px] border-b-2 pb-[11px] text-[13px] ${on
+                ? 'border-axal-violet font-bold text-axal-violet-deep dark:text-violet-300'
+                : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}` };
+            const inner = (<>
+              <Icon aria-hidden="true" className="h-3.5 w-3.5" />
+              <span>{t.label}</span>
+              {flag > 0 && (
+                <span data-testid={`fund-admin-flag-${t.key}`} className={`inline-flex h-4 min-w-4 items-center justify-center rounded-axal-pill px-1 text-[9px] font-extrabold ${on
+                  ? 'bg-axal-violet text-white' : 'bg-amber-700/15 text-amber-700 dark:text-amber-300'}`}>{flag}</span>
+              )}
+            </>);
+            // Literal heads, so the admin route guard reads each tab's door (D1157).
+            return t.path
+              ? <Link key={t.key} to={`/admin/fund-admin/${t.path}${keep}`} {...props}>{inner}</Link>
+              : <Link key={t.key} to={`/admin/fund-admin${keep}`} {...props}>{inner}</Link>;
           })}
         </nav>
       </Chrome>
@@ -125,12 +128,15 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
       )}
       {tab === 'banking' && (
         <nav className="mx-4 mt-4 flex flex-wrap gap-2 sm:mx-6" aria-label="Banking" data-testid="fund-admin-banking-parts">
-          {BANKING_PARTS.map((b) => (
-            <Link key={b.key} to={viewHref(b.path, location.search)} aria-current={b.key === view ? 'page' : undefined} data-testid={`fund-admin-part-${b.key}`}
-              className={`rounded-axal-pill border px-3 py-1 text-[12px] font-bold ${b.key === view
+          {BANKING_PARTS.map((b) => {
+            const props = { 'aria-current': b.key === view ? 'page' : undefined, 'data-testid': `fund-admin-part-${b.key}`,
+              className: `rounded-axal-pill border px-3 py-1 text-[12px] font-bold ${b.key === view
                 ? 'border-axal-violet bg-axal-violet/10 text-axal-violet-deep dark:text-violet-300'
-                : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400'}`}>{b.label}</Link>
-          ))}
+                : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}` };
+            return b.key === 'banking'
+              ? <Link key={b.key} to={`/admin/fund-admin/banking${keep}`} {...props}>{b.label}</Link>
+              : <Link key={b.key} to={`/admin/fund-admin/banking/${b.key}${keep}`} {...props}>{b.label}</Link>;
+          })}
         </nav>
       )}
       <div data-testid={`fund-admin-panel-${view}`}>

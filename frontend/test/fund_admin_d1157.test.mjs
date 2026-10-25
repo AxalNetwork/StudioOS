@@ -148,6 +148,7 @@ test('Banking draws its three parts with the open one current; Reconciliation is
     assert.deepEqual(v.ids().filter((id) => id.startsWith('fund-admin-part-')), BANKING_PARTS.map((b) => `fund-admin-part-${b.key}`));
     assert.ok(v.by('fund-admin-panel-reconciliation'));
     assert.ok(v.calls.includes('matches'));
+    assert.deepEqual(BANKING_PARTS.map((b) => v.href(`fund-admin-part-${b.key}`)), BANKING_PARTS.map((b) => viewHref(b.path)));
   } finally { await v.close(); }
 });
 
