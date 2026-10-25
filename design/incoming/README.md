@@ -109,6 +109,24 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Admin · Fund admin (#2388)
+
+The owner's artifacts `59ZPJbfN7dvmbpovwhZcWi` (the board grid) and
+`WUodW2gUkvzpRSZbmUv15V` (the page) came from S21's prompt on #2388. Each was
+decoded by `scripts/read-canvas.mjs` as is:
+- `Fund admin · Boards.dc.html` is the board grid (FND1 to FND22); it imports
+  the page by name;
+- `Fund Admin Console Page.dc.html` is the page, the canvas "Fund
+  Administration · Admin" that #1779 (D714) waited for.
+
+No value was edited.
+
+**Grade: UPGRADE.** The page is `/admin/fund-admin`, with each tab at a
+sub-path and D714's `?tab=` links forwarding there. S21's integration (D1157)
+draws today's reads on their tabs and says Not read here yet on Funds, LPs and
+Books. The header, the tab bodies and Fund Ops' retirement wait for D1157's
+eight parts, so this canvas stays in the queue until they land.
+
 ## Landed 2026-10-25 — Deals · the deal page (#2421)
 
 The owner's artifacts `SG1gbgTjsbqyatvYDyhj1Z` (the board grid) and

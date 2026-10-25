@@ -2818,6 +2818,8 @@ function AppInner() {
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
+      <Route path="/admin/fund-admin/:tab" element={guard(['admin'], <FundAdminConsole />)} />
+      <Route path="/admin/fund-admin/:tab/:sub" element={guard(['admin'], <FundAdminConsole />)} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       {/* D800 (#2233): the Licences page's tabs, each a sub-path of the page, behind the same guard. */}

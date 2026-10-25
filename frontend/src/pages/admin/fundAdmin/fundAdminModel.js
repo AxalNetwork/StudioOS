@@ -8,20 +8,80 @@
  */
 import { formatCents } from '../../investor/fundCallsModel.js';
 
-/** Decision 7's tabs, in order. `?tab=` picks one; anything else is Overview. */
+export const BASE = '/admin/fund-admin';
+
+/**
+ * D1157 (#2388): the canvas's tabs (FND1–FND15), each at its own address under
+ * `/admin/fund-admin`. Funds, LPs and NAV & performance are new; "Management
+ * fees" is "Fees"; Reconciliation is a part of Banking.
+ */
 export const TABS = Object.freeze([
-  { key: 'overview', label: 'Overview' },
-  { key: 'banking', label: 'Banking' },
-  { key: 'reconciliation', label: 'Reconciliation' },
-  { key: 'calls', label: 'Capital calls' },
-  { key: 'distributions', label: 'Distributions' },
-  { key: 'fees', label: 'Management fees' },
-  { key: 'reports', label: 'Reports' },
+  { key: 'overview', label: 'Overview', path: '' },
+  { key: 'funds', label: 'Funds', path: 'funds' },
+  { key: 'lps', label: 'LPs', path: 'lps' },
+  { key: 'calls', label: 'Capital calls', path: 'calls' },
+  { key: 'distributions', label: 'Distributions', path: 'distributions' },
+  { key: 'performance', label: 'NAV & performance', path: 'performance' },
+  { key: 'fees', label: 'Fees', path: 'fees' },
+  { key: 'reports', label: 'Reports', path: 'reports' },
+  { key: 'banking', label: 'Banking', path: 'banking' },
 ]);
 
+/** Banking's three parts (FND15), each at its own address. */
+export const BANKING_PARTS = Object.freeze([
+  { key: 'banking', label: 'Accounts and transactions', path: 'banking' },
+  { key: 'reconciliation', label: 'Reconciliation', path: 'banking/reconciliation' },
+  { key: 'books', label: 'Books', path: 'banking/books' },
+]);
+
+/** D714's `?tab=` values and where each now lives. */
+export const LEGACY_TABS = Object.freeze({
+  overview: '', banking: 'banking', reconciliation: 'banking/reconciliation', calls: 'calls', distributions: 'distributions', fees: 'fees', reports: 'reports',
+});
+
+/** A `?tab=` value D714 knew, or Overview. */
 export function tabFrom(value) {
-  return TABS.some((t) => t.key === value) ? value : 'overview';
+  return Object.prototype.hasOwnProperty.call(LEGACY_TABS, value) ? value : 'overview';
 }
+
+/**
+ * The view an address names: a tab's key, or a Banking part's. Anything under
+ * a tab's word (`/reports/notices`) is that tab; an unknown word is Overview.
+ */
+export function viewFrom(pathname) {
+  const rest = String(pathname || '').startsWith(BASE) ? String(pathname).slice(BASE.length) : '';
+  const [first = '', second = ''] = rest.replace(/^\/+|\/+$/g, '').split('/');
+  if (first === 'banking') return second === 'reconciliation' || second === 'books' ? second : 'banking';
+  return TABS.some((t) => t.path && t.path === first) ? first : 'overview';
+}
+
+/** The tab a view sits under. */
+export const tabOfView = (view) => (view === 'reconciliation' || view === 'books' ? 'banking' : view);
+
+/** The only query a tab keeps: the fund filter. */
+export function keepFund(search = '') {
+  const id = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('fund');
+  return id && /^[1-9]\d*$/.test(id) ? `?fund=${id}` : '';
+}
+
+/** An address under the console, keeping the fund filter. */
+export const viewHref = (path, search = '') => `${BASE}${path ? `/${path}` : ''}${keepFund(search)}`;
+
+/** Where a D714 `?tab=` link now lives, or null when the address has none. */
+export function legacyHref(search = '') {
+  const tab = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('tab');
+  if (tab == null) return null;
+  return viewHref(LEGACY_TABS[tabFrom(tab)], search);
+}
+
+export const NOT_YET = 'Not read here yet';
+
+/** Why a tab draws no blocks today. Never a zero, never "none". */
+export const WAITS = Object.freeze({
+  funds: 'Each administered fund with its facts, its economics and New fund are not drawn here yet. The administered funds are listed on Overview, from the overview read.',
+  lps: 'No read lists the LPs across funds yet. Each fund\u2019s LPs are read per fund; one view of every LP\u2019s commitment, calls, LPA, identity check and booklet waits for its read.',
+  books: 'The books of each administered fund are not drawn here yet. The fund ledger read exists; this part draws it.',
+});
 
 /**
  * The canvas's amber count flags on the tabs, from the overview only: overdue
