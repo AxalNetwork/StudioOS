@@ -168,9 +168,13 @@ test('leave: a Free investor can leave a room they joined, and still cannot list
   assert.equal((await call(app, env, PRO, '/api/deals')).status, 200);
 });
 
-test('the exemption list is that one route, and index.ts mounts the gate that reads it', () => {
-  assert.deepEqual(INVESTOR_PRO_EXEMPT.map((e) => [e.method, e.path.source]),
-    [['DELETE', '^\\/api\\/deals\\/[^/]+\\/dealroom\\/leave\\/?$']]);
+// D1033 (#2874) adds the my-events feed, which has no session and applies the
+// Professional rule to its token's member (my_events_feed_d1033.test.ts).
+test('the exemption list is those two routes, and index.ts mounts the gate that reads it', () => {
+  assert.deepEqual(INVESTOR_PRO_EXEMPT.map((e) => [e.method, e.path.source]), [
+    ['DELETE', '^\\/api\\/deals\\/[^/]+\\/dealroom\\/leave\\/?$'],
+    ['GET', '^\\/api\\/calendar\\/feed\\/my-events\\.ics$'],
+  ]);
   const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/index.ts'), 'utf8');
   assert.match(src, /const investorPro = requireInvestorTierExcept\('professional'\);\s*for \(const p of INVESTOR_PRO_PREFIXES\) \{\s*app\.use\(p, investorPro\);\s*app\.use\(`\$\{p\}\/\*`, investorPro\);/);
 });

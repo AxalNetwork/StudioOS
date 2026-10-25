@@ -144,9 +144,15 @@ export function requireInvestorTier(required: Exclude<InvestorTier, 'free'>) {
  * D614 — the routes under a gated prefix that stay open on every plan. Leaving
  * a deal room is the one: an investor who drops to Free must still be able to
  * leave the rooms they joined, while listing and joining stay Professional.
+ * D1033 adds the my-events feed, which has no session for this gate to read and
+ * applies the plan rule itself.
  */
 export const INVESTOR_PRO_EXEMPT: ReadonlyArray<{ method: string; path: RegExp }> = [
   { method: 'DELETE', path: /^\/api\/deals\/[^/]+\/dealroom\/leave\/?$/ },
+  // D1033 (#2874): the my-events subscription feed. A calendar client fetches
+  // it with no session, so the session gate cannot run; the route applies the
+  // same Professional rule to the member its token names.
+  { method: 'GET', path: /^\/api\/calendar\/feed\/my-events\.ics$/ },
 ];
 
 /** `requireInvestorTier`, except for the requests `exempt` names. */

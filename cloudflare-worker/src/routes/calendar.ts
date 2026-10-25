@@ -3,6 +3,7 @@
  *
  * Mounted at /api/calendar. Nineteen endpoints across:
  *   - unified events feed + ICS export
+ *   - "Subscribe to my events": its token (make, read, remove) and the feed (D1033)
  *   - IC meetings CRUD + RSVP
  *   - founder check-ins CRUD
  *   - Google Calendar OAuth + sync (status, connect, callback, sync, disconnect)
@@ -11,14 +12,17 @@
  * Every authenticated handler runs through `safe()` so any uncaught error
  * surfaces as a friendly JSON 500 with the cause logged to Cloudflare. The
  * two callbacks intentionally skip requireAuth — the user_id comes from the
- * single-use HMAC-signed state token persisted in oauth_state_tokens.
+ * single-use HMAC-signed state token persisted in oauth_state_tokens. So does
+ * the my-events feed, whose member comes from its token (migration 603).
  */
 import { Hono } from 'hono';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 import { userMayReadDeal } from './deals';
-import { addToCalendarLinks, eventVisibleTo, joinLinkAllowed } from '../services/calendar/myEvents';
+import { addToCalendarLinks, eventVisibleTo, joinLinkAllowed, MY_EVENT_KINDS } from '../services/calendar/myEvents';
+import { feedStatus, mintFeedToken, resolveFeedToken, revokeFeedToken } from '../services/calendar/feedTokens';
+import { investorUpsell, userMeetsInvestorTier } from '../middleware/requireInvestorTier';
 import { logAdminAction } from '../services/adminAudit';
 import { requireAuth } from '../auth';
 import {
@@ -225,6 +229,64 @@ calendar.get('/events.ics', safe('ics', 'Could not export calendar', async (c) =
     headers: {
       'content-type': 'text/calendar',
       'content-disposition': 'attachment; filename="axal-studioos.ics"',
+    },
+  });
+}));
+
+// ===========================================================================
+// D1033 (#2874) item 2 — "Subscribe to my events" (migration 603)
+// ===========================================================================
+// The my-events `.ics` (tickets and hosted events alone) at a URL a calendar
+// client can fetch with no session. The member makes the URL here, signed in;
+// it is shown once, and making a new one or removing it stops the old one.
+// The token rides in the query, never the path: see `feedTokens.ts`.
+const FEED_PATH = '/api/calendar/feed/my-events.ics';
+
+function feedUrls(c: any, token: string): { url: string; webcal_url: string } {
+  const origin = new URL(c.req.url).origin;
+  const url = `${origin}${FEED_PATH}?token=${encodeURIComponent(token)}`;
+  return { url, webcal_url: url.replace(/^https?:/, 'webcal:') };
+}
+
+calendar.get('/my-events/feed', safe('feed_status', 'Could not read your calendar subscription', async (c) => {
+  const user = await requireAuth(c);
+  return c.json(await feedStatus(c.env, user.id));
+}));
+
+calendar.post('/my-events/feed', safe('feed_mint', 'Could not make your calendar subscription', async (c) => {
+  const user = await requireAuth(c);
+  const minted = await mintFeedToken(c.env, user.id);
+  return c.json({
+    ...feedUrls(c, minted.token),
+    created_at: minted.created_at,
+    replaced: minted.replaced,
+    note: 'This address is shown once. Anyone who has it can read your events, with the join links for seats you hold. Make a new one to stop the old one.',
+  }, 201);
+}));
+
+calendar.delete('/my-events/feed', safe('feed_revoke', 'Could not remove your calendar subscription', async (c) => {
+  const user = await requireAuth(c);
+  return c.json({ revoked: await revokeFeedToken(c.env, user.id) });
+}));
+
+// NO SESSION: the token is the credential. `index.ts`'s investor paywall on
+// `/api/calendar` needs a session, so `INVESTOR_PRO_EXEMPT` lets this one path
+// past it and the same rule is applied here to the member the token names: an
+// investor whose plan lapsed gets the paywall's 402, as `/events.ics` gives it.
+calendar.get('/feed/my-events.ics', safe('feed_ics', 'Could not export calendar', async (c) => {
+  const user = await resolveFeedToken(c.env, new URL(c.req.url).searchParams.get('token'));
+  if (!user) return c.json({ detail: 'Calendar feed not found' }, 404);
+  if (!userMeetsInvestorTier(user, 'professional')) return c.json(investorUpsell('professional'), 402);
+  const fromDt = new Date(Date.now() - 7 * 86_400_000);
+  const toDt = new Date(Date.now() + 180 * 86_400_000);
+  const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), [...MY_EVENT_KINDS]);
+  const body = eventsToIcs(events, `Axal StudioOS — my events — ${user.name}`);
+  return new Response(body, {
+    headers: {
+      'content-type': 'text/calendar; charset=utf-8',
+      'content-disposition': 'inline; filename="axal-my-events.ics"',
+      // The body carries join links: never kept by a shared cache.
+      'cache-control': 'private, no-store',
     },
   });
 }));
