@@ -110,14 +110,14 @@ test('the worker serves the names the label reads, in the one SELECT every calle
 // ---------------------------------------------------------------------------
 
 test('the company card has a failed state and draws Unreadable with a retry', () => {
-  const card = slice(CODE, 'function CompanyKybCard()', 'function TrustAdminTools()');
+  const card = slice(CODE, 'function CompanyKybCard()', 'function TrustAdminTools(');
   assert.match(card, /phase: 'failed'/, 'a third state, distinct from empty');
   assert.match(card, /\.catch\(\(e\) => \{[^}]*phase: 'failed'/, 'the catch sets it, instead of pretending the list loaded');
   assert.match(card, /data-testid="company-kyb-unreadable"/);
-  assert.match(card, /<Unreadable what="Your companies’ entity records"[^>]*onRetry=/);
+  assert.match(card, /<MemberUnreadable what="Your companies’ entity records"[^>]*onRetry=/);
   assert.match(card, /onRetry=\{\(\) => setAttempt\(\(n\) => n \+ 1\)\}/, 'retry re-runs the effect');
   assert.match(card, /\}, \[attempt\]\);/, 'the effect depends on the attempt counter');
-  assert.match(PAGE, /import \{ Unreadable \} from '\.\.\/ui';/);
+  assert.match(PAGE, /import MemberOverview, \{ MemberUnreadable \}/);
   // The empty list still draws nothing: no companies is not a failure.
   assert.match(card, /if \(!state\.items\.length\) return null;/);
   // And the old shape — a bare `loaded` flag that could not tell the two apart — is gone.
@@ -146,7 +146,7 @@ test('the Role agreements rows carry Open to sign, fed by /nda/required', () => 
   assert.match(tab, /<ObligationList obligations=\{ndaObligations\}[^>]*rowAction=\{roleNdaAction\}/);
   // No second list.
   assert.doesNotMatch(PAGE, /function NdaCard|Template NDAs/);
-  assert.equal((CODE.match(/<OpenToSignButton /g) || []).length, 1, 'one place draws the button');
+  assert.equal((tab.match(/<OpenToSignButton /g) || []).length, 1, 'one signing action per role-agreement list; its detail dialog reuses that control');
 });
 
 // ---------------------------------------------------------------------------

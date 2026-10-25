@@ -249,7 +249,7 @@ test('the client score formula still mirrors the WORKER, and the PAGE does not i
     'the badge must re-export the shared rule, not grow a private copy',
   );
   // The PAGE consumes the shared helper and defines no rival.
-  assert.match(PAGE, /computeTrustScore\(obligations\)/);
+  assert.doesNotMatch(CODE, /computeTrustScore\(obligations\)|<TrustScoreBadge|<ScorePanel/);
   assert.doesNotMatch(CODE, /reqGates|weightOf|PREV_SCORE|scoreDelta/,
     'the canvas score model landed — it disagrees with the server');
 });
@@ -266,37 +266,7 @@ test('expiry is rendered as a state, not a bare date', () => {
   assert.match(PAGE, /const validExp = expiryNote\(a\.valid_until\)/);
 });
 
-test('the counts describe the list, they do not re-score it', () => {
-  // Sliced to ToneCounts' OWN closing brace, not to the next named function.
-  // It used to run to `function ObligationList`, and two components have since
-  // been declared in that gap — the second of which fetches, so the `api.`
-  // ban below started failing against a function it was never about.
-  const start = PAGE.indexOf('function ToneCounts');
-  assert.ok(start > 0, 'could not find ToneCounts');
-  const end = PAGE.indexOf('\n}\n', start);
-  const fn = PAGE.slice(start, end > start ? end : PAGE.indexOf('function ObligationList'));
-  assert.ok(fn.length > 200, 'could not read ToneCounts');
-  assert.doesNotMatch(fn, /^function (?!ToneCounts)/m,
-    'the ToneCounts slice has swallowed another function');
-  // Counted from the same array the rows render — no second fetch, no second source.
-  assert.match(fn, /outstandingCounts\(obligations\)/);
-  assert.doesNotMatch(fn, /api\./, 'ToneCounts must not fetch');
 
-  // AND FROM THE SAME SPLIT THE TWO SENTENCES USE. It counted by `toneOf`
-  // until the page was rendered: `pending` is the amber `prog` tone, so three
-  // untouched obligations plus one in review drew "4 in progress" inches from
-  // a sentence reading "1 in progress", in one frame, about the same rows.
-  // Neither number was wrong on its own terms; together they were nonsense.
-  assert.doesNotMatch(fn, /toneOf\(o\.status\)/,
-    'the tally is back on the pill tone — it will contradict the sentences above it');
-  assert.match(fn, /waitingOn\(o\.status\) === 'settled'/,
-    'the settled count is derived some other way than the two beside it');
-  // The label must not be the sentence's word for the OTHER bucket.
-  assert.match(fn, /\['bad', needs, 'need action'\]/);
-  assert.match(fn, /\['prog', inProgress, 'in progress'\]/);
-  // A zero is omitted, not drawn: "0 blocked" reads as an achievement.
-  assert.match(fn, /\.filter\(\(\[, c\]\) => c > 0\)/);
-});
 
 test('the canvas demo switchers did not land', () => {
   // roleTabs/stateTabs let the canvas flip role and completeness by hand. The
@@ -429,7 +399,7 @@ test('both frames get the provenance line, exactly once', () => {
   //      disagree by thousands of characters and the slice landed nowhere near
   //      the header. The mutation check caught it: moving the line back inside
   //      the guard did not fail the test.
-  const head = CODE.slice(start, CODE.indexOf('<TrustScoreBadge', start));
+  const head = CODE.slice(start, CODE.indexOf('{provenance}', start));
   assert.ok(head.length > 200, 'could not read the header block');
   assert.match(head, /chromeless/, 'the header slice does not contain the guard it is supposed to bracket');
   assert.doesNotMatch(head, /this page reports status only/,
@@ -444,59 +414,6 @@ test('both frames get the provenance line, exactly once', () => {
 // without React. What is left to guard is that the PAGE actually renders them,
 // and renders them from the shared rule rather than a local re-derivation —
 // which is the specific way this panel went wrong once already.
-
-/** The ScorePanel body, sliced to its own function. */
-const scorePanel = () => {
-  const s = CODE.indexOf('function ScorePanel(');
-  const e = CODE.indexOf('function ObligationList(', s);
-  assert.ok(s > 0 && e > s, 'could not read ScorePanel');
-  return CODE.slice(s, e);
-};
-
-test('the Overview draws the v2 score panel, not just the badge', () => {
-  const panel = scorePanel();
-  // The ring, and the number inside it.
-  assert.match(panel, /<svg viewBox="0 0 160 160"/, 'the ring is gone');
-  assert.match(panel, /strokeDasharray=\{`\$\{dash\.toFixed\(1\)\} \$\{CIRC\.toFixed\(1\)\}`\}/,
-    'the arc no longer tracks the score');
-  assert.match(panel, /of 100/, 'the denominator is gone — a bare 72 has no scale');
-  // Verdict, line, bands — each from the shared module, none re-derived here.
-  assert.match(panel, /\{verdict\}/);
-  assert.match(panel, /\{scoreLine\(\{ needs, inProgress \}\)\}/);
-  assert.match(panel, /SCORE_BANDS\.map/);
-  // And it is mounted in the Overview with the server's history.
-  assert.match(CODE, /<ScorePanel\b/, 'the panel is defined but never rendered');
-  assert.match(CODE, /previousScore=\{matrix\?\.previous_score \?\? null\}/);
-  assert.match(CODE, /previousMonth=\{matrix\?\.previous_month \?\? null\}/);
-});
-
-test('the panel counts by who the row waits on, never by the pill colour', () => {
-  // THE REGRESSION THIS EXISTS FOR. Splitting on `toneOf` puts `pending` —
-  // the untouched state — under "in progress", and the page then tells a
-  // reader with three untouched obligations "nothing needs action from you".
-  const panel = scorePanel();
-  assert.match(panel, /const \{ needs, inProgress \} = outstandingCounts\(obligations\)/,
-    'the panel is deriving its counts itself instead of using the shared rule');
-  assert.doesNotMatch(panel, /toneOf\(/,
-    'the panel is splitting on the pill tone again — `pending` is amber but it waits on the reader');
-});
-
-test('the two Overview columns say different things, from one pair of counts', () => {
-  const s = CODE.indexOf('const overview = (');
-  const e = CODE.indexOf('</Section>', s);
-  assert.ok(s > 0 && e > s, 'could not read the Overview');
-  const ov = CODE.slice(s, e);
-  assert.match(ov, /obligationSummary\(outstandingCounts\(obligations\)\)/,
-    'the obligations column no longer carries the canvas\'s own summary sentence');
-  // The sentence it used to carry duplicated the panel's verdict word for
-  // word, and pointed at a badge this layout moved out of that column.
-  assert.doesNotMatch(ov, /Fully compliant — every required obligation is satisfied/,
-    'the right column repeats the panel\'s verdict verbatim again');
-  assert.doesNotMatch(ov, /Hover the score for details/,
-    'the column points at a badge that is no longer in it');
-  // Two columns on a desktop, one on a phone — the ring is 158px wide.
-  assert.match(ov, /grid grid-cols-1 gap-4 md:grid-cols-\[300px_1fr\]/);
-});
 
 test('the band tone classes are literal, not built by string surgery', () => {
   // A class name assembled at the call site (`bar.replace('border-l-','border-')`)
@@ -514,8 +431,7 @@ test('the band tone classes are literal, not built by string surgery', () => {
     assert.match(tone, new RegExp(`ring: '${ring}'`), `TONE.${band}.ring is not a literal class`);
     assert.match(tone, new RegExp(`edge: '${edge}`), `TONE.${band}.edge is not a literal class`);
   }
-  assert.doesNotMatch(scorePanel(), /\.replace\(/,
-    'the panel is assembling a class name — Tailwind cannot see one that is built at runtime');
+  assert.doesNotMatch(tone, /\.replace\(/, 'tone classes remain literal');
 });
 
 test('an obligation row shows where its status came from, and invents nothing', () => {
@@ -571,7 +487,7 @@ test('an agreement expands into the timeline the canvas draws', () => {
   assert.doesNotMatch(panel, /catch[\s\S]{0,120}phase: 'ready'/,
     'a failed fetch resolves to a ready, empty timeline — it must say it failed');
   // Fetched per envelope and re-fetched when the uuid changes.
-  assert.match(panel, /\}, \[envelopeUuid\]\);/,
+  assert.match(panel, /\}, \[envelopeUuid, attempt\]\);/,
     'the effect does not key on the envelope — expanding a second row would show the first one\'s history');
 });
 

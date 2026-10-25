@@ -554,7 +554,7 @@ test('5. A4m–A10m: each phone view draws ‹ Back, the canvas\'s title and sub
     const c = CANVAS_PAGES[key];
     const markup = html(view());
     assert.equal(barOf(markup).trim().startsWith(`‹ Back ${c.title} ${c.sub}`), true, `${key}: ${barOf(markup)}`);
-    const want = DEPARTED_SECTIONS[key] ? DEPARTED_SECTIONS[key](c.sections) : c.sections;
+    const want = key === 'trust' ? ['Requirements', 'Your requirements'] : DEPARTED_SECTIONS[key] ? DEPARTED_SECTIONS[key](c.sections) : c.sections;
     assert.deepEqual(sectionTitles(markup), want, key);
     assert.match(markup, /class="-m-4 md:-m-6 lg:m-0 |class="min-h-screen bg-white dark:bg-gray-950"/, `${key}: no phone gutter`);
   }
@@ -590,7 +590,8 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
   // before its desktop return, which keeps its heading.
   const trust = read('frontend/src/pages/TrustCenterPage.jsx');
   assert.match(trust, /const phone = usePhoneWidth\(\) && !chromeless;/, 'the investor workspace keeps its chromeless frame');
-  assert.match(trust, /if \(phone\) \{\s*return \(\s*<TrustPhoneView[\s\S]*?\n  return \(\s*<div className="p-6">[\s\S]*?<ShieldCheck className="w-7 h-7 text-emerald-600" \/> Trust Center/);
+  assert.match(trust, /className=\{phone \? 'p-4' : 'p-6'\}/);
+  assert.match(trust, /Your trust<\/h1>/);
   const docs = read('frontend/src/pages/docs/DocsLayout.jsx');
   assert.match(docs, /\) : phone \? \(\s*<HelpPhoneHome[\s\S]*?\) : \(\s*<HelpHome/, 'only the home has a phone view; a guide page is unchanged');
   const products = read('frontend/src/pages/ProductsPage.jsx');
@@ -601,11 +602,12 @@ test('5. at desktop width the pages draw no bar and keep their own heading', () 
 
 test('5. A4m–A10m: each section reads its values from the page\'s sources', () => {
   const trust = text(html(PHONE_VIEWS.trust()));
-  assert.match(trust, /Trust score 50 of 100 You have 2 open requirements Not compliant/, 'needs plus in progress, with verdictFor\'s word');
-  assert.match(trust, /Identity verification \(KYC\) Required in review/);
+  assert.match(trust, /Requirements met: 2 of 4/);
+  assert.doesNotMatch(trust, /of 100/);
+  assert.match(trust, /Identity verification \(KYC\)/);
   const trustRows = html(PHONE_VIEWS.trust());
-  assert.match(trustRows, /style="width:50%"/, 'the score\'s bar');
-  assert.match(text(html(h(TrustPhoneView, { status: 'ready', obligations: OBLIGATIONS.slice(0, 2) }))), /100 of 100 Every required obligation is satisfied\. Compliant/);
+  assert.doesNotMatch(trustRows, /of 100/);
+  assert.match(text(html(h(TrustPhoneView, { status: 'ready', obligations: OBLIGATIONS.slice(0, 2) }))), /Requirements met: 2 of 2/);
 
   const perks = text(html(PHONE_VIEWS.perks()));
   assert.match(perks, /Credits Balance US\$1 of perk value each 1,200 credits/);
@@ -698,7 +700,7 @@ test('8. Trust lists only what /trust/me returns: no 83(b) row, and the pill is 
   const failed = text(html(h(TrustPhoneView, { status: 'unreadable' })));
   assert.match(failed, /Unreadable.*Your requirements could not be read\./);
   assert.doesNotMatch(failed, /No obligations outstanding/);
-  assert.match(read('frontend/src/pages/TrustCenterPage.jsx'), /setMatrix\(\{ obligations: \[\], role, failed: true \}\)/);
+  assert.match(read('frontend/src/pages/TrustCenterPage.jsx'), /setMatrix\(\{ obligations: \[\], role, failed: true, unauthorized:/);
 });
 
 test('8. Help: Popular this week first, no For you now, and contact stays in tickets', () => {
@@ -830,7 +832,7 @@ test('11. the A4m–A10m phone views pass no company or venture to a read', () =
     return src.slice(a, b);
   };
   const blocks = [
-    block('frontend/src/pages/TrustCenterPage.jsx', '// D700 (#1662) — A4m', 'export default function TrustCenterPage('),
+    block('frontend/src/pages/TrustCenterPage.jsx', 'export function trustPhoneGroups(', 'export default function TrustCenterPage('),
     block('frontend/src/pages/PerksPage.jsx', ' * D700 (#1662) — A5m', ' * The standalone `/perks` page'),
     block('frontend/src/pages/CalendarPage.jsx', '// D700 (#1662) — A6m', 'export default function CalendarPage('),
     block('frontend/src/pages/events/MyEventsPage.jsx', '// D700 (#1662) — A7m', 'export default function MyEventsPage('),
