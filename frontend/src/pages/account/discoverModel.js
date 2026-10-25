@@ -78,7 +78,7 @@ export function cyclesOf(p) {
 export function signInKind(p) {
   if (typeof p?.sign_in?.kind === 'string' && p.sign_in.kind) return p.sign_in.kind;
   const kind = authKind(p);
-  if (kind === 'first_party' || kind === 'key') return kind;
+  if (kind === 'none' || kind === 'first_party' || kind === 'key') return kind;
   if (kind === 'token_first') return 'oauth_or_key';
   if (p?.supports_pat) return 'oauth_or_key';
   return 'oauth';
