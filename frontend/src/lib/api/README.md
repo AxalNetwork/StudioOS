@@ -339,3 +339,5 @@ D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 (members, needs met and gaps, offers by kind, links' reach), and the Super
 Admin's write, which names the version it read. Counts leave admins out and
 come back suppressed from 1 to 4.
+
+D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build.
