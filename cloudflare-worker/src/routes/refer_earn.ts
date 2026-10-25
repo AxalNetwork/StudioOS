@@ -5,6 +5,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import type { Env, User } from '../types';
 import { requireAuth, requireAdmin, requireBranchNotSuspended } from '../auth';
+import { programRefusal } from '../services/programEnforcement';
 import { generateUniqueShortReferralCode } from '../services/referrals/codes';
 import {
   ensureReferralSubmissionsSchema,
@@ -280,6 +281,11 @@ refer.post('/admin/strategic-access/:userId/decision', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const userId = Number(c.req.param('userId'));
   if (!Number.isSafeInteger(userId) || userId <= 0) return refuse(c, 400, { code: 'bad_user', message: 'Name a member by their user id.' });
+  // D985 — granting access needs the branch's Refer & Earn grant; a decline stays open.
+  if (body?.decision === 'granted') {
+    const notGranted = await programRefusal(c.env, 'refer-and-earn');
+    if (notGranted) return c.json(notGranted.body, notGranted.status);
+  }
   try {
     const row = await decideStrategicAccess(c.env, userId, body?.decision);
     await logAdminAction(c.env, admin.id, admin.email, `referral_strategic_access.${row.status}`, {
@@ -345,12 +351,22 @@ refer.get('/admin/submissions/:uid', async (c) => {
     referrer_name: member?.name ?? null, referrer_email: member?.email ?? null });
 });
 
+/** D985 — the submission moves that start something under the grant. */
+export const GRANT_STARTS: ReadonlySet<string> = new Set(['qualified', 'converted', 'reward_eligible']);
+
 refer.patch('/admin/submissions/:uid', async (c) => {
   const admin = await requireAdmin(c);
   // D107 — a suspended branch's queues are frozen: 423, after the admin gate.
   await requireBranchNotSuspended(c);
   await ensureReferralSubmissionsSchema(c.env);
   const body = await c.req.json().catch(() => ({}) as Record<string, unknown>);
+  // D985 — accepting a referral or awarding a reward needs the branch's Refer &
+  // Earn grant. Review notes, rejection, closing and paying a reward already
+  // earned stay open.
+  if (GRANT_STARTS.has(String(body.status))) {
+    const notGranted = await programRefusal(c.env, 'refer-and-earn');
+    if (notGranted) return c.json(notGranted.body, notGranted.status);
+  }
   try {
     const row = await reviewSubmission(c.env, c.req.param('uid'), admin.id, {
       status: body.status as string | undefined,
