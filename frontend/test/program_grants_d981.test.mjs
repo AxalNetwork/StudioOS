@@ -1,9 +1,11 @@
 /**
  * D981 (#2376) — Program grants: HQ's page at /admin/licences/programs and
  * the studio's Programs tab at /admin/my-licence/programs, the integration of
- * the owner's canvas (GR1–GR15). No grant is stored yet, so every grantable
- * cell says "Not recorded", never "Not granted"; the fixed facts (HQ only,
- * not ready to grant) are drawn as the canvas states them.
+ * the owner's canvas (GR1–GR15). On the studio's tab a grantable program
+ * says "Not recorded", never "Not granted"; the fixed facts (HQ only, not
+ * ready to grant) are drawn as the canvas states them. The HQ page reads
+ * D982's grants since D987 (#2778), and its mounted tests are
+ * program_grants_d987.test.mjs.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/program_grants_d981.test.mjs
  */
@@ -18,7 +20,6 @@ import { installDocument } from './_contracts_dom.mjs';
 import {
   NOT_RECORDED_GRANT, PROGRAMS, adminCell, hqCell, programGroups, studioRows, studiosTile,
 } from '../src/lib/programGrants.js';
-import ProgramGrants from '../src/pages/admin/grants/ProgramGrants.jsx';
 import ProgramsTab from '../src/pages/subsidiary/licence/ProgramsTab.jsx';
 import { stripFor } from '../src/lib/hqStrips.js';
 import { LICENCE_TABS, tabFor } from '../src/lib/licencePage.js';
@@ -103,47 +104,7 @@ async function render(el, url = '/admin/licences/programs') {
   };
 }
 
-function stub(answer) {
-  const original = globalThis.fetch;
-  const seen = [];
-  globalThis.fetch = async (url) => {
-    const u = new URL(String(url), 'http://x');
-    seen.push(u.pathname);
-    if (u.pathname === '/api/admin/licences') return answer();
-    return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
-  };
-  return { seen, restore() { globalThis.fetch = original; } };
-}
 const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-
-test('mounted HQ page: the header, the studios tile, one row per studio against nine programs, and the waits', async () => {
-  const s = stub(() => json(LICENCES));
-  const v = await render(h(ProgramGrants));
-  try {
-    assert.match(v.of('grants-header'), /Licences.*Program grants.*HQ only/s);
-    assert.match(v.of('grants-tile-studios'), /4.*2 active · 1 suspended · 1 pending activation/s);
-    for (const id of ['in-force', 'requests', 'ending']) assert.match(v.of(`grants-tile-${id}`), /Not read here yet/);
-    assert.match(v.of('grants-row-AXL-005'), /Studio Seoul.*frozen/s);
-    assert.ok(!v.has('grants-row-AXL-007'), 'a draft licence became a row');
-    const cells = v.cells();
-    assert.equal(cells.length, 4 * 9);
-    assert.equal(cells.filter((c) => c === 'HQ only').length, 4);
-    assert.equal(cells.filter((c) => c === 'Not granted').length, 0, 'a cell claimed a decision no store holds');
-    assert.deepEqual([...new Set(s.seen.filter((p) => !p.startsWith('/api/ai')))], ['/api/admin/licences']);
-  } finally { await v.unmount(); s.restore(); }
-});
-
-test('mounted HQ page: a failed ledger read says so, and an empty ledger says to issue a licence first', async () => {
-  let s = stub(() => json({ detail: 'down' }, 503));
-  let v = await render(h(ProgramGrants));
-  try {
-    assert.match(v.of('grants-unreadable'), /not the same as none/);
-    assert.match(v.of('grants-tile-studios'), /Unreadable/);
-  } finally { await v.unmount(); s.restore(); }
-  s = stub(() => json({ items: [LICENCES.items[4]] }));
-  v = await render(h(ProgramGrants));
-  try { assert.match(v.of('grants-empty'), /No studio holds a licence yet/); } finally { await v.unmount(); s.restore(); }
-});
 
 test('the studio\'s Programs tab: HQ decides, nine programs, nothing "Not granted"', async () => {
   // D988 (#2779): the tab reads D984's answer; with no grant row a program HQ grants is "Not recorded".

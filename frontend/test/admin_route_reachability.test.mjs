@@ -311,6 +311,13 @@ const COMPOSED = new Map([
   ['frontend/src/pages/admin/advisors/AdvisorsPartners.jsx', [
     'frontend/src/pages/admin/advisors/People.jsx',
   ]],
+  // D987 (#2778): Program grants draws its grid and its Requests tab from the
+  // files beside it, and they hold the doors to one studio
+  // (`/admin/licences/programs/studio/:uid`).
+  ['frontend/src/pages/admin/grants/ProgramGrants.jsx', [
+    'frontend/src/pages/admin/grants/GridView.jsx',
+    'frontend/src/pages/admin/grants/RequestsView.jsx',
+  ]],
   // D947/D948/D949: Overview, Cohorts, Applications and Participants hold the
   // doors to one cohort (`/cohorts/:ym`), one application (`/applications/:id`)
   // and one founder (`/participants/:uid`).

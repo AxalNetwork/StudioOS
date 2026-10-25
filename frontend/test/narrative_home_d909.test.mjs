@@ -64,9 +64,9 @@ test('Needs you lists each mismatch of the newest version, opened on its Check; 
     href: '/raise/investor-narrative/check?project_id=3&version=4',
   }]);
   assert.deepEqual(needsYou({ ...PART, newest: null }), []);
-  assert.equal(homeFooter(PART), 'The Pitch deck studio reads your narrative.');
-  assert.equal(homeFooter({ ...PART, deck: { version: 6, reads_narrative: false } }), 'No card of your pitch deck reads your narrative yet.');
-  assert.equal(homeFooter({ ...PART, deck: null }), 'No pitch deck yet, so nothing reads your narrative.');
+  assert.equal(homeFooter(PART), 'Positioning now lives here. The Pitch deck studio reads your narrative.');
+  assert.equal(homeFooter({ ...PART, deck: { version: 6, reads_narrative: false } }), 'Positioning now lives here. No card of your pitch deck reads your narrative yet.');
+  assert.equal(homeFooter({ ...PART, deck: null }), 'Positioning now lives here. No pitch deck yet, so nothing reads your narrative.');
 });
 
 test('Home renders the tiles, Needs you and the footer from the part, or says the read failed', () => {
