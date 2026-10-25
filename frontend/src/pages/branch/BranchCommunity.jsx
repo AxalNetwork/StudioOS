@@ -17,7 +17,8 @@ import BranchZone from './BranchZone';
  * sidebar's Community row points at, so this is an index rather than new
  * screens. D303 later added Wellbeing as a fifth card to the same index (the
  * coordinator's decision placed it in Admin · Community), bringing the total
- * to five.
+ * to five. D1117 added Partner invitations as the sixth: its desk's branch
+ * door, once deal types per licence existed (D986).
  *
  * EACH CARD SAYS WHAT ITS CONSOLE ACTUALLY DOES, because four of the five are
  * narrower than their names suggest and a reader who assumes otherwise goes
@@ -112,6 +113,18 @@ export const COMMUNITY_CONSOLES = [
     what: 'Verify or hide an expert on the founder-facing directory; a hidden or unverified '
       + 'expert stops appearing to founders, and a takedown always works. '
       + 'Curated resources are managed in the Wellbeing resource library.',
+  },
+  // D1117 (#2997): the Partner invitations desk's branch door, decided with
+  // #2376's deal types per licence (D986). The desk's writes check the branch's
+  // licence copy, so an invitation offers only the types HQ granted this studio.
+  {
+    key: 'partner-invitations',
+    label: 'Partner invitations',
+    to: '/admin/partner-invitations',
+    worker: 'admin_partners.ts',
+    scope: 'Yours to send, within HQ’s deal types',
+    what: 'Invite an operating partner, follow the invitation to a signed deal, and terminate '
+      + 'a deal. Only the deal types HQ granted this studio can be offered.',
   },
 ];
 

@@ -22,7 +22,7 @@ test('founder /execution redirects to the Build cycle, and the editor keeps its 
   // D661 (#1474): a founder's /build is the Build cycle overview now, and the
   // A3 desk is retired: its file is gone. The create-a-startup form it held
   // moved with it (`projects_partners_retired.test.mjs`).
-  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="build" \/>\)/);
+  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(labRoles\(\[[^\]]*\]\), <CycleRoute cycle="build" \/>\)/);
   assert.ok(!existsSync(resolve(here, '..', 'src/pages/founder/FounderBuildDesk.jsx')), 'the retired A3 desk is back');
 
   // THE EDITOR LEFT THE DESK (D422): `/execution?mode=workspace` mounts

@@ -7,16 +7,33 @@ sub-paths: Catalogue, `/stripe` and `/log` (D1014). The Admin Console's `?tab=pa
 forwards here with `?moved=payments`, in `../LegacyContractsRedirect.jsx`.
 
 - `Payments.jsx` — the page inside `AdminBoardFrame` (board H29, "Payments
-  catalogue"): the header, its reads, and Catalogue's Needs you, tiles and
-  grouped table (on a phone, cards that open the product as a sheet). Today's
-  editor (`../consoles/PaymentsConsole.jsx`) opens on request at the foot of
-  Catalogue until D1008 parts 4 and 5.
+  catalogue"): the header, its reads, and Catalogue: Needs you from part 2's
+  checks, the tiles, and the table with every column, Filters, Sort, a pager
+  and archived products in their own group (on a phone, cards that open the
+  product's address); PAY8–PAY10's states (D1012). New product and Sync from
+  Stripe, and the page-level dialog a product's lightbox opens (D1013). The
+  retired editor (`PaymentsPanel`) is gone; `?new=product` is the storefront's
+  door to New product.
+- `ProductLightbox.jsx` — PAY2 (D1012): one product as a lightbox over
+  Catalogue, at `/admin/platform/payments/products/[id]` (a full page with price cards and persistent actions on a
+  phone, D1129). Where members see it, its prices, the members on the plan, the
+  promo codes that apply, its checks, its recent changes and Technical
+  details. It reads members (plans only), promo codes and the product's
+  change log when open, each answering alone. Its buttons open the price
+  dialogs for the Super Admin (D1013).
 - `StripeConnection.jsx` — PAY5 (D1014): the account, the key, the webhook,
   deliveries per hour (the no-log hour dashed; a table on request and on a
-  phone) and the mirror. Part 5's three buttons are drawn disabled until its
-  dialogs exist (#2832).
+  phone) and the mirror, with the doors to the Stripe dialogs (D1013).
 - `ChangeLog.jsx` — PAY7 (D1014): the change log, its filters and pages, and
-  the CSV export behind an in-page reason dialog.
+  the CSV export behind an in-page reason dialog. D1129 adds submitted text search and an independent read of every current admin and historical payment actor for Who.
+- `ProductDialogs.jsx` — PAY3 and PAY4 (D1013): New product, Add a price,
+  Change a price (part 2's route), Archive a price or a product, and Edit
+  details.
+- `StripeDialogs.jsx` — PAY6 (D1013): Replace key, Register a new endpoint,
+  Add the missing events, and Sync from Stripe with its result or failure.
+- `dialogModel.js` — pure. The plan levels (`/pricing`'s cards), the clash,
+  amounts, the price preview with the allowance and saving, the reason rules,
+  the key check, the sync's new and gone, and a refusal in words.
 - `payUi.jsx` — the shared classes (each with its dark colour, PAY13), the
   read states, `PayDialog` (a bottom sheet on a phone, PAY12) and Technical
   details.
@@ -36,3 +53,12 @@ forwards here with `?moved=payments`, in `../LegacyContractsRedirect.jsx`.
   change log is never drawn as an empty one.
 - Codes (actions, IDs, raw details) only under Technical details.
 - Every dialog is in-page; nothing uses a browser pop-up.
+- Every write says what changes, where members see it and that it is
+  recorded, and sends the admin's reason (D1009). A write that changes what
+  members pay meets the step-up through the platform's own prompt
+  (`StepUpModal`); cancelling it changes nothing.
+- Only the Super Admin is drawn a change; anyone else is told who can make it.
+
+D1129 (#3009) completes the shared header’s New product and More actions and
+PAY12b’s full phone product page. The phone page steps aside for D1013’s
+existing dialogs. Read/search failures never return database details.

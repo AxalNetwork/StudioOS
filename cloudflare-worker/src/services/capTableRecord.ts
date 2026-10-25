@@ -231,9 +231,17 @@ function classOut(c: ClassRow) {
   };
 }
 
+/** D1022 (#2859): each register holder's kind for this venture, by id. */
+async function holderKindsOf(env: Env, projectId: number): Promise<Map<number, string>> {
+  const rows = (await env.DB.prepare(
+    'SELECT id, kind FROM cap_table_holders WHERE project_id = ? AND kind IS NOT NULL',
+  ).bind(projectId).all<{ id: number; kind: string }>()).results || [];
+  return new Map(rows.map((r) => [Number(r.id), String(r.kind)]));
+}
+
 /** GET /record/:projectId — the record by holder and by class, outstanding, fully diluted, the instruments and the proposals. */
 export async function readRecord(env: Env, projectId: number) {
-  const [classes, rows, currency] = await Promise.all([classesOf(env, projectId), issuancesOf(env, projectId), currencyOf(env, projectId)]);
+  const [classes, rows, currency, kinds] = await Promise.all([classesOf(env, projectId), issuancesOf(env, projectId), currencyOf(env, projectId), holderKindsOf(env, projectId)]);
   const byId = new Map(classes.map((c) => [c.id, c]));
   const related = new Map(rows.map((r) => [r.id, r.uid]));
   const isPool = (cls: number) => byId.get(cls)?.kind === 'option_pool';
@@ -246,6 +254,8 @@ export async function readRecord(env: Env, projectId: number) {
     available: true, reason: null,
     rows: holderKeys.map((k) => ({
       ...b.names.get(k)!,
+      // D1022: the register row's kind (founder, investor, employee, advisor), so Who owns can group; null for a holder named only on the issuance.
+      kind: kinds.get(b.names.get(k)!.holder_id ?? -1) ?? null,
       shares: sumOf(b.shares.get(k)),
       options: sumOf(b.options.get(k)),
       by_class: [...new Set([...(b.shares.get(k)?.keys() ?? []), ...(b.options.get(k)?.keys() ?? [])])]
@@ -659,6 +669,59 @@ export async function recordFromSource(env: Env, a: { projectId: number; actorId
   return { id: Number(row?.id), uid };
 }
 
+/**
+ * A source's item, proposed (a close, D1021). One live row per `originRef`, so a
+ * second writer of the same item (the Closing room, CAPITAL's CP11) finds this
+ * row instead of adding one; the audit row is in the same batch.
+ */
+export async function proposeFromSource(env: Env, a: { projectId: number; actor: RecordActor; origin: Origin; originRef: string; body: Record<string, unknown> }) {
+  const f = await readFields(env, a.projectId, a.body, EMPTY);
+  if (!f.kind) throw new RecordError(400, 'incomplete', 'Say what kind of issuance this is.', { missing: ['kind'] });
+  if (f.holder_id == null && f.holder_name == null) throw new RecordError(400, 'incomplete', 'Say who holds it.', { missing: ['holder'] });
+  checkShape(f);
+  if (a.actor.role === 'admin' && !f.correction_reason) throw new RecordError(400, 'reason_required', 'An admin’s change to a founder’s record carries a reason the founder reads.');
+  const uid = newUid();
+  try {
+    await env.DB.batch([
+      insertStmt(env, a.projectId, uid, f, { status: 'proposed', origin: a.origin, originRef: a.originRef, actorId: a.actor.id, currency: await currencyFor(env, a.projectId, f) }),
+      auditStmt(env, a.projectId, a.actor, 'captable.proposal.created', uid, { kind: f.kind, origin: a.origin, reason: f.correction_reason }),
+    ]);
+  } catch (e) {
+    if (isUniqueViolation(e)) throw ALREADY();
+    throw e;
+  }
+  return uid;
+}
+
+/**
+ * Whether the document behind a row is signed (D1021): a SAFE sent through
+ * StudioOS whose envelope is completed (countersigned), a venture's legal
+ * document marked signed, or a data-room file a person attached as the signed
+ * copy. Anything else, and no document at all, is not signed.
+ */
+export async function signatureOf(env: Env, projectId: number, r: { safe_issuance_uid: string | null; document_ref: string | null }) {
+  if (r.safe_issuance_uid != null) {
+    const row = await env.DB.prepare(
+      `SELECT e.status FROM safe_issuances s LEFT JOIN esign_envelopes e ON e.id = s.envelope_id WHERE s.uid = ? AND s.project_id = ?`,
+    ).bind(r.safe_issuance_uid, projectId).first<{ status: string | null }>();
+    if (row?.status === 'completed') return { signed: true, via: 'safe_envelope' as const };
+  }
+  const m = r.document_ref ? /^(legal_documents|data_room_files):(\d+)$/.exec(r.document_ref) : null;
+  if (m?.[1] === 'legal_documents') {
+    const row = await env.DB.prepare(
+      'SELECT ld.status FROM legal_documents ld JOIN deals d ON d.id = ld.deal_id WHERE ld.id = ? AND d.project_id = ?',
+    ).bind(Number(m[2]), projectId).first<{ status: string }>();
+    if (row?.status === 'signed') return { signed: true, via: 'legal_document' as const };
+  }
+  if (m?.[1] === 'data_room_files') {
+    const row = await env.DB.prepare('SELECT id FROM data_room_files WHERE id = ? AND project_id = ?').bind(Number(m[2]), projectId).first();
+    if (row) return { signed: true, via: 'data_room_file' as const };
+  }
+  return { signed: false, via: null };
+}
+
+const NOT_SIGNED = () => new RecordError(409, 'not_signed', 'Not signed yet: attach the investor’s signed document before recording it.');
+
 /** Undo `recordFromSource` when the rest of its caller's write fails: the row and its audit row go together. */
 export async function unrecordFromSource(env: Env, projectId: number, uid: string) {
   await env.DB.batch([
@@ -691,6 +754,8 @@ export async function acceptProposal(env: Env, projectId: number, actor: RecordA
   if (row.status !== 'proposed') throw NOT_PROPOSED();
   const f = await readFields(env, projectId, body, rowFields(row));
   await checkComplete(env, projectId, f, actor);
+  // D1021: a close's investor is recorded only from their signed document.
+  if (row.origin === 'close' && !(await signatureOf(env, projectId, f)).signed) throw NOT_SIGNED();
   await checkBalance(env, projectId, f, row.id);
   const currency = f.amount_cents != null ? row.currency ?? (await currencyOf(env, projectId)).code : null;
   const [upd] = await env.DB.batch([
@@ -845,6 +910,105 @@ export async function setCurrency(env: Env, projectId: number, actor: RecordActo
     ).bind(projectId, actor.id, JSON.stringify({ currency: code, reason }), `user:${actor.id}`, String(projectId)),
   ]);
   return { code, source: 'set' as const };
+}
+
+// ───────────────────────────────────────────────────────────── a spreadsheet import (D1026)
+
+export const IMPORT_ROWS_MAX = 500;
+const IMPORT_FIELDS = ['kind', 'holder_name', 'class_uid', 'shares', 'amount_cents', 'price_per_share_micros', 'issued_on', 'cap_cents', 'discount_bps', 'basis', 'note'] as const;
+
+/**
+ * POST /record/:projectId/proposals/import — a spreadsheet's rows, each a
+ * proposal (`origin: 'import'`), never on the record (D1020 §5, D1026). Every
+ * row is checked before any is written; one that fails refuses the import with
+ * its row number, and nothing lands. `file_ref` is the file's SHA-256, so the
+ * same file's rows are proposed once (`origin_ref` is `<file_ref>:<row>`).
+ * One audit row for the import.
+ */
+export async function proposeImport(env: Env, projectId: number, actor: RecordActor, body: Record<string, unknown>) {
+  const fileRef = typeof body.file_ref === 'string' && /^[0-9a-f]{64}$/.test(body.file_ref) ? body.file_ref : null;
+  if (!fileRef) throw bad('file_ref', 'file_ref is the file’s SHA-256, in hex.');
+  const rows = Array.isArray(body.rows) ? body.rows : null;
+  if (!rows || rows.length === 0) throw new RecordError(400, 'nothing_to_import', 'No rows were sent to propose.');
+  if (rows.length > IMPORT_ROWS_MAX) throw new RecordError(400, 'too_many_rows', `At most ${IMPORT_ROWS_MAX} rows are proposed at once.`);
+  const reason = text(body.reason, 'reason', TEXT_MAX);
+  if (actor.role === 'admin' && !reason) throw new RecordError(400, 'reason_required', 'An admin’s change to a founder’s record carries a reason the founder reads.');
+  const seen = new Set<number>();
+  const checked: Array<{ row: number; f: Fields }> = [];
+  for (const raw of rows) {
+    const r = (raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+    const row = typeof r.row === 'number' && Number.isSafeInteger(r.row) && r.row > 0 ? r.row : null;
+    if (row == null || seen.has(row)) throw new RecordError(400, 'bad_row', 'Each row carries its own row number, once.', { row: r.row ?? null });
+    seen.add(row);
+    const fields: Record<string, unknown> = {};
+    for (const k of IMPORT_FIELDS) if (Object.prototype.hasOwnProperty.call(r, k)) fields[k] = r[k];
+    try {
+      const f = await readFields(env, projectId, fields, { ...EMPTY, source: 'document' });
+      if (!f.kind) throw new RecordError(400, 'incomplete', 'Say what kind of issuance this is.', { missing: ['kind'] });
+      if (f.holder_name == null) throw new RecordError(400, 'incomplete', 'Say who holds it.', { missing: ['holder'] });
+      checkShape(f);
+      f.correction_reason = reason;
+      checked.push({ row, f });
+    } catch (e) {
+      if (e instanceof RecordError) throw new RecordError(e.status, e.code, `Row ${row}: ${e.sentence}`, { ...e.extra, row });
+      throw e;
+    }
+  }
+  const currency = (await currencyOf(env, projectId)).code;
+  const uids = checked.map(() => newUid());
+  try {
+    await env.DB.batch([
+      ...checked.map(({ row, f }, i) => insertStmt(env, projectId, uids[i], f, {
+        status: 'proposed', origin: 'import', originRef: `${fileRef}:${row}`, actorId: actor.id, currency: f.amount_cents != null ? currency : null,
+      })),
+      env.DB.prepare(
+        `INSERT INTO activity_logs (project_id, user_id, action, details, actor, entity_type, entity_id) VALUES (?, ?, 'captable.import.proposed', ?, ?, 'cap_table_import', ?)`,
+      ).bind(projectId, actor.id, JSON.stringify({ rows: checked.length, file_ref: fileRef, reason }), `user:${actor.id}`, fileRef),
+    ]);
+  } catch (e) {
+    if (isUniqueViolation(e)) throw new RecordError(409, 'already_imported', 'Rows of this file are already proposed or on the record. Dismiss them first to import it again.');
+    throw e;
+  }
+  return { proposed: checked.length, uids };
+}
+
+// ───────────────────────────────────────────────────────────── the spreadsheet with history (D1026)
+
+/**
+ * The record and its history as one CSV: the issuances (every status, a void
+ * one with its reason), then the history rows, newest first. A missing value
+ * is an empty cell, never 0, and `cell` neutralises a formula. The caller
+ * writes the audit row; no audit row, no export (D1020 §4).
+ */
+export async function recordCsv(env: Env, projectId: number, cell: (v: unknown) => string, asOf: string) {
+  const record = await readRecord(env, projectId);
+  const history: Array<Record<string, any>> = [];
+  let total = 0;
+  for (let page = 1; page <= 50; page++) {
+    const h = await readHistory(env, projectId, page, HISTORY_PAGE_MAX);
+    history.push(...h.rows);
+    total = h.total;
+    if (history.length >= total || h.rows.length === 0) break;
+  }
+  const classes = new Map((record.classes.rows || []).map((c: any) => [c.uid, c.name]));
+  const line = (vals: unknown[]) => vals.map(cell).join(',');
+  const out: string[] = [line([`Cap table record, as of ${asOf}`]), line([`Currency: ${record.currency.code}`]), ''];
+  out.push(line(['Issuances']));
+  out.push(line(['Kind', 'Status', 'Holder', 'From', 'Class', 'Shares', 'Amount (minor units)', 'Currency', 'Price per share (micros)', 'Issued on', 'Cap (minor units)', 'Discount (bps)', 'Basis', 'MFN', 'Interest (bps)', 'Maturity', 'Source', 'Origin', 'Void reason', 'Admin reason']));
+  const all = [...(record.issuances.rows || []), ...(record.proposals.rows || [])];
+  for (const i of all as any[]) {
+    out.push(line([
+      i.kind, i.status, i.holder?.name, i.from_holder?.name, i.class_uid ? classes.get(i.class_uid) : null, i.shares, i.amount_cents, i.currency,
+      i.price_per_share_micros, i.issued_on, i.terms?.cap_cents, i.terms?.discount_bps, i.terms?.basis,
+      i.terms?.mfn == null ? null : i.terms.mfn ? 'yes' : 'no', i.terms?.interest_bps, i.terms?.maturity_on, i.source, i.origin, i.void_reason, i.correction_reason,
+    ]));
+  }
+  out.push('', line(['History']), line(['When', 'Type', 'What', 'Who', 'Reason']));
+  for (const h of history) {
+    if (h.type === 'issuance') out.push(line([h.at, 'issuance', `${h.issuance.kind} · ${h.issuance.status}`, h.issuance.holder?.name, h.issuance.correction_reason ?? h.issuance.void_reason]));
+    else out.push(line([h.at, 'activity', h.activity.action, h.activity.user_name, h.activity.details?.reason ?? null]));
+  }
+  return { csv: out.join('\r\n') + '\r\n', issuances: all.length, history: history.length, complete: history.length >= total };
 }
 
 export function historyPage(raw: { page?: string; page_size?: string }) {

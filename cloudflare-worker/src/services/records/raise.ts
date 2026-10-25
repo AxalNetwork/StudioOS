@@ -21,8 +21,8 @@
  * creator column (decision 12, `cycleActivity.ts`).
  */
 import type { ActionResult, ModuleSpec, RecordAction, RecordField, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
-import { activeGrant, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
-import { ACCESS_TIERS, investorCommitted, tierAdmits } from '../dataRoomAccess';
+import { activeGrant, dataRoomOwner, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
+import { ACCESS_TIERS, grantFolderScope, investorCommitted, tierAdmits } from '../dataRoomAccess';
 import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
 import { deckReaders, readBySentence } from '../narrative/readers';
 import { RAISE_STAGES } from '../../routes/contacts';
@@ -30,8 +30,9 @@ import {
   type Ctx, type ProspectRow, READINESS_ITEMS, TOOL_HREF, DILIGENCE_CHECKLIST, EVIDENCE, FIGURES, FIGURE_LABEL, INVESTOR_TYPES,
   INVESTOR_TYPE_LABEL, FUND_SECTIONS, FIT_LABEL, LIST_STAGE_LABEL, NEVER_EXPIRES, accessText, capIdOf, capEntryOf, checkInputs, consistencyCheck,
   basedOnLabel, checklistLabel, computeReadiness, fmtFigure, fundCells, groupOf, instrumentOf, loadCap, loadFunds, loadProspects, loadReadiness,
-  loadVersions, prospectFunds, requestTitles,
+  loadVersions, prospectFunds, requestTitles, timeOnDeck,
 } from '../raiseCycle';
+import { deckShareMetrics } from '../deckShareUse';
 import {
   CHECK_SOURCES, EVENT_KINDS, LINK_EXPIRY_DAYS, START_FROM, WriterError, addProspectFeedback, addSectionHire, duplicateNarrativeVersion,
   logProspectEvent, markProspectPassed, rescoreReadiness, revokeDeckLink, saveUseOfFunds, scoreReadinessItem, updateCapHolder,
@@ -59,6 +60,11 @@ const section = (key: string, title: string, read: SectionSpec['read'], extra: P
 const duration = (seconds: number) => {
   const s = Math.max(0, Math.round(seconds));
   return s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
+};
+/** Seconds the viewer reported, as m:ss (D1111); none reported is null, never "0 min". */
+const seconds = (n: unknown): string | null => {
+  const cell = timeOnDeck(n);
+  return cell && typeof cell === 'object' ? cell.text : null;
 };
 const bytes = (n: unknown) => {
   const v = Number(n);
@@ -367,7 +373,7 @@ const narrative = spec('spinout_deck_overrides', 'investor-narrative', async (rc
 
 const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
   const t = await rc.env.DB.prepare(
-    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.view_count, t.investor_label, t.allow_download, t.allow_forwarding,
+    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.used_at, t.view_limit, t.view_count, t.investor_label, t.allow_download, t.allow_forwarding,
             d.version AS deck_version, p.id AS prospect_ref, p.name AS prospect_name, p.firm AS prospect_firm,
             (SELECT COALESCE(SUM(v.read_seconds), 0) FROM deck_share_views v WHERE v.share_token_id = t.id) AS seconds,
             (SELECT s.slide_index FROM deck_view_slides s JOIN deck_share_views v ON v.id = s.view_id
@@ -378,7 +384,8 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
       WHERE t.id = ? AND d.project_id = ?`,
   ).bind(Number(id), rc.projectId).first<any>();
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  const state = t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired' : 'active';
+  // Used up: the engagement read's rule (D895), as the list says it (D1111).
+  const state = t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired' : deckShareMetrics(t).exhausted ? 'used_up' : 'active';
   const never = String(t.expires_at).startsWith(NEVER_EXPIRES.slice(0, 10));
   const investor = [t.prospect_name, t.prospect_firm].filter(Boolean).join(' · ')
     || String(t.investor_label ?? '').trim() || `Link created ${day(t.created_at) ?? 'on an unrecorded day'}`;
@@ -387,10 +394,11 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
     title: `${investor} · link`,
     sub: [`Deck v${Number(t.deck_version)}`,
       state === 'revoked' ? `revoked ${day(t.revoked_at) ?? ''}`.trim() : never ? 'never expires' : `${state === 'expired' ? 'expired' : 'expires'} ${day(t.expires_at)}`].join(' · '),
-    pills: [state === 'active' ? { text: 'Active', tone: 'ok' } : state === 'expired' ? { text: 'Expired', tone: 'grey' } : { text: 'Revoked', tone: 'bad' }],
+    pills: [state === 'active' ? { text: 'Active', tone: 'ok' } : state === 'expired' ? { text: 'Expired', tone: 'grey' }
+      : state === 'used_up' ? { text: 'Used up', tone: 'grey' } : { text: 'Revoked', tone: 'bad' }],
     facts: [
       fact('Views', Number(t.view_count) || 0, ''),
-      fact('Time on deck', `${Math.round((Number(t.seconds) || 0) / 60)} min`, ''),
+      fact('Time on deck', seconds(t.seconds), Number(t.view_count) ? 'No read time recorded' : 'Not opened yet'),
       fact('Most read', t.top_slide == null ? null : `Slide ${Number(t.top_slide) + 1}`, 'No slide time recorded'),
       fact('Expires', expires, 'No expiry recorded'),
     ],
@@ -409,7 +417,7 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
     return {
       rows: (res.results || []).map((v) => ({
         a: `${day(v.created_at) ?? ''} · ${clock(v.created_at)}`,
-        b: [`${Math.round((Number(v.read_seconds) || 0) / 60)} min`, v.first_slide == null ? null
+        b: [seconds(v.read_seconds) ?? 'No read time recorded', v.first_slide == null ? null
           : `slides ${Number(v.first_slide) + 1}–${Number(v.last_slide) + 1}`].filter(Boolean).join(' · '),
       })),
       empty: 'Not opened yet.',
@@ -462,7 +470,7 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
  * `activeGrant`, whose investor the file's tier and expiry admit
  * (`tierAdmits`, with `investorCommitted` for a committed-only file), and,
  * for an `nda` file, only once that investor's NDA is live (`ndaActive`),
- * the gate `data_room.ts` applies.
+ * the gate `data_room.ts` applies. D1103 — and whose folders hold the file.
  */
 async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id: number; name: string | null }>> {
   const res = await rc.env.DB.prepare(
@@ -475,14 +483,14 @@ async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id:
     const grant = await activeGrant(rc.env, rc.projectId, investor);
     if (!grant) continue;
     const committed = f.access_tier === 'committed' ? await investorCommitted(rc.env, rc.projectId, investor) : false;
-    if (!tierAdmits(f, committed)) continue;
+    if (!tierAdmits(f, committed, Date.now(), await grantFolderScope(rc.env, grant.id))) continue;
     if (f.visibility === 'nda' && !(await ndaActive(rc.env, grant.granted_by_user_id, investor))) continue;
     out.push({ id: investor, name: g.name });
   }
   return out;
 }
 
-const dataRoom = spec('data_room_files', 'data-room', async (rc, id) => {
+const dataRoom: ModuleSpec = { ...spec('data_room_files', 'data-room', async (rc, id) => {
   const f = await rc.env.DB.prepare(
     `SELECT f.id, f.uid, f.name, f.folder_id, f.visibility, f.checklist_item, f.dd_request_id, f.access_tier, f.access_expires_at,
             f.size_bytes, f.created_at, d.name AS folder, u.name AS uploader
@@ -607,7 +615,10 @@ const dataRoom = spec('data_room_files', 'data-room', async (rc, id) => {
     checklist: DILIGENCE_CHECKLIST.map((c) => ({ value: c.key, label: c.label, area: c.area })),
     tiers: ACCESS_TIERS.map((t) => ({ value: t, label: TIER_LABEL[t] })),
   };
-});
+}),
+  // D1102 — the file record uses the same owner-only policy as the room.
+  read: dataRoomOwner, write: dataRoomOwner,
+};
 
 // ---------------------------------------------------------------------------
 // Cap table — id: decision 4 (h-<holder>, e-<n>, pool)

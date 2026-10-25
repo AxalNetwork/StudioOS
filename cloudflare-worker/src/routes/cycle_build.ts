@@ -1,5 +1,6 @@
 /** D662 — Build overview and six module reads, from the founder's project. */
 import { Hono } from 'hono';
+import { readCapTable } from '../services/capTableToday';
 import type { Env } from '../types';
 import { requireAuth } from '../auth';
 import { CONNECTOR_METADATA, getDescriptor } from '../integrations/registry';
@@ -14,6 +15,7 @@ import type { Card } from '../services/cycleCards';
 import { buildPhone } from '../services/cycleFocus';
 import { addHolder, updateHolder, HolderError } from '../services/capTableWrites';
 import { logCycleWriteStatement, type BuildModuleSlug as ActivityBuildSlug } from '../services/cycleActivity';
+import { createdId, featureCreateStatements, feedbackLink, mustHaveCreateStatements, roadmapCreateStatements } from '../services/buildCreates';
 import { hasRecords } from '../services/records/index';
 import { ownedRow } from '../services/records/owned';
 import { MVP_VALUES, MVP_EFFORTS, MVP_STATUSES, moveRoadmapItem, roadmapCreateChecks } from './progress';
@@ -411,18 +413,24 @@ async function roadmapGithub(env: Env, p: Project) {
 }
 
 /**
- * The option pool is not a founder (#1693 decision 14): it is the base
- * scenario's `inputs_json.option_pool_pct`, the newest scenario that is not a
- * variant, as Raise's cap table reads it. Null with no such row or no value.
+ * The option pool is not a founder (#1693 decision 14). D1018 (#2855): read
+ * through the one cap table reader. On record, it is the pool's share of the
+ * fully diluted count: options granted and unallocated. Otherwise it is the
+ * saved model's `inputs_json.option_pool_pct` (the newest scenario that is not
+ * a variant), marked Modelled. Null with neither, or no value.
  */
-async function optionPool(env: Env, p: Project): Promise<number | null> {
-  const base = await env.DB.prepare(
-    'SELECT inputs_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
-  ).bind(p.id).first<{ inputs_json: string | null }>();
-  let inputs: any = null;
-  try { inputs = base?.inputs_json ? JSON.parse(base.inputs_json) : null; } catch { inputs = null; }
-  const pool = inputs?.option_pool_pct;
-  return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? null : Number(pool);
+async function optionPool(env: Env, p: Project): Promise<{ pct: number | null; source: 'record' | 'model' | null }> {
+  const cap = await readCapTable(env, p.id);
+  if (cap.source === 'record') {
+    const total = cap.today.totals.shares_outstanding;
+    const pool = (cap.start.start.pool_shares ?? 0) + cap.start.start.holders.filter(h => h.type === 'options').reduce((n, h) => n + h.shares, 0);
+    // No pool class and no grant on record: no pool is recorded, which is not a pool of 0.
+    if (cap.start.start.pool_shares == null && pool === 0) return { pct: null, source: 'record' };
+    return { pct: total > 0 ? Math.round(10000 * pool / total) / 100 : null, source: 'record' };
+  }
+  if (cap.source === 'none') return { pct: null, source: null };
+  const pool = (cap.model.inputs as any)?.option_pool_pct;
+  return pool == null || pool === '' || !Number.isFinite(Number(pool)) ? { pct: null, source: null } : { pct: Number(pool), source: 'model' };
 }
 
 async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRead> {
@@ -460,7 +468,7 @@ async function founding(env: Env, p: Project, viewer: Viewer): Promise<ModuleRea
     cols: [['founder', 'Founder'], ['role', 'Role'], ['equity', 'Equity'], ['vesting', 'Vesting'], ['agreement', 'Agreement']].map(([key, label]) => ({ key, label })),
     rows: holderRows,
     list: { filters: [{ key: 'role', label: 'Role', options: optionsOf(holderRows, 'role') }], sort: { key: '-equity', label: 'Equity' } },
-    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, option_pool_pct: await optionPool(env, p),
+    facts: { cofounder_decision: p.cofounder_decision_meta ? JSON.parse(p.cofounder_decision_meta) : null, ...(await optionPool(env, p).then(o => ({ option_pool_pct: o.pct, option_pool_source: o.source }))),
       agreement_reason: 'The latest document status for a founder is recorded; individual signing status is not.' },
     parts: { github: await fromGithub('founding_team', async () => foundingTeamFromCode(env, p.id, await projectMember(env, p, viewer),
       founderRows.map(h => ({ id: Number(h.id), name: h.name ?? null })))) } };
@@ -949,15 +957,11 @@ app.post('/features', async c => {
   const impact = mvpValue(body, 'impact', IMPACT_IN, MVP_VALUES), effort = mvpValue(body, 'effort', EFFORT_IN, MVP_EFFORTS), scope = scopeValue(body);
   if (!title || description === false || impact === false || effort === false || scope === false) return c.json({ detail: 'A feature needs a title; Impact is High, Medium or Low, Effort Low, Medium or High' }, 400);
   const links = await linkedIds(c, ctx.project, body); if (links instanceof Response) return links;
-  await c.env.DB.batch([
-    c.env.DB.prepare(`INSERT INTO mvp_features (project_id, title, description, added_value, effort, scope, pain_group_id, hypothesis_id, is_must_have, delivery_status, sort_order, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'Backlog', COALESCE((SELECT MAX(sort_order) + 1 FROM mvp_features WHERE project_id = ?), 0), ?, datetime('now'), datetime('now'))`)
-      .bind(ctx.project.id, title, description, impact ?? 'Medium', effort ?? 'M', scope ?? null, links.painId, links.hypothesisId, ctx.project.id, ctx.user.id),
-    logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design',
-      readback: { table: 'mvp_features', by: 'max' }, action: 'build_feature_created', summary: 'Feature added' }),
-  ]);
-  const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM mvp_features WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
-  return c.json({ id: Number(row?.id) }, 201);
+  const results = await c.env.DB.batch(featureCreateStatements(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, title, description, impact: impact ?? 'Medium', effort: effort ?? 'M',
+    scope: scope ?? null, painId: links.painId, hypothesisId: links.hypothesisId,
+  }));
+  return c.json({ id: createdId(results) }, 201);
 });
 
 // D782 (#2114): the founder's decision on a proposal GitHub made. Nothing is written without Accept.
@@ -1050,19 +1054,10 @@ app.post('/must-haves', async c => {
   const ids = await linkedIds(c, ctx.project, { hypothesis_id: body.hypothesis_id ?? null }); if (ids instanceof Response) return ids;
   const owner = await ownerChecked(c, ctx.project, body.owner_user_id); if (owner instanceof Response) return owner;
   const status = state ?? 'Backlog';
-  await c.env.DB.batch([
-    // Migration 441's triggers date a must-have that starts, or moves to, Done.
-    c.env.DB.prepare(`INSERT INTO mvp_features (project_id, title, hypothesis_id, is_must_have, delivery_status, owner_user_id, due_date, added_value, effort, sort_order, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, 1, ?, ?, ?, 'High', 'M', COALESCE((SELECT MAX(sort_order) + 1 FROM mvp_features WHERE project_id = ?), 0), ?, datetime('now'), datetime('now'))`)
-      .bind(ctx.project.id, title, ids.hypothesisId, status, owner, due, ctx.project.id, ctx.user.id),
-    ...[...new Map(links.map(l => [l!.url, l!])).values()].map(l => c.env.DB.prepare(
-      `INSERT INTO mvp_feature_links (feature_id, kind, url, external_ref, created_by) VALUES ((SELECT MAX(id) FROM mvp_features WHERE project_id = ?), ?, ?, ?, ?)`,
-    ).bind(ctx.project.id, l.kind, l.url, l.external_ref, ctx.user.id)),
-    logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'solution-design',
-      readback: { table: 'mvp_features', by: 'max' }, action: 'build_must_have_created', summary: 'Must-have added' }),
-  ]);
-  const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM mvp_features WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
-  return c.json({ id: Number(row?.id) }, 201);
+  const results = await c.env.DB.batch(mustHaveCreateStatements(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, title, hypothesisId: ids.hypothesisId, status, owner, due, links: links as Array<NonNullable<typeof links[number]>>,
+  }));
+  return c.json({ id: createdId(results) }, 201);
 });
 
 app.patch('/features/:id', async c => {
@@ -1174,18 +1169,6 @@ async function columnEnd(env: Env, projectId: number, column: string): Promise<n
     .bind(projectId, column).first<{ n: number }>();
   return Number(row?.n ?? 0);
 }
-/**
- * A feedback theme links this venture's open rows of that theme with no item;
- * nothing is unlinked. A new item is named by its readback, an edited one by its id.
- */
-function feedbackLink(env: Env, projectId: number, item: number | 'new', label: string, theme: string) {
-  return item === 'new'
-    ? env.DB.prepare(`UPDATE product_feedback SET roadmap_item_ref = (SELECT CAST(MAX(id) AS TEXT) FROM roadmap_okrs WHERE project_id = ?), roadmap_item_label = ?
-        WHERE project_id = ? AND theme = ? AND status = 'open' AND roadmap_item_ref IS NULL`).bind(projectId, label, projectId, theme)
-    : env.DB.prepare(`UPDATE product_feedback SET roadmap_item_ref = ?, roadmap_item_label = ?
-        WHERE project_id = ? AND theme = ? AND status = 'open' AND roadmap_item_ref IS NULL`).bind(String(item), label, projectId, theme);
-}
-
 app.post('/roadmap', async c => {
   const ctx = await writeContext(c); if (ctx instanceof Response) return ctx;
   return postRoadmap(c, ctx);
@@ -1205,21 +1188,11 @@ async function postRoadmap(c: WriteCall, ctx: WriteCtx): Promise<Response> {
   const featureId = await ownedId(c, ctx.project, body, 'feature_id', 'mvp_features', 'feature'); if (featureId instanceof Response) return featureId;
   const waitsOn = await ownedId(c, ctx.project, body, 'waits_on_id', 'roadmap_okrs', 'item'); if (waitsOn instanceof Response) return waitsOn;
   const owner = await ownerChecked(c, ctx.project, body.owner_user_id); if (owner instanceof Response) return owner;
-  await c.env.DB.batch([
-    c.env.DB.prepare(`INSERT INTO roadmap_okrs (project_id, objective, key_results_json, kanban_status, sort_order, owner_user_id, target_date, kpi_key, feedback_theme, feature_id, created_by, created_at, updated_at)
-      VALUES (?, ?, '[]', ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`)
-      .bind(ctx.project.id, title, column, await columnEnd(c.env, ctx.project.id, column), owner, due, kpi ?? null, theme, featureId ?? null, ctx.user.id),
-    // A new item has no edge yet, so "Waits on" can be neither a duplicate nor
-    // a cycle, and the item it names is this venture's: the edge goes in the
-    // insert's batch rather than through `addOkrDependency()`'s own write.
-    ...(waitsOn ? [c.env.DB.prepare('INSERT INTO okr_dependencies (project_id, okr_id, blocks_okr_id, note, created_by) VALUES (?, ?, (SELECT MAX(id) FROM roadmap_okrs WHERE project_id = ?), NULL, ?)')
-      .bind(ctx.project.id, waitsOn, ctx.project.id, ctx.user.id)] : []),
-    ...(theme ? [feedbackLink(c.env, ctx.project.id, 'new', title, theme)] : []),
-    logCycleWriteStatement(c.env, { projectId: ctx.project.id, userId: ctx.user.id, cycle: 'build', module: 'product-roadmap',
-      readback: { table: 'roadmap_okrs', by: 'max' }, action: 'build_roadmap_item_created', summary: `Item added to ${column[0].toUpperCase()}${column.slice(1)}` }),
-  ]);
-  const row = await c.env.DB.prepare('SELECT MAX(id) AS id FROM roadmap_okrs WHERE project_id = ?').bind(ctx.project.id).first<{ id: number }>();
-  return c.json({ id: Number(row?.id) }, 201);
+  const results = await c.env.DB.batch(roadmapCreateStatements(c.env, {
+    projectId: ctx.project.id, userId: ctx.user.id, title, column: column as 'now' | 'next' | 'later', sortOrder: await columnEnd(c.env, ctx.project.id, column),
+    owner, due, kpi: kpi ?? null, theme, featureId: featureId ?? null, waitsOn: waitsOn ?? null,
+  }));
+  return c.json({ id: createdId(results) }, 201);
 }
 
 app.patch('/roadmap/:id', async c => {
@@ -1295,7 +1268,7 @@ function vestingOf(body: Record<string, unknown>): { start_date: string; total_m
 export async function unallocated(env: Env, p: Project, exceptHolder: number | null): Promise<number> {
   const held = await env.DB.prepare('SELECT COALESCE(SUM(ownership_pct), 0) AS n FROM cap_table_holders WHERE project_id = ? AND id IS NOT ?')
     .bind(p.id, exceptHolder).first<{ n: number }>();
-  return Math.round((100 - Number(held?.n ?? 0) - (await optionPool(env, p) ?? 0)) * 100) / 100;
+  return Math.round((100 - Number(held?.n ?? 0) - ((await optionPool(env, p)).pct ?? 0)) * 100) / 100;
 }
 async function equityChecked(c: any, p: Project, pct: unknown, exceptHolder: number | null): Promise<number | null | undefined | Response> {
   if (pct === undefined) return undefined;

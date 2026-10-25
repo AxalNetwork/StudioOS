@@ -32,6 +32,16 @@ export const PAGE_SIZE = 10;
  * Axal VC's own accounts are HQ's.
  */
 export const isPersonalMercury = (p) => p?.key === 'mercury';
+
+/**
+ * D1080 (#2945): a connector signed in to through its MCP server's own OAuth
+ * (`/api/integrations/mcp/<key>/start`), by the registry's `oauth_mcp` or the
+ * directory's `sign_in.kind`. Mercury keeps its own route (D840) and words.
+ */
+export const isMcpSignIn = (p) => !isPersonalMercury(p) && (p?.auth_type === 'oauth_mcp' || p?.sign_in?.kind === 'mcp');
+/** The `mcp` kind's words: the button, and the tooltip that says what the button opens. */
+export const mcpSignInLabel = (p) => `Sign in with ${p?.display_name || 'the service'}`;
+export const mcpSignInTooltip = (p) => `Opens ${p?.display_name || 'the service'}’s own sign-in page. Axal VC never sees your password there.`;
 const isMercuryConn = (conn) => conn?.provider_key === 'mercury';
 
 export const CATEGORY_ORDER = ['CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs'];
@@ -164,7 +174,7 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
       connection: byKey.get(p.key) || null,
       joined: joined.has(p.key),
       locked: !!(p.locked_for_user ?? p.tier_locked),
-      available: p.status !== 'coming_soon' && p.has_implementation !== false && !(oauthOff && !p.supports_pat),
+      available: p.status !== 'coming_soon' && p.auth_type !== 'none' && p.has_implementation !== false && !(oauthOff && !p.supports_pat),
     });
   }
   const cards = new Map((Array.isArray(firstPartyCards) ? firstPartyCards : []).filter((c) => c?.key).map((c) => [c.key, c]));
@@ -372,6 +382,7 @@ export const SUGGESTED = 'Suggested for you';
 
 /** The button in a card's corner: "+", a check mark, "Notify me" or "We'll tell you". */
 export function cardAction(p) {
+  if (p.auth_type === 'none') return 'browse';
   if (!p.available && p.status === 'coming_soon') return p.joined ? 'joined' : 'notify';
   if (p.connection) return 'connected';
   if (!p.available) return 'unavailable';
@@ -412,9 +423,11 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
   // OAuth app, a registry one whose OAuth client is unset (D751), or one whose
   // status could not be read) stays in Top, with its
   // reason in the corner; only the registry's own coming_soon is "Coming soon".
-  const top = list.filter((p) => p.status !== 'coming_soon');
+  const top = list.filter((p) => p.auth_type !== 'none' && p.status !== 'coming_soon');
+  const browse = list.filter((p) => p.auth_type === 'none');
   const soon = list.filter((p) => p.status === 'coming_soon');
   const out = [{ title: 'Top connectors', cards: top }];
+  if (browse.length) out.push({ title: 'Works without signing in', cards: browse });
   if (soon.length) out.push({ title: 'Coming soon', cards: soon });
   return out;
 }
@@ -624,6 +637,7 @@ export function stripReturn(search, keys) {
  *   'first_party' — Google, Microsoft or LinkedIn's own sign-in route.
  */
 export function authKind(p) {
+  if (p?.auth_type === 'none') return 'none';
   if (p?.first_party) return 'first_party';
   // D840 (#2346), D881 (#2554): a member connects Mercury only by signing in.
   if (isPersonalMercury(p)) return 'oauth';
@@ -736,6 +750,7 @@ export const TOOL_FILTERS = ['All', 'Connected', 'Not connected', 'Failing'];
  * registry one whose OAuth client is unset, D751).
  */
 export function toolState(p) {
+  if (p.auth_type === 'none') return 'browse';
   if (p.connection) return attentionReason(p.connection) ? 'failing' : 'connected';
   if (p.status === 'coming_soon') return 'soon';
   if (!p.available) return 'unavailable';
@@ -755,7 +770,7 @@ export function toolGroups(catalogue, { q = '', filter = 'All', pin = null } = {
     if (filter === 'Failing') return s === 'failing';
     return true;
   };
-  const list = (catalogue || []).filter((p) => matches(p, q) && keep(p));
+  const list = (catalogue || []).filter((p) => p.auth_type !== 'none' && matches(p, q) && keep(p));
   const groups = [];
   for (const cat of [...BUILD_CATEGORY_ORDER, null]) {
     const rows = list.filter((p) => (cat === null ? !BUILD_CATEGORY_ORDER.includes(p.category) : p.category === cat))

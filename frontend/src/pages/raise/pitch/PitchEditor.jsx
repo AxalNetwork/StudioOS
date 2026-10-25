@@ -8,13 +8,15 @@ import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { Lightbox, usePhoneWidth } from '../../../ui';
 import { SourcesPanel, useDeckSources } from './SourcesBoards';
+import AddMenu from './AddMenu';
+import CardAssistBar from './CardAssistBar';
 import { asList, currentVersion, isReadOnly, ventureQuery } from './pitchStudioModel';
 import { cardOf, presentHref } from './presentExportModel';
 import {
   ADDABLE_KINDS, AUDIENCE_LABELS, CALLOUTS, KIND_LABELS, KIT_FAILED, MODEL_FAILED, NOTES_PLACEHOLDER, NO_CARDS, NO_KIT,
   NOT_RECORDED, PHONE_NOTE, READ_FAILED, THEME_LABELS,
   addBlock, applyLayout, applyToAll, blockLabel, cardColours, cardTitle, cardsOf, changesOf, firstFree, firstRunSeen,
-  keyMove, markFirstRunSeen, moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, tileValue,
+  keyMove, markFirstRunSeen, moveCard, placementProblem, removeBlock, saveState, standardSizes, staleCards, tileValue, updateBlock,
 } from './editorModel';
 
 /**
@@ -38,8 +40,12 @@ import {
  * with Try again and blanks nothing else. An admin reads; nothing is written.
  * On a phone the editor is notes and order only (PD26 frame 4).
  *
- * The Check tab (part 6), the bound charts (PD9, the next part of this task)
- * and the card AI bar (PD7) are not drawn here: each waits for its own store.
+ * D899 (#2678): under the card, the Add menu (`AddMenu.jsx`, PD7, with PD9d's
+ * `ConnectorLightbox.jsx`) and, on a selected text block, Eadwyn's bar
+ * (`CardAssistBar.jsx`). What they propose is placed here on Accept and
+ * written by Save like any other change.
+ *
+ * The Check tab (part 6) is not drawn here: it waits for its own store.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -252,6 +258,18 @@ function Editor({ project, deck, model, kit, refresh, sources, readOnly, phone, 
                 onRemoveBlock={(id) => setDialog({ kind: 'remove-block', id })}
                 onAddBlock={() => setDialog({ kind: 'add-block' })} />
             )}
+            {card && !readOnly ? (
+              <>
+                <AddMenu deckId={base.deck.id} cardIndex={sel} card={card} model={model} items={sources.data?.items || []}
+                  onBlock={(kind) => setDialog({ kind: 'add-block', initial: kind })}
+                  onDesign={() => setPanel('design')}
+                  onPlace={(c) => setCard(sel, c)}
+                  onAddCard={(c) => { setCards((cs) => [...cs, c]); setSel(cards.length); setSelBlock(null); }} />
+                <CardAssistBar deckId={base.deck.id} cardIndex={sel} items={sources.data?.items || []}
+                  block={(card.blocks || []).find((b) => b.id === selBlock) || null}
+                  onPlace={(id, text) => setCard(sel, updateBlock(card, id, { text }))} />
+              </>
+            ) : null}
             {card ? (
               <label className={`${CARD} flex flex-col gap-1.5 px-4 py-3`}>
                 <span className={EYE}>Speaker notes</span>
@@ -299,7 +317,7 @@ function Editor({ project, deck, model, kit, refresh, sources, readOnly, phone, 
           onConfirm={() => { setCards((cs) => applyToAll(cs)); setDialog(null); }} />
       ) : null}
       {dialog?.kind === 'add-block' && card ? (
-        <AddBlockDialog card={card} model={model} sources={sources} onClose={() => setDialog(null)}
+        <AddBlockDialog card={card} model={model} sources={sources} initialKind={dialog.initial} onClose={() => setDialog(null)}
           onAdd={(c) => { setCard(sel, c); setDialog(null); }} />
       ) : null}
     </>
@@ -549,8 +567,8 @@ function DesignTab({ model, card, theme, audience, kit, readOnly, onLayout, onBa
 // Add a block (PD8c)
 // ---------------------------------------------------------------------------
 
-function AddBlockDialog({ card, model, sources, onClose, onAdd }) {
-  const [kind, setKind] = useState('text');
+function AddBlockDialog({ card, model, sources, initialKind, onClose, onAdd }) {
+  const [kind, setKind] = useState(ADDABLE_KINDS.includes(initialKind) ? initialKind : 'text');
   const [fields, setFields] = useState({ style: 'paragraph', text: '', ratio: '16:9' });
   const [video, setVideo] = useState(idle);
   const sizes = standardSizes(kind);

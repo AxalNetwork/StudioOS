@@ -367,7 +367,7 @@ test('#2393 old endpoints report all four omissions; complete and wildcard endpo
     const r = await call(envFor(db), { app: 'stripe', method: 'GET', path: '/webhook' }, HOLDER, 'totp-holder');
     assert.equal(r.status, 200, r.text);
     assert.deepEqual(r.body.endpoints.map((ep: any) => [...ep.missing_events].sort()),
-      [[...REPAIR_EVENTS].sort(), [], [], [...AHEAD_OF_HANDLER].sort()], 'an endpoint with only the handled events misses the ones subscribed ahead');
+      [[...REPAIR_EVENTS].sort(), [], [], AHEAD_OF_HANDLER.filter((event) => !handled.includes(event)).sort()], 'an endpoint with only handled events misses only those still subscribed ahead');
   } finally { db.close(); }
 });
 

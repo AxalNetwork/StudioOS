@@ -25,6 +25,7 @@ lives in `providers/`.
 | `refreshLease.ts` | `acquireRefreshLease` and `REFRESH_LEASE_TTL_S`: the KV lease on `<provider>:refresh:<uid>` that serializes one connection's OAuth token refresh, shared by HubSpot, Calendly, Carta, DocuSign and Salesforce (#1903). `release()` deletes the key only for the caller that acquired it. Best-effort: KV is eventually consistent, so the providers keep their D1 re-checks. |
 | `mcpClient.ts` | D847 (#2468): the Worker as an MCP client of any provider, through one client. `openMcpSession` speaks both eras (`legacy` with `initialize` and the session id, `modern` `2026-07-28` with `_meta` and the `Mcp-*` headers, `auto` probing), with a per-session POST budget, 10-second deadlines, a 25-second wall, a 2 MB body cap and redirects refused; it offers only the record's read tools the server lists, and logs every unknown, annotated, invalid or changed tool as one `mcp_tool_drift` line. Discovery, registration (pre-registered, CIMD, DCR), PKCE, RFC 9207 `iss`, the leased refresh and revoke. Never imports `../mcp/` (StudioOS's own MCP server, D784). |
 | `customMcp.ts` | D852 (#2475): remote MCP servers a member adds, behind `CUSTOM_MCP_ENABLED`. The URL and address guard (https, no IP literal or private name, public addresses only after DNS over HTTPS), `guardedFetcher` (the only fetcher the shared client gets for a custom server), a connection's record (`customProvider`: its approved read tools pinned, no write tool), configure and sign-in, listing (descriptions marked untrusted), approval, `callCustomTool`, health and drift, and revoke (everything deleted). |
+| `mcpSignIn.ts` | D1080 (#2945): what the generic MCP sign-in (`../routes/connector_mcp_oauth.ts`) shares: which records it serves (`genericMcpProvider`: not Mercury's, which keeps its own route), their callback and CIMD paths, D751 readiness for a record, the pre-registered client's loader from HQ › Integration keys, `mcpCallbackUrl` for `CALLBACK_URL`, and the revoke a disconnect runs before the row is deleted. |
 | `mcpProviders.ts` | D847: `MCP_PROVIDERS`, one frozen record per MCP provider (Mercury's first): its server URLs and hosts, scopes, read and write tools (none without a publishing issue), registration order, era, budget, tool pins and D840's legacy names. Imports nothing. |
 
 ## Who sees a provider
@@ -90,3 +91,8 @@ not one provider's goes in this folder; anything with HTTP belongs in
 A KV TTL is at least 60 seconds, KV's minimum: a shorter `expirationTtl` makes the `put` throw in production. `cloudflare-worker/test/kv_refresh_lease.test.ts` fails on a literal under 60 anywhere in `cloudflare-worker/src`, and `cloudflare-worker/test/_mem_kv.mjs` refuses one as KV does.
 
 D1091 (#2956): `fedOwnership.ts` checks the one-owner ledger for explicit links to roadmap OKRs and MVP features; `googleWorkspaceFeeds.ts` is empty until the feeds ship. The Google Workspace directory entry remains Coming soon pending its approved screen.
+
+D1081 (#2946): `lovableFeeds.ts` holds Lovable's four planned launch/app-link
+landings. Only shipped inbound entries become metadata pulls and feeds; none
+have shipped in part 1. Lovable is a directory page with `auth_type: 'none'`,
+not a provider implementation or an account connection.

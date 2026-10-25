@@ -25,8 +25,8 @@ const html = (el) => renderToStaticMarkup(createElement(MemoryRouter, null, el))
 const pageCode = codeOnly(readFileSync(fileURLToPath(new URL('../src/pages/ArchetypeCardPage.jsx', import.meta.url)), 'utf8'));
 
 // The Worker's reply since D683: the tier, the plan's name and its price.
-const FOUNDER_PLAN = { licence: 'founder', tier: 'growth', name: 'Validate + Build', price_label: '$20 / month' };
-const INVESTOR_PLAN = { licence: 'investor', tier: 'professional', price_label: '$149 / month' };
+const FOUNDER_PLAN = { licence: 'founder', tier: 'growth', name: 'Validate + Build', plan_key: 'founder:growth' };
+const INVESTOR_PLAN = { licence: 'investor', tier: 'professional', name: 'Investor Pro', plan_key: 'investor:professional' };
 const lockedFit = (plan) => ({ data: { fit: [], axal_values: [], archetype_sex: 'f', archetype_access: { locked: true, required_plan: plan } }, error: '' });
 const lockedResults = { data: { results: [{ updated_at: '2026-10-01', values: {} }], archetype_access: { locked: true, required_plan: FOUNDER_PLAN } }, error: '' };
 
@@ -41,7 +41,8 @@ test('a locked reply draws the title, a lock and the line naming its plan', () =
   assert.match(markup, /data-testid="archetype-locked"/);
   assert.match(markup, /lucide-lock/, 'the lock icon is drawn');
   const inv = renderedText(html(createElement(ArchetypeCard, { state: { data: null, error: '' }, fitState: lockedFit(INVESTOR_PLAN), audience: 'investor', compact: true })));
-  assert.match(inv, /part of the Professional plan/, 'the plan comes from required_plan, not a literal');
+  // D1050: the Worker sends the catalogue's name, Investor Pro (Pricing's, D786).
+  assert.match(inv, /part of the Investor Pro plan/, 'the plan comes from required_plan, not a literal');
 });
 
 test('the locked card is not a link, is announced as disabled, and holds no archetype text', () => {

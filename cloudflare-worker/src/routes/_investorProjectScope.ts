@@ -32,10 +32,7 @@ export async function investorProjectIds(
   if (!isInvestor(user)) return null;
   await ensureInvestorPaywallSchema(env);
 
-  const seatOwner = await env.DB.prepare(
-    'SELECT investor_seat_primary_user_id FROM users WHERE id = ?',
-  ).bind(user.id).first<{ investor_seat_primary_user_id: number | null }>().catch(() => null);
-  const investorId = Number(seatOwner?.investor_seat_primary_user_id || user.id);
+  const investorId = await seatOwnerId(env, user);
 
   // TWO FULL LITERALS PER QUERY, not one template with an interpolated clause.
   //
@@ -94,6 +91,56 @@ export async function investorProjectIds(
   for (const row of converted.results || []) ids.add(Number(row.project_id));
   return [...ids].filter(Number.isFinite);
 }
+
+/** The investor whose relationships a seat reads: the seat's primary holder, or the caller. */
+async function seatOwnerId(env: Env, user: User): Promise<number> {
+  const seatOwner = await env.DB.prepare(
+    'SELECT investor_seat_primary_user_id FROM users WHERE id = ?',
+  ).bind(user.id).first<{ investor_seat_primary_user_id: number | null }>().catch(() => null);
+  return Number(seatOwner?.investor_seat_primary_user_id || user.id);
+}
+
+/**
+ * D1057 (#2927, #2427 finding 8): the companies an investor HOLDS, for
+ * Portfolio's positions. A relationship (`investorProjectIds`: a dealroom, an
+ * introduction, a converted watchlist item) lets an investor see a company;
+ * it is not a position. Until #2424's `closing_lines` record who signed into
+ * which round, the rule is a CONFIRMED commitment: `commitments.status =
+ * 'confirmed'` on a deal of that company, by the seat's investor, in the
+ * active company (or with none recorded). Pending and withdrawn commitments
+ * are not holdings. The answer is the relationship set narrowed to those
+ * companies, so it never widens what the investor could already see.
+ * Operators return null, as `investorProjectIds` does.
+ */
+export async function investorHeldProjectIds(
+  env: Env, user: User, companyId: number | null = null,
+): Promise<number[] | null> {
+  const related = await investorProjectIds(env, user, companyId);
+  if (related === null || related.length === 0) return related;
+  const investorId = await seatOwnerId(env, user);
+  const rows = companyId === null
+    ? await env.DB.prepare(
+      `SELECT DISTINCT d.project_id
+         FROM commitments t
+         JOIN deals d ON d.id = t.deal_id
+        WHERE t.investor_user_id = ? AND t.status = 'confirmed' AND d.project_id IS NOT NULL`,
+    ).bind(investorId).all<{ project_id: number }>()
+    : await env.DB.prepare(
+      `SELECT DISTINCT d.project_id
+         FROM commitments t
+         JOIN deals d ON d.id = t.deal_id
+        WHERE t.investor_user_id = ? AND t.status = 'confirmed' AND d.project_id IS NOT NULL
+          AND (t.company_id = ? OR t.company_id IS NULL)`,
+    ).bind(investorId, companyId).all<{ project_id: number }>();
+  const held = new Set((rows.results || []).map((r) => Number(r.project_id)));
+  return related.filter((id) => held.has(id));
+}
+
+/** What Portfolio's positions are scoped by, said on the read (D1057). */
+export const HELD_SCOPE = Object.freeze({
+  rule: 'confirmed_commitment',
+  text: 'Companies where you hold a confirmed commitment. The amounts are the positions the studio recorded in them; how you hold each one (direct, through an SPV or a fund) is not recorded yet.',
+});
 
 /**
  * The caller's verified active company for this request, resolved once.

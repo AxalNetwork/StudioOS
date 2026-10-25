@@ -25,6 +25,7 @@
  * definition of open, and one zone formatter.
  */
 import { readLicenceTerms } from './licenceTerms';
+import { programCopy } from './licencePrograms';
 import { dealTypesForPush } from './partnerDealTypes';
 import type { Env } from '../types';
 import { branchByCode } from './branches';
@@ -148,6 +149,14 @@ export async function assembleLicenceRecord(
     record.terms_json = JSON.stringify(rec ? { ...rec.terms, sections_json: JSON.stringify(rec.sections) } : null);
   } catch (e) {
     console.warn('[licencePush] licence_terms unreadable; the copy goes without them', (e as Error).message);
+  }
+  // D984 — the licence's program grants (migration 554), the same way: their
+  // own try, and a store that cannot be read omits the key, so the branch keeps
+  // the programs it has rather than reading an empty set as "none granted".
+  try {
+    record.program_grants_json = JSON.stringify(await programCopy(env, licenceId));
+  } catch (e) {
+    console.warn('[licencePush] program_grants unreadable; the copy goes without them', (e as Error).message);
   }
   // D986 — the partner deal types this licence may offer (migration 555), the
   // same way: the JSON `null` says HQ has recorded none, and a store that

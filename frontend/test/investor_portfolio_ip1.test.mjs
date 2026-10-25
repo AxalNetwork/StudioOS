@@ -239,7 +239,8 @@ test('an empty accessible set reads as empty, never as every row', () => {
   const at = POSITIONS.indexOf("r.get('/marks'");
   const handler = POSITIONS.slice(at, POSITIONS.indexOf('\nr.', at + 20));
   assert.match(handler, /canViewLpData\(user\)/, 'the marks route lost its gate');
-  assert.match(handler, /investorProjectIds\(/, 'the marks route is not scoped');
+  // D1057: positions read the held scope (the relationship scope narrowed to confirmed commitments).
+  assert.match(handler, /investorHeldProjectIds\(/, 'the marks route is not scoped');
   assert.match(handler, /projectIds != null && projectIds\.length === 0/,
     'an empty accessible set is not short-circuited, so it would read as unscoped');
   const guardAt = handler.indexOf('projectIds.length === 0');

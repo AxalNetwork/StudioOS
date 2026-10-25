@@ -435,6 +435,7 @@ function BandAction({ p, action, flow, phone, superAdmin, onChanged, manage = []
           disabled={starting || flow.busy}
           aria-busy={starting ? 'true' : undefined}
           aria-label={action.aria}
+          title={action.title}
           onClick={press}
           data-testid="connector-page-connect-button"
         >
@@ -705,9 +706,21 @@ export function ConnectorBody({ state = 'ready', connector, p, onRetry }) {
         <h2 className={H2}>About</h2>
         {hold || <BodyAbout c={c} />}
       </section>
+      {c?.works_without_signing_in?.length > 0 && (
+        <section data-testid="connector-page-without-sign-in" className="flex min-w-0 flex-col gap-3">
+          <h2 className={H2}>Works without signing in</h2>
+          {c.works_without_signing_in.map(item => <p key={item.name} className="text-[13px] text-axal-ink dark:text-gray-200"><strong>{item.name}</strong> — {item.what}</p>)}
+        </section>
+      )}
+      {c?.never_does?.length > 0 && (
+        <section data-testid="connector-page-never-does" className="flex min-w-0 flex-col gap-3">
+          <h2 className={H2}>What Axal VC never does</h2>
+          {c.never_does.map(line => <p key={line} className="text-[13px] text-axal-ink dark:text-gray-200">{line}</p>)}
+        </section>
+      )}
       <section data-testid="connector-page-tools" className="flex min-w-0 flex-col gap-2">
-        <h2 className={H2}>Tools</h2>
-        {hold || <BodyTools tools={c.tools} name={name} />}
+        <h2 className={H2}>{c?.sign_in?.kind === 'none' ? 'It reads' : 'Tools'}</h2>
+        {hold || (c.sign_in?.kind === 'none' ? <p className="text-[13px] text-axal-muted dark:text-gray-400">Nothing from {name}. The Worker never calls {name}.</p> : <BodyTools tools={c.tools} name={name} />)}
       </section>
       {c && Array.isArray(c.prompts) && c.prompts.length > 0 && (
         <section data-testid="connector-page-prompts" className="flex min-w-0 flex-col gap-2">

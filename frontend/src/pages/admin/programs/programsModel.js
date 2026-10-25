@@ -48,16 +48,20 @@ export const PROGRAMS_PATH = '/admin/programs';
 export const MENTOR_PATH = '/admin/programs/mentor-cohorts';
 export const MENTOR_HOW_PATH = '/admin/programs/mentor-cohorts/how-it-runs';
 export const MENTOR_PEOPLE_PATH = '/admin/programs/mentor-cohorts/people';
+export const MENTOR_ACTIVITY_PATH = '/admin/programs/mentor-cohorts/activity';
 export const REFER_PATH = '/admin/programs/refer-and-earn';
 export const REFER_HOW_PATH = '/admin/programs/refer-and-earn/how-it-runs';
 export const REFER_QUEUE_PATH = '/admin/programs/refer-and-earn/queue';
 export const REFER_SETTINGS_PATH = '/admin/programs/refer-and-earn/settings';
+export const REFER_ACTIVITY_PATH = '/admin/programs/refer-and-earn/activity';
 export const PERKS_PATH = '/admin/programs/perks';
 export const PERKS_HOW_PATH = '/admin/programs/perks/how-it-runs';
 export const PERKS_QUEUE_PATH = '/admin/programs/perks/queue';
+export const PERKS_ACTIVITY_PATH = '/admin/programs/perks/activity';
 export const LEARNING_PATH = '/admin/programs/learning';
 export const LEARNING_HOW_PATH = '/admin/programs/learning/how-it-runs';
 export const LEARNING_PEOPLE_PATH = '/admin/programs/learning/people';
+export const LEARNING_ACTIVITY_PATH = '/admin/programs/learning/activity';
 export const PARTNERS_PATH = '/admin/programs/referral-partners';
 export const PARTNERS_HOW_PATH = '/admin/programs/referral-partners/how-it-runs';
 export const INVESTOR_PATH = '/admin/programs/investor-cohorts';
@@ -125,7 +129,8 @@ export const RAIL_NOTE = 'Eadwyn reads the program figures on this page. Nothing
 
 export const TITLE = 'Programs';
 export const LINE_ADMIN = 'Every program on the accounts HQ holds, and what it needs from you now.';
-export const LINE_SUPER = 'Every program on StudioOS, and what needs HQ now.';
+// D964 (#2797): the line regains "…and what studios propose." with HQ's Proposals tab.
+export const LINE_SUPER = 'Every program on StudioOS, what needs HQ now, and what studios propose.';
 export const FOOT_PROFILING = 'Profiling trends is not a program. It stays here until its home is decided.';
 export const PAGE_UNREADABLE = 'Could not be read';
 
@@ -226,7 +231,10 @@ export const GRANT_GLYPH = Object.freeze({ 'HQ-held': '⌂', 'HQ only': '⌂', '
 /**
  * One entry per program page. `tabs` are the tabs it has today, each a static
  * sub-path; Investor cohort access and AI-native Venture are one page each, so
- * they have none. `workspace` is the board the frame names (D953 §1).
+ * they have none. `workspace` is the board the frame names (D953 §1). D962
+ * adds Activity to Mentor, Refer & Earn, Perks and Learning, each filled by
+ * part 1's activity read. No page has a Terms tab: part 1's store holds no
+ * program's terms (D962 §1).
  */
 export const PAGES = Object.freeze({
   'mentor-cohorts': {
@@ -237,6 +245,7 @@ export const PAGES = Object.freeze({
       { key: 'overview', label: 'Overview', path: MENTOR_PATH },
       { key: 'how', label: 'How it runs', path: MENTOR_HOW_PATH },
       { key: 'people', label: 'People', path: MENTOR_PEOPLE_PATH },
+      { key: 'activity', label: 'Activity', path: MENTOR_ACTIVITY_PATH },
     ],
   },
   'refer-and-earn': {
@@ -248,6 +257,7 @@ export const PAGES = Object.freeze({
       { key: 'how', label: 'How it runs', path: REFER_HOW_PATH },
       { key: 'queue', label: 'Queue', path: REFER_QUEUE_PATH },
       { key: 'settings', label: 'Settings', path: REFER_SETTINGS_PATH },
+      { key: 'activity', label: 'Activity', path: REFER_ACTIVITY_PATH },
     ],
   },
   perks: {
@@ -258,6 +268,7 @@ export const PAGES = Object.freeze({
       { key: 'overview', label: 'Overview', path: PERKS_PATH },
       { key: 'how', label: 'How it runs', path: PERKS_HOW_PATH },
       { key: 'queue', label: 'Queue', path: PERKS_QUEUE_PATH },
+      { key: 'activity', label: 'Activity', path: PERKS_ACTIVITY_PATH },
     ],
   },
   learning: {
@@ -268,6 +279,7 @@ export const PAGES = Object.freeze({
       { key: 'overview', label: 'Overview', path: LEARNING_PATH },
       { key: 'how', label: 'How it runs', path: LEARNING_HOW_PATH },
       { key: 'people', label: 'People', path: LEARNING_PEOPLE_PATH },
+      { key: 'activity', label: 'Activity', path: LEARNING_ACTIVITY_PATH },
     ],
   },
   'referral-partners': {
@@ -414,13 +426,6 @@ export const HOW_IT_RUNS = Object.freeze({
 export const INVESTOR_BANNER = 'New program. This is the design; nothing runs yet.';
 export const INVESTOR_UNDECIDED = 'Who counts as verified, the cohort NDA, what an investor sees and how a founder answers an introduction are not decided yet.';
 export const AI_NATIVE_WAITS = 'The playbook card and the tiles wait for the playbook.';
-
-/** Mentor's "How we measure it": mentors per cohort, then two figures no read serves yet. */
-export const MENTOR_MEASURES = Object.freeze([
-  { label: 'Mentors per cohort', word: null, reason: 'Read from the assignments; Overview counts the cohorts covered, and the chart per cohort is not drawn yet.' },
-  { label: 'Founders hidden', word: NOT_READ_YET, reason: 'Founders’ choices are stored; no admin read counts them yet.' },
-  { label: 'Sessions booked with a mentor', word: NOT_READ_YET, reason: 'Bookings are stored; no read counts the ones made with a mentor yet.' },
-]);
 
 /* ------------------------------------------------------------------ *
  * Reads, and Guard L
@@ -908,7 +913,7 @@ export function testingFrom(read) {
 
 export const SCOPE_READING = 'Reading the scope…';
 export const SCOPE_UNREAD = 'The deployments could not be read, so whether a subsidiary is deployed is not known here.';
-export const SCOPE_NOT_PER_STUDIO = 'Programs reads the accounts HQ holds. No Programs read is per studio yet, so a deployed studio is not shown here.';
+export const SCOPE_PICK_STUDIO = 'These are the accounts HQ holds directly. Pick a studio under Studio to read its own.';
 
 /**
  * The scope chip (D893). For a Super Admin it is keyed on R12. R12 answers 200
@@ -923,7 +928,7 @@ export function scopeChip(superAdmin, scopes) {
   const reason = typeof scopes.data?.reason === 'string' && scopes.data.reason.trim() ? scopes.data.reason.trim() : null;
   if (reason) return { label: SCOPE_LABEL, title: reason };
   const branch = (Array.isArray(scopes.data?.scopes) ? scopes.data.scopes : []).some((s) => s?.kind === 'branch');
-  return { label: SCOPE_LABEL, title: branch ? SCOPE_NOT_PER_STUDIO : SCOPE_TITLE };
+  return { label: SCOPE_LABEL, title: branch ? SCOPE_PICK_STUDIO : SCOPE_TITLE };
 }
 
 /* ------------------------------------------------------------------ *

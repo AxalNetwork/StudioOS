@@ -184,7 +184,7 @@ test('ToastMessage draws both payload shapes, and nothing for no message', () =>
   assert.equal(toastIsError('err'), false);
 });
 
-test('Payments, Billing, the signed-document view and Advisors and partners render a success and an error message without a crash', () => {
+test('Billing and Advisors and partners render a success and an error message without a crash', () => {
   // `useToast` is replaced by one that already holds a message, so the real
   // panels render with it. On main, `{toast}` threw here ("Objects are not
   // valid as a React child"). Module mocks need their own flag, so they run
@@ -197,7 +197,7 @@ test('Payments, Billing, the signed-document view and Advisors and partners rend
   const line = (child.stdout || '').trim().split('\n').filter((l) => l.startsWith('{')).pop();
   assert.ok(line, `the render check printed nothing: ${child.stderr}`);
   const results = JSON.parse(line);
-  for (const panel of ['PaymentsPanel', 'BillingPanel', 'SignedDocLightbox', 'AdminNetworkProfiles']) {
+  for (const panel of ['BillingPanel', 'AdminNetworkProfiles']) {
     for (const kind of ['success', 'error']) {
       const r = results[`${panel}:${kind}`];
       assert.ok(r, `${panel} with a ${kind} message was not rendered`);

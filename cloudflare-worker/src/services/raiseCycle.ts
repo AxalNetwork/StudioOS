@@ -33,6 +33,9 @@ import { peerBenchmark, type PeerBenchmark } from './peerBenchmark';
 import { SERVED_FUNDS } from './researchFundDirectory';
 import { focusTokens, mapCompanySector, mapFundFocus, normalizeLabel } from './researchTaxonomy';
 import { deckReaders, readBySentence } from './narrative/readers';
+import { inputsFrom, readCapTable } from './capTableToday';
+import { simulate } from './captable';
+import { deckShareMetrics } from './deckShareUse';
 
 export { recordQuery };
 export type { RecordQuery };
@@ -707,12 +710,23 @@ export async function pitchDeckCard(ctx: Ctx): Promise<Card> {
   });
 }
 
+/**
+ * A link's time on deck, in the seconds the viewer reported (D1111): m:ss for
+ * the eye, and the seconds themselves. None reported is null, "Not recorded",
+ * never "0 min": a view that sends no time stores 0.
+ */
+export function timeOnDeck(seconds: unknown): Cell {
+  const s = Math.round(Number(seconds));
+  if (!Number.isFinite(s) || s <= 0) return null;
+  return { text: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, seconds: s };
+}
+
 /** A link made with "Never" stores this expiry: the column is NOT NULL (D691 decision 5). */
 export const NEVER_EXPIRES = '9999-12-31 23:59:59';
 
 async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const res = await ctx.env.DB.prepare(
-    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.view_count, t.last_viewed_at, t.investor_label,
+    `SELECT t.id, t.created_at, t.expires_at, t.revoked_at, t.used_at, t.view_limit, t.view_count, t.last_viewed_at, t.investor_label,
             p.name AS prospect_name, p.firm AS prospect_firm,
             (SELECT COALESCE(SUM(v.read_seconds), 0) FROM deck_share_views v WHERE v.share_token_id = t.id) AS seconds,
             (SELECT s.slide_index FROM deck_view_slides s JOIN deck_share_views v ON v.id = s.view_id
@@ -725,14 +739,17 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   // A link needs a deck: with none, the Add builds one first (D695 decision 11).
   const deck = await ctx.env.DB.prepare('SELECT id FROM pitch_decks WHERE project_id = ? LIMIT 1').bind(ctx.projectId).first();
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
-  const status = (t: any) => (t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired' : 'active');
+  // Used up is the engagement read's own rule (D895, deckShareUse.ts): part 1's
+  // promise, so every version's links say it, not only the current one's (D1111).
+  const status = (t: any) => (t.revoked_at ? 'revoked' : String(t.expires_at) < now ? 'expired'
+    : deckShareMetrics(t).exhausted ? 'used_up' : 'active');
   // The investor a link was made for: a prospect still of this venture, else the
   // name typed in. A link made before 463 recorded neither, so it is named by its day.
   const investor = (t: any) => [t.prospect_name, t.prospect_firm].filter(Boolean).join(' · ')
     || String(t.investor_label ?? '').trim() || `Link created ${day(t.created_at) ?? 'on an unrecorded day'}`;
   const expires = (t: any): Cell => {
     const st = status(t);
-    if (st !== 'active') return { text: st === 'revoked' ? 'Revoked' : 'Expired', tone: 'muted' };
+    if (st !== 'active') return { text: st === 'revoked' ? 'Revoked' : st === 'used_up' ? 'Used up' : 'Expired', tone: 'muted' };
     return { text: String(t.expires_at).startsWith(NEVER_EXPIRES.slice(0, 10)) ? 'Never' : day(t.expires_at) ?? '', tone: 'ok' };
   };
   let rows = (res.results || []).filter((t) => has(rq.q, investor(t), day(t.created_at)));
@@ -750,13 +767,13 @@ async function pitchRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
         link: investor(t),
         expires: expires(t),
         views: Number(t.view_count) || 0,
-        time: `${Math.round((Number(t.seconds) || 0) / 60)} min`,
+        time: timeOnDeck(t.seconds),
         most_read: t.top_slide == null ? null : `Slide ${Number(t.top_slide) + 1}`,
       },
     })),
     rq.page,
     {
-      filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
+      filters: [{ key: 'status', label: 'State', options: [{ value: 'active', label: 'Active' }, { value: 'used_up', label: 'Used up' }, { value: 'expired', label: 'Expired' }, { value: 'revoked', label: 'Revoked' }] }],
       sorts: [{ key: 'last_viewed', label: 'Last viewed' }, { key: 'newest', label: 'Newest' }, { key: 'views', label: 'Most views' }],
       add: deck ? { text: 'New link', href: addHref(ctx, 'pitch-deck') } : { text: 'Build your deck', href: TOOL_HREF.pitch },
     },
@@ -909,12 +926,16 @@ async function dataRoomRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
 // ---------------------------------------------------------------------------
 
 export const HOLDER_GROUPS = ['Founders', 'Option pool', 'Investors'] as const;
-export const groupOf = (type: string) => (type === 'founder' ? 'Founders' : type === 'option_pool' ? 'Option pool' : 'Investors');
-const INSTRUMENT: Record<string, string> = { founder: 'Common', option_pool: 'Options', safe: 'SAFE', preferred: 'Preferred' };
+export const groupOf = (type: string) => (type === 'founder' ? 'Founders' : type === 'option_pool' || type === 'options' ? 'Option pool' : 'Investors');
+// `options` is a recorded grant (D1018): options granted from a pool, counted in the pool's group.
+const INSTRUMENT: Record<string, string> = { founder: 'Common', option_pool: 'Options', options: 'Options', safe: 'SAFE', preferred: 'Preferred' };
 
 type Holder = { holder: string; type: string; shares: number };
-/** `type` is the simulator's ledger type, which `capIdOf` pairs with an `inputs_json` list. */
-export type CapRow = { holder: string; type: string; group: string; instrument: string; before: number | null; after: number | null };
+/**
+ * `type` is the simulator's ledger type, which `capIdOf` pairs with an `inputs_json` list.
+ * D1018: a row read from the record carries its own `id` (`h-<holder>`), which `capIdOf` returns.
+ */
+export type CapRow = { holder: string; type: string; group: string; instrument: string; before: number | null; after: number | null; id?: string | null };
 
 /** One row per holder with their percentage before and after the first planned round. */
 export function capRows(before: Holder[], after: Holder[] | null): CapRow[] {
@@ -941,24 +962,44 @@ export function groupShares(rows: CapRow[], side: 'before' | 'after'): number[] 
 /** The planned round as `simulate` stored it: its pre-money and the lines saying how each instrument converted. */
 export type PlannedRound = { name: string; preMoney: number | null; events: string[] };
 
-export async function loadCap(ctx: Ctx): Promise<{ exists: boolean; computed: boolean; roundName: string | null; rows: CapRow[]; inputs: any; round: PlannedRound | null }> {
-  const s = await ctx.env.DB.prepare(
-    'SELECT inputs_json, result_json FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0 ORDER BY updated_at DESC LIMIT 1',
-  ).bind(ctx.projectId).first<{ inputs_json: string | null; result_json: string | null }>();
-  if (!s) return { exists: false, computed: false, roundName: null, rows: [], inputs: null, round: null };
-  let r: any = null;
-  try { r = s.result_json ? JSON.parse(s.result_json) : null; } catch { r = null; }
-  let inputs: any = null;
-  try { inputs = s.inputs_json ? JSON.parse(s.inputs_json) : null; } catch { inputs = null; }
+export type CapSource = 'record' | 'model' | null;
+type LoadedCap = {
+  exists: boolean; computed: boolean; roundName: string | null; rows: CapRow[]; inputs: any; round: PlannedRound | null;
+  /** D1018: where "before" comes from. "After" is always a scenario, so always Modelled. */
+  source: CapSource;
+};
+
+const plannedOf = (round: any): PlannedRound | null => (round ? {
+  name: String(round.name ?? 'the round'), preMoney: num(round.pre_money),
+  events: Array.isArray(round.events) ? round.events.map(String) : [],
+} : null);
+
+/**
+ * D1018 (#2855): through the one cap table reader. On record, "before" is
+ * Today from the record and "after" is the model's planned round run from
+ * Today (Modelled). Otherwise both come from the saved model, as before.
+ */
+export async function loadCap(ctx: Ctx): Promise<LoadedCap> {
+  const cap = await readCapTable(ctx.env, ctx.projectId);
+  if (cap.source === 'none') return { exists: false, computed: false, roundName: null, rows: [], inputs: null, round: null, source: null };
+  if (cap.source === 'record') {
+    const inputs: any = cap.model?.inputs ?? null;
+    const rounds = Array.isArray(inputs?.rounds) ? inputs.rounds.slice(0, 1) : [];
+    const sim: any = rounds.length ? simulate(inputsFrom(cap.start, { rounds })) : null;
+    const round = sim && !sim.errors && sim.rounds?.length ? sim.rounds[0] : null;
+    const planned = plannedOf(round);
+    const rows = capRows(cap.today.founding ?? [], round && Array.isArray(round.ledger) ? round.ledger : null)
+      .map((row) => ({ ...row, id: row.type === 'option_pool' ? 'pool' : cap.start.ids[row.holder] ?? capIdOf(row, inputs) }));
+    return { exists: true, computed: true, roundName: planned ? planned.name : null, rows, inputs, round: planned, source: 'record' };
+  }
+  const r: any = cap.model.result;
+  const inputs: any = cap.model.inputs;
   const founding: Holder[] | null = Array.isArray(r?.founding) ? r.founding : null;
-  if (!founding) return { exists: true, computed: false, roundName: null, rows: [], inputs, round: null };
+  if (!founding) return { exists: true, computed: false, roundName: null, rows: [], inputs, round: null, source: 'model' };
   const round = Array.isArray(r?.rounds) && r.rounds.length ? r.rounds[0] : null;
   const after: Holder[] | null = round && Array.isArray(round.ledger) ? round.ledger : null;
-  const planned = round ? {
-    name: String(round.name ?? 'the round'), preMoney: num(round.pre_money),
-    events: Array.isArray(round.events) ? round.events.map(String) : [],
-  } : null;
-  return { exists: true, computed: true, roundName: planned ? planned.name : null, rows: capRows(founding, after), inputs, round: planned };
+  const planned = plannedOf(round);
+  return { exists: true, computed: true, roundName: planned ? planned.name : null, rows: capRows(founding, after), inputs, round: planned, source: 'model' };
 }
 
 const ENTRY_KEY = /^e-[1-9][0-9]{0,8}$/;
@@ -981,7 +1022,8 @@ export function capEntryOf(row: { holder: string; type: string }, inputs: any): 
  * pool. A row of a scenario saved before keys has none: null, drawn plain, and
  * the read never writes one.
  */
-export function capIdOf(row: { holder: string; type: string }, inputs: any): string | null {
+export function capIdOf(row: { holder: string; type: string; id?: string | null }, inputs: any): string | null {
+  if (row.id !== undefined) return row.id;
   if (row.type === 'option_pool') return 'pool';
   const entry = capEntryOf(row, inputs);
   if (!entry) return null;
@@ -1019,8 +1061,10 @@ export async function capTableCard(ctx: Ctx): Promise<Card> {
       return { state: 'not_recorded', series: null, next: { text: 'Compute the cap table', href: TOOL_HREF.capTable }, reason: 'The cap table has not been computed yet.' };
     }
     const tones = ['v1', 'v2', 'v3'];
-    const rows = [{ label: 'Before', parts: groupShares(cap.rows, 'before') }];
-    if (cap.roundName) rows.push({ label: `After ${cap.roundName}`, parts: groupShares(cap.rows, 'after') });
+    // D1018: on record, "Today" is what was issued and the round after it is Modelled.
+    const recorded = cap.source === 'record';
+    const rows = [{ label: recorded ? 'Today' : 'Before', parts: groupShares(cap.rows, 'before') }];
+    if (cap.roundName) rows.push({ label: recorded ? `After ${cap.roundName} · Modelled` : `After ${cap.roundName}`, parts: groupShares(cap.rows, 'after') });
     return {
       state: 'ok',
       series: [{ kind: 'stack', rows, tones, legend: HOLDER_GROUPS.map((g, i) => ({ label: g, tone: tones[i] })) }],
@@ -1509,7 +1553,7 @@ export const CARD_FOR: Record<ModuleSlug, (ctx: Ctx) => Promise<Card>> = {
   'capital-relationships': capitalCard,
 };
 
-export type Cell = string | number | null | { text: string; tone?: string; href?: string };
+export type Cell = string | number | null | { text: string; tone?: string; href?: string; seconds?: number };
 export type Records = {
   cols: Array<{ key: string; label: string }>;
   /** Null only where decision 4 says so: a cap-table row of a scenario saved before keys. */

@@ -60,6 +60,7 @@ import {
 } from '../integrations/secrets';
 import { buildPkce, issueOauthState, consumeOauthState } from '../integrations/oauth';
 import { refuse } from '../util/refusal';
+import { mcpDisconnect } from '../integrations/mcpSignIn';
 import { MANAGED_PROVIDERS, PROVIDER_ENV_VARS, type ManagedProviderKey } from '../services/providerOauthKeys';
 import { activeCompanyFor } from '../middleware/activeCompany';
 import { companyEnabled, enabledCompanyIds, projectEnabled, writesProjectData } from '../integrations/companyScope';
@@ -610,6 +611,7 @@ integrations.post('/connect', async (c) => {
     return refuse(c, 403, { code: 'purpose_not_allowed', message: personalHqOnlySentence(desc.display_name) });
   }
   if (!desc || audienceOf(c, user, desc) === 'none') return c.json({ error: 'unknown_provider', provider_key: key }, 404);
+  if (desc.auth_type === 'none') return c.json({ error: 'sign_in_not_required' }, 409);
   // D879: a preview connects nothing; Mercury's own connect answers it 403 `purpose_not_allowed` (no personal connection).
   const activeCompanyId = await activeCompanyFor(c, user);
   if (!activeCompanyId && writesProjectData(key)) return c.json({ error: 'active_company_required' }, 400);
@@ -782,6 +784,10 @@ integrations.delete('/:uid', async (c) => {
   if (impl?.disconnect) {
     try { await impl.disconnect(c, user, row); }
     catch (e) { console.warn('[integrations] provider disconnect threw:', (e as Error).message); }
+  } else {
+    // D1080: a member's MCP sign-in is revoked at the provider before its row is deleted.
+    try { await mcpDisconnect(c.env, row); }
+    catch { console.warn('[integrations] mcp revoke failed'); }
   }
 
   await c.env.DB.prepare('DELETE FROM integration_companies WHERE integration_id = ?').bind(row.id).run();

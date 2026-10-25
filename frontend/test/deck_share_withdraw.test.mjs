@@ -253,9 +253,9 @@ test('Pitch deck studio · Share & analytics withdraws through the link record, 
   // `deck_link_revoked`, after a dialog that says what changes.
   const src = codeOnly(STUDIO);
   assert.match(src, /cyclesApi\.recordAction\('raise', reads\.project\.id, 'pitch-deck', withdraw\.id, 'revoke'\)/);
-  // 2026-10-24 (D894 review, R1): a link whose views left are not known is
-  // still offered Withdraw; withdrawing one already used up does no harm.
-  assert.match(src, /!readOnly && l\.live !== false \? <button/, 'Withdraw is drawn on every link not known to be dead, and never for a reader');
+  // D1111: the records say used up for every version's links, so a link is
+  // live or dead, never unknown; Withdraw is drawn on each live one.
+  assert.match(src, /!readOnly && l\.live \? <button/, 'Withdraw is drawn on every live link, and never for a reader');
   assert.match(src, /title="Withdraw this link\?"/);
   assert.match(STUDIO, /link stops opening at once\. Its views stay listed\./);
   assert.doesNotMatch(src, /deckRevokeShare/, 'a second way to end a link is back');

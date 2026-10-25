@@ -120,9 +120,9 @@ test('the module read query, the count, the pages, the cells and the links a rea
 
 test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module page keep `?project_id=`', () => {
   assert.deepEqual(cycleTabs('grow', [{ slug: 'distribution', name: 'Distribution' }], null, '?project_id=7').map((t) => t.href),
-    ['/grow?project_id=7', '/grow/durable-company-building?project_id=7#updates', '/grow/distribution?project_id=7']);
+    ['/grow?project_id=7', '/grow/reporting?project_id=7', '/grow/distribution?project_id=7']);
   for (const bad of ['project_id=7', '//evil.test', '?', null, 7]) {
-    assert.deepEqual(cycleTabs('grow', [{ slug: 'distribution' }], null, bad).map((t) => t.href), ['/grow', '/grow/durable-company-building#updates', '/grow/distribution'], String(bad));
+    assert.deepEqual(cycleTabs('grow', [{ slug: 'distribution' }], null, bad).map((t) => t.href), ['/grow', '/grow/reporting', '/grow/distribution'], String(bad));
   }
   const over = html(h(CycleOverview, { cycle: 'validate', data: OVERVIEWS.validate, search: '?project_id=7' }));
   // The tabs, and each card's title link (its name and ›). A card's own
@@ -142,7 +142,9 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   // 4 → 5 (D906): the Investor narrative tool's tab bar on its module page keeps it too.
   // 5 → 4 (2026-10-24, D906 review): that tab bar now takes `tabSearch(q, …)`, the venture and the version.
   // 4 → 5 (D1015, #2432): the Cap table tool's tab bar on its module page keeps it too.
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 5, 'the overview, module, record header, Validate\'s phone focus and the Cap table tabs keep the venture');
+  // 5 → 6 (D1063, #2426): the Build overview's door to the plan keeps it too.
+  // 6 → 7 (D1101, #2456): the Data room tool's tab bar on its module page keeps it too.
+  assert.equal((route.match(/search=\{q\}/g) || []).length, 8, 'the overview, module, record header, Validate\'s phone focus, the Cap table and Data room tabs, the plan door and the readiness door keep the venture');
   assert.match(route, /search=\{tabSearch\(q, searchParams\.get\('version'\)\)\}/, 'the narrative tabs keep the venture, and the version');
 });
 
@@ -438,8 +440,8 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   for (const c of new Set(mounted)) assert.ok(wired.includes(c), `${c} is mounted with no read in lib/api/cycles.js`);
   assert.match(app, /<Route path="\/validate\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="validate" \/>\)\} \/>/, 'Validate has its module pages');
   assert.match(app, /<Route path="\/raise\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="raise" \/>\)\} \/>/, 'Raise has its module pages');
-  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="build" \/>\)/, "a founder's /build is the Build overview");
-  assert.match(app, /<Route path="\/build\/:slug" element=\{guard\(\[[^\]]*\], <CycleRoute cycle="build" \/>\)\} \/>/, 'Build has its module pages');
+  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(labRoles\(\[[^\]]*\]\), <CycleRoute cycle="build" \/>\)/, "a founder's /build is the Build overview");
+  assert.match(app, /<Route path="\/build\/:slug" element=\{guard\(labRoles\(\[[^\]]*\]\), <CycleRoute cycle="build" \/>\)\} \/>/, 'Build has its module pages');
   // Every Build page keeps its static route, and no module slug is one of them.
   const buildPages = [...app.matchAll(/<Route path="\/build\/([a-z-]+)"/g)].map((m) => m[1]);
   for (const page of ['roadmap', 'cadence', 'kpi', 'this-week', 'board', 'team', 'competitors', 'captable']) assert.ok(buildPages.includes(page), `/build/${page} lost its route`);

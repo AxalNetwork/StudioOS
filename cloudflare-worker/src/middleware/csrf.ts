@@ -47,6 +47,10 @@ const CSRF_PATH_EXEMPT = new Set([
   '/api/notifications/unsubscribe',
   '/api/newsletter/unsubscribe',
   '/api/newsletter/confirm',
+  // D1075 — the subprocessor notices' confirm and one-click unsubscribe, for
+  // the same reasons: the single-use or signed token is the authorisation.
+  '/api/public/trust/subprocessors/confirm',
+  '/api/public/trust/subprocessors/unsubscribe',
 ]);
 
 function readCookie(cookieHeader: string, name: string): string | null {

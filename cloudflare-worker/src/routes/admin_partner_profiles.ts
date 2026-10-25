@@ -9,6 +9,10 @@
  *                   weekly series, each block with `available` and `reason`.
  *   GET /:ref       one profile by its reference, `ein` masked, logged as the
  *                   D612 profile read (`partner_profile_access`) by reference.
+ *   GET /:ref/history   D991: the profile's captures and decisions, newest
+ *                   first, paged. A decision names the admin who made it.
+ *   POST /:ref/reopen   D991: back in the queue, with an optional reason. The
+ *                   verdict stays in the history; nobody is told (PRF5d).
  *   GET /agreements D993: the first-agreement options in their five groups,
  *                   each Ready or "Not ready: no text in the library yet",
  *                   read through the send's own resolver.
@@ -37,6 +41,7 @@ import { hashEmail } from '../util/hashEmail';
 import { maskPartnerProfile } from '../services/sensitiveFields';
 import { logAdminAction } from '../services/adminAudit';
 import { agreementOptions } from '../services/partnerAgreements';
+import { HISTORY_LIMIT_MAX, REOPEN_REASON_MAX, profileHistory, reopenProfile } from '../services/partnerProfileReview';
 import {
   PROFILE_REF, listOptions, listPartnerProfiles, listedByRef, partnerProfileCounts, type ListQuery,
 } from '../services/partnerProfiles';
@@ -102,6 +107,43 @@ r.get('/:ref', async (c) => {
     return c.json({ ...maskPartnerProfile(row), listed });
   } catch (e) {
     return refuse(c, 503, { code: 'partner_profiles_unreadable', message: 'The partner profile could not be read. Try again in a moment.', raw: e });
+  }
+});
+
+const intOr = (v: string | undefined, d: number) => (v != null && /^\d+$/.test(v) ? Number(v) : d);
+
+r.get('/:ref/history', async (c) => {
+  await requireAdmin(c);
+  const ref = c.req.param('ref');
+  if (!PROFILE_REF.test(ref)) return refuse(c, 404, { code: 'profile_not_found', message: 'No partner profile has that reference.' });
+  const limit = Math.min(HISTORY_LIMIT_MAX, Math.max(1, intOr(c.req.query('limit'), 50)));
+  const offset = intOr(c.req.query('offset'), 0);
+  try {
+    const exists = await c.env.DB.prepare('SELECT 1 AS ok FROM partner_profiles WHERE ref = ?').bind(ref).first();
+    if (!exists) return refuse(c, 404, { code: 'profile_not_found', message: 'No partner profile has that reference.' });
+    return c.json(await profileHistory(c.env, ref, limit, offset));
+  } catch (e) {
+    return refuse(c, 503, { code: 'partner_profile_history_unreadable', message: 'This profile\'s history could not be read. That is not the same as none.', raw: e });
+  }
+});
+
+r.post('/:ref/reopen', async (c) => {
+  // Not frozen on a suspended branch, like the verdicts it undoes (D260's Approvals row).
+  const admin = await requireAdmin(c);
+  const ref = c.req.param('ref');
+  if (!PROFILE_REF.test(ref)) return refuse(c, 404, { code: 'profile_not_found', message: 'No partner profile has that reference.' });
+  const body = await c.req.json().catch(() => ({} as any));
+  const reason = typeof body?.reason === 'string' ? body.reason : null;
+  if (reason && reason.trim().length > REOPEN_REASON_MAX) {
+    return refuse(c, 400, { code: 'reason_too_long', message: `A reason is at most ${REOPEN_REASON_MAX} characters.` });
+  }
+  try {
+    const result = await reopenProfile(c.env, ref, admin.id, reason);
+    if (!result.ok) return refuse(c, result.status, { code: result.code, message: result.message });
+    await logRead(c.env, admin, 'partner_profile_reopened', `Admin reopened partner profile ref=${ref}`);
+    return c.json({ ok: true, ref, status: 'pending', reopened_at: result.reopened_at });
+  } catch (e) {
+    return refuse(c, 503, { code: 'partner_profiles_unreadable', message: 'The partner profile could not be reopened. Try again in a moment.', raw: e });
   }
 });
 

@@ -1,7 +1,12 @@
 # Events: host tools and member/public detail
 
-`EventManagePage.jsx` draws the Ops canvas eligibility, registration queue and
-agenda editor at the three manage routes, inside `WorkspaceShell`. It reads
+`EventManagePage.jsx` draws the Ops canvas eligibility, registration queue,
+agenda editor and check-in (D1036) at the four manage routes, under the shared
+host header. `HostHeader.jsx` is that header for the editor and every manage
+tab (MEV12a), with `NewEventHeader` for `/events/new` (MEV12b); its tabs are
+literal links, Check-in only on the event's day. `hostHeaderModel.js` holds its
+pure rules: the event's day in its own zone, the time line, the publish gate,
+the one primary action, Registrations' count, and MEV13's waiting words. It reads
 through the authenticated `events` client; host/admin authority stays in the
 Worker. `eventOrganiserModel.js` contains tab, pagination and missing-value
 formatting shared with the member registration panel. Failed reads are

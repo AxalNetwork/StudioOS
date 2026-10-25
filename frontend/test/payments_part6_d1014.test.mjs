@@ -15,7 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  DIALOGS_WAIT, TABS, actionWord, deliveryColumns, deliveryHours, deliveryTable, detailText, logFilters, logRange,
+  TABS, actionWord, deliveryColumns, deliveryHours, deliveryTable, detailText, logFilters, logRange,
   peopleOf, reasonOf, reasonProblem, silentHoursText, tabOf, whoText,
 } from '../src/pages/admin/payments/payModel.js';
 import { totalsText } from '../src/pages/admin/payments/StripeConnection.jsx';
@@ -150,6 +150,7 @@ function stub(over = {}) {
     '/api/admin/stripe/webhook': () => json(WEBHOOK),
     '/api/admin/platform/summary': () => json(SUMMARY),
     '/api/admin/payments/webhook-deliveries': () => json(DELIVERIES),
+    '/api/admin/payments/change-log/admins': () => json({ admins: [{ id: 1, name: 'Ada Admin' }, { id: 2, name: null }, { id: 99, name: 'Quiet Admin' }] }),
     '/api/admin/payments/change-log': (u) => json({ entries: ENTRIES, total: 3, limit: Number(u.searchParams.get('limit')), offset: 0, filters: {}, kinds: ['product', 'price', 'sync', 'token_pack', 'webhook', 'key'] }),
     ...over,
   };
@@ -171,7 +172,7 @@ async function render(url, { phone = false } = {}) {
   const root = createRoot(container);
   await act(async () => {
     root.render(h(MemoryRouter, { initialEntries: [url] },
-      h(Routes, null, ['', '/stripe', '/log'].map((p) => h(Route, { key: p, path: `/admin/platform/payments${p}`, element: h(Payments) })))));
+      h(Routes, null, ['', '/stripe', '/log', '/products/:id'].map((p) => h(Route, { key: p, path: `/admin/platform/payments${p}`, element: h(Payments) })))));
   });
   await settle();
   const walk = (n) => [n, ...(n.childNodes || []).flatMap(walk)];
@@ -223,22 +224,20 @@ test('mounted Stripe connection: the table form, six hours newest first, then al
   } finally { await v.unmount(); s.restore(); }
 });
 
-test('mounted Stripe connection: the three part-5 buttons are drawn, disabled, saying where the work is done today', async () => {
+test('mounted Stripe connection: for anyone but the Super Admin, the part-5 doors say who can make the change (D1013)', async () => {
   const noEndpoint = stub({ '/api/admin/stripe/webhook': () => json({ ...WEBHOOK, endpoints: [] }) });
   let v = await render('/admin/platform/payments/stripe');
   try {
-    assert.equal(v.props('pay-key-replace').disabled, true);
-    assert.match(v.of('pay-key'), /Replace key…/);
-    assert.ok(v.of('pay-key').includes(DIALOGS_WAIT));
-    assert.equal(v.props('pay-webhook-register').disabled, true);
+    assert.ok(!v.has('pay-key-replace'), 'a control the server can only refuse');
+    assert.match(v.of('pay-key-replace-holder'), /Only the Super Admin can change payments/);
+    assert.match(v.of('pay-webhook-register-gate'), /writes a secret onto the production Worker/);
     assert.ok(!v.has('pay-webhook-add-we_1'));
   } finally { await v.unmount(); noEndpoint.restore(); }
   const s = stub();
   v = await render('/admin/platform/payments/stripe');
   try {
-    assert.equal(v.props('pay-webhook-add-we_1').disabled, true);
-    assert.match(v.of('pay-webhook'), /1 missing\..*Add the missing events/s);
-    assert.ok(!v.has('pay-webhook-register'), 'register offered beside an endpoint of ours');
+    assert.match(v.of('pay-webhook-add-we_1-holder'), /Only the Super Admin/);
+    assert.ok(!v.has('pay-webhook-register-gate'), 'register offered beside an endpoint of ours');
   } finally { await v.unmount(); s.restore(); }
 });
 
@@ -270,16 +269,16 @@ test('mounted Change log: the tab, newest first, who, product by name, failed sy
     const call = s.seen.find((u) => u.pathname === '/api/admin/payments/change-log');
     assert.equal(call.searchParams.get('limit'), '25');
     assert.equal(call.searchParams.get('offset'), '0');
-    assert.deepEqual(s.paths(), ['/api/admin/catalog/products', '/api/admin/payments/change-log'], 'the log tab read more than it draws');
+    assert.deepEqual(s.paths(), ['/api/admin/catalog/products', '/api/admin/payments/change-log', '/api/admin/payments/change-log/admins'], 'the log tab read more than it draws');
   } finally { await v.unmount(); s.restore(); }
 });
 
-test('mounted Change log: filters go to the read, people come from the rows, and paging moves by 25', async () => {
+test('mounted Change log: filters go to the read, people include admins with no rows, and paging moves by 25', async () => {
   const s = stub({ '/api/admin/payments/change-log': (u) => json({ entries: ENTRIES, total: 60, limit: 25, offset: Number(u.searchParams.get('offset')), filters: {}, kinds: ['price', 'sync'] }) });
   const v = await render('/admin/platform/payments/log');
   try {
     assert.match(v.of('pay-log-what'), /^EverythingPricesSyncs$/, 'the kinds did not come from the read');
-    assert.match(v.of('pay-log-who'), /AnyoneAccount #2 · name not recordedAda Admin/);
+    assert.match(v.of('pay-log-who'), /AnyoneAda AdminAdmin #2 · name not recordedQuiet Admin/);
     assert.match(v.of('pay-log-product'), /Delaware incorporation.*Founder Validate \+ Build/);
     await v.change('pay-log-what', 'price');
     await v.change('pay-log-who', '1');
@@ -355,18 +354,23 @@ test('mounted Change log export, sent: the dialog closes and says what was expor
   } finally { paymentsApi.changeLogCsv = original; await v.unmount(); s.restore(); }
 });
 
-test('mounted phone: the catalogue stacks into cards, a product opens as a bottom sheet, the log is a list', async () => {
+test('mounted phone: the catalogue stacks into cards, a product opens as its full page, the log is a list', async () => {
   const s = stub();
   let v = await render('/admin/platform/payments', { phone: true });
   try {
     assert.ok(v.has('pay-phone-catalogue'));
     assert.equal(v.count('pay-row'), 2);
-    await v.click('pay-row');
-    assert.ok(v.has('pay-product'), 'no product sheet');
-    assert.equal(v.props('pay-product-layer')['data-phone'], 'sheet', 'the dialog is not a bottom sheet');
-    assert.match(v.props('pay-product-layer').className, /max-sm:items-end/);
-    assert.match(v.of('pay-product'), /Founder Validate \+ Build.*20\.00 USD \/ month/s);
-    assert.match(v.of('pay-product-tech'), /^Technical details.*prod_b · price_1/);
+    // D1012: a card is a door to the product's own address; the product opens there.
+    assert.equal(v.props('pay-row').href, '/admin/platform/payments/products/prod_b');
+  } finally { await v.unmount(); }
+  v = await render('/admin/platform/payments/products/prod_b', { phone: true });
+  try {
+    assert.ok(v.has('pay-product-page'), 'no full product page');
+    assert.ok(!v.has('pay-product-layer') && !v.has('pay-phone-catalogue') && !v.has('pay-header'));
+    assert.ok(v.has('pay-product-back'));
+    assert.match(v.of('pay-product-page'), /Founder Validate \+ Build.*Monthly.*20\.00 USD/s);
+    assert.ok(v.has('pay-phone-prices'), 'phone prices are cards, not a wide desktop table');
+    assert.match(v.of('pay-product-tech'), /^Technical details.*product: prod_b.*price_1/s);
   } finally { await v.unmount(); }
   v = await render('/admin/platform/payments/log', { phone: true });
   try {
@@ -399,4 +403,60 @@ test('the route, the door, dark colours on the new parts, no pop-up and no secre
     const line = ui.split('\n').find((l) => l.startsWith(`export const ${name} =`));
     assert.match(line, /dark:/, `${name} has no dark colour`);
   }
+});
+
+
+test('D1129 search is submitted, resets paging, reaches CSV, and clears; admins load independently', async () => {
+  let failAdmins = true;
+  const s = stub({
+    '/api/admin/payments/change-log/admins': () => failAdmins ? json({ error: 'down' }, 503) : json({ admins: [{ id: 99, name: 'Quiet Admin' }] }),
+    '/api/admin/payments/change-log': (u) => json({ entries: ENTRIES, total: 60, kinds: ['price'], offset: Number(u.searchParams.get('offset')) }),
+    '/api/admin/payments/change-log.csv': () => new Response('at,what\nnow,price', { headers: { 'Content-Type': 'text/csv', 'X-Export-Rows': '1', 'Content-Disposition': 'attachment; filename="changes.csv"' } }),
+  });
+  const v = await render('/admin/platform/payments/log');
+  try {
+    assert.ok(v.has('pay-log-admins-unread'));
+    assert.equal(v.count('pay-log-row'), 3, 'a failed admin read leaves the log intact');
+    failAdmins = false;
+    // The retry belongs to the shared Unread block; reach its button via its React children.
+    const unread = v.props('pay-log-admins-unread');
+    await act(async () => unread.children[1].props.onClick()); await settle();
+    assert.match(v.of('pay-log-who'), /Quiet Admin/);
+    assert.ok(!v.has('pay-log-admins-unread'));
+    await v.click('pay-log-older');
+    const before = s.seen.filter((u) => u.pathname === '/api/admin/payments/change-log').length;
+    await v.change('pay-log-search', '  Yearly plan  ');
+    assert.equal(s.seen.filter((u) => u.pathname === '/api/admin/payments/change-log').length, before, 'typing does not send a request');
+    await v.submit('pay-log-search-form');
+    const last = s.seen.filter((u) => u.pathname === '/api/admin/payments/change-log').at(-1);
+    assert.equal(last.searchParams.get('q'), 'Yearly plan');
+    assert.equal(last.searchParams.get('offset'), '0');
+    await v.click('pay-log-export'); await v.change('pay-export-reason', 'Quarterly review of prices'); await v.submit('pay-export-form');
+    assert.equal(s.seen.find((u) => u.pathname.endsWith('change-log.csv')).searchParams.get('q'), 'Yearly plan');
+    await v.click('pay-log-clear');
+    assert.equal(v.props('pay-log-search').value, '');
+    assert.equal(s.seen.filter((u) => u.pathname === '/api/admin/payments/change-log').at(-1).searchParams.has('q'), false);
+  } finally { await v.unmount(); s.restore(); }
+});
+
+
+test('D1129 an unnamed Product filter option identifies a product', async () => {
+  const s = stub({ '/api/admin/catalog/products': () => json({ products: [{ ...PRODUCTS[0], name: null }] }) });
+  const v = await render('/admin/platform/payments/log');
+  try {
+    assert.match(v.of('pay-log-product'), /Product prod_/);
+    assert.doesNotMatch(v.of('pay-log-product'), /Admin #/);
+  } finally { await v.unmount(); s.restore(); }
+});
+
+
+test('D1129 Clear filters also clears an unsubmitted search draft', async () => {
+  const s = stub(); const v = await render('/admin/platform/payments/log');
+  try {
+    await v.change('pay-log-who', '1');
+    await v.change('pay-log-search', 'Unsubmitted draft');
+    await v.click('pay-log-clear');
+    assert.equal(v.props('pay-log-search').value, '');
+    assert.equal(s.seen.filter((u) => u.pathname === '/api/admin/payments/change-log').at(-1).searchParams.has('q'), false);
+  } finally { await v.unmount(); s.restore(); }
 });

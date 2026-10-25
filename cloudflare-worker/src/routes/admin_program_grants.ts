@@ -13,6 +13,15 @@
  *   POST   /licences/:uid/:program/pause      pause                                (write bar, reason)
  *   POST   /licences/:uid/:program/resume     resume                               (write bar, reason)
  *   POST   /licences/:uid/:program/end        end                                  (write bar, reason)
+ *   POST   /licences/:uid/:program/schedule/send  send the schedule for signature  (write bar, reason)
+ *
+ * THE SCHEDULE (D1120). A grant under the signed-schedule rule waits on
+ * `schedule_signed` until the studio signs its schedule. The send builds the
+ * schedule from the grant's terms (`services/programSchedule.ts`), sends it
+ * through e-sign to the licence's principal administrator, and stores the
+ * envelope's uuid as `schedule_contract_uid`. The envelope's completion sets
+ * `schedule_signed_at` once (`onProgramScheduleEnvelopeCompleted`, called from
+ * the e-sign completion block and the DocuSign poller).
  *
  * WHO. Reads are `requireSuperAdmin`, as the ledger's are. Every write is
  * `requireSuperAdminWriteBar` (a TOTP session, a fresh step-up, the
@@ -27,6 +36,20 @@
  * resume are refused there; pause and end stay open, as they do on every
  * licence. A terminated licence takes no grant, change or resume either.
  *
+ * A DRAFT (D956, migration 562). A proposal HQ approves for one studio only
+ * opens a `draft` grant of its new program for that studio. The grant write
+ * below is a draft's one way out (`draft` → `granted`), with no readiness or
+ * "can be granted" check, because HQ already approved the program for that
+ * studio; it still refuses a frozen licence. A terms change, pause, resume and
+ * end are refused on a draft. A program D955 added, with no draft, cannot be
+ * granted here: it has no defaults to grant from.
+ *
+ * THE BRANCH'S COPY (D984). Each grant write pushes the licence to its branch,
+ * which carries the grants (`branch_licence.program_grants_json`, migration
+ * 554), and answers `pushed` as a terms save does; a push that does not land
+ * is retried (D272). A defaults change pushes nothing: it reaches each branch
+ * with that licence's next push.
+ *
  * A D1 failure is a 5xx through `mapError`, never an empty list.
  */
 import { Hono } from 'hono';
@@ -34,8 +57,12 @@ import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { mapError, newUid, nowIso } from './_t13t14t15_helpers';
 import { logAdminAction } from '../services/adminAudit';
+import { pushLicenceToBranch } from '../services/licencePush';
+import { offerRefusal } from '../services/programGrantStates';
+import { createAndSendEnvelope } from './esign';
+import { PROGRAM_SCHEDULE_DOC_TYPE, scheduleDocument } from '../services/programSchedule';
 import {
-  DEFAULT_KEYS, TERM_KEYS, presentGrant, programOf, readDefaults, readGrid, readHistory, readinessRefusal,
+  DEFAULT_KEYS, TERM_KEYS, presentGrant, programNamed, programOf, readDefaults, readGrid, readHistory, readinessRefusal,
   termsDiff, termsOf, validateTerms, type LicenceLite, type Terms,
 } from '../services/programGrants';
 
@@ -95,10 +122,11 @@ async function target(c: any) {
   const reason = reasonOf(b);
   if (!reason.ok) return { refused: c.json(reason.body, 400) };
   const programKey = c.req.param('program');
-  if (!programOf(programKey)) return { refused: refuse(c, 404, 'unknown_program', 'There is no such program.') };
+  const program = await programNamed(c.env, programKey);
+  if (!program) return { refused: refuse(c, 404, 'unknown_program', 'There is no such program.') };
   const licence = await licenceByUid(c.env, c.req.param('uid'));
   if (!licence) return { refused: refuse(c, 404, 'not_found', 'There is no such licence.') };
-  return { admin, b, reason: reason.reason, programKey, licence };
+  return { admin, b, reason: reason.reason, programKey, program, licence };
 }
 
 // THE STATEMENTS ARE WRITTEN OUT, never assembled from a column list: no SQL
@@ -111,6 +139,10 @@ const INSERT_GRANT = `INSERT INTO program_grants
 const REGRANT = `UPDATE program_grants SET state = 'granted', starts_on = ?, ends_on = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?,
   note = ?, set_by_user_id = ?, set_at = ?, paused_at = NULL, ended_at = NULL, schedule_contract_uid = NULL, schedule_signed_at = NULL
   WHERE id = ? AND state = 'ended'`;
+// D956: a draft is granted in place, keeping its proposal.
+const GRANT_DRAFT = `UPDATE program_grants SET state = 'granted', starts_on = ?, ends_on = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?,
+  note = ?, set_by_user_id = ?, set_at = ?
+  WHERE id = ? AND state = 'draft'`;
 const CHANGE_TERMS = `UPDATE program_grants SET starts_on = ?, ends_on = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?, note = ?, set_by_user_id = ?, set_at = ?
   WHERE id = ? AND state IN ('granted', 'paused')`;
 const UPDATE_DEFAULTS = `UPDATE program_grant_defaults SET grantable = ?, ends_with_licence = ?, capacity_cap = ?, capacity_uncapped = ?, cohorts_per_year = ?, credits_per_quarter = ?, fee_cents = ?, currency = ?, hq_share_bps = ?, hq_approves_each_cohort = ?, hq_approval_above_cents = ?, playbook = ?, brand = ?, reporting = ?, requires_signed_schedule = ?, updated_by_user_id = ?, updated_at = ?
@@ -119,6 +151,9 @@ const PAUSE = "UPDATE program_grants SET state = 'paused', paused_at = ?, set_by
 const RESUME = "UPDATE program_grants SET state = 'granted', paused_at = NULL, set_by_user_id = ?, set_at = ? WHERE id = ? AND state = 'paused'";
 const END = "UPDATE program_grants SET state = 'ended', ended_at = ?, set_by_user_id = ?, set_at = ? WHERE id = ? AND state IN ('granted', 'paused')";
 const termValues = (t: Terms) => TERM_KEYS.map((k) => t[k] ?? null);
+// D1120: an envelope is named only on a grant with no signed schedule, so a
+// send racing a signature never replaces the signed one.
+const RECORD_SCHEDULE = 'UPDATE program_grants SET schedule_contract_uid = ? WHERE id = ? AND schedule_signed_at IS NULL';
 
 // ─────────────────────────────────────────────── reads
 
@@ -174,6 +209,12 @@ r.put('/defaults/:program', async (c) => {
     if (!programOf(key)) return refuse(c, 404, 'unknown_program', 'There is no such program.');
     if (b?.grantable !== undefined && typeof b.grantable !== 'boolean') return refuse(c, 400, 'invalid_grantable', 'grantable must be true or false.');
     if (b?.grantable === true && readinessRefusal(key)) return refuse(c, 422, 'not_grantable', readinessRefusal(key)!);
+    // D956: switching it on is Offer to studios' one rule, whichever page flips it.
+    const current = (await readDefaults(c.env)).find((d) => d.program_key === key)!;
+    if (b?.grantable === true && !current.grantable) {
+      const refused = await offerRefusal(c.env, key);
+      if (refused) return refuse(c, 409, refused.code, refused.message);
+    }
     const v = validateTerms(key, b?.terms, { defaults: true });
     if (!v.ok) return refuse(c, 400, 'invalid_terms', `${v.errors[0].field} ${v.errors[0].message}.`, { errors: v.errors });
     const before = (await readDefaults(c.env)).find((d) => d.program_key === key)!;
@@ -197,39 +238,57 @@ r.post('/licences/:uid/:program', async (c) => {
   try {
     const t = await target(c);
     if ('refused' in t) return t.refused;
-    const { admin, b, reason, programKey, licence } = t;
-    const notReady = readinessRefusal(programKey);
-    if (notReady) return refuse(c, 422, 'not_grantable', notReady);
-    const defaults = (await readDefaults(c.env)).find((d) => d.program_key === programKey)!;
-    if (!defaults.grantable) return refuse(c, 422, 'not_grantable', `${defaults.name} is switched off in HQ's default terms, so it cannot be granted.`);
+    const { admin, b, reason, programKey, program, licence } = t;
+    const existing = await grantRow(c.env, licence.id, programKey);
+    const fromDraft = existing?.state === 'draft';
+    let defaultTerms: Terms = {};
+    if (!program.nine) {
+      // A program D955 added: granted from its draft, or again after an end.
+      if (!existing) {
+        return refuse(c, 422, 'not_grantable', `${program.name} was added for one studio only. It is granted from the draft its approval opened, and this licence holds none.`);
+      }
+    } else if (!fromDraft) {
+      const notReady = readinessRefusal(programKey);
+      if (notReady) return refuse(c, 422, 'not_grantable', notReady);
+    }
+    if (program.nine) {
+      const defaults = (await readDefaults(c.env)).find((d) => d.program_key === programKey)!;
+      if (!fromDraft && !defaults.grantable) return refuse(c, 422, 'not_grantable', `${defaults.name} is switched off in HQ's default terms, so it cannot be granted.`);
+      defaultTerms = defaults.terms as Terms;
+    }
     const blocked = frozen(licence);
     if (blocked) return refuse(c, 409, 'licence_frozen', blocked);
     const v = validateTerms(programKey, b?.terms);
     if (!v.ok) return refuse(c, 400, 'invalid_terms', `${v.errors[0].field} ${v.errors[0].message}.`, { errors: v.errors });
     const note = noteOf(b);
     if (!note.ok) return refuse(c, 400, 'invalid_note', 'The note to the studio is at most 2000 characters.');
-    const existing = await grantRow(c.env, licence.id, programKey);
-    if (existing && existing.state !== 'ended') {
-      return refuse(c, 409, 'already_granted', `${defaults.name} is already ${existing.state} for this licence. Change its terms, resume or end it instead.`);
+    if (existing && existing.state !== 'ended' && !fromDraft) {
+      return refuse(c, 409, 'already_granted', `${program.name} is already ${existing.state} for this licence. Change its terms, resume or end it instead.`);
     }
     // The defaults fill every term the grant leaves out; what HQ names wins.
-    const terms: Terms = { ...Object.fromEntries(Object.entries(defaults.terms).map(([k, val]) => [k, val ?? null])), ...v.terms };
+    const terms: Terms = { ...Object.fromEntries(Object.entries(defaultTerms).map(([k, val]) => [k, val ?? null])), ...v.terms };
     if (terms.capacity_cap != null && terms.capacity_uncapped === 1) {
       return refuse(c, 400, 'invalid_terms', 'capacity_uncapped cannot be set with a capacity cap.');
     }
     const at = nowIso();
     if (existing) {
       // A re-grant after an end: the same row starts again, with fresh terms and schedule.
-      const res = await c.env.DB.prepare(REGRANT).bind(...termValues(terms), note.note ?? null, admin.id, at, existing.id).run();
-      if (!res.meta?.changes) return refuse(c, 409, 'already_granted', `${defaults.name} changed while you were granting it. Read it again.`);
+      // A draft (D956) is granted in place, with its proposal.
+      const res = await c.env.DB.prepare(fromDraft ? GRANT_DRAFT : REGRANT).bind(...termValues(terms), note.note ?? null, admin.id, at, existing.id).run();
+      if (!res.meta?.changes) return refuse(c, 409, 'already_granted', `${program.name} changed while you were granting it. Read it again.`);
     } else {
       await c.env.DB.prepare(INSERT_GRANT)
         .bind(newUid(), licence.id, programKey, ...termValues(terms), note.note ?? null, admin.id, at).run();
     }
     const changed = termsDiff({}, Object.fromEntries(Object.entries(terms).filter(([, val]) => val != null)));
-    await logProgram(c.env, licence.id, admin.id, { action: existing ? 'regranted' : 'granted', program_key: programKey, changed, reason }, reason);
+    if (fromDraft) changed.unshift({ key: 'state', before: 'draft', after: 'granted' });
+    const action = fromDraft ? 'granted' : existing ? 'regranted' : 'granted';
+    await logProgram(c.env, licence.id, admin.id, {
+      action, program_key: programKey, changed, reason, ...(fromDraft ? { from_draft: true, proposal_uid: existing!.proposal_uid ?? null } : {}),
+    }, reason);
     const saved = await grantRow(c.env, licence.id, programKey);
-    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()) }, existing ? 200 : 201);
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pushed }, existing ? 200 : 201);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -241,6 +300,7 @@ r.patch('/licences/:uid/:program', async (c) => {
     const blocked = frozen(licence);
     if (blocked) return refuse(c, 409, 'licence_frozen', blocked);
     const existing = await grantRow(c.env, licence.id, programKey);
+    if (existing?.state === 'draft') return refuse(c, 409, 'not_granted', 'This grant is a draft. Grant it first: its terms are set when HQ grants it.');
     if (!existing || existing.state === 'ended') return refuse(c, 409, 'not_granted', 'This program is not granted to this licence, so it has no terms to change.');
     const v = validateTerms(programKey, b?.terms);
     if (!v.ok) return refuse(c, 400, 'invalid_terms', `${v.errors[0].field} ${v.errors[0].message}.`, { errors: v.errors });
@@ -259,7 +319,8 @@ r.patch('/licences/:uid/:program', async (c) => {
     if (!res.meta?.changes) return refuse(c, 409, 'not_granted', 'This grant changed while you were changing it. Read it again.');
     await logProgram(c.env, licence.id, admin.id, { action: 'terms_changed', program_key: programKey, changed, note_changed: noteChanged, reason }, reason);
     const saved = await grantRow(c.env, licence.id, programKey);
-    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), changed });
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), changed, pushed });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -288,7 +349,8 @@ function transition(action: 'paused' | 'resumed' | 'ended', from: string[], to: 
         action, program_key: programKey, changed: [{ key: 'state', before: existing.state, after: to }], reason,
       }, reason);
       const saved = await grantRow(c.env, licence.id, programKey);
-      return c.json({ ok: true, grant: presentGrant(saved!, licence, today()) });
+      const pushed = await pushLicenceToBranch(c.env, licence.id);
+      return c.json({ ok: true, grant: presentGrant(saved!, licence, today()), pushed });
     } catch (e) { return mapError(c, e); }
   };
 }
@@ -296,5 +358,90 @@ function transition(action: 'paused' | 'resumed' | 'ended', from: string[], to: 
 r.post('/licences/:uid/:program/pause', transition('paused', ['granted'], 'paused'));
 r.post('/licences/:uid/:program/resume', transition('resumed', ['paused'], 'granted'));
 r.post('/licences/:uid/:program/end', transition('ended', ['granted', 'paused'], 'ended'));
+
+// ─────────────────────────────────────────────── the schedule (D1120)
+
+/** The envelope states after which a schedule can be sent again: it was never signed and never will be. */
+const SCHEDULE_DEAD = new Set(['void', 'rejected']);
+
+r.post('/licences/:uid/:program/schedule/send', async (c) => {
+  try {
+    const t = await target(c);
+    if ('refused' in t) return t.refused;
+    const { admin, reason, programKey, licence } = t;
+    const blocked = frozen(licence);
+    if (blocked) return refuse(c, 409, 'licence_frozen', blocked);
+    const existing = await grantRow(c.env, licence.id, programKey);
+    if (!existing || existing.state === 'ended') {
+      return refuse(c, 409, 'wrong_state', `This program is ${existing ? 'ended' : 'not granted'} for this licence, so it has no schedule to send.`, { state: existing?.state ?? null });
+    }
+    // D956: a draft is HQ's and not granted yet; its schedule is sent once HQ grants it.
+    if (existing.state === 'draft') {
+      return refuse(c, 409, 'wrong_state', 'This grant is a draft. Grant it first: its schedule is sent once HQ grants it.', { state: 'draft' });
+    }
+    if (existing.requires_signed_schedule != null && Number(existing.requires_signed_schedule) === 0) {
+      return refuse(c, 409, 'schedule_not_required', 'This grant does not wait on a signed schedule, so there is nothing to send. Change its terms first if it should.');
+    }
+    if (existing.schedule_signed_at) {
+      return refuse(c, 409, 'already_signed', 'This grant’s schedule is already signed.', { signed_at: existing.schedule_signed_at });
+    }
+    if (existing.schedule_contract_uid) {
+      const env = await c.env.DB.prepare('SELECT status FROM esign_envelopes WHERE envelope_uuid = ?')
+        .bind(existing.schedule_contract_uid).first<{ status: string }>();
+      if (!env || !SCHEDULE_DEAD.has(String(env.status))) {
+        return refuse(c, 409, 'already_sent', 'This grant’s schedule is already out for signature. It can be sent again only once that envelope is voided or declined.', {
+          contract_uid: existing.schedule_contract_uid, envelope_status: env?.status ?? null,
+        });
+      }
+    }
+    const signer = await c.env.DB.prepare(
+      `SELECT u.id, u.email, u.name
+         FROM licence_admins la
+         JOIN users u ON u.id = la.user_id
+        WHERE la.licence_id = ? AND u.is_active = 1
+        ORDER BY CASE la.admin_role WHEN 'principal' THEN 0 ELSE 1 END, la.id
+        LIMIT 1`,
+    ).bind(licence.id).first<{ id: number; email: string; name: string | null }>();
+    if (!signer?.email) {
+      return refuse(c, 409, 'no_signer', 'No active licence administrator has an account to receive the schedule. Grant an admin on this licence first.');
+    }
+    const named = await c.env.DB.prepare('SELECT legal_entity_name, signatory_name FROM territory_licences WHERE id = ?')
+      .bind(licence.id).first<{ legal_entity_name: string | null; signatory_name: string | null }>();
+    const doc = scheduleDocument({ ...licence, legal_entity_name: named?.legal_entity_name ?? null }, existing, today());
+    // A rendered body skips the template library, so no template refusal can
+    // come back; a malformed body is this code's fault and answers 5xx.
+    const sent = await createAndSendEnvelope(c.env, {
+      adminUserId: admin.id,
+      adminName: admin.name || admin.email,
+      recipientUserId: signer.id,
+      recipientEmail: signer.email,
+      recipientName: signer.name || named?.signatory_name || signer.email,
+      documentType: PROGRAM_SCHEDULE_DOC_TYPE,
+      dealId: existing.id,
+      appUrl: c.env.APP_URL || 'https://axal.vc',
+      viaProvider: 'native',
+      renderedBody: doc,
+      templateVersion: null,
+    });
+    if (!sent) return c.json({ error: 'envelope_send_failed', message: 'The schedule could not be created or sent. Nothing was recorded.' }, 502);
+    const res = await c.env.DB.prepare(RECORD_SCHEDULE).bind(sent.envelope_uuid, existing.id).run();
+    if (!res.meta?.changes) return refuse(c, 409, 'already_signed', 'This grant’s schedule was signed while you were sending it. Read it again.');
+    await logProgram(c.env, licence.id, admin.id, {
+      action: 'schedule_sent', program_key: programKey,
+      changed: [{ key: 'schedule_contract_uid', before: existing.schedule_contract_uid ?? null, after: sent.envelope_uuid }], reason,
+    }, reason);
+    await logAdminAction(c.env, admin.id, admin.email, 'program_grant_schedule_sent', {
+      licence_uid: licence.uid, program_key: programKey, envelope_uuid: sent.envelope_uuid, reason,
+    });
+    const saved = await grantRow(c.env, licence.id, programKey);
+    const pushed = await pushLicenceToBranch(c.env, licence.id);
+    return c.json({
+      ok: true,
+      grant: presentGrant(saved!, licence, today()),
+      envelope: { uuid: sent.envelope_uuid, email_sent: sent.email_sent, already_pending: sent.already_pending ?? false },
+      pushed,
+    });
+  } catch (e) { return mapError(c, e); }
+});
 
 export default r;

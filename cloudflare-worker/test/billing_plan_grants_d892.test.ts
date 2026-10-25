@@ -19,6 +19,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
+import { userMeetsTier } from '../src/middleware/requireTier.ts';
+import { effectiveInvestorTier } from '../src/middleware/requireInvestorTier.ts';
 import payments from '../src/routes/payments.ts';
 import billing from '../src/routes/billing.ts';
 import {
@@ -270,8 +272,10 @@ test('item 3: a failed renewal tells the member once per attempt; a failed first
 
 // ── The gates are unchanged ─────────────────────────────────────────────────
 
-test('the tier gates still drop past_due: what a retrying renewal may use is #2451\'s owner question 4', () => {
-  assert.match(read('cloudflare-worker/src/middleware/requireTier.ts'), /if \(status === 'past_due' \|\| status === 'unpaid'\) return false;/);
-  assert.match(read('cloudflare-worker/src/middleware/requireInvestorTier.ts'), /status === 'past_due' \|\| status === 'unpaid' \|\| status === 'cancelled'/);
+test('D1100 bounds D1052 retry access while unpaid still drops both tiers', () => {
+  for(const [status,date,paid] of [['past_due',new Date().toISOString(),true],['past_due',new Date(Date.now()-22*86_400_000).toISOString(),false],['unpaid',null,false]] as const){
+    assert.equal(userMeetsTier({role:'founder',subscription_tier:'studio',subscription_status:status,subscription_renews_at:date} as any,'studio'),paid);
+    assert.equal(effectiveInvestorTier({investor_tier:'institutional',investor_subscription_status:status,investor_subscription_renews_at:date} as any),paid?'institutional':'free');
+  }
   assert.match(read('documentation/architecture/decisions/D892.md'), /^## D892 — /);
 });

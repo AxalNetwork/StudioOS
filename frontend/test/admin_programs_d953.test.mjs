@@ -29,6 +29,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
+import { catalogueBody, labAppsBody } from './_programs_catalogue_fixture.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { pageKeyFor } from '../src/lib/railPages.js';
@@ -44,8 +45,8 @@ import HeldProgramsRedirect from '../src/pages/admin/programs/HeldProgramsRedire
 import AdvisorCohortsRedirect from '../src/pages/admin/programs/AdvisorCohortsRedirect.jsx';
 import ReferEarnRedirect from '../src/pages/admin/programs/ReferEarnRedirect.jsx';
 import {
-  ACTIVE_MENTORS_LINE, ASSIGNED_LINE, CAPS, FROZEN, HQ_READS_COMMISSIONS, LINE_ADMIN, LINE_SUPER, MOVED_NOTICES, NOTHING_WAITING,
-  NOT_READ_YET, NOT_RECORDED, PAGES, PERK_APPROVED, PROGRAMS, PRODUCT_TESTING_FOOT, SCOPE_LABEL, SCOPE_NOT_PER_STUDIO,
+  CAPS, FROZEN, HQ_READS_COMMISSIONS, MOVED_NOTICES,
+  NOT_RECORDED, PAGES, PROGRAMS, SCOPE_LABEL, SCOPE_PICK_STUDIO,
   SCOPE_TITLE, SCOPE_UNREAD, SUSPENDED, TRY_AGAIN, WAITING_LABEL, ageText, approveBody, bandOf, cohortName, cycleForStrip,
   etStamp, laneFrom, learningFigures, learningJoin, mentorFigures, mentorNeeds, movedNotice, openReferrals, perkPrice,
   perkQueueFrom, referralOverview, refusalText, rejectBody, routeFor, scopeChip, waitingForYou, weekLines, withoutMoved,
@@ -136,10 +137,11 @@ test('the addresses: the catalogue, each program\'s tabs as static sub-paths, an
   assert.deepEqual(routeFor('/admin/programs/ai-native-venture'), { program: 'ai-native-venture', tab: 'page' });
   // A program has only the tabs it has today; one tab is no strip.
   assert.deepEqual(Object.fromEntries(Object.entries(PAGES).map(([k, p]) => [k, p.tabs.map((t) => t.label)])), {
-    'mentor-cohorts': ['Overview', 'How it runs', 'People'],
-    'refer-and-earn': ['Overview', 'How it runs', 'Queue', 'Settings'],
-    perks: ['Overview', 'How it runs', 'Queue'],
-    learning: ['Overview', 'How it runs', 'People'],
+    // D962 (#2795) adds Activity to these four; no page has a Terms tab.
+    'mentor-cohorts': ['Overview', 'How it runs', 'People', 'Activity'],
+    'refer-and-earn': ['Overview', 'How it runs', 'Queue', 'Settings', 'Activity'],
+    perks: ['Overview', 'How it runs', 'Queue', 'Activity'],
+    learning: ['Overview', 'How it runs', 'People', 'Activity'],
     'referral-partners': ['Overview', 'How it runs'],
     'investor-cohorts': [],
     'ai-native-venture': [],
@@ -357,7 +359,7 @@ test('the scope chip follows D893, keyed on R12 for a Super Admin: its reason re
   assert.deepEqual(scopeChip(true, ready({ scopes: [{ code: 'hq', kind: 'hq' }], reason: 'The deployment registry could not be read.' })),
     { label: SCOPE_LABEL, title: 'The deployment registry could not be read.' });
   assert.deepEqual(scopeChip(true, ready({ scopes: [{ code: 'hq', kind: 'hq' }] })), { label: SCOPE_LABEL, title: SCOPE_TITLE });
-  assert.deepEqual(scopeChip(true, ready({ scopes: [{ code: 'hq', kind: 'hq' }, { code: 'pt', kind: 'branch' }] })), { label: SCOPE_LABEL, title: SCOPE_NOT_PER_STUDIO });
+  assert.deepEqual(scopeChip(true, ready({ scopes: [{ code: 'hq', kind: 'hq' }, { code: 'pt', kind: 'branch' }] })), { label: SCOPE_LABEL, title: SCOPE_PICK_STUDIO });
   assert.equal(scopeChip(true, failed()).title, SCOPE_UNREAD);
 });
 
@@ -390,6 +392,7 @@ function worker(o = {}) {
     learners = {},
     testing = { items: [{ uid: 't1', status: 'open', applicant_count: 4 }, { uid: 't2', status: 'open', applicant_count: 5 }, { uid: 't3', status: 'closed', applicant_count: 0 }] },
     scopes = { scopes: [{ code: 'hq', label: 'HQ-held', kind: 'hq', bound: true }] },
+    catalogue = () => response(catalogueBody()), labApps = labAppsBody(),
     user = null, writes = {},
   } = o;
   const call = (v, ...a) => (typeof v === 'function' ? v(...a) : response(v));
@@ -420,6 +423,8 @@ function worker(o = {}) {
     if (l) return call(learners[l[1]] ?? { learners: [] });
     if (path === '/api/admin/testing/programmes') return call(testing);
     if (path === '/api/admin/insights/scopes') return call(scopes);
+    if (path === '/api/admin/programs') return call(catalogue, q);
+    if (path === '/api/admin/spinout-applications') return call(labApps);
     return never();
   };
 }
@@ -475,116 +480,9 @@ async function mounted(url, page, handle, { user = null } = {}) {
 const PROGRAM_DOORS = ['/admin/programs/spinout-lab', '/admin/programs/ai-native-venture', '/admin/programs/mentor-cohorts', '/admin/programs/investor-cohorts',
   '/admin/programs/referral-partners', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning'];
 
-test('the catalogue for an Admin: the header, the three tiles, nine cards with their figures, Needs you and doors, and the foot', async () => {
-  const view = await mounted('/admin/programs', ProgramsCatalogue, worker());
-  try {
-    assert.equal(view.textOf('programs-catalogue-line'), LINE_ADMIN);
-    assert.equal(view.textOf('programs-scope-chip'), SCOPE_LABEL);
-    assert.equal(view.props('programs-scope-chip').title, SCOPE_TITLE);
-    assert.match(view.textOf('programs-asof'), /^Updated \d\d:\d\d$/);
-    assert.equal(view.textOf('programs-tile-running'), `Programs running${NOT_RECORDED}No registry records which programs run yet.`);
-    assert.equal(view.textOf('programs-tile-people'), `People taking part${NOT_READ_YET}Each program stores its own members; no read counts them across programs yet.`);
-    assert.equal(view.textOf('programs-tile-waiting-value'), '7');
-    assert.match(view.textOf('programs-tile-waiting'), /oldest 3 days/);
-    assert.ok(view.has('programs-tile-waiting-overdue'), 'an amber Overdue from 72 hours');
-    assert.match(view.textOf('programs-tile-waiting'), /Strategic referral access is not read here yet\./);
-    assert.equal(view.textOf('programs-catalogue-count'), '9 programs');
-    assert.equal(view.textOf('programs-card-spinout-lab-figure'), '2 cohort applications waiting');
-    assert.equal(view.textOf('programs-card-spinout-lab-applications'), `Lab applications: ${NOT_READ_YET}Their read cannot yet tell a failure from none.`);
-    assert.equal(view.textOf('programs-card-spinout-lab-needs'), '!Needs you 3', 'cohort applications and pending hosts');
-    assert.match(view.textOf('programs-card-mentor-cohorts-figure'), /^1 mentor · 2 of 4 cohorts covered/);
-    assert.doesNotMatch(view.textOf('programs-card-mentor-cohorts-figure'), /not left out/, 'deactivated accounts are left out now (D960)');
-    assert.equal(view.textOf('programs-card-mentor-cohorts-needs'), '!Needs you 4', 'two cohorts with no mentor and two open rows of a former Advisor');
-    assert.equal(view.textOf('programs-card-refer-and-earn-figure'), '3 open referralsincluding those waiting on the member');
-    assert.equal(view.textOf('programs-card-refer-and-earn-needs'), '!Needs you 3');
-    assert.equal(view.textOf('programs-card-perks-figure'), '5 live');
-    assert.equal(view.textOf('programs-card-perks-needs'), '!Needs you 1', 'the in_review listing; a draft is not backlog');
-    assert.equal(view.textOf('programs-card-learning-figure'), '2 published programs · 7 active enrolments in themassigned to you');
-    assert.equal(view.textOf('programs-card-investor-cohorts-figure'), 'Not running');
-    assert.match(view.textOf('programs-card-ai-native-venture-purpose'), /^Not recordedThe playbook is not written yet\.$/);
-    assert.equal(view.textOf('programs-card-product-testing-foot'), PRODUCT_TESTING_FOOT);
-    assert.ok(!view.has('programs-card-product-testing-figure'), 'no figures for an Admin');
-    assert.equal(view.textOf('programs-card-referral-partners-grant'), '⌂HQ-held', 'S-HELD: only a granted card reads HQ-held');
-    assert.equal(view.textOf('programs-card-ai-native-venture-grant'), '–Not offered yet');
-    assert.equal(view.textOf('programs-card-product-testing-grant'), '⌂Runs at HQ');
-    const hrefs = view.hrefs();
-    for (const d of PROGRAM_DOORS) assert.ok(hrefs.includes(d), `no door onto ${d}`);
-    assert.ok(!hrefs.includes('/admin?tab=product-testing'), 'Product testing has no door for an Admin');
-    assert.ok(!hrefs.includes('/admin?tab=lab-applications'), 'one Spin-Out Lab card, not two doors to one console');
-    assert.ok(hrefs.includes('/admin/profiling-trends'));
-    assert.match(view.textOf('programs-foot'), /^Profiling trends is not a program\. It stays here until its home is decided\.Open profiling trends$/);
-    assert.ok(!view.requests.some((r) => /spinout-(applications|participants)/.test(r.url)), 'Guard H: the reads that hide failure are not made');
-    assert.ok(!view.requests.some((r) => r.url.startsWith('/api/admin/testing') || r.url.startsWith('/api/admin/insights')), 'R11 and R12 are the Super Admin\'s');
-    // The group chips filter in the browser.
-    await view.click('programs-group-Access');
-    assert.ok(view.has('programs-card-mentor-cohorts') && view.has('programs-card-investor-cohorts') && !view.has('programs-card-perks'));
-    await view.click('programs-group-all');
-    assert.ok(view.has('programs-card-perks'));
-  } finally { await view.close(); }
-});
-
-test('each failed read marks only the blocks it feeds', async () => {
-  const perksDown = await mounted('/admin/programs', ProgramsCatalogue, worker({ perks: down }));
-  try {
-    assert.match(perksDown.textOf('programs-card-perks-figure').trim(), /^Live perks could not be read\. That is not the same as none\.Try again$/);
-    assert.equal(perksDown.textOf('programs-tile-waiting-value'), '7', 'Waiting for you does not read R4');
-    assert.equal(perksDown.textOf('programs-card-perks-needs'), '!Needs you 1', 'the Needs you pill reads R3, which answered');
-    assert.equal(perksDown.textOf('programs-card-refer-and-earn-figure'), '3 open referralsincluding those waiting on the member');
-    assert.match(perksDown.textOf('programs-asof'), /^Updated/);
-  } finally { await perksDown.close(); }
-  const glanceDown = await mounted('/admin/programs', ProgramsCatalogue, worker({ glance: down }));
-  try {
-    assert.match(glanceDown.textOf('programs-tile-waiting'), /Could not be readcohort applications, Refer & Earn reviews could not be read, so no total is drawn\.Try again/);
-    assert.ok(!glanceDown.has('programs-tile-waiting-value'), 'no smaller total');
-    assert.match(glanceDown.textOf('programs-card-spinout-lab-figure').trim(), /^Cohort applications could not be read\./);
-    assert.match(glanceDown.textOf('programs-card-refer-and-earn-figure').trim(), /^Open referrals could not be read\./);
-    assert.equal(glanceDown.textOf('programs-card-spinout-lab-needs'), 'Needs you could not be read');
-    assert.match(glanceDown.textOf('programs-card-mentor-cohorts-figure'), /^1 mentor/, 'the mentor card reads R5 and R7');
-    assert.equal(glanceDown.textOf('programs-card-perks-figure'), '5 live');
-  } finally { await glanceDown.close(); }
-  const mentorsDown = await mounted('/admin/programs', ProgramsCatalogue, worker({ assignments: down }));
-  try {
-    assert.match(mentorsDown.textOf('programs-card-mentor-cohorts-figure').trim(), /^The mentors and cohorts could not be read\./);
-    assert.equal(mentorsDown.textOf('programs-tile-waiting-value'), '7');
-    assert.equal(mentorsDown.textOf('programs-card-learning-figure'), '2 published programs · 7 active enrolments in themassigned to you');
-  } finally { await mentorsDown.close(); }
-  const allDown = await mounted('/admin/programs', ProgramsCatalogue, () => down());
-  try {
-    assert.equal(allDown.textOf('programs-asof'), 'Could not be read', 'when every read fails, the header says so');
-    assert.equal(allDown.textOf('programs-tile-running'), `Programs running${NOT_RECORDED}No registry records which programs run yet.`, 'a block with no read stands');
-  } finally { await allDown.close(); }
-});
-
-test('first use: four empty queues are a real 0 with "Nothing is waiting.", and the queue cards draw no Needs-you pill', async () => {
-  const view = await mounted('/admin/programs', ProgramsCatalogue, worker({
-    glance: glanceBody([lane('cohort', 0), lane('referrals', 0)]), hosts: hostsBody(0, 0), perkQueue: { items: [] },
-  }));
-  try {
-    assert.equal(view.textOf('programs-tile-waiting-value'), '0');
-    assert.match(view.textOf('programs-tile-waiting'), new RegExp(NOTHING_WAITING.replace('.', '\\.')));
-    for (const k of ['spinout-lab', 'refer-and-earn', 'perks']) assert.ok(!view.has(`programs-card-${k}-needs`), k);
-    assert.ok(view.has('programs-card-mentor-cohorts-needs'), 'Mentor counts its own rows: a scheduled cohort with no mentor is one');
-  } finally { await view.close(); }
-});
-
-test('the catalogue for a Super Admin (PG2): HQ\'s line, the chip keyed on R12, no Needs-you pills, Product testing\'s figures and door', async () => {
-  const view = await mounted('/admin/programs', ProgramsCatalogue, worker({
-    user: SUPER, scopes: { scopes: [{ code: 'hq', kind: 'hq' }], reason: 'The deployment registry could not be read.' },
-  }), { user: SUPER });
-  try {
-    assert.equal(view.textOf('programs-catalogue-line'), LINE_SUPER);
-    assert.equal(view.props('programs-scope-chip').title, 'The deployment registry could not be read.');
-    for (const p of PROGRAMS) assert.ok(!view.has(`programs-card-${p.key}-needs`), `${p.key} draws a Needs-you pill for HQ`);
-    assert.equal(view.textOf('programs-card-product-testing-figure'), '2 open · 9 applied, not withdrawn');
-    assert.ok(view.hrefs().includes('/admin?tab=product-testing'));
-    assert.ok(!view.has('programs-card-product-testing-foot'));
-    assert.equal(view.textOf('programs-card-ai-native-venture-grant'), '⌂HQ only');
-    assert.equal(view.textOf('programs-card-mentor-cohorts-grant'), '⌂HQ-held');
-    assert.match(view.textOf('programs-card-learning-who'), /Join: Open or by invitation$/, 'derived from the published rows: one open, one by invitation');
-    assert.ok(view.hrefs().includes('/learning/studio/programs'), 'the program studio\'s door');
-    assert.ok(view.requests.some((r) => r.url.startsWith('/api/admin/testing/programmes')));
-  } finally { await view.close(); }
-});
+// D961 (#2794): the catalogue draws from part 1's catalogue read now, so its
+// mounted tests (an Admin's catalogue, a read that fails, first use and a
+// Super Admin's) live in admin_programs_catalogue_d961.test.mjs, on that read.
 
 test('the redirects keep the query and the hash, add ?moved=, and land where the function now lives', async () => {
   for (const [from, Redirect, to] of [
@@ -615,188 +513,9 @@ test('the moved notice sits under the title where a redirect lands, and Dismiss 
   } finally { await view.close(); }
 });
 
-test('Mentor cohort access · Overview: S-CNT and S-COV tiles with their lines, Needs you rows to People, and every host counted', async () => {
-  const view = await mounted('/admin/programs/mentor-cohorts', MentorCohortAccess, worker());
-  try {
-    assert.match(view.textOf('programs-crumb'), /^Programs › Mentor cohort access$/);
-    assert.equal(view.textOf('programs-facts'), 'Who: Advisors· Join: Assigned by an admin· Cycle: monthly cohorts of four weeks');
-    assert.equal(view.textOf('programs-tile-mentors-value'), '1');
-    assert.match(view.textOf('programs-tile-mentors'), new RegExp(ACTIVE_MENTORS_LINE.replace('.', '\\.')));
-    assert.equal(view.textOf('programs-tile-covered-value'), '2 of 4');
-    assert.match(view.textOf('programs-tile-covered'), /2 of 4 cohorts, scheduled or running/);
-    assert.match(view.textOf('programs-tile-hidden'), /Not read here yetFounders’ choices are stored; no admin read counts them yet\./);
-    assert.match(view.textOf('programs-mentor-needs-cycle-3'), /December 2026 starts 1 Dec with no mentor\.Open People$/);
-    assert.match(view.textOf('programs-mentor-needs-row-3'), /Ana Former is no longer an Advisor\. Their access is already refused, but the assignment is still open\./);
-    assert.equal(view.textOf('programs-mentor-hosts-line'), '4 approved · 1 waiting, every host');
-    assert.ok(view.hrefs().includes('/admin/programs/mentor-cohorts/people'));
-    assert.ok(view.hrefs().includes('/admin/programs/spinout-lab'));
-  } finally { await view.close(); }
-  const hostsDown = await mounted('/admin/programs/mentor-cohorts', MentorCohortAccess, worker({ hosts: down }));
-  try {
-    assert.ok(hostsDown.has('programs-mentor-hosts-unreadable'));
-    assert.equal(hostsDown.textOf('programs-tile-mentors-value'), '1', 'only the hosts card is marked');
-  } finally { await hostsDown.close(); }
-});
-
-test('Mentor cohort access · How it runs: the playbook constant, locked for an Admin, with the cycle strip at 00:00 ET', async () => {
-  const view = await mounted('/admin/programs/mentor-cohorts/how-it-runs', MentorCohortAccess, worker({ timeline: { cycles: CYCLES.filter((c) => c.id !== 1) } }));
-  try {
-    const how = view.textOf('programs-mentor-how');
-    assert.match(how, /A mentor sees a founder once that founder’s first week is recorded\./);
-    assert.match(how, /Set by HQ/);
-    assert.equal(view.textOf('programs-mentor-how-foot'), 'HQ writes the playbook.');
-    assert.match(view.textOf('programs-mentor-cycle'), /November 2026 · scheduledWeek 1 · opens 1 Nov 00:00 ET · deadline 8 Nov 00:00 ET/);
-    assert.match(view.textOf('programs-mentor-cycle'), /Times are America\/New_York\. Cohort dates are fixed by the Lab’s calendar\./);
-    assert.match(view.textOf('programs-mentor-measures'), /Founders hiddenNot read here yet/);
-    assert.ok(view.hrefs().includes('/admin/contracts?tab=templates'));
-  } finally { await view.close(); }
-});
-
-test('Mentor cohort access · People: the assignments body with the moved notice, the new Assign line, and "within the newest 500"', async () => {
-  let sent = null;
-  const view = await mounted('/admin/programs/mentor-cohorts/people?moved=advisor-cohorts', MentorCohortAccess, worker({
-    assignments: { items: many(CAPS.assignments, (i) => assignment(i, 100 + i, 1)) },
-    writes: { assign: (o) => { sent = JSON.parse(o.body); return response({ id: 999, is_active: true }); } },
-  }));
-  try {
-    assert.equal(view.textOf('programs-moved'), `${MOVED_NOTICES['advisor-cohorts'].text}Dismiss`);
-    assert.ok(view.has('advisor-cohort-assignments'));
-    assert.match(view.textOf('advisor-cohort-count'), /— 500, within the newest 500$/);
-    assert.ok(!view.text().includes('Advisor cohort accessAn assignment'), 'the body\'s own heading gives way to the program header');
-    const selects = view.nodes().filter((n) => String(n.tagName).toUpperCase() === 'SELECT');
-    await act(async () => { view.nodeProps(selects[0]).onChange({ target: { value: '21' } }); });
-    await act(async () => { view.nodeProps(selects[1]).onChange({ target: { value: '1' } }); });
-    const form = view.nodes().find((n) => String(n.tagName).toUpperCase() === 'FORM');
-    await act(async () => { await view.nodeProps(form).onSubmit({ preventDefault() {} }); });
-    await view.flush();
-    assert.deepEqual(sent, { advisor_user_id: 21, cohort_cycle_id: 1, note: null });
-    assert.equal(view.textOf('advisor-cohort-note'), ASSIGNED_LINE);
-    assert.equal(ASSIGNED_LINE, 'Assigned. The advisor sees a founder in that cohort once that founder’s first week is recorded.');
-  } finally { await view.close(); }
-});
-
-test('Refer & Earn · Overview: the three statuses, their total and bands, and the oldest and Overdue from R1', async () => {
-  const view = await mounted('/admin/programs/refer-and-earn', ReferAndEarn, worker({ glance: glanceBody([lane('cohort', 0), lane('referrals', 3, 100, 'past')]) }));
-  try {
-    assert.match(view.textOf('programs-refer-status-more_info_needed'), /^Waiting on the member1$/);
-    assert.match(view.textOf('programs-refer-total'), /^Total3Under 24 hours: 2 · 24 to 72 hours: 0 · 72 hours or more: 1$/);
-    assert.match(view.textOf('programs-refer-oldest'), /^Oldest: 4 days since submitted/);
-    assert.ok(view.has('programs-refer-overdue'));
-    assert.equal(view.textOf('programs-tab-queue-count'), '3, Every open referral', 'the Queue tab\'s count is Overview\'s total');
-    assert.match(view.textOf('programs-refer-strategic'), /Not read here yetMembers’ requests are stored; no admin read lists them yet\./);
-  } finally { await view.close(); }
-  const laneDown = await mounted('/admin/programs/refer-and-earn', ReferAndEarn, worker({ glance: glanceBody([lane('cohort', 0), lane('referrals', null)]) }));
-  try {
-    assert.match(laneDown.textOf('programs-refer-oldest'), /^Oldest and Overdue: Could not be read/);
-    assert.ok(!laneDown.has('programs-refer-overdue'));
-    assert.match(laneDown.textOf('programs-refer-total'), /^Total3/, 'the R8 counts still stand');
-  } finally { await laneDown.close(); }
-});
-
-test('Refer & Earn · Queue: the open statuses merged, "Not recorded" for a nameless referrer, the commissions door for a Super Admin only', async () => {
-  const view = await mounted('/admin/programs/refer-and-earn/queue?moved=refer-earn', ReferAndEarn, worker());
-  try {
-    assert.equal(view.textOf('programs-moved'), `${MOVED_NOTICES['refer-earn'].text}Dismiss`);
-    assert.ok(view.has('referral-review-row-s1') && view.has('referral-review-row-u1') && view.has('referral-review-row-m1'), 'the three open statuses');
-    assert.match(view.textOf('referral-review-row-u1-meta'), /· from Not recorded$/);
-    assert.doesNotMatch(view.textOf('referral-review-row-u1-meta'), /u1/, 'never the submission\'s id');
-    assert.equal(view.textOf('referral-review-commissions-hq'), HQ_READS_COMMISSIONS);
-    assert.ok(!view.hrefs().includes('/admin/commissions'), 'the route is hqOnly');
-    assert.equal(view.props('referral-review-chip-open')['aria-pressed'], true, 'the Queue opens on the open statuses');
-    assert.ok(!view.requests.some((r) => r.url.includes('/refer-earn/admin/submissions?limit=')), 'the Queue reads no fourth list for its default view');
-    assert.ok(view.requests.filter((r) => r.url.startsWith('/api/refer-earn/admin/submissions')).every((r) => r.url.includes('limit=200')));
-    await view.click('referral-review-chip-all');
-    assert.ok(view.requests.some((r) => r.url === '/api/refer-earn/admin/submissions?limit=200'), 'All reads 200 rows, not the default 100');
-  } finally { await view.close(); }
-  const hq = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({ user: SUPER }), { user: SUPER });
-  try {
-    assert.ok(hq.hrefs().includes('/admin/commissions'));
-    assert.ok(!hq.has('referral-review-commissions-hq'));
-  } finally { await hq.close(); }
-});
-
-test('Refer & Earn · Queue: a review saved under another chip re-reads the open statuses, so the Open view and the tab count follow', async () => {
-  const view = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker());
-  try {
-    await view.click('referral-review-chip-submitted');
-    await view.click('referral-review-open-s1');
-    const before = view.requests.length;
-    await view.press('Save', 'referral-review-form-s1');
-    const after = view.requests.slice(before).filter((r) => r.method === 'GET' && r.url.startsWith('/api/refer-earn/admin/submissions'));
-    for (const status of ['submitted', 'under_review', 'more_info_needed']) {
-      assert.ok(after.some((r) => new URLSearchParams(r.url.split('?')[1]).get('status') === status), `${status} is read again after the save`);
-    }
-  } finally { await view.close(); }
-});
-
-test('Refer & Earn · Queue: a failed read never also says the queue is empty; a full call says "The newest 200"', async () => {
-  const view = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({ referrals: { submitted: [], under_review: down, more_info_needed: [] } }));
-  try {
-    assert.ok(view.has('referral-review-error'));
-    assert.ok(!view.has('referral-review-empty'), 'N6: no empty sentence under the error');
-    assert.doesNotMatch(view.text(), /Nothing in this queue|Nothing is waiting/);
-    assert.ok(!view.has('programs-tab-queue-count'), 'no count stands in for an unread list');
-  } finally { await view.close(); }
-  const full = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({ referrals: { submitted: many(200, (i) => referral(`s${i}`, 'submitted', 1)), under_review: [], more_info_needed: [] } }));
-  try {
-    assert.equal(full.textOf('referral-review-full'), 'The newest 200 in each open status. Older ones are not listed here.');
-    assert.equal(full.textOf('programs-tab-queue-count'), '200+, The newest 200 in each open status');
-  } finally { await full.close(); }
-  const empty = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({ referrals: { submitted: [], under_review: [], more_info_needed: [] } }));
-  try {
-    assert.match(empty.textOf('referral-review-empty'), /^Nothing is waiting\. Members submit referrals/);
-  } finally { await empty.close(); }
-});
-
-test('Refer & Earn · Queue: a refusal is one sentence under its own Save, keyed on the code', async () => {
-  for (const [body, sentence] of [[{ error: 'branch_suspended', detail: 'Suspended' }, SUSPENDED], [{ error: 'admin_frozen' }, FROZEN]]) {
-    const view = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({ writes: { referral: () => response(body, 423) } }));
-    try {
-      await view.click('referral-review-open-s1');
-      await view.click('referral-review-save-s1');
-      assert.equal(view.textOf('referral-review-refusal-s1'), sentence);
-      assert.ok(!view.has('referral-review-done'));
-    } finally { await view.close(); }
-  }
-});
-
-test('Perks: Overview counts in_review only; the Queue prices "No credit cost", keeps the stored note on Approve, and refuses under its own row', async () => {
-  const items = [
-    perk('a', 'in_review', { credits: 0, review_note: 'Seeded from the partner’s own terms.' }),
-    perk('b', 'in_review', { credits: 200 }),
-    perk('c', 'draft'),
-  ];
-  const overview = await mounted('/admin/programs/perks', ProgramPage, worker({ perkQueue: { items } }));
-  try {
-    assert.equal(overview.textOf('programs-tile-waiting-value'), '2');
-    assert.equal(overview.textOf('programs-tab-queue-count'), '2, Listings in review');
-    assert.match(overview.textOf('programs-tile-credits'), /Not read here yetHQ reads these figures\./, 'O-MONEY for an Admin');
-    assert.match(overview.textOf('programs-tile-claims'), /Not read here yetNo admin read counts claims yet\./);
-  } finally { await overview.close(); }
-  let sent = [];
-  const queue = await mounted('/admin/programs/perks/queue', ProgramPage, worker({
-    perkQueue: { items },
-    writes: { perk: (o, path) => { sent.push({ path, body: JSON.parse(o.body) }); return path.includes('/b/') ? response({ error: 'admin_frozen' }, 423) : response({ ok: true, status: 'live' }); } },
-  }));
-  try {
-    assert.ok(queue.has('programs-perks-row-a') && queue.has('programs-perks-row-b') && !queue.has('programs-perks-row-c'), 'a draft is not listed');
-    assert.equal(queue.textOf('programs-perks-row-a-meta'), 'Partner a · No credit cost');
-    assert.doesNotMatch(queue.textOf('programs-perks-queue'), /\b0 credits\b/);
-    assert.equal(queue.textOf('programs-perks-row-b-meta'), 'Partner b · 200 credits');
-    assert.match(queue.textOf('programs-perks-row-a-age'), /since last edit$/);
-    assert.equal(queue.props('programs-perks-row-a-reject').disabled, true, 'Reject waits for the reason the partner sees');
-    await queue.click('programs-perks-row-b-approve');
-    assert.equal(queue.textOf('programs-perks-row-b-refusal'), FROZEN);
-    assert.ok(!queue.has('programs-perks-row-a-refusal'), 'N10: the refusal sits under its own row only');
-    await queue.click('programs-perks-row-a-approve');
-    assert.deepEqual(sent.find((s) => s.path.includes('/a/')).body, { action: 'approve', review_note: 'Seeded from the partner’s own terms.' });
-    assert.equal(queue.textOf('programs-perks-done'), PERK_APPROVED);
-  } finally { await queue.close(); }
-  const hq = await mounted('/admin/programs/perks', ProgramPage, worker({ user: SUPER }), { user: SUPER });
-  try {
-    assert.match(hq.textOf('programs-tile-credits'), /Not read here yetNo read sums members’ balances yet\./);
-  } finally { await hq.close(); }
-});
+// D962 (#2795) rewrote Mentor cohort access's Overview, How it runs and People, Refer & Earn's
+// Overview and Queue, and Perks' Overview and Queue on parts 1, 4 and 7's reads, with a dialog
+// for every write. Their mounted tests are `admin_programs_d962.test.mjs`'s.
 
 test('Learning: Overview counts published rows only and lists every row; People reads one program, and a 403 marks only it', async () => {
   const view = await mounted('/admin/programs/learning', ProgramPage, worker());
@@ -855,10 +574,10 @@ const APP = read('frontend/src/App.jsx');
 test('the routes: each address under today\'s guard, never hqOnly, and the three redirects each its own lazy *Redirect element', () => {
   const pages = {
     AdminProgramsCatalogue: ['/admin/programs'],
-    AdminMentorCohortAccess: ['/admin/programs/mentor-cohorts', '/admin/programs/mentor-cohorts/how-it-runs', '/admin/programs/mentor-cohorts/people'],
-    AdminReferAndEarn: ['/admin/programs/refer-and-earn', '/admin/programs/refer-and-earn/how-it-runs', '/admin/programs/refer-and-earn/queue', '/admin/programs/refer-and-earn/settings'],
-    AdminProgramPage: ['/admin/programs/perks', '/admin/programs/perks/how-it-runs', '/admin/programs/perks/queue', '/admin/programs/learning',
-      '/admin/programs/learning/how-it-runs', '/admin/programs/learning/people', '/admin/programs/referral-partners',
+    AdminMentorCohortAccess: ['/admin/programs/mentor-cohorts', '/admin/programs/mentor-cohorts/how-it-runs', '/admin/programs/mentor-cohorts/people', '/admin/programs/mentor-cohorts/activity'],
+    AdminReferAndEarn: ['/admin/programs/refer-and-earn', '/admin/programs/refer-and-earn/how-it-runs', '/admin/programs/refer-and-earn/queue', '/admin/programs/refer-and-earn/settings', '/admin/programs/refer-and-earn/activity'],
+    AdminProgramPage: ['/admin/programs/perks', '/admin/programs/perks/how-it-runs', '/admin/programs/perks/queue', '/admin/programs/perks/activity', '/admin/programs/learning',
+      '/admin/programs/learning/how-it-runs', '/admin/programs/learning/people', '/admin/programs/learning/activity', '/admin/programs/referral-partners',
       '/admin/programs/referral-partners/how-it-runs', '/admin/programs/investor-cohorts', '/admin/programs/ai-native-venture'],
   };
   for (const [component, paths] of Object.entries(pages)) {
@@ -905,7 +624,8 @@ test('each frame is one literal AdminBoardFrame, named for its board, as the who
   // ReferralReview keeps its literal commissions door (D569), drawn for a Super Admin only.
   const review = codeOnly(read('frontend/src/pages/admin/ReferralReview.jsx'));
   assert.match(review, /\{superAdmin \? \(\s*<Link\s+to="\/admin\/commissions"/);
-  assert.match(review, /limit: CAPS\.referrals/);
+  // D962: the Queue reads part 4's pages with their total, 25 at a time.
+  assert.match(review, /const params = queueParams\(\{ status, category, sort, page \}\);/);
   assert.match(review, /r\.referrer_name \|\| r\.referrer_email \|\| NOT_RECORDED/);
   assert.doesNotMatch(review, /`user \$\{r\.uid\}`/, 'N6: never the submission\'s id as its referrer');
 });
@@ -976,17 +696,25 @@ test('the tab strips are literal NavLinks, equal to PAGES, and the card doors ar
   for (const d of PROGRAM_DOORS) assert.ok(catalogue.includes(`<Link to="${d}"`), `the ${d} door is not literal`);
 });
 
-test('the pages read only D953 §2\'s reads through existing clients, and draw nothing §3 leaves undrawn', () => {
+test('the pages read D953 §2\'s reads, D961\'s catalogue read and D962\'s through their clients, and draw nothing §3 leaves undrawn', () => {
   const src = PROGRAM_FILES.map((f) => codeOnly(read(f))).join('\n');
-  for (const call of ['api.adminStudioGlance(', "api.adminLabHosts('pending')", 'api.perkReviewQueue(', 'api.perksCatalog(', 'api.adminAdvisorCohortAssignments(',
-    'api.adminCohortTimeline(', 'api.adminReferralSubmissions(', 'learningApi.assignedPrograms(', 'learningApi.programLearners(', 'adminTestingApi.programmes(',
-    'insightsApi.insightsScopes(', 'api.perkReview(']) assert.ok(src.includes(call), `the pages no longer read ${call}`);
+  for (const call of ['api.adminStudioGlance(', "api.adminLabHosts('pending')", 'api.perksCatalog(', 'api.adminAdvisorCohortAssignments(',
+    'api.adminCohortTimeline(', 'api.adminReferralSubmissions(', 'learningApi.assignedPrograms(', 'learningApi.programLearners(', 'adminProgramsApi.catalogue(',
+    'api.adminSpinoutApplications(', 'insightsApi.insightsScopes(', 'api.perkReview(',
+    // D962 (#2795): parts 1, 4 and 7's reads and writes. Perks' queue reads the listings in review (K1), not R3.
+    'programsApi.program(', 'programsApi.activity(', 'programsApi.mentorSessions(', 'programsApi.learningWeekly(', 'programsApi.learner(',
+    'api.adminAdvisorCohortHistory(', 'api.adminPerkListings(', 'api.adminPerkClaims(', 'api.adminReferralWeekly(', 'api.adminStrategicAccess(',
+    'api.adminStrategicAccessDecision(', 'api.adminAssignAdvisorCohort(', 'api.adminEndAdvisorCohortAssignment(']) assert.ok(src.includes(call), `the pages no longer read ${call}`);
   const clients = [...src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api(?:\/(\w+))?'/g)]
     .flatMap((imp) => imp[1].split(',').map((s) => `${imp[2] || 'api'}:${s.trim()}`).filter((s) => !s.endsWith(':')));
-  assert.deepEqual([...new Set(clients)].sort(), ['api:api', 'insights:insightsApi', 'learning:learningApi', 'productTesting:adminTestingApi'],
+  // D964 (#2797) adds part 2's proposal client, the contracts library's templates (Terms) and HQ's grants read (the Studio filter); D961 part 1's catalogue client; D962 part 1's programsApi.
+  assert.deepEqual([...new Set(clients)].sort(), ['adminPrograms:adminProgramsApi', 'api:api', 'contracts:contractsApi', 'insights:insightsApi', 'learning:learningApi',
+    'programGrants:programGrantsApi', 'programProposals:programProposalsApi', 'programs:programsApi'],
     'the existing clients, each from its own module (lib/api re-exports them, but a named import of lib/api must name what api.js itself declares)');
-  assert.doesNotMatch(src, /adminSpinoutApplications|adminSpinoutParticipants|spinout-applications|spinout-participants/, 'Guard H');
-  assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML|<svg|recharts|Export CSV|Propose a program|Pause program/);
+  // D960 lifted Guard H for applications (a failure is a 503 now); participants still answer [] on any error.
+  assert.doesNotMatch(src, /adminSpinoutParticipants|spinout-participants/, 'Guard H');
+  // D961 draws the charts through ui/Charts.jsx, never an <svg> of its own. Propose a program landed with D964 (#2797); Pause waits for OD-PAUSE.
+  assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML|<svg|recharts|Export CSV|Pause program/);
   assert.doesNotMatch(src, /\?\? 0\b/, 'no zero standing in for a value');
   for (const sample of ['[Studio Lisbon]', '[48]', '[A venture program', 'Granted to your studio', '0 credits']) assert.ok(!src.includes(sample), `a canvas sample reached the pages: ${sample}`);
   assert.match(read('frontend/src/pages/admin/programs/programsModel.js'), /import \{ parseStamp \} from '\.\.\/\.\.\/\.\.\/ui\/parseStamp\.js';/);

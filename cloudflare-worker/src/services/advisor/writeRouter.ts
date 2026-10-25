@@ -16,6 +16,7 @@
  * the user types "delete my project" the LLM is instructed (in the
  * advisor system prompt) to deep-link them to the page instead.
  */
+import { inGrace } from '../../middleware/planSubscription';
 import type { Env } from '../../types';
 import type { User } from '../../types';
 import { questionById, mapRoleAnswer, DYNAMIC_ID_RE, FIT_ID_RE } from './questionBank.ts';
@@ -23,6 +24,7 @@ import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../taxonomyVer
 import { parseArchetypeSex } from '../archetypePresentation.ts';
 import { normalizeFitAnswer } from './banks/fitShared.ts';
 import { upsertUserSettings } from '../userSettings.ts';
+import { recordCapture } from '../partnerProfileReview';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -46,12 +48,14 @@ export interface WriteResult {
 interface UserSubscriptionFields {
   investor_subscription_status?: string | null;
   subscription_status?: string | null;
+  investor_subscription_renews_at?: string | null;
+  subscription_renews_at?: string | null;
   advisor_id?: number | null;
 }
 
 async function loadSubscriptionFields(env: Env, userId: number): Promise<UserSubscriptionFields> {
   const row = await env.DB.prepare(
-    `SELECT investor_subscription_status, subscription_status, advisor_id
+    `SELECT investor_subscription_status, investor_subscription_renews_at, subscription_status, subscription_renews_at, advisor_id
        FROM users WHERE id = ?`,
   ).bind(userId).first<UserSubscriptionFields>().catch(() => null);
   return row || {};
@@ -524,7 +528,8 @@ async function tierForInvestorThesis(env: Env, user: User): Promise<{ ok: boolea
   // Anything tied to investor_subscription_status='active' or the
   // generic subscription_status='active' is treated as paid here.
   const subs = await loadSubscriptionFields(env, user.id);
-  const active = subs.investor_subscription_status === 'active' || subs.subscription_status === 'active';
+  const active = inGrace(subs.investor_subscription_status, subs.investor_subscription_renews_at)
+    || inGrace(subs.subscription_status, subs.subscription_renews_at);
   if (active) return { ok: true };
   return { ok: false, upgrade_link: '/billing/investor-upgrade' };
 }
@@ -1407,6 +1412,8 @@ export async function routeAnswer(
       await env.DB.prepare(
         `UPDATE partner_profiles SET ${pcol} = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`,
       ).bind(value, profile.email).run();
+      // D991 — the capture joins the profile's history, by source.
+      await recordCapture(env, profile.email, 'eadwyn');
       return {
         status: 'saved',
         saved_to: { table: 'partner_profiles', column: pcol, id: profile.email, page_url: '/studio' },

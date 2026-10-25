@@ -268,16 +268,11 @@ const SECOND_MOUNTS = new Map([
  * alone. Checked against the hosts' own imports below, so it cannot drift.
  */
 const CONSOLE_PAGES = 'frontend/src/pages/admin/ConsolePages.jsx';
-// D938 (#2743): the console's shell is retired; ConsolePages composes each
-// console under the shared header at its own address. Legal is no page: its
-// tab has forwarded to Contracts since D647, so nothing mounts it.
-const UNMOUNTED = ['frontend/src/pages/admin/consoles/LegalConsole.jsx'];
-const NATIVE_CONSOLES = ['PartnerProfilesConsole', 'PersonasConsole', 'PaymentsConsole'].map((n) => `frontend/src/pages/admin/consoles/${n}.jsx`);
+const NATIVE_CONSOLES = ['PartnerProfilesConsole', 'PersonasConsole'].map((n) => `frontend/src/pages/admin/consoles/${n}.jsx`);
 const COMPOSED = new Map([
   ['frontend/src/pages/admin/profiles/PartnerProfiles.jsx', [NATIVE_CONSOLES[0]]],
   ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [NATIVE_CONSOLES[1]]],
-  ['frontend/src/pages/admin/payments/Payments.jsx', [NATIVE_CONSOLES[2]]],
-  [CONSOLE_PAGES, ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f) && !UNMOUNTED.includes(f) && !NATIVE_CONSOLES.includes(f))],
+  [CONSOLE_PAGES, ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f) && !NATIVE_CONSOLES.includes(f))],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
   ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],
@@ -311,9 +306,16 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
-  // D947/D949: Overview, Cohorts and Participants hold the doors to one cohort
-  // (`/cohorts/:ym`) and one founder (`/participants/:uid`).
+  // D978 (#2764): Advisors & Partners' People tab holds the door to one
+  // person (`/admin/advisors-partners/people/:ref`).
+  ['frontend/src/pages/admin/advisors/AdvisorsPartners.jsx', [
+    'frontend/src/pages/admin/advisors/People.jsx',
+  ]],
+  // D947/D948/D949: Overview, Cohorts, Applications and Participants hold the
+  // doors to one cohort (`/cohorts/:ym`), one application (`/applications/:id`)
+  // and one founder (`/participants/:uid`).
   ['frontend/src/pages/admin/lab/AdminLab.jsx', [
+    'frontend/src/pages/admin/lab/LabApplications.jsx',
     'frontend/src/pages/admin/lab/LabParticipants.jsx',
     'frontend/src/pages/admin/lab/LabCohorts.jsx',
     'frontend/src/pages/admin/lab/LabOverviewBlocks.jsx',
@@ -340,6 +342,17 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/programs/LearningPages.jsx',
     'frontend/src/pages/admin/programs/PerksPages.jsx',
     'frontend/src/pages/admin/programs/ReferralPartners.jsx',
+  ]],
+  // D964 (#2797): the catalogue draws HQ's tab strip (its Proposals door) from
+  // ProposalsPage and the two proposal lists from ProposalTables, and the
+  // proposals page draws the same lists; Your proposals holds the door to
+  // Propose a program.
+  ['frontend/src/pages/admin/programs/ProgramsCatalogue.jsx', [
+    'frontend/src/pages/admin/programs/ProposalsPage.jsx',
+    'frontend/src/pages/admin/programs/ProposalTables.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ProposalsPage.jsx', [
+    'frontend/src/pages/admin/programs/ProposalTables.jsx',
   ]],
 ]);
 

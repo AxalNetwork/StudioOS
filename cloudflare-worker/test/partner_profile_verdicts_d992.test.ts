@@ -13,6 +13,8 @@ import profiling from '../src/routes/profiling.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { buildFresh, postCutoffMigrations } from '../../scripts/check-baseline-drift.mjs';
 import { userMeetsTier } from '../src/middleware/requireTier.ts';
+// D991: a rejection carries the member-facing reason it requires.
+const REJECT_REASON = 'The entity name does not match the registry.';
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql', 'utf8');
 const later = postCutoffMigrations(process.cwd()).map((m: any) => m.sql);
@@ -55,20 +57,20 @@ for (const status of ['unknown','pending','VERIFIED','',null,17,{},undefined]) {
 }
 for (const field of ['admin_notes','agreement_type']) for (const value of ['',null]) {
  test(`${field} clears explicitly with ${JSON.stringify(value)} and preserves the omitted other field`,async()=>{
-  const db=fixture();try {const before=profile(db);const r=await call(db,{status:'rejected',[field]:value});assert.equal(r.status,200);assert.equal(profile(db)[field],null);assert.equal(r.body[field],null);const other=field==='admin_notes'?'agreement_type':'admin_notes';assert.equal(profile(db)[other],before[other]);assert.equal(r.body[other],before[other]);assert.equal(profile(db).admin_status,'rejected');assert.equal(logs(db).length,2);}finally{db.close();}
+  const db=fixture();try {const before=profile(db);const r=await call(db,{status:'rejected',reject_reason:REJECT_REASON,[field]:value});assert.equal(r.status,200);assert.equal(profile(db)[field],null);assert.equal(r.body[field],null);const other=field==='admin_notes'?'agreement_type':'admin_notes';assert.equal(profile(db)[other],before[other]);assert.equal(r.body[other],before[other]);assert.equal(profile(db).admin_status,'rejected');assert.equal(logs(db).length,2);}finally{db.close();}
  });
 }
 test('both fields can be replaced, then omitted on verification without sending an old agreement',async()=>{
- const db=fixture();try {assert.equal((await call(db,{status:'rejected',agreement_type:'replacement',admin_notes:'Replacement note'})).status,200);const r=await call(db,{status:'verified'});assert.equal(r.status,200);assert.equal(r.body.agreement_type,'replacement');assert.equal(r.body.admin_notes,'Replacement note');assert.equal(r.body.esign,null);assert.equal(profile(db).admin_status,'verified');const audit=logs(db);assert.equal(audit.length,4);assert.ok(audit.every((r:any)=>!r.details.includes(email)));assert.deepEqual(audit.map((r:any)=>r.user_id),[1,2,1,2]);}finally{db.close();}
+ const db=fixture();try {assert.equal((await call(db,{status:'rejected',reject_reason:REJECT_REASON,agreement_type:'replacement',admin_notes:'Replacement note'})).status,200);const r=await call(db,{status:'verified'});assert.equal(r.status,200);assert.equal(r.body.agreement_type,'replacement');assert.equal(r.body.admin_notes,'Replacement note');assert.equal(r.body.esign,null);assert.equal(profile(db).admin_status,'verified');const audit=logs(db);assert.equal(audit.length,4);assert.ok(audit.every((r:any)=>!r.details.includes(email)));assert.deepEqual(audit.map((r:any)=>r.user_id),[1,2,1,2]);}finally{db.close();}
 });
 for (const user of [0,2]) test(`verify refuses ${user ? 'a non-admin' : 'an anonymous request'} without writes`,async()=>{
  const db=fixture();try {const before=profile(db);assert.equal((await call(db,{status:'verified',agreement_type:''},user)).status,user?403:401);assert.deepEqual(profile(db),before);assert.equal(logs(db).length,0);}finally{db.close();}
 });
 test('an absent profile is a 404 and writes no audit',async()=>{
- const db=fixture();try {const before=profile(db);assert.equal((await call(db,{status:'rejected'},1,'absent@example.test')).status,404);assert.deepEqual(profile(db),before);assert.equal(logs(db).length,0);}finally{db.close();}
+ const db=fixture();try {const before=profile(db);assert.equal((await call(db,{status:'rejected',reject_reason:REJECT_REASON},1,'absent@example.test')).status,404);assert.deepEqual(profile(db),before);assert.equal(logs(db).length,0);}finally{db.close();}
 });
 test('a failed profile read is a 5xx without a verdict or audit',async()=>{
- const db=fixture();try {const before=profile(db);const DB=d1Over(db);const faulty={...DB,prepare(sql:string){if(/^SELECT \* FROM partner_profiles WHERE email/.test(sql))throw new Error('Synthetic read failure');return DB.prepare(sql);}};assert.equal((await call(db,{status:'rejected'},1,email,faulty)).status,500);assert.deepEqual(profile(db),before);assert.equal(logs(db).length,0);}finally{db.close();}
+ const db=fixture();try {const before=profile(db);const DB=d1Over(db);const faulty={...DB,prepare(sql:string){if(/^SELECT \* FROM partner_profiles WHERE email/.test(sql))throw new Error('Synthetic read failure');return DB.prepare(sql);}};assert.equal((await call(db,{status:'rejected',reject_reason:REJECT_REASON},1,email,faulty)).status,500);assert.deepEqual(profile(db),before);assert.equal(logs(db).length,0);}finally{db.close();}
 });
 test('the existing shared plan policy exempts admins, including free-plan admins',()=>{
  assert.equal(userMeetsTier({role:'admin',subscription_tier:'free'} as any,'studio'),true);

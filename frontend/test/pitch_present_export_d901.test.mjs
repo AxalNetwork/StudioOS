@@ -51,7 +51,7 @@ test('a card is what the version holds: placeholders and empty figures are Not r
   const [a, b, c] = cardsOf(DECK);
   assert.deepEqual([a.n, a.title, a.sub, a.lines, a.bullets, a.image], ['01', 'Problem', 'Why it hurts', ['Line one'], ['First'], 'https://img.example.test/a.png']);
   assert.equal(notesOf(a), 'Open with the problem.');
-  assert.deepEqual(b.figures, [{ k: 'Paying customers', v: NOT_RECORDED }, { k: 'Pilots', v: '3' }]);
+  assert.deepEqual(b.figures, [{ k: 'Paying customers', v: NOT_RECORDED, source: null }, { k: 'Pilots', v: '3', source: null }]);
   assert.deepEqual(b.lines, [`Why now: ${NOT_RECORDED}`]);
   assert.ok(!JSON.stringify(b).includes('[Your why now]'), 'a template sample never reaches a card');
   assert.equal(b.image, null, 'only an https image is drawn');
@@ -59,7 +59,7 @@ test('a card is what the version holds: placeholders and empty figures are Not r
   assert.equal(c.title, 'Card 3');
   assert.equal(c.empty, true);
   assert.deepEqual(cardsOf(null), []);
-  assert.equal(SOURCE_NOT_RECORDED, 'Source: Not recorded', 'no card records a source yet, so Show sources says so');
+  assert.equal(SOURCE_NOT_RECORDED, 'Source: Not recorded', 'a figure with no binding says its source is not recorded');
   assert.equal(cardOf({ fields: [{ kind: 'bullets', label: 'Ask', value: [] }] }, 0).lines[0], `Ask: ${NOT_RECORDED}`);
 });
 

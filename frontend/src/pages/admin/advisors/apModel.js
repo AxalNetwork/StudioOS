@@ -43,9 +43,10 @@ export const MOVED_NOTICES = {
   'firm-links': 'Firm links moved here: attach a partner account to its firm under Firms.',
 };
 
-/** The tabs this integration draws (D972 §1). People waits for its read. */
+/** The tabs this integration draws (D972 §1). People (D978) reads D973's people read. */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: '' },
+  { key: 'people', label: 'People', path: '/people' },
   { key: 'firms', label: 'Firms', path: '/firms' },
   { key: 'deck', label: 'Deck roster', path: '/deck' },
 ];
@@ -54,7 +55,9 @@ export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === AP_PATH) return 'overview';
   const t = TABS.find((x) => x.path && p === `${AP_PATH}${x.path}`);
-  return t ? t.key : null;
+  if (t) return t.key;
+  // D978: one person opens over People at /people/:ref.
+  return /^\/admin\/advisors-partners\/people\/[^/]+$/.test(p) ? 'people' : null;
 }
 
 export function movedTarget(pathname, search, hash, key) {
@@ -71,7 +74,6 @@ export const WAITS = {
   c2: 'Sessions per week waits for the network overview read (D972 part 1).',
   c3: 'Skills against founder demand waits for a demand store; nothing records what founders ask for yet (D972 part 1).',
   c4: 'Active deals by type waits for the network overview read (D972 part 1).',
-  people: 'People, one table of every advisor, operating partner and deck-only name, waits for the people read (D972 part 1).',
 };
 
 const nf = (n) => Number(n).toLocaleString('en-US');
@@ -199,52 +201,6 @@ export function buildNeeds(reads, now) {
     if (n > 0) rows.push({ key: 'no-photo', text: `${plural(n, 'person')} on the deck ${n === 1 ? 'has' : 'have'} no photo.`, action: 'Edit the deck roster', to: AP_DECK_PATH });
   }
   return { state: 'ready', rows, unread };
-}
-
-/**
- * The firms table (AP5), from the three reads that hold its columns. A
- * column whose read failed says so; the rows still come from the firm list.
- */
-export function buildFirms(reads, now) {
-  const p = pending(reads.links, 'The firms could not be read. That is not the same as no firms.');
-  if (p) return p;
-  const dir = reads.directory?.status === 'ready' ? new Map((reads.directory.data?.partners || []).map((x) => [Number(x.id), x])) : null;
-  const dealsOk = reads.deals?.status === 'ready';
-  // A deal belongs to a partner account; the account's firm is on the links read.
-  const firmOfUser = new Map((reads.links.data?.accounts || []).filter((a) => a.partner_id != null).map((a) => [Number(a.id), Number(a.partner_id)]));
-  const dealsByFirm = new Map();
-  if (dealsOk) {
-    for (const d of reads.deals.data?.items || []) {
-      const firm = firmOfUser.get(Number(d.user_id));
-      if (firm == null) continue;
-      const list = dealsByFirm.get(firm) || [];
-      list.push(d);
-      dealsByFirm.set(firm, list);
-    }
-  }
-  const dirWord = (x) => (Number(x.directory_featured) === 1 ? 'Featured' : Number(x.directory_listed) === 1 ? 'Listed' : 'Not listed');
-  const rows = (reads.links.data?.firms || []).map((f) => {
-    const d = dir ? dir.get(Number(f.id)) : null;
-    const deals = dealsByFirm.get(Number(f.id)) || [];
-    const soonest = deals.map((x) => parseStamp(x.expires_at)).filter((x) => x != null).sort((x, y) => x - y)[0];
-    return {
-      id: f.id,
-      name: f.name || 'Not recorded',
-      company: f.company || null,
-      accounts: nf(Number(f.accounts || 0)),
-      specialization: d ? (d.specialization || 'Not recorded') : (dir ? 'Not recorded' : 'Could not be read'),
-      directory: d ? dirWord(d) : (dir ? 'Not listed' : 'Could not be read'),
-      deal: !dealsOk ? 'Could not be read' : deals.length ? `${deals.length === 1 ? deals[0].deal_type : `${nf(deals.length)} deals`}${soonest != null ? ` · ends ${new Date(soonest).toISOString().slice(0, 10)}` : ''}` : 'No active deal',
-      endingSoon: soonest != null && soonest >= now && soonest <= now + 30 * DAY,
-    };
-  });
-  return {
-    state: 'ready',
-    rows,
-    capped: rows.length >= 500,
-    unattached: Number(reads.links.data?.unattached || 0),
-    dealsCapped: dealsOk && (reads.deals.data?.items || []).length >= 200,
-  };
 }
 
 export function pageFailed(reads) {

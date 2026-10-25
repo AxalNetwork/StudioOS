@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Info } from 'lucide-react';
+import Lightbox from './Lightbox';
+import { usePhoneWidth } from './phone/usePhoneWidth';
 
 /**
  * D936 (#2375) — the one header every admin page shares, built to the owner's
@@ -129,8 +131,9 @@ export function HeaderMenuItem({ to = null, onSelect = null, children, 'data-tes
  * focus to the first item; the arrow keys, Home and End move between items;
  * Escape and an outside click close it, Escape returning focus to "⋯".
  */
-function MoreMenu({ children }) {
+function MoreMenu({ children, hasCrumb }) {
   const [open, setOpen] = useState(false);
+  const phone = usePhoneWidth('(max-width: 639px)');
   const wrap = useRef(null);
   const button = useRef(null);
   const menu = useId();
@@ -148,23 +151,33 @@ function MoreMenu({ children }) {
     return () => document.removeEventListener('mousedown', away);
   }, [open]);
   const onKey = (e) => {
-    if (!open) return;
+    if (!open || e.defaultPrevented) return;
     if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
     const all = items();
     const at = all.indexOf(document.activeElement);
+    if (e.key === 'Tab' && all.length) {
+      e.preventDefault();
+      all[(at + (e.shiftKey ? -1 : 1) + all.length) % all.length]?.focus?.();
+      return;
+    }
     const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: all.length - 1 }[e.key];
     if (to === undefined || !all.length) return;
     e.preventDefault();
     all[(to + all.length) % all.length]?.focus?.();
   };
+  const content = (
+    <div id={menu} role="menu" aria-label="More" className="flex min-w-[210px] flex-col rounded-[12px] border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="admin-page-more-menu">
+      <MenuClose.Provider value={close}>{children}</MenuClose.Provider>
+    </div>
+  );
   return (
-    <div ref={wrap} className="relative" onKeyDown={onKey}>
-      <button ref={button} type="button" aria-label="More" aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => setOpen((o) => !o)} className="grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10" data-testid="admin-page-more">⋯</button>
-      {open ? (
-        <div id={menu} role="menu" aria-label="More" className="absolute right-0 top-full z-30 mt-1.5 flex min-w-[210px] flex-col rounded-[12px] border border-axal-hairline bg-white p-1.5 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid="admin-page-more-menu">
-          <MenuClose.Provider value={close}>{children}</MenuClose.Provider>
-        </div>
-      ) : null}
+    <div ref={wrap} className={`relative col-start-2 justify-self-end ${hasCrumb ? 'row-start-2' : 'row-start-1'}`} onKeyDown={onKey}>
+      <button ref={button} type="button" aria-label="More" aria-haspopup={phone ? 'dialog' : 'menu'} aria-expanded={open} aria-controls={open ? menu : undefined} onClick={() => setOpen((o) => !o)} className="grid h-11 w-11 place-items-center rounded-[9px] border border-axal-hairline bg-white text-[16px] font-bold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 sm:h-10 sm:w-10" data-testid="admin-page-more">⋯</button>
+      {open ? phone ? (
+        <Lightbox label="More" phone="sheet" onClose={() => close(true)} returnFocusTo={button} testId="admin-page-more-sheet">
+          {content}
+        </Lightbox>
+      ) : <div className="absolute right-0 top-full z-30 mt-1.5">{content}</div> : null}
     </div>
   );
 }
@@ -191,44 +204,45 @@ export default function AdminPageHeader({
     if (typeof titleRef.current?.focus === 'function') titleRef.current.focus();
   };
   return (
-    <header className="flex flex-col gap-2.5" data-testid={testId}>
+    <header className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2.5" data-testid={testId}>
       {crumb && (
         <>
-          <nav aria-label="Breadcrumb" className="hidden items-center gap-1.5 font-mono text-[11px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400 sm:flex" data-testid="admin-page-crumb">
+          <nav aria-label="Breadcrumb" className="col-span-2 hidden items-center gap-1.5 font-mono text-[11px] uppercase tracking-[.07em] text-axal-muted dark:text-gray-400 sm:flex" data-testid="admin-page-crumb">
             <Link to={crumb.to} className="text-axal-muted hover:text-axal-violet dark:text-gray-400 dark:hover:text-violet-300">{crumb.label}</Link>
             {crumb.current ? <><span aria-hidden="true">›</span><span>{crumb.current}</span></> : null}
           </nav>
-          <Link to={crumb.to} className="inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet sm:hidden" data-testid="admin-page-back">
+          <Link to={crumb.to} className="col-span-2 inline-flex min-h-[44px] items-center text-[13px] font-bold text-axal-violet sm:hidden" data-testid="admin-page-back">
             ‹ {crumb.label}
           </Link>
         </>
       )}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-[9px]">
+      <div className={`col-start-1 flex min-w-0 flex-wrap items-center gap-[9px] ${crumb ? 'row-start-2' : 'row-start-1'}`} data-testid="admin-page-title-row">
           <h1 ref={titleRef} tabIndex={-1} className="m-0 text-[20px] font-extrabold leading-tight tracking-[-.02em] text-axal-ink outline-none dark:text-gray-100 sm:text-[24px]">{title}</h1>
           {pills.map((p) => (
             <span key={p.label} title={p.title} className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11.5px] font-bold ${PILL_TONES[p.tone] || PILL_TONES.hq}`}>{p.label}</span>
           ))}
-        </div>
-        {actions || more ? <div className="flex flex-wrap items-center gap-2">{actions}{more ? <MoreMenu>{more}</MoreMenu> : null}</div> : null}
       </div>
-      {line ? <p className="m-0 max-w-[72ch] text-[13px] leading-normal text-axal-muted dark:text-gray-400">{line}</p> : null}
-      {facts ? <p className="m-0 font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="admin-page-facts">{facts}</p> : null}
+      {actions || more ? <div className={`contents sm:col-start-2 sm:flex sm:items-start sm:gap-2 ${crumb ? 'sm:row-start-2' : 'sm:row-start-1'}`} data-testid="admin-page-actions">
+        {actions ? <div className={`col-span-2 flex min-w-0 flex-col gap-2 [&>*]:w-full sm:flex-row sm:[&>*]:w-auto ${crumb ? 'row-start-4' : 'row-start-3'}`}>{actions}</div> : null}
+        {more ? <MoreMenu hasCrumb={Boolean(crumb)}>{more}</MoreMenu> : null}
+      </div> : null}
+      {line ? <p className={`col-span-2 m-0 max-w-[72ch] text-[13px] leading-normal text-axal-muted dark:text-gray-400 ${crumb ? 'row-start-3' : 'row-start-2'}`}>{line}</p> : null}
+      {facts ? <p className="col-span-2 m-0 font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="admin-page-facts">{facts}</p> : null}
       {scope ? (
-        <div>
+        <div className="col-span-2">
           <span tabIndex={0} title={HELD_SCOPE_TITLE} className="inline-flex cursor-help rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" data-testid="admin-page-scope">{HELD_SCOPE_LABEL}</span>
         </div>
       ) : null}
-      {chip && !scope ? <div>{chip}</div> : null}
+      {chip && !scope ? <div className="col-span-2">{chip}</div> : null}
       {notice?.text ? (
-        <div role="status" aria-live="polite" className="flex items-center gap-2.5 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-1.5 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="admin-page-moved">
+        <div role="status" aria-live="polite" className="col-span-2 flex items-center gap-2.5 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-1.5 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="admin-page-moved">
           <Info size={15} aria-hidden="true" className="shrink-0 text-axal-violet-deep dark:text-violet-300" />
           <span className="min-w-0 flex-1 leading-[1.45]">{notice.text}</span>
-          <button type="button" onClick={onDismiss} className="inline-flex min-h-[40px] shrink-0 items-center rounded-[9px] px-2.5 text-[13px] font-bold text-axal-violet-deep dark:text-violet-300">Dismiss</button>
+          <button type="button" onClick={onDismiss} className="inline-flex min-h-[44px] shrink-0 sm:min-h-[40px] items-center rounded-[9px] px-2.5 text-[13px] font-bold text-axal-violet-deep dark:text-violet-300">Dismiss</button>
         </div>
       ) : null}
       {tabs ? (
-        <nav aria-label={title} className="-mb-px flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" data-testid="admin-page-tabs">
+        <nav aria-label={title} className="col-span-2 -mb-px flex gap-5 overflow-x-auto border-b border-axal-hairline dark:border-gray-700" style={{ maskImage: 'linear-gradient(to right, black calc(100% - 16px), transparent)', paddingRight: 20 }} data-testid="admin-page-tabs">
           {tabs}
         </nav>
       ) : null}

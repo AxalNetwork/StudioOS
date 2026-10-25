@@ -26,8 +26,9 @@
  * partner's own words fill; `full_name` is not one, nor the keys and HQ's own
  * columns.
  *
- * NOTHING RECORDED READS AS NULL. Review dates arrive with part 2; until
- * then those blocks say `available: false` with the reason, never a zero.
+ * NOTHING RECORDED READS AS NULL. Review dates are recorded from migration 557
+ * (D991) on, and a verdict given before it has none, so the verdict counts
+ * stay `available: false` with the reason, never a zero.
  *
  * THE ENVELOPE (D993, part 4). Each row carries the state of the envelope its
  * first agreement went out in, joined from `esign_envelopes`, and the counts
@@ -127,7 +128,8 @@ const ROWS_SUBQUERY = `(
     SELECT p.rowid AS row_id, p.ref, p.email, p.created_at, p.user_id, p.invitation_id,
            p.full_name, p.organization, p.persona, p.legal_entity_name, p.entity_type,
            p.founder_track, p.company_established, p.partnership_goal, p.agreement_type,
-           p.admin_status,
+           p.admin_status, p.reviewed_at, p.reviewed_by, p.changed_after_review_at,
+           rv.name AS reviewer_name,
            ${STATUS_SQL} AS status,
            CASE WHEN ${SRC_INVITATION_SQL} THEN 1 ELSE 0 END AS src_invitation,
            CASE WHEN ${HAS_CHAT_SQL} THEN 1 ELSE 0 END AS src_chat,
@@ -138,14 +140,16 @@ const ROWS_SUBQUERY = `(
     FROM partner_profiles p
     LEFT JOIN users u ON u.id = p.user_id OR (p.user_id IS NULL AND u.email = p.email)
     LEFT JOIN user_role_review rr ON rr.user_id = u.id
+    LEFT JOIN users rv ON rv.id = p.reviewed_by
   ) AS l
   LEFT JOIN esign_envelopes e ON e.id = l.envelope_id
 ) AS listed`;
 
-/** Sort orders, by key. `reviewed` waits for part 2's review dates. */
+/** Sort orders, by key. `reviewed` (D991): newest verdict first, unreviewed last. */
 const ORDER_BY: Record<string, string> = {
   waiting: " ORDER BY (status = 'pending') DESC, julianday(created_at) ASC, row_id ASC",
   newest: ' ORDER BY julianday(created_at) DESC, row_id DESC',
+  reviewed: ' ORDER BY (reviewed_at IS NULL) ASC, julianday(reviewed_at) DESC, row_id DESC',
   name: " ORDER BY LOWER(COALESCE(NULLIF(TRIM(full_name), ''), NULLIF(TRIM(user_name), ''), NULLIF(TRIM(legal_entity_name), ''), NULLIF(TRIM(organization), ''), email)) ASC, row_id ASC",
 };
 
@@ -213,8 +217,13 @@ export function listFilters(query: ListQuery): { where: string[]; binds: unknown
     if (!DATE.test(to)) return { error: 'bad_filter', message: 'captured_to is a date, YYYY-MM-DD.' };
     where.push("julianday(created_at) < julianday(?, '+1 day')"); binds.push(to);
   }
-  if (one(query.reviewed_by)) {
-    return { error: 'not_recorded', message: 'Who reviewed a profile is recorded from Partner profiles part 2; this filter waits for it.' };
+  // D991 — who gave the current verdict, by account id; `not_recorded` is a
+  // verdict whose reviewer nothing stored (every verdict before migration 557).
+  const reviewedBy = one(query.reviewed_by);
+  if (reviewedBy) {
+    if (reviewedBy === 'not_recorded') where.push("status IN ('verified', 'rejected') AND reviewed_by IS NULL");
+    else if (/^\d+$/.test(reviewedBy)) { where.push('reviewed_by = ?'); binds.push(Number(reviewedBy)); }
+    else return { error: 'bad_filter', message: 'reviewed_by is an admin\'s account id, or not_recorded.' };
   }
   return { where, binds };
 }
@@ -254,6 +263,11 @@ export function listRow(r: any) {
     agreement_type: r.agreement_type ?? null,
     admin_status: r.admin_status ?? null,
     status: r.status ?? null,
+    // D991 — the current verdict's date and reviewer, and the changed-after
+    // flag PRF2 draws as the amber dot. Null where nothing recorded them.
+    reviewed_at: r.reviewed_at ?? null,
+    reviewed_by: r.reviewed_by == null ? null : { user_id: r.reviewed_by, name: r.reviewer_name ?? null },
+    changed_after_review_at: r.changed_after_review_at ?? null,
     sources: sourcesOf(r),
     account,
     identity_check: kyc == null ? null : { state: kyc, label: IDENTITY_LABELS[kyc] ?? kyc },
@@ -278,11 +292,8 @@ export async function listPartnerProfiles(env: Env, query: ListQuery): Promise<L
   const filters = listFilters(query);
   if ('error' in filters) return filters;
   const sort = one(query.sort) || 'waiting';
-  if (sort === 'reviewed') {
-    return { error: 'not_recorded', message: 'Review dates are recorded from Partner profiles part 2; this sort waits for them.' };
-  }
   const orderBy = ORDER_BY[sort];
-  if (!orderBy) return { error: 'bad_sort', message: 'Sort by waiting, newest or name.' };
+  if (!orderBy) return { error: 'bad_sort', message: 'Sort by waiting, newest, reviewed or name.' };
   const pageSize = Math.min(PAGE_SIZE_MAX, Math.max(1, Math.floor(Number(query.page_size)) || PAGE_SIZE_DEFAULT));
   const page = Math.max(1, Math.floor(Number(query.page)) || 1);
   const whereSql = filters.where.length ? ' WHERE ' + filters.where.join(' AND ') : '';
@@ -358,7 +369,7 @@ const ENVELOPES_OUT_SQL = "SELECT COALESCE(SUM(envelope_state IN ('out', 'not_de
   + " COALESCE(SUM(envelope_state = 'not_delivered'), 0) AS undelivered FROM " + ROWS_SUBQUERY;
 
 export const WEEKS = 12;
-const PART2 = 'Verification and rejection dates are recorded from Partner profiles part 2.';
+const PART2 = 'Verification and rejection dates are recorded only from 24 Oct 2026 (D991); a verdict given before has none, so this count would be short.';
 
 /**
  * The tiles and the weekly series. Each block carries `available` and
