@@ -1,3 +1,4 @@
+import { storedPmfChecklist } from '../scoring/pmfStore';
 /**
  * D691 (S19-B, #1699) — Raise's seven records on D690's contract (copy per
  * CO:375-381): Fundraising readiness, Investor narrative, Pitch deck, Data
@@ -151,7 +152,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   const row = items.find((i) => i.item_key === id) ?? null;
   const mine = row ? scores.filter((s) => Number(s.item_id) === Number(row.id)) : [];
   const s = mine.at(-1) ?? null; // scores arrive oldest first
-  const computed = id === 'team' ? null : (await computeReadiness(rc.env, rc.projectId)).find((c) => c.key === id) ?? null;
+  const computed = id === 'pmf' ? await storedPmfChecklist(rc.env, rc.projectId) : id === 'team' ? null : (await computeReadiness(rc.env, rc.projectId)).find((c) => c.key === id) ?? null;
   const notScored = 'Not scored yet';
   const out: RecordContent = {
     title: item.label,
@@ -219,11 +220,11 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   return [{
     key: 'rescore', label: 'Re-score', kind: 'write', tone: 'primary',
     execute: (c, itemKey) => refusing(async () => ({ ok: true, record: await rescoreReadiness(c.env, {
-      projectId: c.projectId, userId: userId(c), items: [itemKey], since: 'all',
+      projectId: c.projectId, userId: userId(c), items: [itemKey], since: 'all', ...(itemKey === 'pmf' ? { pmf: true } : {}),
     }) })),
   }];
 }, async (rc) => {
-  // The seven items with their last score; Team is scored by hand.
+  // The eight items with their last score; Team is scored by hand.
   const { scores } = await loadReadiness(ctxOf(rc)); // oldest first, so the last one kept is the newest
   const newest = new Map<string, any>();
   for (const sc of scores) newest.set(String(sc.item_key), sc);

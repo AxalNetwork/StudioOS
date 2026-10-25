@@ -102,3 +102,5 @@ that need data before they draw, and every other request answers 503, then
 profile, and fail on a route that does not draw exactly one rail with its page
 key unless `RENDER_NOT_YET` lists it. `airail_every_page_d781.test.mjs` holds
 the rules to fixtures.
+
+D1123 extends the Lab desks, overview and operations tests for Formation scope, cohort details, structured admission and grant/refusal states.

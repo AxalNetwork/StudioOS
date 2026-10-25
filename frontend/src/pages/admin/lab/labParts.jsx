@@ -184,7 +184,7 @@ export function useWrite(onChanged, refusals, toText) {
  * what it changes, the fields, then Cancel and the action, or one Done after
  * the write. The refusal sits under the buttons.
  */
-export function Dialog({ title, sub, onClose, w, action, tone = 'primary', disabled, onAction, testId, children, done }) {
+export function Dialog({ title, sub, onClose, w, action, tone = 'primary', disabled, onAction, testId, children, done, pageBelow = 'lg' }) {
   const close = w.finish(onClose);
   const footer = (
     <div className="flex flex-col gap-2">
@@ -202,7 +202,7 @@ export function Dialog({ title, sub, onClose, w, action, tone = 'primary', disab
     </div>
   );
   return (
-    <Lightbox label={title} title={title} sub={sub} onClose={close} testId={testId} footer={footer} pageBelow="lg">
+    <Lightbox label={title} title={title} sub={sub} onClose={close} testId={testId} footer={footer} pageBelow={pageBelow}>
       <div className={BODY}>
         {children}
         {w.reply && done ? <Done testId={`${testId}-result`}>{done}</Done> : null}
