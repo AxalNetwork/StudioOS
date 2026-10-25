@@ -21,6 +21,16 @@ import { NOT_RECORDED } from '../../../lib/absence.js';
  *
  * A Draft is a profile with nothing to review yet: it is not in the queue,
  * nor in the Waiting tile, nor in Approvals lane 7 (D990 §2).
+ *
+ * D1127 (#3007) — the gaps D994 §3 left:
+ *   - part 2's list fields (D991): Reviewed "3 Oct by Ada Admin", Not
+ *     recorded for a verdict given before review dates began; the amber
+ *     "● Changed after verified"; the Reviewed by filter and the Reviewed sort;
+ *   - an Explorer's binding agreement in the Account column ("binding
+ *     agreement sent 2 Oct" or "not sent"), from the Exploring board;
+ *   - Rows per page 25 · 50 · 100, and the Columns picker on All profiles;
+ *   - Export: this view (the More menu), the chosen rows, or one row (its
+ *     "⋯", with Open and Reopen for review), through `GET /export`.
  */
 
 export const PP_PATH = '/admin/partner-profiles';
@@ -35,11 +45,12 @@ export const LIST_FAILED = 'We could not load partner profiles.';
 export const LIST_FAILED_SUB = 'This is not a sign that there are none.';
 export const COUNTS_FAILED = 'Could not be read';
 export const PAGE_SIZE = 25;
+/** Rows per page (PRF2's footer). The Worker's list takes up to 100. */
+export const PAGE_SIZES = [25, 50, 100];
 /** Amber from 72 hours (#2805; D953's shared age bands). */
 export const OVERDUE_HOURS = 72;
-/** Part 2 records who reviewed a profile and when (D990 §3 refuses the filter and sort until then). */
-export const REVIEWED_WAITS = 'Who reviewed a profile, and when, is recorded from Partner profiles part 2.';
-export const CHANGED_WAITS = 'A profile changed after it was verified is flagged from Partner profiles part 2.';
+/** D991 records who gave a verdict and when from 24 Oct 2026; a verdict given before has neither. */
+export const REVIEWED_BEFORE = 'Given before 24 Oct 2026, when review dates began to be recorded.';
 /** The summary read pages through the whole list for the categories chart, up to this many rows. */
 export const SUMMARY_CAP = 1000;
 
@@ -104,11 +115,25 @@ export function incorporatedWord(v) {
 const ROLE_WORD = { founder: 'Founder', investor: 'Investor', advisor: 'Advisor', partner: 'Operating Partner', exploring: 'Explorer', admin: 'Admin' };
 export const roleWord = (r) => ROLE_WORD[r] || (r ? String(r) : null);
 
-/** The account a profile belongs to: none yet, or its role, and an Explorer's suggested role. */
+/**
+ * D1127 — an Explorer's binding agreement from the Exploring board, in PRF1's
+ * words: "binding agreement sent 2 Oct", "binding agreement not sent", or
+ * signed. Null for any other account, which has none to show.
+ */
+export function bindingLine(account) {
+  const b = account?.exploring ? account.binding : null;
+  if (!b) return null;
+  if (b.state === 'signed') return `binding agreement signed${shortDay(b.signed_at) ? ` ${shortDay(b.signed_at)}` : ''}`;
+  if (b.state === 'sent') return `binding agreement sent${shortDay(b.sent_at) ? ` ${shortDay(b.sent_at)}` : ''}`;
+  if (b.state === 'not_sent') return 'binding agreement not sent';
+  return null;
+}
+
+/** The account a profile belongs to: none yet, or its role, an Explorer's suggested role and binding agreement. */
 export function accountView(account) {
-  if (!account) return { has: false, text: 'No account yet', sub: null };
+  if (!account) return { has: false, text: 'No account yet', sub: null, binding: null };
   const sub = account.exploring && account.suggested_role ? `Suggested: ${roleWord(account.suggested_role)}` : null;
-  return { has: true, text: roleWord(account.role) || NOT_RECORDED, sub };
+  return { has: true, text: roleWord(account.role) || NOT_RECORDED, sub, binding: bindingLine(account) };
 }
 
 /** The identity check in KYC & KYB's words; no account means no check to show. */
@@ -161,6 +186,34 @@ export function envelopeLine(env) {
   return env.label || NOT_RECORDED;
 }
 
+const DECIDED = new Set(['verified', 'rejected']);
+
+/**
+ * D1127 — the Reviewed column (D991): "3 Oct by Ada Admin" for a verdict
+ * recorded with its day; Not recorded, with why, for one given before review
+ * dates began; "—" for a profile with no verdict.
+ */
+export function reviewedView(r) {
+  if (!DECIDED.has(r?.status)) return { text: '—', tip: 'No verdict yet.', recorded: false };
+  const day = shortDay(r.reviewed_at);
+  if (!day) return { text: NOT_RECORDED, tip: REVIEWED_BEFORE, recorded: false };
+  const who = r.reviewed_by ? (r.reviewed_by.name || `account ${r.reviewed_by.user_id}`) : null;
+  return { text: who ? `${day} by ${who}` : day, tip: `${r.status === 'verified' ? 'Verified' : 'Rejected'} on ${dayOf(r.reviewed_at)}${who ? ` by ${who}` : ''}.`, recorded: true };
+}
+
+/**
+ * D1127 — PRF2's amber dot (owner decision 3): a profile whose answers were
+ * written again after its verdict keeps the verdict and says so.
+ */
+export function changedView(r) {
+  if (!DECIDED.has(r?.status) || !r.changed_after_review_at) return null;
+  const word = r.status === 'verified' ? 'verified' : 'rejected';
+  return { text: `● Changed after ${word}`, tip: `Changed after it was ${word}: its answers were written again on ${dayOf(r.changed_after_review_at)}.` };
+}
+
+/** D1127 — a verdict can be reopened (D991's Reopen); a profile with none is already in the queue or a Draft. */
+export const canReopen = (r) => DECIDED.has(r?.status) && Boolean(r?.ref);
+
 /** One row of either table, ready to draw. */
 export function rowView(r, now = Date.now()) {
   const founder = r.persona === 'Founder';
@@ -179,6 +232,9 @@ export function rowView(r, now = Date.now()) {
     envelopeAmber: r.envelope?.state === 'not_delivered',
     sources: sourceWords(r.sources),
     account: accountView(r.account),
+    reviewed: reviewedView(r),
+    changed: changedView(r),
+    reopenable: canReopen(r),
     identity: identityView(r.identity_check),
     age: ageOf(r.created_at, now),
     captured: dayOf(r.created_at),
@@ -315,8 +371,15 @@ export function categoryChart(rows) {
   };
 }
 
-/** The filters All profiles draws, in the canvas's order. Reviewed by waits for part 2. */
-export const FILTERS = ['source', 'category', 'founder_track', 'entity_type', 'agreement', 'has_account', 'identity', 'captured'];
+/** The filters All profiles draws, in the canvas's order. */
+export const FILTERS = ['source', 'category', 'founder_track', 'entity_type', 'agreement', 'has_account', 'identity', 'captured', 'reviewed_by'];
+
+/** D1127 — the Reviewed by choices: the admins the Worker names, then verdicts with no reviewer recorded. */
+export function reviewerOptions(list) {
+  const named = (Array.isArray(list) ? list : []).filter((x) => x && x.id != null)
+    .map((x) => ({ key: String(x.id), label: x.name || `Account ${x.id}` }));
+  return [...named, { key: 'not_recorded', label: NOT_RECORDED }];
+}
 export const IDENTITY_STATES = [
   { key: 'not_started', label: 'Not started' },
   { key: 'pending', label: 'Pending' },
@@ -326,7 +389,7 @@ export const IDENTITY_STATES = [
 ];
 export const SORTS = {
   review: [{ key: 'waiting', label: 'Waiting longest' }, { key: 'newest', label: 'Newest' }, { key: 'name', label: 'Name' }],
-  all: [{ key: 'newest', label: 'Newest' }, { key: 'waiting', label: 'Waiting longest' }, { key: 'name', label: 'Name' }],
+  all: [{ key: 'newest', label: 'Newest' }, { key: 'waiting', label: 'Waiting longest' }, { key: 'reviewed', label: 'Reviewed' }, { key: 'name', label: 'Name' }],
 };
 
 /**
@@ -339,7 +402,7 @@ export function listParams(tab, f) {
     q: String(f.q || '').trim().length >= 2 ? String(f.q).trim() : null,
     sort: f.sort || (tab === 'review' ? 'waiting' : 'newest'),
     page: f.page > 1 ? f.page : null,
-    page_size: PAGE_SIZE,
+    page_size: PAGE_SIZES.includes(Number(f.page_size)) ? Number(f.page_size) : PAGE_SIZE,
     source: f.source || null,
     category: f.category || null,
     founder_track: f.founder_track || null,
@@ -354,8 +417,52 @@ export function listParams(tab, f) {
     identity: f.identity || null,
     captured_from: f.captured_from || null,
     captured_to: f.captured_to || null,
+    reviewed_by: f.reviewed_by || null,
   };
 }
+
+/** D1127 — the export of a tab's view: its filters and sort, every page. */
+export function exportParams(tab, f) {
+  const { page, page_size, ...rest } = listParams(tab, f); // eslint-disable-line no-unused-vars
+  return rest;
+}
+
+/**
+ * D1127 — the All profiles columns the Columns picker can hide, in the
+ * canvas's order. Person and Status always show: a row without them names
+ * nobody.
+ */
+export const COLUMNS = [
+  { key: 'source', label: 'Source' },
+  { key: 'category', label: 'Onboarding category' },
+  { key: 'entity', label: 'Entity' },
+  { key: 'agreement', label: 'Agreement' },
+  { key: 'reviewed', label: 'Reviewed' },
+  { key: 'captured', label: 'Captured' },
+];
+/** The columns to draw, given the keys hidden; a key this page does not know is ignored. */
+export function shownColumns(hidden) {
+  const off = new Set(Array.isArray(hidden) ? hidden : []);
+  return COLUMNS.filter((c) => !off.has(c.key)).map((c) => c.key);
+}
+
+/** "Exported 3 profiles." from the download's own row count. */
+export const exportedLine = (n) => `Exported ${Number(n || 0).toLocaleString('en-US')} ${Number(n) === 1 ? 'profile' : 'profiles'}. The export is recorded under your name.`;
+
+/** A refused or failed write or export, in the Worker's words when it gave them. */
+export function refusalLine(err, fallback) {
+  const said = String(err?.message || '').trim();
+  return said && !/^(Export failed|Request failed|Failed to fetch)$/i.test(said) ? said : fallback;
+}
+
+/** PRF5d, the Reopen dialog's words. */
+export const REOPEN = {
+  title: (name) => `Put ${name || 'this'}’s profile back in the queue?`,
+  sub: 'The verdict is kept in its history.',
+  foot: 'Nobody is told. Reopening is recorded in the profile’s history under your name.',
+  done: 'Back in the queue.',
+  max: 2000,
+};
 
 /** How many filters are set, for "Clear filters". */
 export function filtersSet(tab, f) {

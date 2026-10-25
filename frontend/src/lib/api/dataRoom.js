@@ -1,4 +1,4 @@
-import { request } from '../api.js';
+import { api, request } from '../api.js';
 
 // D1103 (#2983) — Data room part 2: the founder's own files, versions, a
 // grant's end date and folders, and the preview, on routes/data_room.ts at
@@ -17,8 +17,22 @@ import { request } from '../api.js';
 //   requests(p)                   GET   /data-room/:p/requests → { requests: [{ uid, investor, source, round_call, message, state, created_at, decided_at, decided_by, decline_reason, nda, has_access }], open, can_answer }; 503 requests_unreadable
 //   acceptRequest(p, uid, body)   POST  /data-room/:p/requests/:uid/accept { expires_at?, folders? } → { ok, state }; 409 request_decided
 //   declineRequest(p, uid, reason) POST /data-room/:p/requests/:uid/decline { reason } → { ok, state }; 409 request_decided
-//   sendNda(p, grantUid)          POST  /data-room/:p/grants/:uid/nda → { status: 'envelope_issued', envelope_uuid, signing_url }; 409 nda_active | nda_pending; 403 founder_only
+//   sendNda(p, grantUid)          POST  /data-room/:p/grants/:uid/nda → { status: 'envelope_issued', envelope_uuid, signing_url }; 409 nda_active | nda_pending; 404 for an admin (D1102), 403 founder_only
+// D1105 (#2985) — Data room part 4, the owner's and a co-founder's reads:
+//   activity(p, q)     GET /data-room/:p/activity?from&to&investor&action&page
+//                      → { period, previous_period, filters, daily: [{ day, opened, downloaded, blocked }],
+//                          totals, previous, investors: [{ grant_uid, name, email, last_at, opened, downloaded, blocked }],
+//                          log: { total, page, page_size, pages, rows: [{ at, action, investor, file }] } }
+//   activityCsv(p, q)  GET /data-room/:p/activity.csv?… (the same rows; 413 too_many_rows past 10,000)
+//   checklist(p)       GET /data-room/:p/checklist → { grants_in_force, totals, items: [{ key, area, label, state, reason, files }] }
+// A refusal (`blocked`) is never counted as an open. `investor` is a grant's uid.
 const seg = (v) => encodeURIComponent(String(v));
+const activityQuery = (q = {}) => {
+  const p = new URLSearchParams();
+  for (const k of ['from', 'to', 'investor', 'action', 'page']) if (q[k] != null && q[k] !== '') p.set(k, String(q[k]));
+  const s = p.toString();
+  return s ? `?${s}` : '';
+};
 export const dataRoomApi = {
   download: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}/download`, { method: 'POST' }),
   versions: (projectUid, uid) => request(`/data-room/${seg(projectUid)}/files/${seg(uid)}/versions`),
@@ -30,4 +44,7 @@ export const dataRoomApi = {
   acceptRequest: (projectUid, uid, body) => request(`/data-room/${seg(projectUid)}/requests/${seg(uid)}/accept`, { method: 'POST', body: JSON.stringify(body || {}) }),
   declineRequest: (projectUid, uid, reason) => request(`/data-room/${seg(projectUid)}/requests/${seg(uid)}/decline`, { method: 'POST', body: JSON.stringify({ reason }) }),
   sendNda: (projectUid, grantUid) => request(`/data-room/${seg(projectUid)}/grants/${seg(grantUid)}/nda`, { method: 'POST' }),
+  activity: (projectUid, q) => request(`/data-room/${seg(projectUid)}/activity${activityQuery(q)}`),
+  activityCsv: (projectUid, q) => api._downloadCsv(`/data-room/${seg(projectUid)}/activity.csv${activityQuery(q)}`, 'data-room-activity.csv'),
+  checklist: (projectUid) => request(`/data-room/${seg(projectUid)}/checklist`),
 };
