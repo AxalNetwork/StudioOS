@@ -16,7 +16,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
   AP_DECK_PATH, AP_FIRMS_PATH, AP_PATH, MOVED_NOTICES, NOT_YET,
-  buildFirms, buildNeeds, buildTiles, endingSoon, pageFailed, tabOf,
+  buildNeeds, buildTiles, endingSoon, pageFailed, tabOf,
 } from '../src/pages/admin/advisors/apModel.js';
 import AdvisorsPartners from '../src/pages/admin/advisors/AdvisorsPartners.jsx';
 import ApRedirect from '../src/pages/admin/advisors/ApRedirect.jsx';
@@ -124,19 +124,7 @@ test('Needs you: each queue that holds something, with the page that decides it;
   assert.equal(buildNeeds({ ...ALL, hosts: { status: 'loading' } }, NOW).state, 'loading');
 });
 
-test('the firms table joins a deal to its firm through the account, and a failed column says so', () => {
-  const f = buildFirms(ALL, NOW);
-  const byName = Object.fromEntries(f.rows.map((r) => [r.name, r]));
-  assert.equal(byName['Example Ventures Ltd'].directory, 'Featured');
-  assert.match(byName['Example Ventures Ltd'].deal, /^services_partnership · ends /);
-  assert.equal(byName['Example Ventures Ltd'].endingSoon, true);
-  assert.equal(byName['Sample Growth Partners'].specialization, 'Not recorded');
-  assert.equal(byName['Quiet Firm'].deal, 'No active deal');
-  assert.equal(f.unattached, 1);
-  const half = buildFirms({ ...ALL, deals: bad, directory: bad }, NOW);
-  assert.ok(half.rows.every((r) => r.deal === 'Could not be read' && r.directory === 'Could not be read'));
-  assert.equal(buildFirms({ ...ALL, links: bad }, NOW).state, 'unreadable');
-});
+// D979 (#2765): the Firms table is the Worker's list read now, held by admin_advisors_firms_d979.test.mjs.
 
 test('the tabs, the redirects\' targets, the strip on a tab, and the whole-page failure', () => {
   assert.equal(tabOf(AP_PATH), 'overview');
@@ -226,13 +214,12 @@ test('mounted Overview: the header, each tile from its read, Needs you, the char
   } finally { await m.unmount(); }
 });
 
-test('mounted Firms: the table, the unattached strip, and only the three reads it needs', async () => {
+test('mounted Firms: the unattached strip, and only the two reads it needs (D979: the list is the Worker\'s)', async () => {
   const m = await mount(`${AP_PATH}/firms`);
   try {
-    assert.match(m.of('ap-firm-100'), /Example Ventures Ltd.*Services.*services_partnership.*Featured/s);
     assert.match(m.of('ap-firms-unattached'), /no firm: 1/);
     const paths = [...new Set(m.seen.map((s) => s.split('?')[0]))].filter((p) => !p.startsWith('/api/ai')).sort();
-    assert.deepEqual(paths, ['/api/admin/partners/deals', '/api/admin/partners/directory', '/api/admin/partners/links']);
+    assert.deepEqual(paths, ['/api/admin/partners/firms', '/api/admin/partners/links']);
   } finally { await m.unmount(); }
 });
 

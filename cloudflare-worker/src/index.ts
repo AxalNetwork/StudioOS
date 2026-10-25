@@ -43,6 +43,7 @@ import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
 import adminPartnersReads from './routes/admin_partners_reads';
+import adminPartnerFirms from './routes/admin_partner_firms';
 import adminPartnerDealReads from './routes/admin_partner_deal_reads';
 import adminNetworkReads from './routes/admin_network_reads';
 import adminPublications from './routes/admin_publications';
@@ -876,6 +877,8 @@ app.route('/api/admin/partners', adminPartnersReads);
 // D928 (#2724): one deal's read, the terminate preview, the cross-deal redemptions and the
 // agreement-ready signal. Before `adminPartners`; its deal ids match digits only, so `/deals/top` stays there.
 app.route('/api/admin/partners', adminPartnerDealReads);
+// D979 (#2765): the Firms tab's list (search, filters, sort, pages, exact total) and one firm's drawer. Read only.
+app.route('/api/admin/partners', adminPartnerFirms);
 app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
 app.route('/api/admin/network', adminNetworkReads);

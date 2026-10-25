@@ -6,10 +6,10 @@ import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import AdminNetworkProfiles from '../AdminNetworkProfiles';
-import FirmLinks from './FirmLinks';
+import FirmsTab from './Firms';
 import {
   AP_TITLE, COMMUNITY_PATH, MOVED_NOTICES, NOT_YET, PAGE_LINE, RAIL_NOTE, TABS, WAITS,
-  buildFirms, buildNeeds, buildTiles, pageFailed, tabOf,
+  buildNeeds, buildTiles, pageFailed, tabOf,
 } from './apModel';
 
 /**
@@ -22,8 +22,10 @@ import {
  * THE INTEGRATION, NOT THE WHOLE CANVAS (D972 §3). The header, the tabs whose
  * reads exist, and the Overview and Firms blocks drawn from them, each
  * truthfully. People waits for its read. The Deck roster is today's roster,
- * embedded. Nothing is decided here that is decided elsewhere: attaching a
- * firm, a deal and a host decision each open the page that decides.
+ * embedded. Nothing is decided here that is decided elsewhere: a deal and a
+ * host decision each open the page that decides. The Firms tab (D952, D979,
+ * `Firms.jsx`) makes its own two, each behind a dialog: an account's firm and
+ * a firm's directory switches.
  */
 
 const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
@@ -39,7 +41,8 @@ const MONO = 'font-mono tabular-nums';
 const idle = { status: 'loading', data: null };
 const READS = {
   overview: ['advisors', 'assignments', 'links', 'directory', 'deals', 'hosts', 'roster'],
-  firms: ['links', 'directory', 'deals'],
+  // D979: the firms list is Firms.jsx's own read; the strip and the attach table read `links`.
+  firms: ['links'],
   deck: [],
 };
 
@@ -164,74 +167,6 @@ function Overview({ reads, reload }) {
         <WaitCard id="c4" title="Active partner deals by type" reason={WAITS.c4} />
       </div>
       <p className={SUB}>{WAITS.people}</p>
-    </div>
-  );
-}
-
-function Firms({ reads, reload }) {
-  const [now] = useState(() => Date.now());
-  const firms = useMemo(() => buildFirms(reads, now), [reads, now]);
-  return (
-    <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} aria-labelledby="ap-h-firms" data-testid="ap-firms">
-      <h2 id="ap-h-firms" className={H2}>Firms</h2>
-      {firms.state === 'loading' && <><span className="font-mono text-[13px] text-axal-muted">Reading…</span><Skeleton /></>}
-      {firms.state === 'unreadable' && (
-        <div role="alert" className="flex flex-col gap-2.5 text-[13px] text-axal-destructive dark:text-red-300">
-          <span>{firms.reason}</span>
-          <button type="button" className={DANGER} onClick={reload}>Try again</button>
-        </div>
-      )}
-      {firms.state === 'ready' && (
-        <>
-          {firms.unattached > 0 ? (
-            <p className="m-0 flex flex-wrap items-center justify-between gap-2 rounded-[10px] bg-axal-amber/30 px-3 py-2 text-[13px] text-axal-ink dark:text-gray-100" data-testid="ap-firms-unattached">
-              <span>Partner accounts with no firm: <span className={MONO}>{firms.unattached.toLocaleString('en-US')}</span></span>
-              <a href="#ap-firm-links" className={GHOST}>Attach below</a>
-            </p>
-          ) : null}
-          {firms.rows.length === 0
-            ? <span className={SUB}>No firm is recorded yet. A firm is created when a partner is invited.</span>
-            : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] border-collapse text-left text-[12.5px]">
-                  <thead>
-                    <tr className={EYE}>
-                      <th scope="col" className="py-1.5 pr-3 font-bold">Firm</th>
-                      <th scope="col" className="py-1.5 pr-3 font-bold">Accounts</th>
-                      <th scope="col" className="py-1.5 pr-3 font-bold">Specialization</th>
-                      <th scope="col" className="py-1.5 pr-3 font-bold">Active deal</th>
-                      <th scope="col" className="py-1.5 font-bold">Directory</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {firms.rows.map((r) => (
-                      <tr key={r.id} className="border-t border-axal-hairline align-top dark:border-gray-700" data-testid={`ap-firm-${r.id}`}>
-                        <th scope="row" className="py-2 pr-3 font-bold text-axal-ink dark:text-gray-100">{r.name}{r.company ? <span className={`block font-normal ${SUB}`}>{r.company}</span> : null}</th>
-                        <td className={`py-2 pr-3 ${MONO}`}>{r.accounts}</td>
-                        <td className="py-2 pr-3">{r.specialization}</td>
-                        <td className={`py-2 pr-3 ${MONO} ${r.endingSoon ? 'text-axal-amber-deep dark:text-amber-300' : ''}`}>{r.deal}</td>
-                        <td className="py-2">{r.directory}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          {firms.capped ? <span className={SUB}>The first 500 firms by name.</span> : null}
-          {firms.dealsCapped ? <span className={SUB}>Deals are read from the newest 200 active ones.</span> : null}
-          <span className={SUB}>Search, filters, pages and each firm's drawer come with D972's Firms part.</span>
-        </>
-      )}
-    </section>
-  );
-}
-
-/** The Firms tab: the firms, then attaching an account to one (D952, moved from Partner invitations). */
-function FirmsTab({ reads, reload }) {
-  return (
-    <div className="flex flex-col gap-3.5" data-testid="ap-firms-tab">
-      <Firms reads={reads} reload={reload} />
-      <FirmLinks reads={{ links: reads.links, reload }} />
     </div>
   );
 }
