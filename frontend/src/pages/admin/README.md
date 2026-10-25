@@ -39,15 +39,15 @@ offers, are listed in `frontend/src/lib/railOptions/superAdmin.js`.
 A record view names its record as the rail's last crumb with
 `useRecordCrumb.js` (D768's contract, as a hook).
 
-`HeldZone.jsx` and the two `Held*.jsx` landings are the Admin shell on
-accounts HQ holds directly (canvas S20, D286): `HeldAccounts.jsx` (embeds the
-console's Users panel; links Exploring, Personas, Trash) and
-`HeldApprovals.jsx` (S22's sixteen lanes as literal rows). Programs (now
+`HeldZone.jsx` and `HeldAccounts.jsx` are the last landing of the Admin shell
+on accounts HQ holds directly (canvas S20, D286): it embeds the console's Users
+panel and links Exploring, Personas and Trash. Approvals (now
+`approvals/AdminApprovals.jsx`, D1038, at `/admin/approvals`), Programs (now
 `programs/ProgramsCatalogue.jsx`, D953), Community (now
 `community/AdminCommunity.jsx`, D930) and Insights (now
 `insights/AdminInsights.jsx`, D893) left `/admin/held/` when each was rebuilt
-to its canvas. Since D555 the two landings read HQ's own figures from the
-Studio glance through `heldFigures.jsx` (`useHeldGlance`, `Figure`,
+to its canvas. Since D555 the landing and Approvals read HQ's own figures from
+the Studio glance through `heldFigures.jsx` (`useHeldGlance`, `Figure`,
 `laneOf`): lane counts on Approvals and counts on the cards. Mounted at
 `/admin/held/*` —
 a prefix of their own so none can collide with an HQ console such as

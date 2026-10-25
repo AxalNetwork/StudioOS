@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Admin · Approvals</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">Approvals</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">The admin’s one inbox: every item that waits on an admin, oldest first, across 20 lanes. Most lanes are decided on their own page; three new lanes are decided here and have their own boards. Sample now is Wed 21 Oct 2026, 16:12. Drawers are drawn as centred lightboxes.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="16">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="Approvals Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['APR1', 'Inbox · Admin · desktop 1440 · light', 'Four tiles, waiting by lane in the three age bands, arrived and decided per week, the filter row, the items oldest first, and what this studio is waiting on from HQ. Three rows are checked, so the bulk bar shows. The moved notice is for an old address.', [D('APR1')]],
+      ['APR2', 'Lanes', 'One table per group: each lane’s count, oldest item, where it is decided, who decides and who is told. Nine lanes are new. Under the tables, the five things that are not queues. The second frame is a lane that could not be read.', [D('APR2'), D('APR2b', 'A lane that could not be read', 1100)]],
+      ['APR3', 'An item, and Assign', '[Ben Sample]’s identity check opened as a centred lightbox: its facts, who holds it, its history and the page that decides it. Then the Assign dialog.', [D('APR3'), D('APR3a', 'Assign', 680)]],
+      ['APR4', 'Lane board · Product testers', 'Decided here. The Waiting tab, the Active tab, and the variant where member intake is paused.', [D('APR4', 'Waiting'), D('APR4a', 'Active'), D('APR4v', 'Member intake paused')]],
+      ['APR5', 'Product tester · lightbox and dialogs', '[Gus Demo]’s application, then Approve, a refused approval, Decline, and Pause or remove from the Active tab.', [D('APR5'), D('APR5a', 'A · Approve', 680), D('APR5r', 'A · Refused', 680), D('APR5b', 'B · Decline', 680), D('APR5c', 'C · Pause or remove', 680)]],
+      ['APR6', 'Lane board · Co-marketing pitches', 'The Proposed tab, a pitch opened, and the Approved and Published tabs with their attribution.', [D('APR6', 'Proposed'), D('APR6d', 'A pitch, opened'), D('APR6t', 'Approved and Published', 1200)]],
+      ['APR7', 'Co-marketing dialogs', 'Approve issues an attribution code; decline needs a reason the partner sees; publish needs the link.', [D('APR7a', 'A · Approve', 680), D('APR7b', 'B · Decline', 680), D('APR7c', 'C · Publish', 680)]],
+      ['APR8', 'Lane board · Wellbeing experts', 'The To verify tab, an expert opened with their credentials, and the Verify and Decline dialogs.', [D('APR8', 'To verify'), D('APR8d', 'An expert, opened'), D('APR8a', 'A · Verify', 680), D('APR8b', 'B · Decline', 680)]],
+      ['APR9', 'Inbox · Super Admin', 'The Admin shell with the HQ badge, the HQ decides group and one row per HQ lane. Waiting reads 155: the 133 every admin sees plus 22 for HQ.', [D('APR9')]],
+      ['APR10', 'Decided', 'Every decision, newest first, with who decided it, how long it waited and whether the person saw a note.', [D('APR10')]],
+      ['APR11', 'Empty', 'Nothing waiting, with measured zeros, and an empty lane tab.', [D('APR11a', 'Nothing waiting', 1440, 640), D('APR11b', 'An empty lane tab', 1440, 720)]],
+      ['APR12', 'Loading', 'Header, tabs and filters at once; tab counts are grey bars and every block reads.', [D('APR12')]],
+      ['APR13', 'Error and partial', 'One lane failed and the total says so, the whole read failed, and a decision refused because another admin decided first.', [D('APR13a', 'One lane failed'), D('APR13b', 'The read failed', 1440, 640), D('APR13c', 'A refused decision')]],
+      ['APR14', 'No permission', 'An admin opening an HQ lane link, and a member who is not an admin.', [D('APR14a', 'Admin opens an HQ lane', 1440, 720), D('APR14b', 'Not an admin', 1440, 720)]],
+      ['APR15', 'Phone · 390 wide', 'The inbox as cards, the filters as a bottom sheet, and a tester’s application as a full-screen page with full-width buttons.', [P('APR15a', 'Inbox'), P('APR15b', 'Filters'), P('APR15c', 'A tester, full screen')]],
+      ['APR16', 'Inbox · dark', 'APR1 in the dark colours.', [D('APR16')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

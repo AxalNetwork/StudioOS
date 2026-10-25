@@ -25,7 +25,7 @@ import PartnersOverview from './partners/PartnersOverview';
 import PartnersReferrals from './partners/PartnersReferrals';
 import { usePartnerDesk } from './partners/usePartnerDesk';
 import {
-  LINE, MOVED_LINE, TITLE, cameFromOldAddress, fanOut, needsYou, routeFor, tabCounts, tabPath, withoutMoved,
+  LINE, MOVED_LINE, TITLE, cameFromOldAddress, needsYou, routeFor, tabCounts, tabPath, withoutMoved,
 } from './partners/partnersDeskModel';
 
 /**
@@ -132,7 +132,6 @@ function PartnerInvitationsBody() {
   const [dialog, setDialog] = useState(null);
   const [creating, setCreating] = useState(false);
 
-  const fan = fanOut(reads.set, reads.calls);
   const needs = needsYou(reads.overview, { invitations: reads.invitations, deals: reads.deals });
   const counts = tabCounts({ invitations: reads.invitations, deals: reads.deals, contracts: reads.contracts, needs });
   const moved = cameFromOldAddress(loc.search);
@@ -177,7 +176,7 @@ function PartnerInvitationsBody() {
         {route.tab === 'overview' ? <PartnersOverview reads={reads} needs={needs} actions={actions} /> : null}
         {route.tab === 'invitations' ? <PartnersInvitations reads={reads} now={now} actions={actions} /> : null}
         {route.tab === 'deals' ? <PartnersDeals reads={reads} now={now} actions={actions} /> : null}
-        {route.tab === 'referrals' ? <PartnersReferrals reads={reads} fan={fan} now={now} /> : null}
+        {route.tab === 'referrals' ? <PartnersReferrals reads={reads} now={now} /> : null}
       </div>
 
       {route.record?.kind === 'invitation' ? <InvitationRecord key={route.record.id} id={route.record.id} reads={reads} now={now} onClose={closeRecord} actions={actions} /> : null}

@@ -109,6 +109,70 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Pricing · Checkout (#2451)
+
+The owner's artifacts `UHZdASErjSvAZVJE5W5iAZ` (the board grid) and
+`QWRAQTrCeyLyKVAU1iXGzp` (the page) came from S21's prompt on #2451, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Checkout · Boards.dc.html` is the board grid (PAYX1 to PAYX21, with the
+  lettered boards PAYX6a–b, PAYX7b, PAYX10a–c, PAYX19a–b, PAYX20a–e and PAYX21b);
+- `Checkout Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The checkout sheet opens in place from `/pricing`'s Upgrade
+and "Get …" for every signed-in member, never a second pricing page. S21's
+integration (D1048) draws the plan summary from the public plans read and puts
+today's payment form behind Continue. The quote, the designed refusals and
+states, a change in place, the renewal banner, the other entry points, phone
+and dark wait for D1048's seven parts, so this canvas stays in the queue until
+they land. The `ROUTE_MAP.md` row says what is drawn today.
+
+## Landed 2026-10-25 — Admin · Approvals (#2390)
+
+The owner's artifacts `MGs5M2u9Cfr4XdNyH1eyce` (the board grid) and
+`AzNTkGGaCTA1GJKRkUTT3w` (the page) came from S21's prompt on #2390:
+- `Approvals · Boards.dc.html` is the board grid (APR1 to APR16, with the
+  lettered boards APR2b, APR3a, APR4a, APR4v, APR5a–c, APR5r, APR6d, APR6t,
+  APR7a–c, APR8a, APR8b, APR8d, APR11a–b, APR13a–c, APR14a–b and APR15a–c), as
+  the artifact gave it;
+- `Approvals Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in the font link
+  and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/admin/approvals` with Lanes, Decided and the three lane
+boards is live for every admin, and `/admin/held/approvals` forwards to it. S21's
+integration (D1038) draws the twenty lanes from the Studio glance (the nine new
+ones as "Not read here yet"), the Inbox's waiting lanes oldest first with their
+doors, HQ decides for a Super Admin, and the boards on the co-marketing queue
+and the experts read, reading and never deciding. Items, assignment, the new
+lanes' counts, the tester store, decision records, the log, the drawers and
+dialogs, phone and dark wait for D1038's nine parts, so this canvas stays in
+the queue until they land. The `ROUTE_MAP.md` row says what is drawn today.
+
+## Landed 2026-10-25 — Events · My events (#2387)
+
+The owner's artifacts `FmbzyxCRunXN3NDxo2dC8P` (the board grid) and
+`NydozL4ZQeMNZ7PaC3XPg3` (the page) came from S21's prompt on #2387:
+- `My Events · Boards.dc.html` is the board grid (MEV1 to MEV18, with the
+  lettered boards MEV3a–d, MEV5b, MEV6a–c, MEV7a–b, MEV12a–b, MEV14a–c,
+  MEV16a–b, MEV17a–b and MEV18a–c), the output of `scripts/read-canvas.mjs` as is;
+- `My Events Page.dc.html` is the page, in the copy the grid's bundle carries.
+  The page artifact decodes to the same design, differing only in the font link
+  and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/my/events` and `/hosting`, `/discover` and `/past` are live
+for every signed-in profile, Explorers included. S21's integration (D1030) draws
+the tabs, Upcoming's next event, Going, Hosting soon and suggestions, Hosting's
+groups, Discover's public events and Past, each from a read on `main`. The
+drawers, dialogs, month view, calendar kinds, counts per event, the host header
+and the phone wait for D1030's seven parts, so this canvas stays in the queue
+until they land. The `ROUTE_MAP.md` row says what is drawn today.
+
 ## Landed 2026-10-24 — Admin · Community overview (#2367)
 
 The owner's artifacts `3z8Z58GFCcS8SWMv4YbWiH` and `GewVUumBA5KASoPYNGUJuB`
@@ -131,6 +195,30 @@ the roster, Needs a decision, and the consoles. The period figures, the charts,
 recent activity and the four lightboxes wait for D930's five parts (D931 to
 D935), so this canvas stays in the queue until they land. The `ROUTE_MAP.md`
 row says what is drawn today.
+
+## Landed 2026-10-24 — Founder · Raise · Cap table (#2432)
+
+The owner's artifacts `NtjTWkVfbEYkZ4xWk8n35Q` (the board grid) and
+`Lxsy595iChD3Cmwh8j4qGi` (the page) came from S21's prompt on #2432:
+- `Cap Table · Boards.dc.html` is the board grid (CT1 to CT24, with the lettered
+  boards CT1c, CT2p, CT3b, CT5c, CT11a–c, CT12a–c, CT13n, CT15o, CT15n, CT16a,
+  CT17a–b, CT18a–c, CT19a–c, CT21a–c, CT22a–b and CT23a–c), the output of
+  `scripts/read-canvas.mjs` as is;
+- `Raise Cap Table Page.dc.html` is the page, in the copy the grid's bundle
+  carries. The page artifact decodes to the same design, differing only in the
+  font link and `data-dc-script=""`.
+
+No value was edited.
+
+**Grade: UPGRADE.** `/raise/cap-table` is the tool: Overview is the module page
+with the tool's tabs and the Modelled line, and `/instruments`, `/option-pool`
+and `/scenarios` are tab words CycleRoute reads, with no route added. S21's
+integration (D1015) draws the SAFEs sent through StudioOS, the model's
+instruments and conversion lines, the 409A, the model's pool and the scenario
+cards, each from a read on `main`. The record, the access levels, History,
+Access, Import and export, the drawers, the dialogs, the investor's panel, phone
+and dark wait for D1015's fourteen parts, so this canvas stays in the queue
+until they land. The `ROUTE_MAP.md` row says what is drawn today.
 
 ## Landed 2026-10-24 — HQ · Platform · Payments (#2386)
 

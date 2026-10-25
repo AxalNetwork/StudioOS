@@ -10,7 +10,11 @@
  * has been assigned. Those two answers stay different.
  */
 import type { Env } from '../types';
-import { APPROVAL_SOURCES, approvalBoard, type ApprovalLaneKey } from './approvalSources';
+import {
+  APPROVAL_SOURCES, NOT_LANED, SLA_DUE_SOON_HOURS, SLA_PAST_HOURS, approvalBoard, laneCounts,
+  type ApprovalItem, type ApprovalLaneKey, type ApprovalSource,
+} from './approvalSources';
+import { logAdminAction } from './adminAudit';
 
 export const ASSIGNMENTS_UNREADABLE =
   'The assignment record could not be read on this database. That is not a claim that nobody is assigned.';
@@ -22,10 +26,9 @@ export const ASSIGNMENT_CAP = 40;
 const READ_CAP = 5000;
 const HISTORY_CAP = 100;
 
-const LANE_KEYS = new Set<string>(APPROVAL_SOURCES.map((s) => s.key));
-
+/** A lane `APPROVAL_SOURCES` declares, read from the list each time, so a lane added there (part 3's HQ lanes, D1040) is one too. */
 export function isAssignmentLane(lane: string): lane is ApprovalLaneKey {
-  return LANE_KEYS.has(lane);
+  return APPROVAL_SOURCES.some((s) => s.key === lane);
 }
 
 export function personLabel(row: { id: number; name?: string | null; email?: string | null }): string {
@@ -153,6 +156,7 @@ export async function assignReviewers(
   actorUserId: number,
   assigneeUserId: number,
   items: AssignItem[],
+  opts: { sources?: readonly ApprovalSource[]; boardLimit?: number } = {},
 ): Promise<AssignResult> {
   if (!Number.isInteger(assigneeUserId) || assigneeUserId <= 0) {
     return { ok: false, status: 400, code: 'not_a_reviewer', message: 'A reviewer is an active admin on this territory.' };
@@ -195,7 +199,7 @@ export async function assignReviewers(
   }
   let open: Awaited<ReturnType<typeof approvalBoard>>;
   try {
-    open = await approvalBoard(env, 100);
+    open = await approvalBoard(env, opts.boardLimit ?? 100, Date.now(), opts.sources ?? APPROVAL_SOURCES);
   } catch (e) {
     console.error('[approval-assignments] could not read the board', (e as Error).message);
     return { ok: false, status: 503, code: 'assignments_unreadable', message: ASSIGNMENTS_UNREADABLE };
@@ -293,4 +297,148 @@ export async function assignmentHistory(
     console.error('[approval-assignments] could not read history', (e as Error).message);
     return { available: false, reason: ASSIGNMENTS_UNREADABLE };
   }
+}
+
+// ───────────────────────────────────────────────────────────── the routes' shared steps
+
+function positiveInt(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) return null;
+  return value;
+}
+
+export type Refusal = { ok: false; status: number; code: string; message: string };
+const BAD_ITEM: Refusal = { ok: false, status: 400, code: 'bad_item', message: 'That is not an item on this board.' };
+
+/** A lane this reader may name: one of `sources`, by key. */
+export function isVisibleLane(lane: string, sources: readonly ApprovalSource[]): lane is ApprovalLaneKey {
+  return isAssignmentLane(lane) && sources.some((s) => s.key === lane);
+}
+
+/** The history read's query, checked: `?lane=&item_id=` naming an item on a lane this reader sees. */
+export function readHistoryQuery(lane: string, rawItemId: unknown, sources: readonly ApprovalSource[]): Refusal | { ok: true; lane: ApprovalLaneKey; itemId: number } {
+  const itemId = Number(rawItemId);
+  if (!isVisibleLane(lane, sources) || !Number.isInteger(itemId) || itemId <= 0) return BAD_ITEM;
+  return { ok: true, lane, itemId };
+}
+
+/**
+ * The assignment write both boards take (D470 on a branch, D1040 on HQ):
+ * `{ assignee_user_id, items: [{ lane, item_id }] }`, each item on a lane the
+ * caller sees and among the open rows `boardLimit` reads, then one admin-audit
+ * row per item assigned.
+ */
+export async function assignFromBody(
+  env: Env,
+  admin: { id: number; email?: string | null },
+  body: Record<string, unknown> | null,
+  opts: { sources: readonly ApprovalSource[]; boardLimit: number },
+): Promise<AssignResult> {
+  const assignee = positiveInt(body?.assignee_user_id);
+  const raw = Array.isArray(body?.items) ? body.items : [];
+  const items: AssignItem[] = [];
+  const seen = new Set<string>();
+  for (const row of raw) {
+    const lane = String((row as { lane?: unknown })?.lane || '');
+    const itemId = positiveInt((row as { item_id?: unknown })?.item_id);
+    if (!isVisibleLane(lane, opts.sources) || itemId === null) return BAD_ITEM;
+    const key = `${lane}:${itemId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ lane, item_id: itemId });
+  }
+  if (assignee === null) {
+    return { ok: false, status: 400, code: 'not_a_reviewer', message: 'A reviewer is an active admin on this territory.' };
+  }
+  const result = await assignReviewers(env, admin.id, assignee, items, opts);
+  if (!result.ok) return result;
+  for (const row of result.assigned) {
+    await logAdminAction(env, admin.id, admin.email || '', 'approval_assignment', {
+      target_user_id: row.assignee_user_id,
+      lane: row.lane,
+      item_id: row.item_id,
+    });
+  }
+  return result;
+}
+
+// ───────────────────────────────────────────────────────────── HQ's inbox (D1040)
+
+export const INBOX_PAGE_SIZE = 25;
+/**
+ * The most rows read per lane. Each lane's rows come oldest first, so a lane
+ * read to the cap holds its oldest open items; when one is cut there, the
+ * total comes from its count and the tiles say they cannot be counted.
+ */
+export const INBOX_LANE_CAP = 1000;
+
+const TILES_UNREADABLE = (labels: string[]) =>
+  `${labels.join(', ')} could not be read, so these counts would be missing whatever is in them. They are not shown rather than shown short.`;
+const TILES_CAPPED = (labels: string[]) =>
+  `${labels.join(', ')} has more open items than this read takes, so these counts are not shown rather than shown short.`;
+const TOTAL_UNREADABLE = 'The count of open items could not be read, so the total is not shown.';
+
+export type InboxItem = ApprovalItem & { assignee?: Assignee | null };
+
+/**
+ * GET /api/admin/approvals — every waiting item, oldest first, with its
+ * assignee, paged, with an exact total of the lanes that answered and the
+ * three tiles (over 72 hours, assigned to the caller, per admin).
+ *
+ * A LANE THAT FAILED IS NAMED, NEVER EMPTY: it stays in `unreadable`, the rows
+ * that could be read stay, and the tiles, which would be short by that lane,
+ * answer null with the reason. An unknown age sorts last (`approvalBoard`).
+ */
+export async function hqInbox(env: Env, a: { page: number; callerId: number; sources: readonly ApprovalSource[]; now?: number }) {
+  const board = await approvalBoard(env, INBOX_LANE_CAP, a.now ?? Date.now(), a.sources);
+  const capped = board.lanes.filter((l) => l.count != null && l.count >= INBOX_LANE_CAP);
+  let total: number | null = board.items.length;
+  if (capped.length) {
+    const counts = await laneCounts(env, a.sources.filter((s) => capped.some((c) => c.key === s.key)));
+    const extra = counts.reduce<number | null>((sum, c) => (sum == null || c.count == null ? null : sum + c.count - INBOX_LANE_CAP), 0);
+    total = extra == null ? null : board.items.length + extra;
+  }
+
+  const assignments = await readAssignmentState(env);
+  const items: InboxItem[] = assignments.available
+    ? board.items.map((it) => ({ ...it, assignee: assignments.assignees.get(`${it.lane}:${it.id}`) ?? null }))
+    : board.items;
+
+  const short = board.unreadable.length ? TILES_UNREADABLE(board.unreadable) : capped.length ? TILES_CAPPED(capped.map((c) => c.label)) : null;
+  const assigneeOf = (it: ApprovalItem) => assignments.assignees.get(`${it.lane}:${it.id}`);
+  const tiles = {
+    over_72h: short ? null : board.items.filter((it) => it.sla === 'past').length,
+    assigned_to_me: short || !assignments.available ? null : board.items.filter((it) => assigneeOf(it)?.user_id === a.callerId).length,
+    per_admin: short || !assignments.available || !assignments.reviewers ? null : assignments.reviewers.map((r) => ({
+      id: r.id, name: r.name, count: board.items.filter((it) => assigneeOf(it)?.user_id === r.id).length,
+    })),
+    ...(short ? { reason: short }
+      : !assignments.available ? { reason: assignments.reason }
+        : !assignments.reviewers ? { reason: assignments.reviewers_reason } : {}),
+  };
+
+  const start = (a.page - 1) * INBOX_PAGE_SIZE;
+  return {
+    items: items.slice(start, start + INBOX_PAGE_SIZE),
+    total,
+    ...(total == null ? { total_reason: TOTAL_UNREADABLE } : {}),
+    page: a.page,
+    page_size: INBOX_PAGE_SIZE,
+    lanes: board.lanes,
+    unreadable: board.unreadable,
+    ...(board.unreadable.length ? {
+      reason: `${board.unreadable.join(', ')} could not be read, so the inbox is missing whatever is in them. `
+        + 'The lanes that answered are complete; the ones that did not show no count rather than a zero.',
+    } : {}),
+    ...(capped.length ? { capped: capped.map((c) => c.label) } : {}),
+    tiles,
+    assignments: assignments.available ? { available: true } : { available: false, reason: assignments.reason },
+    reviewers: assignments.reviewers,
+    ...(assignments.reviewers_reason ? { reviewers_reason: assignments.reviewers_reason } : {}),
+    sla_bands: { due_soon_hours: SLA_DUE_SOON_HOURS, past_hours: SLA_PAST_HOURS },
+    not_laned: NOT_LANED,
+    decides: false,
+    decide_note:
+      'This inbox reads. Each decision is made in the queue\'s own console, which owns that '
+      + 'store\'s statuses and its side effects.',
+  };
 }
