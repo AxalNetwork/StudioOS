@@ -1595,3 +1595,13 @@ also renders the aggregate response on the new Files, Access and Activity tabs,
 before any owner-detail derivation. It reuses `AdminRoomSummary` from the files
 workspace, preserves Unreadable/Try again, and offers no owner actions. The full
 admin/support tab design remains #2987's.
+
+### D1131 — My events coverage fixes (#3011, partial)
+
+My events' desktop Join control waits until 15 minutes before start. Hosting and
+Hosting soon use `/events/:id/manage/check-in` on the event's own day. Upcoming
+suggestions use `/api/events/suggested`'s `registration_eligible`; the server's
+registration gate remains authoritative. The account Events row is Current on
+`/my/events` and its children. Successful member registration cancellation and
+host/admin event cancellation schedule cleanup of StudioOS-tracked Google and
+Outlook copies. Durable seat-source/promotion fields await allocation on #3011.

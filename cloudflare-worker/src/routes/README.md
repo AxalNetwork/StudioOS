@@ -326,3 +326,8 @@ calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
 use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+
+D1131's `_eventCalendar.ts` schedules connected-calendar cleanup after successful
+member, host or admin event cancellations. Provider failures do not undo local
+cancellation; failed mappings remain retryable. `/events/suggested` now includes
+the authenticated caller's actual registration eligibility.

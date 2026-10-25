@@ -1034,7 +1034,7 @@ export async function deleteEventFromGoogle(accessToken: string, googleEventId: 
     );
     return r.status === 200 || r.status === 204 || r.status === 404 || r.status === 410;
   } catch (e: any) {
-    console.warn('[CAL] gcal delete exception:', e?.message || e);
+    console.warn('[CAL] google_delete_failed');
     return false;
   }
 }
@@ -1105,7 +1105,7 @@ export async function deleteEventFromMicrosoft(accessToken: string, eventId: str
     );
     return r.status === 200 || r.status === 204 || r.status === 404 || r.status === 410;
   } catch (e: any) {
-    console.warn('[CAL] ms delete exception:', e?.message || e);
+    console.warn('[CAL] microsoft_delete_failed');
     return false;
   }
 }
