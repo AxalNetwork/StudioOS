@@ -32,6 +32,7 @@
   --k-ic_meeting: #6d28d9; --k-founder_checkin: #0f766e; --k-advisor_booking: #b45309;
   --k-partner_office_hour: #1d4ed8; --k-calendly_event: #86198f; --k-expert_booking: #be123c;
   --k-event_ticket: #4d7c0f; --k-event_hosted: #0369a1;
+  --k-investor_meeting: #047857;
   background: var(--cal-shell);
   color: var(--cal-ink);
   min-height: 100%;
@@ -58,6 +59,7 @@
   --k-ic_meeting: #a78bfa; --k-founder_checkin: #5eead4; --k-advisor_booking: #fcd34d;
   --k-partner_office_hour: #93c5fd; --k-calendly_event: #f0abfc; --k-expert_booking: #fda4af;
   --k-event_ticket: #bef264; --k-event_hosted: #7dd3fc;
+  --k-investor_meeting: #6ee7b7;
 }
 
 .cal-mono { font-family:var(--font-mono); font-variant-numeric: tabular-nums; }
@@ -107,6 +109,7 @@
 .cal-dot[data-kind='expert_booking'] { background: var(--k-expert_booking); border-radius: 0 50% 0 50%; }
 .cal-dot[data-kind='event_ticket'] { background: var(--k-event_ticket); border-radius: 50% 50% 0 0; }
 .cal-dot[data-kind='event_hosted'] { background: var(--k-event_hosted); border-radius: 0 0 50% 50%; }
+.cal-dot[data-kind='investor_meeting'] { background: var(--k-investor_meeting); border-radius: 50% 0 50% 50%; }
 
 /* ── body: agenda beside the 328px rail ───────────────────────────────── */
 .cal-body { display: flex; align-items: stretch; }

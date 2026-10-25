@@ -30,6 +30,8 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 | `ConnectorLightbox.jsx` | D899, PD9d: each connector with its state and last sync (`GET /api/integrations`), the recorded figures it feeds, and a new card of bound tiles (free) under a headline that is the founder's or Eadwyn's with its cost. |
 | `AssistParts.jsx` | D899: what the card tools share — the press dialog with the cost, the tokens dialog (PD25), a text proposal. |
 | `deckAssistModel.js` | D899: pure words and derivations of the card tools — the tools and their options, the cost line, what a press sends, why a figure takes no tool, the connector groups and their card, the rail row's models. |
+| `BlockGrid.jsx` | D1112 (#2992): D898's blocks on the 12 × 6 grid, drawn one way for the editor, Present and the print page (`BlockView`, `BlockGrid`). `live` makes video, audio and link blocks real links; `sources` adds each metric tile's source line. |
+| `PrintExtras.jsx` | D1112: what the headless print page (`../../PitchDeckPrintPage.jsx`, which the PDF and PowerPoint exports photograph) draws for a studio card, the speaker notes pages and the Sources appendix, each one 1920 × 1080 page. |
 | `PitchWorkspaceMoved.jsx` | The old `/raise/pitch?mode=workspace` address: it opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`, the venture and the hash kept. |
 
 The template builder, `../../PitchWorkspacePage.jsx` (with

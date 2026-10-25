@@ -153,6 +153,16 @@ export interface DirectoryQuery {
   sort: string;
   limit: number;
   offset: number;
+  /**
+   * D1190 (#3124): two filters only Capital relationships' match read sets,
+   * never `parseDirectoryQuery`. `focus_in` is the raw `sector_focus` strings
+   * whose Fit against the venture is the one asked for (computed by `fundFit`,
+   * which SQL cannot run), with `focus_in_blank` for a fund that records none;
+   * `name_in` is the lower-cased fund names the caller's own network works at.
+   */
+  focus_in?: string[] | null;
+  focus_in_blank?: boolean;
+  name_in?: string[] | null;
 }
 
 function int(field: string, raw: string | undefined, min: number, max: number): number | null {
@@ -233,6 +243,15 @@ async function rawCounts(env: Env, column: 'hq' | 'sector_focus', clause: string
     `SELECT ${column} AS v, COUNT(*) AS n FROM ${SERVED_FUNDS} AS f ${clause} GROUP BY ${column}`,
   ).bind(...binds).all<{ v: string | null; n: number }>();
   return rows.results || [];
+}
+
+/**
+ * D1190 (#3124): every distinct non-blank `sector_focus` the served funds carry,
+ * for Capital relationships' Fit filter (`fundFit` runs on each in JS). Through
+ * `rawCounts`, so it adds no query of its own.
+ */
+export async function servedFocusValues(env: Env): Promise<string[]> {
+  return (await rawCounts(env, 'sector_focus', '', [])).map((r) => r.v).filter((v): v is string => typeof v === 'string' && v.trim() !== '');
 }
 
 /** The distinct raw strings of `column` the crosswalk maps to `target`. */
@@ -320,6 +339,13 @@ function conditions(q: DirectoryQuery, r: Resolved, omit: FacetKey | null = null
     if (v === 1) where.push(`${col} = 1`);
     if (v === 0) where.push(`${col} = 0 AND TRIM(COALESCE(notable_lps, '')) <> ''`);
   }
+  if (q.focus_in) {
+    where.push(q.focus_in_blank
+      ? `(sector_focus IN (SELECT value FROM json_each(?)) OR TRIM(COALESCE(sector_focus, '')) = '')`
+      : `sector_focus IN (SELECT value FROM json_each(?))`);
+    binds.push(JSON.stringify(q.focus_in));
+  }
+  if (q.name_in) { where.push(`LOWER(TRIM(name)) IN (SELECT value FROM json_each(?))`); binds.push(JSON.stringify(q.name_in)); }
   return { where, binds };
 }
 
