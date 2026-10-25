@@ -309,7 +309,7 @@ webhook's deliveries by hour. D1129 adds bounded `q` search to the log and
 CSV, plus `/change-log/admins` (all admin ids/names, no email). `catalog.ts`
 records a failed sync.
 
-D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal.
+D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal. D1066 (#2936) adds the item decisions (`/items/:uid/accept`, `PATCH /items/:uid`, `/items/:uid/dismiss`, `/modules/:module/accept`), founders only, and exports `buildEvidenceRoutes`, mounted at `/api/cycles/build/evidence` for each Build row's trail.
 
 D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 `/api/admin/cohort`: read-only `/settings` and `/activity`, both Admin gated.
