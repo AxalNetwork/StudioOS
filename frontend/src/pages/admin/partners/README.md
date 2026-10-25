@@ -35,11 +35,18 @@ over its tab, and the dialogs.
 - `NewInvitationDialog.jsx` — New invitation (PI4) and its result (PI4d,
   PI4n): the five cards from part 4's offer preview, and the two warnings from
   part 3's lookup (D950).
-- `PartnersDeals.jsx` — Deals (PI5) and Top deals by redemptions.
-- `DealRecord.jsx` — one deal (PI6).
-- `PartnersReferrals.jsx` — Referrals (PI7), under Guard F; `?deal=<id>`
-  narrows it to one deal.
-- `PartnerDialogs.jsx` — Resend (PI8a), Revoke (PI8b) and Terminate (PI8c).
+- `PartnersDeals.jsx` — Deals (PI5; PI11d on a phone): C5 "Terms ending",
+  the list on D926's server filters, sort and pages with its exact total, and
+  Top deals by redemptions (D951). On a phone: cards, a filter sheet with four
+  state groups and an exact "Show [n] deals", and a sort select.
+- `DealRecord.jsx` — one deal (PI6), from D928's single read: due diligence
+  and its KYB section, each obligation, the history with who terminated, and
+  "Signed, deal not activated" with D925's Re-run activation (D951).
+- `PartnersReferrals.jsx` — Referrals (PI7) on D928's cross-deal read: the
+  four tiles, C4, C6 "Rev-share windows closing" and Every redemption with the
+  member's role, paged by the Worker; `?deal=<id>` narrows it to one deal (D951).
+- `PartnerDialogs.jsx` — Resend (PI8a), Revoke (PI8b) and Terminate (PI8c),
+  which states D928's preview: "[n] members lose the grant this deal gave them".
 - `parts.jsx` — the card, pills, stage dots, tiles, read states, copy button,
   row menu, pager and refusal line the tabs share.
 - `usePartnerDesk.js` — the reads, each made alone, and `useRead` for a
@@ -51,6 +58,12 @@ over its tab, and the dialogs.
   column, the CSV, one invitation's blocks (steps, offers, chosen deal,
   refusals, history), the offer preview, the lookup's warnings and Resend's
   result.
+- `useDealsReferrals.js` — D951's server reads for Deals, one deal and
+  Referrals, each through `useRead`; a whole redemption set is read page after
+  page up to a cap, past which each figure says what it covers.
+- `dealsReferralsModel.js` — pure. D951's derivations: the server parameters,
+  C5, the phone groups, one deal's blocks, the terminate preview's lines, and
+  Referrals' tiles, C6 and rows.
 - `partnersDeskModel.js` — pure. Addresses, the words, Guard L (lists that
   stop at their cap), Guard F (sums over the redemptions fan-out), Guard I
   (the stage word and its repair after a resend), the agreement-ready rule,
@@ -60,14 +73,18 @@ over its tab, and the dialogs.
 
 ## Rules
 
-- The desk reads only what D923 §2 lists, and since D950 part 4's single
-  invitation, its offer preview and part 3's lookup: the invitations, the six
-  deal lists,
+- Deals, one deal and Referrals read the server's own lists and records
+  (D926, D928; D951), so they carry no Guard L or Guard F. The Overview, the
+  tab counts and Needs you still read D923 §2's lists until part 4's overview
+  read.
+- The desk reads only what D923 §2 lists, D926's and D928's reads, and since
+  D950 part 4's single invitation, its offer preview and part 3's lookup: the
+  invitations, the six deal lists,
   top deals, one deal's redemptions, the uncapped partner-deals read in
   Contracts, the firm links, one envelope, the Partner Services template, the
   partner due-diligence cases, one member's obligations, the members matching
   an address, and one invitee's answers when the admin asks (that read is
-  logged). It adds no `/api/*` client. It never reads the Contracts detail for
+  logged). Its only client beyond `api.js` is D928's `partnerDealReadsApi`. It never reads the Contracts detail for
   a partner deal or the Agreements union, which hide failures.
 - A failed read says what could not be read, with Try again, and never draws
   "No invitations yet" or a zero. After a failed refresh the rows stay only

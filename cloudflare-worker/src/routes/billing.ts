@@ -683,7 +683,15 @@ billing.get('/plan/status', async (c) => {
   if (!group) {
     return c.json({ plan_group: null, status: 'free', has_customer: !!user.stripe_customer_id });
   }
-  const row = await readAccountSubscription(c.env, user.id);
+  // D1049 (#2900): a store that cannot be read says so, so the pricing page
+  // marks no plan rather than marking a paying member on Basic.
+  let row;
+  try {
+    row = await readAccountSubscription(c.env, user.id);
+  } catch (e) {
+    console.error('[billing] plan status', (e as Error)?.message);
+    return c.json({ error: 'unreadable', detail: 'Your plan could not be read. That is not the same as no plan.' }, 503);
+  }
   // Best-effort: is there a live Stripe price for this persona's Pro plan? Lets
   // the UI show a real "Subscribe" button vs a "coming soon / contact" state.
   let hasPaidPrice = false;

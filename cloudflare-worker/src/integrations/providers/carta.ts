@@ -3,7 +3,10 @@
  *
  * Read-only OAuth integration that mirrors the founder's Carta cap table
  * (issuer / stakeholders / securities) into local D1 tables
- * `cap_table_holders` + `cap_table_securities` with `source='carta'`.
+ * `cap_table_holders` + `cap_table_securities` with `source='connector_carta'`
+ * (D1020; it was `carta` until migration 574), on the venture the founder
+ * named (`config_json.project_id`, PUT /api/captable/carta/venture). With no
+ * venture named, or one the founder no longer owns, rows are account-level.
  *
  * Scopes: `read_issuer_info read_issuer_stakeholders read_issuer_securities`.
  * Cron cadence: every 6 hours (gated in index.ts).
@@ -375,11 +378,27 @@ async function ensureIssuer(env: Env, row: IntegrationRow): Promise<{ id: string
   return { id: issuerId, name: issuerName };
 }
 
+/**
+ * D1020 §4: the venture the founder named for this connection
+ * (`config_json.project_id`), only while their account still owns it. A
+ * venture they no longer own, or none, makes the rows account-level.
+ */
+export async function boundVenture(env: Env, row: IntegrationRow): Promise<number | null> {
+  const id = Number(safeParse(row.config_json || '{}').project_id);
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  const owned = await env.DB.prepare(
+    'SELECT p.id FROM projects p JOIN users u ON u.founder_id = p.founder_id WHERE p.id = ? AND u.id = ? AND p.deleted_at IS NULL',
+  ).bind(id, row.user_id).first<{ id: number }>();
+  return owned ? id : null;
+}
+
 async function sync(c: Context<{ Bindings: Env }>, _user: User, row: IntegrationRow): Promise<SyncResult> {
   if (safeParse(row.config_json || '{}').audience === 'investor') return { summary: 'Investor Carta is read live in Deals and Portfolio; no founder records imported.', counts: { pulled: 0 } };
   if (_user.role && _user.role !== 'founder') throw new Error('carta_reconnect_required');
   const counts = { pulled: 0, holders: 0, securities: 0, vesting: 0, option_pools: 0, errors: 0 };
   const issuer = await ensureIssuer(c.env, row);
+  // D1020: the venture this issuer is the record for, while the founder still owns it.
+  const venture = await boundVenture(c.env, row);
 
   // Fetch stakeholders + securities in parallel.
   let stakeholders: CartaStakeholder[] = [];
@@ -404,14 +423,15 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
     const name = s.name || s.share_class || s.security_type || `Security ${s.id.slice(0, 8)}`;
     try {
       await c.env.DB.prepare(
-        'INSERT INTO cap_table_securities (user_id, name, share_class, shares_authorized, shares_issued, source, carta_id) ' +
-        "VALUES (?, ?, ?, ?, ?, 'carta', ?) " +
+        'INSERT INTO cap_table_securities (user_id, project_id, name, share_class, shares_authorized, shares_issued, source, carta_id) ' +
+        "VALUES (?, ?, ?, ?, ?, ?, 'connector_carta', ?) " +
         'ON CONFLICT(user_id, carta_id) WHERE carta_id IS NOT NULL DO UPDATE SET ' +
-        'name = excluded.name, share_class = excluded.share_class, ' +
+        'project_id = excluded.project_id, name = excluded.name, share_class = excluded.share_class, ' +
         'shares_authorized = excluded.shares_authorized, shares_issued = excluded.shares_issued, ' +
-        "source = 'carta', updated_at = CURRENT_TIMESTAMP",
+        "source = 'connector_carta', updated_at = CURRENT_TIMESTAMP",
       ).bind(
         row.user_id,
+        venture,
         name,
         s.share_class || s.security_type || null,
         s.shares_authorized ?? null,
@@ -447,26 +467,27 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
       seenHolderKeys.add(`${sh.id}:`);
       try {
         await c.env.DB.prepare(
-          'INSERT INTO cap_table_holders (user_id, name, email, security_type, shares, source, carta_stakeholder_id, carta_security_id) ' +
-          "VALUES (?, ?, ?, ?, 0, 'carta', ?, '') " +
+          'INSERT INTO cap_table_holders (user_id, project_id, name, email, security_type, shares, source, carta_stakeholder_id, carta_security_id) ' +
+          "VALUES (?, ?, ?, ?, ?, NULL, 'connector_carta', ?, '') " +
           'ON CONFLICT(user_id, carta_stakeholder_id, carta_security_id) WHERE carta_stakeholder_id IS NOT NULL DO UPDATE SET ' +
-          "name = excluded.name, email = excluded.email, security_type = excluded.security_type, source = 'carta', updated_at = CURRENT_TIMESTAMP",
-        ).bind(row.user_id, name, email, type, sh.id).run();
+          "project_id = excluded.project_id, name = excluded.name, email = excluded.email, security_type = excluded.security_type, source = 'connector_carta', updated_at = CURRENT_TIMESTAMP",
+        ).bind(row.user_id, venture, name, email, type, sh.id).run();
         counts.holders++;
       } catch { counts.errors++; }
     } else {
       for (const h of holdings) {
         seenHolderKeys.add(`${sh.id}:${h.id}`);
-        const shares = h.quantity ?? h.shares ?? h.shares_issued ?? 0;
+        // A holding Carta reports with no count is null, never 0 (D1020).
+        const shares = h.quantity ?? h.shares ?? h.shares_issued ?? null;
         try {
           await c.env.DB.prepare(
-            'INSERT INTO cap_table_holders (user_id, name, email, security_type, shares, source, carta_stakeholder_id, carta_security_id) ' +
-            "VALUES (?, ?, ?, ?, ?, 'carta', ?, ?) " +
+            'INSERT INTO cap_table_holders (user_id, project_id, name, email, security_type, shares, source, carta_stakeholder_id, carta_security_id) ' +
+            "VALUES (?, ?, ?, ?, ?, ?, 'connector_carta', ?, ?) " +
             'ON CONFLICT(user_id, carta_stakeholder_id, carta_security_id) WHERE carta_stakeholder_id IS NOT NULL DO UPDATE SET ' +
-            "name = excluded.name, email = excluded.email, security_type = excluded.security_type, " +
-            "shares = excluded.shares, source = 'carta', updated_at = CURRENT_TIMESTAMP",
+            "project_id = excluded.project_id, name = excluded.name, email = excluded.email, security_type = excluded.security_type, " +
+            "shares = excluded.shares, source = 'connector_carta', updated_at = CURRENT_TIMESTAMP",
           ).bind(
-            row.user_id, name, email,
+            row.user_id, venture, name, email,
             h.share_class || h.security_type || type,
             shares, sh.id, h.id,
           ).run();
@@ -477,14 +498,14 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
   }
   counts.pulled = counts.holders + counts.securities;
 
-  // ── Reconcile: anything currently in DB with source='carta' for this
+  // ── Reconcile: anything currently in DB with source='connector_carta' for this
   // user that we no longer see in the upstream feed gets flipped back to
   // 'manual' (rather than deleted) so the founder can keep the row if it
   // was the last view of a now-removed Carta entry. This mirrors the
   // disconnect semantics.
   try {
     const existingHolders = await c.env.DB.prepare(
-      "SELECT id, carta_stakeholder_id, carta_security_id FROM cap_table_holders WHERE user_id = ? AND source = 'carta'",
+      "SELECT id, carta_stakeholder_id, carta_security_id FROM cap_table_holders WHERE user_id = ? AND source = 'connector_carta'",
     ).bind(row.user_id).all<{ id: number; carta_stakeholder_id: string | null; carta_security_id: string | null }>();
     for (const h of (existingHolders.results || [])) {
       const key = `${h.carta_stakeholder_id || ''}:${h.carta_security_id || ''}`;
@@ -495,7 +516,7 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
       }
     }
     const existingSecurities = await c.env.DB.prepare(
-      "SELECT id, carta_id FROM cap_table_securities WHERE user_id = ? AND source = 'carta'",
+      "SELECT id, carta_id FROM cap_table_securities WHERE user_id = ? AND source = 'connector_carta'",
     ).bind(row.user_id).all<{ id: number; carta_id: string | null }>();
     for (const s of (existingSecurities.results || [])) {
       if (s.carta_id && !seenSecurityIds.has(s.carta_id)) {
@@ -519,18 +540,21 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
     if (!isPool) continue;
     seenPoolIds.add(s.id);
     try {
-      const authorized = s.shares_authorized ?? 0;
-      const issued = s.shares_issued ?? s.quantity ?? s.shares ?? 0;
-      const available = s.shares_available ?? Math.max(0, Number(authorized) - Number(issued));
+      // A count Carta does not report is null, never 0, and available is
+      // derived only when both of its parts are known (D1020).
+      const authorized = s.shares_authorized ?? null;
+      const issued = s.shares_issued ?? s.quantity ?? s.shares ?? null;
+      const available = s.shares_available ?? (authorized != null && issued != null ? Math.max(0, Number(authorized) - Number(issued)) : null);
       await c.env.DB.prepare(
-        'INSERT INTO cap_table_option_pools (user_id, name, shares_authorized, shares_issued, shares_available, source, carta_id) ' +
-        "VALUES (?, ?, ?, ?, ?, 'carta', ?) " +
+        'INSERT INTO cap_table_option_pools (user_id, project_id, name, shares_authorized, shares_issued, shares_available, source, carta_id) ' +
+        "VALUES (?, ?, ?, ?, ?, ?, 'connector_carta', ?) " +
         'ON CONFLICT(user_id, carta_id) WHERE carta_id IS NOT NULL DO UPDATE SET ' +
-        'name = excluded.name, shares_authorized = excluded.shares_authorized, ' +
+        'project_id = excluded.project_id, name = excluded.name, shares_authorized = excluded.shares_authorized, ' +
         'shares_issued = excluded.shares_issued, shares_available = excluded.shares_available, ' +
-        "source = 'carta', updated_at = CURRENT_TIMESTAMP",
+        "source = 'connector_carta', updated_at = CURRENT_TIMESTAMP",
       ).bind(
         row.user_id,
+        venture,
         s.name || s.share_class || 'Option Pool',
         authorized,
         issued,
@@ -567,14 +591,15 @@ async function sync(c: Context<{ Bindings: Env }>, _user: User, row: Integration
     try {
       const totalMonths = v.total_months ?? v.duration_months ?? v.vesting_period_months ?? null;
       await c.env.DB.prepare(
-        'INSERT INTO cap_table_vesting (user_id, carta_vesting_id, start_date, cliff_months, total_months, total_shares, vested_shares, source) ' +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, 'carta') " +
+        'INSERT INTO cap_table_vesting (user_id, project_id, carta_vesting_id, start_date, cliff_months, total_months, total_shares, vested_shares, source) ' +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'connector_carta') " +
         'ON CONFLICT(user_id, carta_vesting_id) WHERE carta_vesting_id IS NOT NULL DO UPDATE SET ' +
-        'start_date = excluded.start_date, cliff_months = excluded.cliff_months, ' +
+        'project_id = excluded.project_id, start_date = excluded.start_date, cliff_months = excluded.cliff_months, ' +
         'total_months = excluded.total_months, total_shares = excluded.total_shares, ' +
-        "vested_shares = excluded.vested_shares, source = 'carta', updated_at = CURRENT_TIMESTAMP",
+        "vested_shares = excluded.vested_shares, source = 'connector_carta', updated_at = CURRENT_TIMESTAMP",
       ).bind(
         row.user_id,
+        venture,
         cartaId,
         v.start_date || null,
         v.cliff_months ?? null,
@@ -601,21 +626,21 @@ async function disconnect(c: Context<{ Bindings: Env }>, _user: User, row: Integ
     // Flip Carta-sourced rows back to manual; rows are PRESERVED.
     try {
       await c.env.DB.prepare(
-        "UPDATE cap_table_holders SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+        "UPDATE cap_table_holders SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'",
       ).bind(row.user_id).run();
       await c.env.DB.prepare(
-        "UPDATE cap_table_securities SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+        "UPDATE cap_table_securities SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'",
       ).bind(row.user_id).run();
       // Vesting + option-pool rows imported from Carta get the same flip-to-
       // manual treatment so they're preserved through a disconnect.
       try {
         await c.env.DB.prepare(
-          "UPDATE cap_table_vesting SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+          "UPDATE cap_table_vesting SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'",
         ).bind(row.user_id).run();
       } catch { /* table may be absent on legacy deployments */ }
       try {
         await c.env.DB.prepare(
-          "UPDATE cap_table_option_pools SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'carta'",
+          "UPDATE cap_table_option_pools SET source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND source = 'connector_carta'",
         ).bind(row.user_id).run();
       } catch { /* table may be absent on legacy deployments */ }
     } catch (e) {

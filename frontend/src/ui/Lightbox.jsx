@@ -51,6 +51,11 @@ import { FOCUSABLE, inertOutside, lockScroll, pushDialog, tabbable, tabTarget, t
  *   · `useLightboxPage()` is true inside a lightbox drawn as a page and false
  *     inside one drawn as a dialog, so a dialog opened inside a page keeps its
  *     header (`ActionSheet`'s page mode reads it).
+ *
+ * D1014 (#2833): `phone="sheet"` draws the dialog as a bottom sheet on a phone
+ * (PAY12: "dialogs as bottom sheets") instead of full screen: pinned to the
+ * bottom, as tall as its content up to 92% of the viewport, rounded on top.
+ * The default, `"full"`, is unchanged.
  */
 
 const LightboxBar = createContext(null);
@@ -67,7 +72,7 @@ export function useLightboxPage() {
 }
 
 export default function Lightbox({
-  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar: barProp, pageClass = '',
+  label, onClose, onEscape, children, eyebrow, title, sub, footer, initialFocus, returnFocusTo, width = 560, size = 'fit', testId = 'lightbox', focusKey, pageBelow, bar: barProp, pageClass = '', phone: phoneForm = 'full',
 }) {
   const id = useId();
   const dialog = useRef(null);
@@ -76,6 +81,7 @@ export default function Lightbox({
   const escape = useRef(onEscape);
   escape.current = onEscape;
   const tall = size === 'tall';
+  const sheet = phoneForm === 'sheet';
   const phone = usePhoneWidth();
   const page = pageBelow === 'lg' && phone;
   const providedBar = useContext(LightboxBar);
@@ -146,7 +152,7 @@ export default function Lightbox({
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-5 max-sm:p-0" data-testid={`${testId}-layer`} data-size={tall ? 'tall' : 'fit'}>
+    <div className={`fixed inset-0 z-[80] flex items-center justify-center p-5 max-sm:p-0${sheet ? ' max-sm:items-end' : ''}`} data-testid={`${testId}-layer`} data-size={tall ? 'tall' : 'fit'} data-phone={sheet ? 'sheet' : undefined}>
       <div
         aria-hidden="true"
         data-testid={`${testId}-backdrop`}
@@ -162,7 +168,7 @@ export default function Lightbox({
         data-testid={testId}
         onKeyDown={onTab}
         style={{ maxWidth: width }}
-        className={`relative flex w-full flex-col overflow-hidden rounded-2xl border border-axal-hairline bg-white shadow-[0_24px_64px_rgba(24,24,27,.24)] outline-none dark:border-gray-800 dark:bg-gray-950 max-sm:h-full max-sm:max-h-none max-sm:!max-w-none max-sm:rounded-none max-sm:border-0 ${tall ? 'h-[min(820px,calc(100dvh-40px))]' : 'max-h-[min(92vh,820px)]'}`}
+        className={`relative flex w-full flex-col overflow-hidden rounded-2xl border border-axal-hairline bg-white shadow-[0_24px_64px_rgba(24,24,27,.24)] outline-none dark:border-gray-800 dark:bg-gray-950 ${sheet ? 'max-sm:max-h-[92dvh] max-sm:!max-w-none max-sm:rounded-b-none max-sm:rounded-t-2xl max-sm:border-x-0 max-sm:border-b-0' : 'max-sm:h-full max-sm:max-h-none max-sm:!max-w-none max-sm:rounded-none max-sm:border-0'} ${tall ? 'h-[min(820px,calc(100dvh-40px))]' : 'max-h-[min(92vh,820px)]'}`}
       >
         {(title || eyebrow) && (
           <header className="flex items-start justify-between gap-3 border-b border-axal-hairline px-5 py-[18px] dark:border-gray-800">
