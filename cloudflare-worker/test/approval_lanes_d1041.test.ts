@@ -228,23 +228,29 @@ test('each HQ lane counts only its queue\'s own open items', async () => {
   assert.equal(props[0].who, 'Fixture Studio');
 });
 
-/** The CHECK list a migration gives a table's column, parsed from that table's CREATE. */
+/**
+ * The CHECK list a migration gives a table's column, parsed from that table's
+ * CREATE. The patterns are literal and the names are compared after matching,
+ * so no expression is built from an argument.
+ */
 function checkList(file: string, table: string, column: string): string[] {
   const all = readFileSync(resolve(MIGRATIONS, file), 'utf8');
-  const start = all.search(new RegExp(`CREATE TABLE(?: IF NOT EXISTS)?\\s+${table}\\s*\\(`, 'i'));
-  assert.ok(start >= 0, `${file} no longer creates ${table}`);
+  const create = [...all.matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z_]+)\s*\(/gi)].find((m) => m[1] === table);
+  assert.ok(create, `${file} no longer creates ${table}`);
+  const start = create!.index!;
   const next = all.slice(start + 1).search(/CREATE (?:TABLE|INDEX|TRIGGER|UNIQUE)/i);
   const sql = next < 0 ? all.slice(start) : all.slice(start, start + 1 + next);
-  const m = sql.match(new RegExp(`CHECK\\s*\\(\\s*${column}\\s+IN\\s*\\(([^)]*)\\)`, 'i'));
+  const m = [...sql.matchAll(/CHECK\s*\(\s*([a-z_]+)\s+IN\s*\(([^)]*)\)/gi)].find((x) => x[1] === column);
   assert.ok(m, `${file} no longer CHECKs ${table}.${column}`);
-  return [...m![1].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]);
+  return [...m![2].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]);
 }
-/** The words a lane's SQL compares a column against. */
+/** The words a lane's SQL compares a column against (an alias such as `k.` is dropped). */
 function wordsIn(sql: string, column: string): string[] {
   const out: string[] = [];
-  for (const m of sql.matchAll(new RegExp(`\\b${column}\\s*(?:=\\s*'([a-z_]+)'|IN\\s*\\(([^)]*)\\))`, 'g'))) {
-    if (m[1]) out.push(m[1]);
-    else out.push(...[...m[2].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]));
+  for (const m of sql.matchAll(/\b([a-z_][a-z0-9_.]*)\s*(?:=\s*'([a-z_]+)'|IN\s*\(([^)]*)\))/g)) {
+    if (m[1].split('.').pop() !== column) continue;
+    if (m[2]) out.push(m[2]);
+    else out.push(...[...m[3].matchAll(/'([a-z_]+)'/g)].map((x) => x[1]));
   }
   return [...new Set(out)];
 }
