@@ -45,6 +45,11 @@ D1119: `admin_programs_d954.test.ts` also checks part 4's six audit actions,
 claim window/kind counts, strategic requests, successful zeroes and independent
 failed reads against the migrated SQLite schema.
 
+D1159: `fund_admin_d1159.test.ts` covers named distribution lines without
+arithmetic changes, both new Admin acts and their audit, frozen/support/member
+refusals, preserved institutional GP scope, and independent booklet queue reads.
+Every external fetch is forbidden; no Mercury call reaches a provider.
+
 ## Conventions
 
 - Build the database from the migration the feature actually ships with, so the
@@ -98,3 +103,5 @@ D1091: `google_workspace_connection.test.ts` tests consent, file scope, previews
 `deal_context_d1150.test.ts` executes migration 600 and real source tables for
 derived stages, per-user/firm visit markers and private notes, including audit
 rollback, no admin bypass, NDA exclusion and anonymous change metadata.
+
+D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.

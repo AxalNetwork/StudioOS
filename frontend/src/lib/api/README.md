@@ -216,6 +216,9 @@ D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
 A reveal's answer is held in the caller's component state only, never stored.
+D1182 adds `bankAccountsApi.history(filters)` for the audited Super Admin GET
+`/api/admin/bank-accounts/history`: q, kind, entity, actor, range or from/to,
+page, per and the returned snapshot token. No history screen is added in part 1.
 
 D702 (#1664): `profile.js` calls `/api/profile/me`, `/api/profile/venture` (GET
 and PATCH) and `/api/profile/preview` (`cloudflare-worker/src/routes/founder_profile.ts`), and the
@@ -384,6 +387,8 @@ licence's program decisions a page at a time) and downloads the grid's CSV
 D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
 
 D1135's `companyActions.js` holds self-service company leave and venture restore.
+
+D1123 adds the cohort capacity read to `labOperations.js`; the mounted Worker route is in admin_lab_operations.ts.
 
 D1168 (#3081): `adminStorage.js` exposes `adminStorageApi.backfillSizes(limit)`
 to the mounted HQ Super Admin POST `/api/admin/platform/storage/backfill-sizes`.

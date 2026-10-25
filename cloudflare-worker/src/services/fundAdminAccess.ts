@@ -66,6 +66,7 @@ export type FundActKey =
   | 'fund_report.draft' | 'fund_report.issue'
   | 'fund_booklet.read' | 'fund_booklet.withdraw' | 'fund_booklet.accept'
   | 'fund_notice.preview' | 'fund_notice.issue'
+  | 'fund.create' | 'fund.valuation'
   | 'fund.gp_of_record' | 'fund.slug_fund_i' | 'fund.economics' | 'fund.write'
   | 'fund_ledger.administrator' | 'fund_ledger.write'
   | 'bank_account.see' | 'bank_account.change' | 'bank_account.reveal'
@@ -88,6 +89,10 @@ const act = (row: FundAct): FundAct => Object.freeze({ ...row, routes: Object.fr
 
 /** Decision 1: one act table. The rows of #1773, #1774 and #1775 have joined it (decision 6), with #1777's issue row (D712). */
 export const FUND_ACTS: readonly FundAct[] = Object.freeze([
+  act({ act: 'fund.create', label: 'Create a fund', tier: 'admin', owner: '#3066', sentence: null,
+    routes: ['POST /api/funds'] }),
+  act({ act: 'fund.valuation', label: 'Record a mark or attribute a position to a fund', tier: 'admin', owner: '#3066', sentence: null,
+    routes: ['POST /api/fund-performance/positions/:id/valuations', 'PUT /api/fund-performance/positions/:id/fund'] }),
   act({ act: 'capital_call.preview', label: 'Preview a capital call', tier: 'admin', owner: '#1779', sentence: null,
     routes: ['POST /api/funds/:id/capital-calls/preview'] }),
   act({ act: 'capital_call.issue', label: 'Issue a capital call', tier: 'super_admin', owner: '#1779',
