@@ -3429,6 +3429,8 @@ function AppInner() {
       {/* D637 — one pitch, edited while Proposed. Only a partner owns pitches (or an admin reads one). */}
       <Route path="/comarketing/:pitch" element={guard(['admin', 'partner'], partnerPrivateWorkspace(<PartnerWorkspaceTabs set="offers" user={user}><CoMarketingPitchPage /></PartnerWorkspaceTabs>))} />
       <Route path="/calendar" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
+      <Route path="/calendar/week" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
+      <Route path="/calendar/agenda" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <CalendarPage />)} />
       {/* Task #40 (E2) — Event host/attendee surface. */}
       {/* D1030 (#2387): each tab its own address; an Explorer reads Upcoming, Discover and Past (MEV2). */}
       <Route path="/my/events" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />

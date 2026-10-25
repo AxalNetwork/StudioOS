@@ -109,6 +109,25 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Account menu › Calendar (#2420)
+
+The owner's artifacts `Bj7uoUqbMzkksEDU1XdUYK` (the page) and
+`HQTr1DAQrsQx3Eb6eagVQn` (the board grid) came from S21's prompt on #2420. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Calendar · Boards.dc.html` is the board grid (CAL1 to CAL21); it imports the
+  page by name;
+- `Calendar Page.dc.html` is the page.
+
+No value was edited. They supersede `canvases/integrated/Calendar.dc.html` (C1–C6)
+as the page's target; that file stays where it is until part 5 rebuilds the page.
+
+**Grade: UPGRADE.** S21's integration (D1205) puts Month at `/calendar`, Week at
+`/calendar/week` and Agenda at `/calendar/agenda`, makes the week Monday to Sunday,
+shows a dash instead of 0 for a source that did not answer, and says Not read here
+yet on deadlines, interview calls and a whole-calendar subscription. The grids,
+drawers, dialogs, connected calendars and new kinds wait for D1205's seven parts,
+so this canvas stays in the queue until they land.
+
 ## Landed 2026-10-25 — HQ › Platform › Product testing (#2382)
 
 The owner's artifacts `Rdu2ReGAwHnT76E65WdjrB` (the page) and
