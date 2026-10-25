@@ -483,3 +483,16 @@ test('the threshold rule and the job\'s wiring', () => {
   const worker = readFileSync(new URL('../src/services/queueWorker.ts', import.meta.url), 'utf8');
   assert.match(worker, /case 'ai_auto_reload': \{[\s\S]*?runAutoReload\(env, Number\(payload\.user_id\)\)/);
 });
+
+test('D1133 auto-reload failure handling does not wait for checkout audit reads', async () => {
+  const f = await world(); const original = globalThis.fetch; let invoiceReads = 0;
+  globalThis.fetch = (async (url: any) => { if (String(url).includes('/invoices/')) invoiceReads++; return new Response('{}', { status: 503 }); }) as typeof fetch;
+  try {
+    enable(f, 20);
+    for (let n = 0; n < 2; n++) {
+      assert.equal((await webhook(f, 'payment_intent.payment_failed', { id: 'pi_reload9', invoice: 'in_unavailable', last_payment_error: { code: 'card_declined' },
+        metadata: { kind: 'cart_order', auto_reload: '1', user_id: '2' } })).status, 200);
+    }
+    assert.equal(settings(f).enabled, 0); assert.equal(notices(f).length, 1); assert.equal(invoiceReads, 0);
+  } finally { globalThis.fetch = original; f.db.close(); }
+});

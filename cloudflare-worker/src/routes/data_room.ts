@@ -24,6 +24,11 @@
  *   POST   /:projectUid/files/:uid/versions/:n/download   one earlier version
  *   POST   /:projectUid/files/:uid/versions/:n/current    make it current (a swap)
  *   GET    /:projectUid/preview?grant=<uid>   the room as that grant sees it; no log
+ *   GET    /:projectUid/activity?from&to&investor&action&page   daily figures against the
+ *                                             period before, per investor, and the log (D1105)
+ *   GET    /:projectUid/activity.csv?from&to&investor&action    the same rows as CSV (D1105)
+ *   GET    /:projectUid/checklist             per diligence item, its files and who can
+ *                                             open them (D1105)
  *
  * WHO ON THE FOUNDER SIDE (D1103, owner question 2, answer A). The owner — the
  * account that owns the venture — does everything; admins use D1102 summary/support reads. A co-founder
@@ -82,6 +87,7 @@ import {
   tierAdmits, investorCommitted, admittedCounts, isAccessTier, expiryMs, grantFolderScope, folderInScope, type FolderScope,
 } from '../services/dataRoomAccess';
 import { CHECKLIST_KEYS } from '../services/raiseCycle';
+import { activityCsv, activityRead, checklistRead, investorOfGrant, parseActivityQuery, CSV_MAX_ROWS } from '../services/dataRoomActivity';
 import { logCycleWrite } from '../services/cycleActivity';
 import { WriterError } from '../services/validateWriters';
 
@@ -434,7 +440,7 @@ async function roomDetails(env: Env, project: ProjectRow, role: RoomRole | 'supp
     // and never a view count — no per-file view is logged (header note).
     const files = await env.DB.prepare(
       `SELECT f.id, f.uid, f.name, f.folder_id, f.content_type, f.size_bytes, f.visibility, f.created_at,
-              f.access_tier, f.access_expires_at,
+              f.access_tier, f.access_expires_at, f.source_kind, f.source_ref,
               (SELECT COUNT(*) FROM data_room_access_log l
                 WHERE l.file_id = f.id AND l.project_id = f.project_id AND l.action = 'download') AS downloads
          FROM data_room_files f WHERE f.project_id = ? ORDER BY f.name`,
@@ -1138,6 +1144,67 @@ export async function removeDataRoomFile(
 }
 
 /** D1103 — each scoped grant's named folders, by grant id; null when the store cannot be read. */
+// ─────────────────────────────────────────────── activity and checklist (D1105)
+
+/**
+ * The room and the investor a query names, for the activity reads: the
+ * owner's or a co-founder's room (404 otherwise, as every founder route), and
+ * a grant uid of this venture (404 `unknown_investor` otherwise).
+ */
+async function activityTarget(c: any) {
+  const user = await requireAuth(c);
+  const room = await roomProject(c, user, c.req.param('projectUid'));
+  if (!room) return { refused: c.json({ detail: 'Project not found' }, 404) };
+  const parsed = parseActivityQuery((k) => c.req.query(k), nowIso().slice(0, 10));
+  if (!parsed.ok) return { refused: c.json({ code: parsed.code, detail: parsed.detail }, 400) };
+  let userId: number | null = null;
+  if (parsed.q.investor) {
+    const g = await investorOfGrant(c.env, room.project.id, parsed.q.investor);
+    if (!g) return { refused: c.json({ code: 'unknown_investor', detail: 'This room has no such grant.' }, 404) };
+    userId = Number(g.investor_user_id);
+  }
+  return { room, q: parsed.q, userId };
+}
+
+r.get('/:projectUid/activity', async (c) => {
+  try {
+    const t = await activityTarget(c);
+    if ('refused' in t) return t.refused;
+    return c.json(await activityRead(c.env, t.room.project.id, t.q, t.userId));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/:projectUid/activity.csv', async (c) => {
+  try {
+    const t = await activityTarget(c);
+    if ('refused' in t) return t.refused;
+    const out = await activityCsv(c.env, t.room.project.id, t.q, t.userId);
+    if ('tooMany' in out) {
+      return refuse(c, 413, {
+        code: 'too_many_rows',
+        message: `This period holds ${out.tooMany} events, more than one file takes (${CSV_MAX_ROWS}). Choose a shorter period, an investor or an action.`,
+        extra: { code: 'too_many_rows' },
+      });
+    }
+    return new Response(out.csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="data-room-activity-${t.q.from}-to-${t.q.to}.csv"`,
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/:projectUid/checklist', async (c) => {
+  try {
+    const user = await requireAuth(c);
+    const room = await roomProject(c, user, c.req.param('projectUid'));
+    if (!room) return c.json({ detail: 'Project not found' }, 404);
+    return c.json(await checklistRead(c.env, room.project.id));
+  } catch (e) { return mapError(c, e); }
+});
+
 async function grantScopesOf(env: Env, projectId: number): Promise<Map<number, string[]> | null> {
   try {
     const rows = await env.DB.prepare(

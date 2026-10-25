@@ -568,7 +568,7 @@ export class AcceptError extends Error {
  * the founder changes the proposed one.
  */
 export async function acceptRaiseProposal(env: Env, a: {
-  integrationId: number; projectId: number; id: number; user: User; reads: RaiseReads | null; section?: unknown;
+  integrationId: number; projectId: number; id: number; user: User; reads: RaiseReads | null; section?: unknown; discount_bps?: unknown;
 }): Promise<Outcome> {
   const { integrationId: i, projectId: pid, user } = a;
   if (a.section !== undefined && a.section !== null && !SECTION_KEYS.includes(String(a.section))) {
@@ -585,7 +585,9 @@ export async function acceptRaiseProposal(env: Env, a: {
       return { ok: true, landed: { table: 'mercury_raise_proposals', id: p.id } };
     }
     if (p.kind === 'statement') return await acceptStatement(env, a, p);
-    if (p.kind === 'safe') return await acceptSafe(env, a, p);
+    // D1025 (#2862, CT11a): Mercury sends no discount; the founder may enter the SAFE's own on Accept.
+    // The record's writer checks it (0–9999 basis points) as it checks every field.
+    if (p.kind === 'safe') return await acceptSafe(env, { ...a, discountBps: a.discount_bps ?? null }, p);
     return await acceptCredit(env, a, p);
   } catch (e) {
     await handBack(env, p.id);
@@ -605,7 +607,7 @@ export async function acceptRaiseProposal(env: Env, a: {
  * record row, as before; if the model refuses it, the record row and its audit
  * row are taken back too, so nothing is half-written.
  */
-async function acceptSafe(env: Env, a: { integrationId: number; projectId: number; user: User }, p: { id: number; kind: ProposalKind; source_key: string; payload: Record<string, any> }): Promise<Outcome> {
+async function acceptSafe(env: Env, a: { integrationId: number; projectId: number; user: User; discountBps?: unknown }, p: { id: number; kind: ProposalKind; source_key: string; payload: Record<string, any> }): Promise<Outcome> {
   const { integrationId: i, projectId: pid, user } = a;
   const name = String(p.payload.investor_name || 'SAFE investor').slice(0, 200);
   let rec: { id: number; uid: string };
@@ -616,7 +618,9 @@ async function acceptSafe(env: Env, a: { integrationId: number; projectId: numbe
         kind: 'safe', holder_name: name, source: 'connector_mercury', basis: 'post_money',
         amount_cents: p.payload.amount_cents ?? null, cap_cents: p.payload.cap_cents ?? null,
         // Mercury's SAFE requests carry no discount (`raiseReadsOf`), and their date is
-        // the request's, not the signing's: both read "Not recorded".
+        // the request's, not the signing's: both read "Not recorded", unless the
+        // founder enters the SAFE's own discount on Accept (D1025, CT11a).
+        ...(a.discountBps != null ? { discount_bps: a.discountBps } : {}),
       },
     });
   } catch (e) {
@@ -656,9 +660,10 @@ async function acceptStatement(env: Env, a: { integrationId: number; projectId: 
   let fileId: number | null = null;
   try {
     const ins = await env.DB.prepare(
+      // D1105 (migration 596): a statement Mercury delivered is a connector's file.
       `INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
-         created_at, updated_at, access_tier, checklist_item)
-       VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)`,
+         created_at, updated_at, access_tier, checklist_item, source_kind, source_ref)
+       VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 'connector', 'mercury')`,
     ).bind(uid, project.id, `Mercury statement ${month}${four}.pdf`, key, pdf.bytes.byteLength, STATEMENT_ACCESS.visibility, a.user.id,
       STATEMENT_ACCESS.access_tier, STATEMENT_ACCESS.checklist_item).run();
     fileId = Number(ins.meta?.last_row_id) || null;
