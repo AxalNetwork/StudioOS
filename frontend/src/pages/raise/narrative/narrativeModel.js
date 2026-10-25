@@ -413,13 +413,13 @@ const FIELD = Object.fromEntries(POSITIONING_FIELDS.map((f) => [f.kind, f]));
 export const fieldLabel = (kind, position = 0) => (FIELD[kind]?.many ? `Line ${Number(position) + 1}` : FIELD[kind]?.label || 'Field');
 
 /**
- * Where a field's words came from, in the canvas's words. The store keeps who
- * saved it but the read does not return a name, so an accepted proposal says
- * so without one (D911 §4).
+ * Where a field's words came from, in the canvas's words (NAR4). D1114: the
+ * read now names who saved it (`by`), so an accepted proposal reads "Proposed
+ * by Eadwyn, accepted by [Name]"; with no name recorded it says so without one.
  */
-export function provenance(source) {
+export function provenance(source, by = null) {
   if (!source || (!source.kind && (!source.label || source.label === 'typed'))) return 'Typed';
-  if (source.kind === 'eadwyn') return 'Proposed by Eadwyn, accepted';
+  if (source.kind === 'eadwyn') return by ? `Proposed by Eadwyn, accepted by ${by}` : 'Proposed by Eadwyn, accepted';
   if (source.kind === 'connector' || source.label === 'connector') return 'From a connected tool';
   if (source.kind === 'module') return 'From a module';
   return 'Typed';
@@ -438,11 +438,11 @@ export function coreRows(core) {
   for (const f of POSITIONING_FIELDS) {
     if (!f.many) {
       const r = at(f.kind);
-      out.push({ kind: f.kind, position: 0, label: f.label, max: f.max, text: r?.text ?? null, provenance: r ? provenance(r.source) : null });
+      out.push({ kind: f.kind, position: 0, label: f.label, max: f.max, text: r?.text ?? null, provenance: r ? provenance(r.source, r.by) : null });
       continue;
     }
     const lines = list.filter((r) => r.kind === 'line').sort((a, b) => a.position - b.position);
-    lines.forEach((r, i) => out.push({ kind: 'line', position: Number(r.position), label: `Line ${i + 1}`, max: f.max, text: r.text, provenance: provenance(r.source) }));
+    lines.forEach((r, i) => out.push({ kind: 'line', position: Number(r.position), label: `Line ${i + 1}`, max: f.max, text: r.text, provenance: provenance(r.source, r.by) }));
     const next = lines.length ? Math.max(...lines.map((r) => Number(r.position))) + 1 : 0;
     if (next < MAX_LINES) out.push({ kind: 'line', position: next, label: `Line ${lines.length + 1}`, max: f.max, text: null, provenance: null, add: true });
   }
@@ -492,3 +492,23 @@ export function proposalRows(items) {
 
 /** A part of the draft read: its items, or null when it could not be read. */
 export const partItems = (part) => (part?.state === 'ok' && Array.isArray(part.items) ? part.items : null);
+
+/**
+ * D1114 (#2994, NAR1): Home's From Mercury "Insert in Story". Each figure
+ * Mercury offers is the same record as a Story source (`services/decks/sources.ts`
+ * MERCURY_SLOTS), so the door opens Story's Insert a figure on that one item.
+ */
+export const MERCURY_STORY_KEY = Object.freeze({
+  revenue_last_month: 'grow.mercury_revenue',
+  revenue_growth: 'grow.mercury_growth',
+  net_burn: 'grow.net_burn',
+  runway: 'grow.runway',
+});
+
+/** The Story address that opens Insert a figure on a Mercury figure, or null for one Story cannot bind. */
+export function insertInStoryHref(figureKey, search = '') {
+  const key = MERCURY_STORY_KEY[figureKey];
+  if (!key) return null;
+  const keep = tabSearch(search);
+  return `${HOME_PATH}/story${keep ? `${keep}&` : '?'}insert=${encodeURIComponent(key)}`;
+}

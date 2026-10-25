@@ -444,7 +444,7 @@ test('the contact block points at the flow, not at a menu item', () => {
   assert.match(body, /to="\/help\/tickets\?new=1"/, 'the ticket link must be a link, to the form');
   assert.match(TICKETS, /useState\(\(\) => new URLSearchParams\(location\.search\)\.get\('new'\) === '1'\)/,
     'the ticket page must open its form when it arrives with ?new=1');
-  assert.match(body, /to="\/trust"/, 'the canvas sends "What we can see" to the Trust Center');
+  assert.match(body, /to="\/trust\/me"/, 'the canvas sends "What we can see" to the Trust Center');
   assert.ok(
     !/in the sidebar/.test(body),
     'naming a sidebar item is how this went stale the first time',
