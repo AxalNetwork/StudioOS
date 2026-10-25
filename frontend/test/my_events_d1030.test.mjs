@@ -272,6 +272,7 @@ test('D1131: a durable promotion makes the off-waitlist row; a current status al
   assert.equal(needsYou([],[{...t,starts_at:'2020-01-01T00:00:00Z'}],NOW).length,0);
   assert.match(needsYou([],[{...t,payment_status:'pending'}],NOW)[0].text,/Pay to confirm/);
   assert.match(needsYou([],[{...t,reg_status:'registered'}],NOW)[0].text,/Waiting for the host/);
+  assert.equal(needsYou([],[{...t,reg_status:'registered',payment_status:'pending'}],NOW)[0].action.label,'View ticket','approval still precedes payment');
 });
 
 test('D1131: the desktop join control, speaker and seat-source pills use the recorded fields',async()=>{

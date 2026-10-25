@@ -145,7 +145,7 @@ export function needsYou(hosting, attending = [], now = Date.now()) {
     const waiting = t.reg_status === 'registered', paying = t.payment_status === 'pending';
     return { key: `promoted-${t.registration_id || t.id}`, pill: 'Off the waitlist', tone: 'good',
       text: `A seat opened at ${t.title || 'an event'}. ${waiting ? 'Waiting for the host.' : paying ? 'Pay to confirm your place.' : 'You’re going.'}`,
-      action: { label: paying ? 'Pay to confirm' : 'View ticket', to: `/events/${t.id}` } };
+      action: { label: paying && !waiting ? 'Pay to confirm' : 'View ticket', to: `/events/${t.id}` } };
   });
   return [...promoted, ...sent];
 }
