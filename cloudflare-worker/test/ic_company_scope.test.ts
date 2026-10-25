@@ -92,6 +92,8 @@ function freshDb() {
       user_id INTEGER NOT NULL, is_primary_admin INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     CREATE TABLE projects (
       id INTEGER PRIMARY KEY, uid TEXT, name TEXT, sector TEXT, stage TEXT,
       status TEXT, founder_id INTEGER, company_id INTEGER, deleted_at TEXT

@@ -13,6 +13,7 @@ const inputs={founders:[{name:'Synthetic',shares:100}],option_pool_pct:0};
 function fixture(){
  const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false});
  for(const t of ['users','projects','project_members','cap_table_scenarios','cap_table_holders','cap_table_securities','activity_logs','user_company_links']) db.exec(tableFromBaseline(baseline,t));
+ db.exec('CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT)'); // D1137 (migration 597)
  const roles=['admin','partner','investor','founder','founder','advisor','partner','exploring','advisor'];
  roles.forEach((role,i)=>db.prepare("INSERT INTO users(id,role,name,email,founder_id,subscription_tier) VALUES(?,?,?,?,?,'studio')").run(i+1,role,'Synthetic',`user${i+1}@example.invalid`,i===3?40:null));
  db.exec("INSERT INTO projects(id,name,founder_id) VALUES(10,'Synthetic',40); INSERT INTO project_members(project_id,user_id,role,status) VALUES(10,5,'cofounder','accepted'),(10,6,'advisor','accepted'),(10,7,'cofounder','accepted'),(10,3,'cofounder','accepted'); INSERT INTO cap_table_holders(user_id,project_id,name,email) VALUES(4,10,'Synthetic holder','holder@example.invalid')");

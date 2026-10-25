@@ -99,7 +99,7 @@ function freshDb(withColumn = true) {
       resolved_at TEXT, resolved_by INTEGER);
     CREATE TABLE user_company_links (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, company_id INTEGER NOT NULL,
       is_primary_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT);
-    CREATE TABLE company_profiles (id INTEGER PRIMARY KEY, company_name TEXT);
+    CREATE TABLE company_profiles (id INTEGER PRIMARY KEY, company_name TEXT, archived_at TEXT);
     CREATE TABLE legal_templates (id INTEGER PRIMARY KEY AUTOINCREMENT, slug TEXT UNIQUE NOT NULL, title TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1);
     CREATE TABLE mi_pro_subscriptions (user_id INTEGER PRIMARY KEY, status TEXT, subscription_id TEXT, plan TEXT, period_end TEXT, stripe_customer_id TEXT);
   `);

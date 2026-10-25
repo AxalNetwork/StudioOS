@@ -90,6 +90,8 @@ function freshDb() {
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, company_id INTEGER NOT NULL, user_id INTEGER NOT NULL
     );
+    -- D1137 (migration 597): resolveActiveCompany reads an archived company as none.
+    CREATE TABLE IF NOT EXISTS company_profiles (id INTEGER PRIMARY KEY, archived_at TEXT);
     -- Verbatim from sql/monitoring.sql plus sql/queue_jobs_alter.sql. POST
     -- /funds enqueues LPA generation, and a hand-shortened copy of this table
     -- fails on max_retries — a 500 that looks like a scoping bug and is not.

@@ -88,7 +88,8 @@ function freshDb() {
       jwt_min_iat INTEGER, name TEXT, email TEXT
     );
     CREATE TABLE company_profiles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, company_name TEXT NOT NULL
+      id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE, company_name TEXT NOT NULL,
+      archived_at TEXT
     );
     CREATE TABLE user_company_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT, company_id INTEGER NOT NULL,
