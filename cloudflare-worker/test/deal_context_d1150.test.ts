@@ -40,7 +40,7 @@ function world() {
   async function call(user=1, suffix='stage', method='GET', body?:any, company?:string, support=false) {
     const tok=await new SignJWT({user_id:user,...(support?{impersonated_by:4}:{})}).setProtectedHeader({alg:'HS256'}).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(secret));
     const response=await app.request(`/api/deals/9/${suffix}`,{method,headers:{Authorization:`Bearer ${tok}`,'Content-Type':'application/json',...(company?{'X-Company-Id':company}:{})},body:body===undefined?undefined:JSON.stringify(body)},{DB,JWT_SECRET:secret,ENVIRONMENT:'development'} as any);
-    return {status:response.status,body:await response.json() as any};
+    return {status:response.status,body:await response.json().catch(()=>null) as any};
   }
   return {db,call,DB};
 }
@@ -188,5 +188,13 @@ test('the stored-receipt projection exposes metadata for the owner only, with no
     const own=await receivedCommitment({DB} as any,{id:1,role:'investor'},11,71);assert.ok(own);assert.deepEqual(Object.keys(own).sort(),['at','id']);
     for(const [id,role,firm] of [[3,'investor',22],[2,'investor',11],[1,'investor',22],[1,'admin',11]] as const)assert.equal(await receivedCommitment({DB} as any,{id,role},firm,71),null);
     db.exec("UPDATE mercury_personal_matches SET state='withdrawn'");assert.equal(await receivedCommitment({DB} as any,{id:1,role:'investor'},11,71),null);
+  }finally{db.close();}
+});
+
+test('HEAD cannot consume a visit through Hono’s implicit GET fallback',async()=>{
+  const {db,call}=world();try{
+    assert.equal((await call(1,'whats-new','HEAD')).status,405);
+    assert.equal((db.prepare('SELECT COUNT(*) AS n FROM deal_seen').get() as any).n,0);
+    assert.equal((await call(1,'whats-new')).body.first_visit,true);
   }finally{db.close();}
 });

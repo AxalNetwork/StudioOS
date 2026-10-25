@@ -10,6 +10,10 @@ const guard = async (c: any, next: () => Promise<void>) => {
   if ((await selectJwt(c))?.payload.impersonated_by) return c.json({ error: 'support_session_refused' }, 403);
   await requireAuth(c);
   c.header('Cache-Control', 'no-store');
+  if (c.req.method === 'HEAD' && c.req.path.endsWith('/whats-new')) {
+    c.header('Allow', 'GET');
+    return c.body(null, 405);
+  }
   await next();
 };
 r.use('/:id/stage', guard);
