@@ -47,6 +47,7 @@ import { RADAR_AXES, ensureSkillsTaxonomySchema } from '../skillsTaxonomySchema'
 import { ensureSkillProfileSchema } from '../skillProfileSchema';
 import { parseUseOfFundsValue } from '../../util/useOfFunds';
 import { simulate, type Inputs, type SimulateResult } from '../captable';
+import { readCapTable } from '../capTableToday';
 import { ensureCapTableVariantColumn } from '../captableSchema';
 import { ensureCompetitorSchema } from '../competitorSchema';
 import { bindingKey } from '../../util/schemaBootstrap';
@@ -415,6 +416,9 @@ export type SpinoutDemoDayData = {
     // standalone cap_table_holders table for Slide 08's donut. Empty when no
     // simulator scenario exists for the project (falls back to holders).
     sim_segments?: Array<[string, number]>;
+    // D1018 (#2855) — where the segments come from: the record (Today) or the
+    // saved model (Modelled); null when neither holds any.
+    sim_source?: 'record' | 'model' | null;
   };
   ask: {
     eyebrow: string; headline: string;
@@ -622,34 +626,29 @@ function segmentsFromSimResult(result: SimulateResult | null | undefined): Array
 }
 
 /**
- * Task #28 — Load the project's saved Cap-Table Simulator scenario (one per
- * project) and compute its ownership segments. Prefers the cached result_json;
- * re-simulates inputs_json when the cache is missing. Returns [] on any error
- * (e.g. table absent) so the deck silently falls back to cap_table_holders.
+ * Task #28 — Slide 08's ownership segments. D1018 (#2855): through the one
+ * cap table reader, Today from the record when the record holds shares, else
+ * the saved model (canonical only: a draft variant is never picked), which
+ * prefers its cached result_json and re-simulates inputs_json when the cache
+ * is missing. Returns no segments on any error (e.g. table absent) so the deck
+ * silently falls back to cap_table_holders.
  */
-async function loadSimSegments(env: Env, projectId: number): Promise<Array<[string, number]>> {
+export async function loadSimSegments(env: Env, projectId: number): Promise<{ segments: Array<[string, number]>; source: 'record' | 'model' | null }> {
   try {
-    const row = await env.DB.prepare(
-      // Task #29 — canonical-only: draft variants (is_variant=1) must NEVER be
-      // picked for Slide 08, even when a variant is newer than the canonical row.
-      `SELECT inputs_json, result_json FROM cap_table_scenarios
-       WHERE project_id = ? AND COALESCE(is_variant,0) = 0 ORDER BY updated_at DESC LIMIT 1`,
-    ).bind(projectId).first<{ inputs_json: string | null; result_json: string | null }>();
-    if (!row) return [];
-    let result: SimulateResult | null = null;
-    if (row.result_json) {
-      try { result = JSON.parse(row.result_json) as SimulateResult; } catch { result = null; }
-    }
-    if ((!result || !Array.isArray(result.rounds)) && row.inputs_json) {
+    const cap = await readCapTable(env, projectId);
+    if (cap.source === 'record') return { segments: segmentsFromSimResult(cap.today), source: 'record' };
+    if (cap.source === 'none') return { segments: [], source: null };
+    let result: SimulateResult | null = cap.model.result;
+    if ((!result || !Array.isArray(result.rounds)) && cap.model.inputs) {
       try {
-        const inputs = JSON.parse(row.inputs_json) as Inputs;
-        const sim = simulate(inputs);
+        const sim = simulate(cap.model.inputs as Inputs);
         if (!('errors' in sim)) result = sim;
       } catch { /* ignore malformed inputs */ }
     }
-    return segmentsFromSimResult(result);
+    const segments = segmentsFromSimResult(result);
+    return { segments, source: segments.length ? 'model' : null };
   } catch {
-    return [];
+    return { segments: [], source: null };
   }
 }
 
@@ -1038,7 +1037,7 @@ export async function fillAxalSpinoutDemoDay(
 
   // Task #28 — ownership segments from the project's Cap-Table Simulator
   // scenario (preferred over the holders table on Slide 08).
-  const simSegments = await loadSimSegments(env, projectId);
+  const { segments: simSegments, source: simSource } = await loadSimSegments(env, projectId);
 
   // Competitive landscape — newest completed Competitor Analysis (Market
   // Intel). Empty (present:false) when the founder has not run one; the deck
@@ -1443,6 +1442,7 @@ export async function fillAxalSpinoutDemoDay(
         : 'Cap table — to be seeded in Week 3.',
       holders: allHolders,
       sim_segments: simSegments,
+      sim_source: simSource,
       note: doneMap.has('incorporation_completed')
         ? 'Incorporated in Week 4.'
         : 'Pre-incorporation — entity stands up in Week 4.',
