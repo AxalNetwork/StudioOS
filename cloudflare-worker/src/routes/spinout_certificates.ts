@@ -22,6 +22,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, requireBranchNotSuspended } from '../auth';
+import { programRefusal } from '../services/programEnforcement';
 import { bindingKey } from '../util/schemaBootstrap';
 import { logAdminAction } from '../services/adminAudit';
 
@@ -97,6 +98,9 @@ app.post('/certificates', async (c) => {
   // D511 — a suspended branch issues and revokes nothing (D135's freeze).
   // After the admin check, as every other frozen write does (D107).
   await requireBranchNotSuspended(c);
+  // D985 — issuing needs the branch's Spin-Out Lab grant; a revoke stays open.
+  const notGranted = await programRefusal(c.env, 'spinout-lab');
+  if (notGranted) return c.json(notGranted.body, notGranted.status);
   await ensureTables(c.env);
 
   const body = await c.req.json().catch(() => ({} as any));
@@ -279,6 +283,9 @@ app.post('/certificates/backfill', async (c) => {
   // D511 — a suspended branch issues and revokes nothing (D135's freeze).
   // After the admin check, as every other frozen write does (D107).
   await requireBranchNotSuspended(c);
+  // D985 — issuing needs the branch's Spin-Out Lab grant; a revoke stays open.
+  const notGranted = await programRefusal(c.env, 'spinout-lab');
+  if (notGranted) return c.json(notGranted.body, notGranted.status);
   await ensureTables(c.env);
   const body = (await c.req.json().catch(() => ({}))) as { limit?: unknown };
   const { backfillCertificates } = await import('../services/certificateIssuance');

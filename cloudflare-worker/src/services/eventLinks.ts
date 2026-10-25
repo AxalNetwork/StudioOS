@@ -1,16 +1,17 @@
 // D1031 (#2872): where an in-app event notice opens. The public reader serves
 // only approved public and unlisted events, so a slug link sent a member to
-// "Event not found." for a private, cancelled or unapproved event. A member's
-// notice opens the signed-in event page and a host's opens the manage page.
-// Part 5 of My events (#2387) moves both to `/my/events/ticket/<id>` and
-// `/my/events/hosting/<id>`, here and nowhere else.
+// "Event not found." for a private, cancelled or unapproved event.
+// D1035 (#2876, part 5 of My events): a member's notice opens their ticket
+// drawer and a host's opens the hosted-event drawer, here and nowhere else.
+// The ticket drawer reads a place in Upcoming or Past, so a notice about a
+// cancelled event or a declined place still lands on it.
 
-/** A registrant's notice: the signed-in event page. */
+/** A registrant's notice: their ticket on My events. */
 export function memberEventLink(eventId: number | string): string {
-  return `/events/${Number(eventId)}`;
+  return `/my/events/ticket/${Number(eventId)}`;
 }
 
-/** The host's notice: the event's manage page. */
+/** The host's notice: the hosted event on My events. */
 export function hostEventLink(eventId: number | string): string {
-  return `/events/${Number(eventId)}/manage`;
+  return `/my/events/hosting/${Number(eventId)}`;
 }

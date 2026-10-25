@@ -75,7 +75,7 @@ function ReviewDialog({ row, onClose, onChanged, now }) {
   );
 }
 
-function ReviewDesk({ now }) {
+function ReviewDesk({ now, scope }) {
   const [tick, setTick] = useState(0);
   const [q, setQ] = useState('');
   const [operator, setOperator] = useState('');
@@ -84,7 +84,7 @@ function ReviewDesk({ now }) {
   const [page, setPage] = useState(1);
   const [dialog, setDialog] = useState(null);
   const reload = () => setTick((t) => t + 1);
-  const read = useRead('83b', tick, () => section83bReviewApi.adminList().then((r) => {
+  const read = useRead(`83b:${scope}`, tick, () => section83bReviewApi.adminList(scope).then((r) => {
     if (!Array.isArray(r?.startups) || !Array.isArray(r?.operators)) throw new Error('The 83(b) review list did not come back as a list.');
     return r;
   }));
@@ -202,7 +202,7 @@ function FiledDialog({ row, onClose, onChanged, now }) {
   );
 }
 
-function OrdersDesk({ now }) {
+function OrdersDesk({ now, scope }) {
   const [tick, setTick] = useState(0);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
@@ -211,7 +211,7 @@ function OrdersDesk({ now }) {
   const [page, setPage] = useState(1);
   const [dialog, setDialog] = useState(null);
   const reload = () => setTick((t) => t + 1);
-  const read = useRead('orders', tick, () => adminIncorporationsApi.list().then((r) => {
+  const read = useRead(`orders:${scope}`, tick, () => adminIncorporationsApi.list(scope).then((r) => {
     if (!Array.isArray(r?.orders)) throw new Error('The formation orders did not come back as a list.');
     return r;
   }));
@@ -292,13 +292,17 @@ function OrdersDesk({ now }) {
 }
 
 export default function LabFormation({ now = Date.now() }) {
+  const [scope, setScope] = useState('lab');
   return (
     <div className="flex flex-col gap-3.5" data-testid="lab-formation">
       <p className={`m-0 rounded-[12px] border border-axal-hairline bg-white px-[18px] py-3 text-[13px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100`} data-testid="lab-formation-note">
-        {`${FORMATION_NOTE} Showing Lab ventures only waits for the venture filter (part 4).`}
+        {scope === 'lab' ? 'Showing ventures linked to a recorded Lab participant.' : FORMATION_NOTE}
       </p>
-      <ReviewDesk now={now} />
-      <OrdersDesk now={now} />
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Formation venture scope">
+        {[['lab', 'Lab ventures'], ['all', 'All startups']].map(([value, label]) => <button key={value} type="button" className={LINK} aria-pressed={scope === value} onClick={() => setScope(value)} data-testid={`lab-formation-scope-${value}`}>{label}</button>)}
+      </div>
+      <ReviewDesk key={`reviews:${scope}`} now={now} scope={scope} />
+      <OrdersDesk key={`orders:${scope}`} now={now} scope={scope} />
     </div>
   );
 }

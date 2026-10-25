@@ -48,7 +48,8 @@ export const CHECKIN_BUCKET = 5;
 /** The postings `jobs.top` lists. */
 export const TOP_POSTINGS = 5;
 
-export const DAYS_OPEN_REASON = 'No store records when a posting was published, so how long it has been open is not known.';
+/** D1121: a published posting approved before migration 609 has no recorded day, so its days open are not known. */
+export const DAYS_OPEN_REASON = 'This posting was approved before the day was recorded, so how long it has been open is not known.';
 /** D930 §5: the corrected CM1 sentence. */
 export const ACTIVE_MEMBERS_REASON =
   'Nothing records who took part in Community, apart from using the platform. Insights counts active accounts platform-wide.';
@@ -125,7 +126,18 @@ async function jobsQueue(env: Env, nowMs: number) {
   };
 }
 
-async function jobsBlock(env: Env, axis: WeekAxis, before: WeekAxis) {
+/**
+ * D1121: whole days since a published posting was last approved (migration 609).
+ * Only a published posting is open; one approved before 609 is not recorded, never 0.
+ */
+function daysOpen(status: unknown, publishedAt: unknown, nowMs: number): number | null | NotRecorded {
+  if (status !== 'published') return null;
+  const at = publishedAt ? Date.parse(String(publishedAt).replace(' ', 'T') + 'Z') : NaN;
+  if (!Number.isFinite(at)) return { recorded: false, reason: DAYS_OPEN_REASON };
+  return Math.max(0, Math.floor((nowMs - at) / 86_400_000));
+}
+
+async function jobsBlock(env: Env, axis: WeekAxis, before: WeekAxis, nowMs: number) {
   const apps = await env.DB.prepare(
     `SELECT SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS window,
             SUM(CASE WHEN datetime(created_at) >= datetime(?) AND datetime(created_at) < datetime(?) THEN 1 ELSE 0 END) AS previous
@@ -145,7 +157,7 @@ async function jobsBlock(env: Env, axis: WeekAxis, before: WeekAxis) {
     by_status[s] += n(r.n);
   }
   const top = await env.DB.prepare(
-    `SELECT j.title AS title, p.name AS company, j.status AS status, COUNT(a.id) AS applications
+    `SELECT j.title AS title, p.name AS company, j.status AS status, j.published_at AS published_at, COUNT(a.id) AS applications
        FROM job_applications a
        JOIN job_postings j ON j.id = a.posting_id
        LEFT JOIN projects p ON p.id = j.project_id
@@ -153,7 +165,7 @@ async function jobsBlock(env: Env, axis: WeekAxis, before: WeekAxis) {
       GROUP BY j.id
       ORDER BY applications DESC, j.id ASC
       LIMIT ?`,
-  ).bind(axis.from, axis.to, TOP_POSTINGS).all<{ title: string; company: string | null; status: string; applications: number }>();
+  ).bind(axis.from, axis.to, TOP_POSTINGS).all<{ title: string; company: string | null; status: string; published_at: string | null; applications: number }>();
   return {
     applications: { window: n(apps?.window), previous: n(apps?.previous) },
     weekly: weekly(axis, byWeek.results || []),
@@ -163,8 +175,8 @@ async function jobsBlock(env: Env, axis: WeekAxis, before: WeekAxis) {
       company: r.company == null ? null : String(r.company),
       status: String(r.status ?? ''),
       applications: n(r.applications),
+      days_open: daysOpen(r.status, r.published_at, nowMs),
     })),
-    days_open: { recorded: false, reason: DAYS_OPEN_REASON } as NotRecorded,
   };
 }
 
@@ -334,6 +346,8 @@ async function eventsParts(env: Env, weeks: CommunityWeeks, nowMs: number) {
   return {
     queue: o.queue,
     events: {
+      // D918's next 30 days (published or waiting) and their seats taken, counts only (D1121).
+      upcoming: o.upcoming_30d,
       weekly: eventsWeekly(o.weekly as D918Block),
       show_up: showUpCounts(o.show_up as D918Block),
       by_type: o.by_type,
@@ -359,7 +373,7 @@ export async function communityOverview(env: Env, weeks: CommunityWeeks, nowMs: 
   const [ev, jobsQ, jobs, jobsRoles, circles, network, experts, bookings, checkins] = await Promise.all([
     eventsParts(env, weeks, nowMs),
     block('The job board queue', () => jobsQueue(env, nowMs)),
-    block('The job board', () => jobsBlock(env, axis, before)),
+    block('The job board', () => jobsBlock(env, axis, before, nowMs)),
     block('Job applications by role', () => jobsByRole(env, axis)),
     block('Circles', () => circlesBlock(env)),
     block('The network roster', () => networkBlock(env)),

@@ -240,9 +240,9 @@ test('1: each list sorts by its default with no sort sent, and the filters narro
   const db = await seeded();
   const ids = async (slug: string, qs = '') => (await read(db, slug, qs)).body.records.rows.map((r: any) => r.id);
   // Score, highest first; the unscored item last.
-  assert.deepEqual(await ids('fundraising-readiness'), ['deck', 'data_room', 'team']);
-  assert.deepEqual(await ids('fundraising-readiness', '&filter=state:gap'), ['data_room']);
-  assert.deepEqual(await ids('fundraising-readiness', '&filter=state:not_scored'), ['team']);
+  assert.deepEqual(await ids('fundraising-readiness'), ['deck', 'data_room', 'narrative', 'cap_table', 'use_of_funds', 'traction', 'team', 'pmf']);
+  assert.deepEqual(await ids('fundraising-readiness', '&filter=state:gap'), ['data_room', 'pmf']);
+  assert.deepEqual(await ids('fundraising-readiness', '&filter=state:not_scored'), ['narrative', 'cap_table', 'use_of_funds', 'traction', 'team', 'pmf']);
   assert.deepEqual(await ids('fundraising-readiness', '&filter=state:scored'), ['deck', 'data_room']);
   // Last viewed first, a link never opened last.
   assert.deepEqual(await ids('pitch-deck'), [42, 41, 43, 44]);
@@ -769,7 +769,7 @@ test('9 (form-options): each module serves its Add form; funds only by name from
     return r.body;
   };
   const ready = await fo('fundraising-readiness');
-  assert.equal(ready.items.length, 7);
+  assert.equal(ready.items.length, 8);
   assert.deepEqual(ready.items.find((i: any) => i.value === 'team'), { value: 'team', label: 'Team', by_hand: true, last_scored: null, score: null });
   assert.equal(ready.items.find((i: any) => i.value === 'deck').score, 9);
   const narrative = await fo('investor-narrative');

@@ -114,3 +114,10 @@ a556b308533429691cb10b1e92092615b1364a82:cloudflare-worker/test/approvals_fixes_
 # keys at run time, so no later commit carries the literal. Scoped to the one
 # finding, as D334's entry is.
 7c6b24553752f7ca9b115e6acaf37eaf404ff676:frontend/test/payments_dialogs_d1013.test.mjs:generic-api-key:392
+
+# D1003 (#2818): the synthetic JWT signing string in the D1003 segment
+# suggestions test's first commit. It signs test tokens for an in-memory database
+# only, and was never a credential. The next commit builds a low-entropy key at
+# run time instead, so no later commit carries the literal. Scoped to the one
+# finding, as D1039's entry is.
+d3e56a7ede0ae62ca9a133216acccd33d4506841:cloudflare-worker/test/segment_suggestions_d1003.test.ts:generic-api-key:37
