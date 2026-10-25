@@ -103,6 +103,7 @@ test('every cell is its block: a value, Not recorded with its reason, or Unreada
   const noFirm = rowOf({ ...BRAM, firm: ok(null) }, NOW).firm;
   assert.deepEqual([noFirm.text, noFirm.warn], ['No firm', true], 'a partner with no firm is flagged');
   assert.equal(rowOf(CLEO, NOW).deck.text, 'On the slide · 1');
+  assert.equal(rowOf({ ...ADA, deck: ok(null) }, NOW).deck.text, 'No deck card', 'a member the roster holds no card for (D1125)');
   assert.equal(rowOf(CLEO, NOW).firm.text, 'Sample Co (deck card)');
 });
 

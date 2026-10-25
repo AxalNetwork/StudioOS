@@ -97,6 +97,8 @@ export function agoWord(stamp, now) {
 
 /** The deck column. A roster card says where it reaches; a member says what the read says. */
 export function deckWord(d) {
+  // D1125 (#3005) reads a member's linked card; `null` is a member the roster holds no card for.
+  if (d == null) return 'No deck card';
   if (!d.shown) return 'Hidden from the deck';
   if (d.reach === 'profile') return `On the slide · ${d.position}`;
   if (d.reach === 'named') return 'Name only';
