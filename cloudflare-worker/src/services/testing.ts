@@ -250,19 +250,45 @@ export async function myApplications(env: Env, userId: number) {
   return (results || []).map(applicationDto);
 }
 
+/**
+ * D1200 (#3150): which of these members are in the tester pool (D1042), as a
+ * Set of user ids: a tester whose status is `active` or `paused`. A paused
+ * tester keeps the badge; an applied, declined or removed one has none. Null
+ * when the pool could not be read, so a row says "Not read" rather than a
+ * badge it does not know.
+ */
+export const TESTER_BADGE_STATUSES = ['active', 'paused'] as const;
+export async function testerIds(env: Env, userIds: number[]): Promise<Set<number> | null> {
+  if (!userIds.length) return new Set();
+  try {
+    const { results } = await env.DB.prepare(
+      `SELECT user_id FROM product_testers WHERE status IN ('active', 'paused') AND user_id IN (SELECT value FROM json_each(?))`,
+    ).bind(JSON.stringify(userIds)).all<any>();
+    return new Set((results || []).map((r: any) => Number(r.user_id)));
+  } catch (e) {
+    console.warn('[testing] tester pool unreadable', (e as Error)?.message);
+    return null;
+  }
+}
+
 /** The owner's view of who applied. No email: Mail writes to testers, StudioOS does not. */
 export async function applicants(env: Env, owner: Owner, uid: string) {
   const p = await ownProgramme(env, owner, uid);
   const { results } = await env.DB.prepare(
-    `SELECT a.uid, a.answers, a.availability, a.consent_email_at, a.status, a.created_at, a.updated_at,
+    `SELECT a.uid, a.user_id, a.answers, a.availability, a.consent_email_at, a.status, a.created_at, a.updated_at,
             COALESCE(u.display_name, u.name) AS name, u.role
        FROM testing_applications a JOIN users u ON u.id = a.user_id
       WHERE a.programme_id = ? AND a.status <> 'withdrawn' ORDER BY a.id`,
   ).bind(p.id).all();
+  const pool = await testerIds(env, (results || []).map((r: any) => Number(r.user_id)));
   return {
     programme: programmeDto(p),
+    // D1200: whether the pool could be read; when it could not, each `tester` is null.
+    tester_pool_readable: pool !== null,
     items: (results || []).map((r: any) => ({
       uid: r.uid, name: r.name, role: r.role,
+      // D1200: the Tester badge (TST5, TST8): in the pool, active or paused. Null when the pool was not read.
+      tester: pool ? pool.has(Number(r.user_id)) : null,
       answers: parse<string[]>(r.answers, []),
       availability: r.availability ?? null,
       consented: !!r.consent_email_at,
