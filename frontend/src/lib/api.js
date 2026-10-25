@@ -33,6 +33,7 @@ export * from './api/capTableAccess.js';
 export * from './api/capTableHolder.js';
 export * from './api/capTableRecord.js';
 export * from './api/capTableRegister.js';
+export * from './api/capTableScenarios.js';
 export * from './api/channelKeys.js';
 export * from './api/channels.js';
 export * from './api/community.js';
