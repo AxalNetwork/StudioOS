@@ -171,6 +171,7 @@ import dashboard from './routes/dashboard';
 import matches from './routes/matches';
 import settings from './routes/settings';
 import personas from './routes/personas';
+import personaSegments from './routes/persona_segments';
 import onboarding from './routes/onboarding';
 // Task #6 (IF) — per-role onboarding checklist + product-tour tracking.
 import onboardingChecklist from './routes/onboarding_checklist';
@@ -219,6 +220,7 @@ import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminProgramGrants from './routes/admin_program_grants';
+import adminProgramRequests from './routes/admin_program_requests';
 // D986 (#2776) — partner deal types per licence: HQ's reads and write, and the studio's own read.
 import adminPartnerDealTypes from './routes/admin_partner_deal_types';
 import licencePartnerDealTypes from './routes/licence_partner_deal_types';
@@ -1106,6 +1108,8 @@ app.route('/api/branch', branchInvitationRoutes);
 app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
 // D982 (#2773): which programs HQ grants each licensed studio, on what terms.
+// D983: the program requests, mounted before part 1's routes so `/requests` is never read as a licence.
+app.route('/api/admin/program-grants/requests', adminProgramRequests);
 app.route('/api/admin/program-grants', adminProgramGrants);
 app.route('/api/admin/partner-deal-types', adminPartnerDealTypes);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
@@ -1331,6 +1335,8 @@ app.route('/api/integrations', integrations);
 // D652 — the Worker AI rail's conversations and their connectors (#1464).
 app.route('/api/eadwyn', eadwynRoutes);
 app.route('/api/crunchbase', crunchbaseRoutes);
+// D1000 (#2815): the segment profiles, before the personas routes.
+app.route('/api/personas/segments', personaSegments);
 app.route('/api/personas', personas);
 app.route('/api/notifications', notificationsRoutes);
 app.route('/api/linkedin', linkedinRoutes);

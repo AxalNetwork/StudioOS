@@ -61,6 +61,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/portfolio-updates → portfolio_updates.ts  (founder updates; D654/D686 Share an update: venture and open-call context, shipped facts, validated audience, retry-safe send, co-founder authors, author/recipient pages)
 /api/cycles/grow   → cycle_grow.ts  (D664/D686: the Grow overview, module reads including update ask replies and Updates history, and store writes; shared card types live in cycleCards)
 /api/cycles/raise  → cycle_raise.ts  (D663: the Raise overview, module reads and the readiness, narrative, checklist and next-step writes)
+/api/personas/segments → persona_segments.ts  (D1000: the segment profiles HQ writes, their history and the needs read; mounted before /api/personas → personas.ts)
 /api/users         → users.ts
 /api/market-intel  → market_intel.ts
 /api/market-intel-public → market_intel_public.ts
@@ -231,6 +232,8 @@ heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 `documentation/architecture/decisions/D663.md`.
 
 D982 (#2773): `admin_program_grants.ts` mounts `/api/admin/program-grants`: HQ's program grants per licence (the grid, one licence, its history, the default terms) under `requireSuperAdmin`, and grant, change terms, pause, resume, end and the defaults under `requireSuperAdminWriteBar` with a reason of at least 10 characters. Each grant write appends one `licence_events` `program_changed` row; the store is migration 553 and `../services/programGrants.ts`. See `documentation/architecture/decisions/D982.md`.
+
+D983 (#2774): `admin_program_requests.ts` mounts `/api/admin/program-grants/requests`, ahead of part 1's routes: the studios' program requests (a grant, a terms change, an end) from HQ's lane and every branch's, under `requireSuperAdmin`, and HQ's approve and decline under `requireSuperAdminWriteBar` with a reason of at least 10 characters. An approval records a draft as a `program_changed` event (`request_approved`); Grant stays `admin_program_grants.ts`'s write. The generic `PATCH /api/admin/escalations/:uid` refuses these kinds. The checks are `../services/programRequests.ts`. See `documentation/architecture/decisions/D983.md`.
 
 D984 (#2775): `licence_programs.ts` mounts `GET /api/licence/mine/programs` at `/api/licence`, beside `licence_requests.ts`: the nine programs HQ grants the caller's licence, read only, with each grant's terms. On HQ it binds the caller through `licence_admins` and reads the store; an account no licence binds reads `linked: false`, "On HQ-held accounts, HQ runs every program." On a branch it answers, to an admin only, from HQ's dated copy (`branch_licence.program_grants_json`, migration 554) with `as_of`. A D1 error or an unreadable copy is a 503. Since D984, `admin_program_grants.ts`'s grant writes push the licence to its branch and answer `pushed`. See `documentation/architecture/decisions/D984.md`.
 
