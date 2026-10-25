@@ -684,3 +684,35 @@ test('strategic decisions notify only the winning conditional write and never de
   assert.equal(one(failed, 'SELECT status FROM referral_strategic_access').status, 'requested');
   assert.equal(one(failed, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0); assert.equal(sent.length, 2);
 }));
+
+test('strategic post-save failures retain the confirmed response and record the actor before a notice attempt', async () => captureMail(async (sent) => {
+  const f = fixture(); f.db.exec("INSERT INTO referral_strategic_access(user_id,status) VALUES(4,'requested')");
+  const prepare = f.env.DB.prepare.bind(f.env.DB); let auditBeforeNotice = false;
+  f.env.DB.prepare = (sql: string) => {
+    const statement = prepare(sql);
+    if (sql.includes('INSERT INTO notifications_inbox')) statement.run = async () => {
+      auditBeforeNotice = one(f, "SELECT COUNT(*) AS n FROM admin_audit_log WHERE action='referral_strategic_access.granted'").n === 1;
+      throw new Error('Synthetic inbox outage');
+    };
+    return statement;
+  };
+  const path = '/api/refer-earn/admin/strategic-access/4/decision';
+  const granted = await call(f, 1, 'POST', path, { decision: 'granted' });
+  assert.equal(granted.status, 200); assert.equal(granted.body.status, 'granted'); assert.equal(auditBeforeNotice, true);
+  assert.equal(one(f, "SELECT admin_user_id FROM admin_audit_log WHERE action='referral_strategic_access.granted'").admin_user_id, 1);
+  assert.equal(one(f, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 0); assert.equal(sent.length, 0);
+
+  const other = fixture(); other.db.exec("INSERT INTO referral_strategic_access(user_id,status) VALUES(4,'requested')");
+  const original = other.env.DB.prepare.bind(other.env.DB); let auditAttempts = 0;
+  other.env.DB.prepare = (sql: string) => {
+    const statement = original(sql);
+    if (sql.includes('INSERT INTO admin_audit_log')) statement.run = async () => { auditAttempts++; throw new Error('Synthetic audit outage'); };
+    return statement;
+  };
+  const reason = 'Synthetic post-audit decline reason.';
+  const declined = await call(other, 1, 'POST', path, { decision: 'declined', note: reason });
+  assert.equal(declined.status, 200); assert.equal(declined.body.status, 'declined'); assert.equal(auditAttempts, 1);
+  const activity = one(other, "SELECT user_id,details FROM activity_logs WHERE action='referral_strategic_access.declined'");
+  assert.equal(activity.user_id, 1); assert.equal(JSON.parse(activity.details).note, reason);
+  assert.equal(one(other, 'SELECT COUNT(*) AS n FROM notifications_inbox').n, 1); assert.equal(sent.length, 1);
+}));

@@ -1,5 +1,6 @@
 import { refuse } from '../util/refusal';
 import { logAdminAction } from '../services/adminAudit';
+import { notify } from '../services/notify';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
@@ -288,12 +289,9 @@ refer.post('/admin/strategic-access/:userId/decision', async (c) => {
     const notGranted = await programRefusal(c.env, 'refer-and-earn');
     if (notGranted) return c.json(notGranted.body, notGranted.status);
   }
+  let row: Awaited<ReturnType<typeof decideStrategicAccess>>;
   try {
-    const row = await decideStrategicAccess(c.env, userId, body?.decision, body?.note);
-    await logAdminAction(c.env, admin.id, admin.email, `referral_strategic_access.${row.status}`, {
-      target_user_id: userId, note: typeof body?.note === 'string' ? body.note.trim().slice(0, 4000) : null,
-    });
-    return c.json(row);
+    row = await decideStrategicAccess(c.env, userId, body?.decision, body?.note);
   } catch (e) {
     if (e instanceof ReferralError) {
       // ReferralError carries only the service's authored refusal sentences.
@@ -303,6 +301,22 @@ refer.post('/admin/strategic-access/:userId/decision', async (c) => {
     console.error('[refer-earn] strategic access decision failed', e);
     return refuse(c, 503, { code: 'strategic_access_unreadable', message: 'Strategic referral access could not be read or saved. Read the request again before retrying.' });
   }
+  const reason = typeof body?.note === 'string' ? body.note.trim() : '';
+  // Record the actor before an external delivery attempt. Post-save work
+  // cannot turn the confirmed decision into an unreadable/save refusal.
+  try {
+    await logAdminAction(c.env, admin.id, admin.email, `referral_strategic_access.${row.status}`, {
+      target_user_id: userId, note: typeof body?.note === 'string' ? reason.slice(0, 4000) : null,
+    });
+  } catch (e) { console.error('[refer-earn] strategic access audit failed', e); }
+  try {
+    await notify(c.env, {
+      userId, type: `strategic_access_${row.status}`, title: `Strategic referral access ${row.status}`,
+      body: `Your strategic referral access was ${row.status}.${row.status === 'declined' ? ` Reason: ${reason}` : ''}`,
+      link: '/refer', channels: ['in_app', 'email'], payload: { status: row.status },
+    });
+  } catch (e) { console.error('[refer-earn] strategic access notice failed', e); }
+  return c.json(row);
 });
 
 refer.get('/admin/submissions/weekly', async (c) => {

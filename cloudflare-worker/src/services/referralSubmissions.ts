@@ -12,7 +12,6 @@
  * platform.
  */
 import type { Env } from '../types';
-import { notify } from './notify';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export const CATEGORIES = ['startup', 'customer', 'strategic'] as const;
@@ -713,11 +712,6 @@ export async function decideStrategicAccess(env: Env, userId: number, decision: 
       .bind(userId).first<{ status: string }>();
     throw new ReferralError('already_decided', `Strategic referral access is already ${latest?.status ?? current.status}.`, 409);
   }
-  await notify(env, {
-    userId, type: `strategic_access_${decision}`, title: `Strategic referral access ${decision}`,
-    body: `Your strategic referral access was ${decision}.${decision === 'declined' ? ` Reason: ${reason}` : ''}`,
-    link: '/refer', channels: ['in_app', 'email'], payload: { status: decision },
-  });
   return { status: decision, decided_at: at };
 }
 
