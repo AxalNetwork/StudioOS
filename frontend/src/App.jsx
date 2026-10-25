@@ -206,6 +206,9 @@ const AdminDueDiligencePage = lazy(() => import('./pages/AdminDueDiligencePage')
 const AdminDueDiligenceCasePage = lazy(() => import('./pages/AdminDueDiligenceCasePage'));
 const DueDiligenceRequestsPage = lazy(() => import('./pages/DueDiligenceRequestsPage'));
 const SharedCapTablePage = lazy(() => import('./pages/SharedCapTablePage'));
+// D1026 — a cap table read through D1019's levels (CT17, CT18), and the venture link.
+const CapTableReadPage = lazy(() => import('./pages/raise/captable/SharedCapTable').then((m) => ({ default: m.CapTableReadPage })));
+const VentureSharePage = lazy(() => import('./pages/raise/captable/SharedCapTable').then((m) => ({ default: m.VentureSharePage })));
 const LabReportSharePage = lazy(() => import('./pages/LabReportSharePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
@@ -2741,6 +2744,8 @@ function AppInner() {
       {/* Task #53 — canonical share URL per spec is /share/deck/<token>. */}
       {/* Build queue #120 — public, audience-scoped cap-table link. No auth:
           the payload is redacted server-side for the link's audience. */}
+      {/* D1026 — a venture link at its level (D1019 §6). Public; the Worker logs each open. */}
+      <Route path="/share/captable/venture/:token" element={<VentureSharePage />} />
       <Route path="/share/captable/:token" element={<SharedCapTablePage />} />
       {/* D588 — signed-in read. The Worker checks the named account. */}
       <Route path="/share/lab-report/:token" element={<RequireAuth {...authProps}><LabReportSharePage /></RequireAuth>} />
@@ -2759,6 +2764,9 @@ function AppInner() {
           sits under /admin/accounts until #2375's question 1 is answered
           (part 4, #2746); /admin/accounts itself stays HQ › Team. */}
       <Route path="/admin/accounts/all" element={guard(['admin'], <AllAccountsPage onImpersonate={handleImpersonate} />)} />
+      {/* D1026 (CT17, CT18) — a venture's cap table as an Advisor, an Operating
+          Partner, an Admin or the Super Admin reads it. The Worker decides the level. */}
+      <Route path="/cap-tables/:projectId" element={guard(['admin', 'advisor', 'partner'], <CapTableReadPage />)} />
       <Route path="/admin/kyc" element={guard(['admin'], <KycPage />)} />
       <Route path="/admin/directory" element={guard(['admin'], <DirectoryPage />)} />
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />

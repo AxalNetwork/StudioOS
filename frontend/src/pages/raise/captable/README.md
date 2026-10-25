@@ -8,6 +8,12 @@ owner's "Cap table" canvas: `design/incoming/Raise Cap Table Page.dc.html` and
 |---|---|
 | `CapTableTool.jsx` | The tool's tab bar (`CapTableTabBar`) and Overview's tab bar with the Modelled line (`CapTableHomeNav`), drawn under the module page's header, and its tab pages (`CapTableTabPage`): Instruments, Option pool and Scenarios. |
 | `capTableModel.js` | Pure: the addresses, the tabs, the words, and every derivation from the reads (the SAFEs sent through StudioOS, the model's instruments and conversion lines, its pool, the 409A, the scenario cards). |
+| `AccessTab.jsx` | Access (CT13, D1026): who sees what, the levels, the share links and the access log; the owner changes, a co-founder reads. |
+| `ImportExportTab.jsx` | Import and export (CT14, D1026): Carta's binding, a spreadsheet to proposals, Mercury's SAFE requests, the three exports. |
+| `SharedCapTable.jsx` | The read for an Advisor, an Operating Partner, an Admin and the Super Admin (CT17, CT18) at `/cap-tables/:projectId`, and the venture link's page. |
+| `CapTableDialog.jsx` | The in-page dialog every change opens, with the Worker's refusal under its buttons. |
+| `capTableAccess.js` | Pure: the levels, the grants, links and log rows, New link's and the support reason's checks, and each level's view. |
+| `capTableImport.js` | Pure: the template, the CSV parse, the column map and the preview's checks against the record. |
 
 ## Where the tool lives
 
@@ -33,10 +39,15 @@ holder. No route is added.
 - **Money in its own unit.** The model is whole dollars; SAFE issuances are the
   currency's smallest unit with their currency code; discounts and rates are
   fractions.
-- **A tab waits for its read** (D953's rule). History, Access and Import and
-  export have none yet. Each is a slot task on #2432 (D1015 §6): build the tab
-  in the PR that builds its read, add its derivation to `capTableModel.js`,
-  and test it in `frontend/test/captable_tool_d1015.test.mjs` or its own file.
+- **A tab waits for its read** (D953's rule). History has none yet; it is part
+  10 (#2862, D1015 §6): build the tab in the PR that builds its read, add its
+  derivation to a pure module here, and test it in its own file. Access and
+  Import and export read D1019's, D1020's and D1017's routes (D1026).
+- **Imports land as proposals, never on the record.** A row that matches the
+  record is left out, so nothing counts twice.
+- **A control a profile cannot use is left out**, with one line saying why
+  (a co-founder on Access). Who reads at which level is the Worker's answer
+  (`via`, `level`), never a role the page guessed.
 - **Every change opens a dialog that says what it changes and who sees it.**
   Never `alert` or `confirm`.
 - **Eadwyn never fills an amount, cap, discount, price or share count** (#2431).

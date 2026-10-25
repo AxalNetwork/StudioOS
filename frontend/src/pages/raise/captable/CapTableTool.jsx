@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../lib/api';
 import { safeIssuancesApi } from '../../../lib/api/safeIssuances';
 import { Unreadable } from '../../../ui';
+import AccessTab from './AccessTab';
+import ImportExportTab from './ImportExportTab';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
 import {
@@ -18,15 +20,15 @@ import {
  * here comes from a read on `main`; see `capTableModel.js`.
  */
 
-const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
-const INK = 'text-axal-ink dark:text-gray-100';
-const MUTED = 'text-axal-muted dark:text-gray-400';
-const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
-const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
-const MONO = 'font-mono tabular-nums';
-const AMBER = 'rounded-[10px] border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
+export const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-800 dark:bg-gray-900';
+export const INK = 'text-axal-ink dark:text-gray-100';
+export const MUTED = 'text-axal-muted dark:text-gray-400';
+export const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
+export const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
+export const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
+export const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
+export const MONO = 'font-mono tabular-nums';
+export const AMBER = 'rounded-[10px] border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11.5px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300';
 const TONE = {
   good: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300',
   warn: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300',
@@ -78,12 +80,12 @@ export function CapTableHomeNav({ search = '' }) {
   );
 }
 
-function Skeleton({ testId }) {
+export function Skeleton({ testId }) {
   return <div className="h-24 w-full animate-pulse rounded-xl bg-axal-ground dark:bg-gray-800" aria-hidden="true" data-testid={testId} />;
 }
 
 /** One read, answering alone: loading, ready, refused (403 or 404) or error. */
-function useRead(load, projectId, reload) {
+export function useRead(load, projectId, reload) {
   const [state, setState] = useState({ status: 'loading', data: null });
   useEffect(() => {
     if (!projectId) return undefined;
@@ -101,7 +103,7 @@ const readCompare = (id) => api.getCapTableCompare(id);
 const readSafes = (id) => safeIssuancesApi.list(id);
 const read409a = (id) => api.get409a(id);
 
-function Section({ title, tag, children, testId, aside }) {
+export function Section({ title, tag, children, testId, aside }) {
   return (
     <section className={CARD} data-testid={testId}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-hairline px-4 py-3 dark:border-gray-800">
@@ -114,14 +116,14 @@ function Section({ title, tag, children, testId, aside }) {
 }
 
 /** A read's own state where its block would be; the rest of the page still draws. */
-function ReadState({ read, what, claim, onRetry, testId, children }) {
+export function ReadState({ read, what, claim, onRetry, testId, children }) {
   if (read.status === 'loading') return <Skeleton testId={`${testId}-loading`} />;
   if (read.status === 'refused') return <p className={`m-0 text-[13px] ${INK}`} data-testid={`${testId}-refused`}>{read.message || 'You do not have access to this venture’s cap table.'}</p>;
   if (read.status === 'error') return <div data-testid={`${testId}-unreadable`}><Unreadable what={what} claim={claim} onRetry={onRetry} /></div>;
   return children;
 }
 
-function Table({ cols, rows, testId }) {
+export function Table({ cols, rows, testId }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse" data-testid={testId}>
@@ -280,6 +282,8 @@ export function CapTableTabPage({ tab, projectId, projectStatus = 'ready', onRet
   else if (!projectId) body = <Skeleton testId="captable-loading" />;
   else if (tab === 'instruments') body = <InstrumentsTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else if (tab === 'option-pool') body = <OptionPoolTab projectId={projectId} reload={reload} retry={retry} search={search} />;
+  else if (tab === 'access') body = <AccessTab projectId={projectId} reload={reload} retry={retry} />;
+  else if (tab === 'import-export') body = <ImportExportTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else body = <ScenariosTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   return (
     <div className="flex min-w-0 flex-col gap-4" data-testid={`captable-${tab}-page`}>

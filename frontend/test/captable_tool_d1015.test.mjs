@@ -94,9 +94,10 @@ async function mounted(url, { phone = false, handle = handler } = {}) {
  * ------------------------------------------------------------------ */
 
 test('the tabs are the canvas\'s with a read, and only their words are tabs; a row is still a record', () => {
-  assert.deepEqual(TABS.map((t) => t.id), ['overview', 'instruments', 'option-pool', 'scenarios']);
-  for (const word of ['instruments', 'option-pool', 'scenarios']) assert.ok(isCapTableTab('cap-table', word), word);
-  for (const id of ['h-12', 'e-3', 'pool', 'new', 'history', 'access', 'import-export', '']) assert.ok(!isCapTableTab('cap-table', id), id);
+  // D1026 added Access and Import and export, with their reads; History waits for part 10.
+  assert.deepEqual(TABS.map((t) => t.id), ['overview', 'instruments', 'option-pool', 'scenarios', 'access', 'import-export']);
+  for (const word of ['instruments', 'option-pool', 'scenarios', 'access', 'import-export']) assert.ok(isCapTableTab('cap-table', word), word);
+  for (const id of ['h-12', 'e-3', 'pool', 'new', 'history', '']) assert.ok(!isCapTableTab('cap-table', id), id);
   assert.ok(!isCapTableTab('investor-narrative', 'instruments'), 'only Cap table has these words');
   assert.equal(tabSearch('?project=7&mode=workspace#x'), '?project_id=7');
   assert.equal(tabSearch('?project_id=0'), '');

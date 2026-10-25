@@ -48,11 +48,11 @@ import {
   saveScenario, logScenarioAct, loadScenarioByUid as loadByUid, type ScenarioRow,
 } from '../services/capTableWrites';
 import {
-  RecordError, acceptProposal, createClass, dismissProposal, historyPage, propose, readHistory, readRecord, recordIssuance,
-  setCurrency, updateClass, voidIssuance, type RecordActor,
+  RecordError, acceptProposal, createClass, dismissProposal, historyPage, propose, proposeImport, readHistory, readRecord, recordCsv,
+  recordIssuance, setCurrency, updateClass, voidIssuance, type RecordActor,
 } from '../services/capTableRecord';
 import {
-  actorHash, auditStatement, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
+  actorHash, auditStatement, csvCell, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
   type RegisterScope,
 } from '../services/capTableRegister';
 
@@ -1074,6 +1074,48 @@ captable.post('/record/:projectId/proposals', async (c) => {
     const { projectId, actor } = await recordWriter(c, false);
     return c.json({ issuance: await propose(c.env, projectId, actor, await recordBody(c)) }, 201);
   } catch (e) { return recordError(c, e); }
+});
+
+/**
+ * D1026 (#2863) — a spreadsheet's rows as proposals (`origin: 'import'`),
+ * never on the record. Anyone who may propose may import; every row is checked
+ * before any is written.
+ */
+captable.post('/record/:projectId/proposals/import', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    return c.json(await proposeImport(c.env, projectId, actor, await recordBody(c)), 201);
+  } catch (e) { return recordError(c, e); }
+});
+
+/**
+ * D1026 (#2863) — the record and its history as one spreadsheet (CSV). The
+ * venture's read gate. One audit row (`cap_table_record_exported`), written
+ * before the file is answered: no audit row, no export (D1020 §4).
+ */
+captable.get('/record/:projectId/export.csv', async (c) => {
+  let projectId: number;
+  try { projectId = await recordReader(c); } catch (e) { return recordError(c, e); }
+  const user = await requireAuth(c);
+  const asOf = today();
+  let out: Awaited<ReturnType<typeof recordCsv>>;
+  try {
+    out = await recordCsv(c.env, projectId, csvCell, asOf);
+    await auditStatement(c.env, user, await actorHash(user as { email?: string | null }), projectId, 'cap_table_record_exported', {
+      format: 'csv', as_of: asOf, issuances: out.issuances, history: out.history, complete: out.complete,
+    }).run();
+  } catch (e) {
+    return refuse(c, 500, { code: 'cap_record_export_failed', message: 'The record could not be exported. Nothing was downloaded; try again in a moment.', raw: e });
+  }
+  return new Response(out.csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="cap-table-record-${projectId}-${asOf}.csv"`,
+      'Cache-Control': 'no-store',
+      'X-Export-Rows': String(out.issuances),
+    },
+  });
 });
 
 captable.post('/record/:projectId/proposals/:uid/accept', async (c) => {

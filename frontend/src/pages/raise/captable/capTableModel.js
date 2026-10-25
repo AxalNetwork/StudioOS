@@ -25,8 +25,9 @@
  * Planned round card are the saved model, so every figure they draw is
  * Modelled. Only a countersigned SAFE is on record. The record is D1017's (part 2).
  *
- * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. History, Access and Import and
- * export have no read and no tab (D953's rule); the holder and instrument
+ * WHAT IS NOT DRAWN YET, AND WHO DRAWS IT. History has no tab yet (D953's
+ * rule; part 10 draws it). Access and Import and export are D1026's
+ * (`capTableAccess.js`, `capTableImport.js`); the holder and instrument
  * drawers, the dialogs and the proposals wait for their parts (D1015 §6).
  */
 
@@ -47,14 +48,17 @@ export const ON_RECORD = 'On record';
 export const HOME_NOTE = 'Every figure on this page comes from your saved model, not from a record of what was issued. A record of issued shares is not kept yet.';
 
 /**
- * The canvas's seven tabs, less History, Access and Import and export, which
- * have no read yet. `path` is the tab's segment under HOME_PATH.
+ * The canvas's seven tabs, less History, which waits for its part (D1025).
+ * Access and Import and export read D1019's and D1020's routes and D1017's
+ * record (D1026). `path` is the tab's segment under HOME_PATH.
  */
 export const TABS = [
   { id: 'overview', label: 'Overview', path: '' },
   { id: 'instruments', label: 'Instruments', path: '/instruments' },
   { id: 'option-pool', label: 'Option pool', path: '/option-pool' },
   { id: 'scenarios', label: 'Scenarios', path: '/scenarios' },
+  { id: 'access', label: 'Access', path: '/access' },
+  { id: 'import-export', label: 'Import and export', path: '/import-export' },
 ];
 const TAB_WORDS = new Set(TABS.filter((t) => t.path).map((t) => t.id));
 
