@@ -3,7 +3,7 @@
 D937 (#2374): the Spin-Out Lab's admin page at `/admin/programs/spinout-lab`,
 built to the owner's canvas (SL1–SL21, `design/incoming/Spin-Out Lab Admin Page.dc.html`)
 under the shared admin page header (D936, `../../../ui/AdminPageHeader.jsx`).
-Its tabs are sub-paths: `/applications`, `/cohorts`, `/participants`, `/hosts`,
+Its tabs are sub-paths: `/applications`, `/cohorts` (and `/cohorts/YYYY-MM`, D947), `/participants`, `/hosts`,
 `/formation`, `/graduation`, `/how-it-runs`, `/settings` and `/activity`; the founder-journey preview is `/preview`.
 
 Three old doors forward here before any old console mounts, keeping the query
@@ -15,9 +15,18 @@ and hash and adding `?moved=`:
 
 - `AdminLab.jsx` — the page: the header (crumb, pills, line, facts, scope chip,
   moved notice, tabs with their counts) and the Overview's blocks.
-  Applications, Cohorts and Participants are today's console, asked for one
-  section through `AdminSpinoutLab`'s `section` prop; Hosts, Formation and
-  Graduation mount the three files below.
+  Applications and Participants are today's console, asked for one section
+  through `AdminSpinoutLab`'s `section` prop; Cohorts, Hosts, Formation and
+  Graduation mount the files below.
+- `LabOverviewBlocks.jsx` — Overview's drawn blocks (SL1, D947): the cohort
+  calendar timeline, Applications by cohort, Weeks passed, From application
+  to company and Applications per week, each with Chart ⇄ Table and its
+  Reading…, Unreadable with Try again, and empty states.
+- `LabCohorts.jsx` — Cohorts (D947): SL5's calendar of the next twelve cohorts
+  or the list, and SL6, one cohort at `/cohorts/YYYY-MM`. Grace and outcome
+  overrides there are still today's `AdminCohortTiming` until part 7.
+- `labOverviewModel.js` — pure. Those blocks and pages from D944's overview
+  read (`GET /api/admin/cohort/overview`) and Settings' minimum and places.
 - `LabHosts.jsx` — Hosts (SL9, D970): status chips with the Worker's counts,
   search, Applied as and the sort, the table (cards on a phone), and the
   Approve, Decline and Remove dialogs with a note the host sees.
@@ -33,7 +42,7 @@ and hash and adding `?moved=`:
 - `labParts.jsx` — what the three tabs draw with: pills, chips, selects, the
   read hook and its state line, tiles, the pager and the in-page dialog.
 - `labModel.js` — pure. The address and tabs, the moved sentences, and the
-  Overview's tiles, cohort table and Needs you from the reads, each `ready`,
+  Overview's tiles and Needs you from the reads, each `ready`,
   `loading` or `unreadable`.
 - `LabRedirect.jsx`, `LabPreviewRedirect.jsx` — the two old paths.
 

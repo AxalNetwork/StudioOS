@@ -63,6 +63,8 @@ export const TABS = [
 export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === LAB_PATH) return 'overview';
+  // D947: one cohort's page (SL6) is under Cohorts.
+  if (/^\/admin\/programs\/spinout-lab\/cohorts\/\d{4}-(0[1-9]|1[0-2])$/.test(p)) return 'cohorts';
   const t = TABS.find((x) => x.path && p === `${LAB_PATH}${x.path}`);
   return t ? t.key : null;
 }
@@ -75,14 +77,6 @@ export function movedTarget(pathname, search, hash, key) {
   return { pathname, search: `?${next.toString()}`, hash: hash || '' };
 }
 
-/** Each block's "not drawn yet" line: what it waits for (D937 §6). */
-export const WAITS = {
-  calendar: 'The calendar timeline waits for D937’s Overview part. Every cohort the reads list is in the table below.',
-  byCohort: 'Applications by cohort waits for the Lab’s overview read (D937 part 2).',
-  weeks: 'Weeks passed, by cohort, waits for the Lab’s overview read (D937 part 2).',
-  funnel: 'From application to company waits for the Lab’s overview read (D937 part 2): nothing counts interviews or incorporations per cohort yet.',
-  perWeek: 'Applications per week waits for the Lab’s overview read (D937 part 2).',
-};
 
 const nf = (n) => Number(n).toLocaleString('en-US');
 const plural = (n, one, many = `${one}s`) => `${nf(n)} ${n === 1 ? one : many}`;
@@ -277,42 +271,6 @@ export function buildTiles(reads, now) {
     }
   }
   return tiles;
-}
-
-/**
- * The cohort table (SL5's list, drawn on Overview in place of the timeline):
- * one row per cycle the reads list. A column whose read failed says so.
- */
-export function buildCohorts(reads, now) {
-  const p = pending(reads.timeline, 'The cohort calendar could not be read. That is not the same as no cohorts.');
-  if (p) return p;
-  const appsOk = reads.applications?.status === 'ready';
-  const rows = cyclesOf(reads).filter((c) => c.timeline).map((c) => {
-    const w4 = (c.windows || []).find((x) => Number(x.week_number) === 4);
-    const pool = appsOk && c.applications ? poolOf(c) : null;
-    const open = parseStamp(c.applications_open_at);
-    const close = parseStamp(c.applications_close_at);
-    return {
-      id: c.id,
-      label: cohortLabel(c),
-      word: appsOk ? cohortWord(c) : (c.status === 'active' ? 'Running' : c.status === 'completed' ? 'Finished' : 'Not recorded'),
-      window: open != null && close != null ? `${dayET(open)} → ${stampET(close)}` : (appsOk ? 'Not recorded' : 'Could not be read'),
-      starts: stampET(parseStamp(c.start_at)) || 'Not recorded',
-      week4: w4 ? stampET(parseStamp(w4.deadline_at)) : 'Not recorded',
-      pool: pool
-        ? `${nf(pool.applied)} applied · ${nf(pool.approved)} approved · ${nf(pool.waitlisted)} waitlisted · ${nf(pool.waiting)} waiting`
-        : (appsOk ? 'Not recorded' : 'Could not be read'),
-      started: c.status === 'scheduled' ? 'Not started' : nf(Number(c.participant_count || 0)),
-      now: c.status === 'active',
-      past: parseStamp(c.end_at) != null && parseStamp(c.end_at) <= now,
-    };
-  });
-  return {
-    state: 'ready',
-    rows,
-    capped: rows.length >= 12,
-    appsUnreadable: !appsOk && reads.applications?.status === 'error',
-  };
 }
 
 /**

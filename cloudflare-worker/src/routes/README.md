@@ -12,6 +12,10 @@ the meantime. Deal-room reads retain their separate partner rule. Legacy legal
 entity listing and other routes with independent role gates are separate
 policies, not grants from the founder-resource guard.
 
+D973 reads live in `admin_network_reads.ts`, mounted before D976’s
+`admin_network.ts` at `/api/admin/network`. Opaque person refs use the
+read-only drawer; numeric account IDs continue to the standing router.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
@@ -29,7 +33,7 @@ widened guard on this very sentence, which is the rule working.)
 
 
 ```
-/api/admin/partner-profiles → admin_partner_profiles.ts (D990: HQ's partner profile list with search, filters, sort and pages, the counts, and one profile by its pp_ reference; Admin, each read logged by reference)
+/api/admin/partner-profiles → admin_partner_profiles.ts (D990: HQ's partner profile list with search, filters, sort and pages, the counts, and one profile by its pp_ reference; Admin, each read logged by reference. D993: agreement readiness, each row's envelope state, and Unbind for a Super Admin with a step-up)
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
 /api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752; connected only by Sign in with Mercury since D881. Never Axal VC's own accounts: D879, guarded by D883's `check-mercury-member-surfaces.mjs`)

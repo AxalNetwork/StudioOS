@@ -303,6 +303,10 @@ Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
 drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
 as `fee_invoices`.
 
+D973: `adminNetwork.js` re-exports `network.js`’s single `adminNetworkApi` binding.
+Overview, paged People and opaque drawer refs coexist with numeric standing
+reads and all D976 writes; the barrel exports no competing client objects.
+
 D976 (#2762): `network.js` is the advisor and partner network's admin side on
 `/api/admin/network/people/:userId`: one person's standing (stage, pause,
 directory, ratings, sessions, engagement counts per lane, payout readiness, a
@@ -323,3 +327,9 @@ D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
 and filtered/paged history, and calls the existing Super Admin draft/publish
 routes and audited size write. Support sessions reuse `adminLab.js`; grant
 terms reuse `programGrants.js`. No Admin is sent to either Super Admin read.
+
+D993 (#2804): `partnerProfiles.js` also reads the first-agreement options
+(`GET /api/admin/partner-profiles/agreements`, each Ready or "Not ready: no
+text in the library yet") and sends Unbind (`POST …/:ref/unbind`, Super Admin
+with a recent step-up and a reason). Each list row and profile carries its
+agreement's envelope state on `envelope`.
