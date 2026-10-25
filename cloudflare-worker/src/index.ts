@@ -201,6 +201,7 @@ import deckNotes from './routes/deck_notes';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckNew from './routes/deck_new';
+import deckAssist from './routes/deck_assist';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -1226,6 +1227,8 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
 app.route('/api/decks', deckNew);
+// D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
+app.route('/api/decks', deckAssist);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are
