@@ -231,9 +231,17 @@ function classOut(c: ClassRow) {
   };
 }
 
+/** D1022 (#2859): each register holder's kind for this venture, by id. */
+async function holderKindsOf(env: Env, projectId: number): Promise<Map<number, string>> {
+  const rows = (await env.DB.prepare(
+    'SELECT id, kind FROM cap_table_holders WHERE project_id = ? AND kind IS NOT NULL',
+  ).bind(projectId).all<{ id: number; kind: string }>()).results || [];
+  return new Map(rows.map((r) => [Number(r.id), String(r.kind)]));
+}
+
 /** GET /record/:projectId — the record by holder and by class, outstanding, fully diluted, the instruments and the proposals. */
 export async function readRecord(env: Env, projectId: number) {
-  const [classes, rows, currency] = await Promise.all([classesOf(env, projectId), issuancesOf(env, projectId), currencyOf(env, projectId)]);
+  const [classes, rows, currency, kinds] = await Promise.all([classesOf(env, projectId), issuancesOf(env, projectId), currencyOf(env, projectId), holderKindsOf(env, projectId)]);
   const byId = new Map(classes.map((c) => [c.id, c]));
   const related = new Map(rows.map((r) => [r.id, r.uid]));
   const isPool = (cls: number) => byId.get(cls)?.kind === 'option_pool';
@@ -246,6 +254,8 @@ export async function readRecord(env: Env, projectId: number) {
     available: true, reason: null,
     rows: holderKeys.map((k) => ({
       ...b.names.get(k)!,
+      // D1022: the register row's kind (founder, investor, employee, advisor), so Who owns can group; null for a holder named only on the issuance.
+      kind: kinds.get(b.names.get(k)!.holder_id ?? -1) ?? null,
       shares: sumOf(b.shares.get(k)),
       options: sumOf(b.options.get(k)),
       by_class: [...new Set([...(b.shares.get(k)?.keys() ?? []), ...(b.options.get(k)?.keys() ?? [])])]

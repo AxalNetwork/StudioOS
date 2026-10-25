@@ -5,8 +5,11 @@ import { safeIssuancesApi } from '../../../lib/api/safeIssuances';
 import { Unreadable } from '../../../ui';
 import { CycleHeader } from '../../cycles/CycleOverview';
 import { CycleBar } from '../../cycles/PhoneModulePage';
+import { Tag } from './CapTableTag';
+import { CapTableOverview } from './CapTableOverview';
+import { holderIdOf } from './overviewModel';
 import {
-  BASIS_CHECK, CANNOT_CONVERT, HOME_NOTE, HOME_PATH, LINE, MODELLED, ON_RECORD, SLUG, TABS, TITLE,
+  BASIS_CHECK, CANNOT_CONVERT, HOME_NOTE, HOME_PATH, LINE, SLUG, TABS, TITLE,
   conversionLines, harbour, harbourTone, issuedSafes, modelInstruments, modelPool, scenarioCards,
   simulatorHref, tabHref, tabSearch, variantHref, variantsHref,
 } from './capTableModel';
@@ -22,6 +25,8 @@ const CARD = 'rounded-xl border border-axal-hairline bg-white dark:border-gray-8
 const INK = 'text-axal-ink dark:text-gray-100';
 const MUTED = 'text-axal-muted dark:text-gray-400';
 const EYEBROW = 'text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
+export { Tag };
+
 const LINK = 'font-semibold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300 dark:hover:text-violet-200';
 const TH = 'px-3 py-2 text-left text-[10.5px] font-extrabold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const TD = 'px-3 py-2 align-top text-[12.5px] text-axal-ink dark:text-gray-100';
@@ -33,19 +38,6 @@ const TONE = {
   bad: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300',
   muted: 'border-axal-hairline bg-axal-ground text-axal-muted dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400',
 };
-
-/** The two tags every board uses: On record (positive, solid edge) and Modelled (muted, dashed edge). */
-export function Tag({ kind }) {
-  const on = kind === 'record';
-  return (
-    <span className={`inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-[10.5px] font-bold ${on
-      ? 'border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300'
-      : 'border-dashed border-gray-300 text-axal-muted dark:border-gray-600 dark:text-gray-400'}`}
-      data-testid={on ? 'tag-on-record' : 'tag-modelled'}>
-      {on ? ON_RECORD : MODELLED}
-    </span>
-  );
-}
 
 /** The tool's own tabs, a second level under the Raise modules: text with an underline. */
 export function CapTableTabBar({ active, search = '' }) {
@@ -66,14 +58,19 @@ export function CapTableTabBar({ active, search = '' }) {
   );
 }
 
-/** Overview's tab bar and the line that says its figures are the model's. */
-export function CapTableHomeNav({ search = '' }) {
+/**
+ * Overview's tab bar, the line that says which figures are the record's, and
+ * (D1022) the record's blocks: the tool bar, Needs you, Who owns and the side
+ * column. The module page's own Holders list and Planned round card follow, Modelled.
+ */
+export function CapTableHomeNav({ search = '', projectId = null }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <CapTableTabBar active="overview" search={search} />
       <p className={`m-0 flex flex-wrap items-center gap-2 text-[12px] ${MUTED}`} data-testid="captable-home-note">
-        <Tag kind="modelled" /> {HOME_NOTE}
+        <Tag kind="record" /> <Tag kind="modelled" /> {HOME_NOTE}
       </p>
+      <CapTableOverview projectId={projectId} search={search} />
     </div>
   );
 }
@@ -274,19 +271,22 @@ export function CapTableTabPage({ tab, projectId, projectStatus = 'ready', onRet
   const [reload, setReload] = useState(0);
   const retry = useCallback(() => setReload((n) => n + 1), []);
   const here = TABS.find((t) => t.id === tab) || TABS[0];
+  // D1022: `h-<n>` is the holder drawer, over Overview's record blocks.
+  const holder = holderIdOf(tab);
   let body;
   // No venture means no read is made: say the venture list failed, never a skeleton.
   if (projectStatus === 'unreadable') body = <Unreadable what="Your ventures" claim="This is not a claim that you have none." onRetry={onRetryProject} />;
   else if (!projectId) body = <Skeleton testId="captable-loading" />;
+  else if (holder != null) body = <CapTableOverview projectId={projectId} search={search} holderId={holder} />;
   else if (tab === 'instruments') body = <InstrumentsTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else if (tab === 'option-pool') body = <OptionPoolTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   else body = <ScenariosTab projectId={projectId} reload={reload} retry={retry} search={search} />;
   return (
-    <div className="flex min-w-0 flex-col gap-4" data-testid={`captable-${tab}-page`}>
+    <div className="flex min-w-0 flex-col gap-4" data-testid={holder != null ? 'captable-holder-page' : `captable-${tab}-page`}>
       {phone
         ? <CycleBar back={{ label: TITLE, to: `${HOME_PATH}${tabSearch(search)}` }} title={here.label} eadwynLabel={`Raise · ${TITLE}`} />
         : <CycleHeader cycle="raise" cards={cards} active={SLUG} action={action} title={TITLE} sub={LINE} search={tabSearch(search)} />}
-      <CapTableTabBar active={tab} search={search} />
+      <CapTableTabBar active={holder != null ? 'overview' : tab} search={search} />
       {body}
     </div>
   );
