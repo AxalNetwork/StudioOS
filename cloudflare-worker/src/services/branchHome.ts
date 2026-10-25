@@ -111,7 +111,10 @@ export type AgreementsExpiring = {
  * most needs to act on — and a lane with no oldest item (measured empty) sorts
  * last, below every lane that has something waiting.
  */
-function byPressure(a: QueuePressureLane, b: QueuePressureLane): number {
+function byPressure(
+  a: Pick<QueuePressureLane, 'count' | 'oldest_age_hours'>,
+  b: Pick<QueuePressureLane, 'count' | 'oldest_age_hours'>,
+): number {
   if ((a.count === null) !== (b.count === null)) return a.count === null ? -1 : 1;
   if (a.oldest_age_hours === null) return b.oldest_age_hours === null ? 0 : 1;
   if (b.oldest_age_hours === null) return -1;
@@ -375,7 +378,7 @@ export async function queuePressure(env: Env, now = Date.now()) {
 export function pressureOf<K extends string>(
   lanes: (Omit<LaneCount, 'key'> & { key: K })[], now = Date.now(),
 ): (Omit<QueuePressureLane, 'key'> & { key: K })[] {
-  const out = lanes.map((l) => {
+  const queue_pressure = lanes.map((l) => {
     const age = l.count === null ? null : ageHours(l.oldest_at, now);
     return {
       key: l.key,
@@ -391,8 +394,8 @@ export function pressureOf<K extends string>(
       ...(l.sub ? { sub: l.sub } : {}),
     };
   });
-  out.sort((a, b) => byPressure(a as QueuePressureLane, b as QueuePressureLane));
-  return out;
+  queue_pressure.sort(byPressure);
+  return queue_pressure;
 }
 
 export async function branchHome(
