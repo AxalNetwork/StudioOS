@@ -69,8 +69,8 @@ test('unshared files, unsupported kinds, invalid IDs and disabled companies neve
    const res=await call(env,base+'/files','POST',{project:1,module,ids});assert.equal((await res.json() as any).error,code);
   }
   assert.equal((db.prepare('SELECT COUNT(*) n FROM google_workspace_files').get() as any).n,0);
-  assert.equal((await call(env,base+'/picker-config','GET',undefined,null)).status,401);
-  for(const [path,method] of [[base+'/picker-config','GET'],[base+'/files?project=1','GET'],['/api/calendar/google/workspace-files/connect','POST']] as const) assert.equal((await call(env,path,method,{project:1},1,true)).status,403);
+  assert.equal((await call(env,base+'/picker-config?project=1','GET',undefined,null)).status,401);
+  for(const [path,method] of [[base+'/picker-config?project=1','GET'],[base+'/files?project=1','GET'],['/api/calendar/google/workspace-files/connect','POST']] as const) assert.equal((await call(env,path,method,{project:1},1,true)).status,403);
   db.exec('UPDATE integration_companies SET enabled=0');
   assert.equal((await call(env,base+'/files?project=1')).status,409);
  } finally {globalThis.fetch=old;db.close();}
@@ -78,17 +78,17 @@ test('unshared files, unsupported kinds, invalid IDs and disabled companies neve
 test('picker config reports both not-yet states without a server token; callback refuses a scope-less file grant before storing it', async()=>{
  const {db,env}=await fixture();const old=globalThis.fetch;
  try {
-  let config=await (await call(env,base+'/picker-config')).json() as any;assert.equal(config.state,'ready');assert.equal(config.scope,DRIVE_FILE_SCOPE);
+  let config=await (await call(env,base+'/picker-config?project=1')).json() as any;assert.equal(config.state,'ready');assert.equal(config.scope,DRIVE_FILE_SCOPE);
   assert.doesNotMatch(JSON.stringify(config),/server-refresh-only|browser-must-never-see-server-access|access_token|refresh_token/);
   db.prepare('UPDATE google_oauth_tokens SET scope=?').run('openid');
-  config=await (await call(env,base+'/picker-config')).json();assert.equal(config.state,'workspace_not_allowed');
+  config=await (await call(env,base+'/picker-config?project=1')).json();assert.equal(config.state,'workspace_not_allowed');
   const start=await call(env,'/api/calendar/google/workspace-files/connect','POST',{project:1});assert.equal(start.status,200);
   const url=new URL((await start.json() as any).redirect_url);assert.ok(url.searchParams.get('scope')?.includes(DRIVE_FILE_SCOPE));assert.equal(url.searchParams.get('include_granted_scopes'),'false');
   globalThis.fetch=googleWorkspaceFake({...files,oauthScope:'openid'}).fetcher;
   const callback=await call(env,'/api/calendar/google/callback?code=synthetic&state='+encodeURIComponent(url.searchParams.get('state')!),'GET',undefined,null);
   assert.equal(callback.status,302);assert.match(callback.headers.get('location')!,/workspace_scope_missing/);
   assert.equal((db.prepare('SELECT scope FROM google_oauth_tokens').get() as any).scope,'openid');
-  db.exec('DELETE FROM google_oauth_tokens');config=await (await call(env,base+'/picker-config')).json();assert.equal(config.state,'google_not_connected');
+  db.exec('DELETE FROM google_oauth_tokens');config=await (await call(env,base+'/picker-config?project=1')).json();assert.equal(config.state,'google_not_connected');
  }finally{globalThis.fetch=old;db.close();}
 });
 test('allowlist is frozen, provider writes are refused by the fake, and disconnect unlinks rather than deletes accepted facts',async()=>{
@@ -152,4 +152,53 @@ test('Workspace source has a single GET-only transport and no provider write end
  assert.equal((source.match(/fetcher\(url\.toString\(\)/g)||[]).length,1);
  assert.match(source,/AbortSignal\.timeout\(10000\)/);
  assert.match(source,/size > 2 \* 1024 \* 1024/);
+});
+
+test('every Workspace route refuses support and admin access; venture scope is required even for Picker configuration',async()=>{
+ const {db,env}=await fixture();const old=globalThis.fetch;globalThis.fetch=googleWorkspaceFake(files).fetcher;
+ try{
+  await call(env,base+'/files','POST',{project:1,module:'revenue_traction',ids:['sheet']});
+  const uid=(db.prepare('SELECT uid FROM google_workspace_files').get() as any).uid;
+  const routes=[['/picker-config?project=1','GET',undefined],['/files?project=1','GET',undefined],['/files','POST',{project:1,module:'revenue_traction',ids:['sheet']}],[`/files/${uid}/mapping`,'PUT',{mapping:{date:'A'}}],[`/files/${uid}/preview`,'POST',{}],[`/files/${uid}`,'DELETE',undefined]] as const;
+  for(const [path,method,body] of routes) assert.equal((await call(env,base+path,method,body,1,true)).status,403,path);
+  assert.equal((await call(env,base+'/picker-config?project=2')).status,403);
+  assert.equal((await call(env,base+'/picker-config')).status,400);
+  db.exec("UPDATE users SET role='admin' WHERE id=1");
+  for(const [path,method,body] of routes) assert.equal((await call(env,base+path,method,body)).status,403,path);
+  assert.equal((await call(env,'/api/calendar/google/workspace-files/connect','POST',{project:1})).status,403);
+  assert.equal((db.prepare('SELECT status FROM google_workspace_files').get() as any).status,'active');
+ }finally{globalThis.fetch=old;db.close();}
+});
+test('failed multi-file confirmation is atomic, repeated registration is idempotent, and Stop using affects only its file and module',async()=>{
+ const {db,env,integration}=await fixture();const old=globalThis.fetch;globalThis.fetch=googleWorkspaceFake(files).fetcher;
+ try{
+  assert.equal((await call(env,base+'/files','POST',{project:1,module:'data_room',ids:['sheet','missing']})).status,403);
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM google_workspace_files').get() as any).n,0);
+  for(let i=0;i<2;i++) assert.equal((await call(env,base+'/files','POST',{project:1,module:'data_room',ids:['sheet','sheet']})).status,201);
+  assert.equal((db.prepare('SELECT COUNT(*) n FROM google_workspace_files').get() as any).n,1);
+  const uid=(db.prepare('SELECT uid FROM google_workspace_files').get() as any).uid;
+  for(const [module,id] of [['data_room','sheet:row'],['data_room','sheet-other:row'],['product_roadmap','sheet:other-row']]) db.prepare('INSERT INTO connector_fed_items(integration_id,project_id,module,kind,external_id,local_table,local_id) VALUES (?,?,?,?,?,?,?)').run(integration.id,1,module,'metric',id,'roadmap_okrs',42);
+  assert.equal((await call(env,base+`/files/${uid}`,'DELETE')).status,200);
+  assert.deepEqual(db.prepare('SELECT local_id FROM connector_fed_items ORDER BY id').all().map((r:any)=>r.local_id),[null,42,42]);
+  assert.equal((await call(env,base+'/files','POST',{project:1,module:'data_room',ids:['sheet']})).status,201);
+  assert.equal((db.prepare('SELECT status FROM google_workspace_files').get() as any).status,'active');
+ }finally{globalThis.fetch=old;db.close();}
+});
+test('all file-operation replies exclude server tokens; unsupported mapping and preview fail without storing content',async()=>{
+ const {db,env}=await fixture();const old=globalThis.fetch;globalThis.fetch=googleWorkspaceFake({...files,form:{name:'Synthetic survey',mimeType:'application/vnd.google-apps.form'}}).fetcher;
+ const scan=async(res:Response)=>{const raw=await res.text();assert.doesNotMatch(raw,/server-refresh-only|browser-must-never-see-server-access|access_token|refresh_token/);return JSON.parse(raw);};
+ try{
+  await scan(await call(env,base+'/picker-config?project=1'));
+  await scan(await call(env,base+'/files','POST',{project:1,module:'customer_research',ids:['doc']}));
+  await scan(await call(env,base+'/files','POST',{project:1,module:'demand_signals',ids:['form']}));
+  const list=await scan(await call(env,base+'/files?project=1'));
+  const doc=list.items.find((r:any)=>r.kind==='doc'),form=list.items.find((r:any)=>r.kind==='form');
+  assert.equal((await scan(await call(env,base+`/files/${doc.uid}/mapping`,'PUT',{mapping:{}}))).error,'mapping_not_supported');
+  assert.equal((await scan(await call(env,base+`/files/${doc.uid}/preview`,'POST',{}))).error,'preview_not_supported');
+  assert.equal((await scan(await call(env,base+`/files/${form.uid}/mapping`,'PUT',{mapping:[]}))).error,'invalid_mapping');
+  assert.equal((await scan(await call(env,base+`/files/${form.uid}/mapping`,'PUT',{mapping:{question:'q1'}}))).saved,true);
+  const preview=await scan(await call(env,base+`/files/${form.uid}/preview`,'POST',{}));
+  assert.deepEqual(preview.rows,[{question_id:'q1',title:'Would you pay?'}]);assert.equal(preview.stored,false);
+  assert.equal((await scan(await call(env,base+`/files/${form.uid}`,'DELETE'))).facts_kept,true);
+ }finally{globalThis.fetch=old;db.close();}
 });

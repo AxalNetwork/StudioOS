@@ -1595,3 +1595,5 @@ also renders the aggregate response on the new Files, Access and Activity tabs,
 before any owner-detail derivation. It reuses `AdminRoomSummary` from the files
 workspace, preserves Unreadable/Try again, and offers no owner actions. The full
 admin/support tab design remains #2987's.
+
+D1091 (#2956, partial foundation): `/api/connectors/google-workspace` mounts `routes/google_workspace.ts` for `GET /picker-config?project=`, `GET /files?project=`, `POST /files`, `PUT /files/:uid/mapping`, `DELETE /files/:uid` (Stop using) and `POST /files/:uid/preview`. Calendar mounts `POST /api/calendar/google/workspace-files/connect`. All refuse support sessions; file routes re-check venture access and company enablement. The D753 `google_workspace` directory entry stays Coming soon while GW1/GW2/GW7/GW8 await approved design; no new screen ships.

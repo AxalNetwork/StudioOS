@@ -573,7 +573,7 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     ],
     tools: [
       tool('pick_files', 'Choose files', 'read', 'Confirms each file chosen in Google’s Picker.', null, ["'files.get'"]),
-      tool('read_file_metadata', 'File details', 'read', 'Reads the chosen file’s kind and modification date.', null, ["'files.get'"]),
+      tool('read_form', 'Form questions', 'read', 'Previews the chosen Form’s questions without respondent identity.', null, ["'forms.get'"]),
       tool('read_doc', 'Documents', 'read', 'Reads a chosen document; module imports are not built yet.', null, ["'documents.get'"]),
       tool('read_sheet', 'Sheets', 'read', 'Previews up to five rows; stores no cells.', null, ["'spreadsheets.values.get'"]),
       tool('read_slides', 'Slides', 'read', 'Reads chosen slides; deck imports are not built yet.', null, ["'presentations.get'"]),

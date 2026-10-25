@@ -2,7 +2,7 @@ import { request } from '../api.js';
 const post = (path, body) => request(path, { method: 'POST', body: JSON.stringify(body) });
 const base = '/connectors/google-workspace';
 export const googleWorkspace = {
-  pickerConfig: () => request(`${base}/picker-config`),
+  pickerConfig: (project) => request(`${base}/picker-config?project=${encodeURIComponent(project)}`),
   connect: (project, enableCompany = false) => post('/calendar/google/workspace-files/connect', { project, enable_company: enableCompany }),
   files: (project) => request(`${base}/files?project=${encodeURIComponent(project)}`),
   choose: (project, module, ids) => post(`${base}/files`, { project, module, ids }),

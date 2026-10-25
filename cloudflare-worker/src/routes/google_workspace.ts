@@ -31,7 +31,7 @@ async function venture(c: any, user: any, project: unknown) {
   const id = idOf(project);
   const role = await getProjectMembershipRole(c.env, id, user.id);
   const row = await c.env.DB.prepare('SELECT id, company_id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL').bind(id).first();
-  if ((!canHoldValidateSource(user) && role !== 'cofounder') || (!row || !await canAccessProject(c.env, user, row, { write: true }))) throw new WorkspaceError('project_not_available', 403);
+  if ((user.role === 'admin' || (!canHoldValidateSource(user) && role !== 'cofounder')) || (!row || !await canAccessProject(c.env, user, row, { write: true }))) throw new WorkspaceError('project_not_available', 403);
   if (!row?.company_id) throw new WorkspaceError('company_not_enabled', 409);
   return row as { id: number; company_id: number };
 }
@@ -70,7 +70,7 @@ function safe(handler: (c: any, user: any) => Promise<any>) {
   };
 }
 workspace.get('/picker-config', safe(async (c, user) => {
-  if (!canHoldValidateSource(user)) throw new WorkspaceError('workspace_not_available', 403);
+  await venture(c, user, c.req.query('project'));
   const state = await workspaceConnection(c.env, user.id);
   const apiKey = c.env.GOOGLE_PICKER_API_KEY, appId = c.env.GOOGLE_PICKER_APP_ID, clientId = googleCalClientId(c.env);
   return c.json({ state, configured: !!(apiKey && appId && clientId), api_key: apiKey || null, app_id: appId || null, client_id: clientId || null, scope: DRIVE_FILE_SCOPE });
