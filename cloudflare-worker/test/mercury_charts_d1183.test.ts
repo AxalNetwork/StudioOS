@@ -144,6 +144,15 @@ test('five-day intercompany pairs cross month/window boundaries, pair once earli
   assert.equal(filtered.status, 200); assert.deepEqual(filtered.body.items, [entity(r.body, 'management')]);
 });
 
+test('native internal moves cannot consume an equal external flow in another entity', async () => {
+  const s = setup(), h = s.account('holdings', '1111'), m = s.account('management', '2222'), g = s.account('gp', '3333'), f = s.account('fund', '4444');
+  s.txn(h, -500, '2026-10-03', { kind: 'internalTransfer' }); s.txn(g, 500, '2026-10-05');
+  s.txn(m, 700, '2026-10-07', { kind: 'internalTransfer' }); s.txn(f, -700, '2026-10-10');
+  const r = await s.get('/monthly'); assert.equal(r.status, 200);
+  assert.deepEqual([month(r.body, 'holdings', '2026-10').out_cents, month(r.body, 'management', '2026-10').in_cents], [0, 0]);
+  assert.deepEqual([month(r.body, 'gp', '2026-10').in_cents, month(r.body, 'fund', '2026-10').out_cents], [500, 700]);
+});
+
 test('an unregistered account does not form a D712 intercompany pair; no data produces no invented months', async () => {
   const s = setup(), h = s.account('holdings', '1111', 0), g = s.account('gp', '2222');
   s.txn(h, -8000, '2026-09-20'); s.txn(g, 8000, '2026-09-21');

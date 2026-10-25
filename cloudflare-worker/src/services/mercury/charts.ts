@@ -58,13 +58,16 @@ type Posted = { id: number; entity_key: string; registered: number; amount_cents
 /** D712's earliest-first, one-use pairing: registered accounts of different
  * entities, equal opposite cents, posted no more than five days apart. */
 function intercompanyIds(rows: Posted[]) {
+  // A native move stays inside one Mercury organization. It cannot be the
+  // other half of an external flow at another entity, even at equal cents.
+  const candidates = rows.filter(row => !(INTERNAL_KINDS as readonly string[]).includes(row.kind ?? ''));
   const credits = new Map<number, Posted[]>();
-  for (const row of rows) if (row.registered === 1 && row.amount_cents > 0) {
+  for (const row of candidates) if (row.registered === 1 && row.amount_cents > 0) {
     const group = credits.get(row.amount_cents) ?? [];
     group.push(row); credits.set(row.amount_cents, group);
   }
   const paired = new Set<number>();
-  for (const debit of rows) {
+  for (const debit of candidates) {
     if (debit.registered !== 1 || debit.amount_cents >= 0) continue;
     const credit = credits.get(-debit.amount_cents)?.find(c => !paired.has(c.id) && c.entity_key !== debit.entity_key
       && Math.abs(Date.parse(c.posted_on) - Date.parse(debit.posted_on)) <= INTERCOMPANY_DAYS * DAY);
