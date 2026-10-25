@@ -24,6 +24,8 @@ import { logAdminAction } from '../services/adminAudit';
 import { sendPartnerInvitationEmailResult } from '../services/email';
 import { ALL_PARTNER_DEAL_TYPES, activatePartnerDealOnSignature, type PartnerDealType } from '../services/partnerDeals';
 import { ensurePartnerDirectoryColumns } from '../services/partnerDirectorySchema';
+import { notAllowedRefusal, readBranchDealTypes } from '../services/partnerDealTypes';
+import { branchOf } from '../util/branch';
 // Task #43 — revocation paths must drop investor_dealroom_max to the
 // free-tier cap, not the hardcoded `5` (which is the *professional* cap).
 // Sourcing the value from INVESTOR_QUOTAS keeps the column in sync with
@@ -70,6 +72,22 @@ admin_partners.post('/invitations', async (c) => {
   }
 
   if (allowed.length > 3) return c.json({ error: 'too_many_deal_types' }, 400);
+
+  // D986 — on a branch, only the deal types HQ allows this licence (the copy
+  // HQ pushed, migration 555). A licence HQ has not set keeps every type
+  // (D986 §3). On HQ itself there is no licence to limit: HQ-held accounts run
+  // every program. A copy that cannot be read is a 503, never a guess.
+  if (branchOf(c.env)) {
+    let copy;
+    try { copy = await readBranchDealTypes(c.env); } catch (e) {
+      console.warn('[admin_partners] partner deal types copy unreadable', (e as Error).message);
+      return c.json({ error: 'deal_types_unreadable', message: 'This studio\'s partner deal types could not be read, so no invitation was sent.' }, 503);
+    }
+    if (copy.state === 'recorded') {
+      const refusal = notAllowedRefusal(allowed, copy.types);
+      if (refusal) return c.json(refusal, 422);
+    }
+  }
 
   const token = genInviteToken();
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 86400 * 1000).toISOString();

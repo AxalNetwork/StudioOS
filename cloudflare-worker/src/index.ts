@@ -218,6 +218,9 @@ import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminProgramGrants from './routes/admin_program_grants';
+// D986 (#2776) — partner deal types per licence: HQ's reads and write, and the studio's own read.
+import adminPartnerDealTypes from './routes/admin_partner_deal_types';
+import licencePartnerDealTypes from './routes/licence_partner_deal_types';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
@@ -1099,6 +1102,7 @@ app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
 // D982 (#2773): which programs HQ grants each licensed studio, on what terms.
 app.route('/api/admin/program-grants', adminProgramGrants);
+app.route('/api/admin/partner-deal-types', adminPartnerDealTypes);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
 app.route('/api/admin/super-admins', adminSuperAdmins);
@@ -1137,6 +1141,7 @@ app.route('/api/admin/insights', adminInsights);
 // D955: proposals before the programs router, whose `/:key` would otherwise answer `proposals`.
 app.route('/api/admin/programs/proposals', adminProgramProposals);
 app.route('/api/admin/programs', adminPrograms);
+app.route('/api/licence', licencePartnerDealTypes);
 app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licencePrograms);
 app.route('/api/licence', licence);

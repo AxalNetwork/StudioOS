@@ -26,6 +26,7 @@
  */
 import { readLicenceTerms } from './licenceTerms';
 import { programCopy } from './licencePrograms';
+import { dealTypesForPush } from './partnerDealTypes';
 import type { Env } from '../types';
 import { branchByCode } from './branches';
 import { mirrorBranchAction } from './auditMirror';
@@ -156,6 +157,14 @@ export async function assembleLicenceRecord(
     record.program_grants_json = JSON.stringify(await programCopy(env, licenceId));
   } catch (e) {
     console.warn('[licencePush] program_grants unreadable; the copy goes without them', (e as Error).message);
+  }
+  // D986 — the partner deal types this licence may offer (migration 555), the
+  // same way: the JSON `null` says HQ has recorded none, and a store that
+  // cannot be read omits the key so the branch keeps the set it has.
+  try {
+    record.partner_deal_types_json = await dealTypesForPush(env, licenceId);
+  } catch (e) {
+    console.warn('[licencePush] partner deal types unreadable; the copy goes without them', (e as Error).message);
   }
   return record;
 }

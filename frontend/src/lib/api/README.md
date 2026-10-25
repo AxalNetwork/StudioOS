@@ -193,6 +193,11 @@ D928 (#2724): `partnerDealReads.js` calls the four reads in
 sorted and paged) and `GET /api/admin/partners/agreement-ready`. Admin only;
 nothing here writes.
 
+D986 (#2776): `partnerDealTypes.js` calls `/api/admin/partner-deal-types`
+(HQ's list, one licence with its history, and the write, which takes the money
+bar and a reason) and `GET /api/licence/mine/partner-deal-types` (the studio's
+own read). A licence HQ has not set reads "Not recorded", never "every type".
+
 D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
 (`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
 Stripe plan invoices in one list, newest first. D789's Usage overview reads the newest three rows.

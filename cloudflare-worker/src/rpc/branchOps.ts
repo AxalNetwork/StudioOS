@@ -421,6 +421,16 @@ export async function applyLicenceCopy(
       console.warn('[branchOps] branch_licence.program_grants_json not written', (e as Error).message);
     }
   }
+  // D986 — the partner deal types (migration 555), by the same rule: only when
+  // HQ sent the key, and only onto the copy this push wrote.
+  if (Object.prototype.hasOwnProperty.call(record, 'partner_deal_types_json')) {
+    try {
+      await env.DB.prepare('UPDATE branch_licence SET partner_deal_types_json = ? WHERE id = 1 AND pushed_at = ?')
+        .bind(s('partner_deal_types_json'), pushedAt).run();
+    } catch (e) {
+      console.warn('[branchOps] branch_licence.partner_deal_types_json not written', (e as Error).message);
+    }
+  }
   return { applied: true, branch, as_of: pushedAt };
 }
 
