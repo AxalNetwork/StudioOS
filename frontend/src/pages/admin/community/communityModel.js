@@ -7,15 +7,17 @@
  *   - `ready`: read, with its value;
  *   - `loading`: the read has not answered;
  *   - `unreadable`: the read failed, which is not a claim of zero;
- *   - `unrecorded`: no store records it (CM1's two cards, Confirmed on its
- *     own in the funnel), said in a sentence and never drawn as 0.
+ *   - `unrecorded`: no store records it (CM1's two cards), said in a
+ *     sentence and never drawn as 0.
  * D930's `notyet` is gone: D933 reads every figure it stood for.
  *
  * THE READS (D930 §2). Each answers alone:
  *   - `glance`    GET /api/admin/studio/glance — the events and jobs lanes;
  *   - `events`    GET /api/admin/events, every page, published and waiting;
- *   - `analytics` GET /api/admin/events/analytics — its 200 rows only, under
- *                 D915's Guard G. Its `summary` is all time and is never read;
+ *   - `analytics` GET /api/admin/events/analytics — its rows only, for CM8's
+ *                 empty rule (every status). Its `summary` is all time and is
+ *                 never read. Seats come from D918's service through the
+ *                 Community read since D1121, never from these rows;
  *   - `jobs`      GET /api/admin/jobs, every page, every status;
  *   - `circles`   GET /api/admin/circles;
  *   - `roster`    GET /api/admin/network-profiles — counts only, no name;
@@ -89,7 +91,6 @@ export const NOT_RECORDED = [
 ];
 
 const nf = (n) => Number(n).toLocaleString('en-US');
-const DAY = 86_400_000;
 
 /** A SQL or ISO timestamp as epoch ms. An offset-free D1 stamp is UTC. NaN when absent. */
 export function stamp(value) {
@@ -196,41 +197,13 @@ export function laneOf(glance, key) {
 }
 
 /**
- * Events that count as "next 30 days": published or waiting for review, and
- * starting from now to 30 days on. The Events desk uses the same rule (D915),
- * so the two pages cannot disagree.
+ * Seats taken on one of Next up's events, as text: "42 / 60", "No cap · 12
+ * registered". The count is D918's list row's own `seats_taken` (registered,
+ * confirmed and attended together, D915's rule, D1121).
  */
-export function upcomingEvents(events, now) {
-  return (events || [])
-    .filter((e) => e.status === 'published' || e.status === 'pending_review')
-    .filter((e) => { const t = stamp(e.starts_at); return t >= now && t < now + 30 * DAY; })
-    .sort((a, b) => stamp(a.starts_at) - stamp(b.starts_at));
-}
-
-/**
- * D915's Guard G, for seats taken. The analytics rows are one query, capped
- * at the 200 latest starts. They can be drawn only when:
- *   - the read answered and did not list `events` as unreadable;
- *   - it carries rows whenever there are events to cover.
- * An event missing from the rows is "Not in this read", never 0.
- */
-export function seatsRead(analytics, events) {
-  if (!analytics || analytics.status === 'loading') return { state: 'loading' };
-  const data = analytics.data;
-  if (failed(analytics) || !data || !Array.isArray(data.events) || (data.unreadable || []).includes('events')) {
-    return { state: 'unreadable' };
-  }
-  if ((events || []).length > 0 && data.events.length === 0) return { state: 'unreadable' };
-  return { state: 'ready', byId: new Map(data.events.map((r) => [Number(r.id), r])) };
-}
-
-/** Seats taken on one event, as text: "42 / 60", "No cap · 12 registered", or why not. */
-export function seatsText(seats, event) {
-  if (seats.state === 'loading') return { text: 'Reading…' };
-  if (seats.state === 'unreadable') return { text: 'Seats could not be read', unreadable: true };
-  const row = seats.byId.get(Number(event.id));
-  if (!row) return { text: 'Not in this read', missing: true };
-  const taken = Number(row.registrations || 0);
+export function seatsText(event) {
+  const taken = Number(event?.seats_taken);
+  if (!Number.isFinite(taken)) return { text: 'Seats not recorded', missing: true };
   if (event.capacity == null) return { text: `No cap · ${nf(taken)} registered`, taken };
   const cap = Number(event.capacity);
   return { text: `${nf(taken)} / ${nf(cap)}`, taken, fill: cap > 0 ? Math.min(1, taken / cap) : 0 };
@@ -251,7 +224,7 @@ const rosterKind = (k) => (k === 'mentor' ? 'advisor' : k);
 
 /** The page's eight tiles, CM1 rows 1 and 2, in the canvas's order. */
 export function buildTiles(reads, now) {
-  const { glance, events, analytics, circles, roster } = reads;
+  const { glance, circles, roster } = reads;
   const tiles = [];
 
   // Waiting on you — the glance's two lanes, added.
@@ -276,21 +249,11 @@ export function buildTiles(reads, now) {
     }
   }
 
-  // Upcoming events — next 30 days, and the seats taken on them under Guard G.
+  // Upcoming events — D918's next 30 days (published or waiting) and their seats taken (D1121).
   const up = { key: 'upcoming', label: 'Upcoming events' };
-  const upp = pending(events, 'The events list could not be read. That is not the same as no events.');
-  if (upp) tiles.push({ ...up, ...upp });
-  else {
-    const list = upcomingEvents(events.data, now);
-    const all = [...events.data];
-    const seats = seatsRead(analytics, all);
-    let reg;
-    if (seats.state === 'loading') reg = 'registered: reading…';
-    else if (seats.state === 'unreadable') reg = 'registered: could not be read';
-    else if (list.some((e) => !seats.byId.has(Number(e.id)))) reg = 'registered: not in this read';
-    else reg = `${nf(list.reduce((t, e) => t + Number(seats.byId.get(Number(e.id)).registrations || 0), 0))} registered`;
-    tiles.push({ ...up, state: 'ready', value: nf(list.length), sub: `next 30 days · ${reg}` });
-  }
+  const ub = blockOf(reads.overview, 'events.upcoming');
+  if (ub.state !== 'ready') tiles.push({ ...up, ...ub });
+  else tiles.push({ ...up, state: 'ready', value: nf(Number(ub.block.events) || 0), sub: `next 30 days · ${nf(Number(ub.block.seats_taken) || 0)} registered` });
 
   const weeks = reads.overview?.data?.weeks;
   const period = (key, label, path, pick) => {
@@ -374,18 +337,20 @@ function showUpTile(overview, weeks) {
   return { ...base, state: 'ready', value: `${Math.round(Number(rate) * 100)}%`, sub: `${nf(attended)} of ${nf(seats)} seats · ${nf(events)} events ended` };
 }
 
-/** The Events card today: Next up, from the published events and their seats. */
+/**
+ * The Events card's Next up: the three soonest published events in the next
+ * 30 days, from D918's list (`GET /api/admin/events`), whose rows carry their
+ * own seats taken (D915's rule). The analytics rows are not read (D1121).
+ */
 export function buildNextUp(reads, now) {
   const p = pending(reads.events, 'The events list could not be read. That is not the same as no events.');
   if (p) return p;
-  const all = reads.events.data;
-  const seats = seatsRead(reads.analytics, all);
-  const rows = upcomingEvents(all, now).filter((e) => e.status === 'published').slice(0, 3).map((e) => ({
-    id: e.id,
-    title: e.title,
-    day: dayLabel(e.starts_at, e.timezone || 'UTC'),
-    seats: seatsText(seats, e),
-  }));
+  const rows = reads.events.data
+    .filter((e) => e.status === 'published')
+    .filter((e) => { const t = stamp(e.starts_at); return t >= now && t < now + 30 * 86_400_000; })
+    .sort((a, b) => stamp(a.starts_at) - stamp(b.starts_at))
+    .slice(0, 3)
+    .map((e) => ({ id: e.id, title: e.title, day: dayLabel(e.starts_at, e.timezone || 'UTC'), seats: seatsText(e) }));
   return { state: 'ready', rows };
 }
 
@@ -516,7 +481,7 @@ export function buildActivity(reads) {
   const weeks = Array.isArray(o.data?.week_starts) ? o.data.week_starts : [];
   const current = weeks.indexOf(o.data?.current_week);
   const specs = [
-    { key: 'registrations', label: 'Event registrations', noun: 'event registrations', tone: 'violet', path: 'events.weekly', rows: (b) => b.weekly, field: 'registrations', totals: (b) => b.registrations },
+    { key: 'registrations', label: 'Event registrations', noun: 'event registrations', tone: 'violet', path: 'events.weekly', rows: (b) => b.weekly, field: 'registrations', totals: (b) => b.registrations, opens: 'events' },
     { key: 'applications', label: 'Job applications', noun: 'job applications', tone: 'sky', path: 'jobs', rows: (b) => b.weekly, field: 'count', totals: (b) => b.applications },
     { key: 'bookings', label: 'Expert bookings', noun: 'expert bookings', tone: 'amber', path: 'wellbeing.bookings', rows: (b) => b.weekly, field: 'count', totals: (b) => ({ window: b.window, previous: b.previous }) },
   ];
@@ -526,7 +491,8 @@ export function buildActivity(reads) {
   for (const sp of specs) {
     const b = blockOf(o, sp.path);
     if (b.state !== 'ready') { missing.push(sp.label); continue; }
-    series.push({ label: sp.label, tone: sp.tone, dash: series.length === 1, values: onWeeks(weeks, sp.rows(b.block), sp.field) });
+    // D1121: a point on the events series opens CM3, the events lightbox.
+    series.push({ key: sp.key, label: sp.label, tone: sp.tone, dash: series.length === 1, values: onWeeks(weeks, sp.rows(b.block), sp.field), ...(sp.opens ? { clickable: true, opens: sp.opens } : {}) });
     const t = sp.totals(b.block) || {};
     totals.push({ noun: sp.noun, window: Number(t.window) || 0, previous: Number(t.previous) || 0 });
   }
@@ -562,8 +528,9 @@ export function biggestChange(totals, weeks) {
 /**
  * The Events card's funnel and events by type, from D918's blocks:
  *   - the funnel is the events that ended in the period: their seats taken
- *     (registered, confirmed and attended together), then attended. D918
- *     does not count Confirmed on its own, so that step says so;
+ *     (registered, confirmed and attended together), then the seats past
+ *     confirmation (confirmed or attended, D918's `confirmed`, D1121), then
+ *     attended. A read without the count says so, never 0;
  *   - waitlisted sits beside it, the seats waiting on upcoming events;
  *   - events by type, published or waiting, starting in the period, over the
  *     twelve stored types (`other` among them). Types with none are behind
@@ -576,12 +543,15 @@ export function buildEventsFunnel(reads) {
   else {
     const seats = Number(su.block.seats_taken) || 0;
     const attended = Number(su.block.attended) || 0;
+    const confirmed = Number.isFinite(Number(su.block.confirmed)) && su.block.confirmed != null ? Number(su.block.confirmed) : null;
     out.funnel = {
       state: 'ready',
       events: Number(su.block.events) || 0,
       steps: [
         { key: 'registered', label: 'Registered', value: seats, share: seats > 0 ? 100 : 0 },
-        { key: 'confirmed', label: 'Confirmed', value: null, note: 'Not counted on its own: D918 counts every seat taken together.' },
+        confirmed == null
+          ? { key: 'confirmed', label: 'Confirmed', value: null, note: 'Not in this read.' }
+          : { key: 'confirmed', label: 'Confirmed', value: confirmed, share: pct(confirmed, seats) },
         { key: 'attended', label: 'Attended', value: attended, share: pct(attended, seats) },
       ],
     };

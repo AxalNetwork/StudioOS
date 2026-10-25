@@ -272,6 +272,10 @@ test('the events parts are D918\'s own blocks, in Community\'s keys, and nothing
   assert.deepEqual(b.events.show_up, showUp);
   assert.deepEqual([b.events.show_up.seats_taken, b.events.show_up.attended, b.events.show_up.rate], [3, 1, 0.33]);
   assert.equal('recent' in b.events.show_up, false, 'the event list stays on the Events desk');
+  // D1121: the Upcoming tile's figure is D918's next 30 days, counts only.
+  assert.deepEqual(b.events.upcoming, d.upcoming_30d);
+  assert.equal(b.events.upcoming.available, true);
+  assert.equal(typeof b.events.show_up.confirmed, 'number', 'the funnel\'s Confirmed step has no count');
 
   // The weekly block on Community's weeks.
   assert.deepEqual(b.events.weekly.weekly.map((w: any) => w.week), (await read(db)).week_starts);

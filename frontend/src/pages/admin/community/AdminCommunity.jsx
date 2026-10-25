@@ -220,7 +220,7 @@ function FunnelParts({ ev, weeks, onRetry }) {
     {f.state !== 'ready' ? <PartState part={f} onRetry={onRetry} /> : (
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start" data-testid="community-funnel">
         <ol className="m-0 flex min-w-0 flex-1 list-none flex-col gap-1.5 p-0"
-          aria-label={`Funnel: registered ${f.steps[0].value}, confirmed not counted on its own, attended ${f.steps[2].value}.`}>
+          aria-label={`Funnel: registered ${f.steps[0].value}, confirmed ${f.steps[1].value ?? 'not in this read'}, attended ${f.steps[2].value}.`}>
           {f.steps.map((st) => (
             <li key={st.key} className="grid grid-cols-[92px_minmax(0,1fr)_auto] items-center gap-2.5 text-[12.5px]" data-testid={`community-funnel-${st.key}`}>
               <span className="font-semibold text-axal-ink dark:text-gray-100">{st.label}</span>
@@ -229,7 +229,7 @@ function FunnelParts({ ev, weeks, onRetry }) {
                   <span className="block h-full rounded-full bg-axal-violet dark:bg-[#a78bfa]" style={{ width: `${st.share}%` }} />
                 </span>
               )}
-              <span className={`${MONO} text-axal-ink dark:text-gray-100`}>{st.value === null ? 'Not recorded' : `${st.value.toLocaleString('en-US')}${st.key === 'attended' ? ` · ${st.share}%` : ''}`}</span>
+              <span className={`${MONO} text-axal-ink dark:text-gray-100`}>{st.value === null ? 'Not recorded' : `${st.value.toLocaleString('en-US')}${st.key !== 'registered' ? ` · ${st.share}%` : ''}`}</span>
             </li>
           ))}
         </ol>
@@ -402,7 +402,7 @@ function NeedsCard({ needs, onRetry }) {
 }
 
 /** CM1 row 3 and CM7: three series by week, the current week hollow, then the biggest change in one sentence. */
-function ActivityCard({ activity, onRetry }) {
+function ActivityCard({ activity, onRetry, onOpen }) {
   const [table, setTable] = useState(false);
   return (
     <Card id="activity" title="Community activity by week" span={12} state={activity.state} reason={activity.reason} onRetry={onRetry}>
@@ -415,12 +415,12 @@ function ActivityCard({ activity, onRetry }) {
         {table ? (
           <div data-testid="community-activity-table"><ChartTable chart={activity.chart} caption="Community activity by week" /></div>
         ) : (<>
-          <div role="img" aria-label={`Community activity by week: ${activity.chart.series.map((x) => x.label).join(', ')}. ${activity.sentence || ''}`}>
-            <Chart chart={activity.chart} />
+          <div role="group" aria-label={`Community activity by week: ${activity.chart.series.map((x) => x.label).join(', ')}. ${activity.sentence || ''}`}>
+            <Chart chart={activity.chart} onSelect={(key) => { const s = activity.chart.series.find((x) => x.key === key); if (s?.opens) onOpen(s.opens); }} />
           </div>
           <Legend items={[...activity.chart.series.map((x) => ({ label: x.label, tone: x.tone, mark: x.dash ? 'dashed' : 'line' })), { label: 'This week, so far', tone: 'hollow' }]} />
         </>)}
-        <span className={SUB}>The current week is not finished, so its point is hollow and its row says so far. A week with no value breaks the line.</span>
+        <span className={SUB}>The current week is not finished, so its point is hollow and its row says so far. A week with no value breaks the line. A point on Event registrations opens the events.</span>
       </>)}
     </Card>
   );
@@ -593,7 +593,6 @@ export default function AdminCommunity() {
       ]}
       coverageNote="Each figure is read alone; one that cannot be read says so and the others still answer."
       unavailable={[
-        ['Confirmed registrations on their own', 'Events count every seat taken together, so the funnel says so.'],
         ['A community figure for a branch', 'No branch is deployed, and these consoles read HQ’s own rows.'],
       ]}
       data-testid="community-rail"
@@ -656,7 +655,7 @@ export default function AdminCommunity() {
                 : <Tile key={t.key} t={t} onRetry={reload} />))}
             </div>
             <div className="grid grid-cols-12 gap-3.5">
-              <ActivityCard activity={activity} onRetry={reload} />
+              <ActivityCard activity={activity} onRetry={reload} onOpen={openBox} />
               <EventsCard next={next} ev={ev} weeks={weeks} onRetry={reload} onOpen={openBox} />
               <WhoCard who={who} onRetry={reload} />
               <JobsCard jobs={jobs} onRetry={reload} onOpen={openBox} />

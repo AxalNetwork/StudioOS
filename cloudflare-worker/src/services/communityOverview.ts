@@ -334,6 +334,8 @@ async function eventsParts(env: Env, weeks: CommunityWeeks, nowMs: number) {
   return {
     queue: o.queue,
     events: {
+      // D918's next 30 days (published or waiting) and their seats taken, counts only (D1121).
+      upcoming: o.upcoming_30d,
       weekly: eventsWeekly(o.weekly as D918Block),
       show_up: showUpCounts(o.show_up as D918Block),
       by_type: o.by_type,

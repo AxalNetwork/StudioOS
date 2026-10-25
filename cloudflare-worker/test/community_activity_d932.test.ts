@@ -136,7 +136,7 @@ test('every source answers: events, jobs, circles, daily registration counts and
   assert.deepEqual(Object.keys(first).sort(), ['actor', 'at', 'count', 'href', 'icon', 'kind', 'sentence', 'title']);
   assert.equal(first.count, 3, 'a day\'s registrations are one row, counted, whatever their status now');
   assert.equal(first.href, '/admin/events');
-  assert.equal(body.rows.find((r: any) => r.kind === 'wellbeing').href, '/admin?tab=wellbeing');
+  assert.equal(body.rows.find((r: any) => r.kind === 'wellbeing').href, '/admin/wellbeing');
   assert.equal(body.rows.find((r: any) => r.kind === 'wellbeing').title, null, 'an expert is not named');
   assert.equal(body.rows.find((r: any) => r.sentence.includes('Product Designer')).dated_by, 'last_change');
   assertNoPerson(body);

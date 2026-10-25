@@ -113,6 +113,8 @@ export const EVENTS = {
   none: 'No events',
   filters: [
     { key: 'status', label: 'Status', all: 'All statuses', options: EVENT_STATUSES.map((s) => ({ value: s.key, label: s.word })) },
+    // CM3's Type ▾: the twelve stored types, filtered by the Worker (D1121).
+    { key: 'type', label: 'Type', all: 'All types', options: EVENT_TYPES.map((t) => ({ value: t.id, label: t.label })) },
     { key: 'when', label: 'Starts', all: 'Starts: All', options: [
       { value: 'upcoming', label: 'Upcoming' }, { value: 'this_week', label: 'This week' }, { value: 'next_30d', label: 'Next 30 days' }, { value: 'ended', label: 'Ended' },
     ] },
@@ -135,7 +137,7 @@ export function eventsQuery(state) {
   const f = state.filters || {};
   const sort = EVENTS.sorts.find((s) => s.key === state.sort) || EVENTS.sorts[0];
   const out = { limit: ROWS, offset: (page - 1) * ROWS, sort: sort.sort, dir: sort.dir };
-  for (const k of ['status', 'when', 'visibility', 'price']) if (f[k]) out[k] = f[k];
+  for (const k of ['status', 'type', 'when', 'visibility', 'price']) if (f[k]) out[k] = f[k];
   if (f.featured) out.featured = f.featured === 'yes';
   const q = String(state.q || '').trim();
   if (q) out.q = q;
@@ -186,7 +188,7 @@ const JOB_STATUSES = [
 const JOB_WORD = Object.fromEntries(JOB_STATUSES);
 export const jobStatusWord = (s) => JOB_WORD[s] || 'Status not recorded';
 
-export const JOBS_LINE = 'Every posting, as of now. A row opens the job board; nothing is approved here.';
+export const JOBS_LINE = 'Every posting, as of now. A row opens that posting on the job board; nothing is approved here.';
 /** Why the canvas's Posted and Days open are not drawn (D934 §3). */
 export const JOBS_FOOT = 'When a posting was published is not recorded, so Created is when its host started it, and days open is not shown.';
 
@@ -196,7 +198,8 @@ export function jobRow(j) {
   const apps = appsOf(j);
   return {
     id: j.id,
-    href: '/admin/jobs',
+    // D1121: the row opens its own posting on the job board.
+    href: `/admin/jobs?posting=${encodeURIComponent(j.id)}`,
     title: String(j.title || '').trim() || 'Untitled posting',
     company: j.project_name || 'Company not recorded',
     status: jobStatusWord(j.status),
@@ -234,13 +237,14 @@ const CIRCLE_TYPE_WORD = { founder: 'Founder', investor: 'Investor', partner: 'P
 const ACCESS_WORD = Object.fromEntries(ACCESS_TYPES.map((a) => [a.id, a.label]));
 const yes = (v) => (v ? 'Yes' : 'No');
 
-export const CIRCLES_LINE = 'Every circle, as of now. A row opens circles; nothing is published here.';
+export const CIRCLES_LINE = 'Every circle, as of now. A row opens that circle; nothing is published here.';
 export const AS_ENTERED_FOOT = 'Members and activity are typed by an admin on each circle, not counted from sign-ups.';
 
 export function circleRow(c) {
   return {
     id: c.id,
-    href: '/admin/circles',
+    // D1121: the row opens its own circle's editor.
+    href: `/admin/circles?circle=${encodeURIComponent(c.id)}`,
     title: String(c.name || '').trim() || 'Untitled circle',
     type: CIRCLE_TYPE_WORD[c.type] || 'Type not recorded',
     access: ACCESS_WORD[c.access] || 'Access not recorded',
