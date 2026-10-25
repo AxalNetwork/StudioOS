@@ -91,7 +91,7 @@ function useMembers() {
 const membersLine = (m, ids, keep) => {
   if (m.status === 'loading') return 'Counting the members on it…';
   const n = m.status === 'ready' ? membersOn(m.data, ids) : null;
-  if (n == null) return `The members on it could not be counted. Whoever is on it ${keep}.`;
+  if (n == null) return `The members on it could not be counted; they ${keep}.`;
   return `${n.toLocaleString('en-US')} member${n === 1 ? '' : 's'} on it ${keep}.`;
 };
 
@@ -197,7 +197,7 @@ export function NewProductDialog({ products = [], audiences = [], onClose, onDon
             <div className="flex flex-col gap-1">
               <span className={EYE}>Plan family</span>
               <div className="flex flex-wrap gap-1.5" data-testid="pay-new-families">
-                {PLAN_FAMILIES.map((f) => <button key={f.key} type="button" aria-pressed={f.key === familyKey} className={CHIP(f.key === familyKey)} onClick={() => pickFamily(f)}>{f.label}</button>)}
+                {PLAN_FAMILIES.map((f) => <button key={f.key} type="button" aria-pressed={f.key === familyKey} className={CHIP(f.key === familyKey)} onClick={() => pickFamily(f)} data-testid={`pay-new-family-${f.key}`}>{f.label}</button>)}
               </div>
             </div>
             <div className="flex flex-col gap-1">

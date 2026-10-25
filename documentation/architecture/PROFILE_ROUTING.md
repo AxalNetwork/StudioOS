@@ -235,7 +235,7 @@ it, where in their nav, and how do they get there.*
 | Ops Page · HQ tools (Q1–Q3, D633) | `/admin/contracts` · `/admin/accounts/credits/:userId` · `/admin/security/obligations` | HQ | Full page | Sidebar → HQ → Contracts | CURRENT | High |
 | Partner invitations | `/admin/partner-invitations` · `/admin/partner-invitations/invitations` · `/admin/partner-invitations/invitations/:id` · `/admin/partner-invitations/deals` · `/admin/partner-invitations/deals/:id` · `/admin/partner-invitations/referrals` · `/admin/partners` · `/admin/partner-invitations/firm-links` · `/admin/advisors-partners/firms?moved=firm-links` | HQ | Full page | Sidebar → HQ → Content | UPGRADE | High |
 | Partner profiles | `/admin?tab=profiles` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Payments | `/admin?tab=payments` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Payments | `/admin?tab=payments` · `/pricing/products` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Persona segments | `/admin?tab=personas` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Program grants | `/admin/licences/programs` · `/admin/my-licence/programs` | HQ | Full page (proposed) | Sidebar → HQ → Licences | UPGRADE | Low |
 | Spin-Out Lab (admin) | `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |

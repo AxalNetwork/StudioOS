@@ -307,7 +307,7 @@ function Catalogue({ reads, reload }) {
                     {g.rows.map((p) => (
                       <tr key={p.id} className={`border-t border-axal-hairline align-top dark:border-gray-700 ${p.active ? '' : 'opacity-60'}`} data-testid="pay-row">
                         <td className="py-2 pr-3">
-                          <button type="button" onClick={() => setOpen(p)} className="block text-left font-bold text-axal-ink hover:text-axal-violet dark:text-gray-100 dark:hover:text-violet-300" data-testid="pay-row-open">{p.name}</button>
+                          <button type="button" onClick={() => setOpen(p)} className="block text-left font-bold text-axal-ink hover:text-axal-violet dark:text-gray-100 dark:hover:text-violet-300" data-testid={`pay-row-open-${p.id}`}>{p.name}</button>
                           <span className={`block ${MONO} ${SUB}`}>{p.id}</span>
                         </td>
                         <td className="py-2 pr-3"><span className={PILL}>{kindWord(p.kind)}</span></td>
