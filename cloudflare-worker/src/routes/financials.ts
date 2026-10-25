@@ -520,14 +520,14 @@ financials.put('/:projectId', async (c) => {
     );
   }
 
-  // Activity log — match the Python message shape (best-effort).
+  // Outcome and scope only: no venture name or financial figures in logs.
   try {
     await c.env.DB.prepare(
       `INSERT INTO activity_logs (action, details, actor, user_id, created_at)
          VALUES (?, ?, ?, ?, datetime('now'))`,
     ).bind(
       'financial_model_saved',
-      `Project ${project.name}: runway=${computed.runway_months}mo, breakeven=${computed.breakeven_month}`,
+      JSON.stringify({ project_id: projectId, outcome: 'saved' }),
       String(user.id),
       user.id,
     ).run();

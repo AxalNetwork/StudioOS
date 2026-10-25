@@ -29,6 +29,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { tableFromBaseline } from './_baseline.mjs';
 import { SignJWT } from 'jose';
 
 import financials from '../src/routes/financials.ts';
@@ -210,6 +211,7 @@ test('2462: deck autofill excludes models nobody saved', () => {
 
 test('D1174: Capital score is not returned, written or exported; legacy storage stays intact', async () => {
   const db = freshDb();
+  db.exec(tableFromBaseline(readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8'), 'activity_logs'));
   const legacy = '{"total":9,"legacy":true}';
   assert.equal((await save(db, drivers)).status, 200);
   db.prepare('UPDATE financial_models SET capital_recompute_json = ? WHERE project_id = ?').run(legacy, PROJECT_A);
@@ -225,6 +227,9 @@ test('D1174: Capital score is not returned, written or exported; legacy storage 
   const exported = await get(financials, `/${PROJECT_A}/export.xlsx`, founder, undefined, db);
   assert.equal(exported.status, 200);
   assert.doesNotMatch(await exported.text(), /Capital score|capital_recompute/i);
+  const logs = db.prepare("SELECT details FROM activity_logs WHERE action = 'financial_model_saved'").all() as Array<{ details: string }>;
+  assert.equal(logs.length, 2);
+  for (const log of logs) assert.deepEqual(JSON.parse(log.details), { project_id: PROJECT_A, outcome: 'saved' });
 });
 
 
