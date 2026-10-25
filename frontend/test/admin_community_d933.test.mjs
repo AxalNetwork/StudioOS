@@ -58,7 +58,8 @@ function overview(over = {}) {
           { week: '2026-10-19', registrations: 5, checkins: 1, to_date: true },
         ],
       },
-      show_up: { available: true, events: 3, seats_taken: 80, attended: 52, rate: 0.65 },
+      show_up: { available: true, events: 3, seats_taken: 80, confirmed: 64, attended: 52, rate: 0.65 },
+      upcoming: { available: true, events: 3, seats_taken: 59, full: 0 },
       by_type: { available: true, counts: { workshop: 4, office_hours: 2, networking: 0, other: 1 } },
       waitlisted: { available: true, registrations: 9, events: 2 },
     },
@@ -211,10 +212,12 @@ test('the biggest change is written from the numbers', () => {
 
 // ---------------------------------------------------------------- the Events card
 
-test('the funnel: registered then attended for the events that ended, Confirmed not counted on its own, waitlisted beside it', () => {
+test('the funnel: registered, confirmed, then attended for the events that ended, waitlisted beside it', () => {
   const ev = buildEventsFunnel(READS());
-  assert.deepEqual(ev.funnel.steps.map((s) => [s.key, s.value, s.share ?? null]), [['registered', 80, 100], ['confirmed', null, null], ['attended', 52, 65]]);
-  assert.match(ev.funnel.steps[1].note, /Not counted on its own/);
+  // D1121: Confirmed is D918's count (confirmed or attended), its own step.
+  assert.deepEqual(ev.funnel.steps.map((s) => [s.key, s.value, s.share ?? null]), [['registered', 80, 100], ['confirmed', 64, 80], ['attended', 52, 65]]);
+  const old = buildEventsFunnel(READS(overview({ events: { show_up: { available: true, events: 3, seats_taken: 80, attended: 52, rate: 0.65 } } })));
+  assert.deepEqual([old.funnel.steps[1].value, old.funnel.steps[1].note], [null, 'Not in this read.'], 'a read without the count draws a zero');
   assert.deepEqual([ev.waitlisted.value, ev.waitlisted.events], [9, 2]);
   const failed = buildEventsFunnel(READS(overview({ events: { show_up: gone('Show-up'), waitlisted: gone('The waitlists') } })));
   assert.equal(failed.funnel.state, 'unreadable');
@@ -385,7 +388,7 @@ test('mounted CM9: every new block is drawn from the Community read', async () =
     assert.match(m.of('community-tile-show-up'), /65%/);
     assert.match(m.of('community-tile-experts'), /9 verified of 12/);
     assert.match(m.of('community-activity-sentence'), /Event registrations moved most/);
-    assert.match(m.of('community-funnel-confirmed'), /Not counted on its own/);
+    assert.match(m.of('community-funnel-confirmed'), /Confirmed\s*64 · 80%/);
     assert.match(m.of('community-waitlisted'), /9.*on 2 upcoming events · not a step/s);
     assert.match(m.of('community-by-type-all'), /Show all · 9 types with none/);
     assert.match(m.of('community-who-sentence'), /Founders took the largest share/);
@@ -403,6 +406,21 @@ test('mounted: the activity table is CM7, the current week marked so far', async
     assert.ok(!m.has('community-activity-table'));
     await m.click('community-activity-toggle');
     assert.match(m.of('community-activity-table'), /19 Oct \(so far\).*5.*2.*1/s);
+  } finally { await m.unmount(); }
+});
+
+test('mounted: a point on the Event registrations series opens CM3, and only that series opens anything (D1121)', async () => {
+  // Mutation checked: the series not marked clickable → no point to press; every series clickable → an applications point exists; onOpen unwired → no lightbox.
+  const m = await mount(`${COMMUNITY_PATH}?weeks=4`);
+  try {
+    assert.ok(!m.has('community-box-events'));
+    assert.ok(m.has('weeklines-point-registrations-2'), 'an events point cannot be pressed');
+    assert.ok(!m.has('weeklines-point-applications-2'), 'an applications point opens something');
+    assert.ok(!m.has('weeklines-point-bookings-2'), 'a bookings point opens something');
+    assert.match(m.props('weeklines-point-registrations-2')['aria-label'], /Event registrations, .*: 25\. Open the list\./);
+    await m.click('weeklines-point-registrations-2');
+    assert.ok(m.has('community-box-events'), 'the point did not open the events lightbox');
+    assert.match(m.loc(), /[?&]open=events/);
   } finally { await m.unmount(); }
 });
 

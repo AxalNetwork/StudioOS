@@ -86,6 +86,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/admin/contracts',      'the Contracts desk (D647), its Structure of the Fund sheet and the template editor (D717)'],
   ['frontend/src/pages/admin/events',         'the admin Events desk (D915): its tabs, the event page, the dialogs and the model they read'],
   ['frontend/src/pages/admin/grants',         'Program grants under Licences (D981)'],
+  ['frontend/src/pages/subsidiary/licence',   'the Licences page\'s tabs, the Administrator\'s own licence (D800, D804, D988)'],
   ['frontend/src/pages/admin/lab',            'the Spin-Out Lab\'s admin page under Programs (D937)'],
   ['frontend/src/pages/admin/fundAdmin',      'the fund administration console (D714) and, since D880, Axal VC\'s own Mercury connections'],
   ['frontend/src/pages/admin/segments',       'Persona segments under Accounts (D997)'],

@@ -379,8 +379,8 @@ test('the fund pages read the live calls ledger, and the legacy method no longer
     'the landing does not read the live ledger');
   assert.match(read('frontend/src/pages/investor/InvestorFundCalls.jsx'), /api\.fundsCallLedger\(/,
     'the Calls zone does not read the fund call ledger');
+  // D1160 (#3067): Fund Ops is retired, so its page is no longer here to read.
   for (const page of [
-    'frontend/src/pages/FundOpsWorkspace.jsx',
     'frontend/src/pages/investor/InvestorFundLanding.jsx',
     'frontend/src/pages/investor/InvestorFundCalls.jsx',
   ]) {

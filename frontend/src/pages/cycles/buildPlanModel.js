@@ -54,3 +54,48 @@ export const SECTIONS = [
 
 export const PLAN_WAIT = 'Proposals are prepared by the planner’s rules from what you accepted in Validate (part 1). Until then none is shown, which is not a claim that there is nothing to build.';
 export const PROGRESS_WAIT = 'Each accepted item’s stages (Accepted, Sent, In progress, Built, Live, Tested) are read from the plan and your tools’ feeds (parts 1 and 4). Until then no stage is drawn, so nothing here reads as not done.';
+
+/**
+ * D1071 (#2941, part 8) — VB5, "Word with Eadwyn". The rules decide which
+ * items exist; Eadwyn words them. Its wording is drawn in lavender beside the
+ * rule's plain title, and nothing is saved until "Keep wording", which is the
+ * item's Save (D1066's PATCH with the wording's id). The run is metered and
+ * only ever starts from the press; in Manual mode the Worker refuses it.
+ */
+export const WORD_OPTION = 'draft:build/plan';
+export const WORD_LABEL = 'Word with Eadwyn';
+export const WORD_LINE = 'Eadwyn words the plan from your accepted evidence. You keep what you want.';
+export const WORD_READS = 'Only what you accepted in Validate.';
+export const WORD_COST = 'Taken from your AI tokens when you press Word with Eadwyn.';
+export const WORDING_TAG = 'Eadwyn’s wording · not saved';
+export const KEEP = 'Keep wording';
+export const DISCARD = 'Discard wording';
+export const NO_PLAN = 'No plan is prepared yet. The planner’s rules prepare it from what you accepted in Validate; Eadwyn words what they propose.';
+export const NOTHING_PENDING = 'No item is waiting for your decision, so there is nothing to word.';
+export const AI_OFF_LINE = 'AI assistance is off on this page. The rule’s titles stand, and you can still edit them.';
+export const AI_OFF_SUB = 'Turn it back on from the Eadwyn rail.';
+export const TOKENS_SUB = 'Runs use your plan’s AI allowance first, then your AI tokens. Nothing was charged.';
+
+/** The kinds Eadwyn words (a door to connect a tool takes no wording). */
+export const WORDED_KINDS = ['feature', 'must-have', 'prototype-test', 'risk', 'roadmap', 'formation-step'];
+
+/** The plan's pending items, in module order, each with its rule's title and any wording not yet decided. */
+export function wordingRows(plan, wording) {
+  const modules = plan?.modules || {};
+  const words = wording?.items || {};
+  return SECTIONS.flatMap((s) => (modules[s.slug] || [])
+    .filter((i) => i?.status === 'proposed' && WORDED_KINDS.includes(i.kind))
+    .map((i) => ({ uid: i.uid, module: s.name, kind: i.kind, title: String(i.payload?.title ?? ''), words: words[i.uid] || null })));
+}
+
+const TOKEN_CODES = new Set(['budget_user_day', 'budget_user_month', 'budget_org_month', 'spend_limit', 'insufficient_tokens']);
+
+/** A refused press, in the page's words: out of tokens, Manual mode, or what the Worker said. */
+export function wordRefusal(e) {
+  const code = e?.code || e?.data?.code || e?.data?.error || null;
+  const said = String(e?.data?.detail || e?.data?.message || e?.message || '').trim();
+  const sentence = said && !/^[a-z_]+$/.test(said) ? said : '';
+  if (Number(e?.status) === 402 || TOKEN_CODES.has(code)) return { kind: 'tokens', text: sentence || 'Not enough AI tokens for this run.', sub: TOKENS_SUB };
+  if (code === 'assist_off') return { kind: 'off', text: AI_OFF_LINE, sub: AI_OFF_SUB };
+  return { kind: 'other', text: sentence || 'Eadwyn could not word the plan just now. Nothing was charged. Try again.', sub: null };
+}
