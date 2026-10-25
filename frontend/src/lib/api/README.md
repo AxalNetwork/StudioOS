@@ -160,6 +160,11 @@ D764 (#2089) adds `page`, `setPagePick` and `setPageMode` to `railPrefs.js`:
 member's pick and switch for that page, and the two `PUT`s write them. The
 page key is the canvas's, in the query or the body.
 
+D1080 (#2945): `mcpOauth.js` starts Sign in with <Provider> for a connector
+whose MCP server signs members in (`GET /api/integrations/mcp/<key>/start`,
+`cloudflare-worker/src/routes/connector_mcp_oauth.ts`); Mercury keeps
+`mercuryPersonal.js`'s own start.
+
 D715 (#1780) PR 3b: `mercuryPersonal.js` calls `GET /api/mercury/personal/status`
 (`cloudflare-worker/src/routes/mercury_personal.ts`, D713): the caller's own
 Mercury connection and the uses their role holds, each with `available` and a

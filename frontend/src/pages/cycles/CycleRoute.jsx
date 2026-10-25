@@ -42,6 +42,9 @@ import MercuryRaiseFeed from './MercuryRaiseFeed';
 import RoadmapFromGithub from './RoadmapFromGithub';
 import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
+import ReportingDesk from './ReportingDesk';
+import BuildPlan, { BuildPlanDoor } from './BuildPlan';
+import { PmfPart, ReadinessDoor } from './PmfPart';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
@@ -61,6 +64,8 @@ import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '
 import { NarrativeAdminGate } from '../raise/narrative/NarrativeAdmin';
 import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool';
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
+import { DataRoomHomeNav, DataRoomTabPage } from '../raise/dataroom/DataRoomTool';
+import { isDataRoomTab, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
 
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
@@ -171,6 +176,13 @@ const CYCLE_DEFS = {
         <>
           <NarrativeHome data={data} />
           {mercuryPart('investor-narrative', data, ctx)}
+        </>
+      ),
+      // D1141 (#2433): Product-market fit, not scored yet, with model v1; then From Mercury.
+      'fundraising-readiness': (data, ctx) => (
+        <>
+          <PmfPart projectId={ctx.projectId} />
+          {mercuryPart('fundraising-readiness', data, ctx)}
         </>
       ),
       'capital-relationships': (data, ctx) => (
@@ -665,7 +677,7 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug }) {
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null }) {
   const { slug: routeSlug, id: recordId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
@@ -756,7 +768,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // is the tool's tab, never a row (rows are `h-<n>`, `e-<n>` and `pool`).
   // D1022 (#2859): `h-<n>` is the tool's too, the holder drawer over Overview.
   const capTableTab = record && cycle === 'raise' && isCapTableTab(slug, recordId) ? recordId : null;
-  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !!projectId && !!def,
+  // D1101 (#2456): the Data room tool's tabs are words under its module, never file records.
+  const dataRoomTab = record && cycle === 'raise' && isDataRoomTab(slug, recordId) ? recordId : null;
+  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !!projectId && !!def,
     cycle, projectId, slug, id: recordId, reload, edit, navigate, back: `/${cycle}/${slug}${q}` });
   useScrollToHash(record ? recordState.status !== 'ready' : moduleStatus !== 'ready');
   // The page re-reads once the lightbox is gone, however it went: ×, Escape and
@@ -776,7 +790,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   useEffect(() => { setQuery({ q: '', filter: {}, sort: '', page: 1 }); }, [slug]);
 
   useEffect(() => {
-    if (record || slug || !projectId || !def) return undefined;
+    // D1056, D1063: the Reporting desk and Build's plan make their own reads, never the overview's.
+    if (record || slug || reporting || buildPlan || !projectId || !def) return undefined;
     let alive = true;
     setOverviewStatus('loading');
     cyclesApi.overview(cycle, projectId)
@@ -787,7 +802,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       })
       .catch(() => { if (alive) setOverviewStatus('unreadable'); });
     return () => { alive = false; };
-  }, [record, cycle, slug, projectId, reload, def]);
+  }, [record, cycle, slug, reporting, buildPlan, projectId, reload, def]);
 
   useEffect(() => {
     if (record || !slug || !known || !projectId || !def) return undefined;
@@ -944,9 +959,26 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       <NarrativeTabPage tab={narrativeTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         fixOn={fillsOn} search={location.search} cards={tabs} action={action} phone={phone} admin={narrativeAdmin} />
     );
+  } else if (reporting && cycle === 'grow') {
+    // D1056 (#2427): Grow's Reporting desk, under the tab row with Reporting lit.
+    body = (
+      <ReportingDesk tab={reporting} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
+  } else if (buildPlan && cycle === 'build') {
+    // D1063 (#2426): Validate → Build's plan, under Build's header and tab row.
+    body = (
+      <BuildPlan tab={buildPlan} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
   } else if (capTableTab) {
     body = (
       <CapTableTabPage tab={capTableTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
+  } else if (dataRoomTab) {
+    body = (
+      <DataRoomTabPage tab={dataRoomTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
     );
   } else if (record) {
@@ -991,6 +1023,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           action={action}
           search={q}
         />
+        {/* D1063 (#2426): the door to the plan, under Build's overview. */}
+        {cycle === 'build' && <BuildPlanDoor search={q} />}
+        {/* D1141 (#2433, RD12): Validate's records feed Product-market fit on Fundraising readiness. */}
+        {cycle === 'validate' && <ReadinessDoor search={q} />}
         <AlsoIn role="founder" row={name} />
       </>
     );
@@ -1026,7 +1062,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
-          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} /> : undefined}
+          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
+          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} /> : undefined}
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
@@ -1098,7 +1135,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
-      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab ? null : recordId ?? null} />
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab || dataRoomTab ? null : recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
   );

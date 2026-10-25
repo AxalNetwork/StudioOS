@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { MemoryRouter } from 'react-router-dom';
 import MercuryRaiseFeed from '../src/pages/cycles/MercuryRaiseFeed.jsx';
 import { figureText, isEmptyView, mercuryView, usd } from '../src/pages/cycles/mercuryRaise.js';
 
@@ -26,7 +27,8 @@ const read = (p) => readFileSync(resolve(process.cwd(), p), 'utf8');
 const ROUTE = read('frontend/src/pages/cycles/CycleRoute.jsx');
 const WRITES = read('frontend/src/lib/api/cycleWrites.js');
 const WORKER = read('cloudflare-worker/src/routes/cycle_raise.ts');
-const render = (props) => renderToStaticMarkup(h(MercuryRaiseFeed, { projectId: 101, ...props }));
+// D1114: the narrative's figures carry an "Insert in Story" link, so the part renders inside a router.
+const render = (props) => renderToStaticMarkup(h(MemoryRouter, null, h(MercuryRaiseFeed, { projectId: 101, ...props })));
 const SLUGS = ['fundraising-readiness', 'investor-narrative', 'pitch-deck', 'data-room', 'cap-table', 'use-of-funds', 'capital-relationships'];
 
 test('every Raise module draws From Mercury from its read, and nothing without the part', () => {

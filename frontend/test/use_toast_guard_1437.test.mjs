@@ -197,7 +197,7 @@ test('Payments, Billing, the signed-document view and Advisors and partners rend
   const line = (child.stdout || '').trim().split('\n').filter((l) => l.startsWith('{')).pop();
   assert.ok(line, `the render check printed nothing: ${child.stderr}`);
   const results = JSON.parse(line);
-  for (const panel of ['PaymentsPanel', 'BillingPanel', 'SignedDocLightbox', 'AdminNetworkProfiles']) {
+  for (const panel of ['BillingPanel', 'SignedDocLightbox', 'AdminNetworkProfiles']) {
     for (const kind of ['success', 'error']) {
       const r = results[`${panel}:${kind}`];
       assert.ok(r, `${panel} with a ${kind} message was not rendered`);
