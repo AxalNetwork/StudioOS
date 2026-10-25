@@ -103,3 +103,5 @@ D1091: `google_workspace_connection.test.ts` tests consent, file scope, previews
 `deal_context_d1150.test.ts` executes migration 600 and real source tables for
 derived stages, per-user/firm visit markers and private notes, including audit
 rollback, no admin bypass, NDA exclusion and anonymous change metadata.
+
+D1123 extends admin_lab_operations_d971.test.ts with real SQLite capacity-result tests: cohort scoping, last event, absent vs unreadable, and admin-only reads.

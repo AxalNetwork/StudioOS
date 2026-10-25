@@ -414,7 +414,7 @@ export function buildCohortPage(read, appsRead, ym, now) {
       text: `Minimum ${nf(settings.min)} · Places ${nf(settings.places)}`,
       approved: approved.kind === 'value' ? `${approved.text} approved of ${nf(settings.places)} places` : `Approved: ${approved.text}`,
       met: approved.kind === 'value' ? approved.value >= settings.min : null,
-      check: 'The capacity check’s own result is not read here yet: no read returns it.',
+      check: 'Current thresholds are shown here. The recorded check result is read separately below.',
     };
 
   const weeks = windows === null
@@ -442,8 +442,8 @@ export function buildCohortPage(read, appsRead, ym, now) {
   return {
     state: 'ready', key: ym, label, title: `${label} cohort`, word: cohortWord(c), line,
     tiles, pool, capacity, weeks,
-    messages: { state: 'not_read', text: 'The messages the Lab sent this cohort are not read here yet: no admin read returns them.' },
-    history: { state: 'not_read', text: 'This cohort’s history is not read here yet: no admin read returns the Lab clock’s events.' },
+    messages: { state: 'separate_read', text: 'Messages are read independently from the cohort-scoped activity ledger.' },
+    history: { state: 'separate_read', text: 'History is read independently from recorded cohort events.' },
   };
 }
 

@@ -23,6 +23,7 @@ import adminLabParticipants from './admin_lab_participants';
 import adminLabOperations from './admin_lab_operations';
 import type { Env } from '../types';
 import { requireAdmin, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
+import { programRefusal } from '../services/programEnforcement';
 import { hashEmail } from '../util/hashEmail';
 import {
   ensureCohortTimingSchema,
@@ -398,6 +399,12 @@ export async function decideCohortApplication(c: Context<{ Bindings: Env }>, leg
     return c.json({ error: "status must be 'approved', 'rejected' or 'waitlisted'" }, 400);
   }
   if (!reason) return c.json({ error: 'A reason is required for every decision' }, 400);
+  // D985 — an admission needs the branch's Spin-Out Lab grant; a rejection or
+  // waitlist winds the queue down and stays open.
+  if (status === 'approved') {
+    const notGranted = await programRefusal(c.env, 'spinout-lab');
+    if (notGranted) return c.json(notGranted.body, notGranted.status);
+  }
   if (legacy) {
     const app = await c.env.DB.prepare('SELECT id FROM spinout_applications WHERE id = ?').bind(targetId).first();
     if (!app) return refusal(c, 404, 'application_not_found', 'That application does not exist.');
@@ -441,6 +448,8 @@ async function applicantForInterview(env: Env, applicantId: number) {
 r.post('/applications/:applicant_id/interview', async (c) => {
   const adminUser = await requireAdmin(c);
   await requireBranchNotSuspended(c);
+  const notGranted = await programRefusal(c.env, 'spinout-lab');
+  if (notGranted) return c.json(notGranted.body, notGranted.status);
   const applicantId = parseInt(c.req.param('applicant_id'));
   if (!Number.isFinite(applicantId)) return refusal(c, 400, 'invalid_applicant', 'That applicant id is not valid.');
   const body = (await c.req.json().catch(() => ({}))) as {
@@ -504,6 +513,8 @@ r.post('/applications/:applicant_id/interview/cancel', async (c) => {
 r.post('/applications/cycles/:cycle_id/force-proceed', async (c) => {
   const adminUser = await requireAdmin(c);
   await requireBranchNotSuspended(c);
+  const notGranted = await programRefusal(c.env, 'spinout-lab');
+  if (notGranted) return c.json(notGranted.body, notGranted.status);
   const { ensureCohortAppSchema, logCycleEvent, monthLabel } = await import('../services/cohortApplications');
   await ensureCohortAppSchema(c.env);
   const cycleId = parseInt(c.req.param('cycle_id'));

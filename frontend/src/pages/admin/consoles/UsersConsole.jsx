@@ -19,6 +19,7 @@ import { drawsAccountControls } from '../../../lib/accountControls';
 import TrustScoreBadge from '../../../components/TrustScoreBadge';
 import { ROLE_BADGES, Field, ConsoleUnreadable, CONSOLE_LOADING } from './shared';
 import useRecordCrumb from '../useRecordCrumb';
+import LabAdmitDialog from '../lab/LabAdmitDialog';
 
 /**
  * D648 (#1448) — the Users console: the account directory, its role picker,
@@ -407,6 +408,7 @@ const KYC_LABELS = {
 
 export default function UsersConsole({ onImpersonate }) {
   const [users, setUsers] = useState([]);
+  const [spinoutAdmit, setSpinoutAdmit] = useState(null);
   // Task #40 — batched trust-score map keyed by user_id, populated by a
   // single POST /api/trust/score/batch after each users-list refresh.
   // Replaces the previous per-row GET /trust/score/:userId fan-out.
@@ -561,22 +563,7 @@ export default function UsersConsole({ onImpersonate }) {
   };
   // Task #7 — admit a founder to the next Spin-Out Lab cohort. Sends the
   // "You're in" email (production Worker; dev backend sets flags only).
-  const handleSpinoutAdmit = async (user) => {
-    const cohort = window.prompt(
-      `Admit ${user.name || user.email} to the Spin-Out Lab?\n\n` +
-      `They'll receive a congratulations email linking to axal.vc/spinout-lab ` +
-      `and see the "You're in" screen on their next visit.\n\nCohort label:`,
-      'Cohort 3'
-    );
-    if (cohort === null) return;
-    try {
-      const res = await api.adminSpinoutAdmit(user.id, cohort.trim() || undefined);
-      alert(res?.already_admitted
-        ? `Already admitted — cohort refreshed to ${res.cohort} (no email re-sent).`
-        : `Admitted to ${res?.cohort || 'the Lab'}${res?.emailed ? ' — email sent.' : ' — email not sent (dev or send failure).'}`);
-      loadAll();
-    } catch (e) { alert(e.message || 'Failed to admit'); }
-  };
+  const handleSpinoutAdmit = (user) => setSpinoutAdmit(user);
   // The pending binding-agreement override: {user, nextRole} while the reason
   // dialog is open, null otherwise. Only a super admin can get here — the
   // dropdown does not offer the options to anyone else, and the server refuses
@@ -647,6 +634,7 @@ export default function UsersConsole({ onImpersonate }) {
 
   return (
     <>
+      {spinoutAdmit && <LabAdmitDialog user={spinoutAdmit} onClose={() => setSpinoutAdmit(null)} onChanged={loadAll} />}
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3" data-testid="admin-user-tiles">
             {Object.entries(counts || { all: null, admin: null, founder: null, partner: null, investor: null, advisor: null, exploring: null }).map(([role, count]) => (

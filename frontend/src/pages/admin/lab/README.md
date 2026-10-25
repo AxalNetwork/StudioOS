@@ -25,8 +25,7 @@ and hash and adding `?moved=`:
   to company and Applications per week, each with Chart ⇄ Table and its
   Reading…, Unreadable with Try again, and empty states.
 - `LabCohorts.jsx` — Cohorts (D947): SL5's calendar of the next twelve cohorts
-  or the list, and SL6, one cohort at `/cohorts/YYYY-MM`. Grace and outcome
-  overrides there are still today's `AdminCohortTiming` until part 7.
+  or the list, and SL6, one cohort at `/cohorts/YYYY-MM`. D1123 embeds D949’s reasoned participant decisions locked to the addressed cohort.
 - `labOverviewModel.js` — pure. Those blocks and pages from D944's overview
   read (`GET /api/admin/cohort/overview`) and Settings' minimum and places.
 - `LabApplications.jsx` — Applications (SL2) and one application (SL3, D948):
@@ -52,7 +51,7 @@ and hash and adding `?moved=`:
 - `LabFormation.jsx` — Formation (SL10, SL10d; D970): the 83(b) operator
   review (assign, record a review) and the formation orders (mark the packet
   ready, record the filing date), each read alone, each write in a dialog with
-  nothing preselected. The "Lab ventures" switch waits for part 4 (#2751).
+  nothing preselected. D1123 wires the Worker’s Lab ventures / All startups scope into both desks.
 - `LabGraduation.jsx` — Graduation (SL11, SL11r; D970): the four tiles
   (Emailed and Downloaded "Not recorded"), Issue all eligible with its
   result, the table, and the Issue and Revoke dialogs (a reason required).
@@ -93,3 +92,10 @@ D971 (#2756), SL12–SL14 and SL21:
 - `labOperationsModel.js` holds words, ET stamps, validators and support paging;
   `labOperationsParts.jsx` gives these tabs their explicit Unreadable / Try again
   block while reusing the shared loading and stale states.
+
+D1123 (#3003): `LabCohortDetails.jsx` reads the stored capacity check and the
+cohort-scoped Messages and History independently. `LabAdmitDialog.jsx` is the
+Users console’s structured admission. `LabGrantBoundary.jsx` reads the branch’s
+dated Lab grant before mounting tools; `LabOnlyNotice.jsx` is SL19a’s member
+refusal. Interview completion and reached-week tracking await an allocated
+migration; scheduling is not attendance.
