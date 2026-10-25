@@ -34,7 +34,7 @@ import { AUTH_ERROR_STATUSES } from '../src/util/authErrors.ts';
 import { d1Over } from './_d1_sqlite.mjs';
 import { tableFromBaseline } from './_baseline.mjs';
 
-const SECRET = 'segment-suggestion-secret-0123456789-abcdef';
+const SECRET = 'x'.repeat(64); // synthetic test fixture
 const BASELINE = readFileSync(new URL('../sql/schema_baseline.sql', import.meta.url), 'utf8');
 const PROFILES = readFileSync(new URL('../sql/migrations/559_segment_profiles.sql', import.meta.url), 'utf8');
 const SUGGESTIONS = readFileSync(new URL('../sql/migrations/570_segment_suggestions.sql', import.meta.url), 'utf8');

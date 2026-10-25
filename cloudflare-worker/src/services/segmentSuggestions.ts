@@ -68,9 +68,6 @@ interface Row {
   created_at: string; updated_at: string;
 }
 
-const COLUMNS = `uid, segment_key, kind, text, status, decline_reason, suggested_by, suggested_by_name, origin_code, origin_ref,
-  hq_uid, delivery, delivery_reason, decided_by_name, decided_at, push_ok, push_reason, created_at, updated_at`;
-
 /** A suggestion as the routes return it. The Admin's account id stays on the deployment that holds it. */
 export function viewOf(row: Row) {
   return {
@@ -120,7 +117,8 @@ export async function readInput(env: Env, body: Record<string, unknown> | null):
 }
 
 async function rowByUid(env: Env, uid: string): Promise<Row | null> {
-  return await env.DB.prepare(`SELECT ${COLUMNS} FROM segment_suggestions WHERE uid = ?`).bind(uid).first<Row>();
+  return await env.DB.prepare(`SELECT uid, segment_key, kind, text, status, decline_reason, suggested_by, suggested_by_name, origin_code, origin_ref,
+  hq_uid, delivery, delivery_reason, decided_by_name, decided_at, push_ok, push_reason, created_at, updated_at FROM segment_suggestions WHERE uid = ?`).bind(uid).first<Row>();
 }
 
 /** HQ's Super Admins, told of each new suggestion. */
@@ -230,7 +228,8 @@ export async function recordFromBranch(env: Env, code: string, raw: Record<strin
      VALUES (?, ?, ?, ?, ?, ?, ?, 'local')
      ON CONFLICT (origin_code, origin_ref) WHERE origin_ref IS NOT NULL DO NOTHING`,
   ).bind(uid, input.segment_key, input.kind, input.text, oneLine(raw?.suggested_by_name).slice(0, 200) || null, code, ref).run();
-  const row = await env.DB.prepare(`SELECT ${COLUMNS} FROM segment_suggestions WHERE origin_code = ? AND origin_ref = ?`).bind(code, ref).first<Row>();
+  const row = await env.DB.prepare(`SELECT uid, segment_key, kind, text, status, decline_reason, suggested_by, suggested_by_name, origin_code, origin_ref,
+  hq_uid, delivery, delivery_reason, decided_by_name, decided_at, push_ok, push_reason, created_at, updated_at FROM segment_suggestions WHERE origin_code = ? AND origin_ref = ?`).bind(code, ref).first<Row>();
   if (!row) throw new Error('segmentSuggestion: the row was not stored');
   if (row.uid === uid) await noticeHq(env, row);
   return { uid: row.uid };
@@ -244,7 +243,8 @@ export async function listSuggestions(env: Env, viewer: { id: number; superAdmin
   const s = status && (SUGGESTION_STATUSES as readonly string[]).includes(status) ? status : null;
   const all = viewer.superAdmin && !branchOf(env);
   const rows = (await env.DB.prepare(
-    `SELECT ${COLUMNS} FROM segment_suggestions
+    `SELECT uid, segment_key, kind, text, status, decline_reason, suggested_by, suggested_by_name, origin_code, origin_ref,
+  hq_uid, delivery, delivery_reason, decided_by_name, decided_at, push_ok, push_reason, created_at, updated_at FROM segment_suggestions
       WHERE (? IS NULL OR status = ?) AND (? = 1 OR suggested_by = ?)
       ORDER BY created_at DESC, id DESC LIMIT ?`,
   ).bind(s, s, all ? 1 : 0, viewer.id, LIST_MAX).all<Row>()).results || [];
@@ -329,7 +329,8 @@ export async function applyAnswer(env: Env, a: Record<string, unknown>): Promise
     const known = await env.DB.prepare('SELECT 1 AS x FROM segment_suggestions WHERE hq_uid = ?').bind(hqUid).first();
     return known ? { ok: true } : { ok: false, reason: `This subsidiary sent no suggestion with HQ uid ${hqUid}, so there is nothing to answer.` };
   }
-  const row = await env.DB.prepare(`SELECT ${COLUMNS} FROM segment_suggestions WHERE hq_uid = ?`).bind(hqUid).first<Row>();
+  const row = await env.DB.prepare(`SELECT uid, segment_key, kind, text, status, decline_reason, suggested_by, suggested_by_name, origin_code, origin_ref,
+  hq_uid, delivery, delivery_reason, decided_by_name, decided_at, push_ok, push_reason, created_at, updated_at FROM segment_suggestions WHERE hq_uid = ?`).bind(hqUid).first<Row>();
   const told = row ? await noticeAdmin(env, row) : { ok: false };
   return { ok: true, ...(told.ok ? {} : { reason: `Recorded; the Admin was not told: ${told.reason}` }) };
 }
