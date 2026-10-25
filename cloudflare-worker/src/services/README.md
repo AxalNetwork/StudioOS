@@ -14,8 +14,10 @@ runs these directly against an in-process SQLite, with no request at all.
 bank-account/Mercury audit history. It uses a successful read audit as its route
 gate, validates bound filters, pins append-only source ids for insertion-stable
 pages, and never reads/decrypts account-number ciphertext or calls Mercury.
-`entityBankAccounts.ts` resolves the recorder's name on every masked account;
-a missing recorder name stays null, with no id/email fallback.
+Malformed audit details are flagged per row without disabling the history.
+`entityBankAccounts.ts` resolves the recorder's name only for Super Admin
+console responses; a missing name stays null, with no id/email fallback.
+Shared payment-instruction and notice projections omit recorder names.
 
 `captableAccess.ts` consumes verified project permissions from the cap-table
 router (#2436). Investors receive no project-bound cap-table access; accepted

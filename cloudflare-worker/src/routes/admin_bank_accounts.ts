@@ -32,7 +32,7 @@ import { logAdminAction } from '../services/adminAudit';
 import { Funds } from '../models/funds';
 import { bankAccountHistory, historyFilters, BankHistoryError } from '../services/bankAccountHistory';
 import {
-  BankAccountError, createAccount, listAccounts, updateAccount, retireAccount, revealAccount,
+  BankAccountError, createAccount, listAccountsForConsole, updateAccount, retireAccount, revealAccount,
 } from '../services/entityBankAccounts';
 import { PAYMENT_PURPOSES, FUND_I_SLUG, NOTICE_REFUSALS, payInstructionsFor, refusalMessage, type PaymentPurpose } from '../services/payInstructions';
 
@@ -85,7 +85,7 @@ r.get('/history', async (c) => {
 
 r.get('/', async (c) => {
   await requireSuperAdmin(c);
-  const [accounts, fundI] = await Promise.all([listAccounts(c.env), Funds.bySlug(c.env, FUND_I_SLUG)]);
+  const [accounts, fundI] = await Promise.all([listAccountsForConsole(c.env), Funds.bySlug(c.env, FUND_I_SLUG)]);
   const coverage = [];
   for (const [purpose, def] of Object.entries(PAYMENT_PURPOSES)) {
     const pay = await payInstructionsFor(c.env, def.payee, purpose as PaymentPurpose);
