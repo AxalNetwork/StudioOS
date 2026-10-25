@@ -829,7 +829,8 @@ const versionOf = (raw: string): number | null => (/^[1-9]\d{0,8}$/.test(raw) ? 
  * `data_room_access_log`, so it is never counted as an investor's download.
  */
 async function founderLink(env: Env, project: ProjectRow, userId: number, file: FileRow, key: string, version: number | null) {
-  if (!key.startsWith(`data-room/${project.uid}/`)) throw new WriterError(404, 'File not found');
+  // Null for an object outside this venture's prefix: the route answers 404.
+  if (!key.startsWith(`data-room/${project.uid}/`)) return null;
   const { token, expires_at } = await mintDownloadToken(env, {
     key, audience: `data_room_founder:${project.uid}`, userId, ttlSec: FOUNDER_LINK_TTL_SEC,
   });
@@ -846,7 +847,8 @@ r.post('/:projectUid/files/:uid/download', async (c) => {
     if (!room) return c.json({ detail: 'Project not found' }, 404);
     const file = await roomFile(c.env, room.project.id, c.req.param('uid'));
     if (!file) return c.json({ detail: 'File not found' }, 404);
-    return c.json(await founderLink(c.env, room.project, Number(user.id), file, file.r2_key, null));
+    const link = await founderLink(c.env, room.project, Number(user.id), file, file.r2_key, null);
+    return link ? c.json(link) : c.json({ detail: 'File not found' }, 404);
   } catch (e) { return mapError(c, e); }
 });
 
@@ -892,7 +894,8 @@ r.post('/:projectUid/files/:uid/versions/:n/download', async (c) => {
       'SELECT r2_key FROM data_room_file_versions WHERE file_id = ? AND version = ?',
     ).bind(file.id, n).first<{ r2_key: string }>() : null;
     if (!file || !version) return c.json({ detail: 'Version not found' }, 404);
-    return c.json(await founderLink(c.env, room.project, Number(user.id), file, version.r2_key, n));
+    const link = await founderLink(c.env, room.project, Number(user.id), file, version.r2_key, n);
+    return link ? c.json(link) : c.json({ detail: 'Version not found' }, 404);
   } catch (e) { return mapError(c, e); }
 });
 
