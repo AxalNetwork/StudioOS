@@ -339,3 +339,5 @@ D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 (members, needs met and gaps, offers by kind, links' reach), and the Super
 Admin's write, which names the version it read. Counts leave admins out and
 come back suppressed from 1 to 4.
+
+`googleWorkspace.js` (D1091) calls the mounted Workspace consent, picked files, mapping, Stop using and preview routes. The files screen awaits its canvas.

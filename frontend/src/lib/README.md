@@ -133,3 +133,5 @@ an explicit international prefix. Only E.164 reaches the Worker; profile and SMS
 destination. Possible length is not proof a number is assigned or SMS-capable;
 the existing verification step remains required. Recovery uses the already
 verified stored number and never accepts a new client-supplied destination.
+
+`googleWorkspacePicker.js` (D1091) opens Google’s Picker with a browser-only, drive.file-only token and returns file IDs; the approved page owns its future dialogs.

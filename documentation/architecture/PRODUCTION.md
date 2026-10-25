@@ -370,3 +370,7 @@ drain, with destruction after 30 seconds. Expired funded leases stop the
 container. Replacement/rejoin stays refused until a durable resume contract
 exists. Publication, canary/price switches and actual meetings remain gated
 by B9 and the owner; deployment alone enables none of them.
+
+### Google Workspace Picker (D1091, #2956)
+
+The existing Calendar OAuth client is reused. Before enabling the approved files screen, the owner must supply `GOOGLE_PICKER_API_KEY` (browser-visible, restricted to the approved Axal/Google referrers and Picker API) and `GOOGLE_PICKER_APP_ID` (the numeric Cloud project number matching the Calendar OAuth client). Enable the Picker and required Workspace APIs in that project. No values are committed. Live verification remains pending.

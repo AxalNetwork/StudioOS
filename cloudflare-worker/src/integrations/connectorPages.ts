@@ -543,13 +543,36 @@ export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
     links: { ...NO_LINKS, developer_docs: 'https://developers.zoom.us/docs/integrations/oauth/' },
     verified_on: null,
   },
+  google_workspace: {
+    tagline: 'Choose Google files for your modules. Coming soon.',
+    long_description: [
+      'Axal VC reads only files you choose. It cannot browse the rest of your Drive.',
+      'Connect Google first at /account/connectors/google. File selection and the chosen-files screen await their approved design.',
+      'Stopping use or disconnecting keeps accepted facts; linked source records are removed. Module imports ship in later parts.',
+    ],
+    tools: [
+      tool('pick_files', 'Choose files', 'read', 'Confirms each file chosen in Google’s Picker.', null, ["'files.get'"]),
+      tool('read_file_metadata', 'File details', 'read', 'Reads the chosen file’s kind and modification date.', null, ["'files.get'"]),
+      tool('read_doc', 'Documents', 'read', 'Reads a chosen document; module imports are not built yet.', null, ["'documents.get'"]),
+      tool('read_sheet', 'Sheets', 'read', 'Previews up to five rows; stores no cells.', null, ["'spreadsheets.values.get'"]),
+      tool('read_slides', 'Slides', 'read', 'Reads chosen slides; deck imports are not built yet.', null, ["'presentations.get'"]),
+      tool('read_form_responses', 'Forms', 'read', 'Read-only Forms reader; importing responses is not built yet.', null, ["'forms.responses.list'"]),
+      tool('copy_file_to_data_room', 'Data room', 'read', 'Not built yet: a future import may read an exported or downloaded copy.', null, ["'files.export'", "'alt=media'"]),
+      tool('revoke_grant', 'Disconnect Google', 'account', 'Revokes the combined Google grant at your request.', null, ['clearWorkspaceConnection(']),
+    ],
+    prompts: [], prompts_reason: 'Eadwyn does not read Google Workspace yet.',
+    made_by: AXAL, service: { name: 'Google Workspace', href: 'https://workspace.google.com' },
+    sign_in: { kind: 'first_party', label: 'Allow Google files', key_help_href: null },
+    endpoints: { sign_in: 'https://accounts.google.com/o/oauth2/v2/auth', api: null },
+    added: null, links: { ...NO_LINKS, developer_docs: 'https://developers.google.com/workspace/drive/picker/guides/web-picker' }, verified_on: null,
+  },
   google_calendar: {
     tagline: 'Your Google Calendar events and interview slots, and sign-in with Google.',
     long_description: [
       'Calendar events and interview slots from your Google sign-in.',
       'Axal VC adds, updates and removes the events it schedules on your primary calendar, including Google Meet interview calls. It reads your events, and the Meet transcripts you allow, into Customer research.',
       'A Meet call that ends without a transcript can still reach Customer research: upload its recording file in Record a Session, and Workers AI transcribes it on your AI tokens.',
-      'If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
+      'Google Docs, Sheets, Slides, Forms and Drive files: choose them on the Google Workspace page (/account/connectors/google_workspace). If an earlier connection granted Gmail access, use Remove Gmail access to revoke the old Google grant and reconnect without Gmail.',
     ],
     tools: [
       tool('remove_gmail_access', 'Google account access', 'account', 'Revokes an earlier Google grant that included Gmail, then starts a fresh consent without Gmail.', null, ['https://oauth2.googleapis.com/revoke']),

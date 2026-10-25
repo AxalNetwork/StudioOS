@@ -405,3 +405,5 @@ UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 actions and reads them back as the Payments change log; `stripeWebhookDeliveries.ts`
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
+
+`google/` holds D1091’s bounded, GET-only Workspace readers over Calendar’s single Google token store. See `google/README.md`.

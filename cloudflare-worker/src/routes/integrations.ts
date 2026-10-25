@@ -18,6 +18,7 @@
  * refresh_token into D1.
  */
 import { Hono } from 'hono';
+import { revokeAndDisconnectGoogle } from './calendar';
 import { cartaAudience } from '../integrations/cartaScopes';
 import type { Context } from 'hono';
 import type { Env, User } from '../types';
@@ -770,6 +771,12 @@ integrations.delete('/:uid', async (c) => {
   const uid = c.req.param('uid');
   const row = await loadRow(c.env, uid, user.id);
   if (!row) return c.json({ error: 'not_found' }, 404);
+
+  if (row.provider_key === 'google_workspace') {
+    try { await revokeAndDisconnectGoogle(c.env, user.id); }
+    catch { return c.json({ error: 'google_revocation_failed' }, 503); }
+    return c.json({ ok: true });
+  }
 
   const impl = getProviderImpl(row.provider_key);
   if (impl?.disconnect) {

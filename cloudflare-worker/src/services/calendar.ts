@@ -232,7 +232,7 @@ export function preflightOAuthSecrets(
 // ===========================================================================
 // Auth URL builders
 // ===========================================================================
-export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string, includeMeetTranscripts = false): string {
+export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string, includeMeetTranscripts = false, includeWorkspaceFiles = false): string {
   // Task #1 — `select_account consent` forces Google's account chooser
   // every time, even when the browser is already signed into exactly one
   // Google account. Without `select_account` Google silently re-uses the
@@ -246,7 +246,7 @@ export function buildGoogleAuthUrl(env: Env, state: string, loginHint?: string, 
     client_id: googleCalClientId(env)!,
     redirect_uri: googleRedirectUri(env),
     response_type: 'code',
-    scope: [...GOOGLE_SCOPES, ...(includeMeetTranscripts ? [GOOGLE_MEET_TRANSCRIPT_SCOPE] : [])].join(' '),
+    scope: [...GOOGLE_SCOPES, ...(includeMeetTranscripts ? [GOOGLE_MEET_TRANSCRIPT_SCOPE] : []), ...(includeWorkspaceFiles ? ['https://www.googleapis.com/auth/drive.file'] : [])].join(' '),
     access_type: 'offline',
     prompt: 'select_account consent',
     state,
