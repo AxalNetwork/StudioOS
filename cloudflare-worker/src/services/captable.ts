@@ -10,6 +10,19 @@
  *   - Option-pool top-ups are pre-money.
  *   - Waterfall = 1× non-participating preferred for SAFE +
  *     priced-round investors; issued common participates, unallocated pool does not.
+ *
+ * D1018 (#2855) adds, without changing any existing scenario's numbers:
+ *   - `exit_values`: up to four exits, one waterfall each (`waterfalls`);
+ *   - a round's `top_up_payer`: the pool top-up in the pre-money (founders,
+ *     the default above) or after the new money (everyone);
+ *   - a SAFE's `converts: false`: it stays outstanding past the round;
+ *   - each round's `conversions`: every instrument's cap price, discount
+ *     price, round price, which won, its shares and its % after the round;
+ *   - `mfn`: for each MFN instrument, each later SAFE with a better cap or not;
+ *   - `post_money_check`: what post-money caps together promise, flagged at
+ *     100% or more — answered, never quietly rescaled;
+ *   - `start`: a scenario begins from recorded holders (the record, D1017)
+ *     instead of typed founders.
  */
 
 import {
@@ -29,19 +42,35 @@ type SafeIn = {
   name: string; amount: number; cap?: number; discount?: number;
   basis?: SafeBasis; instrument?: InstrumentKind;
   interest_rate?: number; issue_date?: string;
+  /** D1018: most-favoured-nation. Reported against later SAFEs, never applied. */
+  mfn?: boolean;
+  /** D1018: false keeps the instrument outstanding past the round. Default true. */
+  converts?: boolean;
 };
+export type TopUpPayer = 'pre_money' | 'post_money';
 type RoundIn = {
   name: string; pre_money: number; investment: number; post_round_pool_pct?: number;
   /** Used only for note interest accrual. */
   conversion_date?: string;
+  /** D1018: who carries the pool top-up. Default 'pre_money' (founders). */
+  top_up_payer?: TopUpPayer;
 };
+/** D1018: a recorded holder a scenario starts from. `preference` is a preferred holder's paid-in amount, null when not recorded. */
+export type StartHolder = { name: string; type: 'common' | 'preferred' | 'options'; shares: number; preference?: number | null };
 export type Inputs = {
   founders?: Founder[];
   option_pool_pct?: number;
   safes?: SafeIn[];
   rounds?: RoundIn[];
   exit_value?: number | null;
+  /** D1018: up to four exit values, one waterfall each. */
+  exit_values?: number[];
+  /** D1018: start from recorded holders instead of `founders` and `option_pool_pct`. */
+  start?: { holders: StartHolder[]; pool_shares?: number | null };
 };
+
+export const MAX_EXIT_VALUES = 4;
+const START_TYPES = ['common', 'preferred', 'options'];
 
 /**
  * Banker's rounding (round-half-to-even). Python 3's built-in `round()`
@@ -65,13 +94,32 @@ function bankersRound(x: number, digits = 0): number {
 function roundShares(x: number): number { return bankersRound(x, 0); }
 function safeDiv(a: number, b: number): number { return b ? a / b : 0; }
 
+function validExit(v: unknown): boolean {
+  return Number.isFinite(Number(v)) && Number(v) >= 0 && Number.isSafeInteger(Math.round(Number(v) * 100));
+}
+
 export function validateInputs(inputs: Inputs): string[] {
   const errs: string[] = [];
-  const founders = inputs.founders || [];
-  if (founders.length === 0) errs.push('At least one founder is required.');
-  for (const f of founders) {
-    if (!f?.name) errs.push('Every founder needs a name.');
-    if (Number(f?.shares || 0) <= 0) errs.push(`Founder '${f?.name ?? '?'}' needs shares > 0.`);
+  if (inputs.start != null) {
+    // D1018: the record's holders replace typed founders and the pool percentage.
+    if ((inputs.founders || []).length || inputs.option_pool_pct) errs.push('A scenario starts from the record or from typed founders, not both.');
+    const holders = Array.isArray(inputs.start.holders) ? inputs.start.holders : [];
+    if (!holders.some((h) => h?.type === 'common' || h?.type === 'preferred')) errs.push('The record holds no shares to start from.');
+    for (const h of holders) {
+      if (!h?.name) errs.push('Every recorded holder needs a name.');
+      if (!START_TYPES.includes(String(h?.type))) errs.push(`Holder '${h?.name ?? '?'}' type must be common, preferred or options.`);
+      if (!Number.isSafeInteger(Number(h?.shares)) || Number(h?.shares) <= 0) errs.push(`Holder '${h?.name ?? '?'}' needs whole shares > 0.`);
+      if (h?.preference != null && !(Number.isFinite(Number(h.preference)) && Number(h.preference) >= 0)) errs.push(`Holder '${h?.name ?? '?'}' preference must be a non-negative amount.`);
+    }
+    const ps = inputs.start.pool_shares;
+    if (ps != null && !(Number.isSafeInteger(Number(ps)) && Number(ps) >= 0)) errs.push('The unallocated pool must be a whole number of shares.');
+  } else {
+    const founders = inputs.founders || [];
+    if (founders.length === 0) errs.push('At least one founder is required.');
+    for (const f of founders) {
+      if (!f?.name) errs.push('Every founder needs a name.');
+      if (Number(f?.shares || 0) <= 0) errs.push(`Founder '${f?.name ?? '?'}' needs shares > 0.`);
+    }
   }
   const pool = Number(inputs.option_pool_pct || 0);
   if (pool < 0 || pool > 80) errs.push('Option pool % must be between 0 and 80.');
@@ -100,6 +148,8 @@ export function validateInputs(inputs: Inputs): string[] {
     if (s?.issue_date != null && s.issue_date !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(String(s.issue_date))) {
       errs.push(`Note '${s?.name ?? '?'}' issue date must be YYYY-MM-DD.`);
     }
+    if (s?.mfn != null && typeof s.mfn !== 'boolean') errs.push(`SAFE '${s?.name ?? '?'}' mfn must be true or false.`);
+    if (s?.converts != null && typeof s.converts !== 'boolean') errs.push(`SAFE '${s?.name ?? '?'}' converts must be true or false.`);
   }
   for (const r of inputs.rounds || []) {
     if (!r?.name) errs.push('Every round needs a name.');
@@ -107,9 +157,16 @@ export function validateInputs(inputs: Inputs): string[] {
     if (Number(r?.investment || 0) <= 0) errs.push(`Round '${r?.name ?? '?'}' needs investment > 0.`);
     const pa = Number(r?.post_round_pool_pct || 0);
     if (pa && (pa < 0 || pa > 80)) errs.push(`Round '${r?.name ?? '?'}' pool % must be 0..80.`);
+    if (r?.top_up_payer != null && r.top_up_payer !== 'pre_money' && r.top_up_payer !== 'post_money') {
+      errs.push(`Round '${r?.name ?? '?'}' top-up payer must be 'pre_money' or 'post_money'.`);
+    }
   }
-  if (inputs.exit_value != null && (!Number.isFinite(Number(inputs.exit_value)) || Number(inputs.exit_value) < 0 || !Number.isSafeInteger(Math.round(Number(inputs.exit_value) * 100)))) {
+  if (inputs.exit_value != null && !validExit(inputs.exit_value)) {
     errs.push('Exit value must be a finite non-negative amount representable in safe integer cents.');
+  }
+  if (inputs.exit_values != null) {
+    if (!Array.isArray(inputs.exit_values) || inputs.exit_values.length > MAX_EXIT_VALUES) errs.push(`Up to ${MAX_EXIT_VALUES} exit values.`);
+    else if (inputs.exit_values.some((v) => v == null || !validExit(v))) errs.push('Each exit value must be a finite non-negative amount representable in safe integer cents.');
   }
   return errs;
 }
@@ -129,11 +186,34 @@ function snapshot(l: Holder[]): Holder[] {
   return out;
 }
 
+/** D1018 (CT4): how one instrument converted, as numbers the page draws without re-deriving. */
+export type ConversionDetail = {
+  name: string; instrument: InstrumentKind; basis: SafeBasis; mfn: boolean;
+  amount: number; accrued_interest: number; converting_amount: number;
+  /** Null when the instrument has no cap, or no discount. */
+  cap_price: number | null; discount_price: number | null; round_price: number;
+  /** Which price won: the lower of the cap and discount prices. */
+  binding: 'cap' | 'discount' | 'none';
+  price_per_share: number; shares: number; pct_after_round: number;
+};
+/** D1018 (CT3): what post-money caps together promise. At 100% or more the terms cannot all be honoured. */
+export type PostMoneyCheck = { fraction: number; pct: number; over_100: boolean };
+
 type RoundOut = {
   name: string; pre_money: number; post_money: number; investment: number;
   price_per_share: number; shares_pre: number; shares_post: number;
   ledger: Holder[]; events: string[];
   round_meta: { investor_label: string; investment: number; safe_preferences: Record<string, number> };
+  conversions: ConversionDetail[];
+  post_money_check: PostMoneyCheck;
+  top_up: { shares: number; payer: TopUpPayer } | null;
+};
+
+/** D1018 (CT4): an MFN instrument against each later SAFE. Reported, never applied to the conversion. */
+export type MfnRead = {
+  name: string;
+  /** 'date' when both issue dates are recorded, else the order the instruments are listed in. */
+  later: Array<{ name: string; cap: number | null; verdict: 'better_cap' | 'no_change'; ordered_by: 'date' | 'listed' }>;
 };
 
 export type SimulateResult = {
@@ -141,25 +221,70 @@ export type SimulateResult = {
   rounds: RoundOut[];
   founder_dilution: Array<{ founder: string; series: Array<{ round: string; shares: number; pct: number }> }>;
   waterfall: ReturnType<typeof waterfall> | ReturnType<typeof waterfallPreRound> | null;
+  /** D1018: one entry per `exit_values` value, in order; null where it could not be calculated. */
+  waterfalls?: Array<{ exit_value: number; waterfall: ReturnType<typeof waterfall> | ReturnType<typeof waterfallPreRound> | null }>;
   warnings: string[];
   totals: { shares_outstanding: number; rounds_completed: number };
+  mfn?: MfnRead[];
+  post_money_check?: PostMoneyCheck;
+  /** D1018: instruments set not to convert, still outstanding after the last round. */
+  outstanding_instruments?: string[];
+  over_100?: boolean;
   errors?: string[];
 };
+
+function postMoneyCheck(safes: SafeIn[]): PostMoneyCheck {
+  const fraction = safes.reduce((n, s) => n + (s.basis === 'post_money' && Number(s.cap) > 0 ? Number(s.amount) / Number(s.cap) : 0), 0);
+  return { fraction: bankersRound(fraction, 6), pct: bankersRound(fraction * 100, 2), over_100: fraction >= 1 };
+}
+
+function mfnReads(safes: SafeIn[]): MfnRead[] {
+  return safes.flatMap((s, i) => {
+    if (s.mfn !== true) return [];
+    const later = safes.flatMap((o, j) => {
+      if (j === i || o.instrument === 'note') return [];
+      const dated = !!s.issue_date && !!o.issue_date;
+      const after = dated ? String(o.issue_date) > String(s.issue_date) : j > i;
+      if (!after) return [];
+      const cap = Number(o.cap) > 0 ? Number(o.cap) : null;
+      const better = cap != null && (Number(s.cap) > 0 ? cap < Number(s.cap) : true);
+      return [{ name: o.name, cap, verdict: better ? 'better_cap' as const : 'no_change' as const, ordered_by: dated ? 'date' as const : 'listed' as const }];
+    });
+    return [{ name: s.name, later }];
+  });
+}
 
 export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } {
   const errs = validateInputs(inputs);
   if (errs.length) return { errors: errs };
   const warnings: string[] = [];
 
-  const founders = inputs.founders!;
   const ledger: Holder[] = [];
-  for (const f of founders) addOrMerge(ledger, f.name, 'founder', roundShares(Number(f.shares)));
-  const initialPoolPct = Number(inputs.option_pool_pct || 0);
-  if (initialPoolPct > 0) {
-    const founderTotal = ledgerTotal(ledger);
-    const target = initialPoolPct / 100;
-    const poolShares = roundShares((founderTotal * target) / Math.max(1e-9, 1 - target));
-    if (poolShares > 0) addOrMerge(ledger, 'Option Pool', 'option_pool', poolShares);
+  // D1018: recorded preferred holders keep the amount they paid in as their preference.
+  const startPrefs: Record<string, number | null> = {};
+  let founders: Founder[];
+  if (inputs.start) {
+    for (const h of inputs.start.holders) {
+      const type = h.type === 'common' ? 'founder' : h.type;
+      addOrMerge(ledger, h.name, type, roundShares(Number(h.shares)));
+      if (h.type === 'preferred') {
+        const prev = startPrefs[h.name];
+        startPrefs[h.name] = h.preference == null || prev === null ? null : (prev ?? 0) + Number(h.preference);
+      }
+    }
+    const pool = Number(inputs.start.pool_shares ?? 0);
+    if (pool > 0) addOrMerge(ledger, 'Option Pool', 'option_pool', pool);
+    founders = inputs.start.holders.filter((h) => h.type === 'common').map((h) => ({ name: h.name, shares: h.shares }));
+  } else {
+    founders = inputs.founders!;
+    for (const f of founders) addOrMerge(ledger, f.name, 'founder', roundShares(Number(f.shares)));
+    const initialPoolPct = Number(inputs.option_pool_pct || 0);
+    if (initialPoolPct > 0) {
+      const founderTotal = ledgerTotal(ledger);
+      const target = initialPoolPct / 100;
+      const poolShares = roundShares((founderTotal * target) / Math.max(1e-9, 1 - target));
+      if (poolShares > 0) addOrMerge(ledger, 'Option Pool', 'option_pool', poolShares);
+    }
   }
   const founding = snapshot(ledger);
   let pendingSafes: SafeIn[] = [...(inputs.safes || [])];
@@ -170,14 +295,19 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
     const preMoney = Number(round.pre_money);
     const investment = Number(round.investment);
     const targetPoolPost = Number(round.post_round_pool_pct || 0) / 100;
+    const payer: TopUpPayer = round.top_up_payer === 'post_money' ? 'post_money' : 'pre_money';
+    // D1018: an instrument set not to convert stays outstanding past this round.
+    const converting = pendingSafes.filter((s) => s.converts !== false);
+    const carried = pendingSafes.filter((s) => s.converts === false);
+    let topUpShares = 0;
 
     let sharesPre = ledgerTotal(ledger);
     let pricePerShare = safeDiv(preMoney, sharesPre);
 
     // 1) Option pool top-up (pre-money).
-    if (targetPoolPost > 0) {
+    if (targetPoolPost > 0 && payer === 'pre_money') {
       let estSafeShares = 0;
-      for (const s of pendingSafes) {
+      for (const s of converting) {
         const cap = Number(s.cap || 0);
         const disc = Number(s.discount || 0);
         const capPrice = cap ? safeDiv(cap, sharesPre) : Infinity;
@@ -194,6 +324,7 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
       if (topUp > 0) {
         addOrMerge(ledger, 'Option Pool', 'option_pool', topUp);
         events.push(`Option pool topped up by ${topUp.toLocaleString()} shares (target ${(targetPoolPost * 100).toFixed(1)}% post)`);
+        topUpShares = topUp;
         sharesPre = ledgerTotal(ledger);
         pricePerShare = safeDiv(preMoney, sharesPre);
       }
@@ -206,9 +337,11 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
     // Post-money SAFEs and notes need a fixed-point solve, so they route to
     // services/safeConversion.ts instead.
     const safePrefs: Record<string, number> = {};
-    if (needsExtendedConversion(pendingSafes as ConvertibleIn[])) {
+    const details: Array<Omit<ConversionDetail, 'pct_after_round'>> = [];
+    let check: PostMoneyCheck = { fraction: 0, pct: 0, over_100: false };
+    if (needsExtendedConversion(converting as ConvertibleIn[])) {
       const conv = convertInstruments(
-        pendingSafes as ConvertibleIn[], sharesPre, pricePerShare, round.conversion_date,
+        converting as ConvertibleIn[], sharesPre, pricePerShare, round.conversion_date,
       );
       for (const w of conv.warnings) warnings.push(w);
       for (const h of conv.holders) {
@@ -224,14 +357,22 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
           `${label} '${h.name}' converted (${basisLabel}): ${h.shares.toLocaleString()} shares ` +
           `@ $${h.price_per_share.toFixed(4)} (binding: ${h.binding})${interest}`,
         );
+        const src = converting.find((s) => s.name === h.name);
+        details.push({
+          name: h.name, instrument: h.instrument, basis: h.basis, mfn: src?.mfn === true,
+          amount: bankersRound(h.converting_amount - h.accrued_interest, 2), accrued_interest: h.accrued_interest,
+          converting_amount: h.converting_amount, cap_price: h.cap_price, discount_price: h.discount_price,
+          round_price: bankersRound(pricePerShare, 6), binding: h.binding, price_per_share: h.price_per_share, shares: h.shares,
+        });
       }
+      check = { fraction: conv.post_money_fraction, pct: bankersRound(conv.post_money_fraction * 100, 2), over_100: conv.over_subscribed };
       if (conv.over_subscribed) {
         events.push(
           `WARNING: post-money caps promise ${(conv.post_money_fraction * 100).toFixed(1)}% of the company — these terms cannot all be honoured.`,
         );
       }
     } else {
-      for (const s of pendingSafes) {
+      for (const s of converting) {
         const cap = Number(s.cap || 0);
         const disc = Number(s.discount || 0);
         const capPrice = cap ? safeDiv(cap, sharesPre) : Infinity;
@@ -246,15 +387,38 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
         addOrMerge(ledger, s.name, 'safe', shares);
         safePrefs[s.name] = (safePrefs[s.name] || 0) + Number(s.amount);
         events.push(`SAFE '${s.name}' converted: ${shares.toLocaleString()} shares @ $${conv.toFixed(4)} (binding: ${binding})`);
+        details.push({
+          name: s.name, instrument: 'safe', basis: 'pre_money', mfn: s.mfn === true,
+          amount: Number(s.amount), accrued_interest: 0, converting_amount: Number(s.amount),
+          cap_price: Number.isFinite(capPrice) ? bankersRound(capPrice, 6) : null,
+          discount_price: Number.isFinite(discPrice) ? bankersRound(discPrice, 6) : null,
+          // A SAFE with neither term was skipped above, so a cap or a discount set the price.
+          round_price: bankersRound(pricePerShare, 6), binding: binding === 'discount' ? 'discount' : 'cap',
+          price_per_share: bankersRound(conv, 6), shares,
+        });
       }
     }
-    pendingSafes = [];
+    pendingSafes = carried;
+    for (const s of carried) events.push(`SAFE '${s.name}' does not convert at this round; it stays outstanding.`);
 
     // 3) New investor.
     const newInvShares = roundShares(safeDiv(investment, pricePerShare));
     const investorLabel = `${round.name} Investors`;
     addOrMerge(ledger, investorLabel, 'preferred', newInvShares);
     events.push(`${investorLabel}: ${newInvShares.toLocaleString()} shares for $${investment.toFixed(0)} @ $${pricePerShare.toFixed(4)}/sh`);
+
+    // 4) D1018: a post-money top-up lands after the new money, so every holder carries it.
+    if (targetPoolPost > 0 && payer === 'post_money') {
+      const currentPool = ledger.filter((h) => h.type === 'option_pool').reduce((n, h) => n + h.shares, 0);
+      const exclPool = ledgerTotal(ledger) - currentPool;
+      const t = targetPoolPost;
+      const topUp = roundShares((exclPool * t) / Math.max(1e-9, 1 - t)) - currentPool;
+      if (topUp > 0) {
+        addOrMerge(ledger, 'Option Pool', 'option_pool', topUp);
+        events.push(`Option pool topped up by ${topUp.toLocaleString()} shares (target ${(targetPoolPost * 100).toFixed(1)}% post), after the new money, so every holder carries it`);
+        topUpShares = topUp;
+      }
+    }
 
     const sharesPost = ledgerTotal(ledger);
     roundsOut.push({
@@ -268,6 +432,9 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
       ledger: snapshot(ledger),
       events,
       round_meta: { investor_label: investorLabel, investment, safe_preferences: safePrefs },
+      conversions: details.map((d) => ({ ...d, pct_after_round: bankersRound(100 * safeDiv(d.shares, sharesPost), 4) })),
+      post_money_check: check,
+      top_up: targetPoolPost > 0 ? { shares: topUpShares, payer } : null,
     });
   }
 
@@ -288,22 +455,53 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
   const founderDilution = founderNames.map((n) => ({ founder: n, series: series[n] }));
 
   // Waterfall.
+  const promised = postMoneyCheck(inputs.safes || []);
+  const over100 = promised.over_100 || roundsOut.some((r) => r.post_money_check.over_100);
+  const exitAt = (exit: number) => {
+    // D1018: an answer that rests on promises that cannot all be honoured is not given. Before
+    // a round, #2446's pre-round rule decides: SAFEs that take cash back convert nothing.
+    if (over100 && roundsOut.length) {
+      warnings.push(`Exit not calculated: post-money caps promise ${promised.pct}% of the company, and these terms cannot all be honoured.`);
+      return null;
+    }
+    if (roundsOut.length && pendingSafes.length) {
+      warnings.push('Exit not calculated after the rounds: an instrument set not to convert is still outstanding.');
+      return null;
+    }
+    if (roundsOut.length) {
+      if (Object.values(startPrefs).some((v) => v === null)) {
+        warnings.push('Exit not calculated: a recorded preferred holder’s paid-in amount is not recorded, so their preference is unknown.');
+        return null;
+      }
+      return waterfall(roundsOut, exit, startPrefs as Record<string, number>);
+    }
+    if (Object.keys(startPrefs).length) {
+      warnings.push('Pre-round exit is not calculated: recorded preferred holders’ preferences are not modelled before a round.');
+      return null;
+    }
+    return waterfallPreRound(snapshot(ledger), pendingSafes, exit, warnings);
+  };
   let wf: any = null;
-  const exit = inputs.exit_value;
-  if (exit != null && roundsOut.length) wf = waterfall(roundsOut, Number(exit));
-  else if (exit != null) wf = waterfallPreRound(snapshot(ledger), pendingSafes, Number(exit), warnings);
+  const exit = inputs.exit_value ?? (inputs.exit_values?.length ? inputs.exit_values[0] : null);
+  if (exit != null) wf = exitAt(Number(exit));
+  const waterfalls = inputs.exit_values?.map((v) => ({ exit_value: Number(v), waterfall: exitAt(Number(v)) }));
 
   return {
     founding,
     rounds: roundsOut,
     founder_dilution: founderDilution,
     waterfall: wf,
-    warnings,
+    ...(waterfalls ? { waterfalls } : {}),
+    warnings: [...new Set(warnings)],
     totals: { shares_outstanding: ledgerTotal(ledger), rounds_completed: roundsOut.length },
+    mfn: mfnReads(inputs.safes || []),
+    post_money_check: promised,
+    outstanding_instruments: pendingSafes.map((p) => p.name),
+    over_100: over100,
   };
 }
 
-function waterfall(roundsOut: RoundOut[], exitValue: number) {
+function waterfall(roundsOut: RoundOut[], exitValue: number, startPrefs: Record<string, number> = {}) {
   const final = snapshot(roundsOut[roundsOut.length - 1].ledger.filter(h => h.type !== 'option_pool'));
   const totalShares = final.reduce((s, h) => s + h.shares, 0);
   if (totalShares <= 0) {
@@ -313,7 +511,7 @@ function waterfall(roundsOut: RoundOut[], exitValue: number) {
       assumptions: ['No outstanding shares — nothing to distribute.'],
     };
   }
-  const preferences: Record<string, number> = {};
+  const preferences: Record<string, number> = { ...startPrefs };
   for (const r of roundsOut) {
     const m = r.round_meta;
     preferences[m.investor_label] = (preferences[m.investor_label] || 0) + m.investment;
@@ -453,6 +651,8 @@ function waterfallPreRound(ledger: Holder[], safes: SafeIn[], exitValue: number,
     holder: safes[i].name, type: 'safe', shares: 0, pct: 0,
     preference: bankersRound(Number(safes[i].amount), 2), payout: cashPayouts[at],
     source: 'purchase amount (SAFE liquidity)',
+    // D1018 (CT4): cash back or common at the cap, whichever pays more.
+    election: 'cash_back' as 'cash_back' | 'as_converted' | null,
   }));
   const converted = safes.flatMap((s, i) => cash.has(i) ? [] : [{ holder: s.name, type: 'safe', shares: equityShares[i], amount: Number(s.amount) }]);
   const equity = [...common.map(h => ({ ...h, amount: 0 })), ...converted];
@@ -464,6 +664,7 @@ function waterfallPreRound(ledger: Holder[], safes: SafeIn[], exitValue: number,
     pct: bankersRound(100 * safeDiv(h.shares, total), 4),
     preference: bankersRound(h.amount, 2), payout: payouts[i],
     source: h.type === 'safe' ? 'as-converted (SAFE liquidity)' : 'pro-rata (common)',
+    election: h.type === 'safe' ? 'as_converted' : null,
   }));
   rows.sort((a, b) => b.payout - a.payout);
   return {

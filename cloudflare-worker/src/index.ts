@@ -201,6 +201,7 @@ import deckNotes from './routes/deck_notes';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import deckNew from './routes/deck_new';
+import deckAssist from './routes/deck_assist';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -269,6 +270,7 @@ import adminInsightsExport from './routes/admin_insights_export';
 import licence from './routes/licence';
 // D799 — the Administrator's requests to HQ, under the same prefix.
 import licenceRequests from './routes/licence_requests';
+import licencePrograms from './routes/licence_programs';
 import cofounderRoutes from './routes/cofounder';
 import skillsRoutes from './routes/skills';
 import valuesRoutes from './routes/values';
@@ -1152,6 +1154,7 @@ app.route('/api/admin/programs/proposals', adminProgramProposals);
 app.route('/api/admin/programs', adminPrograms);
 app.route('/api/licence', licencePartnerDealTypes);
 app.route('/api/licence', licenceRequests);
+app.route('/api/licence', licencePrograms);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
 app.route('/api/admin', admin);
@@ -1227,6 +1230,8 @@ app.route('/api/decks', deckReview);
 app.route('/api/decks', deckSources);
 // D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
 app.route('/api/decks', deckNew);
+// D899 (#2678): Eadwyn's card tools, before `decks` with the other /api/decks routers.
+app.route('/api/decks', deckAssist);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

@@ -226,6 +226,29 @@ export function currentPeriod(cadence: KpiCadence, today: string): string | null
 }
 
 /**
+ * D1057 (#2927, #2427 finding 3): whether an update's stored `period` counts
+ * for the period a report is due for.
+ *
+ * Two writers store a period, in two shapes: the founder's KPI form stores
+ * whatever was typed (`YYYY-Qn` when it follows the rule), and Grow's Share
+ * an update stores the month its period starts in (`YYYY-MM`). Comparing the
+ * two as strings read every Grow update as "Not reported" for a quarter.
+ *   · Quarterly: `YYYY-Qn` is that quarter; a month inside it counts for it.
+ *   · Monthly: months are compared; a quarter does not count for a month,
+ *     because it does not say which month it reports.
+ * Anything else (blank, free text) counts for nothing. Pure.
+ */
+export function periodCounts(cadence: KpiCadence, due: string | null, stored: string | null | undefined): boolean {
+  if (!due) return false;
+  const s = String(stored ?? '').trim();
+  if (cadence === 'monthly') return /^\d{4}-(0[1-9]|1[0-2])$/.test(s) && s === due;
+  if (s === due) return /^\d{4}-Q[1-4]$/.test(s);
+  const month = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(s);
+  if (!month) return false;
+  return `${month[1]}-Q${Math.floor((Number(month[2]) - 1) / 3) + 1}` === due;
+}
+
+/**
  * Days since a company last reported, or null if it never has. Drives
  * the design's stale-update alert rule.
  */

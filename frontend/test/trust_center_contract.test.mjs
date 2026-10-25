@@ -573,7 +573,7 @@ test('an agreement expands into the timeline the canvas draws', () => {
 
 test('the expander exists only where there is an envelope to expand', () => {
   const s = CODE.indexOf('function AgreementsTab(');
-  const e = CODE.indexOf('function SanctionsTab(', s);
+  const e = CODE.indexOf('function CompanyKybCard(', s);
   assert.ok(s > 0 && e > s, 'could not read AgreementsTab');
   const tab = CODE.slice(s, e);
   assert.match(tab, /\{a\.nda_envelope_uuid && \(/,
