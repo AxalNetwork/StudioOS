@@ -1210,6 +1210,7 @@ export const BRAND_MONOGRAM = Object.freeze({
 /** A second key for the same brand (REGISTRY_ALIAS's two, the profile's `twitter`, the admin `gcip`). */
 export const BRAND_ALIAS = Object.freeze({
   google_calendar: 'google',
+  google_workspace: 'google',
   microsoft_365: 'microsoft',
   twitter: 'x',
   gcip: 'google',
