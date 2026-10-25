@@ -203,15 +203,17 @@ test('Option pool draws the 409A in the Worker\'s words, the model\'s pool, and 
   } finally { await v.close(); }
 });
 
-test('Scenarios lists the model and its variants, each opening where it can be edited today', async () => {
+test('Scenarios lists the model and its variants, each opening its scenario page (D1024)', async () => {
   const v = await mounted('/raise/cap-table/scenarios?project_id=3');
   try {
     assert.equal(v.count('captable-scenario-card'), 2);
     assert.match(v.text(), /Cap table · model/);
     assert.match(v.text(), /Founders after 48\.20%/);
     const hrefs = v.hrefs();
-    assert.ok(hrefs.includes('/raise/cap-table/variants/v1'), 'a variant opens its own page');
-    assert.ok(hrefs.includes('/raise/capital/cap-table?project=3'), 'the model opens the simulator, with the venture');
+    // D1024 (#2861): every card opens its scenario under the tool, the venture kept; the simulator stays a link.
+    assert.ok(hrefs.includes('/raise/cap-table/scenarios/v1?project_id=3'), 'a variant opens its scenario page');
+    assert.ok(hrefs.some((u) => /^\/raise\/cap-table\/scenarios\/[^/?]+\?project_id=3$/.test(u) && !u.includes('/v1')), 'the model opens its own page too');
+    assert.ok(hrefs.includes('/raise/capital/cap-table?project=3'), 'the simulator, with the venture');
   } finally { await v.close(); }
 });
 
@@ -266,10 +268,12 @@ test('each read answers alone: a failed one says so where its block would be', a
 
 test('the wiring: no route is added, CycleRoute branches on the tab word, and the canvas sits in incoming', () => {
   const app = read('frontend/src/App.jsx');
-  assert.doesNotMatch(app, /path="\/raise\/cap-table\/(instruments|option-pool|scenarios)/, 'the module routes carry the tool');
+  assert.doesNotMatch(app, /path="\/raise\/cap-table\/(instruments|option-pool|scenarios)"/, 'the module routes carry the tool');
+  // D1024 (#2861): one scenario and the compare page sit two segments under the module, on their own route.
+  assert.match(app, /path="\/raise\/cap-table\/scenarios\/:scenario" element=\{guard\(labRoles\(\['admin', 'founder'\]\), <CycleRoute cycle="raise" slug="cap-table" capTableScenario \/>\)\}/);
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D1025 (#2862): the proposal drawer's route and `/new` are the tool's too.
-  assert.match(route, /const capTableTab = capTableProposal && cycle === 'raise' \? 'proposal'\s*: capTableAdding \? 'new'\s*: record && cycle === 'raise' && isCapTableTab\(slug, recordId\) \? recordId : null;/);
+  assert.match(route, /const capTableTab = capTableScenario && cycle === 'raise' \? 'scenario'\s*: capTableProposal && cycle === 'raise' \? 'proposal'\s*: capTableAdding \? 'new'\s*: record && cycle === 'raise' && isCapTableTab\(slug, recordId\) \? recordId : null;/);
   assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?!!projectId/);
   assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>/);
   const tool = read('frontend/src/pages/raise/captable/CapTableTool.jsx');

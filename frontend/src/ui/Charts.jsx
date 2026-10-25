@@ -482,7 +482,12 @@ export function StackBars({ rows, onSelect, testIdPrefix = 'stack' }) {
  * to the last week; a caller with explicit period metadata may pass -1
  * for completed weeks.
  */
-export function WeekLines({ series, labels, height = 220, currentIndex = labels.length - 1 }) {
+/**
+ * `recordIndex` (D1024, Cap table's Scenarios): the one point that is on
+ * record, drawn hollow with a dotted ring, as CT7's Today; the rest are
+ * modelled. `suffix` follows each axis value (`%`).
+ */
+export function WeekLines({ series, labels, height = 220, currentIndex = labels.length - 1, recordIndex = null, suffix = '' }) {
   const [ref, W] = useBoxWidth();
   const Lx = 30;
   const R = 18;
@@ -510,7 +515,7 @@ export function WeekLines({ series, labels, height = 220, currentIndex = labels.
         {[0, 0.5, 1].map((f) => (
           <g key={f}>
             <line x1={Lx} x2={W - R} y1={Y(max * f)} y2={Y(max * f)} className={GRID} />
-            <text x={Lx - 5} y={Y(max * f) + 3} textAnchor="end" className={MUTE}>{Math.round(max * f)}</text>
+            <text x={Lx - 5} y={Y(max * f) + 3} textAnchor="end" className={MUTE}>{Math.round(max * f)}{suffix}</text>
           </g>
         ))}
         {series.map((s) => (
@@ -519,7 +524,9 @@ export function WeekLines({ series, labels, height = 220, currentIndex = labels.
               ? <polyline key={run[0].i} points={run.map((p) => `${X(p.i)},${Y(p.v)}`).join(' ')} fill="none" strokeWidth="2.2"
                   strokeDasharray={s.dash ? '5 4' : undefined} className={STROKE[s.tone] || STROKE_V} />
               : null))}
-            {s.values.map((v, i) => (v === null || v === undefined ? null : i === currentIndex
+            {s.values.map((v, i) => (v === null || v === undefined ? null : i === recordIndex
+              ? <circle key={i} cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" strokeDasharray="2 2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} data-on-record="true" />
+              : i === currentIndex
               ? <circle key={i} cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} />
               : <circle key={i} cx={X(i)} cy={Y(v)} r="3" className={FILL[s.tone] || FILL.violet} />))}
           </g>
@@ -579,6 +586,70 @@ export function RunningTotal({ points, capacity = null, today = null, height = 2
         {points.map((p, i) => (i % every === 0 || i === points.length - 1
           ? <text key={p.label} x={X(i)} y={height - 5} textAnchor="middle" className={MUTE}>{p.label}</text>
           : null))}
+      </Svg>
+    </div>
+  );
+}
+
+/**
+ * D1024 (#2861, CT9): the share of an exit by group, at each exit value on a
+ * log axis, with each conversion point marked by a dotted line. A column the
+ * engine did not calculate is a dashed outline, never an empty bar.
+ * `columns` are `{ exit, label, parts: [{ value, tone }] | null }` (percent),
+ * `markers` `{ at, label }`.
+ */
+export function ExitSteps({ columns, markers = [], height = 260 }) {
+  const [ref, W] = useBoxWidth();
+  const Lx = 40;
+  const R = 16;
+  const B = 22;
+  const lines = Math.min(3, markers.length);
+  const top = 18 + lines * 12;
+  const ch = height - B - top;
+  const xs = [...columns.map((c) => c.exit), ...markers.map((m) => m.at)].filter((v) => v > 0);
+  const lo = Math.log10(Math.max(1, Math.min(...xs) / 2));
+  const hi = Math.log10(Math.max(...xs) * 2);
+  const X = (v) => Lx + ((W - Lx - R) * (Math.log10(v) - lo)) / Math.max(0.0001, hi - lo);
+  const Y = (v) => top + ch * (1 - v / 100);
+  const bw = Math.max(14, Math.min(34, (W - Lx - R) / Math.max(4, columns.length * 3)));
+  return (
+    <div ref={ref} className="w-full">
+      <Svg width={W} height={height}>
+        {[0, 50, 100].map((v) => (
+          <g key={v}>
+            <line x1={Lx} x2={W - R} y1={Y(v)} y2={Y(v)} className={GRID} />
+            <text x={Lx - 5} y={Y(v) + 3} textAnchor="end" className={MUTE}>{v}%</text>
+          </g>
+        ))}
+        {markers.slice(0, 3).map((m, k) => (
+          <g key={`${m.label}-${k}`}>
+            <line x1={X(m.at)} x2={X(m.at)} y1={6 + k * 12} y2={top + ch} strokeDasharray="1.5 3" strokeWidth="1.5" className="stroke-axal-muted dark:stroke-gray-400" />
+            <text x={X(m.at) + 4} y={14 + k * 12} className={INK}>{m.label}</text>
+          </g>
+        ))}
+        {columns.map((c) => {
+          const x = X(c.exit) - bw / 2;
+          if (!c.parts) {
+            return (
+              <g key={c.exit}>
+                <rect x={x} y={Y(100)} width={bw} height={ch} fill="none" strokeDasharray="3 3" className="stroke-axal-muted dark:stroke-gray-400" />
+                <text x={x + bw / 2} y={height - 6} textAnchor="middle" className={MUTE}>{c.label}</text>
+              </g>
+            );
+          }
+          let acc = 0;
+          return (
+            <g key={c.exit}>
+              {c.parts.map((p, k) => {
+                const v = Math.max(0, Number(p.value) || 0);
+                const y = Y(acc + v);
+                acc += v;
+                return v > 0 ? <rect key={k} x={x} y={y} width={bw} height={Math.max(0, Y(acc - v) - y)} className={FILL[p.tone] || FILL.violet} /> : null;
+              })}
+              <text x={x + bw / 2} y={height - 6} textAnchor="middle" className={MUTE}>{c.label}</text>
+            </g>
+          );
+        })}
       </Svg>
     </div>
   );
