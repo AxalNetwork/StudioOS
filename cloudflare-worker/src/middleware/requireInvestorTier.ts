@@ -89,6 +89,8 @@ export function effectiveInvestorTier(user: InvestorUser | null | undefined): In
   const status = (user.investor_subscription_status ?? 'free').toLowerCase();
   if (status === 'unpaid' || status === 'cancelled' || status === 'canceled'
     || (status === 'past_due' && !inGrace(status, user.investor_subscription_renews_at))) return 'free';
+  // D892 §6: a subscription whose first payment never completed grants nothing.
+  if (status === 'incomplete' || status === 'incomplete_expired') return 'free';
   // X-1: partner-granted/referred investor tiers expire at renews_at.
   // Cron flips them to 'free'; this read-side check prevents stale
   // sessions from sneaking past expiry between sweeps.

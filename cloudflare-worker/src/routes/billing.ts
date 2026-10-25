@@ -1019,6 +1019,18 @@ async function fetchOwnedSub(env: Env, subId: string, customer: string): Promise
   return sub;
 }
 
+// D892 §6: a swap changes a subscription of its own scope's family only. The
+// customer check above is not enough on its own: a member whose investor
+// customer is their general customer (a plan the payments intent sold before
+// D892) holds both families on one customer. A subscription of no known family
+// keeps today's behaviour.
+async function subscriptionInScope(env: Env, sub: StripeSubscription, scope: BillingScope): Promise<boolean> {
+  const { planKindOfSubscription } = await import('../services/planSubscription');
+  const kind = await planKindOfSubscription(env, sub as unknown as Record<string, unknown>);
+  if (!kind) return true;
+  return scope === 'investor' ? kind === 'investor' : kind === 'tier';
+}
+
 // Validate a client-supplied Stripe price id against the mirrored catalog and
 // the request scope, returning the destination tier. This is the server-side
 // authorization gate for plan swaps: the client may only switch to an ACTIVE,
@@ -1280,6 +1292,7 @@ billing.post('/subscription/swap/preview', async (c) => {
     return c.json({ error: 'invalid_price' }, 400);
   }
   const sub = await fetchOwnedSub(c.env, subId, customer);
+  if (!(await subscriptionInScope(c.env, sub, scope))) return c.json({ error: 'invalid_scope' }, 400);
   const itemId = sub.items?.data?.[0]?.id;
   if (!itemId) return c.json({ error: 'no_subscription_item' }, 400);
   try {
@@ -1327,6 +1340,7 @@ billing.post('/subscription/swap/confirm', async (c) => {
   if (!mapped) return c.json({ error: 'invalid_price' }, 400);
 
   const sub = await fetchOwnedSub(c.env, subId, customer);
+  if (!(await subscriptionInScope(c.env, sub, scope))) return c.json({ error: 'invalid_scope' }, 400);
   const itemId = sub.items?.data?.[0]?.id;
   if (!itemId) return c.json({ error: 'no_subscription_item' }, 400);
 
@@ -1588,8 +1602,8 @@ async function handleStripeEvent(
   // only delivers to one endpoint per env.
   // D892 (#2453): a subscription event with no `kind` — one the payments intent
   // made before the fix — takes its plan from its price's catalog product.
-  const { subscriptionMetadata } = await import('../services/planSubscription');
-  const meta = await subscriptionMetadata(env, event.type, obj);
+  const { subscriptionPlanEvent } = await import('../services/planSubscription');
+  const { meta, fromCatalog } = await subscriptionPlanEvent(env, event.type, obj);
   const isTier = meta.kind === 'tier'
     || (typeof obj.client_reference_id === 'string' && (obj.client_reference_id as string).startsWith('tier:'));
   const isInvestor = meta.kind === 'investor'
@@ -1689,11 +1703,59 @@ async function handleStripeEvent(
       if (isPlan) {
         const planUserId = Number(meta.user_id);
         if (planUserId) {
-          await upsertAccountPlanFromStripe(env, obj, meta.plan_group ?? null, planUserId);
+          // D892 §6: the same rule as the founder and investor rows below.
+          await upsertAccountPlanFromStripe(env, obj, meta.plan_group ?? null, planUserId, { takeOver: !fromCatalog });
         }
         return;
       }
       if (!customer) return;
+      const subId = obj.id as string;
+      // D892 §6: a subscription whose first payment never completed grants
+      // nothing. The payments intent's subscription is `incomplete` until its
+      // first invoice is paid; the `active` event that follows grants the plan.
+      // One that expires unpaid takes back what such an event gave before
+      // this rule existed, on the row that still points at it, and nothing else.
+      // A row an earlier event left at `incomplete` for this same subscription
+      // takes Stripe's status when Stripe says it is live.
+      const { isUnpaidStatus, repairIncompleteFromStripe } = await import('../services/planSubscription');
+      if (isUnpaidStatus(status) && (isTier || isInvestor)) {
+        if (status === 'incomplete') await repairIncompleteFromStripe(env, subId);
+        if (status === 'incomplete_expired') {
+          if (isTier) {
+            await env.DB.prepare(
+              `UPDATE users SET subscription_tier = 'free',
+                                 subscription_status = 'incomplete_expired',
+                                 stripe_subscription_id = NULL
+               WHERE stripe_customer_id = ? AND stripe_subscription_id = ?`,
+            ).bind(customer, subId).run();
+          }
+          if (isInvestor) {
+            const taken = await env.DB.prepare(
+              `UPDATE users SET investor_tier = 'free',
+                                 investor_subscription_status = 'incomplete_expired',
+                                 investor_dealroom_max = ?,
+                                 investor_stripe_subscription_id = NULL
+               WHERE investor_stripe_customer_id = ? AND investor_stripe_subscription_id = ?`,
+            ).bind(INVESTOR_QUOTAS.free.dealroom_max, customer, subId).run();
+            if (((taken?.meta?.changes ?? 0) as number) > 0) {
+              await env.DB.prepare(
+                `UPDATE users SET investor_tier = 'free', investor_subscription_status = 'incomplete_expired'
+                 WHERE investor_seat_primary_user_id IN (
+                   SELECT id FROM users WHERE investor_stripe_customer_id = ?
+                 )`,
+              ).bind(customer).run();
+            }
+          }
+        }
+        return;
+      }
+      // D892 §6: an event for another subscription than the one a row holds
+      // never takes over a plan the member still holds, unless this one is
+      // live too (an upgrade made through a checkout). A subscription whose
+      // plan was read from the catalog (made before D892, with no `kind`)
+      // never takes over a held plan at all: it was a duplicate, and it stays
+      // as inert as it was, so its own end drops nothing.
+      const takeOver = fromCatalog ? 0 : 1;
       // Investor mirror — only touches users whose investor_stripe_customer_id matches.
       const invTier: InvestorTier | null = isInvestor && meta.investor_tier === 'institutional'
         ? 'institutional'
@@ -1701,21 +1763,45 @@ async function handleStripeEvent(
           ? 'professional'
           : null;
       if (invTier) {
-        await env.DB.prepare(
+        const granted = await env.DB.prepare(
           `UPDATE users SET investor_tier = ?,
                              investor_subscription_status = ?,
                              investor_subscription_renews_at = ?,
                              investor_dealroom_max = ?,
                              investor_stripe_subscription_id = ?
-           WHERE investor_stripe_customer_id = ?`,
-        ).bind(invTier, status, periodEnd, INVESTOR_QUOTAS[invTier].dealroom_max, obj.id as string, customer).run();
-        // Cascade tier change to accepted seat colleagues.
-        await env.DB.prepare(
-          `UPDATE users SET investor_tier = ?, investor_subscription_status = ?, investor_subscription_renews_at = ?
-           WHERE investor_seat_primary_user_id IN (
-             SELECT id FROM users WHERE investor_stripe_customer_id = ?
-           )`,
-        ).bind(invTier, status, periodEnd, customer).run();
+           WHERE investor_stripe_customer_id = ?
+             AND (investor_stripe_subscription_id IS NULL OR investor_stripe_subscription_id = ?
+                  OR (? = 1 AND ? IN ('active', 'trialing', 'past_due'))
+                  OR COALESCE(investor_subscription_status, '') NOT IN ('active', 'trialing', 'past_due'))`,
+        ).bind(invTier, status, periodEnd, INVESTOR_QUOTAS[invTier].dealroom_max, subId, customer, subId, takeOver, status).run();
+        let changed = (granted?.meta?.changes ?? 0) as number;
+        // A plan bought through the payments intent before D892 sits on the
+        // member's general customer, which no investor row named. The member
+        // its metadata names adopts that customer, if they have no investor
+        // customer of their own; one who has keeps theirs (D892 §6).
+        const legacyUser = Number(meta.user_id);
+        if (changed === 0 && fromCatalog && Number.isSafeInteger(legacyUser) && legacyUser > 0) {
+          const adopted = await env.DB.prepare(
+            `UPDATE users SET investor_stripe_customer_id = ?,
+                               investor_tier = ?,
+                               investor_subscription_status = ?,
+                               investor_subscription_renews_at = ?,
+                               investor_dealroom_max = ?,
+                               investor_stripe_subscription_id = ?
+             WHERE id = ? AND stripe_customer_id = ? AND investor_stripe_customer_id IS NULL`,
+          ).bind(customer, invTier, status, periodEnd, INVESTOR_QUOTAS[invTier].dealroom_max, subId, legacyUser, customer).run();
+          changed = (adopted?.meta?.changes ?? 0) as number;
+        }
+        // Cascade tier change to accepted seat colleagues, only when the
+        // primary's row moved. They carry its period end too (D1100).
+        if (changed > 0) {
+          await env.DB.prepare(
+            `UPDATE users SET investor_tier = ?, investor_subscription_status = ?, investor_subscription_renews_at = ?
+             WHERE investor_seat_primary_user_id IN (
+               SELECT id FROM users WHERE investor_stripe_customer_id = ?
+             )`,
+          ).bind(invTier, status, periodEnd, customer).run();
+        }
       } else if (isInvestor) {
         // Investor sub event without explicit metadata.tier — only run when
         // we know it's an investor event (avoid clobbering rows that share
@@ -1724,8 +1810,11 @@ async function handleStripeEvent(
           `UPDATE users SET investor_subscription_status = ?,
                              investor_subscription_renews_at = ?,
                              investor_stripe_subscription_id = ?
-           WHERE investor_stripe_customer_id = ?`,
-        ).bind(status, periodEnd, obj.id as string, customer).run();
+           WHERE investor_stripe_customer_id = ?
+             AND (investor_stripe_subscription_id IS NULL OR investor_stripe_subscription_id = ?
+                  OR (? = 1 AND ? IN ('active', 'trialing', 'past_due'))
+                  OR COALESCE(investor_subscription_status, '') NOT IN ('active', 'trialing', 'past_due'))`,
+        ).bind(status, periodEnd, subId, customer, subId, takeOver, status).run();
       }
       // Tier-side update: only touches users whose stripe_customer_id matches.
       // Tier metadata may be on the subscription's `metadata.tier`; if absent
@@ -1739,8 +1828,11 @@ async function handleStripeEvent(
                              subscription_status = ?,
                              subscription_renews_at = ?,
                              stripe_subscription_id = ?
-           WHERE stripe_customer_id = ?`,
-        ).bind(subTier, status, periodEnd, obj.id as string, customer).run();
+           WHERE stripe_customer_id = ?
+             AND (stripe_subscription_id IS NULL OR stripe_subscription_id = ?
+                  OR (? = 1 AND ? IN ('active', 'trialing', 'past_due'))
+                  OR COALESCE(subscription_status, '') NOT IN ('active', 'trialing', 'past_due'))`,
+        ).bind(subTier, status, periodEnd, subId, customer, subId, takeOver, status).run();
       } else if (isTier) {
         // Founder-tier event whose subscription metadata didn't echo the tier
         // string — update status/renewal only, leaving subscription_tier as set
@@ -1750,8 +1842,11 @@ async function handleStripeEvent(
           `UPDATE users SET subscription_status = ?,
                              subscription_renews_at = ?,
                              stripe_subscription_id = ?
-           WHERE stripe_customer_id = ?`,
-        ).bind(status, periodEnd, obj.id as string, customer).run();
+           WHERE stripe_customer_id = ?
+             AND (stripe_subscription_id IS NULL OR stripe_subscription_id = ?
+                  OR (? = 1 AND ? IN ('active', 'trialing', 'past_due'))
+                  OR COALESCE(subscription_status, '') NOT IN ('active', 'trialing', 'past_due'))`,
+        ).bind(status, periodEnd, subId, customer, subId, takeOver, status).run();
       }
       // MI Pro mirror — side table. When the event carries kind=mi metadata
       // (propagated via subscription_data at checkout) UPSERT by user_id so an
@@ -1776,8 +1871,11 @@ async function handleStripeEvent(
              plan = COALESCE(excluded.plan, mi_pro_subscriptions.plan),
              period_end = excluded.period_end,
              stripe_customer_id = COALESCE(excluded.stripe_customer_id, mi_pro_subscriptions.stripe_customer_id),
-             updated_at = datetime('now')`
-        ).bind(miUserId, status, obj.id as string, meta.plan ?? null, periodEnd, customer).run();
+             updated_at = datetime('now')
+           WHERE mi_pro_subscriptions.subscription_id IS NULL OR mi_pro_subscriptions.subscription_id = excluded.subscription_id
+              OR (? = 1 AND excluded.status IN ('active', 'trialing', 'past_due'))
+              OR COALESCE(mi_pro_subscriptions.status, '') NOT IN ('active', 'trialing', 'past_due')`
+        ).bind(miUserId, status, obj.id as string, meta.plan ?? null, periodEnd, customer, takeOver).run();
         miRowTouched = true;
       } else if (!isTier && !isInvestor) {
         const res = await env.DB.prepare(
@@ -2050,6 +2148,11 @@ async function handleStripeEvent(
       if (event.type === 'invoice.paid') {
         const { closeInvoiceAlerts } = await import('../services/billingAlerts');
         await closeInvoiceAlerts(env, obj);
+        // D892 §6: a founder or investor row left at `incomplete` for the
+        // invoice's subscription takes Stripe's status when Stripe says it is
+        // live. Never fails the webhook.
+        const { repairIncompleteFromStripe } = await import('../services/planSubscription');
+        await repairIncompleteFromStripe(env, obj.subscription);
       }
       const { handleInvoiceEvent } = await import('../services/invoiceEmails');
       await handleInvoiceEvent(env, obj);

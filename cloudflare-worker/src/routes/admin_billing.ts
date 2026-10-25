@@ -7,6 +7,7 @@ import { ensureAdminAuditLogTable } from './admin';
 import { logAdminAction } from '../services/adminAudit';
 import { clawbackReferralCommissionForRefund, type ClawbackResult } from '../services/referralCommissions';
 import { refusalBody } from '../util/refusal';
+import { paymentChangeReason } from '../services/catalog';
 
 // Task #11 (II) — Admin billing actions. Mounted at `/api/admin/billing`
 // BEFORE the catch-all `/api/admin` in index.ts so the nested routes resolve
@@ -585,6 +586,57 @@ function summarizeDispute(d: StripeDispute) {
     submission_count: d.evidence_details?.submission_count ?? 0,
   };
 }
+
+// -------------------------------------------------------------------------
+// D892 §6 — plan rows left at `incomplete`: the owner's reconciliation
+// -------------------------------------------------------------------------
+
+// POST /api/admin/billing/subscriptions/reconcile-incomplete
+//   { dry_run?: boolean, reason?: string, after?: number, limit?: number }
+//   → { dry_run, checked, counts, results, next_after }
+//
+// Founder and investor rows that hold a subscription at `incomplete` are read
+// again from Stripe, one page at a time by user id, and each result says what
+// Stripe reports and what the row takes (`reconcileIncompleteRows`,
+// services/planSubscription.ts): a live subscription its plan and status, an
+// expired or canceled one free, an unpaid one its status; anything else is
+// left as it is.
+//
+// A DRY RUN UNLESS `dry_run: false`. A dry run only reads Stripe and needs a
+// Super Admin. Writing takes the write bar (a TOTP session, a recent step-up,
+// the holder) and a written reason, as the other payment writes do (D1009).
+// Every run, dry or written, is audited once through `logAdminAction`. The
+// owner runs it against production; no deploy or cron runs it.
+adminBilling.post('/subscriptions/reconcile-incomplete', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+  const write = body?.dry_run === false;
+  const admin = write ? await requireSuperAdminWriteBar(c) : await requireSuperAdmin(c);
+  const reason = paymentChangeReason(body);
+  if (write && !reason) {
+    return c.json({ error: 'reason_required', message: 'Give a reason of 1 to 500 characters for rewriting these plan rows.' }, 400);
+  }
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  const { reconcileIncompleteRows, RECONCILE_LIMIT_MAX } = await import('../services/planSubscription');
+  const whole = (v: unknown, fallback: number) => (Number.isSafeInteger(v) && (v as number) >= 0 ? (v as number) : fallback);
+  const after = whole(body?.after, 0);
+  const limit = Math.max(1, Math.min(RECONCILE_LIMIT_MAX, whole(body?.limit, 25)));
+  let result: Awaited<ReturnType<typeof reconcileIncompleteRows>>;
+  try {
+    result = await reconcileIncompleteRows(c.env, { write, after, limit });
+  } catch (e) {
+    console.warn('[admin/billing] incomplete reconcile failed', (e as Error).message);
+    return c.json(refusalBody({
+      code: 'reconcile_unavailable',
+      message: 'The plan rows could not be read. Nothing was written; try again in a moment.',
+      audience: 'admin',
+    }), 503);
+  }
+  await logAdminAction(c.env, admin.id, admin.email, write ? 'billing_incomplete_reconcile' : 'billing_incomplete_reconcile_dry_run', {
+    dry_run: !write, after, limit, checked: result.checked, counts: result.counts, next_after: result.next_after,
+    ...(reason ? { reason } : {}),
+  });
+  return c.json({ dry_run: !write, ...result });
+});
 
 // -------------------------------------------------------------------------
 // Customer LTV (Task #11) — total net paid across all Stripe customer ids

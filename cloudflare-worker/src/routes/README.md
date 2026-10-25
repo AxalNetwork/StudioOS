@@ -359,3 +359,5 @@ D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
 
 D1123: `admin_lab_operations.ts` adds `/cohorts/:cohort/capacity`, the latest stored capacity event for SL6, separately from current Settings. It never returns free-form event details.
+
+D892 §6 (#2673): `admin_billing.ts` mounts `POST /subscriptions/reconcile-incomplete` under `/api/admin/billing`, the owner-run repair of founder and investor rows left at `incomplete`. A dry run unless `dry_run: false`; a dry run needs a Super Admin, a write the write bar and a reason; every run is audited. The owner runs it against production.
