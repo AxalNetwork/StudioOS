@@ -62,7 +62,8 @@ export async function recordCheckoutRefusal(env: Env, eventId: unknown, pi: Reco
   const id = ref(pi.invoice);
   if (!id || !invoiceId.test(id)) return;
   const { stripeCall } = await import('../routes/billing');
-  const invoice = await stripeCall<{ subscription?: unknown; customer?: unknown }>(env, `/invoices/${id}`, {}, { method: 'GET' }).catch(() => { throw new Error('payment_event_unreadable'); });
+  const invoice = await stripeCall<{ subscription?: unknown; customer?: unknown; billing_reason?: string }>(env, `/invoices/${id}`, {}, { method: 'GET' }).catch(() => { throw new Error('payment_event_unreadable'); });
+  if (invoice.billing_reason !== 'subscription_create') return;
   const sub = ref(invoice.subscription);
   if (!sub || !subscriptionId.test(sub)) return;
   let owner = await subscriptionOwner(env, sub);

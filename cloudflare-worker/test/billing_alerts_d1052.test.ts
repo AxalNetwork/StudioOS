@@ -430,7 +430,7 @@ test('D1133 an activity failure rolls back alert changes; a redelivery recovers 
 test('D1133 a verified refusal records only its reason family and deduplicates event redelivery', async () => {
   const db = database();
   try {
-    stripe['/invoices/in_ada1'] = { body: { subscription: 'sub_ada' } };
+    stripe['/invoices/in_ada1'] = { body: { subscription: 'sub_ada', billing_reason: 'subscription_create' } };
     const event = { id: 'evt_refused', type: 'payment_intent.payment_failed', data: { object: { id: 'pi_declined', invoice: 'in_ada1', last_payment_error: { type: 'card_error', message: 'private detail 4242', decline_code: 'private_code' } } } };
     for (let n = 0; n < 2; n++) assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, event)).status, 200);
     assert.deepEqual(activity(db), [{ user_id: ADA, action: 'payment_refused', details: '{"reason_family":"declined"}' }]);
@@ -445,7 +445,7 @@ test('D1133 a verified refusal records only its reason family and deduplicates e
 test('D1133 a first decline arriving before subscription.created still records its owner, without trusting a foreign customer', async () => {
   const db = database();
   try {
-    stripe['/invoices/in_first'] = { body: { subscription: 'sub_first', customer: 'cus_ada' } };
+    stripe['/invoices/in_first'] = { body: { billing_reason: 'subscription_create', subscription: 'sub_first', customer: 'cus_ada' } };
     stripe['/subscriptions/sub_first'] = { body: { customer: 'cus_ada', metadata: { kind: 'tier', user_id: String(ADA) } } };
     const event = { id: 'evt_first', type: 'payment_intent.payment_failed', data: { object: { id: 'pi_first', invoice: 'in_first' } } };
     assert.equal((await hit(db, 'POST', '/api/billing/stripe/webhook', null, event)).status, 200);
@@ -453,10 +453,20 @@ test('D1133 a first decline arriving before subscription.created still records i
     event.id = 'evt_wrong'; stripe['/subscriptions/sub_first'] = { body: { customer: 'cus_ira', metadata: { kind: 'tier', user_id: String(ADA) } } };
     await hit(db, 'POST', '/api/billing/stripe/webhook', null, event); assert.equal(activity(db).length, 1);
     event.id = 'evt_wrongInvoice'; stripe['/subscriptions/sub_first'] = { body: { customer: 'cus_ada', metadata: { kind: 'tier', user_id: String(ADA) } } };
-    stripe['/invoices/in_first'] = { body: { subscription: 'sub_first', customer: 'cus_ira' } };
+    stripe['/invoices/in_first'] = { body: { billing_reason: 'subscription_create', subscription: 'sub_first', customer: 'cus_ira' } };
     await hit(db, 'POST', '/api/billing/stripe/webhook', null, event); assert.equal(activity(db).length, 1);
     event.id = 'evt_retry'; stripe['/invoices/in_first'] = { status: 503, body: { error: { message: 'private provider text' } } };
     const out = await hit(db, 'POST', '/api/billing/stripe/webhook', null, event);
     assert.equal(out.status, 500); assert.doesNotMatch(out.text, /private provider text/);
+  } finally { db.close(); }
+});
+
+test('D1133 a failed renewal is recorded once as renewal_failed, never as a checkout refusal', async () => {
+  const db = database();
+  try {
+    stripe['/invoices/in_ada1'] = { body: { subscription: 'sub_ada', billing_reason: 'subscription_cycle' } };
+    await hook(db, 'payment_intent.payment_failed', { invoice: 'in_ada1', last_payment_error: { type: 'card_error' } });
+    await hook(db, 'invoice.payment_failed', renewal());
+    assert.deepEqual(activity(db).map((r) => r.action), ['renewal_failed']);
   } finally { db.close(); }
 });

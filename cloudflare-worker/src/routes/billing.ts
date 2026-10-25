@@ -1895,10 +1895,12 @@ async function handleStripeEvent(
     // turns auto-reload off and tells the member. D1133 also audits a plan refusal,
     // with only its reason family, through its caller-bound invoice.
     case 'payment_intent.payment_failed': {
-      const { recordCheckoutRefusal } = await import('../services/billingRecovery');
-      await recordCheckoutRefusal(env, event.id, obj);
       const { onReloadPaymentFailed } = await import('../services/aiAutoReload');
       await onReloadPaymentFailed(env, obj);
+      if (meta.kind !== 'cart_order' || meta.auto_reload !== '1') {
+        const { recordCheckoutRefusal } = await import('../services/billingRecovery');
+        await recordCheckoutRefusal(env, event.id, obj);
+      }
       return;
     }
     case 'payment_intent.succeeded': {
