@@ -12,6 +12,7 @@
  * platform.
  */
 import type { Env } from '../types';
+import { notify } from './notify';
 import { bindingKey } from '../util/schemaBootstrap';
 
 export const CATEGORIES = ['startup', 'customer', 'strategic'] as const;
@@ -692,17 +693,32 @@ export async function listStrategicAccess(env: Env, { status = 'requested', limi
   return { items: rows.results || [], total: Number(count?.n || 0) };
 }
 
-export async function decideStrategicAccess(env: Env, userId: number, decision: string) {
+export async function decideStrategicAccess(env: Env, userId: number, decision: string, note?: unknown) {
   if (decision !== 'granted' && decision !== 'declined') throw new ReferralError('bad_decision', 'Choose granted or declined.');
-  const out = await env.DB.prepare(
-    `UPDATE referral_strategic_access SET status = ?, decided_at = CURRENT_TIMESTAMP
-      WHERE user_id = ? AND status = 'requested'`,
-  ).bind(decision, userId).run();
-  const row = await env.DB.prepare('SELECT status, decided_at FROM referral_strategic_access WHERE user_id = ?')
+  const reason = typeof note === 'string' ? note.trim() : '';
+  if (decision === 'declined' && (reason.length < 10 || reason.length > 4000)) {
+    throw new ReferralError('reason_required', 'A decline needs a reason of 10 to 4000 characters. The member sees it.');
+  }
+  const current = await env.DB.prepare('SELECT status, decided_at FROM referral_strategic_access WHERE user_id = ?')
     .bind(userId).first<{ status: string; decided_at: string | null }>();
-  if (!row) throw new ReferralError('not_found', 'This member has not requested strategic referral access.', 404);
-  if (Number(out.meta?.changes) !== 1) throw new ReferralError('already_decided', `Strategic referral access is already ${row.status}.`, 409);
-  return row;
+  if (!current) throw new ReferralError('not_found', 'This member has not requested strategic referral access.', 404);
+  if (current.status !== 'requested') throw new ReferralError('already_decided', `Strategic referral access is already ${current.status}.`, 409);
+  const at = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const out = await env.DB.prepare(
+    `UPDATE referral_strategic_access SET status = ?, decided_at = ?
+      WHERE user_id = ? AND status = 'requested'`,
+  ).bind(decision, at, userId).run();
+  if (Number(out.meta?.changes) !== 1) {
+    const latest = await env.DB.prepare('SELECT status FROM referral_strategic_access WHERE user_id = ?')
+      .bind(userId).first<{ status: string }>();
+    throw new ReferralError('already_decided', `Strategic referral access is already ${latest?.status ?? current.status}.`, 409);
+  }
+  await notify(env, {
+    userId, type: `strategic_access_${decision}`, title: `Strategic referral access ${decision}`,
+    body: `Your strategic referral access was ${decision}.${decision === 'declined' ? ` Reason: ${reason}` : ''}`,
+    link: '/refer', channels: ['in_app', 'email'], payload: { status: decision },
+  });
+  return { status: decision, decided_at: at };
 }
 
 /** UTC Monday buckets, including the current partial week. */

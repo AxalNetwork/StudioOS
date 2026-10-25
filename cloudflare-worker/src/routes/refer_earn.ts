@@ -289,7 +289,7 @@ refer.post('/admin/strategic-access/:userId/decision', async (c) => {
     if (notGranted) return c.json(notGranted.body, notGranted.status);
   }
   try {
-    const row = await decideStrategicAccess(c.env, userId, body?.decision);
+    const row = await decideStrategicAccess(c.env, userId, body?.decision, body?.note);
     await logAdminAction(c.env, admin.id, admin.email, `referral_strategic_access.${row.status}`, {
       target_user_id: userId, note: typeof body?.note === 'string' ? body.note.trim().slice(0, 4000) : null,
     });
@@ -300,7 +300,8 @@ refer.post('/admin/strategic-access/:userId/decision', async (c) => {
       const { code, message, httpStatus } = e;
       return refuse(c, httpStatus as ContentfulStatusCode, { code, message });
     }
-    throw e;
+    console.error('[refer-earn] strategic access decision failed');
+    return refuse(c, 503, { code: 'strategic_access_unreadable', message: 'Strategic referral access could not be read or saved. Read the request again before retrying.' });
   }
 });
 
