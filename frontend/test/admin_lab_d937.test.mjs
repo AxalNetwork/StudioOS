@@ -250,7 +250,10 @@ async function mount(url, fail) {
   };
 }
 
-test('mounted Overview: each block from its own read, the header\'s counts, and no Guard H read', async () => {
+test('mounted Overview: each block from its own read, the header\'s counts, and no Guard H read', async (t) => {
+  // The fixture's cohort windows are dated from NOW and the page reads the clock for "Week 4, day 24", so the
+  // clock is NOW: on the real one the day moved on with the calendar (day 25 on 2026-10-25).
+  t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const m = await mount(LAB_PATH);
   try {
     assert.match(m.of('lab-header'), /Programs.*Spin-Out Lab.*Live.*HQ-held/s);
