@@ -25,6 +25,11 @@
  *
  * WEEKS ARE MONDAY WEEKS IN UTC, from `weekAxis`, as Insights and Community
  * draw them; the period before is `previousAxis`. The current week is to date.
+ *
+ * D956 (#2789): EACH ROW'S `grant`, for the viewer the route names
+ * (`viewer.grants`, `services/programGrantStates.ts`), and `nothing_granted`
+ * for PG16a. A failed grant read is every row's `grant` unreadable, never a
+ * state. HQ's fan-out to a branch names no viewer, so it carries no grant.
  */
 import type { Env } from '../types';
 import { weekAxis, type WeekAxis } from './activeAccounts';
@@ -33,6 +38,7 @@ import { SLA_PAST_HOURS, SLA_DUE_SOON_HOURS } from './approvalSources';
 import { branchRead } from './branches';
 import { countsOnly, insightsScopes } from './insightsScope';
 import { listPrograms, type ProgramKey, type ProgramRow, PROGRAM_KEYS, PROGRAM_STATUSES } from './programRegistry';
+import { grantFieldOf, grantStates, type GrantViewer } from './programGrantStates';
 
 export const PROGRAM_WEEKS = [4, 12, 52] as const;
 export type ProgramWeeks = typeof PROGRAM_WEEKS[number];
@@ -65,7 +71,7 @@ export const PROGRAM_DEFINITIONS = {
 } as const;
 
 /** D955: `licenceUid` is the viewer's studio, which decides the studio-only programs they read. */
-export type Viewer = { id: number; superAdmin: boolean; licenceUid?: string | null };
+export type Viewer = { id: number; superAdmin: boolean; licenceUid?: string | null; grants?: GrantViewer };
 
 type Unreadable = { available: false; unreadable: true; reason: string };
 type Pending = { available: false; pending: true; reason: string };
@@ -578,6 +584,9 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
 
   const q: Queues = { cohort, referrals, perks, hosts };
   const rows: ProgramRow[] = registry.available ? registry.rows : [];
+  const grants = viewer.grants && registry.available
+    ? await grantStates(env, viewer.grants, rows.map((r) => r.key), new Date(nowMs).toISOString().slice(0, 10))
+    : null;
 
   const byStatus = Object.fromEntries(PROGRAM_STATUSES.map((s) => [s, 0])) as Record<string, number>;
   for (const r of rows) byStatus[r.status] = (byStatus[r.status] ?? 0) + 1;
@@ -610,6 +619,7 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
         rows: rows.map((r) => ({
           key: r.key, group: r.grp, name: r.name, purpose: r.purpose ?? null, who: r.who ?? null,
           join_method: r.join_method ?? null, status: r.status, position: Number(r.position),
+          ...(grants ? { grant: grantFieldOf(grants, r.key) } : {}),
           ...cardFigures(r.key, viewer, q, {
             mentors, coverage, notAdvisor, live, learning,
             testing: testing as Read<{ open: number; applications: number }> | null,
@@ -617,6 +627,12 @@ export async function programCatalogue(env: Env, viewer: Viewer, weeks: ProgramW
         })),
       }
       : registry,
+    ...(grants ? {
+      grants: grants.available
+        ? { available: true as const, viewer: grants.viewer, held_because: grants.held_because }
+        : grants,
+      nothing_granted: grants.available ? grants.nothing_granted : null,
+    } : {}),
     tiles: {
       running: registry.available
         ? { available: true as const, running: byStatus.live, by_status: byStatus, total: rows.length }

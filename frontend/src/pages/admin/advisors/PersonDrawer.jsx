@@ -8,7 +8,7 @@ import { CardDialog } from './DeckRosterDialogs';
 import { cardPayload } from './deckRosterModel';
 import {
   DECIDED, NOT_RECORDED, REASON_MAX, UNREADABLE, agoWord, cell, controlsOf, dayWord, deckDraftOf, deckWord, dialogCopy,
-  directoryWord, effectsLine, kindWord, laneWord, refusalWord, stageWord, standingCell, take, usd,
+  directoryWord, effectsLine, historyLine, kindWord, laneWord, refusalWord, stageWord, standingCell, take, usd,
 } from './peopleModel';
 
 /**
@@ -317,7 +317,22 @@ export default function PersonDrawer({ personRef, onClose, onChanged, now }) {
               </Block>
 
               <Block title="History" testId="person-history">
-                <Whole b={main.data.history}>{() => null}</Whole>
+                <Whole b={main.data.history}>
+                  {(h) => (h.items?.length ? (
+                    <ol className="m-0 flex list-none flex-col gap-1.5 p-0" data-testid="person-history-list">
+                      {h.items.map((item) => {
+                        const l = historyLine(item);
+                        return (
+                          <li key={item.id} className="text-[12.5px] text-axal-ink dark:text-gray-100">
+                            <span className="font-semibold">{l.what}</span> · {l.when} · by {l.who}
+                            {l.extra ? <span className={`block ${SUB}`}>{l.extra}</span> : null}
+                          </li>
+                        );
+                      })}
+                      {h.truncated ? <li className={SUB}>The newest 50 are shown.</li> : null}
+                    </ol>
+                  ) : <span className={SUB} data-testid="person-history-none">Nothing an admin did to this person is recorded.</span>)}
+                </Whole>
                 {s?.pause?.last_resumed_at ? (
                   <span className="text-[12.5px] text-axal-ink dark:text-gray-100">Last resumed {dayWord(s.pause.last_resumed_at) || agoWord(s.pause.last_resumed_at, now)}. Reason: {s.pause.last_resume_reason || NOT_RECORDED}</span>
                 ) : null}

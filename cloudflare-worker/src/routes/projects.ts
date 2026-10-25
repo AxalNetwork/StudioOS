@@ -529,7 +529,7 @@ async function createProjectHandler(c: any) {
   if (!name) return c.json({ error: 'Project name is required' }, 400);
   const sql = getSQL(c.env);
 
-  // Task #6 — free-tier project cap (1). Counts ALL projects owned by the
+  // D1135 — free-tier project cap (1). Counts non-trashed projects owned by the
   // founder regardless of status. Bypass roles never hit the cap.
   //
   // We check BEFORE resolving founder_id: a founder whose users.founder_id is
@@ -553,7 +553,7 @@ async function createProjectHandler(c: any) {
       // anyone creating a second project, or a first one after onboarding had
       // registered them — so the core founder action returned a 500 instead of
       // either the project or the clean 402 the cap is supposed to raise.
-      const existing = await sql`SELECT COUNT(*) AS n FROM projects WHERE founder_id = ${fid}`;
+      const existing = await sql`SELECT COUNT(*) AS n FROM projects WHERE founder_id = ${fid} AND deleted_at IS NULL`;
       const count = Number(existing?.[0]?.n ?? 0);
       if (count >= FREE_TIER_LIMITS.projects) {
         await sql.end();
@@ -1010,6 +1010,24 @@ projects.delete('/:id', async (c) => {
   await sql`UPDATE projects SET deleted_at = CURRENT_TIMESTAMP WHERE id = ${id}`;
   await sql.end();
   return c.json({ ok: true, soft: true });
+});
+
+// D1135 — the owning founder can undo trash within the retention window.
+projects.post('/:id/restore', async (c) => {
+  const user = await requireAuth(c);
+  const id = Number(c.req.param('id'));
+  if (!Number.isSafeInteger(id) || id <= 0) return c.json({ detail: 'Invalid project id' }, 400);
+  const row = await c.env.DB.prepare('SELECT id, founder_id, deleted_at FROM projects WHERE id = ?').bind(id).first<any>();
+  if (!row || user.role !== 'founder' || !user.founder_id || row.founder_id !== user.founder_id) return c.json({ detail: 'Project not found' }, 404);
+  if (!row.deleted_at) return c.json({ ok: true, already_restored: true });
+  // The cap applies to restore too: trash cannot be used to exceed the free plan.
+  const result = await c.env.DB.prepare(
+    `UPDATE projects SET deleted_at = NULL WHERE id = ? AND founder_id = ?
+     AND julianday(deleted_at) > julianday('now', '-30 days')
+     AND (? = 1 OR (SELECT COUNT(*) FROM projects p WHERE p.founder_id = ? AND p.deleted_at IS NULL) < ?)`
+  ).bind(id, user.founder_id, userMeetsTier(user, 'growth') ? 1 : 0, user.founder_id, FREE_TIER_LIMITS.projects).run();
+  if (!result.meta.changes) return c.json({ code: 'restore_unavailable', detail: 'Restore requires space in your plan and a venture trashed less than 30 days ago.' }, 409);
+  return c.json({ ok: true });
 });
 
 projects.post('/:id/advance-week', async (c) => {
@@ -1554,12 +1572,42 @@ projects.post('/:id/invitations', async (c) => {
   const tokenHash = await hashInviteToken(token);
   const sql = getSQL(c.env);
   try {
-    const [inv] = await sql`INSERT INTO project_member_invitations
-        (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
-      VALUES (${id}, ${role}, 'pending', ${mode}, ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days'))
-      RETURNING id, role, status, source, invitee_email, expires_at, created_at`;
+    // D1135: reserve each email atomically before sending. Pending duplicates
+    // cannot send again, and both an inviter and a project have an hourly cap.
+    const [inv] = mode === 'email'
+      ? await sql`INSERT INTO project_member_invitations
+          (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
+        SELECT ${id}, ${role}, 'pending', 'email', ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days')
+        WHERE NOT EXISTS (SELECT 1 FROM project_member_invitations
+          WHERE project_id = ${id} AND invitee_email = ${inviteeEmail} AND status = 'pending' AND julianday(expires_at) > julianday('now'))
+        AND (SELECT COUNT(*) FROM project_member_invitations WHERE invited_by_user_id = ${user.id}
+          AND source = 'email' AND julianday(created_at) > julianday('now','-1 hour')) < 10
+        AND (SELECT COUNT(*) FROM project_member_invitations WHERE project_id = ${id}
+          AND source = 'email' AND julianday(created_at) > julianday('now','-1 hour')) < 20
+        RETURNING id, role, status, source, invitee_email, expires_at, created_at`
+      : await sql`INSERT INTO project_member_invitations
+          (project_id, role, status, source, invitee_email, token_hash, invited_by_user_id, expires_at)
+        VALUES (${id}, ${role}, 'pending', ${mode}, ${inviteeEmail}, ${tokenHash}, ${user.id}, datetime('now','+14 days'))
+        RETURNING id, role, status, source, invitee_email, expires_at, created_at`;
+    if (!inv) {
+      const pending = await c.env.DB.prepare(
+        `SELECT id FROM project_member_invitations WHERE project_id = ? AND invitee_email = ?
+         AND status = 'pending' AND julianday(expires_at) > julianday('now') LIMIT 1`
+      ).bind(id, inviteeEmail).first();
+      if (pending) return c.json({ code: 'already_pending', detail: 'An invitation to that address is already pending.' }, 409);
+      return c.json({ code: 'invitation_rate_limited', detail: 'The invitation limit has been reached. Try again in an hour.' }, 429);
+    }
+    let emailSent: boolean | null = null;
+    if (mode === 'email' && inviteeEmail) {
+      const { sendNotificationEmail } = await import('../services/email');
+      const base = String((c.env as any).PUBLIC_BASE_URL || (c.env as any).APP_URL || 'https://axal.vc').replace(/\/+$/, '');
+      const link = `${base}/projects/invitations/accept?token=${encodeURIComponent(token)}`;
+      emailSent = await sendNotificationEmail(c.env, inviteeEmail, 'Your StudioOS project invitation',
+        `You have been invited to a StudioOS project. Accept here: ${link}\nThis invitation expires in 14 days and works only for this email address.`);
+    }
     return c.json({
       invitation: inv,
+      email_sent: emailSent,
       token, // returned ONCE — only the hash is persisted.
       accept_path: `/projects/invitations/accept?token=${token}`,
     });
