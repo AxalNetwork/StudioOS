@@ -288,6 +288,9 @@ const COMPOSED = new Map([
     'frontend/src/pages/subsidiary/LicenceSummary.jsx',
     'frontend/src/pages/subsidiary/LicenceTerms.jsx',
   ]],
+  // D949 (#2754): the Lab's Participants tab holds the door to one founder
+  // (`/admin/programs/spinout-lab/participants/:uid`).
+  ['frontend/src/pages/admin/lab/AdminLab.jsx', ['frontend/src/pages/admin/lab/LabParticipants.jsx']],
   // D915 (2026-10-24, #2368): the Events desk draws its tabs from the files
   // beside it, and they hold the doors to one event's page (`/admin/events/:id`).
   ['frontend/src/pages/admin/AdminEventsPage.jsx', [

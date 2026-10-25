@@ -62,7 +62,9 @@ export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === LAB_PATH) return 'overview';
   const t = TABS.find((x) => x.path && p === `${LAB_PATH}${x.path}`);
-  return t ? t.key : null;
+  if (t) return t.key;
+  // D949: one founder, /participants/:uid, opens over the Participants tab.
+  return /^\/admin\/programs\/spinout-lab\/participants\/[^/]+$/.test(p) ? 'participants' : null;
 }
 
 /** Where an old address lands: `pathname`, with `?moved=`, keeping the rest of the query and the hash. */

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Eye, RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { adminLabApi } from '../../../lib/api/adminLab';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
@@ -9,6 +10,8 @@ import AdminSpinoutLab from '../AdminSpinoutLab';
 import LabFormation from './LabFormation';
 import LabGraduation from './LabGraduation';
 import LabHosts from './LabHosts';
+import LabParticipants from './LabParticipants';
+import { participantsCount } from './participantsModel';
 import {
   DATES_FIXED, FACTS, LAB_PATH, LAB_TITLE, MOVED_NOTICES, NOT_YET, PAGE_LINE, PROGRAMS_PATH, TABS, WAITS,
   buildCohorts, buildNeeds, buildTiles, pageFailed, tabOf,
@@ -23,9 +26,10 @@ import {
  *
  * THE INTEGRATION, NOT THE WHOLE CANVAS (D937 §3). The header, the tabs whose
  * console exists, and the Overview blocks whose reads exist, each drawn
- * truthfully. Applications, Cohorts and Participants are today's console,
- * asked for one section through `AdminSpinoutLab`'s `section` prop; Hosts,
- * Formation and Graduation are drawn to the canvas by D970 (#2755). Applications is the cycle queue,
+ * truthfully. Applications and Cohorts are today's console, asked for one
+ * section through `AdminSpinoutLab`'s `section` prop; Hosts, Formation and
+ * Graduation are drawn to the canvas by D970 (#2755), and Participants, with
+ * one founder at `/participants/:uid`, by D949 (#2754). Applications is the cycle queue,
  * the one door that decides with a reason; the old list that accepted with
  * none is not reached any more.
  *
@@ -52,8 +56,8 @@ const idle = { status: 'loading', data: null };
  */
 function useLabReads(overview) {
   const keys = useMemo(() => (overview
-    ? ['glance', 'hosts', 'applications', 'timeline', 'review', 'certificates']
-    : ['glance', 'hosts']), [overview]);
+    ? ['glance', 'hosts', 'people', 'applications', 'timeline', 'review', 'certificates']
+    : ['glance', 'hosts', 'people']), [overview]);
   const [reads, setReads] = useState({});
   const [asOf, setAsOf] = useState(null);
   const [tick, setTick] = useState(0);
@@ -72,6 +76,8 @@ function useLabReads(overview) {
         return hq;
       }),
       hosts: () => api.adminLabHosts('pending'),
+      // D949: the Participants tab's count, everyone D946's read lists (one row asked for).
+      people: () => adminLabApi.participants({ limit: 1 }),
       applications: () => api.adminCohortApplications(),
       timeline: () => api.adminCohortTimeline(),
       review: () => api.adminCohortReview(),
@@ -102,7 +108,7 @@ function tabCounts(reads) {
     const n = h.status === 'ready' ? Number(h.data?.counts?.pending) : NaN;
     out.hosts = Number.isFinite(n) ? { kind: 'num', value: n.toLocaleString('en-US') } : { kind: 'dash', tip: 'Could not be read: the hosts list did not answer.' };
   }
-  out.participants = { kind: 'dash', tip: `${NOT_YET}: this read cannot yet tell a failure from none.` };
+  out.participants = participantsCount(reads.people);
   return out;
 }
 
@@ -267,7 +273,6 @@ function Overview({ reads, reload }) {
 const SECTIONS = {
   applications: ['cycles'],
   cohorts: ['timing'],
-  participants: ['participants'],
 };
 
 /** D970: the tabs drawn to the canvas (SL9–SL11), each its own file. */
@@ -326,6 +331,7 @@ export default function AdminLab({ onImpersonate }) {
       />
       {tab === 'overview' ? <Overview reads={reads} reload={reload} /> : null}
       {DESKS[tab] ? React.createElement(DESKS[tab]) : null}
+      {tab === 'participants' ? <LabParticipants onImpersonate={onImpersonate} /> : null}
       {SECTIONS[tab] ? SECTIONS[tab].map((s) => <AdminSpinoutLab key={s} section={s} onImpersonate={onImpersonate} />) : null}
     </div>
   );
