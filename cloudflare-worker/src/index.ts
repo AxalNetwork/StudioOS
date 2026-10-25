@@ -212,6 +212,7 @@ import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
 import buildPlanRoutes from './routes/build_plan';
+import buildPlanStateRoutes from './routes/build_plan_state';
 import metricsRoutes from './routes/metrics';
 import revenueRoutes from './routes/revenue';
 import wellbeingRoutes from './routes/wellbeing';
@@ -1373,6 +1374,8 @@ app.route('/api/founder-risk', founderRiskRoutes);
 // Task #9 — Venture Risk (internal deal-team 10-layer rating).
 app.route('/api/venture-risk', ventureRiskRoutes);
 app.route('/api/progress', progressRoutes);
+// D1067: pause, resume and "new evidence since" before D1065's plan router.
+app.route('/api/cycles/build/plan', buildPlanStateRoutes);
 app.route('/api/cycles/build/plan', buildPlanRoutes);
 app.route('/api/cycles/build', cycleBuildRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
