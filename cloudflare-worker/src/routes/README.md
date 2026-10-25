@@ -1,5 +1,9 @@
 # Worker route handlers — production source of truth
 
+D1156 adds `GET /api/admin/program-grants/licences/:uid/in-use` (HQ Super
+Admin) and `POST /api/licence/mine/programs/report` (local branch Admin).
+Both delegate to `../services/programUsage.ts`; neither accepts member data.
+
 These files are the production API behind `https://axal.vc/api/*`. They are
 mounted by `cloudflare-worker/src/index.ts` and run on Cloudflare Workers
 against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.

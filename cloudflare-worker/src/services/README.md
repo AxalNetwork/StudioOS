@@ -1,5 +1,9 @@
 # cloudflare-worker/src/services — logic, not HTTP
 
+`programUsage.ts` (D1156) collects month-to-date program counts locally, sends
+only aggregates to HQ, validates authenticated reports and reads dated per-grant
+figures. Missing and unreadable metrics stay distinct from measured zero.
+
 Everything a route needs that is not request parsing or response shaping. A file
 here takes `env` and plain values; it does not take a Hono `Context` and does
 not return a `Response`.
