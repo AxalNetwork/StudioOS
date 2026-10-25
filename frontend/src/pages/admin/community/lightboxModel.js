@@ -24,7 +24,7 @@ import { ACCESS_TYPES, ACTIVITY_LEVELS, CIRCLE_TYPES } from '../../../data/netwo
 import {
   NOT_RECORDED, STATUSES as EVENT_STATUSES, attendedText, capacityText, countText, eventHref, fillText, showUpText, startCell, statusWord, titleOf,
 } from '../events/eventsDeskModel.js';
-import { dayLabel, stamp } from './communityModel.js';
+import { dayLabel, jobDaysOpen, stamp } from './communityModel.js';
 
 export { NOT_RECORDED };
 
@@ -189,12 +189,31 @@ const JOB_WORD = Object.fromEntries(JOB_STATUSES);
 export const jobStatusWord = (s) => JOB_WORD[s] || 'Status not recorded';
 
 export const JOBS_LINE = 'Every posting, as of now. A row opens that posting on the job board; nothing is approved here.';
-/** Why the canvas's Posted and Days open are not drawn (D934 §3). */
-export const JOBS_FOOT = 'When a posting was published is not recorded, so Created is when its host started it, and days open is not shown.';
+/** D1121: what Posted and Days open mean, and why an older posting reads Not recorded. */
+export const JOBS_FOOT = 'Posted is the day an admin last approved the posting, and only a published posting has days open. A posting approved before that day was recorded reads Not recorded.';
+
+/** Posted: the day it was last approved; "Not published" when it never was; "Not recorded" when it was, before 609. */
+function postedText(j) {
+  if (j.published_at) return dayLabel(j.published_at);
+  return j.status === 'published' || j.status === 'closed' ? NOT_RECORDED : 'Not published';
+}
+
+/** How long it has been open, as a sortable number (the older the approval, the larger); null when not open or not recorded. */
+function openFor(j) {
+  if (j.status !== 'published') return null;
+  const t = stamp(j.published_at);
+  return Number.isNaN(t) ? null : -t;
+}
+
+function daysOpenCell(j, now) {
+  const d = jobDaysOpen(j, now);
+  if (d === null) return 'Not open';
+  return Number.isNaN(d) ? NOT_RECORDED : nf(d);
+}
 
 const appsOf = (j) => (j.application_count === null || j.application_count === undefined || !Number.isFinite(Number(j.application_count)) ? null : Number(j.application_count));
 
-export function jobRow(j) {
+export function jobRow(j, now = Date.now()) {
   const apps = appsOf(j);
   return {
     id: j.id,
@@ -205,6 +224,8 @@ export function jobRow(j) {
     status: jobStatusWord(j.status),
     statusKey: j.status,
     created: dayLabel(j.created_at),
+    posted: postedText(j),
+    daysOpen: daysOpenCell(j, now),
     place: j.remote ? 'Remote' : 'On-site',
     seniority: SENIORITY_LABELS[j.seniority] || 'Level not recorded',
     applications: apps === null ? NOT_RECORDED : nf(apps),
@@ -225,6 +246,8 @@ export const JOBS = {
   sorts: [
     { key: 'applications', label: 'Applications', compare: (a, b) => byCount(appsOf(a), appsOf(b)) || byText(a.title, b.title) },
     { key: 'created', label: 'Newest', compare: (a, b) => (stamp(b.created_at) || 0) - (stamp(a.created_at) || 0) },
+    // D1121: longest open first; a posting not open, or not recorded, sorts last.
+    { key: 'days_open', label: 'Days open', compare: (a, b) => byCount(openFor(a), openFor(b)) || byText(a.title, b.title) },
     { key: 'title', label: 'Role', compare: (a, b) => byText(a.title, b.title) },
   ],
 };

@@ -3,7 +3,8 @@
  * lightbox row names: CM4's row opens `/admin/jobs?posting=<id>`, that one
  * posting across every status; CM5's opens `/admin/circles?circle=<id>`, that
  * circle's editor. Mounted on a stubbed `fetch`; every posting and circle is
- * made up.
+ * made up. Also the days a posting has been open, from `published_at`
+ * (migration 609): the Jobs card's "[d] days open", CM4's Posted and Days open.
  *
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/community_gaps_d1121.test.mjs
  */
@@ -15,6 +16,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import AdminJobsPage from '../src/pages/admin/AdminJobsPage.jsx';
 import AdminCirclesPage from '../src/pages/admin/AdminCirclesPage.jsx';
+import { buildJobs, daysOpenText, jobDaysOpen } from '../src/pages/admin/community/communityModel.js';
+import { JOBS as JOBS_SPEC, JOBS_FOOT, initialState, jobRow, listView } from '../src/pages/admin/community/lightboxModel.js';
 
 const h = React.createElement;
 const JOBS = [
@@ -97,4 +100,52 @@ test('CM5\'s row opens that circle\'s editor; nothing is saved until the admin d
   try {
     assert.doesNotMatch(plain.text(), /Edit — /, 'an editor opens with no circle asked for');
   } finally { await plain.unmount(); }
+});
+
+// Wednesday 21 October 2026, noon UTC.
+const NOW = Date.parse('2026-10-21T12:00:00Z');
+const POSTINGS = [
+  { id: 1, title: 'Ten days', status: 'published', published_at: '2026-10-11 07:00:00', application_count: 3, created_at: '2026-01-01 09:00:00' },
+  { id: 2, title: 'One day', status: 'published', published_at: '2026-10-20 11:00:00', application_count: 5, created_at: '2026-01-02 09:00:00' },
+  { id: 3, title: 'Before 609', status: 'published', published_at: null, application_count: 4, created_at: '2026-01-03 09:00:00' },
+  { id: 4, title: 'Closed since', status: 'closed', published_at: '2026-09-01 10:00:00', application_count: 1, created_at: '2026-01-04 09:00:00' },
+  { id: 5, title: 'Closed before 609', status: 'closed', published_at: null, application_count: 0, created_at: '2026-01-05 09:00:00' },
+  { id: 6, title: 'A draft', status: 'draft', published_at: null, application_count: 0, created_at: '2026-01-06 09:00:00' },
+];
+const byTitle = (t) => POSTINGS.find((p) => p.title === t);
+
+test('days open: only a published posting is open, counted in whole days from its last approval; before 609 is not recorded, never 0', () => {
+  // Mutation checked: the status check removed → a closed posting has days open;
+  // a missing day read as 0 → "0 days open"; Math.ceil for floor → 11; "1 days" for one.
+  assert.equal(jobDaysOpen(byTitle('Ten days'), NOW), 10);
+  assert.equal(jobDaysOpen(byTitle('One day'), NOW), 1);
+  assert.ok(Number.isNaN(jobDaysOpen(byTitle('Before 609'), NOW)));
+  assert.equal(jobDaysOpen(byTitle('Closed since'), NOW), null, 'a closed posting is not open');
+  assert.equal(jobDaysOpen(byTitle('A draft'), NOW), null);
+  assert.equal(daysOpenText(byTitle('Ten days'), NOW), '10 days open');
+  assert.equal(daysOpenText(byTitle('One day'), NOW), '1 day open');
+  assert.equal(daysOpenText(byTitle('Before 609'), NOW), 'Days open not recorded');
+  assert.equal(daysOpenText(byTitle('Closed since'), NOW), null);
+
+  // The Jobs card's most-applications rows carry it.
+  const card = buildJobs({ jobs: { status: 'ready', data: POSTINGS } }, NOW);
+  assert.deepEqual(card.most.map((j) => [j.title, j.daysOpen]), [
+    ['One day', '1 day open'], ['Before 609', 'Days open not recorded'], ['Ten days', '10 days open'], ['Closed since', null],
+  ]);
+});
+
+test('CM4: Posted and Days open, the Days open sort, and the footnote', () => {
+  // Mutation checked: Posted read from created_at → "1 Jan"; a closed posting before 609 as "Not published";
+  // the sort's not-recorded rows first; the old footnote back.
+  const row = (t) => jobRow(byTitle(t), NOW);
+  assert.deepEqual([row('Ten days').posted, row('Ten days').daysOpen], ['11 Oct', '10']);
+  assert.deepEqual([row('Before 609').posted, row('Before 609').daysOpen], ['Not recorded', 'Not recorded']);
+  assert.deepEqual([row('Closed since').posted, row('Closed since').daysOpen], ['1 Sept', 'Not open']);
+  assert.deepEqual([row('Closed before 609').posted, row('Closed before 609').daysOpen], ['Not recorded', 'Not open'], 'it was live once, so not "Not published"');
+  assert.deepEqual([row('A draft').posted, row('A draft').daysOpen], ['Not published', 'Not open']);
+  const sorted = listView(JOBS_SPEC, POSTINGS, { ...initialState(JOBS_SPEC), sort: 'days_open' }).rows.map((j) => j.title);
+  assert.deepEqual(sorted.slice(0, 2), ['Ten days', 'One day'], 'longest open first');
+  assert.deepEqual(new Set(sorted.slice(2)), new Set(['Before 609', 'Closed since', 'Closed before 609', 'A draft']), 'not open or not recorded sorts last');
+  assert.doesNotMatch(JOBS_FOOT, /not shown/);
+  assert.match(JOBS_FOOT, /last approved/);
 });

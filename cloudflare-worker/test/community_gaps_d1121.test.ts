@@ -4,7 +4,8 @@
  *   - D918's Show-up block counts Confirmed (confirmed or attended), so the
  *     Events funnel's middle step is a count, not a note;
  *   - D918's list takes `type`, CM3's Type ▾, and refuses a type it does not store;
- *   - the activity read's Wellbeing rows link the Wellbeing console.
+ *   - the activity read's Wellbeing rows link the Wellbeing console;
+ *   - an approve records when a posting went live (`published_at`, migration 609).
  *
  * Every event, person and figure is made up.
  *
@@ -16,6 +17,8 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { SignJWT } from 'jose';
+import { Hono } from 'hono';
+import adminJobsRoute from '../src/routes/admin_jobs.ts';
 import adminEvents from '../src/routes/admin_events.ts';
 import { parseListQuery, readEventList, readOverview } from '../src/services/adminEventsReads.ts';
 import { CONSOLE_HREF } from '../src/services/communityActivity.ts';
@@ -103,4 +106,59 @@ test('3. a Wellbeing activity row links the Wellbeing console, not a tab on /adm
   // Mutation checked: back to /admin?tab=wellbeing → fails.
   assert.equal(CONSOLE_HREF.wellbeing, '/admin/wellbeing');
   for (const href of Object.values(CONSOLE_HREF)) assert.doesNotMatch(href, /\?tab=/);
+});
+
+/** The job board's tables as the baseline declares them, then migrations 550 and 609 as written. */
+function jobsFixture() {
+  const sql = new URL('../sql/', import.meta.url);
+  const baseline = readFileSync(new URL('schema_baseline.sql', sql), 'utf8');
+  const ddl = (name: string) => {
+    const at = `\n${baseline}`.indexOf(`\nCREATE TABLE ${name} (`);
+    assert.ok(at >= 0, `${name} is no longer defined in schema_baseline.sql`);
+    return baseline.slice(at, baseline.indexOf(');', at) + 2);
+  };
+  const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
+  for (const t of ['users', 'super_admins', 'user_sessions', 'projects', 'job_postings', 'job_applications', 'admin_audit_log']) db.exec(ddl(t));
+  for (const m of ['550_job_postings_submitted_at.sql', '609_job_postings_published_at.sql']) db.exec(readFileSync(new URL(`migrations/${m}`, sql), 'utf8'));
+  db.exec(`INSERT INTO users (id, email, name, role, is_active) VALUES (1, 'admin@example.test', 'Admin', 'admin', 1), (2, 'host@example.test', 'Host', 'founder', 1);
+    INSERT INTO job_postings (id, slug, host_user_id, title, status, admin_published, created_at) VALUES
+      (1, 'live-before', 2, 'Approved before 609', 'published', 1, '2026-01-01 09:00:00'),
+      (2, 'waiting', 2, 'Waiting role', 'pending_review', 0, '2026-10-01 09:00:00');`);
+  const env: any = { DB: d1Over(db), ENVIRONMENT: 'development', JWT_SECRET: SECRET };
+  const app = new Hono<any>();
+  app.route('/jobs', adminJobsRoute);
+  async function call(path: string, method = 'GET') {
+    const token = await new SignJWT({ user_id: 1 }).setProtectedHeader({ alg: 'HS256' }).setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(SECRET));
+    const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+    try {
+      const res = await app.request(path, { method, headers: { Authorization: `Bearer ${token}` } }, env);
+      return { status: res.status, body: await res.json() as any };
+    } finally { [console.warn, console.error] = saved; }
+  }
+  const publishedAt = (id: number) => (db.prepare('SELECT published_at FROM job_postings WHERE id = ?').get(id) as any).published_at;
+  return { db, env, call, publishedAt };
+}
+
+test('4. approving a posting records when it went live (migration 609); one approved before 609 stays not recorded, never backfilled', async () => {
+  // Mutation checked: the approve's `published_at = datetime('now')` removed → null after approve;
+  // the shape's `published_at` dropped → undefined in the list; a backfill in 609 → posting 1 dated.
+  const f = jobsFixture();
+  assert.equal(f.publishedAt(1), null, '609 backfills nothing');
+  assert.equal(f.publishedAt(2), null);
+  const before = Date.now();
+  const r = await f.call('/jobs/2/approve', 'POST');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.job.status, 'published');
+  const stamp = Date.parse(String(r.body.job.published_at).replace(' ', 'T') + 'Z');
+  assert.ok(Number.isFinite(stamp) && stamp >= before - 2000 && stamp <= Date.now() + 2000, 'written by the approve, now');
+  const list = await f.call('/jobs');
+  const byId = Object.fromEntries(list.body.jobs.map((j: any) => [j.id, j]));
+  assert.equal(byId[1].published_at, null, 'approved before 609: not recorded');
+  assert.equal(byId[2].published_at, r.body.job.published_at);
+  // Unpublishing leaves the day; a later approve writes the new one.
+  f.db.prepare("UPDATE job_postings SET published_at = '2026-09-01 10:00:00' WHERE id = 2").run();
+  await f.call('/jobs/2/unpublish', 'POST');
+  assert.equal(f.publishedAt(2), '2026-09-01 10:00:00', 'unpublishing keeps when it was last approved');
+  await f.call('/jobs/2/approve', 'POST');
+  assert.notEqual(f.publishedAt(2), '2026-09-01 10:00:00', 'each approve records the day it went live again');
 });

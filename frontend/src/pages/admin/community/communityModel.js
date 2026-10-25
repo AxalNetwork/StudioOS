@@ -107,6 +107,25 @@ export function dayLabel(value, timeZone = 'UTC') {
   try { return new Date(t).toLocaleDateString('en-GB', { ...opts, timeZone }); } catch { return new Date(t).toLocaleDateString('en-GB', { ...opts, timeZone: 'UTC' }); }
 }
 
+/**
+ * D1121 (migration 609): a posting's whole days open since an admin last
+ * approved it. Null when it is not published (nothing is open); NaN when it
+ * is published but was approved before the day was recorded, never 0.
+ */
+export function jobDaysOpen(job, now) {
+  if (!job || job.status !== 'published') return null;
+  const t = stamp(job.published_at);
+  return Number.isNaN(t) ? Number.NaN : Math.max(0, Math.floor((now - t) / 86_400_000));
+}
+
+/** "1 day open", "12 days open", "Days open not recorded", or null when the posting is not open. */
+export function daysOpenText(job, now) {
+  const d = jobDaysOpen(job, now);
+  if (d === null) return null;
+  if (Number.isNaN(d)) return 'Days open not recorded';
+  return `${nf(d)} ${d === 1 ? 'day' : 'days'} open`;
+}
+
 /** "10:42", the page's Updated time. */
 export function asOfLabel(ms) {
   return new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -354,8 +373,8 @@ export function buildNextUp(reads, now) {
   return { state: 'ready', rows };
 }
 
-/** The Jobs card: postings by status (a 100% bar), and the five with most applications. */
-export function buildJobs(reads) {
+/** The Jobs card: postings by status (a 100% bar), and the five with most applications, each with its days open. */
+export function buildJobs(reads, now = Date.now()) {
   const p = pending(reads.jobs, 'The job board could not be read. That is not the same as no jobs.');
   if (p) return p;
   const jobs = reads.jobs.data;
@@ -368,7 +387,7 @@ export function buildJobs(reads) {
     .filter((j) => Number(j.application_count) > 0)
     .sort((a, b) => Number(b.application_count) - Number(a.application_count) || stamp(a.created_at) - stamp(b.created_at))
     .slice(0, 5)
-    .map((j) => ({ id: j.id, title: j.title, company: j.project_name || null, applications: Number(j.application_count) }));
+    .map((j) => ({ id: j.id, title: j.title, company: j.project_name || null, applications: Number(j.application_count), daysOpen: daysOpenText(j, now) }));
   return { state: 'ready', total: jobs.length, parts, most };
 }
 

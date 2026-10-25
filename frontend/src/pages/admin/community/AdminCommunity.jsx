@@ -313,7 +313,7 @@ function JobsCard({ jobs, onRetry, onOpen }) {
             <li key={j.id} className="flex items-baseline justify-between gap-3">
               <span className="min-w-0">
                 <span className="block text-[13px] font-bold text-axal-ink dark:text-gray-100">{j.title}</span>
-                {j.company ? <span className={SUB}>{j.company}</span> : null}
+                {j.company || j.daysOpen ? <span className={SUB}>{[j.company, j.daysOpen].filter(Boolean).join(' · ')}</span> : null}
               </span>
               <span className={`${MONO} whitespace-nowrap text-[12px] text-axal-ink dark:text-gray-100`}>{`${j.applications} applications`}</span>
             </li>
@@ -566,7 +566,7 @@ export default function AdminCommunity() {
 
   const tiles = useMemo(() => buildTiles(reads, now), [reads, now]);
   const next = useMemo(() => buildNextUp(reads, now), [reads, now]);
-  const jobs = useMemo(() => buildJobs(reads), [reads]);
+  const jobs = useMemo(() => buildJobs(reads, now), [reads, now]);
   const circ = useMemo(() => buildCircles(reads), [reads]);
   const needs = useMemo(() => buildNeeds(reads, now), [reads, now]);
   const activity = useMemo(() => buildActivity(reads), [reads]);

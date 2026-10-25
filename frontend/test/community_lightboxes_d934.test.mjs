@@ -348,7 +348,9 @@ test('CM4 Job postings: every page read, search, each filter and sort, paging, t
     // D1121: a role opens its own posting on the job board, not the board's list.
     assert.ok(v.hrefs('community-box-jobs').some((h) => /^\/admin\/jobs\?posting=\d+$/.test(h)), 'a role does not open its own posting');
     assert.ok(!v.hrefs('community-box-jobs').includes('/admin/jobs'), 'a role opens the list, not its posting');
-    assert.match(v.text(), /days open is not shown/, 'the canvas\'s Days open needs a date no read returns');
+    // D1121: Posted and Days open are drawn; this fixture's postings were approved before 609, so they read Not recorded.
+    assert.match(v.rows('jobs')[0], /Published.*Senior.*Not recorded.*Not recorded.*14/s, 'Posted and Days open, not recorded before 609');
+    assert.match(v.text(), /only a published posting has days open/);
     await v.click('community-box-jobs-next');
     assert.equal(range(v, 'jobs'), '26–28 of 28');
     await v.change('community-box-jobs-search', 'northwind');

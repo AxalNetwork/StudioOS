@@ -73,6 +73,7 @@ function seeded(pulseMembers = 8) {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of TABLES) db.exec(ddl(t));
   db.exec(readFileSync(resolve(SQL, 'migrations/550_job_postings_submitted_at.sql'), 'utf8'));
+  db.exec(readFileSync(resolve(SQL, 'migrations/609_job_postings_published_at.sql'), 'utf8'));
 
   const u = db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)');
   // users.role admits no `mentor` (its CHECK); participationRole's own test covers it.
@@ -90,6 +91,8 @@ function seeded(pulseMembers = 8) {
   p.run(106, 'draft', null, 'Draft role', 'draft', null);
   p.run(107, 'closed', null, 'Closed role', 'closed', null);
   p.run(108, 'odd', null, 'Odd role', 'archived', null);
+  // D1121 (migration 609): 101 was approved 10 days and 5 hours ago; 102 before 609, so not recorded.
+  db.prepare('UPDATE job_postings SET published_at = ? WHERE id = 101').run(at(NOW - 10 * 24 * HOUR - 5 * HOUR));
 
   const a = db.prepare(`INSERT INTO job_applications (posting_id, user_id, name, email, created_at) VALUES (?, ?, ?, ?, ?)`);
   a.run(101, null, 'Guest Private', 'guest@secret.example', '2026-10-01 10:00:00');
@@ -168,11 +171,11 @@ test('jobs: applications in the window and before, weekly with the current week 
   ]);
   assert.deepEqual(j.by_status, { draft: 1, pending_review: 3, published: 2, rejected: 0, closed: 1, other: 1 });
   assert.deepEqual(j.top, [
-    { title: 'Staff Engineer', company: 'Acme Robotics', status: 'published', applications: 4 },
-    { title: 'Designer', company: null, status: 'published', applications: 2 },
-    { title: 'Ops Lead', company: null, status: 'pending_review', applications: 1 },
+    { title: 'Staff Engineer', company: 'Acme Robotics', status: 'published', applications: 4, days_open: 10 },
+    { title: 'Designer', company: null, status: 'published', applications: 2, days_open: { recorded: false, reason: DAYS_OPEN_REASON } },
+    { title: 'Ops Lead', company: null, status: 'pending_review', applications: 1, days_open: null },
   ]);
-  assert.deepEqual(j.days_open, { recorded: false, reason: DAYS_OPEN_REASON });
+  assert.equal('days_open' in j, false, 'days open is per posting now (D1121), not one block-wide "not recorded"');
 });
 
 test('participation by role: one key per role, Operating Partner is `partner`, no account is a guest', async () => {

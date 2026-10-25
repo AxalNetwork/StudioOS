@@ -755,7 +755,7 @@ export function Chart({ chart, onSelect }) {
   if (chart.type === 'terms') return <TermBars rows={chart.rows} from={chart.from} to={chart.to} />;
   if (chart.type === 'grouped') return <GroupedColumns rows={chart.rows} series={chart.series} height={chart.height} />;
   if (chart.type === 'stackbars') return <StackBars rows={chart.rows} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
-  if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} onSelect={chart.clickable ? onSelect : undefined} />;
+  if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} onSelect={onSelect} />;
   if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} references={chart.references} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
   if (chart.type === 'line') return <WeekLine values={chart.values} labels={chart.labels} previous={chart.previous} />;
   if (chart.type === 'bar100') return <Bar100 parts={chart.parts} />;
