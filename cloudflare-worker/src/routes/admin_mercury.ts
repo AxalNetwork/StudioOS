@@ -8,6 +8,8 @@
  *  DELETE /connections/:entityKey            { reason }                          Super Admin, write bar
  *  POST   /connections/:entityKey/sync       sync now (once in five minutes)
  *  GET    /accounts?entity=
+ *  GET    /balances?account=&range=30d|90d|12m   D1183: daily stored readings, gaps left absent
+ *  GET    /monthly?entity=                      D1183: six months, own transfers excluded
  *  GET    /transactions?entity=&account=&from=&to=&match=&direction=&page=   (50 a page; match=none|not_ours|<state>;
  *                                            direction=credit|debit, #1856)
  *  GET    /matches?state=
@@ -49,6 +51,7 @@ import {
 import { syncConnection } from '../services/mercury/sync';
 import { confirmMatch, proposeManual, rejectMatch, type MatchDeps } from '../services/mercury/match';
 import { markNotOurs, withdrawNotOurs } from '../services/mercury/notOurs';
+import { BALANCE_RANGES, balanceSeries, monthlyFlows, type BalanceRange } from '../services/mercury/charts';
 
 type C = Context<{ Bindings: Env }>;
 
@@ -56,7 +59,7 @@ export const SYNC_NOW_MINUTES = 5;
 export const TRANSACTIONS_PAGE = 50;
 const MATCH_STATES = ['proposed', 'confirmed', 'rejected', 'needs_review'] as const;
 
-export interface AdminMercuryOptions { fetcher?: MercuryFetch; match?: Partial<MatchDeps> }
+export interface AdminMercuryOptions { fetcher?: MercuryFetch; match?: Partial<MatchDeps>; now?: () => Date }
 
 /** D715 (#1780) decision 4: an account by its ending only. No balance and no Mercury account id is selected. */
 type AccountView = { kind: string; last_four: string; nickname: string | null; registered: boolean };
@@ -196,6 +199,27 @@ export function createAdminMercury(opts: AdminMercuryOptions = {}) {
     await logAdminAction(c.env, user.id, user.email, 'mercury_sync_requested', { entity_key: entity, connection_uid: live.uid, status: outcome.status });
     if (outcome.status === 'sync_in_progress') return c.json({ code: 'sync_in_progress', detail: 'A sync of this connection is already running.' }, 409);
     return c.json({ ok: outcome.status !== 'error', entity_key: entity, sync: outcome });
+  });
+
+  r.get('/balances', async (c) => {
+    const user = await requireMercuryReader(c); if (user instanceof Response) return user;
+    const account = c.req.query('account') || null, range = c.req.query('range') || '90d';
+    if (account && !/^[A-Za-z0-9_-]{1,80}$/.test(account)) return c.json({ code: 'invalid_account', detail: 'Choose a recorded account.' }, 400);
+    if (!(BALANCE_RANGES as readonly string[]).includes(range)) return c.json({ code: 'invalid_range', detail: 'Choose 30d, 90d or 12m.' }, 400);
+    if (!await auditRead(c.env, user, 'mercury_balances_read', { account, range })) return c.json(AUDIT_UNAVAILABLE, 503);
+    try {
+      const result = await balanceSeries(c.env, account, range as BalanceRange, opts.now?.() ?? new Date());
+      return result ? c.json({ ok: true, ...result }) : c.json({ code: 'account_not_recorded', detail: 'No such account is recorded.' }, 404);
+    } catch { return c.json({ code: 'balances_unreadable', detail: 'Daily balances could not be read. Try again.' }, 503); }
+  });
+
+  r.get('/monthly', async (c) => {
+    const user = await requireMercuryReader(c); if (user instanceof Response) return user;
+    const entity = c.req.query('entity') || null;
+    if (entity && !isEntityKey(entity)) return c.json({ code: 'unknown_entity', detail: 'No such Axal entity.' }, 400);
+    if (!await auditRead(c.env, user, 'mercury_monthly_read', { entity })) return c.json(AUDIT_UNAVAILABLE, 503);
+    try { return c.json({ ok: true, ...await monthlyFlows(c.env, entity, opts.now?.() ?? new Date()) }); }
+    catch { return c.json({ code: 'monthly_unreadable', detail: 'Monthly money in and out could not be read. Try again.' }, 503); }
   });
 
   r.get('/accounts', async (c) => {
