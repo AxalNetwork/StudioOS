@@ -685,14 +685,20 @@ prospects that responded to a round call (D653) and counts their soft
 commitments; it reads `round_call_recipients` and writes nothing. See
 `decisions/D663.md`.
 
-**UPDATE 2026-10-25 (D1141, #2433):** Fundraising readiness's module page draws
-a Product-market fit part above From Mercury (`pages/cycles/PmfPart.jsx`). It
-says Not scored yet and folds model v1 (RD4), because no route computes the
-score on `main`; it reads nothing. Validate's overview gains a line opening
-`/raise/fundraising-readiness` with the venture kept (RD12). No route and no API
-method are added. Canvas RD1–RD19 is in `design/incoming/`; the engine,
-`parts.pmf`, the page, RD4 from the store and Eadwyn wait for D1141's five
-parts.
+**D1141 (#2433)** initially added the Product-market fit placeholder above
+From Mercury and RD4's model definition, plus Validate's door to
+`/raise/fundraising-readiness`. Canvas RD1–RD19 lives in `design/incoming/`.
+
+**D1144 (#3030)** stores D1143's engine result on a changed inputs hash in
+migration 598's shared scoring tables. The module read returns `parts.pmf`
+before reading its checklist; PMF's failure leaves the other blocks available.
+`GET /api/cycles/raise/pmf/history?project=&limit=&before=` returns signed stored
+points through the same founder/admin `canWrite` gate. Re-score takes
+`pmf: true`; `items: ['pmf']` runs just that engine. Item 8 contributes value ÷ 10
+only at Medium confidence or more. Snapshot, checklist and `pmf_recomputed`
+audit are atomic. The history client is `cycleWrites.raise.pmfHistory`. The
+full frontend and Eadwyn explanation remain the later readiness parts. See
+`decisions/D1144.md` for the stored payload and paging contract.
 
 ### D1113 — legacy Positioning retirement (#2993)
 

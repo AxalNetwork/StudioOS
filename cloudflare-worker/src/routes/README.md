@@ -1,5 +1,8 @@
 # Worker route handlers — production source of truth
 
+
+D1144: `cycle_raise.ts` returns the stored Product-market fit part, its paged `/pmf/history` read and Re-score’s `pmf: true` flag. The founder/admin project gate is unchanged. `../services/scoring/README.md` names the shared snapshot/checklist/audit transaction.
+
 These files are the production API behind `https://axal.vc/api/*`. They are
 mounted by `cloudflare-worker/src/index.ts` and run on Cloudflare Workers
 against D1 (`env.DB`), KV, R2, Vectorize, AI, Queues and Durable Objects.

@@ -103,7 +103,7 @@ the manual writes for migration 440's records. Every call names the project
 with `?project=`.
 
 D661 (#1474): `cycles.js` reads the four cycle pages (`/api/cycles/:cycle/overview`
-and `/modules/:slug`). `cycleWrites.js` is the write table behind their Add and Edit forms,
+and `/modules/:slug`). `cycleWrites.js` also exposes D1144’s venture-scoped `raise.pmfHistory` read and passes the explicit `pmf: true` Re-score flag. It is the write table behind their Add and Edit forms,
 a factory over `request` so the contract test can run it against the real Worker
 routes; `cycles.js` binds it to the app's client as `cyclesWrite`. Its one
 `formOptions(cycle, projectId, slug, query?)` reads a module's form choices from
