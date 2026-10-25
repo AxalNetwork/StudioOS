@@ -109,6 +109,23 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Raise · Use of funds (#2455)
+
+The owner's artifacts `RknpumZGmSfuuUECQr9Toq` (the page) and
+`T1JUEHTPD2ZaTYKzViAh6w` (the board grid) came from S21's prompt on #2455. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Use of funds · Boards.dc.html` is the board grid (UF1 to UF22); it imports
+  the page by name;
+- `Raise Use Of Funds Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The tool is `/raise/use-of-funds`, with each tab a word
+under the module. S21's integration (D1173) draws Allocation's sections from
+the module read and says Not read here yet on the rest. The plan engine,
+scenarios, Forecast and the old capital model's retirement wait for D1173's
+seven parts, so this canvas stays in the queue until they land.
+
 ## Landed 2026-10-25 — Account · Usage · Storage (#2449)
 
 The owner's artifacts `BGAhQ7BJjYZqecV3KSbauq` (the board grid) and

@@ -268,7 +268,7 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   assert.doesNotMatch(app, /path="\/raise\/cap-table\/(instruments|option-pool|scenarios)/, 'the module routes carry the tool');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.match(route, /const capTableTab = record && cycle === 'raise' && isCapTableTab\(slug, recordId\) \? recordId : null;/);
-  assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?!!projectId/);
+  assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?(?:!uofTab && )?!!projectId/);
   assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>/);
   const tool = read('frontend/src/pages/raise/captable/CapTableTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm)\(/);

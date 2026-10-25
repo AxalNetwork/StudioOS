@@ -203,7 +203,8 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   assert.doesNotMatch(app, /path="\/raise\/data-room\/(files|access|requests|activity|checklist|preview)/, 'the module routes carry the tool');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   assert.ok(route.includes("const dataRoomTab = record && cycle === 'raise' && isDataRoomTab(slug, recordId) ? recordId : null;"));
-  assert.ok(route.includes('!narrativeTab && !capTableTab && !dataRoomTab && !!projectId'));
+  // D1173 (#2455) adds Use of funds' tab words beside these.
+  assert.ok(route.includes('!narrativeTab && !capTableTab && !dataRoomTab && !uofTab && !!projectId'));
   assert.ok(route.includes("slug === DATA_ROOM ? <DataRoomHomeNav search={q} />"));
   const tool = read('frontend/src/pages/raise/dataroom/DataRoomTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm|prompt)\(/);

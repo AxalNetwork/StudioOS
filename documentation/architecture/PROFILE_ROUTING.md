@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 167 canonical canvases at `design/canvases/`, listed
-241 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 168 canonical canvases at `design/canvases/`, listed
+242 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -27,7 +27,7 @@ it, where in their nav, and how do they get there.*
 | Entry point | The sidebar path, or how the surface is reached when it has no nav row |
 | Confidence | High = live route reachable from that role’s nav. Medium = live route, no nav row. Low = not routed. |
 
-## Founder — 75 canvases
+## Founder — 76 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -103,6 +103,7 @@ it, where in their nav, and how do they get there.*
 | Studio Ops | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
 | Team | `/build/team?mode=workspace` | — (no nav entry) | Full page | Deep link / in-page action | CURRENT | Medium |
 | Trust center (public) | `/trust/me` | — (no nav entry) | Full page | Deep link / in-page action | NEW | Medium |
+| Use of funds | `/raise/use-of-funds` · `/raise/capital/model?project_id=` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Use of Funds | `/spinout-lab/use-of-funds` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | Headerless | Full page (proposed) | Sidebar → Headerless → Validate | NEW | Low |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
@@ -322,7 +323,7 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 111 | Live route, reachable from that workspace’s sidebar. |
+| High | 112 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 77 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 53 | Not routed. Proposed route only. |
 
