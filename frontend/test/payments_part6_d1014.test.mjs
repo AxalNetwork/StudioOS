@@ -448,3 +448,15 @@ test('D1129 an unnamed Product filter option identifies a product', async () => 
     assert.doesNotMatch(v.of('pay-log-product'), /Admin #/);
   } finally { await v.unmount(); s.restore(); }
 });
+
+
+test('D1129 Clear filters also clears an unsubmitted search draft', async () => {
+  const s = stub(); const v = await render('/admin/platform/payments/log');
+  try {
+    await v.change('pay-log-who', '1');
+    await v.change('pay-log-search', 'Unsubmitted draft');
+    await v.click('pay-log-clear');
+    assert.equal(v.props('pay-log-search').value, '');
+    assert.equal(s.seen.filter((u) => u.pathname === '/api/admin/payments/change-log').at(-1).searchParams.has('q'), false);
+  } finally { await v.unmount(); s.restore(); }
+});

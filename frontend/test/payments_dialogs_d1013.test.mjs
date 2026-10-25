@@ -183,6 +183,7 @@ async function render(url, { user = SUPER, phone = false } = {}) {
     of: (id) => textOf(node(id)),
     has: (id) => Boolean(byTestId(id)),
     props: (id) => props(node(id)),
+    async follow(id) { await act(async () => { props(node(id)).onClick({ button: 0, defaultPrevented: false, preventDefault() {}, target: node(id) }); }); await settle(); },
     async click(id) { await act(async () => { props(node(id)).onClick({ preventDefault() {}, target: node(id) }); }); await settle(); },
     async change(id, value) { await act(async () => { props(node(id)).onChange({ target: { value } }); }); await settle(); },
     async submit(id) { await act(async () => { props(node(id)).onSubmit({ preventDefault() {} }); }); await settle(); },
@@ -589,4 +590,17 @@ test('D1129 an unread product with a pending New query keeps its failure and ret
       assert.ok(!v.has('pay-new'));
     } finally { await v.unmount(); s.restore(); }
   }
+});
+
+
+test('D1129 phone Back retains the catalogue search and place', async () => {
+  const s = stub(); const v = await render('/admin/platform/payments', { phone: true });
+  try {
+    await v.change('pay-search', 'Validate');
+    assert.equal(v.props('pay-search').value, 'Validate');
+    await v.follow('pay-row');
+    assert.ok(v.has('pay-product-page'));
+    await v.click('pay-product-back');
+    assert.equal(v.props('pay-search').value, 'Validate');
+  } finally { await v.unmount(); s.restore(); }
 });

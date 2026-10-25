@@ -460,3 +460,14 @@ test('D1129 Who retains demoted and deleted payment actors, but excludes unrelat
     assert.equal(csv.headers.get('X-Export-Rows'), '1');
   } finally { db.close(); }
 });
+
+
+test('D1129 Who choices exclude system actor ids that the filter cannot accept', async () => {
+  const db = freshDb();
+  try {
+    for (const id of [0, -1]) audit(db, id, 'catalog_sync_failed', { failure: 'stripe' }, '2026-10-01 09:00:00');
+    const out = await call(payments, db, '/change-log/admins');
+    assert.ok(out.body.admins.every((a: any) => Number.isSafeInteger(a.id) && a.id > 0));
+    assert.equal(out.body.admins.length, 3);
+  } finally { db.close(); }
+});

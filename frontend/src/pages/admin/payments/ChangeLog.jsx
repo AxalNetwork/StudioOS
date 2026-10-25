@@ -136,7 +136,7 @@ function Filters({ filters, setFilter, kinds, people, products, onClear }) {
         <span className={EYE}>To</span>
         <input type="date" value={filters.to} min={filters.from || undefined} onChange={(e) => setFilter('to', e.target.value)} className={FIELD} data-testid="pay-log-to" />
       </label>
-      {any && <button type="button" className={`${GHOST} self-end`} onClick={onClear} data-testid="pay-log-clear">Clear filters</button>}
+      {any && <button type="button" className={`${GHOST} self-end`} onClick={() => { setSearch(''); onClear(); }} data-testid="pay-log-clear">Clear filters</button>}
     </div>
   );
 }

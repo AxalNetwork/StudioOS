@@ -158,7 +158,7 @@ function Needs({ reads }) {
   );
 }
 
-/** PAY12a: the catalogue on a phone, one card per product in its group; a tap opens the product as a sheet. */
+/** PAY12a: the catalogue on a phone, one card per product in its group; a tap opens the full product page. */
 function PhoneCatalogue({ groups, flagged }) {
   return (
     <div className="flex flex-col gap-3" data-testid="pay-phone-catalogue">
@@ -502,7 +502,7 @@ function PaymentsPage() {
       <button type="button" aria-label="Refresh" onClick={reload} className="grid h-9 w-9 place-items-center rounded-[9px] border border-axal-hairline text-axal-muted dark:border-gray-700 dark:text-gray-400"><RefreshCw size={16} aria-hidden="true" /></button>
     </>
   );
-  if (phone && productIdOf(loc.pathname)) return <Catalogue reads={reads} reload={reload} />;
+  const phoneProduct = phone && Boolean(productIdOf(loc.pathname));
   const more = <>
     {canWrite && <HeaderMenuItem onSelect={() => { setSaved(null); setSync(true); }} data-testid="pay-header-sync">Sync from Stripe</HeaderMenuItem>}
     <HeaderMenuItem to="/admin/platform/allowances" data-testid="pay-header-packs">Token packs</HeaderMenuItem>
@@ -511,7 +511,7 @@ function PaymentsPage() {
   </>;
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="payments">
-      <AdminPageHeader
+      {!phoneProduct && <AdminPageHeader
         crumb={{ label: 'Platform', to: PLATFORM_PATH, current: PAY_TITLE }}
         title={PAY_TITLE}
         pills={[{ label: 'HQ only', tone: 'hq' }]}
@@ -521,9 +521,9 @@ function PaymentsPage() {
         notice={{ text: notice.text, onDismiss: notice.dismiss }}
         tabs={tabs}
         data-testid="pay-header"
-      />
-      {saved && <span role="status" className={SUB} data-testid="pay-header-saved">{saved}</span>}
-      {sync && canWrite && <SyncDialog onClose={() => setSync(false)} onDone={(out) => { setSync(false); setSaved(out?.text || null); reload(); }} />}
+      />}
+      {!phoneProduct && saved && <span role="status" className={SUB} data-testid="pay-header-saved">{saved}</span>}
+      {!phoneProduct && sync && canWrite && <SyncDialog onClose={() => setSync(false)} onDone={(out) => { setSync(false); setSaved(out?.text || null); reload(); }} />}
       {tab === 'catalogue' && <Catalogue reads={reads} reload={reload} />}
       {tab === 'stripe' && <StripeConnection reads={reads} reload={reload} />}
       {tab === 'log' && <ChangeLog reads={reads} />}

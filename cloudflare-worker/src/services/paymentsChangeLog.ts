@@ -258,7 +258,7 @@ export async function readChangeLogAdmins(env: Env): Promise<{ id: number; name:
     `SELECT actor.id, u.name
        FROM (SELECT id FROM users WHERE role = ?1
              UNION SELECT admin_user_id AS id FROM admin_audit_log
-               WHERE action IN (SELECT value FROM json_each(?2))) actor
+               WHERE admin_user_id > 0 AND action IN (SELECT value FROM json_each(?2))) actor
        LEFT JOIN users u ON u.id = actor.id
        ORDER BY lower(COALESCE(u.name, '')), actor.id`,
   ).bind('admin', JSON.stringify(actionsFor())).all<{ id: number; name: string | null }>();
