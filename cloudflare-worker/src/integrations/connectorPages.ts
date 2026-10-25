@@ -39,7 +39,7 @@ export interface PagePrompt {
 }
 
 /** `mcp` (D847): "Sign in with <Provider>" through its MCP server; no page uses it until a provider issue adds one. */
-export type SignInKind = 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'channel' | 'mcp';
+export type SignInKind = 'none' | 'oauth' | 'oauth_or_key' | 'key' | 'first_party' | 'channel' | 'mcp';
 
 export interface ConnectorPage {
   /** At most 120 characters. */
@@ -47,6 +47,8 @@ export interface ConnectorPage {
   /** One to four paragraphs. */
   long_description: string[];
   tools: PageTool[];
+  works_without_signing_in?: Array<{ name: string; what: string; built: boolean }>;
+  never_does?: string[];
   prompts: PagePrompt[];
   /** Null exactly when `prompts` is not empty. */
   prompts_reason: string | null;
@@ -202,6 +204,25 @@ function mercuryPage(variant: MercuryVariant): ConnectorPage {
  * (D753 decision 15). Read through `pageDescriptor`, never directly by a route.
  */
 export const CONNECTOR_PAGES: Record<string, ConnectorPage | VariantPages> = {
+  lovable: {
+    tagline: 'Works without signing in. Launch links and app links for your venture.',
+    long_description: [
+      'No Lovable account is connected to Axal VC. The Worker never calls Lovable.',
+      'Build in Lovable launch links are being built in part 2. App links and founder-pressed live checks are being built in part 3. Neither is available from this directory entry yet.',
+      'A Lovable project synced to GitHub can already use the existing GitHub connector. That is a GitHub connection, not a Lovable sign-in.',
+    ],
+    works_without_signing_in: [
+      { name: 'Build in Lovable', what: 'Part 2: review a prompt, then open Lovable in your browser. Not built yet.', built: false },
+      { name: 'App links and live checks', what: 'Part 3: record your app’s address and check its public page when you ask. Not built yet.', built: false },
+    ],
+    never_does: ['No Lovable sign-in or stored Lovable key.', 'No prompt sent by the Worker.', 'Nothing built or published for you.'],
+    tools: [], prompts: [], prompts_reason: 'Eadwyn does not read Lovable. No Lovable data is read by the Worker.',
+    made_by: AXAL, service: { name: 'Lovable', href: 'https://lovable.dev' },
+    sign_in: { kind: 'none', label: 'Works without signing in', key_help_href: null },
+    endpoints: { sign_in: null, api: null }, added: null,
+    links: { ...NO_LINKS, developer_docs: 'https://docs.lovable.dev/integrations/build-with-url' }, verified_on: null,
+  },
+
   figma: {
     tagline: 'Design files for Prototype / MVP. Coming soon.',
     long_description: [
@@ -713,7 +734,7 @@ export const CHANNEL_PAGES: { whatsapp: ConnectorPage; telegram: ConnectorPage }
 
 /** The Discover order (D753 decision 13): the Connectors page's list, then Payroll. Every `ConnectorCategory` once. */
 export const CATEGORY_ORDER: readonly ConnectorCategory[] = Object.freeze([
-  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll',
+  'CRM', 'Payments', 'Accounting and banking', 'Calendar', 'Calendar and workspace', 'Messaging', 'Signing', 'Cap table', 'Data', 'Code', 'Design', 'Docs', 'Payroll', 'Design and build',
 ] as const);
 
 /** A page key to its registry key; the inverse of the frontend's `REGISTRY_ALIAS`. */

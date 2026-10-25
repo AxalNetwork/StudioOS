@@ -9,12 +9,12 @@ import {
   actionWord, allowanceOf, amountText, codesWord, dayText, groupOf, intervalWord, kindGroupWord, membersLine, membersOn,
   priceRows, productChecks, promosFor, showsOnRows, technicalLines, whoText,
 } from './payModel';
-import { AMBER, EYE, GHOST, LINK, MONO, PILL, PRIMARY, SUB, WRITE_HOLDER_NOTE, PayDialog, Reading, Technical, Unread } from './payUi';
+import { AMBER, EYE, GHOST, LINK, MONO, PILL, PRIMARY, SUB, WRITE_HOLDER_NOTE, PayDialog, Reading, Technical, Unread, usePayPhone } from './payUi';
 
 /**
  * D1012 (#2831) — PAY2: one product, as a centred lightbox over Catalogue, at
- * its own address (`/admin/platform/payments/products/[id]`), and as a bottom
- * sheet on a phone (PAY12b). Where members see it, its prices with the AI
+ * its own address (`/admin/platform/payments/products/[id]`), and as a full
+ * page on a phone (PAY12b, D1129). Where members see it, its prices with the AI
  * allowance and the yearly saving, the members on the plan, the promo codes
  * that apply, its checks, its recent changes, and Technical details.
  *
@@ -77,6 +77,7 @@ function WhereSeen({ product }) {
 }
 
 function Prices({ product, onAct, canWrite }) {
+  const phone = usePayPhone();
   const rows = priceRows(product);
   const pct = product.plan?.yearly_saving_percent;
   // Changing a price is drawn on a live, non-pack product, for the Super Admin.
@@ -86,7 +87,19 @@ function Prices({ product, onAct, canWrite }) {
     <Section title="Prices" testId="pay-product-prices">
       {groupOf(product) === 'packs' && <Link to={ALLOWANCES_PATH} className={LINK}>Managed on AI allowances →</Link>}
       {rows.length === 0 && <span className={SUB}>No price.</span>}
-      {rows.length > 0 && (
+      {phone && rows.length > 0 && <div className="flex flex-col gap-2" data-testid="pay-phone-prices">
+        {rows.map((x) => <article key={x.id} className="rounded-lg border border-axal-hairline p-3 dark:border-gray-700" data-testid="pay-price-row">
+          <div className="font-semibold text-axal-ink dark:text-gray-100">{intervalWord(x)} · {amountText(x)}</div>
+          <div className={SUB}>AI allowance a month: {allowanceOf(x).text || allowanceOf(x).reason || 'Not recorded'}</div>
+          <div className={SUB}>{x.active ? 'Active' : 'Archived'}{x.nickname ? ` · ${x.nickname}` : ''}</div>
+          <Technical>{x.id}</Technical>
+          {live && x.active && <div className="mt-2 flex gap-2">
+            <button type="button" className={GHOST} onClick={() => onAct({ type: 'changePrice', product, price: x })} data-testid={`pay-act-change-${x.id}`}>Change</button>
+            <button type="button" className={GHOST} onClick={() => onAct({ type: 'archivePrice', product, price: x })} data-testid={`pay-act-archive-${x.id}`}>Archive</button>
+          </div>}
+        </article>)}
+      </div>}
+      {!phone && rows.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-left text-[12.5px]">
             <thead>
@@ -127,7 +140,7 @@ function Prices({ product, onAct, canWrite }) {
         </div>
       )}
       {typeof pct === 'number' && pct > 0 && <span className={SUB} data-testid="pay-product-saving">Yearly saves {pct}%, computed from the two prices.</span>}
-      {rows.some((x) => !allowanceOf(x).text) && product.plan && <span className={SUB}>A dash is a price that gives no AI allowance; hover it for why.</span>}
+      {!phone && rows.some((x) => !allowanceOf(x).text) && product.plan && <span className={SUB}>A dash is a price that gives no AI allowance; hover it for why.</span>}
     </Section>
   );
 }
@@ -197,6 +210,7 @@ function Changes({ product, read, retry }) {
 }
 
 function Body({ product, catalog, onAct, canWrite }) {
+  const phone = usePayPhone();
   const id = product.id;
   const [members, retryMembers] = useRead(() => adminPaymentsApi.members(), !product.plan, `members:${id}`);
   const [promos, retryPromos] = useRead(() => api.adminListPromos(), false, `promos:${id}`);
@@ -208,7 +222,7 @@ function Body({ product, catalog, onAct, canWrite }) {
         <span className={PILL}>{kindGroupWord(product)}{product.plan?.label ? ` · ${product.plan.label}` : ''}</span>
         <span className={PILL}>{product.active ? '✓ Active' : '– Archived'}</span>
       </div>
-      {!pack && product.active && canWrite && (
+      {!phone && !pack && product.active && canWrite && (
         <div className="flex flex-wrap items-center gap-2" data-testid="pay-product-actions">
           <button type="button" className={PRIMARY} onClick={() => onAct({ type: 'addPrice', product })} data-testid="pay-act-add-price">Add a price</button>
           <button type="button" className={GHOST} onClick={() => onAct({ type: 'edit', product })} data-testid="pay-act-edit">Edit details</button>
@@ -230,23 +244,57 @@ function Body({ product, catalog, onAct, canWrite }) {
   );
 }
 
+/** PAY12b is a page with a Back door and persistent actions, not a clipped desktop table. */
+function ProductFrame({ product, title, sub, onClose, onAct, canWrite, children }) {
+  const phone = usePayPhone();
+  const [choosing, setChoosing] = useState(false);
+  if (!phone) return <PayDialog label={title} title={title} sub={sub} onClose={onClose} testId="pay-product">{children}</PayDialog>;
+  const writable = canWrite && product?.active && groupOf(product) !== 'packs';
+  const prices = product ? priceRows(product).filter((p) => p.active) : [];
+  return <section className="min-w-0 bg-white text-axal-ink dark:bg-gray-950 dark:text-gray-100" data-testid="pay-product-page">
+    <header className="flex flex-col gap-2 px-4 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <button type="button" className={LINK} onClick={onClose} data-testid="pay-product-back">‹ Catalogue</button>
+        {writable && <details className="relative" data-testid="pay-phone-product-more">
+          <summary className={`${GHOST} cursor-pointer`}>More</summary>
+          <div className="absolute right-0 z-10 flex min-w-[180px] flex-col gap-2 rounded-lg border border-axal-hairline bg-white p-2 shadow-lg dark:border-gray-700 dark:bg-gray-950">
+            <button type="button" className={GHOST} onClick={() => onAct({ type: 'edit', product })} data-testid="pay-phone-edit">Edit details</button>
+            <button type="button" className={GHOST} onClick={() => onAct({ type: 'archiveProduct', product })} data-testid="pay-phone-archive">Archive product</button>
+          </div>
+        </details>}
+      </div>
+      <h1 className="m-0 text-[22px] font-extrabold">{title}</h1>
+    </header>
+    <div className="flex flex-col gap-3 px-4 pb-6">{children}</div>
+    {choosing && <section className="px-4 pb-4" data-testid="pay-phone-price-picker">
+      <h2 className={EYE}>Which price do you want to change?</h2>
+      {prices.map((p) => <button key={p.id} type="button" className={`${GHOST} mb-2 w-full`} onClick={() => onAct({ type: 'changePrice', product, price: p })} data-testid={`pay-phone-choose-${p.id}`}>{intervalWord(p)} · {amountText(p)}</button>)}
+      <button type="button" className={GHOST} onClick={() => setChoosing(false)}>Cancel</button>
+    </section>}
+    {writable && <footer className="sticky bottom-20 flex gap-2 border-t border-axal-hairline bg-white p-3 dark:border-gray-700 dark:bg-gray-950" data-testid="pay-phone-product-actions">
+      <button type="button" className={`${PRIMARY} flex-1`} onClick={() => onAct({ type: 'addPrice', product })} data-testid="pay-phone-add-price">Add a price</button>
+      <button type="button" className={`${GHOST} flex-1`} disabled={!prices.length} onClick={() => setChoosing(true)} data-testid="pay-phone-change-price">Change a price</button>
+    </footer>}
+  </section>;
+}
+
 /** The lightbox for the product the address names, over whatever the catalogue read is doing. */
 export default function ProductLightbox({ id, catalogRead, onClose, onRetry, onAct = () => {}, canWrite = false }) {
   const products = catalogRead?.status === 'ready' ? catalogRead.data?.products || [] : [];
   const product = products.find((p) => p.id === id) || null;
   if (catalogRead?.status === 'ready' && product) {
     return (
-      <PayDialog label={product.name} title={product.name} sub="Product" onClose={onClose} testId="pay-product">
+      <ProductFrame product={product} title={product.name} sub="Product" onClose={onClose} onAct={onAct} canWrite={canWrite}>
         <Body product={product} catalog={catalogRead.data} onAct={onAct} canWrite={canWrite} />
-      </PayDialog>
+      </ProductFrame>
     );
   }
   return (
-    <PayDialog label="Product" title="Product" onClose={onClose} testId="pay-product">
+    <ProductFrame title="Product" onClose={onClose}>
       {(!catalogRead || catalogRead.status === 'loading') && <Reading />}
       {catalogRead?.status === 'error' && <Unread text={CATALOG_FAILED} onRetry={onRetry} testId="pay-product-unread" />}
       {catalogRead?.status === 'ready' && <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="pay-product-missing">{PRODUCT_MISSING}</p>}
       <Technical testId="pay-product-tech">{id}</Technical>
-    </PayDialog>
+    </ProductFrame>
   );
 }

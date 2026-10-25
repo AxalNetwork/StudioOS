@@ -334,12 +334,11 @@ test('the founder\'s NDA is refused when one is in force or out for signature, f
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pairwise_ndas').get().n, 0, 'a refusal wrote an NDA row');
 });
 
-test('the admin who owns the room by tenancy is not party A: founder_only, and nothing is sent', async () => {
+test('an admin is not the room\'s owner (D1102) and cannot send the NDA in the founder\'s name: 404, and nothing is sent', async () => {
   const db = freshDb();
-  // The admin passes the owner check (tenancy admits admins) and is refused as not the venture's founder.
   const res = await call(db, ADMIN, 'POST', '/p-room/grants/g-holder/nda');
-  assert.equal(res.status, 403, JSON.stringify(res.body));
-  assert.equal(res.body.code, 'founder_only');
+  assert.equal(res.status, 404, JSON.stringify(res.body));
+  assert.ok(!JSON.stringify(res.body).includes('signing'), 'no signing link');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pairwise_ndas').get().n, 0);
 });
 
