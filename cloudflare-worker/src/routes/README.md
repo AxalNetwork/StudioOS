@@ -328,3 +328,5 @@ use legacy investor grants through `/shared` instead. The data-room spec in
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
 
 D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: scoped chosen files, draft mapping, Stop using and ephemeral five-row preview. Calendar adds `/google/workspace-files/connect`; Google tokens stay in its one store. Support sessions are refused. See `../services/google/README.md`.
+
+D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.

@@ -1597,3 +1597,9 @@ workspace, preserves Unreadable/Try again, and offers no owner actions. The full
 admin/support tab design remains #2987's.
 
 D1091 (#2956, partial foundation): `/api/connectors/google-workspace` mounts `routes/google_workspace.ts` for `GET /picker-config?project=`, `GET /files?project=`, `POST /files`, `PUT /files/:uid/mapping`, `DELETE /files/:uid` (Stop using) and `POST /files/:uid/preview`. Calendar mounts `POST /api/calendar/google/workspace-files/connect`. All refuse support sessions; file routes re-check venture access and company enablement. The D753 `google_workspace` directory entry stays Coming soon while GW1/GW2/GW7/GW8 await approved design; no new screen ships.
+
+D1135 (#3015): Company Settings' existing Leave company confirmation now posts
+`/api/company/:uid/leave` through the switcher's shared action. It removes the
+membership and clears a departed active selection. Explorers have no Add a new
+company control in the switcher. `POST /api/projects/:id/restore` is a founder's
+owner-only undo within 30 days and available plan space; no new page is added.
