@@ -236,11 +236,11 @@ test('5. the versions are the pages\' own "Last updated" dates', () => {
   const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const pageDate = (file: string, name: string) => {
     const src = readFileSync(new URL(`../../frontend/src/pages/${file}`, import.meta.url), 'utf8');
-    const m = new RegExp(`export const ${name} = '([A-Z][a-z]+) (\\d{1,2}), (\\d{4})';`).exec(src);
+    const m = [...src.matchAll(/export const ([A-Z_]+) = '([A-Z][a-z]+) (\d{1,2}), (\d{4})';/g)].find((x) => x[1] === name);
     assert.ok(m, `${file} names ${name}`);
-    const month = MONTHS.indexOf(m![1]) + 1;
-    assert.ok(month > 0, m![1]);
-    return `${m![3]}-${String(month).padStart(2, '0')}-${m![2].padStart(2, '0')}`;
+    const month = MONTHS.indexOf(m![2]) + 1;
+    assert.ok(month > 0, m![2]);
+    return `${m![4]}-${String(month).padStart(2, '0')}-${m![3].padStart(2, '0')}`;
   };
   assert.equal(LEGAL_DOCUMENT_VERSIONS.tos_v1, pageDate('TermsPage.jsx', 'TERMS_UPDATED'));
   assert.equal(LEGAL_DOCUMENT_VERSIONS.privacy_v1, pageDate('PrivacyPage.jsx', 'PRIVACY_UPDATED'));
