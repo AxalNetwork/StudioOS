@@ -154,4 +154,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Licences (`/admin/my-licence`)
 
-**Canvas corpus:** 163. **Workspace assignments:** 225.
+**Canvas corpus:** 164. **Workspace assignments:** 230.

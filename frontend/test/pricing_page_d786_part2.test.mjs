@@ -123,13 +123,15 @@ test('D816\'s read: `monthly`, `yearly` and `yearly_saving_percent` are used as 
   assert.equal(priceOf({ prices: [price(100, 'year')], yearly: null }, 'year'), null);
 });
 
-test('the buttons: a visitor registers; a member\'s own plan is "Current plan"; another plan opens its product', () => {
+test('the buttons: a visitor registers; a member\'s own plan is "Current plan"; another plan opens the checkout sheet (D1048)', () => {
   const visitor = cardsOf('founder', {});
   assert.deepEqual(byId(visitor, 'growth').button, { label: 'Get started', to: '/register?lane=founder', disabled: false });
   const member = cardsOf('founder', { held: 'growth', signedIn: true });
   assert.equal(byId(member, 'growth').current, true);
   assert.deepEqual(byId(member, 'growth').button, { label: 'Current plan', to: null, disabled: true });
-  assert.deepEqual(byId(member, 'studio').button, { label: 'Upgrade', to: '/pricing/products/prod_studio', disabled: false });
+  // D1048 (#2451): Upgrade opens the checkout sheet in place, never a second pricing page.
+  assert.deepEqual(byId(member, 'studio').button, { label: 'Upgrade', to: null, checkout: true, disabled: false });
+  assert.equal(byId(member, 'studio').plan.product_id, 'prod_studio', 'the sheet reads the card\'s own plan');
   assert.deepEqual(byId(member, 'free').button, { label: 'Manage plan', to: '/account/billing', disabled: false });
 });
 

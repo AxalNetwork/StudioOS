@@ -16,6 +16,7 @@ building blocks.
 | `tickets/` | What a support ticket shows outside its own page. `BountyBadge.jsx` words a ticket's bounty state (D542) once, for the rows of Help → Tickets and for `MyBugReports.jsx`, the list of the member's own bug reports under the chat's ticket form. |
 | `auth/` | Shared auth chrome (`AuthShell`) for sign-in and onboarding entry. |
 | `brand/` | Brand builder; `brand/templates/` holds the landing-page previews. |
+| `checkout/` | D1048 (#2451): the checkout sheet that opens in place to buy a plan, and its pure model; see its README. |
 | `cofounder/` | Co-founder agreement and matching. |
 | `command-center/` | Founder command-centre widgets. |
 | `discovery/` | Customer-discovery tooling. |

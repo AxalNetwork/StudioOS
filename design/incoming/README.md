@@ -109,6 +109,25 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Pricing · Checkout (#2451)
+
+The owner's artifacts `UHZdASErjSvAZVJE5W5iAZ` (the board grid) and
+`QWRAQTrCeyLyKVAU1iXGzp` (the page) came from S21's prompt on #2451, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Checkout · Boards.dc.html` is the board grid (PAYX1 to PAYX21, with the
+  lettered boards PAYX6a–b, PAYX7b, PAYX10a–c, PAYX19a–b, PAYX20a–e and PAYX21b);
+- `Checkout Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The checkout sheet opens in place from `/pricing`'s Upgrade
+and "Get …" for every signed-in member, never a second pricing page. S21's
+integration (D1048) draws the plan summary from the public plans read and puts
+today's payment form behind Continue. The quote, the designed refusals and
+states, a change in place, the renewal banner, the other entry points, phone
+and dark wait for D1048's seven parts, so this canvas stays in the queue until
+they land. The `ROUTE_MAP.md` row says what is drawn today.
+
 ## Landed 2026-10-25 — Admin · Approvals (#2390)
 
 The owner's artifacts `MGs5M2u9Cfr4XdNyH1eyce` (the board grid) and
