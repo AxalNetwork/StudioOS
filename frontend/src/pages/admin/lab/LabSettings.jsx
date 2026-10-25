@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { labOperationsApi, programGrantsApi } from '../../../lib/api';
+import { labOperationsApi } from '../../../lib/api/labOperations';
+import { programGrantsApi } from '../../../lib/api/programGrants';
 import { actionGhost } from '../../../ui';
 import { CARD, H2, SUB, LINK, INPUT, useRead, Dialog, Field, Select, useWrite } from './labParts';
 import { ReadState } from './labOperationsParts';

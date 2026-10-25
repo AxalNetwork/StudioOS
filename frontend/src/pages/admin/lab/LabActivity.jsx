@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { adminLabApi, labOperationsApi } from '../../../lib/api';
+import { adminLabApi } from '../../../lib/api/adminLab';
+import { labOperationsApi } from '../../../lib/api/labOperations';
 import { actionGhost } from '../../../ui';
 import { CARD, H2, SUB, INPUT, TH, TD, Select, Pager, useRead } from './labParts';
 import { ReadState } from './labOperationsParts';
