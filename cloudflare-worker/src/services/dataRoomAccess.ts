@@ -18,6 +18,15 @@
  * and `withheld_behind_nda` count only what it admits) and its download
  * answers 404. The founder's file tool applies the same rules in the browser
  * (`pages/raise/dataRoomRead.js`).
+ *
+ * D1103 (#2983) — A GRANT'S FOLDER SCOPE. A grant opens every folder, or only
+ * the folders it names (migration 594, `data_room_grants.folders_scoped` with
+ * one `data_room_grant_folders` row per folder). `grantFolderScope` reads it as
+ * a set of folder ids, each named folder with its subfolders, or null for
+ * every folder, and `tierAdmits` takes it as its fourth argument: a file
+ * outside the scope, or at the room's top level under a scoped grant, is
+ * admitted by nothing. Every investor reader passes its grant's scope, so the
+ * one predicate still decides.
  */
 import type { Env } from '../types';
 
@@ -25,7 +34,10 @@ export const ACCESS_TIERS = ['invited', 'committed', 'nobody'] as const;
 export type AccessTier = typeof ACCESS_TIERS[number];
 export const isAccessTier = (v: unknown): v is AccessTier => typeof v === 'string' && (ACCESS_TIERS as readonly string[]).includes(v);
 
-export type TieredFile = { access_tier?: string | null; access_expires_at?: string | null };
+export type TieredFile = { access_tier?: string | null; access_expires_at?: string | null; folder_id?: number | null };
+
+/** The folders a grant opens: their ids, subfolders included, or null for every folder. */
+export type FolderScope = ReadonlySet<number> | null;
 
 /** Milliseconds for a stored `YYYY-MM-DD` or `YYYY-MM-DD HH:MM:SS`, read as UTC; null when unreadable. */
 export function expiryMs(v: string | null | undefined): number | null {
@@ -42,7 +54,7 @@ export function expiryMs(v: string | null | undefined): number | null {
  * reads as `invited`. An expiry that cannot be read hides the file: a date
  * nobody can check is not a promise to keep showing it.
  */
-export function tierAdmits(f: TieredFile, committed: boolean, now: number = Date.now()): boolean {
+export function tierAdmits(f: TieredFile, committed: boolean, now: number = Date.now(), folders: FolderScope = null): boolean {
   const tier = f.access_tier == null || f.access_tier === '' ? 'invited' : f.access_tier;
   // `nobody`, and any value this code does not know, admits no one.
   if (tier !== 'invited' && tier !== 'committed') return false;
@@ -51,7 +63,46 @@ export function tierAdmits(f: TieredFile, committed: boolean, now: number = Date
     const at = expiryMs(f.access_expires_at);
     if (at == null || at <= now) return false;
   }
+  // D1103 — a scoped grant opens only its folders. A file with no folder, or a
+  // reader that did not select `folder_id`, is outside every scope.
+  if (folders !== null && (f.folder_id == null || !folders.has(Number(f.folder_id)))) return false;
   return true;
+}
+
+/** Whether a folder is inside the grant's scope; every folder when it is null. */
+export const folderInScope = (folderId: number | null | undefined, folders: FolderScope): boolean =>
+  folders === null || (folderId != null && folders.has(Number(folderId)));
+
+/**
+ * The grant's folder scope (D1103): null when it opens every folder, else the
+ * ids of the folders it names and of every folder under them, inside the
+ * grant's own project. Fails closed: a scope that cannot be read is an empty
+ * set, which opens nothing, never the whole room.
+ */
+export async function grantFolderScope(env: Env, grantId: number): Promise<FolderScope> {
+  try {
+    const grant = await env.DB.prepare(
+      'SELECT project_id, folders_scoped FROM data_room_grants WHERE id = ?',
+    ).bind(grantId).first<{ project_id: number; folders_scoped: number | null }>();
+    if (!grant) return new Set();
+    if (Number(grant.folders_scoped) !== 1) return null;
+    // The walk is bounded by the project at each step, so a folder row that
+    // points into another venture's tree is never followed.
+    const rows = await env.DB.prepare(
+      `WITH tree AS (
+         SELECT f.id FROM data_room_grant_folders gf
+           JOIN data_room_folders f ON f.id = gf.folder_id AND f.project_id = ?
+          WHERE gf.grant_id = ?
+         UNION
+         SELECT f.id FROM data_room_folders f JOIN tree t ON f.parent_id = t.id WHERE f.project_id = ?
+       )
+       SELECT id FROM tree`,
+    ).bind(grant.project_id, grantId, grant.project_id).all<{ id: number }>();
+    return new Set((rows.results || []).map((r) => Number(r.id)));
+  } catch (e) {
+    console.error('[data_room] folder scope unreadable', (e as Error)?.message);
+    return new Set();
+  }
 }
 
 /**
@@ -78,11 +129,13 @@ export async function investorCommitted(env: Env, projectId: number, userId: num
  * The room's files this reader's tier admits, counted: `total` is what the
  * tier and expiry admit, `open` what the NDA gate then lets them open.
  */
-export async function admittedCounts(env: Env, projectId: number, committed: boolean, nda: boolean): Promise<{ total: number; open: number }> {
+export async function admittedCounts(
+  env: Env, projectId: number, committed: boolean, nda: boolean, folders: FolderScope = null,
+): Promise<{ total: number; open: number }> {
   const res = await env.DB.prepare(
-    'SELECT visibility, access_tier, access_expires_at FROM data_room_files WHERE project_id = ?',
-  ).bind(projectId).all<{ visibility: string; access_tier: string | null; access_expires_at: string | null }>();
+    'SELECT visibility, access_tier, access_expires_at, folder_id FROM data_room_files WHERE project_id = ?',
+  ).bind(projectId).all<{ visibility: string; access_tier: string | null; access_expires_at: string | null; folder_id: number | null }>();
   const now = Date.now();
-  const admitted = (res.results || []).filter((f) => tierAdmits(f, committed, now));
+  const admitted = (res.results || []).filter((f) => tierAdmits(f, committed, now, folders));
   return { total: admitted.length, open: admitted.filter((f) => f.visibility === 'open' || nda).length };
 }

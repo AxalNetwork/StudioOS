@@ -2382,7 +2382,9 @@ function AppInner() {
   // Build's root owns its overview, as Raise, Grow and Network do: founder,
   // and not asking for the editor. Validate's root no longer branches at all
   // (D704, decision 2): every role its guard admits gets the cycle page.
-  const founderBuildLanding = effectiveRole === 'founder'
+  // D1064 (#2934): a Spin-Out Lab founder's /build is the overview too, as
+  // their /validate is, whatever their account role; `labRoles` admits them.
+  const founderBuildLanding = (effectiveRole === 'founder' || (user?.spinout_lab_active === 1 && effectiveRole !== 'admin'))
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const networkParams = new URLSearchParams(location.search);
   const founderNetworkLanding = effectiveRole === 'founder'
@@ -2841,16 +2843,20 @@ function AppInner() {
       <Route path="/admin/programs/mentor-cohorts" element={guard(['admin'], <AdminMentorCohortAccess />)} />
       <Route path="/admin/programs/mentor-cohorts/how-it-runs" element={guard(['admin'], <AdminMentorCohortAccess />)} />
       <Route path="/admin/programs/mentor-cohorts/people" element={guard(['admin'], <AdminMentorCohortAccess />)} />
+      <Route path="/admin/programs/mentor-cohorts/activity" element={guard(['admin'], <AdminMentorCohortAccess />)} />
       <Route path="/admin/programs/refer-and-earn" element={guard(['admin'], <AdminReferAndEarn />)} />
       <Route path="/admin/programs/refer-and-earn/how-it-runs" element={guard(['admin'], <AdminReferAndEarn />)} />
       <Route path="/admin/programs/refer-and-earn/queue" element={guard(['admin'], <AdminReferAndEarn />)} />
       <Route path="/admin/programs/refer-and-earn/settings" element={guard(['admin'], <AdminReferAndEarn />)} />
+      <Route path="/admin/programs/refer-and-earn/activity" element={guard(['admin'], <AdminReferAndEarn />)} />
       <Route path="/admin/programs/perks" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/perks/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/perks/queue" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/perks/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/learning" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/learning/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/learning/people" element={guard(['admin'], <AdminProgramPage />)} />
+      <Route path="/admin/programs/learning/activity" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/referral-partners/how-it-runs" element={guard(['admin'], <AdminProgramPage />)} />
       <Route path="/admin/programs/investor-cohorts" element={guard(['admin'], <AdminProgramPage />)} />
@@ -2972,6 +2978,8 @@ function AppInner() {
           sub-paths (D936's header). /admin/network-profiles and the Admin
           Console's ?tab=network-profiles forward to the Deck roster tab. */}
       <Route path="/admin/advisors-partners" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/people" element={guard(['admin'], <AdvisorsPartners />)} />
+      <Route path="/admin/advisors-partners/people/:ref" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/firms" element={guard(['admin'], <AdvisorsPartners />)} />
       <Route path="/admin/advisors-partners/deck" element={guard(['admin'], <AdvisorsPartners />)} />
       {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
@@ -3077,18 +3085,20 @@ function AppInner() {
           read, and /build/<module> its module pages. Every Build page above
           and below is a static route and wins over /build/:slug; no module
           slug is one of them. */}
+      {/* D1064 (#2934): Build's cycle pages admit a Spin-Out Lab founder, as
+          Validate's do; the Worker admits them on their own venture (ownsVenture). */}
       <Route path="/build" element={founderBuildLanding
-        ? guard(['admin', 'founder'], <CycleRoute cycle="build" />)
+        ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" />)
         : <Navigate to="/build/this-week" replace />} />
       {/* D686 §5.1: Connect a tool, the Build page with its lightbox open; /build/tools is the history's address. */}
-      <Route path="/build/connect" element={guard(['admin', 'founder'], <CycleRoute cycle="build" lightbox />)} />
+      <Route path="/build/connect" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" lightbox />)} />
       <Route path="/build/tools" element={guard(['admin', 'founder'], <HistoryRedirect to="/build/operating-systems" hash="#tools" />)} />
       {/* D1063 (#2426): Validate → Build's plan and its progress, ahead of /build/:slug. */}
-      <Route path="/build/plan" element={guard(['admin', 'founder'], <CycleRoute cycle="build" buildPlan="plan" />)} />
-      <Route path="/build/plan/progress" element={guard(['admin', 'founder'], <CycleRoute cycle="build" buildPlan="progress" />)} />
-      <Route path="/build/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="build" />)} />
-      <Route path="/build/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="build" record />)} />
-      <Route path="/build/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="build" adding />)} />
+      <Route path="/build/plan" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" buildPlan="plan" />)} />
+      <Route path="/build/plan/progress" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" buildPlan="progress" />)} />
+      <Route path="/build/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" />)} />
+      <Route path="/build/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" record />)} />
+      <Route path="/build/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" adding />)} />
       <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
         ? <Navigate to={`/build${location.search}`} replace />
         : founderWorkspace('build', founderEditor(<ExecutionPage />)))} />

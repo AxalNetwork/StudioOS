@@ -310,6 +310,11 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
+  // D978 (#2764): Advisors & Partners' People tab holds the door to one
+  // person (`/admin/advisors-partners/people/:ref`).
+  ['frontend/src/pages/admin/advisors/AdvisorsPartners.jsx', [
+    'frontend/src/pages/admin/advisors/People.jsx',
+  ]],
   // D947/D948/D949: Overview, Cohorts, Applications and Participants hold the
   // doors to one cohort (`/cohorts/:ym`), one application (`/applications/:id`)
   // and one founder (`/participants/:uid`).
