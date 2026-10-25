@@ -62,6 +62,8 @@ function fixture() {
   db.exec(sqlOf('410_safe_issuances.sql'));
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  // D1020: vesting rows carry their venture (migration 574's column).
+  db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER');
   db.exec(sqlOf('567_deck_share_nda_include.sql')); // D902: a link's NDA and what it includes
   raiseEvidenceTables(db);
   db.exec(sqlOf('544_narrative_sections.sql')); // D908: a version based on another copies its narrative stores
@@ -782,6 +784,7 @@ function cycleFixture() {
   db.exec(sqlOf('442_raise_cycle_stores.sql'));
   db.exec(sqlOf('459_cycle_activity_convention.sql'));
   db.exec(sqlOf('463_raise_record_stores.sql'));
+  db.exec('ALTER TABLE cap_table_vesting ADD COLUMN project_id INTEGER'); // D1020, migration 574
   raiseEvidenceTables(db);
   db.exec(sqlOf('549_deck_share_nullable_view_limit.sql'));
   db.exec(sqlOf('567_deck_share_nda_include.sql')); // D902, after 549's rebuild
