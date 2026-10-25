@@ -13,6 +13,19 @@
  *                   first, paged. A decision names the admin who made it.
  *   POST /:ref/reopen   D991: back in the queue, with an optional reason. The
  *                   verdict stays in the history; nobody is told (PRF5d).
+ *   GET /agreements D993: the first-agreement options in their five groups,
+ *                   each Ready or "Not ready: no text in the library yet",
+ *                   read through the send's own resolver.
+ *   POST /:ref/unbind
+ *                   D993: free a profile whose address now belongs to another
+ *                   account (`user_id` cleared), so that account's answers can
+ *                   land in it. Super Admin with a TOTP session and a recent
+ *                   step-up (`requireSuperAdminWriteBar`), a reason of 10
+ *                   characters or more, logged in Governance
+ *                   (`partner_profile_unbound`, `logAdminAction`).
+ *
+ * Each row and profile also carries the state of its first agreement's
+ * envelope (D993), and the counts fill "envelopes out" from it.
  *
  * All `requireAdmin` (Admin and Super Admin alike). A profile is named by its
  * reference (migration 556) in the address and every log line, never by its
@@ -22,10 +35,12 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
-import { requireAdmin } from '../auth';
+import { requireAdmin, requireSuperAdminWriteBar } from '../auth';
 import { refuse } from '../util/refusal';
 import { hashEmail } from '../util/hashEmail';
 import { maskPartnerProfile } from '../services/sensitiveFields';
+import { logAdminAction } from '../services/adminAudit';
+import { agreementOptions } from '../services/partnerAgreements';
 import { HISTORY_LIMIT_MAX, REOPEN_REASON_MAX, profileHistory, reopenProfile } from '../services/partnerProfileReview';
 import {
   PROFILE_REF, listOptions, listPartnerProfiles, listedByRef, partnerProfileCounts, type ListQuery,
@@ -66,6 +81,15 @@ r.get('/', async (c) => {
 r.get('/counts', async (c) => {
   await requireAdmin(c);
   return c.json(await partnerProfileCounts(c.env));
+});
+
+r.get('/agreements', async (c) => {
+  await requireAdmin(c);
+  try {
+    return c.json(await agreementOptions(c.env));
+  } catch (e) {
+    return refuse(c, 503, { code: 'agreements_unreadable', message: 'The legal library could not be read, so readiness is unknown. Try again in a moment.', raw: e });
+  }
 });
 
 r.get('/:ref', async (c) => {
@@ -121,6 +145,48 @@ r.post('/:ref/reopen', async (c) => {
   } catch (e) {
     return refuse(c, 503, { code: 'partner_profiles_unreadable', message: 'The partner profile could not be reopened. Try again in a moment.', raw: e });
   }
+});
+
+/** The shortest reason an Unbind takes, as a void's (D802). */
+export const UNBIND_REASON_MIN = 10;
+const UNBIND_REASON_MAX = 500;
+
+r.post('/:ref/unbind', async (c) => {
+  const admin = await requireSuperAdminWriteBar(c);
+  const ref = c.req.param('ref');
+  if (!PROFILE_REF.test(ref)) return refuse(c, 404, { code: 'profile_not_found', message: 'No partner profile has that reference.' });
+  const body = await c.req.json().catch(() => ({})) as { reason?: unknown };
+  const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+  if (reason.length < UNBIND_REASON_MIN || reason.length > UNBIND_REASON_MAX) {
+    return refuse(c, 400, { code: 'reason_required', message: `Say why, in ${UNBIND_REASON_MIN} to ${UNBIND_REASON_MAX} characters. The reason is kept in Governance.` });
+  }
+  let previous: number;
+  let holder: number | null;
+  try {
+    const row = await c.env.DB.prepare('SELECT email, user_id FROM partner_profiles WHERE ref = ?').bind(ref).first<any>();
+    if (!row) return refuse(c, 404, { code: 'profile_not_found', message: 'No partner profile has that reference.' });
+    if (row.user_id == null) {
+      return refuse(c, 409, { code: 'not_bound', message: 'This profile is not bound to an account, so there is nothing to unbind.' });
+    }
+    previous = Number(row.user_id);
+    const h = await c.env.DB.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?) ORDER BY id LIMIT 1').bind(row.email).first<any>();
+    holder = h?.id == null ? null : Number(h.id);
+    if (holder === previous) {
+      return refuse(c, 409, { code: 'address_still_theirs', message: 'The account this profile is bound to still holds its address. Unbind frees a profile only when the address belongs to another account or to none.' });
+    }
+    // Only the binding read above is cleared: another write in between refuses rather than unbinding someone else.
+    const done = await c.env.DB.prepare('UPDATE partner_profiles SET user_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE ref = ? AND user_id = ?')
+      .bind(ref, previous).run();
+    if (!done?.meta?.changes) {
+      return refuse(c, 409, { code: 'binding_changed', message: 'The profile changed while you were looking at it. Reload and try again.' });
+    }
+  } catch (e) {
+    return refuse(c, 503, { code: 'partner_profiles_unreadable', message: 'The partner profile could not be read, so nothing was changed. Try again in a moment.', raw: e });
+  }
+  await logAdminAction(c.env, admin.id, admin.email, 'partner_profile_unbound', {
+    ref, target_user_id: previous, address_holder_user_id: holder, reason,
+  });
+  return c.json({ unbound: true, ref, previous_user_id: previous, address_holder_user_id: holder });
 });
 
 export default r;

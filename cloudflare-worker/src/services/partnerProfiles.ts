@@ -28,8 +28,12 @@
  *
  * NOTHING RECORDED READS AS NULL. Review dates are recorded from migration 557
  * (D991) on, and a verdict given before it has none, so the verdict counts
- * stay `available: false`; envelope state waits for part 4. Those blocks say
- * so with the reason, never a zero.
+ * stay `available: false` with the reason, never a zero.
+ *
+ * THE ENVELOPE (D993, part 4). Each row carries the state of the envelope its
+ * first agreement went out in, joined from `esign_envelopes`, and the counts
+ * read fills "envelopes out" from the same join. A profile with no agreement
+ * or no envelope has `envelope: null`, which reads "Not sent".
  */
 import type { Env } from '../types';
 
@@ -80,11 +84,47 @@ export const PAGE_SIZE_DEFAULT = 25;
 export const PAGE_SIZE_MAX = 100;
 
 /**
+ * D993 — the envelope a profile's first agreement went out in: the newest
+ * signing envelope of the profile's `agreement_type` addressed to its account
+ * or to its email, as the verify send's own idempotency check finds it
+ * (routes/profiling.ts). None without an agreement on the profile.
+ */
+const ENVELOPE_ID_SQL = `(SELECT e.id FROM esign_envelopes e
+      WHERE NULLIF(TRIM(p.agreement_type), '') IS NOT NULL AND e.document_type = p.agreement_type
+        AND ((u.id IS NOT NULL AND e.user_id = u.id)
+          OR EXISTS (SELECT 1 FROM esign_recipients er WHERE er.envelope_id = e.id AND LOWER(er.recipient_email) = LOWER(p.email)))
+      ORDER BY julianday(e.created_at) DESC, e.id DESC LIMIT 1)`;
+
+/**
+ * D993 — the envelope's state in the page's words: out for signature, not
+ * delivered (out, but the latest mail to the signer failed), signed, declined
+ * or voided. A status this list does not know passes through as stored.
+ */
+const ENVELOPE_STATE_SQL = `CASE WHEN e.id IS NULL THEN NULL
+      WHEN e.status = 'completed' THEN 'signed'
+      WHEN e.status IN ('sent', 'partially_signed') THEN
+        CASE WHEN (SELECT a.action FROM esign_audit_events a
+                    WHERE a.envelope_id = e.id AND a.action IN ('email_sent', 'email_failed')
+                    ORDER BY a.id DESC LIMIT 1) = 'email_failed' THEN 'not_delivered' ELSE 'out' END
+      WHEN e.status = 'rejected' THEN 'declined'
+      WHEN e.status IN ('void', 'voided') THEN 'void'
+      ELSE e.status END`;
+
+/** The envelope states' words. */
+export const ENVELOPE_LABELS: Record<string, string> = {
+  out: 'Out for signature', not_delivered: 'Not delivered', signed: 'Signed', declined: 'Declined', void: 'Voided',
+};
+
+/**
  * One row per profile with everything the list filters and draws. The account
  * is the profile's own `user_id`, else the account holding its email (as the
  * profile read does: an address can move to a later account).
  */
 const ROWS_SUBQUERY = `(
+  SELECT l.*, e.status AS envelope_status, e.document_type AS envelope_document_type,
+         e.created_at AS envelope_sent_at, e.completed_at AS envelope_completed_at,
+         ${ENVELOPE_STATE_SQL} AS envelope_state
+  FROM (
     SELECT p.rowid AS row_id, p.ref, p.email, p.created_at, p.user_id, p.invitation_id,
            p.full_name, p.organization, p.persona, p.legal_entity_name, p.entity_type,
            p.founder_track, p.company_established, p.partnership_goal, p.agreement_type,
@@ -95,12 +135,15 @@ const ROWS_SUBQUERY = `(
            CASE WHEN ${HAS_CHAT_SQL} THEN 1 ELSE 0 END AS src_chat,
            CASE WHEN ${SRC_EADWYN_SQL} THEN 1 ELSE 0 END AS src_eadwyn,
            u.id AS account_id, u.name AS user_name, u.role AS account_role, u.kyc_status,
-           rr.suggested_role, rr.assigned_role, rr.assigned_at
+           rr.suggested_role, rr.assigned_role, rr.assigned_at,
+           ${ENVELOPE_ID_SQL} AS envelope_id
     FROM partner_profiles p
     LEFT JOIN users u ON u.id = p.user_id OR (p.user_id IS NULL AND u.email = p.email)
     LEFT JOIN user_role_review rr ON rr.user_id = u.id
     LEFT JOIN users rv ON rv.id = p.reviewed_by
-  ) AS listed`;
+  ) AS l
+  LEFT JOIN esign_envelopes e ON e.id = l.envelope_id
+) AS listed`;
 
 /** Sort orders, by key. `reviewed` (D991): newest verdict first, unreviewed last. */
 const ORDER_BY: Record<string, string> = {
@@ -228,6 +271,13 @@ export function listRow(r: any) {
     sources: sourcesOf(r),
     account,
     identity_check: kyc == null ? null : { state: kyc, label: IDENTITY_LABELS[kyc] ?? kyc },
+    envelope: r.envelope_state == null ? null : {
+      state: r.envelope_state,
+      label: ENVELOPE_LABELS[r.envelope_state] ?? r.envelope_state,
+      document_type: r.envelope_document_type ?? null,
+      sent_at: r.envelope_sent_at ?? null,
+      signed_at: r.envelope_state === 'signed' ? (r.envelope_completed_at ?? null) : null,
+    },
   };
 }
 
@@ -314,9 +364,12 @@ const WEEKLY_SQL = "SELECT date(p.created_at, '-6 days', 'weekday 1') AS week_st
   + ' WHERE julianday(p.created_at) >= julianday(?) AND julianday(p.created_at) <= julianday(?) AND NOT ' + IS_DRAFT_SQL
   + ' GROUP BY week_start';
 
+/** D993 — profiles whose first agreement is out for signature, and how many of those were not delivered. */
+const ENVELOPES_OUT_SQL = "SELECT COALESCE(SUM(envelope_state IN ('out', 'not_delivered')), 0) AS out_n,"
+  + " COALESCE(SUM(envelope_state = 'not_delivered'), 0) AS undelivered FROM " + ROWS_SUBQUERY;
+
 export const WEEKS = 12;
 const PART2 = 'Verification and rejection dates are recorded only from 24 Oct 2026 (D991); a verdict given before has none, so this count would be short.';
-const PART4 = 'Envelope state is read from Partner profiles part 4.';
 
 /**
  * The tiles and the weekly series. Each block carries `available` and
@@ -355,11 +408,19 @@ export async function partnerProfileCounts(env: Env, now = new Date()) {
     weekly = { available: false, reason: 'The partner profiles could not be read.', verified_available: false, verified_reason: PART2, weeks: [] };
   }
 
+  let envelopesOut: Record<string, unknown>;
+  try {
+    const o = await env.DB.prepare(ENVELOPES_OUT_SQL).first<any>();
+    envelopesOut = { available: true, reason: null, count: Number(o?.out_n ?? 0), not_delivered: Number(o?.undelivered ?? 0) };
+  } catch {
+    envelopesOut = { available: false, reason: 'The signing envelopes could not be read.', count: null, not_delivered: null };
+  }
+
   return {
     as_of: now.toISOString(),
     waiting,
     verified_30d: { available: false, reason: PART2, count: null },
-    envelopes_out: { available: false, reason: PART4, count: null },
+    envelopes_out: envelopesOut,
     weekly,
   };
 }

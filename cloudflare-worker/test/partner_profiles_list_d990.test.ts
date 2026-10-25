@@ -69,7 +69,8 @@ const ago = (hours: number) => new Date(NOW - hours * 3_600_000).toISOString().s
 /** Six profiles, one per shape the three writers leave, inserted before 556 like production's. */
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'partner_profiles', 'user_role_review', 'activity_logs']) db.exec(tableFromBaseline(BASELINE, t));
+  // D993: the list joins each profile's agreement envelope, so the signing tables are here too.
+  for (const t of ['users', 'partner_profiles', 'user_role_review', 'activity_logs', 'esign_envelopes', 'esign_recipients', 'esign_audit_events']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(MIGRATION_275);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active, kyc_status) VALUES (?, ?, ?, ?, 1, ?)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test', 'approved');
@@ -297,8 +298,8 @@ test('the counts: waiting and its bands leave Drafts out, the weekly series coun
   });
   assert.equal(r.body.waiting.oldest_at, ago(120));
   assert.deepEqual(r.body.verified_30d, { available: false, reason: 'Verification and rejection dates are recorded only from 24 Oct 2026 (D991); a verdict given before has none, so this count would be short.', count: null });
-  assert.equal(r.body.envelopes_out.available, false);
-  assert.equal(r.body.envelopes_out.count, null);
+  // D993 fills this block; with no envelope sent it reads zero out, from a read that worked.
+  assert.deepEqual(r.body.envelopes_out, { available: true, reason: null, count: 0, not_delivered: 0 });
   const weeks = r.body.weekly.weeks;
   assert.equal(weeks.length, WEEKS);
   assert.equal(weeks.reduce((s: number, w: any) => s + w.captured, 0), 5, 'the Draft was counted as captured, or a capture was lost');

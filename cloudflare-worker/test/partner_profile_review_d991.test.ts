@@ -71,7 +71,8 @@ function makeD1(db: InstanceType<typeof DatabaseSync>, failing: RegExp[] = []) {
 /** Three profiles: a member with an account, a partner with an account, an invitee with none. */
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
-  for (const t of ['users', 'partner_profiles', 'user_role_review', 'activity_logs']) db.exec(tableFromBaseline(BASELINE, t));
+  // D993: the list joins each row's agreement envelope.
+  for (const t of ['users', 'partner_profiles', 'user_role_review', 'activity_logs', 'esign_envelopes', 'esign_recipients', 'esign_audit_events']) db.exec(tableFromBaseline(BASELINE, t));
   db.exec(M275);
   const u = db.prepare('INSERT INTO users (id, role, name, email, is_active) VALUES (?, ?, ?, ?, 1)');
   u.run(ADMIN, 'admin', 'Ada Admin', 'ada@example.test');
