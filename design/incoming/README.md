@@ -109,6 +109,23 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Account · Companies and projects (#2422)
+
+The owner's artifacts `PVusZxQ7Qx91VaWXwBnE1s` (the board grid) and
+`FxbmngPtN9uks5rgUSEL2k` (the page) came from S21's prompt on #2422, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Companies and projects · Boards.dc.html` is the board grid (CMP1 to
+  CMP19, with the lettered boards); it imports the page by name;
+- `Companies Projects Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** The section lives at `/account/companies`, second in the
+Account list. S21's integration (D1134) draws Companies from the switcher's own
+read and a founder's ventures by company; the lightboxes, dialogs and the
+switcher hand-off wait for D1134's six parts, so this canvas stays in the queue
+until they land.
+
 ## Landed 2026-10-25 — Raise · Data room (#2456)
 
 The owner's artifacts `LEfVAaN5CLoLZ7gnz8LP9F` (the board grid) and

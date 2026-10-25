@@ -112,6 +112,8 @@ test('1. A1m: a founder\'s index draws the Settings rows in order, the plan by D
   const markup = html(h(AccountPhoneIndex, { role: 'founder', follows: ready(FOLLOWS), billing: ready(GROWTH) }));
   assert.deepEqual(rowsOf(markup), [
     ['/account/profile', 'Profile and identity Personal details, identity, company profile ›'],
+    // D1134 (#2422): Companies and projects, below Profile and identity.
+    ['/account/companies', 'Companies and projects Your companies, projects and invitations ›'],
     ['/account/notifications', 'Notifications Each type, in-app, email and push ›'],
     ['/account/security-privacy', 'Sign-in and security Password, authenticator app, SMS ›'],
     ['/account/billing', 'Billing and orders Validate + Build · $20 / month ›'],
