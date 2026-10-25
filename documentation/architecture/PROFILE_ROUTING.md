@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 159 canonical canvases at `design/canvases/`, listed
-218 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 160 canonical canvases at `design/canvases/`, listed
+219 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -289,11 +289,12 @@ it, where in their nav, and how do they get there.*
 | Spin-Out Lab-print | `/spinout-lab/brief` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
 | Spin-Out Lab-print-1vkgcux | `/spinout-lab` | — (no nav entry) | Full page (Spin-Out Lab — frozen) | Deep link / in-page action | OUT OF SCOPE | High |
 
-## Unassigned — no persona in ROUTE_MAP — 1 canvas
+## Unassigned — no persona in ROUTE_MAP — 2 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Brand & Landing Page copy | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
+| My events | `/my/events` · `/my/events/hosting` · `/my/events/discover` · `/my/events/past` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 
 ## Confidence tally
 
@@ -301,7 +302,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 105 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 65 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 48 | Not routed. Proposed route only. |
+| Low | 49 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

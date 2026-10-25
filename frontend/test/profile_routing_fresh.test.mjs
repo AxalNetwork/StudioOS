@@ -110,7 +110,8 @@ test('ROUTE_MAP still parses to the full canvas corpus', () => {
   // 157 the same day (D989, #2380): `Partner profiles`, out of the Admin Console at /admin/partner-profiles.
   // 158 the same day (D997, #2378): `Persona segments`, out of the Admin Console at /admin/persona-segments.
   // 159 the same day (D1008, #2386): `Payments`, out of the Admin Console at /admin/platform/payments.
-  assert.equal(recs.length, 159);
+  // 160 (D1030, #2387): `My events`, its four tabs at their own addresses.
+  assert.equal(recs.length, 160);
 
   for (const r of recs) {
     assert.ok(r.canvas.length > 0, 'every row names a canvas');
