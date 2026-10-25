@@ -228,7 +228,7 @@ test('D688: new Raise cards pin the seven lines and actions; figures stay null',
     // D695 (#1657): each module with a form opens its address; a link needs a deck, so Pitch deck builds one first.
     ['empty', 'No files are currently downloadable by a granted investor.', 'Upload', '/raise/data-room/new?project=1'],
     ['empty', 'No holders yet. Ownership before and after the round appears here.', 'Add holder', '/raise/cap-table/new?project=1'],
-    ['empty', 'No split yet. The planned split and runway appear here.', 'Edit split', '/raise/use-of-funds/new?project=1'],
+    ['empty', 'Not recorded: no valid five-section split. Record a 100% allocation.', 'Edit split', '/raise/use-of-funds/new?project=1'],
     ['empty', 'No investors yet. The pipeline by stage appears here.', 'Add investor', '/raise/capital-relationships/new?project=1'],
   ]);
   // D695 test 13 (#1657): a card that opens an Add opens a module that has a form.
