@@ -54,6 +54,10 @@ function setup(now = NOW) {
 }
 const entity = (body: any, key: string) => body.items.find((x: any) => x.entity_key === key);
 const month = (body: any, key: string, date: string) => entity(body, key).points.find((x: any) => x.month === date);
+const manyRows = (s: ReturnType<typeof setup>, account: number, count: number, date: string) => s.db.prepare(`
+  WITH RECURSIVE sequence(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM sequence WHERE n < ?)
+  INSERT INTO mercury_transactions (uid, mercury_transaction_id, account_id, amount_cents, posted_on, status, currency)
+  SELECT 'bulk-' || n, 'private-bulk-' || n, ?, 1, ?, 'sent', 'usd' FROM sequence`).run(count, account, date);
 
 test('daily balances retain real readings, gaps, nulls, zero and as-of, with only masked account metadata', async () => {
   const s = setup();
@@ -219,6 +223,33 @@ test('unavailable snapshot/transaction stores and unsafe totals are unreadable, 
   const s = setup(), h = s.account('holdings', '1111');
   s.txn(h, Number.MAX_SAFE_INTEGER, '2026-10-01'); s.txn(h, 1, '2026-10-02');
   const overflow = await s.get('/monthly'); assert.deepEqual([overflow.status, overflow.body.code], [503, 'monthly_unreadable']);
+});
+
+test('posted and history row budgets fail closed with no partial totals', async () => {
+  const previous = console.warn; console.warn = () => {};
+  try {
+    for (const scope of ['posted', 'history']) {
+      const s = setup(), h = s.account('holdings', '1111');
+      try {
+        manyRows(s, h, 20_001, scope === 'posted' ? '2026-10-01' : '2026-04-01');
+        if (scope === 'history') { const g = s.account('gp', '2222'); s.txn(g, 1, '2026-10-01'); }
+        const r = await s.get('/monthly');
+        assert.deepEqual([r.status, r.body.code], [503, 'monthly_unreadable'], scope);
+        assert.equal(r.body.items, undefined); assert.doesNotMatch(r.text, /20001|cents|private/);
+      } finally { s.db.close(); }
+    }
+  } finally { console.warn = previous; }
+});
+
+test('history growth warns before its limit with only counts, scope and outcome', async () => {
+  const s = setup(), h = s.account('holdings', '1111'), g = s.account('gp', '2222');
+  manyRows(s, h, 16_000, '2026-04-01'); s.txn(g, 1, '2026-10-01');
+  const previous = console.warn, metrics: unknown[] = [];
+  console.warn = (...args) => { if (args[0] === '[mercury] chart row budget') metrics.push(args[1]); };
+  try {
+    const r = await s.get('/monthly'); assert.equal(r.status, 200); assert.equal(month(r.body, 'gp', '2026-10').in_cents, 1);
+    assert.deepEqual(metrics, [{ scope: 'history', rows: 16_000, limit: 20_000, outcome: 'near_limit' }]);
+  } finally { console.warn = previous; s.db.close(); }
 });
 
 test('HQ admin reads need no write elevation; all other roles, support sessions and branches are refused before bank reads or audit', async () => {

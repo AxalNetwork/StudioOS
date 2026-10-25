@@ -54,6 +54,17 @@ export async function balanceSeries(env: Env, account: string | null, range: Bal
 }
 
 type Posted = { id: number; entity_key: string; registered: number; amount_cents: number; posted_on: string; kind: string | null };
+const MAX_CHART_ROWS = 20_000;
+const CHART_ROW_WARNING = 16_000;
+
+function checkRows(rows: Posted[], scope: 'posted' | 'history') {
+  const count = rows.length;
+  if (count >= CHART_ROW_WARNING) {
+    const outcome = count > MAX_CHART_ROWS ? 'refused' : 'near_limit';
+    console.warn('[mercury] chart row budget', { scope, rows: count, limit: MAX_CHART_ROWS, outcome });
+  }
+  if (count > MAX_CHART_ROWS) throw new Error('Stored chart row limit reached');
+}
 
 /** D712's earliest-first, one-use pairing: registered accounts of different
  * entities, equal opposite cents, posted no more than five days apart. */
@@ -96,8 +107,9 @@ export async function monthlyFlows(env: Env, entity: string | null, now: Date) {
     FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id
     WHERE t.posted_on IS NOT NULL AND t.posted_on >= ? AND t.posted_on <= ?
       AND lower(COALESCE(t.status, '')) IN (SELECT value FROM json_each(?)) AND lower(t.currency) = 'usd'
-    ORDER BY t.posted_on, t.id`).bind(from, to, JSON.stringify(POSTED_STATUSES)).all<Posted>();
+    ORDER BY t.posted_on, t.id LIMIT ?`).bind(from, to, JSON.stringify(POSTED_STATUSES), MAX_CHART_ROWS + 1).all<Posted>();
   if (!Array.isArray(result?.results)) throw new Error('Stored chart transactions unreadable');
+  checkRows(result.results, 'posted');
   for (const row of result.results) cents(row.amount_cents);
   // Pairing decisions can depend on chains of earlier pairs. A fixed five-
   // day lookback can free an already-used counterpart at the display edge.
@@ -113,8 +125,9 @@ export async function monthlyFlows(env: Env, entity: string | null, now: Date) {
         AND t.amount_cents IN (SELECT value FROM json_each(?))
         AND lower(COALESCE(t.status, '')) IN (SELECT value FROM json_each(?)) AND lower(t.currency) = 'usd'
         AND (t.kind IS NULL OR t.kind NOT IN (SELECT value FROM json_each(?)))
-      ORDER BY t.posted_on, t.id`).bind(from, JSON.stringify(amounts), JSON.stringify(POSTED_STATUSES), JSON.stringify(INTERNAL_KINDS)).all<Posted>();
+      ORDER BY t.posted_on, t.id LIMIT ?`).bind(from, JSON.stringify(amounts), JSON.stringify(POSTED_STATUSES), JSON.stringify(INTERNAL_KINDS), MAX_CHART_ROWS + 1).all<Posted>();
     if (!Array.isArray(earlier?.results)) throw new Error('Stored chart transfer history unreadable');
+    checkRows(earlier.results, 'history');
     history = earlier.results;
     for (const row of history) cents(row.amount_cents);
   }
