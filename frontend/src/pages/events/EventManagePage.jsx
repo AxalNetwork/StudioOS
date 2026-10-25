@@ -10,7 +10,8 @@ import CheckinScanner from '../../components/events/CheckinScanner';
 import { REGISTRATION_TABS, pageRows, recorded, registrationTab } from './eventOrganiserModel';
 import './eventOrganiser.css';
 
-const roles = ['admin', 'founder', 'partner', 'investor', 'exploring'];
+// The Worker's EVENT_ROLES (services/eventOrganiser.ts); D1031 adds advisor.
+const roles = ['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'];
 const blankItem = { title: '', starts_at: '', speaker_name: '', location_text: '', location_url: '' };
 export function EventReadState({ loading, error, empty, children }) {
   if (loading) return <p role="status">Loading…</p>;
