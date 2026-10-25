@@ -709,7 +709,9 @@ const capTable = spec('cap_table_scenarios', 'cap-table', async (rc, id) => {
     return { rows };
   }, { side: true }),
 ], async (rc, id, record): Promise<RecordAction[]> => {
-  const actions: RecordAction[] = [{ key: 'model-a-round', label: 'Model a round', kind: 'link', href: '/raise/cap-table/variants' }];
+  // D1016: the tool's Scenarios tab on this venture, which lists the variants (D1015). The bare
+  // `/raise/cap-table/variants` it used to open had no venture, so it said "Open variants from a startup's cap table".
+  const actions: RecordAction[] = [{ key: 'model-a-round', label: 'Model a round', kind: 'link', href: raiseHref(rc, 'cap-table', 'scenarios') }];
   const { entry, type, name } = loadedOf(record);
   // A founder or a SAFE/note holder is edited through `updateHolder()`; the pool and a round's investors are set in the tool.
   if (type !== 'founder' && type !== 'safe') return actions;
