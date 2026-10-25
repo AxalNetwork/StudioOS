@@ -998,7 +998,7 @@ const capital = spec('raise_prospects', 'capital-relationships', async (rc, id) 
         { key: 'on', label: 'On', kind: 'T', input: 'date', note: 'A later date is due, not done.' },
       ] },
       execute: (c, id, body) => refusing(async () => ({ ok: true, record: await logProspectEvent(c.env, {
-        projectId: c.projectId, userId: userId(c), prospectId: prospectId(id), body: picked(body, ['kind', 'note', 'on']),
+        projectId: c.projectId, userId: userId(c), prospectId: prospectId(id), body: picked(body, ['kind', 'note', 'on', 'starts_at']),
       }) })),
     },
     {
