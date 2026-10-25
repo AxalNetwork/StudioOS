@@ -31,7 +31,8 @@ const seed = join(scratch, 'chain.sqlite');
 }
 after(() => rmSync(scratch, { recursive: true, force: true }));
 
-const SECRET = 'synthetic-approvals-d1039-'.repeat(3);
+// A low-entropy signing key built at run time, so no literal reads as a credential.
+const SECRET = 'x'.repeat(48);
 const ADMIN = 1; const FROZEN = 2; const PARTNER = 3; const FOUNDER = 4;
 
 let serial = 0;
