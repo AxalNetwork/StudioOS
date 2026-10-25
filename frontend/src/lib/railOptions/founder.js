@@ -48,6 +48,9 @@ const REVIEWER = 'frontend/src/pages/DeckReviewerPage.jsx';
 const NEW_DECK = 'frontend/src/pages/raise/pitch/NewDeck.jsx';
 const STUDIO = 'frontend/src/pages/raise/pitch/PitchStudio.jsx';
 const PITCH_REVIEW = 'frontend/src/pages/raise/pitch/PitchReview.jsx';
+const ASSIST_BAR = 'frontend/src/pages/raise/pitch/CardAssistBar.jsx';
+const ADD_MENU = 'frontend/src/pages/raise/pitch/AddMenu.jsx';
+const CONNECTOR_CARD = 'frontend/src/pages/raise/pitch/ConnectorLightbox.jsx';
 const BRAND = 'frontend/src/pages/BrandBuilderPage.jsx';
 const NETWORK_DESK = 'frontend/src/pages/founder/FounderNetworkDesk.jsx';
 const ASK = 'frontend/src/pages/research/AskZone.jsx';
@@ -173,6 +176,39 @@ export const FOUNDER_OPTIONS = [
   {
     page: 'Founder · Raise · Pitch deck', key: 'deck:build', route: '/raise/pitch/new', label: 'Build deck', kind: 'write', handler: 'draft',
     at: [[NEW_DECK, 'newDeckApi.build('], [STUDIO, 'newDeckApi.build(']],
+  },
+  // D899 (#2678): Eadwyn's card tools in the editor (PD7, PD9d). Ask and the connector card's headline are rewrites.
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:rewrite', route: '/raise/pitch/edit', label: 'Rewrite', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run('], [CONNECTOR_CARD, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:shorten', route: '/raise/pitch/edit', label: 'Shorten', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:expand', route: '/raise/pitch/edit', label: 'Expand', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:tone', route: '/raise/pitch/edit', label: 'Change tone', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:translate', route: '/raise/pitch/edit', label: 'Translate', kind: 'write', handler: 'draft',
+    at: [[ASSIST_BAR, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:chart', route: '/raise/pitch/edit', label: 'Chart from your records', kind: 'write', handler: 'draft',
+    at: [[ADD_MENU, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:table', route: '/raise/pitch/edit', label: 'Table from your records', kind: 'write', handler: 'draft',
+    at: [[ADD_MENU, 'deckAssistApi.run(']],
+  },
+  {
+    page: 'Founder · Raise · Pitch deck', key: 'deck:timeline', route: '/raise/pitch/edit', label: 'Timeline from your records', kind: 'write', handler: 'draft',
+    at: [[ADD_MENU, 'deckAssistApi.run(']],
   },
   {
     page: 'Founder · Raise · Pitch deck', key: 'review:deck-file', route: '/raise/pitch/review', label: 'Drop your deck here or click to browse', kind: 'vision', handler: 'upload',

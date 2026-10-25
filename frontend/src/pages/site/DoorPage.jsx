@@ -5,6 +5,8 @@ import { ButtonLink } from '../../components/site/SiteBlocks';
 import { DOORS } from '../../lib/siteDoors';
 import { PRODUCT_PAGES } from '../../data/productPages';
 import { FOUNDER_TIERS, INVESTOR_TIERS } from '../../data/pricing';
+import { pricedTier } from '../../lib/plansPricing';
+import { PRICE_READING, PRICE_UNREAD, usePlansRead } from '../../lib/planPrices';
 import NotFoundPage from '../NotFoundPage';
 import './doors.css';
 
@@ -20,18 +22,30 @@ import './doors.css';
  * (owner, 2026-10-13); the aside (when the door has one); questions; the
  * closing band.
  *
- * Plans are read from the price catalogue `/pricing` reads (`data/pricing.js`)
- * — the price AND the feature list. A canvas plan names its tier; one the
- * catalogue does not have does not render, and a door left with none shows no
- * plans section, as the canvas's own `hasPlans` would.
+ * Plans are read from the catalogue `/pricing` reads (`data/pricing.js`): the
+ * tiers and their feature lists. D1050 (#2901): the price is the plans read's
+ * (`GET /api/public/plans-and-packs`), put on each tier by `pricedTier`, never
+ * typed. A canvas plan names its tier; one the catalogue does not have does
+ * not render, and a door left with none shows no plans section, as the
+ * canvas's own `hasPlans` would.
  */
 
-/** The catalogue `/pricing` reads, by audience. */
+/** The catalogue `/pricing` reads, by audience, before any price is read. */
 export const CATALOGUE = { founder: FOUNDER_TIERS, investor: INVESTOR_TIERS };
 
-/** A catalogue tier's monthly price, as the page prints it. */
-export function formatPrice(tier) {
-  return `$${Number(tier.priceMonthly).toLocaleString('en-US')}`;
+/** The catalogue with each tier priced from the plans read; a tier it could not price stays unpriced. */
+export function pricedCatalogue(read) {
+  return {
+    founder: FOUNDER_TIERS.map((t) => pricedTier(t, 'founder', read)),
+    investor: INVESTOR_TIERS.map((t) => pricedTier(t, 'investor', read)),
+    reading: !read || read.status === 'loading',
+  };
+}
+
+/** A catalogue tier's monthly price, as the page prints it: the read's, or why there is none. */
+export function formatPrice(tier, reading = false) {
+  if (typeof tier?.priceMonthly !== 'number' || !Number.isFinite(tier.priceMonthly)) return reading ? PRICE_READING : PRICE_UNREAD;
+  return `$${tier.priceMonthly.toLocaleString('en-US')}`;
 }
 
 function tierFor(door, id, catalogue) {
@@ -47,7 +61,8 @@ export function resolvePlans(door, catalogue = CATALOGUE) {
   return (door.plans || []).flatMap((p) => {
     const tier = tierFor(door, p.tier, catalogue);
     if (!tier) return [];
-    return [{ ...p, price: formatPrice(tier), period: '/ month', features: tier.features.slice() }];
+    // D1050: the plan is called what /pricing calls it, the catalogue tier's name.
+    return [{ ...p, name: tier.name || p.name, price: formatPrice(tier, catalogue.reading), period: '/ month', features: tier.features.slice() }];
   });
 }
 
@@ -56,7 +71,7 @@ export function chapterList(door, list = [], catalogue = CATALOGUE) {
   return list.flatMap((li) => {
     if (typeof li === 'string') return [li];
     const tier = tierFor(door, li.tier, catalogue);
-    return tier ? [li.t.replace('{price}', formatPrice(tier))] : [];
+    return tier ? [li.t.replace('{price}', formatPrice(tier, catalogue.reading))] : [];
   });
 }
 
@@ -79,8 +94,8 @@ function Flow({ steps }) {
   );
 }
 
-function Chapter({ door, c, n }) {
-  const list = chapterList(door, c.list);
+function Chapter({ door, c, n, catalogue }) {
+  const list = chapterList(door, c.list, catalogue);
   return (
     <li className="ax-door-chap">
       <div className="ax-door-chap-head">
@@ -143,10 +158,12 @@ function Tokens({ tokens }) {
 }
 
 export default function DoorPage({ door: key }) {
+  const read = usePlansRead();
   const door = DOORS[key];
   if (!door) return <NotFoundPage />;
   const meta = PRODUCT_PAGES[door.meta]?.meta || {};
-  const plans = resolvePlans(door);
+  const catalogue = pricedCatalogue(read);
+  const plans = resolvePlans(door, catalogue);
   const status = [
     ...door.live.map((s) => ({ t: s.t, route: s.route, soon: false })),
     ...door.soon.map((t) => ({ t, soon: true })),
@@ -199,7 +216,7 @@ export default function DoorPage({ door: key }) {
           <Lbl>How it works</Lbl>
           <h2 id="ax-door-how-h" className="ax-door-h2">{door.chaptersTitle}</h2>
           <ol className="ax-door-chapters">
-            {door.chapters.map((c, i) => <Chapter key={c.k} door={door} c={c} n={nn(i)} />)}
+            {door.chapters.map((c, i) => <Chapter key={c.k} door={door} c={c} n={nn(i)} catalogue={catalogue} />)}
           </ol>
           <aside id="ax-door-eadwyn" className="ax-door-eadwyn" aria-label="Eadwyn">
             <div className="ax-door-eadwyn-mark" aria-hidden="true">E</div>
