@@ -176,8 +176,10 @@ test('two deductions racing cannot both pass the balance: the check is inside th
 test('the Super Admin\'s grants list shows manual lines beside rule grants, marked manual, and not a revoke line', async () => {
   const { env } = setup();
   const rule = await grantCredits(env, { userId: FOUNDER, ruleKey: 'bug_low', sourceRef: 'ticket:1', actor: { kind: 'system', source: 'test' } });
-  const plus = await adjust(env, SUPER, { user_id: FOUNDER, delta: 50, reason: REASON });
-  const minus = await adjust(env, SUPER, { user_id: FOUNDER, delta: -5, reason: REASON });
+  // These are distinct adjustments even when both calls share a millisecond.
+  // Default timestamp references are covered by the single-grant test above.
+  const plus = await adjust(env, SUPER, { user_id: FOUNDER, delta: 50, reason: REASON, source_ref: 'manual-list:add' });
+  const minus = await adjust(env, SUPER, { user_id: FOUNDER, delta: -5, reason: REASON, source_ref: 'manual-list:deduct' });
   await revokeGrant(env, { ledgerId: plus.body.ledger_id, actor: { id: SUPER, email: 'super@example.test' }, reason: 'Granted to the wrong account' });
   for (const path of ['/grants', `/grants?user_id=${FOUNDER}`]) {
     const list = await call(creditRules, env, 'GET', path, SUPER);
