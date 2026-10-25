@@ -161,7 +161,7 @@ async function rec(db: DatabaseSync, slug: string, id: string | number, { who = 
           const bound = bind(...values), first = bound.first.bind(bound);
           bound.first = async (...args: any[]) => {
             const row = await first(...args);
-            runtimeEnv.JWT_SECRET = 'rotated-synthetic-d1174-verification-key';
+            runtimeEnv.JWT_SECRET = JWT_SECRET + '-rotated';
             return row;
           };
           return bound;

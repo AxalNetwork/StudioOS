@@ -128,3 +128,9 @@ d3e56a7ede0ae62ca9a133216acccd33d4506841:cloudflare-worker/test/segment_suggesti
 # instead, so no later commit carries this one. Scoped to the one finding, as
 # D482's entry is.
 805f80f743df531c959d5aa40bc86b53b1bf8177:cloudflare-worker/test/capital_relationships_d1190.test.ts:generic-api-key:26
+
+# D1174 (#3101): synthetic verification string used only to invalidate a JWT
+# after authentication in the in-memory record test. It was never a deployed
+# credential. The next commit derives it from the existing synthetic test seed.
+# Scope this exception to the exact historical finding, not a file or commit.
+88a88f746796d656a861c219943e03ec917061b5:cloudflare-worker/test/cycle_records_raise_d691.test.ts:generic-api-key:164
