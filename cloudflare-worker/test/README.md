@@ -41,6 +41,10 @@ an assertion that bans a shape fails on the comment explaining why that shape is
 gone, and the argument list of `fetch(url, { headers: { … } })` does not end at
 the first `)`.
 
+D1119: `admin_programs_d954.test.ts` also checks part 4's six audit actions,
+claim window/kind counts, strategic requests, successful zeroes and independent
+failed reads against the migrated SQLite schema.
+
 ## Conventions
 
 - Build the database from the migration the feature actually ships with, so the

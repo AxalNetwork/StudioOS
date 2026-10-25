@@ -20,8 +20,8 @@ CREATE TABLE vc_funds(id INTEGER PRIMARY KEY, name TEXT, vintage_year INTEGER, s
 INSERT INTO vc_funds VALUES (10,'Fund A',2021,'active',2),(20,'Fund B',2022,'active',4);
 CREATE TABLE limited_partners(id INTEGER PRIMARY KEY, fund_id INTEGER, user_id INTEGER, email TEXT);
 INSERT INTO limited_partners VALUES (101,10,3,'lp@example.test'),(102,20,4,'other@example.test'),(103,10,NULL,'LEGACY@example.test'),(104,20,4,'legacy@example.test');
-CREATE TABLE portfolio_positions(id INTEGER PRIMARY KEY, fund_id INTEGER, created_by INTEGER, updated_at TEXT);
-INSERT INTO portfolio_positions VALUES (201,10,2,NULL),(202,20,4,NULL),(203,NULL,2,NULL),(204,NULL,4,NULL);
+CREATE TABLE portfolio_positions(id INTEGER PRIMARY KEY, fund_id INTEGER, created_by INTEGER, updated_at TEXT, position_date TEXT, created_at TEXT);
+INSERT INTO portfolio_positions(id, fund_id, created_by, updated_at) VALUES (201,10,2,NULL),(202,20,4,NULL),(203,NULL,2,NULL),(204,NULL,4,NULL);
 CREATE TABLE fund_capital_calls(id INTEGER PRIMARY KEY, fund_id INTEGER, amount_cents INTEGER, created_at TEXT);
 INSERT INTO fund_capital_calls VALUES (1,10,10000,'2021-01-01 12:00:00'),(2,20,999999,'2021-01-01');
 CREATE TABLE capital_calls(id INTEGER PRIMARY KEY, limited_partner_id INTEGER, fund_call_id INTEGER, amount_cents INTEGER, amount REAL, created_at TEXT);

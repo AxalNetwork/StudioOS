@@ -28,6 +28,12 @@ D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
 are read only; the tab's writes stay in `admin_partners.ts`.
 
+D1131's `_eventCalendar.ts` schedules connected-calendar cleanup after successful
+member, host or admin event cancellations. The existing queue durably continues
+bounded immediate work; provider failures do not undo local cancellation, and
+failed mappings remain retryable. `/events/suggested` now includes
+the authenticated caller's actual registration eligibility.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
@@ -97,7 +103,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
-/api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS)
+/api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS; D1158: GET /lps, the LP roster)
 /api/fund-reporting → fund_reporting.ts
 /api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw; the e-sign send and the GP's acceptance (D759))
 /api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)

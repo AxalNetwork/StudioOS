@@ -167,6 +167,9 @@ test('Q6: the KYC window masks date of birth, ID number, address and phone, says
   const admin = codeOnly(adminConsoleSource());
   assert.match(admin, /<KycSensitiveFields\s*masked=\{kycDetail\.kyc_data\.masked\}\s*onShow=\{\(field\) => api\.kycAdminShowField\(kycDetail\.id, field\)\}/);
   assert.doesNotMatch(admin, /kyc_data\.(date_of_birth|id_number|phone|address_line1)/);
-  assert.match(admin, /onShow=\{\(\) => api\.adminShowProfileField\(profile\.email, 'ein'\)\}/);
-  assert.doesNotMatch(admin, /profile\.ein\b/);
+  // D995: a partner profile's tax ID is shown by its record, through the same logged route.
+  const record = codeOnly(read('pages/admin/profiles/ProfileRecord.jsx'));
+  assert.match(record, /api\.adminShowProfileField\(profile\.email, 'ein'\)/);
+  assert.match(record, /profile\.masked\?\.ein/);
+  assert.doesNotMatch(record, /profile\.ein\b/);
 });

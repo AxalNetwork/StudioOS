@@ -59,6 +59,7 @@ import {
 } from '../services/eventBadges';
 import { archetypeAccess } from '../services/archetypeEntitlement';
 import { refuse } from '../util/refusal';
+import { scheduleCalendarCancellation } from './_eventCalendar';
 import { memberEventLink } from '../services/eventLinks';
 
 const events = new Hono<{ Bindings: Env }>();
@@ -466,12 +467,13 @@ events.get('/suggested', async (c) => {
   return c.json({
     archetype,
     track,
-    events: scored.slice(0, 8).map((s) => ({
+    events: await Promise.all(scored.slice(0, 8).map(async (s) => ({
       ...shapeEvent(s.e, { includeJoinLink: canManage(s.e, u) }),
-      suggestion_reason: prefer.has(s.e.type)
+      registration_eligible: (await registrationEligibility(c.env, s.e, u.id, u.email)).eligible,
+      suggestion_reason: u.role === 'exploring' ? 'Popular with new members' : prefer.has(s.e.type)
         ? (archetype?.label ? `Suits ${archetype.label}` : 'Matches your track')
         : null,
-    })),
+    }))),
   });
 });
 
@@ -719,6 +721,7 @@ events.post('/:id/cancel', async (c) => {
   if (!cancelled) return refuse(c, 409, { code: 'already_cancelled', message: 'This event is already cancelled.' });
   const paidCount = paidRows.reduce((total, row) => total + Number(row.count), 0);
   await logAdminAction(c.env, u.id, u.email, 'event_cancelled_by_host', { event_id: id, paid_tickets: paidCount });
+  await scheduleCalendarCancellation(c, 'event', id);
   const seated = await c.env.DB.prepare(
     `SELECT DISTINCT user_id FROM event_registrations
        WHERE event_id = ? AND user_id IS NOT NULL AND status IN ('registered','confirmed','attended','waitlisted')`,
@@ -1139,6 +1142,7 @@ events.delete('/:id/registration', async (c) => {
     }
   }
   await logAdminAction(c.env, u.id, u.email, 'event_registration_cancelled', { event_id: id, registration_id: reg.id });
+  await scheduleCalendarCancellation(c, 'ticket', Number(reg.id));
   return c.json({ ok: true });
 });
 
