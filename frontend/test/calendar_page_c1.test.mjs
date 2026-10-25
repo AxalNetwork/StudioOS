@@ -151,8 +151,19 @@ test('the sixth kind is derived in the canvas\'s idiom rather than borrowed from
 test('D1033: the two My events kinds are derived in the same idiom, apart from every other mark', () => {
   const drawnShapes = canvasKinds.map((k) => k.shape);
   const drawnHues = canvasKinds.flatMap((k) => [k.hue, k.dHue]);
-  const shapeOf = (id) => css.match(new RegExp(`\\.cal-dot\\[data-kind='${escapeRe(id)}'\\] \\{([^}]*)\\}`))?.[1]?.match(/border-radius: ([^;]+);/)?.[1];
-  const huesOf = (id) => [...css.matchAll(new RegExp(`--k-${escapeRe(id)}: (#[0-9a-f]{6});`, 'g'))].map((m) => m[1]);
+  // Literal patterns, one per kind this test reads, rather than a pattern built at run time.
+  const DOT = {
+    expert_booking: /\.cal-dot\[data-kind='expert_booking'\] \{([^}]*)\}/,
+    event_ticket: /\.cal-dot\[data-kind='event_ticket'\] \{([^}]*)\}/,
+    event_hosted: /\.cal-dot\[data-kind='event_hosted'\] \{([^}]*)\}/,
+  };
+  const HUE = {
+    expert_booking: /--k-expert_booking: (#[0-9a-f]{6});/g,
+    event_ticket: /--k-event_ticket: (#[0-9a-f]{6});/g,
+    event_hosted: /--k-event_hosted: (#[0-9a-f]{6});/g,
+  };
+  const shapeOf = (id) => css.match(DOT[id])?.[1]?.match(/border-radius: ([^;]+);/)?.[1];
+  const huesOf = (id) => [...css.matchAll(HUE[id])].map((m) => m[1]);
   const taken = new Set([...drawnShapes, shapeOf('expert_booking')]);
   const takenHues = new Set([...drawnHues, ...huesOf('expert_booking'), '#6d28d9']);
   for (const id of ['event_ticket', 'event_hosted']) {
