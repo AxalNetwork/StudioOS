@@ -176,10 +176,11 @@ const CYCLE_DEFS = {
     // D840 part 2 (#2347): every Raise module's From Mercury, the founder's alone, anchored at #from-mercury.
     parts: toFnMap({
       ...Object.fromEntries(MODULES.raise.map((m) => [m.slug, (data, ctx) => mercuryPart(m.slug, data, ctx)])),
-      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`.
+      // D909 (#2693, NAR1): Home's tiles, Needs you and footer, from the module read's `parts.narrative`;
+      // D913: its Objections heard, with no Answer it for an admin.
       'investor-narrative': (data, ctx) => (
         <>
-          <NarrativeHome data={data} />
+          <NarrativeHome data={data} admin={isNarrativeAdmin({ role: ctx.role })} />
           {mercuryPart('investor-narrative', data, ctx)}
         </>
       ),
