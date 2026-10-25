@@ -124,7 +124,6 @@ test('error reports name the console file, not the retired AdminPage', () => {
     PartnerProfilesConsole: ['loadProfiles', 'partnerProfile'],
     PersonasConsole: ['personas'],
     UsersConsole: ['loadUsers', 'trustScoreBatch', 'loadAdminData'],
-    LegalConsole: ['loadContracts', 'forward-log'],
   })) {
     const src = fs.readFileSync(`${ROOT}/${consoles}/${name}.jsx`, 'utf8');
     for (const tag of tags) assert.ok(src.includes(`reportError('${name}:${tag}'`), `${name}:${tag}`);

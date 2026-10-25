@@ -162,8 +162,9 @@ function stub(over = {}) {
 
 async function settle() { for (let i = 0; i < 10; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)); }); }
 
-async function render(url, { user = SUPER } = {}) {
+async function render(url, { user = SUPER, phone = false } = {}) {
   const restore = installDocument();
+  if (phone) globalThis.matchMedia = () => ({ matches: true, addEventListener() {}, removeEventListener() {} });
   if (user) localStorage.setItem('user', JSON.stringify(user));
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -182,10 +183,11 @@ async function render(url, { user = SUPER } = {}) {
     of: (id) => textOf(node(id)),
     has: (id) => Boolean(byTestId(id)),
     props: (id) => props(node(id)),
+    async follow(id) { await act(async () => { props(node(id)).onClick({ button: 0, defaultPrevented: false, preventDefault() {}, target: node(id) }); }); await settle(); },
     async click(id) { await act(async () => { props(node(id)).onClick({ preventDefault() {}, target: node(id) }); }); await settle(); },
     async change(id, value) { await act(async () => { props(node(id)).onChange({ target: { value } }); }); await settle(); },
     async submit(id) { await act(async () => { props(node(id)).onSubmit({ preventDefault() {} }); }); await settle(); },
-    async unmount() { await act(async () => root.unmount()); restore(); },
+    async unmount() { await act(async () => root.unmount()); if (phone) delete globalThis.matchMedia; restore(); },
   };
 }
 
@@ -481,4 +483,124 @@ test('the editor is retired, the storefront writes nothing, and no dialog uses a
   assert.match(api, /adminCatalogArchiveProduct: \(id, reason\) =>[\s\S]{0,140}body: JSON\.stringify\(\{ reason \}\)/);
   assert.match(api, /adminCatalogArchivePrice: \(priceId, reason\) =>[\s\S]{0,140}body: JSON\.stringify\(\{ reason \}\)/);
   assert.match(api, /adminStripeSetConfig: \(publishableKey, reason\) =>[\s\S]{0,120}body: JSON\.stringify\(\{ publishable_key: publishableKey, reason \}\)/);
+});
+
+
+test('D1129 shared header opens New product and More actions from Stripe, with no immediate write', async () => {
+  const s = stub();
+  let v = await render('/admin/platform/payments/stripe');
+  try {
+    await v.click('pay-header-new');
+    assert.ok(v.has('pay-new'), 'header action opens the existing two-step dialog');
+    assert.equal(s.writes().length, 0);
+  } finally { await v.unmount(); }
+  v = await render('/admin/platform/payments');
+  try {
+    await v.click('pay-header-new');
+    assert.ok(v.has('pay-new'), 'the header works without remounting Catalogue');
+  } finally { await v.unmount(); }
+  v = await render('/admin/platform/payments/stripe');
+  try {
+    await v.click('admin-page-more');
+    assert.equal(v.props('pay-header-packs').href, '/admin/platform/allowances');
+    assert.equal(v.props('pay-header-promos').href, '/admin/platform/promo-codes');
+    assert.equal(v.props('pay-header-revenue').href, '/admin/revenue');
+    await v.click('pay-header-sync');
+    assert.ok(v.has('pay-sync'));
+    assert.ok(!v.has('admin-page-more-menu'));
+    assert.equal(s.writes().length, 0, 'opening More never syncs');
+    await v.click('pay-sync-send');
+    assert.equal(s.count('POST', '/api/admin/catalog/sync'), 1);
+    await v.click('pay-sync-done');
+    assert.match(v.of('pay-header-saved'), /Synced from Stripe/);
+  } finally { await v.unmount(); s.restore(); }
+});
+
+test('D1129 phone product keeps its content and pinned actions; choosing a price opens the existing dialog', async () => {
+  const s = stub();
+  const v = await render('/admin/platform/payments/products/prod_b', { phone: true });
+  try {
+    assert.ok(v.has('pay-product-page') && v.has('pay-phone-prices'));
+    assert.ok(!v.has('pay-header') && !v.has('pay-phone-catalogue'));
+    assert.match(v.props('pay-phone-product-actions').className, /sticky bottom-20/);
+    await v.click('pay-phone-change-price');
+    assert.ok(v.has('pay-phone-price-picker'));
+    assert.equal(s.writes().length, 0);
+    await v.click('pay-phone-choose-p1');
+    assert.ok(v.has('pay-change-price'));
+    assert.ok(!v.has('pay-product-page'), 'only one surface acts as a dialog');
+    assert.equal(s.writes().length, 0, 'a price choice does not change it');
+  } finally { await v.unmount(); s.restore(); }
+});
+
+test('D1129 phone More reuses Edit and Archive dialogs, and read-only products offer no actions', async () => {
+  const s = stub();
+  let v = await render('/admin/platform/payments/products/prod_b', { phone: true });
+  try {
+    assert.ok(v.has('pay-phone-product-more'));
+    assert.ok(!v.has('pay-product-actions'), 'the desktop action row is not duplicated on the phone');
+    await v.click('pay-phone-edit');
+    assert.ok(v.has('pay-edit-product'));
+    assert.equal(s.writes().length, 0);
+  } finally { await v.unmount(); }
+  v = await render('/admin/platform/payments/products/prod_b', { phone: true });
+  try {
+    await v.click('pay-phone-archive');
+    assert.ok(v.has('pay-archive-product'));
+    assert.equal(s.writes().length, 0);
+  } finally { await v.unmount(); }
+  v = await render('/admin/platform/payments/products/prod_e', { phone: true });
+  try {
+    assert.ok(!v.has('pay-phone-product-more') && !v.has('pay-phone-product-actions'), 'token packs remain read only');
+  } finally { await v.unmount(); s.restore(); }
+});
+
+
+test('D1129 the header offers no write to a caller without the Super Admin elevation', async () => {
+  const plain = { id: 2, role: 'admin', is_super_admin: 0 };
+  const s = stub({ 'GET /api/auth/me': () => json(plain) });
+  const v = await render('/admin/platform/payments', { user: plain });
+  try {
+    assert.ok(!v.has('pay-header-new'));
+    await v.click('admin-page-more');
+    assert.ok(!v.has('pay-header-sync'));
+    assert.equal(s.writes().length, 0);
+  } finally { await v.unmount(); s.restore(); }
+});
+
+
+test('D1129 header New product waits for a readable catalogue rather than assuming it is empty', async () => {
+  const s = stub({ 'GET /api/admin/catalog/products': () => json({ error: 'down' }, 503) });
+  const v = await render('/admin/platform/payments/stripe');
+  try {
+    await v.click('pay-header-new');
+    assert.ok(v.has('pay-catalogue-failed'));
+    assert.ok(!v.has('pay-new'));
+    assert.equal(s.writes().filter((c) => c.path.startsWith('/api/admin/catalog/')).length, 0);
+  } finally { await v.unmount(); s.restore(); }
+});
+
+
+test('D1129 an unread product with a pending New query keeps its failure and retry visible', async () => {
+  for (const phone of [false, true]) {
+    const s = stub({ 'GET /api/admin/catalog/products': () => json({ error: 'down' }, 503) });
+    const v = await render('/admin/platform/payments/products/prod_b?new=product', { phone });
+    try {
+      assert.ok(v.has('pay-product-unread'), 'the pending dialog hid the failed product read');
+      assert.ok(!v.has('pay-new'));
+    } finally { await v.unmount(); s.restore(); }
+  }
+});
+
+
+test('D1129 phone Back retains the catalogue search and place', async () => {
+  const s = stub(); const v = await render('/admin/platform/payments', { phone: true });
+  try {
+    await v.change('pay-search', 'Validate');
+    assert.equal(v.props('pay-search').value, 'Validate');
+    await v.follow('pay-row');
+    assert.ok(v.has('pay-product-page'));
+    await v.click('pay-product-back');
+    assert.equal(v.props('pay-search').value, 'Validate');
+  } finally { await v.unmount(); s.restore(); }
 });

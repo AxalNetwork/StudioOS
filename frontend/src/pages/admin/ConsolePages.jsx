@@ -46,7 +46,7 @@ export function consoleBoard(pathname, role) {
   return profile === PROFILE_OF_ROLE[role] ? module : null;
 }
 
-function ConsolePage({ crumb, hqCrumb = crumb, title, line, more = null, testId, children }) {
+function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more = null, testId, children }) {
   const user = useAuth()?.user ?? null;
   const { pathname } = useLocation();
   const hq = isSuperAdminUser(user);
@@ -57,6 +57,7 @@ function ConsolePage({ crumb, hqCrumb = crumb, title, line, more = null, testId,
       <AdminPageHeader
         crumb={hq ? hqCrumb : crumb}
         title={title}
+        pills={hqOnly ? [{ label: 'HQ only', tone: 'hq' }] : []}
         line={line}
         scope={!hq}
         more={more}
@@ -155,7 +156,7 @@ export function PromoCodesPage() {
 
 export function BillingPage() {
   return (
-    <ConsolePage crumb={{ label: 'Revenue', to: '/admin/revenue', current: 'Billing' }} title="Billing" line="Refunds, disputes and their evidence, and each customer's lifetime value." testId="admin-revenue-billing">
+    <ConsolePage hqOnly crumb={{ label: 'Revenue', to: '/admin/revenue', current: 'Billing' }} title="Billing" line="Refunds, disputes and their evidence, and each customer's lifetime value." testId="admin-revenue-billing">
       <BillingPanel />
     </ConsolePage>
   );
