@@ -311,6 +311,12 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
+  // D947 (#2752): the Spin-Out Lab's Overview calendar and its Cohorts tab draw
+  // the doors to one cohort's page (`/admin/programs/spinout-lab/cohorts/:ym`).
+  ['frontend/src/pages/admin/lab/AdminLab.jsx', [
+    'frontend/src/pages/admin/lab/LabCohorts.jsx',
+    'frontend/src/pages/admin/lab/LabOverviewBlocks.jsx',
+  ]],
   // D953 (2026-10-24, #2371): Programs. The catalogue draws its card doors and
   // its foot in its own file. Each program page draws its crumb from the frame,
   // its tab strip from ProgramTabs, and its blocks' doors from the files
