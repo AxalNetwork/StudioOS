@@ -103,6 +103,12 @@ export type ApprovalSource = {
    * lane's own count standing.
    */
   sub?: { label: string; countSql: string };
+  /**
+   * D1040 (#2888): `'hq'` marks a lane that is HQ's own work (part 3's HQ
+   * lanes, #2390). HQ's inbox shows it to a Super Admin only (`sourcesFor`).
+   * Every lane here today is a local queue, so none sets it.
+   */
+  scope?: 'hq';
 };
 
 /**
@@ -569,12 +575,17 @@ export type ApprovalBoard = {
  * `limit` bounds each lane, not the board, so a flooded queue cannot crowd the
  * others off a screen whose whole purpose is "what is oldest anywhere".
  */
-export async function approvalBoard(env: Env, limit = 100, now = Date.now()): Promise<ApprovalBoard> {
+export async function approvalBoard(
+  env: Env,
+  limit = 100,
+  now = Date.now(),
+  sources: readonly ApprovalSource[] = APPROVAL_SOURCES,
+): Promise<ApprovalBoard> {
   const items: ApprovalItem[] = [];
   const lanes: ApprovalBoard['lanes'] = [];
   const unreadable: string[] = [];
 
-  for (const src of APPROVAL_SOURCES) {
+  for (const src of sources) {
     try {
       const rows = await env.DB.prepare(src.rowsSql)
         .bind(Math.max(1, Math.trunc(Number(limit) || 100)))
@@ -624,6 +635,15 @@ export async function approvalBoard(env: Env, limit = 100, now = Date.now()): Pr
       }
       : {}),
   };
+}
+
+/**
+ * D1040 (#2888): the lanes a reader on HQ's inbox sees. A lane marked
+ * `scope: 'hq'` is a Super Admin's; every other lane is every admin's. The
+ * branch board does not filter: it reads `APPROVAL_SOURCES` whole, as before.
+ */
+export function sourcesFor(superAdmin: boolean, sources: readonly ApprovalSource[] = APPROVAL_SOURCES): readonly ApprovalSource[] {
+  return superAdmin ? sources : sources.filter((s) => s.scope !== 'hq');
 }
 
 /** One lane's true open count and the age of its oldest item. */
@@ -687,8 +707,8 @@ async function subCount(env: Env, s: ApprovalSource): Promise<LaneCount['sub']> 
  * others measured and marks itself unread. The CALLER decides what that means
  * — the board keeps its rows, the backlog count refuses to be a total.
  */
-export async function laneCounts(env: Env): Promise<LaneCount[]> {
-  return countLanes(env, APPROVAL_SOURCES);
+export async function laneCounts(env: Env, sources: readonly ApprovalSource[] = APPROVAL_SOURCES): Promise<LaneCount[]> {
+  return countLanes(env, sources);
 }
 
 /**

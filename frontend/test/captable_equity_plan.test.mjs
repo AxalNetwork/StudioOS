@@ -164,18 +164,32 @@ test('the panel says SAFE conversion is absent, and why', () => {
   assert.match(ui, /not shown/i);
   assert.match(ui, /not stored/i, 'the reason must be stated, not just the absence');
 
-  // And the premise: those columns really do not exist on a cap-table security.
-  const sql = readdirSync(resolve(root, 'cloudflare-worker/sql/migrations'))
-    .map((f) => readFileSync(resolve(root, 'cloudflare-worker/sql/migrations', f), 'utf8'))
-    .join('\n') + read('cloudflare-worker/sql/schema_baseline.sql');
-  assert.ok(!/discount_rate/.test(sql), 'if discount_rate now exists, build the conversion detail');
+  // And the premise, as D1017 (#2854) moved it: the discount and MFN are
+  // stored now, but only on the record (`cap_table_issuances`, migration 573),
+  // which this panel does not read. It reads Carta's per-account pools and
+  // vesting; a cap-table security still carries neither term, and the
+  // conversion detail is part 3's (#2855), from the record.
+  const dir = resolve(root, 'cloudflare-worker/sql/migrations');
+  const files = readdirSync(dir).map((f) => [f, readFileSync(resolve(dir, f), 'utf8')]);
+  const all = files.map(([, t]) => t).join('\n') + read('cloudflare-worker/sql/schema_baseline.sql');
+  assert.ok(!/discount_rate/.test(all), 'if discount_rate now exists, build the conversion detail');
 
   // Look for a COLUMN, not a mention. A bare /\bmfn\b/ matches
   // "MFN Provision: [Yes/No]" inside a seeded legal template — which is the
-  // point rather than a counterexample: MFN exists here as document prose a
+  // point rather than a counterexample: MFN exists there as document prose a
   // human fills in, not as a modelled field anything can compute from.
   const mfnColumn = /^\s*\w*mfn\w*\s+(TEXT|INTEGER|REAL|NUMERIC|BOOLEAN)/im;
-  assert.ok(!mfnColumn.test(sql), 'if MFN is now a column, build the inheritance view');
+  // A rate, not money: a cart's `discount_cents` (152) is a price cut, not a SAFE term.
+  const discountColumn = /^\s*\w*discount_(bps|pct|rate|fraction)\w*\s+(TEXT|INTEGER|REAL|NUMERIC)/im;
+  const declaring = (re) => files.filter(([, t]) => re.test(t)).map(([f]) => f);
+  assert.deepEqual(declaring(mfnColumn), ['573_cap_table_record.sql'], 'MFN is a column of the record only');
+  assert.deepEqual(declaring(discountColumn), ['573_cap_table_record.sql'], 'a SAFE discount is a column of the record only');
+  const record = read('cloudflare-worker/sql/migrations/573_cap_table_record.sql');
+  const issuances = record.slice(record.indexOf('CREATE TABLE IF NOT EXISTS cap_table_issuances'), record.indexOf('CREATE TABLE IF NOT EXISTS cap_table_currency'));
+  assert.match(issuances, /^\s*mfn\s+INTEGER/m);
+  assert.match(issuances, /^\s*discount_bps\s+INTEGER/m);
+  const baseline = read('cloudflare-worker/sql/schema_baseline.sql');
+  assert.ok(!mfnColumn.test(baseline) && !discountColumn.test(baseline), 'the baseline, Carta\'s securities among it, has neither');
 });
 
 test('the panel is mounted and the api method exists on both sides', () => {

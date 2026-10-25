@@ -272,7 +272,8 @@ test('#2440: personal calendar assertions reject widened readers across all sour
 
 test('#2440: feed and push entry points cannot substitute another member', async () => {
   for (const [before, after] of [
-    ['fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString())', 'fetchUserEvents(c.env, 2, lc(user.role), fromDt.toISOString(), toDt.toISOString())'],
+    // D1033: the .ics feed takes `kinds` now, as `/events` does.
+    ['fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds)', 'fetchUserEvents(c.env, 2, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds)'],
     ['fetchUserEvents(c.env, user.id, user.role, from, to, [kind])', 'fetchUserEvents(c.env, 2, user.role, from, to, [kind])'],
   ]) {
     assert.ok(routeSource.includes(before), before);
