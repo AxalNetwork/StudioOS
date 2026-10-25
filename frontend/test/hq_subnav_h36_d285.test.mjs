@@ -183,7 +183,8 @@ test('the rows #2375 names light on the pages that left the console (D938)', () 
   }
   assert.ok(lit('admin', '/admin/held/accounts', '/admin/accounts/all'), 'Accounts');
   assert.ok(lit('admin', '/admin/held/accounts', '/admin/persona-segments'), 'Accounts on Persona segments');
-  for (const p of ['/admin/kyc', '/admin/partner-profiles']) assert.ok(lit('admin', '/admin/held/approvals', p), `Approvals on ${p}`);
+  // D1038 (#2390): Approvals moved to /admin/approvals; its lane boards light it too.
+  for (const p of ['/admin/kyc', '/admin/partner-profiles', '/admin/approvals/co-marketing']) assert.ok(lit('admin', '/admin/approvals', p), `Approvals on ${p}`);
   for (const p of ['/admin/directory', '/admin/wellbeing', '/admin/wellbeing/resources']) assert.ok(lit('admin', '/admin/community', p), `Community on ${p}`);
 });
 

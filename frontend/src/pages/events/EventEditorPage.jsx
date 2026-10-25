@@ -1,7 +1,9 @@
 // Task #40 (E2) — EventEditorPage: create (/events/new) + edit (/events/:id/edit).
 // Title, type, schedule + timezone, location, cover, capacity, waitlist,
-// approval, visibility, and the audience-rules builder (design §7.1). The
-// "Submit for review" action appears only when visibility = public (design §1.2).
+// approval, visibility, and the audience-rules builder (design §7.1). A draft
+// or sent-back event offers one action (D1031, #2872): "Send for review" when
+// public, "Publish" when unlisted or private. Either opens a dialog that says
+// what happens and who is told; the save is the dialog's button.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Send, Gift } from 'lucide-react';
@@ -9,6 +11,8 @@ import { eventsApi } from '../../lib/eventsApi';
 import { useToast } from '../../components/useToast';
 import PageExplainer from '../../components/PageExplainer';
 import { EVENT_TYPE_IDS } from '../../lib/eventTypes';
+import Lightbox from '../../ui/Lightbox';
+import { publishAction } from './eventOrganiserModel';
 
 const EVENT_TYPES = EVENT_TYPE_IDS;
 const LOCATION_KINDS = ['virtual', 'in_person', 'hybrid'];
@@ -67,6 +71,8 @@ export default function EventEditorPage() {
   const [loading, setLoading] = useState(isEdit);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(null);
+  const [publishError, setPublishError] = useState('');
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -146,15 +152,25 @@ export default function EventEditorPage() {
     }
   };
 
-  const submitForReview = async () => {
+  const action = isEdit ? publishAction(form.visibility, status) : null;
+  const openPublish = () => { setPublishError(''); setPublishing(action); };
+  const closePublish = () => { if (!saving) setPublishing(null); };
+
+  // The save is the dialog's button; a refusal stays in the dialog.
+  const confirmPublish = async () => {
+    const asked = publishing;
     setSaving(true);
+    setPublishError('');
     try {
       await eventsApi.update(id, payload());
-      await eventsApi.submitReview(id);
-      setStatus('pending_review');
-      showToast({ kind: 'success', msg: 'Submitted for admin review.' });
+      const reply = await eventsApi.submitReview(id);
+      const next = reply?.event?.status;
+      if (!next) throw new Error('The reply did not say the event\'s status.');
+      setStatus(next);
+      setPublishing(null);
+      showToast({ kind: 'success', msg: asked.done });
     } catch (e) {
-      showToast({ kind: 'error', msg: e?.message || 'Could not submit for review.' });
+      setPublishError(e?.message || (asked.kind === 'review' ? 'Could not send for review.' : 'Could not publish.'));
     } finally {
       setSaving(false);
     }
@@ -331,17 +347,30 @@ export default function EventEditorPage() {
           >
             <Save size={16} /> {saving ? 'Saving…' : (isEdit ? 'Save changes' : 'Create event')}
           </button>
-          {isEdit && form.visibility === 'public' && status !== 'pending_review' && status !== 'published' && (
+          {action && (
             <button
-              onClick={submitForReview}
+              type="button"
+              onClick={openPublish}
               disabled={saving}
+              data-testid="event-publish"
               className="inline-flex items-center gap-2 rounded-lg border border-violet-300 dark:border-violet-700 px-4 py-2 text-sm font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-900/20 disabled:opacity-50"
             >
-              <Send size={16} /> Submit for review
+              <Send size={16} /> {action.label}
             </button>
           )}
         </div>
       </div>
+
+      {publishing && (
+        <Lightbox label={publishing.title} title={publishing.title} onClose={closePublish} testId="event-publish-dialog"
+          footer={<>
+            <button type="button" disabled={saving} onClick={closePublish} className="px-4 py-2 text-sm rounded border border-zinc-300 dark:border-zinc-700">Cancel</button>
+            <button type="button" disabled={saving} onClick={confirmPublish} data-testid="event-publish-confirm" className="px-4 py-2 text-sm rounded bg-violet-600 text-white disabled:opacity-50">{saving ? publishing.busy : publishing.label}</button>
+          </>}>
+          <p>{publishing.body}</p>
+          {publishError && <p role="alert" className="mt-3 text-red-700 dark:text-red-300">{publishError}</p>}
+        </Lightbox>
+      )}
 
       {toast && (
         <div className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg ${

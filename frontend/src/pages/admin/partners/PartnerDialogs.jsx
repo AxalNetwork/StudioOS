@@ -6,6 +6,8 @@ import {
   revokedLine, stageOf, terminateCopy, terminateReady, terminatedLine,
 } from './partnersDeskModel';
 import { useRead } from './usePartnerDesk';
+import { terminatePreviewLines } from './dealsReferralsModel';
+import { useTerminatePreview } from './useDealsReferrals';
 import { CopyButton, Done, EYE, INPUT, Refusal } from './parts';
 
 /**
@@ -113,18 +115,28 @@ export function RevokeDialog({ inv, reads, onClose }) {
   );
 }
 
-/** PI8c. The reason is required; the button turns on once one is typed. */
+/**
+ * PI8c. D951: the lines are D928's preview, read as the dialog opens — whether
+ * the partner's own grant ends, and "[n] members lose the grant this deal
+ * gave them" — with the same guards terminate writes with. A preview that
+ * could not be read says so, never a count. The reason is required; the
+ * button turns on once one is typed, and stays off for a deal the preview
+ * says is no longer active.
+ */
 export function TerminateDialog({ deal, reads, onClose }) {
   const [reason, setReason] = useState('');
   const copy = terminateCopy(deal);
+  const preview = useTerminatePreview(deal.id, reads.tick);
+  const lines = terminatePreviewLines(deal, preview);
   const w = useWrite(reads, 'deal');
   const close = w.finish(onClose);
   return (
     <Lightbox label={copy.title} title={copy.title} onClose={close} testId="partners-terminate-dialog"
-      footer={<Buttons done={Boolean(w.reply)} onClose={close} action="Terminate deal" tone="danger" busy={w.busy} refusal={w.refusal} disabled={!terminateReady(reason)}
+      footer={<Buttons done={Boolean(w.reply)} onClose={close} action="Terminate deal" tone="danger" busy={w.busy} refusal={w.refusal} disabled={!terminateReady(reason) || lines.state === 'closed'}
         onAction={() => w.run(() => api.adminPartners.terminateDeal(deal.id, reason.trim()))} testId="partners-terminate-go" />}>
       <div className={BODY}>
-        <ul className={LINES} data-testid="partners-terminate-lines">{copy.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+        <ul className={LINES} data-testid="partners-terminate-lines">{lines.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+        {lines.state === 'unreadable' && !w.reply ? <button type="button" className="self-start text-[12px] font-semibold text-red-700 underline dark:text-red-300" onClick={reads.reload} data-testid="partners-terminate-preview-retry">Try again</button> : null}
         <label className="flex flex-col gap-1.5">
           <span className={EYE}>Reason · required · kept in the audit log</span>
           <textarea value={reason} maxLength={REASON_MAX} rows={3} disabled={Boolean(w.reply)} onChange={(e) => setReason(e.target.value.slice(0, REASON_MAX))}
