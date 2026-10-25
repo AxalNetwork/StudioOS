@@ -84,7 +84,8 @@ function scoped(c: any, registry: RecordRegistry, withId: boolean): Promise<
       ctx.mercuryRead = 'refused';
       if (user.role === 'founder' && user.founder_id != null && Number(user.founder_id) === Number(project.founder_id)) {
         try {
-          if (!(await selectJwt(c))?.payload?.impersonated_by) {
+          const session = await selectJwt(c);
+          if (session && !session.payload.impersonated_by) {
             const bankProject = await c.env.DB.prepare('SELECT company_id FROM projects WHERE id = ?').bind(projectId).first() as { company_id: number | null } | null;
             const company = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));
             ctx.mercuryRead = bankProject && projectInActiveCompany(company, bankProject) ? 'owner' : 'refused';

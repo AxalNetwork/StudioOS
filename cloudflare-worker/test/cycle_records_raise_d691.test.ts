@@ -144,14 +144,36 @@ records.route('/api/cycles', createCycleRecords());
 records.onError((err: any, c) => c.json({ detail: String(err?.message || '') }, 500));
 
 /** One record read (or its activity) through the registered route, as `who`. */
-async function rec(db: DatabaseSync, slug: string, id: string | number, { who = FOUNDER, project = P, tail = '', support = false, company = undefined as number | undefined } = {}) {
+async function rec(db: DatabaseSync, slug: string, id: string | number, { who = FOUNDER, project = P, tail = '', support = false, missingSession = false, company = undefined as number | undefined } = {}) {
   people(db);
   const token = await new SignJWT({ user_id: who, role: PEOPLE[who]?.role ?? 'founder', ...(support ? { impersonated_by: ADMIN } : {}) }).setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const runtimeEnv: any = { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) };
+  if (missingSession) {
+    // Real SQL still runs. Rotate the synthetic verification key after the
+    // initial authentication, just before the private-read session check.
+    const prepare = runtimeEnv.DB.prepare.bind(runtimeEnv.DB);
+    runtimeEnv.DB.prepare = (sql: string) => {
+      const stmt = prepare(sql);
+      if (sql === 'SELECT id, founder_id FROM projects WHERE id = ?') {
+        const bind = stmt.bind.bind(stmt);
+        stmt.bind = (...values: any[]) => {
+          const bound = bind(...values), first = bound.first.bind(bound);
+          bound.first = async (...args: any[]) => {
+            const row = await first(...args);
+            runtimeEnv.JWT_SECRET = 'rotated-synthetic-d1174-verification-key';
+            return row;
+          };
+          return bound;
+        };
+      }
+      return stmt;
+    };
+  }
   const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
   try {
     const res = await records.request(`/api/cycles/raise/modules/${slug}/records/${encodeURIComponent(String(id))}${tail}?project=${project}`,
-      { headers: { Authorization: `Bearer ${token}`, ...(company ? { 'X-Company-Id': String(company) } : {}) } }, { JWT_SECRET, ENVIRONMENT: 'development', DB: d1Over(db) } as any);
+      { headers: { Authorization: `Bearer ${token}`, ...(company ? { 'X-Company-Id': String(company) } : {}) } }, runtimeEnv);
     return { status: res.status, body: await res.json().catch(() => null) as any };
   } finally { [console.warn, console.error] = saved; }
 }
@@ -877,7 +899,7 @@ test('D1174: Actual against plan reads accepted own Mercury mappings with Connec
     assert.equal((await readActual()).rows[1].b, 'Not recorded', 'a partial amount is never a total');
     db.exec("UPDATE mercury_raise_facts SET amount_cents = 20000 WHERE fact_key = 'spend:3:B'; DELETE FROM mercury_raise_facts WHERE fact_key = 'spend:6:B'");
     assert.equal((await readActual()).rows[2].b, 'Not recorded', 'a missing mapped category is not zero');
-    for (const options of [{ who: ADMIN }, { support: true }]) {
+    for (const options of [{ who: ADMIN }, { support: true }, { missingSession: true }]) {
       const denied = await readActual(options);
       assert.deepEqual(denied.rows, []);
       assert.match(denied.empty, /private to the founder/);
