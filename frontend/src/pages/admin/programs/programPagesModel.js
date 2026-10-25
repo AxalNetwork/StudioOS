@@ -111,6 +111,11 @@ export const REFUSALS = Object.freeze({
   // D954 §7, the learner.
   not_assigned: 'This program is not assigned to you, so its learners are not read here.',
   not_enrolled: 'This learner is not in this program now.',
+  // D1124, Download (CSV).
+  nothing_to_export: 'This program has no figures to export yet, so no file was made.',
+  export_not_logged: 'The export could not be logged, so no file was made. Try again.',
+  export_unreadable: 'The program’s figures could not be read, so no file was made. Try again.',
+  export_not_counts_only: 'This export was stopped: it would have carried more than counts. No file was made.',
 });
 
 export function refusalSentence(err, fallback = TRY_AGAIN) {
@@ -850,3 +855,15 @@ export function learnerRows(contents, learner) {
 export const LEARNER_FOOT = 'No email is shown here. Progress is read only.';
 
 export { COULD_NOT_READ, NOT_READ_YET, dataOf, stateOf };
+
+/* ------------------------------------------------------------------ *
+ * D1124 (#3004): a program page's Download (CSV)
+ * ------------------------------------------------------------------ */
+
+/** The program pages whose ⋯ menu holds Download (CSV): the canvas's, with figures to export. */
+export const CSV_PROGRAMS = Object.freeze(['mentor-cohorts', 'refer-and-earn', 'perks', 'learning']);
+export const CSV_LINES = Object.freeze([
+  'The file holds this page’s figures as counts only, never a name or an email.',
+  'Every export is logged in the admin audit.',
+]);
+export const CSV_DONE = 'The file is ready. The link works for 24 hours.';

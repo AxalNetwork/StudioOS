@@ -11,6 +11,7 @@
  *   PUT  /:key/playbook/sections/:section          edit the draft's section (requireSuperAdmin)
  *   POST /:key/playbook/publish                    the draft becomes the next version (requireSuperAdmin)
  *   GET  /:key/activity?before=&limit=             the program's activity, newest first (requireAdmin)
+ *   POST /:key/export                              D1124: the page's Download (CSV), counts only, logged (requireAdmin)
  *
  * An unknown key is 404 `unknown_program` on every `/:key` route, and so is a
  * program approved for another studio only (D955, migration 561): an admin
@@ -39,6 +40,12 @@ import {
 } from '../services/programRegistry';
 import { parseActivityQuery, programActivity } from '../services/programActivity';
 import { newProgram, readerOf } from '../services/programProposals';
+import { EXPORTABLE_PROGRAMS, exportCsv, programExportRows, type ExportableProgram } from '../services/programExport';
+import { refusesCountsOnly } from '../services/insightsExport';
+import { signDownloadToken } from '../services/analyticsReports';
+import { ensureAdminAuditLogTable } from './admin';
+
+const EXPORT_LINK_TTL = 86_400;
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -162,6 +169,63 @@ r.post('/:key/playbook/publish', async (c) => {
   try {
     const user = await requireSuperAdmin(c);
     return c.json(await publishDraft(c.env, c.req.param('key'), actorOf(user)));
+  } catch (e) {
+    return answer(c, e);
+  }
+});
+
+/**
+ * D1124 (#3004) — POST /:key/export: the program page's Download (CSV), from
+ * the catalogue read this admin is shown (D954), counts only (D953 S-CSV).
+ * Logged: one `admin_audit_log` row (`program_export`, the program and the
+ * weeks, never a figure). If the row cannot be written, the stored file is
+ * deleted and no link is handed out (503 `export_not_logged`). Delivered as
+ * the Insights export is: R2 behind the signed 24-hour link, or inline in
+ * local development.
+ */
+r.post('/:key/export', async (c) => {
+  try {
+    const user = await requireAdmin(c);
+    const key = c.req.param('key');
+    const reader = await readerOf(c.env, { id: Number(user.id), superAdmin: isSuperAdmin(user as any) });
+    // An unknown program, or one this admin cannot read, is 404 as on every /:key route.
+    await programByKey(c.env, key, reader);
+    if (!(EXPORTABLE_PROGRAMS as readonly string[]).includes(key)) {
+      return refuse(c, 409, { code: 'nothing_to_export', message: 'This program has no figures to export yet.', extra: { code: 'nothing_to_export' } });
+    }
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const weeks = parseProgramWeeks(body?.weeks == null ? '12' : String(body.weeks));
+    if (!weeks) return c.json({ code: 'bad_weeks', detail: 'weeks must be 4, 12 or 52.' }, 400);
+    const catalogue = await programCatalogue(c.env, { id: Number(user.id), superAdmin: reader.superAdmin, licenceUid: reader.licenceUid }, weeks);
+    const rows = await programExportRows(c.env, key as ExportableProgram, catalogue);
+    if (!rows) return refuse(c, 503, { code: 'export_unreadable', message: 'The program\'s figures could not be read, so nothing was exported. Try again.', extra: { code: 'export_unreadable' } });
+    const csv = exportCsv(rows, { program: key, weeks, asOf: String(catalogue.as_of), scope: String(catalogue.scope?.label ?? '') });
+    if (refusesCountsOnly(csv)) {
+      return refuse(c, 500, { code: 'export_not_counts_only', message: 'This export was stopped: it would have carried more than counts.', extra: { code: 'export_not_counts_only' } });
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const rand = [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(16).padStart(2, '0')).join('');
+    const storageKey = `program-exports/${user.id}/${stamp}-${key}-${rand}.csv`;
+    const r2 = c.env.FILES;
+    let downloadUrl: string;
+    if (r2) {
+      await r2.put(storageKey, csv, { httpMetadata: { contentType: 'text/csv; charset=utf-8' } });
+      downloadUrl = `${new URL(c.req.url).origin}/api/monitoring/analytics/download/${await signDownloadToken(c.env, storageKey, EXPORT_LINK_TTL)}`;
+    } else {
+      downloadUrl = `data:text/csv;charset=utf-8;base64,${btoa(String.fromCharCode(...new TextEncoder().encode(csv)))}`;
+    }
+    try {
+      await ensureAdminAuditLogTable(c.env);
+      await c.env.DB.prepare(
+        `INSERT INTO admin_audit_log (admin_user_id, action, report_type, format, filters_json, storage_key, download_url)
+         VALUES (?, 'program_export', ?, 'csv', ?, ?, ?)`,
+      ).bind(user.id, key, JSON.stringify({ weeks }), r2 ? storageKey : null, r2 ? downloadUrl : null).run();
+    } catch {
+      console.warn('[program export] audit write failed');
+      if (r2) await r2.delete(storageKey).catch(() => {});
+      return refuse(c, 503, { code: 'export_not_logged', message: 'The export could not be logged, so it was not made. Try again.', extra: { code: 'export_not_logged' } });
+    }
+    return c.json({ download_url: downloadUrl, expires_in_seconds: r2 ? EXPORT_LINK_TTL : null, format: 'csv', program: key, weeks, rows: rows.length });
   } catch (e) {
     return answer(c, e);
   }
