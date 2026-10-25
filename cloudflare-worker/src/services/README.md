@@ -468,6 +468,7 @@ Perk listings without exposing member ids or review notes.
 `perkClaims.ts` (D957) gives the admin Perks page and program catalogue one
 UTC Monday window for claim totals, listing ranks and weekly price-kind counts.
 `raiseEvidence.ts` reads active Mercury runway facts and the files current data-room grants can download, for Raise and deck readiness.
+`dataRoomNda.ts` (D1102, migration 608) is the demo-day deck's "NDA required": the founder's `projects.data_room_nda_choice` when set (Yes or No), else true when any file an investor can be admitted to (`tierAdmits()`) is gated `nda`, else null when the room cannot be read. It also says what a write may store as a choice.
 
 `paymentsChangeLog.ts` (D1011) names the fifteen catalogue and Stripe audit
 actions and reads them back as the Payments change log (D1129: bound literal
