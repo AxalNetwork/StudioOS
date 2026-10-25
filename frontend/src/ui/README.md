@@ -60,3 +60,5 @@ specific reason; see the 2026-10-16 follow-up in D687 for the current inventory.
 Carta's connector mark uses its official plugin icon, pinned and embedded as
 an unmodified PNG in `BrandIcon.jsx` (D687). Its source Apache-2.0 licence is
 included there; no logo host request is made.
+
+D1081: Lovable uses the existing initials tile, explicitly classified in `BRAND_MONOGRAM`; no vendor artwork or remote logo is added.
