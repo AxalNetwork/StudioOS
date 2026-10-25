@@ -1,5 +1,7 @@
+import DealFreePlan from '../components/deals/DealFreePlan';
+import { dealMoney, dealBackLink } from '../components/deals/dealMoney';
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
@@ -17,6 +19,7 @@ import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealReferencesTab from '../components/deals/DealReferencesTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
 import MercuryMatch from '../components/MercuryMatch';
+import { NOT_YET, TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
 import {
   ArrowLeft, Download, FileText, Loader2, X, DollarSign, Send, Check,
   Users, Clock, ThumbsUp, ThumbsDown,
@@ -37,37 +40,37 @@ const statusColors = {
   rejected: 'bg-red-100 text-red-700 border-red-500/30',
 };
 
-function fmtMoney(n) {
-  if (n == null) return '—';
-  return `$${Number(n).toLocaleString()}`;
+function fmtMoney(n, currency = 'USD') {
+  return dealMoney(n, currency) ?? 'Not recorded';
 }
 
 /**
- * The deal room's tabs for a role (D630, #1388). The Ops canvas adds three:
- *   - Invitations — admin (`GET /deals/:id/invitations` is `requireAdmin`);
- *   - Transfers — admin and partner, who record them;
- *   - References — admin and investor (D609; founders and partners are refused).
+ * D1148 (#2421): a tab with no per-deal read yet says so where its blocks
+ * would be (`dealPageModel.js` WAITS). Never a zero, never "none".
  */
-export function dealRoomTabs(role) {
-  const tabs = ['Overview', 'Documents', 'Commitments', 'Activity'];
-  if (role === 'admin') tabs.push('Invitations');
-  if (role === 'admin' || role === 'partner') tabs.push('Transfers');
-  if (role === 'admin' || role === 'investor') tabs.push('References');
-  return tabs;
+function WaitCard({ tab }) {
+  return (
+    <section className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid={`deal-wait-${tab}`}>
+      <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
+      <p className="m-0 text-sm text-gray-600 dark:text-gray-400">{WAITS[tab]}</p>
+    </section>
+  );
 }
 
 export default function DealRoomPage() {
-  const { dealId } = useParams();
+  // D1148 (#2421): each tab is its own address under /deals/:dealId.
+  const { dealId, tab: tabParam } = useParams();
   const navigate = useNavigate();
   const role = useCurrentRole();
   const { user } = useAuth() || {};
+  const back = dealBackLink(role);
   const isInvestor = role === 'investor';
   const isAdmin = role === 'admin';
-  const tabs = dealRoomTabs(role);
+  const tabs = dealTabsFor(role);
+  const tab = tabOf(tabParam, role);
 
   const [deal, setDeal] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('Overview');
   const [error, setError] = useState('');
   const [commitOpen, setCommitOpen] = useState(false);
   // D752 (#1891): the investor's share sheet, opened from their own row or after a commitment.
@@ -87,12 +90,12 @@ export default function DealRoomPage() {
   useEffect(() => { loadDeal(); /* eslint-disable-next-line */ }, [dealId]);
 
   useEffect(() => {
-    if (isInvestor) {
+    if (isInvestor && deal && !deal.plan_limited) {
       api.myDealInvitations()
         .then(list => setMyInvite((list || []).find(i => Number(i.deal_id) === Number(dealId)) || null))
         .catch(() => {});
     }
-  }, [isInvestor, dealId, commitOpen]);
+  }, [isInvestor, deal?.id, deal?.plan_limited, dealId, commitOpen]);
 
   const respond = async (response) => {
     try {
@@ -105,17 +108,18 @@ export default function DealRoomPage() {
   if (error || !deal) return (
     <div className="text-center py-16">
       <p className="text-gray-500 mb-4">{error || 'Deal not found'}</p>
-      <button onClick={() => navigate('/deals')} className="text-violet-600 hover:underline">← Back to Deal Flow</button>
+      <button onClick={() => navigate(back.path)} className="text-violet-600 hover:underline">← {back.label}</button>
     </div>
   );
 
   const canInvite = isAdmin && (deal.status === 'active' || deal.status === 'scored');
-  const pct = deal.progress_pct || 0;
+  if (deal.plan_limited) return <DealFreePlan deal={deal} onRetry={loadDeal} />;
+  const pct = deal.progress_pct;
 
   return (
     <div>
-      <button onClick={() => navigate('/deals')} className="text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1 mb-4 dark:text-gray-400">
-        <ArrowLeft size={15} /> Back to Deal Flow
+      <button onClick={() => navigate(back.path)} className="text-sm text-gray-500 hover:text-gray-800 flex items-center gap-1 mb-4 dark:text-gray-400">
+        <ArrowLeft size={15} /> {back.label}
       </button>
 
       <div className="flex items-start justify-between gap-4 flex-wrap mb-5">
@@ -151,40 +155,53 @@ export default function DealRoomPage() {
       <div className="bg-white border border-gray-200 rounded-xl p-4 mb-5 dark:bg-gray-900 dark:border-gray-800">
         <div className="flex justify-between text-sm text-gray-500 mb-1">
           <span>Capital committed</span>
-          <span>{fmtMoney(deal.capital_committed)} / {fmtMoney(deal.target_raise)} ({pct}%)</span>
+          <span>{fmtMoney(deal.capital_committed, deal.currency)} / {fmtMoney(deal.target_raise, deal.currency)} ({pct == null ? 'Not recorded' : `${pct}%`})</span>
         </div>
-        <div className="w-full h-2.5 bg-gray-100 rounded-full dark:bg-gray-800">
+        {pct != null && <div className="w-full h-2.5 bg-gray-100 rounded-full dark:bg-gray-800">
           <div className="h-2.5 bg-violet-500 rounded-full" style={{ width: `${Math.min(100, pct)}%` }} />
-        </div>
+        </div>}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800 mb-5">
+      <nav aria-label="Deal" className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800 mb-5" data-testid="deal-tabs">
         {tabs.map(t => (
-          <button key={t} onClick={() => setTab(t)}
+          <Link key={t} to={tabHref(deal.id, t)} aria-current={tab === t ? 'page' : undefined} data-testid={`deal-tab-${t}`}
             className={`whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-violet-600 text-violet-700 dark:text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'}`}>
-            {t}
-          </button>
+            {TAB_DEFS[t].label}
+          </Link>
         ))}
-      </div>
+      </nav>
 
-      {tab === 'Overview' && (
+      {tab === 'overview' && (
         <>
           <OverviewTab deal={deal} />
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
-      {tab === 'Documents' && <DocumentsTab dealId={deal.id} />}
-      {tab === 'Commitments' && <CommitmentsTab key={proofKey} dealId={deal.id} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
-      {tab === 'Activity' && <ActivityTab dealId={deal.id} />}
-      {tab === 'Invitations' && tabs.includes('Invitations') && (
+      {['scorecard', 'evidence', 'team', 'market', 'traction', 'terms'].includes(tab) && <WaitCard tab={tab} />}
+      {tab === 'diligence' && (
+        <>
+          <WaitCard tab="diligence" />
+          <DealReferencesTab dealId={deal.id} />
+        </>
+      )}
+      {tab === 'documents' && <DocumentsTab dealId={deal.id} />}
+      {tab === 'commitment' && <CommitmentsTab key={proofKey} dealId={deal.id} currency={deal.currency} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
+      {/* DL14: an investor's Notes tab carries the deal's activity under the notes. */}
+      {tab === 'notes' && (
+        <>
+          <WaitCard tab="notes" />
+          <ActivityTab dealId={deal.id} />
+        </>
+      )}
+      {tab === 'activity' && <ActivityTab dealId={deal.id} />}
+      {tab === 'invitations' && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
       )}
-      {tab === 'Transfers' && tabs.includes('Transfers') && <DealTransfersTab dealId={deal.id} canRecord={isAdmin || role === 'partner'} />}
-      {tab === 'References' && tabs.includes('References') && <DealReferencesTab dealId={deal.id} />}
+      {tab === 'transfers' && <DealTransfersTab dealId={deal.id} currency={deal.currency} canRecord={isAdmin || role === 'partner'} />}
 
       {commitOpen && <CommitModal deal={deal} user={user} onClose={() => setCommitOpen(false)} onDone={async (opts) => {
-        setCommitOpen(false); loadDeal(); setTab('Commitments');
+        setCommitOpen(false); loadDeal(); navigate(tabHref(deal.id, 'commitment'));
         if (!opts?.share || !showsProof(user)) return;
         try {
           const read = await mercuryAttestationsApi.targets();
@@ -235,17 +252,17 @@ function OverviewTab({ deal }) {
       {deal.description && (
         <div className="md:col-span-2 mb-2 text-sm text-gray-600 dark:text-gray-400">{deal.description}</div>
       )}
-      <Field label="Target Raise" value={fmtMoney(deal.target_raise)} />
-      <Field label="Capital Committed" value={fmtMoney(deal.capital_committed)} />
-      <Field label="Minimum Check" value={fmtMoney(deal.minimum_check)} />
-      <Field label="Valuation Cap" value={fmtMoney(deal.valuation_cap)} />
+      <Field label="Target Raise" value={fmtMoney(deal.target_raise, deal.currency)} />
+      <Field label="Capital Committed" value={fmtMoney(deal.capital_committed, deal.currency)} />
+      <Field label="Minimum Check" value={fmtMoney(deal.minimum_check, deal.currency)} />
+      <Field label="Valuation Cap" value={fmtMoney(deal.valuation_cap, deal.currency)} />
       <Field label="Instrument" value={deal.instrument} />
       <Field label="SPV Jurisdiction" value={deal.spv_jurisdiction} />
       <Field label="Carry" value={deal.carry_pct != null ? `${deal.carry_pct}%` : null} />
       <Field label="Management Fee" value={deal.management_fee_pct != null ? `${deal.management_fee_pct}%` : null} />
       <Field label="Closing Deadline" value={deal.closing_deadline} />
       <Field label="Lead Partner" value={deal.lead_partner_name} />
-      <Field label="Days in Stage" value={`${deal.days_in_stage ?? 0} days`} />
+      <Field label="Days in Stage" value={deal.days_in_stage == null ? 'Not recorded' : `${deal.days_in_stage} days`} />
       <Field label="Website" value={deal.website ? <a href={deal.website} target="_blank" rel="noreferrer" className="text-violet-600 hover:underline">{deal.website}</a> : null} />
     </div>
   );
@@ -308,11 +325,11 @@ export const COMMITMENT_MATCH_STATUSES = Object.freeze(['pending', 'confirmed'])
 // proof of funds, once, after the commitments load: an audited request that
 // counts a view. It comes from its own route, never from `dealCommitments`,
 // which other invited investors read. Every other viewer makes no proof read.
-export function CommitmentTotal({ total }) {
-  return <div className="text-sm text-gray-700 dark:text-gray-300" data-testid="commitments-total">Total committed: {fmtMoney(total)}</div>;
+export function CommitmentTotal({ total, currency = 'USD' }) {
+  return <div className="text-sm text-gray-700 dark:text-gray-300" data-testid="commitments-total">Total committed: {fmtMoney(total, currency)}</div>;
 }
 
-export function CommitmentsTab({ dealId, proof = false, user = null, onShare, founderMatch = false }) {
+export function CommitmentsTab({ dealId, currency = 'USD', proof = false, user = null, onShare, founderMatch = false }) {
   // D752 (#1891): an investor on HQ sees a door on their own row only.
   const own = useProofTargets({ enabled: showsProof(user) });
   const [items, setItems] = useState(null);
@@ -334,7 +351,7 @@ export function CommitmentsTab({ dealId, proof = false, user = null, onShare, fo
   }, [proof, loaded, dealId]);
   if (failed) return <Unreadable what="The commitments" claim="That is not a claim that none is recorded." onRetry={load} />;
   if (items == null) return <div className="text-center text-gray-500 py-8"><Loader2 className="animate-spin inline" size={16} /></div>;
-  if (!Array.isArray(items)) return <CommitmentTotal total={items.total} />;
+  if (!Array.isArray(items)) return <CommitmentTotal currency={currency} total={items.total} />;
   if (items.length === 0) return <div className="text-center text-gray-500 py-8">No commitments recorded yet</div>;
   return (
     <>
@@ -360,7 +377,7 @@ export function CommitmentsTab({ dealId, proof = false, user = null, onShare, fo
             )}
           </div>
           <div className="flex-none text-right">
-            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmtMoney(c.amount)}</div>
+            <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">{fmtMoney(c.amount, currency)}</div>
             <div className="text-xs text-gray-500 capitalize">{c.status}</div>
             {founderMatch && COMMITMENT_MATCH_STATUSES.includes(c.status) && (
               <div className="mt-1"><MercuryMatch target="commitment" targetId={c.id} matched={c.status === 'confirmed' ? {} : null} onChanged={load} /></div>
@@ -410,7 +427,7 @@ export function CommitModal({ deal, onClose, onDone, user = null }) {
   const submit = async () => {
     const amt = Number(amount);
     if (!amt || amt <= 0) { setErr('Enter a positive amount.'); return; }
-    if (deal.minimum_check && amt < deal.minimum_check) { setErr(`Minimum check is ${fmtMoney(deal.minimum_check)}.`); return; }
+    if (deal.minimum_check && amt < deal.minimum_check) { setErr(`Minimum check is ${fmtMoney(deal.minimum_check, deal.currency)}.`); return; }
     setSaving(true); setErr('');
     try {
       await api.createCommitment(deal.id, { amount: amt, notes: notes || null });
@@ -452,9 +469,9 @@ export function CommitModal({ deal, onClose, onDone, user = null }) {
           <div className="p-5 space-y-4">
             <p className="text-sm text-gray-500">Committing to <span className="font-medium text-gray-800 dark:text-gray-200">{deal.project_name}</span>. This records your intent — no funds move.</p>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">Amount (USD)</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">Amount ({deal.currency || 'USD'})</label>
               <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className={input} placeholder="50000" />
-              {deal.minimum_check ? <div className="text-xs text-gray-400 mt-1">Minimum check: {fmtMoney(deal.minimum_check)}</div> : null}
+              {deal.minimum_check ? <div className="text-xs text-gray-400 mt-1">Minimum check: {fmtMoney(deal.minimum_check, deal.currency)}</div> : null}
             </div>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1 dark:text-gray-400">Notes (optional)</label>

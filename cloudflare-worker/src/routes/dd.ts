@@ -1,3 +1,4 @@
+import { investorHasProjectDeal } from '../services/dealAccess';
 /**
  * Task #3 — Due Diligence routes mounted at /api/dd.
  *
@@ -155,8 +156,8 @@ dd.post('/cases', async (c) => {
   const user = await requireDdReader(c);
   // Task #83 — de-admin Due Diligence. Admins/partners may open a case on any
   // subject. Investors get a scoped path: they may open diligence ONLY on a
-  // startup (subject_type='project') they are actively in a deal room for
-  // (enforced below against investor_dealroom_members) — this is a role gate
+  // startup (subject_type='project') whose deal invited them or records their
+  // commitment (the same predicate as the deal reader) — this is a role gate
   // AND an ownership gate, so an investor can't open cases on arbitrary
   // founders/partners/other investors. Advisors remain read/review-only.
   const isPrivileged = user.role === 'admin' || user.role === 'partner';
@@ -183,13 +184,8 @@ dd.post('/cases', async (c) => {
       if (subjectType !== 'project') {
         return c.json({ error: 'You can only open diligence on a startup you are in a deal with' }, 403);
       }
-      const member: any[] = await sql`
-        SELECT 1 FROM investor_dealroom_members m
-        JOIN deals d ON d.id = m.deal_id
-        WHERE m.investor_user_id = ${user.id} AND d.project_id = ${subjectId}
-        LIMIT 1`;
-      if (member.length === 0) {
-        return c.json({ error: 'You can only open diligence on a startup you are in a deal room for' }, 403);
+      if (!(await investorHasProjectDeal(c.env, user.id, subjectId))) {
+        return c.json({ error: 'An invitation or commitment is required to open diligence on this startup.' }, 403);
       }
     }
     const uid = genUid();
