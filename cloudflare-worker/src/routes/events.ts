@@ -190,16 +190,15 @@ const COMP_SOURCE_OF_INVITATION: Record<string, string> = {
 // The registration fields My events reads (D1032), shared by Upcoming and Past.
 // Every field is the row's own; nothing missing is drawn as 0.
 function placeFields(r: any) {
-  const comp = r.comp === 1;
-  const fromInvitation = comp && r.inv_comp === 1 ? COMP_SOURCE_OF_INVITATION[String(r.inv_source)] ?? null : null;
+  const fromInvitation = r.comp === 1 && r.inv_comp === 1 ? COMP_SOURCE_OF_INVITATION[String(r.inv_source)] ?? null : null;
   return {
     registration_id: Number(r.reg_id),
     reg_status: r.reg_status,
     payment_status: r.reg_payment_status ?? null,
     amount_cents: r.reg_amount_cents != null ? Number(r.reg_amount_cents) : null,
-    comp,
+    comp: r.comp === 1,
     comp_source: fromInvitation,
-    comp_source_recorded: comp ? fromInvitation !== null : null,
+    comp_source_recorded: r.comp === 1 ? fromInvitation !== null : null,
     checked_in_at: r.checked_in_at ?? null,
     decision_reason: r.decision_reason ?? null,
     is_speaker: Number(r.is_speaker) === 1,
