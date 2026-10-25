@@ -15,7 +15,7 @@
  */
 import {
   COULD_NOT_READ, NOT_READ_YET, NOT_RECORDED, NONE_CLAIM, OVERDUE_HOURS, PROGRAMS, ageText, isFailed, isLoading,
-  plural, programByKey,
+  grantBadgeOf, plural, programByKey,
 } from './programsModel';
 
 const nf = (n) => Number(n).toLocaleString('en-US');
@@ -217,11 +217,11 @@ export function joinsChart(read, { superAdmin = false, perStudio = false } = {})
 
 /** Waiting by program's rows: each queue Waiting for you sums, labelled as what it counts, with its literal door. */
 export const WAITING_ROWS = Object.freeze([
-  { key: 'cohort', label: 'Cohort applications', to: '/admin/spinout-lab' },
+  { key: 'cohort', label: 'Cohort applications', to: '/admin/programs/spinout-lab/applications' },
   { key: 'referrals', label: 'Refer & Earn reviews', to: '/admin/programs/refer-and-earn/queue' },
   { key: 'strategic', label: 'Strategic referral access', to: '/admin/programs/refer-and-earn' },
   { key: 'perks', label: 'Perk listings', to: '/admin/programs/perks/queue' },
-  { key: 'hosts', label: 'Office-hours hosts', to: '/admin/spinout-lab' },
+  { key: 'hosts', label: 'Office-hours hosts', to: '/admin/programs/spinout-lab/hosts' },
 ]);
 /** S-AGE and S1-BANDS: under 24 hours, 24 to 72, and 72 or more, in the canvas's first three colours. */
 export const WAIT_BANDS = Object.freeze([
@@ -354,6 +354,8 @@ export function catalogueCards(read) {
       join: r.join_method ?? null,
       whoReason: base.whoReason || 'Who joins and how is not recorded for this program yet.',
       status: STATUS_WORD[r.status] || 'Status not recorded',
+      // D1124 (#3004): D956's per-viewer grant, when the row carries one.
+      grantBadge: grantBadgeOf(r.grant),
       row: r,
     };
   });

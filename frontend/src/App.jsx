@@ -3732,6 +3732,8 @@ function AppInner() {
       {/* D1023 (#2860, CT4): an instrument's drawer, over Instruments; its id is the record's SAFE or note uid. */}
       <Route path="/raise/cap-table/instrument/:instrument" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
+      {/* D1106 (#2986): a data-room file's lightbox over Files. */}
+      <Route path="/raise/data-room/file/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="data-room" record dataRoomFile />)} />
       <Route path="/raise/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" record />)} />
       <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}
