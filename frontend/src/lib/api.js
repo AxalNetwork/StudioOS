@@ -53,6 +53,7 @@ export * from './api/googleSignIn.js';
 export * from './api/helpCenter.js';
 export * from './api/insights.js';
 export * from './api/interviewSessions.js';
+export * from './api/labOperations.js';
 export * from './api/labReportShares.js';
 export * from './api/learning.js';
 export * from './api/licenceAccount.js';

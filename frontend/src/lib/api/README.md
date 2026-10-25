@@ -318,3 +318,8 @@ totals over the filtered set and the filters' options), the counts for the tiles
 and the weekly series, and one profile by its reference (`pp_…`), never by
 email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
 that read them.
+
+D971 (#2756): `labOperations.js` reads the Lab's playbook, operative cohort size
+and filtered/paged history, and calls the existing Super Admin draft/publish
+routes and audited size write. Support sessions reuse `adminLab.js`; grant
+terms reuse `programGrants.js`. No Admin is sent to either Super Admin read.

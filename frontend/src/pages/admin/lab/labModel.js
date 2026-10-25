@@ -44,8 +44,7 @@ export const MOVED_NOTICES = {
 
 /**
  * The tabs this integration draws: the canvas's order, only those whose
- * console exists today (D937 §1). How it runs, Settings and Activity come with
- * the parts that fill them, so no tab is an empty promise.
+ * console exists (D937 §1, D970 and D971). Each tab has its mounted read.
  */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: '' },
@@ -55,6 +54,9 @@ export const TABS = [
   { key: 'hosts', label: 'Hosts', path: '/hosts' },
   { key: 'formation', label: 'Formation', path: '/formation' },
   { key: 'graduation', label: 'Graduation', path: '/graduation' },
+  { key: 'how-it-runs', label: 'How it runs', path: '/how-it-runs' },
+  { key: 'settings', label: 'Settings', path: '/settings' },
+  { key: 'activity', label: 'Activity', path: '/activity' },
 ];
 
 /** Which tab an address opens, or null when the address is not one of them. */

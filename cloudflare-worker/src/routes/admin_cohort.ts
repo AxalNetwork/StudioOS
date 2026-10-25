@@ -17,6 +17,7 @@
 import { Hono, type Context } from 'hono';
 import adminLabReads from './admin_lab';
 import adminLabParticipants from './admin_lab_participants';
+import adminLabOperations from './admin_lab_operations';
 import type { Env } from '../types';
 import { requireAdmin, requireSuperAdmin, requireBranchNotSuspended } from '../auth';
 import { hashEmail } from '../util/hashEmail';
@@ -32,6 +33,8 @@ const r = new Hono<{ Bindings: Env }>();
 r.route('/', adminLabReads);
 // D946 (#2751): the participants read, SL7 and SL8.
 r.route('/', adminLabParticipants);
+// D971: settings and the Lab history, with no read-time bootstrap.
+r.route('/', adminLabOperations);
 
 const isoNow = (): string => new Date().toISOString().replace('T', ' ').slice(0, 19);
 

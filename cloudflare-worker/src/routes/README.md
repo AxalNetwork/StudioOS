@@ -282,3 +282,9 @@ D1011 (#2830): `admin_payments.ts` is the Payments page's Super Admin reads,
 mounted at `/api/admin/payments`: the change log over the catalogue's and
 Stripe's audit rows, its CSV export (a recorded reason, failing closed), and the
 webhook's deliveries by hour. `catalog.ts` records a failed sync.
+
+D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
+`/api/admin/cohort`: read-only `/settings` and `/activity`, both Admin gated.
+The latter filters/paginates one safe projection of existing stores and never
+returns staff identities or free-form audit payloads. An unavailable source is
+503, never an empty successful log. Reads create no schema or data.
