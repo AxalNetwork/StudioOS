@@ -300,7 +300,7 @@ refer.post('/admin/strategic-access/:userId/decision', async (c) => {
       const { code, message, httpStatus } = e;
       return refuse(c, httpStatus as ContentfulStatusCode, { code, message });
     }
-    console.error('[refer-earn] strategic access decision failed');
+    console.error('[refer-earn] strategic access decision failed', e);
     return refuse(c, 503, { code: 'strategic_access_unreadable', message: 'Strategic referral access could not be read or saved. Read the request again before retrying.' });
   }
 });
