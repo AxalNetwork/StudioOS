@@ -883,7 +883,7 @@ export async function sendNotificationEmail(
     });
     return res.ok;
   } catch (e: any) {
-    console.error(`[EMAIL] notification send failed for ${to}: ${e?.message || 'unknown'}`);
+    console.error('[EMAIL] notification send failed');
     return false;
   }
 }

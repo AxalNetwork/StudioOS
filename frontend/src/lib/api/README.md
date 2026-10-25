@@ -372,3 +372,5 @@ private Security reports, and HQ's read of them).
 
 D1128 extends `personaSegments.js` with mounted Worker paths for creation,
 completion counts, Events segment choices, and expected-primary follow-up answers.
+
+D1135's `companyActions.js` holds self-service company leave and venture restore.

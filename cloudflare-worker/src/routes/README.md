@@ -332,3 +332,5 @@ admin `GET /:key/completion` count. `personas.ts` exposes authenticated
 `GET /audience-segments` (names/statuses only); `/me` includes the member’s
 missing segment questions. Its existing answer route accepts an expected-primary
 check for follow-up; custom stored segment IDs work in sign-up and retag.
+
+D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.
