@@ -228,6 +228,21 @@ test('an HQ lane is a Super Admin’s: read, assigned and its history, and nobod
   }
 });
 
+test('on a suspended branch the HQ route is frozen too: no assignment, and the reads still answer', async () => {
+  const f = fresh({ jobs: [10] });
+  try {
+    f.db.exec(`INSERT INTO branch_licence (id, licence_uid, status, suspended_note, pushed_at) VALUES (1, 'lic-pt', 'suspended', 'paused', datetime('now'))`);
+    const onBranch = { ...f.env, BRANCH_CODE: 'pt' };
+    const frozen = await call(f, ADA, '/assignments', 'POST', { assignee_user_id: BEA, items: [{ lane: 'jobs', item_id: 100 }] }, onBranch);
+    assert.equal(frozen.status, 423, frozen.text);
+    assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM approval_assignments').get().n, 0);
+    assert.equal((await call(f, ADA, '/', 'GET', undefined, onBranch)).status, 200);
+    assert.equal((await call(f, ADA, '/history?lane=jobs&item_id=100', 'GET', undefined, onBranch)).status, 200);
+    // HQ has no licence to suspend: the same write lands there.
+    assert.equal((await call(f, ADA, '/assignments', 'POST', { assignee_user_id: BEA, items: [{ lane: 'jobs', item_id: 100 }] })).status, 200);
+  } finally { f.db.close(); }
+});
+
 test('mounted where the client calls it, and the branch board shares the same steps', () => {
   const index = readFileSync(resolve(ROOT, 'cloudflare-worker/src/index.ts'), 'utf8');
   assert.match(index, /app\.route\('\/api\/admin\/approvals', adminApprovalRoutes\)/);
