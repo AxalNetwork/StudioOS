@@ -827,7 +827,8 @@ export function SyncStrip({ sync, failed, onRetry }) {
       <div className="mt-2">{body}</div>
       <p className="mt-2 text-[10px] text-axal-faint">
         The mirror&apos;s latest attempts, ticket by ticket, are on{' '}
-        <Link to="/admin/platform" className="underline">Platform</Link>; its settings are on the Admin Console.
+        <Link to="/admin/platform" className="underline">Platform</Link>; its settings are under{' '}
+        <Link to="/admin/integration-keys#github" className="underline">Integration keys › GitHub Sync</Link>.
       </p>
     </Card>
   );

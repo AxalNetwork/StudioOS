@@ -422,7 +422,7 @@ test('under the overlay the HQ-only card is absent and the admin card says whose
   assert.ok(!hrefs(OVERLAY).includes('/admin/security'), 'the Security link survives with the card it belongs to gone');
   assert.ok(OVERLAY.includes('data-testid="hq-team-actions-admin"'), 'the admin card must still be drawn');
   const note = text(OVERLAY);
-  assert.match(note, /These are fr's own, on its Admin Console\./, 'the admin card does not name the branch it describes');
+  assert.match(note, /These are fr's own, on its own admin pages\./, 'the admin card does not name the branch it describes');
   // D260 — the reason changed, not the rule: the branch hit now carries the
   // three states, so the card says they are shown read-only and whose the
   // decision is, and it keeps no sentence claiming the search lacks them.
