@@ -85,11 +85,28 @@ test('number buckets have fixed boundaries; aggregate all members, exclude admin
   const r = await read(db); assert.equal(r.status, 200);
   const q = question(r, 'check_size_usd');
   assert.deepEqual(q.buckets.map((b: any) => b.count), [10, 10, 10, 5]);
+  assert.deepEqual(q.buckets.map((b: any) => b.label), ['Under $10k', '$10k to under $25k', '$25k to under $50k', '$50k and over']);
   assert.deepEqual(q.answered, visible(35));
   assert.deepEqual(q.not_recorded, { label: 'Not recorded', ...visible(0) });
   assert.deepEqual(question(r, 'deals_per_year').not_recorded, { label: 'Not recorded', ...visible(35) });
   assert.equal(r.body.small_cell_min, 5);
   assert.equal(r.body.themes_enabled, false);
+});
+
+test('AUM uses fixed million bands and hours use the experience bands; finite scientific numbers count', async () => {
+  const db = fixture();
+  for (let i = 0; i < 20; i++) {
+    member(db, i + 2, 'investor', 1, 'lp_institutional');
+    answer(db, i + 2, 'aum_usd', ['0', '1e6', '1e7', '1e8'][i % 4], 'lp_institutional');
+    member(db, i + 30, 'advisor', 1, 'operator_advisor');
+    answer(db, i + 30, 'time_per_week_hours', ['0', '5', '10', '20'][i % 4], 'operator_advisor');
+  }
+  let r = await read(db, 'answers', 'lp_institutional');
+  const aum = question(r, 'aum_usd');
+  assert.deepEqual(aum.buckets.map((b: any) => b.count), [5, 5, 5, 5]);
+  assert.deepEqual(aum.buckets.map((b: any) => b.label), ['Under $1m', '$1m to under $10m', '$10m to under $100m', '$100m and over']);
+  r = await read(db, 'answers', 'operator_advisor');
+  assert.deepEqual(question(r, 'time_per_week_hours').buckets.map((b: any) => b.count), [5, 5, 5, 5]);
 });
 
 test('choices use only the question bank; invalid choices and malformed numbers are Not recorded', async () => {
@@ -165,6 +182,23 @@ test('two small cells stay hidden without hiding an unrelated large cell', async
   const r = await read(db, 'answers', 'lp_individual');
   assert.deepEqual(question(r, 'accreditation').buckets.map(({ count, suppressed }: any) => ({ count, suppressed })), [hidden, hidden, visible(10)]);
   assert.deepEqual(question(r, 'accreditation').answered, hidden);
+});
+
+test('a whole segment under five hides a zero companion too, since D999 exposes its total', async () => {
+  const db = fixture();
+  for (let id = 2; id < 6; id++) {
+    member(db, id); answer(db, id, 'check_size_usd', '1');
+    answer(db, id, 'sector_focus', 'private'); profile(db, id, 'inv_thesis_backer');
+  }
+  const answers = await read(db);
+  for (const q of answers.body.questions) {
+    const cells = q.type === 'text' ? [q.answered, q.not_recorded] : [...q.buckets, q.not_recorded];
+    assert.ok(cells.filter((c: any) => c.suppressed).length >= 2, q.key);
+    assert.deepEqual(q.answered, hidden);
+  }
+  const archetypes = await read(db, 'archetypes');
+  assert.ok([...archetypes.body.archetypes, archetypes.body.not_recorded].filter((c: any) => c.suppressed).length >= 2);
+  assert.deepEqual(archetypes.body.profiled, hidden);
 });
 
 test('archetypes count the latest snapshot once per member, displayed rather than computed, joined to current primary', async () => {
