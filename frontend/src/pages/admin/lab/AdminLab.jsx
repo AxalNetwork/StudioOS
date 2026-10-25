@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Eye, RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
+import { adminLabApi } from '../../../lib/api/adminLab.js';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
@@ -9,9 +10,12 @@ import AdminSpinoutLab from '../AdminSpinoutLab';
 import LabFormation from './LabFormation';
 import LabGraduation from './LabGraduation';
 import LabHosts from './LabHosts';
+import LabCohorts from './LabCohorts';
+import { ByCohortBlock, CalendarBlock, FunnelBlock, HeatBlock, PerWeekBlock } from './LabOverviewBlocks';
+import { buildByCohort, buildFunnel, buildHeat, buildPerWeek, buildTimeline, cohortOf } from './labOverviewModel';
 import {
-  DATES_FIXED, FACTS, LAB_PATH, LAB_TITLE, MOVED_NOTICES, NOT_YET, PAGE_LINE, PROGRAMS_PATH, TABS, WAITS,
-  buildCohorts, buildNeeds, buildTiles, pageFailed, tabOf,
+  FACTS, LAB_PATH, LAB_TITLE, MOVED_NOTICES, NOT_YET, PAGE_LINE, PROGRAMS_PATH, TABS,
+  buildNeeds, buildTiles, pageFailed, tabOf,
 } from './labModel';
 
 /**
@@ -23,9 +27,12 @@ import {
  *
  * THE INTEGRATION, NOT THE WHOLE CANVAS (D937 §3). The header, the tabs whose
  * console exists, and the Overview blocks whose reads exist, each drawn
- * truthfully. Applications, Cohorts and Participants are today's console,
- * asked for one section through `AdminSpinoutLab`'s `section` prop; Hosts,
- * Formation and Graduation are drawn to the canvas by D970 (#2755). Applications is the cycle queue,
+ * truthfully. Applications and Participants are today's console, asked for
+ * one section through `AdminSpinoutLab`'s `section` prop; Hosts, Formation and
+ * Graduation are drawn to the canvas by D970 (#2755). D947 (#2752) draws the
+ * Overview's calendar, charts and funnel from part 2's read (D944), and the
+ * Cohorts tab: SL5 at /cohorts and one cohort, SL6, at /cohorts/:ym
+ * (`LabCohorts.jsx`). Applications is the cycle queue,
  * the one door that decides with a reason; the old list that accepted with
  * none is not reached any more.
  *
@@ -39,7 +46,6 @@ const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gr
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
 const LINK = 'text-[12px] font-bold text-axal-violet hover:text-axal-violet-deep dark:text-violet-300';
-const TAG = 'self-start rounded-full border border-dashed border-axal-muted px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
 const MONO = 'font-mono tabular-nums';
 
@@ -52,7 +58,7 @@ const idle = { status: 'loading', data: null };
  */
 function useLabReads(overview) {
   const keys = useMemo(() => (overview
-    ? ['glance', 'hosts', 'applications', 'timeline', 'review', 'certificates']
+    ? ['glance', 'hosts', 'applications', 'timeline', 'review', 'certificates', 'overview']
     : ['glance', 'hosts']), [overview]);
   const [reads, setReads] = useState({});
   const [asOf, setAsOf] = useState(null);
@@ -76,6 +82,8 @@ function useLabReads(overview) {
       timeline: () => api.adminCohortTimeline(),
       review: () => api.adminCohortReview(),
       certificates: () => api.spinoutCertificateList(),
+      // D947: part 2's read (D944) feeds the calendar, the four charts and the funnel.
+      overview: () => adminLabApi.overview(),
     };
     for (const k of keys) settle(k, work[k]());
     return () => { live = false; };
@@ -134,77 +142,6 @@ function Tile({ t, onRetry, children }) {
   );
 }
 
-function Failed({ reason, onRetry }) {
-  return (
-    <div className="flex flex-col gap-2.5 rounded-[10px] border border-axal-destructive-edge bg-axal-destructive-tint p-3.5 text-[13px] leading-normal text-axal-destructive dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" role="alert">
-      <span>{reason || 'Could not be read. That is not the same as none.'}</span>
-      <button type="button" className={DANGER} onClick={onRetry}>Try again</button>
-    </div>
-  );
-}
-
-/** A block the canvas draws that waits for a part: its title and what it waits for. Never a zero. */
-function WaitCard({ id, title, reason, wide = false }) {
-  return (
-    <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4 ${wide ? '' : 'lg:col-span-6'}`} data-testid={`lab-wait-${id}`}>
-      <h2 className={H2}>{title}</h2>
-      <span className={TAG}>{NOT_YET}</span>
-      <span className={SUB}>{reason}</span>
-    </section>
-  );
-}
-
-function CohortsCard({ cohorts, onRetry }) {
-  return (
-    <section className={`${CARD} col-span-12 flex flex-col gap-3 px-[18px] py-4`} aria-labelledby="lab-h-cohorts" data-testid="lab-cohorts">
-      <span className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="lab-h-cohorts" className={H2}>Cohort calendar</h2>
-        <Link to={`${LAB_PATH}/cohorts`} className={LINK}>Open Cohorts</Link>
-      </span>
-      {cohorts.state === 'loading' && <><span className="font-mono text-[13px] text-axal-muted">Reading…</span><Skeleton /></>}
-      {cohorts.state === 'unreadable' && <Failed reason={cohorts.reason} onRetry={onRetry} />}
-      {cohorts.state === 'ready' && (cohorts.rows.length === 0
-        ? <span className={SUB}>The Lab’s calendar holds no cohort yet. The Lab’s clock schedules each one on its own.</span>
-        : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] border-collapse text-left text-[12.5px]">
-              <thead>
-                <tr className={EYE}>
-                  <th scope="col" className="py-1.5 pr-3 font-bold">Cohort</th>
-                  <th scope="col" className="py-1.5 pr-3 font-bold">Status</th>
-                  <th scope="col" className="py-1.5 pr-3 font-bold">Applications</th>
-                  <th scope="col" className="py-1.5 pr-3 font-bold">Starts</th>
-                  <th scope="col" className="py-1.5 pr-3 font-bold">Week 4 deadline</th>
-                  <th scope="col" className="py-1.5 pr-3 font-bold">Pool</th>
-                  <th scope="col" className="py-1.5 font-bold">Started</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cohorts.rows.map((r) => (
-                  <tr key={r.id} className="border-t border-axal-hairline align-top dark:border-gray-700" data-testid={`lab-cohort-${r.id}`}>
-                    <th scope="row" className="py-2 pr-3 font-bold text-axal-ink dark:text-gray-100">
-                      <span className={MONO}>{r.label}</span>{r.now ? <span className="ml-1.5 rounded-full bg-axal-lavender px-1.5 py-0.5 text-[10.5px] font-bold text-axal-violet-deep">now</span> : null}
-                    </th>
-                    <td className="py-2 pr-3">{r.word}</td>
-                    <td className={`py-2 pr-3 ${MONO}`}>{r.window}</td>
-                    <td className={`py-2 pr-3 ${MONO}`}>{r.starts}</td>
-                    <td className={`py-2 pr-3 ${MONO}`}>{r.week4}</td>
-                    <td className={`py-2 pr-3 ${MONO}`}>{r.pool}</td>
-                    <td className={`py-2 ${MONO}`}>{r.started}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ))}
-      {cohorts.state === 'ready' && cohorts.appsUnreadable ? <span className={SUB}>The applications could not be read, so each cohort’s window and pool say so. The rest is from the calendar.</span> : null}
-      {cohorts.state === 'ready' && cohorts.capped ? <span className={SUB}>The 12 newest cohorts the calendar holds.</span> : null}
-      <span className={SUB}>{DATES_FIXED} Times are ET (America/New_York).</span>
-      <span className={SUB}>{WAITS.calendar}</span>
-    </section>
-  );
-}
-
 function NeedsCard({ needs }) {
   return (
     <section className={`${CARD} col-span-12 flex flex-col gap-2.5 px-[18px] py-4 lg:col-span-6`} aria-labelledby="lab-h-needs" data-testid="lab-needs">
@@ -233,10 +170,15 @@ function NeedsCard({ needs }) {
 
 function Overview({ reads, reload }) {
   const [now] = useState(() => Date.now());
+  const [chosen, setChosen] = useState(null);
   const tiles = useMemo(() => buildTiles(reads, now), [reads, now]);
-  const cohorts = useMemo(() => buildCohorts(reads, now), [reads, now]);
   const needs = useMemo(() => buildNeeds(reads), [reads]);
-  if (pageFailed(reads)) {
+  const tl = useMemo(() => buildTimeline(reads.overview, now, 'overview'), [reads.overview, now]);
+  const byCohort = useMemo(() => buildByCohort(reads.overview, reads.applications, now), [reads.overview, reads.applications, now]);
+  const heat = useMemo(() => buildHeat(reads.overview, now), [reads.overview, now]);
+  const funnel = useMemo(() => buildFunnel(reads.overview, chosen), [reads.overview, chosen]);
+  const perWeek = useMemo(() => buildPerWeek(reads.overview), [reads.overview]);
+  if (pageFailed(reads) && reads.overview?.status === 'error') {
     return (
       <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-axal-destructive-edge bg-axal-destructive-tint px-3.5 py-3 text-[13px] text-axal-destructive dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" data-testid="lab-unreadable">
         <span>The Lab’s figures could not be read. Nothing here is a zero. Every tab still opens its console.</span>
@@ -252,12 +194,12 @@ function Overview({ reads, reload }) {
           : <Tile key={t.key} t={t} onRetry={reload} />))}
       </div>
       <div className="grid grid-cols-12 gap-3.5">
-        <CohortsCard cohorts={cohorts} onRetry={reload} />
-        <WaitCard id="by-cohort" title="Applications by cohort" reason={WAITS.byCohort} />
-        <WaitCard id="weeks" title="Weeks passed, by cohort" reason={WAITS.weeks} />
-        <WaitCard id="funnel" title="From application to company" reason={WAITS.funnel} />
+        <CalendarBlock tl={tl} onRetry={reload} right={<Link to={`${LAB_PATH}/cohorts`} className={LINK}>Open Cohorts</Link>} />
+        <ByCohortBlock block={byCohort} onRetry={reload} />
+        <HeatBlock block={heat} onRetry={reload} />
+        <FunnelBlock block={funnel} onRetry={reload} onChoose={setChosen} />
         <NeedsCard needs={needs} />
-        <WaitCard id="per-week" title="Applications per week" reason={WAITS.perWeek} wide />
+        <PerWeekBlock block={perWeek} onRetry={reload} />
       </div>
     </div>
   );
@@ -266,7 +208,6 @@ function Overview({ reads, reload }) {
 /** Which console section each tab still asks `AdminSpinoutLab` for. */
 const SECTIONS = {
   applications: ['cycles'],
-  cohorts: ['timing'],
   participants: ['participants'],
 };
 
@@ -326,6 +267,7 @@ export default function AdminLab({ onImpersonate }) {
       />
       {tab === 'overview' ? <Overview reads={reads} reload={reload} /> : null}
       {DESKS[tab] ? React.createElement(DESKS[tab]) : null}
+      {tab === 'cohorts' ? <LabCohorts ym={cohortOf(loc.pathname)} /> : null}
       {SECTIONS[tab] ? SECTIONS[tab].map((s) => <AdminSpinoutLab key={s} section={s} onImpersonate={onImpersonate} />) : null}
     </div>
   );
