@@ -29,8 +29,7 @@ const mig = (n: string) => readFileSync(resolve(process.cwd(), `cloudflare-worke
 const ddl = (n: string) => mig(n).split(/;\s*\n/).map((s) => s.replace(/^\s*--.*$/gm, '').trim())
   .filter((s) => /^CREATE\s+(TABLE|INDEX)/i.test(s)).map((s) => `${s};`).join('\n');
 
-const P = 101; // the venture
-const B = 202; // another venture
+const P = 101; // the venture (202 is another venture, seeded inline)
 const FOUNDER = 1;
 const OTHER_FOUNDER = 2;
 const ADMIN = 30;
