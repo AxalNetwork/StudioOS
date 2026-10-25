@@ -176,10 +176,16 @@ test('the archetype routes send a free account no archetype key, and the plan th
 });
 
 test('the events suggestion drops its archetype framing on a free plan', async () => {
-  const { env } = await seeded();
+  const { env, db } = await seeded();
+  // D1031 (#2872): a founder-track workshop is suggested, worded to the canvas.
+  db.exec(`INSERT INTO events (slug, host_user_id, title, type, starts_at, visibility, status, admin_published)
+           VALUES ('d1031-workshop', 99, 'Workshop fixture', 'workshop', '2099-01-01T10:00:00Z', 'public', 'published', 1)`);
   const free = await call(events, env, 1, '/suggested');
   assert.equal(free.status, 200);
   assert.equal(free.body.archetype, null, 'events framed a free founder with their archetype');
   assert.equal(free.body.track, 'founder', 'the track stopped personalising');
-  assert.equal((await call(events, env, 2, '/suggested')).body.archetype?.slug, 'visionary');
+  const paid = await call(events, env, 2, '/suggested');
+  assert.equal(paid.body.archetype?.slug, 'visionary');
+  assert.deepEqual(paid.body.events.map((e: any) => e.suggestion_reason), ['Suits The Visionary']);
+  assert.deepEqual(free.body.events.map((e: any) => e.suggestion_reason), ['Matches your track'], 'a free plan is not told its archetype');
 });

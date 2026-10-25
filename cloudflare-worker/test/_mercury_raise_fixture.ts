@@ -60,7 +60,7 @@ export function mercury() {
 export async function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false, enableDoubleQuotedStringLiterals: true });
   for (const t of ['users', 'projects', 'activity_logs', 'cap_table_scenarios', 'cap_table_holders', 'cap_table_vesting', 'raise_prospects', 'data_room_files',
-    'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'deck_share_views', 'dd_cases', 'dd_requests', 'raise_rounds']) {
+    'spinout_deck_overrides', 'pitch_decks', 'pitch_deck_share_tokens', 'deck_share_views', 'dd_cases', 'dd_requests', 'raise_rounds', 'esign_envelopes']) {
     db.exec(tableFromBaseline(BASELINE, t));
   }
   db.exec(mig('129_captable_one_canonical_per_project.sql'));
@@ -79,7 +79,8 @@ export async function fixture() {
   db.exec(mig('311_revenue_entries.sql'));
   db.exec(mig('477_mercury_personal.sql'));
   personalMatchTables(db);
-  for (const m of ['445_connector_fed_items.sql', '520_mercury_raise_feeds.sql']) db.exec(mig(m));
+  // D1017: a Mercury SAFE's Accept lands on the record.
+  for (const m of ['445_connector_fed_items.sql', '520_mercury_raise_feeds.sql', '573_cap_table_record.sql']) db.exec(mig(m));
   raiseEvidenceTables(db);
   db.exec(`
     INSERT INTO users (id, role, founder_id, name, email, is_active, subscription_tier) VALUES

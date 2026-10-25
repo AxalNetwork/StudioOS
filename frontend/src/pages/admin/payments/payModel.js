@@ -18,10 +18,21 @@
  *                (`requireSuperAdmin`): the publishable key's own mode, the
  *                mirror's counts and last write, and webhook deliveries in
  *                24 hours, each block with `available`.
+ *
+ * D1014 (#2833, part 6) adds two reads of part 3's client (D1011,
+ * `lib/api/payments.js`), each answering alone:
+ *   - `deliveries` GET /api/admin/payments/webhook-deliveries — 24 clock hours,
+ *                oldest first, the last one partial. An hour the request log
+ *                holds nothing for is null: drawn as the dashed no-log hour,
+ *                never as 0. 503 when the log does not answer.
+ *   - the change log GET /api/admin/payments/change-log — newest first, paged,
+ *                filtered by what, who, product and day; read by the Change
+ *                log tab itself, since its filters drive it.
  */
 
 export const PAY_PATH = '/admin/platform/payments';
 export const PAY_STRIPE_PATH = '/admin/platform/payments/stripe';
+export const PAY_LOG_PATH = '/admin/platform/payments/log';
 export const PLATFORM_PATH = '/admin/platform';
 export const ALLOWANCES_PATH = '/admin/platform/allowances';
 export const PAY_TITLE = 'Payments';
@@ -37,16 +48,18 @@ export const MOVED_NOTICES = {
   payments: 'The Admin Console has moved: Payments now lives under Platform.',
 };
 
-/** The tabs this integration draws (D1008 §1). The change log waits for its read (part 3). */
+/** The tabs (D1008 §1). The change log came with its read (D1011) and its page (D1014). */
 export const TABS = [
   { key: 'catalogue', label: 'Catalogue', path: '' },
   { key: 'stripe', label: 'Stripe connection', path: '/stripe' },
+  { key: 'log', label: 'Change log', path: '/log' },
 ];
 
 export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
   if (p === PAY_PATH) return 'catalogue';
   if (p === PAY_STRIPE_PATH) return 'stripe';
+  if (p === PAY_LOG_PATH) return 'log';
   return null;
 }
 
@@ -156,4 +169,187 @@ export function stampText(s) {
   const M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getUTCDate()} ${M[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+}
+
+// ─────────────────────────────────────────────── D1014: deliveries per hour (PAY5)
+
+/** Part 5's dialogs (#2832) are not built yet; the buttons that open them say so. */
+export const DIALOGS_WAIT = 'Opens with D1008 part 5 (#2832). Until then, use the editor on Catalogue.';
+export const DELIVERIES_UNREAD = 'Could not be read. The request log did not answer. This is not a claim that no delivery came.';
+
+const hourOf = (iso) => {
+  const m = /T(\d{2}):/.exec(String(iso || ''));
+  return m ? `${m[1]}:00` : null;
+};
+const isCount = (v) => typeof v === 'number' && Number.isFinite(v);
+
+/**
+ * The read's 24 hours as the page draws them, oldest first. An hour is
+ * `logged` only when both of its counts are numbers: a null is the log's
+ * silence, never a zero. The last hour is the one the read was made in.
+ */
+export function deliveryHours(hours) {
+  const list = Array.isArray(hours) ? hours : [];
+  return list.map((h, i) => {
+    const logged = isCount(h?.deliveries) && isCount(h?.not_2xx);
+    return {
+      hour: h?.hour ?? null,
+      label: hourOf(h?.hour) || '—',
+      logged,
+      deliveries: logged ? h.deliveries : null,
+      accepted: logged ? Math.max(0, h.deliveries - h.not_2xx) : null,
+      refused: logged ? h.not_2xx : null,
+      current: i === list.length - 1,
+    };
+  });
+}
+
+/** The rows `Columns` draws: accepted in violet under not accepted in amber; a silent hour dashed. */
+export function deliveryColumns(hours) {
+  return deliveryHours(hours).map((h) => {
+    const label = h.label.slice(0, 2);
+    if (!h.logged) return { label, value: 0, open: true, text: '' };
+    return {
+      label,
+      value: h.deliveries,
+      text: h.deliveries ? String(h.deliveries) : '0',
+      parts: [{ value: h.accepted, tone: 'violet' }, { value: h.refused, tone: 'amber' }],
+    };
+  });
+}
+
+/** "No log was kept for 03:00 to 05:00." — runs of silent hours, joined; null when every hour was logged. */
+export function silentHoursText(hours) {
+  const rows = deliveryHours(hours);
+  const runs = [];
+  rows.forEach((h, i) => {
+    if (h.logged) return;
+    const last = runs[runs.length - 1];
+    if (last && last.end === i - 1) last.end = i;
+    else runs.push({ start: i, end: i });
+  });
+  if (!runs.length) return null;
+  const until = (i) => {
+    const m = /^(\d{2})/.exec(rows[i].label);
+    return m ? `${String((Number(m[1]) + 1) % 24).padStart(2, '0')}:00` : '—';
+  };
+  const parts = runs.map((r) => `${rows[r.start].label} to ${until(r.end)}`);
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return `No log was kept for ${list}.`;
+}
+
+/** The table form (the phone's, and "Table" on a computer): newest first. */
+export function deliveryTable(hours) {
+  return deliveryHours(hours).slice().reverse().map((h) => ({
+    key: h.hour || h.label,
+    hour: h.current ? `${h.label} · so far` : h.label,
+    accepted: h.logged ? String(h.accepted) : 'Not logged',
+    refused: h.logged ? String(h.refused) : 'Not logged',
+    logged: h.logged,
+  }));
+}
+
+// ─────────────────────────────────────────────── D1014: the change log (PAY7)
+
+export const LOG_PAGE = 25;
+export const LOG_UNREAD = 'Could not be read. Nothing is shown rather than an empty log.';
+export const EXPORT_REASON_MIN = 10;
+export const EXPORT_REASON_MAX = 500;
+
+/** What changed, as the filter names it. The Worker's `kinds` decide which appear. */
+export const WHAT_WORDS = {
+  product: 'Products',
+  price: 'Prices',
+  sync: 'Syncs',
+  token_pack: 'Token packs',
+  webhook: 'Webhook',
+  key: 'Publishable key',
+};
+export const whatWord = (k) => WHAT_WORDS[k] || 'Not recorded';
+
+/** Each recorded action in the canvas's words. An action not listed reads as its own code, never hidden. */
+const ACTION_WORDS = {
+  catalog_sync: 'Synced from Stripe',
+  catalog_sync_failed: 'Sync failed',
+  catalog_product_create: 'Created a product',
+  catalog_product_update: 'Changed a product',
+  catalog_product_archive: 'Archived a product',
+  catalog_price_create: 'Added a price',
+  catalog_price_update: 'Changed a price',
+  catalog_price_archive: 'Archived a price',
+  token_pack_create: 'Created a token pack',
+  token_pack_adopt: 'Adopted a price as a token pack',
+  token_pack_update: 'Changed a token pack',
+  token_pack_archive: 'Archived a token pack',
+  stripe_webhook_register: 'Registered the webhook endpoint',
+  stripe_webhook_update: 'Changed the webhook endpoint',
+  stripe_pk_update: 'Replaced the publishable key',
+};
+export const actionWord = (a) => ACTION_WORDS[a] || String(a || 'Not recorded');
+export const isFailure = (a) => a === 'catalog_sync_failed';
+
+/**
+ * A row's detail, in words, from what its writer recorded. The reason is
+ * shown on its own line; anything else stays under Technical details.
+ */
+export function detailText(entry) {
+  const d = entry?.details && typeof entry.details === 'object' ? entry.details : {};
+  switch (entry?.action) {
+    case 'catalog_sync':
+      return isCount(d.synced) ? `${d.synced} product${d.synced === 1 ? '' : 's'} synced` : null;
+    case 'catalog_sync_failed':
+      if (d.failure === 'stripe') return isCount(d.stripe_status) ? `Stripe answered ${d.stripe_status}` : 'Stripe did not answer';
+      return 'The platform could not finish the sync';
+    case 'catalog_product_create':
+      return typeof d.name === 'string' && d.name ? `${d.name}${d.kind ? ` · ${kindWord(d.kind)}` : ''}` : null;
+    case 'token_pack_create':
+    case 'token_pack_adopt':
+      return isCount(d.face_cents) ? `${(d.face_cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD pack` : null;
+    case 'token_pack_update':
+      return typeof d.on_sale === 'boolean' ? (d.on_sale ? 'On sale' : 'Off sale') : null;
+    case 'stripe_pk_update':
+      return d.mode ? `Now ${modeWord(d.mode)}` : null;
+    case 'stripe_webhook_register':
+      return d.secret_stored === false ? 'Signing secret not stored' : (typeof d.url === 'string' ? d.url : null);
+    case 'stripe_webhook_update':
+      return typeof d.url === 'string' ? d.url : null;
+    default:
+      return null;
+  }
+}
+export const reasonOf = (entry) => (typeof entry?.details?.reason === 'string' && entry.details.reason.trim() ? entry.details.reason.trim() : null);
+
+/** Who did it: the account's name, or its number when the name was not recorded. */
+export const whoText = (who) => (who?.name ? who.name : who?.id != null ? `Account #${who.id} · name not recorded` : 'Not recorded');
+
+/** "1–25 of 142", or "0 of 0". */
+export function logRange(offset, shown, total) {
+  if (!total || !shown) return `0 of ${Number(total || 0).toLocaleString('en-US')}`;
+  return `${(offset + 1).toLocaleString('en-US')}–${(offset + shown).toLocaleString('en-US')} of ${Number(total).toLocaleString('en-US')}`;
+}
+
+/** The filters the read is sent, without the empty ones. */
+export function logFilters({ what, who, product, from, to } = {}) {
+  const out = {};
+  if (what) out.what = what;
+  if (who) out.who = who;
+  if (product) out.product = product;
+  if (from) out.from = from;
+  if (to) out.to = to;
+  return out;
+}
+
+/** The export's reason, as the Worker rules it: null when it will be accepted. */
+export function reasonProblem(text) {
+  const n = String(text || '').trim().length;
+  if (n < EXPORT_REASON_MIN) return `Say why you are exporting, in at least ${EXPORT_REASON_MIN} characters.`;
+  if (n > EXPORT_REASON_MAX) return `Keep the reason to ${EXPORT_REASON_MAX} characters.`;
+  return null;
+}
+
+/** The people the log names on the rows read so far, by name: the Who filter's choices. */
+export function peopleOf(entries, known = []) {
+  const map = new Map(known.map((p) => [String(p.id), p]));
+  for (const e of entries || []) if (e?.who?.id != null && !map.has(String(e.who.id))) map.set(String(e.who.id), { id: e.who.id, name: whoText(e.who) });
+  return [...map.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
 }
