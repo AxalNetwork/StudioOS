@@ -142,7 +142,9 @@ test('heldCard reads the session\'s own tier, for the member\'s own role\'s tab 
   assert.equal(heldCard({ subscription_tier: 'studio' }, 'founder', 'investor'), null);
   assert.equal(heldCard({ subscription_tier: 'growth' }, 'investor', 'founder'), null, 'an investor holds no founder plan');
   assert.equal(heldCard({ investor_tier: 'professional' }, 'investor', 'investor'), 'professional');
-  assert.equal(heldCard({}, 'partner', 'operating-partner'), 'free');
+  // D1049 (#2900): an Operating Partner's plan is read from their plan status, not assumed Basic.
+  assert.equal(heldCard({}, 'partner', 'operating-partner'), null, 'nothing marked before the plan status is read');
+  assert.equal(heldCard({}, 'partner', 'operating-partner', { status: 'ready', body: { plan_group: 'partner', status: 'free' } }), 'free');
 });
 
 test('an unreadable read is "Prices unavailable", not an empty tab', () => {
