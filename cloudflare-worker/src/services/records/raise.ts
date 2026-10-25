@@ -916,6 +916,18 @@ async function capitalOptions(rc: RecordContext, query: Record<string, string>) 
   };
 }
 
+/**
+ * D1189 (#3123): one feedback row, the objection with the answer Add feedback
+ * stored beside it. An objection nobody answered says so rather than drawing
+ * nothing, and the day follows either.
+ */
+export const feedbackRow = (f: { objection: string; answer?: string | null; created_at?: string | null }): Row => {
+  const answer = typeof f.answer === 'string' ? f.answer.trim() : '';
+  const said = answer ? `Answer: ${answer}` : 'No answer recorded';
+  const on = day(f.created_at ?? null);
+  return { a: `"${f.objection}"`, b: on ? `${said} · ${on}` : said };
+};
+
 const capital = spec('raise_prospects', 'capital-relationships', async (rc, id) => {
   const ctx = ctxOf(rc);
   const p = (await loadProspects(rc.env, rc.projectId)).find((x) => String(x.id) === id) as ProspectRow;
@@ -961,9 +973,9 @@ const capital = spec('raise_prospects', 'capital-relationships', async (rc, id) 
   }),
   section('feedback', 'Feedback', async (rc, id) => {
     const res = await rc.env.DB.prepare(
-      'SELECT objection, created_at FROM raise_prospect_feedback WHERE prospect_id = ? ORDER BY created_at DESC, id DESC LIMIT 20',
-    ).bind(Number(id)).all<{ objection: string; created_at: string }>();
-    return { rows: (res.results || []).map((f) => ({ a: `"${f.objection}"`, b: day(f.created_at) ?? '' })), empty: 'No feedback recorded.', action: 'add-feedback' };
+      'SELECT objection, answer, created_at FROM raise_prospect_feedback WHERE prospect_id = ? ORDER BY created_at DESC, id DESC LIMIT 20',
+    ).bind(Number(id)).all<{ objection: string; answer: string | null; created_at: string }>();
+    return { rows: (res.results || []).map(feedbackRow), empty: 'No feedback recorded.', action: 'add-feedback' };
   }, { side: true }),
   // Deck links made for this prospect, and the room's folders their account opened, matched by email.
   section('materials', 'Materials', async (rc, id) => {
