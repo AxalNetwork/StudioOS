@@ -190,7 +190,7 @@ function Card({ card, sources, small = false }) {
             <div key={k} className="flex flex-col gap-0.5 rounded-[8px] border border-gray-200 p-2 dark:border-gray-200">
               <span className="text-[11px] text-slate-500">{f.k}</span>
               <span className={`${small ? 'text-[14px]' : 'text-[clamp(15px,1.8vw,24px)]'} font-bold`}>{f.v}</span>
-              {sources ? <span className="text-[10.5px] text-slate-500">{SOURCE_NOT_RECORDED}</span> : null}
+              {sources ? <span className="text-[10.5px] text-slate-500">{f.source || SOURCE_NOT_RECORDED}</span> : null}
             </div>
           ))}
         </div>
