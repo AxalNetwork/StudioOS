@@ -93,7 +93,7 @@ export const RESPONSE_TIMES = [
 ];
 
 export const DISCLOSURE_GAPS = [
-  missing('PGP key', 'Ask by email and we reply with one.'),
+  missing('PGP key', 'None is published. Send sensitive detail through the private advisory.'),
   missing('Researchers we thank', 'No report has been credited yet.'),
   missing('Report a security issue in the app', 'Not built yet. Use the private advisory or email.'),
 ];

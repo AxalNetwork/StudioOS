@@ -678,8 +678,8 @@ function RecordCrumb({ title, type = null, id = null }) {
   return null;
 }
 
-export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false }) {
-  const { slug: routeSlug, id: recordId } = useParams();
+export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, dataRoomFile = false, capTableProposal = false }) {
+  const { slug: routeSlug, id: recordId, proposal: proposalId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
@@ -716,7 +716,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // (`state.editing`), so Back closes it as it closes an Add.
   const forms = useMemo(() => (slug && def ? formsFor(cycle, slug) : []), [cycle, slug, def]);
   const edit = slug && def ? editFor(cycle, slug) : null;
-  const formOpen = adding && forms.length ? forms.find((f) => f.key === searchParams.get('form')) || forms[0] : null;
+  // D1025 (#2862): Cap table's `/new` is Record an issuance (CT12a), not the old Add holder form.
+  const capTableAdding = adding && cycle === 'raise' && slug === CAP_TABLE;
+  const formOpen = adding && forms.length && !capTableAdding ? forms.find((f) => f.key === searchParams.get('form')) || forms[0] : null;
   const editingId = !adding && edit && location.state?.editing != null ? String(location.state.editing) : null;
   const phone = usePhoneWidth();
   // #1652's `?add=1` (the Worker's card hrefs) is the first Add's address: the
@@ -768,7 +770,11 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D1015 (#2432): under Cap table a record id that is a tab word (`/instruments`, …)
   // is the tool's tab, never a row (rows are `h-<n>`, `e-<n>` and `pool`).
   // D1022 (#2859): `h-<n>` is the tool's too, the holder drawer over Overview.
-  const capTableTab = record && cycle === 'raise' && isCapTableTab(slug, recordId) ? recordId : null;
+  // D1025 (#2862): `/new` opens Record an issuance over Overview, and
+  // `/raise/cap-table/proposal/<id>` a proposal's drawer (CT11), both the tool's own.
+  const capTableTab = capTableProposal && cycle === 'raise' ? 'proposal'
+    : capTableAdding ? 'new'
+      : record && cycle === 'raise' && isCapTableTab(slug, recordId) ? recordId : null;
   // D1101 (#2456): the Data room tool's tabs are words under its module, never file records.
   // D1106 (#2986): `/raise/data-room/file/<id>` is a file's lightbox over Files.
   const dataRoomTab = record && cycle === 'raise' && (dataRoomFile ? 'files' : isDataRoomTab(slug, recordId) ? recordId : null);
@@ -978,7 +984,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else if (capTableTab) {
     body = (
-      <CapTableTabPage tab={capTableTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+      <CapTableTabPage tab={capTableTab} proposal={proposalId} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
     );
   } else if (dataRoomTab) {

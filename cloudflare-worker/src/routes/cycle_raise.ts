@@ -53,7 +53,7 @@
  *
  *   D840 part 2 (#2347): the founder's own Mercury feeds the modules.
  *   POST   /mercury/sync                  reads Mercury; writes facts and proposals → { counts }
- *   POST   /mercury/proposals/:id/accept  { section? }  lands it in its module
+ *   POST   /mercury/proposals/:id/accept  { section?, discount_bps? }  lands it in its module (D1025: a SAFE's discount)
  *   POST   /mercury/proposals/:id/dismiss               never proposed again
  *   DELETE /mercury/facts/:id                           deleted; a re-sync never brings it back
  *   A module's read carries `parts.mercury` for the founder alone
@@ -694,6 +694,7 @@ cycleRaise.post('/mercury/proposals/:id/accept', async (c) => {
   try {
     const out = await acceptRaiseProposal(c.env, {
       integrationId: own.integrationId, projectId: s.projectId, id, user: s.user, reads: reads?.ok ? reads.reads : null, section: b.section,
+      discount_bps: b.discount_bps,
     });
     if (!out.ok) return c.json({ error: out.code, detail: out.message }, OUTCOME_STATUS(out));
     return c.json(out);

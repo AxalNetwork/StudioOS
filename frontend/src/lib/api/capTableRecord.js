@@ -13,9 +13,14 @@ const post = (path, body) => request(path, { method: 'POST', body: JSON.stringif
 
 export const capTableRecordApi = {
   read: (projectId) => request(base(projectId)),
-  history: (projectId, { page = 1, pageSize } = {}) => {
+  // D1025 — `section` ('record' or 'changes') reads one of History's two blocks,
+  // each paged on its own; `filters` narrow the record's timeline (q, kind,
+  // source, has_document, from, to). Without a section it is D1017's read.
+  history: (projectId, { page = 1, pageSize, section, filters = {} } = {}) => {
     const q = new URLSearchParams({ page: String(page) });
     if (pageSize) q.set('page_size', String(pageSize));
+    if (section) q.set('section', section);
+    for (const [k, v] of Object.entries(filters || {})) if (v != null && v !== '') q.set(k, String(v));
     return request(`${base(projectId)}/history?${q}`);
   },
   propose: (projectId, body) => post(`${base(projectId)}/proposals`, body),

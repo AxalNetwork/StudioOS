@@ -54,6 +54,8 @@ function freshDb() {
   }
   // D691 (#1700) — migration 463's file access columns, which every room read now filters on.
   addColumnsFrom(db, stripForeignKeys(MIG463), 'data_room_files');
+  // D1105: migration 596's source of each file.
+  addColumnsFrom(db, readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/596_data_room_file_source.sql'), 'utf8'), 'data_room_files');
   // D1103 (#2983) — migration 594: a grant's folder scope, which every investor read passes.
   withGrantFolders(db);
   // The pipeline a committed-only file is opened by.
