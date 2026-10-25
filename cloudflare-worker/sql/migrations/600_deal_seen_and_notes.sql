@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS deal_seen (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   company_id INTEGER REFERENCES company_profiles(id) ON DELETE CASCADE,
   last_seen_at TEXT NOT NULL,
+  source_snapshot_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(source_snapshot_json)),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(deal_id, user_id, company_id)

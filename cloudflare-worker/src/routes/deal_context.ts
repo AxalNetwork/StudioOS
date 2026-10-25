@@ -38,11 +38,11 @@ async function context(c: any) {
 /** Only metadata from records this investor may read; never other firms' memos or bank data. */
 async function facts(db: D1Database, x: any) {
   const { id, user, company, deal } = x;
-  const invitation = await db.prepare(`SELECT status, COALESCE(responded_at, created_at) AS at FROM deal_invitations
+  const invitation = await db.prepare(`SELECT uid, status, COALESCE(responded_at, created_at) AS at FROM deal_invitations
     WHERE deal_id = ? AND investor_user_id = ? AND (company_id = ? OR company_id IS NULL) ORDER BY id DESC LIMIT 1`).bind(id, user.id, company).first<any>();
   const member = await db.prepare(`SELECT joined_at AS at FROM investor_dealroom_members
     WHERE deal_id = ? AND investor_user_id = ? AND (company_id = ? OR company_id IS NULL) LIMIT 1`).bind(id, user.id, company).first<any>();
-  const dd = await db.prepare(`SELECT d.uid, d.updated_at AS at FROM dd_cases d WHERE d.subject_type = 'project' AND d.subject_id = ?
+  const dd = await db.prepare(`SELECT d.uid, d.status, d.updated_at AS at FROM dd_cases d WHERE d.subject_type = 'project' AND d.subject_id = ?
     AND d.status != 'archived' AND (d.owner_user_id = ? OR EXISTS (SELECT 1 FROM dd_reviewers v WHERE v.case_id = d.id AND v.user_id = ?))
     ORDER BY julianday(d.updated_at) DESC, d.id DESC LIMIT 1`).bind(deal.project_id, user.id, user.id).first<any>();
   const ic = await db.prepare(`SELECT d.uid, d.status, d.decision, d.terms_json IS NOT NULL AND trim(d.terms_json) NOT IN ('','{}','null') AS terms, d.updated_at AS at
@@ -56,7 +56,7 @@ async function facts(db: D1Database, x: any) {
   const envelope = await db.prepare(`SELECT e.envelope_uuid AS uid, CASE WHEN EXISTS (SELECT 1 FROM esign_recipients mine WHERE mine.envelope_id = e.id AND mine.user_id = ? AND mine.status = 'signed') THEN 'completed' ELSE e.status END AS status, COALESCE(e.completed_at,e.created_at) AS at FROM esign_envelopes e
     WHERE e.deal_id = ? AND (e.user_id = ? OR EXISTS (SELECT 1 FROM esign_recipients p WHERE p.envelope_id = e.id AND p.user_id = ?))
     AND e.document_type IN ('safe','spa','subscription') AND e.status IN ('sent','partially_signed','completed') ORDER BY e.id DESC LIMIT 1`).bind(user.id, id, user.id, user.id).first<any>();
-  const funded = commitment ? await db.prepare(`SELECT confirmed_at AS at FROM mercury_personal_matches
+  const funded = commitment ? await db.prepare(`SELECT id, confirmed_at AS at FROM mercury_personal_matches
     WHERE target_kind = 'deal_commitment' AND target_id = ? AND state = 'confirmed' ORDER BY id DESC LIMIT 1`).bind(commitment.id).first<any>() : null;
   return { invitation, member, dd, ic, committee, commitment, envelope, funded };
 }
@@ -76,7 +76,7 @@ r.get('/:id/stage', async c => {
     if (f.funded) { stage = 'Funded'; next = { label: 'View company reports', href: '/portfolio/updates' }; }
     if (x.deal.status === 'rejected') { stage = 'Passed by the studio'; next = { label: 'View deal', href: `${base}/overview` }; }
     if (f.invitation?.status === 'passed' || f.ic?.decision === 'pass') { stage = 'You passed'; next = { label: 'View deal', href: `${base}/overview` }; }
-    return c.json({ my_stage: stage, reason: stage === null ? 'No current invitation or progress fact is recorded.' : null, next_action: next, ic: f.committee ? { state: 'used' } : { state: 'not_used', label: 'Not used', reason: 'No IC record is recorded for this firm.' } });
+    return c.json({ my_stage: stage, reason: stage === null ? 'No current invitation or progress fact is recorded.' : null, next_action: { ...next, kind: stage === 'Invited' ? 'respond_interest' : 'navigate', ...(stage === 'Invited' ? { invitation_uid: f.invitation.uid } : {}) }, ic: f.committee ? { state: 'used' } : { state: 'not_used', label: 'Not used', reason: 'No IC record is recorded for this firm.' } });
   } catch { return c.json({ error: 'stage_unreadable', message: 'Deal progress is unreadable. Try again.' }, 503); }
 });
 
@@ -85,35 +85,42 @@ r.get('/:id/whats-new', async c => {
     const clock = await c.env.DB.prepare("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now') AS at").first<{ at: string }>();
     const at = clock!.at;
     const x = await context(c); if ('error' in x) return x.error;
+    const expected = await c.env.DB.prepare('SELECT source_snapshot_json FROM deal_seen WHERE deal_id = ? AND user_id = ? AND company_id IS ?').bind(x.id,x.user.id,x.company).first<{source_snapshot_json:string}>();
     const f = await facts(c.env.DB, x);
     const documents = await c.env.DB.prepare('SELECT id, updated_at AS at FROM documents WHERE project_id = ? ORDER BY id DESC').bind(x.deal.project_id).all<{ id: number; at: string }>();
-    const notes = await c.env.DB.prepare(`SELECT updated_at AS at FROM deal_notes WHERE deal_id = ? AND company_id IS ?
-      AND (company_id IS NOT NULL OR author_user_id = ?)`).bind(x.id,x.company,x.user.id).all<{at:string}>();
-    const others = await c.env.DB.prepare(`SELECT created_at AS at FROM commitments WHERE deal_id = ? AND investor_user_id != ? AND status IN ('pending','confirmed')`).bind(x.id,x.user.id).all<{at:string}>();
-    const answers = await c.env.DB.prepare(`SELECT q.responded_at AS at FROM dd_requests q JOIN dd_cases d ON d.id = q.case_id
+    const decks = await c.env.DB.prepare('SELECT id, created_at AS at FROM pitch_decks WHERE project_id = ? AND is_current = 1').bind(x.deal.project_id).all<{id:number;at:string}>();
+    const notes = await c.env.DB.prepare(`SELECT id, updated_at AS at FROM deal_notes WHERE deal_id = ? AND company_id IS ?
+      AND (company_id IS NOT NULL OR author_user_id = ?)`).bind(x.id,x.company,x.user.id).all<{id:number;at:string}>();
+    const others = await c.env.DB.prepare(`SELECT id, created_at AS at FROM commitments WHERE deal_id = ? AND investor_user_id != ? AND status IN ('pending','confirmed')`).bind(x.id,x.user.id).all<{id:number;at:string}>();
+    const answers = await c.env.DB.prepare(`SELECT q.id, q.responded_at AS at FROM dd_requests q JOIN dd_cases d ON d.id = q.case_id
       WHERE d.subject_type = 'project' AND d.subject_id = ? AND q.responded_at IS NOT NULL AND
-      (d.owner_user_id = ? OR EXISTS (SELECT 1 FROM dd_reviewers v WHERE v.case_id = d.id AND v.user_id = ?))`).bind(x.deal.project_id,x.user.id,x.user.id).all<{at:string}>();
+      (d.owner_user_id = ? OR EXISTS (SELECT 1 FROM dd_reviewers v WHERE v.case_id = d.id AND v.user_id = ?))`).bind(x.deal.project_id,x.user.id,x.user.id).all<{id:number;at:string}>();
     const sources = [
-      { type: 'deal', at: x.deal.updated_at || x.deal.created_at },
-      ...(documents.results || []).map(d => ({ type: 'document', at: d.at })),
-      ...(notes.results || []).map(d => ({ type: 'firm_note', at: d.at })),
-      ...(others.results || []).map(d => ({ type: 'investor_commitment', at: d.at })),
-      ...(answers.results || []).map(d => ({ type: 'diligence_answer', at: d.at })),
+      { type: 'deal', ref: x.id, version: x.deal.status, at: x.deal.updated_at || x.deal.created_at },
+      ...(decks.results || []).map(d => ({ type: 'deck', ref: d.id, version: '', at: d.at })),
+      ...(documents.results || []).map(d => ({ type: 'document', ref: d.id, version: '', at: d.at })),
+      ...(notes.results || []).map(d => ({ type: 'firm_note', ref: d.id, version: '', at: d.at })),
+      ...(others.results || []).map(d => ({ type: 'investor_commitment', ref: d.id, version: '', at: d.at })),
+      ...(answers.results || []).map(d => ({ type: 'diligence_answer', ref: d.id, version: '', at: d.at })),
       ...['invitation','member','dd','ic','commitment','envelope','funded'].flatMap(type => {
-        const fact = f[type as keyof typeof f]; return fact?.at ? [{ type, at: fact.at }] : [];
+        const fact = f[type as keyof typeof f]; return fact?.at ? [{ type, ref: fact.uid ?? fact.id ?? type, version: JSON.stringify(fact), at: fact.at }] : [];
       }),
     ];
+    const snapshot = Object.fromEntries(sources.map(s => [`${s.type}:${s.ref}`, `${s.at}:${s.version}`]));
     // Read the previous watermark and advance it in one transaction. Two visits
     // cannot both consume the same previous watermark. Failed reads never advance it.
     const results = await c.env.DB.batch([
-      c.env.DB.prepare('SELECT last_seen_at FROM deal_seen WHERE deal_id = ? AND user_id = ? AND company_id IS ?').bind(x.id, x.user.id, x.company),
-      c.env.DB.prepare(`INSERT INTO deal_seen (deal_id,user_id,company_id,last_seen_at) VALUES (?,?,?,?)
-        ON CONFLICT DO UPDATE SET last_seen_at = MAX(deal_seen.last_seen_at,excluded.last_seen_at), updated_at = excluded.last_seen_at`).bind(x.id,x.user.id,x.company,at),
+      c.env.DB.prepare('SELECT last_seen_at, source_snapshot_json FROM deal_seen WHERE deal_id = ? AND user_id = ? AND company_id IS ?').bind(x.id, x.user.id, x.company),
+      c.env.DB.prepare(`INSERT INTO deal_seen (deal_id,user_id,company_id,last_seen_at,source_snapshot_json) VALUES (?,?,?,?,?)
+        ON CONFLICT DO UPDATE SET last_seen_at = MAX(deal_seen.last_seen_at,excluded.last_seen_at), updated_at = excluded.last_seen_at, source_snapshot_json = excluded.source_snapshot_json
+        WHERE deal_seen.source_snapshot_json IS ? AND excluded.last_seen_at >= deal_seen.last_seen_at`).bind(x.id,x.user.id,x.company,at,JSON.stringify(snapshot),expected?.source_snapshot_json ?? null),
     ]);
-    const since = (results[0].results[0] as any)?.last_seen_at ?? null;
-    const stamp = (v: string) => Date.parse(v.includes('T') ? v : `${v.replace(' ','T')}Z`);
-    const changes = since ? sources.filter(s => stamp(s.at) > stamp(since) && stamp(s.at) <= stamp(at)) : [];
-    return c.json({ since, seen_at: at, first_visit: since === null, changes, coverage: 'Latest stored change in each accessible source and current documents, firm notes, anonymous commitments and accessible diligence answers. A first visit establishes the baseline; historical intermediate changes are not reconstructed.' });
+    const previous = results[0].results[0] as any;
+    const since = previous?.last_seen_at ?? null;
+    const old = previous ? JSON.parse(previous.source_snapshot_json) : {};
+    const consumed = Number(results[1].meta.changes) > 0;
+    const changes = previous && consumed ? sources.filter(s => old[`${s.type}:${s.ref}`] !== snapshot[`${s.type}:${s.ref}`]).map(({ type, at }) => ({ type, at })) : [];
+    return c.json({ since, seen_at: at, first_visit: since === null, changes, coverage: 'Latest stored change in each accessible source and current decks, documents, firm notes, anonymous commitments and accessible diligence answers. A first visit establishes the baseline; historical intermediate changes are not reconstructed.' });
   } catch { return c.json({ error: 'changes_unreadable', message: 'Changes are unreadable. Try again.' }, 503); }
 });
 
