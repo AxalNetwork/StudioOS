@@ -241,6 +241,9 @@ function build(p: Base, L: Loaded) {
 
   const openCase = L.cases.ok ? L.cases.rows.find((c) => Number(c.user_id) === p.id) ?? null : undefined;
   const row = {
+    // D949: the account's id, which the grace, change-a-week and open-workspace
+    // writes (admin_cohort.ts, admin.ts) are keyed by. It is not personal data.
+    user_id: p.id,
     uid: p.uid ?? null,
     name: p.name ?? null,
     company: p.project_name ?? null,

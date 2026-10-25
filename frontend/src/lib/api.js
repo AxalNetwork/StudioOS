@@ -3821,7 +3821,15 @@ export const api = {
     request(`/captable/scenarios/${uid}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteCapTableScenario: (uid) =>
     request(`/captable/scenarios/${uid}`, { method: 'DELETE' }),
-  exportCapTableCsvUrl: (uid) => `/api/captable/scenarios/${uid}/export.csv`,
+  // D1016: the CSV as a blob, with `request()`'s headers (bearer, CSRF, company, rail) and the
+  // cookie; a refusal throws its own sentence, which the page shows in place.
+  downloadCapTableCsv: async (uid) => {
+    const res = await fetch(`${BASE}/captable/scenarios/${encodeURIComponent(uid)}/export.csv`, {
+      method: 'GET', headers: rawRequestHeaders('GET'), credentials: 'include',
+    });
+    if (!res.ok) throw await refusalError(res, 'The CSV could not be downloaded.');
+    return res.blob();
+  },
   // 409A safe harbour — appraisals on file plus the material events that
   // can end the presumption before the 12 months are up.
   get409a: (projectId) => request(`/captable/409a/${projectId}`),
@@ -5747,11 +5755,14 @@ export const events = {
 
 // Public (no-auth) event surface — feed, detail, register, invite response.
 export const eventsPublic = {
-  list: ({ limit = 20, offset = 0, type, from, to, q, past } = {}) => {
+  // D1032: `format` (virtual, in_person, hybrid) and `price` (free, paid); the reply carries an exact `total`.
+  list: ({ limit = 20, offset = 0, type, from, to, q, past, format, price } = {}) => {
     const qs = new URLSearchParams();
     qs.set('limit', String(limit));
     qs.set('offset', String(offset));
     if (type) qs.set('type', type);
+    if (format) qs.set('format', format);
+    if (price) qs.set('price', price);
     if (from) qs.set('from', from);
     if (to) qs.set('to', to);
     if (q) qs.set('q', q);

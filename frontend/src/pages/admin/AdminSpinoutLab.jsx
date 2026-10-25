@@ -359,7 +359,7 @@ function ApplicationsSection({ apps, loading, unreadable = false, onDecided, onR
 // ---------------------------------------------------------------------------
 // Cohort participants
 // ---------------------------------------------------------------------------
-function ParticipantsSection({ participants, catalog, loading, unreadable = false, onRetry, onOpenWorkspace, openingId, emptyLine = null }) {
+function ParticipantsSection({ participants, catalog, loading, unreadable = false, onRetry, onOpenWorkspace, openingId }) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [cohortFilter, setCohortFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -436,7 +436,7 @@ function ParticipantsSection({ participants, catalog, loading, unreadable = fals
         <ConsoleUnreadable what="The participants" onRetry={onRetry} />
       ) : filtered.length === 0 ? (
         <div className="text-gray-500 text-center py-16 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-          {participants.length === 0 ? (emptyLine || 'No admitted founders yet — accept an application to get started.') : 'No participants match these filters.'}
+          {participants.length === 0 ? 'No admitted founders yet — accept an application to get started.' : 'No participants match these filters.'}
         </div>
       ) : (
         <>
@@ -625,10 +625,6 @@ function ParticipantsSection({ participants, catalog, loading, unreadable = fals
 // ---------------------------------------------------------------------------
 // Page shell
 // ---------------------------------------------------------------------------
-// D937 (#2374): the Participants read answers `[]` with 200 when it fails
-// (Guard H, D953 §2), so on the new page an empty list does not claim an
-// empty Lab. D953's part 7 makes the read truthful; then this line goes.
-export const PARTICIPANTS_EMPTY_UNTRUSTED = 'No participant is listed. This read cannot yet tell an empty Lab from a failed read, so this is not a claim that no one is in the Lab.';
 
 /**
  * `section` fixes one section and draws only its body, with no heading and no
@@ -728,7 +724,6 @@ export default function AdminSpinoutLab({ onImpersonate, standalone = false, sec
           onRetry={load}
           onOpenWorkspace={openWorkspace}
           openingId={openingId}
-          emptyLine={fixedSection ? PARTICIPANTS_EMPTY_UNTRUSTED : null}
         />
       </>
     )

@@ -34,7 +34,10 @@ export const S16_STORES_SQL = `
   ALTER TABLE partner_profiles ADD COLUMN product_strategy TEXT;
   ALTER TABLE partner_profiles ADD COLUMN existing_investors TEXT;
   CREATE TABLE user_role_review (
-    user_id INTEGER PRIMARY KEY, suggested_role TEXT, onboarded_at TEXT);
+    user_id INTEGER PRIMARY KEY, suggested_role TEXT, onboarded_at TEXT, binding_envelope_id INTEGER);
+  -- D1039: the Exploring lane counts an Explorer whose binding agreement is signed.
+  CREATE TABLE esign_envelopes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, status TEXT NOT NULL DEFAULT 'sent', completed_at TEXT);
   CREATE TABLE job_postings (
     id INTEGER PRIMARY KEY AUTOINCREMENT, host_user_id INTEGER, title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft', created_at TEXT NOT NULL DEFAULT (datetime('now')));
@@ -56,6 +59,24 @@ const USER_COLUMNS = [
   ['kyc_submitted_at', 'TIMESTAMP'],
   ['created_at', 'TEXT'],
 ];
+
+/**
+ * D1039: give an Explorer a signed binding agreement, so the Exploring lane
+ * counts them (a holding-role account with none is not ready for a role).
+ */
+export function signBinding(d, userId) {
+  d.exec(`CREATE TABLE IF NOT EXISTS esign_envelopes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, status TEXT NOT NULL DEFAULT 'sent', completed_at TEXT)`);
+  d.exec('CREATE TABLE IF NOT EXISTS user_role_review (user_id INTEGER PRIMARY KEY, suggested_role TEXT, onboarded_at TEXT, binding_envelope_id INTEGER)');
+  if (!d.prepare('PRAGMA table_info(user_role_review)').all().some((c) => c.name === 'binding_envelope_id')) {
+    d.exec('ALTER TABLE user_role_review ADD COLUMN binding_envelope_id INTEGER');
+  }
+  const env = d.prepare("INSERT INTO esign_envelopes (user_id, status, completed_at) VALUES (?, 'completed', '2026-01-01 00:00:00')").run(userId);
+  const id = Number(env.lastInsertRowid);
+  const has = d.prepare('SELECT 1 FROM user_role_review WHERE user_id = ?').get(userId);
+  if (has) d.prepare('UPDATE user_role_review SET binding_envelope_id = ? WHERE user_id = ?').run(id, userId);
+  else d.prepare('INSERT INTO user_role_review (user_id, binding_envelope_id) VALUES (?, ?)').run(userId, id);
+}
 
 /** Create the seven stores on a `node:sqlite` DatabaseSync that already has `users`. */
 export function addS16Stores(d) {

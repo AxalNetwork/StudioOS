@@ -19,6 +19,8 @@ function fixture() {
   for (const name of ['users', 'super_admins']) {
     db.exec(tableFromBaseline(baseline, name));
   }
+  // D1000: sign-up reads each segment's status from migration 559's store.
+  db.exec(readFileSync(new URL('../sql/migrations/559_segment_profiles.sql', import.meta.url), 'utf8'));
   db.exec("INSERT INTO users(id,email,name,role,is_active) VALUES(1,'advisor@example.test','Synthetic advisor','advisor',1)");
   return { db, env: { DB: d1Over(db), JWT_SECRET: SECRET, ENVIRONMENT: 'development' } as any };
 }

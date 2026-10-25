@@ -13,6 +13,12 @@
  *                                          counts only, admins left out
  * - POST /api/personas/admin/:user_id/retag admin: set primary persona
  *                                          with manual_override = 1
+ *
+ * D1000 (#2815): the segment profile store (`services/segmentProfiles.ts`)
+ * sets each segment's status. Sign-up (taxonomy, classify, finalize) offers
+ * only Active segments; an admin's retag may use a Draft one but never a
+ * Retired one; a member keeps a segment they already hold. The profiles
+ * themselves are `routes/persona_segments.ts`, at /api/personas/segments.
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
@@ -22,6 +28,7 @@ import { PERSONAS, PERSONA_BY_ID, isAllowedPersonaOverlap, type PersonaId } from
 import { classifyPersona } from '../../ai-workers/persona-router';
 import { bindingKey } from '../util/schemaBootstrap';
 import { readPersonaSegments } from '../services/personaSegments';
+import { NOT_OFFERED, retiredSentence, statusesOf } from '../services/segmentProfiles';
 
 const personas = new Hono<{ Bindings: Env }>();
 
@@ -90,7 +97,36 @@ interface UserExtraRow {
   source: string;
 }
 
-personas.get('/taxonomy', (c) => c.json({ personas: PERSONAS }));
+/**
+ * D1000: the segment profile store decides what sign-up offers. Only Active
+ * segments are listed, under HQ's name and words; the questions stay code's.
+ * A store that cannot be read answers 503, never the full twelve.
+ */
+async function signUpStatuses(c: any) {
+  try { return await statusesOf(c.env); } catch (e) {
+    console.error('[personas] segment statuses unreadable:', (e as Error)?.message);
+    return null;
+  }
+}
+const STATUSES_UNREADABLE = { detail: 'The segments could not be read just now. Try again in a moment.', code: 'segments_unreadable' };
+
+personas.get('/taxonomy', async (c) => {
+  const statuses = await signUpStatuses(c);
+  if (!statuses) return c.json(STATUSES_UNREADABLE, 503);
+  let names = new Map<string, { name: string; who: string | null }>();
+  try {
+    const r = await c.env.DB.prepare(`SELECT key, name, who FROM segment_profiles`).all<{ key: string; name: string; who: string | null }>();
+    names = new Map((r.results || []).map((x) => [x.key, { name: x.name, who: x.who }]));
+  } catch (e) {
+    console.error('[personas] segment names unreadable:', (e as Error)?.message);
+    return c.json(STATUSES_UNREADABLE, 503);
+  }
+  const offered = PERSONAS.filter((p) => statuses.get(p.id) === 'active').map((p) => {
+    const stored = names.get(p.id);
+    return stored ? { ...p, label: stored.name, short_description: stored.who || p.short_description } : p;
+  });
+  return c.json({ personas: offered });
+});
 
 personas.get('/me', async (c) => {
   await ensurePersonaSchema(c.env);
@@ -114,8 +150,16 @@ personas.post('/classify', async (c) => {
   const body = await c.req.json().catch(() => ({} as { first_message?: unknown }));
   const firstMessage = typeof body.first_message === 'string' ? body.first_message : '';
   if (!firstMessage.trim()) return c.json({ error: 'first_message required' }, 400);
+  const statuses = await signUpStatuses(c);
+  if (!statuses) return c.json(STATUSES_UNREADABLE, 503);
   const result = await classifyPersona(c.env, { first_message: firstMessage, email: user.email });
-  return c.json(result);
+  // D1000: a suggestion sign-up does not offer is not made; the member picks.
+  const offered = (id: string | null) => !!id && statuses.get(id) === 'active';
+  const alternatives = result.alternatives.filter((a) => offered(a.persona_id));
+  if (result.persona_id && !offered(result.persona_id)) {
+    return c.json({ ...result, persona_id: null, confidence: 0, follow_up_questions: [], needs_disambiguation: true, alternatives });
+  }
+  return c.json({ ...result, alternatives });
 });
 
 personas.post('/answer', async (c) => {
@@ -164,6 +208,14 @@ personas.post('/finalize', async (c) => {
   }
 
   const db = c.env.DB;
+  // D1000: a member joins only an Active segment. One they already hold they
+  // keep (a Retired segment's members keep it until they are moved).
+  const statuses = await signUpStatuses(c);
+  if (!statuses) return c.json(STATUSES_UNREADABLE, 503);
+  const held = new Set(((await db.prepare(`SELECT persona_id FROM user_personas WHERE user_id = ?`).bind(user.id).all<{ persona_id: string }>()).results || []).map((r) => r.persona_id));
+  for (const id of [body.persona_id, secondary]) {
+    if (id && statuses.get(id) !== 'active' && !held.has(id)) return c.json({ detail: NOT_OFFERED, code: 'segment_not_offered' }, 409);
+  }
   // Reset primary flags so we never end up with two primaries.
   await db.prepare(`UPDATE user_personas SET is_primary = 0 WHERE user_id = ?`).bind(user.id).run();
   await db.prepare(`
@@ -251,6 +303,18 @@ personas.post('/admin/:user_id/retag', async (c) => {
   ).bind(userId).first<{ persona_id: string } | null>();
   if (current?.persona_id === body.persona_id) {
     return c.json({ ok: true, unchanged: true });
+  }
+
+  // D1000: an admin may place a member in an Active or a Draft segment; a
+  // Retired one takes no new members.
+  let statuses: Awaited<ReturnType<typeof statusesOf>>;
+  try { statuses = await statusesOf(c.env); } catch (e) {
+    console.error('[personas] segment statuses unreadable:', (e as Error)?.message);
+    return c.json(STATUSES_UNREADABLE, 503);
+  }
+  if (statuses.get(body.persona_id) === 'retired') {
+    const named = await db.prepare(`SELECT name FROM segment_profiles WHERE key = ?`).bind(body.persona_id).first<{ name: string }>().catch(() => null);
+    return c.json({ detail: retiredSentence(named?.name || PERSONA_BY_ID[body.persona_id as PersonaId].label), code: 'segment_retired' }, 409);
   }
 
   // D255 — the demote-and-insert used to be two separate D1 round-trips; a
