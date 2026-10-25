@@ -20,14 +20,17 @@ export type FundUse = { label: string; pct: number };
 
 /** Parse legacy text without correcting, dropping or truncating its figures. */
 function parseFreeText(raw: string): FundUse[] {
-  const parts = raw.split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+  let remaining = raw.trim();
   const out: FundUse[] = [];
-  for (const part of parts) {
-    const m = part.match(/^(.+?)[:\s]+(\d{1,3})\s*%?$/);
-    if (m) {
-      const pct = Number(m[2]);
-      out.push({ label: m[1].trim(), pct });
-    } else return [];
+  while (remaining) {
+    // Match a complete fixed label before consuming a separator: one label
+    // contains a comma and another contains a colon.
+    const section = FUND_SECTIONS.find((s) => remaining.startsWith(s.label));
+    if (!section) return [];
+    const match = remaining.slice(section.label.length).match(/^(?:\s*:\s*|\s+)(\d{1,3}(?:\.\d+)?)\s*%?\s*(?:[,;\n]|$)/);
+    if (!match) return [];
+    out.push({ label: section.label, pct: Number(match[1]) });
+    remaining = remaining.slice(section.label.length + match[0].length).trim();
   }
   return out;
 }

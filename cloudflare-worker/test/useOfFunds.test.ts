@@ -9,6 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  FUND_SECTIONS,
   parseUseOfFundsValue,
   normalizeUseOfFunds,
   formatUseOfFundsText,
@@ -38,6 +39,8 @@ test('D1174: unknown sections are not a recorded split', () => {
 });
 
 test('D1174: legacy text needs canonical labels; unknown labels stay unrecorded', () => {
+  const five = FUND_SECTIONS.map((s) => ({ label: s.label, pct: 20 }));
+  for (const separator of [', ', '; ', '\n']) assert.deepEqual(parseUseOfFundsValue(five.map((s) => `${s.label} ${s.pct}%`).join(separator)), five);
   assert.deepEqual(parseUseOfFundsValue('Eng 55%, GTM 30%, Ops 15%'), []);
   for (const text of ['Product & engineering 150%', 'Product & engineering 100%; unreadable row']) assert.deepEqual(parseUseOfFundsValue(text), []);
   assert.deepEqual(parseUseOfFundsValue('Product & engineering 60%; GTM: sales and marketing 40%'), [
