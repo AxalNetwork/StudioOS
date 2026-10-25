@@ -185,6 +185,14 @@ is shown to its owner only and never stored. `partnerSettlements.js` calls
 and `/api/admin/partner-settlements` (an Admin's list, draft, edit and delete;
 the Super Admin's issue and void). Nothing here moves money.
 
+D928 (#2724): `partnerDealReads.js` calls the four reads in
+`cloudflare-worker/src/routes/admin_partner_deal_reads.ts`: `GET
+/api/admin/partners/deals/:id` (one deal, in full), `GET
+/api/admin/partners/deals/:id/terminate-preview`, `GET
+/api/admin/partners/redemptions` (every redemption across deals, filtered,
+sorted and paged) and `GET /api/admin/partners/agreement-ready`. Admin only;
+nothing here writes.
+
 D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
 (`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
 Stripe plan invoices in one list, newest first. D789's Usage overview reads the newest three rows.
@@ -301,6 +309,8 @@ directory, ratings, sessions, engagement counts per lane, payout readiness, a
 studio agreement on file and Lab host status), Pause and Resume, each with a
 required reason, and the advisor directory switch. No client name and no rating
 comment is on the wire.
+D1011 (#2830): `payments.js` calls `/api/admin/payments`: the change log, its
+CSV (with a reason) and the webhook's deliveries by hour. Super Admin only.
 
 D990 (#2801): `partnerProfiles.js` is HQ's Partner profiles on
 `/api/admin/partner-profiles`: the list (search, filters, sort and pages, with

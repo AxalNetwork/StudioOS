@@ -311,6 +311,29 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
+  // D953 (2026-10-24, #2371): Programs. The catalogue draws its card doors and
+  // its foot in its own file. Each program page draws its crumb from the frame,
+  // its tab strip from ProgramTabs, and its blocks' doors from the files
+  // beside it. Mentor cohort access and Refer & Earn mount the two consoles'
+  // bodies; once /admin/refer-earn redirects, ReferralReview.jsx is not
+  // routed, and its /admin/commissions door counts only through this entry.
+  ['frontend/src/pages/admin/programs/MentorCohortAccess.jsx', [
+    'frontend/src/pages/admin/programs/ProgramFrame.jsx',
+    'frontend/src/pages/admin/programs/ProgramTabs.jsx',
+    'frontend/src/pages/admin/AdvisorCohortAssignments.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ReferAndEarn.jsx', [
+    'frontend/src/pages/admin/programs/ProgramFrame.jsx',
+    'frontend/src/pages/admin/programs/ProgramTabs.jsx',
+    'frontend/src/pages/admin/ReferralReview.jsx',
+  ]],
+  ['frontend/src/pages/admin/programs/ProgramPage.jsx', [
+    'frontend/src/pages/admin/programs/ProgramFrame.jsx',
+    'frontend/src/pages/admin/programs/ProgramTabs.jsx',
+    'frontend/src/pages/admin/programs/LearningPages.jsx',
+    'frontend/src/pages/admin/programs/PerksPages.jsx',
+    'frontend/src/pages/admin/programs/ReferralPartners.jsx',
+  ]],
 ]);
 
 /** path → the files whose doors that path can reach. */
@@ -492,15 +515,21 @@ test('every in-page /admin link points at a registered route', () => {
 test('a redirect-only /admin route is excluded, and its target is reachable', () => {
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
-  assert.deepEqual(REDIRECTS, ['/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news'],
+  // D953's Programs redirects and D937/D972's Lab/network redirects coexist.
+  assert.deepEqual(REDIRECTS, ['/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/programs', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
   // (D893: HeldInsightsRedirect sends /admin/held/insights to INSIGHTS_PATH;
-  // D930: HeldCommunityRedirect sends /admin/held/community to COMMUNITY_PATH).
+  // D930: HeldCommunityRedirect sends /admin/held/community to COMMUNITY_PATH;
+  // D953: the three Programs redirects take theirs from programsModel.js).
+  const PROGRAMS_MODEL = 'frontend/src/pages/admin/programs/programsModel.js';
   const COMPONENT_TARGETS = {
     HeldInsightsRedirect: ['/admin/insights', 'frontend/src/pages/admin/insights/insightsModel.js', 'INSIGHTS_PATH'],
     HeldCommunityRedirect: ['/admin/community', 'frontend/src/pages/admin/community/communityModel.js', 'COMMUNITY_PATH'],
+    HeldProgramsRedirect: ['/admin/programs', PROGRAMS_MODEL, 'PROGRAMS_PATH'],
+    AdvisorCohortsRedirect: ['/admin/programs/mentor-cohorts/people', PROGRAMS_MODEL, 'MENTOR_PEOPLE_PATH'],
+    ReferEarnRedirect: ['/admin/programs/refer-and-earn/queue', PROGRAMS_MODEL, 'REFER_QUEUE_PATH'],
     // D937 (#2374): the Lab and its preview moved under Programs.
     LabRedirect: ['/admin/programs/spinout-lab', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PATH'],
     LabPreviewRedirect: ['/admin/programs/spinout-lab/preview', 'frontend/src/pages/admin/lab/labModel.js', 'LAB_PREVIEW_PATH'],
