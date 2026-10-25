@@ -502,7 +502,7 @@ export function StackBars({ rows, onSelect, testIdPrefix = 'stack' }) {
  * record, drawn hollow with a dotted ring, as CT7's Today; the rest are
  * modelled. `suffix` follows each axis value (`%`).
  */
-export function WeekLines({ series, labels, height = 220, currentIndex = labels.length - 1, recordIndex = null, suffix = '' }) {
+export function WeekLines({ series, labels, height = 220, currentIndex = labels.length - 1, recordIndex = null, suffix = '', onSelect }) {
   const [ref, W] = useBoxWidth();
   const Lx = 30;
   const R = 18;
@@ -539,11 +539,25 @@ export function WeekLines({ series, labels, height = 220, currentIndex = labels.
               ? <polyline key={run[0].i} points={run.map((p) => `${X(p.i)},${Y(p.v)}`).join(' ')} fill="none" strokeWidth="2.2"
                   strokeDasharray={s.dash ? '5 4' : undefined} className={STROKE[s.tone] || STROKE_V} />
               : null))}
-            {s.values.map((v, i) => (v === null || v === undefined ? null : i === recordIndex
-              ? <circle key={i} cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" strokeDasharray="2 2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} data-on-record="true" />
-              : i === currentIndex
-              ? <circle key={i} cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} />
-              : <circle key={i} cx={X(i)} cy={Y(v)} r="3" className={FILL[s.tone] || FILL.violet} />))}
+            {s.values.map((v, i) => {
+              if (v === null || v === undefined) return null;
+              const dot = i === recordIndex
+                ? <circle cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" strokeDasharray="2 2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} data-on-record="true" />
+                : i === currentIndex
+                ? <circle cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} />
+                : <circle cx={X(i)} cy={Y(v)} r="3" className={FILL[s.tone] || FILL.violet} />;
+              // D1121: a series marked `clickable` opens what its points count, by key or click.
+              if (!s.clickable || !onSelect) return <React.Fragment key={i}>{dot}</React.Fragment>;
+              const open = () => onSelect(s.key ?? s.label, i);
+              return (
+                <g key={i} role="button" tabIndex={0} aria-label={`${s.label}, ${labels[i]}: ${v}. Open the list.`} className="cursor-pointer"
+                  onClick={open} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+                  data-testid={`weeklines-point-${s.key ?? s.label}-${i}`}>
+                  <circle cx={X(i)} cy={Y(v)} r="10" fill="transparent" />
+                  {dot}
+                </g>
+              );
+            })}
           </g>
         ))}
         {labels.map((l, i) => (i % every === 0 || i === last
@@ -812,7 +826,7 @@ export function Chart({ chart, onSelect }) {
   if (chart.type === 'terms') return <TermBars rows={chart.rows} from={chart.from} to={chart.to} />;
   if (chart.type === 'grouped') return <GroupedColumns rows={chart.rows} series={chart.series} height={chart.height} />;
   if (chart.type === 'stackbars') return <StackBars rows={chart.rows} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
-  if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} />;
+  if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} onSelect={onSelect} />;
   if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} references={chart.references} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
   if (chart.type === 'line') return <WeekLine values={chart.values} labels={chart.labels} previous={chart.previous} />;
   if (chart.type === 'bar100') return <Bar100 parts={chart.parts} />;

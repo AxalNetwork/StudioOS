@@ -34,6 +34,10 @@ export const eventsApi = {
   answerInvitation: (id, action) => request(`/events/${id}/invitation`, { method: 'POST', body: JSON.stringify({ action }) }),
   // D1032: the host's cancel; paid tickets go to the Events desk for refunds.
   cancel: (id, note) => request(`/events/${id}/cancel`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
+  // D1035: the caller cancels their own place (DELETE /:id/registration); a held seat goes to the waitlist.
+  cancelPlace: (id) => request(`/events/${id}/registration`, { method: 'DELETE' }),
+  // D1033's add-to links (GET /api/calendar/event-links/:id): Google, Outlook and the .ics path.
+  calendarLinks: (id) => request(`/calendar/event-links/${encodeURIComponent(String(id))}`),
   // GET /:id — read one (host or admin).
   get: (id) => request(`/events/${id}`),
   // POST / — create an event (host).

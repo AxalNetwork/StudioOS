@@ -202,6 +202,8 @@ export function shapeJobPosting(row: any, opts: { includePrivate?: boolean } = {
   if (opts.includePrivate) {
     base.admin_published = TRUTHY(row.admin_published);
     base.review_notes = row.review_notes ?? null;
+    // D1121 (migration 609): when an admin last approved it; null before 609 or never approved.
+    base.published_at = row.published_at ?? null;
   }
   return base;
 }

@@ -6,8 +6,8 @@ import { CARD, H2, SUB, INPUT, TH, TD, Select, Pager, useRead } from './labParts
 import { ReadState } from './labOperationsParts';
 import { ACTIVITY_TYPES, BY, SORT, byWord, eventWord, pageOf, stamp, supportRows, requireActivity, requireSupport } from './labOperationsModel';
 
-function LogPage({ query, page, setPage, tick, retry }) {
-  const read = useRead('lab-activity', tick, () => labOperationsApi.activity({ ...query, limit: 25, offset: (page - 1) * 25 }).then(requireActivity));
+export function LogPage({ query, page, setPage, tick, retry }) {
+  const read = useRead(`lab-activity:${JSON.stringify(query)}:${page}`, tick, () => labOperationsApi.activity({ ...query, limit: 25, offset: (page - 1) * 25 }).then(requireActivity));
   const data = read.data;
   const shown = data ? { page, pages: Math.max(1, Math.ceil(data.total / 25)), size: 25, total: data.total, from: data.items.length ? (page - 1) * 25 + 1 : 0, to: Math.min(page * 25, data.total) } : null;
   return <>
