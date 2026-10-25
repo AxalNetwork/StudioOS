@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { api, programGrantsApi } from '../../../lib/api';
+import { api } from '../../../lib/api';
+import { programGrantsApi } from '../../../lib/api/programGrants';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderMenuItem, HeaderTab } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';

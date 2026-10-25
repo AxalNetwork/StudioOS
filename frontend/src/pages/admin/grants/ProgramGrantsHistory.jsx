@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { programGrantsApi } from '../../../lib/api';
+import { programGrantsApi } from '../../../lib/api/programGrants';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderMenuItem } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
