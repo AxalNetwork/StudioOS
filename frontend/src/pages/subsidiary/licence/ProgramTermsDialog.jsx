@@ -64,7 +64,7 @@ export default function ProgramTermsDialog({ program, status, onClose, onRequest
         </div>
         <div className="sticky bottom-0 flex gap-2 border-t border-gray-200 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
           {isHeld(program) && (
-            <button type="button" onClick={() => onRequestChange?.(program)} className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:flex-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" data-testid="program-terms-change">
+            <button type="button" onClick={() => onRequestChange?.(program)} className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 sm:flex-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800" data-testid="program-terms-change">
               Request a change
             </button>
           )}
