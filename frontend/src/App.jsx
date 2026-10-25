@@ -2889,6 +2889,7 @@ function AppInner() {
       {/* D1008 (#2386): Payments, its two tabs as sub-paths, HQ only; /admin?tab=payments forwards here (LegacyContractsRedirect). */}
       <Route path="/admin/platform/payments" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/payments/stripe" element={guard(['admin'], hqOnly(<Payments />))} />
+      <Route path="/admin/platform/payments/log" element={guard(['admin'], hqOnly(<Payments />))} />
       <Route path="/admin/platform/meeting-bots" element={guard(['admin'], hqOnly(<HqMeetingBotsPage />))} />
       <Route path="/admin/platform/topology" element={guard(['admin'], hqOnly(<HqPlatformTopologyPage />))} />
       <Route path="/admin/platform/allowances" element={guard(['admin'], hqOnly(<HqPlatformAllowancesPage />))} />

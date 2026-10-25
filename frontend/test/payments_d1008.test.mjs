@@ -40,7 +40,8 @@ const AUD = [{ value: 'founders', label: 'For Founders' }, { value: 'legal_servi
 test('the addresses, the redirect, the strip and the moved notice', () => {
   assert.equal(tabOf('/admin/platform/payments'), 'catalogue');
   assert.equal(tabOf('/admin/platform/payments/stripe/'), 'stripe');
-  assert.equal(tabOf('/admin/platform/payments/log'), null, 'the change log waits for its read');
+  assert.equal(tabOf('/admin/platform/payments/log'), 'log', 'D1014 drew the change log');
+  assert.equal(tabOf('/admin/platform/payments/elsewhere'), null);
   assert.equal(legacyContractsTarget('?tab=payments'), '/admin/platform/payments?moved=payments');
   assert.equal(stripFor('/admin/platform/payments/stripe'), 'Platform');
   assert.equal(MOVED_NOTICES.payments, 'The Admin Console has moved: Payments now lives under Platform.');
@@ -131,6 +132,7 @@ function stub(over = {}) {
     '/api/admin/stripe/config': () => json({ publishable_key: 'pk_live_••••4821', mode: 'live', configured: true }),
     '/api/admin/stripe/webhook': () => json(WEBHOOK),
     '/api/admin/platform/summary': () => json(SUMMARY),
+    '/api/admin/payments/webhook-deliveries': () => json({ available: true, window_hours: 24, deliveries: 212, not_2xx: 2, last: { status_code: 200, latency_ms: 84, at: '2026-10-24 14:02:00' }, hours: [] }),
     ...over,
   };
   globalThis.fetch = async (url) => {
@@ -172,7 +174,7 @@ test('mounted Stripe connection: the account, the key and its mismatch, our endp
     assert.match(v.of('pay-key-match'), /The publishable key is Test, the account is Live/);
     assert.match(v.of('pay-endpoint-ours'), /charge\.refunded — missing.*1 missing/s);
     assert.match(v.of('pay-endpoint-other'), /Not used by this platform/);
-    assert.match(v.of('pay-deliveries'), /212 deliveries · 2 not accepted.*Per hour: Not read here yet/s);
+    assert.match(v.of('pay-deliveries'), /212 deliveries · 2 not accepted.*Last delivery: 24 Oct 2026, 14:02 UTC · 200 · 84 ms/s);
     assert.match(v.of('pay-mirror'), /4 active of 5 products · 5 active of 6 prices/);
     assert.ok(!s.seen.includes('/api/admin/catalog/products'), 'Stripe connection read the catalogue');
   } finally { await v.unmount(); s.restore(); }

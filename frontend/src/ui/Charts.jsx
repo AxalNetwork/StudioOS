@@ -154,7 +154,7 @@ export function Columns({ rows, height = 220, pct = false, max: maxIn }) {
           let bar;
           if (r.open) {
             h = ch * 0.5;
-            bar = <rect x={x} y={top + ch - h} width={bw} height={h} fill="none" strokeDasharray="3 3" className="stroke-axal-muted" />;
+            bar = <rect x={x} y={top + ch - h} width={bw} height={h} fill="none" strokeDasharray="3 3" className="stroke-axal-muted dark:stroke-gray-400" />;
           } else if (r.toDate) {
             bar = <rect x={x} y={top + ch - h} width={bw} height={h} fill={`url(#${hatch})`} className={STROKE_V} />;
           } else if (r.parts?.length) {
