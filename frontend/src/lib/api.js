@@ -21,6 +21,7 @@ export * from './api/adminMercury.js';
 export * from './api/adminNetwork.js';
 export * from './api/adminPartnerFirms.js';
 export * from './api/adminPayments.js';
+export * from './api/adminPrograms.js';
 export * from './api/aiBudget.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';
