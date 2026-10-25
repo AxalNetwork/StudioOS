@@ -10,6 +10,7 @@ import { railBody } from './railPages.js';
 // this file. See lib/api/README.md. scripts/check-api-drift.mjs fails if this
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
+export * from './api/accountCompanies.js';
 export * from './api/adminAiUsage.js';
 export * from './api/adminApprovals.js';
 export * from './api/adminCapitalAttestations.js';
@@ -2853,11 +2854,6 @@ export const api = {
   // D767 — keep the proposal as the new current version, or discard it (only it).
   deckKeepProposal: (proposalId) => request(`/decks/proposals/${proposalId}/keep`, { method: 'POST', body: '{}' }),
   deckDiscardProposal: (proposalId) => request(`/decks/proposals/${proposalId}`, { method: 'DELETE' }),
-  // Task #10 — one-click positioning: pulls the project's team, traction and
-  // updates, returns { one_liner, elevator_pitch, positioning_lines[],
-  // sourced_from }. 503 `ai_unavailable` when no AI provider is configured
-  // (dev FastAPI has no such route → shows an explicit error, never fake lines).
-  deckPositioning: (projectId, headers) => request('/decks/positioning', { method: 'POST', headers, body: JSON.stringify({ project_id: projectId }) }),
   // Task #41 — assemble the NEW 10-slide Spin-Out deck DATA + NOTES + gaps[]
   // (the Worker remaps the live Lab data). The browser renders/downloads the
   // .pptx from this via frontend/src/decks/spinout/buildDeck.js. Returns

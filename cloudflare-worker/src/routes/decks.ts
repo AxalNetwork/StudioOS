@@ -9,14 +9,12 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { hydrateSuperAdmin, isSuperAdmin, requireAuth } from '../auth';
 import { projectOwned as sharedProjectOwned } from '../middleware/projectContentAccess';
-import { ensureProjectMembershipSchema, getProjectMembershipRole } from '../services/projectAccess';
+import { getProjectMembershipRole } from '../services/projectAccess';
 import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
-import { autofillDeck, toEditorSlides, parseJsonLoose } from '../services/decks/autofill';
-import { run as aiRouterRun } from '../services/aiRouter';
-import { AI_SURFACE } from '../services/aiSurfaces';
+import { autofillDeck, toEditorSlides } from '../services/decks/autofill';
 // Task #15 — Axal 28-day Spin-Out Lab demo day deck. Custom autofill
 // path that bypasses the generic field-source vocabulary in autofill.ts
 // because the deck binds to Lab tables (interviews, milestones, OKRs)
@@ -31,7 +29,7 @@ import { renderDeckPPTX, renderDeckPPTXWithImages } from '../services/decks/pptx
 import { stripTrailingSlashes } from '../util/url';
 import { bindingKey } from '../util/schemaBootstrap';
 import { refuse } from '../util/refusal';
-import { railFor, refuseRun } from '../util/railContext';
+import { railFor } from '../util/railContext';
 import { slideTotals, recordSlideSeconds } from '../services/deckSlideDwell';
 import { logCycleWrite } from '../services/cycleActivity';
 import { shareAnalytics, type LinkAnalytics } from '../services/decks/shareAnalytics';
@@ -542,162 +540,6 @@ export async function insertVersion(env: Env, projectId: number, slides: any[], 
 
 // D897 (#2677): POST /generate moved to `routes/deck_new.ts`, where it builds a
 // proposal the founder keeps card by card instead of writing a version.
-
-// Task #10 — One-liner & Elevator pitch generator ("one-click positioning").
-// Pulls the selected project's TEAM (recorded founder and accepted members), TRACTION (project
-// columns + financial model) and recent UPDATES (submitted
-// portfolio updates), then asks the AI for a punchy one-liner, a short
-// elevator pitch and 3-5 alternate positioning lines. Growth-tier, owner-
-// scoped. Uses the held, guarded run path; a refused run has no silent
-// fallback and no fabricated lines (security-first / explicit-error prefs).
-decks.post('/positioning', async (c) => {
-  ensureTier(await requireAuth(c), 'studio'); // D683: Raise + Grow
-  const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
-  const pid = parseInt(body?.project_id);
-  if (!pid) return c.json({ error: 'project_id required' }, 400);
-
-  let p: any;
-  try {
-    await projectOwned(c, user, pid, { write: true });
-    p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
-  } catch (e: any) {
-    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
-    return c.json({ error: 'forbidden' }, 403);
-  }
-  if (!p) return c.json({ error: 'not found' }, 404);
-
-  // --- Gather grounding data (each source degrades to empty on failure). ---
-  // Only the venture's recorded team. Share ownership is never a team record.
-  let team: string[] = [];
-  let advisors: string[] = [];
-  let teamReadable = true;
-  try {
-    await ensureProjectMembershipSchema(c.env);
-    const rows = await c.env.DB.prepare(
-      `WITH target AS (SELECT id, founder_id FROM projects WHERE id = ?)
-        SELECT u.id, u.name,
-          CASE WHEN u.role = 'founder' AND u.founder_id = p.founder_id THEN 'founder' ELSE pm.role END AS member_role
-        FROM users u JOIN (
-          SELECT u.id FROM users u JOIN target p ON u.founder_id = p.founder_id WHERE u.role = 'founder'
-          UNION
-          SELECT pm.user_id FROM project_members pm JOIN target p ON pm.project_id = p.id
-            WHERE pm.status = 'accepted' AND pm.role IN ('owner', 'cofounder', 'advisor')
-        ) t ON u.id = t.id CROSS JOIN target p
-        LEFT JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = u.id
-        WHERE u.is_active = 1 AND trim(COALESCE(u.name, '')) <> ''
-        ORDER BY CASE WHEN u.role = 'founder' AND u.founder_id = p.founder_id THEN 0 WHEN pm.role = 'advisor' THEN 2 ELSE 1 END, u.id LIMIT 6`,
-    ).bind(pid).all<{ id: number; name: string; member_role: string }>();
-    const recorded = rows.results ?? [];
-    team = recorded.filter((u) => u.member_role !== 'advisor').map((u) => String(u.name ?? '').trim()).filter(Boolean);
-    advisors = recorded.filter((u) => u.member_role === 'advisor').map((u) => String(u.name ?? '').trim()).filter(Boolean);
-  } catch { teamReadable = false; }
-  const teamStatus = !teamReadable ? 'unreadable' : team.length ? 'recorded' : 'not_recorded';
-
-  // Financials — runway / burn / LTV:CAC add credible traction color.
-  let fin: any = null;
-  try {
-    const fmRow = await c.env.DB
-      .prepare('SELECT computed_json, assumptions_json FROM financial_models WHERE project_id = ? AND updated_by IS NOT NULL')
-      .bind(pid).first<any>();
-    if (fmRow?.computed_json) { try { fin = JSON.parse(fmRow.computed_json); } catch { fin = null; } }
-    if (!fin && fmRow?.assumptions_json) { try { fin = JSON.parse(fmRow.assumptions_json); } catch { fin = null; } }
-  } catch { /* table may not exist in dev */ }
-
-  // Recent submitted portfolio updates → the "updates" grounding.
-  let updates: Array<{ period: string | null; title: string }> = [];
-  try {
-    const ur = await c.env.DB.prepare(
-      `SELECT period, title FROM portfolio_updates
-       WHERE project_id = ? AND status = 'submitted'
-       ORDER BY COALESCE(submitted_at, updated_at) DESC LIMIT 5`,
-    ).bind(pid).all<{ period: string | null; title: string }>();
-    updates = (ur.results || []).filter((u) => String(u.title || '').trim());
-  } catch { /* table may not exist in dev */ }
-
-
-  const hasTraction = !!(
-    p.traction_summary || p.growth_signals || p.users_count || p.revenue
-  );
-  const sourced_from = {
-    team: teamReadable ? team.length : null,
-    advisors: teamReadable ? advisors.length : null,
-    team_status: teamStatus,
-    traction: hasTraction,
-    updates: updates.length,
-    financials: !!fin,
-  };
-
-  const ctx = {
-    name: p.name, sector: p.sector, stage: p.stage,
-    description: p.description, problem: p.problem_statement,
-    solution: p.solution, why_now: p.why_now,
-    tagline: p.tagline, vision: p.vision,
-    tam: p.tam, sam: p.sam, som: p.som,
-    users: p.users_count, revenue: p.revenue,
-    traction_summary: p.traction_summary,
-    growth_signals: p.growth_signals, funding_needed: p.funding_needed,
-    team, advisors, team_status: teamStatus,
-    runway_months: fin?.runway_months, ltv_cac_ratio: fin?.ltv_cac_ratio,
-    avg_monthly_burn: fin?.avg_monthly_burn,
-    recent_updates: updates.map((u) => (u.period ? `${u.period}: ${u.title}` : u.title)),
-  };
-
-  const prompt = `You are a world-class startup positioning strategist.
-Using ONLY the startup data below, craft investor-ready positioning.
-
-Startup data (JSON):
-${JSON.stringify(ctx)}
-
-Return ONLY valid JSON of exactly this shape:
-{
-  "one_liner": "<one punchy sentence, <= 15 words, no buzzwords>",
-  "elevator_pitch": "<2-3 sentences a founder can say in ~20 seconds>",
-  "positioning_lines": ["<line 1>", "<line 2>", "<line 3>", "<line 4>"]
-}
-
-Rules:
-- 3 to 5 positioning_lines, each <= 18 words, each a DISTINCT angle
-  (customer value, market wedge, why-now, outcome).
-- Concrete and specific to THIS startup — never generic filler.
-- Never invent metrics, customers, or funding not present in the data.
-- The advisors field contains advisors only. Never describe them as founders or members of the operating team.
-- An empty team contains no recorded names. Do not infer a team from share ownership or invent team members.`;
-
-  const result = await aiRouterRun(c.env, {
-    task: 'rail_write',
-    userId: Number(user.id),
-    surface: AI_SURFACE.raisePitch,
-    rail: railFor(c, { page: 'Founder · Raise · Pitch deck', option: 'draft:positioning' }, `project:${pid}`),
-    systemPrompt: 'You are a senior startup positioning strategist. Always return valid JSON.',
-    messages: [{ role: 'user', content: prompt }],
-    temperature: 0.6,
-    maxTokens: 700,
-  });
-  if (!result.ok || !result.output) {
-    return refuseRun(c, result) || c.json({ error: 'ai_unavailable', code: 'ai_unavailable', message: 'The positioning generator could not complete. Please try again.' }, 503);
-  }
-  const parsed = parseJsonLoose<any>(result.output);
-
-  const one_liner = typeof parsed?.one_liner === 'string' ? parsed.one_liner.trim() : '';
-  const elevator_pitch = typeof parsed?.elevator_pitch === 'string' ? parsed.elevator_pitch.trim() : '';
-  const positioning_lines = Array.isArray(parsed?.positioning_lines)
-    ? parsed.positioning_lines.map((s: any) => String(s).trim()).filter(Boolean).slice(0, 6)
-    : [];
-
-  if (!one_liner && !elevator_pitch && positioning_lines.length === 0) {
-    return c.json({ error: 'ai_failed', code: 'ai_failed', message: 'The positioning generator returned nothing usable. Please try again.' }, 502);
-  }
-
-  return c.json({
-    project_id: pid,
-    project_name: String(p.name || ''),
-    one_liner,
-    elevator_pitch,
-    positioning_lines,
-    sourced_from,
-  });
-});
 
 /** GET /api/decks/recommend?project_id=... — suggested method for project. */
 decks.get('/recommend', async (c) => {
