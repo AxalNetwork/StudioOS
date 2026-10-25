@@ -86,13 +86,25 @@ export function sheetMode({ user, role, plan, held }) {
   return 'pay';
 }
 
-/** The plan summary's "Included" lines: the AI allowance, storage as not read, then the card's own lines. */
+/**
+ * The plan summary's "Included" lines: the AI allowance, storage, then the
+ * plan's own lines. D1050 (#2901): the lines and the storage are the plan
+ * catalogue's, sent on the plans read as `plan.catalogue`; the Pricing card's
+ * lines are the fallback for a read from before it. Storage is a figure only
+ * when the catalogue holds one, else its reason (#2449).
+ */
 export function includedLines(plan, spec, interval) {
   const price = intervalPrice(plan, interval) || intervalPrice(plan, interval === 'yearly' ? 'monthly' : 'yearly');
-  const feats = (spec?.feats || []).filter((f) => !/of AI tokens a month$/.test(f));
+  const cat = plan?.catalogue;
+  const lines = Array.isArray(cat?.included) ? cat.included : (spec?.feats || []);
+  const feats = lines.filter((f) => !/of AI tokens a month$/.test(f) && f !== 'AI runs from AI tokens you top up');
+  const bytes = Number(cat?.storage?.bytes);
+  const storage = Number.isFinite(bytes) && bytes > 0
+    ? { key: 'storage', text: `${(bytes / 1e9).toLocaleString('en-US', { maximumFractionDigits: 1 })} GB of storage`, measured: true }
+    : { key: 'storage', text: cat?.storage?.reason || STORAGE_WAITS, measured: false };
   return [
     { key: 'ai', text: price?.ai || 'AI runs from AI tokens you top up', measured: !!price?.ai },
-    { key: 'storage', text: STORAGE_WAITS, measured: false },
+    storage,
     ...feats.map((f) => ({ key: f, text: f, measured: true })),
   ];
 }

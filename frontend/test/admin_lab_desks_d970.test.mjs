@@ -389,6 +389,6 @@ test('the source: no browser pop-up, no bare dash, no venture filter in the brow
   assert.doesNotMatch(files, /'—'|"—"|>—</, 'no bare dash stands in for a value');
   assert.doesNotMatch(files, /venture_id|lab_venture|isLabVenture/, 'nothing filters by venture until part 4');
   const lab = read('frontend/src/pages/admin/lab/AdminLab.jsx');
-  assert.match(lab, /const DESKS = \{ hosts: LabHosts, formation: LabFormation, graduation: LabGraduation \};/);
+  assert.match(lab, /const DESKS = \{ hosts: LabHosts, formation: LabFormation, graduation: LabGraduation,/);
   assert.doesNotMatch(lab, /hosts: \['hosts'\]|formation: \['review83b'|graduation: \['certificates'\]/);
 });

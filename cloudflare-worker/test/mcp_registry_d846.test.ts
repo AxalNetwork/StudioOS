@@ -160,10 +160,12 @@ test('a connection that is not active does not list its tool', async () => {
   assert.ok(!(await names(await session(env, grant(FAY, [P, P2]), READS))).includes('get_build_progress'));
 });
 
-test('a plan past due drops a plan-gated tool', async () => {
+test('an unpaid plan drops a plan-gated tool; one Stripe is still retrying keeps it (D1052)', async () => {
   const { env, db } = fixture();
-  db.exec(`UPDATE users SET subscription_status = 'past_due' WHERE id = ${FAY}`);
+  db.exec(`UPDATE users SET subscription_status = 'unpaid' WHERE id = ${FAY}`);
   assert.ok(!(await names(await session(env, grant(FAY, [P]), READS))).includes('d846_studio_only'));
+  db.exec(`UPDATE users SET subscription_status = 'past_due' WHERE id = ${FAY}`);
+  assert.ok((await names(await session(env, grant(FAY, [P]), READS))).includes('d846_studio_only'));
 });
 
 // ── The hidden-tool call ─────────────────────────────────────────────────────

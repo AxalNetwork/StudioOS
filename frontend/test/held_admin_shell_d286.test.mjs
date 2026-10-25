@@ -210,14 +210,18 @@ test('Approvals draws the canvas\'s twenty lanes, each with a literal door; mode
   assert.deepEqual(Object.keys(doors).sort(), LANES.map((l) => l.key).sort(), 'every lane has exactly one door');
   for (const [k, to] of Object.entries(doors)) assert.ok(routeLine(pathOf(to)), `${k} opens ${to}, which is not a registered route`);
   assert.equal(doors.moderation, '/admin/spinout-moderation', 'Spinout moderation lost its console — D442 built it and D506 made this lane its HQ door');
-  // The eleven laned queues the glance counts are the lanes with a glance key.
+  // The laned queues the glance counts are the lanes with a glance key: D215's
+  // eleven and D1041's eight (#2889). Product testers has no store yet.
   assert.deepEqual(LANES.filter((l) => l.glance).map((l) => l.glance).sort(),
-    ['best_fit', 'cohort', 'due_diligence', 'events', 'exploring', 'jobs', 'kyc', 'lp', 'moderation', 'partner_profiles', 'referrals']);
+    ['articles', 'best_fit', 'cohort', 'comarketing', 'due_diligence', 'events', 'exploring', 'jobs', 'kyb', 'kyc', 'lab_hosts', 'lp',
+      'moderation', 'partner_profiles', 'perk_listings', 'referrals', 'score_flags', 'strategic_access', 'wellbeing_experts']);
   // Queued consoles belong on Approvals by the H35 map.
   const laned = new Set(ADMIN_PLACEMENT
     .filter((e) => [e, ...(e.also || [])].some((p) => p.tier === 'Admin' && p.row === 'Approvals'))
     .map((e) => e.route));
-  for (const l of LANES.filter((x) => x.glance)) {
+  // D215's eleven only: the nine new lanes' doors are D1038's canvas, drawn after the H35 map,
+  // and every door is a registered route by the check above.
+  for (const l of LANES.filter((x) => x.glance && !x.isNew)) {
     const route = doors[l.key];
     // The Lab's queue is placed on Programs (D937); moderation (D442) postdates the map (D506);
     // Events opens the desk's Review tab, a sub-path of the placed /admin/events (D1038).

@@ -13,7 +13,8 @@ const SOURCES = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/servi
 test('every lane the worker sends has an entry in LANE_CONSOLE', () => {
   // A lane missing here would render "no console" on real work that HAS one.
   const keys = [...SOURCES.matchAll(/^\s{4}key: '([a-z_]+)',$/gm)].map((m) => m[1]);
-  assert.equal(keys.length, 11, `expected eleven lanes, found ${keys.join(', ')}`);
+  // D1041 (#2889) adds eight to D215's eleven.
+  assert.equal(keys.length, 19, `expected nineteen lanes, found ${keys.join(', ')}`);
   const block = PAGE.slice(PAGE.indexOf('const LANE_CONSOLE'), PAGE.indexOf('const VIEWS'));
   for (const k of keys) assert.match(block, new RegExp(`\\n\\s+${k}: `), `${k} has no LANE_CONSOLE entry`);
 });

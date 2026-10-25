@@ -5,7 +5,7 @@ built to the owner's canvas (SL1–SL21, `design/incoming/Spin-Out Lab Admin Pag
 under the shared admin page header (D936, `../../../ui/AdminPageHeader.jsx`).
 Its tabs are sub-paths: `/applications`, `/cohorts` (and one cohort at
 `/cohorts/YYYY-MM`, D947), `/participants` (one founder at `/participants/:uid`, D949), `/hosts`,
-`/formation` and `/graduation`; the founder-journey preview is `/preview`.
+`/formation`, `/graduation`, `/how-it-runs`, `/settings` and `/activity`; the founder-journey preview is `/preview`.
 
 Three old doors forward here before any old console mounts, keeping the query
 and hash and adding `?moved=`:
@@ -67,3 +67,18 @@ and hash and adding `?moved=`:
   subtree.
 - Each tab is a literal `HeaderTab`, so the reachability walk finds its door.
 - Dates are the Lab's rule and cannot be moved here. Times are ET.
+
+D971 (#2756), SL12–SL14 and SL21:
+- `LabHowItRuns.jsx` reads the published playbook. Super Admin draft edits and
+  publishing use separate in-page dialogs; the monthly checklist and admin tools
+  link to the live desks. The calendar links to the live cohort calendar rather
+  than copying a sample chart into the playbook.
+- `LabSettings.jsx` reads operative cohort size, edits Minimum or Places in a
+  dialog, reads a selected licensed studio's grant for a Super Admin, and draws
+  the fixed rules. An Admin's grant terms wait explicitly for #2775.
+- `LabActivity.jsx` reads the Worker's filtered and paged history. Super Admin
+  support sessions read separately and search/page over the newest 100 records;
+  an Admin makes no support-session request.
+- `labOperationsModel.js` holds words, ET stamps, validators and support paging;
+  `labOperationsParts.jsx` gives these tabs their explicit Unreadable / Try again
+  block while reusing the shared loading and stale states.
