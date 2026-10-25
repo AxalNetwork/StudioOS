@@ -7,6 +7,7 @@ files say how to act on it.
 
 | File | Use it to |
 | --- | --- |
+| `STRIPE_RENEWAL_GRACE.md` | Configure failed-payment termination and verify the bounded grace and webhook payload version (D1100). |
 | `DEPLOY.md` | Ship the Worker and the SPA to production, and roll a deploy back. |
 | `D1_RECOVERY.md` | Recover D1 when the data is wrong and a Worker rollback will not help. |
 | `INCIDENT_RESPONSE.md` | Respond to an incident: severities, response times and who is paged. |
