@@ -102,3 +102,8 @@ fe8fe20055a0ccb2a32530287fbf08aab27420f1:cloudflare-worker/test/validate_sources
 # D923 / PR #2706: redemptions90 is a UI tile key for the 90-day referral
 # count, not a credential. Ignore only this historical generic-api-key finding.
 beecd4b9f67fda255e419c41b8a54c85566acced:frontend/src/pages/admin/partners/partnersDeskModel.js:generic-api-key:937
+# D1039 (#2887): the synthetic JWT signing string in the D1039 route test's first
+# commit. It signs test tokens for an in-memory database only, and was never a
+# credential. The next commit builds a low-entropy key at run time instead, so no
+# later commit carries the literal. Scoped to the one finding, as D334's entry is.
+a556b308533429691cb10b1e92092615b1364a82:cloudflare-worker/test/approvals_fixes_d1039.test.ts:generic-api-key:34
