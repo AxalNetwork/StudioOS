@@ -21,6 +21,7 @@ Builds the deck payload from the venture's real records and renders it.
 | `videoLink.ts` | D898, PD8c: a video block's YouTube or Vimeo link, checked with the provider's own oEmbed endpoint before it is placed. Two fixed URLs, no redirect followed, the poster on the provider's image host; behind `GET /api/decks/video-link`. |
 | `deckVersionColumns.ts` | D898: migration 539's four `pitch_decks` columns where it has not run, awaited by both runtime creators of the table. Imports nothing, so the advisor's write router can call it. |
 | `sources.ts` | D896 (#2675): `DECK_SOURCES`, one read-only adapter per row of #2434's sources table, a fixed slot list, `sourceAndGrade` (the one origin → Source and grade mapping), coverage, snapshot hashes and the binding compare behind `POST /api/decks/:id/refresh`. Writes nothing; no model runs. |
+| `chartSeries.ts` | D898 group C (#2676): `CHART_SERIES`, the dated series a deck chart plots (Grow's monthly snapshots, Stripe and typed apart; Validate's interviews per week), each with its points, Source, grade and snapshot; `chartFits`, how many each of the twelve chart types can draw and why not. Read by `GET /api/decks/chart-series` and the refresh. Writes nothing; no model runs. |
 
 ## The rule
 

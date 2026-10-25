@@ -28,7 +28,16 @@
 //                                                                 400 invalid_request, 409 not_withdrawable (D1198)
 //   `told` is counts only: `owner` is null for HQ's own programme, `mail_reach`
 //   how many Mail's testers:<uid> rule would write to. StudioOS sends no email.
-//   create, edit, applicants, pick, decline: as the partner's, on HQ's own programmes.
+//   create, edit, pick, decline: as the partner's, on HQ's own programmes.
+//   applicants       GET   /admin/testing/programmes/:uid/applicants → { programme, items, can_decide }:
+//                         any programme's (D1197); a partner's is read only, `can_decide: false`
+//   events           GET   /admin/testing/programmes/:uid/events?page=&page_size= → { programme, events: { available, page, total, items } }
+//   applications     GET   /admin/testing/applications?programme=&owner=&status=&role=&consented=&tester=&q=&sort=&page=&page_size=
+//                         → { applications: { available, page, total, sort, items } }; status none leaves withdrawn out, `all` keeps it
+//
+// `adminProductTestersApi`, the tester pool (D1042's store, migration 576; read by
+// D1195's Tester pool tab):
+//   list             GET   /admin/product-testers?status=&page=   → { rows, page, page_size, matching, totals }
 //
 // Every path is written out in full so the drift check (scripts/check-api-drift.mjs)
 // reads each one against the Worker.
@@ -72,6 +81,32 @@ export const adminTestingApi = {
   create: (programme) => request('/admin/testing/programmes', { method: 'POST', body: JSON.stringify(programme) }),
   edit: (uid, changes) => request(`/admin/testing/programmes/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   applicants: (uid) => request(`/admin/testing/programmes/${enc(uid)}/applicants`),
+  events: (uid, { page = 1, pageSize } = {}) => {
+    const q = new URLSearchParams({ page: String(page) });
+    if (pageSize) q.set('page_size', String(pageSize));
+    return request(`/admin/testing/programmes/${enc(uid)}/events?${q}`);
+  },
+  applications: (filters = {}) => {
+    const q = new URLSearchParams();
+    for (const k of ['programme', 'owner', 'status', 'role', 'consented', 'tester', 'q', 'sort', 'page', 'page_size']) {
+      if (filters[k] != null && filters[k] !== '') q.set(k, String(filters[k]));
+    }
+    const qs = q.toString();
+    return request(`/admin/testing/applications${qs ? `?${qs}` : ''}`);
+  },
   pick: (uid) => request(`/admin/testing/applications/${enc(uid)}/pick`, { method: 'POST' }),
   decline: (uid) => request(`/admin/testing/applications/${enc(uid)}/decline`, { method: 'POST' }),
+};
+
+export const TESTER_STATUSES = ['applied', 'active', 'paused', 'declined', 'removed'];
+
+export const adminProductTestersApi = {
+  list: (status, page = 1) => {
+    if (status != null && status !== '' && !TESTER_STATUSES.includes(status)) throw new Error(`Unknown tester status: ${status}`);
+    const q = new URLSearchParams();
+    if (status) q.set('status', status);
+    if (page > 1) q.set('page', String(page));
+    const qs = q.toString();
+    return request(`/admin/product-testers${qs ? `?${qs}` : ''}`);
+  },
 };

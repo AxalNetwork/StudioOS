@@ -66,7 +66,7 @@ test('all fourteen rows are present: the canvas\'s eleven in canvas order, with 
   // whose strip carried both.
   // D953 (#2371): the Programs row the canvas draws after Licences
   // (`Programs Page.dc.html:509`), lit on every program page by its match.
-  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings']);
+  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Programs', 'Funds oversight', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings']);
   assert.equal(rows.find((r) => r.label === 'Integration keys')?.to, '/admin/integration-keys');
   assert.deepEqual(rows.find((r) => r.label === 'Programs')?.match, ['/admin/programs'], 'the Programs row stays lit on every program page');
   assert.equal(rows.find((r) => r.label === 'Fund admin')?.to, '/admin/fund-admin');

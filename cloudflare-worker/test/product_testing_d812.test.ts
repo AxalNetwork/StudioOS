@@ -199,7 +199,10 @@ test('a partner\'s programme opens only after HQ approves it; sent back, its nex
   assert.equal((await call(w, HQ, 'POST', `/admin/testing/programmes/${hq.uid}/approve`, {})).status, 409);
   assert.equal((await call(w, HQ, 'POST', `/admin/testing/programmes/${hq.uid}/open`)).body.programme.status, 'open');
   assert.equal((await call(w, ACME, 'GET', `/partner/testing/programmes/${hq.uid}/applicants`)).status, 404);
-  assert.equal((await call(w, HQ, 'GET', `/admin/testing/programmes/${uid}/applicants`)).status, 404, "HQ's owner routes are HQ's programmes");
+  // D1197 (#3147): HQ reads a partner's applicants, read only (#2382 owner question 2); its writes stay HQ's own.
+  const read = await call(w, HQ, 'GET', `/admin/testing/programmes/${uid}/applicants`);
+  assert.equal(read.status, 200);
+  assert.equal(read.body.can_decide, false, "HQ's read of a partner's programme decides nothing");
   assert.equal((await call(w, HQ, 'POST', `/admin/testing/programmes/${hq.uid}/close`)).body.programme.status, 'closed');
 });
 

@@ -12,6 +12,8 @@
  *                         each answers `told`, counts only), withdraw an
  *                         application with a reason, and HQ's own programmes
  *                         with the partner's create, edit and pick.
+ *                         D1197: any programme's history and applicants (a
+ *                         partner's read only), and every application across programmes.
  *
  * Lists are `{ items }`; a refusal is `{ error, detail }` with the service's
  * sentence. Another firm's programme or application is 404, as a missing one.
@@ -212,7 +214,34 @@ adminTesting.post('/applications/:uid/withdraw', async (c) => {
 
 adminTesting.post('/programmes', create(actingHq));
 adminTesting.patch('/programmes/:uid', edit(actingHq));
-adminTesting.get('/programmes/:uid/applicants', applicantsOf(actingHq));
+// D1197 (#3147): HQ reads any programme's applicants; a partner's answer
+// `can_decide: false`, and pick and decline below still reach HQ's own only.
+adminTesting.get('/programmes/:uid/applicants', async (c) => {
+  try {
+    await actingHq(c);
+    return c.json(await svc.hqApplicants(c.env, c.req.param('uid')));
+  } catch (e) { return fail(c, e); }
+});
+
+// D1197: a programme's history, newest first, paged; names, never an address.
+adminTesting.get('/programmes/:uid/events', async (c) => {
+  try {
+    await actingHq(c);
+    return c.json(await svc.programmeEvents(c.env, c.req.param('uid'), { page: c.req.query('page'), page_size: c.req.query('page_size') }));
+  } catch (e) { return fail(c, e); }
+});
+
+// D1197: every application across programmes, paged and filtered (TST8).
+adminTesting.get('/applications', async (c) => {
+  try {
+    await actingHq(c);
+    const q = (k: string) => c.req.query(k);
+    return c.json(await svc.allApplications(c.env, {
+      programme: q('programme'), owner: q('owner'), status: q('status'), role: q('role'), consented: q('consented'),
+      tester: q('tester'), q: q('q'), sort: q('sort'), page: q('page'), page_size: q('page_size'),
+    }));
+  } catch (e) { return fail(c, e); }
+});
 adminTesting.post('/applications/:uid/pick', decide(actingHq, 'pick'));
 adminTesting.post('/applications/:uid/decline', decide(actingHq, 'decline'));
 

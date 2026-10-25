@@ -33,6 +33,7 @@ import { readFileSync } from 'node:fs';
 
 import research, { FOUNDER_DRAFT_PAGES, SHARED_DRAFT_PAGES } from '../src/routes/research.ts';
 import { FOUNDER_OPTIONS } from '../../frontend/src/lib/railOptions/founder.js';
+import { WORD_OPTION, WORD_PAGE } from '../src/services/buildPlanWord.ts';
 
 const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 
@@ -668,7 +669,9 @@ test('D778: each founder-only band\'s fallback page is the one D771\'s inventory
     assert.equal(page, option.page, `draft:${surface}`);
   }
   // Every other founder draft band is one another profile shares, so it keeps the page from its path.
-  const others = FOUNDER_OPTIONS.filter((o: any) => /^draft:[a-z-]+\/[a-z-]+$/.test(o.key) && !(o.key.slice(6) in FOUNDER_DRAFT_PAGES));
+  // D1071: the build plan's wording is its own route, not a band; that route's fallback page is the inventory's.
+  assert.equal(WORD_PAGE, (byKey.get(WORD_OPTION) as any)?.page, WORD_OPTION);
+  const others = FOUNDER_OPTIONS.filter((o: any) => /^draft:[a-z-]+\/[a-z-]+$/.test(o.key) && o.key !== WORD_OPTION && !(o.key.slice(6) in FOUNDER_DRAFT_PAGES));
   assert.deepEqual(others.map((o: any) => o.key).sort(),
     ['draft:network/introductions', 'draft:network/relationships', 'draft:research/ask', 'draft:research/library']);
 });

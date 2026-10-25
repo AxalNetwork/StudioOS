@@ -109,6 +109,26 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — HQ › Platform › Product testing (#2382)
+
+The owner's artifacts `Rdu2ReGAwHnT76E65WdjrB` (the page) and
+`XyuTn3fWnt6fLCmQpYV7yS` (the board grid) came from S21's prompt on #2382. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Product testing · Boards.dc.html` is the board grid (TST1 to TST16); it
+  imports the page by name;
+- `Product Testing Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The page is `/admin/platform/product-testing`, with each tab
+at its own address. S21's integration (D1195) draws Overview's tiles, places and
+status chips from the programme list and the tester store, keeps D815's console
+as Review and Programs, opens one program at `/programs/:uid`, and draws the
+tester pool without email; the rest says Not read here yet. The reads, the
+writes, the logo and the frontend wait for D1195's nine parts, and member intake
+(TST10) for the owner's answer on #2318, so this canvas stays in the queue until
+they land.
+
 ## Landed 2026-10-25 — Raise · Capital relationships (#2457)
 
 The owner's artifacts `3z5VF6kEsVmbAWPV4UhNiL` (the page) and

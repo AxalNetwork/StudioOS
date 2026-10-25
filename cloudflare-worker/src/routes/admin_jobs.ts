@@ -137,7 +137,7 @@ adminJobs.post('/:id/approve', async (c) => {
   const posting = await loadPosting(c.env, id);
   if (!posting) return c.json({ error: 'not_found' }, 404);
   await c.env.DB.prepare(
-    `UPDATE job_postings SET status = 'published', admin_published = 1, review_notes = NULL, updated_at = datetime('now') WHERE id = ?`,
+    `UPDATE job_postings SET status = 'published', admin_published = 1, review_notes = NULL, published_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`,
   ).bind(id).run();
   await writeAudit(c.env, { adminId: a.id, adminEmail: a.email, action: 'job_approved', postingId: id });
   if (posting.host_user_id) {

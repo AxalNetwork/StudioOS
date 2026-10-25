@@ -214,8 +214,9 @@ test('Dispute a line takes an amount in the statement\'s currency and a reason; 
 
 // ───────────────────────────────────────────────────────────── L5 requests
 
-test('the Requests tab has the five buttons, the renewal timeline and the requests with HQ\'s answer inline', () => {
-  assert.deepEqual(REQUEST_BUTTONS.map((b) => b.t), ['Request renewal', 'Request a change', 'Request seats', 'Request a delegate', 'Give notice of non-renewal']);
+test('the Requests tab has the six buttons, the renewal timeline and the requests with HQ\'s answer inline', () => {
+  // D988 (#2779) adds the sixth, "Request a program".
+  assert.deepEqual(REQUEST_BUTTONS.map((b) => b.t), ['Request renewal', 'Request a change', 'Request seats', 'Request a delegate', 'Give notice of non-renewal', 'Request a program']);
   const t = text(RequestsView, { list: LIST, mine: MINE, today: '2026-10-20T10:00:00Z' });
   for (const b of REQUEST_BUTTONS) assert.ok(t.includes(b.t), b.t);
   assert.ok(t.includes('Today2026-10-20') && t.includes(`Notice deadline${NOT_RECORDED}`) && t.includes('Renewal2028-03-01'));
