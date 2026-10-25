@@ -29,8 +29,8 @@ import {
  * search, filters, a sort and pages, all asked of D990's list read.
  *
  * WHAT IS NOT RECORDED SAYS SO (D994 §3): who reviewed a profile and when,
- * the changed-since-verified flag and each week's decisions wait for part 2;
- * the envelopes out for signature for part 4. The review is today's dialog
+ * the changed-since-verified flag and each week's decisions wait for part 2.
+ * The envelopes out for signature, and each row's, are D993's (part 4). The review is today's dialog
  * (`ProfileReviewModal`) until part 6; a failed record read says so in the
  * page, never in a browser pop-up.
  */
@@ -180,6 +180,16 @@ function Category({ v }) {
 function Entity({ v }) {
   if (!v.entity) return <span className={SUB}>{NOT_GIVEN}</span>;
   return <><span className="block font-semibold text-axal-ink dark:text-gray-100">{v.entity}</span>{v.entityType ? <span className={`block ${SUB}`}>{v.entityType}</span> : null}</>;
+}
+
+function Agreement({ v }) {
+  if (v.agreement === 'Not sent') return <span className={SUB}>Not sent</span>;
+  return (
+    <>
+      <span className="block font-semibold text-axal-ink dark:text-gray-100">{v.agreement}</span>
+      {v.envelope ? <span className={`block ${v.envelopeAmber ? 'font-bold text-[#92400e] dark:text-amber-300' : SUB}`}>{v.envelope}</span> : null}
+    </>
+  );
 }
 
 function Account({ v }) {
@@ -466,7 +476,7 @@ function AllProfiles({ list, summary, counts, f, set, reset, onReview, reload })
                       <td className="py-2 pr-3"><Sources v={v} /></td>
                       <td className="py-2 pr-3"><Category v={v} /></td>
                       <td className="py-2 pr-3"><Entity v={v} /></td>
-                      <td className="py-2 pr-3 text-axal-ink dark:text-gray-100">{v.agreement}</td>
+                      <td className="py-2 pr-3"><Agreement v={v} /></td>
                       <td className="py-2 pr-3 text-axal-muted dark:text-gray-400" title={REVIEWED_WAITS}>{v.statusKey === 'verified' || v.statusKey === 'rejected' ? NOT_RECORDED : '—'}</td>
                       <td className={`py-2 pr-3 ${MONO} whitespace-nowrap text-[11.5px] font-semibold text-axal-ink dark:text-gray-100`}>{v.captured}</td>
                       <td className="py-2 text-right"><button type="button" className={GHOST} onClick={() => onReview(r)}>Open</button></td>

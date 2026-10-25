@@ -9,14 +9,15 @@ import { NOT_RECORDED } from '../../../lib/absence.js';
  * The reads (D990, `lib/api/partnerProfiles.js`; each answers alone):
  *   - `counts`  GET /api/admin/partner-profiles/counts — the Waiting tile and
  *               its bands, the Drafts it leaves out, and twelve weeks of
- *               captured profiles. "Verified in 30 days", "Agreements out for
- *               signature" and each week's verified and rejected say why they
- *               are not recorded (parts 2 and 4).
+ *               captured profiles, and the envelopes out for signature (D993).
+ *               "Verified in 30 days" and each week's verified and rejected
+ *               say why they are not recorded (part 2).
  *   - `list`    GET /api/admin/partner-profiles — one page of profiles, with
  *               search, filters and a sort, and `totals` over the filtered
  *               set. Each row carries its reference, `created_at`, `status`
- *               (Draft apart from Waiting), `sources`, `account` and
- *               `identity_check`. Each read is logged (D625).
+ *               (Draft apart from Waiting), `sources`, `account`,
+ *               `identity_check` and its first agreement's `envelope` (D993).
+ *               Each read is logged (D625).
  *
  * A Draft is a profile with nothing to review yet: it is not in the queue,
  * nor in the Waiting tile, nor in Approvals lane 7 (D990 §2).
@@ -140,6 +141,26 @@ export function dayOf(stamp) {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+/** "3 Oct", a short UTC day for an envelope's line. */
+function shortDay(stamp) {
+  const at = parseStamp(stamp);
+  if (at == null) return null;
+  const d = new Date(at);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+}
+
+/**
+ * The envelope a profile's first agreement went out in (D993), in PRF2's
+ * words: "Out for signature since 3 Oct", "Signed 5 Oct", "Not delivered",
+ * "Declined", "Voided". No agreement, or no envelope, is null.
+ */
+export function envelopeLine(env) {
+  if (!env || !env.state) return null;
+  if (env.state === 'out') return `${env.label || 'Out for signature'}${shortDay(env.sent_at) ? ` since ${shortDay(env.sent_at)}` : ''}`;
+  if (env.state === 'signed') return `${env.label || 'Signed'}${shortDay(env.signed_at) ? ` ${shortDay(env.signed_at)}` : ''}`;
+  return env.label || NOT_RECORDED;
+}
+
 /** One row of either table, ready to draw. */
 export function rowView(r, now = Date.now()) {
   const founder = r.persona === 'Founder';
@@ -154,6 +175,8 @@ export function rowView(r, now = Date.now()) {
     entity: r.legal_entity_name || null,
     entityType: r.legal_entity_name ? (r.entity_type || null) : null,
     agreement: r.agreement_type || 'Not sent',
+    envelope: r.agreement_type ? envelopeLine(r.envelope) : null,
+    envelopeAmber: r.envelope?.state === 'not_delivered',
     sources: sourceWords(r.sources),
     account: accountView(r.account),
     identity: identityView(r.identity_check),
@@ -196,7 +219,10 @@ export function tilesOf(counts) {
       sub: `${(w.count - w.over_24h).toLocaleString('en-US')} under 24h · ${(w.over_24h - w.over_72h).toLocaleString('en-US')} under 72h`,
     },
     verified30: block(data?.verified_30d) || { kind: 'num', value: data.verified_30d.count },
-    out: block(data?.envelopes_out) || { kind: 'num', value: data.envelopes_out.count, sub: 'sent from this page' },
+    out: block(data?.envelopes_out) || {
+      kind: 'num', value: data.envelopes_out.count,
+      sub: data.envelopes_out.not_delivered > 0 ? `${data.envelopes_out.not_delivered.toLocaleString('en-US')} not delivered` : 'sent from this page',
+    },
     drafts: waitingBad ? null : w.drafts,
   };
 }

@@ -17,7 +17,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  accountView, ageOf, categoryChart, dayOf, failureRef, filtersSet, identityView, listParams, pageLabel, rowView, sourceWords,
+  accountView, ageOf, categoryChart, dayOf, envelopeLine, failureRef, filtersSet, identityView, listParams, pageLabel, rowView, sourceWords,
   tilesOf, weeklyChart,
 } from '../src/pages/admin/profiles/ppModel.js';
 import PartnerProfiles from '../src/pages/admin/profiles/PartnerProfiles.jsx';
@@ -44,7 +44,7 @@ const QUEUE = [
 const ALL = [
   ...QUEUE,
   row({ ref: 'pp_000000000e', email: 'draft@example.com', status: 'draft', sources: [], persona: 'Technical Partner', created_at: '2026-10-23 09:00:00' }),
-  row({ ref: 'pp_000000000f', email: 'finn@example.com', user_name: 'Finn Mock', status: 'verified', admin_status: 'verified', persona: 'Founder', founder_track: 'Strategic Scale (Existing)', created_at: '2026-09-28 09:00:00', agreement_type: 'Spin-Out Lab participation agreement' }),
+  row({ ref: 'pp_000000000f', email: 'finn@example.com', user_name: 'Finn Mock', status: 'verified', admin_status: 'verified', persona: 'Founder', founder_track: 'Strategic Scale (Existing)', created_at: '2026-09-28 09:00:00', agreement_type: 'Spin-Out Lab participation agreement', envelope: { state: 'signed', label: 'Signed', document_type: 'Spin-Out Lab participation agreement', sent_at: '2026-10-02 09:00:00', signed_at: '2026-10-05 10:00:00' } }),
   row({ ref: 'pp_0000000010', email: 'odd@example.com', status: null, admin_status: 'archived', persona: null, created_at: '2026-08-14 09:00:00' }),
 ];
 const TOTALS = (rows) => ({
@@ -57,7 +57,6 @@ const TOTALS = (rows) => ({
 });
 const OPTIONS = { category: ['Founder', 'Operating Partner', 'Technical Partner'], founder_track: ['Spin-Out (New)', 'Strategic Scale (Existing)'], entity_type: ['Limited partnership'], agreement: ['Spin-Out Lab participation agreement'] };
 const PART2 = 'Verification and rejection dates are recorded from Partner profiles part 2.';
-const PART4 = 'Envelope state is read from Partner profiles part 4.';
 const WEEKS = Array.from({ length: 12 }, (_, i) => {
   const d = new Date(Date.UTC(2026, 7, 3 + 7 * i));
   return { week_start: d.toISOString().slice(0, 10), captured: [2, 3, 2, 4, 3, 3, 4, 5, 3, 4, 5, 7][i], verified: null, rejected: null };
@@ -66,7 +65,8 @@ const COUNTS = {
   as_of: '2026-10-24T12:00:00.000Z',
   waiting: { available: true, reason: null, count: 4, over_24h: 2, over_72h: 1, oldest_at: '2026-10-20 12:00:00', drafts: 1 },
   verified_30d: { available: false, reason: PART2, count: null },
-  envelopes_out: { available: false, reason: PART4, count: null },
+  // D993 (part 4): the envelopes out, read from the signing store.
+  envelopes_out: { available: true, reason: null, count: 3, not_delivered: 1 },
   weekly: { available: true, reason: null, verified_available: false, verified_reason: PART2, weeks: WEEKS },
 };
 
@@ -93,6 +93,19 @@ test('a row in the canvas\'s words: sources, account, identity check, entity typ
   assert.equal(dayOf(null), '—');
 });
 
+test('the envelope line (D993): out since its day, signed on its day, the other states by name, and none without an agreement', () => {
+  const env = (o) => ({ document_type: 'X', sent_at: '2026-10-03 09:00:00', signed_at: null, ...o });
+  assert.equal(envelopeLine(env({ state: 'out', label: 'Out for signature' })), 'Out for signature since 3 Oct');
+  assert.equal(envelopeLine(env({ state: 'signed', label: 'Signed', signed_at: '2026-10-05 10:00:00' })), 'Signed 5 Oct');
+  assert.equal(envelopeLine(env({ state: 'not_delivered', label: 'Not delivered' })), 'Not delivered');
+  assert.equal(envelopeLine(env({ state: 'declined', label: 'Declined' })), 'Declined');
+  assert.equal(envelopeLine(null), null);
+  // An agreement chosen but no envelope yet reads only the agreement; no agreement reads "Not sent".
+  assert.deepEqual([rowView(row({ agreement_type: 'Partner agreement', envelope: null })).agreement, rowView(row({ agreement_type: 'Partner agreement', envelope: null })).envelope], ['Partner agreement', null]);
+  assert.deepEqual([rowView(row({ envelope: { state: 'out', label: 'Out for signature' } })).agreement, rowView(row({ envelope: { state: 'out', label: 'Out for signature' } })).envelope], ['Not sent', null], 'an envelope with no agreement on the profile');
+  assert.equal(rowView(row({ agreement_type: 'X', envelope: env({ state: 'not_delivered', label: 'Not delivered' }) })).envelopeAmber, true);
+});
+
 test('the age pill: minutes, hours, then days, amber from 72 hours exactly, and no stamp is a dash, never 0h', () => {
   assert.deepEqual([ageOf('2026-10-24 11:15:00', NOW).text, ageOf('2026-10-24 11:15:00', NOW).over], ['45m', false]);
   assert.equal(ageOf('2026-10-23 16:00:00', NOW).text, '20h');
@@ -106,13 +119,17 @@ test('the age pill: minutes, hours, then days, amber from 72 hours exactly, and 
   assert.equal(ageOf('2026-10-24 11:00:00', NOW).text, '1h');
 });
 
-test('the tiles: Waiting and Past 72 hours from the counts read, the two part 2 and 4 blocks Not recorded with their reason', () => {
+test('the tiles: Waiting, Past 72 hours and the envelopes out from the counts read; Verified in 30 days Not recorded until part 2', () => {
   assert.equal(tilesOf({ status: 'loading' }), null);
   const t = tilesOf({ status: 'ready', data: COUNTS });
   assert.deepEqual([t.waiting.kind, t.waiting.value, t.waiting.sub], ['num', 4, 'oldest 4 days']);
   assert.deepEqual([t.past72.value, t.past72.amber, t.past72.sub], [1, true, '2 under 24h · 1 under 72h']);
   assert.deepEqual(t.verified30, { kind: 'not_recorded', reason: PART2 });
-  assert.deepEqual(t.out, { kind: 'not_recorded', reason: PART4 });
+  assert.deepEqual(t.out, { kind: 'num', value: 3, sub: '1 not delivered' });
+  // A store that cannot be read is not a zero; a block not yet available says why.
+  const outDown = tilesOf({ status: 'ready', data: { ...COUNTS, envelopes_out: { available: false, reason: 'The signing store could not be read.', count: null } } });
+  assert.deepEqual(outDown.out, { kind: 'not_recorded', reason: 'The signing store could not be read.' });
+  assert.equal(tilesOf({ status: 'ready', data: { ...COUNTS, envelopes_out: { available: true, count: 0, not_delivered: 0 } } }).out.sub, 'sent from this page');
   assert.equal(t.drafts, 1);
   // A measured zero shows as 0 (PRF7).
   const zero = tilesOf({ status: 'ready', data: { ...COUNTS, waiting: { ...COUNTS.waiting, count: 0, over_24h: 0, over_72h: 0, oldest_at: null, drafts: 0 } } });
@@ -244,7 +261,7 @@ test('mounted, To review: the tiles, the queue oldest first with its seven colum
     assert.match(v.of('pp-tile-waiting'), /Waiting\s*4\s*oldest 4 days/);
     assert.match(v.of('pp-tile-past72'), /Past 72 hours\s*1\s*2 under 24h · 1 under 72h/);
     assert.match(v.of('pp-tile-verified30'), new RegExp(`Not recorded${PART2}`));
-    assert.match(v.of('pp-tile-out'), new RegExp(`Not recorded${PART4}`));
+    assert.match(v.of('pp-tile-out'), /Agreements out for signature\s*3\s*1 not delivered/);
     assert.match(v.of('pp-queue'), /Waiting.*Person.*Source.*Onboarding category.*Entity.*Account.*Identity check/s);
     const rows = v.all('pp-queue-row');
     assert.equal(rows.length, 4);
@@ -322,7 +339,7 @@ test('mounted, All profiles: the chips with Drafts, the weekly chart with decisi
     const rows = v.all('pp-all-row');
     assert.equal(rows.length, 7);
     const finn = rows.find((r) => r.includes('Finn Mock'));
-    assert.match(finn, /✓ Verified.*Spin-Out Lab participation agreement.*Not recorded.*28 Sep 2026/s, 'a decided profile\'s Reviewed says Not recorded, never a date');
+    assert.match(finn, /✓ Verified.*Spin-Out Lab participation agreement.*Signed 5 Oct.*Not recorded.*28 Sep 2026/s, 'a decided profile\'s Reviewed says Not recorded, never a date');
     assert.match(rows.find((r) => r.includes('draft@example.com')), /✎ Draft.*None recorded/s);
     assert.match(v.of('pp-count'), /1–7 of 7/);
     await v.click('Drafts · 1');
