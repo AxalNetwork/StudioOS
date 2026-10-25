@@ -137,7 +137,7 @@ test('the source writes nothing, and the canvas and decision are in', () => {
   assert.doesNotMatch(src, /createCompany|updateCompany|removeCompanyMember|deleteProject|setActiveCompanyId/, 'the integration writes nothing');
   for (const f of ['Companies Projects Page.dc.html', 'Companies and projects · Boards.dc.html']) {
     const s = read(`design/incoming/${f}`);
-    assert.ok(s.includes('<script src="./support.js"></script>'), f);
+    assert.match(s, /<script src="\.\/support\.js"><\/script>/, f);
   }
   assert.ok(read('design/incoming/Companies and projects · Boards.dc.html').includes('dc-import name="Companies Projects Page"'));
   assert.ok(read('design/incoming/Companies and projects · Boards.dc.html').includes('CMP19'));

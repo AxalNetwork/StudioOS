@@ -210,7 +210,7 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   assert.doesNotMatch(tool, /dataRoom(Upload|Delete|Grant|Revoke|Update)/, 'the integration writes nothing');
   for (const f of ['Raise Data Room Page.dc.html', 'Data Room · Boards.dc.html']) {
     const src = read(`design/incoming/${f}`);
-    assert.ok(src.includes('<script src="./support.js"></script>'), f);
+    assert.match(src, /<script src="\.\/support\.js"><\/script>/, f);
     assert.ok(!src.includes('@font-face') && !src.includes('__claude_design_branding'), f);
   }
   assert.ok(read('design/incoming/Data Room · Boards.dc.html').includes('dc-import name="Raise Data Room Page"'));
