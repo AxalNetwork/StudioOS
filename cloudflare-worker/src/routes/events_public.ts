@@ -19,6 +19,7 @@ import { isPrincipalCompEligible, parseAudienceRules } from '../services/eventAu
 import { isCapacityFull, seatsTaken, type EventSeatRow } from '../services/eventCapacity';
 import { buildEventsIcs, isInPersonEvent, shapeAgendaItem, shapeEvent } from '../services/eventsCommon';
 import { registerPrincipal } from './events';
+import { refuse } from '../util/refusal';
 
 const eventsPublic = new Hono<{ Bindings: Env }>();
 
@@ -28,6 +29,8 @@ eventsPublic.use('*', async (c, next) => {
 });
 
 const FEED_PREDICATE = `visibility = 'public' AND status = 'published' AND admin_published = 1`;
+// D1032: Discover's format filter, the event's `location_kind` (migration 109).
+const FORMATS = new Set(['virtual', 'in_person', 'hybrid']);
 
 function clampInt(v: string | null, def: number, max: number): number {
   // NB: Number(null) === 0, so an absent query param must short-circuit to the
@@ -70,13 +73,35 @@ eventsPublic.get('/events', async (c) => {
       : `datetime(COALESCE(ends_at, starts_at)) >= datetime('now')`);
   }
   if (q) { where.push('(title LIKE ? OR summary LIKE ?)'); binds.push(`%${q}%`, `%${q}%`); }
+  // D1032 (#2873): Discover's filters. A value outside the list is refused,
+  // never ignored, so a typo cannot read as "every event".
+  const format = c.req.query('format');
+  if (format) {
+    if (!FORMATS.has(format)) return refuse(c, 400, { code: 'invalid_format', message: 'Choose virtual, in person or hybrid.' });
+    where.push('location_kind = ?'); binds.push(format);
+  }
+  const price = c.req.query('price');
+  if (price) {
+    if (price === 'free') where.push('price_cents = 0');
+    else if (price === 'paid') where.push('price_cents > 0');
+    else return refuse(c, 400, { code: 'invalid_price', message: 'Choose free or paid.' });
+  }
 
   // Upcoming reads forward from today; the archive reads backward from today.
   const order = includePast ? 'DESC' : 'ASC';
   const rows = await c.env.DB.prepare(
     `SELECT * FROM events WHERE ${where.join(' AND ')} ORDER BY starts_at ${order} LIMIT ? OFFSET ?`,
   ).bind(...binds, limit, offset).all();
-  return c.json({ events: (rows.results || []).map((r) => shapeEvent(r)) });
+  // The exact number of events the same filters match, for Discover's pages.
+  const total: any = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM events WHERE ${where.join(' AND ')}`,
+  ).bind(...binds).first();
+  return c.json({
+    events: (rows.results || []).map((r) => shapeEvent(r)),
+    total: Number(total?.n ?? 0),
+    limit,
+    offset,
+  });
 });
 
 // ── GET /events.ics — public calendar feed ─────────────────────────────────

@@ -14,7 +14,6 @@ export const PART4_CLAIMS = 'Perk claims are read through part 4’s claims serv
 export const PART4_STRATEGIC = 'Strategic referral access is read through part 4’s queue service, which is not on this Worker yet.';
 export const HQ_READS = 'HQ reads these figures.';
 export const LAB_PEOPLE = 'Who a cohort’s founders are waits on O-FND and #2374.';
-export const DEACTIVATED = 'Deactivated accounts are not left out yet.';
 
 const queue = (count, bands = [count, 0, 0], oldest = 10, aged = 'since applied', extra = {}) => ({
   available: true, count, oldest_hours: count ? oldest : null,
@@ -54,7 +53,7 @@ export function catalogueBody(o = {}) {
       needs_you: waiting.cohort.available && waiting.hosts.available ? { available: true, count: waiting.cohort.count + waiting.hosts.count } : unreadable('Cohort applications or office-hours hosts'),
     }),
     'mentor-cohorts': () => ({
-      figures: { mentors: o.mentors ?? { available: true, count: 1, reason: DEACTIVATED }, coverage: o.coverage ?? { available: true, cohorts: 4, covered: 2, uncovered: 2 } },
+      figures: { mentors: o.mentors ?? { available: true, count: 1 }, coverage: o.coverage ?? { available: true, cohorts: 4, covered: 2, uncovered: 2 } },
       needs_you: { available: true, count: 4 },
     }),
     'refer-and-earn': () => ({

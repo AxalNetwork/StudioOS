@@ -360,7 +360,9 @@ export function WeekLine({ values, labels, previous = null, height = 220 }) {
  * Columns grouped by series, one group per week: `rows` are
  * `{ label, values: [n, …], toDate }` and `series` `{ label, tone }`. The
  * current week (`toDate`) is hatched in each series' own colour, so the
- * hatch never takes a series' colour away.
+ * hatch never takes a series' colour away. A `null` value is not recorded:
+ * it is a short dashed mark on the baseline, never a zero-height bar
+ * (D994, Partner profiles' weekly decisions before part 2).
  */
 export function GroupedColumns({ rows, series, height = 220 }) {
   const [ref, W] = useBoxWidth();
@@ -373,7 +375,7 @@ export function GroupedColumns({ rows, series, height = 220 }) {
   const gw = (W - Lx - 4) / n;
   const bw = Math.max(3, Math.min(14, (gw * 0.7) / k));
   const ch = height - B - top;
-  const max = Math.max(1, ...rows.flatMap((r) => r.values));
+  const max = Math.max(1, ...rows.flatMap((r) => r.values.filter((v) => v != null)));
   const every = W < 420 ? Math.ceil(rows.length / 4) : 1;
   return (
     <div ref={ref} className="w-full">
@@ -400,9 +402,12 @@ export function GroupedColumns({ rows, series, height = 220 }) {
           return (
             <g key={`${r.label}-${i}`}>
               {series.map((s, j) => {
-                const v = r.values[j] || 0;
-                const h = (ch * v) / max;
                 const x = x0 + bw * j;
+                if (r.values[j] == null) {
+                  return <line key={s.label} x1={x} x2={x + bw} y1={top + ch - 1} y2={top + ch - 1} strokeWidth="1.5" strokeDasharray="2 2" className="stroke-axal-muted" />;
+                }
+                const v = r.values[j];
+                const h = (ch * v) / max;
                 return r.toDate
                   ? <rect key={s.label} x={x} y={top + ch - h} width={bw} height={h} fill={`url(#${id}-${j})`} className={STROKE[s.tone] || STROKE_V} />
                   : <rect key={s.label} x={x} y={top + ch - h} width={bw} height={h} className={FILL[s.tone] || FILL.violet} />;

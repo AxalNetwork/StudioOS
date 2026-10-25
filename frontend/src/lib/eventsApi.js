@@ -20,8 +20,20 @@ import { request } from './api';
 const BASE = '/api';
 
 export const eventsApi = {
-  // GET / — the caller's events (hosting + attending).
-  list: () => request('/events'),
+  // GET / — the caller's events (hosting, attending, and Past).
+  // D1032: `past_limit` and `past_offset` page Past (`past.total` is exact).
+  list: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.pastLimit != null) q.set('past_limit', String(params.pastLimit));
+    if (params.pastOffset != null) q.set('past_offset', String(params.pastOffset));
+    const qs = q.toString();
+    return request(`/events${qs ? `?${qs}` : ''}`);
+  },
+  // D1032: my pending invitations, and answering one signed in (no token).
+  invitations: () => request('/events/invitations'),
+  answerInvitation: (id, action) => request(`/events/${id}/invitation`, { method: 'POST', body: JSON.stringify({ action }) }),
+  // D1032: the host's cancel; paid tickets go to the Events desk for refunds.
+  cancel: (id, note) => request(`/events/${id}/cancel`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   // GET /:id — read one (host or admin).
   get: (id) => request(`/events/${id}`),
   // POST / — create an event (host).

@@ -27,7 +27,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 import {
-  AXIS_12, DEACTIVATED, HQ_READS, LAB_PEOPLE, PART4_CLAIMS, PART4_STRATEGIC, catalogueBody, labAppsBody, pendingBlock, unreadable,
+  AXIS_12, HQ_READS, LAB_PEOPLE, PART4_CLAIMS, PART4_STRATEGIC, catalogueBody, labAppsBody, pendingBlock, unreadable,
 } from './_programs_catalogue_fixture.mjs';
 import { AuthProvider } from '../src/hooks/useAuthSync.jsx';
 import ProgramsCatalogue from '../src/pages/admin/programs/ProgramsCatalogue.jsx';
@@ -310,7 +310,7 @@ test('the catalogue for an Admin: header, period, four tiles, the three charts, 
     assert.equal(view.textOf('programs-card-spinout-lab-figure'), '2 cohort applications waiting');
     assert.equal(view.textOf('programs-card-spinout-lab-applications'), '4 Lab applications waiting');
     assert.equal(view.textOf('programs-card-spinout-lab-needs'), '!Needs you 3');
-    assert.equal(view.textOf('programs-card-mentor-cohorts-figure'), `1 mentor · 2 of 4 cohorts coveredCohorts scheduled or running.${DEACTIVATED}`);
+    assert.equal(view.textOf('programs-card-mentor-cohorts-figure'), '1 mentor · 2 of 4 cohorts coveredCohorts scheduled or running.', 'deactivated accounts are left out (D960), so no line says otherwise');
     assert.equal(view.textOf('programs-card-mentor-cohorts-needs'), '!Needs you 4');
     assert.equal(view.textOf('programs-card-refer-and-earn-figure'), '3 open referralsincluding those waiting on the member');
     assert.equal(view.textOf('programs-card-refer-and-earn-strategic'), `Strategic referral access: ${NOT_READ_YET}${PART4_STRATEGIC}`);
