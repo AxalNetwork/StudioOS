@@ -17,7 +17,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import raise from '../src/routes/cycle_raise.ts';
-import { dollarsToCents, COUNTED } from '../src/services/capitalRelationships.ts';
+import { dollarsToCents, COUNTED } from '../src/services/capRelReads.ts';
 import { logProspectEvent, WriterError } from '../src/services/raiseWriters.ts';
 import * as calendar from '../src/services/calendar.ts';
 import { tableFromBaseline } from './_baseline.mjs';
@@ -113,7 +113,9 @@ function seedCommitments(db: DatabaseSync) {
       ('c-eur', 2, 64, 10000, 'pending'),
       ('c-b', 3, 63, 7777777, 'confirmed');
     INSERT INTO mercury_personal_matches (uid, user_id, integration_id, mercury_transaction_id, account_last_four, amount_cents, posted_on, target_kind, target_id, state)
-      VALUES ('m-1', 1, 41, 'tx-fixture-1', '0000', 15000000, '2026-10-02', 'raise_prospect', 5, 'confirmed');
+      VALUES ('m-1', 1, 41, 'tx-fixture-1', '0000', 15000000, '2026-10-02', 'raise_prospect', 5, 'confirmed'),
+      -- Another member's match on this venture's prospect: never the founder's Received.
+             ('m-2', 2, 42, 'tx-fixture-2', '0001', 7500000, '2026-10-03', 'raise_prospect', 3, 'confirmed');
   `);
 }
 

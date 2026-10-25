@@ -59,7 +59,7 @@
  *   A module's read carries `parts.mercury` for the founder alone
  *   (`services/mercury/raiseFeeds.ts`).
  *
- *   D1190 (#3124): Capital relationships' two reads (`services/capitalRelationships.ts`).
+ *   D1190 (#3124): Capital relationships' two reads (`services/capRelReads.ts`).
  *   GET /capital-relationships/commitments?project=   one read across the stores:
  *     → { currency, round, totals, investors: [{ key, prospect_id, name, chosen, lines }], sources, words, basis }
  *     Mercury's matched credits only for the venture's founder (`mercuryFounderOnly`).
@@ -118,7 +118,7 @@ import { isSupportSession } from '../integrations/providers/mercury';
 import { resolveActiveCompany, ACTIVE_COMPANY_HEADER } from '../middleware/activeCompany';
 import { projectInActiveCompany } from '../services/tenancyScope';
 import { HolderError } from '../services/capTableWrites';
-import { MatchQueryError, commitmentsRead, matchRead } from '../services/capitalRelationships';
+import { MatchQueryError, commitmentsRead, matchRead } from '../services/capRelReads';
 
 const cycleRaise = new Hono<{ Bindings: Env }>();
 

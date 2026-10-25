@@ -1396,6 +1396,23 @@ export async function receivedDates(env: Env, projectId: number): Promise<Map<nu
   return new Map(rows.map((r) => [Number(r.target_id), String(r.posted_on)]));
 }
 
+/**
+ * D1190 (#3124): the founder's own confirmed raise receipts (D752) on this
+ * venture's prospects, with their amounts, for Capital relationships'
+ * commitments read. Only the matches `founderUserId` made; the caller checks
+ * that they are the venture's founder (`mercuryFounderOnly`) first.
+ */
+export async function receivedCredits(env: Env, projectId: number, founderUserId: number, limit: number):
+  Promise<Array<{ uid: string; target_id: number; amount_cents: number | null; posted_on: string | null }>> {
+  return ((await env.DB.prepare(
+    `SELECT m.uid, m.target_id, m.amount_cents, m.posted_on
+       FROM mercury_personal_matches m
+       JOIN raise_prospects p ON p.id = m.target_id
+      WHERE m.target_kind = 'raise_prospect' AND m.state = 'confirmed' AND m.user_id = ? AND p.project_id = ?
+      ORDER BY m.posted_on DESC LIMIT ?`,
+  ).bind(founderUserId, projectId, limit).all<{ uid: string; target_id: number; amount_cents: number | null; posted_on: string | null }>()).results || []);
+}
+
 /** D1150: an investor's own receiving-side commitment evidence, metadata only.
  * Same stored-receipt boundary as receivedDates; no connection or bank fields.
  * The caller passes its verified company scope. Role and ownership are checked

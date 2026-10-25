@@ -56,7 +56,7 @@
  * Every statement here is bound. Logs hold counts only.
  */
 import type { Env } from '../types';
-import { fundFit, FIT_LABEL, type Fit } from './raiseCycle';
+import { fundFit, FIT_LABEL, receivedCredits, type Fit } from './raiseCycle';
 import { DirectoryQueryError, listDirectory, parseDirectoryQuery, servedFocusValues, type DirectoryQuery } from './researchFundDirectory';
 
 // ───────────────────────────────────────────────────────────────── vocabulary
@@ -142,7 +142,7 @@ async function readBlock<T>(name: string, read: () => Promise<T[]>, sources: Rec
     sources[name] = { state: 'ok' };
     return rows;
   } catch (e) {
-    console.warn('[capitalRelationships] block unreadable:', name, (e as Error)?.name || 'error');
+    console.warn('[capRelReads] block unreadable:', name, (e as Error)?.name || 'error');
     sources[name] = { state: 'unreadable', reason };
     return [];
   }
@@ -245,14 +245,9 @@ export async function commitmentsRead(env: Env, projectId: number, founderUserId
   if (founderUserId == null) {
     sources.mercury = { state: 'founder_only', reason: 'Only the startup’s founder reads its Mercury, from their own connection.' };
   } else {
-    const received = await readBlock('mercury', async () => ((await env.DB.prepare(
-      `SELECT m.uid, m.target_id, m.amount_cents, m.posted_on
-         FROM mercury_personal_matches m
-         JOIN raise_prospects p ON p.id = m.target_id
-        WHERE m.target_kind = 'raise_prospect' AND m.state = 'confirmed' AND m.user_id = ? AND p.project_id = ?
-        ORDER BY m.posted_on DESC LIMIT ?`,
-    ).bind(founderUserId, projectId, ROW_CAP).all<{ uid: string; target_id: number; amount_cents: number | null; posted_on: string | null }>()).results || []),
-    sources, 'Mercury’s matched credits could not be read');
+    // The query is `raiseCycle.receivedCredits`, inside the personal-Mercury allowlist (D713's guard).
+    const received = await readBlock('mercury', () => receivedCredits(env, projectId, founderUserId, ROW_CAP),
+      sources, 'Mercury’s matched credits could not be read');
     for (const m of received) {
       const pid = Number(m.target_id);
       add(`prospect:${pid}`, pid, prospectName.get(pid) ?? 'Investor', line({
@@ -418,7 +413,7 @@ async function verifiedInvestorsWhoFit(env: Env, sector: string | null) {
     }).length;
     return { count, reason: null, basis: 'Verified investors on Axal whose published focus fits your venture. Their names stay private until they answer a Call for Capital.' };
   } catch (e) {
-    console.warn('[capitalRelationships] verified investors unreadable:', (e as Error)?.name || 'error');
+    console.warn('[capRelReads] verified investors unreadable:', (e as Error)?.name || 'error');
     return { count: null, reason: 'The investors on Axal could not be read. Try again.' };
   }
 }
