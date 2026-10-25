@@ -81,3 +81,5 @@ padding, as clarified by the owner. Heading and paragraph line lengths stay boun
 The shell already supplies an edge-to-edge surface for this route; no other
 profile's Lab page or LP workspace layout changes. This layout correction
 allocates no new decision or migration number.
+
+D1133: `PricingPage.jsx` carries the account-plan read into the checkout sheet, including loading, failure/retry and a held Pro plan.

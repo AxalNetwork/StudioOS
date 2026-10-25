@@ -1595,3 +1595,5 @@ also renders the aggregate response on the new Files, Access and Activity tabs,
 before any owner-detail derivation. It reuses `AdminRoomSummary` from the files
 workspace, preserves Unreadable/Try again, and offers no owner actions. The full
 admin/support tab design remains #2987's.
+
+D1133 (#3013): Pricing’s in-place checkout sheet uses D1049’s held-plan read and retries it independently. Worker `/api/billing/alerts/:id/pay` and `/update-card` prepare only the caller’s failed renewal, behind a fresh TOTP. D1054 owns the still-unbuilt app-wide banner; D1051’s #2902 contract now includes recorded post-payment changes.

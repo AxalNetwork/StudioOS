@@ -9,5 +9,7 @@ import { request } from '../api.js';
  */
 export const billingAlertsApi = {
   list: () => request('/billing/alerts'),
+  pay: (id) => request(`/billing/alerts/${encodeURIComponent(id)}/pay`, { method: 'POST' }),
+  updateCard: (id) => request(`/billing/alerts/${encodeURIComponent(id)}/update-card`, { method: 'POST' }),
   confirm: (id) => request(`/billing/alerts/${encodeURIComponent(id)}/confirm`, { method: 'POST' }),
 };

@@ -369,3 +369,5 @@ published blocks, the change log, the matrix and the subprocessor subscribe, no 
 `trustCenterAdminApi` (HQ › Security › Trust center content: drafts, subprocessors, the
 auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
 private Security reports, and HQ's read of them).
+
+D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id)` for the mounted failed-renewal preparation routes. Their client secrets belong only in the in-page Stripe form, never storage or logs.

@@ -438,6 +438,25 @@ billing.post('/alerts/:id/confirm', async (c) => {
   return c.json({ client_secret: r.client_secret, payment_intent: r.payment_intent });
 });
 
+// D1133: failed-renewal actions prepare Stripe Elements only after a fresh TOTP.
+const renewalAction = (action: 'pay' | 'update-card') => async (c: Context<{ Bindings: Env }>) => {
+  await requireFactor(c, 'totp');
+  await requireStepUp(c);
+  const user = await requireAuth(c);
+  c.header('Cache-Control', 'private, no-store');
+  if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'stripe_not_configured' }, 503);
+  try {
+    const { prepareRenewal } = await import('../services/billingRecovery');
+    const r = await prepareRenewal(c.env, Number(user.id), Number(c.req.param('id')), action);
+    if (!r.ok) return c.json({ error: r.error }, r.status);
+    return c.json({ kind: r.kind, client_secret: r.client_secret, scope: r.scope });
+  } catch {
+    return refuse(c, 503, { code: 'renewal_unreadable', message: 'The renewal payment could not be read. Try again.', audience: 'member' });
+  }
+};
+billing.post('/alerts/:id/pay', renewalAction('pay'));
+billing.post('/alerts/:id/update-card', renewalAction('update-card'));
+
 billing.get('/tier/status', async (c) => {
   const user = (await requireAuth(c)) as TierUser;
   await ensureTierSchema(c.env);
@@ -1511,7 +1530,7 @@ billing.post('/stripe/webhook', async (c) => {
     const ok = await verifyStripeSignature(raw, sig, secret);
     if (!ok) return c.json({ error: 'invalid_signature' }, 400);
   }
-  let event: { type: string; data: { object: Record<string, unknown> } };
+  let event: { id?: string; type: string; data: { object: Record<string, unknown> } };
   try {
     event = JSON.parse(raw);
   } catch {
@@ -1559,7 +1578,7 @@ billing.post('/stripe/webhook', async (c) => {
 
 async function handleStripeEvent(
   env: Env,
-  event: { type: string; data: { object: Record<string, unknown> } },
+  event: { id?: string; type: string; data: { object: Record<string, unknown> } },
 ): Promise<void> {
   const obj = event.data.object;
   // Task #6 — `metadata.kind === 'tier'` routes the event into the founder
@@ -1873,8 +1892,11 @@ async function handleStripeEvent(
       return;
     }
     // D794 (#2219): an auto-reload's charge that failed after it was confirmed
-    // turns auto-reload off and tells the member. Every other payment is untouched.
+    // turns auto-reload off and tells the member. D1133 also audits a plan refusal,
+    // with only its reason family, through its caller-bound invoice.
     case 'payment_intent.payment_failed': {
+      const { recordCheckoutRefusal } = await import('../services/billingRecovery');
+      await recordCheckoutRefusal(env, event.id, obj);
       const { onReloadPaymentFailed } = await import('../services/aiAutoReload');
       await onReloadPaymentFailed(env, obj);
       return;
