@@ -332,6 +332,20 @@ function handledStripeEvents(): string[] {
   return events;
 }
 const REPAIR_EVENTS = ['payment_intent.payment_failed', 'charge.refunded', 'charge.dispute.created', 'charge.dispute.closed'];
+// D1049 (#2900): required before the webhook handles it, so part 4 (D1052, #2903) receives it on its first deploy.
+const AHEAD_OF_HANDLER = ['invoice.payment_action_required'];
+
+test('D1049 invoice.payment_action_required is required, and every event required ahead of its handler is named here', async () => {
+  const db = freshDb();
+  try {
+    const r = await call(envFor(db), { app: 'stripe', method: 'GET', path: '/webhook' }, HOLDER, 'totp-holder');
+    assert.equal(r.status, 200, r.text);
+    assert.ok(r.body.required_events.includes('invoice.payment_action_required'));
+    const handled = new Set(handledStripeEvents());
+    assert.deepEqual(r.body.required_events.filter((ev: string) => !handled.has(ev)).filter((ev: string) => !AHEAD_OF_HANDLER.includes(ev)), [],
+      'a required event with no handler must be named in AHEAD_OF_HANDLER, so nothing is subscribed by accident');
+  } finally { db.close(); }
+});
 
 test('#2393 every billing webhook case is in the console required event set', async () => {
   const db = freshDb();
@@ -345,12 +359,15 @@ test('#2393 every billing webhook case is in the console required event set', as
 
 test('#2393 old endpoints report all four omissions; complete and wildcard endpoints have no drift', async () => {
   const handled = handledStripeEvents();
-  webhookEvents = [handled.filter((event) => !REPAIR_EVENTS.includes(event)), handled, ['*']];
+  // D1049: the required set is the handled one plus events subscribed ahead of their handler.
+  const required = [...new Set([...handled, ...AHEAD_OF_HANDLER])];
+  webhookEvents = [required.filter((event) => !REPAIR_EVENTS.includes(event)), required, ['*'], handled];
   const db = freshDb();
   try {
     const r = await call(envFor(db), { app: 'stripe', method: 'GET', path: '/webhook' }, HOLDER, 'totp-holder');
     assert.equal(r.status, 200, r.text);
-    assert.deepEqual(r.body.endpoints.map((ep: any) => [...ep.missing_events].sort()), [[...REPAIR_EVENTS].sort(), [], []]);
+    assert.deepEqual(r.body.endpoints.map((ep: any) => [...ep.missing_events].sort()),
+      [[...REPAIR_EVENTS].sort(), [], [], [...AHEAD_OF_HANDLER].sort()], 'an endpoint with only the handled events misses the ones subscribed ahead');
   } finally { db.close(); }
 });
 
@@ -364,7 +381,8 @@ test('#2393 Register and Update both send every handled billing event to Stripe'
       const writes = toStripe().filter((c) => c.method === 'POST');
       assert.equal(writes.length, 1);
       const events = [...writes[0].form!.entries()].filter(([name]) => /^enabled_events\[\d+\]$/.test(name)).map(([, event]) => event);
-      assert.deepEqual([...events].sort(), [...handledStripeEvents()].sort(), `${action} must subscribe to every handled event`);
+      assert.deepEqual([...events].sort(), [...new Set([...handledStripeEvents(), ...AHEAD_OF_HANDLER])].sort(),
+        `${action} must subscribe to every handled event, and to the ones subscribed ahead of their handler`);
     } finally { db.close(); }
   }
 });

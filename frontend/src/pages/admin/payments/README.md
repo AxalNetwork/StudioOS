@@ -3,22 +3,36 @@
 D1008 (#2386): Payments at `/admin/platform/payments`, HQ only, built to the
 owner's canvas (PAY1–PAY13, `design/incoming/Payments Page.dc.html`) under the
 shared admin page header (D936). It sits under Platform; its tabs are
-sub-paths: Catalogue and `/stripe`. The Admin Console's `?tab=payments`
+sub-paths: Catalogue, `/stripe` and `/log` (D1014). The Admin Console's `?tab=payments`
 forwards here with `?moved=payments`, in `../LegacyContractsRedirect.jsx`.
 
 - `Payments.jsx` — the page inside `AdminBoardFrame` (board H29, "Payments
-  catalogue"): the header, Catalogue's Needs you, tiles and grouped table, and
-  Stripe connection's account, key, webhook, deliveries and mirror. Today's
+  catalogue"): the header, its reads, and Catalogue's Needs you, tiles and
+  grouped table (on a phone, cards that open the product as a sheet). Today's
   editor (`../consoles/PaymentsConsole.jsx`) opens on request at the foot of
-  Catalogue until D1008 parts 4 to 6.
+  Catalogue until D1008 parts 4 and 5.
+- `StripeConnection.jsx` — PAY5 (D1014): the account, the key, the webhook,
+  deliveries per hour (the no-log hour dashed; a table on request and on a
+  phone) and the mirror. Part 5's three buttons are drawn disabled until its
+  dialogs exist (#2832).
+- `ChangeLog.jsx` — PAY7 (D1014): the change log, its filters and pages, and
+  the CSV export behind an in-page reason dialog.
+- `payUi.jsx` — the shared classes (each with its dark colour, PAY13), the
+  read states, `PayDialog` (a bottom sheet on a phone, PAY12) and Technical
+  details.
 - `payModel.js` — pure. The addresses and tabs, the moved sentence, the words
-  for kinds, modes and prices, the groups and counts, keys match and Needs you.
+  for kinds, modes and prices, the groups and counts, keys match and Needs you,
+  the hourly deliveries, and the change log's words, ranges and reason rule.
 
 ## Rules
 
-- Each of the four reads answers alone; a failed one is said, never drawn as
+- Each read answers alone; a failed one is said, never drawn as
   "not set up" or as a match.
 - Amounts are shown in their own currency and never added across currencies.
 - The page never shows or takes a secret key.
 - Token packs are read only here; they are managed on Platform › AI allowances.
 - Each tab is a literal `HeaderTab`, so the reachability walk finds its door.
+- An hour the request log is silent on is "no log", never 0; an unread
+  change log is never drawn as an empty one.
+- Codes (actions, IDs, raw details) only under Technical details.
+- Every dialog is in-page; nothing uses a browser pop-up.

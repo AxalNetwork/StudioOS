@@ -205,3 +205,95 @@ export function redactForAudience(
       : 'Full view: the complete cap table as the owner sees it.',
   };
 }
+
+// ---------------------------------------------------------------------------
+// D1019 (#2856) — levels per venture (CT13).
+// ---------------------------------------------------------------------------
+
+/**
+ * The canvas's five levels, narrowest first. `none` sees nothing; the other
+ * four are each a read that returns only what that level shows. Summary,
+ * Investor and Full are the three audiences above, unchanged, so a link and a
+ * grant at the same level show the same thing.
+ */
+export const ACCESS_LEVELS = ['none', 'own_position', 'summary', 'investor', 'full'] as const;
+export type AccessLevel = typeof ACCESS_LEVELS[number];
+/** The levels a share link may carry: a link has no holder, so no Own position. */
+export const LINK_LEVELS: ReadonlyArray<ShareAudience> = SHARE_AUDIENCES;
+/** Investor and Full name holders, so a link at either needs the founder's attestation. */
+export const ATTESTED_LEVELS: ReadonlyArray<ShareAudience> = ['investor', 'full'];
+
+export function isAccessLevel(v: unknown): v is AccessLevel {
+  return typeof v === 'string' && (ACCESS_LEVELS as ReadonlyArray<string>).includes(v);
+}
+
+/** Higher is wider. `none` is 0. */
+export function levelRank(l: AccessLevel): number {
+  return ACCESS_LEVELS.indexOf(l);
+}
+
+/** The wider of two levels. */
+export function widerLevel(a: AccessLevel, b: AccessLevel): AccessLevel {
+  return levelRank(a) >= levelRank(b) ? a : b;
+}
+
+export const LEVEL_SCOPE: Record<Exclude<AccessLevel, 'none'>, { label: string; sees: string }> = {
+  own_position: { label: 'Own position', sees: 'Their shares, instruments and documents, and the group split.' },
+  summary: { label: 'Summary', sees: '% by group and number of rounds. No names, no counts.' },
+  investor: {
+    label: 'Investor',
+    sees: 'Every investor and founder position, rounds and pricing, the pool as one line, the waterfall. Not who holds options.',
+  },
+  full: { label: 'Full', sees: 'Everything the founder sees.' },
+};
+
+type InstrumentIn = {
+  name?: string; amount?: number; cap?: number; discount?: number; basis?: string;
+  instrument?: string; interest_rate?: number; issue_date?: string;
+};
+
+export interface OwnPosition {
+  level: 'own_position';
+  holder: string;
+  /** Each final-ledger row in the holder's name: shares and fully diluted %. */
+  position: Array<{ holder: string; type: string; shares: number; pct: number | null }>;
+  /** The holder's own SAFEs and notes, as the model states them. */
+  instruments: Array<{ instrument: string; amount: number | null; cap: number | null; discount: number | null; basis: string | null; issue_date: string | null }>;
+  documents: Array<{ title: string; status: string | null }>;
+  summary: Array<{ group: string; pct: number }>;
+  disclosure: string;
+}
+
+/**
+ * One holder's own position. Built by copying, as `redactForAudience` is:
+ * only the rows whose holder name is the grant's `holder_ref`, and the group
+ * split, which every level above None shows. No other holder's name or count.
+ */
+export function ownPositionView(
+  result: { founding?: Holder[]; rounds?: Array<Record<string, unknown>> } | null | undefined,
+  inputs: { safes?: InstrumentIn[] } | null | undefined,
+  holderRef: string,
+  documents: Array<{ title: string; status: string | null }> = [],
+): OwnPosition {
+  const rounds = Array.isArray(result?.rounds) ? result!.rounds! : [];
+  const ledger: Holder[] = rounds.length > 0 ? ((rounds[rounds.length - 1] as any)?.ledger || []) : (result?.founding || []);
+  const mine = (n: unknown) => String(n ?? '').trim().toLowerCase() === holderRef.trim().toLowerCase();
+  return {
+    level: 'own_position',
+    holder: holderRef,
+    position: ledger.filter((h) => mine(h.holder)).map((h) => ({
+      holder: h.holder, type: h.type, shares: Number(h.shares) || 0, pct: h.pct === undefined ? null : Number(h.pct),
+    })),
+    instruments: (inputs?.safes || []).filter((s) => mine(s.name)).map((s) => ({
+      instrument: s.instrument === 'note' ? 'note' : 'safe',
+      amount: s.amount ?? null,
+      cap: s.cap ?? null,
+      discount: s.discount ?? null,
+      basis: s.basis ?? null,
+      issue_date: s.issue_date ?? null,
+    })),
+    documents: documents.map((d) => ({ title: d.title, status: d.status })),
+    summary: summariseLedger(ledger),
+    disclosure: 'Own position: your shares, instruments and documents, and the split by group. No other holder is named.',
+  };
+}

@@ -107,7 +107,8 @@ test('a board on a shared route names the board that owns it, which the canvas l
 test('the boards with a page of their own sit in AdminBoardFrame under their own name', () => {
   const framed = ADMIN_BOARDS.filter((b) => b.rail === FRAME && !b.alias && !b.host);
   // D953 (#2371): S19, the Programs catalogue, left HeldZone for the frame.
-  assert.deepEqual(framed.map((b) => b.id), ['S3', 'S4', 'S8', 'S9', 'S10', 'S11', 'S15', 'S16', 'S17', 'S18', 'S19', 'S23', 'S31', 'S39']);
+  // D1038 (#2390): so did S5, Approvals, with its lane boards.
+  assert.deepEqual(framed.map((b) => b.id), ['S3', 'S4', 'S5', 'S8', 'S9', 'S10', 'S11', 'S15', 'S16', 'S17', 'S18', 'S19', 'S23', 'S31', 'S39']);
   for (const b of framed) {
     for (const f of b.files) {
       assert.deepEqual(frames(f), [nameOf(b)], `${f}: the frame is not named "${nameOf(b)}", once`);

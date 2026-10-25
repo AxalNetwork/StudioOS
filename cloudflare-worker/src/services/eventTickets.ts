@@ -20,6 +20,7 @@ import { ensurePaymentsCustomer } from '../routes/payments';
 import type { TierUser } from '../middleware/requireTier';
 import { notify } from './notify';
 import { ensureCheckinCode } from './eventCapacity';
+import { memberEventLink } from './eventLinks';
 
 export interface EventTicketEventMin {
   id: number;
@@ -135,7 +136,7 @@ export async function fulfillEventTicket(env: Env, pi: Record<string, unknown>):
     await notify(env, {
       userId: Number(row.user_id), type: 'event_ticket_paid', category: 'events',
       title: `You're confirmed: ${row.title}`,
-      link: `/events/${row.slug}`, payload: { event_id: eventId },
+      link: memberEventLink(eventId), payload: { event_id: eventId },
     }).catch(() => {});
   }
 }
