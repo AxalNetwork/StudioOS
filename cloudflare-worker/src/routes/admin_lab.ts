@@ -5,7 +5,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
 import { wallClockToUtcMs, COHORT_TZ, sqliteUtcToMs } from '../services/cohortTiming';
-import { monthLabel } from '../services/cohortApplications';
+import { monthLabel, readCohortSizeSettings } from '../services/cohortApplications';
 import { ORIGINS, TTO_STATUSES, parseStoredAnswers } from '../services/applicationLifecycle';
 
 const r = new Hono<{ Bindings: Env }>();
@@ -39,6 +39,53 @@ export function labWeeks(now: number) {
   return Array.from({ length: 12 }, (_, i) => ({ start: at((i - 11) * 7), end: at((i - 10) * 7), partial: i === 11 }));
 }
 
+/** D944's pool, one row per cohort assignment with its normalised facts. D948
+ * reads one row of it for SL3, so the list and the drawer can never disagree. */
+const POOL_CTE = `WITH facts AS (
+    SELECT ca.id, ca.application_id, ca.user_id, ca.cohort_cycle_id, ca.status, ca.rolled_from_cycle_id,
+      ca.created_at AS pool_created_at, ca.decided_at, ca.decision_reason,
+      a.created_at AS applied_at, a.company_name, a.idea, a.stage, a.incorporated, a.jurisdiction, a.answers_json,
+      u.name, u.email, u.role, printf('%04d-%02d', cy.year, cy.month) AS cohort,
+      i.id AS interview_id, i.status AS interview_status, i.scheduled_at AS interview_at,
+      i.duration_min AS interview_duration_min, i.location AS interview_location,
+      CASE WHEN json_valid(a.answers_json) THEN a.answers_json ELSE '{}' END AS safe_answers
+    FROM cohort_applicants ca
+    JOIN cohort_cycles cy ON cy.id = ca.cohort_cycle_id
+    LEFT JOIN users u ON u.id = ca.user_id
+    LEFT JOIN spinout_applications a ON a.id = ca.application_id
+    LEFT JOIN spinout_application_interviews i ON i.application_id = ca.application_id
+      AND i.id = (SELECT MAX(latest.id) FROM spinout_application_interviews latest WHERE latest.application_id = ca.application_id)
+  ), normalized AS (
+    SELECT facts.*,
+      CASE WHEN json_extract(safe_answers, '$.origin') IN ('university','corporate','independent')
+        THEN json_extract(safe_answers, '$.origin') END AS origin,
+      CASE WHEN json_extract(safe_answers, '$.tto_status') IN ('not_disclosed','disclosed','negotiating','signed','not_applicable')
+        THEN json_extract(safe_answers, '$.tto_status') END AS tech_transfer,
+      CASE WHEN json_type(safe_answers, '$.institution') = 'text' THEN NULLIF(trim(json_extract(safe_answers, '$.institution')), '') END AS institution,
+      CASE WHEN json_type(safe_answers, '$.team_size') = 'integer' AND json_extract(safe_answers, '$.team_size') BETWEEN 1 AND 50
+        THEN json_extract(safe_answers, '$.team_size') END AS team_size,
+      CASE WHEN status IN ('pending','waitlisted') THEN COALESCE(decided_at, pool_created_at) END AS waiting_since,
+      CASE WHEN status = 'pending' AND interview_status = 'scheduled' THEN 'interview_set'
+        WHEN status = 'pending' THEN 'waiting' WHEN status = 'rejected' THEN 'declined'
+        WHEN status = 'rolled_forward' THEN 'carried_forward' WHEN status = 'activated' THEN 'started'
+        ELSE status END AS display_status
+    FROM facts
+  )`;
+const ITEM_JSON = `json_object('id',id,'application_id',application_id,'user_id',user_id,
+      'cohort_cycle_id',cohort_cycle_id,'cohort',cohort,'status',status,'display_status',display_status,
+      'rolled_from_cycle_id',rolled_from_cycle_id,'pool_created_at',pool_created_at,'decided_at',decided_at,
+      'decision_reason',decision_reason,'applied_at',applied_at,'company_name',company_name,'idea',idea,
+      'stage',stage,'incorporated',incorporated,'jurisdiction',jurisdiction,'name',name,'email',email,'role',role,
+      'answers_json',answers_json,'origin',origin,'tech_transfer',tech_transfer,'institution',institution,
+      'team_size',team_size,'waiting_since',waiting_since,'interview_id',interview_id,'interview_status',interview_status,
+      'interview_at',interview_at,'interview_duration_min',interview_duration_min,'interview_location',interview_location)`;
+const itemOf = (json: string): Row => {
+  const { answers_json, ...item } = JSON.parse(json) as Row;
+  const answers = parseStoredAnswers(answers_json);
+  return { ...item, answers, answers_recorded: answers !== null,
+    answers_status: !answers_json ? 'not_recorded' : answers === null ? 'unreadable' : 'ready' };
+};
+
 r.get('/overview', async (c) => {
   await requireAdmin(c);
   const selected = c.req.query('cohort');
@@ -46,8 +93,8 @@ r.get('/overview', async (c) => {
   const now = new Date().toISOString();
   const weeks = labWeeks(Date.parse(now));
   // Independent reads: the absent/failing source affects only its metrics.
-  const [cycles, pools, starts, interviews, outcomes, windows, incorporations, certificates, weekly] = await Promise.all([
-    read(c.env.DB, `SELECT id, year, month, status, app_status, start_at, end_at, applications_open_at, applications_close_at
+  const [cycles, pools, starts, interviews, outcomes, windows, incorporations, certificates, weekly, settings] = await Promise.all([
+    read(c.env.DB, `SELECT id, year, month, status, app_status, start_at, end_at, applications_open_at, applications_close_at, force_proceed
       FROM cohort_cycles ORDER BY year DESC, month DESC`, 'Cohorts could not be read.'),
     read(c.env.DB, `SELECT cohort_cycle_id, COUNT(*) AS applied,
       SUM(CASE WHEN status IN ('approved','activated') THEN 1 ELSE 0 END) AS approved,
@@ -99,6 +146,8 @@ r.get('/overview', async (c) => {
         ON datetime(a.created_at) >= datetime(w.starts_at) AND datetime(a.created_at) < datetime(w.ends_at)
         AND datetime(a.created_at) <= datetime(?) GROUP BY w.idx ORDER BY w.idx`,
       'Weekly application submissions could not be read.', [...weeks.flatMap(w => [w.start, w.end]), now]),
+    // D948: the minimum and places Settings hold, for SL2's capacity bar. Null when unreadable.
+    readCohortSizeSettings(c.env),
   ]);
   let rows: Row[] = [];
   if (cycles.available) rows = cycles.rows.map(cycle => {
@@ -145,6 +194,8 @@ r.get('/overview', async (c) => {
     cohorts: cycles.available ? { available: true, items: rows } : cycles,
     applications_per_week: weekly.available ? { available: true, items: weeks.map((w, i) => ({ ...w, applied: Number(weekly.rows.find(x => x.idx === i)?.applied || 0) })) } : weekly,
     funnel,
+    settings: settings ? { available: true, min: settings.min, places: settings.max }
+      : unreadable('Minimum and places could not be read, so no cohort is judged against them.'),
   }, definitions: {
     applied: 'Application assignments in each cohort pool, including carried-in applications. Weekly submissions count application records once, not assignments or drafts.',
     approved: 'Approved and activated pool assignments; historical approvals subsequently rolled forward are not retained as approvals.',
@@ -177,36 +228,7 @@ r.get('/applications/list', async (c) => {
   const filter = (name: string) => q[name] || null;
   // instr treats %, _ and quote characters as literal search text. Every
   // request value, including the sort selector, is bound rather than SQL.
-  const result = await read(c.env.DB, `WITH facts AS (
-    SELECT ca.id, ca.application_id, ca.user_id, ca.cohort_cycle_id, ca.status, ca.rolled_from_cycle_id,
-      ca.created_at AS pool_created_at, ca.decided_at, ca.decision_reason,
-      a.created_at AS applied_at, a.company_name, a.idea, a.stage, a.incorporated, a.jurisdiction, a.answers_json,
-      u.name, u.email, u.role, printf('%04d-%02d', cy.year, cy.month) AS cohort,
-      i.id AS interview_id, i.status AS interview_status, i.scheduled_at AS interview_at,
-      i.duration_min AS interview_duration_min, i.location AS interview_location,
-      CASE WHEN json_valid(a.answers_json) THEN a.answers_json ELSE '{}' END AS safe_answers
-    FROM cohort_applicants ca
-    JOIN cohort_cycles cy ON cy.id = ca.cohort_cycle_id
-    LEFT JOIN users u ON u.id = ca.user_id
-    LEFT JOIN spinout_applications a ON a.id = ca.application_id
-    LEFT JOIN spinout_application_interviews i ON i.application_id = ca.application_id
-      AND i.id = (SELECT MAX(latest.id) FROM spinout_application_interviews latest WHERE latest.application_id = ca.application_id)
-  ), normalized AS (
-    SELECT facts.*,
-      CASE WHEN json_extract(safe_answers, '$.origin') IN ('university','corporate','independent')
-        THEN json_extract(safe_answers, '$.origin') END AS origin,
-      CASE WHEN json_extract(safe_answers, '$.tto_status') IN ('not_disclosed','disclosed','negotiating','signed','not_applicable')
-        THEN json_extract(safe_answers, '$.tto_status') END AS tech_transfer,
-      CASE WHEN json_type(safe_answers, '$.institution') = 'text' THEN NULLIF(trim(json_extract(safe_answers, '$.institution')), '') END AS institution,
-      CASE WHEN json_type(safe_answers, '$.team_size') = 'integer' AND json_extract(safe_answers, '$.team_size') BETWEEN 1 AND 50
-        THEN json_extract(safe_answers, '$.team_size') END AS team_size,
-      CASE WHEN status IN ('pending','waitlisted') THEN COALESCE(decided_at, pool_created_at) END AS waiting_since,
-      CASE WHEN status = 'pending' AND interview_status = 'scheduled' THEN 'interview_set'
-        WHEN status = 'pending' THEN 'waiting' WHEN status = 'rejected' THEN 'declined'
-        WHEN status = 'rolled_forward' THEN 'carried_forward' WHEN status = 'activated' THEN 'started'
-        ELSE status END AS display_status
-    FROM facts
-  ), filtered AS (
+  const result = await read(c.env.DB, `${POOL_CTE}, filtered AS (
     SELECT * FROM normalized WHERE (? IS NULL OR cohort = ?)
       AND (? IS NULL OR display_status = ?)
       AND (? IS NULL OR origin = ? OR (? = 'unknown' AND origin IS NULL))
@@ -225,14 +247,7 @@ r.get('/applications/list', async (c) => {
       CASE WHEN ? = 'company' THEN lower(company_name) END ASC,
       CASE WHEN ? = 'team_size' THEN team_size END DESC, id DESC LIMIT ? OFFSET ?
   ) SELECT (SELECT COUNT(*) FROM filtered) AS total,
-    json_object('id',id,'application_id',application_id,'user_id',user_id,
-      'cohort_cycle_id',cohort_cycle_id,'cohort',cohort,'status',status,'display_status',display_status,
-      'rolled_from_cycle_id',rolled_from_cycle_id,'pool_created_at',pool_created_at,'decided_at',decided_at,
-      'decision_reason',decision_reason,'applied_at',applied_at,'company_name',company_name,'idea',idea,
-      'stage',stage,'incorporated',incorporated,'jurisdiction',jurisdiction,'name',name,'email',email,'role',role,
-      'answers_json',answers_json,'origin',origin,'tech_transfer',tech_transfer,'institution',institution,
-      'team_size',team_size,'waiting_since',waiting_since,'interview_id',interview_id,'interview_status',interview_status,
-      'interview_at',interview_at,'interview_duration_min',interview_duration_min,'interview_location',interview_location) AS item_json FROM page
+    ${ITEM_JSON} AS item_json FROM page
     UNION ALL SELECT (SELECT COUNT(*) FROM filtered) AS total, NULL AS item_json`,
     'Applications could not be read. The total and filtered page are unknown.', [
       cohort, cohort, filter('status'), filter('status'),
@@ -245,12 +260,7 @@ r.get('/applications/list', async (c) => {
     ]);
   if (!result.available) return c.json({ ...result, items: null, total: null, limit, offset });
   const row = result.rows[0];
-  const items = result.rows.filter(r => r.item_json !== null).map(r => {
-    const { answers_json, ...item } = JSON.parse(r.item_json) as Row;
-    const answers = parseStoredAnswers(answers_json);
-    return { ...item, answers, answers_recorded: answers !== null,
-      answers_status: !answers_json ? 'not_recorded' : answers === null ? 'unreadable' : 'ready' };
-  });
+  const items = result.rows.filter(r => r.item_json !== null).map(r => itemOf(r.item_json));
   return c.json({ available: true, as_of: new Date().toISOString(), timezone: COHORT_TZ, items, total: Number(row.total), limit, offset, sort,
     filters: { cohort, status: filter('status'), origin: filter('origin'), tech_transfer: filter('tech_transfer'),
       stage: filter('stage'), incorporated: filter('incorporated'), interview: filter('interview'),
@@ -259,6 +269,55 @@ r.get('/applications/list', async (c) => {
       incorporated: 'The application self-declaration, not a verified company formation.',
       interview: 'Latest scheduling record. There is no interview-completion store.',
       team_size: 'Recorded integer team sizes, descending; unknown sizes follow known sizes.' },
+  });
+});
+
+/**
+ * D948 (#2753): SL3, one application, for the drawer at /applications/:id.
+ * The row is D944's pool row (`POOL_CTE`), so it matches the queue. Beside it,
+ * each read answers alone: what the founder was told and asked (migration 315),
+ * the latest interview with its note and any ask to move it (316), the cohort
+ * it sits in and the next one (for SL4 B and C's copy), and the Week 1 plan
+ * (396). A failed block is `{available:false,reason}`; a missing application
+ * is 404. The id is digits only, so `/applications/list`, `/notifications` and
+ * `/events` never reach this route.
+ */
+r.get('/applications/:applicant_id{[0-9]+}', async (c) => {
+  await requireAdmin(c);
+  const id = Number(c.req.param('applicant_id'));
+  if (!Number.isSafeInteger(id) || id < 1) return c.json({ error: 'invalid_applicant', message: 'That application id is not valid.' }, 400);
+  const main = await read(c.env.DB, `${POOL_CTE} SELECT ${ITEM_JSON} AS item_json FROM normalized WHERE id = ?`,
+    'This application could not be read.', [id]);
+  if (!main.available) return c.json({ available: false, reason: main.reason });
+  if (!main.rows.length) return c.json({ error: 'applicant_not_found', message: 'There is no application with this id.' }, 404);
+  const item = itemOf(main.rows[0].item_json);
+  const [founder, interview, cohorts, plan] = await Promise.all([
+    read(c.env.DB, `SELECT a.withdrawn_at, a.applicant_note, a.applicant_note_at, a.applicant_asks_json
+      FROM spinout_applications a WHERE a.id = ?`, 'What the founder was told could not be read.', [item.application_id]),
+    read(c.env.DB, `SELECT id, scheduled_at, duration_min, location, note, status, reschedule_requested_at, reschedule_reason
+      FROM spinout_application_interviews WHERE application_id = ? ORDER BY id DESC LIMIT 1`,
+      'The interview could not be read.', [item.application_id]),
+    read(c.env.DB, `SELECT id, year, month, status, app_status, start_at, end_at, applications_open_at, applications_close_at, force_proceed
+      FROM cohort_cycles WHERE id IN (?, ?) OR (year * 12 + month) = (SELECT year * 12 + month + 1 FROM cohort_cycles WHERE id = ?)`,
+      'The cohort could not be read.', [item.cohort_cycle_id, item.rolled_from_cycle_id ?? -1, item.cohort_cycle_id]),
+    read(c.env.DB, `SELECT user_id, rule_key, steps_json, started, computed_by, created_at, updated_at
+      FROM spinout_week1_plans WHERE user_id = ?`, 'The Week 1 plan could not be read. That is not the same as none.', [item.user_id]),
+  ]);
+  const { parseStoredAsks } = await import('../services/applicationLifecycle');
+  const { planView } = await import('../services/week1Plan');
+  const cycle = (row: Row | undefined) => row ? { id: row.id, cohort: key(row), label: monthLabel(row.year, row.month), status: row.status,
+    app_status: row.app_status, start_at: row.start_at, end_at: row.end_at, applications_open_at: row.applications_open_at,
+    applications_close_at: row.applications_close_at, force_proceed: Number(row.force_proceed) === 1 } : null;
+  const own = cohorts.available ? cohorts.rows.find(x => x.id === item.cohort_cycle_id) : undefined;
+  const next = cohorts.available && own ? cohorts.rows.find(x => x.year * 12 + x.month === own.year * 12 + own.month + 1) : undefined;
+  const from = cohorts.available && item.rolled_from_cycle_id != null ? cohorts.rows.find(x => x.id === item.rolled_from_cycle_id) : undefined;
+  const f = founder.available ? founder.rows[0] : null;
+  return c.json({ available: true, as_of: new Date().toISOString(), timezone: COHORT_TZ, item,
+    founder: !founder.available ? founder : { available: true, withdrawn_at: f?.withdrawn_at ?? null,
+      applicant_note: f?.applicant_note ?? null, applicant_note_at: f?.applicant_note_at ?? null, applicant_asks: parseStoredAsks(f?.applicant_asks_json) },
+    interview: !interview.available ? interview : { available: true, latest: interview.rows[0] ?? null },
+    cohort: !cohorts.available ? cohorts : { available: true, own: cycle(own), next: cycle(next), carried_from: cycle(from) },
+    week1_plan: !plan.available ? plan : { available: true, plan: planView(plan.rows[0] as any) },
   });
 });
 
