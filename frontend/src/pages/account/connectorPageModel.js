@@ -95,7 +95,7 @@ export function keyPath(p) {
  *   `oauth`       — "Connect to Axal VC", sending the browser to the service.
  */
 export function pageAction(p, { view = 'idle' } = {}) {
-  if (!p) return { kind: 'none' };
+  if (!p || p.auth_type === 'none') return { kind: 'none' };
   const name = p.display_name || 'this connector';
   if (p.connection) {
     const pill = connectionStatus(p.connection, p);
