@@ -374,9 +374,19 @@ export const LANE_CONSOLES = {
   partner_profiles: '/admin/partner-profiles',
   exploring: '/admin/exploring',
   jobs: '/admin/jobs',
-  events: '/admin/events',
+  // D1038 (#2390): the lane opens the desk's Review tab, its queue.
+  events: '/admin/events/review',
   best_fit: '/admin/best-fit',
   due_diligence: '/admin/due-diligence',
+  // D1041 (#2889): part 3's lanes, each by the door Approvals draws for it (D1038's LaneDoor).
+  kyb: '/admin/kyc',
+  comarketing: '/admin/approvals/co-marketing',
+  wellbeing_experts: '/admin/approvals/wellbeing-experts',
+  perk_listings: '/admin/programs/perks',
+  strategic_access: '/admin/programs/refer-and-earn',
+  lab_hosts: '/admin/programs/spinout-lab/hosts',
+  score_flags: '/monitoring',
+  articles: '/admin/articles',
 };
 
 /** The lanes with no pending notion (`NOT_LANED`), by label, with their consoles. */

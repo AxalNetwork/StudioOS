@@ -43,7 +43,9 @@ export const FROZEN = [
     // D1041 (#2889) adds eight lanes: four gated, three not, and KYB undecided.
     row: 'Approvals',
     note: 'LP applications, referrals, strategic referral access, Spin-Out moderation, KYC, perk listings, Spin-Out Lab hosts and wellbeing expert verdicts are frozen, approve and reject alike. Naming a reviewer on the board is frozen too. Items keep their SLA age, so nothing looks fresh when it unfreezes. No admin decides KYB yet. Partner profiles, Exploring, Best-Fit consultations, due diligence, co-marketing pitches, articles and score flags are not frozen.',
-    gatedIn: ['admin_lp_applications.ts', 'refer_earn.ts', 'spinout_moderation.ts', 'kyc.ts', 'perks.ts', 'lab_hosts.ts', 'wellbeing.ts', 'branch_approval_assignments.ts'],
+    // D1040 — admin_approvals.ts is HQ's inbox; on a branch it is the same
+    // assignment write, so naming a reviewer there is frozen too.
+    gatedIn: ['admin_lp_applications.ts', 'refer_earn.ts', 'spinout_moderation.ts', 'kyc.ts', 'perks.ts', 'lab_hosts.ts', 'wellbeing.ts', 'branch_approval_assignments.ts', 'admin_approvals.ts'],
   },
   {
     // D260 — the older application decide in admin.ts writes the same cohort
@@ -55,9 +57,12 @@ export const FROZEN = [
     //
     // D960 — mentor cohort access too, both ways: giving a mentor a cohort's
     // founders and ending it are each an act on who can read founder data.
+    //
+    // D945 — moving an applicant to another cohort, bulk decisions and admit
+    // without an application are admissions too (admin_lab_writes.ts).
     row: 'Programs',
-    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike. Lab grace, overrides, settings, force-proceed and host decisions, including revocation, are frozen. Graduation certificates cannot be issued or revoked. No mentor can be given, or lose, access to a cohort. Perk reviews and feature changes are frozen too; listings and claims remain readable. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing.',
-    gatedIn: ['admin_cohort.ts', 'admin.ts', 'lab_hosts.ts', 'spinout_certificates.ts', 'advisors.ts', 'perks.ts'],
+    note: 'Cohort and Spin-Out Lab admissions closed, by the cohort queue and by the older application decide alike, with moves to another cohort, bulk decisions and admitting without an application. Lab grace, overrides, settings, force-proceed and host decisions, including revocation, are frozen. Graduation certificates cannot be issued or revoked. No mentor can be given, or lose, access to a cohort. Perk reviews and feature changes are frozen too; listings and claims remain readable. The running cohort continues to its end date — its week decisions are not frozen, because the founders in it did nothing.',
+    gatedIn: ['admin_cohort.ts', 'admin_lab_writes.ts', 'admin.ts', 'lab_hosts.ts', 'spinout_certificates.ts', 'advisors.ts', 'perks.ts'],
   },
   {
     // D260 — the admin acts that decide an account's access: both KYC

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body{margin:0;background:#eeedf2}a{color:#7c3aed;text-decoration:none}a:hover{color:#6d28d9}</style>
+</helmet>
+<div style="display:flex;flex-direction:column;font-family:'Space Grotesk',system-ui,sans-serif;color:#18181b">
+  <header style="padding:40px 44px 8px;display:flex;flex-direction:column;gap:6px">
+    <span style="font:700 11px 'Roboto Mono',monospace;letter-spacing:.07em;text-transform:uppercase;color:#6b6577">Member · Events</span>
+    <h1 style="margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em">My events</h1>
+    <p style="margin:0;font-size:14px;color:#6b6577;max-width:840px;line-height:1.55">One page with four tabs: Upcoming, Hosting, Discover and Past. Events lives in the account menu, so no sidebar row is lit. Sample today is Tue [10 Nov 2026]. Tickets and hosted events open as centred lightboxes rather than side drawers; on a phone they open as full pages.</p>
+  </header>
+  <sc-for list="{{ boards }}" as="b" hint-placeholder-count="18">
+    <section id="{{ b.id }}" style="padding:36px 44px;border-bottom:1px solid rgba(0,0,0,.08);display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px">
+      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+        <a href="#{{ b.id }}" style="font:700 11px 'Roboto Mono',monospace;padding:3px 8px;background:#18181b;color:#fff;border-radius:5px">{{ b.id }}</a>
+        <h2 style="margin:0;font-size:16px;font-weight:800;letter-spacing:-.01em">{{ b.t }}</h2>
+      </div>
+      <p style="margin:0;font-size:13px;line-height:1.55;color:#4a4553;max-width:920px">{{ b.cap }}</p>
+      <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+        <sc-for list="{{ b.frames }}" as="f" hint-placeholder-count="1">
+          <div style="display:flex;flex-direction:column;gap:8px;flex:none">
+            <sc-if value="{{ f.lab }}" hint-placeholder-val="{{ false }}"><span style="font:600 11px 'Roboto Mono',monospace;color:#6b6577">{{ f.lab }}</span></sc-if>
+            <div style="{{ f.box }}"><dc-import name="My Events Page" board="{{ f.b }}" hint-size="{{ f.hint }}"></dc-import></div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script="">
+class Component extends DCLogic {
+  renderVals() {
+    const D = (b, lab, w, h, r) => ({ b, lab: lab || false, hint: '100%,' + (h || 900) + 'px', box: 'width:' + (w || 1440) + 'px;' + (h ? 'height:' + h + 'px;' : '') + 'overflow:hidden;border-radius:' + (r || 12) + 'px;border:1px solid rgba(24,24,27,.12);background:#f4f3f7;box-shadow:0 1px 3px rgba(0,0,0,.06)' });
+    const P = (b, lab) => D(b, lab, 390, 844, 28);
+    const boards = [
+      ['MEV1', 'Upcoming · Founder · desktop 1440 · light', 'Needs you, the next event, the other tickets grouped by when, the next two hosted events, the month, the calendar subscription and suggestions. The account menu is open with Events marked current, between Calendar and Learning.', [D('MEV1')]],
+      ['MEV2', 'Upcoming · Explorer', 'No Hosting tab and no New event. One line says hosting opens once the profile is set, and a suggestion closed to Explorers says so in place of Register.', [D('MEV2')]],
+      ['MEV3', 'Ticket · lightbox over Upcoming', 'The QR code with its code in text, when and where, the join link, Add to calendar, the seat, the agenda and the host. Then the top card in the four states that carry no code.', [D('MEV3'), D('MEV3a', 'Pay to confirm', 620), D('MEV3b', 'Waitlist · #[3]', 620), D('MEV3c', 'Waiting for the host', 620), D('MEV3d', 'Declined by the host', 620)]],
+      ['MEV4', 'Hosting · Founder', 'Hosted events grouped by what they need, each with the one action that fits its status and a ⋯ menu. A row opens the hosted event.', [D('MEV4')]],
+      ['MEV5', 'Hosted event · lightbox over Hosting', 'On the event’s day: the publish gate, what to do next, four tiles, who may register and the four host pages. The second frame holds the other states and gates.', [D('MEV5'), D('MEV5b', 'Other states', 1200)]],
+      ['MEV6', 'Publish dialogs', 'A public event goes to review; unlisted and private events publish at once.', [D('MEV6a', 'Public', 680), D('MEV6b', 'Unlisted', 680), D('MEV6c', 'Private', 680)]],
+      ['MEV7', 'Cancel dialogs', 'Cancelling a place, with the paid-seat box, and cancelling an event as its host.', [D('MEV7a', 'Cancel my place', 680), D('MEV7b', 'Cancel event · host', 680)]],
+      ['MEV8', 'Discover · Investor', 'Suggestions first, then every upcoming event in November with the action that fits it. The dashed card notes what differs for an investor.', [D('MEV8')]],
+      ['MEV9', 'Past · Founder', 'This year by month, then every past event with its result. Replay is not recorded yet.', [D('MEV9')]],
+      ['MEV10', 'Past · dark', 'MEV9 in the dark colours; violet becomes #a78bfa.', [D('MEV10')]],
+      ['MEV11', 'Upcoming as a month', 'The Month switch: chips by kind with a legend, +1 more on a full day, and Add to calendar open on the Demo Day chip.', [D('MEV11')]],
+      ['MEV12', 'Host pages · shared header', 'The header the editor and the manage pages share; their bodies are drawn on their own canvas. Check-in shows as a tab only on the event’s day.', [D('MEV12a', 'An existing event, on its day', 1440, 620), D('MEV12b', 'A new event', 1440, 520)]],
+      ['MEV13', 'Hosting · Admin', 'Studio events in the Admin shell, with the line that links to the review desk.', [D('MEV13', false, 1440, 860)]],
+      ['MEV14', 'Empty', 'Nothing upcoming, nothing hosted, nothing past.', [D('MEV14a', 'Upcoming', 1000), D('MEV14b', 'Hosting', 640), D('MEV14c', 'Past', 640)]],
+      ['MEV15', 'Loading', 'Header and tabs drawn at once; every card reads.', [D('MEV15')]],
+      ['MEV16', 'Error and partial', 'Suggestions failed while the rest renders, with Past’s count as a dash; then the whole read failed.', [D('MEV16a', 'One block failed'), D('MEV16b', 'The whole read failed', 1440, 560)]],
+      ['MEV17', 'No permission', 'Someone opens an event they do not host; an Explorer, if My events stays closed to them.', [D('MEV17a', 'Not your event'), D('MEV17b', 'Explorer, if My events stays closed', 1440, 640)]],
+      ['MEV18', 'Phone · 390 wide', 'Upcoming with a one-week strip, a ticket full screen, and check-in on the day as a camera sheet.', [P('MEV18a', 'Upcoming'), P('MEV18b', 'Ticket'), P('MEV18c', 'Check in on the day')]]
+    ].map(([id, t, cap, frames]) => ({ id, t, cap, frames }));
+    return { boards };
+  }
+}
+</script>
+</body></html>

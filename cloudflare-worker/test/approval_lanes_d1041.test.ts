@@ -15,6 +15,7 @@ import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 
 import glanceRoute from '../src/routes/admin_studio_glance.ts';
+import approvalsRoute from '../src/routes/admin_approvals.ts';
 import {
   APPROVAL_SOURCES, NOT_COUNTED_YET, SUB_COUNTS_NOT_YET, approvalBoard, countLanes, laneCounts,
 } from '../src/services/approvalSources.ts';
@@ -160,6 +161,20 @@ async function glance(db: DatabaseSync, who: number, extra: Record<string, unkno
   try {
     const res = await withThrownResponses(() => glanceApp.request('/api/admin/studio/glance', {
       headers: { Authorization: `Bearer ${token}` },
+    }, env(db, extra)));
+    return { status: res.status, body: await res.json().catch(() => null) as any };
+  } finally { [console.warn, console.error] = saved; }
+}
+
+const inboxApp = new Hono<any>();
+inboxApp.route('/api/admin/approvals', approvalsRoute);
+async function inbox(db: DatabaseSync, who: number, path: string, init: RequestInit = {}, extra: Record<string, unknown> = {}) {
+  const token = await new SignJWT({ user_id: who, role: 'admin', jti: `totp-${who}` }).setProtectedHeader({ alg: 'HS256' })
+    .setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(JWT_SECRET));
+  const saved = [console.warn, console.error]; console.warn = () => {}; console.error = () => {};
+  try {
+    const res = await withThrownResponses(() => inboxApp.request(`/api/admin/approvals${path === '/' ? '' : path}`, {
+      ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     }, env(db, extra)));
     return { status: res.status, body: await res.json().catch(() => null) as any };
   } finally { [console.warn, console.error] = saved; }
@@ -354,4 +369,33 @@ test('one failed lane is null with its reason and leaves the others; a failed su
   const lanes = Object.fromEntries((await laneCounts(env(db))).map((c) => [c.key, c]));
   assert.equal(lanes.comarketing.count, 1);
   assert.deepEqual(lanes.comarketing.sub, { label: 'approved, not published yet', count: null });
+});
+
+test('HQ\'s inbox (D1040) carries HQ\'s lanes for a Super Admin only: read, assigned and its history', async () => {
+  const db = fixture();
+  seed(db);
+  seedHq(db);
+  const HQ_KEYS = HQ_APPROVAL_SOURCES.map((s) => s.key as string);
+  const sup = await inbox(db, SUPER, '/');
+  assert.equal(sup.status, 200, JSON.stringify(sup.body));
+  assert.deepEqual(sup.body.unreadable, [], 'every lane, HQ\'s included, reads on the full chain');
+  const supLanes = new Set(sup.body.items.map((it: any) => it.lane));
+  for (const k of HQ_KEYS) assert.ok(supLanes.has(k), `the Super Admin's inbox has no ${k} item`);
+  const plain = await inbox(db, PLAIN, '/');
+  assert.equal(plain.status, 200);
+  assert.equal(plain.body.items.some((it: any) => HQ_KEYS.includes(it.lane)), false, 'an Admin saw an HQ item');
+  assert.equal(plain.body.lanes.some((l: any) => HQ_KEYS.includes(l.key)), false);
+  assert.ok(plain.body.items.some((it: any) => it.lane === 'articles'), 'an Admin still sees the studio lanes');
+  assert.equal(sup.body.total, plain.body.total + 10, 'HQ\'s ten open items are the whole difference');
+
+  const support = sup.body.items.find((it: any) => it.lane === 'support');
+  const item = [{ lane: 'support', item_id: support.id }];
+  const post = (who: number) => inbox(db, who, '/assignments', { method: 'POST', body: JSON.stringify({ assignee_user_id: PLAIN, items: item }) });
+  assert.equal((await post(PLAIN)).body.error, 'bad_item', 'an Admin assigned on an HQ lane');
+  assert.equal((await inbox(db, PLAIN, `/history?lane=support&item_id=${support.id}`)).body.error, 'bad_item');
+  assert.equal((await post(SUPER)).status, 200);
+  assert.equal((await inbox(db, SUPER, `/history?lane=support&item_id=${support.id}`)).body.items.length, 1);
+
+  const onBranch = await inbox(db, SUPER, '/', {}, { BRANCH_CODE: 'pt' });
+  assert.equal(onBranch.body.items.some((it: any) => HQ_KEYS.includes(it.lane)), false, 'an HQ lane read on a branch');
 });

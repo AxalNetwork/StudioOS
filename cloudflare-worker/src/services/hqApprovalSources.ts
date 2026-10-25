@@ -13,14 +13,15 @@
  * SQL and the per-lane isolation are `approvalSources.ts`'s.
  */
 import type { Env } from '../types';
-import { countLanes, type ApprovalSource } from './approvalSources';
+import { APPROVAL_SOURCES, countLanes, type ApprovalSource } from './approvalSources';
 import { pressureOf } from './branchHome';
 
 export type HqLaneKey =
   | 'testing_programs' | 'learning' | 'tickets' | 'payouts' | 'ai_runs'
   | 'notices' | 'support' | 'proposals';
 
-export type HqApprovalSource = Omit<ApprovalSource, 'key'> & { key: HqLaneKey };
+/** An HQ lane: `scope: 'hq'`, so D1040's `sourcesFor` shows it to a Super Admin only. */
+export type HqApprovalSource = ApprovalSource & { key: HqLaneKey; scope: 'hq' };
 
 export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
   {
@@ -40,6 +41,7 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'LEFT JOIN users u ON u.id = t.created_by '
       + "WHERE t.status = 'submitted' AND t.owner_kind = 'partner' "
       + 'ORDER BY julianday(COALESCE(t.updated_at, t.created_at)) ASC LIMIT ?',
+    scope: 'hq',
     notifies: 'The partner',
     decidedOn: 'Platform › Product testing',
   },
@@ -57,6 +59,7 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'FROM learning_exercise_submissions s LEFT JOIN learning_exercises x ON x.id = s.exercise_id '
       + 'LEFT JOIN users u ON u.id = s.user_id '
       + "WHERE s.status = 'submitted' ORDER BY julianday(s.submitted_at) ASC LIMIT ?",
+    scope: 'hq',
     notifies: 'Nobody yet',
     decidedOn: 'Learning studio',
   },
@@ -87,6 +90,7 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'FROM community_tasks ct JOIN tickets t ON t.id = ct.ticket_id LEFT JOIN users u ON u.id = t.user_id '
       + "WHERE ct.status = 'pending' AND t.type = 'task'"
       + ') ORDER BY julianday(created_at) ASC LIMIT ?',
+    scope: 'hq',
     notifies: 'The member',
     decidedOn: 'HQ review',
   },
@@ -105,6 +109,7 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'p.created_at AS created_at '
       + 'FROM payouts p LEFT JOIN users u ON u.id = p.user_id '
       + "WHERE p.status IN ('requested', 'processing') ORDER BY julianday(p.created_at) ASC LIMIT ?",
+    scope: 'hq',
     notifies: 'Nobody yet',
     decidedOn: 'Commissions',
   },
@@ -121,6 +126,7 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + "'Held AI run · ' || r.month_key AS what, r.created_at AS created_at "
       + 'FROM ai_budget_reservations r LEFT JOIN users u ON u.id = r.user_id '
       + "WHERE r.status = 'review' ORDER BY julianday(r.created_at) ASC LIMIT ?",
+    scope: 'hq',
     notifies: 'Nobody yet',
     decidedOn: 'Platform › AI allowances',
   },
@@ -138,6 +144,7 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'FROM admin_notices n LEFT JOIN territory_licences l ON l.id = n.licence_id '
       + 'LEFT JOIN users u ON u.id = n.user_id '
       + "WHERE n.status = 'responded' ORDER BY julianday(COALESCE(n.responded_at, n.created_at)) ASC LIMIT ?",
+    scope: 'hq',
     notifies: 'The studio',
     decidedOn: 'Licences',
   },
@@ -153,6 +160,7 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       "SELECT e.id AS id, COALESCE(NULLIF(e.raised_by_name, ''), 'studio ' || e.branch_code) AS who, "
       + "e.kind || ' · ' || e.subject AS what, e.created_at AS created_at "
       + "FROM hq_escalations e WHERE e.status = 'open' ORDER BY julianday(e.created_at) ASC LIMIT ?",
+    scope: 'hq',
     notifies: 'The studio',
     decidedOn: 'Support',
   },
@@ -170,10 +178,22 @@ export const HQ_APPROVAL_SOURCES: readonly HqApprovalSource[] = [
       + 'FROM program_proposals pp LEFT JOIN territory_licences l ON l.uid = pp.licence_uid '
       + 'LEFT JOIN users u ON u.id = pp.created_by_user_id '
       + "WHERE pp.status = 'sent' ORDER BY julianday(COALESCE(pp.sent_at, pp.created_at)) ASC LIMIT ?",
+    scope: 'hq',
     notifies: 'Nobody yet',
     decidedOn: 'Programs › Proposals',
   },
 ];
+
+/**
+ * HQ's inbox (D1040, `routes/admin_approvals.ts`): every studio's lanes, then
+ * HQ's, read from both lists on each call as D1040 reads `APPROVAL_SOURCES`.
+ * `sourcesFor` drops the HQ ones for an admin without the elevation, and on a
+ * branch nobody holds it, so a branch's admin never reads one. The branch
+ * board itself reads `APPROVAL_SOURCES` alone.
+ */
+export function inboxSources(): readonly ApprovalSource[] {
+  return [...APPROVAL_SOURCES, ...HQ_APPROVAL_SOURCES];
+}
 
 /** HQ's lanes with no store to count yet, said rather than laned. */
 export const HQ_NOT_COUNTED_YET: ReadonlyArray<{ key: string; label: string; reason: string }> = [

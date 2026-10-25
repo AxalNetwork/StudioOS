@@ -190,7 +190,9 @@ const ACTS: Array<{ name: string; method: string; path: string; body: Record<str
   { name: 'KYC approve', method: 'PATCH', path: `/api/kyc/admin/${FOUNDER}/approve`, body: {} },
   { name: 'KYC reject', method: 'PATCH', path: `/api/kyc/admin/${FOUNDER}/reject`, body: { reason: 'The document is unreadable; please resubmit' } },
   { name: 'limited-access grant', method: 'PATCH', path: `/api/admin/users/${FOUNDER}/access-level`, body: { level: 'limited' } },
-  { name: 'Lab admission', method: 'POST', path: `/api/admin/users/${FOUNDER}/spinout-admit`, body: { cohort: 'Cohort 5' } },
+  // D945: spinout-admit admits without an application, into an open cohort and
+  // with a reason. MEMBER, because FOUNDER already holds a place in the queue.
+  { name: 'Lab admission', method: 'POST', path: `/api/admin/users/${MEMBER}/spinout-admit`, body: { cycle_id: 1, reason: 'Synthetic admission' } },
   { name: 'application decide', method: 'POST', path: `/api/admin/spinout-applications/${APP_ID}/decide`, body: { decision: 'accepted', reason: 'Synthetic review' } },
 ];
 
@@ -201,6 +203,8 @@ function snapshot(db: DB) {
     flags: db.prepare('SELECT * FROM user_spinout_flags WHERE user_id = ?').all(FOUNDER),
     app: db.prepare('SELECT * FROM spinout_applications WHERE id = ?').get(APP_ID),
     cohort: db.prepare('SELECT * FROM cohort_applicants WHERE application_id = ?').all(APP_ID),
+    admitted: db.prepare('SELECT * FROM cohort_applicants WHERE user_id = ?').all(MEMBER),
+    admittedApp: db.prepare('SELECT * FROM spinout_applications WHERE user_id = ?').all(MEMBER),
   });
 }
 
@@ -229,7 +233,7 @@ test('D260: on an active branch, all five writes go through and land', async () 
     'KYC approve': (db) => assert.equal((db.prepare('SELECT kyc_status FROM users WHERE id = ?').get(FOUNDER) as any).kyc_status, 'approved'),
     'KYC reject': (db) => assert.equal((db.prepare('SELECT kyc_status FROM users WHERE id = ?').get(FOUNDER) as any).kyc_status, 'rejected'),
     'limited-access grant': (db) => assert.equal((db.prepare('SELECT access_level FROM users WHERE id = ?').get(FOUNDER) as any).access_level, 'limited'),
-    'Lab admission': (db) => assert.equal(Number((db.prepare('SELECT spinout_lab_admitted FROM user_spinout_flags WHERE user_id = ?').get(FOUNDER) as any)?.spinout_lab_admitted), 1),
+    'Lab admission': (db) => assert.equal((db.prepare('SELECT status FROM cohort_applicants WHERE user_id = ? AND cohort_cycle_id = 1').get(MEMBER) as any)?.status, 'approved'),
     'application decide': (db) => {
       assert.equal((db.prepare('SELECT status FROM spinout_applications WHERE id = ?').get(APP_ID) as any).status, 'pending');
       assert.equal((db.prepare('SELECT status FROM cohort_applicants WHERE application_id = ?').get(APP_ID) as any).status, 'approved');
@@ -239,7 +243,7 @@ test('D260: on an active branch, all five writes go through and land', async () 
     // Each on its own database: approve and reject cannot both land on one row.
     const db = freshDb('active');
     const r = await req(makeEnv(db, FR_VARS), act.method, act.path, act.body);
-    assert.equal(r.status, 200, `the ${act.name} was refused on an active branch: ${r.status} ${JSON.stringify(r.body)}`);
+    assert.ok(r.status >= 200 && r.status < 300, `the ${act.name} was refused on an active branch: ${r.status} ${JSON.stringify(r.body)}`);
     expected[act.name](db);
   }
 });
@@ -283,7 +287,7 @@ test('D260: HQ is not frozen by a suspended licence row — the gate is a no-op 
     // The row is there on purpose: HQ must ignore it rather than lack it.
     const db = freshDb('suspended');
     const r = await req(makeEnv(db, HQ_VARS), act.method, act.path, act.body);
-    assert.equal(r.status, 200, `HQ's ${act.name} was frozen: ${r.status} ${JSON.stringify(r.body)}`);
+    assert.ok(r.status >= 200 && r.status < 300, `HQ's ${act.name} was frozen: ${r.status} ${JSON.stringify(r.body)}`);
   }
 });
 
