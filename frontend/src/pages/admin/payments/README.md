@@ -25,7 +25,7 @@ forwards here with `?moved=payments`, in `../LegacyContractsRedirect.jsx`.
   deliveries per hour (the no-log hour dashed; a table on request and on a
   phone) and the mirror, with the doors to the Stripe dialogs (D1013).
 - `ChangeLog.jsx` — PAY7 (D1014): the change log, its filters and pages, and
-  the CSV export behind an in-page reason dialog. D1129 adds submitted text search and an independent read of every admin for Who.
+  the CSV export behind an in-page reason dialog. D1129 adds submitted text search and an independent read of every current admin and historical payment actor for Who.
 - `ProductDialogs.jsx` — PAY3 and PAY4 (D1013): New product, Add a price,
   Change a price (part 2's route), Archive a price or a product, and Edit
   details.

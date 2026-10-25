@@ -429,3 +429,5 @@ catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
 reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
+
+D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.

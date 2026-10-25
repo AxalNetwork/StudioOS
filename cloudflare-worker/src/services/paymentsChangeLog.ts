@@ -196,7 +196,8 @@ const ROWS_SQL = `SELECT a.id, a.exported_at, a.action, a.admin_user_id, u.name,
                SELECT json_extract(p.value, '$.id') FROM stripe_products s, json_each(s.prices_json) p WHERE s.id = ?3))
      AND (?4 IS NULL OR datetime(a.exported_at) >= datetime(?4))
      AND (?5 IS NULL OR datetime(a.exported_at) < datetime(?5, '+1 day'))
-     AND (?6 IS NULL OR instr(lower(COALESCE(a.filters_json, '')), lower(?6)) > 0
+     AND (?6 IS NULL OR EXISTS (SELECT 1 FROM json_tree(a.filters_json) detail
+               WHERE detail.type = 'text' AND instr(lower(detail.value), lower(?6)) > 0)
           OR EXISTS (SELECT 1 FROM stripe_products s
                WHERE instr(lower(s.name), lower(?6)) > 0
                  AND (s.id = json_extract(a.filters_json, '$.product_id')
@@ -213,7 +214,8 @@ const COUNT_SQL = `SELECT COUNT(*) AS n FROM admin_audit_log a
                SELECT json_extract(p.value, '$.id') FROM stripe_products s, json_each(s.prices_json) p WHERE s.id = ?3))
      AND (?4 IS NULL OR datetime(a.exported_at) >= datetime(?4))
      AND (?5 IS NULL OR datetime(a.exported_at) < datetime(?5, '+1 day'))
-     AND (?6 IS NULL OR instr(lower(COALESCE(a.filters_json, '')), lower(?6)) > 0
+     AND (?6 IS NULL OR EXISTS (SELECT 1 FROM json_tree(a.filters_json) detail
+               WHERE detail.type = 'text' AND instr(lower(detail.value), lower(?6)) > 0)
           OR EXISTS (SELECT 1 FROM stripe_products s
                WHERE instr(lower(s.name), lower(?6)) > 0
                  AND (s.id = json_extract(a.filters_json, '$.product_id')
@@ -250,10 +252,15 @@ export function changeLogCsvRows(entries: ChangeLogEntry[]): unknown[][] {
   ]);
 }
 
-/** D1129: every admin is selectable, even before recording a payment change. */
+/** D1129: current admins and historical payment actors, even if demoted or deleted. */
 export async function readChangeLogAdmins(env: Env): Promise<{ id: number; name: string | null }[]> {
   const rows = await env.DB.prepare(
-    `SELECT id, name FROM users WHERE role = ? ORDER BY lower(COALESCE(name, '')), id`,
-  ).bind('admin').all<{ id: number; name: string | null }>();
+    `SELECT actor.id, u.name
+       FROM (SELECT id FROM users WHERE role = ?1
+             UNION SELECT admin_user_id AS id FROM admin_audit_log
+               WHERE action IN (SELECT value FROM json_each(?2))) actor
+       LEFT JOIN users u ON u.id = actor.id
+       ORDER BY lower(COALESCE(u.name, '')), actor.id`,
+  ).bind('admin', JSON.stringify(actionsFor())).all<{ id: number; name: string | null }>();
   return rows.results ?? [];
 }

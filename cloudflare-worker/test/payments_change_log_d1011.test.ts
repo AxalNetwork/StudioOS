@@ -416,9 +416,47 @@ test('D1129 Who lists every admin, including one with no log row, with no email 
     assert.equal((await call(payments, db, '/change-log/admins', { as: ADMIN })).status, 403);
     assert.equal((await call(payments, db, '/change-log/admins', { as: 0 })).status, 401);
     const base = makeD1(db);
-    const d1 = { ...base, prepare(sql: string) { if (sql.includes('SELECT id, name FROM users WHERE role')) throw new Error('private database detail'); return base.prepare(sql); } };
+    const d1 = { ...base, prepare(sql: string) { if (sql.includes('SELECT actor.id, u.name')) throw new Error('private database detail'); return base.prepare(sql); } };
     const failed = await call(payments, db, '/change-log/admins', { d1 });
     assert.equal(failed.status, 503);
     assert.doesNotMatch(failed.text, /private database detail/);
+  } finally { db.close(); }
+});
+
+
+test('D1129 search reads decoded detail values, never JSON keys, with matching count and CSV', async () => {
+  const db = freshDb();
+  try {
+    audit(db, SUPER, 'catalog_price_update', { price_id: 'px_A', product_id: 'prod_A', reason: 'Monthly' }, '2026-10-01 09:00:00');
+    audit(db, SUPER, 'catalog_price_update', { patch: { nickname: 'A "quoted" \\path 25%' } }, '2026-10-01 10:00:00');
+    for (const q of ['price', 'product', 'reason']) {
+      const out = await call(payments, db, '/change-log?q=' + q);
+      assert.equal(out.body.total, 0, 'JSON key matched: ' + q);
+      assert.deepEqual(out.body.entries, []);
+    }
+    for (const q of ['"quoted"', '\\path', '25%']) {
+      const out = await call(payments, db, '/change-log?q=' + encodeURIComponent(q));
+      assert.equal(out.body.total, 1, 'decoded detail did not match: ' + q);
+      assert.equal(out.body.entries.length, 1);
+      const csv = await call(payments, db, '/change-log.csv?q=' + encodeURIComponent(q) + '&reason=Quarterly%20payments%20audit');
+      assert.equal(csv.headers.get('X-Export-Rows'), '1');
+    }
+  } finally { db.close(); }
+});
+
+test('D1129 Who retains demoted and deleted payment actors, but excludes unrelated audit actors', async () => {
+  const db = freshDb();
+  try {
+    db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(806, 'founder', 'Former Admin', 'former@example.test');
+    db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)').run(808, 'founder', 'Unrelated', 'unrelated@example.test');
+    audit(db, 806, 'catalog_product_update', { product_id: 'prod_A' }, '2026-10-01 09:00:00');
+    audit(db, 807, 'catalog_price_update', { price_id: 'price_A' }, '2026-10-01 10:00:00');
+    audit(db, 808, 'role_changed', {}, '2026-10-01 11:00:00');
+    const out = await call(payments, db, '/change-log/admins');
+    assert.deepEqual(out.body.admins.map((a: any) => a.id).sort(), [801, 802, 803, 806, 807]);
+    assert.deepEqual(out.body.admins.find((a: any) => a.id === 807), { id: 807, name: null });
+    assert.equal((await call(payments, db, '/change-log?who=806')).body.total, 1);
+    const csv = await call(payments, db, '/change-log.csv?who=807&reason=Quarterly%20payments%20audit');
+    assert.equal(csv.headers.get('X-Export-Rows'), '1');
   } finally { db.close(); }
 });

@@ -347,7 +347,7 @@ function Catalogue({ reads, reload }) {
   // One modal at a time: the lightbox steps aside while a dialog is open, and
   // its address keeps it, so it is back when the dialog closes.
   const act = (d) => { setSaved(null); setDialog(d); };
-  const lightbox = openId && !(canWrite && dialog) && <ProductLightbox id={openId} catalogRead={catalog} onClose={() => navigate(PAY_PATH)} onRetry={reload} onAct={act} canWrite={canWrite} />;
+  const lightbox = openId && !(canWrite && data && dialog) && <ProductLightbox id={openId} catalogRead={catalog} onClose={() => navigate(PAY_PATH)} onRetry={reload} onAct={act} canWrite={canWrite} />;
   const dialogs = <OpenDialog dialog={canWrite && data ? dialog : null} products={products} audiences={audiences} onClose={closeDialog} onDone={done} />;
   const savedLine = saved && <span role="status" className="text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="pay-saved">{saved}</span>;
 

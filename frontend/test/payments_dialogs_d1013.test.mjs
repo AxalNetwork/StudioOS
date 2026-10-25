@@ -578,3 +578,15 @@ test('D1129 header New product waits for a readable catalogue rather than assumi
     assert.equal(s.writes().filter((c) => c.path.startsWith('/api/admin/catalog/')).length, 0);
   } finally { await v.unmount(); s.restore(); }
 });
+
+
+test('D1129 an unread product with a pending New query keeps its failure and retry visible', async () => {
+  for (const phone of [false, true]) {
+    const s = stub({ 'GET /api/admin/catalog/products': () => json({ error: 'down' }, 503) });
+    const v = await render('/admin/platform/payments/products/prod_b?new=product', { phone });
+    try {
+      assert.ok(v.has('pay-product-unread'), 'the pending dialog hid the failed product read');
+      assert.ok(!v.has('pay-new'));
+    } finally { await v.unmount(); s.restore(); }
+  }
+});

@@ -438,3 +438,13 @@ test('D1129 search is submitted, resets paging, reaches CSV, and clears; admins 
     assert.equal(s.seen.filter((u) => u.pathname === '/api/admin/payments/change-log').at(-1).searchParams.has('q'), false);
   } finally { await v.unmount(); s.restore(); }
 });
+
+
+test('D1129 an unnamed Product filter option identifies a product', async () => {
+  const s = stub({ '/api/admin/catalog/products': () => json({ products: [{ ...PRODUCTS[0], name: null }] }) });
+  const v = await render('/admin/platform/payments/log');
+  try {
+    assert.match(v.of('pay-log-product'), /Product prod_/);
+    assert.doesNotMatch(v.of('pay-log-product'), /Admin #/);
+  } finally { await v.unmount(); s.restore(); }
+});

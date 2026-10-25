@@ -125,7 +125,7 @@ function Filters({ filters, setFilter, kinds, people, products, onClear }) {
         <span className={EYE}>Product</span>
         <select value={filters.product} onChange={(e) => setFilter('product', e.target.value)} className={`${FIELD} md:max-w-[260px]`} data-testid="pay-log-product">
           <option value="">Every product</option>
-          {products.map((p) => <option key={p.id} value={p.id}>{p.name || `Admin #${p.id} · name not recorded`}</option>)}
+          {products.map((p) => <option key={p.id} value={p.id}>{p.name || `Product ${p.id} · name not recorded`}</option>)}
         </select>
       </label>
       <label className="flex flex-col gap-1">
