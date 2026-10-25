@@ -21,6 +21,7 @@ export const TOP_COUNT = 8;
 export const NO_CATEGORY = 'No category recorded';
 export const CYCLES = [['validate', 'Validate'], ['build', 'Build'], ['raise', 'Raise'], ['grow', 'Grow'], ['network', 'Network']];
 export const SIGN_IN_LABEL = {
+  none: 'Works without signing in',
   oauth: 'Sign in at the service',
   oauth_or_key: 'Sign-in or a personal token',
   key: 'API key or token',

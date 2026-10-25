@@ -174,7 +174,7 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
       connection: byKey.get(p.key) || null,
       joined: joined.has(p.key),
       locked: !!(p.locked_for_user ?? p.tier_locked),
-      available: p.status !== 'coming_soon' && p.has_implementation !== false && !(oauthOff && !p.supports_pat),
+      available: p.status !== 'coming_soon' && (p.auth_type === 'none' || p.has_implementation !== false) && !(oauthOff && !p.supports_pat),
     });
   }
   const cards = new Map((Array.isArray(firstPartyCards) ? firstPartyCards : []).filter((c) => c?.key).map((c) => [c.key, c]));
@@ -382,6 +382,7 @@ export const SUGGESTED = 'Suggested for you';
 
 /** The button in a card's corner: "+", a check mark, "Notify me" or "We'll tell you". */
 export function cardAction(p) {
+  if (p.auth_type === 'none') return 'browse';
   if (!p.available && p.status === 'coming_soon') return p.joined ? 'joined' : 'notify';
   if (p.connection) return 'connected';
   if (!p.available) return 'unavailable';
@@ -634,6 +635,7 @@ export function stripReturn(search, keys) {
  *   'first_party' — Google, Microsoft or LinkedIn's own sign-in route.
  */
 export function authKind(p) {
+  if (p?.auth_type === 'none') return 'none';
   if (p?.first_party) return 'first_party';
   // D840 (#2346), D881 (#2554): a member connects Mercury only by signing in.
   if (isPersonalMercury(p)) return 'oauth';
@@ -765,7 +767,7 @@ export function toolGroups(catalogue, { q = '', filter = 'All', pin = null } = {
     if (filter === 'Failing') return s === 'failing';
     return true;
   };
-  const list = (catalogue || []).filter((p) => matches(p, q) && keep(p));
+  const list = (catalogue || []).filter((p) => p.auth_type !== 'none' && matches(p, q) && keep(p));
   const groups = [];
   for (const cat of [...BUILD_CATEGORY_ORDER, null]) {
     const rows = list.filter((p) => (cat === null ? !BUILD_CATEGORY_ORDER.includes(p.category) : p.category === cat))
