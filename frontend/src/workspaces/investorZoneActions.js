@@ -16,7 +16,7 @@ import { makeZoneActions } from './zoneActionBuilder';
  * Thirteen of these fifty-seven actions run today, and the Deals and Fund gaps
  * are not all the same kind of gap. The SCREENS are read-only —
  * `InvestorDealsWorkspace` calls `listDeals` and two invitation methods,
- * `FundOpsWorkspace` calls `capitalCalls` and `fundsLpPortal`, and
+ * Fund Ops (retired by D1160) called `capitalCalls` and `fundsLpPortal`, and
  * `InvestorFundCalls` and `InvestorFundAccounting` call no API at all. But
  * "read-only screen" is not "no such capability", and two of these labels are
  * exactly that difference: `api.fundAddLP` and `api.fundCapitalCall` both exist

@@ -5,7 +5,9 @@ import { requireAuth } from '../auth';
 import { lpMembershipScope } from '../services/tenancyScope';
 import { claimLpRowsByEmail } from '../services/lpClaim';
 import { requireFundGp } from '../services/fundGpAccess';
+import { assertAdminAct, auditFundAct } from '../services/fundAdminAccess';
 import { readFundPerformance, validDate } from '../services/fundPerformance';
+import { readFundHistory, readFundPositions } from '../services/fundPositionsHistory';
 import { refuse } from '../util/refusal';
 import { AUTH_ERROR_STATUSES } from '../util/authErrors';
 const r = new Hono<{ Bindings: Env }>();
@@ -53,8 +55,24 @@ r.get('/:id', async (c) => {
   if (!fund) return notFound();
   return c.json(await readFundPerformance(c.env, fund, today()));
 });
+// D1158: FND10's positions and quarterly history — the fund's GP of record and admins only.
+r.get('/:id/positions', async (c) => {
+  const id = positiveId(c.req.param('id'));
+  if (!id) return notFound();
+  await requireFundGp(c, id);
+  return c.json(await readFundPositions(c.env, id, today()));
+});
+r.get('/:id/history', async (c) => {
+  const id = positiveId(c.req.param('id'));
+  if (!id) return notFound();
+  if ((c.req.query('step') ?? 'quarter') !== 'quarter')
+    return refuse(c, 400, { code: 'invalid_history_step', message: 'History is read by quarter: step=quarter.' });
+  const { fund } = await requireFundGp(c, id);
+  return c.json(await readFundHistory(c.env, fund, today()));
+});
 r.put('/positions/:id/fund', async (c) => {
   const user = await requireAuth(c), id = positiveId(c.req.param('id'));
+  await assertAdminAct(c, user, 'fund.valuation');
   const body = await c.req.json().catch(() => null);
   if (!id || !body || !(body.fund_id === null || (Number.isSafeInteger(body.fund_id) && body.fund_id > 0)))
     return refuse(c, 400, { code: 'invalid_fund_attribution', message: 'Choose a fund ID or null for a firm-level position.' });
@@ -72,10 +90,12 @@ r.put('/positions/:id/fund', async (c) => {
   ]);
   if (results.some(result => !result.success)) throw new Error('Attribution batch failed');
   if (results[0].meta.changes !== 1) return refuse(c, 409, { code: 'position_changed', message: 'The position changed. Reload before attributing it.' });
+  await auditFundAct(c.env, user, 'fund.valuation', { position_id: id, before_fund_id: position.fund_id, fund_id: body.fund_id, write: 'attribution' });
   return c.json({ position_id: id, fund_id: body.fund_id });
 });
 r.post('/positions/:id/valuations', async (c) => {
-  await requireAuth(c);
+  const actor = await requireAuth(c);
+  await assertAdminAct(c, actor, 'fund.valuation');
   const id = positiveId(c.req.param('id')), body = await c.req.json().catch(() => null);
   if (!id || !body || !validDate(body.valuation_date) || body.valuation_date > today()
     || !Number.isSafeInteger(body.value_cents) || body.value_cents < 0
@@ -94,6 +114,7 @@ r.post('/positions/:id/valuations', async (c) => {
   ]);
   if (results.some(result => !result.success)) throw new Error('Valuation batch failed');
   if (results[0].meta.changes !== 1) return refuse(c, 409, { code: 'position_changed', message: 'The position changed. Reload before recording its valuation.' });
+  await auditFundAct(c.env, user, 'fund.valuation', { position_id: id, fund_id: position.fund_id, valuation_date: body.valuation_date, value_cents: body.value_cents, write: 'mark' });
   return c.json({ id: results[0].meta.last_row_id, position_id: id, recorded_by: user.id }, 201);
 });
 export default r;

@@ -10,10 +10,7 @@
  *   R1 `GET /api/admin/events?status&limit=200&offset`, paged until a short
  *      page (`readEveryPage`): every event's own fields. A D1 error is a 5xx,
  *      so a failed R1 is a failed read, never an empty list.
- *   R2 `GET /api/admin/events/analytics`: only its per-event rows, joined to R1
- *      by `id` under Guard G (`analyticsJoin`). Its `summary` is not read (it
- *      is all-time, has no `rejected` bucket, and turns a failure into zeros),
- *      and its `conversion` is never drawn (it is 0 for every upcoming event).
+ *   D1115: D918's paged list carries the counts; the desk never reads capped analytics.
  *   R3 `GET /api/admin/events/:id`: the event page.
  *   R5 `GET /api/events/:id/agenda`: the event page's agenda.
  * The roster (names and emails) is not read anywhere on the desk.
@@ -23,7 +20,7 @@
  *   "Not read here yet"  it is stored, but no read sums it yet;
  *   "Not held yet"       the event has not ended, so nobody could attend;
  *   "No cap"             the event has no capacity;
- *   "Not in this read"   the event is missing from R2's 200 rows (Guard G);
+ *   "Not in this read"   an id is absent from the list read;
  *   "Could not be read"  the read failed.
  * A real zero is drawn as 0, but only where a read succeeded.
  */
@@ -215,6 +212,13 @@ export function whenLine(ev) {
   return `${span} · ${zoneLabel(ev)}`;
 }
 
+/** EV3: the same stored instants in the viewer's own zone. */
+export function yourTimeLine(ev) {
+  if (parseStamp(ev?.starts_at) === null) return null;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  return `Your time ${whenLine({ ...ev, timezone })}`;
+}
+
 /** 'Thu 14 Nov · 18:30', for a queue row. */
 export function startShort(ev) {
   const start = parseStamp(ev?.starts_at);
@@ -310,32 +314,26 @@ export const readyList = (read) => (read?.status === 'ready' && Array.isArray(re
 /** The claim a failed read is not: `Unreadable` prints "{what} could not be read." before it. */
 export const COUNTS_CLAIM = 'That is not a claim that nobody registered.';
 
-/**
- * GUARD G (D915 §2; the map's A §0.3). R1 is truthful, but R2's per-event rows
- * are one query that answers `[]` with status 200 when it fails. So the
- * per-event counts COULD NOT BE READ when
- *   (a) R1 holds at least one event (`known`) and R2's `events` is empty;
- *   (b) R2's `events` is not a list at all (missing, null, or a `{}` reply);
- *   (c) R2 says so itself: its `unreadable` list names `'events'` (D915 part 1).
- * Otherwise the rows are joined by id, and an R1 event missing from them (R2
- * holds the 200 that start latest) reads "Not in this read", never 0.
- */
-export function analyticsJoin(read, known) {
+/** D1115: D918 carries each count on the paged list; no capped analytics join. */
+export function listCounts(read) {
   if (!read || read.status === 'loading') return { state: 'loading' };
-  if (read.status !== 'ready') return { state: 'unreadable', reason: COUNTS_CLAIM };
-  const data = read.data;
-  const rows = Array.isArray(data?.events) ? data.events : null;
+  const rows = readyList(read);
   if (!rows) return { state: 'unreadable', reason: COUNTS_CLAIM };
-  if (Array.isArray(data?.unreadable) && data.unreadable.includes('events')) return { state: 'unreadable', reason: COUNTS_CLAIM };
-  if (Number(known) > 0 && rows.length === 0) return { state: 'unreadable', reason: COUNTS_CLAIM };
-  return { state: 'ready', byId: new Map(rows.map((r) => [String(r?.id), r])) };
+  return { state: 'ready', byId: new Map(rows.map(row => [String(row.id), { ...row, registrations: row.seats_taken }])) };
+}
+
+/** The event page's first row of tiles uses its own independent D918 block. */
+export function summaryCounts(read) {
+  const block = summaryBlock(read, 'registrations');
+  if (block.state !== 'ready') return block;
+  const b = block.data;
+  return { state: 'ready', taken: count(b.seats_taken), attended: count(b.by_status?.attended), waitlisted: count(b.by_status?.waitlisted) };
 }
 
 const count = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 
 /**
- * One event's counts from R2's row. Seats taken = Registered + Confirmed +
- * Attended, which is exactly R2's `registrations`.
+ * One event's counts from a D918 list row. Seats taken = Registered + Confirmed + Attended.
  */
 export function countsFor(join, id) {
   if (!join || join.state !== 'ready') return { state: join?.state || 'loading', reason: join?.reason };
@@ -409,7 +407,7 @@ export function statusCounts(events) {
   return out;
 }
 
-const MISSING_REASON = 'The analytics read holds the 200 events that start latest, and some of these are older.';
+const MISSING_REASON = 'Some events are absent from the list read.';
 export const LIST_CLAIM = 'That is not a claim that there are no events.';
 export const QUEUE_CLAIM = 'That is not a claim that nothing waits.';
 
@@ -640,7 +638,7 @@ export function pageOf(rows, page, size = ROWS_PER_PAGE) {
 
 export const rangeText = ({ from, to, total }) => (total ? `${nf(from)}–${nf(to)} of ${nf(total)}` : 'No events');
 
-/** One table row: R1's own fields, R2's counts under Guard G. */
+/** One table row: R1's own fields, D918's paged counts. */
 export function tableRow(ev, join, now) {
   const c = countsFor(join, ev.id);
   return {
@@ -686,7 +684,7 @@ export function publishGate(ev) {
   ];
 }
 
-/** The event page's tiles, from R3's event and R2's row (Guard G). */
+/** The event page's tiles, from R3's event and D918's registrations summary. */
 export function eventTiles(ev, c, now) {
   const cap = ev?.capacity;
   const taken = countText(c, 'taken');
@@ -856,6 +854,8 @@ export function refusalText(err, fallback = 'That did not go through. Try again.
   if (status === 423 || code === 'branch_suspended') return SUSPENDED;
   if (status === 404 || code === 'not_found') return GONE;
   if (code === 'invalid_capacity') return CAPACITY_ERROR;
+  if (code === 'not_published') return 'This event is no longer published. Refresh to see its current state.';
+  if (code === 'already_cancelled') return 'This event is already cancelled. Refresh to see its current state.';
   if (code === 'not_waiting') return CHANGED;
   if (code === 'reason_required') return REASON_NEEDED;
   return fallback;

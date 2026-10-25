@@ -109,6 +109,130 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — HQ › Platform › Product testing (#2382)
+
+The owner's artifacts `Rdu2ReGAwHnT76E65WdjrB` (the page) and
+`XyuTn3fWnt6fLCmQpYV7yS` (the board grid) came from S21's prompt on #2382. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Product testing · Boards.dc.html` is the board grid (TST1 to TST16); it
+  imports the page by name;
+- `Product Testing Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The page is `/admin/platform/product-testing`, with each tab
+at its own address. S21's integration (D1195) draws Overview's tiles, places and
+status chips from the programme list and the tester store, keeps D815's console
+as Review and Programs, opens one program at `/programs/:uid`, and draws the
+tester pool without email; the rest says Not read here yet. The reads, the
+writes, the logo and the frontend wait for D1195's nine parts, and member intake
+(TST10) for the owner's answer on #2318, so this canvas stays in the queue until
+they land.
+
+## Landed 2026-10-25 — Raise · Capital relationships (#2457)
+
+The owner's artifacts `3z5VF6kEsVmbAWPV4UhNiL` (the page) and
+`Gb57mGM9MedbZMms389a6J` (the board grid) came from S21's prompt on #2457. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Capital relationships · Boards.dc.html` is the board grid (CRL1 to CRL19);
+  it imports the page by name;
+- `Capital Relationships Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The tool is `/raise/capital-relationships`, with each tab a
+word under the module. S21's integration (D1188) draws Pipeline's investors,
+Commitments' closes and pro-rata, and Calls' history from today's reads, and says
+Not read here yet on Match, Outreach and Activity. The board, the commitments
+read, Match and Outreach and the old pages' retirement wait for D1188's six
+parts, so this canvas stays in the queue until they land.
+
+## Landed 2026-10-25 — HQ › Platform › Bank accounts (#2389)
+
+The owner's artifacts `VKFadETWcanf49seVMzWT1` (the page) and
+`Bhhofcvq6hNkvn16HeJv99` (the board grid) came from S21's prompt on #2389. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Bank accounts · Boards.dc.html` is the board grid (BNK1 to BNK12); it
+  imports the page by name;
+- `Bank Accounts Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The page is `/admin/platform/bank-accounts` (D938), with
+Cash and History at their own addresses. S21's integration (D1181) draws Cash's
+balances from Mercury's read and says Not read here yet on the series, monthly
+totals and History. The lightbox, dialogs, charts and phone wait for D1181's six
+parts, so this canvas stays in the queue until they land.
+
+## Landed 2026-10-25 — Raise · Use of funds (#2455)
+
+The owner's artifacts `RknpumZGmSfuuUECQr9Toq` (the page) and
+`T1JUEHTPD2ZaTYKzViAh6w` (the board grid) came from S21's prompt on #2455. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Use of funds · Boards.dc.html` is the board grid (UF1 to UF22); it imports
+  the page by name;
+- `Raise Use Of Funds Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The tool is `/raise/use-of-funds`, with each tab a word
+under the module. S21's integration (D1173) draws Allocation's sections from
+the module read and says Not read here yet on the rest. The plan engine,
+scenarios, Forecast and the old capital model's retirement wait for D1173's
+seven parts, so this canvas stays in the queue until they land.
+
+## Landed 2026-10-25 — Account · Usage · Storage (#2449)
+
+The owner's artifacts `BGAhQ7BJjYZqecV3KSbauq` (the board grid) and
+`YYDnkAx3NdxTZ3pA5QhJaE` (the page) came from S21's prompt on #2449. Each was
+decoded by `scripts/read-canvas.mjs` as is:
+- `Storage · Boards.dc.html` is the board grid (STG1 to STG20); it imports the
+  page by name;
+- `Account Storage Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW.** The page is `/account/usage/storage`, Usage's fourth page.
+S21's integration (D1166) draws today's storage read by place and says Not read
+here yet on the allowance, kinds, companies and largest files. The allowance,
+the guard, Pricing's Storage group and HQ's totals wait for D1166's six parts,
+so this canvas stays in the queue until they land.
+
+## Landed 2026-10-25 — Admin · Fund admin (#2388)
+
+The owner's artifacts `59ZPJbfN7dvmbpovwhZcWi` (the board grid) and
+`WUodW2gUkvzpRSZbmUv15V` (the page) came from S21's prompt on #2388. Each was
+decoded by `scripts/read-canvas.mjs` as is:
+- `Fund admin · Boards.dc.html` is the board grid (FND1 to FND22); it imports
+  the page by name;
+- `Fund Admin Console Page.dc.html` is the page, the canvas "Fund
+  Administration · Admin" that #1779 (D714) waited for.
+
+No value was edited.
+
+**Grade: UPGRADE.** The page is `/admin/fund-admin`, with each tab at a
+sub-path and D714's `?tab=` links forwarding there. S21's integration (D1157)
+draws today's reads on their tabs and says Not read here yet on Funds, LPs and
+Books. The header, the tab bodies and Fund Ops' retirement wait for D1157's
+eight parts, so this canvas stays in the queue until they land.
+
+## Landed 2026-10-25 — Deals · the deal page (#2421)
+
+The owner's artifacts `SG1gbgTjsbqyatvYDyhj1Z` (the board grid) and
+`7ji9JjHGCXCFHbJPjM6T3s` (the page) came from S21's prompt on #2421, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Deal page · Boards.dc.html` is the board grid (DL1 to DL24, with the
+  lettered boards); it imports the page by name;
+- `Investor Deal Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The page is `/deals/:dealId`, with each tab at
+`/deals/:dealId/<tab>`. S21's integration (D1148) draws today's reads on their
+tabs and says Not read here yet on the rest; the stage track, the reading tabs
+and the dialogs wait for D1148's seven parts, so this canvas stays in the queue
+until they land.
+
 ## Landed 2026-10-25 — Raise · Fundraising readiness (#2433)
 
 The owner's artifacts `XDZ4YKmUxUwBpLEPLYzx8i` (the board grid) and

@@ -135,6 +135,7 @@ test('the Super Admin with a fresh step-up adds, lists, relabels, retires and re
   const env = envFor(db);
   const added = await addAccount(env);
   assert.equal(added.status, 201, added.text);
+  assert.equal(added.body.account.recorded_by_name, 'The Holder');
   const uid = added.body.account.uid;
   assert.equal(added.body.account.account_masked, `••••${NUMBER_A.slice(-4)}`);
   assert.equal(added.body.account.entity_name, 'Axal VC GP LLC');
@@ -153,15 +154,18 @@ test('the Super Admin with a fresh step-up adds, lists, relabels, retires and re
   const relabel = await call(env, 'PATCH', `/${uid}`, HOLDER, 'totp-holder', { label: 'GP operating' });
   assert.equal(relabel.status, 200, relabel.text);
   assert.equal(relabel.body.account.label, 'GP operating');
+  assert.equal(relabel.body.account.recorded_by_name, 'The Holder');
 
   const reveal = await call(env, 'POST', `/${uid}/reveal`, HOLDER, 'totp-holder', { reason: 'Checking against Mercury' });
   assert.equal(reveal.status, 200, reveal.text);
   assert.equal(reveal.body.account.account_number, NUMBER_A);
+  assert.equal(reveal.body.account.recorded_by_name, 'The Holder');
   assert.equal(reveal.headers.get('Cache-Control'), 'no-store');
 
   const retire = await call(env, 'POST', `/${uid}/retire`, HOLDER, 'totp-holder', { reason: 'Account closed' });
   assert.equal(retire.status, 200, retire.text);
   assert.equal(retire.body.account.status, 'retired');
+  assert.equal(retire.body.account.recorded_by_name, 'The Holder');
   // D1184: the GET also writes its Mercury read row; the writes' own rows are these four.
   assert.deepEqual(auditRows(db).map((r) => r.action).filter((a: string) => a.startsWith('bank_account_')),
     ['bank_account_added', 'bank_account_updated', 'bank_account_revealed', 'bank_account_retired']);

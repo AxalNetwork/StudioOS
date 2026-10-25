@@ -54,10 +54,10 @@ function fixture() {
 }
 const status = (db: DatabaseSync): string => (db.prepare('SELECT status FROM events WHERE id = 1').get() as any).status;
 
-test('D1031 the link helpers: a member opens the signed-in event page, a host the manage page', () => {
-  assert.equal(memberEventLink(42), '/events/42');
-  assert.equal(memberEventLink('42'), '/events/42');
-  assert.equal(hostEventLink(42), '/events/42/manage');
+test('D1031, moved by D1035: a member opens their ticket, a host the hosted-event drawer', () => {
+  assert.equal(memberEventLink(42), '/my/events/ticket/42');
+  assert.equal(memberEventLink('42'), '/my/events/ticket/42');
+  assert.equal(hostEventLink(42), '/my/events/hosting/42');
 });
 
 test('D1031 submit-review publishes an unlisted or private draft or sent-back event at once, and queues a public one', async () => {
@@ -88,7 +88,7 @@ test('D1031 the host\'s live, sent-back and unpublished notices open the manage 
   assert.equal((await f.request('/1/approve')).status, 200);
   assert.equal((await f.request('/1/unpublish', 1, {})).status, 200);
   for (const type of ['event_rejected', 'event_approved', 'event_unpublished']) {
-    assert.deepEqual(f.notices(type), [{ user_id: 2, link: '/events/1/manage' }], type);
+    assert.deepEqual(f.notices(type), [{ user_id: 2, link: '/my/events/hosting/1' }], type);
   }
 });
 
@@ -98,9 +98,9 @@ test('D1031 the cancelled and off-the-waitlist notices from the admin desk open 
     INSERT INTO event_registrations (event_id, user_id, status) VALUES (1, 3, 'confirmed');
     INSERT INTO event_registrations (event_id, user_id, status, waitlist_position) VALUES (1, 4, 'waitlisted', 1);`);
   assert.equal((await f.request('/1/capacity', 1, { capacity: 2 })).status, 200);
-  assert.deepEqual(f.notices('event_waitlist_promoted'), [{ user_id: 4, link: '/events/1' }]);
+  assert.deepEqual(f.notices('event_waitlist_promoted'), [{ user_id: 4, link: '/my/events/ticket/1' }]);
   assert.equal((await f.request('/1/cancel', 1, {})).status, 200);
-  assert.deepEqual(f.notices('event_cancelled'), [{ user_id: 3, link: '/events/1' }, { user_id: 4, link: '/events/1' }]);
+  assert.deepEqual(f.notices('event_cancelled'), [{ user_id: 3, link: '/my/events/ticket/1' }, { user_id: 4, link: '/my/events/ticket/1' }]);
 });
 
 test('D1031 the host\'s confirm, decline and waitlist notices open the member\'s event page', async () => {
@@ -109,10 +109,10 @@ test('D1031 the host\'s confirm, decline and waitlist notices open the member\'s
     INSERT INTO event_registrations (id, event_id, user_id, status) VALUES (10, 1, 3, 'registered');
     INSERT INTO event_registrations (id, event_id, user_id, status, waitlist_position) VALUES (11, 1, 4, 'waitlisted', 1);`);
   assert.equal((await f.request('/1/registrations/10/approve', 2, {}, 'POST', events)).status, 200);
-  assert.deepEqual(f.notices('event_confirmed'), [{ user_id: 3, link: '/events/1' }]);
+  assert.deepEqual(f.notices('event_confirmed'), [{ user_id: 3, link: '/my/events/ticket/1' }]);
   assert.equal((await f.request('/1/registrations/10/decline', 2, {}, 'POST', events)).status, 200);
-  assert.deepEqual(f.notices('event_declined'), [{ user_id: 3, link: '/events/1' }]);
-  assert.deepEqual(f.notices('event_promoted'), [{ user_id: 4, link: '/events/1' }]);
+  assert.deepEqual(f.notices('event_declined'), [{ user_id: 3, link: '/my/events/ticket/1' }]);
+  assert.deepEqual(f.notices('event_promoted'), [{ user_id: 4, link: '/my/events/ticket/1' }]);
   // The failure case: a stranger cannot decide a registration, and nobody is told.
   assert.equal((await f.request('/1/registrations/11/decline', 5, {}, 'POST', events)).status, 403);
   assert.equal(f.notices('event_declined').length, 1);
@@ -125,7 +125,7 @@ test('D1031 the reminder notice opens the member\'s event page; the email-only r
   f.db.exec(`INSERT INTO event_registrations (event_id, user_id, status) VALUES (1, 3, 'confirmed');`);
   const sweep = await sweepEventReminders(f.env);
   assert.equal(sweep.sent, 1);
-  assert.deepEqual(f.notices('event_reminder'), [{ user_id: 3, link: '/events/1' }]);
+  assert.deepEqual(f.notices('event_reminder'), [{ user_id: 3, link: '/my/events/ticket/1' }]);
   const source = readFileSync(new URL('../src/services/eventReminders.ts', import.meta.url), 'utf8');
   assert.ok(source.includes('const eventUrl = `${base}/events/${encodeURIComponent(event.slug)}`;'), 'an email reader is not signed in');
 });

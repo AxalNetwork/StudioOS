@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { programGrantsApi } from '../../../lib/api/programGrants.js';
 import { reportError } from '../../../lib/log';
-import { AdminPageHeader, HeaderTab } from '../../../ui';
+import { AdminPageHeader, HeaderMenuItem, HeaderTab } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import { LEDGER_PATH } from '../../../lib/programGrants';
 import GridView from './GridView';
@@ -28,6 +28,9 @@ import { viewOf } from './grantsModel';
  * own addresses; one studio is /admin/licences/programs/studio/:uid. Every
  * write opens an in-page dialog with a reason; the authenticator code is the
  * app's step-up.
+ *
+ * D1126 (#3006): the History tab (`ProgramGrantsHistory.jsx`, every studio's
+ * program decisions) and the More menu's Download CSV of the whole grid.
  */
 
 const idle = { status: 'loading', data: null };
@@ -56,6 +59,40 @@ function requestsCount(read) {
   return n ? { kind: 'num', value: String(n) } : null;
 }
 
+/**
+ * HQ's tabs, literal doors (D936) so the reachability walk finds each. Shared
+ * with the History page (D1126), which passes no requests read and so draws
+ * the Requests tab without its count.
+ */
+export function GrantsTabs({ requests = null }) {
+  return (
+    <>
+      <HeaderTab to="/admin/licences/programs" data-testid="grants-tab-grid">Grid</HeaderTab>
+      <HeaderTab to="/admin/licences/programs/requests" count={requests ? requestsCount(requests) : null} data-testid="grants-tab-requests">Requests</HeaderTab>
+      <HeaderTab to="/admin/licences/programs/defaults" data-testid="grants-tab-defaults">Default terms</HeaderTab>
+      <HeaderTab to="/admin/licences/programs/history" data-testid="grants-tab-history">History</HeaderTab>
+    </>
+  );
+}
+
+/** D1126: a CSV download with its own state; a failure is said on the page, never silent. */
+export function useCsvDownload(run) {
+  const [state, setState] = useState({ busy: false, error: null });
+  const start = useCallback(() => {
+    setState({ busy: true, error: null });
+    run().then(
+      () => setState({ busy: false, error: null }),
+      (e) => { reportError('program-grants:csv', e); setState({ busy: false, error: e?.message || 'The CSV could not be downloaded. Try again.' }); },
+    );
+  }, [run]);
+  return [start, state];
+}
+
+export function CsvError({ error }) {
+  if (!error) return null;
+  return <p role="alert" className="m-0 text-[13px] text-axal-destructive dark:text-red-300" data-testid="grants-csv-error">The CSV could not be downloaded: {error}</p>;
+}
+
 function ProgramGrantsPage() {
   const loc = useLocation();
   const { view, uid } = viewOf(loc.pathname);
@@ -63,6 +100,7 @@ function ProgramGrantsPage() {
   const [requests, reloadRequests] = useRead(() => programGrantsApi.requests(), 'requests');
   const reload = useCallback(() => { reloadGrid(); reloadRequests(); }, [reloadGrid, reloadRequests]);
   const asOf = grid.at || requests.at;
+  const [downloadCsv, csv] = useCsvDownload(programGrantsApi.exportCsv);
 
   const actions = (
     <>
@@ -77,14 +115,6 @@ function ProgramGrantsPage() {
     return <StudioView uid={uid} grid={grid} requests={requests} reloadAll={reload} />;
   }
 
-  // Literal doors, one per tab (D936), so the reachability walk finds each.
-  const tabs = (
-    <>
-      <HeaderTab to="/admin/licences/programs" data-testid="grants-tab-grid">Grid</HeaderTab>
-      <HeaderTab to="/admin/licences/programs/requests" count={requestsCount(requests)} data-testid="grants-tab-requests">Requests</HeaderTab>
-      <HeaderTab to="/admin/licences/programs/defaults" data-testid="grants-tab-defaults">Default terms</HeaderTab>
-    </>
-  );
 
   return (
     <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="program-grants">
@@ -94,9 +124,11 @@ function ProgramGrantsPage() {
         pills={[{ label: 'HQ only', tone: 'hq' }]}
         actions={actions}
         line="Which programs each studio may run, and on what terms. Studios ask; HQ decides."
-        tabs={tabs}
+        tabs={<GrantsTabs requests={requests} />}
+        more={<HeaderMenuItem onSelect={downloadCsv} data-testid="grants-csv">{csv.busy ? 'Downloading…' : 'Download CSV'}</HeaderMenuItem>}
         data-testid="grants-header"
       />
+      <CsvError error={csv.error} />
       {view === 'grid' && <GridView grid={grid} requests={requests} reload={reload} reloadGrid={reloadGrid} reloadRequests={reloadRequests} />}
       {view === 'requests' && <RequestsView grid={grid} requests={requests} reload={reload} />}
       {view === 'defaults' && <DefaultsView grid={grid} reload={reloadGrid} />}

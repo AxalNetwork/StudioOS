@@ -102,6 +102,7 @@ export const READINESS_ITEMS = [
   { key: 'use_of_funds', label: 'Use of funds' },
   { key: 'traction', label: 'Traction proof' },
   { key: 'team', label: 'Team' },
+  { key: 'pmf', label: 'Product-market fit' },
 ] as const;
 export type ReadinessKey = (typeof READINESS_ITEMS)[number]['key'];
 export const READINESS_KEYS: readonly string[] = READINESS_ITEMS.map((i) => i.key);
@@ -153,7 +154,7 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
-export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | null; missing: string | null; reads: ReadRow[] };
+export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
 /**
@@ -257,7 +258,7 @@ export async function computeReadiness(env: Env, projectId: number): Promise<Com
  * one fixed statement per item. `null` marks a check that reads `projects`
  * fields, which keep no write time, so it always re-scores.
  */
-const LATEST_WRITE: Record<Exclude<ReadinessKey, 'team'>, string | null> = {
+const LATEST_WRITE: Record<Exclude<ReadinessKey, 'team' | 'pmf'>, string | null> = {
   deck: 'SELECT MAX(created_at) AS at FROM pitch_decks WHERE project_id = ?',
   use_of_funds: null,
   cap_table: 'SELECT MAX(updated_at) AS at FROM cap_table_scenarios WHERE project_id = ? AND COALESCE(is_variant, 0) = 0',
@@ -280,7 +281,7 @@ export async function changedSinceScored(
 ): Promise<boolean> {
   if (!newest) return true;
   if (newest.score !== c.score || (newest.missing ?? null) !== c.missing) return true;
-  const sql = LATEST_WRITE[c.key as Exclude<ReadinessKey, 'team'>];
+  const sql = LATEST_WRITE[c.key as Exclude<ReadinessKey, 'team' | 'pmf'>];
   if (sql == null) return true;
   // Each statement names the venture once per store it reads.
   const binds = Array.from({ length: (sql.match(/\?/g) ?? []).length }, () => projectId);
@@ -1394,6 +1395,22 @@ export async function receivedDates(env: Env, projectId: number): Promise<Map<nu
       WHERE m.target_kind = 'raise_prospect' AND m.state = 'confirmed' AND p.project_id = ?`,
   ).bind(projectId).all<{ target_id: number; posted_on: string }>()).results || [];
   return new Map(rows.map((r) => [Number(r.target_id), String(r.posted_on)]));
+}
+
+/** D1150: an investor's own receiving-side commitment evidence, metadata only.
+ * Same stored-receipt boundary as receivedDates; no connection or bank fields.
+ * The caller passes its verified company scope. Role and ownership are checked
+ * here too, so using this projection cannot become an admin or cross-firm read.
+ */
+export async function receivedCommitment(
+  env: Pick<Env, 'DB'>, actor: { id: number; role: string }, companyId: number | null, commitmentId: number,
+): Promise<{ id: number; at: string } | null> {
+  if (actor.role !== 'investor') return null;
+  return env.DB.prepare(`SELECT m.id, m.confirmed_at AS at FROM mercury_personal_matches m
+    JOIN commitments c ON c.id = m.target_id WHERE m.target_kind = 'deal_commitment'
+    AND m.state = 'confirmed' AND c.id = ? AND c.investor_user_id = ?
+    AND (c.company_id = ? OR c.company_id IS NULL) ORDER BY m.id DESC LIMIT 1`)
+    .bind(commitmentId, actor.id, companyId).first<{ id: number; at: string }>();
 }
 
 async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {

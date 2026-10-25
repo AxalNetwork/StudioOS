@@ -20,11 +20,12 @@
  *     sold under, as `planOf` (`services/aiCredits.ts`) reads it. Null for a
  *     plan with no product (a free plan, LP access, staff);
  *   - `sellable` and `sellable_reason`. Investor Plus is not sold (D786);
- *   - `storage` and `best_suited_for`: #2449's. Neither is decided yet, so each
- *     is null with the reason, never a figure;
+ *   - `storage` and `best_suited_for`: D1167's projection of storagePlans.ts,
+ *     the owner's table on #2449, with a reason for negotiated/staff values;
  *   - `included`: the lines the plan includes, the Pricing card's own
  *     (`frontend/src/lib/sitePricing.js`, held equal by the test).
  */
+import { storagePlan } from './storagePlans';
 // Keep catalogue types independent of payment and Stripe implementation modules.
 export type PlanFamily = 'founder' | 'investor' | 'advisor' | 'partner' | 'market_intelligence' | 'other';
 
@@ -46,10 +47,6 @@ export type CatalogueEntry = {
   best_suited_for_reason: string | null;
   included: readonly string[];
 };
-
-/** #2449 decides storage per plan and "Best suited for". Until it does, each reads its reason. */
-export const STORAGE_NOT_DECIDED = 'Storage per plan is not decided yet (#2449).';
-export const BEST_SUITED_NOT_DECIDED = '"Best suited for" is not decided yet (#2449).';
 
 export const NOT_SOLD = {
   free: 'A free plan: nothing to buy.',
@@ -147,9 +144,9 @@ export const PLAN_CATALOGUE: readonly CatalogueEntry[] = Object.freeze(SPECS.map
   ...s,
   colour: FAMILY_COLOUR[s.family],
   sellable_reason: s.sellable ? null : (s.sellable_reason ?? null),
-  storage: { bytes: null, reason: STORAGE_NOT_DECIDED },
-  best_suited_for: null,
-  best_suited_for_reason: BEST_SUITED_NOT_DECIDED,
+  storage: Object.freeze({ bytes: storagePlan(s.key)!.allowance_bytes, reason: storagePlan(s.key)!.allowance_reason }),
+  best_suited_for: storagePlan(s.key)!.best_suited,
+  best_suited_for_reason: storagePlan(s.key)!.best_suited_reason,
   included: Object.freeze([...s.included]),
 })));
 

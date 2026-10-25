@@ -2,12 +2,15 @@
 // events" canvas — Upcoming, Hosting, Discover and Past, each at its own
 // address under /my/events, drawn from the reads that exist (myEventsModel.js).
 // The phone keeps D700's A7m sections until D1030's phone part.
+// D1035 (#2876): the ticket and hosted-event drawers open over their tab at
+// /my/events/ticket/[id] and /my/events/hosting/[id] (MyEventsDrawers.jsx).
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Plus, Calendar, MapPin, Ticket } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
 import { eventsPublic } from '../../lib/api';
 import { adminEvents } from '../../lib/api';
+import { eventTime } from './eventTime';
 import { waitingWords } from './hostHeaderModel';
 import { useAuth } from '../../hooks/useAuthSync';
 import { useToast } from '../../components/useToast';
@@ -19,9 +22,11 @@ import { AccountPhonePage, phonePending } from '../account/AccountPhonePage';
 import { ACCOUNT_PHONE_PAGES } from '../account/accountPhone';
 import {
   EXPLORER_LINE, LINE, NOT_READ, REPLAY_LINE, TITLE,
-  dateBlock, discoverAction, goingGroups, hostAction, hostingGroups, hostingSoon, isExplorer, needsYou, nextEvent,
+  JOIN_LEAD_MS, joinState, seatSourceLabel, dateBlock, discoverAction, goingGroups, hostAction, hostingGroups, hostingSoon, isExplorer, needsYou, nextEvent,
   pastRows, placeOf, priceOf, splitTickets, statusOf, tabCounts, tabHref, tabOf, tabsFor, timeLine, visibilityWord, whereOf as eventWhere,
 } from './myEventsModel';
+import { MY_EVENTS_OPEN_TO_EXPLORERS, drawerOf, hostedPath, tabUnder, ticketPath } from './eventDrawersModel';
+import { ExplorerClosedCard, HostedDrawer, PublishDialog, TicketDrawer } from './MyEventsDrawers';
 
 const STATUS_STYLES = {
   draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -141,26 +146,33 @@ export function EventsPhoneView({ events, suggested, now, children = null }) {
   );
 }
 
-/** `GET /events/suggested`, best-effort: the events, or null. */
+/** D1131: suggestions fail as their own block and can be retried. */
 function useSuggestedEvents() {
-  const [data, setData] = useState(null); // { archetype, track, events }
+  const [state, setState] = useState({ status: 'loading', data: null });
+  const [revision, setRevision] = useState(0);
   useEffect(() => {
     let alive = true;
-    (async () => {
-      try {
-        const res = await eventsApi.suggested();
-        if (alive) setData(res || null);
-      } catch { if (alive) setData(null); }
-    })();
+    setState({ status: 'loading', data: null });
+    Promise.resolve().then(() => eventsApi.suggested())
+      .then(data => { if (alive) setState({ status: 'ready', data }); })
+      .catch(() => { if (alive) setState({ status: 'error', data: null }); });
     return () => { alive = false; };
-  }, []);
-  return data;
+  }, [revision]);
+  return { ...state, reload: () => setRevision(n => n + 1) };
 }
 
 export default function MyEventsPage() {
   const [hosting, setHosting] = useState([]);
   const [attending, setAttending] = useState([]);
+  const [past, setPast] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const nextOpen = attending.map(t => eventTime(t.starts_at)).filter(t => t != null).map(t => t - JOIN_LEAD_MS).filter(t => t > now);
+    const delay = Math.max(1, Math.min(60_000, ...nextOpen.map(t => t - Date.now())));
+    const timer = setTimeout(() => setNow(Date.now()), delay);
+    return () => clearTimeout(timer);
+  }, [now, attending]);
   // D332 — a failed read used to fall back to `[]` and render "not hosting
   // any events yet", which is the same screen a genuinely empty account
   // gets. The toast that told the truth disappears; this does not.
@@ -176,10 +188,11 @@ export default function MyEventsPage() {
       const res = await eventsApi.list();
       setHosting(Array.isArray(res?.hosting) ? res.hosting : (Array.isArray(res) ? res : []));
       setAttending(Array.isArray(res?.attending) ? res.attending : []);
+      setPast(res?.past && Array.isArray(res.past.places) ? res.past : null);
     } catch (e) {
       showToast({ kind: 'error', msg: e?.message || 'Could not load your events.' });
       setLoadError(e?.message || 'Could not load your events.');
-      setHosting([]); setAttending([]);
+      setHosting([]); setAttending([]); setPast(null);
     } finally {
       setLoading(false);
     }
@@ -188,6 +201,20 @@ export default function MyEventsPage() {
   useEffect(() => { load(); }, [load]);
   const suggested = useSuggestedEvents();
   const phone = usePhoneWidth();
+  const navigate = useNavigate();
+
+  // D1035: the drawer the address names, over the tab it opens from. Closing
+  // goes back to that tab; a change made inside closes it, re-reads the list
+  // and says what happened.
+  const drawer = drawerOf(location.pathname);
+  const list = { status: loading ? 'loading' : loadError ? 'error' : 'ready', data: { hosting, attending, past }, reload: load };
+  const closeDrawer = () => navigate(tabHref({ path: tabUnder(drawer) === 'hosting' ? '/hosting' : '' }));
+  const doneDrawer = (line) => { closeDrawer(); load(); showToast({ kind: 'ok', msg: line }); };
+  const drawerEl = drawer?.kind === 'ticket'
+    ? <TicketDrawer key={`t-${drawer.id}`} id={drawer.id} list={list} onClose={closeDrawer} onDone={doneDrawer} />
+    : drawer?.kind === 'hosted'
+      ? <HostedDrawer key={`h-${drawer.id}`} id={drawer.id} list={list} user={user} onClose={closeDrawer} onDone={doneDrawer} />
+      : null;
 
   const toastEl = toast && (
     <div className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg ${
@@ -201,8 +228,9 @@ export default function MyEventsPage() {
     const events = { status: loading ? 'loading' : loadError ? 'unreadable' : 'ready', hosting, attending, reload: load };
     const coded = attending.filter((t) => t.checkin_code || t.code || t.qr_code);
     return (
-      <EventsPhoneView events={events} suggested={Array.isArray(suggested?.events) ? suggested.events : null}>
+      <EventsPhoneView events={events} suggested={Array.isArray(suggested.data?.events) ? suggested.data.events : null}>
         <PageExplainer pageKey="my_events" />
+        {drawerEl}
         {events.status === 'ready' && coded.length > 0 && (
           <div>
             <h2 className="text-[11px] font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">Check-in codes</h2>
@@ -215,10 +243,12 @@ export default function MyEventsPage() {
   }
 
   const explorer = isExplorer(user);
+  // MEV17b: only if the owner closes My events to Explorers (D1030 opened it to them).
+  if (explorer && !MY_EVENTS_OPEN_TO_EXPLORERS) return <ExplorerClosedCard />;
   const tab = tabOf(location.pathname);
   const counts = tabCounts({ attending, hosting, ok: !loading && !loadError });
   const held = new Set(attending.map((t) => t.id));
-  const tips = Array.isArray(suggested?.events) ? suggested.events : [];
+  const tips = Array.isArray(suggested.data?.events) ? suggested.data.events : [];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6" data-testid="my-events">
@@ -263,7 +293,7 @@ export default function MyEventsPage() {
 
       <div className="mt-4">
         {tab === 'discover' ? (
-          <DiscoverTab held={held} suggested={tips} />
+          <DiscoverTab held={held} suggested={tips} suggestionsRead={suggested} />
         ) : loading ? (
           <Reading />
         ) : loadError ? (
@@ -271,14 +301,15 @@ export default function MyEventsPage() {
             <Unreadable what="Your events" claim="That is not the same as having none." onRetry={load} />
           </div>
         ) : tab === 'hosting' && !explorer ? (
-          <HostingTab hosting={hosting} admin={String(user?.role || '').toLowerCase() === 'admin'} />
+          <HostingTab hosting={hosting} now={now} admin={String(user?.role || '').toLowerCase() === 'admin'} onDone={(line) => { load(); showToast({ kind: 'ok', msg: line }); }} />
         ) : tab === 'past' ? (
           <PastTab attending={attending} hosting={explorer ? [] : hosting} />
         ) : (
-          <UpcomingTab attending={attending} hosting={explorer ? [] : hosting} suggested={tips} explorer={explorer} />
+          <UpcomingTab attending={attending} hosting={explorer ? [] : hosting} suggested={tips} suggestionsRead={suggested} explorer={explorer} now={now} />
         )}
       </div>
 
+      {drawerEl}
       {toastEl}
     </div>
   );
@@ -320,12 +351,14 @@ function DateTile({ event }) {
 
 const viewerZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } };
 
-function EventLine({ event, children }) {
+function EventLine({ event, to, children }) {
   return (
     <div className="flex min-w-0 items-start gap-3">
       <DateTile event={event} />
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className={`truncate text-[14px] font-extrabold ${INK}`}>{event.title || 'Not recorded'}</span>
+        {to
+          ? <Link to={to} className={`truncate text-[14px] font-extrabold hover:text-axal-violet ${INK}`} data-testid="my-events-open-drawer">{event.title || 'Not recorded'}</Link>
+          : <span className={`truncate text-[14px] font-extrabold ${INK}`}>{event.title || 'Not recorded'}</span>}
         <span className={`text-[12px] ${MUTED}`}>{timeLine(event, viewerZone())}</span>
         <span className={`inline-flex items-center gap-1 text-[12px] ${MUTED}`}><MapPin size={12} /> {eventWhere(event)}</span>
         {children}
@@ -334,12 +367,12 @@ function EventLine({ event, children }) {
   );
 }
 
-function UpcomingTab({ attending, hosting, suggested, explorer }) {
-  const { upcoming } = splitTickets(attending);
+function UpcomingTab({ attending, hosting, suggested, suggestionsRead, explorer, now }) {
+  const { upcoming } = splitTickets(attending, now);
   const next = nextEvent(upcoming);
   const rest = upcoming.filter((t) => t !== next);
-  const needs = needsYou(hosting);
-  const soon = hostingSoon(hosting);
+  const needs = needsYou(hosting, attending, now);
+  const soon = hostingSoon(hosting, now);
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <div className="flex flex-col gap-3.5 lg:col-span-2">
@@ -348,7 +381,7 @@ function UpcomingTab({ attending, hosting, suggested, explorer }) {
             <h2 className={`m-0 border-b border-axal-hairline px-4 py-3 text-[15px] font-extrabold dark:border-gray-800 ${INK}`}>Needs you</h2>
             {needs.slice(0, 4).map((n) => (
               <div key={n.key} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-2.5 last:border-b-0 dark:border-gray-800" data-testid="my-events-needs-row">
-                <span className="flex items-center gap-2 text-[12.5px]"><Pill tone="bad">{n.pill}</Pill> <span className={INK}>{n.text}</span></span>
+                <span className="flex items-center gap-2 text-[12.5px]"><Pill tone={n.tone || 'bad'}>{n.pill}</Pill> <span className={INK}>{n.text}</span></span>
                 <Link className={`${LINK} text-[12.5px]`} to={n.action.to}>{n.action.label}</Link>
               </div>
             ))}
@@ -356,14 +389,14 @@ function UpcomingTab({ attending, hosting, suggested, explorer }) {
         ) : null}
         <section className={`${CARD} p-4`} data-testid="my-events-next">
           <h2 className={`m-0 mb-3 ${EYEBROW}`}>Your next event</h2>
-          {next ? <NextEvent ticket={next} /> : (
+          {next ? <NextEvent ticket={next} now={now} /> : (
             <p className={`m-0 text-[13px] ${MUTED}`} data-testid="my-events-nothing">Nothing coming up. <Link className={LINK} to={tabHref({ path: '/discover' })}>Find an event in Discover.</Link></p>
           )}
         </section>
         {rest.length ? (
           <section className={`${CARD} p-4`} data-testid="my-events-going">
             <h2 className={`m-0 mb-2 text-[15px] font-extrabold ${INK}`}>Going</h2>
-            {goingGroups(rest).map((g) => (
+            {goingGroups(rest, now).map((g) => (
               <div key={g.key} className="mt-2 flex flex-col gap-2">
                 <span className={EYEBROW}>{g.label}</span>
                 {g.rows.map((t) => {
@@ -371,7 +404,7 @@ function UpcomingTab({ attending, hosting, suggested, explorer }) {
                   return (
                     <div key={t.id} className="flex flex-wrap items-center justify-between gap-2" data-testid="my-events-going-row">
                       <EventLine event={t}><Pill tone={place.tone}>{place.label}</Pill></EventLine>
-                      <Link className={`${LINK} text-[12px]`} to={`/events/${t.id}`}>Open event page</Link>
+                      <Link className={`${LINK} text-[12px]`} to={ticketPath(t.id)} data-testid="my-events-show-ticket">Show ticket</Link>
                     </div>
                   );
                 })}
@@ -384,11 +417,13 @@ function UpcomingTab({ attending, hosting, suggested, explorer }) {
             <h2 className={`m-0 mb-2 text-[15px] font-extrabold ${INK}`}>Hosting soon</h2>
             {soon.map((e) => {
               const st = statusOf(e);
-              const act = hostAction(e);
+              const act = hostAction(e, now);
               return (
                 <div key={e.id} className="mt-2 flex flex-wrap items-center justify-between gap-2" data-testid="my-events-hosting-soon-row">
-                  <EventLine event={e}><Pill tone={st.tone}>{st.label}</Pill></EventLine>
-                  {act.label ? <Link className={`${LINK} text-[12px]`} to={act.to}>{act.label}</Link> : <span className={`text-[12px] ${MUTED}`}>{act.note}</span>}
+                  <EventLine event={e} to={hostedPath(e.id)}><Pill tone={st.tone}>{st.label}</Pill></EventLine>
+                  {act.to ? <Link className={`${LINK} text-[12px]`} to={act.to}>{act.label}</Link>
+                    : act.dialog ? <Link className={`${LINK} text-[12px]`} to={hostedPath(e.id)}>{act.label}</Link>
+                      : <span className={`text-[12px] ${MUTED}`}>{act.note}</span>}
                 </div>
               );
             })}
@@ -397,28 +432,33 @@ function UpcomingTab({ attending, hosting, suggested, explorer }) {
         ) : null}
       </div>
       <div className="flex flex-col gap-3.5">
-        <SuggestedCard events={suggested.slice(0, 3)} />
+        <SuggestedCard events={suggested.slice(0, 3)} read={suggestionsRead} explorer={explorer} />
       </div>
     </div>
   );
 }
 
-function NextEvent({ ticket }) {
+function NextEvent({ ticket, now }) {
   const place = placeOf(ticket);
   const code = ticket.checkin_code || null;
-  const online = ticket.location_kind !== 'in_person' && ticket.location_kind !== 'physical' && ticket.location_url;
+  const online = ['virtual', 'online', 'hybrid'].includes(ticket.location_kind);
+  const join = joinState(ticket, now);
+  const seat = seatSourceLabel(ticket);
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <EventLine event={ticket}>
         <span className="mt-1 flex flex-wrap items-center gap-2">
           <Pill tone={place.tone}>{place.label}</Pill>
-          {ticket.comp ? <Pill tone="good">Free seat</Pill> : null}
+          {seat ? <Pill tone="good" testId="my-events-seat-source">{seat}</Pill> : null}
+          {ticket.is_speaker ? <Pill testId="my-events-presenting">You’re presenting</Pill> : null}
         </span>
         <span className="mt-2 flex flex-wrap gap-3 text-[12.5px]">
+          <Link className={LINK} to={ticketPath(ticket.id)} data-testid="my-events-next-ticket">Show ticket</Link>
           <a className={LINK} href={eventsApi.icsUrl(ticket.id)}>Download .ics</a>
-          {online ? <a className={LINK} href={ticket.location_url} target="_blank" rel="noopener noreferrer">Join</a> : null}
+          {online ? join.available ? <a className={LINK} href={ticket.location_url} target="_blank" rel="noopener noreferrer" data-testid="my-events-join">Join</a> : <button type="button" disabled className={MUTED} data-testid="my-events-join-quiet">Join</button> : null}
           <Link className={LINK} to={`/events/${ticket.id}`}>Open event page</Link>
         </span>
+        {online && join.note ? <span className={`mt-1 text-[11.5px] ${MUTED}`} data-testid="my-events-join-note">{join.note}</span> : null}
       </EventLine>
       {code ? (
         <div className="flex flex-col items-center" data-testid="my-events-ticket">
@@ -433,25 +473,30 @@ function NextEvent({ ticket }) {
   );
 }
 
-function SuggestedCard({ events }) {
+function SuggestedCard({ events, read, explorer = false }) {
   return (
     <section className={`${CARD} p-4`} data-testid="my-events-suggested">
       <h2 className={`m-0 mb-2 text-[15px] font-extrabold ${INK}`}>Suggested for you</h2>
-      {events.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`}>Nothing to suggest right now.</p> : events.map((ev) => (
-        <Link key={ev.id} to={`/events/${ev.slug || ev.id}`} className="mt-2 flex flex-col gap-0.5 rounded-[10px] border border-axal-hairline p-2.5 hover:border-axal-violet dark:border-gray-700" data-testid="my-events-suggested-row">
-          <span className={`text-[13px] font-bold ${INK}`}>{ev.title}</span>
+      {read?.status === 'loading' ? <Reading /> : read?.status === 'error' ? <Unreadable what="Suggested events" claim="This is not a claim that none are available." onRetry={read.reload} /> : events.length === 0 ? <p className={`m-0 text-[12.5px] ${MUTED}`}>Nothing to suggest right now.</p> : events.map(ev => {
+        const closed = ev.registration_eligible === false;
+        const unknown = typeof ev.registration_eligible !== 'boolean';
+        return <div key={ev.id} className="mt-2 flex flex-col gap-0.5 rounded-[10px] border border-axal-hairline p-2.5 dark:border-gray-700" data-testid="my-events-suggested-row">
+          <Link to={`/events/${ev.slug || ev.id}`} className={`text-[13px] font-bold ${INK}`}>{ev.title}</Link>
           <span className={`text-[11.5px] ${MUTED}`}>{timeLine(ev, viewerZone())}</span>
           {ev.suggestion_reason ? <Pill tone="muted">{ev.suggestion_reason}</Pill> : null}
-        </Link>
-      ))}
+          {closed ? <><span className={`text-[12px] font-bold ${MUTED}`} data-testid="my-events-suggested-closed">{explorer ? 'Not open to Explorers' : 'Not open to your profile'}</span><span className={`text-[11.5px] ${MUTED}`}>The host opened this event to selected profiles.</span></> : unknown ? <span className={`text-[12px] ${MUTED}`}>Eligibility not recorded</span> : <Link className={`${LINK} text-[12px]`} to={`/events/${ev.slug || ev.id}`} data-testid="my-events-suggested-register">Register</Link>}
+        </div>;
+      })}
       <Link className={`${LINK} mt-2 inline-block text-[12px]`} to={tabHref({ path: '/discover' })}>See all in Discover</Link>
     </section>
   );
 }
 
-function HostingTab({ hosting, admin }) {
+function HostingTab({ hosting, admin, now, onDone }) {
   const [q, setQ] = useState('');
-  const groups = hostingGroups(hosting, Date.now(), q);
+  // D1035: a draft's Send for review or Publish opens MEV6's dialog here, without the drawer.
+  const [publishing, setPublishing] = useState(null);
+  const groups = hostingGroups(hosting, now, q);
   // D1036 (MEV13): the review desk's waiting count, its own read; a failed read is said, never a 0.
   const [waiting, setWaiting] = useState(admin ? { state: 'loading' } : null);
   useEffect(() => {
@@ -486,14 +531,15 @@ function HostingTab({ hosting, admin }) {
           <h2 className={`m-0 border-b border-axal-hairline px-4 py-3 text-[14px] font-extrabold dark:border-gray-800 ${INK}`}>{g.label} <span className={`font-mono text-[12px] ${MUTED}`}>{g.rows.length}</span></h2>
           {g.rows.map((e) => {
             const st = statusOf(e);
-            const act = hostAction(e);
+            const act = hostAction(e, now);
             return (
               <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-800" data-testid="my-events-hosted-row">
-                <EventLine event={e}>
+                <EventLine event={e} to={hostedPath(e.id)}>
                   <span className="mt-1 flex flex-wrap items-center gap-2 text-[12px]"><Pill tone={st.tone}>{st.label}</Pill><span className={MUTED}>{visibilityWord(e.visibility)}</span></span>
                 </EventLine>
                 <span className="flex flex-wrap items-center gap-3 text-[12px]">
-                  {act.label ? <Link className={LINK} to={act.to} data-testid="my-events-host-action">{act.label}</Link> : act.note ? <span className={MUTED}>{act.note}</span> : null}
+                  {act.dialog ? <button type="button" className={LINK} onClick={() => setPublishing(e)} data-testid="my-events-host-action">{act.label}</button>
+                    : act.label ? <Link className={LINK} to={act.to} data-testid="my-events-host-action">{act.label}</Link> : act.note ? <span className={MUTED}>{act.note}</span> : null}
                   {e.status !== 'draft' && e.status !== 'rejected' ? <Link className={LINK} to={`/events/${e.id}/edit`}>Edit details</Link> : null}
                 </span>
               </div>
@@ -502,13 +548,14 @@ function HostingTab({ hosting, admin }) {
         </section>
       ))}
       {hosting.length ? <p className={`m-0 text-[11.5px] ${MUTED}`}>Seats, waitlist, approvals and open invitations per event: {NOT_READ}.</p> : null}
+      {publishing ? <PublishDialog event={publishing} counts={publishing.counts} onClose={() => setPublishing(null)} onDone={(line) => { setPublishing(null); onDone(line); }} /> : null}
     </div>
   );
 }
 
 const PAGE = 25;
 
-function DiscoverTab({ held, suggested }) {
+function DiscoverTab({ held, suggested, suggestionsRead }) {
   const [q, setQ] = useState('');
   const [offset, setOffset] = useState(0);
   const [read, setRead] = useState({ status: 'loading', events: [] });
@@ -524,6 +571,7 @@ function DiscoverTab({ held, suggested }) {
   }, [term, offset, reload]);
   return (
     <div className="flex flex-col gap-3.5" data-testid="my-events-discover">
+      {suggestionsRead?.status === 'error' ? <Unreadable what="Suggested events" claim="This is not a claim that none are available." onRetry={suggestionsRead.reload} /> : null}
       {suggested.length ? (
         <section className="grid gap-2.5 md:grid-cols-2 lg:grid-cols-4">
           {suggested.slice(0, 4).map((ev) => (

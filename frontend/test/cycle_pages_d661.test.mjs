@@ -144,7 +144,9 @@ test('A CHOSEN VENTURE RIDES ON EVERY LINK: tabs, card titles and the module pag
   // 4 → 5 (D1015, #2432): the Cap table tool's tab bar on its module page keeps it too.
   // 5 → 6 (D1063, #2426): the Build overview's door to the plan keeps it too.
   // 6 → 7 (D1101, #2456): the Data room tool's tab bar on its module page keeps it too.
-  assert.equal((route.match(/search=\{q\}/g) || []).length, 8, 'the overview, module, record header, Validate\'s phone focus, the Cap table and Data room tabs, the plan door and the readiness door keep the venture');
+  // 8 → 9 (D1173, #2455): the Use of funds tool's tab bar on its module page keeps it too.
+  // 9 → 10 (D1188, #2457): the Capital relationships tool's tab bar on its module page keeps it too.
+  assert.equal((route.match(/search=\{q\}/g) || []).length, 10, 'the overview, module, record header, Validate\'s phone focus, the Cap table, Data room, Use of funds and Capital relationships tabs, the plan door and the readiness door keep the venture');
   assert.match(route, /search=\{tabSearch\(q, searchParams\.get\('version'\)\)\}/, 'the narrative tabs keep the venture, and the version');
 });
 
@@ -236,7 +238,8 @@ test('ADD FORMS: one dialog draws each form, the module offers it, and the check
   assert.match(route, /const formWrites = \{ \.\.\.cyclesWrite, verdict: verdictApi \};/);
   assert.match(route, /const saved = \(\) => \{ dirty\.current = true; \};/);
   // D695 (#1656): the Add, an Edit from the row's values, and an Edit from its record (Validate's).
-  assert.equal((route.match(/onSaved=\{saved\}/g) || []).length, 3, 'a save, Add or Edit, reads the module again once the form closes');
+  // D1106 (#2986): and the data room's own Upload, which draws in place of the Add form at its `/new`.
+  assert.equal((route.match(/onSaved=\{saved\}/g) || []).length, 4, 'a save, Add or Edit, reads the module again once the form closes');
   // The checklist: tick an open item, undo your own tick, never undo the Lab's.
   const items = [
     { key: 'ein_received', label: 'Tax ID (EIN) received', done: true, source: 'Spin-Out Lab', done_at: null },

@@ -35,6 +35,14 @@ const labelCls = 'block text-xs text-gray-500 dark:text-gray-400 mb-1';
 const btnPrimary = 'inline-flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm';
 const btnGhost = 'inline-flex items-center gap-2 px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-lg text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50';
 
+/**
+ * D1189 (#3123): the Contacts hub at the linked contact, not the whole inbox.
+ * ContactsPanel opens the drawer `?contact=` names.
+ */
+export function contactHubPath(uid) {
+  return uid ? `/network?tab=contacts&contact=${encodeURIComponent(uid)}` : '/network?tab=contacts';
+}
+
 function fmtMoney(n) {
   if (n === null || n === undefined || n === '' || Number.isNaN(Number(n))) return '—';
   return new Intl.NumberFormat('en-US', {
@@ -730,7 +738,7 @@ function ProspectDrawer({ prospect, stages, busy, onSave, onClose }) {
                   Status: {contact.status || '—'} · Source: {contact.source || '—'}
                   {contact.last_activity_at && <> · Last activity {new Date(contact.last_activity_at).toLocaleDateString()}</>}
                 </div>
-                <Link to="/network?tab=contacts"
+                <Link to={contactHubPath(contact.uid)}
                   className="mt-2 inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 hover:underline">
                   Open in Contacts hub <ExternalLink size={12} />
                 </Link>

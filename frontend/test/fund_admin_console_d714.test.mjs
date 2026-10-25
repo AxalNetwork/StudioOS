@@ -184,8 +184,8 @@ async function open(user, tab, s = stubs({ access: async () => access(Number(use
 
 // ------------------------------------------------------------------ each tab on its fixture
 
-test('the tabs are decision 7\'s, in order, and ?tab= picks one', () => {
-  assert.deepEqual(TABS.map((t) => t.label), ['Overview', 'Banking', 'Reconciliation', 'Capital calls', 'Distributions', 'Management fees', 'Reports']);
+test('the tabs are the canvas\'s (D1157 replaces decision 7\'s order), and a D714 ?tab= value is still known', () => {
+  assert.deepEqual(TABS.map((t) => t.label), ['Overview', 'Funds', 'LPs', 'Capital calls', 'Distributions', 'NAV & performance', 'Fees', 'Reports', 'Banking']);
   assert.equal(tabFrom('fees'), 'fees');
   assert.equal(tabFrom('nonsense'), 'overview');
   assert.equal(tabFrom(null), 'overview');
@@ -353,7 +353,7 @@ test('the two shell rows lead to the route, which is guard([\'admin\']) and not 
   const admin = SIDEBAR_GROUPS.admin.flatMap((g) => g.items);
   const at = (rows, label) => rows.findIndex((r) => r.label === label);
   assert.equal(hq[at(hq, 'Fund admin')]?.to, '/admin/fund-admin');
-  assert.equal(at(hq, 'Fund admin'), at(hq, 'Funds') + 1, 'after Funds in the HQ shell');
+  assert.equal(at(hq, 'Fund admin'), at(hq, 'Funds oversight') + 1, 'after Funds oversight in the HQ shell (D1160)');
   assert.equal(admin[at(admin, 'Fund admin')]?.to, '/admin/fund-admin');
   assert.equal(at(admin, 'Fund admin'), at(admin, 'Contracts') + 1, 'after Contracts in the Admin shell');
   const line = APP.split('\n').find((l) => l.includes('path="/admin/fund-admin"'));
@@ -400,7 +400,7 @@ test('#1780 decision 12: the entity sheet opens this console\'s Banking tab; a b
   const api = { connections: async () => CONNECTIONS() };
   const p = { key: 'mercury', display_name: 'Mercury' };
   const page = renderToStaticMarkup(h(MemoryRouter, null, h(MercuryEntitySheet, { p, api, onClose() {} })));
-  assert.match(page, /href="\/admin\/fund-admin\?tab=banking"[^>]*>Open Banking</);
+  assert.match(page, /href="\/admin\/fund-admin\/banking"[^>]*>Open Banking</);
   const branch = renderToStaticMarkup(h(MemoryRouter, null, h(MercuryEntitySheet, { p, api, branch: 'ldn', onClose() {} })));
   assert.doesNotMatch(branch, /Open Banking/);
 });
@@ -514,10 +514,11 @@ test('canvas: the tabs carry the amber count flags from the overview, and a bloc
   assert.deepEqual(tabFlags(bad), { calls: 0, reconciliation: 0, reports: 2 });
   assert.deepEqual(tabFlags(null), { calls: 0, reconciliation: 0, reports: 0 });
   const { m } = await open(ADMIN, 'overview');
-  assert.equal(m.text(m.by('fund-admin-flag-reconciliation')), '4');
+  // D1157: Reconciliation is a part of Banking, so its matches flag the Banking tab.
+  assert.equal(m.text(m.by('fund-admin-flag-banking')), '4');
   assert.equal(m.text(m.by('fund-admin-flag-calls')), '2');
   assert.equal(m.text(m.by('fund-admin-flag-reports')), '2');
-  assert.ok(!m.by('fund-admin-flag-fees') && !m.by('fund-admin-flag-banking'));
+  assert.ok(!m.by('fund-admin-flag-fees') && !m.by('fund-admin-flag-reconciliation'));
   await m.unmount();
 });
 

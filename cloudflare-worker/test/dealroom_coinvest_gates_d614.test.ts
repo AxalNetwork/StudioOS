@@ -62,7 +62,7 @@ CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, sector TEXT, founder_i
 CREATE TABLE partners (id INTEGER PRIMARY KEY, name TEXT);
 CREATE TABLE deals (
   id INTEGER PRIMARY KEY AUTOINCREMENT, project_id INTEGER, partner_id INTEGER, lead_partner_id INTEGER,
-  status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied','scored','active','funded','rejected')),
+  currency TEXT NOT NULL DEFAULT 'USD', status TEXT NOT NULL DEFAULT 'applied' CHECK (status IN ('applied','scored','active','funded','rejected')),
   notes TEXT, amount REAL, source TEXT, stage_changed_at TEXT, pass_reason TEXT, pass_note TEXT, passed_at TEXT,
   passed_by_user_id INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT);
 CREATE TABLE deal_stage_events (
@@ -168,9 +168,12 @@ test('leave: a Free investor can leave a room they joined, and still cannot list
   assert.equal((await call(app, env, PRO, '/api/deals')).status, 200);
 });
 
-test('the exemption list is that one route, and index.ts mounts the gate that reads it', () => {
+// D1033 (#2874) adds the my-events feed, which has no session and applies the
+// Professional rule to its token's member (my_events_feed_d1033.test.ts).
+test('the exemption list names only precise routes, and index.ts mounts the gate that reads it', () => {
   assert.deepEqual(INVESTOR_PRO_EXEMPT.map((e) => [e.method, e.path.source]),
-    [['DELETE', '^\\/api\\/deals\\/[^/]+\\/dealroom\\/leave\\/?$']]);
+    [['GET', '^\\/api\\/dd\\/reports\\/download\\/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\/?$'], ['GET', '^\\/api\\/deals\\/[1-9][0-9]*\\/?$'], ['DELETE', '^\\/api\\/deals\\/[^/]+\\/dealroom\\/leave\\/?$'],
+      ['GET', '^\\/api\\/calendar\\/feed\\/my-events\\.ics$']]);
   const src = readFileSync(resolve(process.cwd(), 'cloudflare-worker/src/index.ts'), 'utf8');
   assert.match(src, /const investorPro = requireInvestorTierExcept\('professional'\);\s*for \(const p of INVESTOR_PRO_PREFIXES\) \{\s*app\.use\(p, investorPro\);\s*app\.use\(`\$\{p\}\/\*`, investorPro\);/);
 });

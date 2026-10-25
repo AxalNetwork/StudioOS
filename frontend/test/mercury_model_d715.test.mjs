@@ -118,7 +118,7 @@ test('decision 4 and 6: the Fund\'s note, the org-name sentence, and the fixed s
   assert.equal(BRANCH_MANAGED, 'Axal VC\'s own accounts are managed from HQ.');
   assert.deepEqual(HQ_ACCOUNTS, { text: 'Axal VC\'s own accounts are managed in HQ › Bank accounts.', link: 'Open Bank accounts', href: '/admin/platform/bank-accounts' });
   assert.equal(TOKEN_HELP, 'How to create a Read Only token');
-  assert.deepEqual(OPEN_BANKING, { text: 'Open Banking', href: '/admin/fund-admin?tab=banking' });
+  assert.deepEqual(OPEN_BANKING, { text: 'Open Banking', href: '/admin/fund-admin/banking' });
   assert.equal(confirmReadOnlyLabel('Axal VC Holdings LLC'), 'This is a Read Only token from Axal VC Holdings LLC\'s Mercury organization.');
 });
 
@@ -211,12 +211,12 @@ test('the model is pure and stands alone: no React, no fetch, no import of conne
 
 // ── PR 1b: adminMercuryApi (decision 11) ─────────────────────────────────────
 
-test('decision 11: adminMercuryApi has one method per #1775 route (and D749\'s two), each under /api/admin/mercury, and nothing that moves money', async () => {
+test('decision 11: adminMercuryApi has one method per #1775 route, D749 marks and D1183 charts; nothing moves money', async () => {
   const { adminMercuryApi } = await import('../src/lib/api/adminMercury.js');
   const api = await import('../src/lib/api.js');
   assert.equal(api.adminMercuryApi, adminMercuryApi, 'api.js re-exports it in its module block');
   assert.deepEqual(Object.keys(adminMercuryApi).sort(), [
-    'accounts', 'confirmMatch', 'connect', 'connections', 'disconnect', 'markNotOurs', 'matches', 'proposeMatch', 'rejectMatch', 'sync',
+    'accounts', 'balances', 'confirmMatch', 'connect', 'connections', 'disconnect', 'markNotOurs', 'matches', 'monthly', 'proposeMatch', 'rejectMatch', 'sync',
     'transactions', 'withdrawNotOurs',
   ]);
   globalThis.localStorage ??= { getItem: () => null, setItem() {}, removeItem() {} };
@@ -240,6 +240,8 @@ test('decision 11: adminMercuryApi has one method per #1775 route (and D749\'s t
     await adminMercuryApi.rejectMatch('m-2', 'Not this line at all');
     await adminMercuryApi.markNotOurs('t-2', { reason: 'other', note: 'A wire meant for another fund' });
     await adminMercuryApi.withdrawNotOurs('n-1', 'It was ours after all');
+    await adminMercuryApi.balances({ account: 'a'.repeat(32), range: '30d' });
+    await adminMercuryApi.monthly({ entity: 'gp' });
   } finally { globalThis.fetch = savedFetch; }
   const path = (u) => new URL(u, 'https://axal.test').pathname + new URL(u, 'https://axal.test').search;
   assert.deepEqual(seen.map((c) => `${c.method} ${path(c.url)}`), [
@@ -255,6 +257,8 @@ test('decision 11: adminMercuryApi has one method per #1775 route (and D749\'s t
     'POST /api/admin/mercury/matches/m-2/reject',
     'POST /api/admin/mercury/transactions/t-2/not-ours',
     'POST /api/admin/mercury/not-ours/n-1/withdraw',
+    `GET /api/admin/mercury/balances?account=${'a'.repeat(32)}&range=30d`,
+    'GET /api/admin/mercury/monthly?entity=gp',
   ]);
   assert.deepEqual(seen[10].body, { reason: 'other', note: 'A wire meant for another fund' });
   assert.deepEqual(seen[11].body, { reason: 'It was ours after all' });

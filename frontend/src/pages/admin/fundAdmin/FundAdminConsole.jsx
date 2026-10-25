@@ -1,4 +1,5 @@
-import { useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AdminPageHeader, HeaderMenuItem, HeaderTab, actionPrimary, useMovedNotice } from '../../../ui';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { branchOfUser } from '../../../lib/shellRole';
 import { api } from '../../../lib/api';
@@ -7,10 +8,15 @@ import { adminMercuryApi } from '../../../lib/api/adminMercury';
 import { fundFeesApi } from '../../../lib/api/fundFees';
 import { fundReportingApi } from '../../../lib/api/fundReporting';
 import { adminCapitalAttestationsApi } from '../../../lib/api/adminCapitalAttestations';
+import { fundPerformanceApi } from '../../../lib/api/fundPerformance';
+import { FundPerformanceView } from '../../FundPerformancePage';
 import { Banner } from '../../account/ConnectorSheet';
-import { Landmark, LayoutDashboard, Scale, HandCoins, ArrowRightLeft, Percent, FileText } from 'lucide-react';
-import { HQ_ONLY, TABS, administeredFunds, pickFund, tabFlags, tabFrom } from './fundAdminModel';
+import {
+  BANKING_PARTS, LEGACY_TABS, LINE, MOVED_NOTICES, NOT_YET, TABS, TITLE, WAITS, administeredFunds, fundFilter, fundsCsv,
+  headerPrimary, keepFund, legacyHref, moreItems, pickFund, profilePill, tabCounts, tabOfView, viewFrom, viewHref, withFund,
+} from './fundAdminModel';
 import { useRead } from './useRead';
+import { Refusal } from './Refusal';
 import { OverviewTab } from './OverviewTab';
 import { BankingTab, ReconciliationTab } from './BankingTabs';
 import { CallsTab, DistributionsTab, FeesTab, ReportsTab } from './FundTabs';
@@ -38,6 +44,8 @@ export const DEFAULT_APIS = {
   reporting: fundReportingApi,
   // D752 (#1890): the Calls tab's proofs of funds, read only on Show.
   capitalAttestations: adminCapitalAttestationsApi,
+  // D1157 (#2388): NAV & performance draws today's performance read until FND10 lands.
+  performance: fundPerformanceApi,
   funds: {
     distributions: (fundId) => api.fundsDistributions(fundId),
     execute: (body) => api.fundsExecuteDistribution(body),
@@ -47,16 +55,25 @@ export const DEFAULT_APIS = {
 
 export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const branch = branchOfUser(user);
-  const tab = tabFrom(params.get('tab'));
+  // D1157 (#2388): each tab is its own address; D714's `?tab=` links forward there.
+  const forward = legacyHref(location.search);
+  const view = viewFrom(location.pathname);
+  const tab = tabOfView(view);
+  const moved = useMovedNotice(MOVED_NOTICES);
   const access = useRead(() => apis.fundAdmin.access(), [apis], { enabled: !branch });
   const overview = useRead(() => apis.fundAdmin.overview(), [apis], { enabled: !branch });
+  const performance = useRead(() => apis.performance.list(), [apis], { enabled: !branch && !forward && view === 'performance' });
 
+  if (forward) return <Navigate to={forward} replace />;
+
+  // FND20a (D1160): a branch admin sees one centred refusal and the console makes no read.
   if (branch) {
     return (
-      <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
-        <Chrome sub="Axal’s entities and administered funds" />
-        <div className="mx-4 mt-5 sm:mx-6"><Banner tone="neutral" data-testid="fund-admin-branch">{HQ_ONLY}</Banner></div>
+      <main className="mx-auto max-w-[1440px] px-4 pb-16 sm:px-6" data-testid="fund-admin-console">
+        <Refusal kind="branch" testId="fund-admin-branch" />
       </main>
     );
   }
@@ -66,42 +83,40 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
   const fund = pickFund(funds, params.get('fund'));
   const go = (next) => {
     const p = new URLSearchParams(params);
-    for (const [k, v] of Object.entries(next)) p.set(k, String(v));
-    setParams(p, { replace: true });
+    for (const [k, v] of Object.entries(next)) if (k !== 'tab') p.set(k, String(v));
+    if (next.tab != null) navigate(viewHref(LEGACY_TABS[next.tab] ?? '', `?${p}`));
+    else setParams(p, { replace: true });
   };
   const fundProps = { apis, access: acts, funds, fund, overview, onFund: (id) => go({ fund: id }) };
-  const flags = tabFlags(overview.status === 'ready' ? overview.data : null);
+  const counts = tabCounts(overview.status === 'ready' ? overview.data : overview.status === 'unreadable' ? {} : null);
+  const keep = keepFund(location.search);
   const asOf = overview.status === 'ready' && overview.data?.as_of ? `As of ${overview.data.as_of}` : null;
-  const role = acts ? (acts.super_admin === true ? 'Super Admin' : 'Admin') : null;
+  const pill = profilePill(acts);
+  const primary = headerPrimary(view, acts, PER_FUND_VIEWS.includes(tab) ? fund : null);
+  const filter = fundFilter(funds, location.search, tab);
+  const exportCsv = () => downloadCsv(fundsCsv(overview.status === 'ready' ? overview.data : null));
 
   return (
     <main className="mx-auto max-w-[1440px] pb-16" data-testid="fund-admin-console">
-      <Chrome sub="Capital calls, distributions, management fees, reconciliation, bank accounts and LP reports for Axal’s entities and administered funds."
-        chips={<>
-          {role && <span className={CHIP} data-testid="fund-admin-role">{role}</span>}
-          {asOf && <span className={CHIP} data-testid="fund-admin-as-of">{asOf}</span>}
-        </>}>
-        <nav className="-mb-px mt-3.5 flex gap-5 overflow-x-auto" aria-label="Fund administration">
-          {TABS.map((t) => {
-            const Icon = ICONS[t.key];
-            const on = t.key === tab;
-            return (
-              <button key={t.key} type="button" onClick={() => go({ tab: t.key })} aria-current={on ? 'page' : undefined}
-                data-testid={`fund-admin-tab-${t.key}`}
-                className={`flex shrink-0 items-center gap-[7px] border-b-2 pb-[11px] text-[13px] ${on
-                  ? 'border-axal-violet font-bold text-axal-violet-deep dark:text-violet-300'
-                  : 'border-transparent font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}>
-                <Icon aria-hidden="true" className="h-3.5 w-3.5" />
-                <span>{t.label}</span>
-                {flags[t.key] > 0 && (
-                  <span data-testid={`fund-admin-flag-${t.key}`} className={`inline-flex h-4 min-w-4 items-center justify-center rounded-axal-pill px-1 text-[9px] font-extrabold ${on
-                    ? 'bg-axal-violet text-white' : 'bg-amber-700/15 text-amber-700 dark:text-amber-300'}`}>{flags[t.key]}</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </Chrome>
+      <div className="px-4 pt-5 sm:px-6">
+        <AdminPageHeader
+          title={TITLE}
+          pills={pill ? [{ ...pill, testId: 'fund-admin-role' }] : []}
+          line={LINE}
+          actions={primary ? <Link className={actionPrimary} to={primary.to} data-testid="fund-admin-primary">{primary.label}</Link> : null}
+          more={moreItems(acts).map((m) => (m.to
+            ? <HeaderMenuItem key={m.key} to={m.to} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>
+            : <HeaderMenuItem key={m.key} onSelect={exportCsv} data-testid={`fund-admin-more-${m.key}`}>{m.label}</HeaderMenuItem>))}
+          chip={asOf ? <span title="Every figure on this page is as of this date." className="inline-flex rounded-full border border-axal-hairline bg-white px-3 py-1 font-mono text-[11.5px] font-medium text-axal-muted dark:border-gray-700 dark:bg-gray-900 dark:text-gray-400" data-testid="fund-admin-as-of">{asOf}</span> : null}
+          notice={moved}
+          tabs={TABS.map((t) => (t.path
+            // Literal heads, so the admin route guard reads each tab's door (D1157).
+            ? <HeaderTab key={t.key} to={`/admin/fund-admin/${t.path}${keep}`} end={false} count={counts[t.key] || null} data-testid={`fund-admin-tab-${t.key}`}>{t.label}</HeaderTab>
+            : <HeaderTab key={t.key} to={`/admin/fund-admin${keep}`} count={null} data-testid={`fund-admin-tab-${t.key}`}>{t.label}</HeaderTab>))}
+          data-testid="fund-admin-header"
+        />
+        {funds.length > 0 && <FundFilter filter={filter} pathname={location.pathname} search={location.search} />}
+      </div>
       {access.status === 'unreadable' && (
         <div className="mx-4 mt-4 sm:mx-6">
           <Banner tone="warn" data-testid="fund-admin-access-unreadable">
@@ -109,39 +124,83 @@ export function FundAdminConsoleView({ user, apis = DEFAULT_APIS }) {
           </Banner>
         </div>
       )}
-      <div data-testid={`fund-admin-panel-${tab}`}>
-        {tab === 'overview' && <OverviewTab overview={overview} onOpen={(next) => go(next)} />}
-        {tab === 'banking' && <BankingTab apis={apis} access={acts} />}
-        {tab === 'reconciliation' && <ReconciliationTab apis={apis} access={acts} />}
-        {tab === 'calls' && <CallsTab {...fundProps} />}
-        {tab === 'distributions' && <DistributionsTab {...fundProps} />}
-        {tab === 'fees' && <FeesTab {...fundProps} />}
-        {tab === 'reports' && <ReportsTab {...fundProps} />}
+      {tab === 'banking' && (
+        <nav className="mx-4 mt-4 flex flex-wrap gap-2 sm:mx-6" aria-label="Banking" data-testid="fund-admin-banking-parts">
+          {BANKING_PARTS.map((b) => {
+            const props = { 'aria-current': b.key === view ? 'page' : undefined, 'data-testid': `fund-admin-part-${b.key}`,
+              className: `rounded-axal-pill border px-3 py-1 text-[12px] font-bold ${b.key === view
+                ? 'border-axal-violet bg-axal-violet/10 text-axal-violet-deep dark:text-violet-300'
+                : 'border-axal-hairline text-axal-muted hover:text-axal-ink dark:border-gray-700 dark:text-gray-400 dark:hover:text-gray-100'}` };
+            return b.key === 'banking'
+              ? <Link key={b.key} to={`/admin/fund-admin/banking${keep}`} {...props}>{b.label}</Link>
+              : <Link key={b.key} to={`/admin/fund-admin/banking/${b.key}${keep}`} {...props}>{b.label}</Link>;
+          })}
+        </nav>
+      )}
+      <div data-testid={`fund-admin-panel-${view}`}>
+        {view === 'overview' && <OverviewTab overview={overview} onOpen={(next) => go(next)} />}
+        {view === 'banking' && <BankingTab apis={apis} access={acts} />}
+        {view === 'reconciliation' && <ReconciliationTab apis={apis} access={acts} />}
+        {view === 'calls' && <CallsTab {...fundProps} />}
+        {view === 'distributions' && <DistributionsTab {...fundProps} />}
+        {view === 'fees' && <FeesTab {...fundProps} />}
+        {view === 'reports' && <ReportsTab {...fundProps} />}
+        {view === 'performance' && (
+          <div className="mx-4 mt-5 sm:mx-6">
+            <FundPerformanceView items={performance.data?.items || []} loading={performance.status === 'loading'}
+              error={performance.status === 'unreadable' ? (performance.error?.message || 'Fund performance could not be read.') : null} reload={performance.reload} />
+          </div>
+        )}
+        {(view === 'funds' || view === 'lps' || view === 'books') && <WaitCard view={view} />}
       </div>
     </main>
   );
 }
 
-const ICONS = { overview: LayoutDashboard, banking: Landmark, reconciliation: Scale, calls: HandCoins, distributions: ArrowRightLeft, fees: Percent, reports: FileText };
-const CHIP = 'inline-flex items-center rounded-axal-sm border border-axal-hairline px-2.5 py-1.5 text-[11.5px] font-semibold text-axal-muted dark:border-gray-700 dark:text-gray-400';
-
-/** The canvas's chrome: the violet mark, the title and its sub, the chips, then the tabs. */
-function Chrome({ sub, chips = null, children = null }) {
+/** D1157: a tab with no read yet says so where its blocks would be. Never a zero, never "none". */
+function WaitCard({ view }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-axal-hairline bg-white px-4 pt-3.5 sm:px-6 dark:border-gray-800 dark:bg-gray-900">
-      <div className="flex flex-wrap items-center justify-between gap-3.5 pb-px">
-        <div className="flex min-w-0 items-center gap-[11px]">
-          <span className="flex h-[29px] w-[29px] flex-none items-center justify-center rounded-axal-sm bg-axal-violet text-white"><Landmark aria-hidden="true" className="h-[15px] w-[15px]" /></span>
-          <div className="min-w-0">
-            <h1 className="text-[15.5px] font-extrabold tracking-[-.015em] text-axal-ink dark:text-gray-100">Fund Administration</h1>
-            <p className="mt-px text-[11.5px] text-axal-muted dark:text-gray-400">{sub}</p>
-          </div>
-        </div>
-        {chips && <div className="flex flex-wrap items-center gap-2">{chips}</div>}
-      </div>
-      {children || <div className="h-3.5" />}
-    </header>
+    <section className="mx-4 mt-5 flex flex-col gap-2 rounded-axal-md border border-axal-hairline bg-white px-[18px] py-4 sm:mx-6 dark:border-gray-800 dark:bg-gray-900" data-testid={`fund-admin-wait-${view}`}>
+      <span className="w-fit rounded-axal-pill border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
+      <p className="m-0 text-[13px] text-axal-muted dark:text-gray-400">{WAITS[view]}</p>
+    </section>
   );
+}
+const PER_FUND_VIEWS = ['calls', 'distributions', 'fees', 'reports'];
+
+/** The fund filter (FND2): pills on a desktop, a select on a phone; kept across tabs as `?fund=`. */
+function FundFilter({ filter, pathname, search }) {
+  const navigate = useNavigate();
+  return (
+    <div className="mt-3 flex flex-col gap-1.5" data-testid="fund-admin-filter">
+      <nav aria-label="Fund" className="hidden w-fit flex-wrap gap-0.5 rounded-full border border-axal-hairline bg-[#faf9fc] p-[3px] sm:flex dark:border-gray-700 dark:bg-gray-800">
+        {filter.pills.map((p) => (
+          <Link key={p.key} to={withFund(pathname, search, p.id)} aria-current={p.on ? 'true' : undefined} data-testid={`fund-admin-filter-${p.key}`}
+            className={`inline-flex min-h-[30px] items-center whitespace-nowrap rounded-full px-[13px] text-[12.5px] ${p.on
+              ? 'bg-white font-extrabold text-axal-ink shadow-[0_0_0_1px_theme(colors.axal.hairline)] dark:bg-gray-900 dark:text-gray-100'
+              : 'font-semibold text-axal-muted hover:text-axal-ink dark:text-gray-400 dark:hover:text-gray-100'}`}>{p.label}</Link>
+        ))}
+      </nav>
+      <label className="flex min-h-[44px] items-center gap-2.5 rounded-[9px] border border-axal-hairline bg-white px-3 text-[13px] font-semibold text-axal-ink sm:hidden dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">
+        <span className="font-mono text-[10px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400">Fund</span>
+        <select className="min-w-0 flex-1 bg-transparent" value={filter.pills.find((p) => p.on)?.key || ''} data-testid="fund-admin-filter-select"
+          onChange={(e) => { const p = filter.pills.find((x) => x.key === e.target.value); if (p) navigate(withFund(pathname, search, p.id)); }}>
+          {filter.pills.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+        </select>
+      </label>
+      {filter.note && <p className="m-0 text-[12px] text-axal-muted dark:text-gray-400" data-testid="fund-admin-filter-note">{filter.note}</p>}
+    </div>
+  );
+}
+
+/** Export (FND1): a file made in the browser from the read on the page; nothing is sent. */
+function downloadCsv(text) {
+  if (typeof document === 'undefined' || typeof URL?.createObjectURL !== 'function') return;
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = 'fund-admin-funds.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export default function FundAdminConsole() {

@@ -748,6 +748,15 @@ export async function requireHqAuthoring(c: Context<{ Bindings: Env }>): Promise
  * suspended: suspension is a claim HQ makes, and inferring it from a missing
  * row would freeze every branch during the window between bootstrap and the
  * first push — exactly when its principal is trying to work.
+ *
+ * D985 — THE GRANT GATE STANDS BEHIND IT. A write that starts something under
+ * a program (an admission, a host approval, a certificate, a mentor
+ * assignment, a perk going live, a Refer & Earn acceptance) then calls
+ * `programRefusal` (services/programEnforcement.ts): 403 when the branch's
+ * licence does not hold the program, or holds it paused, ended or outside its
+ * dates. Same order, same posture on a missing copy; a different answer,
+ * because it is a different claim — this one is about the licence, that one
+ * about one program on it. `branchFreeze.js`'s Programs row lists both.
  */
 export async function requireBranchNotSuspended(c: Context<{ Bindings: Env }>): Promise<void> {
   if (!branchOf(c.env)) return;

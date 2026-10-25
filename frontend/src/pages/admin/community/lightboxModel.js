@@ -24,7 +24,7 @@ import { ACCESS_TYPES, ACTIVITY_LEVELS, CIRCLE_TYPES } from '../../../data/netwo
 import {
   NOT_RECORDED, STATUSES as EVENT_STATUSES, attendedText, capacityText, countText, eventHref, fillText, showUpText, startCell, statusWord, titleOf,
 } from '../events/eventsDeskModel.js';
-import { dayLabel, stamp } from './communityModel.js';
+import { dayLabel, jobDaysOpen, stamp } from './communityModel.js';
 
 export { NOT_RECORDED };
 
@@ -113,6 +113,8 @@ export const EVENTS = {
   none: 'No events',
   filters: [
     { key: 'status', label: 'Status', all: 'All statuses', options: EVENT_STATUSES.map((s) => ({ value: s.key, label: s.word })) },
+    // CM3's Type ▾: the twelve stored types, filtered by the Worker (D1121).
+    { key: 'type', label: 'Type', all: 'All types', options: EVENT_TYPES.map((t) => ({ value: t.id, label: t.label })) },
     { key: 'when', label: 'Starts', all: 'Starts: All', options: [
       { value: 'upcoming', label: 'Upcoming' }, { value: 'this_week', label: 'This week' }, { value: 'next_30d', label: 'Next 30 days' }, { value: 'ended', label: 'Ended' },
     ] },
@@ -135,7 +137,7 @@ export function eventsQuery(state) {
   const f = state.filters || {};
   const sort = EVENTS.sorts.find((s) => s.key === state.sort) || EVENTS.sorts[0];
   const out = { limit: ROWS, offset: (page - 1) * ROWS, sort: sort.sort, dir: sort.dir };
-  for (const k of ['status', 'when', 'visibility', 'price']) if (f[k]) out[k] = f[k];
+  for (const k of ['status', 'type', 'when', 'visibility', 'price']) if (f[k]) out[k] = f[k];
   if (f.featured) out.featured = f.featured === 'yes';
   const q = String(state.q || '').trim();
   if (q) out.q = q;
@@ -186,22 +188,44 @@ const JOB_STATUSES = [
 const JOB_WORD = Object.fromEntries(JOB_STATUSES);
 export const jobStatusWord = (s) => JOB_WORD[s] || 'Status not recorded';
 
-export const JOBS_LINE = 'Every posting, as of now. A row opens the job board; nothing is approved here.';
-/** Why the canvas's Posted and Days open are not drawn (D934 §3). */
-export const JOBS_FOOT = 'When a posting was published is not recorded, so Created is when its host started it, and days open is not shown.';
+export const JOBS_LINE = 'Every posting, as of now. A row opens that posting on the job board; nothing is approved here.';
+/** D1121: what Posted and Days open mean, and why an older posting reads Not recorded. */
+export const JOBS_FOOT = 'Posted is the day an admin last approved the posting, and only a published posting has days open. A posting approved before that day was recorded reads Not recorded.';
+
+/** Posted: the day it was last approved; "Not published" when it never was; "Not recorded" when it was, before 609. */
+function postedText(j) {
+  if (j.published_at) return dayLabel(j.published_at);
+  return j.status === 'published' || j.status === 'closed' ? NOT_RECORDED : 'Not published';
+}
+
+/** How long it has been open, as a sortable number (the older the approval, the larger); null when not open or not recorded. */
+function openFor(j) {
+  if (j.status !== 'published') return null;
+  const t = stamp(j.published_at);
+  return Number.isNaN(t) ? null : -t;
+}
+
+function daysOpenCell(j, now) {
+  const d = jobDaysOpen(j, now);
+  if (d === null) return 'Not open';
+  return Number.isNaN(d) ? NOT_RECORDED : nf(d);
+}
 
 const appsOf = (j) => (j.application_count === null || j.application_count === undefined || !Number.isFinite(Number(j.application_count)) ? null : Number(j.application_count));
 
-export function jobRow(j) {
+export function jobRow(j, now = Date.now()) {
   const apps = appsOf(j);
   return {
     id: j.id,
-    href: '/admin/jobs',
+    // D1121: the row opens its own posting on the job board.
+    href: `/admin/jobs?posting=${encodeURIComponent(j.id)}`,
     title: String(j.title || '').trim() || 'Untitled posting',
     company: j.project_name || 'Company not recorded',
     status: jobStatusWord(j.status),
     statusKey: j.status,
     created: dayLabel(j.created_at),
+    posted: postedText(j),
+    daysOpen: daysOpenCell(j, now),
     place: j.remote ? 'Remote' : 'On-site',
     seniority: SENIORITY_LABELS[j.seniority] || 'Level not recorded',
     applications: apps === null ? NOT_RECORDED : nf(apps),
@@ -222,6 +246,8 @@ export const JOBS = {
   sorts: [
     { key: 'applications', label: 'Applications', compare: (a, b) => byCount(appsOf(a), appsOf(b)) || byText(a.title, b.title) },
     { key: 'created', label: 'Newest', compare: (a, b) => (stamp(b.created_at) || 0) - (stamp(a.created_at) || 0) },
+    // D1121: longest open first; a posting not open, or not recorded, sorts last.
+    { key: 'days_open', label: 'Days open', compare: (a, b) => byCount(openFor(a), openFor(b)) || byText(a.title, b.title) },
     { key: 'title', label: 'Role', compare: (a, b) => byText(a.title, b.title) },
   ],
 };
@@ -234,13 +260,14 @@ const CIRCLE_TYPE_WORD = { founder: 'Founder', investor: 'Investor', partner: 'P
 const ACCESS_WORD = Object.fromEntries(ACCESS_TYPES.map((a) => [a.id, a.label]));
 const yes = (v) => (v ? 'Yes' : 'No');
 
-export const CIRCLES_LINE = 'Every circle, as of now. A row opens circles; nothing is published here.';
+export const CIRCLES_LINE = 'Every circle, as of now. A row opens that circle; nothing is published here.';
 export const AS_ENTERED_FOOT = 'Members and activity are typed by an admin on each circle, not counted from sign-ups.';
 
 export function circleRow(c) {
   return {
     id: c.id,
-    href: '/admin/circles',
+    // D1121: the row opens its own circle's editor.
+    href: `/admin/circles?circle=${encodeURIComponent(c.id)}`,
     title: String(c.name || '').trim() || 'Untitled circle',
     type: CIRCLE_TYPE_WORD[c.type] || 'Type not recorded',
     access: ACCESS_WORD[c.access] || 'Access not recorded',

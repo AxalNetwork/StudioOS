@@ -129,7 +129,9 @@ test('HQ approvals: when every lane answers, the total is their sum', async () =
   // D1041 (#2889): the stores the canvas's new lanes read, empty here.
   for (const t of ['company_profiles', 'comarketing_pitches', 'partners', 'experts', 'perks',
     'referral_strategic_access', 'score_snapshots', 'articles']) db.exec(ddl(t));
-  for (const m of ['220_company_kyb.sql', '313_lab_host_applications.sql']) {
+  db.exec(readFileSync(new URL('../sql/migrations/577_expert_review_records.sql', import.meta.url), 'utf8'));
+  // D1132 (#3012): and Product testers' store, migration 576.
+  for (const m of ['220_company_kyb.sql', '313_lab_host_applications.sql', '576_product_testers.sql']) {
     db.exec(readFileSync(new URL(`../sql/migrations/${m}`, import.meta.url), 'utf8'));
   }
   const g: any = await studioGlance({ DB: makeD1(db) } as any, NOW);
