@@ -21,6 +21,7 @@
  * 402 Response (the global error handler returns it as-is).
  */
 import type { Context } from 'hono';
+import { planByKey } from '../services/planCatalogue';
 import type { Env, User } from '../types';
 import { requireAuth } from '../auth';
 import { bindingKey, runSchemaBootstrap } from '../util/schemaBootstrap';
@@ -32,9 +33,10 @@ const TIER_RANK: Record<Tier, number> = { free: 0, growth: 1, studio: 2 };
 const BYPASS_ROLES = new Set<string>(['admin', 'partner', 'investor', 'advisor']);
 
 /** What a member reads for each paid tier (D683). */
+/** D1050: the plan names are the plan catalogue's (`services/planCatalogue.ts`). */
 export const PLAN_NAME: Record<Exclude<Tier, 'free'>, string> = {
-  growth: 'Validate + Build',
-  studio: 'Raise + Grow',
+  growth: planByKey('founder:growth')!.name,
+  studio: planByKey('founder:studio')!.name,
 };
 
 const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
@@ -42,10 +44,14 @@ const TIER_COPY: Record<Exclude<Tier, 'free'>, string> = {
   studio: 'This is on the Raise + Grow plan. Upgrade for the pitch deck, cap table, capital, legal, and partner tooling.',
 };
 
-/** The monthly price a member is quoted. It must match the active Stripe price on the tier's product. */
-export const PLAN_PRICE_LABEL: Record<Exclude<Tier, 'free'>, string> = {
-  growth: '$20 / month',
-  studio: '$100 / month',
+/**
+ * D1050 (#2901): no price is typed here. The upsell names the plan by its
+ * catalogue key (`plan_key`), and the price is read from Stripe's D1 mirror
+ * on `GET /api/public/plans-and-packs`, as the paywall and Pricing read it.
+ */
+export const PLAN_KEY: Record<Exclude<Tier, 'free'>, string> = {
+  growth: 'founder:growth',
+  studio: 'founder:studio',
 };
 
 export interface TierUserCols {
@@ -89,7 +95,7 @@ export function tierUpsell(required: Exclude<Tier, 'free'>) {
     error: 'tier_required',
     required,
     message: TIER_COPY[required],
-    plan: { tier: required, name: PLAN_NAME[required], price_label: PLAN_PRICE_LABEL[required] },
+    plan: { tier: required, name: PLAN_NAME[required], plan_key: PLAN_KEY[required] },
     checkout_path: '/api/billing/tier/checkout',
   };
 }
