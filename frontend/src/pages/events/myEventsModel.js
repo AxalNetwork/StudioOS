@@ -31,6 +31,9 @@ export const tabHref = (t) => `${PATH}${t.path}`;
 
 export function tabOf(pathname) {
   const p = String(pathname || '').replace(/\/+$/, '');
+  // D1035: a drawer sits over the tab it opens from: a ticket over Upcoming, a hosted event over Hosting.
+  if (/^\/my\/events\/ticket\/[^/]+$/.test(p)) return 'upcoming';
+  if (/^\/my\/events\/hosting\/[^/]+$/.test(p)) return 'hosting';
   const t = TABS.find((x) => `${PATH}${x.path}` === p);
   return t ? t.key : 'upcoming';
 }
@@ -167,11 +170,18 @@ export function hostingGroups(hosting, now = Date.now(), q = '') {
 }
 
 /**
- * The one action that fits a hosted event's status (MEV4). Publishing and
- * sending for review open part 5's dialogs; until then they open the editor.
+ * The one action that fits a hosted event's status (MEV4). D1035: a draft
+ * whose date is ahead offers "Send for review" (public) or "Publish"
+ * (unlisted, private), which opens the publish dialog; a draft whose date has
+ * passed offers Edit details.
  */
-export function hostAction(e) {
+export function hostAction(e, now = Date.now()) {
   if (e.status === 'rejected') return { label: 'Edit and resend', to: `/events/${e.id}/edit` };
+  if (e.status === 'draft' && !isPast({ starts_at: e.starts_at }, now)) {
+    return e.visibility === 'public' ? { label: 'Send for review', dialog: 'publish' }
+      : ['unlisted', 'private'].includes(e.visibility) ? { label: 'Publish', dialog: 'publish' }
+      : { label: 'Edit details', to: `/events/${e.id}/edit` };
+  }
   if (e.status === 'draft') return { label: 'Edit details', to: `/events/${e.id}/edit` };
   if (e.status === 'pending_review') return { label: null, note: 'Waiting for an admin' };
   if (e.status === 'published') return { label: 'Manage', to: `/events/${e.id}/manage` };
@@ -200,9 +210,9 @@ export function tabCounts({ attending, hosting, ok }, now = Date.now()) {
   return { upcoming: upcoming.length, hosting: (hosting || []).length, past: past.length + pastHosted(hosting, now).length };
 }
 
-/** Discover's row action (MEV8), from what the caller already holds. */
+/** Discover's row action (MEV8), from what the caller already holds; D1035: a held place opens its ticket. */
 export function discoverAction(ev, held) {
-  if (held.has(ev.id)) return { label: 'Going', to: `/events/${ev.id}` };
+  if (held.has(ev.id)) return { label: 'Show ticket', to: `/my/events/ticket/${ev.id}` };
   return { label: 'Open event', to: `/events/${ev.slug || ev.id}` };
 }
 

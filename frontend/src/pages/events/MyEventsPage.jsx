@@ -2,8 +2,10 @@
 // events" canvas — Upcoming, Hosting, Discover and Past, each at its own
 // address under /my/events, drawn from the reads that exist (myEventsModel.js).
 // The phone keeps D700's A7m sections until D1030's phone part.
+// D1035 (#2876): the ticket and hosted-event drawers open over their tab at
+// /my/events/ticket/[id] and /my/events/hosting/[id] (MyEventsDrawers.jsx).
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Plus, Calendar, MapPin, Ticket } from 'lucide-react';
 import { eventsApi } from '../../lib/eventsApi';
 import { eventsPublic } from '../../lib/api';
@@ -22,6 +24,8 @@ import {
   dateBlock, discoverAction, goingGroups, hostAction, hostingGroups, hostingSoon, isExplorer, needsYou, nextEvent,
   pastRows, placeOf, priceOf, splitTickets, statusOf, tabCounts, tabHref, tabOf, tabsFor, timeLine, visibilityWord, whereOf as eventWhere,
 } from './myEventsModel';
+import { MY_EVENTS_OPEN_TO_EXPLORERS, drawerOf, hostedPath, tabUnder, ticketPath } from './eventDrawersModel';
+import { ExplorerClosedCard, HostedDrawer, PublishDialog, TicketDrawer } from './MyEventsDrawers';
 
 const STATUS_STYLES = {
   draft: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
@@ -160,6 +164,7 @@ function useSuggestedEvents() {
 export default function MyEventsPage() {
   const [hosting, setHosting] = useState([]);
   const [attending, setAttending] = useState([]);
+  const [past, setPast] = useState(null);
   const [loading, setLoading] = useState(true);
   // D332 — a failed read used to fall back to `[]` and render "not hosting
   // any events yet", which is the same screen a genuinely empty account
@@ -176,10 +181,11 @@ export default function MyEventsPage() {
       const res = await eventsApi.list();
       setHosting(Array.isArray(res?.hosting) ? res.hosting : (Array.isArray(res) ? res : []));
       setAttending(Array.isArray(res?.attending) ? res.attending : []);
+      setPast(res?.past && Array.isArray(res.past.places) ? res.past : null);
     } catch (e) {
       showToast({ kind: 'error', msg: e?.message || 'Could not load your events.' });
       setLoadError(e?.message || 'Could not load your events.');
-      setHosting([]); setAttending([]);
+      setHosting([]); setAttending([]); setPast(null);
     } finally {
       setLoading(false);
     }
@@ -188,6 +194,20 @@ export default function MyEventsPage() {
   useEffect(() => { load(); }, [load]);
   const suggested = useSuggestedEvents();
   const phone = usePhoneWidth();
+  const navigate = useNavigate();
+
+  // D1035: the drawer the address names, over the tab it opens from. Closing
+  // goes back to that tab; a change made inside closes it, re-reads the list
+  // and says what happened.
+  const drawer = drawerOf(location.pathname);
+  const list = { status: loading ? 'loading' : loadError ? 'error' : 'ready', data: { hosting, attending, past }, reload: load };
+  const closeDrawer = () => navigate(tabHref({ path: tabUnder(drawer) === 'hosting' ? '/hosting' : '' }));
+  const doneDrawer = (line) => { closeDrawer(); load(); showToast({ kind: 'ok', msg: line }); };
+  const drawerEl = drawer?.kind === 'ticket'
+    ? <TicketDrawer key={`t-${drawer.id}`} id={drawer.id} list={list} onClose={closeDrawer} onDone={doneDrawer} />
+    : drawer?.kind === 'hosted'
+      ? <HostedDrawer key={`h-${drawer.id}`} id={drawer.id} list={list} user={user} onClose={closeDrawer} onDone={doneDrawer} />
+      : null;
 
   const toastEl = toast && (
     <div className={`fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2 text-sm text-white shadow-lg ${
@@ -203,6 +223,7 @@ export default function MyEventsPage() {
     return (
       <EventsPhoneView events={events} suggested={Array.isArray(suggested?.events) ? suggested.events : null}>
         <PageExplainer pageKey="my_events" />
+        {drawerEl}
         {events.status === 'ready' && coded.length > 0 && (
           <div>
             <h2 className="text-[11px] font-bold uppercase tracking-wide text-gray-700 dark:text-gray-300">Check-in codes</h2>
@@ -215,6 +236,8 @@ export default function MyEventsPage() {
   }
 
   const explorer = isExplorer(user);
+  // MEV17b: only if the owner closes My events to Explorers (D1030 opened it to them).
+  if (explorer && !MY_EVENTS_OPEN_TO_EXPLORERS) return <ExplorerClosedCard />;
   const tab = tabOf(location.pathname);
   const counts = tabCounts({ attending, hosting, ok: !loading && !loadError });
   const held = new Set(attending.map((t) => t.id));
@@ -271,7 +294,7 @@ export default function MyEventsPage() {
             <Unreadable what="Your events" claim="That is not the same as having none." onRetry={load} />
           </div>
         ) : tab === 'hosting' && !explorer ? (
-          <HostingTab hosting={hosting} admin={String(user?.role || '').toLowerCase() === 'admin'} />
+          <HostingTab hosting={hosting} admin={String(user?.role || '').toLowerCase() === 'admin'} onDone={(line) => { load(); showToast({ kind: 'ok', msg: line }); }} />
         ) : tab === 'past' ? (
           <PastTab attending={attending} hosting={explorer ? [] : hosting} />
         ) : (
@@ -279,6 +302,7 @@ export default function MyEventsPage() {
         )}
       </div>
 
+      {drawerEl}
       {toastEl}
     </div>
   );
@@ -320,12 +344,14 @@ function DateTile({ event }) {
 
 const viewerZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return null; } };
 
-function EventLine({ event, children }) {
+function EventLine({ event, to, children }) {
   return (
     <div className="flex min-w-0 items-start gap-3">
       <DateTile event={event} />
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className={`truncate text-[14px] font-extrabold ${INK}`}>{event.title || 'Not recorded'}</span>
+        {to
+          ? <Link to={to} className={`truncate text-[14px] font-extrabold hover:text-axal-violet ${INK}`} data-testid="my-events-open-drawer">{event.title || 'Not recorded'}</Link>
+          : <span className={`truncate text-[14px] font-extrabold ${INK}`}>{event.title || 'Not recorded'}</span>}
         <span className={`text-[12px] ${MUTED}`}>{timeLine(event, viewerZone())}</span>
         <span className={`inline-flex items-center gap-1 text-[12px] ${MUTED}`}><MapPin size={12} /> {eventWhere(event)}</span>
         {children}
@@ -371,7 +397,7 @@ function UpcomingTab({ attending, hosting, suggested, explorer }) {
                   return (
                     <div key={t.id} className="flex flex-wrap items-center justify-between gap-2" data-testid="my-events-going-row">
                       <EventLine event={t}><Pill tone={place.tone}>{place.label}</Pill></EventLine>
-                      <Link className={`${LINK} text-[12px]`} to={`/events/${t.id}`}>Open event page</Link>
+                      <Link className={`${LINK} text-[12px]`} to={ticketPath(t.id)} data-testid="my-events-show-ticket">Show ticket</Link>
                     </div>
                   );
                 })}
@@ -387,8 +413,10 @@ function UpcomingTab({ attending, hosting, suggested, explorer }) {
               const act = hostAction(e);
               return (
                 <div key={e.id} className="mt-2 flex flex-wrap items-center justify-between gap-2" data-testid="my-events-hosting-soon-row">
-                  <EventLine event={e}><Pill tone={st.tone}>{st.label}</Pill></EventLine>
-                  {act.label ? <Link className={`${LINK} text-[12px]`} to={act.to}>{act.label}</Link> : <span className={`text-[12px] ${MUTED}`}>{act.note}</span>}
+                  <EventLine event={e} to={hostedPath(e.id)}><Pill tone={st.tone}>{st.label}</Pill></EventLine>
+                  {act.to ? <Link className={`${LINK} text-[12px]`} to={act.to}>{act.label}</Link>
+                    : act.dialog ? <Link className={`${LINK} text-[12px]`} to={hostedPath(e.id)}>{act.label}</Link>
+                      : <span className={`text-[12px] ${MUTED}`}>{act.note}</span>}
                 </div>
               );
             })}
@@ -415,6 +443,7 @@ function NextEvent({ ticket }) {
           {ticket.comp ? <Pill tone="good">Free seat</Pill> : null}
         </span>
         <span className="mt-2 flex flex-wrap gap-3 text-[12.5px]">
+          <Link className={LINK} to={ticketPath(ticket.id)} data-testid="my-events-next-ticket">Show ticket</Link>
           <a className={LINK} href={eventsApi.icsUrl(ticket.id)}>Download .ics</a>
           {online ? <a className={LINK} href={ticket.location_url} target="_blank" rel="noopener noreferrer">Join</a> : null}
           <Link className={LINK} to={`/events/${ticket.id}`}>Open event page</Link>
@@ -449,8 +478,10 @@ function SuggestedCard({ events }) {
   );
 }
 
-function HostingTab({ hosting, admin }) {
+function HostingTab({ hosting, admin, onDone }) {
   const [q, setQ] = useState('');
+  // D1035: a draft's Send for review or Publish opens MEV6's dialog here, without the drawer.
+  const [publishing, setPublishing] = useState(null);
   const groups = hostingGroups(hosting, Date.now(), q);
   // D1036 (MEV13): the review desk's waiting count, its own read; a failed read is said, never a 0.
   const [waiting, setWaiting] = useState(admin ? { state: 'loading' } : null);
@@ -489,11 +520,12 @@ function HostingTab({ hosting, admin }) {
             const act = hostAction(e);
             return (
               <div key={e.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-axal-ground px-4 py-3 last:border-b-0 dark:border-gray-800" data-testid="my-events-hosted-row">
-                <EventLine event={e}>
+                <EventLine event={e} to={hostedPath(e.id)}>
                   <span className="mt-1 flex flex-wrap items-center gap-2 text-[12px]"><Pill tone={st.tone}>{st.label}</Pill><span className={MUTED}>{visibilityWord(e.visibility)}</span></span>
                 </EventLine>
                 <span className="flex flex-wrap items-center gap-3 text-[12px]">
-                  {act.label ? <Link className={LINK} to={act.to} data-testid="my-events-host-action">{act.label}</Link> : act.note ? <span className={MUTED}>{act.note}</span> : null}
+                  {act.dialog ? <button type="button" className={LINK} onClick={() => setPublishing(e)} data-testid="my-events-host-action">{act.label}</button>
+                    : act.label ? <Link className={LINK} to={act.to} data-testid="my-events-host-action">{act.label}</Link> : act.note ? <span className={MUTED}>{act.note}</span> : null}
                   {e.status !== 'draft' && e.status !== 'rejected' ? <Link className={LINK} to={`/events/${e.id}/edit`}>Edit details</Link> : null}
                 </span>
               </div>
@@ -502,6 +534,7 @@ function HostingTab({ hosting, admin }) {
         </section>
       ))}
       {hosting.length ? <p className={`m-0 text-[11.5px] ${MUTED}`}>Seats, waitlist, approvals and open invitations per event: {NOT_READ}.</p> : null}
+      {publishing ? <PublishDialog event={publishing} counts={publishing.counts} onClose={() => setPublishing(null)} onDone={(line) => { setPublishing(null); onDone(line); }} /> : null}
     </div>
   );
 }
