@@ -192,6 +192,10 @@ test('settings default is operative, explicit zero stays zero, and save uses the
   const write = await call(adminCohort, db, ADMIN, '/applications/settings', { method: 'POST', body: { min_cohort_size: 3, max_cohort_size: 0 } });
   assert.equal(write.status, 200);
   assert.deepEqual((await call(adminCohort, db, ADMIN, '/settings')).body.settings, { min: 3, max: 0 });
+  assert.equal((await call(adminCohort, db, ADMIN, '/applications/settings', { method: 'POST', body: { max_cohort_size: 7 } })).status, 200);
+  assert.deepEqual((await call(adminCohort, db, ADMIN, '/settings')).body.settings, { min: 3, max: 7 }, 'a Places-only save retains Minimum');
+  assert.equal((await call(adminCohort, db, ADMIN, '/applications/settings', { method: 'POST', body: { min_cohort_size: 0 } })).status, 200);
+  assert.deepEqual((await call(adminCohort, db, ADMIN, '/settings')).body.settings, { min: 0, max: 7 }, 'a Minimum-only save retains Places and accepts explicit zero');
   assert.equal(db.prepare("SELECT actor FROM cohort_cycle_events WHERE event_type='settings_updated'").get()!.actor, `admin:${ADMIN}`);
   assert.equal((await call(adminOperations, db, FOUNDER, '/settings')).status, 403);
   db.close();
