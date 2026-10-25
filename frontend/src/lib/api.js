@@ -36,6 +36,7 @@ export * from './api/channelKeys.js';
 export * from './api/channels.js';
 export * from './api/community.js';
 export * from './api/communityTasks.js';
+export * from './api/companyActions.js';
 export * from './api/companyEin.js';
 export * from './api/companySheet.js';
 export * from './api/connectors.js';
