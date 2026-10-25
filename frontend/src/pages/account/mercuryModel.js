@@ -34,7 +34,7 @@ export function accountLine(account) {
 }
 
 /** D880: an admin's line on this connector's page; the accounts themselves are HQ's. */
-export const HQ_ACCOUNTS = { text: 'Axal VC\'s own accounts are managed in HQ › Bank accounts.', link: 'Open Bank accounts', href: '/admin?tab=bank-accounts' };
+export const HQ_ACCOUNTS = { text: 'Axal VC\'s own accounts are managed in HQ › Bank accounts.', link: 'Open Bank accounts', href: '/admin/platform/bank-accounts' };
 /** A branch admin's search for Mercury. */
 export const BRANCH_MANAGED = 'Axal VC\'s own accounts are managed from HQ.';
 

@@ -14,10 +14,9 @@ import { ensureTier, tierCovers } from '../middleware/requireTier';
 import {
   DECK_METHODS, PREMIUM_METHOD_IDS, getMethod,
 } from '../services/decks/methods';
-import { autofillDeck, toEditorSlides, parseJsonLoose, recordedDeckRunway, formatDeckRunway } from '../services/decks/autofill';
+import { autofillDeck, toEditorSlides, parseJsonLoose } from '../services/decks/autofill';
 import { run as aiRouterRun } from '../services/aiRouter';
 import { AI_SURFACE } from '../services/aiSurfaces';
-import { formatUseOfFundsText } from '../util/useOfFunds';
 // Task #15 — Axal 28-day Spin-Out Lab demo day deck. Custom autofill
 // path that bypasses the generic field-source vocabulary in autofill.ts
 // because the deck binds to Lab tables (interviews, milestones, OKRs)
@@ -43,7 +42,7 @@ import {
   TEXT_STYLES, THEME_KINDS, VIDEO_RATIOS, contentHash, modelProblems, sanitizeModel, sanitizeTheme,
 } from '../services/decks/slideModel';
 import { checkVideoLink } from '../services/decks/videoLink';
-import { ensureDeckVersionColumns } from '../services/decks/deckVersionColumns';
+import { ensureDeckVersionColumns, ensureProposalOutlineColumns } from '../services/decks/deckVersionColumns';
 import { isSupportSession } from '../integrations/providers/mercury';
 
 /** D895 applies only to deck operations, not other project-content routes. */
@@ -63,7 +62,7 @@ async function mercuryRunwayOwner(c: any, user: any, projectId: number): Promise
   return project?.founder_id === user.founder_id ? Number(user.id) : null;
 }
 
-async function auditDeckWrite(c: any, user: any, projectId: number, action: string, summary: string) {
+export async function auditDeckWrite(c: any, user: any, projectId: number, action: string, summary: string) {
   await logCycleWrite(c.env, { projectId, userId: Number(user.id), cycle: 'raise', module: 'pitch-deck', entityId: null, action, summary });
 }
 
@@ -77,7 +76,7 @@ export async function deckOwnerBrand(env: Env, projectId: number) {
 const decks = new Hono<{ Bindings: Env }>();
 
 const MIGRATED = new WeakMap<object, boolean>();
-async function ensureSchema(env: Env): Promise<void> {
+export async function ensureSchema(env: Env): Promise<void> {
   if (MIGRATED.get(bindingKey(env))) return;
   const stmts = [
     `CREATE TABLE IF NOT EXISTS pitch_decks (
@@ -186,6 +185,8 @@ async function ensureSchema(env: Env): Promise<void> {
   } catch {}
   // Migration 539 — D898: what a version records about itself, for the editor.
   await ensureDeckVersionColumns(env);
+  // Migration 542 — D897: a New deck proposal's outline and kept cards.
+  await ensureProposalOutlineColumns(env);
   MIGRATED.set(bindingKey(env), true);
 }
 
@@ -281,146 +282,11 @@ async function hashViewerField(env: Env, value: string | null): Promise<string |
   return out;
 }
 
-const SLIDE_TITLES = [
-  'Problem', 'Solution', 'Market', 'Traction', 'Business model',
-  'Go-to-market', 'Competition', 'Team', 'Ask', 'Financials',
-];
-
-function fmtMoney(n: any): string | null {
-  const v = Number(n);
-  if (!isFinite(v) || v <= 0) return null;
-  return `$${Math.round(v).toLocaleString()}`;
-}
-
-function heuristicSlides(p: any): any[] {
-  // Task #14 — extended to read every project column the 12 deck templates
-  // reference, preserving the literal '—' placeholder when the column is
-  // empty so the editor renders a visible "needs filling" cue instead of
-  // an opinionated default. The dash mirrors `autofill.ts::PLACEHOLDER`.
-  const DASH = '—';
-  const orDash = (v: any): string => {
-    const s = (v == null ? '' : String(v)).trim();
-    return s ? s : DASH;
-  };
-  const name = orDash(p.name);
-  const sector = orDash(p.sector);
-  const tagline = orDash(p.tagline);
-  const vision = orDash(p.vision);
-  const tractionSummary = orDash(p.traction_summary);
-  const contactEmail = orDash(p.contact_email);
-  const logoUrl = (p.logo_url && String(p.logo_url).trim()) ? String(p.logo_url).trim() : null;
-  const problem = orDash(p.problem_statement);
-  const solution = (p.solution || p.description || '').toString().trim() || DASH;
-  const whyNow = orDash(p.why_now);
-  const tam = fmtMoney(p.tam);
-  const sam = fmtMoney(p.sam);
-  const som = fmtMoney(p.som);
-  const users = Number(p.users_count || 0);
-  const revenue = fmtMoney(p.revenue);
-  const funding = fmtMoney(p.funding_needed);
-  const useOf = formatUseOfFundsText(p.use_of_funds) || DASH;
-  const cac = fmtMoney(p.cac);
-  const grossMarginPct = p.gross_margin_pct != null && p.gross_margin_pct !== ''
-    ? `${Math.round(Number(p.gross_margin_pct) * 100) / 100}%` : null;
-  const arr = (xs: (string | null | undefined)[]) => xs.filter((x): x is string => !!x);
-
-  return [
-    { title: 'Title', subtitle: name, body: tagline, bullets: arr([vision !== DASH ? `Vision: ${vision}` : null]), image_url: logoUrl },
-    { title: 'Problem', subtitle: name, body: problem, bullets: arr([whyNow !== DASH ? whyNow : null]), image_url: null },
-    { title: 'Solution', subtitle: name, body: solution, bullets: [], image_url: null },
-    { title: 'Market', subtitle: sector, body: '', bullets: arr([
-      tam ? `TAM: ${tam}` : `TAM: ${DASH}`,
-      sam ? `SAM: ${sam}` : `SAM: ${DASH}`,
-      som ? `SOM: ${som}` : `SOM: ${DASH}`,
-      whyNow !== DASH ? whyNow : null,
-    ]), image_url: null },
-    { title: 'Traction', subtitle: "What's working", body: tractionSummary, bullets: arr([
-      users > 0 ? `${users.toLocaleString()} users` : `Users: ${DASH}`,
-      revenue ? `${revenue} revenue` : `Revenue: ${DASH}`,
-      p.growth_signals || DASH,
-    ]), image_url: null },
-    { title: 'Business model', subtitle: 'How we make money', body: '', bullets: arr([
-      cac ? `Blended CAC: ${cac}` : `CAC: ${DASH}`,
-      grossMarginPct ? `Gross margin: ${grossMarginPct}` : `Gross margin: ${DASH}`,
-    ]), image_url: null },
-    { title: 'Go-to-market', subtitle: 'Channels & motion', body: '', bullets: [DASH], image_url: null },
-    { title: 'Competition', subtitle: 'Landscape', body: '', bullets: [DASH], image_url: null },
-    { title: 'Team', subtitle: 'Why us', body: '', bullets: [DASH], image_url: null },
-    { title: 'Ask', subtitle: 'Round', body: '', bullets: arr([
-      funding ? `Raising ${funding}` : `Raise: ${DASH}`,
-      `Runway: ${formatDeckRunway(p._recordedRunway) || 'Not recorded'}`,
-      useOf,
-    ]), image_url: null },
-    { title: 'Financials', subtitle: 'Plan', body: '', bullets: arr([
-      funding ? `Burn target reflecting ${funding} raise.` : `Burn target: ${DASH}`,
-    ]), image_url: null },
-    { title: 'Contact', subtitle: name, body: contactEmail, bullets: [], image_url: null },
-  ];
-}
-
-// D767 (#2096): one router run on Workers AI, held, guarded and charged to the
-// founder who pressed, with the Raise › Pitch deck page and option on its usage
-// row. The task is the page's row in D764's matrix (`ai/railMatrix.json`,
-// "Founder · Raise · Pitch deck": kind vision, `rail_vision`). A refusal or a failed run returns null and the
-// heuristic deck is used, as a missing key used to.
-async function aiSlides(env: Env, p: any, userId: number): Promise<any[] | null> {
-  try {
-    const ctx = {
-      name: p.name, sector: p.sector, stage: p.stage,
-      description: p.description, problem: p.problem_statement,
-      solution: p.solution, why_now: p.why_now,
-      tam: p.tam, sam: p.sam, users: p.users_count, revenue: p.revenue,
-      growth_signals: p.growth_signals, cost_to_mvp: p.cost_to_mvp,
-      funding_needed: p.funding_needed, use_of_funds: p.use_of_funds,
-    };
-    const prompt = `Draft a 10-slide pitch deck for the following startup. Return ONLY valid JSON of the shape:
-{"slides":[{"title":"...","subtitle":"...","body":"...","bullets":["...","..."]}, ...]}
-Use exactly these slide titles in order: ${JSON.stringify(SLIDE_TITLES)}.
-\`body\` is a 1-2 sentence narrative paragraph (markdown allowed). \`bullets\` is 2-4 punchy bullets (≤18 words each).
-Startup data: ${JSON.stringify(ctx)}`;
-    const res = await aiRouterRun(env, {
-      task: 'rail_vision',
-      userId,
-      surface: AI_SURFACE.raisePitch,
-      // D765: the member's rail context; run() records it as D767's page, option and record.
-      rail: { page: AI_SURFACE.raisePitch, option: 'deck_draft', record: `project:${Number(p?.id) || 0}` },
-      systemPrompt: 'You are a senior VC associate drafting concise pitch decks. Always return valid JSON.',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.5,
-      maxTokens: 1800,
-    });
-    if (!res.ok || !res.output) return null;
-    const parsed: any = parseJsonLoose<any>(res.output);
-    const slides = Array.isArray(parsed?.slides) ? parsed.slides : null;
-    return slides && slides.length >= 1 ? slides : null;
-  } catch { return null; }
-}
-
-// Spec: deck "auto-creates 10 slides". Pad with fallback content from the
-// heuristic when the AI returns fewer; trim when more. Aligned by canonical
-// slide title where possible.
-function enforceTen(slides: any[], fallback: any[]): any[] {
-  const byTitle = new Map<string, any>();
-  const fallbackByTitle = new Map(fallback.map(slide => [String(slide.title).trim().toLowerCase(), slide]));
-  for (const slide of slides || []) {
-    if (!slide || typeof slide !== 'object') continue;
-    const title = String(slide.title || '').trim().toLowerCase();
-    if (title && !byTitle.has(title)) byTitle.set(title, slide);
-  }
-  return SLIDE_TITLES.map(title => {
-    const key = title.toLowerCase();
-    // Ask figures always come from records. Unmatched AI slides cannot be
-    // reused in another slot while padding, so aliases cannot invent runway.
-    const slide = (key === 'ask' ? null : byTitle.get(key)) || fallbackByTitle.get(key) || {};
-    return { ...slide, title };
-  });
-}
-
 // Task #16 — must accept *both* the legacy {title,body,bullets,image_url}
 // shape AND the new fielded shape { title, subtitle, spec_id, appendix,
 // method_id, fields:[{key,label,kind,value,source,edited?}] }. Anything
 // else is dropped. Caps prevent runaway sizes.
-function sanitizeSlides(input: any[]): any[] {
+export function sanitizeSlides(input: any[]): any[] {
   return (input || []).slice(0, 60).map((s: any) => {
     const title = String((s?.title || '') as string).trim().slice(0, 120) || 'Slide';
     const sub = s?.subtitle ? String(s.subtitle).trim().slice(0, 200) : null;
@@ -532,13 +398,22 @@ export function sanitizeImageUrl(input: string | null | undefined): string | nul
 
 
 
-/** D767 — a "Fill from project" proposal as the editor shows it beside the current version. */
-function rowToProposal(row: any): any {
+/**
+ * D767 — a "Fill from project" proposal as the editor shows it beside the
+ * current version. D897: a New deck's proposal also carries its outline and
+ * the cards kept so far (migration 542); both are null on any other proposal.
+ */
+export function rowToProposal(row: any): any {
   let slides: any[] = [];
   try { slides = founderPitchSlides(JSON.parse(row.slides || '[]')); } catch { slides = []; }
+  let outline: any = null;
+  try { outline = row.outline_json ? JSON.parse(row.outline_json) : null; } catch { outline = null; }
+  let kept: number[] | null = null;
+  try { kept = row.kept_slides_json ? (JSON.parse(row.kept_slides_json) as unknown[]).filter((x): x is number => Number.isInteger(x)) : null; } catch { kept = null; }
   return {
     id: row.id, project_id: row.project_id, base_deck_id: row.base_deck_id,
     title: row.title, method_id: row.method_id, created_at: row.created_at, slides,
+    outline: outline && typeof outline === 'object' ? outline : null, kept,
   };
 }
 
@@ -549,7 +424,7 @@ export function founderPitchSlides(slides: any[]): any[] {
   }) : slide.fields }));
 }
 
-function rowToDeck(row: any, withSlides = true): any {
+export function rowToDeck(row: any, withSlides = true): any {
   const out: any = {
     id: row.id, project_id: row.project_id, version: row.version,
     title: row.title, is_current: !!row.is_current, created_at: row.created_at,
@@ -584,13 +459,13 @@ function publicDeckOf(row: any): any {
   return deck;
 }
 
-function themeOfRow(row: any): any {
+export function themeOfRow(row: any): any {
   if (!row?.theme_json) return null;
   try { return sanitizeTheme(JSON.parse(row.theme_json), sanitizeImageUrl); } catch { return null; }
 }
 
 /** What a version records about itself besides its slides (D898). */
-type VersionMeta = { audience?: string | null; round_ref?: string | null; theme?: any };
+export type VersionMeta = { audience?: string | null; round_ref?: string | null; theme?: any };
 
 /**
  * The audience, round and theme a save asks for, checked: an unknown audience,
@@ -649,7 +524,7 @@ async function nextVersion(env: Env, projectId: number): Promise<number> {
   return (Number(row?.v) || 0) + 1;
 }
 
-async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null, meta: VersionMeta = {}): Promise<number> {
+export async function insertVersion(env: Env, projectId: number, slides: any[], title: string, userId: number | null, meta: VersionMeta = {}): Promise<number> {
   await env.DB.prepare(
     'UPDATE pitch_decks SET is_current = 0 WHERE project_id = ? AND is_current = 1'
   ).bind(projectId).run();
@@ -664,38 +539,8 @@ async function insertVersion(env: Env, projectId: number, slides: any[], title: 
   return Number((res as any)?.meta?.last_row_id || 0);
 }
 
-decks.post('/generate', async (c) => {
-  // Task #6 — deck generation/save. D683: the pitch deck is Raise work, so it
-  // is on the Raise + Grow plan (`studio`).
-  ensureTier(await requireAuth(c), 'studio');
-  const user = await requireAuth(c);
-  const body = await c.req.json().catch(() => ({} as any));
-  const pid = parseInt(body?.project_id);
-  if (!pid) return c.json({ error: 'project_id required' }, 400);
-  let p: any;
-  try {
-    await projectOwned(c, user, pid, { write: true });
-    p = await c.env.DB.prepare('SELECT * FROM projects WHERE id = ?').bind(pid).first<any>();
-  } catch (e: any) {
-    if (e?.message === 'NotFound') return c.json({ error: 'not found' }, 404);
-    return c.json({ error: 'forbidden' }, 403);
-  }
-  await ensureSchema(c.env);
-  p._recordedRunway = await recordedDeckRunway(c.env, pid, await mercuryRunwayOwner(c, user, pid));
-  const fallback = heuristicSlides(p);
-  const raw = (await aiSlides(c.env, p, Number(user.id) || 0)) || fallback;
-  const aligned = enforceTen(raw, fallback);
-  const slides = sanitizeSlides(aligned);
-  while (slides.length < 10) slides.push(fallback[slides.length]);
-  // Task #6 — inject brand kit from landing page (generic generate = 'off' theme)
-  const landingPage = await fetchLandingPageForProject(c.env, pid);
-  const brandedSlides = applyBrandKitToSlides(slides, landingPage, 'off', p.name);
-  const title = `${p.name} — Pitch deck`;
-  const id = await insertVersion(c.env, pid, brandedSlides, title, Number(user.id) || null);
-  const row = await c.env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
-  await auditDeckWrite(c, user, pid, 'deck_generated', 'Deck generated from project records');
-  return c.json(rowToDeck(row));
-});
+// D897 (#2677): POST /generate moved to `routes/deck_new.ts`, where it builds a
+// proposal the founder keeps card by card instead of writing a version.
 
 // Task #10 — One-liner & Elevator pitch generator ("one-click positioning").
 // Pulls the selected project's TEAM (recorded founder and accepted members), TRACTION (project
@@ -889,7 +734,7 @@ decks.get('/by-project/:pid', async (c) => {
   });
 });
 
-async function getDeckRow(env: Env, id: number): Promise<any> {
+export async function getDeckRow(env: Env, id: number): Promise<any> {
   const row = await env.DB.prepare('SELECT * FROM pitch_decks WHERE id = ?').bind(id).first<any>();
   if (!row) throw new Error('NotFound');
   return (await withNames(env, [row]))[0];
@@ -2065,7 +1910,7 @@ async function proposeFill(env: Env, base: any, slides: any[], methodId: string,
   return rowToProposal(row);
 }
 
-async function ownedProposal(c: any, user: any, id: number): Promise<any | Response> {
+export async function ownedProposal(c: any, user: any, id: number): Promise<any | Response> {
   const env = c.env as Env;
   const row = id ? await env.DB.prepare('SELECT * FROM pitch_deck_proposals WHERE id = ?').bind(id).first<any>() : null;
   if (!row) return c.json({ error: 'not found' }, 404);

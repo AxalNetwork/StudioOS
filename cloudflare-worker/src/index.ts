@@ -44,11 +44,12 @@ import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
 import adminPartnersReads from './routes/admin_partners_reads';
 import adminPartnerDealReads from './routes/admin_partner_deal_reads';
-import adminNetwork from './routes/admin_network';
+import adminNetworkReads from './routes/admin_network_reads';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
+import adminNetwork from './routes/admin_network';
 import profileHistoryRoutes from './routes/profile_history';
 import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
@@ -198,6 +199,7 @@ import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
 import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
+import deckNew from './routes/deck_new';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
 import linkedinRoutes from './routes/linkedin';
@@ -216,6 +218,9 @@ import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
 import adminProgramGrants from './routes/admin_program_grants';
+// D986 (#2776) — partner deal types per licence: HQ's reads and write, and the studio's own read.
+import adminPartnerDealTypes from './routes/admin_partner_deal_types';
+import licencePartnerDealTypes from './routes/licence_partner_deal_types';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
@@ -253,6 +258,7 @@ import adminHqSupport from './routes/admin_hq_support';
 import adminStudioGlance from './routes/admin_studio_glance';
 import adminInsights from './routes/admin_insights';
 import adminPrograms from './routes/admin_programs';
+import adminProgramProposals from './routes/admin_program_proposals';
 import adminInsightsExport from './routes/admin_insights_export';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
@@ -868,6 +874,7 @@ app.route('/api/admin/partners', adminPartnersReads);
 app.route('/api/admin/partners', adminPartnerDealReads);
 app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
+app.route('/api/admin/network', adminNetworkReads);
 app.route('/api/admin/network', adminNetwork);
 app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);
@@ -1094,6 +1101,7 @@ app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
 // D982 (#2773): which programs HQ grants each licensed studio, on what terms.
 app.route('/api/admin/program-grants', adminProgramGrants);
+app.route('/api/admin/partner-deal-types', adminPartnerDealTypes);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
 app.route('/api/admin/super-admins', adminSuperAdmins);
@@ -1129,7 +1137,10 @@ app.route('/api/admin/studio', adminStudioGlance);
 app.route('/api/admin/insights/export', adminInsightsExport);
 app.route('/api/admin/insights', adminInsights);
 // D954 (#2787): Admin › Programs — the registry, the playbook, the catalogue read and each program's activity.
+// D955: proposals before the programs router, whose `/:key` would otherwise answer `proposals`.
+app.route('/api/admin/programs/proposals', adminProgramProposals);
 app.route('/api/admin/programs', adminPrograms);
+app.route('/api/licence', licencePartnerDealTypes);
 app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
@@ -1204,6 +1215,8 @@ app.route('/api/decks', deckNotes);
 app.route('/api/decks', deckReview);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
+// D897: New deck (`/new/context`, `/new/quote`, `/outline`, `/generate`, `/proposals/:id/keep-slides`), before `decks` for the same reason.
+app.route('/api/decks', deckNew);
 app.route('/api/decks', decks);
 // Competitor Analysis (in-house crawl + Workers AI synthesis) and Pitch Deck
 // Reviewer (document conversion + investor-style review). Both are

@@ -197,7 +197,8 @@ const EXPECTED: Record<string, string[]> = {
   'services/deckVersionReview.ts': ['AI_SURFACE.raisePitchReview'],
   // D767 (#2096): the deck draft and the slide fill.
   // D778 part 2: positioning joins the deck draft on the same surface.
-  'routes/decks.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'],
+  'routes/decks.ts': ['AI_SURFACE.raisePitch'],
+  'routes/deck_new.ts': ['AI_SURFACE.raisePitch', 'AI_SURFACE.raisePitch'], // D897: the outline and the build; /generate moved here
   'services/decks/autofill.ts': ['AI_SURFACE.raisePitch'],
   'routes/cycle_raise.ts': ['AI_SURFACE.raiseNarrative'], // D911: the narrative's positioning proposal
   'services/publications.ts': ['AI_SURFACE.adminPublications'],

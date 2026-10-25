@@ -12,6 +12,10 @@ the meantime. Deal-room reads retain their separate partner rule. Legacy legal
 entity listing and other routes with independent role gates are separate
 policies, not grants from the founder-resource guard.
 
+D973 reads live in `admin_network_reads.ts`, mounted before D976’s
+`admin_network.ts` at `/api/admin/network`. Opaque person refs use the
+read-only drawer; numeric account IDs continue to the standing router.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
@@ -29,7 +33,7 @@ widened guard on this very sentence, which is the rule working.)
 
 
 ```
-/api/admin/partner-profiles → admin_partner_profiles.ts (D990: HQ's partner profile list with search, filters, sort and pages, the counts, and one profile by its pp_ reference; Admin, each read logged by reference)
+/api/admin/partner-profiles → admin_partner_profiles.ts (D990: HQ's partner profile list with search, filters, sort and pages, the counts, and one profile by its pp_ reference; Admin, each read logged by reference. D993: agreement readiness, each row's envelope state, and Unbind for a Super Admin with a step-up)
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
 /api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752; connected only by Sign in with Mercury since D881. Never Axal VC's own accounts: D879, guarded by D883's `check-mercury-member-surfaces.mjs`)
@@ -228,7 +232,11 @@ heartbeat also takes `slides`, the viewer's seconds per slide, stored through
 
 D982 (#2773): `admin_program_grants.ts` mounts `/api/admin/program-grants`: HQ's program grants per licence (the grid, one licence, its history, the default terms) under `requireSuperAdmin`, and grant, change terms, pause, resume, end and the defaults under `requireSuperAdminWriteBar` with a reason of at least 10 characters. Each grant write appends one `licence_events` `program_changed` row; the store is migration 553 and `../services/programGrants.ts`. See `documentation/architecture/decisions/D982.md`.
 
+D986 (#2776): `admin_partner_deal_types.ts` mounts `/api/admin/partner-deal-types`: which partner deal types each licence may offer, read under `requireSuperAdmin` and set under `requireSuperAdminWriteBar` with a reason (one `program_changed` licence event, action `deal_types_changed`, then a push to the branch). `licence_partner_deal_types.ts` mounts `GET /api/licence/mine/partner-deal-types` ahead of `licence.ts`: the bound Administrator on HQ, or a branch admin reading its copy. The branch's partner invitation write (`admin_partners.ts`) refuses a type the copy does not allow. The store is migration 555 and `../services/partnerDealTypes.ts`. See `documentation/architecture/decisions/D986.md`.
+
 D896 (#2675): `deck_sources.ts` mounts `GET /api/decks/sources` and `POST /api/decks/:id/refresh`, after `deck_share_actions.ts` and before `decks.ts`, so that `decks.ts`'s `GET /:id` cannot answer `/sources`. Both read only, through `projectOwned`; Mercury's slots are read only for the venture's own founder. The adapters are `../services/decks/sources.ts`. See `documentation/architecture/decisions/D896.md`.
+
+D897 (#2677): `deck_new.ts` mounts New deck — `GET /api/decks/new/context`, `POST /new/quote`, `POST /outline`, `POST /generate` (moved here from `decks.ts`; it now builds a proposal) and `POST /proposals/:id/keep-slides` — after `deck_sources.ts` and before `decks.ts`. Code fills every figure from `../services/decks/sources.ts` through `../services/decks/newDeck.ts`; the runs write words only, and their price is `quoteRun`'s before they run. See `documentation/architecture/decisions/D897.md`.
 
 D900 (#2679): `deck_review.ts` mounts `POST /api/decks/:id/review` (a version's own review, each point naming a card, with the run's cost) and `GET /api/decks/:id/reviews` (the venture's reviews per version, the first reader of `deck_review_history`), after `deck_notes.ts` and before `decks.ts`. Founders run a review; an Admin and the Super Admin read. The review is `../services/deckVersionReview.ts`; uploads and pasted text stay `deck_reviewer.ts`'s. See `documentation/architecture/decisions/D900.md`.
 

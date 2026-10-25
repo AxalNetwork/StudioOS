@@ -12,7 +12,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
@@ -22,7 +22,6 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
 const APP = read('frontend/src/App.jsx');
 const PAGE = read('frontend/src/pages/hq/IntegrationKeysPage.jsx');
-const ADMIN_PAGE = read('frontend/src/pages/AdminPage.jsx');
 
 test('the page is registered once, behind the admin guard and hqOnly', () => {
   const lines = APP.split('\n').filter((l) => l.includes('path="/admin/integration-keys"'));
@@ -53,21 +52,21 @@ test('the row is the Super Admin\'s, after Platform, and no other profile has it
   }
 });
 
-test('the Admin Console offers neither console any more', () => {
-  const start = ADMIN_PAGE.indexOf('const ADMIN_SECTIONS = [');
-  const sections = ADMIN_PAGE.slice(start, ADMIN_PAGE.indexOf('];', start));
-  assert.doesNotMatch(sections, /value: 'integration-keys'|value: 'github'/);
-  assert.doesNotMatch(ADMIN_PAGE, /IntegrationKeysPanel|GithubSyncPanel/);
+test('the Admin Console is retired, so no page offers either console as a tab (D938)', () => {
+  assert.ok(!existsSync(resolve(root, 'frontend/src/pages/AdminPage.jsx')), 'AdminPage.jsx is back');
+  assert.doesNotMatch(read('frontend/src/pages/admin/ConsolePages.jsx'), /IntegrationKeysPanel|GithubSyncPanel/);
 });
 
 test('the old addresses redirect to the page, GitHub Sync to its section', () => {
   assert.equal(legacyContractsTarget('?tab=integration-keys'), '/admin/integration-keys');
   assert.equal(legacyContractsTarget('?tab=github'), '/admin/integration-keys#github');
+  assert.equal(legacyContractsTarget('?tab=github', '#elsewhere'), '/admin/integration-keys#github', 'the section wins over an old hash');
   assert.equal(legacyContractsTarget('?tab=legal'), '/admin/contracts?moved=legal', 'D647 is unchanged');
-  // D1008 (#2386) forwards ?tab=payments; ?tab=kyc is still a console tab.
-  for (const q of ['', '?tab=users', '?tab=kyc', '?tab=constructor', '?tab=__proto__']) {
-    assert.equal(legacyContractsTarget(q), null, q);
+  // D938: every other tab forwards to its own page; an unknown one to All accounts.
+  for (const q of ['', '?tab=users', '?tab=constructor', '?tab=__proto__']) {
+    assert.equal(legacyContractsTarget(q), '/admin/accounts/all?moved=users', q);
   }
+  assert.equal(legacyContractsTarget('?tab=payments'), '/admin/platform/payments?moved=payments');
 });
 
 test('nothing in the app links the old addresses', () => {

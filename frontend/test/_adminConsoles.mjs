@@ -7,12 +7,16 @@
  * `pages/admin/consoles/`. This returns the shell followed by every console,
  * in the dropdown's order, so a test that asks "does the Admin Console still
  * say X" keeps asking the same question of the same code.
+ *
+ * D938 (#2743) retired the shell: each console is a page at its own address,
+ * and `pages/admin/ConsolePages.jsx` composes each one under the shared
+ * header. That file stands first now, where the shell stood.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export const ADMIN_CONSOLE_FILES = [
-  'frontend/src/pages/AdminPage.jsx',
+  'frontend/src/pages/admin/ConsolePages.jsx',
   'frontend/src/pages/admin/consoles/UsersConsole.jsx',
   'frontend/src/pages/admin/consoles/PartnerProfilesConsole.jsx',
   'frontend/src/pages/admin/consoles/KycConsole.jsx',

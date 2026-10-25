@@ -4,7 +4,7 @@ import { Building2, ChevronDown, ChevronLeft, ChevronRight, Lock as LockIcon, Se
 import { openPaywall } from '../components/PaywallModal';
 import { defaultOpenGroups, hasTier, hasInvestorTier } from '../sidebarConfig';
 import { safeReadJSON } from '../lib/storage';
-import { hqRowFor, adminRowFor } from '../lib/hqStrips.js';
+import { hqRowFor } from '../lib/hqStrips.js';
 import CompanySwitcher from './CompanySwitcher';
 import useLicenceNeeds from '../hooks/useLicenceNeeds';
 import { needsCount } from '../lib/licencePage';
@@ -84,15 +84,12 @@ export default function SidebarNav({ groups, role, onNavigate, user, collapsed, 
   }, [persistOpen]);
 
   const q = query.trim().toLowerCase();
-  // D285 / H36 — in the HQ shell a row can be lit by the QUERY, not only the
-  // path: /admin?tab=payments is Platform's, /admin?tab=legal is
-  // Contracts'. The map says which; when it names a row, that row and no
-  // other is active, and the path-only rules below decide nothing.
-  // D286 — the same on the S20 Admin shell: an /admin tab lights the Admin
-  // row the map places it on, and a tab placed on none lights no row.
-  const derivedRow = role === 'super_admin' ? hqRowFor(navLocation.pathname, navLocation.search)
-    : role === 'admin' ? adminRowFor(navLocation.pathname, navLocation.search)
-      : null;
+  // D285 / H36 — in the HQ shell a strip's pages light the strip's row, even
+  // where an item's address sits under another row's path (/monitoring is
+  // Platform's). When it names a row, that row and no other is active, and
+  // the path-only rules below decide nothing. D938: no admin page lives on a
+  // query any more, so the Admin shell's rows light by path and `match` alone.
+  const derivedRow = role === 'super_admin' ? hqRowFor(navLocation.pathname) : null;
   // When the user types, force-expand any group with a match so the
   // matching items are visible without manual clicking.
   const effectiveOpen = q
