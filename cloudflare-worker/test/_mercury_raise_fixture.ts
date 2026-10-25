@@ -68,6 +68,7 @@ export async function fixture() {
   db.exec(mig('410_safe_issuances.sql'));
   db.exec(mig('442_raise_cycle_stores.sql'));
   db.exec(mig('463_raise_record_stores.sql'));
+  addColumnsFrom(db, mig('596_data_room_file_source.sql'), 'data_room_files');
   addColumnsFrom(db, mig('441_build_cycle_stores.sql'), 'cap_table_holders');
   db.exec(`
     CREATE TABLE integrations(id INTEGER PRIMARY KEY, uid TEXT UNIQUE, user_id INTEGER, provider_key TEXT, status TEXT DEFAULT 'active', auth_type TEXT, credentials_enc TEXT,
