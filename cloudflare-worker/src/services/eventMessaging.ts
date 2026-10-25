@@ -16,6 +16,7 @@ import type { Env } from '../types';
 import { notify } from './notify';
 import { buildEventIcs, shapeEvent } from './eventsCommon';
 import { wrap, type EmailTemplate } from '../templates/email/layout';
+import { memberEventLink } from './eventLinks';
 
 export interface EventInviteTarget {
   /** Recipient account id (drives the in-app inbox row). */
@@ -92,7 +93,7 @@ export async function deliverEventInvite(
       category: 'events',
       title: subject,
       body: invite.message || undefined,
-      link: `/events/${event.slug}`,
+      link: memberEventLink(event.id),
       payload: { event_id: event.id, token: invite.token, comp: !!invite.comp },
     }).catch(() => {});
   }
