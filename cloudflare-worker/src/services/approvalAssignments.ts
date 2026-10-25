@@ -16,6 +16,7 @@ import {
 } from './approvalSources';
 import { logAdminAction } from './adminAudit';
 import { HQ_APPROVAL_SOURCES } from './hqApprovalSources';
+import { LANE_GROUP, NO_FILTER, filterInbox, isFiltered, laneBands, type InboxQuery } from './approvalInbox';
 
 export const ASSIGNMENTS_UNREADABLE =
   'The assignment record could not be read on this database. That is not a claim that nobody is assigned.';
@@ -382,6 +383,37 @@ const TILES_UNREADABLE = (labels: string[]) =>
 const TILES_CAPPED = (labels: string[]) =>
   `${labels.join(', ')} has more open items than this read takes, so these counts are not shown rather than shown short.`;
 const TOTAL_UNREADABLE = 'The count of open items could not be read, so the total is not shown.';
+const TOTAL_CAPPED_FILTERED = (labels: string[]) =>
+  `${labels.join(', ')} has more open items than this read takes, so how many match is not shown rather than shown short.`;
+
+/**
+ * D1132 (#3012) — one waiting item, for `/admin/approvals/[id]`: the row as
+ * the inbox shows it, its assignee, its lane (group, who a decision tells,
+ * the page that decides it) and its assignment history. Read from the lane's
+ * own rows to the inbox's cap, so an item the inbox shows is an item this
+ * finds; one no longer waiting answers `null`.
+ */
+export async function inboxItem(env: Env, a: { lane: ApprovalLaneKey; itemId: number; sources: readonly ApprovalSource[]; now?: number }) {
+  const source = a.sources.find((s) => s.key === a.lane);
+  if (!source) return null;
+  const board = await approvalBoard(env, INBOX_LANE_CAP, a.now ?? Date.now(), [source]);
+  if (board.unreadable.length) return 'unreadable' as const;
+  const item = board.items.find((it) => it.id === a.itemId);
+  if (!item) return null;
+  const assignments = await readAssignmentState(env);
+  return {
+    item: { ...item, assignee: assignments.available ? assignments.assignees.get(`${item.lane}:${item.id}`) ?? null : undefined },
+    ...(assignments.available ? {} : { assignee_reason: assignments.reason }),
+    lane: {
+      key: source.key, label: source.label, group: LANE_GROUP[source.key],
+      notifies: source.notifies, decided_on: source.decidedOn,
+      ...(source.undecidedReason ? { undecided_reason: source.undecidedReason } : {}),
+      hq: source.scope === 'hq',
+    },
+    history: await assignmentHistory(env, item.lane, item.id),
+    decides: false,
+  };
+}
 
 export type InboxItem = ApprovalItem & { assignee?: Assignee | null };
 
@@ -394,7 +426,12 @@ export type InboxItem = ApprovalItem & { assignee?: Assignee | null };
  * that could be read stay, and the tiles, which would be short by that lane,
  * answer null with the reason. An unknown age sorts last (`approvalBoard`).
  */
-export async function hqInbox(env: Env, a: { page: number; callerId: number; sources: readonly ApprovalSource[]; now?: number }) {
+export async function hqInbox(env: Env, a: {
+  page: number; callerId: number; sources: readonly ApprovalSource[]; now?: number;
+  /** D1132: search, filters and sort, applied to the rows read (`approvalInbox.ts`). */
+  query?: InboxQuery;
+}) {
+  const query = a.query ?? NO_FILTER;
   const board = await approvalBoard(env, INBOX_LANE_CAP, a.now ?? Date.now(), a.sources);
   const capped = board.lanes.filter((l) => l.count != null && l.count >= INBOX_LANE_CAP);
   let total: number | null = board.items.length;
@@ -422,14 +459,31 @@ export async function hqInbox(env: Env, a: { page: number; callerId: number; sou
         : !assignments.reviewers ? { reason: assignments.reviewers_reason } : {}),
   };
 
+  // D1132: the query narrows the rows read. An assigned filter on an
+  // unreadable assignment record would answer "nobody" for every row, so it is
+  // refused rather than answered (`assigned_unreadable`).
+  if (query.assigned !== null && !assignments.available) {
+    return { refused: { status: 503, code: 'assigned_unreadable', message: assignments.reason ?? ASSIGNMENTS_UNREADABLE } } as const;
+  }
+  const filtered = isFiltered(query);
+  const shown = filtered || query.sort !== 'oldest' ? filterInbox(items, query, a.callerId) : items;
+  // A narrowed total counts the rows read; a lane cut at the cap may hold more
+  // that match, so the total is withheld then rather than shown short.
+  const matching: number | null = !filtered ? total : capped.length ? null : shown.length;
+
   const start = (a.page - 1) * INBOX_PAGE_SIZE;
   return {
-    items: items.slice(start, start + INBOX_PAGE_SIZE),
-    total,
-    ...(total == null ? { total_reason: TOTAL_UNREADABLE } : {}),
+    items: shown.slice(start, start + INBOX_PAGE_SIZE),
+    total: matching,
+    ...(matching == null
+      ? { total_reason: filtered && capped.length ? TOTAL_CAPPED_FILTERED(capped.map((c) => c.label)) : TOTAL_UNREADABLE }
+      : {}),
+    ...(filtered ? { unfiltered_total: total } : {}),
+    query,
     page: a.page,
     page_size: INBOX_PAGE_SIZE,
-    lanes: board.lanes,
+    // D1132: each lane with its group and its split by age band (APR1's chart).
+    lanes: laneBands(board.lanes, board.items, INBOX_LANE_CAP),
     unreadable: board.unreadable,
     ...(board.unreadable.length ? {
       reason: `${board.unreadable.join(', ')} could not be read, so the inbox is missing whatever is in them. `

@@ -1203,6 +1203,7 @@ const MS_TERMS = 'Microsoft\'s Trademark and Brand Guidelines (https://www.micro
 /** Initials on purpose, each with why. */
 export const BRAND_MONOGRAM = Object.freeze({
   lovable: Object.freeze({ name: 'Lovable', reason: 'D1081 uses the existing initials tile. No approved Lovable artwork is recorded in this repository.' }),
+  notion: Object.freeze({ name: 'Notion', reason: 'D1085 (#2950) adds Notion with the initials tile. No approved Notion artwork, or the brand terms that would allow it, is recorded in this repository.' }),
   teams: Object.freeze({ name: 'Microsoft Teams', reason: MS_TERMS }),
   affinity: Object.freeze({ name: 'Affinity', reason: 'Affinity CRM is affinity.co, not the Affinity design suite. The vendor newsroom (https://www.affinity.co/company/newsroom, read 2026-10-16) has no downloadable icon kit. Brandfetch and an n8n SVG were located, but their current vendor provenance and permitted treatment remain unverified. Initials until that is recorded.' }),
 });

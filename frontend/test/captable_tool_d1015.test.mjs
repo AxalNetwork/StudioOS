@@ -10,8 +10,8 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import CycleRoute from '../src/pages/cycles/CycleRoute.jsx';
 import {
-  BASIS_CHECK, CANNOT_CONVERT, HOME_NOTE, TABS, basisWord, conversionLines, dollars, foundersAfter, harbour, isCapTableTab,
-  issuedSafes, modelInstruments, modelPool, money, pct, scenarioCard, scenarioCards, simulatorHref, tabHref, tabSearch,
+  BASIS_CHECK, HOME_NOTE, TABS, dollars, foundersAfter, harbour, isCapTableTab,
+  money, pct, scenarioCard, scenarioCards, simulatorHref, tabHref, tabSearch,
   variantHref, variantsHref,
 } from '../src/pages/raise/captable/capTableModel.js';
 
@@ -122,36 +122,14 @@ test('money in its own unit and currency; a missing value is "Not recorded", nev
   assert.equal(pct(null), 'Not recorded');
 });
 
-test('a SAFE sent through StudioOS is on record only once countersigned, with no invented discount', () => {
-  const [a, b] = issuedSafes(SAFES);
-  assert.deepEqual(a, { uid: 's1', holder: 'Bluefern Capital', amount: '$500,000', cap: '$10,000,000', discount: 'Not recorded', basis: 'Post-money', status: 'Countersigned', onRecord: true, created: '2 Mar 2026' });
-  assert.equal(b.onRecord, false);
-  assert.equal(b.cap, 'Not recorded');
-  assert.deepEqual(issuedSafes(null), []);
-});
-
-test('the model\'s instruments: fractions as percentages, the basis check, a note\'s interest, and what cannot convert', () => {
-  const [harbor, bluefern, note] = modelInstruments(CANONICAL);
-  assert.equal(harbor.discount, '15%');
-  assert.equal(harbor.basis, 'Pre-money (not stated)');
-  assert.equal(harbor.check, true, 'a basis the model never stated is read as pre-money by the engine');
-  assert.equal(bluefern.basis, 'Post-money');
-  assert.equal(bluefern.check, false);
-  assert.equal(bluefern.discount, 'Not recorded');
-  assert.equal(note.type, 'Convertible note');
-  assert.equal(note.interest, '8%');
-  assert.equal(note.cannotConvert, true, 'no cap and no discount');
-  assert.equal(harbor.interest, null, 'a SAFE has no interest column value');
-  assert.equal(basisWord({ basis: 'pre_money' }), 'Pre-money');
+// D1023 (#2860): the SAFEs sent through StudioOS and the model's instruments and
+// pool are no longer drawn here. Instruments and Option pool read the record and
+// part 3's scenario reads (captable_instruments_pool_d1023.test.mjs).
+test('CT3\'s pre-money note keeps its words', () => {
   assert.match(BASIS_CHECK, /post-money/);
-  assert.match(CANNOT_CONVERT, /no cap and no discount/);
-  assert.deepEqual(conversionLines(CANONICAL), { round: 'Seed', lines: ['SAFE Harbor Seed Fund converts at the cap', 'Option pool topped up by 312000 shares'] });
-  assert.equal(conversionLines({ result: { rounds: [] } }), null);
 });
 
 test('the pool, the 409A and the scenarios, each in the Worker\'s own figures', () => {
-  assert.deepEqual(modelPool(CANONICAL), { target: '10%', shares: '888,889', pct: '10.00%' });
-  assert.equal(modelPool(null), null);
   const hb = harbour(V409A);
   assert.equal(hb.state, 'valid');
   assert.equal(hb.fmv, '$0.42');
@@ -173,33 +151,25 @@ test('the pool, the 409A and the scenarios, each in the Worker\'s own figures', 
  * The page, mounted under CycleRoute on a stubbed fetch
  * ------------------------------------------------------------------ */
 
-test('Instruments reads the SAFEs and the model, never a record called "instruments"', async () => {
+test('Instruments is D1023\'s: it reads the record, Today and the scenarios, never a record called "instruments"', async () => {
   const v = await mounted('/raise/cap-table/instruments?project_id=3');
   try {
-    assert.ok(v.requests.some((u) => u.includes('/safe-issuances/project/3')));
-    assert.ok(v.requests.some((u) => u.includes('/captable/scenarios/by-project/3/compare')));
+    assert.ok(v.requests.some((u) => u.includes('/captable/record/3')));
+    assert.ok(v.requests.some((u) => u.includes('/captable/scenarios/by-project/3/today')));
     assert.ok(!v.requests.some((u) => /\/records\/instruments/.test(u)), 'a tab word is not a record');
+    assert.ok(!v.requests.some((u) => u.includes('/safe-issuances/')), 'a SAFE sent through StudioOS is on the record once recorded');
     const ids = v.testIds();
     assert.ok(ids.includes('captable-instruments-page') && ids.includes('captable-tabs'));
-    assert.equal(v.count('captable-issued-row'), 2);
-    assert.equal(v.count('tag-on-record'), 1, 'only the countersigned SAFE is on record');
-    assert.equal(v.count('captable-model-instrument'), 3);
-    assert.equal(v.count('captable-basis-check'), 2, 'the stated post-money SAFE carries no check');
-    assert.ok(ids.includes('tag-modelled') && ids.includes('captable-conversion') && ids.includes('captable-cannot-convert'));
-    assert.match(v.text(), /Countersigned/);
-    assert.match(v.text(), /How they convert in Seed/);
   } finally { await v.close(); }
 });
 
-test('Option pool draws the 409A in the Worker\'s words, the model\'s pool, and says grants are not read', async () => {
+test('Option pool is D1023\'s: the 409A in the Worker\'s words, and the venture\'s own plan', async () => {
   const v = await mounted('/raise/cap-table/option-pool?project_id=3');
   try {
     assert.ok(v.requests.some((u) => u.includes('/captable/409a/3')));
     assert.match(v.text(), /Safe harbour in force until 2027-03-03\./);
     assert.match(v.text(), /\$0\.42/);
-    assert.match(v.text(), /888,889/);
-    assert.ok(v.testIds().includes('captable-grants-wait'));
-    assert.ok(!v.requests.some((u) => u.includes('/equity-plan')), 'the per-account plan is never read for one venture');
+    assert.ok(v.requests.some((u) => u.includes('/captable/equity-plan?project_id=3')), 'the plan is read per venture (D1020)');
   } finally { await v.close(); }
 });
 
@@ -242,15 +212,14 @@ test('Overview is the module page with the tabs and the Modelled line; a row is 
 
 test('each read answers alone: a failed one says so where its block would be', async () => {
   const fail = (match) => (u) => (match(u) ? response({ detail: 'boom' }, 500) : handler(u));
-  const a = await mounted('/raise/cap-table/instruments?project_id=3', { handle: fail((u) => u.includes('/safe-issuances/')) });
+  const a = await mounted('/raise/cap-table/instruments?project_id=3', { handle: fail((u) => u.includes('/captable/record/')) });
   try {
-    assert.ok(a.testIds().includes('captable-issued-unreadable'));
-    assert.equal(a.count('captable-model-instrument'), 3, 'the model still draws');
-    assert.match(a.text(), /This is not a claim that none were sent\./);
+    assert.ok(a.testIds().includes('captable-inst-unreadable'));
+    assert.match(a.text(), /This is not a claim that none are recorded\./);
   } finally { await a.close(); }
-  const b = await mounted('/raise/cap-table/option-pool?project_id=3', { handle: fail((u) => u.includes('/compare')) });
+  const b = await mounted('/raise/cap-table/option-pool?project_id=3', { handle: fail((u) => u.includes('/equity-plan')) });
   try {
-    assert.ok(b.testIds().includes('captable-pool-model-unreadable'));
+    assert.ok(b.testIds().includes('captable-grants-unreadable'));
     assert.match(b.text(), /Safe harbour in force/, 'the 409A still draws');
   } finally { await b.close(); }
   const c = await mounted('/raise/cap-table/scenarios?project_id=3', { handle: (u) => (u.includes('/compare') ? response({ detail: 'Forbidden' }, 403) : handler(u)) });
@@ -269,12 +238,13 @@ test('the wiring: no route is added, CycleRoute branches on the tab word, and th
   assert.doesNotMatch(app, /path="\/raise\/cap-table\/(instruments|option-pool|scenarios)/, 'the module routes carry the tool');
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
   // D1025 (#2862): the proposal drawer's route and `/new` are the tool's too.
-  assert.match(route, /const capTableTab = capTableProposal && cycle === 'raise' \? 'proposal'\s*: capTableAdding \? 'new'\s*: record && cycle === 'raise' && isCapTableTab\(slug, recordId\) \? recordId : null;/);
-  assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?!!projectId/);
+  // D1023 (#2860): the instrument drawer's route sets `capTableProposal` too, with `:instrument`.
+  assert.match(route, /const capTableTab = capTableProposal && cycle === 'raise' \? \(instrumentId \? 'instrument' : 'proposal'\)\s*: capTableAdding \? 'new'\s*: record && cycle === 'raise' && isCapTableTab\(slug, recordId\) \? recordId : null;/);
+  assert.match(route, /!narrativeTab && !capTableTab && (?:!dataRoomTab && )?(?:!uofTab && )?(?:!capRelTab && )?!!projectId/);
   assert.match(route, /slug === CAP_TABLE \? <CapTableHomeNav search=\{q\} projectId=\{projectId\} \/>/);
   const tool = read('frontend/src/pages/raise/captable/CapTableTool.jsx');
   assert.doesNotMatch(tool, /\b(alert|confirm)\(/);
-  assert.doesNotMatch(tool, /equity-plan|getEquityPlan/, 'pools and vesting are per account today');
+  assert.doesNotMatch(tool, /equity-plan|getEquityPlan/, 'the tool file reads no plan itself: Option pool reads the venture\'s (D1023)');
   for (const f of ['Raise Cap Table Page.dc.html', 'Cap Table · Boards.dc.html']) {
     const src = read(`design/incoming/${f}`);
     assert.match(src, /<script src="\.\/support\.js"><\/script>/, f);

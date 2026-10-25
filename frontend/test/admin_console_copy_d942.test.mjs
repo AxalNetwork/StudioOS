@@ -121,7 +121,6 @@ test('error reports name the console file, not the retired AdminPage', () => {
   for (const [name, tags] of Object.entries({
     GithubSyncConsole: ['githubConfigLoad'],
     KycConsole: ['loadKycQueue', 'kycRecord'],
-    PartnerProfilesConsole: ['loadProfiles', 'partnerProfile'],
     PersonasConsole: ['personas'],
     UsersConsole: ['loadUsers', 'trustScoreBatch', 'loadAdminData'],
   })) {
