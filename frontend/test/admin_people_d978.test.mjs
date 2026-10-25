@@ -195,6 +195,9 @@ function worker(fail = [], writes = {}) {
   return seen;
 }
 
+// The page reads the clock ("2 d ago"); pin it to the fixtures' day, as D937 does.
+const pin = (t) => t.mock.timers.enable({ apis: ['Date'], now: NOW });
+
 function Where() { const l = useLocation(); return h('output', { 'data-testid': 'where' }, l.pathname + l.search); }
 
 async function mount(url, { fail = [], writes = {}, phone = false } = {}) {
@@ -227,7 +230,8 @@ async function mount(url, { fail = [], writes = {}, phone = false } = {}) {
   };
 }
 
-test('mounted People: the tab, each row from its blocks, a failed block Unreadable, and only the people read', async () => {
+test('mounted People: the tab, each row from its blocks, a failed block Unreadable, and only the people read', async (t) => {
+  pin(t);
   const m = await mount(PEOPLE);
   try {
     assert.match(m.of('ap-header'), /Advisors & Partners › People/);
@@ -241,7 +245,8 @@ test('mounted People: the tab, each row from its blocks, a failed block Unreadab
   } finally { await m.unmount(); }
 });
 
-test('mounted People: search, a filter and sort go to the address and the read; Clear empties them', async () => {
+test('mounted People: search, a filter and sort go to the address and the read; Clear empties them', async (t) => {
+  pin(t);
   const m = await mount(PEOPLE);
   try {
     await m.change('people-search', 'ada');
@@ -257,7 +262,8 @@ test('mounted People: search, a filter and sort go to the address and the read; 
   } finally { await m.unmount(); }
 });
 
-test('mounted People: a 503 is the list Unreadable with Try again; an empty network and a missed search say so', async () => {
+test('mounted People: a 503 is the list Unreadable with Try again; an empty network and a missed search say so', async (t) => {
+  pin(t);
   const bad = await mount(PEOPLE, { fail: ['people'] });
   try {
     assert.match(bad.of('people-unreadable'), /Unreadable\. A requested search\/filter source could not be read.*Nothing here is a zero/s);
@@ -275,7 +281,8 @@ test('mounted People: a 503 is the list Unreadable with Try again; an empty netw
   } finally { await half.unmount(); }
 });
 
-test('mounted People on a phone: cards, not the table', async () => {
+test('mounted People on a phone: cards, not the table', async (t) => {
+  pin(t);
   const m = await mount(PEOPLE, { phone: true });
   try {
     assert.ok(m.has('people-cards'));
@@ -284,7 +291,8 @@ test('mounted People on a phone: cards, not the table', async () => {
   } finally { await m.unmount(); }
 });
 
-test('mounted bulk add: it reads the roster first, skips who is on it, asks, then adds hidden cards', async () => {
+test('mounted bulk add: it reads the roster first, skips who is on it, asks, then adds hidden cards', async (t) => {
+  pin(t);
   const sent = [];
   const writes = { '/api/admin/network-profiles': (body) => { sent.push(body); return new Response(JSON.stringify({ profile: { id: 50, ...body } }), { status: 200, headers: { 'Content-Type': 'application/json' } }); } };
   const m = await mount(PEOPLE, { writes });
@@ -309,7 +317,8 @@ test('mounted bulk add: it reads the roster first, skips who is on it, asks, the
   } finally { await bad.unmount(); }
 });
 
-test('mounted export: pages the read at 100 and hands over a CSV; an incomplete list is refused', async () => {
+test('mounted export: pages the read at 100 and hands over a CSV; an incomplete list is refused', async (t) => {
+  pin(t);
   const blobs = [];
   const urlApi = { createObjectURL: (b) => { blobs.push(b); return 'blob:x'; }, revokeObjectURL() {} };
   const saved = { c: URL.createObjectURL, r: URL.revokeObjectURL };
@@ -333,7 +342,8 @@ test('mounted export: pages the read at 100 and hands over a CSV; an incomplete 
   } finally { URL.createObjectURL = saved.c; URL.revokeObjectURL = saved.r; }
 });
 
-test('mounted drawer: profile, standing with its links, work with a failed block, terms from the standing, the deck link', async () => {
+test('mounted drawer: profile, standing with its links, work with a failed block, terms from the standing, the deck link', async (t) => {
+  pin(t);
   const m = await mount(`${PEOPLE}/user%3A7?skill=Finance`);
   try {
     assert.match(m.of('person-drawer'), /Ada Example/);
@@ -352,7 +362,8 @@ test('mounted drawer: profile, standing with its links, work with a failed block
   } finally { await m.unmount(); }
 });
 
-test('mounted drawer: a failed standing read is Unreadable and offers no Pause; a failed person read has Try again; an unknown ref says so', async () => {
+test('mounted drawer: a failed standing read is Unreadable and offers no Pause; a failed person read has Try again; an unknown ref says so', async (t) => {
+  pin(t);
   const m = await mount(`${PEOPLE}/user%3A7`, { fail: ['standing'] });
   try {
     assert.match(m.of('person-standing-unreadable'), /Unreadable.*Pause and Hide wait/s);
@@ -366,7 +377,8 @@ test('mounted drawer: a failed standing read is Unreadable and offers no Pause; 
   try { assert.ok(gone.has('person-missing')); } finally { await gone.unmount(); }
 });
 
-test('mounted Pause: the dialog says what it changes, needs a reason, shows a refusal in words, then the result', async () => {
+test('mounted Pause: the dialog says what it changes, needs a reason, shows a refusal in words, then the result', async (t) => {
+  pin(t);
   let paused = false;
   const sent = [];
   const writes = {
@@ -395,7 +407,8 @@ test('mounted Pause: the dialog says what it changes, needs a reason, shows a re
   } finally { await m.unmount(); }
 });
 
-test('mounted directory switch: Hide asks in a dialog, with no reason box, then says the result', async () => {
+test('mounted directory switch: Hide asks in a dialog, with no reason box, then says the result', async (t) => {
+  pin(t);
   const sent = [];
   const writes = { '/api/admin/network/people/7/directory': (body) => { sent.push(body); return new Response(JSON.stringify({ user_id: 7, hidden_by_admin: true, listed: false }), { status: 200, headers: { 'Content-Type': 'application/json' } }); } };
   const m = await mount(`${PEOPLE}/user%3A7`, { writes });
@@ -410,7 +423,8 @@ test('mounted directory switch: Hide asks in a dialog, with no reason box, then 
   } finally { await m.unmount(); }
 });
 
-test('the drawer’s Add to deck roster opens the card dialog filled in and hidden', async () => {
+test('the drawer’s Add to deck roster opens the card dialog filled in and hidden', async (t) => {
+  pin(t);
   const m = await mount(`${PEOPLE}/user%3A7`);
   try {
     await m.click('person-deck-add');
