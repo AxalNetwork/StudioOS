@@ -29,6 +29,7 @@ function fixture() {
   db.exec(migration('594_data_room_grant_folders.sql'));
   addColumnsFrom(db, migration('442_raise_cycle_stores.sql'), 'data_room_files');
   addColumnsFrom(db, migration('463_raise_record_stores.sql'), 'data_room_files');
+  addColumnsFrom(db, migration('596_data_room_file_source.sql'), 'data_room_files');
   db.exec(stripForeignKeys(tableFromBaseline(migration('463_raise_record_stores.sql'), 'data_room_file_versions')));
   db.exec(stripForeignKeys(tableFromBaseline(migration('401_lab_report_shares.sql'), 'lab_report_shares')));
   for (const [id, role] of Object.entries(roles)) db.prepare('INSERT INTO users (id,role,name,email,password_hash,founder_id,is_active) VALUES (?,?,?,?,?,?,1)')

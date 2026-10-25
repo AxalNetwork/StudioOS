@@ -14,6 +14,8 @@
 //   POST   /api/admin/program-grants/licences/:uid/:program/pause    { reason }
 //   POST   /api/admin/program-grants/licences/:uid/:program/resume   { reason }
 //   POST   /api/admin/program-grants/licences/:uid/:program/end      { reason }
+//   POST   /api/admin/program-grants/licences/:uid/:program/schedule/send  { reason }  (D1120)
+//            → { ok, grant, envelope: { uuid, email_sent, already_pending }, pushed }
 // A term nobody set is null and reads "Not recorded".
 // D983 (#2774, part 2): the studios' program requests and HQ's answer.
 // Worker: routes/admin_program_requests.ts over services/programRequests.ts.
@@ -50,6 +52,8 @@ export const programGrantsApi = {
   pause: (uid, program, body) => request(`${at(uid, program)}/pause`, { method: 'POST', body: JSON.stringify(body || {}) }),
   resume: (uid, program, body) => request(`${at(uid, program)}/resume`, { method: 'POST', body: JSON.stringify(body || {}) }),
   end: (uid, program, body) => request(`${at(uid, program)}/end`, { method: 'POST', body: JSON.stringify(body || {}) }),
+  // D987: GR3's Send schedule (D1120's route).
+  sendSchedule: (uid, program, body) => request(`${at(uid, program)}/schedule/send`, { method: 'POST', body: JSON.stringify(body || {}) }),
   requests: (status) => request(`/admin/program-grants/requests${status ? `?status=${enc(status)}` : ''}`),
   approveRequest: (uid, body) => request(`/admin/program-grants/requests/${enc(uid)}/approve`, { method: 'POST', body: JSON.stringify(body || {}) }),
   declineRequest: (uid, body) => request(`/admin/program-grants/requests/${enc(uid)}/decline`, { method: 'POST', body: JSON.stringify(body || {}) }),

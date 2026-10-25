@@ -13,3 +13,5 @@ in the browser, and the payment form mounts only on Continue, because
 `POST /api/payments/intent` makes a subscription in Stripe. Pricing's Upgrade
 opens the sheet today; every other entry point (the paywall, Billing, Usage)
 opens the same sheet, never a page of its own.
+
+D1133 passes D1049’s Pricing plan read into the sheet: Reading and Unreadable with Try again cannot start a payment; a held account plan uses the existing change mode. D1051’s changed-field status contract was extended on #2902; the status UI still belongs to D1053.

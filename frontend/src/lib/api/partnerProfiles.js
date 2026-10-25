@@ -8,7 +8,9 @@
 // each row's envelope state (on `rows[].envelope` and the profile's `listed`),
 // and Unbind, the Super Admin's one extra control (a recent step-up and a
 // reason; logged in Governance).
-import { request } from '../api.js';
+// D1127 (#3007) — the export: the list's own filters, or the chosen `refs`,
+// as a logged CSV of what the page draws.
+import { api, request } from '../api.js';
 
 const BASE = '/admin/partner-profiles';
 
@@ -39,6 +41,15 @@ export const partnerProfilesApi = {
   history: (ref, params) => request(`${BASE}/${encodeURIComponent(ref)}/history${query(params)}`),
   /** D991 — back in the queue, with an optional `reason`; the verdict stays in the history. */
   reopen: (ref, reason) => request(`${BASE}/${encodeURIComponent(ref)}/reopen`, { method: 'POST', body: JSON.stringify({ reason: reason || null }) }),
+  /**
+   * D1127 — downloads the list's view as a CSV: the same params as `list`
+   * (page and page_size ignored), or `refs` (an array of references, at most
+   * 100). Refused 413 `export_too_large` past 5,000 profiles. Logged.
+   */
+  exportCsv: (params = {}) => {
+    const { page, page_size, refs, ...rest } = params; // eslint-disable-line no-unused-vars
+    return api._downloadCsv(`${BASE}/export${query({ ...rest, refs: Array.isArray(refs) && refs.length ? refs.join(',') : null })}`, 'partner-profiles.csv');
+  },
   /** `{ groups: [{ label, options: [{ value, label, ready, readiness, source }] }] }`. */
   agreements: () => request(`${BASE}/agreements`),
   /** Free a profile whose address now belongs to another account. Super Admin; `reason` is 10 to 500 characters. */

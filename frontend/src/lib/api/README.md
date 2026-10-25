@@ -374,4 +374,6 @@ D1126 (#3006): `programGrants.js` also reads HQ's History tab (`allHistory`, eve
 licence's program decisions a page at a time) and downloads the grid's CSV
 (`exportCsv`, and `exportLicenceCsv` for one studio), all Super Admin.
 
+D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
+
 D1135's `companyActions.js` holds self-service company leave and venture restore.
