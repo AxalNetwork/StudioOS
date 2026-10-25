@@ -4073,8 +4073,9 @@ export const api = {
   trustScore: (userId) => request(`/trust/score/${encodeURIComponent(userId)}`),
   // Task #40 — batch the per-row trust-score lookups on AdminPage / DealsPage
   // into a single request. Returns { scores: [{ user_id, score, missing[],
-  // required_total }] } in the same order the ids were sent. Admin/partner/
-  // investor only; founders should keep using `trustScore(userId)` for self.
+  // required_total }] } in the same order the ids were sent. D1074: the single
+  // read's rule for every id (self, this territory's admin, an open intro or
+  // deal's counterparty); one id the caller may not read refuses the batch.
   trustScoreBatch: (userIds) => request('/trust/score/batch', {
     method: 'POST',
     body: JSON.stringify({ user_ids: userIds }),

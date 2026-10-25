@@ -30,9 +30,11 @@ import { recordTermsAcceptance, obligationSource } from '../src/services/trust.t
 const BASELINE = readFileSync(
   resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8',
 );
-const MIGRATION = readFileSync(
-  resolve(process.cwd(), 'cloudflare-worker/sql/migrations/245_legal_acceptances.sql'), 'utf8',
-);
+// D1074 (#2966): 583 adds `document_version`, which the writer now fills, so the
+// table is built from both migrations, in order.
+const MIGRATION = ['245_legal_acceptances.sql', '583_legal_acceptance_version.sql'].map((f) => readFileSync(
+  resolve(process.cwd(), `cloudflare-worker/sql/migrations/${f}`), 'utf8',
+)).join('\n');
 
 function tableDDL(name: string): string {
   const at = BASELINE.indexOf(`CREATE TABLE ${name} (`);

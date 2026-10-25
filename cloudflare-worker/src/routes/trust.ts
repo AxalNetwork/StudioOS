@@ -31,6 +31,7 @@ import {
   trustScoreOf,
   recordAndCompareScore,
   envelopeHistory,
+  latestAcceptances,
 } from '../services/trust';
 import { getSQL } from '../db';
 import { companyKybScope } from '../services/tenancyScope';
@@ -76,6 +77,9 @@ trust.get('/me', async (c) => {
   // same fixtures and fails if they ever disagree.
   const score = trustScoreOf(obligations);
   const history = await recordAndCompareScore(c.env, user.id, score);
+  // D1074 (#2966): what the member accepted, when, where, and which version;
+  // `newer_document` when the page has changed since. Null when unreadable.
+  const acceptances = await latestAcceptances(c.env, user.id);
 
   return c.json({
     role: user.role,
@@ -88,6 +92,7 @@ trust.get('/me', async (c) => {
     // month has not "held steady", it has no comparison (D56/D68).
     previous_score: history.previousScore,
     previous_month: history.previousMonth,
+    acceptances,
   });
 });
 
@@ -99,7 +104,7 @@ trust.get('/me', async (c) => {
 //   3. `documents`           — legacy signed contracts referencing the caller.
 // Each source is wrapped in try/catch so a missing/legacy table on a stale
 // D1 (e.g. envelopes / documents not yet provisioned) never blocks the
-// canonical pairwise list. Admins also get the pairs they don't sit on.
+// canonical pairwise list. Only the caller's own pairs, for every role.
 // ---------------------------------------------------------------------------
 trust.get('/agreements', async (c) => {
   const user = await requireAuth(c);
@@ -160,20 +165,22 @@ trust.get('/agreements', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /score/:userId — Task #4 (Y-2).
-// Returns {score, missing[]} for any user. Readable by:
-//   - the user themselves (self),
-//   - admins, partners, investors (since they review founders/peers).
-// Founders cannot see other founders' scores.
+// GET /score/:userId — Task #4 (Y-2), scoped by D1074 (#2966).
+// Returns {score, missing[]}. Readable by the member, an admin of this
+// territory, and a counterparty in an open intro or deal (`mayReadTrustScores`);
+// anyone else is 403, whatever their role. Only the member and an admin get the
+// missing items. A member with no obligation rows reads `not_recorded`, never 100.
 // ---------------------------------------------------------------------------
+const NOT_RECORDED = { status: 'not_recorded', reason: 'No trust obligations recorded' } as const;
+
 trust.get('/score/:userId', async (c) => {
   const caller = await requireAuth(c);
   const target = Number(c.req.param('userId'));
   if (!Number.isInteger(target) || target <= 0) return c.json({ error: 'invalid_user' }, 400);
   const isSelf = caller.id === target;
+  await ensureTrustSchema(c.env);
   const allowed = await mayReadTrustScores(c.env, caller, [target]);
   if (!allowed) return c.json({ error: 'forbidden' }, 403);
-  await ensureTrustSchema(c.env);
   // Self-heal: seed any missing rows for the target's role so a
   // legacy unseeded user doesn't return an optimistic 100. Mirrors
   // the behaviour of /trust/me.
@@ -193,9 +200,10 @@ trust.get('/score/:userId', async (c) => {
   const missing = required
     .filter(o => o.status !== 'satisfied' && o.status !== 'waived')
     .map(o => o.obligation_key);
+  const recorded = score == null ? NOT_RECORDED : { status: 'recorded' };
   return c.json(isSelf || caller.role === 'admin'
-    ? { user_id: target, score, missing, required_total: required.length, ...(score == null ? { reason: 'No trust obligations recorded' } : {}) }
-    : { user_id: target, score, ...(score == null ? { reason: 'No trust obligations recorded' } : {}) });
+    ? { user_id: target, score, ...recorded, missing, required_total: required.length }
+    : { user_id: target, score, ...recorded });
 });
 
 // ---------------------------------------------------------------------------
@@ -205,12 +213,8 @@ trust.get('/score/:userId', async (c) => {
 //
 // Collapses N sequential GET /score/:userId calls (one per visible row in
 // AdminPage Users / DealsPage pipeline) into a single round-trip + two
-// SQL queries. Auth mirrors the single-user route minus the founder
-// self-only branch — founders never need to see other people's scores
-// in batch contexts (admin/investor/partner are the only callers that
-// render a list of users with trust columns), so we hard-require those
-// roles here. A founder asking for their OWN score still has the
-// per-user GET /score/:userId fallback.
+// SQL queries. D1074: auth is the single-user route's rule for every id
+// (`mayReadTrustScores`), so no role reads a list of strangers.
 //
 // Performance notes:
 //   - Batch does not seed legacy members; members with no stored obligations
@@ -221,17 +225,15 @@ trust.get('/score/:userId', async (c) => {
 // ---------------------------------------------------------------------------
 trust.post('/score/batch', async (c) => {
   const caller = await requireAuth(c);
-  if (caller.role !== 'admin' && caller.role !== 'partner' && caller.role !== 'investor') {
-    return c.json({ error: 'forbidden' }, 403);
-  }
   const body = await c.req.json().catch(() => ({} as any));
   const raw = Array.isArray(body?.user_ids) ? body.user_ids : [];
   const ids: number[] = Array.from(new Set(
     raw.map((v: any) => Number(v)).filter((n: number) => Number.isInteger(n) && n > 0),
   )).slice(0, 200) as number[];
   if (ids.length === 0) return c.json({ scores: [] });
-  if (!await mayReadTrustScores(c.env, caller, ids)) return c.json({ error: 'forbidden' }, 403);
   await ensureTrustSchema(c.env);
+  // D1074: the single read's rule, for every id; one the caller may not read refuses the batch.
+  if (!await mayReadTrustScores(c.env, caller, ids)) return c.json({ error: 'forbidden' }, 403);
   const placeholders = ids.map(() => '?').join(',');
   const rows: any = await c.env.DB.prepare(
     `SELECT user_id, obligation_key, required, status
@@ -254,9 +256,10 @@ trust.post('/score/batch', async (c) => {
     const missing = required
       .filter((o: any) => o.status !== 'satisfied' && o.status !== 'waived')
       .map((o: any) => o.obligation_key);
+    const recorded = score == null ? NOT_RECORDED : { status: 'recorded', reason: null };
     return caller.role === 'admin' || caller.id === id
-      ? { user_id: id, score, missing, required_total: required.length, reason: score == null ? 'No trust obligations recorded' : null }
-      : { user_id: id, score, reason: score == null ? 'No trust obligations recorded' : null };
+      ? { user_id: id, score, ...recorded, missing, required_total: required.length }
+      : { user_id: id, score, ...recorded };
   });
   return c.json({ scores });
 });
@@ -666,45 +669,31 @@ trust.post('/nda/sign/:envelope_uuid', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /pairwise-ndas — list pairwise NDAs touching the caller (or all
-// rows for an admin caller). Mirrors the admin-only equivalent at
-// /api/admin/contracts/pairwise-ndas but without the requireAdmin gate
-// for non-admin self-views.
+// GET /pairwise-ndas — the pairwise NDAs the caller is a party to, and only
+// those, whatever their role. D1074 (#2966, finding 5): an admin no longer gets
+// every pair on the platform here; the platform's pairs are read in Contracts
+// (`/api/admin/contracts/pairwise-ndas`). A signer who is not one of the two
+// parties (Axal's own countersigner) is named without an address.
 // ---------------------------------------------------------------------------
 trust.get('/pairwise-ndas', async (c) => {
   const user = await requireAuth(c);
   await ensureTrustSchema(c.env);
   const { ensurePairwiseNdaColumns } = await import('../services/sanctions');
   await ensurePairwiseNdaColumns(c.env);
-  const isAdmin = user.role === 'admin';
-  const rows: any = isAdmin
-    ? await c.env.DB.prepare(
-        `SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
-                p.nda_envelope_uuid, p.status, p.valid_until, p.created_at, p.updated_at,
-                p.signers_json, p.voided_at, p.voided_reason,
-                ua.email AS party_a_email, ub.email AS party_b_email,
-                ua.name AS party_a_name, ub.name AS party_b_name,
-                e.status AS envelope_status
-           FROM pairwise_ndas p
-           LEFT JOIN users ua ON ua.id = p.party_a_user_id
-           LEFT JOIN users ub ON ub.id = p.party_b_user_id
-           LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
-          ORDER BY p.created_at DESC LIMIT 500`,
-      ).all()
-    : await c.env.DB.prepare(
-        `SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
-                p.nda_envelope_uuid, p.status, p.valid_until, p.created_at, p.updated_at,
-                p.signers_json, p.voided_at, p.voided_reason,
-                ua.email AS party_a_email, ub.email AS party_b_email,
-                ua.name AS party_a_name, ub.name AS party_b_name,
-                e.status AS envelope_status
-           FROM pairwise_ndas p
-           LEFT JOIN users ua ON ua.id = p.party_a_user_id
-           LEFT JOIN users ub ON ub.id = p.party_b_user_id
-           LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
-          WHERE p.party_a_user_id = ?1 OR p.party_b_user_id = ?1
-          ORDER BY p.created_at DESC LIMIT 200`,
-      ).bind(user.id).all();
+  const rows: any = await c.env.DB.prepare(
+    `SELECT p.id, p.party_a_user_id, p.party_b_user_id, p.intermediary,
+            p.nda_envelope_uuid, p.status, p.valid_until, p.created_at, p.updated_at,
+            p.signers_json, p.voided_at, p.voided_reason,
+            ua.email AS party_a_email, ub.email AS party_b_email,
+            ua.name AS party_a_name, ub.name AS party_b_name,
+            e.status AS envelope_status
+       FROM pairwise_ndas p
+       LEFT JOIN users ua ON ua.id = p.party_a_user_id
+       LEFT JOIN users ub ON ub.id = p.party_b_user_id
+       LEFT JOIN esign_envelopes e ON e.envelope_uuid = p.nda_envelope_uuid
+      WHERE p.party_a_user_id = ?1 OR p.party_b_user_id = ?1
+      ORDER BY p.created_at DESC LIMIT 200`,
+  ).bind(user.id).all();
 
   // Enrich with computed signer list. We don't trust `signers_json` to
   // be populated retroactively for envelopes that completed before this
@@ -736,7 +725,10 @@ trust.get('/pairwise-ndas', async (c) => {
         });
       }
       for (const it of items) {
-        const all = byUuid[it.nda_envelope_uuid] || [];
+        const parties = new Set([it.party_a_email, it.party_b_email].filter(Boolean).map((e: string) => e.toLowerCase()));
+        const all = (byUuid[it.nda_envelope_uuid] || []).map((r: any) => (
+          r.email && parties.has(String(r.email).toLowerCase()) ? r : { ...r, email: null }
+        ));
         it.signers = all.filter(s => s.status === 'signed' || !!s.signed_at);
         it.recipients = all;
       }

@@ -16,7 +16,7 @@ const secret = 'synthetic-test-only-'.repeat(3);
 function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   for (const name of ['users', 'projects', 'deals', 'deal_invitations', 'commitments',
-    'user_company_links', 'score_snapshots', 'activity_logs',
+    'user_company_links', 'score_snapshots', 'activity_logs', 'pairwise_ndas',
     'super_admins', 'user_personas', 'mi_pro_subscriptions']) {
     db.exec(tableFromBaseline(baseline, name));
   }
@@ -99,11 +99,15 @@ test('risk and screening: flagged/rejected/unsigned/tampered rows supply no comp
 test('trust: related venture members get bare scores; self/admin retain missing obligations', async () => {
   const f = fixture();
   try {
+    // D1074 (#2966): a partner reads a founder's score as the deal's lead partner,
+    // no longer as any partner (mayReadTrustScores; trust_score_scope_d1074.test.ts).
+    f.db.exec('UPDATE deals SET lead_partner_id = 2 WHERE id = 100');
     for (const id of [2, 3]) {
       const response = await request(trust, f.env, id, '/score/4');
       assert.equal(response.status, 200);
       const score: any = await response.json();
-      assert.deepEqual(Object.keys(score).sort(), ['score', 'user_id']);
+      // D1074 adds `status` (recorded or not_recorded); still no missing items for a counterparty.
+      assert.deepEqual(Object.keys(score).sort(), ['score', 'status', 'user_id']);
       assert.equal((await request(trust, f.env, id, '/score/999')).status, 403);
       const batch = await request(trust, f.env, id, '/score/batch', { user_ids: [4, 6] });
       assert.equal(batch.status, 200);
@@ -115,9 +119,11 @@ test('trust: related venture members get bare scores; self/admin retain missing 
     assert.equal((await request(trust, f.env, 3, '/score/batch', { user_ids: [4, 5] })).status, 403);
     assert.equal((await request(trust, f.env, 4, '/score/5')).status, 403);
     for (const id of [6, 7]) assert.equal((await request(trust, f.env, id, '/score/4')).status, 403);
-    for (const id of [4, 6, 7]) {
+    for (const id of [6, 7]) {
       assert.equal((await request(trust, f.env, id, '/score/batch', { user_ids: [4] })).status, 403);
     }
+    // D1074: the batch follows the single read's rule, so a member's own id is theirs to read.
+    assert.equal((await request(trust, f.env, 4, '/score/batch', { user_ids: [4] })).status, 200);
     for (const id of [1, 4]) {
       const response = await request(trust, f.env, id, '/score/4');
       assert.equal(response.status, 200);
@@ -210,7 +216,8 @@ test('trust bulk permissions: bounded queries match single-deal invitations and 
     const prepare = f.env.DB.prepare.bind(f.env.DB);
     f.env.DB.prepare = (sql: string) => { queries++; return prepare(sql); };
     assert.equal(await mayReadTrustScores(f.env, { id: 3, role: 'investor' } as any, [4, 5, 6]), true);
-    assert.equal(queries, 2, 'one indexed membership query and one bulk authorization query');
+    // D1074: one bounded query decides every id (an open deal or intro in either direction).
+    assert.equal(queries, 1, 'one bulk authorization query');
   } finally { f.db.close(); }
 });
 

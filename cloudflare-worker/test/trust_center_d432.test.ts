@@ -9,8 +9,9 @@
  *    email — the canvas titles it "Novacraft Labs, Inc. ↔ Marisol Vega" for an
  *    admin and "Dev Raman · Latitude Seed" for a member. The route already
  *    joined `users` twice for the emails; it now selects `name` from the same
- *    joins, on BOTH the admin branch and the self branch, and a party whose
- *    account is gone is served as NULL (the LEFT JOIN), never dropped.
+ *    joins, and a party whose account is gone is served as NULL (the LEFT
+ *    JOIN), never dropped. D1074 (#2966) removed the admin branch: every
+ *    caller, an admin included, reads only the pairs they are party to.
  *
  * 2. GET /trust/companies/kyb REFUSES WHEN IT CANNOT READ. It used to catch
  *    every error into an empty list, so a member of three companies whose
@@ -187,15 +188,11 @@ test('a member sees both parties named on their own pairwise row', async () => {
   assert.equal(row.party_b_email, 'dev@example.com');
 });
 
-test('an admin sees the names on every row, through the other SELECT', async () => {
+test('an admin party to no pair gets none: the platform\'s pairs are read in Contracts (D1074)', async () => {
   const db = freshDb();
   const r = await get(env(db), '/pairwise-ndas', admin);
   assert.equal(r.status, 200);
-  assert.equal(r.body.items.length, 2);
-  const byB = Object.fromEntries(r.body.items.map((i: any) => [i.party_b_user_id, i]));
-  assert.equal(byB[INVESTOR].party_a_name, 'Marisol Vega');
-  assert.equal(byB[INVESTOR].party_b_name, 'Dev Raman');
-  assert.equal(byB[GONE].party_a_name, 'Marisol Vega');
+  assert.deepEqual(r.body.items, []);
 });
 
 test('a party whose account is gone is served as null, and the row is not dropped', async () => {
@@ -211,12 +208,12 @@ test('a party whose account is gone is served as null, and the row is not droppe
   assert.ok(!('party_b_name' in gone) || gone.party_b_name === null);
 });
 
-test('the name columns are selected on both branches, from the joins that already existed', () => {
+test('the name columns are selected, from the joins that already existed, in the one SELECT left (D1074)', () => {
   const route = WORKER.slice(WORKER.indexOf("trust.get('/pairwise-ndas'"), WORKER.indexOf("trust.post('/pairwise-ndas/:id/resend'"));
   assert.ok(route.length > 500, 'the route could not be sliced');
   const hits = route.match(/ua\.name AS party_a_name, ub\.name AS party_b_name/g) || [];
-  assert.equal(hits.length, 2, 'one SELECT per caller kind, each serving both names');
-  assert.equal((route.match(/LEFT JOIN users ua ON ua\.id = p\.party_a_user_id/g) || []).length, 2);
+  assert.equal(hits.length, 1, 'one SELECT for every caller, serving both names');
+  assert.equal((route.match(/LEFT JOIN users ua ON ua\.id = p\.party_a_user_id/g) || []).length, 1);
 });
 
 // ---------------------------------------------------------------------------

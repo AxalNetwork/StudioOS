@@ -15,9 +15,11 @@ permissions; list responses are owner-scoped, including for admins. Bound
 scenarios whose project is missing fail closed for non-admins; admin can recover
 or delete them. They are never silently detached into private scenarios.
 
-`scoreAccess.ts` scopes #2439 project risk and external trust-score reads through
-existing deal permissions. Self/admin trust reads retain obligation details;
-related external readers receive only the bare score. Non-admin risk and
+`scoreAccess.ts` scopes #2439 project risk through existing deal permissions,
+and, since D1074 (#2966), trust-score reads to the member, an admin of this
+territory (this deployment's database), and a counterparty in an open intro or
+deal (`mayReadTrustScores`, `counterpartiesOf`). Self/admin trust reads retain
+obligation details; a counterparty receives only the bare score. Non-admin risk and
 screening snapshots use `scoreIntegrity.ts` verification and read auditing.
 Bulk reads deduplicate projects, select snapshots once, and batch per-score
 audit entries without weakening approval or signature checks.
