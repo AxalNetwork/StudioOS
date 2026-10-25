@@ -18,9 +18,20 @@
 //             An advisor only: 409 not_an_advisor; 400 listed_required; 409 already_hidden | not_hidden.
 import { request } from '../api.js';
 
+const query = (filters) => {
+  const params = new URLSearchParams();
+  for (const key of ['q', 'kind', 'stage', 'skill', 'sector', 'lab_host', 'profile_check', 'kyc', 'on_deck', 'firm_attached', 'active_deal', 'sort', 'limit', 'offset']) {
+    const value = filters?.[key];
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  return params.size ? `?${params}` : '';
+};
+
 const path = (userId) => `/admin/network/people/${encodeURIComponent(userId)}`;
 
 export const adminNetworkApi = {
+  overview: () => request('/admin/network/overview'),
+  people: (filters = {}) => request(`/admin/network/people${query(filters)}`),
   person: (userId) => request(path(userId)),
   pause: (userId, reason) => request(`${path(userId)}/pause`, { method: 'POST', body: JSON.stringify({ reason }) }),
   resume: (userId, reason) => request(`${path(userId)}/resume`, { method: 'POST', body: JSON.stringify({ reason }) }),
