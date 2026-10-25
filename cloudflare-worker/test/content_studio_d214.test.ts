@@ -122,6 +122,8 @@ const M267 = read('cloudflare-worker/sql/migrations/267_hq_escalation_sla_claim.
 const M296_HQ = splitStatements(read('cloudflare-worker/sql/migrations/296_escalation_relation.sql'))
   .find((st: string) => /^ALTER TABLE hq_escalations\b/.test(st)) as string;
 
+const M551 = read('cloudflare-worker/sql/migrations/551_network_profiles_roster.sql');
+
 /** The tables the three panels read. The board reads the pipeline's and 259's. */
 const PANEL_TABLES = [
   'assessment_games', 'assessment_chapters', 'assessment_archetypes', 'assessment_items',
@@ -138,6 +140,8 @@ function freshDb(opts: { without?: string[] } = {}) {
   for (const t of ['users', 'super_admins', ...PIPELINE_TABLES, ...PANEL_TABLES]) {
     if (!without.has(t)) db.exec(ddl(t));
   }
+  // Migration 551 (D974): the roster's link and archive columns, which the panel reads (D1125).
+  if (!without.has('network_profiles')) db.exec(M551);
   if (!without.has('admin_publications')) db.exec(publicationsDdl());
   if (!without.has('hq_escalations')) { db.exec(M259); db.exec(M267); db.exec(M296_HQ); }
   db.prepare('INSERT INTO users (id, role, name, email) VALUES (?, ?, ?, ?)')
@@ -232,17 +236,23 @@ function tag(db: any, userId: number, personaId: string, primary: 0 | 1) {
   db.prepare('INSERT INTO user_personas (user_id, persona_id, is_primary) VALUES (?, ?, ?)')
     .run(userId, personaId, primary);
 }
+/**
+ * An inactive row is archived unless `hidden` says it is kept (D974's three
+ * states, migration 551): these tests were written when inactive meant archived.
+ */
 function profile(db: any, p: {
-  name: string; order: number; active?: 0 | 1; kind?: string; role?: string | null;
+  name: string; order: number; active?: 0 | 1; hidden?: boolean; kind?: string; role?: string | null;
   company?: string | null; bio?: string; linkedin?: string; photo?: string;
 }): number {
+  const active = p.active ?? 1;
   return Number(db.prepare(
     `INSERT INTO network_profiles
-       (name, kind, role, company, bio, linkedin_url, photo_r2_key, display_order, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (name, kind, role, company, bio, linkedin_url, photo_r2_key, display_order, is_active, archived_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     p.name, p.kind ?? 'advisor', p.role ?? null, p.company ?? null, p.bio ?? null,
-    p.linkedin ?? null, p.photo ?? null, p.order, p.active ?? 1,
+    p.linkedin ?? null, p.photo ?? null, p.order, active,
+    active === 0 && !p.hidden ? '2026-10-01 00:00:00' : null,
   ).lastInsertRowid);
 }
 
@@ -798,6 +808,22 @@ test('archived rows never push an active row off the fifty-row list', async () =
   assert.equal(body.roster.archived, 55);
 });
 
+test('D1125: a hidden row is hidden, not archived — in its label, its count and its place', async () => {
+  // D974 split one inactive state in two (migration 551): hidden keeps the card
+  // on the roster, archived takes it out. The panel used to call both archived.
+  const db = freshDb();
+  profile(db, { name: 'Shown', order: 1 });
+  profile(db, { name: 'Kept', order: 2, active: 0, hidden: true });
+  profile(db, { name: 'Gone', order: 0, active: 0 });
+  const { body } = await summary(db);
+  assert.deepEqual(body.roster.rows.map((r: any) => [r.name, r.state, r.reach]),
+    [['Shown', 'active', 'profile'], ['Kept', 'hidden', 'hidden'], ['Gone', 'archived', 'archived']],
+    'hidden sorts after shown and before archived, and is named hidden');
+  assert.deepEqual([body.roster.active, body.roster.hidden, body.roster.archived], [1, 1, 1]);
+  const advisor = body.roster.by_kind.find((k: any) => k.kind === 'advisor');
+  assert.deepEqual([advisor.active, advisor.hidden, advisor.archived], [1, 1, 1]);
+});
+
 test('roster: empty and unreadable are two states', async () => {
   const empty = await summary(freshDb());
   assert.equal(empty.body.roster.available, true);
@@ -868,7 +894,7 @@ test('no bio, photo key or LinkedIn URL reaches the payload', async () => {
   const { text, body } = await summary(db);
   assert.ok(!text.includes('SENTINEL-7Q2'), 'a field the panel never draws was sent');
   assert.deepEqual(Object.keys(body.roster.rows[0]).sort(),
-    ['active', 'company', 'deck_role', 'id', 'kind', 'name', 'reach', 'role']);
+    ['active', 'company', 'deck_role', 'id', 'kind', 'name', 'reach', 'role', 'state']);
 });
 
 test('the four new blocks carry no console path: the page writes each link itself', async () => {

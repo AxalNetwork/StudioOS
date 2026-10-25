@@ -16,6 +16,10 @@ D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
 
+D1136's reads of the caller's own companies, ventures and invitations, and
+answering an invitation while signed in, live in `account_companies.ts`,
+mounted at `/api` with full paths before `projects.ts` and `company.ts`.
+
 D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 `/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
 sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
