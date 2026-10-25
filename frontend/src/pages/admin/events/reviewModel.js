@@ -27,7 +27,7 @@
 import { EVENT_TYPES } from '../../../lib/eventTypes.js';
 import { NOT_RECORDED, titleCase } from '../../../lib/absence.js';
 import {
-  compFlags, dateLabel, factsOf, listJoin, parseStamp, queueFlags, roleWord, startShort, statusWord, titleOf, zoneOf,
+  compFlags, dateLabel, factsOf, listJoin, parseStamp, queueFlags, roleWord, startShort, statusWord, titleOf, yourTimeLine, zoneOf,
 } from './eventsDeskModel.js';
 import { OVERDUE_HOURS, hostLine, matchesSearch } from './allEventsModel.js';
 import { clashMap } from './calendarModel.js';
@@ -319,6 +319,7 @@ export function reviewFacts(ev) {
   const out = [typeFact(ev)];
   for (const f of factsOf(ev)) {
     if (f.key === 'place') out.push({ key: 'place', label: 'Format and place', value: formatPlace(ev) });
+    else if (f.key === 'when') out.push({ ...f, sub: yourTimeLine(ev) });
     else if (f.key === 'created') out.push(ventureFact(ev), f, submittedFact(ev));
     else out.push(f);
   }
