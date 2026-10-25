@@ -52,7 +52,7 @@ test('words: kinds, modes and prices in the canvas\'s form, a quarterly price ne
   assert.deepEqual(['live', 'test', 'unconfigured', undefined].map(modeWord), ['Live', 'Test', 'Not connected', 'Not recorded']);
   assert.equal(priceText(price('x', 2000, 'month')), '20.00 USD / month');
   assert.equal(priceText(price('x', 2000, 'month', { interval_count: 3 })), '20.00 USD every 3 months');
-  assert.equal(priceText(price('x', 49900, null)), '499.00 USD');
+  assert.equal(priceText(price('x', 49900, null)), '499.00 USD · one time', 'D1012: a one-time price says so (PAY1)');
   assert.equal(priceText(price('x', null, 'month')), 'No fixed amount / month');
   assert.equal(stampText('2026-10-18 09:12:00'), '18 Oct 2026, 09:12 UTC');
   assert.equal(stampText(null), null);
@@ -159,7 +159,7 @@ test('mounted Catalogue: one h1, the crumb, HQ only, the notice, needs you, the 
     assert.match(v.of('pay-tile-webhook'), /212.*2 not accepted/s);
     assert.match(v.of('pay-group-plans'), /Advisor Pro.*every 3 months.*Founder Validate \+ Build.*20\.00 USD \/ month.*204\.00 USD \/ year/s);
     assert.match(v.of('pay-group-packs'), /Managed on AI allowances/);
-    assert.match(v.of('pay-group-oneTime'), /Old add-on.*Archived/s);
+    assert.match(v.of('pay-group-archived'), /Old add-on.*Archived/s, 'D1012: archived products sit in their own group (PAY1)');
     assert.ok(v.has('pay-editor-open'), 'today\'s editor is unreachable');
     assert.deepEqual([...new Set(s.seen.filter((p) => !p.startsWith('/api/ai')))].sort(),
       ['/api/admin/catalog/products', '/api/admin/platform/summary', '/api/admin/stripe/config', '/api/admin/stripe/webhook']);

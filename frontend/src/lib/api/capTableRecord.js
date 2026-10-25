@@ -2,6 +2,10 @@
 // outstanding, fully diluted), its proposals, history, share classes and
 // currency, apart from the model a scenario computes. Worker: the
 // `/record/:projectId` section of routes/captable.ts.
+//
+// D1021 — part 6: a close's proposals (one per investor, the same row the
+// Closing room decides) and Eadwyn's read of a signed document, which drafts
+// non-money terms only.
 import { request } from '../api.js';
 
 const base = (projectId) => `/captable/record/${encodeURIComponent(projectId)}`;
@@ -24,6 +28,9 @@ export const capTableRecordApi = {
     method: 'PATCH',
     body: JSON.stringify(body || {}),
   }),
+  close: (projectId, closeUid) => request(`${base(projectId)}/closes/${encodeURIComponent(closeUid)}`),
+  proposeFromClose: (projectId, closeUid, body) => post(`${base(projectId)}/closes/${encodeURIComponent(closeUid)}/proposals`, body),
+  readDocument: (projectId, documentRef) => post(`${base(projectId)}/document-read`, { document_ref: documentRef }),
   setCurrency: (projectId, currency, reason) => request(`${base(projectId)}/currency`, {
     method: 'PUT',
     body: JSON.stringify(reason ? { currency, reason } : { currency }),

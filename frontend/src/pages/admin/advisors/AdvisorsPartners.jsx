@@ -1,15 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { api, adminNetworkProfiles } from '../../../lib/api';
+import { api } from '../../../lib/api';
+import { adminNetworkApi } from '../../../lib/api/adminNetwork';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import AdminNetworkProfiles from '../AdminNetworkProfiles';
 import FirmLinks from './FirmLinks';
+import ApOverview from './ApOverview';
 import {
-  AP_TITLE, COMMUNITY_PATH, MOVED_NOTICES, NOT_YET, PAGE_LINE, RAIL_NOTE, TABS, WAITS,
-  buildFirms, buildNeeds, buildTiles, pageFailed, tabOf,
+  AP_TITLE, COMMUNITY_PATH, MOVED_NOTICES, PAGE_LINE, RAIL_NOTE, TABS,
+  buildFirms, tabOf,
 } from './apModel';
 
 /**
@@ -19,10 +21,8 @@ import {
  * the bare /admin/network-profiles both forward to the Deck roster tab with
  * the moved notice.
  *
- * THE INTEGRATION, NOT THE WHOLE CANVAS (D972 §3). The header, the tabs whose
- * reads exist, and the Overview and Firms blocks drawn from them, each
- * truthfully. People waits for its read. The Deck roster is today's roster,
- * embedded. Nothing is decided here that is decided elsewhere: attaching a
+ * D977 completes Overview from D973's summary read. Firms keeps its own
+ * reads and the Deck roster is embedded; People is a separate UI part. Nothing is decided here that is decided elsewhere: attaching a
  * firm, a deal and a host decision each open the page that decides.
  */
 
@@ -32,13 +32,12 @@ const DANGER = `${BTN} self-start border border-axal-destructive-edge bg-white t
 const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
 const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
 const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
-const TAG = 'self-start rounded-full border border-dashed border-axal-muted px-2 py-0.5 text-[11px] font-semibold text-axal-muted dark:text-gray-400';
 const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
 const MONO = 'font-mono tabular-nums';
 
 const idle = { status: 'loading', data: null };
 const READS = {
-  overview: ['advisors', 'assignments', 'links', 'directory', 'deals', 'hosts', 'roster'],
+  overview: ['overview'],
   firms: ['links', 'directory', 'deals'],
   deck: [],
 };
@@ -55,18 +54,16 @@ function useApReads(tab) {
     let live = true;
     const want = sig ? sig.split(',') : [];
     setReads(Object.fromEntries(want.map((k) => [k, idle])));
+    setAsOf(null);
     const settle = (key, work) => work.then(
       (data) => { if (live) { setReads((r) => ({ ...r, [key]: { status: 'ready', data } })); setAsOf(Date.now()); } },
       (e) => { reportError(`advisors-partners:${key}`, e); if (live) setReads((r) => ({ ...r, [key]: { status: 'error', data: null } })); },
     );
     const work = {
-      advisors: () => api.adminAssignableAdvisors(),
-      assignments: () => api.adminAdvisorCohortAssignments(),
+      overview: () => adminNetworkApi.overview(),
       links: () => api.adminPartners.listFirmLinks(),
       directory: () => api.adminListDirectoryPartners(),
       deals: () => api.adminPartners.listDeals('active'),
-      hosts: () => api.adminLabHosts('pending'),
-      roster: () => adminNetworkProfiles.list(),
     };
     for (const k of want) settle(k, work[k]());
     return () => { live = false; };
@@ -78,94 +75,6 @@ function useApReads(tab) {
 
 function Skeleton() {
   return <span className="block h-2.5 w-[70%] rounded-full bg-axal-hairline dark:bg-gray-700" />;
-}
-
-function Tile({ t, onRetry }) {
-  return (
-    <div className={`${CARD} flex flex-col gap-1.5 px-4 py-3.5`} data-testid={`ap-tile-${t.key}`}>
-      <span className={EYE}>{t.label}</span>
-      {t.state === 'loading' && <><span className="font-mono text-[15px] text-axal-muted">Reading…</span><Skeleton /></>}
-      {t.state === 'ready' && (
-        <>
-          <span className={`${MONO} text-[26px] font-medium tracking-[-.01em] text-axal-ink dark:text-gray-100`}>{t.value}</span>
-          {t.sub ? <span className={SUB}>{t.sub}</span> : null}
-          {t.warn ? <span className="text-[12px] font-semibold text-axal-amber-deep dark:text-amber-300">{t.warn}</span> : null}
-        </>
-      )}
-      {t.state === 'notyet' && <><span className={TAG}>{NOT_YET}</span><span className={SUB}>{t.reason}</span></>}
-      {t.state === 'unreadable' && (
-        <>
-          <span className="text-[13px] font-bold text-axal-destructive dark:text-red-400">Unreadable</span>
-          <span className={SUB}>{t.reason}</span>
-          <button type="button" className={DANGER} onClick={onRetry}>Try again</button>
-        </>
-      )}
-    </div>
-  );
-}
-
-function WaitCard({ id, title, reason }) {
-  return (
-    <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4 lg:col-span-6`} data-testid={`ap-wait-${id}`}>
-      <h2 className={H2}>{title}</h2>
-      <span className={TAG}>{NOT_YET}</span>
-      <span className={SUB}>{reason}</span>
-    </section>
-  );
-}
-
-function NeedsCard({ needs }) {
-  return (
-    <section className={`${CARD} flex flex-col gap-2.5 px-[18px] py-4`} aria-labelledby="ap-h-needs" data-testid="ap-needs">
-      <h2 id="ap-h-needs" className={H2}>Needs you</h2>
-      {needs.state === 'loading' && <><span className="font-mono text-[13px] text-axal-muted">Reading…</span><Skeleton /></>}
-      {needs.state === 'ready' && (
-        <>
-          {needs.rows.length === 0 && needs.unread.length === 0 ? <span className={SUB}>Nothing needs you.</span> : null}
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
-            {needs.rows.map((r) => (
-              <li key={r.key} className="flex items-center justify-between gap-3 text-[13px] text-axal-ink dark:text-gray-100" data-testid={`ap-need-${r.key}`}>
-                <span>{r.text}</span>
-                <Link to={r.to} className={GHOST}>{r.action}</Link>
-              </li>
-            ))}
-            {needs.unread.map((u) => (
-              <li key={u} className="text-[12.5px] text-axal-destructive dark:text-red-400" data-testid="ap-need-unread">{u}: could not be read, so it may hold something.</li>
-            ))}
-          </ul>
-        </>
-      )}
-    </section>
-  );
-}
-
-function Overview({ reads, reload }) {
-  const [now] = useState(() => Date.now());
-  const tiles = useMemo(() => buildTiles(reads, now), [reads, now]);
-  const needs = useMemo(() => buildNeeds(reads, now), [reads, now]);
-  if (pageFailed(reads)) {
-    return (
-      <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-axal-destructive-edge bg-axal-destructive-tint px-3.5 py-3 text-[13px] text-axal-destructive dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" data-testid="ap-unreadable">
-        <span>The network's figures could not be read. Nothing here is a zero.</span>
-        <button type="button" className={DANGER} onClick={reload}>Try again</button>
-      </div>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-3.5" data-testid="ap-overview">
-      <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="ap-tiles">
-        {tiles.map((t) => <Tile key={t.key} t={t} onRetry={reload} />)}
-      </div>
-      <NeedsCard needs={needs} />
-      <div className="grid grid-cols-12 gap-3.5">
-        <WaitCard id="c1" title="Who is in the network" reason={WAITS.c1} />
-        <WaitCard id="c2" title="Sessions per week" reason={WAITS.c2} />
-        <WaitCard id="c3" title="Skills: who can help, and what founders ask for" reason={WAITS.c3} />
-        <WaitCard id="c4" title="Active partner deals by type" reason={WAITS.c4} />
-      </div>
-      <p className={SUB}>{WAITS.people}</p>
-    </div>
-  );
 }
 
 function Firms({ reads, reload }) {
@@ -272,7 +181,7 @@ function AdvisorsPartnersPage() {
         tabs={tabs}
         data-testid="ap-header"
       />
-      {tab === 'overview' && <Overview reads={reads} reload={reload} />}
+      {tab === 'overview' && <ApOverview read={reads.overview} reload={reload} />}
       {tab === 'firms' && <FirmsTab reads={reads} reload={reload} />}
       {tab === 'deck' && <AdminNetworkProfiles embedded />}
     </div>
