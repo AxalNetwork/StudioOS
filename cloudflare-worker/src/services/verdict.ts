@@ -467,6 +467,23 @@ export async function decisionById(
   return { ...row, evidence: ev.results || [], commitments: cm.results || [] };
 }
 
+/** The newest unsuperseded decision of one scope, given or withheld (D1065's build plan reads it). */
+export type LatestDecision = Pick<DecisionRow, 'id' | 'decision' | 'state' | 'hypothesis_id' | 'pivot_hypothesis_id'>;
+export async function latestDecision(env: Env, projectId: number, scope: Scope): Promise<LatestDecision | null> {
+  return env.DB.prepare(
+    `SELECT id, decision, state, hypothesis_id, pivot_hypothesis_id FROM validation_decisions
+      WHERE project_id = ? AND hypothesis_id IS ? AND superseded_at IS NULL ORDER BY id DESC LIMIT 1`,
+  ).bind(projectId, scopeBind(scope)).first<LatestDecision>();
+}
+
+/** The ref ids of the evidence a decision rests on as support. */
+export async function supportingRefIds(env: Env, decisionId: number): Promise<string[]> {
+  const rows = (await env.DB.prepare(
+    "SELECT ref_id FROM validation_decision_evidence WHERE decision_id = ? AND direction = 'supports'",
+  ).bind(decisionId).all<{ ref_id: string }>()).results || [];
+  return rows.map((r) => r.ref_id);
+}
+
 /**
  * Why a given decision has no evidence rows (D693 decision 5). Only the old
  * verdict route ever wrote one, since every other given decision rests on

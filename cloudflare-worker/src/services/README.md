@@ -423,6 +423,8 @@ actions and reads them back as the Payments change log; `stripeWebhookDeliveries
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
 
+D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and applies the ten fixed mapping rules, then batches a plan and source proposals; acceptance stays with D1066. It never runs AI or writes a Build record.
+
 D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
 catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
