@@ -148,7 +148,7 @@ test('a failed module read says so where the sections would be', async () => {
 
 test('the wiring: no route is added, CycleRoute branches on the tab word, and the canvas sits in incoming', () => {
   const route = read('frontend/src/pages/cycles/CycleRoute.jsx');
-  assert.ok(route.includes('isUseOfFundsTab(slug, recordId)') && route.includes('!uofTab && !!projectId'));
+  assert.ok(route.includes('isUseOfFundsTab(slug, recordId)') && route.includes('!uofTab && !capRelTab && !!projectId'));
   assert.ok(route.includes("'use-of-funds': (q) => ({ label: 'Open the financial model', href: forecastHref(q) })"));
   assert.ok(!read('frontend/src/App.jsx').includes('path="/raise/use-of-funds'), 'no route is added');
   for (const f of ['Raise Use Of Funds Page.dc.html', 'Use of funds · Boards.dc.html']) assert.ok(existsSync(`design/incoming/${f}`), f);

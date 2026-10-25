@@ -109,6 +109,24 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Raise · Capital relationships (#2457)
+
+The owner's artifacts `3z5VF6kEsVmbAWPV4UhNiL` (the page) and
+`Gb57mGM9MedbZMms389a6J` (the board grid) came from S21's prompt on #2457. Each
+was decoded by `scripts/read-canvas.mjs` as is:
+- `Capital relationships · Boards.dc.html` is the board grid (CRL1 to CRL19);
+  it imports the page by name;
+- `Capital Relationships Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: UPGRADE.** The tool is `/raise/capital-relationships`, with each tab a
+word under the module. S21's integration (D1188) draws Pipeline's investors,
+Commitments' closes and pro-rata, and Calls' history from today's reads, and says
+Not read here yet on Match, Outreach and Activity. The board, the commitments
+read, Match and Outreach and the old pages' retirement wait for D1188's six
+parts, so this canvas stays in the queue until they land.
+
 ## Landed 2026-10-25 — HQ › Platform › Bank accounts (#2389)
 
 The owner's artifacts `VKFadETWcanf49seVMzWT1` (the page) and
