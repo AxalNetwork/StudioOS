@@ -59,7 +59,7 @@ test('file registration confirms provider metadata, scopes every operation, prev
     assert.equal((db.prepare('SELECT local_id FROM connector_fed_items').get() as any).local_id,null);
     assert.equal((await (await call(env,base+'/files?project=1')).json() as any).items.length,0);
     assert.equal((await call(env,base+`/files/${uid}/preview`,'POST',{})).status,404);
-    assert.ok(fake.calls.filter(x=>x.host.endsWith('googleapis.com')&&x.host!=='oauth2.googleapis.com').every(x=>x.method==='GET'));
+    assert.ok(fake.calls.filter(x=>x.host!=='oauth2.googleapis.com').every(x=>['www.googleapis.com','docs.googleapis.com','sheets.googleapis.com','slides.googleapis.com','forms.googleapis.com'].includes(x.host)&&x.method==='GET'));
   } finally {globalThis.fetch=old;db.close();}
 });
 test('unshared files, unsupported kinds, invalid IDs and disabled companies never create a source; support sessions cannot read or connect', async()=>{
