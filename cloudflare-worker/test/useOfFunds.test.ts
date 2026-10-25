@@ -49,6 +49,7 @@ test('D1174: legacy text needs canonical labels; unknown labels stay unrecorded'
   for (const value of ['[', '[]', '[null]', '[{"label":"Other","pct":100}]',
     '[{"key":"other","label":"Product & engineering","pct":100}]',
     '[{"key":"product","pct":50}]', '[{"key":"product","pct":50},{"key":"product","pct":50}]',
+    '[{"key":"product","pct":0},{"key":"product","pct":100}]',
     '[{"key":"product","pct":[100]}]', '[{"key":"product","pct":null}]', '[{"key":"product","pct":true}]', '[{"key":"product","pct":""}]']) {
     assert.deepEqual(parseUseOfFundsValue(value), [], value);
   }
@@ -104,7 +105,7 @@ test('normalizeUseOfFunds: legacy free-text passes through unchanged', () => {
   });
 });
 
-test('formatUseOfFundsText: JSON → readable, free-text passthrough, empty → ""', () => {
+test('formatUseOfFundsText: canonical JSON → readable; unknown text and empty → ""', () => {
   assert.equal(
     formatUseOfFundsText(CANON),
     'Product & engineering 45%; GTM: sales and marketing 30%; Infrastructure & data 25%',
