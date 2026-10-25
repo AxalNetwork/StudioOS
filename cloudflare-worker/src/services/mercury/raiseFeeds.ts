@@ -660,9 +660,10 @@ async function acceptStatement(env: Env, a: { integrationId: number; projectId: 
   let fileId: number | null = null;
   try {
     const ins = await env.DB.prepare(
+      // D1105 (migration 596): a statement Mercury delivered is a connector's file.
       `INSERT INTO data_room_files (uid, project_id, folder_id, name, r2_key, content_type, size_bytes, visibility, uploaded_by_user_id,
-         created_at, updated_at, access_tier, checklist_item)
-       VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?)`,
+         created_at, updated_at, access_tier, checklist_item, source_kind, source_ref)
+       VALUES (?, ?, NULL, ?, ?, 'application/pdf', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 'connector', 'mercury')`,
     ).bind(uid, project.id, `Mercury statement ${month}${four}.pdf`, key, pdf.bytes.byteLength, STATEMENT_ACCESS.visibility, a.user.id,
       STATEMENT_ACCESS.access_tier, STATEMENT_ACCESS.checklist_item).run();
     fileId = Number(ins.meta?.last_row_id) || null;
