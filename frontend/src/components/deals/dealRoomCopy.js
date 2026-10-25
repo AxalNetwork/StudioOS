@@ -1,3 +1,4 @@
+import { dealMoney } from './dealMoney';
 /**
  * D630 (#1388) — the deal room's words, in one place.
  *
@@ -11,8 +12,7 @@
  */
 
 /** What joining does, and what it does not. Both the list and the header say it. */
-export const JOIN_NOTE = 'Joining adds the company to your portfolio and research views, and lets you open a diligence case on it. '
-  + 'It does not open the room’s documents; only an invited or committed investor reads them.';
+export const JOIN_NOTE = 'Requesting an invitation records your interest. It does not grant access to the deal or diligence. Only an invited or committed investor can read them.';
 
 const PLAN_LABEL = { free: 'Free', professional: 'Professional', institutional: 'Institutional' };
 
@@ -75,7 +75,7 @@ export const STATES = {
 };
 
 /** Invitation status, as the canvas words it. */
-export const INVITE_STATUS = { invited: 'Invited', interested: 'Interested', passed: 'Passed' };
+export const INVITE_STATUS = { requested: 'Invitation requested', invited: 'Invited', interested: 'Interested', passed: 'Passed' };
 
 /** Reference status, as the canvas words it. */
 export const REFERENCE_STATUS = {
@@ -141,10 +141,8 @@ export function amountToCents(raw) {
 }
 
 /** Cents as money, to the cent: 1250000 → "$12,500.00". */
-export function centsMoney(cents) {
-  const n = Number(cents);
-  if (!Number.isFinite(n)) return null;
-  return `$${(n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export function centsMoney(cents, currency = 'USD') {
+  return dealMoney(cents, currency, true);
 }
 
 /** A stored timestamp as "12 Oct 2026, 09:41" (UTC), or null when absent or unparseable. */

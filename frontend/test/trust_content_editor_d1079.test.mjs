@@ -344,7 +344,8 @@ test('SECURITY.md and security.txt keep only what the platform does', () => {
   }
   assert.match(md, /No PGP key is published/);
   assert.match(md, /POST \/api\/help\/security-reports/);
-  assert.match(md, /not built yet/);
+  // D1077 (#2969): the in-app form is built on the trust center's Disclosure tab.
+  assert.match(md, /Disclosure tab \(`\/trust\/disclosure`\)/);
   const txt = read('frontend/public/.well-known/security.txt');
   assert.match(txt, /^Policy: https:\/\/axal\.vc\/trust\/disclosure$/m);
   assert.match(txt, /^Contact: mailto:security@axal\.vc$/m);

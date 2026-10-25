@@ -3,7 +3,11 @@ import { useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../lib/shellRole';
 import { PROFILE_OF_ROLE, crumbsOfKey, pageFor } from '../../lib/railPages';
-import AdminPageHeader, { HeaderMenuItem, useMovedNotice } from '../../ui/AdminPageHeader';
+import { Link } from 'react-router-dom';
+import AdminPageHeader, { HeaderMenuItem, HeaderTab, useMovedNotice } from '../../ui/AdminPageHeader';
+import { adminMercuryApi } from '../../lib/api/adminMercury';
+import { Accounts as EntityAccounts } from './fundAdmin/BankingTabs';
+import { ADMIN_CASH_LINE, NOT_YET, WAITS, tabOf } from './consoles/bankAccountsTabs';
 import AdminBoardFrame from './AdminBoardFrame';
 import { movedNoticesFor } from './LegacyContractsRedirect';
 // D648 (#1448) — one component per console, each in its own file under
@@ -46,7 +50,7 @@ export function consoleBoard(pathname, role) {
   return profile === PROFILE_OF_ROLE[role] ? module : null;
 }
 
-function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more = null, testId, children }) {
+function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more = null, tabs = null, testId, children }) {
   const user = useAuth()?.user ?? null;
   const { pathname } = useLocation();
   const hq = isSuperAdminUser(user);
@@ -61,6 +65,7 @@ function ConsolePage({ crumb, hqCrumb = crumb, title, line, hqOnly = false, more
         line={line}
         scope={!hq}
         more={more}
+        tabs={tabs}
         notice={{ text: notice.text, onDismiss: notice.dismiss }}
       />
       <div className="min-w-0">{children}</div>
@@ -130,10 +135,53 @@ export function AdminWellbeingPage() {
   );
 }
 
-export function BankAccountsPage() {
+/**
+ * D1181 (#2389) — Bank accounts' three tabs (BNK1, BNK3, BNK5). Accounts is
+ * today's registry; Cash draws the entity accounts' balances from the read
+ * Fund admin › Banking makes, and says what waits; History waits for its read.
+ * Cash and History are the Super Admin's here, as the registry is.
+ */
+const MERCURY_APIS = { mercury: adminMercuryApi };
+function Wait({ id, title }) {
   return (
-    <ConsolePage crumb={{ ...PLATFORM, current: 'Bank accounts' }} title="Bank accounts" line="Each entity's bank accounts, their Mercury state and the receipts not yet matched." testId="admin-platform-bank-accounts">
-      <BankAccountsPanel />
+    <section className="flex flex-col gap-2 rounded-xl border border-axal-hairline bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900" data-testid={`bank-wait-${id}`}>
+      <h3 className="m-0 text-[13px] font-bold text-axal-ink dark:text-gray-100">{title}</h3>
+      <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-axal-muted dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
+      <p className="m-0 text-[12.5px] text-axal-muted dark:text-gray-400">{WAITS[id]}</p>
+    </section>
+  );
+}
+function BankTabBody({ tab }) {
+  const holder = isSuperAdminUser(useAuth()?.user ?? null);
+  if (tab === 'accounts') return <BankAccountsPanel />;
+  if (!holder) {
+    return <p className="p-6 text-sm text-gray-700 dark:text-gray-300" data-testid="bank-admin-line">{ADMIN_CASH_LINE} <Link className="font-semibold text-axal-violet dark:text-violet-300" to="/admin/fund-admin/banking">Open Fund admin › Banking</Link></p>;
+  }
+  if (tab === 'cash') {
+    return (
+      <div className="flex flex-col gap-4" data-testid="bank-cash">
+        <EntityAccounts apis={MERCURY_APIS} />
+        <Wait id="series" title="Balance over time" />
+        <Wait id="monthly" title="Money in and out" />
+      </div>
+    );
+  }
+  return <Wait id="history" title="History" />;
+}
+
+export function BankAccountsPage() {
+  const { pathname } = useLocation();
+  const tab = tabOf(pathname);
+  const tabs = (
+    <>
+      <HeaderTab to="/admin/platform/bank-accounts" data-testid="bank-tab-accounts">Accounts</HeaderTab>
+      <HeaderTab to="/admin/platform/bank-accounts/cash" data-testid="bank-tab-cash">Cash</HeaderTab>
+      <HeaderTab to="/admin/platform/bank-accounts/history" data-testid="bank-tab-history">History</HeaderTab>
+    </>
+  );
+  return (
+    <ConsolePage crumb={{ ...PLATFORM, current: 'Bank accounts' }} title="Bank accounts" line="Each entity's bank accounts, their Mercury state and the receipts not yet matched." tabs={tabs} testId="admin-platform-bank-accounts">
+      <BankTabBody tab={tab} />
     </ConsolePage>
   );
 }

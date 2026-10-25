@@ -16,7 +16,8 @@
  *   - `experts`  GET /api/wellbeing/experts?limit=50 — for an admin, every
  *                active expert ranked, at most 50, with `total_active`. It
  *                carries no created date, so no wait is drawn.
- * Product testers have no store yet (part 4), so their board reads nothing.
+ * D1132: Product testers are counted on the glance now that part 4's store
+ * exists; their board's table and decisions are part 8's (#2894).
  */
 
 export const PATH = '/admin/approvals';
@@ -65,7 +66,7 @@ export const LANES = [
   { key: 'kyb', group: 'people', label: 'KYB', glance: 'kyb', door: 'KYC & KYB', isNew: true },
   { key: 'partner_profiles', group: 'people', label: 'Partner profiles', glance: 'partner_profiles', door: 'Partner profiles' },
   { key: 'exploring', group: 'people', label: 'Explorers ready for a profile', glance: 'exploring', door: 'Exploring board' },
-  { key: 'product_testers', group: 'people', label: 'Product testers', glance: null, here: true, isNew: true, waits: 'No product tester application is stored yet (part 4).' },
+  { key: 'product_testers', group: 'people', label: 'Product testers', glance: 'product_testers', here: true, isNew: true },
   { key: 'lp', group: 'people', label: 'LP applications', glance: 'lp', door: 'LP applications' },
   { key: 'cohort', group: 'programs', label: 'Spin-Out Lab applications', glance: 'cohort', door: 'Spin-Out Lab' },
   { key: 'lab_hosts', group: 'programs', label: 'Office-hours hosts', glance: 'lab_hosts', door: 'Spin-Out Lab › Hosts', isNew: true },
@@ -93,7 +94,7 @@ export const HQ_LANES = [
   { key: 'notices', label: 'Notice responses', door: 'Licences' },
   { key: 'support', label: 'Requests from studios', door: 'Support' },
   { key: 'proposals', label: 'Program proposals', door: null, waits: 'Programs › Proposals is not built yet (#2371).' },
-  { key: 'grants', label: 'Program-grant requests', door: null, waits: 'Licences › Program grants › Requests is not built yet (#2376).' },
+  { key: 'grants', label: 'Program-grant requests', door: 'Licences › Program grants › Requests' },
 ];
 export const isHqLane = (key) => HQ_LANES.some((l) => l.key === key);
 export const HQ_ONLY_TITLE = 'This lane belongs to the Super Admin.';
@@ -165,7 +166,10 @@ export function waitingTile(views) {
     value: failed.length ? `${nf(total)} +` : nf(total),
     sub: failed.length
       ? `${failed.map((v) => v.label).join(', ')} could not be read`
-      : `across ${nf(ready.length)} of ${nf(views.length)} lanes; ${nf(uncounted)} ${uncounted === 1 ? 'is' : 'are'} not counted yet`,
+      // D1132: every lane is counted now, so "0 are not counted yet" is not said.
+      : uncounted
+        ? `across ${nf(ready.length)} of ${nf(views.length)} lanes; ${nf(uncounted)} ${uncounted === 1 ? 'is' : 'are'} not counted yet`
+        : `across ${nf(ready.length)} of ${nf(views.length)} lanes`,
   };
 }
 

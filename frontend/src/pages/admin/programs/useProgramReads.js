@@ -169,11 +169,12 @@ export function useReferReads(tab) {
   const oldest = useRead('refer:oldest', 'oldest', tick, overview,
     () => api.adminReferralSubmissions({ status: OPEN_STATUSES.join(','), sort: 'oldest', limit: 200, offset: 0 }).then(paged('The open referrals')));
   const weekly = useRead('refer:weekly', 'weekly', tick, overview, () => api.adminReferralWeekly(12));
+  const funnel = useRead('refer:funnel', 'funnel', tick, overview, () => api.adminReferralFunnel());
   const strategic = useRead('refer:strategic', 'strategic', tick, overview, () => api.adminStrategicAccess({ status: 'requested', limit: 200 }).then(paged('The strategic access requests')));
   const glance = useRead('glance', 'glance', tick, overview, readGlance);
   return {
     open, all, converted, totals: { submitted, under_review: underReview, more_info_needed: moreInfo }, rejected, closed,
-    oldest, weekly, strategic, glance, reload,
+    oldest, weekly, funnel, strategic, glance, reload,
   };
 }
 

@@ -631,6 +631,8 @@ const LANE_CONSOLE = {
   lab_hosts: { to: '/admin/programs/spinout-lab/hosts', label: 'Spin-Out Lab hosts' },
   score_flags: { to: '/monitoring', label: 'Monitoring' },
   articles: { to: '/admin/articles', label: 'Content queue' },
+  // D1132 (#3012): part 4's store is laned; its board is Approvals' own.
+  product_testers: { to: '/admin/approvals/product-testers', label: 'Product testers' },
 };
 
 /** Predicates over what the server already sent. "Assigned to me" needs the side record. */

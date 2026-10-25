@@ -103,6 +103,7 @@ const DOCUMENTED = new Map([
   ['frontend/src/pages/raise/pitch',          'the Pitch deck studio (D894): its shell, its tabs and the model they read'],
   ['frontend/src/pages/raise/narrative',      'the Investor narrative tool (D906): its tabs inside the module page, and the model they read'],
   ['frontend/src/pages/raise/captable',       'the Cap table tool (D1015): its tabs inside the module page, and the model they read'],
+  ['frontend/src/pages/raise/dataroom',       'the Data room tool (D1101, D1106): its tabs, Files with its lightboxes, Upload and the dialogs, and the models they read'],
   ['frontend/src/pages/partner',              'the partner licence’s pages and the kit every partner zone imports'],
   ['frontend/src/pages/partner/delivery',     'the partner Delivery bucket’s zones and the edits they share (D637)'],
   ['frontend/src/pages/investor',             'investor workspace landing pages, mirroring frontend/src/pages/founder'],

@@ -14,6 +14,8 @@
  * single-use HMAC-signed state token persisted in oauth_state_tokens.
  */
 import { Hono } from 'hono';
+import { prepareWorkspaceConnect } from './google_workspace';
+import { DRIVE_FILE_SCOPE, WorkspaceError, clearWorkspaceConnection, ensureWorkspaceIntegration } from '../services/google/workspace';
 import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
@@ -832,6 +834,7 @@ export async function revokeAndDisconnectGoogle(
     }
   }
 
+  await clearWorkspaceConnection(env, userId);
   await clearGoogleLocalConnection(env, userId, options);
 }
 
@@ -932,6 +935,7 @@ calendar.post('/google/remove-gmail-access', safe('g_remove_gmail', 'Could not r
   const identityMarker = await makeGoogleSyncIdentityStateMarker(c.env, row.google_sub);
   const next = await buildGoogleOAuthStartResponse(
     c.env, user.id, loginHint, keepMeetTranscripts, '', keepMeetTranscripts, identityMarker,
+    googleGrantHasScope(row.scope, DRIVE_FILE_SCOPE),
   );
   if (next.status !== 200) return c.json(next.body, next.status);
   try {
@@ -970,6 +974,7 @@ export async function buildGoogleOAuthStartResponse(
   tag = '',
   meetTranscriptsPreserved = false,
   stateMarker = '',
+  workspaceFiles = false,
 ): Promise<{ status: 200 | 500; body: any }> {
   const missing = preflightOAuthSecrets(env, 'google');
   if (missing.length > 0) {
@@ -984,7 +989,7 @@ export async function buildGoogleOAuthStartResponse(
       },
     };
   }
-  const nonce = `${meetTranscriptsPreserved ? 'mp_' : meetTranscripts ? 'gm_' : ''}${tag}${stateMarker}${crypto.randomUUID().replace(/-/g, '')}`;
+  const nonce = `${tag === 'gw_' ? 'gw_' : meetTranscriptsPreserved ? 'mp_' : meetTranscripts ? 'gm_' : ''}${tag === 'gw_' ? '' : tag}${stateMarker}${crypto.randomUUID().replace(/-/g, '')}`;
   try {
     await persistState(env, nonce, userId, 'google');
     const state = await makeState(env, nonce);
@@ -993,10 +998,11 @@ export async function buildGoogleOAuthStartResponse(
     // pre-selects/highlights the matching row. The chooser still always
     // appears (`prompt=select_account consent`) so the user can pick a
     // different account if they really want to.
-    const url = buildGoogleAuthUrl(env, state, loginHint, meetTranscripts);
+    const url = buildGoogleAuthUrl(env, state, loginHint, meetTranscripts, workspaceFiles);
     return { status: 200, body: { redirect_url: url, auth_url: url } };
   } catch (e: any) {
-    console.error('[CAL:g_start] persistState/makeState failed:', e?.message, e?.stack || '');
+    if (tag === 'gw_') console.warn('[CAL:workspace_start]', 'failed');
+    else console.error('[CAL:g_start] persistState/makeState failed:', e?.message, e?.stack || '');
     return {
       status: 500,
       body: {
@@ -1076,7 +1082,7 @@ async function startGoogleOAuth(c: any, meetTranscripts = false) {
   const stateMarker = await makeGoogleSyncIdentityStateMarker(c.env, linkedGoogle?.google_sub);
   const { status, body } = await buildGoogleOAuthStartResponse(
     c.env, user.id, loginHint, meetTranscripts || preserveMeetTranscripts,
-    returnTag(returnTo, c.req.query('project_id')), preserveMeetTranscripts, stateMarker,
+    returnTag(returnTo, c.req.query('project_id')), preserveMeetTranscripts, stateMarker, await storedGoogleGrantHasScope(c.env, user.id, DRIVE_FILE_SCOPE),
   );
   if (status === 200 && (returnTo === 'integrations' || returnTo === 'build' || returnTo === 'record')) {
     c.header(
@@ -1099,6 +1105,21 @@ calendar.post('/google/meet-transcripts/connect', safe('g_meet_consent', 'Could 
     }
     return startGoogleOAuth(c, true);
   }));
+
+// D1091: incremental file consent shares Calendar's single token store.
+calendar.post('/google/workspace-files/connect', async (c) => {
+  try {
+    const user = await prepareWorkspaceConnect(c);
+    const existing = await c.env.DB.prepare('SELECT google_sub,scope FROM google_oauth_tokens WHERE user_id = ?').bind(user.id).first<{ google_sub: string; scope: string }>();
+    const marker = await makeGoogleSyncIdentityStateMarker(c.env, existing?.google_sub);
+    const keepMeet = meetTranscriptsEnabled(c.env) && googleGrantHasScope(existing?.scope, GOOGLE_MEET_TRANSCRIPT_SCOPE);
+    const result = await buildGoogleOAuthStartResponse(c.env, user.id, undefined, keepMeet, 'gw_', keepMeet, marker, true);
+    return c.json(result.body, result.status);
+  } catch (error) {
+    if (error instanceof Error && ['Unauthorized','Forbidden'].includes(error.message)) throw error;
+    return c.json({ error: error instanceof WorkspaceError ? error.code : 'workspace_unreadable' }, error instanceof WorkspaceError ? error.status as any : 503);
+  }
+});
 
 /**
  * Task #1 — pure persistence step of /google/callback, extracted for
@@ -1246,6 +1267,7 @@ export async function persistGoogleCallbackTokens(
 }
 
 calendar.get('/google/callback', async (c) => {
+  let workspaceCallback = false;
   // Intentionally no requireAuth — the user_id comes from the state row.
   let returnTo = readReturnTo(c);
   try {
@@ -1257,10 +1279,12 @@ calendar.get('/google/callback', async (c) => {
     // The signed nonce names Build's return when the cookie is on another host (#1597).
     const signed = stateRaw ? await verifyState(c.env, stateRaw) : null;
     returnTo = returnFromNonce(signed) || returnTo;
-    if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', error || 'invalid_state', returnTo);
+    if (error || !code || !stateRaw) return failureRedirect(c.env, 'google', signed?.startsWith('gw_') ? 'workspace_consent_refused' : error || 'invalid_state', returnTo);
     const nonce = signed;
     if (!nonce) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
     const newMeetGrant = nonce.startsWith('gm_');
+    const newWorkspaceGrant = nonce.startsWith('gw_');
+    workspaceCallback = newWorkspaceGrant;
     const userId = await consumeState(c.env, nonce, 'google');
     if (!userId) return failureRedirect(c.env, 'google', 'invalid_state', returnTo);
 
@@ -1268,6 +1292,7 @@ calendar.get('/google/callback', async (c) => {
     if (newMeetGrant && !String(tokens?.scope || '').split(/[\s,]+/).includes(GOOGLE_MEET_TRANSCRIPT_SCOPE)) {
       return failureRedirect(c.env, 'google', 'meet_scope_missing', returnTo);
     }
+    if (newWorkspaceGrant && !googleGrantHasScope(tokens?.scope, DRIVE_FILE_SCOPE)) return failureRedirect(c.env, 'google', 'workspace_scope_missing', returnTo);
     const refreshToken = tokens?.refresh_token;
     if (!refreshToken) return failureRedirect(c.env, 'google', 'no_refresh_token', returnTo);
     const info = await fetchGoogleUserinfo(tokens.access_token || '');
@@ -1319,6 +1344,7 @@ calendar.get('/google/callback', async (c) => {
     const previousGoogleSub = String(previousGoogleConnection?.google_sub || '');
     const identityChanged = retainedIdentityMatches === false
       || (retainedIdentityMatches === null && !!previousGoogleSub && !!googleSub && previousGoogleSub !== googleSub);
+    if (newWorkspaceGrant && (!previousGoogleSub || previousGoogleSub !== googleSub)) return failureRedirect(c.env, 'google', 'workspace_account_changed', returnTo);
     let previousGoogleIdentityLink = '';
     try {
       const link = (await sql`
@@ -1345,6 +1371,7 @@ calendar.get('/google/callback', async (c) => {
     if (!persist.ok) {
       return failureRedirect(c.env, 'google', persist.reason, returnTo);
     }
+    if (identityChanged) await clearWorkspaceConnection(c.env, userId);
     if (identityChanged && previousGoogleIdentityLink && previousGoogleIdentityLink !== googleSub) {
       // The original sign-in link remains intact if consent is abandoned; once
       // a different Calendar identity is confirmed, remove only that old link.
@@ -1364,15 +1391,17 @@ calendar.get('/google/callback', async (c) => {
     const extra: Record<string, string> = {};
     // The return banner tells a transcript grant from an ordinary connect (#1926).
     if (newMeetGrant) extra.meet = 'granted';
-    if (persist.warn) {
+    if (newWorkspaceGrant) { await ensureWorkspaceIntegration(c.env, userId); extra.workspace = 'granted'; }
+    if (persist.warn && !newWorkspaceGrant) {
       extra.warn = persist.warn;
       if (persist.warnEmail) extra.google_email = persist.warnEmail;
     }
     return successRedirect(c.env, 'google', returnTo, extra);
   } catch (e: any) {
     const msg = String(e?.message || e);
-    console.error('[CAL:g_callback]', msg, e?.stack || '');
-    return failureRedirect(c.env, 'google', bucketCallbackFailure(msg), returnTo);
+    if (workspaceCallback) console.warn('[CAL:workspace_callback]', 'failed');
+    else console.error('[CAL:g_callback]', msg, e?.stack || '');
+    return failureRedirect(c.env, 'google', workspaceCallback ? 'workspace_unreadable' : bucketCallbackFailure(msg), returnTo);
   }
 });
 

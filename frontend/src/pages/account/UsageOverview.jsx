@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { toUtcInstant } from '../../lib/notices';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { billingInvoicesApi } from '../../lib/api/billingInvoices';
+import { usageApi } from '../../lib/api/usage';
 import { EmptyState, PhoneBar, Pill, Unrecorded, Unreadable } from '../../ui';
 import { BTN, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import { overviewScopeFor } from './BillingCards';
@@ -11,12 +12,15 @@ import { allowanceView, balanceText } from './billingModel';
 import { limitView, packOrdersCard } from './limitsModel';
 import { USAGE_SUBTITLE, costReadable, monthIsEmpty, recentInvoices } from './costModel';
 import { DailyCostChart, TokenUsageChart } from './UsageCharts';
+import { storageView } from './usageModel';
+import { NOT_YET } from './storagePageModel';
 
 const OPEN = 'text-xs font-semibold text-axal-violet hover:underline dark:text-violet-300';
 const VALUE = 'font-mono text-[28px] font-medium tracking-tight';
 export const OVERVIEW_LINKS = Object.freeze({
   spend: '/account/usage/cost', balance: '/account/billing', daily: '/account/usage/cost',
   tokens: '/account/usage/cost', limits: '/account/usage/limits', invoices: '/account/billing',
+  storage: '/account/usage/storage',
 });
 export function UsageBar({ pct, label }) {
   return <div className="my-2 h-1.5 overflow-hidden rounded-full bg-axal-ground dark:bg-gray-800"
@@ -121,7 +125,19 @@ export function RecentInvoices({ invoices }) {
       </UsageCardState>
   </PanelCard>;
 }
-export function UsageOverviewView({ me, limit, overview, autoReload, cost, invoices, emptyMonth }) {
+/** D1166 (#2449), STG17: what the member stores, from D642's read; no plan sets an allowance yet. */
+export function StorageOverview({ storage }) {
+  const v = storage.status === 'ready' ? storageView(storage.data) : null;
+  return <PanelCard title="Storage" action={<Open card="storage">Open storage</Open>} data-testid="overview-storage">
+    <UsageCardState read={storage} what="Storage">
+      {v?.total != null
+        ? <p className={VALUE} data-testid="overview-storage-total">{v.total}</p>
+        : <Unrecorded reason={v?.anyUnreadable ? 'A place could not be read.' : 'Some files were stored before sizes were recorded.'}>Not recorded</Unrecorded>}
+      <p className="text-xs text-axal-muted dark:text-gray-400" data-testid="overview-storage-allowance">Your plan's allowance: {NOT_YET}.</p>
+    </UsageCardState>
+  </PanelCard>;
+}
+export function UsageOverviewView({ me, limit, overview, autoReload, cost, invoices, emptyMonth, storage }) {
   return <div className="flex min-w-0 flex-col gap-4" data-testid="usage-overview">
     <div className="-mx-[22px] lg:hidden"><PhoneBar back={{ label: 'Account', to: '/account' }} title="Usage" sub={USAGE_SUBTITLE} /></div>
     <header className="hidden lg:block"><h2 className="text-xl font-extrabold tracking-axal-heading">Usage</h2><p className="mt-1 text-[13px] text-axal-muted dark:text-gray-400">{USAGE_SUBTITLE}</p></header>
@@ -133,12 +149,15 @@ export function UsageOverviewView({ me, limit, overview, autoReload, cost, invoi
     </div>
     {emptyMonth === true && <><EmptyState size="sm" title="No AI runs yet this month." /><Link to="/studio" className={BTN.ghost}>Open Studio</Link></>}
     <div className="grid min-w-0 gap-3 md:grid-cols-2"><LimitsOverview me={me} limit={limit} /><RecentInvoices invoices={invoices} /></div>
+    {storage && <StorageOverview storage={storage} />}
   </div>;
 }
 /** Forward old anchors before mounting any account reads. */
 export default function UsageOverview({ role }) {
   const { hash } = useLocation();
-  if (/^#(?:days|where|models|last-run|storage)$/.test(hash)) return <Navigate to={`/account/usage/cost${hash}`} replace />;
+  // D1166: storage has its own page now.
+  if (hash === '#storage') return <Navigate to="/account/usage/storage" replace />;
+  if (/^#(?:days|where|models|last-run)$/.test(hash)) return <Navigate to={`/account/usage/cost${hash}`} replace />;
   return <UsageOverviewReads role={role} />;
 }
 export function readRecentInvoices(client = billingInvoicesApi) {
@@ -151,11 +170,12 @@ function UsageOverviewReads({ role, now = new Date() }) {
   const autoReload = useAccountRead(() => aiBudgetApi.autoReload());
   const cost = useAccountRead(() => aiBudgetApi.cost({ range: '30d', group: 'model' }));
   const invoices = useAccountRead(() => readRecentInvoices());
+  const storage = useAccountRead(() => usageApi.storage());
   // A 30-day read covers the whole month except on the 31st. Only that UTC
   // day needs the extra read; a charge of zero cannot prove zero runs.
   const needsMonth = now.getUTCDate() === 31;
   const month = useAccountRead(() => aiBudgetApi.cost({ range: 'mtd', group: 'model' }), { enabled: needsMonth });
   const activity = needsMonth ? month : cost;
   const emptyMonth = activity.status === 'ready' ? monthIsEmpty(activity.data, now) : null;
-  return <UsageOverviewView me={me} limit={limit} overview={overview} autoReload={autoReload} cost={cost} emptyMonth={emptyMonth} invoices={invoices} />;
+  return <UsageOverviewView me={me} limit={limit} overview={overview} autoReload={autoReload} cost={cost} emptyMonth={emptyMonth} invoices={invoices} storage={storage} />;
 }

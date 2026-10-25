@@ -178,8 +178,11 @@ test('D916: conversion waits for the recorded end or a full day after start, and
       ['invalid-end', '2026-10-23T10:00:00Z', 'unreadable', null],
     ] as const;
     for (const [title, start, end] of cases) {
-      const made = await f.create({ title, starts_at: start, ends_at: end, capacity: 4 });
+      // D1115 validates new schedules. Seed legacy representations directly so
+      // this reader test still covers old/invalid rows without bypassing the writer's contract.
+      const made = await f.create({ title, starts_at: '2026-10-23T10:00:00Z', capacity: 4 });
       assert.equal(made.status, 201);
+      f.db.prepare('UPDATE events SET starts_at = ?, ends_at = ? WHERE id = ?').run(start, end, made.body.event.id);
       f.db.prepare("INSERT INTO event_registrations(event_id,email,status) VALUES(?,'attended@example.test','attended'),(?,'registered@example.test','confirmed'),(?,'cancelled@example.test','cancelled'),(?,'waiting@example.test','waitlisted')").run(made.body.event.id, made.body.event.id, made.body.event.id, made.body.event.id);
     }
     const empty = await f.create({ title: 'no-registrations', starts_at: '2026-10-20T12:00:00Z' });
