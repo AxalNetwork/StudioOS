@@ -18,6 +18,8 @@ import type { Env, User } from '../types';
 import { getSQL } from '../db';
 import { canAccessProject, getProjectMembershipRole } from '../services/projectAccess';
 import { userMayReadDeal } from './deals';
+import { canViewEvent } from './events';
+import { addToCalendarLinks, joinLinkAllowed } from '../services/calendar/myEvents';
 import { logAdminAction } from '../services/adminAudit';
 import { requireAuth } from '../auth';
 import {
@@ -26,7 +28,7 @@ import {
   revokeGoogleOAuthGrant, loadRefreshTokenExport,
   exchangeGoogleCode, exchangeMicrosoftCode,
   fetchGoogleUserinfo, fetchMicrosoftUserinfo,
-  fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs,
+  fetchUserEvents, fetchUserEventsWithSources, attachPushRecords, eventsToIcs, KNOWN_KINDS,
   syncUserToGoogle, syncUserToMicrosoft,
   preflightOAuthSecrets,
 } from '../services/calendar';
@@ -207,7 +209,18 @@ calendar.get('/events.ics', safe('ics', 'Could not export calendar', async (c) =
   const toQ = url.searchParams.get('to');
   const fromDt = fromQ ? new Date(fromQ) : new Date(Date.now() - 7 * 86_400_000);
   const toDt = toQ ? new Date(toQ) : new Date(Date.now() + 180 * 86_400_000);
-  const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString());
+  if (Number.isNaN(fromDt.getTime()) || Number.isNaN(toDt.getTime())) {
+    return c.json({ detail: 'Invalid from/to ISO datetime' }, 400);
+  }
+  // D1033 — `kinds` narrows the file as it narrows `/events`, so
+  // `?kinds=event_ticket,event_hosted` is "my events" alone. A kind the
+  // aggregator does not know is refused rather than read as an empty file.
+  const kindsQ = url.searchParams.get('kinds');
+  const kinds = kindsQ ? kindsQ.split(',').map(s => s.trim()).filter(Boolean) : undefined;
+  if (kinds && kinds.some(k => !(KNOWN_KINDS as readonly string[]).includes(k))) {
+    return c.json({ detail: 'Unknown calendar kind' }, 400);
+  }
+  const events = await fetchUserEvents(c.env, user.id, lc(user.role), fromDt.toISOString(), toDt.toISOString(), kinds);
   const body = eventsToIcs(events, `Axal StudioOS — ${user.name}`);
   return new Response(body, {
     headers: {
@@ -587,6 +600,7 @@ calendar.delete('/founder-checkins/:id', safe('ck_cancel', 'Could not cancel che
 // ===========================================================================
 const PUSHABLE_KINDS = new Set([
   'advisor_booking', 'ic_meeting', 'founder_checkin', 'partner_office_hour',
+  'event_ticket', 'event_hosted',
 ]);
 calendar.post('/push/:kind/:source_id', safe('push_one', 'Could not push event', async (c) => {
   const user = await requireAuth(c);
@@ -604,6 +618,30 @@ calendar.post('/push/:kind/:source_id', safe('push_one', 'Could not push event',
   const { pushOneEventForUser } = await import('../services/calendar/sync');
   const result = await pushOneEventForUser(c.env, user.id, ev);
   return c.json({ ok: true, pushed: result });
+}));
+
+// ===========================================================================
+// D1033 — "Add to Google Calendar" and "Outlook" for one event.
+//
+// GET /api/calendar/event-links/:event_id. Built here, not on the page, so the
+// page never assembles a join link it was not given: the URLs carry the title,
+// the times, the place and the event page, and the join link only under the
+// same rule as `canReadJoinLink` in `routes/events.ts` (#2623). Anyone who may
+// see the event may have the links (`canViewEvent`), exactly as with its .ics.
+// ===========================================================================
+calendar.get('/event-links/:event_id', safe('event_links', 'Could not build calendar links', async (c) => {
+  const user = await requireAuth(c);
+  const eventId = Number(c.req.param('event_id'));
+  if (!Number.isInteger(eventId) || eventId <= 0) return c.json({ detail: 'Event not found' }, 404);
+  const env = c.env as Env;
+  const event = await env.DB.prepare('SELECT * FROM events WHERE id = ?').bind(eventId).first<Record<string, any>>();
+  if (!event) return c.json({ detail: 'Event not found' }, 404);
+  if (!(await canViewEvent(env, event, user))) return c.json({ detail: 'You cannot see this event' }, 403);
+  const registration = await env.DB.prepare(
+    'SELECT status, payment_status FROM event_registrations WHERE event_id = ? AND user_id = ?',
+  ).bind(eventId, user.id).first<{ status: string; payment_status: string }>();
+  const links = addToCalendarLinks(env, event, joinLinkAllowed(event, user, registration));
+  return c.json({ event_id: eventId, ics: `/api/events/${eventId}/ics`, ...links });
 }));
 
 // ===========================================================================
