@@ -2375,7 +2375,9 @@ function AppInner() {
   // Build's root owns its overview, as Raise, Grow and Network do: founder,
   // and not asking for the editor. Validate's root no longer branches at all
   // (D704, decision 2): every role its guard admits gets the cycle page.
-  const founderBuildLanding = effectiveRole === 'founder'
+  // D1064 (#2934): a Spin-Out Lab founder's /build is the overview too, as
+  // their /validate is, whatever their account role; `labRoles` admits them.
+  const founderBuildLanding = (effectiveRole === 'founder' || (user?.spinout_lab_active === 1 && effectiveRole !== 'admin'))
     && new URLSearchParams(location.search).get('mode') !== 'workspace';
   const networkParams = new URLSearchParams(location.search);
   const founderNetworkLanding = effectiveRole === 'founder'
@@ -3056,15 +3058,17 @@ function AppInner() {
           read, and /build/<module> its module pages. Every Build page above
           and below is a static route and wins over /build/:slug; no module
           slug is one of them. */}
+      {/* D1064 (#2934): Build's cycle pages admit a Spin-Out Lab founder, as
+          Validate's do; the Worker admits them on their own venture (ownsVenture). */}
       <Route path="/build" element={founderBuildLanding
-        ? guard(['admin', 'founder'], <CycleRoute cycle="build" />)
+        ? guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" />)
         : <Navigate to="/build/this-week" replace />} />
       {/* D686 §5.1: Connect a tool, the Build page with its lightbox open; /build/tools is the history's address. */}
-      <Route path="/build/connect" element={guard(['admin', 'founder'], <CycleRoute cycle="build" lightbox />)} />
+      <Route path="/build/connect" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" lightbox />)} />
       <Route path="/build/tools" element={guard(['admin', 'founder'], <HistoryRedirect to="/build/operating-systems" hash="#tools" />)} />
-      <Route path="/build/:slug" element={guard(['admin', 'founder'], <CycleRoute cycle="build" />)} />
-      <Route path="/build/:slug/:id" element={guard(['admin', 'founder'], <CycleRoute cycle="build" record />)} />
-      <Route path="/build/:slug/new" element={guard(['admin', 'founder'], <CycleRoute cycle="build" adding />)} />
+      <Route path="/build/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" />)} />
+      <Route path="/build/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" record />)} />
+      <Route path="/build/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="build" adding />)} />
       <Route path="/execution" element={guard(['admin', 'founder'], effectiveRole === 'founder' && !founderExecutionEditor
         ? <Navigate to={`/build${location.search}`} replace />
         : founderWorkspace('build', founderEditor(<ExecutionPage />)))} />

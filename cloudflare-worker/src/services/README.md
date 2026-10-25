@@ -120,6 +120,9 @@ no new schema, runtime or billing path is introduced.
 `cycleCards.ts` defines the D656 Figure and Card shapes, card failure isolation,
 and shared paging. `buildCycleRecords.ts` holds D662's D661-shaped record table,
 chart specs and bounded search/filter/sort/paging for the Build modules.
+`buildCreates.ts` (D1064, #2934) holds Build's three creates (feature, must-have,
+roadmap item) as statement builders, each INSERT first with `RETURNING id`, so
+a route answers with its own row (`createdId`) and another writer can batch them.
 
 - No `Context`, no `Response`. If you need one, the code belongs in `routes/`.
 - Never build SQL by interpolation. `check-sql-prepare` fails the build on a

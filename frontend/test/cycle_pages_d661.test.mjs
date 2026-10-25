@@ -438,8 +438,8 @@ test('A CYCLE IS MOUNTED ONLY ONCE ITS READ IS WIRED: all four are, each with it
   for (const c of new Set(mounted)) assert.ok(wired.includes(c), `${c} is mounted with no read in lib/api/cycles.js`);
   assert.match(app, /<Route path="\/validate\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="validate" \/>\)\} \/>/, 'Validate has its module pages');
   assert.match(app, /<Route path="\/raise\/:slug" element=\{guard\([^)]*\), <CycleRoute cycle="raise" \/>\)\} \/>/, 'Raise has its module pages');
-  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(\[[^\]]*\], <CycleRoute cycle="build" \/>\)/, "a founder's /build is the Build overview");
-  assert.match(app, /<Route path="\/build\/:slug" element=\{guard\(\[[^\]]*\], <CycleRoute cycle="build" \/>\)\} \/>/, 'Build has its module pages');
+  assert.match(app, /<Route path="\/build" element=\{founderBuildLanding\s*\? guard\(labRoles\(\[[^\]]*\]\), <CycleRoute cycle="build" \/>\)/, "a founder's /build is the Build overview");
+  assert.match(app, /<Route path="\/build\/:slug" element=\{guard\(labRoles\(\[[^\]]*\]\), <CycleRoute cycle="build" \/>\)\} \/>/, 'Build has its module pages');
   // Every Build page keeps its static route, and no module slug is one of them.
   const buildPages = [...app.matchAll(/<Route path="\/build\/([a-z-]+)"/g)].map((m) => m[1]);
   for (const page of ['roadmap', 'cadence', 'kpi', 'this-week', 'board', 'team', 'competitors', 'captable']) assert.ok(buildPages.includes(page), `/build/${page} lost its route`);

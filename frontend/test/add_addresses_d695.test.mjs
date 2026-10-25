@@ -259,7 +259,8 @@ test('initialValues and validate read T, CH and CK fields, parts and `when`, and
 
 const GUARDS = {
   validate: "labRoles(['admin', 'founder'])",
-  build: "['admin', 'founder']",
+  // D1064 (#2934): Build's cycle pages admit a Spin-Out Lab founder, as Validate's do.
+  build: "labRoles(['admin', 'founder'])",
   grow: "['admin', 'founder']",
   raise: "labRoles(['admin', 'founder'])",
 };

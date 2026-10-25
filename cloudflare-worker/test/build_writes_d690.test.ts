@@ -415,7 +415,7 @@ test('test 9: a keyless Workspace PUT with no row stores nothing', async () => {
 const NEW_WRITES: Array<{ name: string; path: string; body: unknown; action: string; entityType: string; entityId: (r: any) => string; state: string; batched: boolean }> = [
   { name: 'Add feature', path: '/features', body: { title: 'CSV export', impact: 'High' }, action: 'build_feature_created', entityType: 'build.solution-design',
     entityId: (r) => String(r.id), state: 'SELECT COUNT(*) AS n FROM mvp_features', batched: true },
-  { name: 'Add must-have', path: '/must-haves', body: { title: 'Bank sync', links: ['https://github.com/kestrel/app/issues/42'] }, action: 'build_must_have_created', entityType: 'build.solution-design',
+  { name: 'Add must-have', path: '/must-haves', body: { title: 'Bank sync', links: ['https://github.com/kestrel/app/issues/42'] }, action: 'build_must_have_created', entityType: 'build.prototype-mvp',
     entityId: (r) => String(r.id), state: 'SELECT (SELECT COUNT(*) FROM mvp_features) || \'/\' || (SELECT COUNT(*) FROM mvp_feature_links) AS n', batched: true },
   { name: 'Add founder', path: '/founders', body: { name: 'Lee Park', email: 'lee@example.test', role: 'CTO', equity_pct: 20 }, action: 'build_founder_created', entityType: 'build.founding-team',
     entityId: (r) => r.id, state: 'SELECT COUNT(*) AS n FROM cap_table_holders', batched: false },
