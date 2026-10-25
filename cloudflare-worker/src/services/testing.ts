@@ -416,15 +416,53 @@ async function changed(env: Env, stmts: any[]): Promise<boolean> {
  * Inbox, where their text remains readable. Historical URLs redirect to Studio.
  */
 export const MY_APPLICATIONS_LINK = '/inbox';
-const MEMBER_NOTICES = new Set(['testing_applied', 'testing_picked', 'testing_not_picked']);
+const MEMBER_NOTICES = new Set(['testing_applied', 'testing_picked', 'testing_not_picked', 'testing_withdrawn']);
 
-async function tell(env: Env, userId: number | null | undefined, type: string, title: string, body: string, payload: Record<string, unknown>) {
-  if (!userId) return;
+/** The bell, best-effort. True only when the notice reached their inbox. */
+async function tell(env: Env, userId: number | null | undefined, type: string, title: string, body: string, payload: Record<string, unknown>): Promise<boolean> {
+  if (!userId) return false;
   const link = MEMBER_NOTICES.has(type) ? MY_APPLICATIONS_LINK : null;
   try {
-    await notify(env, { userId: Number(userId), type, title, body, payload, link, channels: ['in_app'], category: 'product_testing' });
-  } catch (e) { console.warn('[testing] notify failed', (e as Error)?.message); }
+    return (await notify(env, { userId: Number(userId), type, title, body, payload, link, channels: ['in_app'], category: 'product_testing' })) != null;
+  } catch (e) { console.warn('[testing] notify failed', (e as Error)?.message); return false; }
 }
+
+/** How many of `userIds` the bell reached. */
+async function tellEach(env: Env, userIds: number[], type: string, title: string, body: string, payload: Record<string, unknown>): Promise<number> {
+  let n = 0;
+  for (const id of userIds) if (await tell(env, id, type, title, body, payload)) n += 1;
+  return n;
+}
+
+/**
+ * D1198 (#3148): who owns a programme, as people. A partner's programme is its
+ * firm: every active account the firm holds (`users.partner_id`). HQ's own
+ * has no owner to tell; HQ is the one acting, so callers ask only for a
+ * partner's.
+ */
+async function ownerPeople(env: Env, p: any): Promise<number[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT id FROM users WHERE partner_id = ? AND role = 'partner' AND is_active = 1 ORDER BY id",
+  ).bind(Number(p.owner_partner_id)).all();
+  return (results || []).map((r: any) => Number(r.id));
+}
+
+/** The picked testers on active accounts: who the bell tells when testing starts. */
+async function pickedPeople(env: Env, programmeId: number): Promise<number[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT a.user_id FROM testing_applications a JOIN users u ON u.id = a.user_id
+      WHERE a.programme_id = ? AND a.status = 'picked' AND u.is_active = 1 ORDER BY a.id`,
+  ).bind(programmeId).all();
+  return (results || []).map((r: any) => Number(r.user_id));
+}
+
+/**
+ * What a change says about who was told: counts, never a name or an address.
+ * `owner` is null for HQ's own programme (nobody to tell), else how many of the
+ * firm's accounts the bell reached. `mail_reach` is how many Mail's
+ * `testers:<uid>` rule would write to (D811); StudioOS sends no email.
+ */
+export type Told = { owner: number | null; testers?: number; mail_reach?: number };
 
 export async function createProgramme(env: Env, owner: Owner, actor: number, body: any) {
   const input = programmeInput(body, false);
@@ -511,7 +549,12 @@ export async function openProgramme(env: Env, actor: number, uid: string) {
       ? 'Only a draft can be opened.'
       : "A partner's programme opens only after HQ approves it.");
   }
-  return programmeDto(await programmeByUid(env, uid));
+  // D1198: the firm is told; HQ's own programme has nobody to tell.
+  const told: Told = { owner: p.owner_kind === 'partner'
+    ? await tellEach(env, await ownerPeople(env, p), 'testing_programme_opened', `${p.product_name} is open`,
+      'HQ opened your testing programme. Members can now apply.', { programme_uid: uid })
+    : null };
+  return { programme: programmeDto(await programmeByUid(env, uid)), told };
 }
 
 export async function closeProgramme(env: Env, actor: number, uid: string) {
@@ -519,7 +562,33 @@ export async function closeProgramme(env: Env, actor: number, uid: string) {
   if (!(await step(env, p, actor, ['open', 'testing'], 'closed', 'closed'))) {
     throw refuse(409, 'not_closable', 'Only an open programme can be closed.');
   }
-  return programmeDto(await programmeByUid(env, uid));
+  const told: Told = { owner: p.owner_kind === 'partner'
+    ? await tellEach(env, await ownerPeople(env, p), 'testing_programme_closed', `${p.product_name} is closed`,
+      'HQ closed your testing programme. It takes no new applications.', { programme_uid: uid })
+    : null };
+  return { programme: programmeDto(await programmeByUid(env, uid)), told };
+}
+
+/**
+ * D1198 (#3148): HQ moves an open or closed programme to testing. The firm
+ * and the picked testers are told by the bell; Mail writes to testers only by
+ * its own rule (`testers:<uid>`), so the answer counts that reach and sends
+ * nothing.
+ */
+export async function startTesting(env: Env, actor: number, uid: string) {
+  const p = await programmeByUid(env, uid);
+  if (!(await step(env, p, actor, ['open', 'closed'], 'testing', 'testing_started'))) {
+    throw refuse(409, 'not_testable', 'Only an open or closed programme can move to testing.');
+  }
+  const owner = p.owner_kind === 'partner'
+    ? await tellEach(env, await ownerPeople(env, p), 'testing_started', `Testing has started on ${p.product_name}`,
+      'HQ moved your programme to testing. The picked testers are told.', { programme_uid: uid })
+    : null;
+  const testers = await tellEach(env, await pickedPeople(env, p.id), 'testing_started', `Testing has started on ${p.product_name}`,
+    'You were picked, and testing has now started. The team will be in touch with what happens next.', { programme_uid: uid });
+  const mail_reach = (await testersAudience(env, uid)).length;
+  const told: Told = { owner, testers, mail_reach };
+  return { programme: programmeDto(await programmeByUid(env, uid)), told };
 }
 
 export async function apply(env: Env, user: { id: number; role: string }, uid: string, body: any) {
@@ -564,6 +633,37 @@ export async function withdraw(env: Env, userId: number, appUid: string) {
   ]);
   if (!ok) throw refuse(409, 'not_withdrawable', 'This application can no longer be withdrawn.');
   return (await myApplications(env, userId)).find((a) => a.uid === appUid);
+}
+
+export const WITHDRAW_REASON_MIN = 10;
+export const WITHDRAW_REASON_MAX = 500;
+
+/**
+ * D1198 (#3148): HQ withdraws a member's application, applied or picked, with
+ * the reason the member reads. A picked place is freed (places count `picked`).
+ * The event is HQ's: its actor is the Super Admin, its action
+ * `withdrawn_by_hq`, its detail the reason and the status it left.
+ */
+export async function withdrawByHq(env: Env, actor: number, appUid: string, reasonIn: unknown) {
+  const reason = typeof reasonIn === 'string' ? reasonIn.trim() : '';
+  if (reason.length < WITHDRAW_REASON_MIN || reason.length > WITHDRAW_REASON_MAX) {
+    throw refuse(400, 'invalid_request', `Give the reason they will read, ${WITHDRAW_REASON_MIN} to ${WITHDRAW_REASON_MAX} characters.`);
+  }
+  const a = await env.DB.prepare(
+    `SELECT a.id, a.user_id, a.status, p.id AS programme_id, p.uid AS programme_uid, p.product_name
+       FROM testing_applications a JOIN testing_programmes p ON p.id = a.programme_id WHERE a.uid = ?`,
+  ).bind(appUid).first<any>();
+  if (!a) throw refuse(404, 'not_found', 'Application not found.');
+  const ok = await changed(env, [
+    env.DB.prepare(`UPDATE testing_applications SET status = 'withdrawn', updated_at = datetime('now')
+      WHERE id = ? AND status IN ('applied', 'picked')`).bind(a.id),
+    eventAfter(env, a.programme_id, appUid, actor, 'withdrawn_by_hq', { reason, from: a.status }),
+  ]);
+  if (!ok) throw refuse(409, 'not_withdrawable', 'Only an application that is applied or picked can be withdrawn.');
+  const member = await tell(env, a.user_id, 'testing_withdrawn', `Your application to test ${a.product_name} was withdrawn`,
+    `HQ withdrew your application: ${reason}`, { programme_uid: a.programme_uid });
+  const row = await env.DB.prepare(`${SELECT_APPLICATION} WHERE a.id = ?`).bind(a.id).first<any>();
+  return { application: applicationDto(row), freed_place: a.status === 'picked', told: { member } };
 }
 
 /** The owner picks or declines one application, picks held to the places. */

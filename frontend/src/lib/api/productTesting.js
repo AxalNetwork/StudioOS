@@ -20,7 +20,14 @@
 // `adminTestingApi`, Super Admin:
 //   programmes       GET   /admin/testing/programmes?status=
 //   approve / reject POST  /admin/testing/programmes/:uid/approve|reject { note } (reject needs one)
-//   open / close     POST  /admin/testing/programmes/:uid/open|close
+//   open / close     POST  /admin/testing/programmes/:uid/open|close → { programme, told: { owner } }
+//   startTesting     POST  /admin/testing/programmes/:uid/testing   → { programme, told: { owner, testers, mail_reach } };
+//                                                                 open or closed only, else 409 not_testable (D1198)
+//   withdraw         POST  /admin/testing/applications/:uid/withdraw { reason } (10 to 500 characters)
+//                                                               → { application, freed_place, told: { member } };
+//                                                                 400 invalid_request, 409 not_withdrawable (D1198)
+//   `told` is counts only: `owner` is null for HQ's own programme, `mail_reach`
+//   how many Mail's testers:<uid> rule would write to. StudioOS sends no email.
 //   create, edit, applicants, pick, decline: as the partner's, on HQ's own programmes.
 //
 // Every path is written out in full so the drift check (scripts/check-api-drift.mjs)
@@ -60,6 +67,8 @@ export const adminTestingApi = {
   reject: (uid, note) => request(`/admin/testing/programmes/${enc(uid)}/reject`, { method: 'POST', body: JSON.stringify({ note }) }),
   open: (uid) => request(`/admin/testing/programmes/${enc(uid)}/open`, { method: 'POST' }),
   close: (uid) => request(`/admin/testing/programmes/${enc(uid)}/close`, { method: 'POST' }),
+  startTesting: (uid) => request(`/admin/testing/programmes/${enc(uid)}/testing`, { method: 'POST' }),
+  withdraw: (uid, reason) => request(`/admin/testing/applications/${enc(uid)}/withdraw`, { method: 'POST', body: JSON.stringify({ reason }) }),
   create: (programme) => request('/admin/testing/programmes', { method: 'POST', body: JSON.stringify(programme) }),
   edit: (uid, changes) => request(`/admin/testing/programmes/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   applicants: (uid) => request(`/admin/testing/programmes/${enc(uid)}/applicants`),
