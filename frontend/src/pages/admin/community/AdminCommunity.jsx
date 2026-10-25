@@ -471,7 +471,7 @@ function WellbeingCard({ wb, onRetry }) {
         <span className={wb.checkins.withheld ? SUB : `${MONO} text-[13px] font-bold text-axal-ink dark:text-gray-100`} data-testid="community-checkins">{wb.checkins.text}</span>
       )}
       <span className={SUB}>Shown as a range, counted without reading anyone’s answers. No mood or stress figure is shown here.</span>
-      <Link to="/admin?tab=wellbeing" className={`${LINK} self-start`}>Open wellbeing</Link>
+      <Link to="/admin/wellbeing" className={`${LINK} self-start`}>Open wellbeing</Link>
     </section>
   );
 }
