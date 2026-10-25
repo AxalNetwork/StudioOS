@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { api, personaSegmentsApi } from '../../../lib/api';
+import { api } from '../../../lib/api';
+import { personaSegmentsApi } from '../../../lib/api/personaSegments';
 import { reportError } from '../../../lib/log';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
