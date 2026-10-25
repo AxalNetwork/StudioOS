@@ -133,7 +133,7 @@ test('the record says the agreement is not ready from the Worker\'s answer, and 
   try {
     assert.ok(notReady.requests.some((r) => r.url === '/api/admin/partners/agreement-ready'), 'the desk asks the Worker');
     assert.ok(!notReady.requests.some((r) => r.url.startsWith('/api/legal/esign/templates/')), 'and no longer reads the template to work it out');
-    assert.match(notReady.textOf('partners-invitation-not-ready'), new RegExp(`^${AGREEMENT_NOT_READY.replace(/[.]/g, '\\.')}`));
+    assert.ok(notReady.textOf('partners-invitation-not-ready').startsWith(AGREEMENT_NOT_READY), 'the record says the agreement is not ready');
   } finally { await notReady.close(); }
   const isReady = await mounted('/admin/partner-invitations/invitations/7', worker({ rows: [row], details: { 7: detailFor(row, chosen) } }));
   try { assert.ok(!isReady.has('partners-invitation-not-ready')); } finally { await isReady.close(); }
@@ -186,7 +186,7 @@ test('PI10b mounted: a type HQ has not granted is a locked card, and a refusal i
     await view.change('partners-new-email', { value: 'new@example.com' });
     await view.change('partners-new-type-custom-box', { checked: true });
     await view.click('partners-new-send');
-    assert.match(view.text(), new RegExp(sentence.replace(/[.]/g, '\\.')));
+    assert.ok(view.text().includes(sentence), 'the refusal is the Worker\'s own sentence');
   } finally { await view.close(); }
   const held = await mounted('/admin/partner-invitations/invitations', worker({}));
   try {
