@@ -327,3 +327,141 @@ test('the editor calls only mounted reads, is mounted at /raise/pitch/edit, and 
   const at = (p) => worker.indexOf(`decks.get('${p}'`);
   for (const p of ['/model', '/video-link', '/brand-kit']) assert.ok(at(p) > 0 && at(p) < at('/:id'), `${p} is registered before /:id`);
 });
+
+/* ------------------------------------------------------------------ *
+ * D898 group C (#2676): the bound charts, PD9–PD9c
+ * ------------------------------------------------------------------ */
+
+const S_MRR = {
+  key: 'grow.mrr.monthly', label: 'MRR, monthly', unit: 'usd', cadence: 'monthly', module: 'Grow › Revenue and traction', href: '/grow/revenue-and-traction?project=7',
+  state: 'recorded', points: [{ x: '2026-07', y: 12000 }, { x: '2026-08', y: 14100 }, { x: '2026-09', y: 16000 }, { x: '2026-10', y: 18200 }],
+  as_of: '2026-10-31', source: 'Connector', grade: 'Measured', record_ref: 'project_metrics:9', snapshot_hash: 'b'.repeat(24),
+};
+const S_TYPED = { ...S_MRR, key: 'grow.mrr.typed', label: 'Typed MRR', source: 'Typed', grade: 'Stated', points: [{ x: '2026-08', y: 15000 }, { x: '2026-10', y: 18400 }], as_of: '2026-10-20', snapshot_hash: 'c'.repeat(24) };
+const S_INT = { key: 'validate.interviews.weekly', label: 'Interviews per week', unit: 'count', cadence: 'weekly', module: 'Validate › Customer research', href: '/validate/customer-research?project=7',
+  state: 'recorded', points: [{ x: '2026-10-05', y: 2 }, { x: '2026-10-12', y: 0 }], as_of: '2026-10-07', source: 'Recorded', grade: 'Sourced', record_ref: 'discovery_interviews:2', snapshot_hash: 'd'.repeat(24) };
+const S_ARR = { ...S_MRR, key: 'grow.arr.monthly', label: 'ARR, monthly', state: 'not_recorded', points: [], as_of: null, source: null, grade: 'Not recorded', record_ref: null, snapshot_hash: null };
+const TYPES = ['line', 'columns', 'stacked', 'percent_bar', 'ranked_bars', 'funnel', 'cohort_heatmap', 'timeline', 'metric_tiles', 'comparison_table', 'waterfall', 'nested_bars'].map((type) => ({
+  type, label: type, description: type,
+  fits: ['ranked_bars', 'funnel', 'cohort_heatmap', 'timeline', 'comparison_table', 'nested_bars'].includes(type) ? 0 : 2,
+  reason: type === 'cohort_heatmap' ? 'Needs churn by month joined, not recorded on StudioOS yet.' : ['ranked_bars', 'funnel', 'timeline', 'comparison_table', 'nested_bars'].includes(type) ? 'Needs other data.' : null,
+}));
+const CHARTS = { project_id: 7, series: [S_MRR, S_TYPED, S_INT, S_ARR], types: TYPES };
+const ok = (data) => ({ status: 'ok', data });
+// The binding as saved at v3, before October's snapshot.
+const OLD_BINDING = { source_key: 'grow.mrr.monthly', record_ref: 'project_metrics:7', as_of: '2026-09-30', grade: 'Measured', snapshot_hash: 'a'.repeat(24) };
+const CHART_CARD = {
+  title: 'Synthetic chart', layout: 'chart_text',
+  blocks: [{ id: 'c1', kind: 'chart', grid: { c1: 1, c2: 8, r1: 2, r2: 6 }, chart_type: 'line', range: 'all', previous: false, labels: true, series: [{ label: 'MRR', binding: OLD_BINDING }] }],
+};
+
+test('the chart model: a bound series draws up to its as of and its range; Refresh moves the binding; nothing missing is a 0', async () => {
+  const { pointsFor, seriesChanged, chartView, refreshSeries, chartBlock, typeChoices, seriesChoices, rangeStart, valueWord, OTHER_UNIT } = await import('../src/pages/raise/pitch/chartModel.js');
+  assert.deepEqual(pointsFor(S_MRR, OLD_BINDING, 'all', '2026-10-25').map((p) => p.x), ['2026-07', '2026-08', '2026-09'], 'Keep as of: never a later month');
+  assert.deepEqual(pointsFor(S_MRR, { as_of: '2026-10-31' }, '3m', '2026-10-25').map((p) => p.x), ['2026-08', '2026-09', '2026-10']);
+  assert.equal(rangeStart('12m', '2026-10-25'), '2025-11-01');
+  assert.deepEqual(pointsFor(S_INT, { as_of: '2026-10-07' }, 'all', '2026-10-25').map((p) => p.x), ['2026-10-05'], 'a weekly point compares by day');
+  assert.equal(seriesChanged(S_MRR, OLD_BINDING), true);
+  assert.equal(seriesChanged(S_MRR, { snapshot_hash: S_MRR.snapshot_hash }), false);
+  const view = chartView(CHART_CARD.blocks[0], ok(CHARTS), '2026-10-25');
+  assert.equal(view.state, 'ready');
+  assert.deepEqual(view.chart.values, [12000, 14100, 16000]);
+  assert.match(view.chips[0].text, /^Connector · Grow › Revenue and traction · 30 Sep · Measured$/);
+  assert.match(view.alt, /Sep 2026 \$16,000\.$/);
+  // Two series, a month only one has: a line leaves it blank, a stacked column leaves the month out.
+  const two = { chart_type: 'line', range: 'all', series: [{ label: 'MRR', binding: { ...OLD_BINDING, as_of: '2026-10-31' } }, { label: 'Typed', binding: { source_key: 'grow.mrr.typed', as_of: '2026-10-20' } }] };
+  const lines = chartView(two, ok(CHARTS), '2026-10-25');
+  assert.deepEqual(lines.chart.series[1].values, [null, 15000, null, 18400], 'a missing month is blank, never 0');
+  const stacked = chartView({ ...two, chart_type: 'stacked' }, ok(CHARTS), '2026-10-25');
+  assert.deepEqual(stacked.chart.rows.map((r) => r.label), ['Aug 2026', 'Oct 2026']);
+  assert.ok(stacked.chips[1].typed, 'the typed series keeps its Typed chip');
+  const fall = chartView({ ...CHART_CARD.blocks[0], chart_type: 'waterfall', series: [{ label: 'MRR', binding: { ...OLD_BINDING, as_of: '2026-10-31' } }] }, ok(CHARTS), '2026-10-25');
+  assert.deepEqual(fall.chart.rows.map((r) => [r.value, r.below]), [[2100, 0], [1900, 0], [2200, 0]]);
+  assert.equal(chartView({ chart_type: 'line', series: [{ label: 'X', binding: { source_key: 'grow.mrr' } }] }, ok(CHARTS), '2026-10-25').state, 'unbound', 'a slot, not a dated series');
+  assert.equal(chartView({ chart_type: 'line', range: '3m', series: [{ binding: { source_key: 'validate.interviews.weekly', as_of: '2026-07-01' } }] }, ok(CHARTS), '2026-10-25').state, 'empty');
+  assert.equal(chartView(CHART_CARD.blocks[0], { status: 'error' }, '2026-10-25').state, 'unreadable');
+  const fresh = refreshSeries(CHART_CARD.blocks[0], 0, ok(CHARTS));
+  assert.deepEqual(fresh.series[0].binding, { source_key: 'grow.mrr.monthly', record_ref: 'project_metrics:9', as_of: '2026-10-31', grade: 'Measured', snapshot_hash: 'b'.repeat(24) });
+  assert.equal(CHART_CARD.blocks[0].series[0].binding.as_of, '2026-09-30', 'the old block is untouched');
+  assert.equal(chartBlock({ type: 'columns', keys: ['grow.mrr.monthly'], previous: true }, ok(CHARTS)).previous, false, 'previous period is a single line\'s');
+  assert.equal(chartBlock({ type: 'line', keys: ['grow.mrr.monthly', 'nope'] }, ok(CHARTS)).series.length, 1, 'an unknown series is never bound');
+  const t = Object.fromEntries(typeChoices(ok(CHARTS), ['grow.mrr.monthly']).map((x) => [x.type, x]));
+  assert.equal(t.cohort_heatmap.reason, 'Needs churn by month joined, not recorded on StudioOS yet.');
+  assert.equal(t.stacked.reason, 'Needs two series in the same unit.');
+  assert.equal(t.line.disabled, false);
+  const c = seriesChoices(ok(CHARTS), ['grow.mrr.monthly']);
+  assert.deepEqual(c.map((s) => s.key), ['grow.mrr.monthly', 'grow.mrr.typed', 'validate.interviews.weekly'], 'a series with nothing recorded is not offered');
+  assert.equal(c.find((s) => s.key === 'validate.interviews.weekly').blocked, OTHER_UNIT);
+  assert.equal(valueWord(null, 'usd'), NOT_RECORDED);
+});
+
+test('PD9 and PD9c: a selected chart shows its toolbar; Data says Changed since with Refresh; Save writes the new binding; types the series cannot fill are greyed', async () => {
+  let saved = null;
+  const deck = { ...DECK, slides: [CHART_CARD] };
+  const m = await mount({
+    deckGet: async () => deck, 'editor.chartSeries': async () => CHARTS,
+    deckUpdate: async (id, body) => { saved = body; return { ...deck, id: 32, version: 4, slides: body.slides }; },
+  });
+  try {
+    assert.ok(m.calls.some((c) => c[0] === 'editor.chartSeries' && c[1] === 7));
+    const drawn = m.by('pitch-chart');
+    assert.ok(drawn, 'the chart is drawn from its series');
+    assert.doesNotMatch(m.pr(drawn)['aria-label'], /Oct 2026/, 'Keep as of: the saved version never shows October');
+    assert.match(m.text(m.by('pitch-chart-chips')), /Connector · Grow › Revenue and traction · 30 Sep · Measured/);
+    await m.press(m.by('pitch-editor-block-c1'));
+    assert.ok(m.by('pitch-chart-toolbar'), 'the toolbar replaces Eadwyn\'s bar');
+    await m.press(m.by('pitch-chart-change-type'));
+    assert.equal(m.pr(m.by('pitch-chart-type-cohort_heatmap')).disabled, true);
+    assert.equal(m.pr(m.by('pitch-chart-type-cohort_heatmap')).title, 'Needs churn by month joined, not recorded on StudioOS yet.');
+    await m.press(m.by('pitch-chart-type-columns'));
+    await m.press(m.by('pitch-chart-data-open'));
+    assert.match(m.text(m.by('pitch-chart-changed-0')), /Changed since 30 Sep.*Refresh.*Keep as of 30 Sep/);
+    await m.press(m.by('pitch-chart-refresh-0'));
+    assert.ok(!m.by('pitch-chart-changed-0'), 'refreshed: no longer changed');
+    assert.match(m.pr(m.by('pitch-chart'))['aria-label'], /Oct 2026 \$18,200/);
+    assert.equal(saved, null, 'nothing is written before Save');
+    await m.press(m.by('pitch-editor-save'));
+    await m.press(m.by('pitch-editor-save-run'));
+    const block = saved.slides[0].blocks[0];
+    assert.equal(block.chart_type, 'columns');
+    assert.deepEqual(block.series[0].binding, { source_key: 'grow.mrr.monthly', record_ref: 'project_metrics:9', as_of: '2026-10-31', grade: 'Measured', snapshot_hash: 'b'.repeat(24) });
+  } finally { await m.unmount(); }
+});
+
+test('PD9b: the library lists the twelve types with their fits, offers only recorded series, and inserts a bound chart that Save keeps', async () => {
+  let saved = null;
+  const deck = { ...DECK, slides: [{ title: 'Synthetic empty', layout: 'statement', blocks: [] }, CHART_CARD] };
+  const m = await mount({
+    deckGet: async () => deck, 'editor.chartSeries': async () => CHARTS,
+    deckUpdate: async (id, body) => { saved = body; return { ...deck, id: 32, version: 4, slides: body.slides }; },
+  });
+  try {
+    await m.press(m.by('pitch-editor-chart-library'));
+    assert.ok(m.by('pitch-chart-library'));
+    assert.match(m.text(m.by('pitch-library-fit-cohort_heatmap')), /Needs churn by month joined/);
+    assert.equal(m.pr(m.by('pitch-library-type-cohort_heatmap')).disabled, true);
+    assert.match(m.text(m.by('pitch-library-fit-line')), /Fits 2 of your series/);
+    assert.ok(!m.by('pitch-library-series-grow.arr.monthly'), 'nothing recorded: not offered');
+    assert.match(m.text(m.by('pitch-library-reuse')), /Card 2 · MRR/, 'charts already in the deck can be reused');
+    assert.equal(m.pr(m.by('pitch-chart-insert')).disabled, true, 'no series, no chart');
+    await act(async () => { m.pr(m.by('pitch-library-series-grow.mrr.monthly')).onChange({ target: {} }); }); await m.settle();
+    assert.equal(m.pr(m.by('pitch-library-series-validate.interviews.weekly')).disabled, true, 'a different unit');
+    assert.ok(m.by('pitch-library-preview'));
+    await m.press(m.by('pitch-chart-insert'));
+    assert.ok(!m.by('pitch-chart-library'));
+    await m.press(m.by('pitch-editor-save'));
+    await m.press(m.by('pitch-editor-save-run'));
+    const block = saved.slides[0].blocks[0];
+    assert.deepEqual([block.kind, block.chart_type, block.range, block.grid], ['chart', 'line', '12m', { c1: 1, c2: 8, r1: 1, r2: 4 }]);
+    assert.equal(block.series[0].binding.snapshot_hash, 'b'.repeat(24));
+    assert.deepEqual(Object.keys(block.series[0]).sort(), ['binding', 'label'], 'a bound series carries no typed points');
+  } finally { await m.unmount(); }
+});
+
+test('the chart tools call only the mounted read and draw no canvas sample', () => {
+  const src = read('frontend/src/pages/raise/pitch/ChartTools.jsx') + read('frontend/src/pages/raise/pitch/chartModel.js');
+  assert.ok(read('frontend/src/pages/raise/pitch/PitchEditor.jsx').includes('deckEditorApi.chartSeries('));
+  for (const sample of ['Northwind', '[$', '16,950', '[12 Oct]', 'Stripe counts']) assert.ok(!src.includes(sample), `a canvas sample reached the page: ${sample}`);
+  assert.ok(!/window\.(confirm|alert|prompt)\(|dangerouslySetInnerHTML|<svg/.test(src), 'no pop-up, and the charts draw through ui/Charts');
+  assert.ok(read('cloudflare-worker/src/index.ts').indexOf("app.route('/api/decks', deckSources)") < read('cloudflare-worker/src/index.ts').indexOf("app.route('/api/decks', decks)"), '/chart-series is mounted before /:id');
+});
