@@ -146,7 +146,19 @@ test('mounted HQ page: a failed ledger read says so, and an empty ledger says to
 });
 
 test('the studio\'s Programs tab: HQ decides, nine programs, nothing "Not granted"', async () => {
+  // D988 (#2779): the tab reads D984's answer; with no grant row a program HQ grants is "Not recorded".
+  const original = globalThis.fetch;
+  const entry = (p, standing, word) => ({ program_key: p.key, name: p.name, group: p.group, standing, word, line: '', grant: null });
+  globalThis.fetch = async (url) => {
+    const u = new URL(String(url), 'http://x');
+    if (u.pathname === '/api/licence/mine/programs') {
+      return json({ linked: true, source: 'hq', licence: { brand_name: 'Studio Lisbon' }, reason: null, programs: PROGRAMS.map((p) => (
+        p.grant === 'hq' ? entry(p, 'hq_only', 'Runs at HQ') : p.grant === 'notready' ? entry(p, 'not_offered', 'Not offered yet') : entry(p, 'not_recorded', NOT_RECORDED_GRANT))) });
+    }
+    return json({});
+  };
   const v = await render(h(ProgramsTab), '/admin/my-licence/programs');
+  globalThis.fetch = original;
   try {
     assert.match(v.of('licence-programs-rule'), /HQ decides which programs your studio runs/);
     assert.match(v.of('licence-program-product-testing'), /Runs at HQ/);
@@ -163,7 +175,7 @@ test('the routes, the guard, the strip, the tab door and nothing that writes', (
   assert.ok(app.includes(`<Route path="/admin/my-licence/programs" element={guard(['admin'], <MyLicencePage />)} />`));
   assert.match(app, /\{hqStrip === 'Licences' && \(\s*<HqSubNavStrip label="Licences">/);
   assert.ok(read('frontend/src/pages/subsidiary/LicenceFrame.jsx').includes('<Tab to="/admin/my-licence/programs" tab="programs">Programs</Tab>'));
-  assert.ok(read('frontend/src/pages/subsidiary/MyLicencePage.jsx').includes("{tab === 'programs' && <ProgramsTab />}"));
+  assert.ok(read('frontend/src/pages/subsidiary/MyLicencePage.jsx').includes("{tab === 'programs' && <ProgramsTab user={user} />}"));
   const page = read('frontend/src/pages/admin/grants/ProgramGrants.jsx');
   assert.doesNotMatch(page + read('frontend/src/pages/subsidiary/licence/ProgramsTab.jsx'), /method: ['"](POST|PUT|PATCH|DELETE)|api\.\w+\(\{|\.post\(/);
   assert.match(page, /export default function ProgramGrants\(\) \{\s*return \(\s*<AdminBoardFrame workspace="Licences"/);
