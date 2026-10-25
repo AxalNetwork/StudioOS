@@ -44,6 +44,7 @@ import MvpFromGithub from './MvpFromGithub';
 import UpdatesHistory from './UpdatesHistory';
 import ReportingDesk from './ReportingDesk';
 import BuildPlan, { BuildPlanDoor } from './BuildPlan';
+import { PmfPart, ReadinessDoor } from './PmfPart';
 import UpdateAskReplies from './UpdateAskReplies';
 import CallsHistory from './CallsHistory';
 import RaiseReceiptMatches from '../../components/RaiseReceiptMatches';
@@ -175,6 +176,13 @@ const CYCLE_DEFS = {
         <>
           <NarrativeHome data={data} />
           {mercuryPart('investor-narrative', data, ctx)}
+        </>
+      ),
+      // D1141 (#2433): Product-market fit, not scored yet, with model v1; then From Mercury.
+      'fundraising-readiness': (data, ctx) => (
+        <>
+          <PmfPart projectId={ctx.projectId} />
+          {mercuryPart('fundraising-readiness', data, ctx)}
         </>
       ),
       'capital-relationships': (data, ctx) => (
@@ -1016,6 +1024,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         />
         {/* D1063 (#2426): the door to the plan, under Build's overview. */}
         {cycle === 'build' && <BuildPlanDoor search={q} />}
+        {/* D1141 (#2433, RD12): Validate's records feed Product-market fit on Fundraising readiness. */}
+        {cycle === 'validate' && <ReadinessDoor search={q} />}
         <AlsoIn role="founder" row={name} />
       </>
     );

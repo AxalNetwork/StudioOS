@@ -672,6 +672,15 @@ prospects that responded to a round call (D653) and counts their soft
 commitments; it reads `round_call_recipients` and writes nothing. See
 `decisions/D663.md`.
 
+**UPDATE 2026-10-25 (D1141, #2433):** Fundraising readiness's module page draws
+a Product-market fit part above From Mercury (`pages/cycles/PmfPart.jsx`). It
+says Not scored yet and folds model v1 (RD4), because no route computes the
+score on `main`; it reads nothing. Validate's overview gains a line opening
+`/raise/fundraising-readiness` with the venture kept (RD12). No route and no API
+method are added. Canvas RD1–RD19 is in `design/incoming/`; the engine,
+`parts.pmf`, the page, RD4 from the store and Eadwyn wait for D1141's five
+parts.
+
 ### Cycle overviews and module pages (D661, #1474)
 
 The four cycles are mounted through `frontend/src/pages/cycles/CycleRoute.jsx`. D661 gives the chart and table shape; D696 adds each module’s record routes after D690’s record API landed. Rows link only when the module read declares them linkable with a real store id.
