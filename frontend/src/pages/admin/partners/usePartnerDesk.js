@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, dd } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
-import { redemptionDealSet } from './partnersDeskModel';
+import { overviewReply, redemptionDealSet } from './partnersDeskModel';
 
 /**
  * D923 (#2370) — the desk's reads, each made alone so one that fails leaves
@@ -12,7 +12,10 @@ import { redemptionDealSet } from './partnersDeskModel';
  *   contracts    R5, every deal, paged at 500 until its `total`;
  *   links        R6, the partner accounts and firms;
  *   template     R8, for the agreement-ready rule;
- *   calls        R4, one per deal with redemptions (Guard F's fan-out).
+ *   calls        R4, one per deal with redemptions (Guard F's fan-out), for Referrals;
+ *   overview     part 4's `GET /api/admin/partners/overview` (D927): every
+ *                Overview tile, Needs-you row and chart, and the Overview
+ *                tab's count (D929).
  * Deals and one deal also read R3 (top deals) and R9 (due-diligence cases).
  * A record's own reads (R7, R10, R4 for its last redeemers, R12 on request)
  * are made by the record with `useRead`.
@@ -170,6 +173,7 @@ export function usePartnerDesk(route) {
   const contracts = useRead('contracts', 'contracts', tick, true, readContracts);
   const links = useRead('links', 'links', tick, true, readLinks);
   const template = useRead('template', 'template', tick, true, () => api.esignTemplate('partner_services'));
+  const overview = useRead('overview', 'overview', tick, true, () => api.adminPartners.overview().then(overviewReply));
   const onDeals = route.tab === 'deals';
   const top = useRead('top', 'top', tick, onDeals, () => api.adminPartners.listTopDeals({ limit: 5, status: 'all' }).then((r) => itemsOf(r, 'The top deals')));
   const cases = useRead('cases', 'cases', tick, onDeals,
@@ -179,5 +183,5 @@ export function usePartnerDesk(route) {
   const ids = set.state === 'ready' ? set.deals.map((d) => d.id) : [];
   const calls = useFanOut(ids, tick, set.state === 'ready');
 
-  return { invitations, deals, contracts, links, template, top, cases, set, calls, tick, reload, extra, adopt };
+  return { invitations, deals, contracts, links, template, overview, top, cases, set, calls, tick, reload, extra, adopt };
 }

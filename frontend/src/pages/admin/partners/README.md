@@ -20,6 +20,8 @@ over its tab, and the dialogs.
   (PI9e) and first use (PI9b). Each chart is a block in D893's four states
   with "View as table", drawn with `../../../ui/Charts.jsx`. A C1 bar opens
   Invitations at `?stage=`, a C3 segment Deals at `?type=&state=`.
+  Every tile, Needs-you row and chart reads part 4's overview read
+  (`GET /api/admin/partners/overview`, D927; D929 §7); only first use reads R1.
   Overview's Needs-you row about unattached accounts opens the Firms tab.
 - `PartnersInvitations.jsx` — Invitations (PI2; PI11b on a phone), on part 3's
   server list (D926, D950): search, stage chips, type, inviter, first send,
@@ -59,7 +61,8 @@ over its tab, and the dialogs.
 ## Rules
 
 - The desk reads only what D923 §2 lists, and since D950 part 4's single
-  invitation, its offer preview and part 3's lookup: the invitations, the six deal lists,
+  invitation, its offer preview and part 3's lookup: the invitations, the six
+  deal lists,
   top deals, one deal's redemptions, the uncapped partner-deals read in
   Contracts, the firm links, one envelope, the Partner Services template, the
   partner due-diligence cases, one member's obligations, the members matching
@@ -74,9 +77,10 @@ over its tab, and the dialogs.
   says "Not in this read".
 - Every dialog is a `Lightbox` that says only what the Worker does. A result
   or a refusal sits inside it until Done: no toast, no timer.
-- Nothing D923 §3 lists under "Not drawn now" is drawn, except C1–C4 (D929)
-  and what D950 draws from parts 3 and 4: the Email column, the CSV, the offer
-  text, the step dates and the history. Adjust terms waits for O-TERMS.
+- Nothing D923 §3 lists under "Not drawn now" is drawn, except C1–C4, which
+  D929 draws from part 4's overview read, and what D950 draws from parts 3
+  and 4: the Email column, the CSV, the offer text, the step dates and the
+  history. Adjust terms waits for O-TERMS.
 - The Invitations tab and one invitation draw the stored stage: since D924 a
   resend keeps it, so Guard I's repair is not applied there (`repair: false`).
   The other tabs keep it until their parts.
