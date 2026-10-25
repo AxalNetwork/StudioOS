@@ -23,7 +23,7 @@ import * as calendar from '../src/services/calendar.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 
-const JWT_SECRET = 'synthetic-caprel-d1190-'.repeat(3);
+const JWT_SECRET = 'unit-test-jwt-secret-0123456789-abcdef';
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const mig = (n: string) => readFileSync(resolve(process.cwd(), `cloudflare-worker/sql/migrations/${n}`), 'utf8');
 const ddl = (n: string) => mig(n).split(/;\s*\n/).map((s) => s.replace(/^\s*--.*$/gm, '').trim())
