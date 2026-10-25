@@ -11,6 +11,7 @@ import { railBody } from './railPages.js';
 // block does not name exactly the files in lib/api/.
 // api-modules:begin
 export * from './api/adminAiUsage.js';
+export * from './api/adminApprovals.js';
 export * from './api/adminCapitalAttestations.js';
 export * from './api/adminIncorporations.js';
 export * from './api/adminLab.js';
