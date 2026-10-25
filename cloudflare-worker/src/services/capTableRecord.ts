@@ -231,9 +231,17 @@ function classOut(c: ClassRow) {
   };
 }
 
+/** D1022 (#2859): each register holder's kind for this venture, by id. */
+async function holderKindsOf(env: Env, projectId: number): Promise<Map<number, string>> {
+  const rows = (await env.DB.prepare(
+    'SELECT id, kind FROM cap_table_holders WHERE project_id = ? AND kind IS NOT NULL',
+  ).bind(projectId).all<{ id: number; kind: string }>()).results || [];
+  return new Map(rows.map((r) => [Number(r.id), String(r.kind)]));
+}
+
 /** GET /record/:projectId — the record by holder and by class, outstanding, fully diluted, the instruments and the proposals. */
 export async function readRecord(env: Env, projectId: number) {
-  const [classes, rows, currency] = await Promise.all([classesOf(env, projectId), issuancesOf(env, projectId), currencyOf(env, projectId)]);
+  const [classes, rows, currency, kinds] = await Promise.all([classesOf(env, projectId), issuancesOf(env, projectId), currencyOf(env, projectId), holderKindsOf(env, projectId)]);
   const byId = new Map(classes.map((c) => [c.id, c]));
   const related = new Map(rows.map((r) => [r.id, r.uid]));
   const isPool = (cls: number) => byId.get(cls)?.kind === 'option_pool';
@@ -246,6 +254,8 @@ export async function readRecord(env: Env, projectId: number) {
     available: true, reason: null,
     rows: holderKeys.map((k) => ({
       ...b.names.get(k)!,
+      // D1022: the register row's kind (founder, investor, employee, advisor), so Who owns can group; null for a holder named only on the issuance.
+      kind: kinds.get(b.names.get(k)!.holder_id ?? -1) ?? null,
       shares: sumOf(b.shares.get(k)),
       options: sumOf(b.options.get(k)),
       by_class: [...new Set([...(b.shares.get(k)?.keys() ?? []), ...(b.options.get(k)?.keys() ?? [])])]
@@ -659,6 +669,59 @@ export async function recordFromSource(env: Env, a: { projectId: number; actorId
   return { id: Number(row?.id), uid };
 }
 
+/**
+ * A source's item, proposed (a close, D1021). One live row per `originRef`, so a
+ * second writer of the same item (the Closing room, CAPITAL's CP11) finds this
+ * row instead of adding one; the audit row is in the same batch.
+ */
+export async function proposeFromSource(env: Env, a: { projectId: number; actor: RecordActor; origin: Origin; originRef: string; body: Record<string, unknown> }) {
+  const f = await readFields(env, a.projectId, a.body, EMPTY);
+  if (!f.kind) throw new RecordError(400, 'incomplete', 'Say what kind of issuance this is.', { missing: ['kind'] });
+  if (f.holder_id == null && f.holder_name == null) throw new RecordError(400, 'incomplete', 'Say who holds it.', { missing: ['holder'] });
+  checkShape(f);
+  if (a.actor.role === 'admin' && !f.correction_reason) throw new RecordError(400, 'reason_required', 'An admin’s change to a founder’s record carries a reason the founder reads.');
+  const uid = newUid();
+  try {
+    await env.DB.batch([
+      insertStmt(env, a.projectId, uid, f, { status: 'proposed', origin: a.origin, originRef: a.originRef, actorId: a.actor.id, currency: await currencyFor(env, a.projectId, f) }),
+      auditStmt(env, a.projectId, a.actor, 'captable.proposal.created', uid, { kind: f.kind, origin: a.origin, reason: f.correction_reason }),
+    ]);
+  } catch (e) {
+    if (isUniqueViolation(e)) throw ALREADY();
+    throw e;
+  }
+  return uid;
+}
+
+/**
+ * Whether the document behind a row is signed (D1021): a SAFE sent through
+ * StudioOS whose envelope is completed (countersigned), a venture's legal
+ * document marked signed, or a data-room file a person attached as the signed
+ * copy. Anything else, and no document at all, is not signed.
+ */
+export async function signatureOf(env: Env, projectId: number, r: { safe_issuance_uid: string | null; document_ref: string | null }) {
+  if (r.safe_issuance_uid != null) {
+    const row = await env.DB.prepare(
+      `SELECT e.status FROM safe_issuances s LEFT JOIN esign_envelopes e ON e.id = s.envelope_id WHERE s.uid = ? AND s.project_id = ?`,
+    ).bind(r.safe_issuance_uid, projectId).first<{ status: string | null }>();
+    if (row?.status === 'completed') return { signed: true, via: 'safe_envelope' as const };
+  }
+  const m = r.document_ref ? /^(legal_documents|data_room_files):(\d+)$/.exec(r.document_ref) : null;
+  if (m?.[1] === 'legal_documents') {
+    const row = await env.DB.prepare(
+      'SELECT ld.status FROM legal_documents ld JOIN deals d ON d.id = ld.deal_id WHERE ld.id = ? AND d.project_id = ?',
+    ).bind(Number(m[2]), projectId).first<{ status: string }>();
+    if (row?.status === 'signed') return { signed: true, via: 'legal_document' as const };
+  }
+  if (m?.[1] === 'data_room_files') {
+    const row = await env.DB.prepare('SELECT id FROM data_room_files WHERE id = ? AND project_id = ?').bind(Number(m[2]), projectId).first();
+    if (row) return { signed: true, via: 'data_room_file' as const };
+  }
+  return { signed: false, via: null };
+}
+
+const NOT_SIGNED = () => new RecordError(409, 'not_signed', 'Not signed yet: attach the investor’s signed document before recording it.');
+
 /** Undo `recordFromSource` when the rest of its caller's write fails: the row and its audit row go together. */
 export async function unrecordFromSource(env: Env, projectId: number, uid: string) {
   await env.DB.batch([
@@ -691,6 +754,8 @@ export async function acceptProposal(env: Env, projectId: number, actor: RecordA
   if (row.status !== 'proposed') throw NOT_PROPOSED();
   const f = await readFields(env, projectId, body, rowFields(row));
   await checkComplete(env, projectId, f, actor);
+  // D1021: a close's investor is recorded only from their signed document.
+  if (row.origin === 'close' && !(await signatureOf(env, projectId, f)).signed) throw NOT_SIGNED();
   await checkBalance(env, projectId, f, row.id);
   const currency = f.amount_cents != null ? row.currency ?? (await currencyOf(env, projectId)).code : null;
   const [upd] = await env.DB.batch([

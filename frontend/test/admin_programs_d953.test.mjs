@@ -810,10 +810,13 @@ test('the pages read only D953 §2\'s reads and D962\'s through their clients, a
     'api.adminStrategicAccessDecision(', 'api.adminAssignAdvisorCohort(', 'api.adminEndAdvisorCohortAssignment(']) assert.ok(src.includes(call), `the pages no longer read ${call}`);
   const clients = [...src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api(?:\/(\w+))?'/g)]
     .flatMap((imp) => imp[1].split(',').map((s) => `${imp[2] || 'api'}:${s.trim()}`).filter((s) => !s.endsWith(':')));
-  assert.deepEqual([...new Set(clients)].sort(), ['api:api', 'insights:insightsApi', 'learning:learningApi', 'productTesting:adminTestingApi', 'programs:programsApi'],
+  // D964 (#2797) adds part 2's proposal client, the contracts library's templates (Terms) and HQ's grants read (the Studio filter); D962 part 1's programsApi.
+  assert.deepEqual([...new Set(clients)].sort(), ['api:api', 'contracts:contractsApi', 'insights:insightsApi', 'learning:learningApi', 'productTesting:adminTestingApi',
+    'programGrants:programGrantsApi', 'programProposals:programProposalsApi', 'programs:programsApi'],
     'the existing clients, each from its own module (lib/api re-exports them, but a named import of lib/api must name what api.js itself declares)');
   assert.doesNotMatch(src, /adminSpinoutApplications|adminSpinoutParticipants|spinout-applications|spinout-participants/, 'Guard H');
-  assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML|<svg|recharts|Export CSV|Propose a program|Pause program/);
+  // Propose a program landed with D964 (#2797); Pause waits for OD-PAUSE.
+  assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML|<svg|recharts|Export CSV|Pause program/);
   assert.doesNotMatch(src, /\?\? 0\b/, 'no zero standing in for a value');
   for (const sample of ['[Studio Lisbon]', '[48]', '[A venture program', 'Granted to your studio', '0 credits']) assert.ok(!src.includes(sample), `a canvas sample reached the pages: ${sample}`);
   assert.match(read('frontend/src/pages/admin/programs/programsModel.js'), /import \{ parseStamp \} from '\.\.\/\.\.\/\.\.\/ui\/parseStamp\.js';/);

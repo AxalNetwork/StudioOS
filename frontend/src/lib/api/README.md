@@ -354,3 +354,9 @@ D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 (members, needs met and gaps, offers by kind, links' reach), and the Super
 Admin's write, which names the version it read. Counts leave admins out and
 come back suppressed from 1 to 4.
+
+D1075 (#2967): `trustContent.js` is the public trust center's store: `trustPublicApi` (the
+published blocks, the change log, the matrix and the subprocessor subscribe, no session),
+`trustCenterAdminApi` (HQ › Security › Trust center content: drafts, subprocessors, the
+auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
+private Security reports, and HQ's read of them).

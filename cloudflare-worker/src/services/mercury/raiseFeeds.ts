@@ -34,6 +34,7 @@ import type { Env, User } from '../../types';
 import { FUND_SECTIONS, type ModuleSlug } from '../raiseCycle';
 import { normalizeEntityName, namesAxalEntity } from '../../integrations/providers/mercury';
 import { addHolder } from '../capTableWrites';
+import { readCapTable } from '../capTableToday';
 import { RecordError, recordFromSource, unrecordFromSource } from '../capTableRecord';
 import { createProspect } from '../../routes/contacts';
 import { logCycleWrite } from '../cycleActivity';
@@ -595,10 +596,14 @@ export async function acceptRaiseProposal(env: Env, a: {
 
 /**
  * D1017 (#2854): a SAFE lands on the record (`cap_table_issuances`), post-money,
- * from connector_mercury, once per Mercury SAFE. The model keeps its Investors ·
- * SAFE entry beside it until part 3 (#2855) reads the model from the record; if
- * the model refuses it, the record row and its audit row are taken back too, so
- * nothing is half-written.
+ * from connector_mercury, once per Mercury SAFE.
+ *
+ * D1018 (#2855): Mercury reads the cap table through the one reader. When the
+ * record holds the cap table, the SAFE is on record and nothing else is
+ * written: every reader takes it from there. While the venture's cap table is
+ * still the saved model, the model keeps its Investors · SAFE entry beside the
+ * record row, as before; if the model refuses it, the record row and its audit
+ * row are taken back too, so nothing is half-written.
  */
 async function acceptSafe(env: Env, a: { integrationId: number; projectId: number; user: User }, p: { id: number; kind: ProposalKind; source_key: string; payload: Record<string, any> }): Promise<Outcome> {
   const { integrationId: i, projectId: pid, user } = a;
@@ -619,7 +624,7 @@ async function acceptSafe(env: Env, a: { integrationId: number; projectId: numbe
     throw e;
   }
   try {
-    await addHolder(env, {
+    if ((await readCapTable(env, pid)).source !== 'record') await addHolder(env, {
       projectId: pid, actor: user, group: 'investors', instrument: 'safe', basis: 'post_money',
       name,
       amount_cents: p.payload.amount_cents, cap_cents: p.payload.cap_cents ?? null, discount_pct: p.payload.discount_pct ?? null,

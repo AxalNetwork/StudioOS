@@ -15,10 +15,11 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  AP_DECK_PATH, AP_FIRMS_PATH, AP_PATH, MOVED_NOTICES, NOT_YET,
+  AP_DECK_PATH, AP_FIRMS_PATH, AP_PATH, MOVED_NOTICES,
   buildFirms, buildNeeds, buildTiles, endingSoon, pageFailed, tabOf,
 } from '../src/pages/admin/advisors/apModel.js';
 import AdvisorsPartners from '../src/pages/admin/advisors/AdvisorsPartners.jsx';
+import { apOverviewFixture } from './_ap_overview_fixture.mjs';
 import ApRedirect from '../src/pages/admin/advisors/ApRedirect.jsx';
 import FirmLinksRedirect from '../src/pages/admin/advisors/FirmLinksRedirect.jsx';
 import { legacyContractsTarget } from '../src/pages/admin/LegacyContractsRedirect.jsx';
@@ -171,6 +172,12 @@ function worker(fail = [], writes = {}) {
       '/api/admin/lab-hosts': ['hosts', HOSTS],
       '/api/admin/network-profiles': ['roster', ROSTER],
     };
+    if (p === '/api/admin/network/overview') {
+      if (down('overview')) return json({detail:'down'},503);
+      const d=apOverviewFixture();
+      if(down('network-deals')) {d.deals={available:false,reason:'Deals could not be read'};d.needs_you.ending_deals={available:false,reason:'Deals could not be read'};}
+      return json(d);
+    }
     if (map[p]) return down(map[p][0]) ? json({ detail: 'down' }, 503) : json(map[p][1]);
     return json({});
   };
@@ -211,16 +218,16 @@ async function mount(url, fail, writes) {
   };
 }
 
-test('mounted Overview: the header, each tile from its read, Needs you, the charts waiting, and one h1', async () => {
+test('mounted Overview: the header, each tile from the D973 summary, Needs you, live charts, and one h1', async () => {
   const m = await mount(AP_PATH);
   try {
     assert.match(m.of('ap-header'), /Community.*Advisors & Partners/s);
     assert.match(m.of('ap-tile-advisors'), /3.*1 have no advisor profile yet/s);
     assert.match(m.of('ap-tile-partners'), /3.*1 not attached to a firm/s);
     assert.match(m.of('ap-tile-hosts'), /14.*3 waiting/s);
-    assert.match(m.of('ap-tile-sessions'), new RegExp(NOT_YET));
-    assert.match(m.of('ap-needs'), /1 partner account has no firm.*Attach to a firm/s);
-    for (const id of ['c1', 'c2', 'c3', 'c4']) assert.match(m.of(`ap-wait-${id}`), new RegExp(NOT_YET));
+    assert.match(m.of('ap-tile-sessions'), /17/);
+    assert.match(m.of('ap-needs'), /Synthetic partner has a partner account but no firm.*Attach to firm/s);
+    for (const id of ['c1', 'c2', 'c3', 'c4']) assert.ok(m.has(`ap-chart-${id}`));
     assert.equal(m.h1s(), 1);
     assert.ok(!m.has('admin-page-moved'));
   } finally { await m.unmount(); }
@@ -285,13 +292,13 @@ test('mounted Deck roster: today\'s roster under the header, with one h1 and the
 });
 
 test('mounted: one read failing costs its blocks; every read failing says nothing is a zero', async () => {
-  const one = await mount(AP_PATH, ['links']);
+  const one = await mount(AP_PATH, ['network-deals']);
   try {
-    assert.match(one.of('ap-tile-partners'), /Unreadable/);
+    assert.match(one.of('ap-tile-deals'), /Unreadable/);
     assert.match(one.of('ap-tile-advisors'), /3/, 'another block stopped answering');
-    assert.match(one.of('ap-needs'), /Partner accounts with no firm: could not be read/);
+    assert.match(one.of('ap-needs'), /DealUnreadable/);
   } finally { await one.unmount(); }
-  const all = await mount(AP_PATH, ['advisors', 'assignments', 'links', 'directory', 'deals', 'hosts', 'roster']);
+  const all = await mount(AP_PATH, ['overview']);
   try { assert.match(all.of('ap-unreadable'), /Nothing here is a zero/); } finally { await all.unmount(); }
 });
 

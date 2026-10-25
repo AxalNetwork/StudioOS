@@ -28,6 +28,15 @@ page in a child component inside it:
   (`/admin/programs/referral-partners`, `/how-it-runs`), and the one-page
   `/admin/programs/investor-cohorts` and `/admin/programs/ai-native-venture`.
 
+- `ProposePage.jsx` — D964 (#2797), workspace "Programs":
+  `/admin/programs/propose`, Propose a program (PG14) on part 2's proposal
+  routes. `?proposal=<uid>` opens a stored proposal: a Draft or Sent back one
+  in the form, any other read only with HQ's note.
+- `ProposalsPage.jsx` — D964, workspace "Programs": `/admin/programs/proposals`.
+  A Super Admin gets the tab strip and Proposals from studios; an Admin gets
+  PG19b in the page. It also holds `ProgramsTabs`, the strip "Catalogue ·
+  Proposals [n]" the catalogue draws for a Super Admin.
+
 The pieces they draw with:
 
 - `ProgramFrame.jsx` — every program page's crumb, header, facts strip and
@@ -49,6 +58,16 @@ The pieces they draw with:
   Super Admin's Edit and Publish dialogs (D962). Part 10 reuses it.
 - `MentorDialogs.jsx` — Mentor cohort access's Assign a mentor and End access
   dialogs, opened from Overview, People and the header (D962).
+- `ProposalTables.jsx` — D964: Your proposals (PG1, an Admin's) and
+  Proposals from studios (PG2, a Super Admin's), each on its own read, with
+  search, status, sort and pages.
+- `ProposalFields.jsx` — D964: PG14's Basics and How it runs fields, shared by
+  Propose a program and New program.
+- `DecideDialog.jsx` — D964: PG15a, a Super Admin's decision on one proposal.
+- `NewProgramDialog.jsx` — D964: New program (PG2's header), for a Super Admin.
+- `proposalsModel.js` — D964, pure: the proposal's statuses, PG14's steps and
+  lists, the Review lines, PG15a's choices, PG19b, the list parameters and the
+  refusals.
 - `useProgramReads.js` — the reads, each made alone.
 - `programPagesModel.js` — pure. D962's rules on parts 1, 4 and 7's reads:
   activity sentences, the playbook, the mentor figures and People's columns,
@@ -70,7 +89,8 @@ The redirects, each the route's whole element:
 ## Rules
 
 - The pages read D953 §2's R1–R12 and, from D962, parts 1, 4 and 7's reads
-  (`programPagesModel.js` lists them). Part 1's reads go through
+  (`programPagesModel.js` lists them), and, from D964, part 2's proposal routes
+  through `../../../lib/api/programProposals.js`. Part 1's reads go through
   `frontend/src/lib/api/programs.js`; the rest through their existing clients. They never read `GET /api/admin/spinout-applications` or
   `GET /api/admin/spinout-participants`, which answer `[]` on any error
   (Guard H): Lab applications read "Not read here yet".
@@ -85,5 +105,7 @@ The redirects, each the route's whole element:
   dialog. There is no corner toast.
 - Every figure states its window, because a program page has no period
   control (S-PER). Charts are `frontend/src/ui/Charts.jsx`'s (D893, moved by D929).
-- Still not drawn: no period control, no Propose a program, no Pause, no CSV,
-  no studio filter, no Terms tab (part 1's store holds no program's terms).
+- Still not drawn: no period control, no Pause, no CSV, no studio filter on
+  the catalogue, no Terms tab (part 1's store holds no program's terms). D964
+  drew the proposal flow (Propose, the two lists, Decide, New program, PG19b)
+  on part 2's routes, through `../../../lib/api/programProposals.js`.
