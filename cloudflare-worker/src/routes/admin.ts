@@ -1182,199 +1182,50 @@ admin.post('/users/:user_id/spinout-admit', async (c) => {
 
 // Spin-Out Lab cohort applications — review queue + accept/refuse.
 // GET  /spinout-applications           → pending first, newest first
-// POST /spinout-applications/:id/decide {decision:'accepted'|'refused'}
-//   accepted → sets admitted flags on the user + sends the spinout_admitted
-//              email whose CTA links to /spinout-lab (workspace access)
-//   refused  → sends the spinout_refused email encouraging a re-apply for
-//              the next cohort
+// POST /spinout-applications/:id/decide {decision:'accepted'|'refused', reason,
+//                                      confirm_over_places?: true}
+// D943: both decisions use the assigned cycle; approval schedules admission
+// for the cohort's 1st rather than activating the workspace here.
 admin.get('/spinout-applications', async (c) => {
   await requireAdmin(c);
-  let applications: unknown[] = [];
+  // D960 (#2793) — a failed read is a failure, not an empty queue. It used to
+  // answer `{ applications: [] }` on any error, which the Lab drew as nobody
+  // applying. `counts` is by status over every application, uncapped, as
+  // `GET /api/admin/lab-hosts` answers, so a figure stays exact while the list
+  // stops at 200.
   try {
-    const rs = await c.env.DB.prepare(
-      `SELECT a.id, a.user_id, u.name, u.email, a.company_name, a.idea,
-              a.incorporated, a.stage, a.jurisdiction, a.cohort, a.status,
-              a.created_at, a.decided_at
-       FROM spinout_applications a
-       JOIN users u ON u.id = a.user_id
-       ORDER BY CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
-                a.created_at DESC
-       LIMIT 200`,
-    ).all();
-    applications = rs.results ?? [];
-  } catch { /* table not yet migrated → empty queue */ }
-  return c.json({ applications });
+    const [rs, counts] = await Promise.all([
+      c.env.DB.prepare(
+        `SELECT a.id, a.user_id, u.name, u.email, a.company_name, a.idea,
+                a.incorporated, a.stage, a.jurisdiction, a.cohort, a.status,
+                a.created_at, a.decided_at
+         FROM spinout_applications a
+         JOIN users u ON u.id = a.user_id
+         ORDER BY CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END,
+                  a.created_at DESC
+         LIMIT 200`,
+      ).all(),
+      c.env.DB.prepare(
+        'SELECT status, COUNT(*) AS n FROM spinout_applications GROUP BY status',
+      ).all<{ status: string; n: number }>(),
+    ]);
+    const byStatus: Record<string, number> = {};
+    for (const r of counts.results ?? []) byStatus[String(r.status)] = Number(r.n) || 0;
+    return c.json({ applications: rs.results ?? [], counts: byStatus });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'lab_applications_unreadable',
+      message: 'Lab applications could not be read. That is not the same as none.',
+      raw: e,
+    });
+  }
 });
 
+// D943: both doors use the cycle decision, including its reason, places and
+// freeze checks. Only the cohort scheduler activates a founder on the 1st.
 admin.post('/spinout-applications/:app_id/decide', async (c) => {
-  const adminUser = await requireAdmin(c);
-  // D260 — FROZEN BOTH WAYS, because this is the D107 cohort queue by another
-  // door. It writes the same `cohort_applicants` rows as admin_cohort.ts's
-  // decide, which has been frozen since D107; left open, a suspended branch
-  // would decide the frozen queue through this route instead. A refusal is a
-  // verdict, not a takedown, as it is on every other queue.
-  await requireBranchNotSuspended(c);
-  const appId = parseInt(c.req.param('app_id'));
-  if (!Number.isFinite(appId)) return c.json({ error: 'Invalid application id' }, 400);
-  const body = (await c.req.json().catch(() => ({}))) as { decision?: unknown; cohort?: unknown };
-  const decision = (typeof body.decision === 'string' ? body.decision : '').trim().toLowerCase();
-  if (decision !== 'accepted' && decision !== 'refused') {
-    return c.json({ error: "decision must be 'accepted' or 'refused'" }, 400);
-  }
-  // Task #102 — optional cohort override on approval (defaults to the
-  // cohort the founder applied to, matching prior behavior).
-  const cohortOverride = (typeof body.cohort === 'string' ? body.cohort : '').trim().slice(0, 50);
-
-  const app: any = await c.env.DB.prepare(
-    `SELECT a.id, a.user_id, a.company_name, a.cohort, a.status,
-            u.email, u.name, u.role, u.is_incorporated
-     FROM spinout_applications a JOIN users u ON u.id = a.user_id
-     WHERE a.id = ?`,
-  ).bind(appId).first();
-  if (!app) return c.json({ error: 'Application not found' }, 404);
-  if (app.status !== 'pending') return c.json({ error: `Application already ${app.status}` }, 409);
-  // D260 — THE ROLE THIS HANDLER ALWAYS READ AND NEVER USED. `/apply` takes
-  // founders and explorers only, but a role can change while an application
-  // waits, and spinout-admit refuses an admin. Accepting one here admitted
-  // through this door what the other refuses. A refusal stays open.
-  if (decision === 'accepted' && app.role === 'admin') {
-    return c.json({ error: 'Admins cannot be admitted to the Lab' }, 400);
-  }
-
-  // Guarded update — WHERE status='pending' makes the decision atomic, so two
-  // admins deciding at once can't both trigger emails/admission side effects.
-  const upd = await c.env.DB.prepare(
-    `UPDATE spinout_applications SET status = ?, decided_at = datetime('now') WHERE id = ? AND status = 'pending'`,
-  ).bind(decision, appId).run();
-  if ((upd.meta?.changes ?? 1) === 0) {
-    return c.json({ error: 'Application was already decided' }, 409);
-  }
-
-  // Task #5 — keep the cycle pool (cohort_applicants) in lockstep with the
-  // legacy decision so close/capacity counts and the activation job see the
-  // same truth: accepted → 'approved' (the cron activates the workspace at
-  // the cohort start), refused → 'rejected'. Tables may not exist yet in
-  // older dev DBs — best-effort.
-  try {
-    await c.env.DB.prepare(
-      `UPDATE cohort_applicants SET status = ?, decided_at = datetime('now'), decided_by = ?, decision_reason = 'Legacy admin decision'
-        WHERE application_id = ? AND status NOT IN ('activated', 'rolled_forward')`,
-    ).bind(decision === 'accepted' ? 'approved' : 'rejected', `admin:${adminUser.id}`, appId).run();
-  } catch { /* cohort_applicants not yet migrated */ }
-
-  const cohort = cohortOverride || app.cohort || 'Cohort 4';
-  const appUrl = (c.env.APP_URL || 'https://axal.vc').replace(/\/+$/, '');
-  // Idempotency shared with the cohort decide route: claim the same
-  // decision-email ledger key so the two admin surfaces can't each send the
-  // candidate the same decision email. Ledger tables may not exist in older
-  // dev DBs — treat a failed claim probe as "not yet sent" (best-effort).
-  let emailClaimed = true;
-  // The cycle this application is pinned to, when the cycle tables exist.
-  // Needed twice below: for the shared decision-email ledger claim, and — on
-  // accept — for the activation that keeps this route in step with the cron.
-  let cycle: { id: number; start_at: string } | null = null;
-  try {
-    const caRow = await c.env.DB.prepare(
-      `SELECT ca.cohort_cycle_id AS cycle_id, cc.start_at
-         FROM cohort_applicants ca JOIN cohort_cycles cc ON cc.id = ca.cohort_cycle_id
-        WHERE ca.application_id = ? ORDER BY ca.id DESC LIMIT 1`,
-    ).bind(appId).first<{ cycle_id: number; start_at: string }>();
-    if (caRow) {
-      cycle = { id: Number(caRow.cycle_id), start_at: String(caRow.start_at) };
-      const { claimDecisionEmail } = await import('../services/cohortApplications');
-      emailClaimed = await claimDecisionEmail(
-        c.env, app.user_id, cycle.id,
-        decision === 'accepted' ? 'approved' : 'rejected',
-      );
-    }
-  } catch { /* ledger not yet migrated — proceed with send */ }
-  let emailed = false;
-  if (decision === 'accepted') {
-    await ensureSpinoutAdmissionColumns(c.env);
-    await c.env.DB.prepare(
-      `INSERT INTO user_spinout_flags (user_id, spinout_lab_admitted, spinout_lab_cohort)
-       VALUES (?, 1, ?)
-       ON CONFLICT(user_id) DO UPDATE SET spinout_lab_admitted = 1, spinout_lab_cohort = excluded.spinout_lab_cohort`,
-    ).bind(app.user_id, cohort).run();
-
-    // Land the founder in the SAME state activateDueCycles would have.
-    //
-    // This route used to stop at `admitted = 1`, leaving `spinout_lab_active`
-    // at 0 — so the founder saw the "Start Week 1" screen and `startLab()`
-    // stamped `spinout_lab_started_at` with their CLICK time, which could be
-    // weeks off their cohort. That drift is not cosmetic: `getCohortGate`
-    // resolves a founder's cycle by `start_at <= started_at < end_at`, so an
-    // early starter resolves to the PREVIOUS month's cycle (whose week
-    // windows have already expired, unlocking all four weeks at once) or to
-    // no cycle at all, and the admin review/at-risk queues — which count
-    // participants by `started_at BETWEEN cycle.start_at AND cycle.end_at` —
-    // stop seeing them entirely.
-    //
-    // Binding `started_at` to the cycle's own start instant is what the cron
-    // does, and it is what makes the two admin tabs interchangeable. The
-    // `spinout_lab_active = 0` guard mirrors the cron's, so re-deciding never
-    // resets a running founder's clock. With no cycle row (an un-migrated dev
-    // DB, or an application never pinned to one) there is no calendar to clamp
-    // to and `getCohortGate` treats the founder as un-gated anyway, so the
-    // old admitted-only behaviour stands.
-    if (cycle) {
-      await c.env.DB.prepare(
-        `UPDATE users SET spinout_lab_active = 1, spinout_lab_week = 1, spinout_lab_started_at = ?
-          WHERE id = ? AND (spinout_lab_active IS NULL OR spinout_lab_active = 0)`,
-      ).bind(cycle.start_at, app.user_id).run();
-      // Retire the applicant from the activation queue we just did by hand,
-      // so the cron's own pass is a no-op rather than a second admission.
-      try {
-        await c.env.DB.prepare(
-          `UPDATE cohort_applicants SET status = 'activated', decided_at = datetime('now')
-            WHERE application_id = ? AND status = 'approved'`,
-        ).bind(appId).run();
-      } catch { /* cohort_applicants not yet migrated */ }
-    }
-
-    if (emailClaimed) try {
-      const { send } = await import('../services/email/send');
-      const labUrl = `${appUrl}/spinout-lab`;
-      const r = await send(c.env, 'spinout_admitted', app.email, {
-        name: app.name || 'there',
-        cohort_label: cohort,
-        lab_url: labUrl,
-      }, { userId: app.user_id, ctaUrl: labUrl });
-      emailed = !!r?.ok;
-    } catch (e) {
-      console.error('[admin/spinout-decide] accept email failed', e);
-    }
-  } else {
-    // Next cohort label: "Cohort 4" → "Cohort 5"; fall back gracefully.
-    const m = /^Cohort (\d+)$/.exec(cohort);
-    const nextCohort = m ? `Cohort ${Number(m[1]) + 1}` : 'the next cohort';
-    if (emailClaimed) try {
-      const { send } = await import('../services/email/send');
-      const applyUrl = `${appUrl}/spinout-lab/apply`;
-      const r = await send(c.env, 'spinout_refused', app.email, {
-        name: app.name || 'there',
-        company_name: app.company_name,
-        cohort_label: cohort,
-        next_cohort_label: nextCohort,
-        apply_url: applyUrl,
-      }, { userId: app.user_id, ctaUrl: applyUrl });
-      emailed = !!r?.ok;
-    } catch (e) {
-      console.error('[admin/spinout-decide] refusal email failed', e);
-    }
-  }
-
-  try {
-    const adminHash = await hashEmail(adminUser.email);
-    const targetHash = await hashEmail(app.email);
-    await c.env.DB.prepare(
-      `INSERT INTO activity_logs (action, details, actor, user_id) VALUES (?, ?, ?, ?)`,
-    ).bind(`spinout_application_${decision}`,
-      `Admin ${adminUser.name} ${decision} Spin-Out Lab application #${appId} for user_id=${app.user_id} (email_hash=${targetHash}, ${cohort})${emailed ? '' : ' (email send failed)'}`,
-      adminHash, adminUser.id).run();
-  } catch {}
-
-  return c.json({ ok: true, status: decision, cohort: decision === 'accepted' ? cohort : null, emailed });
+  const { decideCohortApplication } = await import('./admin_cohort');
+  return decideCohortApplication(c, true);
 });
 
 // Task #102 — Spin-Out Lab participants for the admin dashboard
@@ -1405,6 +1256,9 @@ admin.get('/spinout-participants', async (c) => {
   };
 
   await ensureSpinoutAdmissionColumns(c.env);
+  // D960 (#2793) — each read here says when it failed, instead of reading as
+  // none: the list answers 503, and the two inner reads set a flag.
+  const PARTICIPANT_ROWS = 400;
   let rows: any[] = [];
   try {
     const rs = await c.env.DB.prepare(
@@ -1421,13 +1275,20 @@ admin.get('/spinout-participants', async (c) => {
           OR u.id IN (SELECT user_id FROM spinout_lab_milestones
                       WHERE milestone_key = 'incorporation_completed')
        ORDER BY u.spinout_lab_started_at ASC, u.id ASC, p.id ASC
-       LIMIT 400`,
-    ).all();
+       LIMIT ?`,
+    ).bind(PARTICIPANT_ROWS).all();
     rows = (rs.results ?? []) as any[];
-  } catch {
-    // tables predate the Lab migrations
-    return c.json({ participants: [], catalog });
+  } catch (e) {
+    return refuse(c, 503, {
+      code: 'lab_participants_unreadable',
+      message: 'Lab participants could not be read. That is not the same as none.',
+      raw: e,
+    });
   }
+  // The limit counts user-and-project rows before the de-dup below, so a full
+  // page means some participants may be missing, not that there are exactly
+  // this many.
+  const truncated = rows.length >= PARTICIPANT_ROWS;
 
   // Several projects per founder: keep the first row per user (same rule
   // as the public cohort tracker).
@@ -1440,6 +1301,8 @@ admin.get('/spinout-participants', async (c) => {
   }
 
   const msMap = new Map<number, { key: string; week: number; completed_at: string }[]>();
+  let milestonesUnreadable = false;
+  let applicationsUnreadable = false;
   if (deduped.length > 0) {
     try {
       const placeholders = deduped.map(() => '?').join(',');
@@ -1454,7 +1317,12 @@ admin.get('/spinout-participants', async (c) => {
         list.push({ key: m.milestone_key, week: Number(m.week), completed_at: m.completed_at });
         msMap.set(m.user_id, list);
       }
-    } catch { /* milestones table missing → empty lists */ }
+    } catch (e) {
+      // A failed read is not "no milestones": it would make a graduate read as
+      // admitted. Say so, and leave a status it cannot know unset.
+      milestonesUnreadable = true;
+      console.error('[admin] spinout participants: milestones unreadable', (e as Error)?.message);
+    }
   }
 
   // Latest application per participant, fetched in ONE query (rows come
@@ -1478,7 +1346,10 @@ admin.get('/spinout-participants', async (c) => {
           appMap.set(a.user_id, rest);
         }
       }
-    } catch { /* table not yet migrated */ }
+    } catch (e) {
+      applicationsUnreadable = true;
+      console.error('[admin] spinout participants: applications unreadable', (e as Error)?.message);
+    }
   }
 
   const participants = [];
@@ -1487,7 +1358,9 @@ admin.get('/spinout-participants', async (c) => {
     const completedKeys = new Set(milestones.map((m) => m.key));
     const active = Number(r.spinout_lab_active ?? 0) === 1;
     const graduated = completedKeys.has('incorporation_completed');
-    const status = active ? 'active' : graduated ? 'graduated' : 'admitted';
+    // Graduated and admitted differ only by a milestone; with the milestones
+    // unread, a participant who is not active has a status nobody knows.
+    const status = active ? 'active' : milestonesUnreadable ? null : graduated ? 'graduated' : 'admitted';
     const week = status === 'graduated' ? 4 : Math.max(0, Math.min(4, Number(r.spinout_lab_week ?? 0)));
     let day: number | null = null;
     let daysRemaining: number | null = null;
@@ -1518,12 +1391,16 @@ admin.get('/spinout-participants', async (c) => {
       is_incorporated: Number(r.is_incorporated ?? 0) === 1,
       company_name: r.project_name ?? application?.company_name ?? null,
       sector: r.project_sector ?? null,
-      milestones,
-      unlocked_features: status !== 'admitted' ? unlockedFeaturesThrough(week) : [],
+      milestones: milestonesUnreadable ? null : milestones,
+      unlocked_features: status && status !== 'admitted' ? unlockedFeaturesThrough(week) : [],
       application: application ?? null,
     });
   }
-  return c.json({ participants, catalog });
+  return c.json({
+    participants, catalog, truncated,
+    ...(milestonesUnreadable ? { milestones_unreadable: true } : {}),
+    ...(applicationsUnreadable ? { applications_unreadable: true } : {}),
+  });
 });
 
 admin.post('/users/:user_id/resend-verification', async (c) => {

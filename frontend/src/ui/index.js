@@ -94,6 +94,11 @@ export { NOT_RECORDED, text, titleCase } from '../lib/absence';
 // D923 (#2370): a stored time read by one rule, D1's zone-less stamps as UTC.
 // A pure model imports `./parseStamp.js` itself, so it stays free of React.
 export { parseStamp } from './parseStamp.js';
+// D893's charts, moved here from pages/admin/insights/ by D929 (#2725) so every
+// admin desk draws the same parts in the one palette (D915 §6). See Charts.jsx.
+export {
+  Bar100, Chart, ChartTable, Columns, Donut, GroupedColumns, HBars, Legend, RunningTotal, StackBars, WeekLine, WeekLines, useBoxWidth,
+} from './Charts';
 // D936 (#2375): the one admin page header — crumb, title, line, scope chip,
 // moved notice and tab bar — that replaces the Admin Console's title and dropdown.
 export { default as AdminPageHeader, HeaderTab, useMovedNotice, HELD_SCOPE_LABEL, HELD_SCOPE_TITLE } from './AdminPageHeader';

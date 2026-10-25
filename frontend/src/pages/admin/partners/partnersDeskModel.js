@@ -42,7 +42,8 @@ export const DESK_PATH = '/admin/partner-invitations';
 export const INVITATIONS_PATH = '/admin/partner-invitations/invitations';
 export const DEALS_PATH = '/admin/partner-invitations/deals';
 export const REFERRALS_PATH = '/admin/partner-invitations/referrals';
-export const FIRM_LINKS_PATH = '/admin/partner-invitations/firm-links';
+/** D952 (#2728): attaching an account to its firm is on Advisors & Partners › Firms; the old /firm-links forwards there. */
+export const FIRMS_TAB_PATH = '/admin/advisors-partners/firms';
 /** The old address. App.jsx redirects it to `MOVED_PATH`. */
 export const OLD_PATH = '/admin/partners';
 export const MOVED = 'partners';
@@ -57,7 +58,7 @@ export const TITLE = 'Partner invitations';
 export const LINE = 'Bring operating partners in, see where each invitee stands, and keep their deals healthy.';
 export const MOVED_LINE = 'Partner invitations has a new address. Update your bookmark.';
 
-/** The tab strip (PI1). Firm links has an address and no tab (D923 §1). */
+/** The tab strip (PI1). */
 export const TABS = [
   { key: 'overview', label: 'Overview', path: DESK_PATH },
   { key: 'invitations', label: 'Invitations', path: INVITATIONS_PATH },
@@ -71,7 +72,6 @@ export const isRecordId = (id) => /^[1-9]\d*$/.test(String(id ?? ''));
 /** What a path opens: the tab, and the record drawn over it. */
 export function routeFor(pathname) {
   const path = String(pathname || '').replace(/\/+$/, '');
-  if (path === FIRM_LINKS_PATH) return { tab: 'firm-links', record: null };
   const hit = TABS.find((t) => t.path === path);
   if (hit) return { tab: hit.key, record: null };
   const m = /^\/admin\/partner-invitations\/(invitations|deals)\/([^/]+)$/.exec(path);
@@ -79,10 +79,13 @@ export function routeFor(pathname) {
   return { tab: 'overview', record: null };
 }
 
-export const tabPath = (tab) => (tab === 'firm-links' ? FIRM_LINKS_PATH : (TABS.find((t) => t.key === tab) || TABS[0]).path);
+export const tabPath = (tab) => (TABS.find((t) => t.key === tab) || TABS[0]).path;
 export const invitationHref = (id) => `${INVITATIONS_PATH}/${encodeURIComponent(id)}`;
 export const dealHref = (id) => `${DEALS_PATH}/${encodeURIComponent(id)}`;
 export const referralsForDeal = (id) => `${REFERRALS_PATH}?deal=${encodeURIComponent(id)}`;
+/** D929: a C1 bar opens Invitations at its stage; a C3 segment opens Deals of that type and state. */
+export const invitationsAtStage = (stage) => `${INVITATIONS_PATH}?stage=${encodeURIComponent(stage)}`;
+export const dealsOfTypeState = (type, states) => `${DEALS_PATH}?type=${encodeURIComponent(type)}&state=${states.map(encodeURIComponent).join(',')}`;
 export const envelopeHref = (id) => `/legal/send?envelope=${encodeURIComponent(id)}`;
 
 /** `?moved=partners`: the visitor came by the old address (PI9f). */
@@ -485,6 +488,12 @@ const byCreatedDesc = (a, b) => (parseStamp(b.inv.created_at) ?? -Infinity) - (p
 const isOpenRow = (r) => !r.row.stage.closed;
 const stageRank = (stage) => (stage.closed ? (stage.key === 'signed' ? 8 : 10) : stage.lapsed ? 9 : stage.step ?? 11);
 
+/** D929: the stage chips an address names (`?stage=`), the known ones only. */
+export function stagesFromSearch(search) {
+  const raw = new URLSearchParams(search || '').get('stage') || '';
+  return [...new Set(raw.split(',').filter((k) => STAGE_CHIPS.some((c) => c.key === k)))];
+}
+
 /**
  * Search (name or email), stage chips, the type offered, the inviter and the
  * first send, over the loaded rows, then the sort. Below the cap these are
@@ -642,6 +651,17 @@ export const DEAL_SORTS = [
   { key: 'partner', label: 'Partner A–Z' },
 ];
 export const ENDS_WITHIN = [30, 60, 90];
+
+/**
+ * D929: the type and states an address names (`?type=&state=`), the known
+ * ones only. No `state` keeps the tab's default (Active); `null` says so.
+ */
+export function dealFiltersFromSearch(search) {
+  const p = new URLSearchParams(search || '');
+  const type = DEAL_TYPES.some((d) => d.key === p.get('type')) ? p.get('type') : '';
+  const states = [...new Set((p.get('state') || '').split(',').filter((k) => DEAL_STATE_KEYS.includes(k)))];
+  return { type, states: states.length ? states : null };
+}
 
 /** Search (partner, email or code), state chips (Active on by default), type, ends within, has redemptions, sort. */
 export function filterDeals(rows, { q = '', states = ['active'], type = '', endsWithin = '', hasRedemptions = false, sort = 'ends', now = Date.now() } = {}) {
@@ -942,7 +962,7 @@ export function dealTiles({ deals, invitations, fan, now = Date.now() }) {
   }
   const r90 = fanFigure(fan, countLast90(now));
   tiles.push({ key: 'redemptions90', label: 'Referral redemptions, 90 days', ...r90 });
-  tiles.push({ key: 'emails', label: 'Emails not delivered', state: 'note', note: { text: NOT_READ_YET, reason: 'Whether each invitation email went out is kept only in the audit log, which no read here returns yet.' } });
+  tiles.push({ key: 'sends', label: 'Sends that failed', state: 'note', note: { text: NOT_READ_YET, reason: 'Whether each send was Sent or Not sent is kept only in the audit log, which no read here returns yet.' } });
   return tiles;
 }
 
@@ -1003,7 +1023,7 @@ export function needsYou({ invitations, deals, links, template, fan, now = Date.
       const text = atCap(l.accounts, CAPS.links)
         ? `${plural(n, 'partner account', 'partner accounts')} of the first 500 ${n === 1 ? 'is' : 'are'} not attached to a firm.`
         : `${plural(n, 'partner account is', 'partner accounts are')} not attached to a firm.`;
-      rows.push({ key: 'firms', kind: 'Firms', text, action: { label: 'Open firm links', to: FIRM_LINKS_PATH } });
+      rows.push({ key: 'firms', kind: 'Firms', text, action: { label: 'Open Firms', to: FIRMS_TAB_PATH } });
     }
   } else if (isLoading(links)) loading = true;
   else failed.push({ key: 'links', what: 'The partner accounts' });
@@ -1015,6 +1035,250 @@ export function needsYou({ invitations, deals, links, template, fan, now = Date.
   else failed.push({ key: 'revshare', what: 'Rev-share windows', reason: closing.reason });
 
   return { rows, failed, settled: !loading };
+}
+
+/* ------------------------------------------------------------------ *
+ * Overview charts C1–C4 (D929), on D923's reads until part 4's overview read
+ * ------------------------------------------------------------------ */
+
+/**
+ * A chart block is `{ key, title, state, … }`, where `state` is D893's four:
+ *   loading     its read has not answered;
+ *   unreadable  its read failed (`reason` says what, never a zero);
+ *   unrecorded  its rows came back, but none carries the field it counts by;
+ *   ready       `chart` (with `alt`, its one sentence), `legend`, `lines`
+ *               (what the figures cover or leave out) and `foot`.
+ * A zero is drawn only in a ready block.
+ */
+export const WEEKS = 12;
+
+/** The Monday 00:00 UTC that starts the week holding `ms`. */
+export function weekStart(ms) {
+  const d = new Date(ms);
+  const back = (d.getUTCDay() + 6) % 7;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - back);
+}
+
+/** The last `n` weeks' starts, oldest first; the last is the current week, not finished. */
+export function weekStarts(now, n = WEEKS) {
+  const cur = weekStart(now);
+  return Array.from({ length: n }, (_, i) => cur - (n - 1 - i) * 7 * DAY_MS);
+}
+
+/** "19 Oct": a week's label, by its Monday. */
+export const weekLabel = (ms) => { const d = new Date(ms); return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`; };
+
+/** Which of `starts` a stored time falls in, or -1 (before the window, after now, or no time). */
+function weekOf(value, starts, now) {
+  const at = parseStamp(value);
+  if (at === null || at > now || at < starts[0]) return -1;
+  return Math.min(starts.length - 1, Math.floor((at - starts[0]) / (7 * DAY_MS)));
+}
+
+const notYet = (read, what) => (isLoading(read) ? { state: 'loading' } : { state: 'unreadable', reason: `${what} could not be read. ${LIST_CLAIM}` });
+
+/** C1's open stages, in the canvas's order: Sent to Agreement out. */
+const OPEN_STAGES = [1, 2, 3, 4, 5, 6].map((step) => ({ key: STEP_KEY[step], word: STEPS[step - 1] }));
+
+/**
+ * C1 "Where open invitations stand", from R1 under Guards L and I. One bar per
+ * stage for the open invitations whose link has not lapsed, each with its
+ * count and how many days ago the oldest of them was first sent: time in a
+ * stage is not recorded until part 4, so every bar counts from the first send.
+ * The closed line is Signed · Lapsed · Revoked (D929), and a bar or a closed
+ * count opens Invitations filtered to it by the same stage rule.
+ */
+export function stageChart(invitations, { proposed = null, now = Date.now() } = {}) {
+  const base = { key: 'c1', title: 'Where open invitations stand' };
+  const list = listOf(invitations);
+  if (!list) return { ...base, ...notYet(invitations, 'The invitations') };
+  if (list.length && !list.some((inv) => String(inv?.status || ''))) return { ...base, state: 'unrecorded', reason: 'No invitation read here carries its stage.' };
+  const rows = list.map((inv) => ({ inv, stage: stageOf(inv, { proposed, now }) }));
+  const open = rows.filter((r) => !r.stage.closed && !r.stage.lapsed);
+  const bars = OPEN_STAGES.map(({ key, word }) => {
+    const at = open.filter((r) => r.stage.key === key);
+    const first = at.map((r) => parseStamp(r.inv.created_at)).filter((x) => x !== null).sort((a, b) => a - b)[0];
+    let text = nf(at.length);
+    if (at.length) text += first === undefined ? ' · oldest not recorded' : ` · oldest ${plural(Math.max(0, Math.floor((now - first) / DAY_MS)), 'day', 'days')}`;
+    return { label: word, value: at.length, text, group: key, aria: `Open Invitations at ${word}: ${nf(at.length)}` };
+  });
+  const closed = [
+    { key: 'signed', word: 'Signed', n: rows.filter((r) => r.stage.key === 'signed').length },
+    { key: 'lapsed', word: 'Lapsed', n: rows.filter((r) => r.stage.lapsed).length },
+    { key: 'revoked', word: 'Revoked', n: rows.filter((r) => r.stage.key === 'revoked').length },
+  ];
+  const lines = [];
+  const expired = rows.filter((r) => r.stage.key === 'expired').length;
+  if (expired) lines.push(`${plural(expired, 'invitation was', 'invitations were')} signed after the link lapsed, and the deal voided.`);
+  const odd = open.filter((r) => r.stage.key === 'unknown').length;
+  if (odd) lines.push(`${plural(odd, 'open invitation is', 'open invitations are')} at a stage not recognised, so no bar counts ${odd === 1 ? 'it' : 'them'}.`);
+  const lag = open.filter((r) => r.stage.mayLag).length;
+  if (lag) lines.push(`${plural(lag, 'resent invitation', 'resent invitations')} may sit at an earlier stage than ${lag === 1 ? 'it' : 'they'} reached.`);
+  if (atCap(list, CAPS.invitations)) lines.push(`${WITHIN_INVITATIONS}.`);
+  if (isStale(invitations)) lines.push('Could not refresh the invitations. These counts are from the last read.');
+  const total = bars.reduce((t, b) => t + b.value, 0);
+  return {
+    ...base,
+    state: 'ready',
+    chart: { type: 'hbar', clickable: true, testIdPrefix: 'partners-c1', rows: bars },
+    alt: `${nf(total)} open ${total === 1 ? 'invitation' : 'invitations'} by stage now: ${bars.map((b) => `${b.label.toLowerCase()} ${nf(b.value)}`).join(', ')}.`,
+    closed,
+    lines,
+    foot: 'Where each open invitation is now. Days count from the first send: time in a stage is not recorded yet. A lapsed invitation keeps the stage it reached, and a revoked one does not. A bar opens Invitations at that stage.',
+  };
+}
+
+/**
+ * C2 "Invitations per week", from R1 under Guard L: first sends by
+ * `created_at` and signatures by `signed_at`, over twelve Monday weeks (UTC),
+ * the current week hatched. Below the cap a week with none is a true 0; at it,
+ * the sends are complete only from the oldest send read, and the signatures
+ * miss the invitations first sent before it.
+ */
+export function weeklyInvitations(invitations, { now = Date.now() } = {}) {
+  const base = { key: 'c2', title: 'Invitations per week' };
+  const list = listOf(invitations);
+  if (!list) return { ...base, ...notYet(invitations, 'The invitations') };
+  if (list.length && !list.some((inv) => parseStamp(inv?.created_at) !== null)) return { ...base, state: 'unrecorded', reason: 'No invitation read here carries the day it was first sent.' };
+  const starts = weekStarts(now);
+  const sent = starts.map(() => 0);
+  const signed = starts.map(() => 0);
+  for (const inv of list) {
+    const a = weekOf(inv?.created_at, starts, now);
+    if (a >= 0) sent[a] += 1;
+    if (inv?.status === 'signed') {
+      const b = weekOf(inv?.signed_at, starts, now);
+      if (b >= 0) signed[b] += 1;
+    }
+  }
+  const lines = [];
+  if (atCap(list, CAPS.invitations)) {
+    const oldest = list.map((inv) => parseStamp(inv?.created_at)).filter((x) => x !== null).sort((a, b) => a - b)[0];
+    lines.push(oldest !== undefined && oldest > starts[0]
+      ? `${WITHIN_INVITATIONS}: weeks before ${day(oldest)} are not complete, and signatures of invitations first sent earlier are not counted.`
+      : `${WITHIN_INVITATIONS}: signatures of invitations first sent earlier are not counted.`);
+  }
+  if (isStale(invitations)) lines.push('Could not refresh the invitations. These counts are from the last read.');
+  const S = sent.reduce((t, n) => t + n, 0);
+  const G = signed.reduce((t, n) => t + n, 0);
+  return {
+    ...base,
+    state: 'ready',
+    chart: {
+      type: 'grouped',
+      series: [{ label: 'Sent', tone: 'violet' }, { label: 'Signed', tone: 'sky' }],
+      rows: starts.map((w, i) => ({ label: weekLabel(w), values: [sent[i], signed[i]], toDate: i === starts.length - 1 })),
+    },
+    alt: `Invitations per week for twelve weeks: ${nf(S)} sent and ${nf(G)} signed. The current week is not finished.`,
+    legend: [{ label: 'Sent', tone: 'violet' }, { label: 'Signed', tone: 'sky' }, { label: 'Current week, so far', tone: 'hatch' }],
+    lines,
+    foot: 'Hatched columns are the current week, so far. Weeks start on Monday, UTC.',
+  };
+}
+
+/** C3's four state groups, in the canvas's order and colours. Ended is term over, terminated and voided. */
+export const C3_STATES = [
+  { key: 'active', word: 'Active', states: ['active'], tone: 'violet' },
+  { key: 'awaiting', word: 'Awaiting signature', states: ['awaiting_signature'], tone: 'sky' },
+  { key: 'proposed', word: 'Offer chosen, not sent', states: ['proposed'], tone: 'amber' },
+  { key: 'ended', word: 'Ended', states: ['expired', 'terminated', 'voided'], tone: 'muted' },
+];
+
+/** C3's bars, in the canvas's order. */
+const C3_TYPE_ORDER = ['services_partnership', 'deal_sourcing_revshare', 'equity_partnership', 'capital_partnership', 'custom'];
+
+/**
+ * C3 "Deals by type and state", from the six R2 lists under Guard L. Each
+ * type is a bar, each state group a segment that opens Deals filtered to it.
+ * A failed list makes the block unreadable, never a smaller bar. Deals before
+ * signing are joined to their invitation, and those whose link lapsed are
+ * said; so are active deals past their end that nothing has closed yet.
+ */
+export function dealsByTypeState({ deals, invitations, now = Date.now() }) {
+  const base = { key: 'c3', title: 'Deals by type and state' };
+  const u = dealsUnion(deals);
+  if (u.loading.length) return { ...base, state: 'loading' };
+  if (u.failed.length) {
+    const words = u.failed.map((k) => dealState(k).word.toLowerCase()).join(', ');
+    return { ...base, state: 'unreadable', reason: `The deal lists (${words}) could not be read. ${LIST_CLAIM}` };
+  }
+  if (u.rows.length && !u.rows.some((d) => d?.deal_type)) return { ...base, state: 'unrecorded', reason: 'No deal read here carries its type.' };
+  const known = (d) => DEAL_TYPES.some((t) => t.key === d?.deal_type);
+  const ordered = C3_TYPE_ORDER.map((k) => DEAL_TYPES.find((t) => t.key === k));
+  const types = u.rows.some((d) => !known(d)) ? [...ordered, { key: 'other', word: 'Another deal type' }] : ordered;
+  const typeOf = (d) => (known(d) ? d.deal_type : 'other');
+  const groupOf = (d) => C3_STATES.find((g) => g.states.includes(d?.status)) || null;
+  const rows = types.map((t) => {
+    const mine = u.rows.filter((d) => typeOf(d) === t.key);
+    const parts = C3_STATES.map((g) => {
+      const value = mine.filter((d) => groupOf(d) === g).length;
+      const to = t.key === 'other' ? null : dealsOfTypeState(t.key, g.states);
+      return { key: g.key, label: g.word, tone: g.tone, value, to, aria: to ? `Open Deals: ${t.word}, ${g.word}, ${nf(value)}` : `${t.word}, ${g.word}: ${nf(value)}` };
+    });
+    return { key: t.key, label: `${t.word} · ${nf(mine.length)}`, word: t.word, total: nf(mine.length), parts };
+  });
+  const lines = [];
+  const pre = u.rows.filter((d) => d?.status === 'proposed' || d?.status === 'awaiting_signature');
+  if (pre.length) {
+    const inv = listOf(invitations);
+    if (!inv && !isLoading(invitations)) lines.push('Lapsed invitations could not be checked, so deals before signing are drawn without that check.');
+    else if (inv) {
+      const lapsed = pre.filter((d) => { const hit = inv.find((i) => String(i?.id) === String(d?.invitation_id)); return hit && isLapsed(hit, now); }).length;
+      if (lapsed) lines.push(`${plural(lapsed, 'deal before signing belongs', 'deals before signing belong')} to an invitation whose link has lapsed.`);
+    }
+  }
+  const past = u.rows.filter((d) => { const end = parseStamp(d?.expires_at); return d?.status === 'active' && end !== null && end <= now; }).length;
+  if (past) lines.push(past === 1 ? '1 active deal is past its end, not yet closed, and counts as Active.' : `${nf(past)} active deals are past their end, not yet closed, and count as Active.`);
+  if (u.capped.length) lines.push(`${WITHIN_DEALS}.`);
+  if (u.stale.length) lines.push('Could not refresh every deal list. These counts are partly from the last read.');
+  return {
+    ...base,
+    state: 'ready',
+    chart: { type: 'stackbars', clickable: true, testIdPrefix: 'partners-c3', head: 'Type', parts: C3_STATES.map((g) => ({ key: g.key, label: g.word })), rows },
+    alt: `${plural(u.rows.length, 'deal', 'deals')} by type: ${rows.map((r) => `${r.word} ${r.total} (${r.parts.map((p) => `${p.label} ${nf(p.value)}`).join(', ')})`).join('; ')}.`,
+    legend: C3_STATES.map((g) => ({ label: `${g.word} ${nf(u.rows.filter((d) => groupOf(d) === g).length)}`, tone: g.tone })),
+    lines,
+    foot: 'Ended counts term over, terminated and voided. A segment opens Deals with that type and state.',
+  };
+}
+
+/**
+ * C4 "Referral redemptions per week", from the R4 fan-out under Guard F: one
+ * line per attribution (referral solid, deal-sourcing rev-share dashed) over
+ * twelve Monday weeks (UTC). The dash names the series; the current week is
+ * only the hollow point. A failed call makes the block unreadable, never a
+ * lower line.
+ */
+export function weeklyRedemptions(fan, { now = Date.now() } = {}) {
+  const base = { key: 'c4', title: 'Referral redemptions per week' };
+  if (!fan || fan.state === 'loading') return { ...base, state: 'loading' };
+  if (fan.state === 'unreadable') return { ...base, state: 'unreadable', reason: `${fan.text}. ${fan.claim}` };
+  if (fan.items.length && !fan.items.some((it) => parseStamp(it?.redeemed_at) !== null)) return { ...base, state: 'unrecorded', reason: 'No redemption read here carries the day it was made.' };
+  const starts = weekStarts(now);
+  const series = [
+    { key: 'referral', label: 'Referral', tone: 'violet', dash: false, values: starts.map(() => 0) },
+    { key: 'deal_sourcing_revshare', label: 'Deal-sourcing rev-share', tone: 'sky', dash: true, values: starts.map(() => 0) },
+  ];
+  let unknown = 0;
+  for (const it of fan.items) {
+    const w = weekOf(it?.redeemed_at, starts, now);
+    if (w < 0) continue;
+    const s = series.find((x) => x.key === it?.attribution_kind);
+    if (s) s.values[w] += 1; else unknown += 1;
+  }
+  const lines = [];
+  if (unknown) lines.push(`${plural(unknown, 'redemption', 'redemptions')} in these weeks ${unknown === 1 ? 'has' : 'have'} no recorded attribution and ${unknown === 1 ? 'is' : 'are'} not drawn.`);
+  if (!fan.exact) lines.push(fanFigure(fan, () => 0).sub);
+  const sum = (s) => s.values.reduce((t, n) => t + n, 0);
+  return {
+    ...base,
+    state: 'ready',
+    chart: { type: 'lines', labels: starts.map(weekLabel), series: series.map(({ label, tone, dash, values }) => ({ label, tone, dash, values })) },
+    alt: `Members who registered with a partner code per week: ${nf(sum(series[0]))} through referral and ${nf(sum(series[1]))} through deal-sourcing rev-share in twelve weeks.`,
+    legend: [{ label: 'Referral · solid', tone: 'violet', mark: 'line' }, { label: 'Deal-sourcing rev-share · dashed', tone: 'sky', mark: 'dashed' }, { label: 'Current week, so far', tone: 'hollow' }],
+    lines,
+    foot: 'The hollow point is the current week, so far. Weeks start on Monday, UTC.',
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -1368,7 +1632,7 @@ export const COPIED = 'Copied';
 export const COPY_FAILED = 'Copy failed. Select the link and copy it.';
 
 /* ------------------------------------------------------------------ *
- * Firm links (off the canvas; #2369 takes it in part 9)
+ * Attaching accounts to firms (drawn on Advisors & Partners › Firms since D952)
  * ------------------------------------------------------------------ */
 
 export function firmCounts(data) {

@@ -17,6 +17,7 @@
  *     no second write in the re-read's gap, focus kept, the menu a disclosure.
  */
 import test from 'node:test';
+import { overviewFixture } from './_events_overview_fixture.mjs';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -31,7 +32,7 @@ import {
   ALL_PATH, COMMUNITY_PATH, DAY_MS, DESK_PATH, FROZEN, GONE, LINE, NOT_HELD, NOT_IN_READ, NO_CAP, QUICK_REASONS, REVIEW_PATH,
   SCOPE_LABEL, STATUSES, SUSPENDED, TABS, TITLE, allRows, analyticsJoin, approveLine3, approveLines, approvedLine,
   attendedText, cancelCopy, capacityPreview, clockLabel, countText, countsFor, eventIdFor, factsOf, featureCopy, fillText, hasEnded,
-  isEventId, money, moneyTotals, onPublicCalendar, overviewTiles, pageOf, publishGate, queueFlags, queueRows, rangeText,
+  isEventId, money, moneyTotals, onPublicCalendar, overviewTiles, pageOf, publishGate, queueFlags, rangeText,
   readEveryPage, refusalText, showUpText, statusCounts, statusFromSearch, statusWord, tabFor, unpublishCopy, whenLine,
 } from '../src/pages/admin/events/eventsDeskModel.js';
 import { SCOPE_LABEL as INSIGHTS_SCOPE_LABEL } from '../src/pages/admin/insights/insightsModel.js';
@@ -195,15 +196,14 @@ test('"What approving does": line 3 names the two sources approve invites, and s
   assert.match(approvedLine(ev(1, { title: 'A' }), { featureError: { status: 423, code: 'branch_suspended' } }), /It is not featured: This studio’s licence is suspended/);
 });
 
-test('the review queue: titles only, sorted by start or by creation, with the Paid and Free seats flags', () => {
+// D921 (#2704) moved the queue's search, filters and sorts to `reviewModel.js`
+// (`frontend/test/events_review_d921.test.mjs`); D915's flags and facts stay here.
+test('the review queue\'s Paid and Free seats flags, and the facts from the event\'s own row', () => {
   const list = [
     ev(1, { title: 'Breakfast', starts_at: iso(9), created_at: '2026-10-01 09:00:00', price_cents: 4000 }),
     ev(2, { title: 'Workshop', starts_at: iso(2), created_at: '2026-10-05 09:00:00', audience_rules: { comp_invested_lps: true } }),
     ev(3, { title: 'Roundtable', starts_at: null, created_at: '2026-10-03 09:00:00' }),
   ];
-  assert.deepEqual(queueRows(list).map((e) => e.id), [2, 1, 3], 'starts soonest; no start last');
-  assert.deepEqual(queueRows(list, { sort: 'created' }).map((e) => e.id), [2, 3, 1], 'newest created');
-  assert.deepEqual(queueRows(list, { q: 'work' }).map((e) => e.id), [2]);
   assert.deepEqual(queueFlags(list[0]), ['Paid $40']);
   assert.deepEqual(queueFlags(list[1]), ['Free seats']);
   assert.deepEqual(queueFlags(list[2]), []);
@@ -212,7 +212,7 @@ test('the review queue: titles only, sorted by start or by creation, with the Pa
   assert.equal(facts['Free seats for'], 'Official partners');
   assert.equal(facts.Capacity, '60 seats · waitlist on');
   assert.equal(facts.Place, 'Not recorded');
-  assert.equal(facts.Submitted, 'Not recorded yet', 'submitted_at is part 2');
+  assert.equal(facts.Submitted, undefined, 'Submitted is D921\'s, read from part 2\'s submitted_at');
   assert.equal(Object.fromEntries(factsOf(ev(1, { capacity: null })).map((f) => [f.label, f.value]))['Capacity'], NO_CAP);
   assert.equal(whenLine(ev(1, { starts_at: '2026-11-14T18:30:00Z', ends_at: '2026-11-14T21:00:00Z', timezone: 'Europe/Lisbon' })), 'Sat 14 Nov 2026, 18:30–21:00 · Europe/Lisbon');
   assert.equal(whenLine(ev(1, { starts_at: null })), 'Date not recorded');
@@ -312,12 +312,12 @@ test('the dialogs say only what the Worker does', () => {
 
   const cancel = cancelCopy(ev(1, { title: 'A' }));
   assert.equal(cancel.lines[0], 'It leaves the public calendar.');
-  assert.match(cancel.lines[1], /^People with an account who hold a seat or wait for one are told in StudioOS\./);
+  assert.match(cancel.lines[1], /^People with an account who hold a seat or wait for one are told in StudioOS, with your note\./, 'D922: the note reaches them');
   assert.equal(cancel.paid, null, 'a free event has no refund box');
   assert.match(cancelCopy(ev(1, { price_cents: 4000 })).paid, /HQ refunds them in Revenue › Billing/);
   const all = JSON.stringify([cancel, cancelCopy(ev(1, { price_cents: 4000 })), unpublishCopy(ev(1)), featureCopy(ev(1)), featureCopy(ev(1, { featured: true }))]);
-  assert.doesNotMatch(all, /cannot be undone|every calendar|with your note|Each gets an email/, 'the canvas copy the Worker does not do');
-  assert.match(unpublishCopy(ev(1)).body, /The host is not told automatically\./);
+  assert.doesNotMatch(all, /cannot be undone|every calendar|Each gets an email/, 'the canvas copy the Worker does not do');
+  assert.match(unpublishCopy(ev(1)).body, /The host is told, with your note\./, 'D922: part 2 tells the host');
   assert.equal(featureCopy(ev(1)).action, 'Feature');
   assert.equal(featureCopy(ev(1)).next, true);
   assert.equal(featureCopy(ev(1, { featured: true })).action, 'Stop featuring');
@@ -377,17 +377,22 @@ test('the page keeps its frame, its crumb and its literal tab doors', () => {
 test('the desk reads only R1, R2, R3 and R5, never the roster, R2\'s summary or conversion', () => {
   // The comments say why each of these is not read; the code must not read it.
   const src = DESK_FILES.map((f) => codeOnly(read(f))).join('\n');
-  for (const call of ['adminEvents.list(', 'adminEvents.analytics()', 'adminEvents.get(', 'eventsApi.agenda(']) assert.ok(src.includes(call), `the desk no longer calls ${call}`);
+  // D921 adds the selected review event's history and free-seat preview (D918 §6, §7).
+  for (const call of ['adminEvents.list(', 'adminEvents.analytics()', 'adminEvents.get(', 'eventsApi.agenda(', 'adminEvents.history(', 'adminEvents.compPreview(']) assert.ok(src.includes(call), `the desk no longer calls ${call}`);
   for (const write of ['adminEvents.approve(', 'adminEvents.reject(', 'adminEvents.feature(', 'adminEvents.unpublish(', 'adminEvents.cancel(', 'adminEvents.setCapacity(']) assert.ok(src.includes(write), write);
   assert.doesNotMatch(src, /\.roster\(|roster\(/, 'the roster carries names and emails');
-  assert.doesNotMatch(src, /\.summary\b|\bsummary\./, 'R2\'s summary is all-time and hides its failure');
+  assert.doesNotMatch(src, /analytics[\w.?]*\.summary\b/, 'R2\'s summary is all-time and hides its failure');
+  assert.ok(src.includes('adminEvents.summary(eventId)') && src.includes('adminEvents.history(eventId)'), 'D922: one event\'s own summary and history (D918)');
   assert.doesNotMatch(src, /conversion/, 'R2\'s conversion is 0 for every upcoming event');
   assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML/);
   for (const imp of src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api'/g)) {
     assert.deepEqual(imp[1].split(',').map((s) => s.trim().split(/\s+as\s+/)[0]).sort(), imp[1].includes('events as') ? ['adminEvents', 'events'] : ['adminEvents'], 'only the two existing clients');
   }
-  // Nothing D915 §3 leaves undrawn: no type, format, period or chart.
-  assert.doesNotMatch(src, /location_kind|\bev\.type\b|In person|'Online'|12 weeks|recharts|<svg/);
+  // D920 uses the shared chart components and D918's overview; no extra chart library.
+  assert.ok(src.includes('adminEvents.overview(weeks)'));
+  assert.doesNotMatch(src, /recharts|<svg/);
+  const pages = DESK_FILES.filter((f) => !f.endsWith('Model.js')).map((f) => codeOnly(read(f))).join('\n');
+  assert.doesNotMatch(pages, /location_kind|In person|'Online'/, 'the format word comes from the model alone');
   for (const sample of ['Northwind', 'Bluefern', 'Rua Exemplo', 'Fund I', 'Pricing Workshop', 'Demo Day Rehearsal', '[$', '[3]']) assert.ok(!src.includes(sample), `a canvas sample reached the desk: ${sample}`);
 });
 
@@ -408,11 +413,12 @@ const response = (body, status = 200) => ({ ok: status < 400, status, headers: {
 const LIVE = Date.now();
 const liveIso = (days) => new Date(LIVE + days * DAY_MS).toISOString();
 
-function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, writes = {} } = {}) {
+function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }, event = null, agenda = { agenda: [] }, summary = {}, history = null, overview = overviewFixture(), writes = {} } = {}) {
   return (url, options = {}) => {
     const method = String(options.method || 'GET').toUpperCase();
     const m = url.match(/\/api\/admin\/events\/(\d+)\/(\w+)$/);
     if (method === 'POST' && m) return writes[m[2]] ? writes[m[2]](options) : response({ event: { id: Number(m[1]) } });
+    if (url.includes('/api/admin/events/overview')) return overview instanceof Function ? overview() : response(overview);
     if (url.includes('/api/admin/events/analytics')) return analytics instanceof Function ? analytics() : response(analytics);
     if (/\/api\/admin\/events\?/.test(url)) {
       const q = new URLSearchParams(url.split('?')[1]);
@@ -423,6 +429,9 @@ function worker({ list = [], queue = [], analytics = { summary: {}, events: [] }
     }
     if (/\/api\/admin\/events\/\d+$/.test(url)) return event ? response({ event }) : response({ error: 'not_found' }, 404);
     if (/\/api\/events\/\d+\/agenda$/.test(url)) return response(agenda);
+    // D922: the event's own summary and history (D918).
+    if (/\/api\/admin\/events\/\d+\/summary$/.test(url)) return summary instanceof Function ? summary() : response(summary);
+    if (/\/api\/admin\/events\/\d+\/history$/.test(url)) return history instanceof Function ? history() : response(history || { history: { created_at: event?.created_at, items: [] } });
     return response({});
   };
 }
@@ -586,7 +595,7 @@ test('All events joins R2 under Guard G: an empty analytics read is "Could not b
   } finally { await counted.close(); }
 });
 
-test('Overview pages R1 to the end, counts statuses from it, and says Not recorded where nothing stores a value', async () => {
+test('Overview pages the list for Next up, and reads period counts from D918, independent of capped analytics', async () => {
   // Every start is on the live clock the page reads, so no event ends while the suite ages.
   const list = [
     ...Array.from({ length: 200 }, (_, i) => ev(i + 1, { starts_at: liveIso(-30 - i / 10) })),
@@ -594,18 +603,19 @@ test('Overview pages R1 to the end, counts statuses from it, and says Not record
   ];
   // R2 as the Worker reads it: `ORDER BY e.starts_at DESC LIMIT 200`, so the three oldest ended events are not in it.
   const r2 = [...list].sort((a, b) => Date.parse(b.starts_at) - Date.parse(a.starts_at)).slice(0, 200).map((e) => ({ ...row(e.id, 2, 1), starts_at: e.starts_at }));
-  const view = await mounted('/admin/events', worker({ list, analytics: { events: r2 } }));
+  const overview = overviewFixture();
+  overview.by_status.counts = { draft: 1, pending_review: 0, published: 200, rejected: 2, cancelled: 0, other: 0 };
+  const view = await mounted('/admin/events', worker({ list, analytics: { events: r2 }, overview }));
   try {
     assert.ok(view.requests.some((r) => r.url === '/api/admin/events?limit=200&offset=200'), 'a full page asks for the next');
     assert.match(view.textOf('events-status-rejected'), /Sent back · 2/);
     assert.match(view.textOf('events-status-published'), /Published · 200/);
     assert.ok(view.hrefs().includes('/admin/events/all?status=rejected'), 'each chip opens All events with its status');
-    assert.match(view.textOf('events-unrecorded-views'), /No store counts views of an event page/);
-    assert.match(view.textOf('events-unrecorded-feedback'), /Events have no feedback form yet\./);
-    assert.equal(view.textOf('events-tile-showup'),
-      'Show-up rateNot in this read3 events are not in this read. The analytics read holds the 200 events that start latest, and some of these are older.',
-      'three of the 200 ended events start before R2\'s 200 rows: never summed as if they had none');
-    assert.match(view.textOf('events-tile-waiting'), /Waiting time not recorded yet/);
+    assert.match(view.textOf('events-block-views'), /No store counts views of an event page/);
+    assert.match(view.textOf('events-block-feedback'), /Events have no feedback form yet\./);
+    assert.match(view.textOf('events-tile-showup'), /61%/);
+    assert.match(view.textOf('events-tile-waiting'), /Overdue.*72 hours/);
+    assert.ok(!view.requests.some((r) => r.url.includes('/analytics')), 'Overview no longer reads capped analytics');
   } finally { await view.close(); }
 });
 
@@ -636,8 +646,8 @@ test('one event: R3, R2\'s row and R5; Not held yet before it ends; the roster s
     assert.match(view.textOf('events-event-tile-showup'), /Not held yet/);
     assert.match(view.textOf('events-event-gate'), /On the public calendar/);
     assert.match(view.textOf('events-event-roster'), /Names and emails are on the host’s roster\./);
-    assert.match(view.textOf('events-event-history'), /Created · 1 Oct 2026/);
-    assert.match(view.textOf('events-event-history'), /Not read here yet/);
+    assert.match(view.textOf('events-history-created'), /^Created\s*1 Oct 2026$/);
+    assert.doesNotMatch(view.textOf('events-event-history'), /Not read here yet/, 'D922 reads the history');
     assert.match(view.textOf('events-event-agenda'), /Doors/);
     assert.ok(view.hrefs().includes('/events/41/manage/registrations'));
     assert.ok(!view.testIds().includes('events-header'), 'the event\'s own header, not the desk\'s');
@@ -711,20 +721,22 @@ test('"Updated" is the oldest answer among the reads the tab draws, never a newe
   const realNow = Date.now;
   let clock = LIVE;
   Date.now = () => clock;
-  const held = { queue: deferred(), list: deferred(), analytics: deferred() };
+  const held = { queue: deferred(), list: deferred(), overview: deferred() };
   const T = [0, 10, 20, 30].map((m) => LIVE + m * 60_000);
   try {
-    const view = await mounted('/admin/events', worker({ queue: () => held.queue.promise, list: () => held.list.promise, analytics: () => held.analytics.promise }));
+    const view = await mounted('/admin/events', worker({ queue: () => held.queue.promise, list: () => held.list.promise, overview: () => held.overview.promise }));
     try {
       assert.equal(view.textOf('events-asof'), 'Reading…', 'nothing has answered yet');
       clock = T[0]; held.queue.resolve(response({ events: QUEUE })); await view.flush();
       clock = T[1]; held.list.resolve(response({ events: [ev(31, { starts_at: liveIso(4) })] })); await view.flush();
-      clock = T[2]; held.analytics.resolve(response({ events: [row(31, 4)] })); await view.flush();
+      clock = T[2]; held.overview.resolve(response(overviewFixture())); await view.flush();
       assert.equal(view.textOf('events-asof'), `Updated ${clockLabel(T[0])}`, 'the Waiting tile and the Review count are the queue read at T0');
-      // Review draws the queue alone, read again on the way in: the list's and R2's times are not its.
+      // D921: Review draws the queue and the list (its Clashes card), both the
+      // reads Overview already holds, so "Updated" is still the queue at T0;
+      // R2 is not Review's, so its time is not either.
       clock = T[3];
       await view.follow('/admin/events/review');
-      assert.equal(view.textOf('events-asof'), `Updated ${clockLabel(T[3])}`);
+      assert.equal(view.textOf('events-asof'), `Updated ${clockLabel(T[0])}`);
     } finally { await view.close(); }
   } finally { Date.now = realNow; }
 });
@@ -759,7 +771,8 @@ test('Review: a decided event leaves the queue at once, so it cannot be approved
     assert.ok(!view.testIds().includes('events-queue-row-22'), 'the approved event is out of the queue');
     assert.ok(view.testIds().includes('events-queue-row-21'));
     assert.match(view.text(), /Waiting for review · 1/);
-    assert.equal(view.textOf('events-approving-does'), 'What approving doesPuts the event on the public calendar at axal.vc/events.Tells the host it is live.Sends free-seat invitations to official partners not invited yet.',
+    // D921 counts line 3 from the free-seat preview, which this stub does not answer.
+    assert.match(view.textOf('events-approving-does'), /^What approving doesPuts the event on the public calendar at axal\.vc\/events\.Tells the host it is live\.Sends free-seat invitations to official partners not invited yet\./,
       'the action bar acts on the next event, Breakfast for founders');
     assert.equal(view.focused(), 'events-done', 'focus moves to the confirmation line');
     // A read newer than the decision is the truth again, whatever it holds.

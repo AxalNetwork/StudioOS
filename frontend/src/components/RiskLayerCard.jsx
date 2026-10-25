@@ -105,7 +105,7 @@ export default function RiskLayerCard({ layer, canWrite = false, onSave, onClear
         <div className="flex items-center gap-2 flex-shrink-0">
           {layerHasData ? (
             <>
-              <span className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{layer.score}</span>
+              <span className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">{layer.score ?? '—'}</span>
               <Band band={layer.band} />
             </>
           ) : (

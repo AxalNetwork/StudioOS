@@ -6,16 +6,21 @@ D923 (#2370): the admin Partner invitations desk, built to the owner's
 is the routed page, in `AdminBoardFrame` workspace "Partner invitations", at
 `/admin/partner-invitations` (Overview), `/admin/partner-invitations/invitations`,
 `/admin/partner-invitations/invitations/:id`, `/admin/partner-invitations/deals`,
-`/admin/partner-invitations/deals/:id`, `/admin/partner-invitations/referrals`
-and `/admin/partner-invitations/firm-links`. `/admin/partners` redirects to
-`/admin/partner-invitations?moved=partners`. It draws the shell: the crumb
+`/admin/partner-invitations/deals/:id` and `/admin/partner-invitations/referrals`.
+`/admin/partners` redirects to `/admin/partner-invitations?moved=partners`.
+`/admin/partner-invitations/firm-links` forwards to Advisors & Partners ›
+Firms with `?moved=firm-links` (D952): attaching an account to its firm
+lives there now, in `../advisors/FirmLinks.jsx`. It draws the shell: the crumb
 "Community › Partner invitations", the moved notice, the header, the literal
 tab strip with its counts, then the tab the address names, the record drawn
 over its tab, and the dialogs.
 
-- `PartnersOverview.jsx` — Overview (PI1): the two tile rows, Needs you, the
-  agreement-not-ready banner (PI9e) and first use (PI9b). Overview's Needs-you
-  row is Firm links' only door.
+- `PartnersOverview.jsx` — Overview (PI1; PI11a on a phone, PI12 in dark):
+  the two tile rows, Needs you, C1–C4 (D929), the agreement-not-ready banner
+  (PI9e) and first use (PI9b). Each chart is a block in D893's four states
+  with "View as table", drawn with `../../../ui/Charts.jsx`. A C1 bar opens
+  Invitations at `?stage=`, a C3 segment Deals at `?type=&state=`.
+  Overview's Needs-you row about unattached accounts opens the Firms tab.
 - `PartnersInvitations.jsx` — Invitations (PI2): the table under Guards L and
   I, its toolbar, the row menu and the pager.
 - `InvitationRecord.jsx` — one invitation (PI3; PI11c on a phone).
@@ -24,7 +29,6 @@ over its tab, and the dialogs.
 - `DealRecord.jsx` — one deal (PI6).
 - `PartnersReferrals.jsx` — Referrals (PI7), under Guard F; `?deal=<id>`
   narrows it to one deal.
-- `FirmLinks.jsx` — Firm links, off the canvas, until #2369 takes it.
 - `PartnerDialogs.jsx` — Resend (PI8a), Revoke (PI8b) and Terminate (PI8c).
 - `parts.jsx` — the card, pills, stage dots, tiles, read states, copy button,
   row menu, pager and refusal line the tabs share.
@@ -33,7 +37,8 @@ over its tab, and the dialogs.
 - `partnersDeskModel.js` — pure. Addresses, the words, Guard L (lists that
   stop at their cap), Guard F (sums over the redemptions fan-out), Guard I
   (the stage word and its repair after a resend), the agreement-ready rule,
-  tiers and term, each tab's derivations, the dialogs' words and the refusals.
+  tiers and term, each tab's derivations, C1–C4's blocks and their links
+  (D929), the dialogs' words and the refusals.
   Dates go through `../../../ui/parseStamp.js`.
 
 ## Rules
@@ -53,6 +58,7 @@ over its tab, and the dialogs.
   says "Not in this read".
 - Every dialog is a `Lightbox` that says only what the Worker does. A result
   or a refusal sits inside it until Done: no toast, no timer.
-- Nothing D923 §3 lists under "Not drawn now" is drawn: no chart, no Email
-  column, no CSV, no offer text, no Adjust terms, no step dates beyond the
-  record's own, no history beyond one line.
+- Nothing D923 §3 lists under "Not drawn now" is drawn, except C1–C4, which
+  D929 draws on these reads until part 4's overview read: no Email column,
+  no CSV, no offer text, no Adjust terms, no step dates beyond the record's
+  own, no history beyond one line.

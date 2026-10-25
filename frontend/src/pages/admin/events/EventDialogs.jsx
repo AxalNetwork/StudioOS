@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
 import {
   FEATURE_LINE, QUICK_REASONS, REASON_MAX, SEND_BACK_NOTE, approveLines, approveTitle, cancelCopy, capacityNow,
-  capacityPreview, featureCopy, sendBackReady, sendBackTitle, unpublishCopy,
+  NOTE_MAX, capacityPreview, featureCopy, sendBackReady, sendBackTitle, unpublishCopy,
 } from './eventsDeskModel';
 import { EYE, INPUT, Refusal, SUB } from './parts';
 
@@ -50,22 +50,31 @@ function Buttons({ back = 'Back', onClose, action, onAction, disabled, busy, ton
   );
 }
 
-/** EV4: what approving does, and "Also feature it", which is a second call after the approve. */
-export function ApproveDialog({ ev, busy, refusal, onClose, onConfirm }) {
+/**
+ * EV4: what approving does, and "Also feature it", which is a second call
+ * after the approve. `lines` are the page's (D921: line 3 counted from part
+ * 3's free-seat preview), and `delivery` says where the invitations arrive.
+ */
+export function ApproveDialog({ ev, lines = null, delivery = null, busy, refusal, onClose, onConfirm }) {
   const [feature, setFeature] = useState(false);
   return (
     <Lightbox label={approveTitle(ev)} title={approveTitle(ev)} onClose={onClose} testId="events-approve-dialog"
       footer={<Buttons onClose={onClose} action="Approve and publish" busy={busy} onAction={() => onConfirm({ feature })} refusal={refusal} testId="events-approve-go" />}>
       <div className={BODY}>
-        <ul className={LINES}>{approveLines(ev).map((l) => <li key={l}>{l}</li>)}</ul>
+        <ul className={LINES} data-testid="events-approve-lines">{(lines || approveLines(ev)).map((l) => <li key={l}>{l}</li>)}</ul>
+        {delivery ? <p className={`m-0 ${SUB}`} data-testid="events-approve-delivery">{delivery}</p> : null}
         <Switch checked={feature} onChange={setFeature} label="Also feature it" sub={FEATURE_LINE} testId="events-approve-feature" />
       </div>
     </Lightbox>
   );
 }
 
-/** EV5: a reason is required (O-RSN); a quick reason fills it, and the Worker keeps 1000 characters. */
-export function SendBackDialog({ ev, busy, refusal, onClose, onConfirm }) {
+/**
+ * EV5: a reason is required (O-RSN, and D917's 400 `reason_required`, drawn
+ * under the field as `fieldError`); a quick reason fills it, and the Worker
+ * keeps 1000 characters.
+ */
+export function SendBackDialog({ ev, busy, refusal, fieldError = null, onClose, onConfirm }) {
   const [reason, setReason] = useState('');
   const ready = sendBackReady(reason);
   return (
@@ -88,9 +97,11 @@ export function SendBackDialog({ ev, busy, refusal, onClose, onConfirm }) {
         <label className="flex flex-col gap-1.5">
           <span className={EYE}>Reason for the host · required</span>
           <textarea value={reason} maxLength={REASON_MAX} rows={4} onChange={(e) => setReason(e.target.value.slice(0, REASON_MAX))}
+            aria-invalid={fieldError ? 'true' : undefined} aria-describedby={fieldError ? 'events-sendback-field-error' : undefined}
             className={`${INPUT} py-2 leading-normal`} data-testid="events-sendback-reason" />
           <span className="self-end font-mono text-[11px] text-axal-muted dark:text-gray-400" data-testid="events-sendback-count">{`${reason.length} / ${REASON_MAX}`}</span>
         </label>
+        {fieldError ? <p id="events-sendback-field-error" role="alert" className="m-0 text-[12.5px] font-semibold leading-normal text-red-700 dark:text-red-300" data-testid="events-sendback-field-error">{fieldError}</p> : null}
       </div>
     </Lightbox>
   );
@@ -121,15 +132,17 @@ export function CapacityDialog({ ev, counts, busy, refusal, onClose, onConfirm }
 }
 
 /** EV10: a paid event waits for the refund checkbox, because HQ refunds by hand (O-REF). */
-export function CancelDialog({ ev, busy, refusal, onClose, onConfirm }) {
-  const copy = cancelCopy(ev);
+export function CancelDialog({ ev, payments, busy, refusal, onClose, onConfirm }) {
+  const copy = cancelCopy(ev, payments);
   const [understood, setUnderstood] = useState(false);
+  const [note, setNote] = useState('');
   return (
     <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId="events-cancel-dialog"
-      footer={<Buttons back="Keep event" onClose={onClose} action="Cancel event" tone="danger" busy={busy} disabled={Boolean(copy.paid) && !understood} onAction={() => onConfirm()} refusal={refusal} testId="events-cancel-go" />}>
+      footer={<Buttons back="Keep event" onClose={onClose} action="Cancel event" tone="danger" busy={busy} disabled={Boolean(copy.paid) && !understood} onAction={() => onConfirm(note.trim())} refusal={refusal} testId="events-cancel-go" />}>
       <div className={BODY}>
         <span className={EYE}>What happens</span>
         <ul className={LINES}>{copy.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+        <NoteField label={copy.noteLabel} value={note} onChange={setNote} testId="events-cancel-note" />
         {copy.paid ? (
           <div className="flex flex-col gap-2 rounded-[10px] border border-amber-300 bg-amber-50 p-3 text-[13px] font-semibold leading-normal text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="events-cancel-paid">
             <span>{copy.paid}</span>
@@ -144,14 +157,28 @@ export function CancelDialog({ ev, busy, refusal, onClose, onConfirm }) {
   );
 }
 
-/** EV11a: the host is not told, and there is no note until part 2. */
+/** A note the Worker passes on as it is, at most NOTE_MAX characters (D917). */
+function NoteField({ label, value, onChange, testId }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className={EYE}>{label}</span>
+      <textarea value={value} maxLength={NOTE_MAX} placeholder="Write a note…" onChange={(e) => onChange(e.target.value)}
+        className="min-h-[64px] rounded-[8px] border border-axal-hairline bg-white p-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
+        data-testid={testId} />
+    </label>
+  );
+}
+
+/** EV11a: the host is told, with the note (D917). */
 export function UnpublishDialog({ ev, busy, refusal, onClose, onConfirm }) {
   const copy = unpublishCopy(ev);
+  const [note, setNote] = useState('');
   return (
     <Lightbox label={copy.title} title={copy.title} onClose={onClose} testId="events-unpublish-dialog"
-      footer={<Buttons onClose={onClose} action="Unpublish" busy={busy} onAction={() => onConfirm()} refusal={refusal} testId="events-unpublish-go" />}>
+      footer={<Buttons onClose={onClose} action="Unpublish" busy={busy} onAction={() => onConfirm(note.trim())} refusal={refusal} testId="events-unpublish-go" />}>
       <div className={BODY}>
         <p className="m-0 text-[13px] leading-normal text-axal-ink dark:text-gray-100">{copy.body}</p>
+        <NoteField label={copy.noteLabel} value={note} onChange={setNote} testId="events-unpublish-note" />
       </div>
     </Lightbox>
   );

@@ -13,6 +13,7 @@ import { railBody } from './railPages.js';
 export * from './api/adminAiUsage.js';
 export * from './api/adminCapitalAttestations.js';
 export * from './api/adminIncorporations.js';
+export * from './api/adminLab.js';
 export * from './api/adminLearning.js';
 export * from './api/adminMeetingBots.js';
 export * from './api/adminMercury.js';
@@ -34,6 +35,7 @@ export * from './api/creditRules.js';
 export * from './api/cycleValidate.js';
 export * from './api/cycleWrites.js';
 export * from './api/cycles.js';
+export * from './api/deckEditor.js';
 export * from './api/deckSources.js';
 export * from './api/developerKeys.js';
 export * from './api/developerUsage.js';
@@ -62,10 +64,15 @@ export * from './api/mercuryAttestations.js';
 export * from './api/mercuryInvestor.js';
 export * from './api/mercuryPersonal.js';
 export * from './api/narrative.js';
+export * from './api/network.js';
 export * from './api/newsletter.js';
+export * from './api/partnerDealReads.js';
+export * from './api/partnerProfiles.js';
 export * from './api/partnerSettlements.js';
+export * from './api/payments.js';
 export * from './api/productTesting.js';
 export * from './api/profile.js';
+export * from './api/programGrants.js';
 export * from './api/publicAiModels.js';
 export * from './api/publicPricing.js';
 export * from './api/railPrefs.js';
@@ -387,6 +394,7 @@ export const SLOW_PATHS = [
   /^\/dd\/cases\/[^/]+\/(scan|report)$/,
   /^\/deck-reviewer\/[^/]+\/regenerate$/,
   /^\/decks\/generate$/,
+  /^\/decks\/[^/]+\/review$/,           // D900: a version's review
   /^\/funds\/[^/]+\/regenerate-lpa$/,
   /^\/profiling\/chat$/,                 // onboarding chat
   /^\/references\/[^/]+\/(transcribe|summarize)$/,
@@ -1226,21 +1234,58 @@ export const api = {
   // Task #9 (X-2) — Partner deal engine: admin invitations + deals.
   adminPartners: {
     activateDeal: (id) => request(`/admin/partners/deals/${id}/activate`, { method: 'POST' }),
+    // D926 — search, filters, sort and pages run on the Worker, which answers
+    // an exact `total`. With no options the call is today's: the newest 200.
+    // `stage` is a list of stored stages and `lapsed`.
     listInvitations: (opts = {}) => {
       const q = new URLSearchParams();
       if (opts.status) q.set('status', opts.status);
       if (opts.email) q.set('email', opts.email);
+      if (opts.q) q.set('q', opts.q);
+      for (const s of [].concat(opts.stage || [])) q.append('stage', s);
+      if (opts.dealType) q.set('deal_type', opts.dealType);
+      if (opts.invitedBy != null) q.set('invited_by', String(opts.invitedBy));
+      if (opts.sentWithin) q.set('sent_within', String(opts.sentWithin));
+      if (opts.sort) q.set('sort', opts.sort);
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.offset) q.set('offset', String(opts.offset));
       const qs = q.toString();
       return request(`/admin/partners/invitations${qs ? `?${qs}` : ''}`);
     },
+    // D926 — PI4's two warnings: an open invitation to this address, and the
+    // member who owns it (their role only).
+    lookupInvitation: (email) =>
+      request(`/admin/partners/invitations/lookup?email=${encodeURIComponent(email)}`),
     createInvitation: (data) =>
       request('/admin/partners/invitations', { method: 'POST', body: JSON.stringify(data) }),
+    // D927 (#2723) — read only. The Overview's blocks (each `{ available, … }`
+    // alone), one invitation (message, step dates, offers seen, chosen deal,
+    // refusals, admin history), and the offers a set of types makes over a
+    // neutral profile. None writes a row or logs a view.
+    overview: () => request('/admin/partners/overview'),
+    getInvitation: (id) => request(`/admin/partners/invitations/${encodeURIComponent(id)}`),
+    previewOffers: (types = []) =>
+      request(`/admin/partners/offers/preview?types=${encodeURIComponent([].concat(types).join(','))}`),
+    // The reply carries `signing_link`: 'renewed' | 'not_renewed' | null (D927).
     resendInvitation: (id) =>
       request(`/admin/partners/invitations/${id}/resend`, { method: 'POST' }),
     revokeInvitation: (id, reason) =>
       request(`/admin/partners/invitations/${id}/revoke`, { method: 'POST', body: JSON.stringify({ reason: reason || '' }) }),
-    listDeals: (status = 'active') =>
-      request(`/admin/partners/deals?status=${encodeURIComponent(status)}`),
+    // A state, as today, or D926's options: `status` (a list, or 'all'),
+    // `q`, `dealType`, `endsWithin`, `hasRedemptions`, `sort`, `limit`, `offset`.
+    listDeals: (statusOrOpts = 'active') => {
+      const opts = typeof statusOrOpts === 'string' ? { status: statusOrOpts } : (statusOrOpts || {});
+      const q = new URLSearchParams();
+      for (const s of [].concat(opts.status || 'active')) q.append('status', s);
+      if (opts.q) q.set('q', opts.q);
+      if (opts.dealType) q.set('deal_type', opts.dealType);
+      if (opts.endsWithin) q.set('ends_within', String(opts.endsWithin));
+      if (opts.hasRedemptions) q.set('has_redemptions', 'true');
+      if (opts.sort) q.set('sort', opts.sort);
+      if (opts.limit) q.set('limit', String(opts.limit));
+      if (opts.offset) q.set('offset', String(opts.offset));
+      return request(`/admin/partners/deals?${q.toString()}`);
+    },
     terminateDeal: (id, reason) =>
       request(`/admin/partners/deals/${id}/terminate`, { method: 'POST', body: JSON.stringify({ reason }) }),
     // Task #26 — operational counters
@@ -2480,6 +2525,13 @@ export const api = {
     ).toString();
     return request(`/refer-earn/admin/submissions${qs ? `?${qs}` : ''}`);
   },
+  adminReferralSubmission: (uid) => request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`),
+  adminReferralWeekly: (weeks = 12) => request(`/refer-earn/admin/submissions/weekly?${new URLSearchParams({ weeks })}`),
+  adminStrategicAccess: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/refer-earn/admin/strategic-access${qs ? `?${qs}` : ''}`);
+  },
+  adminStrategicAccessDecision: (userId, data) => request(`/refer-earn/admin/strategic-access/${encodeURIComponent(userId)}/decision`, { method: 'POST', body: JSON.stringify(data) }),
   adminReferralReview: (uid, data) =>
     request(`/refer-earn/admin/submissions/${encodeURIComponent(uid)}`, {
       method: 'PATCH', body: JSON.stringify(data),
@@ -2592,6 +2644,16 @@ export const api = {
     request('/advisors/admin/cohort-assignments', { method: 'POST', body: JSON.stringify(data) }),
   adminEndAdvisorCohortAssignment: (id) =>
     request(`/advisors/admin/cohort-assignments/${id}`, { method: 'DELETE' }),
+  // D960 — every grant and end (migration 565), newest first: { items, total }.
+  // `params`: assignment_id, cohort_cycle_id, limit (1–200), offset.
+  adminAdvisorCohortHistory: (params = {}) => {
+    const q = new URLSearchParams();
+    for (const k of ['assignment_id', 'cohort_cycle_id', 'limit', 'offset']) {
+      if (params[k] != null && params[k] !== '') q.set(k, String(params[k]));
+    }
+    const qs = q.toString();
+    return request(`/advisors/admin/cohort-assignments/history${qs ? `?${qs}` : ''}`);
+  },
 
   adminCohortTimeline: () => request('/admin/cohort/timeline'),
   adminCohortReview: (cycleId) => request(`/admin/cohort/review${cycleId ? `?cycle_id=${cycleId}` : ''}`),
@@ -2707,6 +2769,10 @@ export const api = {
   // D905 (#2684) — a deck's notes, from its admins to its founders (PD21).
   deckNotes: (id) => request(`/decks/${id}/notes`),
   deckPostNote: (id, payload) => request(`/decks/${id}/notes`, { method: 'POST', body: JSON.stringify(payload || {}) }),
+  // D900 (#2679) — the studio's review of one version (PD14), and the venture's reviews per version.
+  // `headers` is the press's own rail context (`railPressHeaders('review:deck-version')`).
+  deckReviewVersion: (id, headers) => request(`/decks/${id}/review`, { ...(headers ? { headers } : {}), method: 'POST', body: JSON.stringify({}) }),
+  deckReviews: (id) => request(`/decks/${id}/reviews`),
   // The Super Admin's default template by sector and stage; an admin reads it.
   deckRecommendOverrides: () => request('/decks/admin/recommend-overrides'),
   deckSetRecommendOverride: (payload) => request('/decks/admin/recommend-overrides', { method: 'PUT', body: JSON.stringify(payload || {}) }),
@@ -2725,6 +2791,8 @@ export const api = {
     `/decks/share/${encodeURIComponent(token)}/nda`,
     { method: 'POST', body: JSON.stringify(payload || {}) },
   ),
+  // D902 — the NDA's text before acceptance (PD20 A).
+  deckShareNdaText: (token) => request(`/decks/share/${encodeURIComponent(token)}/nda`),
   deckShareFeedback: (token, payload) => request(
     `/decks/share/${encodeURIComponent(token)}/feedback`,
     { method: 'POST', body: JSON.stringify(payload || {}) },
@@ -3422,6 +3490,11 @@ export const api = {
     request(`/perks/partner/${encodeURIComponent(uid)}/redeem`, { method: 'POST', body: JSON.stringify(data || {}) }),
   perkRate: (uid, stars) =>
     request(`/perks/${encodeURIComponent(uid)}/rating`, { method: 'POST', body: JSON.stringify({ stars }) }),
+  adminPerkClaims: (weeks = 12) => request(`/perks/admin/claims?${new URLSearchParams({ weeks })}`),
+  adminPerkListings: (params = {}) => {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return request(`/perks/admin/listings${qs ? `?${qs}` : ''}`);
+  },
   perkReviewQueue: () => request('/perks/admin/queue'),
   perkReview: (uid, data) =>
     request(`/perks/admin/${encodeURIComponent(uid)}/review`, { method: 'POST', body: JSON.stringify(data || {}) }),
@@ -5318,7 +5391,16 @@ export const adminExploring = {
 // Task #1 — Admin advisor & partner network profiles (drives Spin-Out
 // Demo Day deck's Advisors & Network slide).
 export const adminNetworkProfiles = {
-  list: () => request('/admin/network-profiles'),
+  // D974: `{ state: 'shown' | 'hidden' | 'archived', q, limit }`; with no
+  // state the Worker lists shown and hidden rows.
+  list: (params = {}) => {
+    const qs = new URLSearchParams();
+    for (const k of ['state', 'q', 'limit']) if (params[k] != null && params[k] !== '') qs.set(k, String(params[k]));
+    const tail = qs.toString();
+    return request(`/admin/network-profiles${tail ? `?${tail}` : ''}`);
+  },
+  archive: (id) => request(`/admin/network-profiles/${id}/archive`, { method: 'POST' }),
+  restore: (id) => request(`/admin/network-profiles/${id}/restore`, { method: 'POST' }),
   create: (payload) => request('/admin/network-profiles', { method: 'POST', body: JSON.stringify(payload) }),
   update: (id, patch) => request(`/admin/network-profiles/${id}`, { method: 'PUT', body: JSON.stringify(patch) }),
   remove: (id) => request(`/admin/network-profiles/${id}`, { method: 'DELETE' }),
@@ -5702,9 +5784,11 @@ export const adminEvents = {
   get: (id) => request(`/admin/events/${id}`),
   approve: (id) => request(`/admin/events/${id}/approve`, { method: 'POST', body: '{}' }),
   reject: (id, reason) => request(`/admin/events/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
-  unpublish: (id) => request(`/admin/events/${id}/unpublish`, { method: 'POST', body: '{}' }),
+  // D917: the host is told, with the optional note (D922 sends it).
+  unpublish: (id, note = '') => request(`/admin/events/${id}/unpublish`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   feature: (id, featured) => request(`/admin/events/${id}/feature`, { method: 'POST', body: JSON.stringify({ featured }) }),
-  cancel: (id) => request(`/admin/events/${id}/cancel`, { method: 'POST', body: '{}' }),
+  // D917: registrants with an account are told, with the optional note (D922 sends it).
+  cancel: (id, note = '') => request(`/admin/events/${id}/cancel`, { method: 'POST', body: JSON.stringify(note ? { note } : {}) }),
   // capacity: null clears the cap (unlimited). Promotes the waitlist server-side.
   setCapacity: (id, capacity) =>
     request(`/admin/events/${id}/capacity`, { method: 'POST', body: JSON.stringify({ capacity }) }),

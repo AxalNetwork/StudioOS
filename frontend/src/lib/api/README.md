@@ -185,6 +185,14 @@ is shown to its owner only and never stored. `partnerSettlements.js` calls
 and `/api/admin/partner-settlements` (an Admin's list, draft, edit and delete;
 the Super Admin's issue and void). Nothing here moves money.
 
+D928 (#2724): `partnerDealReads.js` calls the four reads in
+`cloudflare-worker/src/routes/admin_partner_deal_reads.ts`: `GET
+/api/admin/partners/deals/:id` (one deal, in full), `GET
+/api/admin/partners/deals/:id/terminate-preview`, `GET
+/api/admin/partners/redemptions` (every redemption across deals, filtered,
+sorted and paged) and `GET /api/admin/partners/agreement-ready`. Admin only;
+nothing here writes.
+
 D806 (#2245): `billingInvoices.js` calls `GET /api/billing/invoices?page&per`
 (`cloudflare-worker/src/routes/billing.ts`): the member's own paid orders and
 Stripe plan invoices in one list, newest first. D789's Usage overview reads the newest three rows.
@@ -294,3 +302,23 @@ record the total received or void, and the PDF (`pdfBlob`, and the
 Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
 drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
 as `fee_invoices`.
+
+D973: `adminNetwork.js` re-exports `network.js`’s single `adminNetworkApi` binding.
+Overview, paged People and opaque drawer refs coexist with numeric standing
+reads and all D976 writes; the barrel exports no competing client objects.
+
+D976 (#2762): `network.js` is the advisor and partner network's admin side on
+`/api/admin/network/people/:userId`: one person's standing (stage, pause,
+directory, ratings, sessions, engagement counts per lane, payout readiness, a
+studio agreement on file and Lab host status), Pause and Resume, each with a
+required reason, and the advisor directory switch. No client name and no rating
+comment is on the wire.
+D1011 (#2830): `payments.js` calls `/api/admin/payments`: the change log, its
+CSV (with a reason) and the webhook's deliveries by hour. Super Admin only.
+
+D990 (#2801): `partnerProfiles.js` is HQ's Partner profiles on
+`/api/admin/partner-profiles`: the list (search, filters, sort and pages, with
+totals over the filtered set and the filters' options), the counts for the tiles
+and the weekly series, and one profile by its reference (`pp_…`), never by
+email. The older `/api/profiling/admin/*` calls stay on `api.js` for the pages
+that read them.

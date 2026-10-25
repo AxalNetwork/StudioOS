@@ -26,6 +26,9 @@ function fixture() {
   }
   db.exec("ALTER TABLE pitch_deck_share_tokens ADD COLUMN revoked_at TEXT");
   db.exec("ALTER TABLE pitch_deck_share_tokens ADD COLUMN allow_forwarding INTEGER DEFAULT 1");
+  // 463: who a link was made for. D902 offers no deal pack on a link made for an investor.
+  db.exec("ALTER TABLE pitch_deck_share_tokens ADD COLUMN prospect_id INTEGER");
+  db.exec("ALTER TABLE pitch_deck_share_tokens ADD COLUMN investor_label TEXT");
   db.exec("ALTER TABLE pitch_deck_share_tokens ADD COLUMN bound_viewer_hash TEXT");
   for (const [col, type] of [['commit_status','TEXT'], ['amount','REAL'], ['close_id','INTEGER'], ['instrument','TEXT']]) {
     try { db.exec(`ALTER TABLE raise_prospects ADD COLUMN ${col} ${type}`); } catch {}

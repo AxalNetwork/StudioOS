@@ -155,8 +155,9 @@ test('migration 536 relabels historical computed traction only and preserves sco
  assert.deepEqual(planActions([allocated,later],new Map([[later.name,later.checksum]])).map(a=>a.action),['apply','skip'],'the filename ledger applies 536 even after 544 is recorded');
  const db=new DatabaseSync(':memory:',{enableForeignKeyConstraints:false,enableDoubleQuotedStringLiterals:true});
  db.exec(baseline);
- // Production can already have higher-numbered files: replay every other delta first.
- for(const f of files) if(migrationNumber(f.name)>BASELINE_CUTOFF && f.name!==allocated.name) db.exec(f.sql);
+ // Production can already have higher-numbered files: replay independent deltas first.
+ // 558 explicitly depends on 536 and must follow it to retain nullable scores.
+ for(const f of files) if(migrationNumber(f.name)>BASELINE_CUTOFF && f.name!==allocated.name && f.name!=='558_readiness_scores_nullable_score.sql') db.exec(f.sql);
  db.exec("INSERT INTO users(id,role,name,email,is_active) VALUES(1,'founder','Synthetic founder','fixture@example.test',1); INSERT INTO projects(id,name) VALUES(1,'Synthetic venture')");
  const columnsBefore=db.prepare('PRAGMA table_info(readiness_scores)').all();
  const objectsBefore=db.prepare("SELECT name,type FROM sqlite_master WHERE tbl_name='readiness_scores' AND type IN ('index','trigger') ORDER BY name").all();

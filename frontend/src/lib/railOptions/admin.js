@@ -46,7 +46,7 @@ export const ADMIN_BOARDS = [
   { id: 'S4', section: 'Accounts', module: 'Trash', route: '/admin/trash', files: ['pages/AdminTrashPage.jsx'], rail: FRAME },
   { id: 'S5', section: 'Approvals', module: null, route: '/admin/held/approvals', files: ['pages/admin/HeldApprovals.jsx'], rail: HELD },
   { id: 'S6', section: 'Approvals', module: 'Identity checks', route: '/admin?tab=kyc', files: ['pages/admin/consoles/KycConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
-  { id: 'S7', section: 'Approvals', module: 'Entity profiles', route: '/admin?tab=profiles', files: ['pages/admin/consoles/PartnerProfilesConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'S7', section: 'Approvals', module: 'Entity profiles', route: '/admin/partner-profiles', files: ['pages/admin/consoles/PartnerProfilesConsole.jsx'], rail: FRAME, host: 'pages/admin/profiles/PartnerProfiles.jsx' },
   { id: 'S8', section: 'Approvals', module: 'LP applications', route: '/admin/lp-applications', files: ['pages/admin/AdminLpApplications.jsx'], rail: FRAME },
   { id: 'S9', section: 'Approvals', module: 'Referrals', route: '/admin/refer-earn', files: ['pages/admin/ReferralReview.jsx'], rail: FRAME },
   { id: 'S10', section: 'Approvals', module: 'Best fit', route: '/admin/best-fit', files: ['pages/admin/AdminBestFitPage.jsx'], rail: FRAME },
@@ -77,7 +77,7 @@ export const ADMIN_BOARDS = [
   { id: 'S35', section: 'Contracts', module: 'Partner deals', route: '/admin/contracts?tab=partner-deals', files: ['pages/admin/contracts/RelatedLists.jsx'], rail: CONTRACTS },
   { id: 'S36', section: 'Contracts', module: 'Templates', route: '/admin/contracts?tab=templates', files: ['pages/admin/AdminTemplates.jsx', 'pages/admin/contracts/TemplateEditor.jsx', 'pages/admin/contracts/TemplateCatalog.jsx'], rail: CONTRACTS },
   { id: 'S37', section: 'Contracts', module: 'Forms', route: '/admin/contracts?tab=forms', files: ['pages/admin/AdminForms.jsx'], rail: CONTRACTS },
-  { id: 'S38', section: 'Insights', module: null, route: '/admin/insights', files: ['pages/admin/insights/AdminInsights.jsx', 'pages/admin/insights/insightsModel.js', 'pages/admin/insights/InsightsCharts.jsx'], rail: 'pages/admin/insights/AdminInsights.jsx' },
+  { id: 'S38', section: 'Insights', module: null, route: '/admin/insights', files: ['pages/admin/insights/AdminInsights.jsx', 'pages/admin/insights/insightsModel.js', 'ui/Charts.jsx'], rail: 'pages/admin/insights/AdminInsights.jsx' },
   { id: 'S39', section: 'Licences', module: null, route: '/admin/my-licence', files: ['pages/subsidiary/MyLicencePage.jsx'], rail: FRAME },
 ];
 

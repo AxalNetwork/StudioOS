@@ -34,6 +34,25 @@ test('D527 re-export and Worker mount are present for the drift scanner', () => 
   const exports = root.slice(root.indexOf('// api-modules:begin'), root.indexOf('// api-modules:end')).split('\n').filter(x => x.startsWith('export * from'));
   assert.ok(exports.includes("export * from './api/adminNetwork.js';")); assert.deepEqual(exports, [...exports].sort());
   const worker = read('../../cloudflare-worker/src/index.ts');
-  assert.match(worker, /app\.route\('\/api\/admin\/network', adminNetwork\)/);
-  assert.match(worker, /import adminNetwork from '\.\/routes\/admin_network'/);
+  assert.match(worker, /app\.route\('\/api\/admin\/network', adminNetworkReads\)/);
+  assert.ok(worker.indexOf("app.route('/api/admin/network', adminNetworkReads)") < worker.indexOf("app.route('/api/admin/network', adminNetwork)"));
+  assert.match(worker, /import adminNetworkReads from '\.\/routes\/admin_network_reads'/);
+});
+
+
+test('both network modules expose one client with D976 standing writes intact', async () => {
+  const fromReads = await import('../src/lib/api/adminNetwork.js');
+  const fromStanding = await import('../src/lib/api/network.js');
+  assert.equal(fromReads.adminNetworkApi, fromStanding.adminNetworkApi);
+  seen.length = 0;
+  await adminNetworkApi.person(2);
+  await adminNetworkApi.pause(2, 'Pause fixture');
+  await adminNetworkApi.resume(2, 'Resume fixture');
+  await adminNetworkApi.setListed(2, false);
+  assert.deepEqual(seen, [
+    { url: '/api/admin/network/people/2', method: 'GET', body: undefined },
+    { url: '/api/admin/network/people/2/pause', method: 'POST', body: JSON.stringify({ reason: 'Pause fixture' }) },
+    { url: '/api/admin/network/people/2/resume', method: 'POST', body: JSON.stringify({ reason: 'Resume fixture' }) },
+    { url: '/api/admin/network/people/2/directory', method: 'POST', body: JSON.stringify({ listed: false }) },
+  ]);
 });

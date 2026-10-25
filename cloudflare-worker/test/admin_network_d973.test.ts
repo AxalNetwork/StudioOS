@@ -5,7 +5,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
-import route from '../src/routes/admin_network.ts';
+import route from '../src/routes/admin_network_reads.ts';
+import standing from '../src/routes/admin_network.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 import { mutate } from './_channel_readiness.ts';
@@ -214,6 +215,19 @@ for (const [tag, before, after, gate] of [
   ['failure', "return unreadable(`${key} could not be read. Try again.`);", 'return ok([]);', failureGate],
   ['hq', 'includeSettlements && !branch', 'includeSettlements', failureGate],
 ] as const) test('mutation rejected: ' + tag, async () => {
-  const changed = await mutate('../src/routes/admin_network.ts', before, after, tag);
+  const changed = await mutate('../src/routes/admin_network_reads.ts', before, after, tag);
   await assert.rejects(() => gate(changed.default), undefined, `${tag} must be caught`);
+});
+
+
+test('D973 opaque drawer refs coexist with D976 numeric standing in the mounted order', async () => {
+  const { db } = fixture();
+  const combined = new Hono<any>(); combined.route('/', route); combined.route('/', standing);
+  try {
+    const drawer = await get(db, '/people/user%3A2', 1, {}, combined);
+    assert.equal(drawer.status, 200); assert.equal(drawer.body.person.ref, 'user:2');
+    const numeric = await get(db, '/people/2', 1, {}, combined);
+    assert.equal(numeric.status, 200); assert.equal(numeric.body.user_id, 2);
+    assert.equal((await get(db, '/overview', 1, {}, combined)).status, 200);
+  } finally { db.close(); }
 });

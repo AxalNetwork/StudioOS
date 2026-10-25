@@ -42,6 +42,9 @@ import legal from './routes/legal';
 import legalcap from './routes/legalcap';
 import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
+import adminPartnersReads from './routes/admin_partners_reads';
+import adminPartnerDealReads from './routes/admin_partner_deal_reads';
+import adminNetworkReads from './routes/admin_network_reads';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
@@ -50,6 +53,7 @@ import adminNetwork from './routes/admin_network';
 import profileHistoryRoutes from './routes/profile_history';
 import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
+import adminPartnerProfilesRoutes from './routes/admin_partner_profiles';
 import helpCenterRoutes, { adminHelpCenter } from './routes/help_center';
 import networkPublic from './routes/network_public';
 // Task #3 — Admin Telegram channels + aggregator + post send.
@@ -193,6 +197,7 @@ import deckShareActions from './routes/deck_share_actions';
 // D901 (#2680) — the HTML export and the deck export ledger.
 import deckExports from './routes/deck_exports';
 import deckNotes from './routes/deck_notes';
+import deckReview from './routes/deck_review';
 import deckSources from './routes/deck_sources';
 import notificationsRoutes from './routes/notifications';
 import votesRoutes from './routes/votes';
@@ -211,6 +216,7 @@ import advisorGrantRoutes from './routes/advisor_grants';
 import messagesRoutes from './routes/messages';
 import perksRoutes from './routes/perks';
 import adminLicences from './routes/admin_licences';
+import adminProgramGrants from './routes/admin_program_grants';
 import adminDeployments from './routes/admin_deployments';
 import adminStatements from './routes/admin_statements';
 import adminEscalations from './routes/admin_escalations';
@@ -247,6 +253,7 @@ import adminSecurity from './routes/admin_security';
 import adminHqSupport from './routes/admin_hq_support';
 import adminStudioGlance from './routes/admin_studio_glance';
 import adminInsights from './routes/admin_insights';
+import adminPrograms from './routes/admin_programs';
 import adminInsightsExport from './routes/admin_insights_export';
 // The holder-facing read of one licence — see routes/licence.ts for why it is
 // not a role branch inside the admin ledger.
@@ -347,6 +354,7 @@ import billing from './routes/billing';
 import catalog, { adminCatalog } from './routes/catalog';
 // Task #16 — Admin Stripe management (webhook endpoints + publishable key).
 import adminStripe from './routes/admin_stripe';
+import adminPayments from './routes/admin_payments';
 import adminMoneyRails from './routes/admin_money_rails';
 import { adminPartnerSettlements, partnerSettlements } from './routes/partner_settlements';
 import mercuryPersonalRoutes from './routes/mercury_personal';
@@ -688,6 +696,8 @@ const COOL_OFF_PREFIXES = [
   // D755 — the catalog's writes, token packs included, sell what members pay
   // for and can mint a pack. Same class as promos.
   '/api/admin/catalog',
+  // D1009 — checkout keys and webhook settings share the Payments cool-off.
+  '/api/admin/stripe',
 ];
 for (const p of COOL_OFF_PREFIXES) {
   app.use(p, recoveryCoolOff);
@@ -852,7 +862,15 @@ app.route('/api/partners', partners);
 // Task #8 (X-1) — Partner deal engine. Admin endpoints under
 // /api/admin/partners (separate from legacy /api/partners) and the
 // public token-gated onboarding flow under /api/partner-onboard.
+// D927 (#2723) — the read-only overview, one invitation's read and the offer preview.
+app.route('/api/admin/partners', adminPartnersReads);
+// D928 (#2724): one deal's read, the terminate preview, the cross-deal redemptions and the
+// agreement-ready signal. Before `adminPartners`; its deal ids match digits only, so `/deals/top` stays there.
+app.route('/api/admin/partners', adminPartnerDealReads);
 app.route('/api/admin/partners', adminPartners);
+// D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
+app.route('/api/admin/network', adminNetworkReads);
+app.route('/api/admin/network', adminNetwork);
 app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);
 app.route('/api/partner-portal', partnerPortal);
@@ -939,7 +957,6 @@ app.route('/api/admin/team', adminTeam);
 // Task #1 — Network profiles. Mounted BEFORE catch-all /api/admin so
 // /api/admin/network-profiles/* resolves here.
 app.route('/api/admin/network-profiles', adminNetworkProfiles);
-app.route('/api/admin/network', adminNetwork);
 // Task #3 — mount Telegram BEFORE the catch-all `/api/admin` so the
 // nested `/api/admin/telegram/*` routes resolve here rather than 404ing
 // inside the generic admin router.
@@ -980,11 +997,13 @@ app.route('/api/admin/articles', adminArticles);
 // generic admin router. Step-up + requireAdmin enforced per-route.
 app.route('/api/admin/billing', adminBilling);
 // Task — Stripe product catalog admin sync. Mounted BEFORE the catch-all
-// /api/admin so /api/admin/catalog/* resolves here. requireAdmin per-route.
+// /api/admin so /api/admin/catalog/* resolves here. Super Admin gates per-route (D1009).
 app.route('/api/admin/catalog', adminCatalog);
 // Task #16 — Admin Stripe management (webhook + publishable key). Mounted
 // BEFORE the catch-all /api/admin so /api/admin/stripe/* resolves here.
 app.route('/api/admin/stripe', adminStripe);
+// D1011 (#2830): the Payments page's change log and webhook deliveries; Super Admin only.
+app.route('/api/admin/payments', adminPayments);
 // D707 (#1772) — the entities' roles and the money rails. Before the catch-all.
 app.route('/api/admin/money-rails', adminMoneyRails);
 app.route('/api/admin/partner-settlements', adminPartnerSettlements);
@@ -1075,6 +1094,8 @@ app.route('/api/branch', branchInvitationRoutes);
 // database recorded. Same prefix as the other branch reads.
 app.route('/api/branch', branchSupportSessionRoutes);
 app.route('/api/admin/licences', adminLicences);
+// D982 (#2773): which programs HQ grants each licensed studio, on what terms.
+app.route('/api/admin/program-grants', adminProgramGrants);
 // Migrations 199/207 — who holds the Super Admin elevation. Mount BEFORE the
 // catch-all for the same reason as the licence ledger above.
 app.route('/api/admin/super-admins', adminSuperAdmins);
@@ -1109,6 +1130,8 @@ app.route('/api/admin/studio', adminStudioGlance);
 // D893 (#2661): the logged, counts-only export of the Insights read below. Mounted first, so /export never reaches the read's router.
 app.route('/api/admin/insights/export', adminInsightsExport);
 app.route('/api/admin/insights', adminInsights);
+// D954 (#2787): Admin › Programs — the registry, the playbook, the catalogue read and each program's activity.
+app.route('/api/admin/programs', adminPrograms);
 app.route('/api/licence', licenceRequests);
 app.route('/api/licence', licence);
 app.route('/api/best-fit', bestFitSelf);
@@ -1179,6 +1202,8 @@ app.route('/api/decks', deckShareActions);
 app.route('/api/decks', deckExports);
 // D905 (#2684): a deck's notes, from its admins to its founders; two-segment paths, before `decks`.
 app.route('/api/decks', deckNotes);
+// D900 (#2679): a version's review and the venture's review history; two-segment paths, before `decks`.
+app.route('/api/decks', deckReview);
 // D896: `/sources` and `/:id/refresh`, before `decks` so its `GET /:id` cannot answer `/sources`.
 app.route('/api/decks', deckSources);
 app.route('/api/decks', decks);
@@ -1253,6 +1278,8 @@ app.route('/api/profile', profileHistoryRoutes);
 app.route('/api/profile', founderProfileRoutes);
 // D358 — admin aggregates of how profiles move over time (routes/admin_profiling.ts).
 app.route('/api/admin/profiling', adminProfilingRoutes);
+// D990 — Partner profiles: the list, the counts and one profile by reference (routes/admin_partner_profiles.ts).
+app.route('/api/admin/partner-profiles', adminPartnerProfilesRoutes);
 // D603 — the Help Center's guide views and yes/no answers (routes/help_center.ts).
 app.route('/api/help', helpCenterRoutes);
 app.route('/api/admin/help', adminHelpCenter);

@@ -1,5 +1,6 @@
 /**
- * Lazy schema bootstrap for the advisor's own stores — migrations 201–206.
+ * Lazy schema bootstrap for the advisor's own stores — migrations 201–206,
+ * with 367's notice ledger and opt-outs and 565's assignment history.
  *
  * WHY THIS EXISTS, and it is a rule rather than a precaution.
  * `documentation/architecture/GOTCHAS.md` states it directly: an `ALTER` file
@@ -182,6 +183,23 @@ const TABLES = [
    )`,
   `CREATE INDEX IF NOT EXISTS idx_cohort_advisor_optouts_advisor
      ON cohort_advisor_optouts (advisor_user_id, withdrawn_at)`,
+  // 565 (D960) — every grant and end, which a re-assign no longer overwrites.
+  // The schema only: 565's backfill is a one-off and does not belong in a
+  // bootstrap that runs on every request.
+  `CREATE TABLE IF NOT EXISTS advisor_cohort_assignment_events (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     assignment_id INTEGER NOT NULL REFERENCES advisor_cohort_assignments(id),
+     advisor_user_id INTEGER NOT NULL,
+     cohort_cycle_id INTEGER NOT NULL,
+     kind TEXT NOT NULL CHECK (kind IN ('assigned', 'ended')),
+     admin_user_id INTEGER,
+     note TEXT,
+     created_at TEXT NOT NULL
+   )`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_cohort_assignment_events_assignment
+     ON advisor_cohort_assignment_events(assignment_id, created_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_advisor_cohort_assignment_events_cycle
+     ON advisor_cohort_assignment_events(cohort_cycle_id, created_at)`,
 ];
 
 async function addMissingColumns(

@@ -1,10 +1,12 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminEvents, events as eventsApi } from '../../../lib/api';
-import { Unreadable, Unrecorded, actionDanger, actionGhost } from '../../../ui';
+import { EVENT_TYPES } from '../../../lib/eventTypes.js';
+import { HBars, RunningTotal, Unreadable, Unrecorded, actionDanger, actionGhost } from '../../../ui';
 import {
-  GONE, HISTORY_REST, ROSTER_LINE, agendaRows, analyticsJoin, capacitySavedLine, countsFor, dateLabel, eventTiles,
-  isEventId, onPublicCalendar, publishGate, refusalText, titleOf, visibilityWord, whenLine,
+  GONE, READING, ROSTER_LINE, SEATS_CHART_LABEL, agendaRows, analyticsJoin, capacitySavedLine, countsFor, dateLabel, eventTiles,
+  formatWord, funnelOf, historyRows, hostLine, invitationRows, isEventId, onPublicCalendar, paymentRows, publishGate, refusalText,
+  registrantRows, reminderRows, seatsSeries, summaryBlock, summaryTiles, titleOf, typeWord, visibilityWord, whenLine,
 } from './eventsDeskModel';
 import { CancelDialog, CapacityDialog, FeatureDialog, UnpublishDialog } from './EventDialogs';
 import { CARD, Card, Done, EYE, LINK, Pill, StatusPill, SUB } from './parts';
@@ -13,10 +15,36 @@ import { CARD, Card, Done, EYE, LINK, Pill, StatusPill, SUB } from './parts';
  * D915 (#2368) — one event (EV7), at `/admin/events/:id`, inside the desk's
  * frame. R3 gives the event; R2's row gives its counts under Guard G; R5 gives
  * the agenda. Each block answers alone. The roster is not read: names and
- * emails stay on the host's roster, one link away. The charts, the count cards
- * (payments, free seats, invitations, sources) and the rest of the history
- * wait for D915 parts 3 and 7.
+ * emails stay on the host's roster, one link away.
+ *
+ * D922 (#2705) completes it from part 3's two reads (D918): the summary gives
+ * the host line, the second row of tiles, both charts, who registered, the
+ * invitations, the payments and the reminders, block by block; the history
+ * gives the history. Every figure is a count; a block that failed says so with
+ * Try again and the rest still draw (EV15a).
  */
+
+/** A block's loading and failed states, so each card draws its own (EV15a). */
+function BlockState({ block, what, onRetry, children }) {
+  if (block.state === 'loading') return <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{READING}</span>;
+  if (block.state !== 'ready') return <Unreadable what={what} claim="That is not the same as none." onRetry={onRetry} />;
+  return children;
+}
+
+/** A row of a figure and its label; a value nothing records carries its reason as a line. */
+function FigureRow({ label, value, reason, unrecorded, testId }) {
+  return (
+    <div className="flex flex-col gap-0.5 border-t border-axal-hairline py-2 first:border-t-0 dark:border-gray-700" data-testid={testId}>
+      <div className="flex items-baseline justify-between gap-3 text-[13px]">
+        <span className="text-axal-ink dark:text-gray-100">{label}</span>
+        {unrecorded
+          ? <span className="font-mono text-[10.5px] font-bold uppercase tracking-[.05em] text-axal-muted dark:text-gray-400"><Unrecorded>{value}</Unrecorded></span>
+          : <span className="font-mono text-[13px] font-semibold text-axal-ink dark:text-gray-100">{value}</span>}
+      </div>
+      {reason ? <span className={SUB}>{reason}</span> : null}
+    </div>
+  );
+}
 
 const GATE_TONE = {
   ok: 'text-emerald-700 dark:text-emerald-400',
@@ -96,6 +124,17 @@ export default function EventPage({ id, reads, now }) {
   if (!ev || typeof ev !== 'object') return <Unreadable what="This event" claim="The answer held no event." onRetry={reads.reload} />;
 
   const counts = countsFor(analyticsJoin(reads.analytics, 1), ev.id);
+  const block = (key) => summaryBlock(reads.summary, key);
+  const host = hostLine(block('host'));
+  const type = typeWord(ev, EVENT_TYPES);
+  const format = formatWord(ev);
+  const seats = seatsSeries(block('seats_by_day'), ev, now);
+  const funnel = funnelOf(block('registrations'), ev, now);
+  const who = registrantRows(block('by_role'), block('by_source'));
+  const invites = invitationRows(block('invitations'));
+  const pays = paymentRows(block('payments'));
+  const reminders = reminderRows(block('reminders'), ev, now);
+  const history = historyRows(reads.history);
   const agenda = reads.agenda.status === 'ready' ? agendaRows(reads.agenda.data, ev) : null;
   const close = () => { if (!busy) { setDialog(null); setRefusal(null); } };
   // The Worker checks no status, so the actions wait for a read newer than the last write.
@@ -125,10 +164,18 @@ export default function EventPage({ id, reads, now }) {
             <span className="flex flex-wrap gap-1.5">
               <StatusPill status={ev.status} />
               <Pill>{visibilityWord(ev.visibility)}</Pill>
+              {type ? <Pill tone="violet">{type}</Pill> : null}
               {ev.featured ? <Pill tone="violet">★ Featured</Pill> : null}
             </span>
+            {host ? (
+              <p className="m-0 text-[13px] font-semibold leading-normal text-axal-ink dark:text-gray-100" data-testid="events-event-host">
+                {host.recorded ? host.text : <Unrecorded>{host.text}</Unrecorded>}
+              </p>
+            ) : null}
+            {block('host').state === 'unreadable' ? <Unreadable what="The host" claim="That is not a claim that it has none." onRetry={reads.reload} /> : null}
             <p className="m-0 text-[13px] leading-normal text-axal-muted dark:text-gray-400">{whenLine(ev)}</p>
-            <p className="m-0 text-[13px] leading-normal text-axal-muted dark:text-gray-400">
+            <p className="m-0 text-[13px] leading-normal text-axal-muted dark:text-gray-400" data-testid="events-event-place">
+              {format ? `${format} · ` : null}
               {String(ev.location_text || '').trim() || <Unrecorded>Place not recorded</Unrecorded>}
             </p>
           </div>
@@ -155,6 +202,103 @@ export default function EventPage({ id, reads, now }) {
             {t.sub ? <span className={SUB}>{t.sub}</span> : null}
           </div>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3" data-testid="events-event-tiles-2">
+        {summaryTiles(reads.summary).map((t) => (
+          <div key={t.key} className={`${CARD} flex min-w-0 flex-col gap-1.5 px-4 py-3.5`} data-testid={`events-event-tile-${t.key}`}>
+            <span className={EYE}>{t.label}</span>
+            {t.failed ? <Unreadable what={t.label} claim="That is not the same as none." onRetry={reads.reload} /> : (
+              <>
+                <span className={t.words
+                  ? 'text-[15px] font-bold leading-snug text-axal-muted dark:text-gray-400'
+                  : 'font-mono text-[24px] font-medium tracking-[-.02em] text-axal-ink dark:text-gray-100'}>{t.value}</span>
+                {t.sub ? <span className={SUB}>{t.sub}</span> : null}
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-3.5 lg:grid-cols-2">
+        <Card title="Seats taken over time" testId="events-event-seats">
+          <BlockState block={block('seats_by_day')} what="Seats over time" onRetry={reads.reload}>
+            {seats ? (
+              <>
+                <span className={SUB}>{SEATS_CHART_LABEL}</span>
+                {seats.points.length ? (
+                  <div role="img" aria-label={seats.alt}>
+                    <RunningTotal points={seats.points.map((p) => ({ label: dateLabel(p.day).replace(/ \d{4}$/, ''), value: p.total }))}
+                      capacity={seats.capacity} today={seats.todayAfter ? 'after' : seats.today ? seats.points.findIndex((p) => p.day >= seats.today) : null} />
+                  </div>
+                ) : <p className={`m-0 ${SUB}`}>{seats.alt}</p>}
+                {seats.undated ? <span className={SUB}>{`${seats.undated} seat holder${seats.undated === 1 ? ' has' : 's have'} no registration date and ${seats.undated === 1 ? 'is' : 'are'} not drawn.`}</span> : null}
+              </>
+            ) : null}
+          </BlockState>
+        </Card>
+        <Card title="From sign-up to the door" testId="events-event-funnel">
+          <BlockState block={block('registrations')} what="The registrations" onRetry={reads.reload}>
+            {funnel ? (
+              <>
+                <div role="img" aria-label={funnel.steps.map((st) => `${st.label} ${st.text || st.value}`).join(', ')}>
+                  <HBars rows={funnel.steps.map((st) => ({ label: st.label, value: st.value, text: st.text, dash: st.dash }))} testIdPrefix="events-funnel" />
+                </div>
+                <span className="flex flex-wrap gap-1.5" data-testid="events-event-funnel-beside">
+                  {funnel.beside.map((b) => <Pill key={b.key}>{`${b.label} ${b.value}`}</Pill>)}
+                </span>
+                <span className={SUB}>Confirmed counts everyone confirmed, including those who attended.</span>
+              </>
+            ) : null}
+          </BlockState>
+        </Card>
+      </div>
+
+      <div className="grid gap-3.5 lg:grid-cols-3">
+        <Card title="Who registered" testId="events-event-who">
+          <span className={SUB}>Seats by profile and by how the seat was got.</span>
+          <BlockState block={block('by_role')} what="Who registered" onRetry={reads.reload}>
+            {who.profile ? <HBars rows={who.profile.map((r) => ({ label: r.label, value: r.value }))} testIdPrefix="events-who-profile" /> : null}
+          </BlockState>
+          <span className={EYE}>How the seat was got</span>
+          <BlockState block={block('by_source')} what="How seats were got" onRetry={reads.reload}>
+            {who.source ? <HBars rows={who.source.map((r) => ({ label: r.label, value: r.value }))} testIdPrefix="events-who-source" /> : null}
+            {who.added ? <FigureRow label="Added by an admin" value="Not recorded" reason={who.added} unrecorded testId="events-who-added" /> : null}
+          </BlockState>
+        </Card>
+        <Card title="Invitations" testId="events-event-invitations">
+          <BlockState block={block('invitations')} what="The invitations" onRetry={reads.reload}>
+            {invites ? (
+              <div className="flex flex-col">
+                <span className={EYE}>By status</span>
+                {invites.status.map((r) => <FigureRow key={r.key} label={r.label} value={r.value} testId={`events-invite-${r.key}`} />)}
+                <span className={`${EYE} pt-2`}>By source</span>
+                {invites.source.map((r) => <FigureRow key={r.key} label={r.label} value={r.value} testId={`events-invite-src-${r.key}`} />)}
+              </div>
+            ) : null}
+          </BlockState>
+        </Card>
+        <div className="flex flex-col gap-3.5">
+          <Card title="Payments" testId="events-event-payments">
+            <BlockState block={block('payments')} what="Ticket payments" onRetry={reads.reload}>
+              {pays ? <div className="flex flex-col">{pays.map((r) => <FigureRow key={r.key} {...r} testId={`events-pay-${r.key}`} />)}</div> : null}
+            </BlockState>
+          </Card>
+          <Card title="Reminders" testId="events-event-reminders">
+            <BlockState block={block('reminders')} what="The reminders" onRetry={reads.reload}>
+              {reminders ? (
+                <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                  {reminders.map((r) => (
+                    <li key={r.key} className="flex gap-2 text-[13px]" data-testid={`events-reminder-${r.key}`}>
+                      <span aria-hidden="true" className={r.sent ? 'font-extrabold text-emerald-700 dark:text-emerald-400' : 'text-axal-muted dark:text-gray-400'}>{r.sent ? '✓' : '◷'}</span>
+                      <span className="flex flex-col"><span className="font-semibold text-axal-ink dark:text-gray-100">{r.label}</span><span className={SUB}>{r.line}</span></span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </BlockState>
+          </Card>
+        </div>
       </div>
 
       <p className="m-0 flex flex-wrap items-center gap-2.5 text-[12.5px] text-axal-muted dark:text-gray-400" data-testid="events-event-roster">
@@ -184,8 +328,19 @@ export default function EventPage({ id, reads, now }) {
           <Link to={`/events/${ev.id}/manage/agenda`} className={`${LINK} self-start`}>Edit as host ›</Link>
         </Card>
         <Card title="History" testId="events-event-history">
-          <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100">{`Created · ${dateLabel(ev.created_at)}`}</p>
-          <span className="text-[12.5px]"><Unrecorded reason={HISTORY_REST.reason}>{HISTORY_REST.text}</Unrecorded></span>
+          <BlockState block={history} what="The history" onRetry={reads.reload}>
+            {history.rows ? (
+              <ol className="m-0 flex list-none flex-col gap-1 p-0">
+                {history.rows.map((r) => (
+                  <li key={r.key} className={`flex flex-col gap-0.5 rounded-[8px] py-1.5 text-[13px] ${r.amber ? 'border border-amber-300 bg-amber-50 px-2.5 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200' : 'text-axal-ink dark:text-gray-100'}`}
+                    data-testid={`events-history-${r.key}`}>
+                    <span className="font-semibold">{r.amber ? <span aria-hidden="true">↻ </span> : null}{r.text}</span>
+                    <span className={r.amber ? 'text-[12px]' : SUB}>{r.date}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </BlockState>
         </Card>
       </div>
 
@@ -199,11 +354,11 @@ export default function EventPage({ id, reads, now }) {
       ) : null}
       {dialog === 'unpublish' ? (
         <UnpublishDialog ev={ev} busy={busy} refusal={refusal} onClose={close}
-          onConfirm={() => run(() => adminEvents.unpublish(ev.id), `${title} is back with its host as a draft.`)} />
+          onConfirm={(note) => run(() => adminEvents.unpublish(ev.id, note), `${title} is back with its host as a draft. The host is told${note ? ', with your note' : ''}.`)} />
       ) : null}
       {dialog === 'cancel' ? (
-        <CancelDialog ev={ev} busy={busy} refusal={refusal} onClose={close}
-          onConfirm={() => run(() => adminEvents.cancel(ev.id), `${title} is cancelled.`)} />
+        <CancelDialog ev={ev} payments={block('payments')} busy={busy} refusal={refusal} onClose={close}
+          onConfirm={(note) => run(() => adminEvents.cancel(ev.id, note), `${title} is cancelled.`)} />
       ) : null}
     </div>
   );
