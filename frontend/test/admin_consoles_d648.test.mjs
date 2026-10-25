@@ -25,7 +25,6 @@ import { MemoryRouter } from 'react-router-dom';
 import { api } from '../src/lib/api.js';
 import * as PAGES from '../src/pages/admin/ConsolePages.jsx';
 import UsersConsole from '../src/pages/admin/consoles/UsersConsole.jsx';
-import PartnerProfilesConsole from '../src/pages/admin/consoles/PartnerProfilesConsole.jsx';
 import KycConsole from '../src/pages/admin/consoles/KycConsole.jsx';
 import PersonasPanel from '../src/pages/admin/consoles/PersonasConsole.jsx';
 import DirectoryPanel from '../src/pages/admin/consoles/DirectoryConsole.jsx';
@@ -135,8 +134,6 @@ const UNREADABLE = /could not be read\. This is not a sign that there are none\.
 const CONSOLES = [
   { name: 'Users', el: () => React.createElement(UsersConsole), reads: ['adminListUsers'],
     empty: { adminListUsers: async () => ({ results: [], total: 0, by_role: {} }) }, says: /No users found/, loading: /Loading…/ },
-  { name: 'Partner Profiles', el: () => React.createElement(PartnerProfilesConsole), reads: ['adminListProfiles'],
-    empty: { adminListProfiles: async () => [] }, says: /No profiles captured yet/, loading: /Loading…/ },
   { name: 'KYC', el: () => React.createElement(KycConsole), reads: ['kycAdminQueue'],
     empty: { kycAdminQueue: async () => [] }, says: /No submissions in pending status/, loading: /Loading…/ },
   { name: 'Personas', el: () => React.createElement(PersonasPanel), reads: ['listPersonasAdmin'],

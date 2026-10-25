@@ -1,0 +1,4 @@
+/* Member detail and confirmation lightboxes reach the phone's viewport edges. */
+@media (width < 40rem) {
+  .member-trust-lightbox > [data-testid="lightbox-layer"] { padding: 0; }
+}

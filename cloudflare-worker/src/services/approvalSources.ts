@@ -52,6 +52,8 @@ export type ApprovalLaneKey =
   // D1041 (#2889): the lanes D1038's canvas adds.
   | 'kyb' | 'comarketing' | 'wellbeing_experts' | 'perk_listings' | 'strategic_access'
   | 'lab_hosts' | 'score_flags' | 'articles'
+  // D1132 (#3012): part 4's store (migration 576) is in, so the lane is counted.
+  | 'product_testers'
   // D1041: HQ's own lanes (`hqApprovalSources.ts`, `scope: 'hq'`), so HQ's
   // inbox (D1040) reads, assigns and keeps history on them like any other.
   | HqLaneKey;
@@ -378,7 +380,7 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
       + 'FROM comarketing_pitches c LEFT JOIN partners pt ON pt.id = c.partner_id '
       + 'LEFT JOIN users u ON u.id = c.submitter_user_id '
       + "WHERE c.status = 'proposed' ORDER BY julianday(c.created_at) ASC LIMIT ?",
-    notifies: 'Nobody yet',
+    notifies: 'The partner',
     decidedOn: 'Co-marketing',
     // Only the publish transition stamps `published_at`, so this is every
     // approved pitch still waiting to go out.
@@ -390,23 +392,24 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
   {
     key: 'wellbeing_experts',
     label: 'Wellbeing experts',
-    // NO STATUS COLUMN: the directory's own bar (D1038 §2), which is "To
-    // verify": active, unverified, not hidden, at least 70% complete
+    // D1043: the directory's "To verify" bar: active, unverified, not
+    // declined or hidden, at least 70% complete
     // (`profile_completion_pct`, recomputed on every edit), and not a sample
-    // (`seed_` uids, services/wellbeing/seedExperts.ts). There is no declined
-    // state yet (part 5), so none is left out for it.
+    // (`seed_` uids, services/wellbeing/seedExperts.ts).
     countSql:
       'SELECT COUNT(*) AS n, MIN(datetime(created_at)) AS oldest FROM experts '
       + 'WHERE is_active = 1 AND verified = 0 AND COALESCE(hidden_by_admin, 0) = 0 '
+      + "AND decision_state <> 'declined' "
       + "AND COALESCE(profile_completion_pct, 0) >= 70 AND substr(uid, 1, 5) <> 'seed_'",
     rowsSql:
       "SELECT e.id AS id, COALESCE(NULLIF(e.name, ''), NULLIF(u.name, ''), u.email, 'expert ' || e.id) AS who, "
       + "'Wellbeing expert · ' || COALESCE(NULLIF(e.headline, ''), 'no headline') AS what, e.created_at AS created_at "
       + 'FROM experts e LEFT JOIN users u ON u.id = e.user_id '
       + 'WHERE e.is_active = 1 AND e.verified = 0 AND COALESCE(e.hidden_by_admin, 0) = 0 '
+      + "AND e.decision_state <> 'declined' "
       + "AND COALESCE(e.profile_completion_pct, 0) >= 70 AND substr(e.uid, 1, 5) <> 'seed_' "
       + 'ORDER BY julianday(e.created_at) ASC LIMIT ?',
-    notifies: 'Nobody yet',
+    notifies: 'The expert',
     decidedOn: 'Wellbeing',
   },
   {
@@ -486,6 +489,23 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
     notifies: 'The author',
     decidedOn: 'Content queue',
   },
+  {
+    key: 'product_testers',
+    label: 'Product testers',
+    // D1132 (#3012): D1042's store (migration 576). `applied` is the one
+    // undecided state (`TRANSITIONS.approve.from`); the wait is from
+    // `applied_at`. Every decision emails the member and writes their inbox
+    // (`routes/admin_product_testers.ts`).
+    countSql:
+      'SELECT COUNT(*) AS n, MIN(datetime(applied_at)) AS oldest FROM product_testers WHERE status = \'applied\'',
+    rowsSql:
+      "SELECT t.id AS id, COALESCE(NULLIF(u.name, ''), u.email, 'account ' || t.user_id) AS who, "
+      + "'Product tester application' AS what, t.applied_at AS created_at "
+      + 'FROM product_testers t LEFT JOIN users u ON u.id = t.user_id '
+      + "WHERE t.status = 'applied' ORDER BY julianday(t.applied_at) ASC, t.id ASC LIMIT ?",
+    notifies: 'The member',
+    decidedOn: 'Approvals › Product testers',
+  },
 ] as const;
 
 /**
@@ -494,7 +514,7 @@ export const APPROVAL_SOURCES: readonly ApprovalSource[] = [
  * read" on every database, and make every branch's backlog total null.
  */
 export const NOT_COUNTED_YET: ReadonlyArray<{ key: string; label: string; reason: string }> = [
-  { key: 'product_testers', label: 'Product testers', reason: 'No product tester application is stored yet; part 4 (#2890) adds the store.' },
+  // D1132 (#3012): empty. Product testers is counted now that part 4's store exists.
 ];
 
 /**

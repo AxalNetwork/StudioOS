@@ -7,6 +7,7 @@ export const labOperationsApi = {
   playbook: () => request(`/admin/programs/${PROGRAM_KEY}`),
   editSection: (key, body) => request(`/admin/programs/${PROGRAM_KEY}/playbook/sections/${encodeURIComponent(key)}`, { method: 'PUT', body: JSON.stringify(body) }),
   publish: () => request(`/admin/programs/${PROGRAM_KEY}/playbook/publish`, { method: 'POST' }),
+  capacity: (cohort) => request(`/admin/cohort/cohorts/${encodeURIComponent(cohort)}/capacity`),
   settings: () => request('/admin/cohort/settings'),
   setSize: (body) => request('/admin/cohort/applications/settings', { method: 'POST', body: JSON.stringify(body) }),
   activity: (params = {}) => {

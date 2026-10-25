@@ -169,9 +169,9 @@ export function TermBars({ rows, from = -20, to = 120 }) {
  * D961 (#2794) adds `below`: a row's `below` (with `belowTone`) is drawn under a zero axis, as
  * Programs' Credits in and out draws spends under the grants stacked above it.
  */
-export function Columns({ rows, height = 220, pct = false, max: maxIn, references = [] }) {
+export function Columns({ rows, height = 220, pct = false, max: maxIn, references = [], onSelect, testIdPrefix = 'insights-stack' }) {
   if (rows.some((r) => Number.isFinite(r.below))) return <DivergingColumns rows={rows} height={height} />;
-  return <UpColumns rows={rows} height={height} pct={pct} max={maxIn} references={references} />;
+  return <UpColumns rows={rows} height={height} pct={pct} max={maxIn} references={references} onSelect={onSelect} testIdPrefix={testIdPrefix} />;
 }
 
 /** Columns stacked above a zero axis, with each row's `below` drawn under it, on one scale. */
@@ -223,7 +223,11 @@ function DivergingColumns({ rows, height }) {
   );
 }
 
-function UpColumns({ rows, height, pct, max: maxIn, references }) {
+/**
+ * D1110 (#2990): with `onSelect`, a stacked part with a `group` is a button that
+ * opens its group (INS3), keyed `${testIdPrefix}-${row index}-${group}`.
+ */
+function UpColumns({ rows, height, pct, max: maxIn, references, onSelect, testIdPrefix }) {
   const [ref, W] = useBoxWidth();
   const hatch = `ins-hatch-${useId().replace(/:/g, '')}`;
   const Lx = 34;
@@ -269,7 +273,18 @@ function UpColumns({ rows, height, pct, max: maxIn, references }) {
                 {r.parts.map((p, k) => {
                   const ph = (ch * p.value) / max;
                   y0 -= ph;
-                  return ph > 0 ? <rect key={k} x={x} y={y0} width={bw} height={ph} className={FILL[p.tone] || FILL.violet} /> : null;
+                  if (!(ph > 0)) return null;
+                  const seg = <rect x={x} y={y0} width={bw} height={ph} className={FILL[p.tone] || FILL.violet} />;
+                  if (!p.group || !onSelect) return <g key={k}>{seg}</g>;
+                  return (
+                    <g key={k} role="button" tabIndex={0} aria-label={`Open the ${p.label || p.group} group, ${nf(p.value)} that week`}
+                      className="cursor-pointer outline-none focus-visible:[&>rect]:stroke-axal-ink focus-visible:[&>rect]:stroke-2"
+                      onClick={() => onSelect(p.group)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(p.group); } }}
+                      data-testid={`${testIdPrefix}-${i}-${p.group}`}>
+                      {seg}
+                    </g>
+                  );
                 })}
               </>
             );
@@ -482,7 +497,12 @@ export function StackBars({ rows, onSelect, testIdPrefix = 'stack' }) {
  * to the last week; a caller with explicit period metadata may pass -1
  * for completed weeks.
  */
-export function WeekLines({ series, labels, height = 220, currentIndex = labels.length - 1 }) {
+/**
+ * `recordIndex` (D1024, Cap table's Scenarios): the one point that is on
+ * record, drawn hollow with a dotted ring, as CT7's Today; the rest are
+ * modelled. `suffix` follows each axis value (`%`).
+ */
+export function WeekLines({ series, labels, height = 220, currentIndex = labels.length - 1, recordIndex = null, suffix = '', onSelect }) {
   const [ref, W] = useBoxWidth();
   const Lx = 30;
   const R = 18;
@@ -510,7 +530,7 @@ export function WeekLines({ series, labels, height = 220, currentIndex = labels.
         {[0, 0.5, 1].map((f) => (
           <g key={f}>
             <line x1={Lx} x2={W - R} y1={Y(max * f)} y2={Y(max * f)} className={GRID} />
-            <text x={Lx - 5} y={Y(max * f) + 3} textAnchor="end" className={MUTE}>{Math.round(max * f)}</text>
+            <text x={Lx - 5} y={Y(max * f) + 3} textAnchor="end" className={MUTE}>{Math.round(max * f)}{suffix}</text>
           </g>
         ))}
         {series.map((s) => (
@@ -519,9 +539,25 @@ export function WeekLines({ series, labels, height = 220, currentIndex = labels.
               ? <polyline key={run[0].i} points={run.map((p) => `${X(p.i)},${Y(p.v)}`).join(' ')} fill="none" strokeWidth="2.2"
                   strokeDasharray={s.dash ? '5 4' : undefined} className={STROKE[s.tone] || STROKE_V} />
               : null))}
-            {s.values.map((v, i) => (v === null || v === undefined ? null : i === currentIndex
-              ? <circle key={i} cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} />
-              : <circle key={i} cx={X(i)} cy={Y(v)} r="3" className={FILL[s.tone] || FILL.violet} />))}
+            {s.values.map((v, i) => {
+              if (v === null || v === undefined) return null;
+              const dot = i === recordIndex
+                ? <circle cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" strokeDasharray="2 2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} data-on-record="true" />
+                : i === currentIndex
+                ? <circle cx={X(i)} cy={Y(v)} r="4.5" strokeWidth="2" className={`fill-white dark:fill-gray-900 ${STROKE[s.tone] || STROKE_V}`} />
+                : <circle cx={X(i)} cy={Y(v)} r="3" className={FILL[s.tone] || FILL.violet} />;
+              // D1121: a series marked `clickable` opens what its points count, by key or click.
+              if (!s.clickable || !onSelect) return <React.Fragment key={i}>{dot}</React.Fragment>;
+              const open = () => onSelect(s.key ?? s.label, i);
+              return (
+                <g key={i} role="button" tabIndex={0} aria-label={`${s.label}, ${labels[i]}: ${v}. Open the list.`} className="cursor-pointer"
+                  onClick={open} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+                  data-testid={`weeklines-point-${s.key ?? s.label}-${i}`}>
+                  <circle cx={X(i)} cy={Y(v)} r="10" fill="transparent" />
+                  {dot}
+                </g>
+              );
+            })}
           </g>
         ))}
         {labels.map((l, i) => (i % every === 0 || i === last
@@ -584,6 +620,70 @@ export function RunningTotal({ points, capacity = null, today = null, height = 2
   );
 }
 
+/**
+ * D1024 (#2861, CT9): the share of an exit by group, at each exit value on a
+ * log axis, with each conversion point marked by a dotted line. A column the
+ * engine did not calculate is a dashed outline, never an empty bar.
+ * `columns` are `{ exit, label, parts: [{ value, tone }] | null }` (percent),
+ * `markers` `{ at, label }`.
+ */
+export function ExitSteps({ columns, markers = [], height = 260 }) {
+  const [ref, W] = useBoxWidth();
+  const Lx = 40;
+  const R = 16;
+  const B = 22;
+  const lines = Math.min(3, markers.length);
+  const top = 18 + lines * 12;
+  const ch = height - B - top;
+  const xs = [...columns.map((c) => c.exit), ...markers.map((m) => m.at)].filter((v) => v > 0);
+  const lo = Math.log10(Math.max(1, Math.min(...xs) / 2));
+  const hi = Math.log10(Math.max(...xs) * 2);
+  const X = (v) => Lx + ((W - Lx - R) * (Math.log10(v) - lo)) / Math.max(0.0001, hi - lo);
+  const Y = (v) => top + ch * (1 - v / 100);
+  const bw = Math.max(14, Math.min(34, (W - Lx - R) / Math.max(4, columns.length * 3)));
+  return (
+    <div ref={ref} className="w-full">
+      <Svg width={W} height={height}>
+        {[0, 50, 100].map((v) => (
+          <g key={v}>
+            <line x1={Lx} x2={W - R} y1={Y(v)} y2={Y(v)} className={GRID} />
+            <text x={Lx - 5} y={Y(v) + 3} textAnchor="end" className={MUTE}>{v}%</text>
+          </g>
+        ))}
+        {markers.slice(0, 3).map((m, k) => (
+          <g key={`${m.label}-${k}`}>
+            <line x1={X(m.at)} x2={X(m.at)} y1={6 + k * 12} y2={top + ch} strokeDasharray="1.5 3" strokeWidth="1.5" className="stroke-axal-muted dark:stroke-gray-400" />
+            <text x={X(m.at) + 4} y={14 + k * 12} className={INK}>{m.label}</text>
+          </g>
+        ))}
+        {columns.map((c) => {
+          const x = X(c.exit) - bw / 2;
+          if (!c.parts) {
+            return (
+              <g key={c.exit}>
+                <rect x={x} y={Y(100)} width={bw} height={ch} fill="none" strokeDasharray="3 3" className="stroke-axal-muted dark:stroke-gray-400" />
+                <text x={x + bw / 2} y={height - 6} textAnchor="middle" className={MUTE}>{c.label}</text>
+              </g>
+            );
+          }
+          let acc = 0;
+          return (
+            <g key={c.exit}>
+              {c.parts.map((p, k) => {
+                const v = Math.max(0, Number(p.value) || 0);
+                const y = Y(acc + v);
+                acc += v;
+                return v > 0 ? <rect key={k} x={x} y={y} width={bw} height={Math.max(0, Y(acc - v) - y)} className={FILL[p.tone] || FILL.violet} /> : null;
+              })}
+              <text x={x + bw / 2} y={height - 6} textAnchor="middle" className={MUTE}>{c.label}</text>
+            </g>
+          );
+        })}
+      </Svg>
+    </div>
+  );
+}
+
 /** A 100% bar, one part per slice. */
 export function Bar100({ parts }) {
   const [ref, W] = useBoxWidth(380);
@@ -641,7 +741,8 @@ const BORDER = {
  * `hollow`. `mark: 'line'` or `'dashed'` draws a line swatch in the tone, for
  * a line chart whose series differ by dash as well as colour.
  */
-export function Legend({ items }) {
+/** D1110 (#2990): with `onSelect`, an item with a `group` is a button that opens it. */
+export function Legend({ items, onSelect }) {
   const dot = (tone, mark) => {
     if (mark === 'line' || mark === 'dashed') return `h-0 w-4 rounded-none border-t-2 ${mark === 'dashed' ? 'border-dashed' : 'border-solid'} ${BORDER[tone] || BORDER.violet}`;
     if (tone === 'hatch') return 'border border-axal-violet dark:border-[#a78bfa] bg-[repeating-linear-gradient(45deg,#7c3aed_0_2px,transparent_2px_4px)] dark:bg-[repeating-linear-gradient(45deg,#a78bfa_0_2px,transparent_2px_4px)]';
@@ -654,12 +755,18 @@ export function Legend({ items }) {
   };
   return (
     <div className="flex flex-wrap gap-x-3.5 gap-y-1.5">
-      {items.map((g) => (
+      {items.map((g) => (g.group && onSelect ? (
+        <button key={g.label} type="button" onClick={() => onSelect(g.group)} aria-label={`Open the ${g.label} group`} data-testid={`insights-legend-${g.group}`}
+          className="flex items-center gap-1.5 text-[11.5px] text-axal-muted underline-offset-2 hover:text-axal-ink hover:underline dark:text-gray-400 dark:hover:text-gray-100">
+          <span className={`h-2.5 w-2.5 flex-none rounded-[3px] ${dot(g.tone, g.mark)}`} />
+          {g.label}
+        </button>
+      ) : (
         <span key={g.label} className="flex items-center gap-1.5 text-[11.5px] text-axal-muted dark:text-gray-400">
           <span className={`h-2.5 w-2.5 flex-none rounded-[3px] ${dot(g.tone, g.mark)}`} />
           {g.label}
         </span>
-      ))}
+      )))}
     </div>
   );
 }
@@ -719,8 +826,8 @@ export function Chart({ chart, onSelect }) {
   if (chart.type === 'terms') return <TermBars rows={chart.rows} from={chart.from} to={chart.to} />;
   if (chart.type === 'grouped') return <GroupedColumns rows={chart.rows} series={chart.series} height={chart.height} />;
   if (chart.type === 'stackbars') return <StackBars rows={chart.rows} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
-  if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} />;
-  if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} references={chart.references} />;
+  if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} onSelect={onSelect} />;
+  if (chart.type === 'columns' || chart.type === 'stack') return <Columns rows={chart.rows} pct={chart.pct} max={chart.max} height={chart.height} references={chart.references} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
   if (chart.type === 'line') return <WeekLine values={chart.values} labels={chart.labels} previous={chart.previous} />;
   if (chart.type === 'bar100') return <Bar100 parts={chart.parts} />;
   if (chart.type === 'donut') return <Donut parts={chart.parts} center={chart.center} centerSub={chart.centerSub} />;

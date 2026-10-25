@@ -1,4 +1,5 @@
 export const MODULE_LABELS: Record<string, string> = {
+  grow_updates: 'Grow · Updates',
   product_roadmap: 'Product roadmap',
   prototype_mvp: 'Prototype / MVP',
   solution_design: 'Solution design',
@@ -37,11 +38,14 @@ export const MODULE_LABELS: Record<string, string> = {
   team_expansion: 'Team expansion',
   distribution: 'Distribution',
   partner_network: 'Partner network',
+  // D1085 (#2950): the Grow module Notion parts 3–6 feed.
+  product_improvement: 'Product improvement',
 };
 
 
 /** D686: module doors for recorded connector deliveries. Unknown keys have no door. */
 export const MODULE_HREFS: Record<string, string> = {
+  grow_updates: '/grow/durable-company-building#updates',
   product_roadmap: '/build/product-roadmap',
   prototype_mvp: '/build/prototype-mvp',
   solution_design: '/build/solution-design',
@@ -77,6 +81,7 @@ export const MODULE_HREFS: Record<string, string> = {
   team_expansion: '/grow/team-expansion',
   distribution: '/grow/distribution',
   partner_network: '/grow/partner-network',
+  product_improvement: '/grow/product-improvement',
 };
 
 export function moduleHref(key: string): string | null {

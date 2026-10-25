@@ -209,7 +209,8 @@ const CONTRACT = [
   [W('services/learningAccess.ts'), "export const LEARNING_STATUSES = ['draft', 'published', 'archived'] as const;", P('programModel.js'), "{ publish: 'published', unpublish: 'draft', archive: 'archived' }"],
   [W('routes/admin_learning_programs.ts'), "r.put('/programs/:uid/contents', async", P('programReads.js'), 'adminLearningApi.setProgramContents(uid, contents)'],
   [W('routes/admin_learning_programs.ts'), 'const list = b?.contents;', P('programModel.js'), '({ subject_kind: c.subject_kind, subject_uid: c.subject_uid })'],
-  [W('routes/admin_learning_programs.ts'), "if (kind === 'webinar') bad('webinar_not_built'", P('ProgramDetail.jsx'), '<option value="webinar" disabled>'],
+  // D1124 (#3004): a webinar is checked against its store, and the picker lists the studio's webinars.
+  [W('routes/admin_learning_programs.ts'), "webinar: 'SELECT 1 AS ok FROM learning_webinars WHERE uid = ?'", P('programReads.js'), "webinar: [() => adminLearningApi.listWebinars(), 'webinars', 'The webinar list']"],
   [W('routes/admin_learning_programs.ts'), "r.post('/programs/:uid/admins', async", P('programReads.js'), 'adminLearningApi.assignProgramAdmin(uid, userUid)'],
   [W('routes/admin_learning_programs.ts'), "return refuse(c, 400, { code: 'not_an_admin'", P('ProgramDetail.jsx'), "adminsOnly ? all.filter((u) => u.role === 'admin') : all"],
   [W('routes/admin_learning_programs.ts'), "r.delete('/programs/:uid/admins/:userUid', async", P('programReads.js'), 'adminLearningApi.unassignProgramAdmin(uid, userUid)'],
@@ -396,26 +397,27 @@ test('the Super Admin\'s studio: every call with its method, path and body, the 
 test('a refusal reaches the studio in the route\'s own words', async () => {
   await withFetch([
     { status: 400, body: refusal('bad_name', 'A program needs a name.') },
-    { status: 400, body: refusal('webinar_not_built', 'Webinars are not a Learning store yet (D560), so a program cannot hold one.') },
+    { status: 400, body: refusal('unknown_content', 'No webinar has the uid w1.') },
     { status: 400, body: refusal('not_an_admin', 'Only an admin can be assigned to a program.') },
     { status: 404, body: refusal('not_enrolled', 'That user is not enrolled in this program.') },
     { status: 403, body: refusal('forbidden', 'Super Admin only.') },
   ], async () => {
     await assert.rejects(createProgram({ name: '', region: '', description: '', enrolment: 'invite' }), (err) => err.message === 'A program needs a name.' && err.code === 'bad_name');
-    await assert.rejects(saveContents('p-nordics', [{ subject_kind: 'webinar', subject_uid: 'w1' }]), /a program cannot hold one\./);
+    await assert.rejects(saveContents('p-nordics', [{ subject_kind: 'webinar', subject_uid: 'w1' }]), /No webinar has the uid w1\./);
     await assert.rejects(assignAdmin('p-nordics', 'u-mia'), (err) => err.message === 'Only an admin can be assigned to a program.');
     await assert.rejects(unenrolMember('p-nordics', 'u-otto'), (err) => err.status === 404 && err.message === 'That user is not enrolled in this program.');
     assert.deepEqual(await readStudioProgram('p-nordics'), { refused: { code: 'forbidden', message: 'Super Admin only.' } });
   });
 });
 
-test('choosing content and people: four lists that answer alone, and a search that never keeps an email', async () => {
+test('choosing content and people: five lists that answer alone (D1124: webinars), and a search that never keeps an email', async () => {
   let choices; let found;
   const calls = await withFetch([
     { courses: [{ uid: 'c-101', slug: 'nordic-101', title: 'Nordic 101', status: 'published' }] },
     { items: [{ uid: 'v-welcome', kind: 'video', title: 'Cohort welcome', status: 'published' }] },
     { status: 500, body: refusal('internal', 'The exam list could not be read.') },
     { exercises: [{ uid: 'e-plan', title: 'Your plan', status: 'draft' }] },
+    { webinars: [{ uid: 'w-demo', title: 'Demo day', status: 'published' }] },
     USERS,
   ], async () => {
     choices = await readContentChoices();
@@ -423,9 +425,10 @@ test('choosing content and people: four lists that answer alone, and a search th
   });
   assert.deepEqual(lines(calls), [
     'GET /admin/learning/courses', 'GET /admin/learning/items', 'GET /admin/learning/exams', 'GET /admin/learning/exercises',
-    'GET /admin/users?q=ada&limit=20',
+    'GET /admin/learning/webinars', 'GET /admin/users?q=ada&limit=20',
   ]);
-  assert.deepEqual(Object.entries(choices.byKind).map(([k, v]) => [k, v.status]), [['course', 'ready'], ['item', 'ready'], ['exam', 'unreadable'], ['exercise', 'ready']]);
+  // D1124 (#3004): the webinar list is the fifth, and answers alone like the others.
+  assert.deepEqual(Object.entries(choices.byKind).map(([k, v]) => [k, v.status]), [['course', 'ready'], ['item', 'ready'], ['exam', 'unreadable'], ['exercise', 'ready'], ['webinar', 'ready']]);
   assert.equal(choices.byKind.exam.message, 'The exam list could not be read.');
   assert.deepEqual(found, [
     { uid: 'u-ada', name: 'Ada Assigned', role: 'admin', active: true },
@@ -459,7 +462,12 @@ test('a learner\'s standing per content: a tick, a percent, a score, a review, a
     { mark: 'Started', tone: 'neutral', label: 'In progress, 0 of 2 required lessons' }, 'a started course was drawn as 0%');
   assert.deepEqual(cell({ subject_kind: 'course', status: 'in_progress', required: 0, completed: 0, percent: null }), { mark: 'Started', tone: 'neutral', label: 'In progress' });
   assert.equal(cell({ subject_kind: 'exam', status: 'passed', best_score_percent: null, attempts: 1 }).mark, 'Passed');
-  assert.equal(cell({ subject_kind: 'webinar', subject_uid: 'w', status: 'not_built' }).label, 'Not recorded');
+  // A kind the route does not measure is said, never guessed.
+  assert.equal(cell({ subject_kind: 'lesson', subject_uid: 'l', status: 'not_built' }).label, 'Not recorded');
+  // D1124 (#3004): a webinar, from the host's attendance.
+  assert.deepEqual(['attended', 'not_attended', 'registered', 'not_registered'].map((status) => cell({ subject_kind: 'webinar', status }).label),
+    ['Attended', 'Did not attend', 'Registered, not attended yet', 'Not registered']);
+  assert.equal(cell({ subject_kind: 'webinar', status: 'attended' }).tone, 'ok');
   assert.equal(cell(null).label, 'Not recorded');
   assert.equal(cell({ subject_kind: 'exercise', status: 'accepted' }).tone, 'ok');
   assert.equal(subjectKindLabel('item'), 'Video or reading');
@@ -762,8 +770,10 @@ test('adding content: the kinds the route takes, the studio\'s rows not yet held
   } };
   const picker = (kind) => html(h(ContentPicker, { choices, held: CONTENTS, onAdd: () => {}, onCancel: () => {}, initialKind: kind }));
   const course = picker('course');
-  assert.match(course, /<option value="webinar" disabled="">Webinar \(not a program content yet\)<\/option>/);
-  assert.deepEqual([...course.matchAll(/<option value="(course|item|exam|exercise)"/g)].map((m) => m[1]), ['course', 'item', 'exam', 'exercise']);
+  // D1124 (#3004): a webinar is offered like every other kind.
+  assert.match(course, /<option value="webinar">Webinar<\/option>/);
+  assert.doesNotMatch(course, /disabled="">Webinar/);
+  assert.deepEqual([...course.matchAll(/<option value="(course|item|exam|exercise|webinar)"/g)].map((m) => m[1]), ['course', 'item', 'exam', 'exercise', 'webinar']);
   assert.match(course, /<option value="c-202">Nordic 202 \(draft\)<\/option>/);
   assert.doesNotMatch(course, /value="c-101"|value="c-old"/, 'the picker offered a course the program holds, or an archived one');
   assert.match(tagOf(course, 'button-program-content-add'), /disabled=""/, 'Add is live before anything is chosen');
@@ -905,7 +915,7 @@ test('the calls stay in one file, through methods the clients already declare', 
   assert.deepEqual([...new Set(called.map(([c, m]) => `${c}.${m}`))].sort(), [
     'adminLearningApi.assignProgramAdmin', 'adminLearningApi.createProgram', 'adminLearningApi.enrolInProgram', 'adminLearningApi.getProgram',
     'adminLearningApi.listCourses', 'adminLearningApi.listExams', 'adminLearningApi.listExercises', 'adminLearningApi.listItems',
-    'adminLearningApi.listPrograms', 'adminLearningApi.setProgramContents', 'adminLearningApi.unassignProgramAdmin',
+    'adminLearningApi.listPrograms', 'adminLearningApi.listWebinars', 'adminLearningApi.setProgramContents', 'adminLearningApi.unassignProgramAdmin',
     'adminLearningApi.unenrolFromProgram', 'adminLearningApi.updateProgram',
     'api.adminListUsers',
     'learningApi.assignedPrograms', 'learningApi.enrolInProgram', 'learningApi.myEnrolledPrograms',

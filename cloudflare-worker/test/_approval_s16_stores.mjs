@@ -115,14 +115,30 @@ export function signBinding(d, userId) {
   else d.prepare('INSERT INTO user_role_review (user_id, binding_envelope_id) VALUES (?, ?)').run(userId, id);
 }
 
-/** Create the seven stores, and D1041's eight, on a `node:sqlite` DatabaseSync that already has `users`. */
+/** D1132 (#3012): the Product testers lane's store, trimmed from migration 576. */
+export const D1132_STORES_SQL = `
+  CREATE TABLE IF NOT EXISTS product_testers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'applied', applied_at TEXT NOT NULL DEFAULT (datetime('now')));
+`;
+
+/** Create the seven stores, D1041's eight and D1132's one, on a `node:sqlite` DatabaseSync that already has `users`. */
 export function addS16Stores(d) {
   d.exec(S16_STORES_SQL);
   d.exec(D1041_STORES_SQL);
+  d.exec(D1132_STORES_SQL);
+  addExpertReviewStore(d);
   d.exec(readFileSync(new URL('../sql/migrations/275_partner_profiles_columns.sql', import.meta.url), 'utf8'));
   d.exec(readFileSync(new URL('../sql/migrations/546_events_review_columns.sql', import.meta.url), 'utf8'));
   const have = new Set(d.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
   for (const [name, type] of USER_COLUMNS) {
     if (!have.has(name)) d.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
+  }
+}
+
+/** D1043's declined predicate reads the real migration, not a copied column. */
+export function addExpertReviewStore(d) {
+  if (!d.prepare('PRAGMA table_info(experts)').all().some((c) => c.name === 'decision_state')) {
+    d.exec(readFileSync(new URL('../sql/migrations/577_expert_review_records.sql', import.meta.url), 'utf8'));
   }
 }

@@ -120,7 +120,8 @@ export const SIDEBAR_GROUPS = {
       // page: hqRowFor returns no row off HQ's strips, and a row without
       // `match` is exact (SidebarNav's `end`).
       { to: '/admin/programs', icon: Calendar, label: 'Programs', match: ['/admin/programs'] },
-      { to: '/admin/funds', icon: Landmark, label: 'Funds' },
+      // D1160 (#3067): #2388 owner question 2's default — HQ keeps both rows; this one is oversight.
+      { to: '/admin/funds', icon: Landmark, label: 'Funds oversight' },
       // D714 (#1779) decision 7 — fund administration, after Funds. Funds keeps
       // its cross-branch registry; this row is HQ's own funds and entities.
       { to: '/admin/fund-admin', icon: Banknote, label: 'Fund admin' },

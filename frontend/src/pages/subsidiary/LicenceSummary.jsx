@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { licenceAccountApi } from '../../lib/api/licenceAccount';
+import { licenceProgramsApi } from '../../lib/api/licencePrograms';
 import { licenceRequestsApi } from '../../lib/api/licenceRequests';
 import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { reportError } from '../../lib/log';
@@ -9,6 +10,7 @@ import {
   NOT_RECORDED, allowanceCard, contractCard, feeCard, money, needRow, needsCount, oweCard, percent,
   renewalCard, shareCard, stateBanner, tabPath, termCard,
 } from '../../lib/licencePage';
+import { summaryLine } from '../../lib/studioPrograms';
 import { LicenceStateBanner } from './LicenceFrame';
 
 /**
@@ -50,6 +52,7 @@ const readStatements = () => licenceAccountApi.statements();
 const readContract = () => licenceAccountApi.contract();
 const readRequests = () => licenceRequestsApi.list();
 const readBudget = () => aiBudgetApi.mine();
+const readPrograms = () => licenceProgramsApi.mine();
 
 function Bar({ pct, warn = false }) {
   return (
@@ -229,6 +232,25 @@ export function Administrators({ user, adminRole }) {
   );
 }
 
+/**
+ * D988 (#2779), GR7's Summary inset: "4 granted · 1 with HQ", from D984's
+ * read and the requests this page already holds. An unreadable read says so.
+ */
+export function ProgramsCard({ read, requests }) {
+  const programs = read.value === undefined ? undefined : Array.isArray(read.value?.programs) ? read.value.programs : null;
+  const unlinked = read.value?.linked === false;
+  return (
+    <section className={`${card} space-y-1.5 px-4 py-3.5`} data-testid="licence-programs-card">
+      <span className={label}>Programs</span>
+      <p className="font-mono text-sm font-bold text-gray-900 dark:text-gray-100">
+        {unlinked ? 'HQ runs every program' : summaryLine(programs, requests.value === undefined ? undefined : requests.value)}
+      </p>
+      {programs === null && !unlinked && <Missing>{read.value?.reason || read.reason}</Missing>}
+      <div className="pt-1"><Link to={tabPath('programs')} className={btnGhost}>Open Programs ›</Link></div>
+    </section>
+  );
+}
+
 /** "AI allowance for this licence": the caller's own daily and monthly allowance, and this month's use. */
 export function AiAllowance({ read }) {
   const a = read.value ? allowanceCard(read.value) : null;
@@ -263,6 +285,7 @@ export default function LicenceSummary({ licence, terms, termsReason, user, stat
   const contract = useRead(readContract, 'contract');
   const requests = useRead(readRequests, 'requests');
   const budget = useRead(readBudget, 'allowance');
+  const programs = useRead(readPrograms, 'programs');
   const banner = stateBanner(state, licence, { signUrl: contract.value?.sign_url || null });
   return (
     <div className="space-y-3" data-testid="licence-summary">
@@ -277,6 +300,7 @@ export default function LicenceSummary({ licence, terms, termsReason, user, stat
         <div className="space-y-3">
           {seats}
           <YourContract read={contract} />
+          <ProgramsCard read={programs} requests={requests} />
           <Administrators user={user} adminRole={licence?.admin_role} />
           <AiAllowance read={budget} />
         </div>

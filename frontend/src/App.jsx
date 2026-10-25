@@ -1,3 +1,4 @@
+import { isMyEventsPath } from './pages/events/myEventsModel';
 import LegacyContractsRedirect from './pages/admin/LegacyContractsRedirect';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
@@ -163,6 +164,7 @@ const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsig
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
+const ProgramGrantsHistory = lazy(() => import('./pages/admin/grants/ProgramGrantsHistory'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
 // D989 (#2380): Partner profiles, out of the Admin Console, under Approvals.
 const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfiles'));
@@ -214,10 +216,10 @@ const VentureSharePage = lazy(() => import('./pages/raise/captable/SharedCapTabl
 const LabReportSharePage = lazy(() => import('./pages/LabReportSharePage'));
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const SpinoutLabPage = lazy(() => import('./pages/SpinoutLabPage'));
-// The investor journey's two pages. Separate lazy imports (rather than reaching
-// the workspace through FundOpsWorkspace) so /spinout-lab and
-// /spinout-lab/investor-workspace serve them directly without pulling the whole
-// Fund Ops shell — and so a founder never downloads either chunk.
+// The investor journey's two pages. Separate lazy imports so /spinout-lab and
+// /spinout-lab/investor-workspace serve them directly (Fund Ops, which once
+// held the workspace, is retired by D1160) — and so a founder never downloads
+// either chunk.
 const SpinoutLabInvestorPage = lazy(() => import('./pages/SpinoutLabInvestorPage'));
 const InvestorWorkspacePage = lazy(() => import('./pages/investor/InvestorWorkspacePage'));
 const InvestorFundLanding = lazy(() => import('./pages/investor/InvestorFundLanding'));
@@ -282,6 +284,7 @@ const BranchAnalytics = lazy(() => import('./pages/branch/BranchAnalytics'));
 // The Super Admin's HQ-only surfaces (migrations 199/207). `hqOnly` below
 // renders the notice for an admin without the elevation.
 const SuperAdminOnlyNotice = lazy(() => import('./pages/hq/SuperAdminOnlyNotice'));
+const LabOnlyNotice = lazy(() => import('./pages/admin/lab/LabOnlyNotice'));
 const AdminOnlyNotice = lazy(() => import('./pages/hq/AdminOnlyNotice'));
 const HqContractsPage = lazy(() => import('./pages/hq/ContractsPage'));
 const HqAccountsPage = lazy(() => import('./pages/hq/AccountsPage'));
@@ -385,7 +388,9 @@ const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ChangelogPage = lazy(() => import('./pages/ChangelogPage'));
 const PublicCertificateVerifyPage = lazy(() => import('./pages/PublicCertificateVerifyPage'));
 const MonitoringPage = lazy(() => import('./pages/MonitoringPage'));
-const FundOpsWorkspace = lazy(() => import('./pages/FundOpsWorkspace'));
+// D1160 (#3067): Fund Ops is retired; an admin's /funds and /funds/performance forward to Fund administration.
+const FundOpsRedirect = lazy(() => import('./pages/admin/fundAdmin/FundOpsRedirect'));
+const FundPerformancePage = lazy(() => import('./pages/FundPerformancePage'));
 const PortfolioWorkspace = lazy(() => import('./pages/PortfolioWorkspace'));
 const PortfolioCompanyPage = lazy(() => import('./pages/investor/PortfolioCompanyPage'));
 const PipelineWorkspace = lazy(() => import('./pages/PipelineWorkspace'));
@@ -447,6 +452,8 @@ const PitchEditor = lazy(() => import('./pages/raise/pitch/PitchEditor'));
 const PitchBoundary = lazy(() => import('./pages/raise/pitch/PitchBoundary'));
 const NewDeck = lazy(() => import('./pages/raise/pitch/NewDeck'));
 const NarrativeBoundary = lazy(() => import('./pages/raise/narrative/NarrativeAdmin').then((m) => ({ default: m.NarrativeBoundary })));
+const FundAdminBoundary = lazy(() => import('./pages/admin/fundAdmin/Refusal'));
+const FUND_ADMIN_BOUNDARY_ROLES = new Set(['founder', 'partner', 'investor', 'advisor', 'exploring']);
 const FounderRaiseStatus = lazy(() => import('./pages/founder/FounderRaiseStatus'));
 const FounderRaiseCapital = lazy(() => import('./pages/founder/FounderRaiseCapital'));
 const FounderRaiseLegal = lazy(() => import('./pages/founder/FounderRaiseLegal'));
@@ -767,6 +774,7 @@ function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
 
 // Carta-style user dropdown — top-right of the global header.
 function UserDropdown({ user, onLogout }) {
+  const eventsCurrent = isMyEventsPath(useLocation().pathname);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -847,9 +855,9 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Calendar
           </Link>
-          <Link to="/my/events" onClick={() => setOpen(false)}
-            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Events
+          <Link to="/my/events" onClick={() => setOpen(false)} aria-current={eventsCurrent ? 'page' : undefined}
+            className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Events {eventsCurrent ? <span className="text-[11px] font-bold text-axal-violet" data-testid="account-events-current">Current</span> : null}
           </Link>
           {/* D562 — "Learning" replaces "Articles" (the owner, epic #1157).
               Articles live inside Learning now: its Articles tab lists them,
@@ -1874,6 +1882,9 @@ function RequireAuth({ user, children, onLogout, viewMode, onViewModeChange, isI
  */
 const ROUTE_BOUNDARIES = [
   { under: /^\/raise\/investor-narrative(\/|$)/, roles: NARRATIVE_BOUNDARY_ROLES, Panel: NarrativeBoundary },
+  // D1160 (#3067, FND20b/c): Fund administration refuses a support session and every non-admin in its own words.
+  // An admin previewing another role is sent home as before (`notPreview`).
+  { under: /^\/admin\/fund-admin(\/|$)/, roles: FUND_ADMIN_BOUNDARY_ROLES, Panel: FundAdminBoundary, notPreview: true },
 ];
 
 function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImpersonating, impersonationTargetRef }) {
@@ -1890,10 +1901,12 @@ function RoleGuard({ user, allowedRoles, children, viewMode, realUser, isImperso
     const pendingTarget = isImpersonating ? impersonationTargetRef?.current : null;
     const defaultPath = pendingTarget || ROLE_DEFAULT_PATH[effectiveRole] || '/studio';
     // A pending handoff still wins: the boundary is drawn only when nothing is on its way.
-    const boundary = !pendingTarget && ROUTE_BOUNDARIES.find((b) => b.under.test(pathname) && b.roles.has(effectiveRole));
-    if (boundary) return <boundary.Panel home={defaultPath} />;
+    const previewing = !isImpersonating && (realUser || user)?.role === 'admin';
+    const boundary = !pendingTarget && ROUTE_BOUNDARIES.find((b) => b.under.test(pathname) && b.roles.has(effectiveRole) && !(b.notPreview && previewing));
+    if (boundary) return <boundary.Panel home={defaultPath} impersonating={!!isImpersonating} />;
     // D940: retain the canonical policy, including preview and impersonation exceptions.
     if (adminRefusal({ pathname, realRole: (realUser || user)?.role, isImpersonating })) {
+      if (/^\/admin\/programs\/spinout-lab(\/|$)/.test(pathname)) return <LabOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;
       return <AdminOnlyNotice home={ROLE_DEFAULT_PATH[effectiveRole] || '/studio'} />;
     }
     return <Navigate to={defaultPath} replace />;
@@ -2337,6 +2350,9 @@ function AppInner() {
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
       : component
   );
+  const trustCenter = user
+    ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenter inShell />)
+    : <TrustCenter />;
   const investorFundWorkspace = (component) => investorWorkspace('fund', component, {
     fundUnlocked: hasInvestorTier(user, 'institutional'),
   });
@@ -2565,6 +2581,7 @@ function AppInner() {
           `:section` above matches one segment only, so without this every
           Usage sub-page answered 404; SettingsPage reads the page from the path. */}
       <Route path="/account/usage/:page" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
+      <Route path="/account/companies/:tab" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <SettingsPage />)} />
       <Route path="/settings/:section" element={<SettingsSectionRedirect />} />
 
       {/* Phase 0.1 — investor role added to every guard a partner currently
@@ -2779,7 +2796,11 @@ function AppInner() {
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />
       {/* Platform and Revenue pages are the Super Admin's, like every other (#2375). */}
       <Route path="/admin/platform/bank-accounts" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
+      <Route path="/admin/platform/bank-accounts/cash" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
+      <Route path="/admin/platform/bank-accounts/history" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
       <Route path="/admin/platform/product-testing" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
+      <Route path="/admin/platform/product-testing/:tab" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
+      <Route path="/admin/platform/product-testing/programs/:uid" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/promo-codes" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
       <Route path="/admin/revenue/billing" element={guard(['admin'], hqOnly(<BillingPage />))} />
       <Route path="/admin/trash" element={guard(['admin'], <AdminTrashPage />)} />
@@ -2816,12 +2837,15 @@ function AppInner() {
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
       {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
       <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/history" element={guard(['admin'], hqOnly(<ProgramGrantsHistory />))} />
       <Route path="/admin/licences/programs/requests" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/defaults" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/licences/programs/studio/:uid" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
+      <Route path="/admin/fund-admin/:tab" element={guard(['admin'], <FundAdminConsole />)} />
+      <Route path="/admin/fund-admin/:tab/:sub" element={guard(['admin'], <FundAdminConsole />)} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       {/* D800 (#2233): the Licences page's tabs, each a sub-path of the page, behind the same guard. */}
@@ -2991,6 +3015,8 @@ function AppInner() {
       {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
       <Route path="/admin/partner-profiles" element={guard(['admin'], <PartnerProfiles />)} />
       <Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />
+      {/* D995: one profile as PRF3's lightbox, over the list it was opened from. */}
+      <Route path="/admin/partner-profiles/:ref" element={guard(['admin'], <PartnerProfiles />)} />
       {/* D997 (#2378): Persona segments, its two tabs as sub-paths; /admin?tab=personas forwards here (LegacyContractsRedirect). */}
       <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
@@ -3325,6 +3351,8 @@ function AppInner() {
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
+      {/* D1148 (#2421): each deal tab at its own address; a word the role does not draw opens Overview. */}
+      <Route path="/deals/:dealId/:tab" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
       {/* D670 — the Market intelligence page is retired, with its sector
           digest email. Research reads the same market data, so an old link
           (and a link in a digest already sent) lands there. */}
@@ -3408,6 +3436,9 @@ function AppInner() {
       <Route path="/my/events/hosting" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />
       <Route path="/my/events/discover" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />
       <Route path="/my/events/past" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />
+      {/* D1035 (#2876): the ticket and hosted-event drawers, each over its tab, at their own addresses. */}
+      <Route path="/my/events/ticket/:eventId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />
+      <Route path="/my/events/hosting/:eventId" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <MyEventsPage />)} />
       <Route path="/events/new" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
       <Route path="/events/:id/edit" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventEditorPage />)} />
       <Route path="/events/:id/manage" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <EventManagePage />)} />
@@ -3449,15 +3480,16 @@ function AppInner() {
           carries no role gating, so every advisor could see the link, click it,
           and be bounced off the only page listing what they owe. */}
       {/* D1072 (#2425): the public trust center is /trust and its tabs, for anyone; a member's own part is /trust/me. */}
-      <Route path="/trust" element={<TrustCenter />} />
-      <Route path="/trust/security" element={<TrustCenter />} />
-      <Route path="/trust/data" element={<TrustCenter />} />
-      <Route path="/trust/subprocessors" element={<TrustCenter />} />
-      <Route path="/trust/documents" element={<TrustCenter />} />
-      <Route path="/trust/disclosure" element={<TrustCenter />} />
+      {/* D1077 (#2969, TRU20): signed in, the public trust center sits in the app shell, in the member's colours; signed out, in the site frame (TRU1). */}
+      <Route path="/trust" element={trustCenter} />
+      <Route path="/trust/security" element={trustCenter} />
+      <Route path="/trust/data" element={trustCenter} />
+      <Route path="/trust/subprocessors" element={trustCenter} />
+      <Route path="/trust/documents" element={trustCenter} />
+      <Route path="/trust/disclosure" element={trustCenter} />
       <Route path="/trust/me" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], investorWorkspace('trust', <TrustCenterPage chromeless={effectiveRole === 'investor'} />))} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
-      <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
+      <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsRedirect />)} />
       <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />
       <Route path="/lp-portal" element={<LpPortalRedirect />} />
       <Route path="/funds/lp-workspace" element={<FundLpWorkspaceRedirect />} />
@@ -3673,7 +3705,7 @@ function AppInner() {
       <Route path="/pipeline/transactions" element={<Navigate to="/deals/closing" replace />} />
       <Route path="/portfolio/performance" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
       <Route path="/portfolio/value-add" element={guard(['admin', 'investor'], investorWorkspace('portfolio', <PortfolioWorkspace activeRole={effectiveRole} />))} />
-      <Route path="/funds/performance" element={guard(['admin', 'investor'], investorFundWorkspace(<FundOpsWorkspace />))} />
+      <Route path="/funds/performance" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? investorFundWorkspace(<FundPerformancePage embedded />) : <FundOpsRedirect />)} />
       <Route path="/funds/lps" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundLPs />))} />
       <Route path="/funds/calls" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundCalls />))} />
       <Route path="/funds/ledger" element={guard(['admin', 'investor'], investorFundWorkspace(<InvestorFundAccounting />))} />
@@ -3713,7 +3745,13 @@ function AppInner() {
       <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
       {/* D1025 (#2862, CT11): a Cap table proposal's drawer, over the tool; its id is a record proposal's uid or `mercury-<n>`. */}
       <Route path="/raise/cap-table/proposal/:proposal" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
+      {/* D1023 (#2860, CT4): an instrument's drawer, over Instruments; its id is the record's SAFE or note uid. */}
+      <Route path="/raise/cap-table/instrument/:instrument" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
+      {/* D1024 (#2861, CT6–CT9): a scenario, or `compare`, under the tool's Scenarios tab. */}
+      <Route path="/raise/cap-table/scenarios/:scenario" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableScenario />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
+      {/* D1106 (#2986): a data-room file's lightbox over Files. */}
+      <Route path="/raise/data-room/file/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="data-room" record dataRoomFile />)} />
       <Route path="/raise/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" record />)} />
       <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />
       {/* Standalone Referrals page (Refer & Earn + Payouts). Legacy /refer also redirects here. */}

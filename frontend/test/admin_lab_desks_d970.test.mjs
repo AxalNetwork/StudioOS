@@ -282,12 +282,17 @@ const REVIEW = {
   operators: [{ id: 7, name: 'Admin A', email: 'a@example.com' }, { id: 8, name: 'Admin B', email: 'b@example.com' }],
 };
 
-test('mounted Formation: both desks, no venture switch, and a review recorded with nothing preselected', async () => {
+test('mounted Formation: both desks, the venture scope switch, and a review recorded with nothing preselected', async () => {
   const v = await mount('/admin/programs/spinout-lab/formation', { review: REVIEW, orders: { orders: [order(1), order(2, { status: 'packet_ready', packet_document_id: 502 })] } });
   try {
     assert.ok(v.has('lab-83b-table') && v.has('lab-orders-table'));
-    assert.match(v.of('lab-formation-note'), /These two desks also serve startups outside the Lab\./);
-    assert.doesNotMatch(v.text(), /Lab ventures ·|All startups/, 'the switch waits for part 4');
+    assert.match(v.of('lab-formation-note'), /Showing ventures linked to a recorded Lab participant/);
+    assert.ok(v.has('lab-formation-scope-lab') && v.has('lab-formation-scope-all'));
+    assert.ok(v.calls.some(c => c.path === '/api/admin/83b-review?scope=lab'));
+    assert.ok(v.calls.some(c => c.path === '/api/admin/incorporations?scope=lab'));
+    await v.click('lab-formation-scope-all');
+    assert.ok(v.calls.some(c => c.path === '/api/admin/83b-review?scope=all'));
+    assert.ok(v.calls.some(c => c.path === '/api/admin/incorporations?scope=all'));
     assert.match(v.of('lab-83b-row-1'), /Complete7 Nov( 2026)? · an admin/);
     assert.match(v.of('lab-83b-row-2'), /Unassigned/);
     await v.click('lab-83b-record-1');

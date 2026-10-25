@@ -1,3 +1,4 @@
+import { storedPmfChecklist } from '../scoring/pmfStore';
 /**
  * D691 (S19-B, #1699) — Raise's seven records on D690's contract (copy per
  * CO:375-381): Fundraising readiness, Investor narrative, Pitch deck, Data
@@ -150,7 +151,7 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   const row = items.find((i) => i.item_key === id) ?? null;
   const mine = row ? scores.filter((s) => Number(s.item_id) === Number(row.id)) : [];
   const s = mine.at(-1) ?? null; // scores arrive oldest first
-  const computed = id === 'team' ? null : (await computeReadiness(rc.env, rc.projectId)).find((c) => c.key === id) ?? null;
+  const computed = id === 'pmf' ? await storedPmfChecklist(rc.env, rc.projectId) : id === 'team' ? null : (await computeReadiness(rc.env, rc.projectId)).find((c) => c.key === id) ?? null;
   const notScored = 'Not scored yet';
   const out: RecordContent = {
     title: item.label,
@@ -218,11 +219,11 @@ const readiness = spec('readiness_items', 'fundraising-readiness', async (rc, id
   return [{
     key: 'rescore', label: 'Re-score', kind: 'write', tone: 'primary',
     execute: (c, itemKey) => refusing(async () => ({ ok: true, record: await rescoreReadiness(c.env, {
-      projectId: c.projectId, userId: userId(c), items: [itemKey], since: 'all',
+      projectId: c.projectId, userId: userId(c), items: [itemKey], since: 'all', ...(itemKey === 'pmf' ? { pmf: true } : {}),
     }) })),
   }];
 }, async (rc) => {
-  // The seven items with their last score; Team is scored by hand.
+  // The eight items with their last score; Team is scored by hand.
   const { scores } = await loadReadiness(ctxOf(rc)); // oldest first, so the last one kept is the newest
   const newest = new Map<string, any>();
   for (const sc of scores) newest.set(String(sc.item_key), sc);
@@ -916,6 +917,18 @@ async function capitalOptions(rc: RecordContext, query: Record<string, string>) 
   };
 }
 
+/**
+ * D1189 (#3123): one feedback row, the objection with the answer Add feedback
+ * stored beside it. An objection nobody answered says so rather than drawing
+ * nothing, and the day follows either.
+ */
+export const feedbackRow = (f: { objection: string; answer?: string | null; created_at?: string | null }): Row => {
+  const answer = typeof f.answer === 'string' ? f.answer.trim() : '';
+  const said = answer ? `Answer: ${answer}` : 'No answer recorded';
+  const on = day(f.created_at ?? null);
+  return { a: `"${f.objection}"`, b: on ? `${said} · ${on}` : said };
+};
+
 const capital = spec('raise_prospects', 'capital-relationships', async (rc, id) => {
   const ctx = ctxOf(rc);
   const p = (await loadProspects(rc.env, rc.projectId)).find((x) => String(x.id) === id) as ProspectRow;
@@ -961,9 +974,9 @@ const capital = spec('raise_prospects', 'capital-relationships', async (rc, id) 
   }),
   section('feedback', 'Feedback', async (rc, id) => {
     const res = await rc.env.DB.prepare(
-      'SELECT objection, created_at FROM raise_prospect_feedback WHERE prospect_id = ? ORDER BY created_at DESC, id DESC LIMIT 20',
-    ).bind(Number(id)).all<{ objection: string; created_at: string }>();
-    return { rows: (res.results || []).map((f) => ({ a: `"${f.objection}"`, b: day(f.created_at) ?? '' })), empty: 'No feedback recorded.', action: 'add-feedback' };
+      'SELECT objection, answer, created_at FROM raise_prospect_feedback WHERE prospect_id = ? ORDER BY created_at DESC, id DESC LIMIT 20',
+    ).bind(Number(id)).all<{ objection: string; answer: string | null; created_at: string }>();
+    return { rows: (res.results || []).map(feedbackRow), empty: 'No feedback recorded.', action: 'add-feedback' };
   }, { side: true }),
   // Deck links made for this prospect, and the room's folders their account opened, matched by email.
   section('materials', 'Materials', async (rc, id) => {

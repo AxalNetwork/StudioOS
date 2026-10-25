@@ -6,8 +6,12 @@ owner's "Cap table" canvas: `design/incoming/Raise Cap Table Page.dc.html` and
 
 | File | What it is |
 |---|---|
-| `CapTableTool.jsx` | The tool's tab bar (`CapTableTabBar`) and Overview's tab bar with the Modelled line (`CapTableHomeNav`), drawn under the module page's header, and its tab pages (`CapTableTabPage`): Instruments, Option pool and Scenarios. |
-| `capTableModel.js` | Pure: the addresses, the tabs, the words, and every derivation from the reads (the SAFEs sent through StudioOS, the model's instruments and conversion lines, its pool, the 409A, the scenario cards). |
+| `CapTableTool.jsx` | The tool's tab bar (`CapTableTabBar`) and Overview's tab bar with the Modelled line (`CapTableHomeNav`), drawn under the module page's header, and its tab pages (`CapTableTabPage`), Scenarios drawn here and the others from their own files. |
+| `capTableModel.js` | Pure: the addresses, the tabs, the words, and the shared derivations (money, dates, the 409A, the scenario cards). |
+| `InstrumentsTab.jsx` | D1023 (#2860): Instruments (CT3, CT3b): the record's SAFEs and notes with the toolbar, Convert at a price or a scenario, the modelled columns and chart, the over-100% notice; and the instrument drawer (CT4) at `/raise/cap-table/instrument/<uid>`. |
+| `instrumentsModel.js` | D1023, pure: each instrument from the record, the toolbar, Convert at's body, the engine's conversion as columns, bars and steps, MFN and the exit before conversion. |
+| `OptionPoolTab.jsx` | D1023: Option pool (CT5, CT5c): the tiles, the burn-down with the model's target, the 409A with Record a valuation and Record an event, Top up the pool, and the grants (Carta's read only). |
+| `poolModel.js` | D1023, pure: the tiles, the burn-down by month, the grants from the venture's plan, and the 409A dialogs' bodies. |
 | `AccessTab.jsx` | Access (CT13, D1026): who sees what, the levels, the share links and the access log; the owner changes, a co-founder reads. |
 | `ImportExportTab.jsx` | Import and export (CT14, D1026): Carta's binding, a spreadsheet to proposals, Mercury's SAFE requests, the three exports. |
 | `SharedCapTable.jsx` | The read for an Advisor, an Operating Partner, an Admin and the Super Admin (CT17, CT18) at `/cap-tables/:projectId`, and the venture link's page. |
@@ -21,6 +25,9 @@ owner's "Cap table" canvas: `design/incoming/Raise Cap Table Page.dc.html` and
 | `ProposalDrawer.jsx` | D1025: one proposal at `/raise/cap-table/proposal/<id>` (CT11a–b): a Mercury SAFE request (`mercury-<n>`), a close's investors together, or a person's or an import's proposal. |
 | `IssuanceDialogs.jsx` | D1025: Record an issuance or Propose one (CT12a) at `/new`, Eadwyn's draft from a signed file (CT11c), Void (CT12b) and an admin's correction (CT12c). |
 | `historyModel.js` | D1025, pure: the timeline's and the changes' lines, the toolbar's filters, each dialog's body in the record's units, and each drawer's view. |
+| `ScenariosPages.jsx` | D1024 (#2861): Scenarios (CT6–CT9) — the cards with Compare and New scenario, one scenario at `/raise/cap-table/scenarios/<uid>` (inputs, before and after, the round's events, the exit waterfall and its step chart, the two read-backs) with Duplicate, Rename and Delete in dialogs, and the compare page at `/scenarios/compare?ids=`. |
+| `ScenarioModelEditor.jsx` | D632's variant editor, moved here by D1024: the form for a scenario typed by hand (founders, pool, SAFEs, rounds, an exit), saved in place. The variants page reads it from here until part 14 retires that page. |
+| `scenariosModel.js` | D1024, pure: the addresses, the cards, the dialogs' words, both drafts and their bodies, the results, the waterfall table, the conversion points, the read-backs and the compare rows and charts. |
 | `CapTableTag.jsx` | The On record and Modelled tags. |
 
 ## Where the tool lives
@@ -32,15 +39,18 @@ two bands. The tab words (`/instruments`, `/option-pool`, `/scenarios`) arrive
 on the module's record route, `/raise/:slug/:id`, and CycleRoute draws
 `CapTableTabPage` for them instead of a record (`isCapTableTab`). A holder's
 address, `h-<n>`, opens the holder drawer over Overview (D1022); `e-<n>` and
-`pool` are still records. `/new` is Record an issuance over Overview (D1025), and a
-proposal's drawer has the one route the tool adds, `/raise/cap-table/proposal/<id>`.
+`pool` are still records. `/new` is Record an issuance over Overview (D1025). Two drawers have routes
+of their own: a proposal's, `/raise/cap-table/proposal/<id>` (D1025), and an
+instrument's, `/raise/cap-table/instrument/<uid>`, over Instruments (D1023); so do a
+scenario and the compare page, `/raise/cap-table/scenarios/<uid>` and
+`/scenarios/compare` (D1024).
 
 ## The rules for adding here
 
 - **On record and Modelled never share a number without a tag.** A figure
   from the record (D1017, `GET /api/captable/record/:projectId`) is On record;
-  a figure from the saved model carries the Modelled tag; a SAFE sent through
-  StudioOS is On record once countersigned.
+  a figure from the saved model, or from a round run from Today (D1018),
+  carries the Modelled tag.
 - **Every figure comes from a mounted read.** A read that fails says so where
   its figure would be, a refusal is never "none", and a value nobody recorded
   reads "Not recorded", never `$0` or `0%`. No canvas sample (`[Acme
@@ -58,5 +68,6 @@ proposal's drawer has the one route the tool adds, `/raise/cap-table/proposal/<i
   (a co-founder on Access). Who reads at which level is the Worker's answer
   (`via`, `level`), never a role the page guessed.
 - **Every change opens a dialog that says what it changes and who sees it.**
-  Never `alert` or `confirm`.
+  Never `alert` or `confirm`. A scenario's own Save is the one edit made in place, as the
+  variants page made it (D1024); its Duplicate, Rename, Delete and Attach are dialogs.
 - **Eadwyn never fills an amount, cap, discount, price or share count** (#2431).

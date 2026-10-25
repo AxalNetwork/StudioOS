@@ -32,9 +32,11 @@ import { BuyTokensCard, PaymentDetailsCard, PlanAllowanceCard, TokenBalanceCard,
 import FollowingSection from './account/AccountFollowing';
 import UsageSection from './account/UsageOverview';
 import CompaniesProjects from './account/companies/CompaniesProjects';
+import { companiesTabFor } from './account/companies/companiesModel';
 import CostPage from './account/CostPage';
 // D807 (#2246) — `/account/usage/limits`, Usage's Limits page.
 import LimitsPage from './account/LimitsPage';
+import StoragePage from './account/StoragePage';
 import { USAGE_PAGES, usagePageFor } from './account/limitsModel';
 import ConnectorsSection from './account/AccountConnectors';
 import ConnectorPage from './account/ConnectorPage';
@@ -272,6 +274,8 @@ export default function SettingsPage() {
   const connectorKey = active === 'connectors' ? connectorKeyFor(location.pathname) : null;
   // D807 — which Usage page the address opens: the overview, or Limits.
   const usagePage = active === 'usage' ? usagePageFor(location.pathname) : null;
+  // D1138 — Companies and projects' tabs are addresses of their own; the canonicalising effect keeps them.
+  const companiesTab = active === 'companies' ? companiesTabFor(location.pathname) : null;
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -301,7 +305,7 @@ export default function SettingsPage() {
   // account recovery. A canonicalising hop must not eat the part of the link
   // that said why it was sent.
   useEffect(() => {
-    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage });
+    const want = accountPathFor({ section: active, phone, key: connectorKey, usagePage, companiesTab });
     if (location.pathname !== want && /^\/(?:account|settings)\b/.test(location.pathname)) {
       navigate({ pathname: want, search: location.search, hash: location.hash }, { replace: true });
     }
@@ -507,7 +511,7 @@ function AccountPanes({ safeActive, data, setData, flash, patch, reloadAccount, 
       )}
       {safeActive === 'companies' && <CompaniesProjects role={role} />}
       {safeActive === 'following' && <FollowingSection />}
-      {safeActive === 'usage' && (usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
+      {safeActive === 'usage' && (usagePage === 'storage' ? <StoragePage role={role} /> : usagePage === 'limits' ? <LimitsPage /> : usagePage === 'cost' ? <CostPage role={role} /> : <UsageSection role={role} />)}
       {safeActive === 'developer' && allowedIds.has('developer') && <DeveloperSection role={data.role} />}
       {safeActive === 'onboarding' && <OnboardingSettingsTab />}
       {safeActive === 'connectors' && <ConnectorsTab connectorKey={connectorKey} />}

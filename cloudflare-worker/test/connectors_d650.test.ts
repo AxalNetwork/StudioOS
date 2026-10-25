@@ -80,7 +80,8 @@ test('both mounts use one catalogue handler and calendar state comes from its ow
   assert.equal(canonical.body.items.find((item: any) => item.key === 'microsoft_365').already_connected, false);
   assert.deepEqual(canonical.body.unreadable_sources, []);
   for (const item of canonical.body.items) {
-    assert.equal(item.permissions.length, getDescriptor(item.key)?.oauth_scopes?.length || (item.auth_type === 'api_key' ? 1 : 0));
+    // D1085: an MCP sign-in, like a key, carries one line saying what it reads.
+    assert.equal(item.permissions.length, getDescriptor(item.key)?.oauth_scopes?.length || (item.auth_type === 'api_key' || item.auth_type === 'oauth_mcp' ? 1 : 0));
   }
   db.close();
 });
