@@ -31,6 +31,15 @@ page in a child component inside it:
   (`/admin/programs/referral-partners`, `/how-it-runs`), and the one-page
   `/admin/programs/investor-cohorts` and `/admin/programs/ai-native-venture`.
 
+- `ProposePage.jsx` — D964 (#2797), workspace "Programs":
+  `/admin/programs/propose`, Propose a program (PG14) on part 2's proposal
+  routes. `?proposal=<uid>` opens a stored proposal: a Draft or Sent back one
+  in the form, any other read only with HQ's note.
+- `ProposalsPage.jsx` — D964, workspace "Programs": `/admin/programs/proposals`.
+  A Super Admin gets the tab strip and Proposals from studios; an Admin gets
+  PG19b in the page. It also holds `ProgramsTabs`, the strip "Catalogue ·
+  Proposals [n]" the catalogue draws for a Super Admin.
+
 The pieces they draw with:
 
 - `ProgramFrame.jsx` — every program page's crumb, header, facts strip and
@@ -51,6 +60,16 @@ The pieces they draw with:
 - `catalogueModel.js` — pure. D961's period, the four tiles, the three
   charts' series, rows and tables, the cards from the registry, Lab
   applications and the studio chip, each from one block of part 1's read.
+- `ProposalTables.jsx` — D964: Your proposals (PG1, an Admin's) and
+  Proposals from studios (PG2, a Super Admin's), each on its own read, with
+  search, status, sort and pages.
+- `ProposalFields.jsx` — D964: PG14's Basics and How it runs fields, shared by
+  Propose a program and New program.
+- `DecideDialog.jsx` — D964: PG15a, a Super Admin's decision on one proposal.
+- `NewProgramDialog.jsx` — D964: New program (PG2's header), for a Super Admin.
+- `proposalsModel.js` — D964, pure: the proposal's statuses, PG14's steps and
+  lists, the Review lines, PG15a's choices, PG19b, the list parameters and the
+  refusals.
 - `programsModel.js` — pure. The addresses and moved keys, the nine programs
   (S-RUN), each page's header, facts, tabs and How it runs text, Guard L, the
   bands, Waiting for you, the mentor counts (S-CNT, S-COV), the Refer & Earn,
@@ -68,7 +87,8 @@ The redirects, each the route's whole element:
 
 - The pages read D953 §2's R1–R12 and, from D961, part 1's catalogue read
   through `frontend/src/lib/api/adminPrograms.js` and Lab applications through
-  `GET /api/admin/spinout-applications`, whose failure is a 503 since D960.
+  `GET /api/admin/spinout-applications`, whose failure is a 503 since D960; and,
+  from D964, part 2's proposal routes through `../../../lib/api/programProposals.js`.
   They never read `GET /api/admin/spinout-participants`, which still answers
   `[]` on any error (Guard H).
 - A failed read marks only the blocks it feeds, with what could not be read,
@@ -79,5 +99,6 @@ The redirects, each the route's whole element:
   read", each with its reason as a visible line.
 - A refusal is one sentence in place, keyed on its `code`.
 - The charts are `frontend/src/ui/Charts.jsx`'s, never an `<svg>` of their own. Nothing
-  else D953 §3 lists under "Not drawn now" is drawn: no Propose a program, no
-  Pause, no CSV.
+  else D953 §3 lists under "Not drawn now" is drawn: no Pause, no CSV. D964 drew
+  the proposal flow (Propose, the two lists, Decide, New program, PG19b) on part
+  2's routes, through `../../../lib/api/programProposals.js`.

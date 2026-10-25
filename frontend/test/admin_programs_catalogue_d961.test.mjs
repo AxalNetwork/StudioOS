@@ -279,7 +279,8 @@ async function mounted(url, handle, { user = null, phone = false } = {}) {
   };
 }
 
-const catalogueCalls = (v) => v.requests.filter((u) => u.startsWith('/api/admin/programs'));
+// The catalogue read only: D964's proposal lists read `/api/admin/programs/proposals…` on the same page, held by its own test.
+const catalogueCalls = (v) => v.requests.filter((u) => u.startsWith('/api/admin/programs') && !u.startsWith('/api/admin/programs/proposals'));
 
 test('the catalogue for an Admin: header, period, four tiles, the three charts, and nine cards with their figures, Needs you and doors', async () => {
   const view = await mounted('/admin/programs', worker());

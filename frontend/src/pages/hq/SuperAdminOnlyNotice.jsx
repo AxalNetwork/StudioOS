@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Landmark } from 'lucide-react';
-import { HQ_EYEBROW, HQ_LINKS, HQ_TITLE, hqLine } from './hqNoticeModel';
+import { HQ_EYEBROW, HQ_TITLE, hqLine, hqLinks } from './hqNoticeModel';
 
 /**
  * What an admin without the elevation sees on an HQ-only route.
@@ -35,7 +35,7 @@ export default function SuperAdminOnlyNotice() {
       <h1 id="super-admin-only-title" className="mt-2 text-[18px] font-extrabold tracking-[-.01em] text-axal-ink dark:text-gray-100">{HQ_TITLE}</h1>
       <p className="mt-2 text-[13px] leading-relaxed text-axal-muted dark:text-gray-400" data-testid="super-admin-only-line">{hqLine(pathname)}</p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        {HQ_LINKS.map((l, i) => (
+        {hqLinks(pathname).map((l, i) => (
           <Link key={l.href} to={l.href}
             className={`inline-flex min-h-[40px] items-center rounded-[9px] px-3.5 text-[13px] font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-axal-violet ${i === 0
               ? 'border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800'

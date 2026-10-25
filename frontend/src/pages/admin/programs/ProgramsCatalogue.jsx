@@ -22,10 +22,14 @@ import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth';
 import { scopeParam, scopeState } from '../insights/insightsModel';
 import AdminBoardFrame from '../AdminBoardFrame';
 import {
-  BlockFailed, CARD, ChartBlock, Chip, EYE, GrantBadge, H2, LINK, MovedNotice, PeriodControl, Pill, StatusPill,
+  BlockFailed, CARD, ChartBlock, Chip, Done, EYE, GrantBadge, H2, LINK, MovedNotice, PeriodControl, Pill, StatusPill,
   StudioSelect, SUB, Skeleton, Tile, Unread,
 } from './parts';
 import { useCatalogueReads } from './useProgramReads';
+import { ProposalsFromStudios, YourProposals } from './ProposalTables';
+import { ProgramsTabs, useWaitingProposals } from './ProposalsPage';
+import NewProgramDialog from './NewProgramDialog';
+import { NEW_PROGRAM } from './proposalsModel';
 import {
   ASSIGNED_TO_YOU, COULD_NOT_READ, FOOT_PROFILING, GROUPS, INCLUDING_MEMBER, LINE_ADMIN, LINE_SUPER, NOT_READ_YET,
   NOT_RECORDED, PRODUCT_TESTING_FOOT, READING, TITLE, asOfState, clockLabel, movedNotice, plural, scopeChip, withoutMoved,
@@ -36,6 +40,7 @@ import {
   weeksFrom, withWeeks,
 } from './catalogueModel';
 
+const PRIMARY = 'hidden min-h-[36px] items-center rounded-[9px] bg-axal-violet px-3.5 text-[13px] font-bold text-white hover:opacity-90 sm:inline-flex dark:bg-violet-600';
 const OPEN = 'inline-flex min-h-[44px] items-center rounded-[9px] border border-axal-hairline bg-white px-3.5 text-[13px] font-bold text-axal-ink hover:bg-axal-ground sm:min-h-[34px] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800';
 const FIGURE = 'font-mono text-[12.5px] font-semibold leading-normal text-axal-ink dark:text-gray-100';
 
@@ -128,6 +133,9 @@ function CatalogueBody() {
   const phone = usePhoneWidth();
   const weeks = weeksFrom(loc.search);
   const [group, setGroup] = useState(null);
+  const [newOpen, setNewOpen] = useState(false);
+  const [created, setCreated] = useState(null);
+  const waitingProposals = useWaitingProposals(superAdmin);
 
   // The studio (PG2): R12's lines, then the picked studio. While R12 reads, no per-studio read is made.
   const reads = useCatalogueReads(superAdmin, {
@@ -300,6 +308,10 @@ function CatalogueBody() {
         {/* PG20a: on a phone the header has no buttons, so no studio filter. */}
         {phone ? null : (
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* D964: PG2's New program and PG1's Propose a program. A phone has no header door (dc:469). */}
+            {superAdmin
+              ? <button type="button" className={PRIMARY} onClick={() => setNewOpen(true)} data-testid="programs-new">{NEW_PROGRAM}</button>
+              : <Link to="/admin/programs/propose" className={PRIMARY} data-testid="programs-propose">Propose a program</Link>}
             {superAdmin ? <StudioSelect scopes={scopeLinesOf(reads.scopes)} current={scope} onPick={pickStudio} /> : null}
             <span className={`font-mono text-[12px] ${asOf.kind === 'failed' ? 'font-bold text-red-700 dark:text-red-300' : 'text-axal-muted dark:text-gray-400'}`} data-testid="programs-asof">
               {asOf.kind === 'updated' ? `Updated ${clockLabel(asOf.at)}` : asOf.kind === 'failed' ? COULD_NOT_READ : READING}
@@ -310,6 +322,12 @@ function CatalogueBody() {
           </div>
         )}
       </header>
+
+      {superAdmin ? <ProgramsTabs waiting={waitingProposals} /> : null}
+
+      {created ? (
+        <Done testId="programs-new-done">{`${created.name} is added as Proposed, with an empty playbook draft. This page draws its nine programs, so the new one has no card here yet.`}</Done>
+      ) : null}
 
       <MovedNotice text={moved} onDismiss={() => navigate({ pathname: loc.pathname, search: withoutMoved(loc.search), hash: loc.hash }, { replace: true })} />
 
@@ -348,11 +366,16 @@ function CatalogueBody() {
         {shown.map(card)}
       </div>
 
+      {superAdmin ? <ProposalsFromStudios onDecided={waitingProposals.reload} /> : <YourProposals />}
+
       {/* O-PRF: one literal door until Profiling trends' home is decided. */}
       <p className={`m-0 flex flex-wrap items-center gap-x-2 ${SUB}`} data-testid="programs-foot">
         <span>{FOOT_PROFILING}</span>
         <Link to="/admin/profiling-trends" className={LINK}>Open profiling trends</Link>
       </p>
+      {newOpen ? (
+        <NewProgramDialog onClose={() => setNewOpen(false)} onCreated={(c) => { setNewOpen(false); setCreated(c); }} />
+      ) : null}
     </div>
   );
 }

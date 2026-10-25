@@ -880,12 +880,14 @@ test('the pages read D953 §2\'s reads and D961\'s catalogue read through their 
     'api.adminSpinoutApplications(', 'insightsApi.insightsScopes(', 'api.perkReview(']) assert.ok(src.includes(call), `the pages no longer read ${call}`);
   const clients = [...src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api(?:\/(\w+))?'/g)]
     .flatMap((imp) => imp[1].split(',').map((s) => `${imp[2] || 'api'}:${s.trim()}`).filter((s) => !s.endsWith(':')));
-  assert.deepEqual([...new Set(clients)].sort(), ['adminPrograms:adminProgramsApi', 'api:api', 'insights:insightsApi', 'learning:learningApi'],
+  // D964 (#2797) adds part 2's proposal client, the contracts library's templates (Terms) and HQ's grants read (the Studio filter); D961 part 1's catalogue client.
+  assert.deepEqual([...new Set(clients)].sort(), ['adminPrograms:adminProgramsApi', 'api:api', 'contracts:contractsApi', 'insights:insightsApi', 'learning:learningApi',
+    'programGrants:programGrantsApi', 'programProposals:programProposalsApi'],
     'the existing clients, each from its own module (lib/api re-exports them, but a named import of lib/api must name what api.js itself declares)');
   // D960 lifted Guard H for applications (a failure is a 503 now); participants still answer [] on any error.
   assert.doesNotMatch(src, /adminSpinoutParticipants|spinout-participants/, 'Guard H');
-  // D961 draws the charts through ui/Charts.jsx, never an <svg> of its own.
-  assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML|<svg|recharts|Export CSV|Propose a program|Pause program/);
+  // D961 draws the charts through ui/Charts.jsx, never an <svg> of its own. Propose a program landed with D964 (#2797); Pause waits for OD-PAUSE.
+  assert.doesNotMatch(src, /window\.confirm|useToast|dangerouslySetInnerHTML|<svg|recharts|Export CSV|Pause program/);
   assert.doesNotMatch(src, /\?\? 0\b/, 'no zero standing in for a value');
   for (const sample of ['[Studio Lisbon]', '[48]', '[A venture program', 'Granted to your studio', '0 credits']) assert.ok(!src.includes(sample), `a canvas sample reached the pages: ${sample}`);
   assert.match(read('frontend/src/pages/admin/programs/programsModel.js'), /import \{ parseStamp \} from '\.\.\/\.\.\/\.\.\/ui\/parseStamp\.js';/);
