@@ -52,12 +52,15 @@ import {
   saveScenario, logScenarioAct, loadScenarioByUid as loadByUid, type ScenarioRow,
 } from '../services/capTableWrites';
 import {
-  RecordError, acceptProposal, createClass, dismissProposal, historyPage, propose, readHistory, readRecord, recordIssuance,
-  setCurrency, updateClass, voidIssuance, type RecordActor,
+  RecordError, acceptProposal, createClass, dismissProposal, historyPage, propose, proposeImport, readHistory, readRecord, recordCsv,
+  recordIssuance, setCurrency, updateClass, voidIssuance, type RecordActor,
 } from '../services/capTableRecord';
+import { proposeFromClose, readClose } from '../services/capTableClose';
+import { DOCUMENT_OPTION, DOCUMENT_PAGE, documentRecord, readDocumentTerms } from '../services/capTableDocumentRead';
+import { railFor, refuseRun } from '../util/railContext';
 import { MODEL_SCENARIO_NAME, inputsFrom, offerFromModel, startFromRecord } from '../services/capTableToday';
 import {
-  actorHash, auditStatement, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
+  actorHash, auditStatement, csvCell, equityPlanBody, num, readEquityPlan, readRegister, registerCsv, snapshotPdf, withOwnership,
   type RegisterScope,
 } from '../services/capTableRegister';
 
@@ -625,16 +628,14 @@ captable.get('/scenarios/:uid/export.csv', async (c) => {
   });
 });
 
-// =====================================================================
-// Build queue #120 — audience-scoped share links.
+// ==============================================================// Build queue #120 — audience-scoped share links.
 //
 // ROUTE ORDER MATTERS: `/share/:token` and the scenario-scoped share
 // endpoints are registered here, ABOVE the `/:projectId` catch-all
 // further down this file. Hono matches in registration order, so moving
 // these below it would route `/api/captable/share/abc` into the
 // project handler and 404 (or worse, treat "share" as a project id).
-// =====================================================================
-
+// ==============================================================
 const SHARE_TTL_HOURS_DEFAULT = 168;   // 7 days
 const SHARE_TTL_HOURS_MAX = 24 * 90;   // 90 days
 const SHARE_VIEW_LIMIT_MAX = 500;
@@ -1155,6 +1156,48 @@ captable.post('/record/:projectId/proposals', async (c) => {
   } catch (e) { return recordError(c, e); }
 });
 
+/**
+ * D1026 (#2863) — a spreadsheet's rows as proposals (`origin: 'import'`),
+ * never on the record. Anyone who may propose may import; every row is checked
+ * before any is written.
+ */
+captable.post('/record/:projectId/proposals/import', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    return c.json(await proposeImport(c.env, projectId, actor, await recordBody(c)), 201);
+  } catch (e) { return recordError(c, e); }
+});
+
+/**
+ * D1026 (#2863) — the record and its history as one spreadsheet (CSV). The
+ * venture's read gate. One audit row (`cap_table_record_exported`), written
+ * before the file is answered: no audit row, no export (D1020 §4).
+ */
+captable.get('/record/:projectId/export.csv', async (c) => {
+  let projectId: number;
+  try { projectId = await recordReader(c); } catch (e) { return recordError(c, e); }
+  const user = await requireAuth(c);
+  const asOf = today();
+  let out: Awaited<ReturnType<typeof recordCsv>>;
+  try {
+    out = await recordCsv(c.env, projectId, csvCell, asOf);
+    await auditStatement(c.env, user, await actorHash(user as { email?: string | null }), projectId, 'cap_table_record_exported', {
+      format: 'csv', as_of: asOf, issuances: out.issuances, history: out.history, complete: out.complete,
+    }).run();
+  } catch (e) {
+    return refuse(c, 500, { code: 'cap_record_export_failed', message: 'The record could not be exported. Nothing was downloaded; try again in a moment.', raw: e });
+  }
+  return new Response(out.csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="cap-table-record-${projectId}-${asOf}.csv"`,
+      'Cache-Control': 'no-store',
+      'X-Export-Rows': String(out.issuances),
+    },
+  });
+});
+
 captable.post('/record/:projectId/proposals/:uid/accept', async (c) => {
   try {
     const { projectId, actor } = await recordWriter(c, true);
@@ -1201,6 +1244,41 @@ captable.put('/record/:projectId/currency', async (c) => {
   try {
     const { projectId, actor } = await recordWriter(c, true);
     return c.json({ currency: await setCurrency(c.env, projectId, actor, await recordBody(c)) });
+  } catch (e) { return recordError(c, e); }
+});
+
+/**
+ * D1021 (#2858) — part 6: a close's proposals, and Eadwyn's read of a signed document.
+ *
+ *   GET   /record/:projectId/closes/:closeUid             CT11b: the close's investors, each proposal, signed or not
+ *   POST  /record/:projectId/closes/:closeUid/proposals   a closed close proposes one issuance per investor (owner, co-founder, admin)
+ *   POST  /record/:projectId/document-read                CT11c: non-money terms with their page; money fields their page only
+ *
+ * A close's proposal is part 2's row (origin 'close'): Accept and Dismiss are
+ * part 2's routes, and Accept refuses an investor whose document is not signed.
+ * The document read writes nothing on the record; it is one metered run.
+ */
+captable.get('/record/:projectId/closes/:closeUid', async (c) => {
+  try { return c.json(await readClose(c.env, await recordReader(c), c.req.param('closeUid'))); }
+  catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/closes/:closeUid/proposals', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    return c.json(await proposeFromClose(c.env, projectId, actor, c.req.param('closeUid'), await recordBody(c)));
+  } catch (e) { return recordError(c, e); }
+});
+
+captable.post('/record/:projectId/document-read', async (c) => {
+  try {
+    const { projectId, actor } = await recordWriter(c, false);
+    const rail = railFor(c, { page: DOCUMENT_PAGE, option: DOCUMENT_OPTION }, documentRecord(projectId));
+    const { result, draft } = await readDocumentTerms(c.env, projectId, actor.id, await recordBody(c), rail);
+    if (!draft) {
+      return refuseRun(c, result) || refuse(c, 503, { code: 'ai_unavailable', message: 'Eadwyn could not read that document just now. Try again.' });
+    }
+    return c.json({ draft });
   } catch (e) { return recordError(c, e); }
 });
 

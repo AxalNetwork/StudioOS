@@ -15,9 +15,11 @@ permissions; list responses are owner-scoped, including for admins. Bound
 scenarios whose project is missing fail closed for non-admins; admin can recover
 or delete them. They are never silently detached into private scenarios.
 
-`scoreAccess.ts` scopes #2439 project risk and external trust-score reads through
-existing deal permissions. Self/admin trust reads retain obligation details;
-related external readers receive only the bare score. Non-admin risk and
+`scoreAccess.ts` scopes #2439 project risk through existing deal permissions,
+and, since D1074 (#2966), trust-score reads to the member, an admin of this
+territory (this deployment's database), and a counterparty in an open intro or
+deal (`mayReadTrustScores`, `counterpartiesOf`). Self/admin trust reads retain
+obligation details; a counterparty receives only the bare score. Non-admin risk and
 screening snapshots use `scoreIntegrity.ts` verification and read auditing.
 Bulk reads deduplicate projects, select snapshots once, and batch per-score
 audit entries without weakening approval or signature checks.
@@ -124,6 +126,9 @@ no new schema, runtime or billing path is introduced.
 | `programGrants.ts` | D982 (#2773): program grants. The nine programs and their readiness (held equal to `frontend/src/lib/programGrants.js`), `TERM_FIELDS` (which grant terms apply to which program, and which are defaultable), `validateTerms` (an unknown or inapplicable term is refused; `null` clears), `presentGrant` (the in-force rule and what a grant waits on), `readGrid`, `readDefaults` and `readHistory`. The store is migration 553; `../routes/admin_program_grants.ts` and `licencePrograms.ts` call it. D983 adds the grid's requests tile and series. |
 | `licencePrograms.ts` | D984 (#2775): the Administrator's programs. `programCopy` (the licence's grant rows and which programs HQ grants, as the licence push carries them to the branch, migration 554), `parseProgramCopy`, `studioPrograms` (the nine programs in the studio's words, in force by `presentGrant` and the day) and `unlinkedPrograms` (HQ runs every program). Callers: `../routes/licence_programs.ts` and `licencePush.ts`. |
 | `programRequests.ts` | D983 (#2774): the program requests checked against HQ's grants where HQ records them (`checkProgramRequest`: offered, held, a term that applies, one open request per question, what the term stands at read from the grant), the open-request counts per lane, a request's licence, and the draft an approval leaves (`draftOf`). Called by `../rpc/hqOps.ts` and `../routes/admin_program_requests.ts`. |
+| `trustContent.ts` | D1075 (#2967): the public trust center's content store (migration 584): the seven blocks, each line a fact or a gap with its reason (`parseBody`), a certification only with its auditor's report on file, Publish in one batch with one change note (`publish`), the subprocessors (ten days' notice), the change log, and the public matrix from `trust.ts`'s `obligationsForRole` (`publicMatrix`). |
+| `subprocessorNotices.ts` | D1075: the subprocessor notices: double opt-in (an encrypted address, a hashed single-use confirm token), a signed unsubscribe link that works once, and the sweep that emails confirmed subscribers once per new subprocessor before it starts. |
+| `securityReports.ts` | D1075: Help's Security category: a member's report, encrypted, read only by HQ's Super Admins and its sender, never a ticket row (tickets mirror to GitHub and Slack). Five a day; HQ only. |
 | `licenceTerms.ts` | D797: a licence's terms schedule, the one list of its 31 fields (`LICENCE_TERM_FIELDS`: key, group, label, type and range) and the canvas's section numbers (`DEFAULT_TERM_SECTIONS`), `validateTermsBody` (an unknown key or a bad value is refused, naming the field; `null` clears), `termsFromRow`, `readLicenceTerms`, `termsDiff` and the `TERMS_REASON` sentences. Migration 512's CHECKs hold the same ranges; HQ's write, `/licence/mine`, the branch copy and D800/D801 import it. |
 | `eadwynTools.ts` | D854: Eadwyn uses the MCP registry's tools inside the member's own access. `eadwynToolInfo` lists them (scope and the page's company; D846's filter replaces `eadwynToolAvailable`), `runEadwynToolCalls` re-checks each call the model proposed, runs a read through `callTool` (metered by D844) and turns a write into an `ai_rail_proposals` row, and `toolResultsForModel` hands results back as escaped data. |
 

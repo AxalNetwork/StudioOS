@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
@@ -7,12 +7,12 @@ import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import AdminNetworkProfiles from '../AdminNetworkProfiles';
-import FirmLinks from './FirmLinks';
+import FirmsTab from './Firms';
 import ApOverview from './ApOverview';
 import People from './People';
 import {
   AP_TITLE, COMMUNITY_PATH, MOVED_NOTICES, PAGE_LINE, RAIL_NOTE, TABS,
-  buildFirms, tabOf,
+  tabOf,
 } from './apModel';
 
 /**
@@ -24,23 +24,16 @@ import {
  *
  * D977 completes Overview from D973's summary read. Firms keeps its own
  * reads and the Deck roster is embedded; People (D978) is its own read, in
- * `People.jsx`. Nothing is decided here that is decided elsewhere: attaching a
- * firm, a deal and a host decision each open the page that decides.
+ * `People.jsx`. Nothing is decided here that is decided elsewhere: a deal
+ * and a host decision each open the page that decides. The Firms tab (D952, D979, `Firms.jsx`) makes its own two, each behind
+ * a dialog: an account's firm and a firm's directory switches.
  */
-
-const BTN = 'inline-flex min-h-[36px] items-center justify-center gap-2 whitespace-nowrap rounded-[9px] px-3.5 text-[12.5px] font-bold';
-const GHOST = `${BTN} border border-axal-hairline bg-white text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-800`;
-const DANGER = `${BTN} self-start border border-axal-destructive-edge bg-white text-axal-destructive dark:border-red-900 dark:bg-gray-900 dark:text-red-400`;
-const CARD = 'rounded-[12px] border border-axal-hairline bg-white dark:border-gray-700 dark:bg-gray-900';
-const EYE = 'text-[10.5px] font-bold uppercase tracking-[.07em] text-axal-muted dark:text-gray-400';
-const SUB = 'text-[12px] leading-[1.45] text-axal-muted dark:text-gray-400';
-const H2 = 'm-0 text-[15px] font-extrabold tracking-[-.02em] text-axal-ink dark:text-gray-100';
-const MONO = 'font-mono tabular-nums';
 
 const idle = { status: 'loading', data: null };
 const READS = {
   overview: ['overview'],
-  firms: ['links', 'directory', 'deals'],
+  // D979: the firms list is Firms.jsx's own read; the strip and the attach table read `links`.
+  firms: ['links'],
   people: [],
   deck: [],
 };
@@ -74,78 +67,6 @@ function useApReads(tab) {
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
   return { reads, asOf, reload };
-}
-
-function Skeleton() {
-  return <span className="block h-2.5 w-[70%] rounded-full bg-axal-hairline dark:bg-gray-700" />;
-}
-
-function Firms({ reads, reload }) {
-  const [now] = useState(() => Date.now());
-  const firms = useMemo(() => buildFirms(reads, now), [reads, now]);
-  return (
-    <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} aria-labelledby="ap-h-firms" data-testid="ap-firms">
-      <h2 id="ap-h-firms" className={H2}>Firms</h2>
-      {firms.state === 'loading' && <><span className="font-mono text-[13px] text-axal-muted">Reading…</span><Skeleton /></>}
-      {firms.state === 'unreadable' && (
-        <div role="alert" className="flex flex-col gap-2.5 text-[13px] text-axal-destructive dark:text-red-300">
-          <span>{firms.reason}</span>
-          <button type="button" className={DANGER} onClick={reload}>Try again</button>
-        </div>
-      )}
-      {firms.state === 'ready' && (
-        <>
-          {firms.unattached > 0 ? (
-            <p className="m-0 flex flex-wrap items-center justify-between gap-2 rounded-[10px] bg-axal-amber/30 px-3 py-2 text-[13px] text-axal-ink dark:text-gray-100" data-testid="ap-firms-unattached">
-              <span>Partner accounts with no firm: <span className={MONO}>{firms.unattached.toLocaleString('en-US')}</span></span>
-              <a href="#ap-firm-links" className={GHOST}>Attach below</a>
-            </p>
-          ) : null}
-          {firms.rows.length === 0
-            ? <span className={SUB}>No firm is recorded yet. A firm is created when a partner is invited.</span>
-            : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] border-collapse text-left text-[12.5px]">
-                  <thead>
-                    <tr className={EYE}>
-                      <th scope="col" className="py-1.5 pr-3 font-bold">Firm</th>
-                      <th scope="col" className="py-1.5 pr-3 font-bold">Accounts</th>
-                      <th scope="col" className="py-1.5 pr-3 font-bold">Specialization</th>
-                      <th scope="col" className="py-1.5 pr-3 font-bold">Active deal</th>
-                      <th scope="col" className="py-1.5 font-bold">Directory</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {firms.rows.map((r) => (
-                      <tr key={r.id} className="border-t border-axal-hairline align-top dark:border-gray-700" data-testid={`ap-firm-${r.id}`}>
-                        <th scope="row" className="py-2 pr-3 font-bold text-axal-ink dark:text-gray-100">{r.name}{r.company ? <span className={`block font-normal ${SUB}`}>{r.company}</span> : null}</th>
-                        <td className={`py-2 pr-3 ${MONO}`}>{r.accounts}</td>
-                        <td className="py-2 pr-3">{r.specialization}</td>
-                        <td className={`py-2 pr-3 ${MONO} ${r.endingSoon ? 'text-axal-amber-deep dark:text-amber-300' : ''}`}>{r.deal}</td>
-                        <td className="py-2">{r.directory}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          {firms.capped ? <span className={SUB}>The first 500 firms by name.</span> : null}
-          {firms.dealsCapped ? <span className={SUB}>Deals are read from the newest 200 active ones.</span> : null}
-          <span className={SUB}>Search, filters, pages and each firm's drawer come with D972's Firms part.</span>
-        </>
-      )}
-    </section>
-  );
-}
-
-/** The Firms tab: the firms, then attaching an account to one (D952, moved from Partner invitations). */
-function FirmsTab({ reads, reload }) {
-  return (
-    <div className="flex flex-col gap-3.5" data-testid="ap-firms-tab">
-      <Firms reads={reads} reload={reload} />
-      <FirmLinks reads={{ links: reads.links, reload }} />
-    </div>
-  );
 }
 
 function AdvisorsPartnersPage() {

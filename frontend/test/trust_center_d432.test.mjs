@@ -99,9 +99,10 @@ test('the row draws that title, from the signed-in user id, and nothing else tit
   assert.equal((CODE.match(/data-testid="pairwise-title"/g) || []).length, 1);
 });
 
-test('the worker serves the names the label reads, on both caller branches', () => {
+test('the worker serves the names the label reads, in the one SELECT every caller reads (D1074)', () => {
+  // D1074 (#2966) removed the admin branch: an admin lists only their own pairs.
   const route = slice(WORKER, "trust.get('/pairwise-ndas'", "trust.post('/pairwise-ndas/:id/resend'");
-  assert.equal((route.match(/ua\.name AS party_a_name, ub\.name AS party_b_name/g) || []).length, 2);
+  assert.equal((route.match(/ua\.name AS party_a_name, ub\.name AS party_b_name/g) || []).length, 1);
 });
 
 // ---------------------------------------------------------------------------

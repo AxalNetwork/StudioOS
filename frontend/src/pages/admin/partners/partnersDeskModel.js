@@ -316,6 +316,21 @@ export const STAGE_WORDS = Object.freeze({
   selected: 'Offer chosen', finalized: 'Agreement out', signed: 'Signed', revoked: 'Revoked',
 });
 
+/**
+ * D1117 (#2997): a voided deal's stored reason (D924, `partner_deals.void_reason`),
+ * or null for a deal that is not voided. A deal voided before D924 stored none,
+ * so it says the reason was not recorded rather than guessing one.
+ */
+export const VOID_REASONS = Object.freeze({
+  invitation_revoked: 'Voided: the invitation was revoked before the deal started.',
+  link_lapsed: 'Voided: the agreement was signed after the invitation’s link lapsed.',
+  admin_revoked: 'Voided: an admin revoked the invitation.',
+});
+export function voidReason(deal) {
+  if (deal?.status !== 'voided') return null;
+  return VOID_REASONS[deal.void_reason] || 'Voided. The reason was not recorded.';
+}
+
 /** A stored `expired` has one meaning: the agreement was signed after the link lapsed, and the deal was voided. */
 export const STORED_EXPIRED_WORD = 'Signed after the link lapsed · deal voided';
 export const LAG_WORD = 'Stage may lag';
@@ -412,36 +427,29 @@ export const nameOf = (inv) => String(inv?.recipient_name || '').trim() || NO_NA
 export const whoOf = (inv) => String(inv?.recipient_name || '').trim() || String(inv?.recipient_email || '').trim() || 'this invitee';
 
 /* ------------------------------------------------------------------ *
- * The agreement-ready rule (D923 §2)
+ * The agreement-ready rule (D923 §2, the Worker's since D928)
  * ------------------------------------------------------------------ */
 
-/** The five fields finalize fills (`partner_onboarding.ts`). */
-export const FINALIZE_FILLS = Object.freeze(['partner_name', 'partner_email', 'effective_date', 'deal_type', 'term_months']);
-/** R8 refuses with these when the template has no body or its store cannot be read. */
-export const TEMPLATE_REFUSALS = Object.freeze(['template_has_no_body', 'template_unreadable']);
-
 /**
- * The Partner Services agreement cannot be sent yet when R8 refuses (no body,
- * or the template cannot be read), or when it lists a field finalize leaves
- * empty: a sender field outside the five finalize fills, or any
- * `counterparty.*` field, which this flow never fills. When R8 itself fails
- * any other way, nothing is said either way (`unknown`). Part 5's signal
- * replaces this rule.
+ * D1117 (#2997): the record takes the Worker's answer, `GET
+ * /api/admin/partners/agreement-ready` (D928), so it and the Overview's
+ * banner say the same thing. The browser no longer works the rule out from
+ * R8's template body.
+ *   ready: true        → ready
+ *   ready: false       → not ready, with the Worker's reason and the unfilled fields
+ *   ready: null, or the read failed (503 `unreadable`, a paused read, anything
+ *   else)              → nothing is said either way (`unknown`)
  */
 export function agreementReady(read) {
   if (isLoading(read)) return { state: 'loading' };
-  if (isFailed(read)) {
-    const code = read.error?.code || read.error?.data?.code || null;
-    if (TEMPLATE_REFUSALS.includes(code)) return { state: 'not_ready', why: code };
-    return { state: 'unknown' };
+  if (isFailed(read)) return { state: 'unknown' };
+  const d = dataOf(read);
+  if (d?.ready === true) return { state: 'ready' };
+  if (d?.ready === false) {
+    const fields = Array.isArray(d.fields) ? d.fields.map((f) => String(f?.key || '')).filter(Boolean) : [];
+    return fields.length ? { state: 'not_ready', why: d.reason || 'unfilled_fields', fields } : { state: 'not_ready', why: d.reason || 'not_ready' };
   }
-  const fields = dataOf(read)?.fields;
-  if (!Array.isArray(fields)) return { state: 'unknown' };
-  const unfilled = fields
-    .map((f) => ({ key: String(f?.key || ''), by: f?.filled_by }))
-    .filter((f) => f.key.startsWith('counterparty.') || (f.by === 'sender' && !FINALIZE_FILLS.includes(f.key)))
-    .map((f) => f.key);
-  return unfilled.length ? { state: 'not_ready', why: 'fields', fields: unfilled } : { state: 'ready' };
+  return { state: 'unknown' };
 }
 
 export const AGREEMENT_BANNER = 'The Partner Services agreement is not ready. Invitees who choose an offer cannot sign until it is completed in Contracts.';
@@ -962,7 +970,7 @@ export function invitationTiles(read) {
   };
   return [
     tile('open', 'Open invitations', 'open', (t) => ({ value: nf(count(t.count)), sub: t.oldest_first_sent_at ? `oldest first sent ${day(t.oldest_first_sent_at)}` : null })),
-    tile('lapsed', 'Lapsed, not closed', 'lapsed', (t) => ({ value: nf(count(t.count)), tone: 'amber', sub: 'link expired before signing' })),
+    tile('lapsed', LAPSED_NOT_CLOSED, 'lapsed', (t) => ({ value: nf(count(t.count)), tone: 'amber', sub: 'link expired before signing' })),
     tile('signed90', 'Signed, last 90 days', 'signed_90d', (t) => ({ value: nf(count(t.count)) })),
     tile('median', 'Days from first send to signed', 'days_to_sign', (t) => (t.median_days === null || t.median_days === undefined
       ? { value: 'None signed yet', words: true }
@@ -1143,6 +1151,9 @@ const chartBlock = (read, key, title, pick) => {
   return b.state === 'ready' ? { key, title, state: 'ready', block: b.block } : { key, title, ...b };
 };
 
+/** T1's word and C1's (D1117): a lapsed invitation is not closed; Resend renews it. */
+export const LAPSED_NOT_CLOSED = 'Lapsed, not closed';
+
 /** C1's open stages, in the canvas's order: Sent to Agreement out. The Worker keys them by stored status. */
 const OPEN_STAGES = [1, 2, 3, 4, 5, 6].map((step) => ({ key: STEP_KEY[step], word: STEPS[step - 1] }));
 
@@ -1152,8 +1163,9 @@ const OPEN_STAGES = [1, 2, 3, 4, 5, 6].map((step) => ({ key: STEP_KEY[step], wor
  * days the oldest of them has been at that stage (D927: when it entered the
  * stage, from its onboarding row). An invitation with no record of when it
  * entered is counted, and said, never timed as zero. The closed line is
- * Signed · Lapsed · Revoked, and a bar or a closed count opens Invitations
- * filtered to it.
+ * Signed · Revoked, then "Lapsed, not closed" (D1117: a lapsed invitation is
+ * not closed, as tile T1 says; Resend renews it), and a bar or a count opens
+ * Invitations filtered to it.
  */
 export function stageChart(read) {
   const b = chartBlock(read, 'c1', 'Where open invitations stand', (d) => d.c1);
@@ -1169,9 +1181,9 @@ export function stageChart(read) {
   const c = b.block.closed || {};
   const closed = [
     { key: 'signed', word: 'Signed', n: count(c.signed) },
-    { key: 'lapsed', word: 'Lapsed', n: count(c.lapsed) },
     { key: 'revoked', word: 'Revoked', n: count(c.revoked) },
   ];
+  const lapsed = { key: 'lapsed', word: LAPSED_NOT_CLOSED, n: count(c.lapsed) };
   const lines = [];
   const untimed = OPEN_STAGES.reduce((t, { key }) => t + count(stages[key]?.entered_not_recorded), 0);
   if (untimed) lines.push(`${plural(untimed, 'open invitation has', 'open invitations have')} no record of when ${untimed === 1 ? 'it' : 'they'} reached ${untimed === 1 ? 'its' : 'their'} stage, so ${untimed === 1 ? 'it is' : 'they are'} counted but not timed.`);
@@ -1183,6 +1195,7 @@ export function stageChart(read) {
     chart: { type: 'hbar', clickable: true, testIdPrefix: 'partners-c1', rows: bars },
     alt: `${nf(total)} open ${total === 1 ? 'invitation' : 'invitations'} by stage now: ${bars.map((x) => `${x.label.toLowerCase()} ${nf(x.value)}`).join(', ')}.`,
     closed,
+    lapsed,
     lines,
     foot: 'Where each open invitation is now, and how long the oldest has been at that stage. A lapsed invitation keeps the stage it reached, and a revoked one does not. A bar opens Invitations at that stage.',
   };
@@ -1648,6 +1661,29 @@ export const NEW_SUB = 'The invitee gets a private link by email.';
 export const TYPE_NOTE = 'Pick up to three. The invitee sees one offer per type.';
 export const TYPE_FULL = 'Three are picked; clear one to choose this.';
 export const CAPITAL_NOTE = 'Needs KYC and accreditation after signing.';
+
+/**
+ * PI10b (D1117, #2997): the deal types this studio's licence allows, from the
+ * studio's own read (`GET /api/licence/mine/partner-deal-types`, D986 §6).
+ *   set       HQ chose the list: a type outside it is locked here, and the
+ *             invitation write refuses it (422 `deal_type_not_allowed`).
+ *   open      HQ has not set the list, or the account is HQ-held (404
+ *             `no_licence`): every type stays open (D986 §3, §4).
+ *   unreadable the read failed: nothing is locked, and the write still checks.
+ */
+export function dealTypesAllowed(read) {
+  if (isLoading(read)) return { state: 'loading' };
+  if (isFailed(read)) {
+    const code = read.error?.code || read.error?.data?.code || read.error?.data?.error || null;
+    return Number(read.error?.status) === 404 && code === 'no_licence' ? { state: 'open', why: 'hq_held' } : { state: 'unreadable' };
+  }
+  const d = dataOf(read);
+  if (d?.recorded === true && Array.isArray(d.types)) return { state: 'set', allowed: d.types.map(String) };
+  return { state: 'open', why: 'not_recorded' };
+}
+export const isTypeLocked = (allowed, key) => allowed?.state === 'set' && !allowed.allowed.includes(key);
+export const notGranted = (word) => `HQ has not granted ${word} to this studio.`;
+export const DEAL_TYPES_UNREADABLE = 'Which deal types this studio may offer could not be read. Sending still checks them.';
 export const MESSAGE_HINT = 'Shown in the email and at the start of the onboarding chat.';
 export const LINK_FOOT = 'The link is valid for 14 days. Resending gives a new 14 days.';
 export const counter = (n, max) => `${nf(n)} / ${nf(max)}`;
@@ -1710,6 +1746,10 @@ export function refusalText(err, kind = 'invitation') {
   const code = err?.code || err?.data?.code || null;
   if (code === 'admin_frozen' || (status === 423 && code !== 'branch_suspended')) return FROZEN;
   if (code === 'branch_suspended') return 'This studio’s licence is suspended, so changes are paused until HQ lifts it.';
+  // PI10b (D1117): a type the licence does not allow. The Worker's sentence names it.
+  if (code === 'deal_type_not_allowed' || err?.data?.error === 'deal_type_not_allowed') {
+    return String(err?.message || '').trim() || 'This studio’s licence does not allow one of these deal types. HQ sets which partner deal types a studio may offer.';
+  }
   if (status === 409) return kind === 'deal' ? DEAL_NOT_ACTIVE : INVITATION_CLOSED;
   if (status === 404) {
     if (kind === 'deal') return 'This deal no longer exists.';

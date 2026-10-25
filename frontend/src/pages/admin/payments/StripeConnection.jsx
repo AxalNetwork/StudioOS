@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
+import SecretWriteGate from '../../../components/SecretWriteGate';
 import { Columns } from '../../../ui/Charts';
 import {
-  DELIVERIES_UNREAD, DIALOGS_WAIT, STRIPE_UNREAD, WEBHOOK_UNREAD,
+  DELIVERIES_UNREAD, STRIPE_UNREAD, WEBHOOK_UNREAD,
   deliveryColumns, deliveryTable, keysMatch, modeWord, silentHoursText, stampText,
 } from './payModel';
 import {
-  AMBER, BIG, CARD, EYE, GHOST, H2, MONO, PILL, SUB, Reading, Unread, usePayPhone,
+  AMBER, BIG, CARD, EYE, GHOST, H2, MONO, PILL, SUB, WRITE_HOLDER_NOTE, Reading, Unread, useCanWrite, usePayPhone,
 } from './payUi';
+import { AddEventsDialog, RegisterEndpointDialog, ReplaceKeyDialog, SyncDialog } from './StripeDialogs';
 
 /**
  * D1008 / D1014 (#2833) — PAY5, Stripe connection, complete: the account, the
@@ -14,10 +16,9 @@ import {
  * acts on, deliveries per hour with the hour that has no log, and the
  * catalogue mirror. Each block answers from its own read, alone.
  *
- * The three buttons open part 5's dialogs (#2832). Until they exist each is
- * drawn, disabled, with the sentence saying where the work is done today
- * (D1014 §2): a button that opened nothing would be a lie, and hiding it would
- * hide the canvas.
+ * D1013 (#2832): its buttons open part 5's dialogs (`StripeDialogs.jsx`,
+ * PAY6): Replace key…, Register a new endpoint…, Add the missing events, and
+ * Sync from Stripe on the mirror. After each, the tab's reads are read again.
  */
 
 export function keysLine(k) {
@@ -29,14 +30,10 @@ export function keysLine(k) {
   return 'The key\'s mode was not checked';
 }
 
-/** A part-5 button: drawn, disabled, and saying why. */
-function Waits({ children, testId }) {
-  return (
-    <span className="flex flex-col gap-1">
-      <button type="button" className={`${GHOST} self-start`} disabled aria-describedby={`${testId}-why`} data-testid={testId}>{children}</button>
-      <span id={`${testId}-why`} className={SUB}>{DIALOGS_WAIT}</span>
-    </span>
-  );
+/** A button that opens one of PAY6's dialogs; for anyone but the Super Admin, who can. */
+function Opens({ children, onClick, testId, canWrite }) {
+  if (!canWrite) return <span className={SUB} data-testid={`${testId}-holder`}>{WRITE_HOLDER_NOTE}</span>;
+  return <button type="button" className={`${GHOST} self-start`} onClick={onClick} data-testid={testId}>{children}</button>;
 }
 
 const LEGEND = [
@@ -132,8 +129,14 @@ export default function StripeConnection({ reads, reload }) {
   const mirror = summary?.data?.catalog;
   const endpoints = webhook?.data?.endpoints || [];
   const ours = endpoints.filter((e) => e.is_ours);
+  const [dialog, setDialog] = useState(null);
+  const [saved, setSaved] = useState(null);
+  const holdsSecretWrites = useCanWrite();
+  const open = (d) => { setSaved(null); setDialog(d); };
+  const done = (out) => { setDialog(null); if (out?.text) setSaved(out.text); reload(); };
   return (
     <div className="grid grid-cols-12 gap-3.5">
+      {saved && <span role="status" className="col-span-12 text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="pay-saved">{saved}</span>}
       <section className={`${CARD} col-span-12 flex flex-col gap-2 px-[18px] py-4 lg:col-span-6`} data-testid="pay-account">
         <h2 className={H2}>Account</h2>
         {config?.status === 'loading' && <Reading />}
@@ -153,7 +156,7 @@ export default function StripeConnection({ reads, reload }) {
           <>
             <span className={`${MONO} text-[14px] text-axal-ink dark:text-gray-100`}>{config.data?.configured ? config.data?.publishable_key : 'Not set'}</span>
             <span className={k.state === 'differ' ? AMBER : SUB} data-testid="pay-key-match">{k.state === 'differ' ? `The publishable key is ${modeWord(k.key)}, the account is ${modeWord(k.account)}. Checkout and token packs will fail until they match.` : keysLine(k)}</span>
-            <Waits testId="pay-key-replace">Replace key…</Waits>
+            <Opens canWrite={holdsSecretWrites} onClick={() => open({ type: 'key' })} testId="pay-key-replace">Replace key…</Opens>
           </>
         )}
       </section>
@@ -167,7 +170,11 @@ export default function StripeConnection({ reads, reload }) {
             <span className={SUB}>Stripe sends events to this platform at this address.</span>
             <span className={`${MONO} break-all text-[12.5px] text-axal-ink dark:text-gray-100`}>{webhook.data?.our_url}</span>
             {endpoints.length === 0 && <span className={AMBER}>Stripe has no webhook endpoint yet.</span>}
-            {ours.length === 0 && <Waits testId="pay-webhook-register">Register a new endpoint…</Waits>}
+            {ours.length === 0 && (
+              <SecretWriteGate holds={holdsSecretWrites} what="Registering a webhook endpoint" testid="pay-webhook-register-gate">
+                <Opens canWrite onClick={() => open({ type: 'register' })} testId="pay-webhook-register">Register a new endpoint…</Opens>
+              </SecretWriteGate>
+            )}
             {endpoints.map((e) => (
               <div key={e.id} className={`rounded-[10px] border border-axal-hairline px-3.5 py-3 dark:border-gray-700 ${e.is_ours ? '' : 'opacity-70'}`} data-testid={`pay-endpoint-${e.is_ours ? 'ours' : 'other'}`}>
                 <div className="flex flex-wrap items-center gap-2">
@@ -186,7 +193,7 @@ export default function StripeConnection({ reads, reload }) {
                     {(e.missing_events || []).length > 0 && (
                       <div className="mt-2 flex flex-col gap-1">
                         <span className={SUB}>{e.missing_events.length} missing.</span>
-                        <Waits testId={`pay-webhook-add-${e.id}`}>Add the missing events</Waits>
+                        <Opens canWrite={holdsSecretWrites} onClick={() => open({ type: 'events', endpoint: e })} testId={`pay-webhook-add-${e.id}`}>Add the missing events</Opens>
                       </div>
                     )}
                   </>
@@ -209,7 +216,12 @@ export default function StripeConnection({ reads, reload }) {
             <span className={SUB}>{mirror.sync_basis}</span>
           </>
         ) : <span className={SUB}>Not recorded: {mirror?.reason}</span>)}
+        <Opens canWrite={holdsSecretWrites} onClick={() => open({ type: 'sync' })} testId="pay-sync-open">Sync from Stripe</Opens>
       </section>
+      {dialog?.type === 'key' && <ReplaceKeyDialog accountMode={config?.status === 'ready' ? config.data?.mode : null} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.type === 'register' && <RegisterEndpointDialog ourUrl={webhook?.data?.our_url} events={webhook?.data?.required_events} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.type === 'events' && <AddEventsDialog endpoint={dialog.endpoint} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.type === 'sync' && <SyncDialog onClose={() => setDialog(null)} onDone={done} />}
     </div>
   );
 }
