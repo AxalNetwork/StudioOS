@@ -72,7 +72,10 @@ export function userMeetsTier(user: User | null | undefined, required: Tier): bo
   const status = (user as TierUser).subscription_status ?? 'active';
   // Cancelled subs keep tier until renews_at; we read tier as-is and rely on
   // the Stripe webhook to flip tier→'free' on subscription.deleted.
-  if (status === 'past_due' || status === 'unpaid') return false;
+  // D1052 (#2903): `past_due` is a renewal Stripe is still retrying, and the
+  // plan keeps its access meanwhile (#2451's owner question 4, as #2453
+  // proposed). `unpaid` is Stripe giving up: the plan's access ends.
+  if (status === 'unpaid') return false;
   // X-1: partner-granted/referred tiers are time-bounded. The cron sweep
   // resets tier→'free' at expiry, but enforce on read too so a stale
   // session can't bypass an expired grant before the cron runs.

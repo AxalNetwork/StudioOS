@@ -48,6 +48,8 @@ const REQUIRED_EVENTS: string[] = [
   'payment_intent.payment_failed',
   // D892 (#2453): a failed renewal tells the member.
   'invoice.payment_failed',
+  // D1052 (#2903): a bank asks the member to confirm a renewal.
+  'invoice.payment_action_required',
   'invoice.finalized',
   'invoice.paid',
   'charge.succeeded',
