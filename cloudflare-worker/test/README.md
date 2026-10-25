@@ -13,6 +13,10 @@ ids, company boundaries, unchanged models after refused writes, and owner/admin
 access. It also pins the separate deal-room partner reader and the recompute
 edit gate so future read-only relationships cannot acquire writes accidentally.
 
+`bank_registry_d1184.test.ts` checks the registry’s audited Mercury association,
+masked resolver previews and source add validation over the real migrations,
+with all network access refused.
+
 Tests run **in process against a real SQLite database** (`node:sqlite`) loaded
 from the actual schema or a specific migration file — not against mocks. A
 handler that would fail on D1 because of an unknown column fails here too,

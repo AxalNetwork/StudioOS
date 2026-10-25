@@ -18,6 +18,8 @@ Malformed audit details are flagged per row without disabling the history.
 `entityBankAccounts.ts` resolves the recorder's name only for Super Admin
 console responses; a missing name stays null, with no id/email fallback.
 Shared payment-instruction and notice projections omit recorder names.
+D1184 (#3113) validates an optional Mercury source through `mercury/registry.ts`
+before inserting a registry account; its entity, last four and kind must agree.
 
 `captableAccess.ts` consumes verified project permissions from the cap-table
 router (#2436). Investors receive no project-bound cap-table access; accepted

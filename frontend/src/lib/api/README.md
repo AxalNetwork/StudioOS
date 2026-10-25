@@ -215,6 +215,9 @@ Stripe plan invoices in one list, newest first. D789's Usage overview reads the 
 D708 (#1773): `bankAccounts.js` calls `/api/admin/bank-accounts` (the Super
 Admin's list, add, label and purposes, retire, and a recorded reveal of one
 number) and the LP's own `GET /api/funds/:id/capital-calls/lines/:lineId/pay-instructions`.
+D1184 adds per-account `mercury`, `notice_preview` and `notice_preview_reason`
+to the list, and `addFromMercury(uid, body)` on the existing POST, where the
+Worker checks the source entity, ending and kind. No new endpoint.
 A reveal's answer is held in the caller's component state only, never stored.
 D1182 adds `bankAccountsApi.history(filters)` for the audited Super Admin GET
 `/api/admin/bank-accounts/history`: q, kind, entity, actor, range or from/to,
