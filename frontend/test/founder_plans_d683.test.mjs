@@ -61,7 +61,8 @@ test('Raise and Grow work asks for Raise + Grow; Validate and Build work for Val
     assert.match(fresh.slice(at, at + 200), /const plan = planRefusal\(user\);\n  if \(plan\) return plan;/, `deck ${route} is Raise + Grow`);
   }
   assert.doesNotMatch(fresh, /'growth'/, 'no New deck path asks for growth');
-  for (const route of ["/positioning'", "/:id/share'"]) {
+  // D1113: the old /positioning generator is retired; sharing retains its gate.
+  for (const route of ["/:id/share'"]) {
     const at = decks.indexOf(`decks.post('${route}`);
     assert.ok(at > 0, `decks ${route} exists`);
     assert.match(decks.slice(at, at + 400), /ensureTier\(await requireAuth\(c\), 'studio'\)/, `deck ${route} is Raise + Grow`);

@@ -4,7 +4,7 @@ import { scheduledSyncDue } from './connectorRules';
 
 /** These providers write into project-backed stores; other connections are personal. */
 export function writesProjectData(providerKey: string): boolean {
-  return providerKey === 'hubspot' || providerKey === 'salesforce' || providerKey === 'stripe' || providerKey === 'github' || providerKey === 'notion';
+  return providerKey === 'hubspot' || providerKey === 'salesforce' || providerKey === 'stripe' || providerKey === 'github' || providerKey === 'google_workspace' || providerKey === 'notion';
 }
 
 /** A missing scope row denies the write; joining another company grants nothing. */

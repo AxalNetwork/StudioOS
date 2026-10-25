@@ -16,10 +16,20 @@ D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
 
+D1136's reads of the caller's own companies, ventures and invitations, and
+answering an invitation while signed in, live in `account_companies.ts`,
+mounted at `/api` with full paths before `projects.ts` and `company.ts`.
+
 D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 `/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
 sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
 are read only; the tab's writes stay in `admin_partners.ts`.
+
+D1131's `_eventCalendar.ts` schedules connected-calendar cleanup after successful
+member, host or admin event cancellations. The existing queue durably continues
+bounded immediate work; provider failures do not undo local cancellation, and
+failed mappings remain retryable. `/events/suggested` now includes
+the authenticated caller's actual registration eligibility.
 
 ## Mount map
 
@@ -317,6 +327,8 @@ The latter filters/paginates one safe projection of existing stores and never
 returns staff identities or free-form audit payloads. An unavailable source is
 503, never an empty successful log. Reads create no schema or data.
 
+D1105 (#2985): `data_room.ts` adds the owner's and a co-founder's `GET /:projectUid/activity` (any period, by investor, paged), `GET /:projectUid/activity.csv` and `GET /:projectUid/checklist`, from `../services/dataRoomActivity.ts`; migration 596 records each file's source (`document`, `connector`, `signed`). See `documentation/architecture/decisions/D1105.md`.
+
 D1102 (#2982, part): `data_room.ts` keeps founder details and mutations owner-only.
 The ordinary admin GET returns scoped aggregate counts and checklist coverage,
 with unavailable blocks explicit and no file names, investor identities or access
@@ -326,5 +338,9 @@ calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
 use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+
+D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: scoped chosen files, draft mapping, Stop using and ephemeral five-row preview. Calendar adds `/google/workspace-files/connect`; Google tokens stay in its one store. Support sessions are refused. See `../services/google/README.md`.
+
+D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.

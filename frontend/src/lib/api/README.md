@@ -362,6 +362,8 @@ D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 Admin's write, which names the version it read. Counts leave admins out and
 come back suppressed from 1 to 4.
 
+`googleWorkspace.js` (D1091) calls the mounted Workspace consent, picked files, mapping, Stop using and preview routes. The files screen awaits its canvas.
+
 D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build.
 
 D1075 (#2967): `trustContent.js` is the public trust center's store: `trustPublicApi` (the
@@ -369,5 +371,7 @@ published blocks, the change log, the matrix and the subprocessor subscribe, no 
 `trustCenterAdminApi` (HQ › Security › Trust center content: drafts, subprocessors, the
 auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
 private Security reports, and HQ's read of them).
+
+D1133 adds `billingAlertsApi.pay(id)` and `.updateCard(id, nonce)` for the mounted failed-renewal preparation routes. Keep one validated 8–64-character nonce per open card form and reuse it on retries. Their client secrets belong only in the in-page Stripe form, never storage or logs.
 
 D1135's `companyActions.js` holds self-service company leave and venture restore.

@@ -107,7 +107,7 @@ no new schema, runtime or billing path is introduced.
 | --- | --- |
 | `advisor/` | The advisor state machine and its question banks. |
 | `ai/` | D763: the AI router's pure parts. `guard.ts` holds Llama Guard's slicing, verdicts, category policy and refusal copy. Its README has the rule for adding here. |
-| `calendar/` | Calendar sync (`sync.ts`), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. |
+| `calendar/` | Calendar sync (`sync.ts`), cancellation-time removal of tracked copies (`cancelEvents.ts`, D1131), and My events in the calendar (`myEvents.ts`, D1033): tickets and hosted events as calendar kinds, the add-to links, and the copies a sync must remove. D1131 uses `queue.ts`, `queueWorker.ts` and `../models/jobs.ts` for two immediate copies, scan batches of five plus continuation, per-copy cancellation rechecks and independent retry/dead-letter handling. This idempotent job alone may fall back to D1 after an uncertain CF send; exact reads use the mapping primary key, scans use existing source/event indexes. |
 | `channels/` | D684: business Telegram and WhatsApp conversations, and Zoom and Google Meet calls, reaching Validate › Interviews. The contract, event dedupe, connection tenancy, link codes, outbound tracking and the pending-thread store. Its README has the rules. |
 | `ai/` | D761: the AI router's request and response shapes, per-class timeouts, context-window and paid-only fallbacks, session affinity and the units each attempt used. D760: `catalogue.ts`, every Workers AI model priced in each unit Cloudflare bills, and `pricing.ts`, cost and billed in exact decimals with `AI_MARKUP` written once. Pure; `aiRouter.ts` calls it. |
 | `decks/` | Deck assembly and export. |
@@ -230,6 +230,13 @@ assumptions state. Mercury's accepted SAFEs explicitly pass `post_money` through
 `capTableWrites.ts`; manual missing basis retains the legacy pre-money default.
 The [YC post-money user guide](https://bookface-static.ycombinator.com/assets/ycdc/Website%20User%20Guide%20Feb%202023%20-%20final-28acf9a3b938e643cc270b7da514194d5c271359be25b631b025605673fa9f95.pdf)
 explains exclusion of cash-outs and the unissued pool from liquidity capitalization.
+`dataRoomActivity.ts` (D1105, #2985) is the data room's activity and checklist
+reads: `activityRead()` (a period's daily figures against the period before, per
+investor, the paged log), `activityCsv()` (the same rows; 413 past 10,000) and
+`checklistRead()` (per diligence item, its files and how many grants in force can
+open each, by `tierAdmits()` with each grant's folder scope and the NDA gate). A
+refusal (`blocked`) is never counted as an open, and a reader is named only through
+one of the venture's own grants. Its routes are `../routes/data_room.ts`'s.
 `dataRoomAccess.ts` (D691 decision 6, #1700) is the data room's one access
 predicate, `tierAdmits()`: a file's `access_tier` (`invited`, `committed`,
 `nobody`) and `access_expires_at`, with `investorCommitted()` (a committed
@@ -434,6 +441,8 @@ search before count/page/export, and the complete admin filter list); `stripeWeb
 is the webhook's request-log reader, shared by HQ · Platform and Payments, with
 hourly buckets that are null for an hour the log was silent.
 
+`google/` holds D1091’s bounded, GET-only Workspace readers over Calendar’s single Google token store. See `google/README.md`.
+
 D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and applies the ten fixed mapping rules, then batches a plan and source proposals; acceptance stays with D1066. It never runs AI or writes a Build record.
 
 D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
@@ -443,3 +452,5 @@ reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
 
 D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
+
+D1133: `billingRecovery.ts` prepares caller-owned renewal invoice intents or card-only SetupIntents behind Billing’s fresh-TOTP routes, and records only allowlisted payment-refusal families. `billingAlerts.ts` atomically couples renewal history with alert transitions. No card/client secret is stored.
