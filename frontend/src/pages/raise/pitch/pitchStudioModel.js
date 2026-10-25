@@ -254,16 +254,15 @@ export function funnelRows(stats) {
  * The investor links, as the module's records give them, with what the
  * engagement read adds.
  *
- * A link is live only when it has not expired or been withdrawn (the record's
- * own expiry cell) AND it still has a view left. The records do not carry the
- * second. The engagement read's `shares` do (`exhausted`: the Worker's
- * `used_at`, or `view_count` at `view_limit`), for the current version's links,
- * and a link nobody has opened has every view left. An opened link the
- * engagement read does not list (another version's, one past its newest 50,
- * or any opened link while that read is running or has failed) is neither live
- * nor dead: `live` is null. The page still offers Withdraw on it, and says why
- * its views left are not shown; withdrawing one that had already been used up
- * marks it Revoked, and the dialog says so.
+ * A link is live only when it has not expired, been withdrawn or been used up.
+ * The records say all three for every version's links (D1111: the expiry
+ * cell reads "Used up" by the engagement read's own rule, D895), so a link the
+ * records call live is live. The engagement read can only be fresher: a
+ * current-version link it calls `exhausted` reads Used up too. Withdrawing a
+ * used-up link marks it Revoked.
+ *
+ * Time on deck comes as the seconds the viewer reported (D1111), drawn m:ss;
+ * none reported is null, "Not recorded", never 0:00.
  */
 export function linkRows(records, engagement = null) {
   const shares = new Map(asList(engagement, 'shares').map((s) => [String(s.id), s]));
@@ -277,9 +276,9 @@ export function linkRows(records, engagement = null) {
       id: row.id,
       investor: String(c.link || '').trim() || 'Investor not recorded',
       expires: usedUp ? 'Used up' : exp.text || NOT_RECORDED,
-      live: exp.tone !== 'ok' || usedUp ? false : share || views === 0 ? true : null,
+      live: exp.tone === 'ok' && !usedUp,
       views,
-      time: c.time == null || c.time === '' ? null : String(c.time),
+      time: c.time && typeof c.time === 'object' && Number(c.time.seconds) > 0 ? mmss(c.time.seconds) : null,
       mostRead: c.most_read == null ? null : String(c.most_read),
     };
   });

@@ -39,7 +39,7 @@ async function scope(c: any, gate: (p: ProjectRef, u: User) => boolean): Promise
   const raw = String(c.req.query('project') ?? '');
   if (!/^[1-9][0-9]{0,9}$/.test(raw)) return c.json({ detail: 'project is required' }, 400);
   const projectId = Number(raw);
-  const project = (await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ?')
+  const project = (await c.env.DB.prepare('SELECT id, founder_id FROM projects WHERE id = ? AND deleted_at IS NULL')
     .bind(projectId).first()) as ProjectRef | null;
   if (!project) return c.json({ detail: 'Project not found' }, 404);
   if (!gate(project, user)) return c.json({ detail: 'Forbidden' }, 403);
