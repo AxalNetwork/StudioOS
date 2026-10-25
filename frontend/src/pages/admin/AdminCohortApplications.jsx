@@ -1,9 +1,10 @@
 // The Spin-Out Lab's cohort settings and logs, under Applications' queue
 // (D948, #2753). Until D948 this was the whole Cycles console, deciding with
 // browser prompts; every decision is now SL4's dialogs in
-// `lab/LabApplications.jsx`. What stays here until part 9 (#2756) draws
-// Settings and Activity: Settings' minimum and places, edited in an in-page
-// dialog, and the notification log and cycle history.
+// `lab/LabApplications.jsx`. What stays here: Settings' minimum and places,
+// edited in an in-page dialog, and the notification log and cycle history.
+// D971's Settings and Activity tabs now repeat them; retiring this is its own
+// change (D948 §5).
 //
 // Everything time-based is decided by the Worker cron — this console only
 // reads state and saves the two settings, audited.

@@ -18,7 +18,8 @@ and hash and adding `?moved=`:
   moved notice, tabs with their counts) and the Overview's blocks.
   Applications, Participants, Cohorts, Hosts, Formation and Graduation mount
   the files below; under Applications, `AdminSpinoutLab`'s `cycles` section
-  keeps Settings' minimum and places and the two logs until part 9 (#2756).
+  keeps Settings' minimum and places and the two logs, which D971's Settings
+  and Activity now repeat; retiring it is its own change (D948 §5).
 - `LabOverviewBlocks.jsx` — Overview's drawn blocks (SL1, D947): the cohort
   calendar timeline, Applications by cohort, Weeks passed, From application
   to company and Applications per week, each with Chart ⇄ Table and its

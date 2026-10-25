@@ -219,7 +219,8 @@ function Overview({ reads, reload }) {
 /**
  * Which console section each tab still asks `AdminSpinoutLab` for. D948: under
  * Applications' queue, the old Cycles console keeps only Settings' minimum and
- * places and the two logs, until part 9 (#2756) draws Settings and Activity.
+ * places and the two logs. D971's Settings and Activity now repeat them;
+ * retiring this mount is its own change (D948 §5).
  */
 const SECTIONS = {
   applications: ['cycles'],
