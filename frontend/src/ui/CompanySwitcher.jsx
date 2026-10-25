@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
 import { useActiveCompany as _useActiveCompany } from '../contexts/ActiveCompanyContext';
-import { api, companyActionsApi, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
+import { api, setActiveCompanyId, initActiveCompanyId } from '../lib/api';
+import { companyActionsApi } from '../lib/api/companyActions';
 
 /**
  * CompanySwitcher — the ONLY way the active company changes.
