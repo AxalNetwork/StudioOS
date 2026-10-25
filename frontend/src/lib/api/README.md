@@ -362,7 +362,7 @@ D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 Admin's write, which names the version it read. Counts leave admins out and
 come back suppressed from 1 to 4.
 
-D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build.
+D1065 (#2935): `buildPlan.js` reads or prepares `/api/cycles/build/plan`, with venture and hypothesis scope. Preparation sends no browser-supplied evidence and accepts nothing into Build. D1071 (#2941): `word` (one metered run, with the press's rail headers), `wording`, `keepWording` and `discardWording`; `edit(uid, payload, wording)` keeps an item's wording as its Save.
 
 D1075 (#2967): `trustContent.js` is the public trust center's store: `trustPublicApi` (the
 published blocks, the change log, the matrix and the subprocessor subscribe, no session),

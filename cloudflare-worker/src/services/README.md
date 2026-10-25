@@ -437,6 +437,8 @@ D1065 (#2935): `buildPlanner.ts` reads accepted Validate labels/counts and appli
 
 D1066 (#2936): `buildPlanAccept.ts` decides plan items: Accept (with an optional edit) claims the proposal and lands the row through `buildCreates.ts` in one batch with its evidence links, `fill_provenance` rows and activity line, handing the claim back if the batch fails; Dismiss, Accept all in a module (at most 50) and each Build row's evidence trail. `buildCreates.ts` gains the risk, formation-step and prototype-test builders.
 
+D1071 (#2941): `buildPlanWord.ts` is Eadwyn's wording of the plan: the material (pending items' rule titles and evidence labels and counts, never a name, quote or decision), the prompt, the screen (no digit, currency, contact or link leaves) and the wording row (`ai_rail_proposals`, `kind 'draft'`, on `build_plan:<uid>`). Keeping an item's wording goes through `buildPlanAccept.ts`'s `editItem`, and Accept names the run in `fill_provenance`.
+
 D971 completes `programRegistry.ts`'s Lab draft path: its canonical section
 catalogue contains headings only. The existing Super Admin edit route creates a
 missing allowed draft section after validation, in the same batch as its edit;
