@@ -111,6 +111,10 @@ test('a run is metered under draft:narrative-section and writes nothing; the fou
     const u = f.usage();
     assert.equal(u.length >= 1, true, 'metered');
     assert.ok(u.some((x) => x.rail_option === OPTION), 'logged under its own option');
+    // A client that sends no rail header still runs under the route's own page and option.
+    const bare = await f.call('POST', DRAFT, { mode: 'draft' });
+    assert.equal(bare.status, 200);
+    assert.equal(f.usage().at(-1).rail_option, OPTION);
   } finally { f.db.close(); }
 });
 
@@ -170,6 +174,11 @@ test('refusals: the page switched off is 403 assist_off, an empty purse is 402, 
     assert.equal(empty.body.code, 'nothing_to_read');
     assert.equal(f.prompts.length, 0);
     assert.equal((await f.call('POST', DRAFT, { mode: 'draft' }, { who: 3 })).status, 403, 'not the venture\'s');
+    // An admin reads a narrative; a run is a write, so it is refused before any read or run.
+    const admin = await f.call('POST', DRAFT, { mode: 'draft' }, { who: 1 });
+    assert.equal(admin.status, 403);
+    assert.equal(admin.body.code ?? admin.body.error, 'admin_read_only');
+    assert.equal(f.prompts.length, 0);
   } finally { f.db.close(); }
 });
 
