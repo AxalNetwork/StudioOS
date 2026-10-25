@@ -174,7 +174,6 @@ export function noteState(note) {
 /** A refusal in words: the Worker's sentence, or one that says nothing changed. Never a code. */
 export function refusalText(e, fallback = 'That could not be saved just now. Nothing changed. Try again.') {
   const m = e?.message;
-  if (m === 'step_up_cancelled') return 'The step-up was cancelled, so nothing changed. Confirm with your authenticator to save.';
   if (typeof m === 'string' && m && !/^[a-z_]+$/.test(m) && !/^HTTP \d+/.test(m)) return m;
   if (e?.code && REFUSALS[e.code]) return REFUSALS[e.code];
   return fallback;

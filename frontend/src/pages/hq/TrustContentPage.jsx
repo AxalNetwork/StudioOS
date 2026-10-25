@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { trustCenterAdminApi } from '../../lib/api';
+import { trustCenterAdminApi } from '../../lib/api/trustContent.js';
 import { reportError } from '../../lib/log';
 import { AdminPageHeader, Card, Lightbox } from '../../ui';
 import {

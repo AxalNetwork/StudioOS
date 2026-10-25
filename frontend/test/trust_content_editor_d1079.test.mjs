@@ -138,7 +138,7 @@ test('the note: 10 to 1000 characters, trimmed; a refusal is words, never a code
   assert.equal(noteState('x'.repeat(1000)).ok, true);
   assert.equal(refusalText({ message: 'note_required', code: 'note_required' }), REFUSALS.note_required);
   assert.equal(refusalText({ message: 'The Worker said this.' }), 'The Worker said this.');
-  assert.match(refusalText({ message: 'step_up_cancelled' }), /nothing changed/);
+  assert.match(refusalText({ message: 'step_up_cancelled' }), /Nothing changed/, 'a bare code is never shown');
   assert.match(refusalText({ message: 'HTTP 500' }), /Nothing changed/);
 });
 
