@@ -70,7 +70,7 @@ export const SUPER_ADMIN_BOARDS = [
   // 2026-10-20, GitHub sync its `#github` section; the page draws the frame.
   { id: 'H27', section: 'Platform', module: 'Integration keys', route: '/admin/integration-keys', files: ['pages/admin/consoles/IntegrationKeysConsole.jsx'], rail: FRAME, host: KEYS_PAGE },
   { id: 'H28', section: 'Platform', module: 'GitHub sync', route: '/admin/integration-keys#github', files: ['pages/admin/consoles/GithubSyncConsole.jsx'], rail: FRAME, host: KEYS_PAGE },
-  { id: 'H29', section: 'Platform', module: 'Payments catalogue', route: '/admin/platform/payments', files: ['pages/admin/consoles/PaymentsConsole.jsx'], rail: FRAME, host: 'pages/admin/payments/Payments.jsx' },
+  { id: 'H29', section: 'Platform', module: 'Payments catalogue', route: '/admin/platform/payments', files: ['pages/admin/payments/Payments.jsx'], rail: FRAME, host: 'pages/admin/payments/Payments.jsx' },
   { id: 'H30', section: 'Platform', module: 'Promo codes', route: '/admin/platform/promo-codes', files: ['pages/admin/consoles/PromoCodesConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'H31', section: 'Platform', module: 'Credit rules', route: '/admin/credit-rules', files: ['pages/hq/CreditRulesRegistryPage.jsx'], rail: 'pages/hq/CreditRulesRegistryPage.jsx' },
   { id: 'H32', section: 'Platform', module: 'AI allowances', route: '/admin/platform/allowances', files: ['pages/hq/PlatformAllowancesPage.jsx'], rail: 'pages/hq/PlatformAllowancesPage.jsx' },

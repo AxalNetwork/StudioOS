@@ -26,7 +26,6 @@ export const ADMIN_CONSOLE_FILES = [
   'frontend/src/pages/admin/consoles/IntegrationKeysConsole.jsx',
   'frontend/src/pages/admin/consoles/GithubSyncConsole.jsx',
   'frontend/src/pages/admin/consoles/PromoCodesConsole.jsx',
-  'frontend/src/pages/admin/consoles/PaymentsConsole.jsx',
   'frontend/src/pages/admin/consoles/BankAccountsConsole.jsx',
   'frontend/src/pages/admin/consoles/ProductTestingConsole.jsx',
   'frontend/src/pages/admin/consoles/BillingConsole.jsx',

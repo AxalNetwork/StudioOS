@@ -160,7 +160,7 @@ test('mounted Catalogue: one h1, the crumb, HQ only, the notice, needs you, the 
     assert.match(v.of('pay-group-plans'), /Advisor Pro.*every 3 months.*Founder Validate \+ Build.*20\.00 USD \/ month.*204\.00 USD \/ year/s);
     assert.match(v.of('pay-group-packs'), /Managed on AI allowances/);
     assert.match(v.of('pay-group-oneTime'), /Old add-on.*Archived/s);
-    assert.ok(v.has('pay-editor-open'), 'today\'s editor is unreachable');
+    assert.match(v.of('pay-new-holder'), /Only the Super Admin can change payments/, 'D1013: the retired editor\'s place');
     assert.deepEqual([...new Set(s.seen.filter((p) => !p.startsWith('/api/ai')))].sort(),
       ['/api/admin/catalog/products', '/api/admin/platform/summary', '/api/admin/stripe/config', '/api/admin/stripe/webhook']);
   } finally { await v.unmount(); s.restore(); }

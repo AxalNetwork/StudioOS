@@ -173,8 +173,6 @@ export function stampText(s) {
 
 // ─────────────────────────────────────────────── D1014: deliveries per hour (PAY5)
 
-/** Part 5's dialogs (#2832) are not built yet; the buttons that open them say so. */
-export const DIALOGS_WAIT = 'Opens with D1008 part 5 (#2832). Until then, use the editor on Catalogue.';
 export const DELIVERIES_UNREAD = 'Could not be read. The request log did not answer. This is not a claim that no delivery came.';
 
 const hourOf = (iso) => {

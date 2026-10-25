@@ -2055,16 +2055,16 @@ export const api = {
   //   adminCatalogSync()                       → { ok, synced }
   //   adminCatalogCreateProduct(body)          → { ok, product }
   //   adminCatalogUpdateProduct(id, body)      → { ok }
-  //   adminCatalogArchiveProduct(id)           → { ok }
+  //   adminCatalogArchiveProduct(id, reason)   → { ok }
   //   adminCatalogAddPrice(productId, body)    → { ok, price }
-  //   adminCatalogArchivePrice(priceId)        → { ok }
+  //   adminCatalogArchivePrice(priceId, reason) → { ok }
   // Webhook:
   //   adminStripeListWebhooks()                → { endpoints, required_events, our_url }
   //   adminStripeRegisterWebhook()             → { ok, endpoint_id, url, secret_stored }
   //   adminStripeUpdateWebhookEvents(epId)     → { ok, endpoint_id, url }
   // Config (publishable key):
   //   adminStripeGetConfig()                   → { publishable_key, mode, configured }
-  //   adminStripeSetConfig(pk)                 → { ok, mode }
+  //   adminStripeSetConfig(pk, reason)         → { ok, mode }
   // D232 — `adminCatalogMode` went: no caller, and the mode already rides on
   // `adminCatalogList` and `adminStripeGetConfig`. The route stays.
   adminCatalogList: () => request('/admin/catalog/products'),
@@ -2076,10 +2076,13 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body || {}),
     }),
-  adminCatalogArchiveProduct: (id) =>
+  // D1009: every product and price write carries the admin's `reason` (1 to
+  // 500 characters), recorded with the change; the bodies above take it as a
+  // field, the two archives and the key take it here (D1013).
+  adminCatalogArchiveProduct: (id, reason) =>
     request(`/admin/catalog/products/${encodeURIComponent(id)}/archive`, {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify({ reason }),
     }),
   adminCatalogAddPrice: (productId, body) =>
     request(`/admin/catalog/products/${encodeURIComponent(productId)}/prices`, {
@@ -2091,10 +2094,10 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body || {}),
     }),
-  adminCatalogArchivePrice: (priceId) =>
+  adminCatalogArchivePrice: (priceId, reason) =>
     request(`/admin/catalog/prices/${encodeURIComponent(priceId)}/archive`, {
       method: 'POST',
-      body: '{}',
+      body: JSON.stringify({ reason }),
     }),
   adminStripeListWebhooks: () => request('/admin/stripe/webhook'),
   adminStripeRegisterWebhook: () =>
@@ -2108,10 +2111,10 @@ export const api = {
       body: JSON.stringify({ action: 'update', endpoint_id: endpointId }),
     }),
   adminStripeGetConfig: () => request('/admin/stripe/config'),
-  adminStripeSetConfig: (publishableKey) =>
+  adminStripeSetConfig: (publishableKey, reason) =>
     request('/admin/stripe/config', {
       method: 'PUT',
-      body: JSON.stringify({ publishable_key: publishableKey }),
+      body: JSON.stringify({ publishable_key: publishableKey, reason }),
     }),
 
   adminDownloadContractUrl: (uid) => `/api/admin/contracts/${uid}/download`,

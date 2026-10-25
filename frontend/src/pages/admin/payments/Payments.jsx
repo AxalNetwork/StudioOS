@@ -1,17 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { paymentsApi } from '../../../lib/api/payments';
 import { reportError } from '../../../lib/log';
 import { AdminPageHeader, HeaderTab, useMovedNotice } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
-import { PaymentsPanel } from '../consoles/PaymentsConsole';
 import {
   CATALOG_FAILED, MOVED_NOTICES, NOT_YET, PAGE_LINE, PAY_TITLE, PLATFORM_PATH, RAIL_NOTE, STRIPE_UNREAD,
   catalogueCounts, catalogueGroups, keysMatch, kindWord, modeWord, needsYou, priceText, searchProducts, stampText, tabOf,
 } from './payModel';
-import { AMBER, BIG, CARD, EYE, GHOST, H2, LINK, MONO, PILL, SUB, PayDialog, Reading, Technical, Unread, usePayPhone } from './payUi';
+import { AMBER, BIG, CARD, EYE, GHOST, H2, LINK, MONO, PILL, PRIMARY, SUB, WRITE_HOLDER_NOTE, PayDialog, Reading, Technical, Unread, useCanWrite, usePayPhone } from './payUi';
+import { AddPriceDialog, ArchivePriceDialog, ArchiveProductDialog, ChangePriceDialog, EditProductDialog, NewProductDialog } from './ProductDialogs';
 import StripeConnection, { keysLine } from './StripeConnection';
 import ChangeLog from './ChangeLog';
 
@@ -34,6 +34,13 @@ import ChangeLog from './ChangeLog';
  * (`ChangeLog.jsx`), and the page has its dark colours (PAY13) and its phone
  * form (PAY12): the catalogue stacks into cards and a product opens as a
  * sheet, the chart is a table, and every dialog is a bottom sheet.
+ *
+ * D1013 (#2832, part 5): the dialogs. Catalogue's New product (PAY3, also
+ * opened by `?new=product`, the storefront's door), and from a product its
+ * price dialogs (PAY4: add, change, archive) with Edit details and Archive a
+ * price; Stripe connection's dialogs are `StripeDialogs.jsx` (PAY6). Each
+ * sends the recorded reason and meets the step-up D1009 requires. Today's
+ * editor (`consoles/PaymentsConsole.jsx`) is retired with them.
  */
 
 const idle = { status: 'loading', data: null };
@@ -164,33 +171,72 @@ function PhoneCatalogue({ groups, onOpen }) {
   );
 }
 
-/** PAY12b: one product, read only, as a sheet. Changing it is part 4's lightbox; today's editor sits on this page. */
-function ProductSheet({ product: p, labels, onClose }) {
+/**
+ * PAY12b: one product as a sheet, and the door to its dialogs. Part 4's
+ * lightbox (PAY2) takes its place; the dialogs it opens stay these. A token
+ * pack offers none: it is managed on AI allowances.
+ */
+function ProductSheet({ product: p, labels, onClose, onAct, canWrite }) {
   const prices = p.prices || [];
+  const pack = p.kind === 'token_pack';
+  const act = (type, price = null) => onAct({ type, product: p, price });
+  const SMALL = `${GHOST} min-h-[30px] px-2.5 text-[12px]`;
   return (
     <PayDialog title={p.name} sub={`${kindWord(p.kind)} · ${p.active ? 'Active' : 'Archived'}`} onClose={onClose} testId="pay-product">
+      {!pack && p.active && !canWrite && <span className={SUB} data-testid="pay-product-holder">{WRITE_HOLDER_NOTE}</span>}
+      {!pack && p.active && canWrite && (
+        <div className="flex flex-wrap gap-2" data-testid="pay-product-actions">
+          <button type="button" className={PRIMARY} onClick={() => act('addPrice')} data-testid="pay-act-add-price">Add a price</button>
+          <button type="button" className={GHOST} onClick={() => act('edit')} data-testid="pay-act-edit">Edit details</button>
+          <button type="button" className={GHOST} onClick={() => act('archiveProduct')} data-testid="pay-act-archive">Archive product</button>
+        </div>
+      )}
       <div className="flex flex-col gap-1">
         <span className={EYE}>Prices</span>
-        {p.kind === 'token_pack' ? <Link to="/admin/platform/allowances" className={LINK}>Managed on AI allowances →</Link>
+        {pack ? <Link to="/admin/platform/allowances" className={LINK}>Managed on AI allowances →</Link>
           : prices.length ? prices.map((x) => (
-            <span key={x.id} className={`${MONO} text-[13px] ${x.active ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted line-through dark:text-gray-500'}`}>{priceText(x)}{x.active ? '' : ' · archived'}</span>
+            <span key={x.id} className="flex flex-wrap items-center justify-between gap-2" data-testid="pay-product-price">
+              <span className={`${MONO} text-[13px] ${x.active ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted line-through dark:text-gray-500'}`}>{priceText(x)}{x.active ? '' : ' · archived'}</span>
+              {x.active && p.active && canWrite && (
+                <span className="flex gap-1.5">
+                  <button type="button" className={SMALL} onClick={() => act('changePrice', x)} data-testid={`pay-act-change-${x.id}`}>Change</button>
+                  <button type="button" className={SMALL} onClick={() => act('archivePrice', x)} data-testid={`pay-act-archive-${x.id}`}>Archive</button>
+                </span>
+              )}
+            </span>
           )) : <span className={SUB}>No price</span>}
       </div>
       <div className="flex flex-col gap-1">
         <span className={EYE}>For</span>
         {(p.categories || []).length ? <span className="flex flex-wrap gap-1">{p.categories.map((c) => <span key={c} className={PILL}>{labels[c] || c}</span>)}</span> : <span className={SUB}>Not set</span>}
       </div>
-      <span className={SUB}>Changing a product opens with D1008 part 4. Until then, use the editor at the foot of Catalogue.</span>
+      {!p.active && !pack && <span className={SUB}>An archived product cannot be changed here; make a new product instead.</span>}
       <Technical testId="pay-product-tech">{[p.id, ...prices.map((x) => x.id)].join(' · ')}</Technical>
     </PayDialog>
   );
 }
 
+/** The dialog the page has open, at page level so a sheet never holds a dialog inside it. */
+function OpenDialog({ dialog, products, audiences, onClose, onDone }) {
+  if (!dialog) return null;
+  const { type, product, price } = dialog;
+  if (type === 'new') return <NewProductDialog products={products} audiences={audiences} onClose={onClose} onDone={onDone} />;
+  if (type === 'addPrice') return <AddPriceDialog product={product} onClose={onClose} onDone={onDone} />;
+  if (type === 'changePrice') return <ChangePriceDialog product={product} price={price} onClose={onClose} onDone={onDone} />;
+  if (type === 'archivePrice') return <ArchivePriceDialog product={product} price={price} onClose={onClose} onDone={onDone} />;
+  if (type === 'archiveProduct') return <ArchiveProductDialog product={product} onClose={onClose} onDone={onDone} />;
+  if (type === 'edit') return <EditProductDialog product={product} audiences={audiences} onClose={onClose} onDone={onDone} />;
+  return null;
+}
+
 function Catalogue({ reads, reload }) {
   const [q, setQ] = useState('');
   const [group, setGroup] = useState('all');
-  const [editor, setEditor] = useState(false);
   const [open, setOpen] = useState(null);
+  const [params, setParams] = useSearchParams();
+  const [dialog, setDialog] = useState(() => (params.get('new') === 'product' ? { type: 'new' } : null));
+  const [saved, setSaved] = useState(null);
+  const canWrite = useCanWrite();
   const phone = usePayPhone();
   const catalog = reads.catalog;
   const products = catalog?.status === 'ready' ? catalog.data?.products || [] : [];
@@ -198,13 +244,26 @@ function Catalogue({ reads, reload }) {
   const counts = useMemo(() => catalogueCounts(products), [products]);
   const groups = useMemo(() => catalogueGroups(searchProducts(products, q)).filter((g) => group === 'all' || g.key === group), [products, q, group]);
   const shown = groups.reduce((t, g) => t + g.rows.length, 0);
+  const audiences = catalog?.data?.audience_categories || [];
+  const closeDialog = () => {
+    setDialog(null);
+    if (params.get('new')) { const next = new URLSearchParams(params); next.delete('new'); setParams(next, { replace: true }); }
+  };
+  const done = (out) => { closeDialog(); setOpen(null); if (out?.text) setSaved(out.text); reload(); };
+  const act = (d) => { setOpen(null); setSaved(null); setDialog(d); };
 
   return (
     <>
       <Needs reads={reads} />
       <Tiles reads={reads} reload={reload} />
       <section className={`${CARD} flex flex-col gap-3 px-[18px] py-4`} aria-labelledby="pay-h-catalogue" data-testid="pay-catalogue">
-        <h2 id="pay-h-catalogue" className={H2}>Catalogue</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="pay-h-catalogue" className={H2}>Catalogue</h2>
+          {canWrite
+            ? <button type="button" className={PRIMARY} onClick={() => act({ type: 'new' })} disabled={catalog?.status !== 'ready'} data-testid="pay-new-open">New product</button>
+            : <span className={SUB} data-testid="pay-new-holder">{WRITE_HOLDER_NOTE}</span>}
+        </div>
+        {saved && <span role="status" className="text-[12.5px] text-emerald-700 dark:text-emerald-300" data-testid="pay-saved">{saved}</span>}
         {catalog?.status === 'loading' && <Reading />}
         {catalog?.status === 'error' && <Unread text={CATALOG_FAILED} onRetry={reload} testId="pay-catalogue-failed" />}
         {catalog?.status === 'ready' && counts.all === 0 && (
@@ -248,7 +307,7 @@ function Catalogue({ reads, reload }) {
                     {g.rows.map((p) => (
                       <tr key={p.id} className={`border-t border-axal-hairline align-top dark:border-gray-700 ${p.active ? '' : 'opacity-60'}`} data-testid="pay-row">
                         <td className="py-2 pr-3">
-                          <span className="block font-bold text-axal-ink dark:text-gray-100">{p.name}</span>
+                          <button type="button" onClick={() => setOpen(p)} className="block text-left font-bold text-axal-ink hover:text-axal-violet dark:text-gray-100 dark:hover:text-violet-300" data-testid="pay-row-open">{p.name}</button>
                           <span className={`block ${MONO} ${SUB}`}>{p.id}</span>
                         </td>
                         <td className="py-2 pr-3"><span className={PILL}>{kindWord(p.kind)}</span></td>
@@ -270,17 +329,13 @@ function Catalogue({ reads, reload }) {
               </table>
             </div>
             )}
-            {open && <ProductSheet product={open} labels={labels} onClose={() => setOpen(null)} />}
+            {open && <ProductSheet product={open} labels={labels} onClose={() => setOpen(null)} onAct={act} canWrite={canWrite} />}
             <span className={SUB}>Where each product shows, its AI allowance and the members on it arrive with D1008 part 2.</span>
           </>
         )}
       </section>
 
-      <section className="flex flex-col gap-2" aria-labelledby="pay-h-editor" data-testid="pay-editor">
-        <h2 id="pay-h-editor" className={H2}>Make a change</h2>
-        <span className={SUB}>Today&apos;s editor (products, prices, the publishable key and the webhook), until D1008 parts 4 to 6 draw the dialogs and the step-up.</span>
-        {editor ? <PaymentsPanel /> : <button type="button" className={`${GHOST} self-start`} onClick={() => setEditor(true)} data-testid="pay-editor-open">Open the editor</button>}
-      </section>
+      <OpenDialog dialog={canWrite ? dialog : null} products={products} audiences={audiences} onClose={closeDialog} onDone={done} />
       <p className={`m-0 ${SUB}`}>Money received, refunds and disputes are on <Link to="/admin/revenue" className={LINK}>Revenue</Link>. Promo codes have their own page.</p>
     </>
   );

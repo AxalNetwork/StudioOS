@@ -15,7 +15,7 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { installDocument } from './_contracts_dom.mjs';
 import {
-  DIALOGS_WAIT, TABS, actionWord, deliveryColumns, deliveryHours, deliveryTable, detailText, logFilters, logRange,
+  TABS, actionWord, deliveryColumns, deliveryHours, deliveryTable, detailText, logFilters, logRange,
   peopleOf, reasonOf, reasonProblem, silentHoursText, tabOf, whoText,
 } from '../src/pages/admin/payments/payModel.js';
 import { totalsText } from '../src/pages/admin/payments/StripeConnection.jsx';
@@ -223,22 +223,20 @@ test('mounted Stripe connection: the table form, six hours newest first, then al
   } finally { await v.unmount(); s.restore(); }
 });
 
-test('mounted Stripe connection: the three part-5 buttons are drawn, disabled, saying where the work is done today', async () => {
+test('mounted Stripe connection: for anyone but the Super Admin, the part-5 doors say who can make the change (D1013)', async () => {
   const noEndpoint = stub({ '/api/admin/stripe/webhook': () => json({ ...WEBHOOK, endpoints: [] }) });
   let v = await render('/admin/platform/payments/stripe');
   try {
-    assert.equal(v.props('pay-key-replace').disabled, true);
-    assert.match(v.of('pay-key'), /Replace key…/);
-    assert.ok(v.of('pay-key').includes(DIALOGS_WAIT));
-    assert.equal(v.props('pay-webhook-register').disabled, true);
+    assert.ok(!v.has('pay-key-replace'), 'a control the server can only refuse');
+    assert.match(v.of('pay-key-replace-holder'), /Only the Super Admin can change payments/);
+    assert.match(v.of('pay-webhook-register-gate'), /writes a secret onto the production Worker/);
     assert.ok(!v.has('pay-webhook-add-we_1'));
   } finally { await v.unmount(); noEndpoint.restore(); }
   const s = stub();
   v = await render('/admin/platform/payments/stripe');
   try {
-    assert.equal(v.props('pay-webhook-add-we_1').disabled, true);
-    assert.match(v.of('pay-webhook'), /1 missing\..*Add the missing events/s);
-    assert.ok(!v.has('pay-webhook-register'), 'register offered beside an endpoint of ours');
+    assert.match(v.of('pay-webhook-add-we_1-holder'), /Only the Super Admin/);
+    assert.ok(!v.has('pay-webhook-register-gate'), 'register offered beside an endpoint of ours');
   } finally { await v.unmount(); s.restore(); }
 });
 

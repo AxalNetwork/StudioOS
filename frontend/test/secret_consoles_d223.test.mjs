@@ -13,6 +13,8 @@
  * the page does not offer a button the server can only refuse (D134).
  */
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -74,7 +76,6 @@ function gated(src, i) {
 const WRITES = [
   ['IntegrationKeysPanel', ['onClick={() => setEditing(', 'onClick={() => onDelete(']],
   ['GithubSyncPanel', ['onClick={onSave}', 'onClick={onRotateSecret}', 'value={token}']],
-  ['PaymentsPanel', ['onClick={registerWebhook}']],
 ];
 
 for (const [name, needles] of WRITES) {
@@ -102,10 +103,21 @@ test('what stays open is still drawn for every admin: the probes and the events 
   assert.ok(!gated(gh, gh.indexOf('onClick={() => onTest(true)}')), 'the write probe was hidden');
   const keys = panel('IntegrationKeysPanel');
   assert.ok(!gated(keys, keys.indexOf('onClick={() => onTest(row.provider_key)}')), 'the key test was hidden');
-  const pay = panel('PaymentsPanel');
-  assert.ok(!gated(pay, pay.indexOf('onClick={() => updateWebhookEvents(ep.id)}')), 'the events repair was hidden');
 });
 
 test('the GitHub panel says whether a token is set, and nothing else about it', () => {
   assert.doesNotMatch(PAGE, /token_preview/, 'AdminPage still reads token_preview');
+});
+
+test('Payments (D1013): registering a webhook endpoint is behind the holder check', () => {
+  // The retired PaymentsPanel's register button moved to Stripe connection's
+  // dialogs. Registering writes STRIPE_WEBHOOK_SECRET onto the Worker, so the
+  // button that opens it sits inside the gate, read from the same elevation.
+  const ui = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/admin/payments/payUi.jsx'), 'utf8'));
+  assert.match(ui, /export const useCanWrite = \(\) => isSuperAdminUser\(useAuth\(\)\.user\);/);
+  const src = codeOnly(readFileSync(resolve(process.cwd(), 'frontend/src/pages/admin/payments/StripeConnection.jsx'), 'utf8'));
+  assert.match(src, /const holdsSecretWrites = useCanWrite\(\);/);
+  const i = src.indexOf("open({ type: 'register' })");
+  assert.ok(i > 0, 'the register door is gone — this check would pass on nothing');
+  assert.ok(gated(src, i), 'registering an endpoint is drawn for every admin');
 });
