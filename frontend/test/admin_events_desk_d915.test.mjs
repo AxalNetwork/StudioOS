@@ -373,8 +373,8 @@ test('the page keeps its frame, its crumb and its literal tab doors', () => {
   assert.match(page, /<Link to="\/admin\/events\/all" className=\{CRUMB_LINK\}>‹ All events<\/Link>/);
   assert.match(page, /<Link to="\/events\/new" className=\{actionGhost\} data-testid="events-new">New event<\/Link>/, 'New event, not "New studio event" (O-STU)');
   assert.doesNotMatch(page, /to="\/admin\/held\/community"/, 'the crumb links Community itself, not its redirect');
-  // The approvals lane and the Community doors keep /admin/events.
-  assert.match(read('frontend/src/pages/admin/HeldApprovals.jsx'), /to="\/admin\/events"/);
+  // The Community doors keep /admin/events; Approvals' Events lane opens the Review tab (D1038).
+  assert.match(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /to="\/admin\/events\/review"/);
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /to="\/admin\/events"/);
 });
 

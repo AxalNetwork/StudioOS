@@ -45,7 +45,7 @@ export const ADMIN_BOARDS = [
   { id: 'S2', section: 'Accounts', module: 'Users', route: '/admin/accounts/all', files: ['pages/admin/consoles/UsersConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S3', section: 'Accounts', module: 'Exploring members', route: '/admin/exploring', files: ['pages/admin/AdminExploring.jsx'], rail: FRAME },
   { id: 'S4', section: 'Accounts', module: 'Trash', route: '/admin/trash', files: ['pages/AdminTrashPage.jsx'], rail: FRAME },
-  { id: 'S5', section: 'Approvals', module: null, route: '/admin/held/approvals', files: ['pages/admin/HeldApprovals.jsx'], rail: HELD },
+  { id: 'S5', section: 'Approvals', module: null, route: '/admin/approvals', files: ['pages/admin/approvals/AdminApprovals.jsx', 'pages/admin/approvals/LaneBoards.jsx'], rail: FRAME },
   { id: 'S6', section: 'Approvals', module: 'Identity checks', route: '/admin/kyc', files: ['pages/admin/consoles/KycConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S7', section: 'Approvals', module: 'Entity profiles', route: '/admin/partner-profiles', files: ['pages/admin/consoles/PartnerProfilesConsole.jsx'], rail: FRAME, host: 'pages/admin/profiles/PartnerProfiles.jsx' },
   { id: 'S8', section: 'Approvals', module: 'LP applications', route: '/admin/lp-applications', files: ['pages/admin/AdminLpApplications.jsx'], rail: FRAME },
@@ -69,7 +69,7 @@ export const ADMIN_BOARDS = [
   { id: 'S26', section: 'Community', module: 'Jobs', route: '/admin/jobs', files: ['pages/admin/AdminJobsPage.jsx'], rail: FRAME, alias: 'S16' },
   { id: 'S27', section: 'Community', module: 'Communities', route: '/admin/circles', files: ['pages/admin/AdminCirclesPage.jsx'], rail: FRAME, alias: 'S17' },
   { id: 'S28', section: 'Community', module: 'Wellbeing experts', route: '/admin/wellbeing', files: ['pages/admin/consoles/WellbeingConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
-  { id: 'S29', section: 'Community', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
+  { id: 'S29', section: 'Community', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx', 'pages/admin/advisors/DeckRosterDialogs.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
   { id: 'S30', section: 'Community', module: 'Directory', route: '/admin/directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S31', section: 'Community', module: 'Partner invitations', route: '/admin/partner-invitations', files: ['pages/admin/PartnerInvitations.jsx'], rail: FRAME },
   { id: 'S32', section: 'Contracts', module: null, route: '/admin/contracts', files: [CONTRACTS], rail: CONTRACTS },
@@ -87,7 +87,7 @@ export const ADMIN_OPTIONS = [];
 export const ADMIN_QUIET_CONTROLS = [
   { page: 'S11', label: 'Upload signed NDA', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'accept="application/pdf,image/*"', why: 'Stores the reviewer\'s signed NDA; no model reads it.' },
   { page: 'S11', label: 'Generate report', file: 'pages/AdminDueDiligenceCasePage.jsx', anchor: 'await dd.generateReport(uid)', why: 'The Worker assembles the report from the case\'s recorded sections and findings (routes/dd.ts, POST /cases/:uid/report); no model writes it.' },
-  { page: 'S29', label: 'Upload photo', file: 'pages/admin/AdminNetworkProfiles.jsx', anchor: 'onChange={(e) => submitPhoto(e.target.files?.[0])}', why: 'Stores the profile photo; no model reads it.' },
+  { page: 'S29', label: 'Upload photo', file: 'pages/admin/advisors/DeckRosterDialogs.jsx', anchor: 'onChange={(e) => submitPhoto(e.target.files?.[0])}', why: 'Stores the profile photo; no model reads it.' },
 ];
 
 /** The options the rail lists on a board. */

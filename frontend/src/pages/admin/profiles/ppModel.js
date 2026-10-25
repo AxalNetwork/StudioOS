@@ -21,7 +21,7 @@
 
 export const PP_PATH = '/admin/partner-profiles';
 export const PP_ALL_PATH = '/admin/partner-profiles/all';
-export const APPROVALS_PATH = '/admin/held/approvals';
+export const APPROVALS_PATH = '/admin/approvals';
 export const PP_TITLE = 'Partner profiles';
 export const PAGE_LINE = 'Check who each new member and partner says they are, then verify or reject, and send their first agreement.';
 export const RAIL_NOTE = 'Eadwyn reads the profiles on this page. Nothing changes until you act.';
