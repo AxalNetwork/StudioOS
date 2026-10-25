@@ -23,6 +23,21 @@ export type TicketCategory = (typeof TICKET_CATEGORIES)[number]['id'];
 const IDS = new Set<string>(TICKET_CATEGORIES.map((c) => c.id));
 
 /**
+ * D1075 (#2967) — Help's "Security" category. It is not one of the eight and
+ * never a ticket row: a ticket is mirrored to GitHub issues on a public
+ * repository and read by every admin, so a security report goes to its own
+ * store, which only HQ's Super Admins and the reporter read
+ * (`services/securityReports.ts`). Help offers it beside the eight and sends
+ * it to `route`.
+ */
+export const SECURITY_CATEGORY = Object.freeze({
+  id: 'security',
+  label: 'Security',
+  route: '/api/help/security-reports',
+  private: true,
+} as const);
+
+/**
  * The category a request body names. Absent, null or blank is `null` (none
  * recorded); one of the eight is itself; anything else is an error naming the set.
  */
@@ -30,5 +45,8 @@ export function parseTicketCategory(raw: unknown): { ok: true; value: TicketCate
   if (raw === undefined || raw === null || (typeof raw === 'string' && raw.trim() === '')) return { ok: true, value: null };
   const v = typeof raw === 'string' ? raw.trim() : '';
   if (IDS.has(v)) return { ok: true, value: v as TicketCategory };
+  if (v === SECURITY_CATEGORY.id) {
+    return { ok: false, error: `A security issue is reported privately, not as a ticket: send it to ${SECURITY_CATEGORY.route}.` };
+  }
   return { ok: false, error: `category must be one of: ${TICKET_CATEGORIES.map((c) => c.id).join(', ')}` };
 }

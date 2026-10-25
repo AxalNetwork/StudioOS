@@ -58,6 +58,11 @@ export const DECK_SHARE_SIGNUP = /^\/api\/decks\/share\/[^/]+\/signup$/;
 // HMAC-signed token cannot be guessed, so the cap bought nothing there.
 export const NEWSLETTER_PUBLIC = /^\/api\/newsletter\/(subscribe|confirm|preferences)$/;
 
+// D1075 — the trust center's public reads, and the subprocessor notices'
+// subscribe and confirm. Unsubscribe is outside, as the newsletter's is.
+export const TRUST_PUBLIC_READS = /^\/api\/public\/trust(?:\/changes|\/matrix)?$/;
+export const TRUST_SUBSCRIBE = /^\/api\/public\/trust\/subprocessors\/(subscribe|confirm)$/;
+
 /**
  * The founder's advisory-session charge — `POST /bookings/:id/pay`, D81.
  *
@@ -239,6 +244,15 @@ const BUCKETS: Bucket[] = [
     test: (p, m) => m === 'GET' && p === '/api/public/plans-and-packs',
     scope: 'ip',
   },
+  // D1075 (#2967) — the public trust center's reads: per IP and fail-open,
+  // as the other public reads (a trust page must not go away with KV).
+  {
+    name: 'public_trust',
+    limit: 60,
+    windowSec: 60,
+    test: (p, m) => m === 'GET' && TRUST_PUBLIC_READS.test(p),
+    scope: 'ip',
+  },
   // D786 (#2211) — the Pricing page's public models read: per IP and
   // fail-open, as the other public reads. Its origin is the bundle, so the
   // bucket only bounds scraping.
@@ -338,6 +352,17 @@ const BUCKETS: Bucket[] = [
     limit: 10,
     windowSec: 60,
     test: (p) => NEWSLETTER_PUBLIC.test(p),
+    scope: 'ip',
+    failClosed: true,
+  },
+  // D1075 — the subprocessor notices' subscribe (mails whatever address it
+  // is given) and confirm (takes a token a script could try): 10/min/IP, and
+  // fail-closed, as the newsletter's are.
+  {
+    name: 'trust_subscribe',
+    limit: 10,
+    windowSec: 60,
+    test: (p) => TRUST_SUBSCRIBE.test(p),
     scope: 'ip',
     failClosed: true,
   },
