@@ -315,6 +315,8 @@ The latter filters/paginates one safe projection of existing stores and never
 returns staff identities or free-form audit payloads. An unavailable source is
 503, never an empty successful log. Reads create no schema or data.
 
+D1105 (#2985): `data_room.ts` adds the owner's and a co-founder's `GET /:projectUid/activity` (any period, by investor, paged), `GET /:projectUid/activity.csv` and `GET /:projectUid/checklist`, from `../services/dataRoomActivity.ts`; migration 596 records each file's source (`document`, `connector`, `signed`). See `documentation/architecture/decisions/D1105.md`.
+
 D1102 (#2982, part): `data_room.ts` keeps founder details and mutations owner-only.
 The ordinary admin GET returns scoped aggregate counts and checklist coverage,
 with unavailable blocks explicit and no file names, investor identities or access
