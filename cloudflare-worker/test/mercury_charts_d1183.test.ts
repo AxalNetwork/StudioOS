@@ -142,6 +142,19 @@ test('five-day intercompany pairs cross month/window boundaries, pair once earli
   assert.equal(month(r.body, 'fund', '2026-10').out_cents, 0);
   const filtered = await s.get('/monthly?entity=management');
   assert.equal(filtered.status, 200); assert.deepEqual(filtered.body.items, [entity(r.body, 'management')]);
+  const filteredGp = await s.get('/monthly?entity=gp');
+  assert.equal(filteredGp.status, 200); assert.deepEqual(filteredGp.body.items, [entity(r.body, 'gp')]);
+});
+
+test('an earlier pair outside the display lookback cannot consume a displayed external flow', async () => {
+  const s = setup(), h = s.account('holdings', '1111'), g = s.account('gp', '2222'), m = s.account('management', '3333');
+  s.txn(h, -1000, '2026-04-21'); s.txn(g, 1000, '2026-04-26');
+  s.txn(m, -1000, '2026-05-01');
+  const r = await s.get('/monthly'); assert.equal(r.status, 200);
+  assert.equal(month(r.body, 'management', '2026-05').out_cents, 1000);
+  assert.deepEqual(entity(r.body, 'gp').points, []);
+  const filtered = await s.get('/monthly?entity=management');
+  assert.deepEqual(filtered.body.items, [entity(r.body, 'management')]);
 });
 
 test('native internal moves cannot consume an equal external flow in another entity', async () => {

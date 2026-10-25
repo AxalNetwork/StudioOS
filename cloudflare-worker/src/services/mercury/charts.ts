@@ -69,25 +69,56 @@ function intercompanyIds(rows: Posted[]) {
   const paired = new Set<number>();
   for (const debit of candidates) {
     if (debit.registered !== 1 || debit.amount_cents >= 0) continue;
-    const credit = credits.get(-debit.amount_cents)?.find(c => !paired.has(c.id) && c.entity_key !== debit.entity_key
-      && Math.abs(Date.parse(c.posted_on) - Date.parse(debit.posted_on)) <= INTERCOMPANY_DAYS * DAY);
-    if (credit) { paired.add(debit.id); paired.add(credit.id); }
+    const group = credits.get(-debit.amount_cents);
+    if (!group) continue;
+    const since = shift(debit.posted_on, -INTERCOMPANY_DAYS), until = shift(debit.posted_on, INTERCOMPANY_DAYS);
+    // Skip old credits by date instead of rescanning every earlier year for
+    // each debit. Credits retain their posting-date/id order.
+    let lo = 0, hi = group.length;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (group[mid].posted_on < since) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let i = lo; i < group.length && group[i].posted_on <= until; i++) {
+      const credit = group[i];
+      if (paired.has(credit.id) || credit.entity_key === debit.entity_key) continue;
+      paired.add(debit.id); paired.add(credit.id); break;
+    }
   }
   return paired;
 }
 
 export async function monthlyFlows(env: Env, entity: string | null, now: Date) {
   const from = iso(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1))), to = iso(now);
-  // Read all entities before applying the display filter. A counterpart can
-  // be in another month, or outside the six displayed months.
+  // Read all entities before applying the display filter.
   const result = await env.DB.prepare(`SELECT t.id, a.entity_key, a.registered, t.amount_cents, t.posted_on, t.kind
     FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id
     WHERE t.posted_on IS NOT NULL AND t.posted_on >= ? AND t.posted_on <= ?
       AND lower(COALESCE(t.status, '')) IN (SELECT value FROM json_each(?)) AND lower(t.currency) = 'usd'
-    ORDER BY t.posted_on, t.id`).bind(shift(from, -INTERCOMPANY_DAYS), to, JSON.stringify(POSTED_STATUSES)).all<Posted>();
+    ORDER BY t.posted_on, t.id`).bind(from, to, JSON.stringify(POSTED_STATUSES)).all<Posted>();
   if (!Array.isArray(result?.results)) throw new Error('Stored chart transactions unreadable');
   for (const row of result.results) cents(row.amount_cents);
-  const paired = intercompanyIds(result.results);
+  // Pairing decisions can depend on chains of earlier pairs. A fixed five-
+  // day lookback can free an already-used counterpart at the display edge.
+  // Read earlier candidates for the displayed amounts only; other amounts
+  // cannot affect these pairs. No historical figures leave this service.
+  const amounts = [...new Set(result.results.filter(row => row.registered === 1 && row.amount_cents !== 0
+    && !(INTERNAL_KINDS as readonly string[]).includes(row.kind ?? '')).flatMap(row => [row.amount_cents, -row.amount_cents]))];
+  let history: Posted[] = [];
+  if (amounts.length) {
+    const earlier = await env.DB.prepare(`SELECT t.id, a.entity_key, a.registered, t.amount_cents, t.posted_on, t.kind
+      FROM mercury_transactions t JOIN mercury_accounts a ON a.id = t.account_id
+      WHERE a.registered = 1 AND t.posted_on IS NOT NULL AND t.posted_on < ?
+        AND t.amount_cents IN (SELECT value FROM json_each(?))
+        AND lower(COALESCE(t.status, '')) IN (SELECT value FROM json_each(?)) AND lower(t.currency) = 'usd'
+        AND (t.kind IS NULL OR t.kind NOT IN (SELECT value FROM json_each(?)))
+      ORDER BY t.posted_on, t.id`).bind(from, JSON.stringify(amounts), JSON.stringify(POSTED_STATUSES), JSON.stringify(INTERNAL_KINDS)).all<Posted>();
+    if (!Array.isArray(earlier?.results)) throw new Error('Stored chart transfer history unreadable');
+    history = earlier.results;
+    for (const row of history) cents(row.amount_cents);
+  }
+  const paired = intercompanyIds([...history, ...result.results]);
   return { currency: 'USD', from, to, months: 6, items: ENTITY_KEYS.filter(key => !entity || key === entity).map(key => {
     const points = new Map<string, { month: string; in_cents: number; out_cents: number; to_date: boolean }>();
     for (const row of result.results) {
