@@ -209,11 +209,11 @@ test('D982’s grant write takes a draft to granted, once, with its proposal; ev
   sent(db, 'pp-1', 'lic-lis', 'Regional Demo Night');
   await approve(db, 'pp-1');
   const base = '/api/admin/program-grants/licences/lic-lis/regional-demo-night';
-  for (const [method, path] of [['PATCH', base], ['POST', `${base}/pause`], ['POST', `${base}/resume`], ['POST', `${base}/end`]] as const) {
+  for (const [method, path] of [['PATCH', base], ['POST', `${base}/pause`], ['POST', `${base}/resume`], ['POST', `${base}/end`], ['POST', `${base}/schedule/send`]] as const) {
     const r = await call(db, SUPER, method, path, { reason: REASON, terms: { fee_cents: 100 } });
     assert.equal(r.status, 409, `${method} ${path}`);
     assert.ok(['not_granted', 'wrong_state'].includes(r.body.error), r.body.error);
-    if (method === 'PATCH') assert.match(r.body.message, /is a draft/, 'says why, not "changed while you were changing it"');
+    if (method === 'PATCH' || path.endsWith('/schedule/send')) assert.match(r.body.message, /is a draft/, 'says why');
   }
   assert.equal(one(db, "SELECT state FROM program_grants WHERE program_key = 'regional-demo-night'").state, 'draft');
   // A term that only a nine program carries does not apply to a program D955 added.

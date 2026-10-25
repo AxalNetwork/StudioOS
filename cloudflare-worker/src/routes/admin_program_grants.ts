@@ -375,6 +375,10 @@ r.post('/licences/:uid/:program/schedule/send', async (c) => {
     if (!existing || existing.state === 'ended') {
       return refuse(c, 409, 'wrong_state', `This program is ${existing ? 'ended' : 'not granted'} for this licence, so it has no schedule to send.`, { state: existing?.state ?? null });
     }
+    // D956: a draft is HQ's and not granted yet; its schedule is sent once HQ grants it.
+    if (existing.state === 'draft') {
+      return refuse(c, 409, 'wrong_state', 'This grant is a draft. Grant it first: its schedule is sent once HQ grants it.', { state: 'draft' });
+    }
     if (existing.requires_signed_schedule != null && Number(existing.requires_signed_schedule) === 0) {
       return refuse(c, 409, 'schedule_not_required', 'This grant does not wait on a signed schedule, so there is nothing to send. Change its terms first if it should.');
     }
