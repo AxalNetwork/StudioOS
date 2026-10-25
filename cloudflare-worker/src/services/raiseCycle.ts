@@ -154,7 +154,7 @@ export function readinessHistory(scores: ScoreRow[]): Array<{ day: string; score
 
 /** One input a computed check read: what it counted, and whether that input is met (D691 decision 8). */
 export type ReadRow = { a: string; b: string; c: 'Counted' | 'Partial' | 'Missing'; tone: 'ok' | 'amb' | 'bad' };
-export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | null; missing: string | null; reads: ReadRow[] };
+export type ComputedScore = { compared_count?: number; key: ReadinessKey; score: number | null; evidence: 'measured' | 'stated' | 'pattern' | null; missing: string | null; reads: ReadRow[] };
 const met = (ok: boolean, partial = false): Pick<ReadRow, 'c' | 'tone'> => (ok ? { c: 'Counted', tone: 'ok' } : partial ? { c: 'Partial', tone: 'amb' } : { c: 'Missing', tone: 'bad' });
 
 /**
