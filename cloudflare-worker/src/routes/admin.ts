@@ -1124,6 +1124,10 @@ admin.post('/users/:user_id/spinout-admit', async (c) => {
   const adminUser = await requireAdmin(c);
   // D260 — a suspended branch admits no one to the Lab: 423, after the admin gate.
   await requireBranchNotSuspended(c);
+  // D985 — nor does a branch whose licence does not hold the Lab, or holds it paused.
+  const { programRefusal } = await import('../services/programEnforcement');
+  const notGranted = await programRefusal(c.env, 'spinout-lab');
+  if (notGranted) return c.json(notGranted.body, notGranted.status);
   const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
   const { admitRoute } = await import('./admin_lab_writes');
   return admitRoute(c, adminUser, c.req.param('user_id'), body);
