@@ -551,7 +551,7 @@ test('Refer & Earn · Overview: exact totals with their window, the funnel’s c
 
 test('Refer & Earn · Queue: part 4’s pages with their total, waiting longest first; the referral opens with its timeline and sends Status only when it moved', async () => {
   let save = null;
-  const view = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({ writes: { referral: (o) => (save ? save(o) : response({ ...referral('u1', 'under_review', 80), history: [{ label: 'Updated', status: null, note: 'Thanks', created_at: d1(NOW) }] })) } }));
+  const view = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({ writes: { referral: () => (save ? save() : response({ ...referral('u1', 'under_review', 80), history: [{ label: 'Updated', status: null, note: 'Thanks', created_at: d1(NOW) }] })) } }));
   try {
     const list = view.requests.find((r) => r.url.startsWith('/api/refer-earn/admin/submissions?') && r.url.includes('limit=25'));
     const q = new URLSearchParams(list.url.split('?')[1]);
@@ -595,7 +595,7 @@ test('Perks · Overview: claims with their window; an Admin’s Credits held rea
 
 test('Perks · Queue: every state paged with its total; Reject needs its reason, a refusal sits in the dialog, Approve keeps the stored note', async () => {
   let perk = () => refusal(409, 'not_reviewable', 'This listing is live; reject does not apply to that state.');
-  const view = await mounted('/admin/programs/perks/queue', ProgramPage, worker({ writes: { perk: (o) => perk(o) } }));
+  const view = await mounted('/admin/programs/perks/queue', ProgramPage, worker({ writes: { perk: () => perk() } }));
   try {
     assert.equal(view.textOf('programs-perks-count'), '1–2 of 2');
     const q = new URLSearchParams(view.requests.find((r) => r.url.startsWith('/api/perks/admin/listings?') && r.url.includes('limit=25')).url.split('?')[1]);

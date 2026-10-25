@@ -71,7 +71,7 @@ export const PAGE_SIZE = 25;
 
 /** "1–25 of 140", "0 of 0" for none. */
 export function countLine(offset, shown, total) {
-  if (!total) return `0 of ${nf(total || 0)}`;
+  if (!total) return '0 of 0';
   return `${nf(offset + 1)}–${nf(offset + shown)} of ${nf(total)}`;
 }
 
