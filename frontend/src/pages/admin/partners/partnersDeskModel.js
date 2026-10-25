@@ -365,7 +365,7 @@ export function proposedFor(invId, proposedRead) {
  *   · Profile done and Offers shown cannot be repaired until part 1.
  * Lapsed keeps the dots at the stage reached, as the canvas draws Mara.
  */
-export function stageOf(inv, { proposed = null, now = Date.now() } = {}) {
+export function stageOf(inv, { proposed = null, now = Date.now(), repair = true } = {}) {
   const status = String(inv?.status || '');
   const resent = resentAt(inv);
   const base = { resent, lapsed: false, mayLag: false, repaired: false };
@@ -380,6 +380,15 @@ export function stageOf(inv, { proposed = null, now = Date.now() } = {}) {
   }
   let repaired = false;
   let mayLag = false;
+  // D950: a row from the server's list or one invitation's read is drawn as stored. Since D924 a
+  // resend keeps the stage, so Guard I's repair is not needed there (`repair: false`).
+  if (!repair) {
+    const stageWord = STEPS[step - 1];
+    return {
+      ...base, key: STEP_KEY[step], stageWord, word: lapsed ? 'Lapsed' : stageWord, tone: lapsed ? 'amber' : STEP_TONE[step],
+      glyph: lapsed ? '◷' : STEP_GLYPH[step], step, closed: false, lapsed, repaired, mayLag,
+    };
+  }
   if (inv?.envelope_id && step < 6) { step = 6; repaired = true; }
   if (step < 5) {
     const p = proposedFor(inv?.id, proposed);
@@ -469,8 +478,8 @@ export function expiresCell(inv, stage) {
 }
 
 /** One table row, from R1's own fields and Guard I. */
-export function invitationRow(inv, { proposed = null, now = Date.now() } = {}) {
-  const stage = stageOf(inv, { proposed, now });
+export function invitationRow(inv, { proposed = null, now = Date.now(), repair = true } = {}) {
+  const stage = stageOf(inv, { proposed, now, repair });
   return {
     id: inv?.id,
     name: nameOf(inv),
@@ -496,7 +505,6 @@ export const STAGE_CHIPS = [
   { key: 'lapsed', word: 'Lapsed' },
   { key: 'revoked', word: 'Revoked' },
 ];
-const chipOf = (stage) => (stage.lapsed ? 'lapsed' : stage.key);
 
 export const INVITATION_SORTS = [
   { key: 'newest', label: 'Newest sent' },
@@ -507,44 +515,10 @@ export const INVITATION_SORTS = [
 ];
 export const SENT_WITHIN = [7, 30, 90, 365];
 
-const byCreatedDesc = (a, b) => (parseStamp(b.inv.created_at) ?? -Infinity) - (parseStamp(a.inv.created_at) ?? -Infinity);
-const isOpenRow = (r) => !r.row.stage.closed;
-const stageRank = (stage) => (stage.closed ? (stage.key === 'signed' ? 8 : 10) : stage.lapsed ? 9 : stage.step ?? 11);
-
 /** D929: the stage chips an address names (`?stage=`), the known ones only. */
 export function stagesFromSearch(search) {
   const raw = new URLSearchParams(search || '').get('stage') || '';
   return [...new Set(raw.split(',').filter((k) => STAGE_CHIPS.some((c) => c.key === k)))];
-}
-
-/**
- * Search (name or email), stage chips, the type offered, the inviter and the
- * first send, over the loaded rows, then the sort. Below the cap these are
- * exact; at it they cover the newest 200 by first send (Guard L).
- */
-export function filterInvitations(rows, { q = '', stages = [], type = '', invitedBy = '', sentWithin = '', sort = 'newest', now = Date.now() } = {}) {
-  const needle = String(q || '').trim().toLowerCase();
-  const chips = new Set(stages);
-  const within = Number(sentWithin) > 0 ? now - Number(sentWithin) * DAY_MS : null;
-  const out = rows.filter(({ inv, row }) => {
-    if (needle && !`${row.named ? row.name : ''} ${row.email}`.toLowerCase().includes(needle)) return false;
-    if (chips.size && !chips.has(chipOf(row.stage))) return false;
-    if (type && !row.offered.shown.includes(type)) return false;
-    if (invitedBy && row.invitedBy !== invitedBy) return false;
-    if (within !== null) {
-      const sent = parseStamp(inv.created_at);
-      if (sent === null || sent < within) return false;
-    }
-    return true;
-  });
-  const sorters = {
-    newest: byCreatedDesc,
-    'oldest-open': (a, b) => (isOpenRow(b) - isOpenRow(a)) || -byCreatedDesc(a, b),
-    expires: (a, b) => (isOpenRow(b) - isOpenRow(a)) || ((parseStamp(a.inv.expires_at) ?? Infinity) - (parseStamp(b.inv.expires_at) ?? Infinity)),
-    name: (a, b) => a.row.name.localeCompare(b.row.name, 'en', { sensitivity: 'base' }) || a.row.email.localeCompare(b.row.email),
-    stage: (a, b) => stageRank(a.row.stage) - stageRank(b.row.stage) || byCreatedDesc(a, b),
-  };
-  return [...out].sort(sorters[sort] || byCreatedDesc);
 }
 
 export const ROWS_PER_PAGE = 25;
@@ -561,13 +535,6 @@ export function pageOf(rows, page, size = ROWS_PER_PAGE) {
 export function rangeText({ from, to, total }, cover = null) {
   if (!total) return 'None';
   return `${nf(from)}–${nf(to)} of ${nf(total)}${cover ? ` · ${cover.charAt(0).toLowerCase()}${cover.slice(1)}` : ''}`;
-}
-
-/** The empty line after a search, in the canvas's words; at the cap it says what it covers. */
-export function noMatchLine(q, isCapped) {
-  const s = String(q || '').trim();
-  if (s) return isCapped ? `None of the newest 200 match ‘${s}’.` : `No invitation matches ‘${s}’.`;
-  return 'No invitation matches these filters.';
 }
 
 /* ------------------------------------------------------------------ *
@@ -1366,7 +1333,10 @@ export function tabCounts({ invitations, deals, contracts, needs }) {
   const referralsTitle = all.exact === false ? `Redemptions, all time · ${WITHIN_DEALS}` : 'Redemptions, all time';
   return {
     overview,
-    invitations: list ? { text: capped(list.length, atCap(list, CAPS.invitations)), title: atCap(list, CAPS.invitations) ? `${WITHIN_INVITATIONS}; there may be more` : 'Every invitation' } : null,
+    // D950: R1 carries the Worker's exact `total` (D926), so the count is exact even past the newest 200.
+    invitations: list ? (Number.isFinite(list.total)
+      ? { text: nf(list.total), title: 'Every invitation' }
+      : { text: capped(list.length, atCap(list, CAPS.invitations)), title: atCap(list, CAPS.invitations) ? `${WITHIN_INVITATIONS}; there may be more` : 'Every invitation' }) : null,
     deals: dealsCount(contracts, deals),
     referrals: all.state === 'ready' ? { text: all.value, title: all.paused ? `${referralsTitle}. ${CONTRACTS_PAUSED}` : referralsTitle } : null,
   };
@@ -1400,27 +1370,8 @@ export function findInvitation(id, invitations, extra = null) {
   return { state: atCap(list, CAPS.invitations) ? 'missing' : 'none' };
 }
 
-export const MISSING_INVITATION = 'This invitation is not among the newest 200 read. The Worker has no single-invitation read until part 4.';
 export const MISSING_DEAL = 'This deal is not in the deal lists read. The Worker has no single-deal read until part 5.';
-export const NO_INVITATION = 'No invitation in the list has this address.';
 export const NO_DEAL = 'No deal in the lists has this address.';
-
-/**
- * The deal an invitation led to, in any of the six lists, by `invitation_id`
- * or `resulting_deal_id`; a live deal before a voided one. While a list is
- * read again a deal can be between two of them (a revoke moves it from
- * `proposed` to `voided`), so the answer waits for every list.
- */
-export function dealForInvitation(inv, deals) {
-  const u = dealsUnion(deals);
-  const mine = u.rows.filter((d) => String(d?.invitation_id) === String(inv?.id) || (inv?.resulting_deal_id != null && String(d?.id) === String(inv.resulting_deal_id)));
-  const hit = mine.find((d) => d.status !== 'voided') || mine[0];
-  if (hit) return { state: 'ready', deal: hit };
-  if (u.loading.length || u.refreshing.length) return { state: 'loading' };
-  if (u.failed.length || u.stale.length) return { state: 'unreadable' };
-  if (u.capped.length) return { state: 'missing' };
-  return { state: 'none' };
-}
 
 const ENVELOPE_OUT = new Set(['sent', 'partially_signed']);
 const ENVELOPE_VOID = new Set(['void', 'voided', 'rejected', 'declined']);
@@ -1445,31 +1396,6 @@ export function signingLink(envelope, now) {
 }
 
 const failedText = (read) => (isCoolOff(read?.error) ? PAUSED : COULD_NOT_READ);
-
-/** The progress list (PI3): the record's own dates, R2's first choice and R7's envelope. */
-export function progressRows(inv, stage, dealHit, envelope) {
-  const sent = dayOr(inv?.created_at);
-  let chosen;
-  if (dealHit.state === 'ready') chosen = day(dealHit.deal.created_at) ? `First chosen ${day(dealHit.deal.created_at)}` : NOT_RECORDED;
-  else if (dealHit.state === 'loading') chosen = READING;
-  else if (dealHit.state === 'unreadable') chosen = COULD_NOT_READ;
-  else if (dealHit.state === 'missing') chosen = stage.closed || (stage.step !== null && stage.step >= 5) ? NOT_IN_READ : NOT_REACHED;
-  else chosen = stage.step !== null && stage.step >= 5 ? NOT_RECORDED : NOT_REACHED;
-  let out;
-  if (!inv?.envelope_id) out = NOT_REACHED;
-  else if (isLoading(envelope)) out = READING;
-  else if (isFailed(envelope)) out = failedText(envelope);
-  else out = dayOr(dataOf(envelope)?.created_at);
-  return [
-    { key: 'sent', label: 'Sent', value: stage.resent !== null ? `${sent} · resent ${day(stage.resent)}` : sent },
-    { key: 'opened', label: 'Opened', value: day(inv?.viewed_at) || 'Not opened' },
-    { key: 'profiled', label: 'Profile done', value: NOT_READ_YET, unread: true },
-    { key: 'offers', label: 'Offers shown', value: NOT_READ_YET, unread: true },
-    { key: 'chosen', label: 'Offer chosen', value: chosen },
-    { key: 'agreement', label: 'Agreement out', value: out },
-    { key: 'signed', label: 'Signed', value: day(inv?.signed_at) || NOT_REACHED },
-  ];
-}
 
 /** The link's own line under Progress: valid until, lapsed on, or closed. */
 export function linkLine(inv, stage) {
@@ -1624,7 +1550,7 @@ const ONBOARDING_INSTEAD = 'so no signing link is renewed. Resending sends the o
  * PI8a. Line one is the renewed link; line two depends on the stage. Resend
  * keeps the stored stage at every step (D924). At Agreement out the line says
  * what the Worker does, read from R7 as the dialog opens; it is not a claim
- * about the write, which `resentResult` reads from the reply alone.
+ * about the write, which `resendResult` (invitationsModel.js, D950) reads from the reply alone.
  */
 export function resendCopy(inv, stage, envelope, now) {
   const who = whoOf(inv);
@@ -1644,22 +1570,6 @@ export function resendCopy(inv, stage, envelope, now) {
     else lines.push(`No signature from ${who} is pending on the agreement, ${ONBOARDING_INSTEAD}`);
   }
   return { title: `Resend the invitation to ${who}?`, lines };
-}
-
-export const RESENT_SENT = 'Sent.';
-export const RESENT_NOT_SENT = 'Not sent. Copy the link instead.';
-
-/**
- * The resend result, from the reply alone. The Worker's reply is `{ ok,
- * email_sent, link, expires_at }` whether it renewed the agreement's signing
- * link or sent the onboarding email instead (the envelope can change while
- * the dialog is open), so the result says nothing about a renewal. When no
- * email went, the reply's `link` (the invitation's own) is offered to copy.
- * #2723 (part 4) adds a `signing_link` answer to this reply; part 7 (#2726)
- * reads it.
- */
-export function resentResult(reply) {
-  return reply?.email_sent === true ? { text: RESENT_SENT, sent: true } : { text: RESENT_NOT_SENT, sent: false, copy: true };
 }
 
 /**
@@ -1768,7 +1678,6 @@ export const NEW_TITLE = 'New invitation';
 export const NEW_SUB = 'The invitee gets a private link by email.';
 export const TYPE_NOTE = 'Pick up to three. The invitee sees one offer per type.';
 export const TYPE_FULL = 'Three are picked; clear one to choose this.';
-export const TERMS_NOT_READ = 'Terms not read here yet';
 export const CAPITAL_NOTE = 'Needs KYC and accreditation after signing.';
 export const MESSAGE_HINT = 'Shown in the email and at the start of the onboarding chat.';
 export const LINK_FOOT = 'The link is valid for 14 days. Resending gives a new 14 days.';
@@ -1777,31 +1686,6 @@ export const counter = (n, max) => `${nf(n)} / ${nf(max)}`;
 export function toggleType(picked, key) {
   if (picked.includes(key)) return picked.filter((k) => k !== key);
   return picked.length >= TYPE_CAP ? picked : [...picked, key];
-}
-
-const ROLE_WORD = { admin: 'Admin', founder: 'Founder', partner: 'Operating Partner', investor: 'Investor', advisor: 'Advisor', exploring: 'Explorer' };
-const roleWord = (r) => ROLE_WORD[r] || (r ? titleCase(r) : 'role not recorded');
-
-/** O-DUP: an exact, open match in R1 is warned about, not refused. A failed check says it could not check. */
-export function duplicateCheck(read, email) {
-  if (!read || isLoading(read)) return { state: 'loading' };
-  if (read.status === 'error') return { state: 'failed', text: 'Could not check for an open invitation.' };
-  const want = String(email || '').trim().toLowerCase();
-  const hit = (listOf(read) || []).find((i) => String(i?.recipient_email || '').toLowerCase() === want && !['signed', 'revoked', 'expired'].includes(i?.status));
-  return hit ? { state: 'found', inv: hit, text: `An open invitation to this address exists, sent ${dayOr(hit.created_at)}. Open it instead?` } : { state: 'clear' };
-}
-
-/** R11, an exact match on the client. "and adds the partner deal" waits for part 2: until then, signing replaces a paid plan. */
-export function memberCheck(read, email) {
-  if (!read || isLoading(read)) return { state: 'loading' };
-  if (read.status === 'error') return { state: 'failed', text: 'Could not check whether this address belongs to a member.' };
-  const data = dataOf(read);
-  const rows = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
-  const want = String(email || '').trim().toLowerCase();
-  const hit = rows.find((u) => String(u?.email || '').toLowerCase() === want);
-  if (hit) return { state: 'found', text: `This address belongs to a member (${roleWord(hit.role)}). Signing keeps their role.` };
-  if (atCap(rows, CAPS.users)) return { state: 'failed', text: 'This address matched more accounts than one read returns, so membership could not be checked.' };
-  return { state: 'clear' };
 }
 
 export function createdLines(reply, email) {

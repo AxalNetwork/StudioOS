@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../../../lib/api';
 import { Lightbox, actionDanger, actionGhost, actionPrimary } from '../../../ui';
 import {
-  REASON_MAX, counter, partialWrite, refusalText, resendCopy, resentResult, revokeCopy, revokeVariant,
+  REASON_MAX, counter, partialWrite, refusalText, resendCopy, revokeCopy, revokeVariant,
   revokedLine, stageOf, terminateCopy, terminateReady, terminatedLine,
 } from './partnersDeskModel';
+import { resendResult } from './invitationsModel';
 import { useRead } from './usePartnerDesk';
 import { CopyButton, Done, EYE, INPUT, Refusal } from './parts';
 
@@ -61,7 +62,8 @@ function useWrite(reads, kind) {
  * PI8a. The line by stage; at Agreement out it reads R7, because resend then
  * renews the agreement's signing link too when the invitee's signature is
  * pending (D924). That line says what the Worker does; the result says only
- * what its reply reports, which is whether the email went (`resentResult`).
+ * what its reply reports (`resendResult`, D950): renewed, not renewed, or the
+ * onboarding email sent instead, from the reply's `signing_link` (D927 §5).
  */
 export function ResendDialog({ inv, reads, now, onClose }) {
   const stage = stageOf(inv, { proposed: reads.deals.proposed, now });
@@ -69,7 +71,7 @@ export function ResendDialog({ inv, reads, now, onClose }) {
   const envelope = useRead('envelope', `envelope:${envelopeId}`, reads.tick, stage.step === 6 && envelopeId !== null, () => api.esignDetail(envelopeId));
   const w = useWrite(reads, 'invitation');
   const copy = resendCopy(inv, stage, envelope, now);
-  const result = w.reply ? resentResult(w.reply) : null;
+  const result = w.reply ? resendResult(w.reply) : null;
   const close = w.finish(onClose);
   return (
     <Lightbox label={copy.title} title={copy.title} onClose={close} testId="partners-resend-dialog"

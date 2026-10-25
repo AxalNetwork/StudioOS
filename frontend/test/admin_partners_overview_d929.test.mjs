@@ -347,7 +347,14 @@ function worker({ invitations = [], deals = {}, redemptions = {}, template = { d
   return (url) => {
     const [path, qs] = url.split('?');
     const q = new URLSearchParams(qs || '');
-    if (path === '/api/admin/partners/invitations') return call(typeof invitations === 'function' ? invitations : { items: invitations });
+    // D950: the tab reads D926's page, so the stub filters by stage (Lapsed computed) and pages, with a total.
+    if (path === '/api/admin/partners/invitations') {
+      if (typeof invitations === 'function') return call(invitations);
+      const stages = q.getAll('stage');
+      const rows = stages.length ? invitations.filter((i) => stages.includes(i.is_expired && !['signed', 'revoked', 'expired'].includes(i.status) ? 'lapsed' : i.status)) : invitations;
+      const offset = Number(q.get('offset') || 0);
+      return response({ items: rows.slice(offset, offset + (q.get('limit') ? Number(q.get('limit')) : 200)), total: rows.length });
+    }
     if (path === '/api/admin/partners/deals/top') return response({ items: [] });
     if (path === '/api/admin/partners/deals') return call(deals[q.get('status')] ?? { items: [] });
     const red = /^\/api\/admin\/partners\/deals\/(\d+)\/redemptions$/.exec(path);
