@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAuth, selectJwt } from '../auth';
 import { activeCompanyFor } from '../middleware/activeCompany';
+import { receivedCommitment } from '../services/raiseCycle';
 
 const r = new Hono<{ Bindings: Env }>();
 const guard = async (c: any, next: () => Promise<void>) => {
@@ -60,8 +61,7 @@ async function facts(db: D1Database, x: any) {
   const envelope = await db.prepare(`SELECT e.envelope_uuid AS uid, CASE WHEN EXISTS (SELECT 1 FROM esign_recipients mine WHERE mine.envelope_id = e.id AND mine.user_id = ? AND mine.status = 'signed') THEN 'completed' ELSE e.status END AS status, COALESCE(e.completed_at,e.created_at) AS at FROM esign_envelopes e
     WHERE e.deal_id = ? AND (e.user_id = ? OR EXISTS (SELECT 1 FROM esign_recipients p WHERE p.envelope_id = e.id AND p.user_id = ?))
     AND e.document_type IN ('safe','spa','subscription') AND e.status IN ('sent','partially_signed','completed') ORDER BY e.id DESC LIMIT 1`).bind(user.id, id, user.id, user.id).first<any>();
-  const funded = commitment ? await db.prepare(`SELECT id, confirmed_at AS at FROM mercury_personal_matches
-    WHERE target_kind = 'deal_commitment' AND target_id = ? AND state = 'confirmed' ORDER BY id DESC LIMIT 1`).bind(commitment.id).first<any>() : null;
+  const funded = commitment ? await receivedCommitment({ DB: db }, user, company, commitment.id) : null;
   return { invitation, member, dd, ic, committee, commitment, envelope, funded };
 }
 

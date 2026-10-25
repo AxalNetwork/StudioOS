@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { Hono } from 'hono';
 import { SignJWT } from 'jose';
 import router from '../src/routes/deal_context.ts';
+import { receivedCommitment } from '../src/services/raiseCycle.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import { d1Over } from './_d1_sqlite.mjs';
 const baseline = readFileSync('cloudflare-worker/sql/schema_baseline.sql','utf8');
@@ -178,5 +179,14 @@ for (const method of ['PUT','DELETE']) test(`a raced ${method} does not audit a 
     DB.batch=async (stmts:any[])=>{db.exec('DELETE FROM deal_notes');return batch(stmts);};
     assert.equal((await call(1,`notes/${added.body.uid}`,method,method==='PUT'?{body:'EDIT'}:undefined)).status,404);
     const logs=db.prepare('SELECT action FROM activity_logs').all() as any[];assert.deepEqual(logs.map(r=>r.action),['deal_note_added']);
+  }finally{db.close();}
+});
+
+test('the stored-receipt projection exposes metadata for the owner only, with no bank fields',async()=>{
+  const {db,DB}=world();try{
+    db.exec("INSERT INTO commitments(id,deal_id,investor_user_id,company_id,amount,status) VALUES(71,9,1,11,100,'confirmed'); INSERT INTO mercury_personal_matches(uid,user_id,integration_id,mercury_transaction_id,account_last_four,amount_cents,posted_on,target_kind,target_id) VALUES('match',5,1,'PRIVATE','1234',10000,'2026-10-25','deal_commitment',71)");
+    const own=await receivedCommitment({DB} as any,{id:1,role:'investor'},11,71);assert.ok(own);assert.deepEqual(Object.keys(own).sort(),['at','id']);
+    for(const [id,role,firm] of [[3,'investor',22],[2,'investor',11],[1,'investor',22],[1,'admin',11]] as const)assert.equal(await receivedCommitment({DB} as any,{id,role},firm,71),null);
+    db.exec("UPDATE mercury_personal_matches SET state='withdrawn'");assert.equal(await receivedCommitment({DB} as any,{id:1,role:'investor'},11,71),null);
   }finally{db.close();}
 });
