@@ -105,7 +105,7 @@ test('2448: narrative readiness without a comparison is unscored and omitted fro
  const row=db.prepare('SELECT score,evidence,missing FROM readiness_scores').get()!;assert.equal(row.score,null);assert.equal(row.evidence,null);
  assert.equal((await loadReadiness({env,projectId:1} as any)).scores[0].score,null);
  const ctx:any={env,projectId:1,today:'2026-10-24'};
- const readiness=(await figures(ctx)).find(f=>f.key==='readiness_score')!;assert.deepEqual(readiness.coverage,{scored:0,total:7});assert.equal(readiness.value,null);
+ const readiness=(await figures(ctx)).find(f=>f.key==='readiness_score')!;assert.deepEqual(readiness.coverage,{scored:0,total:8});assert.equal(readiness.value,null);
  const card:any=await readinessCard(ctx);assert.equal(card.series.find(s=>s.kind==='hbar').items.find(i=>i.label==='Investor narrative').tone,'grey');
  const query:any={q:'',sort:'order',filter:{},page:1};
  const records=await RECORDS_FOR['fundraising-readiness'](ctx,query);const narrative=records.rows.find(r=>r.id==='narrative')!;assert.equal(narrative.cells.score,null);assert.equal(narrative.cells.evidence,null);

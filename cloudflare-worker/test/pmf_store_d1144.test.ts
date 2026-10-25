@@ -52,8 +52,8 @@ test('a changed input set stores one PMF point, its model, checklist item 8 and 
   assert.equal(first.state,'scored');assert.equal(first.confidence_word,'Medium');assert.equal(first.changed,true);assert.equal(first.value,59);assert.equal(first.confidence,0.57);
   assert.equal(count(db,'venture_scorecards'),1);assert.equal(count(db,'scoring_model_versions'),1);
   const item=db.prepare("SELECT id,position FROM readiness_items WHERE item_key='pmf'").get() as any;assert.equal(item.position,7);assert.equal(count(db,'readiness_items'),8);
-  const check=db.prepare('SELECT score,source,scored_by FROM readiness_scores').get() as any;
-  assert.equal(check.score,first.value!/10);assert.equal(check.source,'computed');assert.equal(check.scored_by,1);
+  const check=db.prepare('SELECT score,evidence,source,scored_by FROM readiness_scores').get() as any;
+  assert.equal(check.score,first.value!/10);assert.equal(check.source,'computed');assert.equal(check.evidence,'pattern');assert.equal(check.scored_by,1);
   const audit=db.prepare("SELECT action,details,user_id FROM activity_logs").get() as any;
   assert.equal(audit.action,'pmf_recomputed');assert.equal(audit.user_id,1);
   assert.deepEqual(JSON.parse(audit.details),{model_version:'1.0',trigger:'module_read',inputs_hash:first.inputs_hash});

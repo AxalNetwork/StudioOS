@@ -155,7 +155,7 @@ test('readiness with no items returns empty, with the action that starts it', as
   assert.equal(fig(r.body, 'readiness_score').state, 'empty');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM readiness_items').get().n, 0, 'reading creates no item');
 
-  // That action — the computed rescore — creates the seven items and scores the six it can measure.
+  // That action — the computed rescore — creates the eight items and scores the six it can measure.
   db.exec(`UPDATE projects SET use_of_funds = '[{"label":"Product & engineering","pct":100}]', funding_needed = 500000 WHERE id = ${P}`);
   assert.equal((await call(db, FOUNDER, 'POST', `/readiness/rescore?project=${P}`)).status, 200);
   const after = card((await overview(db)).body, 'fundraising-readiness');

@@ -37,7 +37,7 @@ function payload(row: Stored): { result: PmfResult; pivot_at: string | null } {
 }
 export function pmfChecklist(result: PmfResult): ComputedScore {
   const eligible = result.state === 'scored' && result.value != null && ['Medium','High'].includes(result.confidence_word || '');
-  return { key: 'pmf', score: eligible ? result.value! / 10 : null, evidence: eligible ? 'measured' : null,
+  return { key: 'pmf', score: eligible ? result.value! / 10 : null, evidence: eligible ? 'pattern' : null,
     missing: eligible ? null : 'Not scored: Product-market fit needs Medium confidence or more.',
     reads: [{ a: 'Product-market fit', b: result.value == null ? 'Not enough recorded' : `${result.value} / 100 · ${result.confidence_word} confidence`,
       c: eligible ? 'Counted' : 'Missing', tone: eligible ? 'ok' : 'bad' }] };
