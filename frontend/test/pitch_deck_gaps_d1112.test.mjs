@@ -144,7 +144,7 @@ test('the model: new in your data, the versions filter, sort and links, the bloc
 });
 
 test('PD2 mounted: New in your data since v4, Refresh the deck, a failed read, and nothing to compare', async () => {
-  let asked = studioStubs(async () => REFRESH);
+  const asked = studioStubs(async () => REFRESH);
   let v = await mount(h(StudioDecks, { reads: reads(), readOnly: false, q: '?project_id=7' }));
   try {
     assert.deepEqual(asked, [40], 'the current version is compared');
@@ -158,7 +158,7 @@ test('PD2 mounted: New in your data since v4, Refresh the deck, a failed read, a
     assert.match(v.of('pitch-studio-refresh-deck'), new RegExp(REFRESH_THE_DECK.replace('›', '.')));
   } finally { await v.unmount(); }
 
-  asked = studioStubs(async () => { throw new Error('down'); });
+  studioStubs(async () => { throw new Error('down'); });
   v = await mount(h(StudioDecks, { reads: reads(), readOnly: false, q: '?project_id=7' }));
   try {
     assert.match(v.of('pitch-studio-new-data'), /could not be read. That is not the same as nothing. Try again/);
