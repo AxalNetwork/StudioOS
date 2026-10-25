@@ -14,10 +14,10 @@ import type { Env } from '../types';
 import { requireAuth, requireAdmin, canViewLpData } from '../auth';
 import { mapError, nowIso, newUid } from './_t13t14t15_helpers';
 import {
-  computeFundMetrics, rollUpPosition, currentPeriod, daysSince,
+  computeFundMetrics, rollUpPosition, currentPeriod, daysSince, periodCounts,
   type CashFlow, type KpiCadence,
 } from '../services/portfolioMetrics';
-import { investorProjectIds, investorActiveCompany } from './_investorProjectScope';
+import { HELD_SCOPE, investorHeldProjectIds, investorActiveCompany } from './_investorProjectScope';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -79,7 +79,7 @@ r.get('/', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
+    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
     const scopeCsv = projectIds == null ? null : projectIds.join(',');
     // Single grouped query joined to projects, replacing the previous
     // two-queries-per-project loop (N+1) that would not scale past a
@@ -141,7 +141,9 @@ r.get('/', async (c) => {
         mark_basis: mark?.basis ?? null,
       };
     });
-    return c.json({ items });
+    // D1057: the read says which companies it lists. An investor sees the ones they hold a confirmed
+    // commitment in (finding 8); an admin, every recorded position.
+    return c.json({ items, scope: projectIds == null ? { rule: 'all_positions', text: 'Every position the studio recorded.' } : HELD_SCOPE });
   } catch (e) { return mapError(c, e); }
 });
 
@@ -188,7 +190,7 @@ r.get('/marks', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
+    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
     const scopeCsv = projectIds == null ? null : projectIds.join(',');
     // A book with no accessible projects reads as empty rather than as
     // unscoped: `investorProjectIds` returning [] must not become "all rows".
@@ -239,7 +241,7 @@ r.get('/analytics', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
+    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
     const scopeCsv = projectIds == null ? null : projectIds.join(',');
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
 
@@ -311,12 +313,13 @@ r.get('/analytics', async (c) => {
 //
 // Compliance is DERIVED from portfolio_updates rather than tracked in a
 // second table: a company is compliant for the period when it has a
-// submitted update whose `period` matches. One reporting channel.
+// submitted update whose `period` counts for it (`periodCounts`, D1057: a
+// month inside the quarter counts for the quarter). One reporting channel.
 r.get('/kpi-compliance', async (c) => {
   try {
     const user = await requireAuth(c);
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
-    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
+    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
     const scopeCsv = projectIds == null ? null : projectIds.join(',');
     const cadence: KpiCadence = c.req.query('cadence') === 'monthly' ? 'monthly' : 'quarterly';
     const today = isoDate(c.req.query('as_of')) || new Date().toISOString().slice(0, 10);
@@ -348,7 +351,8 @@ r.get('/kpi-compliance', async (c) => {
     const lastSeen = new Map<number, string>();
     for (const u of (updates.results || [])) {
       const pid = Number(u.project_id);
-      if (period && String(u.period || '') === period) thisPeriod.add(pid);
+      // D1057: a Grow update's `YYYY-MM` counts for the quarter it falls in (finding 3).
+      if (periodCounts(cadence, period, u.period)) thisPeriod.add(pid);
       const at = String(u.last_at || '').slice(0, 10);
       const prev = lastSeen.get(pid);
       if (at && (!prev || at > prev)) lastSeen.set(pid, at);
@@ -388,7 +392,7 @@ r.get('/:projectUid', async (c) => {
     if (!canViewLpData(user)) return c.json({ detail: 'Forbidden' }, 403);
     const proj = await c.env.DB.prepare('SELECT id, uid, name, sector, stage, status FROM projects WHERE uid = ? AND deleted_at IS NULL').bind(c.req.param('projectUid')).first<any>();
     if (!proj) return c.json({ detail: 'Not found' }, 404);
-    const projectIds = await investorProjectIds(c.env, user, await investorActiveCompany(c, user));
+    const projectIds = await investorHeldProjectIds(c.env, user, await investorActiveCompany(c, user));
     if (projectIds != null && !projectIds.includes(Number(proj.id))) return c.json({ detail: 'Forbidden' }, 403);
     const rounds = await c.env.DB.prepare(
       'SELECT * FROM portfolio_positions WHERE project_id = ? ORDER BY COALESCE(position_date, created_at) ASC'

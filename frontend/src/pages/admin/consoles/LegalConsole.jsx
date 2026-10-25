@@ -114,7 +114,7 @@ export function LegalPanel() {
         setPartnerDealsNote(pd?.note || '');
       }
     } catch (e) {
-      reportError('AdminPage:loadContracts', e);
+      reportError('LegalConsole:loadContracts', e);
       if (isListSub) setListUnreadable(true);
       if (sub === 'pairwise') {
         setPairwise([]);
@@ -1106,7 +1106,7 @@ export function SignedDocLightbox({ uid, onClose, onChanged }) {
       try {
         const r = await api.adminGetForwardLog(doc.id);
         if (!cancelled) setForwards(r.forwards || []);
-      } catch (e) { if (!cancelled) reportError('AdminPage:forward-log', e); }
+      } catch (e) { if (!cancelled) reportError('LegalConsole:forward-log', e); }
     })();
     return () => { cancelled = true; };
   }, [doc]);

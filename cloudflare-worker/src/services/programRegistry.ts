@@ -75,6 +75,15 @@ export const PAUSE_NOT_DECIDED =
 const TEXT_MAX = { purpose: 300, who: 200, join_method: 120, title: 120, body: 5000 } as const;
 const TEMPLATES_MAX = 20;
 
+/** D971: canonical Lab headings, never sample playbook content. Created only on an authorised edit. */
+export const LAB_PLAYBOOK_SECTIONS = [
+  ['purpose', 'Purpose'], ['who-can-apply', 'Who can apply'], ['calendar', 'The calendar'],
+  ['deciding-applications', 'Deciding applications'], ['capacity', 'Capacity'], ['four-weeks', 'The four weeks'],
+  ['week-outcomes', 'Week outcomes'], ['graduation-formation', 'Graduation and formation'],
+  ['office-hours', 'Office hours'], ['moderation', 'Moderation'],
+].map(([key, title], position) => ({ key, title, position }));
+
+
 export function isProgramKey(v: unknown): v is ProgramKey {
   return typeof v === 'string' && (PROGRAM_KEYS as readonly string[]).includes(v);
 }
@@ -260,6 +269,7 @@ export async function programDetail(env: Env, key: string, superAdmin: boolean, 
   const published = latest ? await sectionsOf(env, p.key, Number(latest.version)) : [];
   const out: Record<string, unknown> = {
     program: programView(p),
+    ...(p.key === 'spinout-lab' ? { section_catalogue: LAB_PLAYBOOK_SECTIONS } : {}),
     playbook: latest
       ? { published: true, version: Number(latest.version), published_at: latest.published_at, sections: published.map(sectionView) }
       : { published: false, version: null, published_at: null, sections: [] },
@@ -296,19 +306,21 @@ export async function editDraftSection(env: Env, key: string, sectionKey: string
   const p = await programByKey(env, key);
   const s = await env.DB.prepare(SECTION_SELECT + ' WHERE program_key = ? AND version = 0 AND section_key = ?')
     .bind(p.key, sectionKey).first<SectionRow>();
-  if (!s) throw new ProgramError(404, 'unknown_section', 'This program\'s playbook has no section with that key.');
+  const initial = p.key === 'spinout-lab' ? LAB_PLAYBOOK_SECTIONS.find((x) => x.key === sectionKey) : undefined;
+  if (!s && !initial) throw new ProgramError(404, 'unknown_section', 'This program\'s playbook has no section with that key.');
+  const section = s || { section_key: sectionKey, computed: 0 };
   const b = body && typeof body === 'object' ? body as Record<string, unknown> : {};
   const title = textField(b, 'title', TEXT_MAX.title);
   if (title === null) throw new ProgramError(400, 'bad_title', 'A section needs a title.');
   const text = textField(b, 'body', TEXT_MAX.body);
-  if (text !== undefined && Number(s.computed) === 1) {
+  if (text !== undefined && Number(section.computed) === 1) {
     throw new ProgramError(400, 'computed_section', 'This section is drawn from live data, so it holds no text.');
   }
   const templates = 'template_keys' in b ? await checkTemplates(env, b.template_keys) : undefined;
   const changed = [title !== undefined && 'title', text !== undefined && 'body', templates !== undefined && 'template_keys']
     .filter((x): x is string => !!x);
   if (!changed.length) throw new ProgramError(400, 'nothing_to_change', 'Send at least one of title, body or template_keys.');
-  await env.DB.prepare(
+  const update = env.DB.prepare(
     `UPDATE program_playbook_sections SET
        title = CASE WHEN ? = 1 THEN ? ELSE title END,
        body = CASE WHEN ? = 1 THEN ? ELSE body END,
@@ -319,10 +331,18 @@ export async function editDraftSection(env: Env, key: string, sectionKey: string
     title !== undefined ? 1 : 0, title ?? null,
     text !== undefined ? 1 : 0, text ?? null,
     templates !== undefined ? 1 : 0, JSON.stringify(templates ?? []),
-    new Date().toISOString(), actor.id, p.key, s.section_key,
-  ).run();
+    new Date().toISOString(), actor.id, p.key, section.section_key,
+  );
+  if (!s && initial) {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT OR IGNORE INTO program_playbook_sections
+        (program_key, version, section_key, position, title) VALUES (?, 0, ?, ?, ?)`)
+        .bind(p.key, initial.key, initial.position, initial.title),
+      update,
+    ]);
+  } else await update.run();
   await logAdminAction(env, actor.id, actor.email, REGISTRY_ACTIONS.edit,
-    { program_key: p.key, section: s.section_key, fields: changed });
+    { program_key: p.key, section: section.section_key, fields: changed });
   return programDetail(env, p.key, true);
 }
 

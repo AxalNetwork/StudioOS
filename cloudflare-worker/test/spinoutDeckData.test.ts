@@ -400,6 +400,15 @@ test('captable segments: simulator sim_segments win over the holders table', () 
   assert.deepEqual(values, [63, 23, 15], 'sim_segments values drive the donut (rounded)');
 });
 
+test('captable segments: D1018 — the donut says Modelled when its segments come from the saved model', () => {
+  for (const [source, caption] of [['model', 'fully diluted · modelled'], ['record', 'fully diluted'], [null, 'fully diluted']] as const) {
+    const src = makeFullSrc();
+    src.cap_table.sim_segments = [['Founders', 80], ['Option Pool', 20]];
+    (src.cap_table as any).sim_source = source;
+    assert.equal(mapToSpinoutDeckData(src).data.captable.centerSmall, caption, String(source));
+  }
+});
+
 test('captable segments: sim_segments are filtered (>0, named) and capped at 6', () => {
   const src = makeFullSrc();
   src.cap_table.sim_segments = [
