@@ -121,10 +121,10 @@ test('the change is a non-zero whole number within the bound, and the note at mo
     assert.equal(r.status, 400, String(delta));
     assert.equal(r.body.error, 'invalid_delta');
   }
-  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: 100_000, reason: REASON })).status, 200, 'the bound itself is allowed');
+  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: 100_000, reason: REASON, source_ref: 'bounds:amount' })).status, 200, 'the bound itself is allowed');
   const long = await adjust(env, SUPER, { user_id: FOUNDER, delta: 1, reason: REASON, note: 'x'.repeat(501) });
   assert.deepEqual([long.status, long.body.error], [400, 'note_too_long']);
-  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: 1, reason: REASON, note: 'x'.repeat(500) })).status, 200);
+  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: 1, reason: REASON, note: 'x'.repeat(500), source_ref: 'bounds:note' })).status, 200);
   const ref = await adjust(env, SUPER, { user_id: FOUNDER, delta: 1, reason: REASON, source_ref: 'r'.repeat(121) });
   assert.deepEqual([ref.status, ref.body.error], [400, 'invalid_source_ref']);
   const nobody = await adjust(env, SUPER, { user_id: 9999, delta: 1, reason: REASON });
@@ -154,10 +154,10 @@ test('a repeated source_ref is a 409 naming the existing row, of either sign, an
 
 test('a deduction past the balance is refused with the balance, and writes nothing', async () => {
   const { db, env } = setup();
-  await adjust(env, SUPER, { user_id: FOUNDER, delta: 20, reason: REASON });
-  const r = await adjust(env, SUPER, { user_id: FOUNDER, delta: -21, reason: REASON });
+  await adjust(env, SUPER, { user_id: FOUNDER, delta: 20, reason: REASON, source_ref: 'overdraw:seed' });
+  const r = await adjust(env, SUPER, { user_id: FOUNDER, delta: -21, reason: REASON, source_ref: 'overdraw:refused' });
   assert.deepEqual([r.status, r.body.error, r.body.balance], [400, 'would_overdraw', 20]);
-  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: -20, reason: REASON })).body.balance, 0, 'down to zero is allowed');
+  assert.equal((await adjust(env, SUPER, { user_id: FOUNDER, delta: -20, reason: REASON, source_ref: 'overdraw:zero' })).body.balance, 0, 'down to zero is allowed');
   assert.deepEqual(rowCounts(db), [2, 2, 2]);
 });
 
