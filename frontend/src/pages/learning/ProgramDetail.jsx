@@ -189,8 +189,8 @@ function ContentLine({ content, index, count, handlers, busy }) {
 
 /**
  * Add one subject: its kind, then one of the studio's own rows of that kind
- * that the program does not hold yet. A webinar is drawn disabled: the
- * contents route refuses one until webinars are a program store.
+ * that the program does not hold yet. D1124 (#3004): a webinar is one of
+ * the kinds.
  */
 export function ContentPicker({ choices, held, onAdd, onCancel, busy, initialKind = 'course' }) {
   const [kind, setKind] = useState(initialKind);
@@ -221,7 +221,6 @@ export function ContentPicker({ choices, held, onAdd, onCancel, busy, initialKin
       <Field id={id('kind')} label="Kind">
         <select id={id('kind')} className={INPUT} value={kind} onChange={(e) => { setKind(e.target.value); setUid(''); }} data-testid="select-program-kind">
           {CONTENT_KINDS.map((k) => <option key={k} value={k}>{subjectKindLabel(k)}</option>)}
-          <option value="webinar" disabled>Webinar (not a program content yet)</option>
         </select>
       </Field>
       <Field id={id('subject')} label={subjectKindLabel(kind)}>{picker}</Field>

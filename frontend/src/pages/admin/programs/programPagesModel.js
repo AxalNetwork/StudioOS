@@ -785,6 +785,8 @@ export function isDone(cell) {
   const s = cell?.status;
   if (cell?.subject_kind === 'exercise') return s === 'accepted';
   if (cell?.subject_kind === 'exam') return s === 'passed';
+  // D1124 (#3004): a webinar is Done when the learner attended it.
+  if (cell?.subject_kind === 'webinar') return s === 'attended';
   return s === 'completed';
 }
 export const hasFinished = (learner) => Array.isArray(learner?.completion) && learner.completion.length > 0 && learner.completion.every(isDone);
@@ -810,7 +812,7 @@ export function finishedTotal(rows) {
   if (rows.some((r) => r.state !== 'ready')) return { state: 'loading' };
   return { state: 'ready', count: rows.reduce((t, r) => t + r.finished, 0) };
 }
-export const FINISHED_LINE = 'Learners who are Done with every item in a published program: a course or item completed, an exercise accepted, an exam passed.';
+export const FINISHED_LINE = 'Learners who are Done with every item in a published program: a course or item completed, an exercise accepted, an exam passed, a webinar attended.';
 
 /** Enrolled and Enrolments per week (P4), each with its window. */
 export function enrolmentsFrom(read) {
@@ -831,7 +833,7 @@ export function enrolmentsFrom(read) {
 export const enrolledLine = (weeks) => `The last ${weeks} weeks, this week so far. A re-enrolment counts again.`;
 
 /** The learner dialog's rows (item 20): its kind, title, Done or Not yet, and the date it was reached. */
-const KIND_LABEL = { course: 'Course', exercise: 'Exercise', exam: 'Exam' };
+const KIND_LABEL = { course: 'Course', exercise: 'Exercise', exam: 'Exam', webinar: 'Webinar' };
 export function learnerRows(contents, learner) {
   const byUid = new Map((contents || []).map((c) => [`${c.subject_kind}|${c.subject_uid}`, c]));
   return (learner?.completion || []).map((cell) => {
@@ -842,10 +844,13 @@ export function learnerRows(contents, learner) {
     const done = isDone(cell);
     const when = cell.subject_kind === 'exam' ? cell.passed_at
       : cell.subject_kind === 'exercise' ? (done ? cell.reviewed_at : null)
-        : cell.completed_at;
+        // D1124: a webinar is reached on its own date.
+        : cell.subject_kind === 'webinar' ? (c.starts_at ?? null)
+          : cell.completed_at;
     const extra = cell.subject_kind === 'exam'
       ? (cell.attempts ? `Best ${cell.best_score_percent === null || cell.best_score_percent === undefined ? NOT_RECORDED.toLowerCase() : `${cell.best_score_percent}%`} · ${plural(cell.attempts, 'attempt', 'attempts')}` : 'No attempt yet')
-      : null;
+      : cell.subject_kind === 'webinar' ? (WEBINAR_WORD[cell.status] || null)
+        : null;
     return {
       key: `${cell.subject_kind}-${cell.subject_uid}`, kind, title: c.title || 'Title not recorded', done,
       word: done ? 'Done' : 'Not yet', date: done ? (shortDay(when) || NOT_RECORDED) : '—', extra,
@@ -853,6 +858,8 @@ export function learnerRows(contents, learner) {
   });
 }
 export const LEARNER_FOOT = 'No email is shown here. Progress is read only.';
+/** D1124: where a learner stands on a webinar; the host records attendance. */
+const WEBINAR_WORD = { registered: 'Registered', not_attended: 'Did not attend', not_registered: 'Not registered' };
 
 export { COULD_NOT_READ, NOT_READ_YET, dataOf, stateOf };
 
