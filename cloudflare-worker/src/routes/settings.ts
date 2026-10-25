@@ -1,4 +1,4 @@
-import { memberFileStatement, missingMemberFileStatement } from '../services/memberFiles';
+import { memberFileStatement, missingMemberFileStatement, recheckMemberFileStatement } from '../services/memberFiles';
 /**
  * Epic 3 — Settings page backend.
  *
@@ -444,6 +444,7 @@ settings.post('/headshot', async (c) => {
     await c.env.DB.batch([
       c.env.DB.prepare('UPDATE users SET headshot_r2_key = ? WHERE id = ?').bind(meta.file_key,user.id),
       memberFileStatement(c.env,meta.file_key,user.id,'headshot',meta.size),
+      recheckMemberFileStatement(c.env,oldKey??null,user.id,meta.file_key),
     ]);
   } catch {
     await sql.end();
@@ -1641,6 +1642,7 @@ settings.post('/profile/linkedin-import/apply', async (c) => {
             await c.env.DB.batch([
               c.env.DB.prepare('UPDATE users SET headshot_r2_key = ? WHERE id = ?').bind(meta.file_key,user.id),
               memberFileStatement(c.env,meta.file_key,user.id,'headshot',meta.size),
+              recheckMemberFileStatement(c.env,oldKey??null,user.id,meta.file_key),
             ]);
             await sql.end();
             if (oldKey && oldKey !== meta.file_key) { try { await c.env.FILES.delete(oldKey); await missingMemberFileStatement(c.env,oldKey,user.id).run(); } catch {} }

@@ -15,7 +15,9 @@ const PENDING = `SELECT 'demand' AS source,id,evidence_file_key AS r2_key,NULL A
  UNION ALL SELECT 'import',id,raw_file_r2_key,NULL FROM
  (SELECT id,raw_file_r2_key FROM data_imports WHERE raw_file_r2_key IS NOT NULL AND raw_file_r2_key <> '' AND size_bytes IS NULL AND size_missing_at IS NULL AND id>? ORDER BY id LIMIT ?)
  UNION ALL SELECT 'member',id,r2_key,owner_user_id FROM
- (SELECT id,r2_key,owner_user_id FROM member_files WHERE size_bytes IS NULL AND size_missing_at IS NULL AND id>? ORDER BY id LIMIT ?)
+ (SELECT f.id,f.r2_key,f.owner_user_id FROM member_files f WHERE f.size_missing_at IS NULL
+   AND (f.size_bytes IS NULL OR (f.kind='headshot' AND (f.size_recheck_required=1 OR f.owner_user_id IS NULL)))
+   AND f.id>? AND (f.size_bytes IS NULL OR (f.id>? AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id=f.owner_user_id AND u.headshot_r2_key=f.r2_key))) ORDER BY f.id LIMIT ?)
  LIMIT ?`;
 const prefixes:Record<string,string>={demand:'validate-evidence/',formation:'build-proof/',obligation:'build-proof/',minutes:'grow-minutes/',import:'imports/'};
 function namespaceOwner(key:string):number|null {
@@ -23,8 +25,8 @@ function namespaceOwner(key:string):number|null {
  const id=match?Number(match[1]):NaN;return Number.isSafeInteger(id)?id:null;
 }
 function seed(env:Env,key:string,owner:number|null,kind:MemberFileKind){
- return env.DB.prepare(`INSERT INTO member_files(uid,r2_key,owner_user_id,kind) VALUES (?,?,(SELECT id FROM users WHERE id=?),?) ON CONFLICT(r2_key) DO NOTHING`)
-   .bind(crypto.randomUUID(),key,owner,kind);
+ return env.DB.prepare(`INSERT INTO member_files(uid,r2_key,owner_user_id,kind,size_recheck_required) VALUES (?,?,(SELECT id FROM users WHERE id=?),?,CASE WHEN ?='headshot' AND NOT EXISTS (SELECT 1 FROM users WHERE id=? AND headshot_r2_key=?) THEN 1 ELSE 0 END) ON CONFLICT(r2_key) DO NOTHING`)
+   .bind(crypto.randomUUID(),key,owner,kind,kind,owner,key);
 }
 /** All discovery positions live in D1, including legacy pointer scans. */
 async function discover(env:Env,limit:number){
@@ -66,7 +68,7 @@ async function discover(env:Env,limit:number){
 type MeasurementCursor = {measurement_pass:number;demand_after:number;formation_after:number;obligation_after:number;minutes_after:number;import_after:number;member_after:number};
 const cursorValues=(c:MeasurementCursor)=>[c.demand_after,c.formation_after,c.obligation_after,c.minutes_after,c.import_after,c.member_after];
 const zeroCursor=():MeasurementCursor=>({measurement_pass:0,demand_after:0,formation_after:0,obligation_after:0,minutes_after:0,import_after:0,member_after:0});
-const pendingRows=(env:Env,cursor:MeasurementCursor,limit:number)=>env.DB.prepare(PENDING).bind(...cursorValues(cursor).flatMap(after=>[after,limit]),limit).all<Candidate>();
+const pendingRows=(env:Env,cursor:MeasurementCursor,limit:number,recheckAfter=cursor.member_after)=>env.DB.prepare(PENDING).bind(...cursorValues(cursor).slice(0,5).flatMap(after=>[after,limit]),cursor.member_after,recheckAfter,limit,limit).all<Candidate>();
 async function measurementCursor(env:Env){
  const row=await env.DB.prepare(`SELECT measurement_pass,demand_after,formation_after,obligation_after,minutes_after,import_after,member_after
   FROM member_file_size_backfill_state WHERE uid=?`).bind('member-files-v1').first<MeasurementCursor>();
@@ -102,7 +104,8 @@ function record(env:Env,row:Candidate,size:number|null,missing:string|null){
   case 'obligation': return env.DB.prepare('UPDATE entity_obligations SET size_bytes=?,size_missing_at=? WHERE id=? AND proof_file_key=? AND size_bytes IS NULL AND size_missing_at IS NULL').bind(...values);
   case 'minutes': return env.DB.prepare('UPDATE obligation_occurrences SET size_bytes=?,size_missing_at=? WHERE id=? AND minutes_file_key=? AND size_bytes IS NULL AND size_missing_at IS NULL').bind(...values);
   case 'import': return env.DB.prepare('UPDATE data_imports SET size_bytes=?,size_missing_at=? WHERE id=? AND raw_file_r2_key=? AND size_bytes IS NULL AND size_missing_at IS NULL').bind(...values);
-  case 'member': return env.DB.prepare("UPDATE member_files SET size_bytes=?,size_missing_at=?,updated_at=datetime('now') WHERE id=? AND r2_key=? AND size_bytes IS NULL AND size_missing_at IS NULL").bind(...values);
+  case 'member': return env.DB.prepare(`UPDATE member_files SET size_bytes=?,size_missing_at=?,updated_at=datetime('now') WHERE id=? AND r2_key=? AND size_missing_at IS NULL
+   AND (size_bytes IS NULL OR (kind='headshot' AND (size_recheck_required=1 OR owner_user_id IS NULL) AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id=member_files.owner_user_id AND u.headshot_r2_key=member_files.r2_key)))`).bind(...values);
   default:throw new Error('size_store_unreadable');
  }
 }
@@ -140,10 +143,12 @@ export async function backfillMemberFileSizes(env:Env,actorId:number,limit:numbe
    }catch{counts.failed++;}
   }
   await checkpointMeasurements(env,batch.cursor);
-  const rest=await pendingRows(env,zeroCursor(),1);
-  if(!rest.success)throw new Error('size_store_unreadable');
-  const state=await env.DB.prepare('SELECT phase FROM member_file_size_backfill_state WHERE uid=?').bind('member-files-v1').first<{phase:string}>();
+  const state=await env.DB.prepare('SELECT phase,member_after FROM member_file_size_backfill_state WHERE uid=?').bind('member-files-v1').first<{phase:string;member_after:number}>();
   if(!state)throw new Error('size_store_unreadable');
+  // Unknown sizes always block completion. Known replaced headshots need one
+  // verification per pass; future passes recheck them after a failed cleanup.
+  const rest=await pendingRows(env,zeroCursor(),1,state.member_after);
+  if(!rest.success)throw new Error('size_store_unreadable');
   complete=counts.failed===0&&!(rest.results||[]).length&&state.phase==='done';
   outcome=complete?'complete':counts.failed?'unreadable':'partial';
   return {...counts,complete,outcome};

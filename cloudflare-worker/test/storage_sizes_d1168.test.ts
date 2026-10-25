@@ -85,7 +85,7 @@ test('D1168: legacy profile pointers and paginated R2 namespaces are discovered 
  for(const key of ['headshots/3/one.png','headshots/3/two.png','brand-logos/3/live.svg','brand-logos/999/orphan.svg'])f.objects.set(key,new Uint8Array(17));
  const first=await backfillMemberFileSizes(f.env,1,1);assert.equal(first.complete,false);assert.equal(f.db.prepare('SELECT row_cursor FROM member_file_size_backfill_state').get()!.row_cursor,3);
  let out=first,unattributed=first.unattributed;for(let i=0;i<20&&!out.complete;i++){out=await backfillMemberFileSizes({...f.env},1,1);unattributed+=out.unattributed;}assert.equal(unattributed,1);
- assert.equal(out.complete,true);const files=f.db.prepare('SELECT r2_key,owner_user_id,size_bytes,size_missing_at FROM member_files').all();assert.equal(files.length,6);assert.equal(files.filter(x=>x.size_missing_at!==null).length,2);assert.equal(files.find(x=>x.r2_key==='brand-logos/3/live.svg')!.size_bytes,17);assert.equal(files.find(x=>x.r2_key==='brand-logos/999/orphan.svg')!.owner_user_id,null);assert.equal(f.db.prepare('SELECT phase FROM member_file_size_backfill_state').get()!.phase,'done');assert.ok(f.lists.some(x=>x.cursor==='1'));assert.ok(!JSON.stringify(out).includes('brand-logos/'));assert.equal(f.deletes.length,0);
+ assert.equal(out.complete,true);const files=f.db.prepare('SELECT r2_key,owner_user_id,size_bytes,size_missing_at,size_recheck_required FROM member_files').all();assert.equal(files.length,6);assert.equal(files.filter(x=>x.size_missing_at!==null).length,2);assert.equal(files.find(x=>x.r2_key==='brand-logos/3/live.svg')!.size_bytes,17);assert.equal(files.find(x=>x.r2_key==='headshots/3/one.png')!.size_recheck_required,1);assert.equal(files.find(x=>x.r2_key==='headshots/3/gone.png')!.size_recheck_required,0);assert.equal(files.find(x=>x.r2_key==='brand-logos/3/live.svg')!.size_recheck_required,0);assert.equal(files.find(x=>x.r2_key==='brand-logos/999/orphan.svg')!.owner_user_id,null);assert.equal(f.db.prepare('SELECT phase FROM member_file_size_backfill_state').get()!.phase,'done');assert.ok(f.lists.some(x=>x.cursor==='1'));assert.ok(!JSON.stringify(out).includes('brand-logos/'));assert.equal(f.deletes.length,0);
  }finally{f.db.close();}
 });
 test('D1168: R2 discovery failures cannot claim completion but known rows still backfill',async()=>{
@@ -110,7 +110,7 @@ test('D1168: CSV import measures UTF-8 bytes and never records a size when stori
  const f=fixture();try{const csv='first_name,last_name,email\nZoë,Test,z@example.test\n',body={csv,target:'contacts',mapping:{first_name:'first_name',last_name:'last_name',email:'email'}};const r=await f.call('/imports/universal/commit',body,1);assert.equal(r.status,200,JSON.stringify(r.body));const row=f.db.prepare('SELECT raw_file_r2_key,size_bytes FROM data_imports ORDER BY id DESC LIMIT 1').get()!;assert.equal(row.size_bytes,new TextEncoder().encode(csv).byteLength);assert.notEqual(row.size_bytes,csv.length);assert.equal(row.size_bytes,f.objects.get(String(row.raw_file_r2_key))!.byteLength);f.env.FILES.put=async()=>{throw Error('synthetic-private-object-key');};assert.equal((await f.call('/imports/universal/commit',body,1)).status,200);const absent=f.db.prepare('SELECT raw_file_r2_key,size_bytes FROM data_imports ORDER BY id DESC LIMIT 1').get()!;assert.equal(absent.raw_file_r2_key,null);assert.equal(absent.size_bytes,null);}finally{f.db.close();}
 });
 test('D1168: member-file upserts are idempotent and measured sizes cannot be negative or fractional',async()=>{
- const f=fixture();try{await memberFileStatement(f.env,'brand-logos/3/a.svg',3,'brand_logo',10).run();await memberFileStatement(f.env,'brand-logos/3/a.svg',3,'brand_logo',11).run();assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM member_files').get()!.n,1);assert.equal(f.db.prepare('SELECT size_bytes FROM member_files').get()!.size_bytes,11);for(const size of [-1,1.5,NaN,Infinity])assert.throws(()=>memberFileStatement(f.env,'brand-logos/3/b.svg',3,'brand_logo',size));}finally{f.db.close();}
+ const f=fixture();try{await memberFileStatement(f.env,'brand-logos/3/a.svg',3,'brand_logo',10).run();await memberFileStatement(f.env,'brand-logos/3/a.svg',3,'brand_logo',11).run();assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM member_files').get()!.n,1);assert.equal(f.db.prepare('SELECT size_bytes FROM member_files').get()!.size_bytes,11);assert.equal(f.db.prepare('SELECT size_recheck_required FROM member_files').get()!.size_recheck_required,0);for(const size of [-1,1.5,NaN,Infinity])assert.throws(()=>memberFileStatement(f.env,'brand-logos/3/b.svg',3,'brand_logo',size));}finally{f.db.close();}
 });
 
 
@@ -147,7 +147,7 @@ test('D1168: discovery compare-and-set never rewinds another batch or changes an
  }
 });
 test('D1168: discovery does not clear a size already recorded by an upload',async()=>{
- const f=fixture();try{f.objects.set('headshots/3/known.png',new Uint8Array(17));await memberFileStatement(f.env,'headshots/3/known.png',3,'headshot',17).run();let complete=false;for(let i=0;i<8&&!complete;i++)complete=(await backfillMemberFileSizes(f.env,1,2)).complete;assert.equal(complete,true);assert.equal(f.heads.length,0);assert.equal(f.db.prepare('SELECT size_bytes FROM member_files').get()!.size_bytes,17);}finally{f.db.close();}
+ const f=fixture();try{f.objects.set('brand-logos/3/known.svg',new Uint8Array(17));await memberFileStatement(f.env,'brand-logos/3/known.svg',3,'brand_logo',17).run();let complete=false;for(let i=0;i<8&&!complete;i++)complete=(await backfillMemberFileSizes(f.env,1,2)).complete;assert.equal(complete,true);assert.equal(f.heads.length,0);assert.equal(f.db.prepare('SELECT size_bytes FROM member_files').get()!.size_bytes,17);}finally{f.db.close();}
 });
 test('D1168: a namespace listing cannot seed unrelated private keys',async()=>{
  const f=fixture();try{f.db.prepare("UPDATE member_file_size_backfill_state SET phase='headshots'").run();f.env.FILES.list=async()=>({objects:[{key:'kyc/3/synthetic.pdf',size:9}],truncated:false});const out=await backfillMemberFileSizes(f.env,1,2);assert.equal(out.failed,1);assert.equal(out.complete,false);assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM member_files').get()!.n,0);assert.equal(f.heads.length,0);}finally{f.db.close();}
@@ -158,7 +158,7 @@ test('D1168: invalid HEAD sizes are unreadable before any measurement write',asy
 
 
 test('D1168: the bounded pending read uses partial indexes and does not sort the remaining inventory',async()=>{
- const f=fixture();try{seedRows(f);await backfillMemberFileSizes(f.env,1,2);const q=f.sqls.find(s=>s.startsWith("SELECT 'demand'"))!;const plan=f.db.prepare('EXPLAIN QUERY PLAN '+q).all(0,2,0,2,0,2,0,2,0,2,0,2,2).map(x=>String(x.detail)).join('\n');for(const name of ['idx_demand_signals_size_pending','idx_formation_steps_size_pending','idx_entity_obligations_size_pending','idx_obligation_occurrences_size_pending','idx_data_imports_size_pending','idx_member_files_pending'])assert.ok(plan.includes(name),name);assert.doesNotMatch(plan,/USE TEMP B-TREE/);}finally{f.db.close();}
+ const f=fixture();try{seedRows(f);await backfillMemberFileSizes(f.env,1,2);const q=f.sqls.find(s=>s.startsWith("SELECT 'demand'"))!;const plan=f.db.prepare('EXPLAIN QUERY PLAN '+q).all(0,2,0,2,0,2,0,2,0,2,0,0,2,2).map(x=>String(x.detail)).join('\n');for(const name of ['idx_demand_signals_size_pending','idx_formation_steps_size_pending','idx_entity_obligations_size_pending','idx_obligation_occurrences_size_pending','idx_data_imports_size_pending','idx_member_files_pending'])assert.ok(plan.includes(name),name);assert.doesNotMatch(plan,/USE TEMP B-TREE/);}finally{f.db.close();}
 });
 test('D1168: a removed account leaves unattributed file metadata without blocking account deletion',async()=>{
  const f=fixture();try{await memberFileStatement(f.env,'headshots/3/kept.png',3,'headshot',12).run();f.db.prepare('DELETE FROM user_sessions WHERE user_id=3').run();f.db.exec('PRAGMA foreign_keys=ON');f.db.prepare('DELETE FROM users WHERE id=3').run();const row=f.db.prepare('SELECT owner_user_id,size_bytes FROM member_files').get()!;assert.equal(row.owner_user_id,null);assert.equal(row.size_bytes,12);assert.equal(f.deletes.length,0);}finally{f.db.close();}
@@ -215,4 +215,31 @@ test('D1168: failed cursor writes report unreadable and remain resumable',async(
   f.env.DB.prepare=(sql:string)=>sql.startsWith(kind==='reset'?'UPDATE member_file_size_backfill_state SET measurement_pass=':'UPDATE member_file_size_backfill_state SET demand_after=max')?{bind(){return this;},async run(){return {success:false,meta:{changes:0}};}}:prepare(sql);
   const r=await f.call();assert.equal(r.status,503);assert.equal(r.body.recorded,undefined);assert.ok(!JSON.stringify(r.body).includes('r2_key'));
  }finally{f.db.close();}}
+});
+
+
+test('D1168: failed cleanup marks for manual and LinkedIn replacements stay reconcilable',async()=>{
+ for(const linkedin of [false,true]){const f=fixture(),real=globalThis.fetch;globalThis.fetch=async()=>new Response(new Uint8Array([1,2,3,4,5]),{headers:{'content-type':'image/png'}});
+ try{const photo={data_uri:'data:image/png;base64,'+btoa('synthetic-png')};assert.equal((await f.call('/settings/headshot',photo,3)).status,200);const old=f.db.prepare('SELECT * FROM member_files').get()!;f.fail(/UPDATE member_files SET size_bytes=NULL,size_missing_at=datetime/);
+  const replacement=await f.call(linkedin?'/settings/profile/linkedin-import/apply':'/settings/headshot',linkedin?{photo_url:'https://media.licdn.com/dms/image/synthetic'}:photo,3);assert.equal(replacement.status,200);if(linkedin)assert.equal(replacement.body.photo_applied,true);
+  const queued=f.db.prepare('SELECT * FROM member_files WHERE id=?').get(old.id)!;assert.equal(queued.size_bytes,null);assert.equal(queued.size_missing_at,null);assert.equal(queued.size_recheck_required,1);assert.equal(f.objects.has(String(old.r2_key)),false);
+  f.fail(null);let complete=false;for(let i=0;i<12&&!complete;i++)complete=(await backfillMemberFileSizes(f.env,1,2)).complete;assert.equal(complete,true);const corrected=f.db.prepare('SELECT * FROM member_files WHERE id=?').get(old.id)!;assert.equal(corrected.size_bytes,null);assert.ok(corrected.size_missing_at);const current=f.db.prepare('SELECT * FROM member_files WHERE r2_key=(SELECT headshot_r2_key FROM users WHERE id=3)').get()!;assert.equal(current.size_bytes,linkedin?5:13);assert.equal(current.size_recheck_required,0);assert.equal(f.deletes.length,1);
+ }finally{globalThis.fetch=real;f.db.close();}}
+});
+test('D1168: a verification before delayed cleanup is reconciled by the next pass', {timeout:20000}, async()=>{
+ const f=fixture();let release:()=>void=()=>{},replacing:Promise<any>|undefined;
+ try{const photo={data_uri:'data:image/png;base64,'+btoa('synthetic-png')};await f.call('/settings/headshot',photo,3);const old=f.db.prepare('SELECT * FROM member_files').get()!;let entered:()=>void=()=>{};const started=new Promise<void>(r=>{entered=r;}),wait=new Promise<void>(r=>{release=r;});const remove=f.env.FILES.delete;let blocked=false;
+  f.env.FILES.delete=async(key:string)=>{if(blocked)throw Error('unexpected cleanup from backfill');blocked=true;entered();await wait;return remove(key);};
+  replacing=f.call('/settings/headshot',photo,3);await started;await backfillMemberFileSizes(f.env,1,20);assert.equal(f.db.prepare('SELECT size_bytes FROM member_files WHERE id=?').get(old.id)!.size_bytes,13);
+  f.fail(/UPDATE member_files SET size_bytes=NULL,size_missing_at=datetime/);release();assert.equal((await replacing).status,200);f.fail(null);
+  await backfillMemberFileSizes(f.env,1,20);const fixed=f.db.prepare('SELECT size_bytes,size_missing_at FROM member_files WHERE id=?').get(old.id)!;assert.equal(fixed.size_bytes,null);assert.ok(fixed.size_missing_at);assert.equal(f.deletes.length,1);
+ }finally{release();await replacing?.catch(()=>{});f.db.close();}
+});
+
+
+test('D1168: completion waits for all queued headshots, and later passes can verify retained copies again',async()=>{
+ const f=fixture();try{f.db.exec("UPDATE member_file_size_backfill_state SET phase='done';INSERT INTO member_files(uid,r2_key,owner_user_id,kind,size_bytes,size_recheck_required) VALUES ('one','headshots/3/one.png',3,'headshot',13,1),('two','headshots/3/two.png',3,'headshot',14,1),('three','headshots/3/three.png',3,'headshot',15,1),('current','headshots/3/current.png',3,'headshot',8,1);UPDATE users SET headshot_r2_key='headshots/3/current.png' WHERE id=3");f.objects.set('headshots/3/one.png',new Uint8Array(13));f.objects.set('headshots/3/current.png',new Uint8Array(8));
+  assert.equal((await backfillMemberFileSizes(f.env,1,1)).complete,false);assert.equal((await backfillMemberFileSizes(f.env,1,1)).complete,false);assert.equal((await backfillMemberFileSizes(f.env,1,1)).complete,true);assert.equal(f.heads.length,3);assert.equal(f.heads.includes('headshots/3/current.png'),false);
+  const again=await backfillMemberFileSizes(f.env,1,1);assert.equal(again.complete,true);assert.equal(f.heads.filter(k=>k==='headshots/3/one.png').length,2);assert.equal(f.db.prepare("SELECT size_bytes FROM member_files WHERE uid='one'").get()!.size_bytes,13);for(const uid of ['two','three']){const row=f.db.prepare('SELECT size_bytes,size_missing_at FROM member_files WHERE uid=?').get(uid)!;assert.equal(row.size_bytes,null);assert.ok(row.size_missing_at);}assert.equal(f.deletes.length,0);
+ }finally{f.db.close();}
 });

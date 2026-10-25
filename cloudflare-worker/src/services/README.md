@@ -45,7 +45,8 @@ normalization out of the changed-after-approval flag.
 with its authoritative key. `memberFileSizeBackfill.ts` measures missing sizes
 for five record stores and profile files with HEAD only, using migration 605's
 durable pointer/discovery cursors and per-row checkpoints. Missing is marked,
-never 0; failures are retryable. Only the HQ Super Admin maintenance route
+never 0; failures are retryable. Replaced headshots are invalidated with the
+new pointer and remain eligible for reconciliation in later passes. Only the HQ Super Admin maintenance route
 invokes it, with step-up and count-only auditing. No object content or deletion.
 
 ## The ones worth knowing
