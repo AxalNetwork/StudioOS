@@ -4,15 +4,14 @@ Each console lives here, in its own file, and reads only its own data (D648).
 The Admin Console shell that mounted one at a time is retired (D938, #2743):
 `../ConsolePages.jsx` mounts each console at its own address under the shared
 header, and `/admin?tab=` forwards there (`../LegacyContractsRedirect.jsx`).
-`LegalConsole.jsx` is mounted by no page: its tab has forwarded to Contracts
-since D647, and the Contracts work retires it.
+D1122 retired the unused Legal console and its dedicated tests; Contracts has
+its own routed desk and tests.
 
 | File | Console | Reads |
 | --- | --- | --- |
 | `UsersConsole.jsx` | Users: the account directory, role picker, support sessions, the account drawer | the users list, trust scores |
 | `PartnerProfilesConsole.jsx` | Partner Profiles and the profile review drawer. Since D989 the tab forwards to `/admin/partner-profiles` (`../profiles/`), which opens this file's `ProfileReviewModal` | the profiles list |
 | `KycConsole.jsx` | KYC / AML queue and its review drawer | the queue, one record on Review |
-| `LegalConsole.jsx` | Legal (contracts, envelopes, signed documents) | its own contract reads |
 | `PersonasConsole.jsx` | Personas. Since D997 the tab forwards to `/admin/persona-segments` (`../segments/`), whose Overview embeds `PersonasPanel` until its part 8 | the persona list |
 | `DirectoryConsole.jsx` | Directory | the directory partners |
 | `IntegrationKeysConsole.jsx` | Integration keys | the provider keys, each one's callback URL and setup guide, and the OAuth clients set only at deploy |
@@ -43,10 +42,3 @@ pages (D937, D972).
 - **Tests read the consoles through `frontend/test/_adminConsoles.mjs`**, which
   lists every file here; a new console file is added to that list and to the
   `COMPOSED` table in `admin_route_reachability.test.mjs`.
-
-D647 (#1441): Legal no longer has a dead Incorporation tab. Its quiet Programs
-link opens Spin-Out Lab, where the admin selects Formation orders. Empty
-agreement/template-usage copy names New envelope. The pending Contracts canvas
-will replace this reused panel; no per-template publication state is implied.
-A failed agreement-list read draws the existing ConsoleUnreadable with Try
-again; a successful retry clears the failure and can show a real empty list.
