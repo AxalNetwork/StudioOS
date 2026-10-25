@@ -55,7 +55,7 @@ test('1. the funnel counts each referral at the furthest stage it reached', asyn
   try {
     h.referral('draft');                                                                     // never submitted
     h.referral('submitted', { history: ['submitted'] });
-    h.referral('more_info_needed', { history: ['submitted', 'under_review'] });              // under review's level
+    h.referral('more_info_needed', { history: ['submitted'] });                              // under review's level, from its status alone
     h.referral('qualified', { history: ['submitted'] });                                     // skipped Under review
     h.referral('rejected', { history: ['submitted', 'under_review', 'qualified'] });         // keeps Qualified
     h.referral('in_conversation');

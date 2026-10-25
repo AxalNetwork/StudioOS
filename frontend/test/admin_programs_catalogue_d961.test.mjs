@@ -149,8 +149,8 @@ test('Joins per week: Learning is "in the programs assigned to you" for an Admin
 
 test('Waiting by program: the five queues as rows with literal doors, in three bands; a pending queue is words; the foot only when nothing is 72 hours old', () => {
   assert.deepEqual(WAITING_ROWS.map((r) => [r.key, r.to]), [
-    ['cohort', '/admin/spinout-lab'], ['referrals', '/admin/programs/refer-and-earn/queue'], ['strategic', '/admin/programs/refer-and-earn'],
-    ['perks', '/admin/programs/perks/queue'], ['hosts', '/admin/spinout-lab']]);
+    ['cohort', '/admin/programs/spinout-lab/applications'], ['referrals', '/admin/programs/refer-and-earn/queue'], ['strategic', '/admin/programs/refer-and-earn'],
+    ['perks', '/admin/programs/perks/queue'], ['hosts', '/admin/programs/spinout-lab/hosts']]);
   assert.deepEqual(WAIT_BANDS.map((b) => b.key), ['under_24', 'from_24_to_72', 'over_72']);
   const c = waitingChart(ready(catalogueBody()));
   assert.equal(c.chart.type, 'stackbars');
@@ -324,7 +324,7 @@ test('the catalogue for an Admin: header, period, four tiles, the three charts, 
     assert.equal(view.textOf('programs-card-referral-partners-grant'), '⌂HQ-held');
     const hrefs = view.hrefs();
     for (const d of ['/admin/programs/spinout-lab', '/admin/programs/mentor-cohorts', '/admin/programs/refer-and-earn', '/admin/programs/perks', '/admin/programs/learning',
-      '/admin/programs/refer-and-earn/queue', '/admin/programs/perks/queue', '/admin/spinout-lab', '/admin/profiling-trends']) assert.ok(hrefs.includes(d), `no door onto ${d}`);
+      '/admin/programs/refer-and-earn/queue', '/admin/programs/perks/queue', '/admin/programs/spinout-lab/applications', '/admin/programs/spinout-lab/hosts', '/admin/profiling-trends']) assert.ok(hrefs.includes(d), `no door onto ${d}`);
     assert.ok(!view.has('programs-studio'), 'no studio filter for an Admin');
     assert.ok(!view.requests.some((u) => u.startsWith('/api/admin/insights')), 'R12 is the Super Admin\'s');
     await view.click('programs-group-Access');

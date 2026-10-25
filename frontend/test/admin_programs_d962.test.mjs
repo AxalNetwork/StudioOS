@@ -35,7 +35,7 @@ import ProgramPage from '../src/pages/admin/programs/ProgramPage.jsx';
 import { HQ_READS_MONEY, NOT_READ_YET, PAGES, routeFor } from '../src/pages/admin/programs/programsModel.js';
 import {
   ACTIVE_PAIR, ASSIGNED_DONE, CREDITS_FOOT, ENDED_DONE, LEARNER_FOOT, MENTOR_ACTIVITY_GAP, REFUSALS,
-  REVIEW_MOVES, REVIEW_SAVED, REVIEW_TOLD, VISIBLE_DASH, activityText, completionRows, cohortPlace, endedInWindow,
+  REVIEW_MOVES, REVIEW_SAVED, REVIEW_TOLD, VISIBLE_DASH, CSV_DONE, CSV_PROGRAMS, NOT_RECORDED, FUNNEL_WINDOW, referFunnelChart, referrerLine, queueParams, activityText, completionRows, cohortPlace, endedInWindow,
   episodesOf, finishedTotal, hasFinished, hiddenFrom, isDone, listingActions, listingBody, mentorsPerCohort, peopleRows,
   playbookFrom, refusalSentence, reviewPatch, sectionEdit, statusChoices, versionLine,
 } from '../src/pages/admin/programs/programPagesModel.js';
@@ -305,6 +305,7 @@ function worker(o = {}) {
       if (/^\/api\/perks\/admin\/[^/]+\/review$/.test(path)) return writes.perk ? writes.perk(options) : response({ ok: true, status: 'live' });
       if (/^\/api\/admin\/programs\/[^/]+\/playbook\/sections\/[^/]+$/.test(path)) return writes.section ? writes.section(options) : response(PLAYBOOK);
       if (/^\/api\/admin\/programs\/[^/]+\/playbook\/publish$/.test(path)) return writes.publish ? writes.publish(options) : response(PLAYBOOK);
+      if (/^\/api\/admin\/programs\/[^/]+\/export$/.test(path)) return writes.export ? writes.export(options, path) : response({ download_url: 'data:text/csv;base64,eA==', expires_in_seconds: 86400, format: 'csv', rows: 3 });
       return never();
     }
     if (path === '/api/auth/me') return user ? response(user) : never();
@@ -662,4 +663,85 @@ test('the source: every write is a dialog, no corner toast, part 1’s client in
     const fn = src.lastIndexOf('function ', at);
     assert.match(src.slice(fn, src.indexOf('\n}\n', at)), /<Lightbox\b/, `${call} is not made from a dialog`);
   }
+});
+
+/* ------------------------------------------------------------------ *
+ * D1124 (#3004): the D953 gaps on these pages
+ * ------------------------------------------------------------------ */
+
+test('D1124 · the funnel: its alt names every stage reached; a missing count or a failed read is unreadable, never a zero', () => {
+  const stages = [['submitted', 'Submitted', 4], ['qualified', 'Qualified', 0]].map(([key, label, count]) => ({ key, label, count }));
+  const ok = referFunnelChart(ready({ stages }));
+  assert.equal(ok.state, 'ready');
+  assert.equal(ok.alt, 'Referral funnel: 4 submitted, 0 qualified.');
+  assert.deepEqual(ok.chart.rows.map((r) => r.value), [4, 0], 'a real zero stays a zero');
+  assert.equal(ok.window, FUNNEL_WINDOW);
+  assert.equal(referFunnelChart(ready({ stages: [{ key: 'submitted', label: 'Submitted' }] })).state, 'unreadable', 'a missing count is not a zero');
+  assert.equal(referFunnelChart(ready({ stages: [] })).state, 'unreadable');
+  assert.equal(referFunnelChart(failed()).state, 'unreadable');
+});
+
+test('D1124 · the Queue: role and search ride the read, trimmed and capped; the referrer line names their platform role', () => {
+  const p = queueParams({ role: 'investor', search: `  ${'x'.repeat(120)} ` });
+  assert.equal(p.role, 'investor');
+  assert.equal(p.q, 'x'.repeat(100));
+  assert.ok(!('q' in queueParams({ search: '   ' })), 'a blank search is not sent');
+  assert.ok(!('role' in queueParams({})));
+  assert.equal(referrerLine({ referrer_name: 'Ana', referrer_role: 'partner' }), 'Ana · Operating Partner');
+  assert.equal(referrerLine({ referrer_role: null }), `${NOT_RECORDED} · Role not recorded`);
+});
+
+test('D1124 · Refer & Earn · Queue: the search and the role filter go to the Worker; the role sits in the column and the dialog, the relationship apart', async () => {
+  const view = await mounted('/admin/programs/refer-and-earn/queue', ReferAndEarn, worker({
+    referrals: (q) => paged([referral('u1', 'under_review', 80, { referrer_role: 'investor', your_role: 'Former colleague' })], 1),
+    one: { ...referral('u1', 'under_review', 80, { referrer_role: 'investor', your_role: 'Former colleague' }), history: [] },
+  }));
+  try {
+    assert.equal(view.textOf('referral-review-row-u1-meta'), 'Referrer u1 · Investor');
+    const lists = () => view.requests.filter((r) => r.url.startsWith('/api/refer-earn/admin/submissions?') && r.url.includes('limit=25'));
+    await view.change('referral-review-role', { value: 'investor' });
+    assert.equal(new URLSearchParams(lists().at(-1).url.split('?')[1]).get('role'), 'investor');
+    await view.change('referral-review-search', { value: 'bluefern' });
+    const before = lists().length;
+    assert.ok(!lists().some((r) => r.url.includes('q=')), 'typing alone sends nothing');
+    await act(async () => { view.props('referral-review-search-form').onSubmit({ preventDefault() {} }); });
+    await view.flush();
+    assert.ok(lists().length > before);
+    const q = new URLSearchParams(lists().at(-1).url.split('?')[1]);
+    assert.deepEqual([q.get('q'), q.get('role'), q.get('offset')], ['bluefern', 'investor', '0']);
+    await view.click('referral-review-open-u1');
+    assert.match(view.text(), /referred by Referrer u1 · Investor/);
+    assert.equal(view.textOf('referral-dialog-relationship'), 'The referrer’s relationship: Former colleague');
+  } finally { await view.close(); }
+});
+
+test('D1124 · Download (CSV): the ⋯ menu on the four pages; one POST with the weeks; a refusal is its sentence and no link', async () => {
+  let reply = () => refusal(503, 'export_not_logged', 'x');
+  const view = await mounted('/admin/programs/refer-and-earn', ReferAndEarn, worker({ writes: { export: () => reply() } }));
+  try {
+    assert.deepEqual([...CSV_PROGRAMS], ['mentor-cohorts', 'refer-and-earn', 'perks', 'learning']);
+    assert.ok(!view.has('programs-more-menu'));
+    await view.click('programs-more');
+    await view.click('programs-more-csv');
+    assert.ok(view.has('programs-csv-dialog'));
+    assert.equal(writesTo(view, /\/export$/, 'POST').length, 0, 'opening the dialog sends nothing');
+    await view.click('programs-csv-go');
+    const sent = writesTo(view, /\/api\/admin\/programs\/refer-and-earn\/export$/, 'POST');
+    assert.equal(sent.length, 1);
+    assert.deepEqual(JSON.parse(sent[0].body), { weeks: 12 });
+    assert.equal(view.textOf('programs-csv-go-refusal'), REFUSALS.export_not_logged);
+    assert.ok(!view.has('programs-csv-link'), 'no file without its audit row');
+    reply = () => response({ download_url: 'data:text/csv;base64,eA==', expires_in_seconds: 86400, format: 'csv', rows: 3 });
+    await view.click('programs-csv-go');
+    assert.equal(view.textOf('programs-csv-go-done'), CSV_DONE);
+    assert.equal(view.props('programs-csv-link').href, 'data:text/csv;base64,eA==');
+  } finally { await view.close(); }
+});
+
+test('D1124 · the Lab’s tabs (#2374): Mentor’s office-hours hosts card opens Spin-Out Lab › Hosts', async () => {
+  const view = await mounted('/admin/programs/mentor-cohorts', MentorCohortAccess, worker());
+  try {
+    assert.equal(view.props('programs-mentor-hosts-door').href, '/admin/programs/spinout-lab/hosts');
+    assert.equal(view.textOf('programs-mentor-hosts-door'), 'Spin-Out Lab › Hosts');
+  } finally { await view.close(); }
 });

@@ -217,11 +217,11 @@ export function joinsChart(read, { superAdmin = false, perStudio = false } = {})
 
 /** Waiting by program's rows: each queue Waiting for you sums, labelled as what it counts, with its literal door. */
 export const WAITING_ROWS = Object.freeze([
-  { key: 'cohort', label: 'Cohort applications', to: '/admin/spinout-lab' },
+  { key: 'cohort', label: 'Cohort applications', to: '/admin/programs/spinout-lab/applications' },
   { key: 'referrals', label: 'Refer & Earn reviews', to: '/admin/programs/refer-and-earn/queue' },
   { key: 'strategic', label: 'Strategic referral access', to: '/admin/programs/refer-and-earn' },
   { key: 'perks', label: 'Perk listings', to: '/admin/programs/perks/queue' },
-  { key: 'hosts', label: 'Office-hours hosts', to: '/admin/spinout-lab' },
+  { key: 'hosts', label: 'Office-hours hosts', to: '/admin/programs/spinout-lab/hosts' },
 ]);
 /** S-AGE and S1-BANDS: under 24 hours, 24 to 72, and 72 or more, in the canvas's first three colours. */
 export const WAIT_BANDS = Object.freeze([

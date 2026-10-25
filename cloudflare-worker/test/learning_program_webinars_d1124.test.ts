@@ -114,5 +114,13 @@ test('3. a program-only webinar: seen, listed and registered for by an enrolled 
     db.exec(`UPDATE learning_programs SET status = 'published' WHERE id = 1; UPDATE learning_enrollments SET status = 'removed' WHERE user_id = ${MEMBER}`);
     assert.equal((await call(webinars, env, MEMBER, '/webinars/w-prog')).status, 404);
     assert.equal((await call(webinars, env, OUTSIDER, '/webinars/w-open')).status, 200, 'an open webinar is everyone\'s');
+    // Held through a course's webinar lesson: the program holds the course, the course the webinar.
+    db.exec(`INSERT INTO learning_webinars (uid, title, starts_at, ends_at, visibility, status, created_by) VALUES ('w-lesson', 'Webinar w-lesson', '${START}', '2099-01-01T00:00:00.000Z', 'program', 'published', ${SUPER});
+      INSERT INTO learning_courses (id, uid, slug, title, visibility, status, created_by) VALUES (1, 'c-1', 'c-1', 'Course', 'program', 'published', ${SUPER});
+      INSERT INTO learning_course_modules (id, uid, course_id, title) VALUES (1, 'm-1', 1, 'Module');
+      INSERT INTO learning_lessons (uid, module_id, title, kind, ref_uid) VALUES ('l-1', 1, 'Live session', 'webinar', 'w-lesson');
+      INSERT INTO learning_program_contents (program_id, subject_kind, subject_uid, position) VALUES (1, 'course', 'c-1', 1)`);
+    assert.equal((await call(webinars, env, ABSENT, '/webinars/w-lesson')).status, 200, 'held through the course');
+    assert.equal((await call(webinars, env, OUTSIDER, '/webinars/w-lesson')).status, 404);
   } finally { db.close(); }
 });

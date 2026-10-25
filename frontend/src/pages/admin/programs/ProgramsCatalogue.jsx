@@ -114,11 +114,11 @@ function WaitingRows({ rows }) {
           </span>
           <span className="flex items-baseline gap-3">
             {r.state === 'ready' ? <span className="font-mono text-[12.5px] font-semibold text-axal-ink dark:text-gray-100">{r.text}</span> : null}
-            {r.key === 'cohort' ? <Link to="/admin/spinout-lab" className={LINK}>Open</Link> : null}
+            {r.key === 'cohort' ? <Link to="/admin/programs/spinout-lab/applications" className={LINK} data-testid="programs-waiting-cohort-door">› Applications</Link> : null}
             {r.key === 'referrals' ? <Link to="/admin/programs/refer-and-earn/queue" className={LINK}>Open</Link> : null}
             {r.key === 'strategic' ? <Link to="/admin/programs/refer-and-earn" className={LINK}>Open</Link> : null}
             {r.key === 'perks' ? <Link to="/admin/programs/perks/queue" className={LINK}>Open</Link> : null}
-            {r.key === 'hosts' ? <Link to="/admin/spinout-lab" className={LINK}>Open</Link> : null}
+            {r.key === 'hosts' ? <Link to="/admin/programs/spinout-lab/hosts" className={LINK} data-testid="programs-waiting-hosts-door">› Hosts</Link> : null}
           </span>
         </li>
       ))}

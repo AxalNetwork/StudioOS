@@ -1,237 +1,165 @@
-// D953 (#2371) — Programs › Mentor cohort access (PG4–PG6), from the reads
-// that exist. This file is the routed page at
-// `/admin/programs/mentor-cohorts` (Overview), `/how-it-runs` and `/people`
-// (`guard(['admin'])` in App.jsx; `/admin/advisor-cohorts` redirects to People
-// with `?moved=advisor-cohorts`) and board S18's file: its default export is
-// one `AdminBoardFrame` named "Advisor cohort access", board S18's name, and
-// the page sits in `MentorBody` inside it. People mounts the assignments
-// console's body, never its default export, so the page has one rail.
-//
-// D962 (#2795) completes it: Overview's four tiles, Mentors per cohort, Needs
-// you whose rows open Assign or End access, Recent activity; How it runs
-// from part 1's playbook store with the editor; People with its toolbar,
-// columns and dialogs; Activity; and the phone pages (PG20b–PG20d).
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { actionPrimary, usePhoneWidth } from '../../../ui';
-import { useAuth } from '../../../hooks/useAuthSync';
-import { isSuperAdminUser } from '../../../lib/shellRole';
-import AdminBoardFrame from '../AdminBoardFrame';
-import { AdvisorCohortAssignmentsBody } from '../AdvisorCohortAssignments';
-import ActivityTab, { RecentActivity } from './ActivityTab';
-import { AssignDialog, EndDialog } from './MentorDialogs';
-import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
-import ProgramFrame from './ProgramFrame';
-import { MentorTabs } from './ProgramTabs';
-import { BlockFailed, CARD, Card, ChartCard, EYE, H2, LINK, Pill, Skeleton, SUB, Tile } from './parts';
-import { useMentorReads } from './useProgramReads';
+/**
+ * D560 (#1161) — Learning webinars, member side. Mounted at /api/learning
+ * beside `learning.ts`.
+ *
+ *   GET    /webinars?when=upcoming|past   published webinars (and cancelled ones), with counts; never a join link
+ *   GET    /webinars/:uid                 one webinar, the caller's registration, and the join link inside its window
+ *   POST   /webinars/:uid/registration    register, within capacity, before the end
+ *   DELETE /webinars/:uid/registration    unregister, before the end
+ *   GET    /webinars/:uid/calendar.ics    the event, for a calendar
+ *
+ * VISIBILITY IS `canSeeLearning`, as for every Learning subject. A cancelled
+ * webinar is still shown, as cancelled, so a registered member learns it is
+ * off; it offers no registration and no link.
+ */
+import { Hono, type Context } from 'hono';
+import type { Env } from '../types';
+import { requireAuth, isSuperAdmin } from '../auth';
+import { refuse } from '../util/refusal';
+import { mapError } from './_t13t14t15_helpers';
+import { canSeeLearning, enrolledSql } from '../services/learningAccess';
+import { buildEventIcs } from '../services/eventsCommon';
 import {
-  ENDED_WINDOW_LINE, FOUNDERS_WAIT, HIDDEN_LINE, MENTOR_ACTIVITY_GAP, NO_MENTORS, endedInWindow, hiddenFrom,
-  mentorsPerCohort, needsActions, nextCohort, noMentorsLine, sessionsFrom,
-} from './programPagesModel';
-import {
-  ACTIVE_MENTORS_LINE, CYCLE_FIXED, ET, WITHIN_500, cohortName, coveredLine, cycleForStrip, hostsFrom, hostsLine, isFailed,
-  isReady, mentorFigures, routeFor, weekLines,
-} from './programsModel';
+  WEBINAR_COLS, memberWebinar, recordingOf, registeredCounts, webinarPhase, type WebinarRow,
+} from '../services/learningWebinars';
 
-const cyclesOf = (timeline) => (isReady(timeline) && Array.isArray(timeline.data?.cycles) ? timeline.data.cycles : []);
+const r = new Hono<{ Bindings: Env }>();
+type C = Context<{ Bindings: Env }>;
 
-/** PG16b: no assignment has ever been made. A failed read is never this. */
-function NoMentors({ timeline, onAssign }) {
-  const line = noMentorsLine(nextCohort(timeline));
-  return (
-    <section className={`${CARD} flex flex-col items-center gap-2 px-6 py-10 text-center`} data-testid="programs-mentor-none">
-      <span aria-hidden="true" className="text-[22px] font-bold text-axal-violet dark:text-violet-300">+</span>
-      <h2 className={H2}>{NO_MENTORS}</h2>
-      {line ? <p className={`m-0 ${SUB}`} data-testid="programs-mentor-none-next">{line}</p> : null}
-      <button type="button" className={actionPrimary} onClick={onAssign} data-testid="programs-mentor-none-assign">Assign a mentor</button>
-    </section>
-  );
-}
-
-function MentorOverview({ reads, phone, open }) {
-  const now = Date.now();
-  const f = mentorFigures(reads.assignments, reads.timeline);
-  const hosts = hostsFrom(reads.hosts, now);
-  const needs = needsActions(f);
-  const hidden = hiddenFrom(reads.assignments);
-  const ended = endedInWindow(reads.history, now);
-  const perCohort = mentorsPerCohort(reads.assignments, reads.timeline);
-  const failedWhat = isFailed(reads.assignments) ? 'The mentor assignments' : 'The cohort cycles';
-  const tiles = f.state === 'ready'
-    ? [
-      { key: 'mentors', label: 'Active mentors', state: 'ready', value: f.mentors.toLocaleString('en-US'), sub: ACTIVE_MENTORS_LINE, cover: f.capped ? `Counted ${WITHIN_500} assignments.` : null },
-      { key: 'covered', label: 'Cohorts covered', state: 'ready', value: f.total ? `${f.covered.toLocaleString('en-US')} of ${f.total.toLocaleString('en-US')}` : '0', sub: coveredLine(f), cover: f.capped ? `Counted ${WITHIN_500} assignments.` : null },
-    ]
-    : ['mentors', 'covered'].map((key) => ({ key, label: key === 'mentors' ? 'Active mentors' : 'Cohorts covered', state: f.state, reason: `${failedWhat} could not be read. That is not the same as none.` }));
-  tiles.push(hidden.state === 'ready'
-    ? { key: 'hidden', label: 'Founders hidden from a mentor', state: 'ready', value: hidden.text, sub: HIDDEN_LINE }
-    : { key: 'hidden', label: 'Founders hidden from a mentor', state: hidden.state, reason: hidden.reason });
-  tiles.push(ended.state === 'ready'
-    ? { key: 'ended', label: 'Ended', state: 'ready', value: ended.text, sub: ENDED_WINDOW_LINE }
-    : { key: 'ended', label: 'Ended', state: ended.state, reason: 'The access history could not be read. That is not the same as none.' });
-  const none = isReady(reads.assignments) && Array.isArray(reads.assignments.data?.items) && !reads.assignments.data.items.length;
-  const needsCard = (
-    <Card title="Needs you" meta={f.state === 'ready' ? needs.length.toLocaleString('en-US') : null} testId="programs-mentor-needs">
-      {f.state === 'loading' ? <Skeleton lines={2} /> : null}
-      {f.state === 'unreadable' ? <BlockFailed what={failedWhat} onRetry={reads.reload} testId="programs-mentor-needs-unreadable" /> : null}
-      {f.state === 'ready' && !needs.length ? <p className={`m-0 ${SUB}`} data-testid="programs-mentor-needs-none">Nothing here needs you now.</p> : null}
-      {f.state === 'ready' && needs.length ? (
-        <ul className="m-0 flex list-none flex-col p-0">
-          {needs.map((row) => (
-            <li key={row.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-axal-hairline py-2.5 first:border-t-0 dark:border-gray-700" data-testid={`programs-mentor-needs-${row.key}`}>
-              <span className="flex min-w-0 flex-col gap-1">
-                <span className="self-start"><Pill tone="amber"><span aria-hidden="true">!</span>{row.kind}</Pill></span>
-                <span className="text-[13px] leading-snug text-axal-ink dark:text-gray-100">{row.text}</span>
-              </span>
-              <button type="button" onClick={() => open(row.open)} className="min-h-[36px] rounded-[9px] border border-axal-hairline px-3 text-[12.5px] font-bold text-axal-ink hover:bg-axal-ground dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800" data-testid={`programs-mentor-needs-${row.key}-act`}>{row.action}</button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </Card>
-  );
-  return (
-    <div className="flex flex-col gap-4" data-testid="programs-mentor-overview">
-      {none ? <NoMentors timeline={reads.timeline} onAssign={() => open({ dialog: 'assign' })} /> : null}
-      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
-        {tiles.map((t) => <Tile key={t.key} t={t} onRetry={reads.reload} />)}
-      </div>
-      {phone ? needsCard : (
-        <>
-          <div className="grid gap-3.5 lg:grid-cols-2">
-            <ChartCard title="Mentors per cohort" testId="programs-mentor-per-cohort" onRetry={reads.reload}
-              b={perCohort.state === 'ready'
-                ? { state: 'ready', chart: perCohort.rows.length ? { type: 'hbar', rows: perCohort.rows, axis: 'mentors' } : null, alt: perCohort.alt, notes: perCohort.notes, window: `Cohorts scheduled or running. ${FOUNDERS_WAIT}` }
-                : { state: perCohort.state, what: failedWhat }}>
-              {perCohort.state === 'ready' && !perCohort.rows.length ? <p className={`m-0 ${SUB}`}>No cohort is scheduled or running.</p> : null}
-            </ChartCard>
-            {needsCard}
-          </div>
-          <div className="grid gap-3.5 lg:grid-cols-2">
-            <RecentActivity read={reads.recent} cycles={cyclesOf(reads.timeline)} gap={MENTOR_ACTIVITY_GAP} onRetry={reads.reload}
-              seeAll={<Link to="/admin/programs/mentor-cohorts/activity" className={LINK} data-testid="programs-mentor-recent-all">See all</Link>} testId="programs-mentor-recent" />
-            <Card title="Office-hours hosts" testId="programs-mentor-hosts">
-              <p className={`m-0 ${SUB}`}>Hosts are approved on the Spin-Out Lab page.</p>
-              {hosts.state === 'loading' ? <Skeleton lines={1} /> : null}
-              {hosts.state === 'unreadable' ? <BlockFailed what="The office-hours hosts" onRetry={reads.reload} testId="programs-mentor-hosts-unreadable" /> : null}
-              {hosts.state === 'ready' ? <span className="font-mono text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="programs-mentor-hosts-line">{hostsLine(hosts)}</span> : null}
-              <Link to="/admin/programs/spinout-lab" className={`${LINK} self-start`}>Open Spin-Out Lab</Link>
-            </Card>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-/** The cycle strip: the four weeks of the running cohort, or else the next scheduled one. */
-function CycleStrip({ timeline, onRetry }) {
-  if (timeline.status === 'loading') return <Skeleton lines={2} />;
-  if (timeline.status === 'error') return <BlockFailed what="The cohort cycles" onRetry={onRetry} testId="programs-mentor-cycle-unreadable" />;
-  const cycle = cycleForStrip(timeline);
-  if (!cycle) return <p className={`m-0 ${SUB}`} data-testid="programs-mentor-cycle">No cohort is running or scheduled.</p>;
-  const weeks = weekLines(cycle);
-  return (
-    <div className="flex flex-col gap-2" data-testid="programs-mentor-cycle">
-      <span className={EYE}>{`${cohortName(cycle)} · ${cycle.status === 'active' ? 'running' : 'scheduled'}`}</span>
-      {weeks.length ? (
-        <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-          {weeks.map((w) => (
-            <li key={w.week} className="rounded-[10px] border border-axal-hairline bg-axal-ground px-3 py-1.5 font-mono text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">{w.text}</li>
-          ))}
-        </ul>
-      ) : <p className={`m-0 ${SUB}`}>Its week windows are not set yet.</p>}
-      <p className={`m-0 ${SUB}`}>{`Times are ${ET}. ${CYCLE_FIXED}`}</p>
-    </div>
-  );
+async function auth(c: C): Promise<any | Response> {
+  try { return await requireAuth(c); } catch (e) { return mapError(c, e); }
 }
 
 /**
- * How we measure it (item 6): mentors per cohort from Overview, founders
- * hidden (part 7) and sessions booked with a mentor (part 1), each read now.
+ * A cancelled webinar is shown as one: `canSeeLearning` reads it as published.
+ * D1124 (#3004): a `program` webinar is seen by a member enrolled in a
+ * published program that holds it (`enrolledSql`, selected `AS enrolled`).
  */
-function Measures({ reads }) {
-  const hidden = hiddenFrom(reads.assignments);
-  const sessions = sessionsFrom(reads.sessions);
-  const line = (label, node, testId) => (
-    <li className="flex flex-col gap-0.5" data-testid={testId}>
-      <span className="text-[13px] font-semibold text-axal-ink dark:text-gray-100">{label}</span>
-      {node}
-    </li>
-  );
-  return (
-    <ul className="m-0 flex list-none flex-col gap-2.5 p-0" data-testid="programs-mentor-measures">
-      {line('Mentors per cohort', <span className={SUB}>Drawn on Overview, one bar per cohort scheduled or running.</span>, 'programs-mentor-measure-per-cohort')}
-      {line('Founders hidden', hidden.state === 'ready'
-        ? <span className="font-mono text-[13px] font-semibold text-axal-ink dark:text-gray-100">{`${hidden.text} now · ${HIDDEN_LINE}`}</span>
-        : hidden.state === 'loading' ? <Skeleton lines={1} /> : <BlockFailed what="Founders hidden" onRetry={reads.reload} />, 'programs-mentor-measure-hidden')}
-      {line('Sessions booked with a mentor', sessions.state === 'ready' ? (
-        <span className="flex flex-col gap-0.5">
-          <span className="font-mono text-[13px] font-semibold text-axal-ink dark:text-gray-100">{`${sessions.total.toLocaleString('en-US')} across the ${sessions.rows.length} newest cohorts`}</span>
-          {sessions.rows.filter((r) => r.mentors).slice(0, 4).map((r) => <span key={r.key} className={SUB}>{`${r.label}: ${r.sessions.toLocaleString('en-US')}`}</span>)}
-          {sessions.rule ? <span className={SUB}>{sessions.rule}</span> : null}
-        </span>
-      ) : sessions.state === 'loading' ? <Skeleton lines={1} /> : <BlockFailed what="Sessions booked with a mentor" onRetry={reads.reload} />, 'programs-mentor-measure-sessions')}
-    </ul>
-  );
+const seen = (user: any, w: WebinarRow & { enrolled?: unknown }) =>
+  canSeeLearning(user, { status: w.status === 'cancelled' ? 'published' : w.status, visibility: w.visibility, enrolled: w.enrolled });
+
+/** 1 when the caller (its one `?`) is enrolled in a published program holding this webinar. */
+const WEBINAR_ENROLLED = enrolledSql('webinar', 'learning_webinars.uid');
+
+async function visible(c: C, user: any): Promise<WebinarRow | Response> {
+  const w = await c.env.DB.prepare('SELECT ' + WEBINAR_COLS + ', ' + WEBINAR_ENROLLED + ' AS enrolled FROM learning_webinars WHERE uid = ?')
+    .bind(user.id, c.req.param('uid') ?? '').first<WebinarRow & { enrolled: number }>();
+  // Not found and not visible answer alike: a draft's uid is not confirmed to exist.
+  if (!w || !seen(user, w)) return refuse(c, 404, { code: 'not_found', message: 'No such webinar.' });
+  return w;
 }
 
-function MentorHowItRuns({ reads, superAdmin }) {
-  const fill = (key, section) => {
-    if (key === 'cycle') return <CycleStrip timeline={reads.timeline} onRetry={reads.reload} />;
-    if (key === 'measure') return <Measures reads={reads} />;
-    if (key === 'terms') {
-      return (
-        <div className="flex flex-col gap-1">
-          {section.templates.length
-            ? <p className="m-0 text-[13.5px] text-axal-ink dark:text-gray-100" data-testid="programs-mentor-terms-templates">{`Linked templates: ${section.templates.join(', ')}`}</p>
-            : <p className="m-0 text-[13.5px] text-axal-ink dark:text-gray-100" data-testid="programs-mentor-terms-none">No contract template is linked to this program yet.</p>}
-          <Link to="/admin/contracts?tab=templates" className={`${LINK} self-start`}>Open contract templates</Link>
-        </div>
-      );
-    }
-    return null;
-  };
-  return <PlaybookEditor program="mentor-cohorts" superAdmin={superAdmin} detail={reads.detail} fill={fill} testId="programs-mentor-how" />;
-}
+const registrationOf = (env: Env, webinarId: number, userId: number) =>
+  env.DB.prepare('SELECT registered_at, attended FROM learning_webinar_registrations WHERE webinar_id = ? AND user_id = ?')
+    .bind(webinarId, userId).first<{ registered_at: string; attended: number | null }>();
 
-function MentorBody() {
-  const { pathname } = useLocation();
-  const superAdmin = isSuperAdminUser(useAuth()?.user ?? null);
-  const phone = usePhoneWidth();
-  const { tab } = routeFor(pathname);
-  const reads = useMentorReads(tab);
-  const detail = useProgramDetail('mentor-cohorts', tab === 'how');
-  const [dialog, setDialog] = useState(null);
-  const [writes, setWrites] = useState(0);
-  const changed = () => { setWrites((w) => w + 1); reads.reload(); };
-  const cycles = cyclesOf(reads.timeline);
-  const cohortOf = (r) => { const c = cycles.find((x) => Number(x.id) === Number(r.cohort_cycle_id)); return c ? cohortName(c) : `Cycle #${r.cohort_cycle_id}`; };
-  const open = (o) => setDialog(o);
-  return (
-    <ProgramFrame
-      program="mentor-cohorts"
-      superAdmin={superAdmin}
-      actionsOnPhone={false}
-      actions={<button type="button" onClick={() => open({ dialog: 'assign' })} className={`${actionPrimary} w-full sm:w-auto`} data-testid="programs-mentor-assign">Assign a mentor</button>}
-      tabs={<MentorTabs />}
-    >
-      {tab === 'overview' ? <MentorOverview reads={reads} phone={phone} open={open} /> : null}
-      {tab === 'how' ? <MentorHowItRuns reads={{ ...reads, detail }} superAdmin={superAdmin} /> : null}
-      {tab === 'people' ? <AdvisorCohortAssignmentsBody embedded onChanged={reads.reload} refresh={writes} /> : null}
-      {tab === 'activity' ? <ActivityTab program="mentor-cohorts" cycles={cycles} gap={MENTOR_ACTIVITY_GAP} testId="programs-mentor-activity" /> : null}
-      {dialog?.dialog === 'assign' ? <AssignDialog assignments={reads.assignments} timeline={reads.timeline} cycleId={dialog.cycleId || null} onClose={() => setDialog(null)} onAssigned={changed} /> : null}
-      {dialog?.dialog === 'end' ? <EndDialog row={dialog.row} cohort={cohortOf(dialog.row)} onClose={() => setDialog(null)} onEnded={changed} /> : null}
-    </ProgramFrame>
-  );
-}
+const registrationView = (reg: { registered_at: string; attended: number | null } | null) => reg
+  ? { registered: true, registered_at: reg.registered_at, attended: reg.attended === null ? null : Number(reg.attended) === 1 }
+  : { registered: false, registered_at: null, attended: null };
 
-// D774 (#2100): S18 drew no rail. The board's page, in the Admin boards' frame.
-export default function MentorCohortAccess() {
-  return (
-    <AdminBoardFrame workspace="Advisor cohort access" note="Eadwyn reads the program figures on this page. Nothing changes until you act." data-testid="admin-board-advisor-cohort-access">
-      <MentorBody />
-    </AdminBoardFrame>
+r.get('/webinars', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const when = c.req.query('when') || 'upcoming';
+  if (when !== 'upcoming' && when !== 'past') return refuse(c, 400, { code: 'bad_when', message: 'when is upcoming or past.' });
+  const nowIso = new Date().toISOString();
+  const sa = isSuperAdmin(user) ? 1 : 0;
+  // Upcoming has not ended yet (live ones included), soonest first; past has, newest first.
+  const res = await c.env.DB.prepare(
+    'SELECT ' + WEBINAR_COLS + ', ' + WEBINAR_ENROLLED + ` AS enrolled FROM learning_webinars
+      WHERE status IN ('published', 'cancelled') AND (? = 1 OR visibility = 'open' OR (visibility = 'program' AND ` + WEBINAR_ENROLLED + `))
+        AND starts_at IS NOT NULL AND ends_at IS NOT NULL
+        AND ((? = 'upcoming' AND ends_at > ?) OR (? = 'past' AND ends_at <= ?))
+      ORDER BY CASE WHEN ? = 'upcoming' THEN starts_at END ASC, CASE WHEN ? = 'past' THEN starts_at END DESC, id
+      LIMIT 100`,
+  ).bind(user.id, sa, user.id, when, nowIso, when, nowIso, when, when).all<WebinarRow & { enrolled: number }>();
+  const rows = (res.results || []).filter((w) => seen(user, w));
+  const counts = await registeredCounts(c.env, rows.map((w) => w.id));
+  const mine = new Set<number>();
+  if (rows.length) {
+    const ph = rows.map(() => '?').join(', ');
+    const regs = await c.env.DB.prepare(
+      `SELECT webinar_id FROM learning_webinar_registrations WHERE user_id = ? AND webinar_id IN (${ph})`,
+    ).bind(user.id, ...rows.map((w) => w.id)).all<{ webinar_id: number }>();
+    for (const x of regs.results || []) mine.add(Number(x.webinar_id));
+  }
+  const now = Date.now();
+  const webinars = [];
+  for (const w of rows) {
+    // A list never carries the join link, whatever the window says.
+    const { join_url: _j, ...shown } = memberWebinar(w, { registeredCount: counts.get(w.id) ?? 0, registered: mine.has(w.id), now });
+    void _j;
+    webinars.push({
+      ...shown, registered: mine.has(w.id),
+      recording: when === 'past' ? await recordingOf(c.env, w) : null,
+    });
+  }
+  return c.json({ when, webinars });
+});
+
+r.get('/webinars/:uid', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const w = await visible(c, user); if (w instanceof Response) return w;
+  const [reg, counts] = await Promise.all([registrationOf(c.env, w.id, user.id), registeredCounts(c.env, [w.id])]);
+  const now = Date.now();
+  return c.json({
+    webinar: memberWebinar(w, { registeredCount: counts.get(w.id) ?? 0, registered: Boolean(reg), now }),
+    registration: registrationView(reg ?? null),
+    recording: webinarPhase(w, now) === 'past' ? await recordingOf(c.env, w) : null,
+    ics_href: `/api/learning/webinars/${w.uid}/calendar.ics`,
+  });
+});
+
+r.post('/webinars/:uid/registration', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const w = await visible(c, user); if (w instanceof Response) return w;
+  // A draft is refused as a draft (#1252); only the Super Admin can reach one.
+  if (w.status === 'draft') {
+    return refuse(c, 409, { code: 'draft', message: 'This webinar is a draft. Publish it before members can register.' });
+  }
+  if (w.status !== 'published') return refuse(c, 409, { code: 'cancelled', message: 'This webinar was cancelled.' });
+  if (webinarPhase(w, Date.now()) === 'past') return refuse(c, 409, { code: 'ended', message: 'This webinar has ended.' });
+  const existing = await registrationOf(c.env, w.id, user.id);
+  if (existing) return c.json({ registration: registrationView(existing) });
+  const t = new Date().toISOString();
+  // One statement checks the capacity and inserts, so two members cannot both take the last seat.
+  const res = await c.env.DB.prepare(
+    `INSERT INTO learning_webinar_registrations (webinar_id, user_id, registered_at)
+     SELECT ?, ?, ? WHERE ? IS NULL OR (SELECT COUNT(*) FROM learning_webinar_registrations WHERE webinar_id = ?) < ?
+     ON CONFLICT (webinar_id, user_id) DO NOTHING`,
+  ).bind(w.id, user.id, t, w.capacity, w.id, w.capacity).run();
+  if (!Number((res as any)?.meta?.changes ?? 0)) {
+    const again = await registrationOf(c.env, w.id, user.id);
+    if (again) return c.json({ registration: registrationView(again) });
+    return refuse(c, 409, { code: 'full', message: 'This webinar is full.' });
+  }
+  return c.json({ registration: registrationView(await registrationOf(c.env, w.id, user.id)) }, 201);
+});
+
+r.delete('/webinars/:uid/registration', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const w = await visible(c, user); if (w instanceof Response) return w;
+  if (webinarPhase(w, Date.now()) === 'past') {
+    return refuse(c, 409, { code: 'ended', message: 'This webinar has ended; its registrations are its attendance record.' });
+  }
+  const res = await c.env.DB.prepare('DELETE FROM learning_webinar_registrations WHERE webinar_id = ? AND user_id = ?')
+    .bind(w.id, user.id).run();
+  if (!Number((res as any)?.meta?.changes ?? 0)) return refuse(c, 404, { code: 'not_registered', message: 'You are not registered.' });
+  return c.json({ registration: registrationView(null) });
+});
+
+r.get('/webinars/:uid/calendar.ics', async (c) => {
+  const user = await auth(c); if (user instanceof Response) return user;
+  const w = await visible(c, user); if (w instanceof Response) return w;
+  if (!w.starts_at || !w.ends_at) return refuse(c, 409, { code: 'no_time', message: 'This webinar has no time recorded yet.' });
+  const base = new URL(c.req.url).origin;
+  // The calendar entry links to the webinar's page, never to the join link.
+  const ics = buildEventIcs(
+    { title: w.title, summary: w.abstract, starts_at: w.starts_at, ends_at: w.ends_at, updated_at: w.updated_at, location_text: 'Online' },
+    base, { uid: `webinar-${w.uid}@axal.vc`, url: `${base}/learning/webinars/${w.uid}` },
   );
-}
+  return new Response(ics, {
+    headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': `attachment; filename="webinar-${w.uid}.ics"` },
+  });
+});
+
+export default r;
