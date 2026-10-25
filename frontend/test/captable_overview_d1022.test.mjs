@@ -358,7 +358,7 @@ test('CT16: a co-founder reads the line, opens a proposal, and cannot record it'
 test('CT24: below Raise + Grow the tool bar says so with See plans', async () => {
   const v = await mounted('/raise/cap-table?project_id=3', { user: { ...OWNER, subscription_tier: 'free' } });
   try {
-    assert.match(v.text(v.by('captable-plan-gate')), new RegExp(PLAN_LINE.replace(/\+/g, '\\+').replace(/\./g, '\\.')));
+    assert.ok(v.text(v.by('captable-plan-gate')).includes(PLAN_LINE));
     assert.ok(v.hrefs().includes('/pricing/products'));
     assert.ok(v.by('captable-who-owns'), 'reading stays open');
   } finally { await v.close(); }
@@ -371,7 +371,7 @@ test('CT19: nothing recorded, with the model kept as a scenario, offers to propo
     propose: (u, o) => { proposed.push(JSON.parse(o.body)); return response({ issuance: {} }, 201); },
   });
   try {
-    assert.match(v.text(v.by('captable-empty-model')), new RegExp(MODEL_TITLE.replace(/\./g, '\\.')));
+    assert.ok(v.text(v.by('captable-empty-model')).includes(MODEL_TITLE));
     assert.ok(!v.by('captable-tiles'), 'no tile, so no sample number');
     await v.press(v.by('captable-from-model-open'));
     assert.match(v.text(v.by('captable-from-model-says')), /2 founders' shares and 2 SAFEs or notes from your saved model become proposals/);
@@ -381,15 +381,15 @@ test('CT19: nothing recorded, with the model kept as a scenario, offers to propo
   } finally { await v.close(); }
   const w = await mounted('/raise/cap-table?project_id=3', { record: EMPTY, compare: { canonical: null, variants: [] } });
   try {
-    assert.match(w.text(w.by('captable-empty')), new RegExp(EMPTY_TITLE.replace(/\./g, '\\.')));
+    assert.ok(w.text(w.by('captable-empty')).includes(EMPTY_TITLE));
   } finally { await w.close(); }
 });
 
 test('CT20–CT22: reading, a failed record read that offers no Save, a failed 409A alone, another company and an Explorer', async () => {
   const fail = await mounted('/raise/cap-table?project_id=3', { record: 500 });
   try {
-    assert.match(fail.text(fail.by('captable-record-unreadable')), new RegExp(UNREADABLE_LINE.slice(0, 50)));
-    assert.match(fail.text(fail.by('captable-save-blocked')), new RegExp(SAVE_BLOCKED));
+    assert.ok(fail.text(fail.by('captable-record-unreadable')).includes(UNREADABLE_LINE.slice(0, 50)));
+    assert.ok(fail.text(fail.by('captable-save-blocked')).includes(SAVE_BLOCKED));
     assert.match(fail.text(fail.by('captable-toolbar')), /As of · could not be read/);
     assert.ok(!fail.by('captable-who-owns') && !fail.by('captable-empty'), 'a failed read is never an empty cap table');
   } finally { await fail.close(); }
@@ -401,7 +401,7 @@ test('CT20–CT22: reading, a failed record read that offers no Save, a failed 4
   } finally { await harbourDown.close(); }
   const other = await mounted('/raise/cap-table?project_id=3', { record: 403 });
   try {
-    assert.match(other.text(other.by('captable-other-company')), new RegExp(OTHER_TITLE.replace(/\./g, '\\.')));
+    assert.ok(other.text(other.by('captable-other-company')).includes(OTHER_TITLE));
   } finally { await other.close(); }
   const explorer = await mounted('/raise/cap-table?project_id=3', { user: { id: 9, role: 'exploring' } });
   try {
