@@ -35,6 +35,8 @@ function freshDb() {
   db.exec(MIG401);
   // D691 (#1700) — migration 463's file access columns, which every room read now filters on.
   addColumnsFrom(db, stripForeignKeys(MIG463), 'data_room_files');
+  // D1105: migration 596's source of each file.
+  addColumnsFrom(db, readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/596_data_room_file_source.sql'), 'utf8'), 'data_room_files');
   withGrantFolders(db); // D1103: migration 594
   // The pipeline a committed-only file is opened by.
   db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'raise_prospects')));

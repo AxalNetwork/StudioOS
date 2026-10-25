@@ -66,6 +66,10 @@ import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool
 import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
 import { DataRoomHomeNav, DataRoomTabPage } from '../raise/dataroom/DataRoomTool';
 import { isDataRoomTab, SLUG as DATA_ROOM } from '../raise/dataroom/dataRoomModel';
+import { UseOfFundsHomeNav, UseOfFundsTabPage } from '../raise/useoffunds/UseOfFundsTool';
+import { forecastHref, isUseOfFundsTab, SLUG as USE_OF_FUNDS } from '../raise/useoffunds/useOfFundsModel';
+import { CapRelHomeNav, CapRelTabPage } from '../raise/caprel/CapRelTool';
+import { isCapRelTab, SLUG as CAP_REL } from '../raise/caprel/capRelModel';
 
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
@@ -197,7 +201,8 @@ const CYCLE_DEFS = {
       'investor-narrative': (q) => ({ label: 'Open positioning', href: `/raise/investor-narrative/positioning${q || ''}` }),
       'pitch-deck': () => ({ label: 'Open the pitch deck', href: '/raise/pitch' }),
       'cap-table': () => ({ label: 'Open the cap table', href: '/raise/capital/cap-table' }),
-      'use-of-funds': () => ({ label: 'Open the financial model', href: '/raise/capital/model' }),
+      // D1173 (#2455): the venture travels with the link (broken item 8).
+      'use-of-funds': (q) => ({ label: 'Open the financial model', href: forecastHref(q) }),
       'capital-relationships': () => ({ label: 'Open the investor pipeline', href: '/raise/capital/pipeline' }),
       // D696 decision 12: the access view manages nothing, so the label says what it shows.
       'data-room': (q) => ({ label: 'Open the access view: grants, NDA state and recent access', href: `/raise/data-room?mode=access${q ? `&${q.slice(1)}` : ''}` }),
@@ -678,7 +683,7 @@ function RecordCrumb({ title, type = null, id = null }) {
 }
 
 export default function CycleRoute({ cycle, lightbox = false, adding = false, record = false, slug: suppliedSlug, reporting = null, buildPlan = null, capTableProposal = false }) {
-  const { slug: routeSlug, id: recordId, proposal: proposalId } = useParams();
+  const { slug: routeSlug, id: recordId, proposal: proposalId, instrument: instrumentId } = useParams();
   const location = useLocation();
   const { user } = useAuth() || {};
   const def = Object.prototype.hasOwnProperty.call(CYCLE_DEFS, cycle) ? CYCLE_DEFS[cycle] : null;
@@ -771,12 +776,17 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D1022 (#2859): `h-<n>` is the tool's too, the holder drawer over Overview.
   // D1025 (#2862): `/new` opens Record an issuance over Overview, and
   // `/raise/cap-table/proposal/<id>` a proposal's drawer (CT11), both the tool's own.
-  const capTableTab = capTableProposal && cycle === 'raise' ? 'proposal'
+  // D1023 (#2860): `/raise/cap-table/instrument/<uid>` is the instrument drawer (CT4).
+  const capTableTab = capTableProposal && cycle === 'raise' ? (instrumentId ? 'instrument' : 'proposal')
     : capTableAdding ? 'new'
       : record && cycle === 'raise' && isCapTableTab(slug, recordId) ? recordId : null;
   // D1101 (#2456): the Data room tool's tabs are words under its module, never file records.
   const dataRoomTab = record && cycle === 'raise' && isDataRoomTab(slug, recordId) ? recordId : null;
-  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !!projectId && !!def,
+  // D1173 (#2455): the Use of funds tool's tabs are words under its module, never section records.
+  const uofTab = record && cycle === 'raise' && isUseOfFundsTab(slug, recordId) ? recordId : null;
+  // D1188 (#2457): the Capital relationships tool's tabs are words under its module, never investor records.
+  const capRelTab = record && cycle === 'raise' && isCapRelTab(slug, recordId) ? recordId : null;
+  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !dataRoomTab && !uofTab && !capRelTab && !!projectId && !!def,
     cycle, projectId, slug, id: recordId, reload, edit, navigate, back: `/${cycle}/${slug}${q}` });
   useScrollToHash(record ? recordState.status !== 'ready' : moduleStatus !== 'ready');
   // The page re-reads once the lightbox is gone, however it went: ×, Escape and
@@ -979,12 +989,22 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
     );
   } else if (capTableTab) {
     body = (
-      <CapTableTabPage tab={capTableTab} proposal={proposalId} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+      <CapTableTabPage tab={capTableTab} proposal={proposalId} instrument={instrumentId} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
     );
   } else if (dataRoomTab) {
     body = (
       <DataRoomTabPage tab={dataRoomTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
+  } else if (uofTab) {
+    body = (
+      <UseOfFundsTabPage tab={uofTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
+  } else if (capRelTab) {
+    body = (
+      <CapRelTabPage tab={capRelTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         search={location.search} cards={tabs} action={action} phone={phone} />
     );
   } else if (record) {
@@ -1069,7 +1089,9 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         search={q}
         subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
           : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} projectId={projectId} />
-          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} /> : undefined}
+          : cycle === 'raise' && slug === DATA_ROOM ? <DataRoomHomeNav search={q} />
+          : cycle === 'raise' && slug === USE_OF_FUNDS ? <UseOfFundsHomeNav search={q} />
+          : cycle === 'raise' && slug === CAP_REL ? <CapRelHomeNav search={q} /> : undefined}
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}

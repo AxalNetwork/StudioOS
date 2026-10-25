@@ -12,6 +12,10 @@ the meantime. Deal-room reads retain their separate partner rule. Legacy legal
 entity listing and other routes with independent role gates are separate
 policies, not grants from the founder-resource guard.
 
+D1150: `deal_context.ts`, mounted before the deal router at `/api/deals`,
+provides investor-owned stage/visit metadata and author/firm-private notes.
+No admin bypass; migration 600; writes and audit rows share a batch.
+
 D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
@@ -24,6 +28,12 @@ D979's Firms reads live in `admin_partner_firms.ts`, mounted at
 `/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
 sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
 are read only; the tab's writes stay in `admin_partners.ts`.
+
+D1131's `_eventCalendar.ts` schedules connected-calendar cleanup after successful
+member, host or admin event cancellations. The existing queue durably continues
+bounded immediate work; provider failures do not undo local cancellation, and
+failed mappings remain retryable. `/events/suggested` now includes
+the authenticated caller's actual registration eligibility.
 
 ## Mount map
 
@@ -94,7 +104,7 @@ widened guard on this very sentence, which is the rule working.)
 /api/infra         → infra.ts
 /api/funds         → funds.ts
 /api/fund-fees     → fund_fees.ts       (D709: the management fee's terms, admissions, net invested capital, offsets, and fee periods the GP previews and issues; moves no money)
-/api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS)
+/api/fund-admin    → fund_admin.ts      (D714: GET /access, which fund acts this admin may take, from FUND_ACTS; D1158: GET /lps, the LP roster)
 /api/fund-reporting → fund_reporting.ts
 /api/fund-booklets → fund_booklets.ts (D716: the Subscription Booklet, the applicant's ticks, paper and submit, HQ's read, PDF and withdraw; the e-sign send and the GP's acceptance (D759))
 /api/fund-notices  → fund_notices.ts    (D716: an Admin previews, the Super Admin issues, the LP reads their own; kept PDFs through Browser Run)
@@ -313,13 +323,15 @@ webhook's deliveries by hour. D1129 adds bounded `q` search to the log and
 CSV, plus `/change-log/admins` (all admin ids/names, no email). `catalog.ts`
 records a failed sync.
 
-D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal.
+D1065 (#2935): `build_plan.ts` mounts at `/api/cycles/build/plan` before the Build router. GET reads a scoped plan; POST prepares/updates only for the venture’s founder or admitted Lab owner. Admins read; company-linked partners read only landed accepted items without a decision or pending proposal. D1066 (#2936) adds the item decisions (`/items/:uid/accept`, `PATCH /items/:uid`, `/items/:uid/dismiss`, `/modules/:module/accept`), founders only, and exports `buildEvidenceRoutes`, mounted at `/api/cycles/build/evidence` for each Build row's trail.
 
 D971 (#2756): `admin_lab_operations.ts` is mounted by `admin_cohort.ts` under
 `/api/admin/cohort`: read-only `/settings` and `/activity`, both Admin gated.
 The latter filters/paginates one safe projection of existing stores and never
 returns staff identities or free-form audit payloads. An unavailable source is
 503, never an empty successful log. Reads create no schema or data.
+
+D1105 (#2985): `data_room.ts` adds the owner's and a co-founder's `GET /:projectUid/activity` (any period, by investor, paged), `GET /:projectUid/activity.csv` and `GET /:projectUid/checklist`, from `../services/dataRoomActivity.ts`; migration 596 records each file's source (`document`, `connector`, `signed`). See `documentation/architecture/decisions/D1105.md`.
 
 D1102 (#2982, part): `data_room.ts` keeps founder details and mutations owner-only.
 The ordinary admin GET returns scoped aggregate counts and checklist coverage,
@@ -330,6 +342,8 @@ calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
 use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+
+D1091 (#2956): `google_workspace.ts` mounts `/api/connectors/google-workspace`: scoped chosen files, draft mapping, Stop using and ephemeral five-row preview. Calendar adds `/google/workspace-files/connect`; Google tokens stay in its one store. Support sessions are refused. See `../services/google/README.md`.
 
 D1133: `billing.ts` mounts `/alerts/:id/pay` and `/alerts/:id/update-card` under `/api/billing`, both recent-TOTP gated. They prepare in-page Stripe forms for the caller’s open failed renewal; opening neither confirms a charge nor changes the default card.
 

@@ -1,3 +1,4 @@
+import { isMyEventsPath } from './pages/events/myEventsModel';
 import LegacyContractsRedirect from './pages/admin/LegacyContractsRedirect';
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { safeReadJSON } from './lib/storage';
@@ -163,6 +164,7 @@ const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsig
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
+const ProgramGrantsHistory = lazy(() => import('./pages/admin/grants/ProgramGrantsHistory'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
 // D989 (#2380): Partner profiles, out of the Admin Console, under Approvals.
 const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfiles'));
@@ -767,6 +769,7 @@ function getSidebarGroups(role, primaryPersonaId, user, hqView = true) {
 
 // Carta-style user dropdown — top-right of the global header.
 function UserDropdown({ user, onLogout }) {
+  const eventsCurrent = isMyEventsPath(useLocation().pathname);
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -847,9 +850,9 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Calendar
           </Link>
-          <Link to="/my/events" onClick={() => setOpen(false)}
-            className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
-            Events
+          <Link to="/my/events" onClick={() => setOpen(false)} aria-current={eventsCurrent ? 'page' : undefined}
+            className="flex items-center justify-between px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
+            Events {eventsCurrent ? <span className="text-[11px] font-bold text-axal-violet" data-testid="account-events-current">Current</span> : null}
           </Link>
           {/* D562 — "Learning" replaces "Articles" (the owner, epic #1157).
               Articles live inside Learning now: its Articles tab lists them,
@@ -2337,6 +2340,9 @@ function AppInner() {
       ? <InvestorWorkspacePage page={page} {...options}>{component}</InvestorWorkspacePage>
       : component
   );
+  const trustCenter = user
+    ? guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <TrustCenter inShell />)
+    : <TrustCenter />;
   const investorFundWorkspace = (component) => investorWorkspace('fund', component, {
     fundUnlocked: hasInvestorTier(user, 'institutional'),
   });
@@ -2779,6 +2785,8 @@ function AppInner() {
       <Route path="/admin/wellbeing" element={guard(['admin'], <AdminWellbeingPage />)} />
       {/* Platform and Revenue pages are the Super Admin's, like every other (#2375). */}
       <Route path="/admin/platform/bank-accounts" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
+      <Route path="/admin/platform/bank-accounts/cash" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
+      <Route path="/admin/platform/bank-accounts/history" element={guard(['admin'], hqOnly(<BankAccountsPage />))} />
       <Route path="/admin/platform/product-testing" element={guard(['admin'], hqOnly(<ProductTestingHqPage />))} />
       <Route path="/admin/platform/promo-codes" element={guard(['admin'], hqOnly(<PromoCodesPage />))} />
       <Route path="/admin/revenue/billing" element={guard(['admin'], hqOnly(<BillingPage />))} />
@@ -2816,9 +2824,15 @@ function AppInner() {
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
       {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
       <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/history" element={guard(['admin'], hqOnly(<ProgramGrantsHistory />))} />
+      <Route path="/admin/licences/programs/requests" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/defaults" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/studio/:uid" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
+      <Route path="/admin/fund-admin/:tab" element={guard(['admin'], <FundAdminConsole />)} />
+      <Route path="/admin/fund-admin/:tab/:sub" element={guard(['admin'], <FundAdminConsole />)} />
       {/* A subsidiary admin reads their OWN licence; /admin/licences is HQ's ledger of every one. */}
       <Route path="/admin/my-licence" element={guard(['admin'], <MyLicencePage />)} />
       {/* D800 (#2233): the Licences page's tabs, each a sub-path of the page, behind the same guard. */}
@@ -2988,6 +3002,8 @@ function AppInner() {
       {/* D989 (#2380): Partner profiles, its two tabs as sub-paths; /admin?tab=profiles forwards here (LegacyContractsRedirect). */}
       <Route path="/admin/partner-profiles" element={guard(['admin'], <PartnerProfiles />)} />
       <Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />
+      {/* D995: one profile as PRF3's lightbox, over the list it was opened from. */}
+      <Route path="/admin/partner-profiles/:ref" element={guard(['admin'], <PartnerProfiles />)} />
       {/* D997 (#2378): Persona segments, its two tabs as sub-paths; /admin?tab=personas forwards here (LegacyContractsRedirect). */}
       <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
@@ -3322,6 +3338,8 @@ function AppInner() {
       <Route path="/deals/commit" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/closing" element={guard(['admin', 'investor'], <InvestorDealsRoutes />)} />
       <Route path="/deals/:dealId" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
+      {/* D1148 (#2421): each deal tab at its own address; a word the role does not draw opens Overview. */}
+      <Route path="/deals/:dealId/:tab" element={guard(['admin', 'partner', 'investor', 'founder'], investorWorkspace('deals', <DealRoomPage />))} />
       {/* D670 — the Market intelligence page is retired, with its sector
           digest email. Research reads the same market data, so an old link
           (and a link in a digest already sent) lands there. */}
@@ -3446,12 +3464,13 @@ function AppInner() {
           carries no role gating, so every advisor could see the link, click it,
           and be bounced off the only page listing what they owe. */}
       {/* D1072 (#2425): the public trust center is /trust and its tabs, for anyone; a member's own part is /trust/me. */}
-      <Route path="/trust" element={<TrustCenter />} />
-      <Route path="/trust/security" element={<TrustCenter />} />
-      <Route path="/trust/data" element={<TrustCenter />} />
-      <Route path="/trust/subprocessors" element={<TrustCenter />} />
-      <Route path="/trust/documents" element={<TrustCenter />} />
-      <Route path="/trust/disclosure" element={<TrustCenter />} />
+      {/* D1077 (#2969, TRU20): signed in, the public trust center sits in the app shell, in the member's colours; signed out, in the site frame (TRU1). */}
+      <Route path="/trust" element={trustCenter} />
+      <Route path="/trust/security" element={trustCenter} />
+      <Route path="/trust/data" element={trustCenter} />
+      <Route path="/trust/subprocessors" element={trustCenter} />
+      <Route path="/trust/documents" element={trustCenter} />
+      <Route path="/trust/disclosure" element={trustCenter} />
       <Route path="/trust/me" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], investorWorkspace('trust', <TrustCenterPage chromeless={effectiveRole === 'investor'} />))} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
@@ -3710,6 +3729,8 @@ function AppInner() {
       <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
       {/* D1025 (#2862, CT11): a Cap table proposal's drawer, over the tool; its id is a record proposal's uid or `mercury-<n>`. */}
       <Route path="/raise/cap-table/proposal/:proposal" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
+      {/* D1023 (#2860, CT4): an instrument's drawer, over Instruments; its id is the record's SAFE or note uid. */}
+      <Route path="/raise/cap-table/instrument/:instrument" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       <Route path="/raise/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" record />)} />
       <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />

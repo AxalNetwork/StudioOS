@@ -56,6 +56,12 @@ call runs at boot.
   Admin adds it per Axal organization, kept in its own store and synced
   read-only by `cloudflare-worker/src/services/mercury/`, behind
   `cloudflare-worker/src/routes/admin_mercury.ts`.
+- D1085 (#2950) — `notion.ts` is a founder's own Notion, read-only, through
+  Notion's MCP server. It registers `connect` (a support session is refused;
+  a token paste is refused: Sign in with Notion only), `disconnect` (the grant
+  revoked, best effort, then the tokens deleted), `revokeGranted` and `ready`.
+  The sign-in is the generic MCP route's (D1080); every read is
+  `cloudflare-worker/src/services/notion/reads.ts`.
 - D713 (#1778) — `mercury.ts` is a member's own Mercury, for founders and
   partners (`personal_roles`). It registers `connect` and nothing else: no
   sync, push, webhook, preview or action. Connect takes a Read Only token,
