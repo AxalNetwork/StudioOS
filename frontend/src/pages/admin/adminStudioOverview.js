@@ -374,7 +374,8 @@ export const LANE_CONSOLES = {
   partner_profiles: '/admin/partner-profiles',
   exploring: '/admin/exploring',
   jobs: '/admin/jobs',
-  events: '/admin/events',
+  // D1038 (#2390): the lane opens the desk's Review tab, its queue.
+  events: '/admin/events/review',
   best_fit: '/admin/best-fit',
   due_diligence: '/admin/due-diligence',
 };

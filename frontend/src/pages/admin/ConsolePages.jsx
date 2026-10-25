@@ -74,7 +74,7 @@ function ConsolePage({ crumb, hqCrumb = crumb, title, line, more = null, testId,
 }
 
 const ACCOUNTS = { label: 'Accounts', to: '/admin/held/accounts' };
-const APPROVALS = { label: 'Approvals', to: '/admin/held/approvals' };
+const APPROVALS = { label: 'Approvals', to: '/admin/approvals' };
 const COMMUNITY = { label: 'Community', to: '/admin/community' };
 const PLATFORM = { label: 'Platform', to: '/admin/platform' };
 

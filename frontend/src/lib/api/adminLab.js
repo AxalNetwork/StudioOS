@@ -27,4 +27,21 @@ export const adminLabApi = {
   participant: (uid) => request(`/admin/cohort/participants/${encodeURIComponent(uid)}`),
   /** D946: SL14s, the Super Admin's read of support sessions (every admin's). 403 for an Admin. */
   supportSessions: () => request('/admin/cohort/impersonation-audit'),
+  /** D945 (#2750): SL4 D — an undecided, waitlisted or approved applicant to
+   * another open cohort, with a reason. The founder is told. */
+  move: (applicantId, { cycle_id, reason, confirm_over_places } = {}) =>
+    request(`/admin/cohort/applications/${encodeURIComponent(applicantId)}/move`, {
+      method: 'POST', body: JSON.stringify({ cycle_id, reason, confirm_over_places }),
+    }),
+  /** D945: SL2's bulk bar — approve or waitlist up to 25 applicants with one
+   * reason, each through the one decision path. Answers each applicant's result. */
+  bulkDecide: ({ applicant_ids, status, reason, confirm_over_places } = {}) =>
+    request('/admin/cohort/applications/bulk-decide', {
+      method: 'POST', body: JSON.stringify({ applicant_ids, status, reason, confirm_over_places }),
+    }),
+  /** D945: SL4 G — admit a founder without an application, into an open cohort. */
+  admit: ({ user_id, cycle_id, reason, company_name, confirm_over_places } = {}) =>
+    request('/admin/cohort/applications/admit', {
+      method: 'POST', body: JSON.stringify({ user_id, cycle_id, reason, company_name, confirm_over_places }),
+    }),
 };

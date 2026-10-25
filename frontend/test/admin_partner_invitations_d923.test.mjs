@@ -33,7 +33,7 @@ import PartnerInvitations from '../src/pages/admin/PartnerInvitations.jsx';
 import { parseStamp as uiParseStamp } from '../src/ui/parseStamp.js';
 import {
   AGREEMENT_BANNER, AGREEMENT_LAPSE_WARNING, CAPS, COMMUNITY_PATH, CONTRACTS_PAUSED, COULD_NOT_READ, DEAL_NOT_ACTIVE, DEAL_STATE_KEYS, EMPTY_TITLE,
-  FIRMS_TAB_PATH, FOUNDER_NO_PLAN, FROZEN, INVITATION_CLOSED, LINE, MISSING_DEAL, MISSING_INVITATION, MOVED_LINE, MOVED_PATH, NO_DEAL, NO_INVITATION,
+  FIRMS_TAB_PATH, FOUNDER_NO_PLAN, FROZEN, INVITATION_CLOSED, LINE, MISSING_INVITATION, MOVED_LINE, MOVED_PATH, NO_DEAL, NO_INVITATION,
   NOT_IN_READ, NOT_READ_YET, NOT_RECORDED, READING, RESENT_NOT_SENT, RESENT_SENT,
   STORED_EXPIRED_WORD, TABS, TITLE, TRY_AGAIN, TYPE_FULL, WITHIN_DEALS, WITHIN_INVITATIONS, agreementReady,
   allTimeRedemptions, cameFromOldAddress, copyFailed, countClosing30, countLast90, countOpenWindows, createdLines, day,
@@ -638,7 +638,7 @@ test('every wiring place D923 §1 names follows the page', () => {
   assert.doesNotMatch(sidebar, /'\/admin\/partners'/, 'Approvals no longer lights the page: exactly one row does');
   const placement = read('frontend/src/lib/adminPlacement.js');
   assert.match(placement, /\{ key: '\/admin\/partners', kind: 'row', label: 'Partner Invitations', route: '\/admin\/partner-invitations', hqOnly: false,\s*\.\.\.admin\('Community', 'card link'\), how: [^}]*also: \[admin\('Approvals', 'lane'\)\] \}/);
-  assert.match(read('frontend/src/pages/admin/HeldApprovals.jsx'), /<Link to="\/admin\/partner-invitations" className=\{CONSOLE\}>\/admin\/partner-invitations<\/Link>/);
+  assert.match(read('frontend/src/pages/admin/approvals/AdminApprovals.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Partner invitations<\/Link>/);
   assert.match(read('frontend/src/pages/admin/adminStudioOverview.js'), /'Partner invitations': '\/admin\/partner-invitations',/);
   assert.match(read('frontend/src/pages/admin/community/AdminCommunity.jsx'), /<Link to="\/admin\/partner-invitations" className=\{LINK\}>Open partner invitations<\/Link>/);
   assert.match(read('frontend/src/lib/railPages.js'), /own\('\/admin\/partner-invitations', key\(AD, 'Community', 'Partner invitations'\)\)/);
@@ -652,8 +652,11 @@ test('the desk reads only D923 §2\'s reads through existing clients, and draws 
   const src = DESK_FILES.map((f) => codeOnly(read(f))).join('\n');
   for (const call of ['api.adminPartners.listInvitations(', 'api.adminPartners.listDeals(', 'api.adminPartners.listTopDeals(', 'api.adminPartners.dealRedemptions(',
     'api.adminListPartnerDeals(', 'api.adminPartners.listFirmLinks(', 'api.esignDetail(', 'api.esignTemplate(\'partner_services\')', 'dd.listCases(',
-    'api.trustScoreBatch(', 'api.adminListUsers(', 'api.adminGetProfile(']) assert.ok(src.includes(call), `the desk no longer reads ${call}`);
-  for (const write of ['createInvitation(', 'resendInvitation(', 'revokeInvitation(', 'terminateDeal(']) assert.ok(src.includes(`api.adminPartners.${write}`), write);
+    'api.adminListUsers(', 'api.adminGetProfile(',
+    // D951 (#2727): one deal, the terminate preview and Referrals read D928's routes; the trust batch is gone with R10.
+    'partnerDealReadsApi.deal(', 'partnerDealReadsApi.terminatePreview(', 'partnerDealReadsApi.redemptions(']) assert.ok(src.includes(call), `the desk no longer reads ${call}`);
+  assert.ok(!src.includes('api.trustScoreBatch('), 'one deal\'s obligations come from D928\'s read, which never seeds them');
+  for (const write of ['createInvitation(', 'resendInvitation(', 'revokeInvitation(', 'terminateDeal(', 'activateDeal(']) assert.ok(src.includes(`api.adminPartners.${write}`), write);
   // D952: attaching an account to a firm is decided on Advisors & Partners › Firms now, not on the desk.
   assert.ok(!src.includes('api.adminPartners.setFirmLink('), 'the desk still writes firm links');
   for (const imp of src.matchAll(/import \{([^}]+)\} from '[./]+lib\/api'/g)) {
@@ -715,6 +718,7 @@ function overviewReply(kinds = {}) {
 function worker({
   invitations = [], deals = {}, contracts, links = { accounts: [], firms: [], attached: 0, unattached: 0 }, template = { doc_type: 'partner_services', fields: [] },
   top = { items: [], status: 'all', limit: 5 }, cases = [], redemptions = {}, envelopes = {}, users = [], writes = {}, overview = overviewReply(),
+  dealReads = {}, previews = {}, crossDeal,
 } = {}) {
   const call = (v, ...a) => (typeof v === 'function' ? v(...a) : response(v));
   return (url, options = {}) => {
@@ -734,8 +738,38 @@ function worker({
     }
     if (path === '/api/admin/partners/deals/top') return call(top);
     if (path === '/api/admin/partners/deals') {
-      const v = deals[q.get('status')] ?? [];
-      return typeof v === 'function' ? v(q) : response({ items: v });
+      // D926: one state, several, or `all`; the reply carries an exact `total` (D951 reads it).
+      const wanted = q.getAll('status');
+      if (wanted.length === 1 && typeof deals[wanted[0]] === 'function') return deals[wanted[0]](q);
+      const keys = wanted.includes('all') ? Object.keys(deals) : wanted;
+      const items = keys.flatMap((k) => (Array.isArray(deals[k]) ? deals[k] : []));
+      return response({ items, total: items.length });
+    }
+    // D928's single-deal read, by default built from the lists the test seeded.
+    const one = /^\/api\/admin\/partners\/deals\/(\d+)$/.exec(path);
+    if (one) {
+      if (dealReads[one[1]] !== undefined) return call(dealReads[one[1]]);
+      const d = Object.values(deals).filter(Array.isArray).flat().find((x) => String(x.id) === one[1]);
+      if (!d) return response({ error: 'not_found', message: 'There is no such deal.' }, 404);
+      const inv = (Array.isArray(invitations) ? invitations : []).find((i) => String(i.id) === String(d.invitation_id)) || null;
+      return response({
+        deal: { ...d, proposal: d.proposal ?? null, proposal_unreadable: false, redemptions_total: Number(d.redemptions_count) || 0 },
+        invitation: inv, invitation_missing: false, envelope: null,
+        due_diligence: d.user_id && d.activated_at ? { match: 'none', case: null, candidates: [] } : { match: 'not_activated', case: null, candidates: [] },
+        obligations: d.user_id ? [] : null, history: [{ kind: 'created', at: d.created_at, by_user_id: null, by_name: null, reason: null }],
+      });
+    }
+    const pre = /^\/api\/admin\/partners\/deals\/(\d+)\/terminate-preview$/.exec(path);
+    if (pre) {
+      if (previews[pre[1]] !== undefined) return call(previews[pre[1]]);
+      const d = Object.values(deals).filter(Array.isArray).flat().find((x) => String(x.id) === pre[1]);
+      const n = Number(d?.redemptions_count) || 0;
+      // A deal the seeded arrays do not hold (a test's list is a function) is taken as active.
+      return response({ deal_id: Number(pre[1]), status: d?.status ?? 'active', can_terminate: d ? d.status === 'active' : true, partner: null, registered: n, members_losing: n, members: [], members_truncated: false });
+    }
+    if (path === '/api/admin/partners/redemptions') {
+      if (crossDeal !== undefined) return typeof crossDeal === 'function' ? crossDeal(q) : response(crossDeal);
+      return response({ items: [], total: 0, page: 1, limit: Number(q.get('limit')) || 25, pages: 1, sort: q.get('sort') || 'newest', attribution_days: 365 });
     }
     const red = /^\/api\/admin\/partners\/deals\/(\d+)\/redemptions$/.exec(path);
     if (red) return call(redemptions[red[1]] ?? { deal: { id: Number(red[1]) }, items: [] });
@@ -975,15 +1009,16 @@ test('Terminate is disabled until a reason is typed; its result and its refusal 
     assert.equal(view.textOf('partners-deal-count'), 'Redemptions: 3', 'the count comes from the row');
     assert.ok(view.has('partners-deal-redeemers-unreadable'), 'a failed R4 reads Unreadable');
     const r4 = () => view.requests.filter((r) => r.url.endsWith('/deals/7/redemptions')).length;
-    assert.equal(r4(), 2, 'once for the record and once for the fan-out');
+    assert.equal(r4(), 1, 'once, for the record: D951 retired the fan-out');
     await view.wait(50);
-    assert.equal(r4(), 2, 'and never again: a failure does not re-read in a loop');
+    assert.equal(r4(), 1, 'and never again: a failure does not re-read in a loop');
     assert.equal(view.textOf('partners-deal-obligations-line'), 'No obligations recorded');
     assert.match(view.textOf('partners-deal-terms'), /Tiers grantedFounder grant: no plan/);
     await view.click('partners-deal-terminate');
     assert.ok(view.has('partners-terminate-dialog'));
     assert.equal(view.props('partners-terminate-go').disabled, true, 'disabled until a reason is typed');
-    assert.match(view.textOf('partners-terminate-lines'), /3 members registered with Lio Testwell’s code\. Those still on the grant it gave lose it\./);
+    // D951: the lines are D928's preview, not the row's redemption count.
+    assert.equal(view.textOf('partners-terminate-lines'), '3 members lose the grant this deal gave them.This cannot be undone.');
     await view.change('partners-terminate-reason', { value: '   ' });
     assert.equal(view.props('partners-terminate-go').disabled, true, 'spaces are not a reason');
     await view.change('partners-terminate-reason', { value: 'Breach of terms' });
@@ -1049,37 +1084,7 @@ test('Deals: names before signing come from the invitation, the lapsed cross-che
   } finally { await view.close(); }
 });
 
-test('Referrals under Guard F: one deal\'s failed read makes every fan-out figure say so, never a smaller number; all time stays exact from R5', async () => {
-  const revshare = deal(7, { deal_type: 'deal_sourcing_revshare', redemptions_count: 2 });
-  const plain = deal(8, { redemptions_count: 1 });
-  const items7 = [
-    redemption(1, LIVE - 10 * DAY, { attribution_kind: 'deal_sourcing_revshare', revshare_window_remaining_days: 20 }),
-    redemption(2, LIVE - 200 * DAY, { attribution_kind: 'deal_sourcing_revshare', revshare_window_remaining_days: 165 }),
-  ];
-  const reply7 = { deal: { id: 7, deal_type: 'deal_sourcing_revshare', status: 'active', partner_name: 'Dana 7', referral_code: 'PART-7' }, items: items7 };
-  const down = await mounted('/admin/partner-invitations/referrals', worker({ deals: { active: [revshare, plain] }, redemptions: { 7: reply7, 8: () => response({ error: 'down' }, 503) } }));
-  try {
-    assert.equal(down.textOf('partners-ref-tile-all'), 'Redemptions, all time3', 'R5 is uncapped, so its count is exact');
-    for (const key of ['last90', 'open', 'closing']) {
-      assert.match(down.textOf(`partners-ref-tile-${key}`), /Could not be read for 1 of 2 deals1 of 2 deals did not answer, so no partial sum is drawn\.Try again$/, key);
-    }
-    assert.ok(down.has('partners-ref-unreadable') && !down.has('partners-ref-table') && !down.has('partners-ref-none'), 'no partial list, and no empty-list sentence');
-    assert.match(down.textOf('partners-ref-unreadable'), /1 of 2 deals did not answer, so no partial sum is drawn\./);
-  } finally { await down.close(); }
-  const reply8 = { deal: { id: 8, deal_type: 'services_partnership', status: 'active', partner_name: 'Dana 8', referral_code: 'PART-8' }, items: [redemption(3, LIVE - 5 * DAY)] };
-  const up = await mounted('/admin/partner-invitations/referrals?deal=7', worker({ deals: { active: [revshare, plain] }, redemptions: { 7: reply7, 8: reply8 } }));
-  try {
-    assert.equal(up.textOf('partners-ref-tile-last90'), 'Last 90 days2');
-    assert.equal(up.textOf('partners-ref-tile-open'), 'Rev-share windows open2On active deals only');
-    assert.equal(up.textOf('partners-ref-tile-closing'), 'Closing within 30 days1');
-    assert.match(up.textOf('partners-referrals-deal'), /^Deal #7 only\./);
-    assert.ok(up.has('partners-ref-row-7:1') && up.has('partners-ref-row-7:2') && !up.has('partners-ref-row-8:3'), '?deal= narrows the table to one deal');
-    assert.match(up.textOf('partners-ref-row-7:1'), /Role: Not read here yet/);
-    assert.match(up.textOf('partners-ref-row-7:1'), /20 days left/);
-    assert.match(up.textOf('partners-ref-foot'), /^Payouts are handled in Contracts\.Open payouts in Contracts$/);
-    assert.ok(up.hrefs().includes('/admin/contracts?tab=partner-deals'));
-  } finally { await up.close(); }
-});
+// D951 (#2727): Referrals reads D928's cross-deal read; its tests are in admin_partners_deals_referrals_d951.test.mjs.
 
 /* ------------------------------------------------------------------ *
  * Mounted: the build review's findings
@@ -1126,8 +1131,8 @@ test('when the row that opened a dialog leaves its list after the write, focus g
   const lio = deal(7, { partner_name: 'Lio Testwell', expires_at: isoAt(LIVE + 100 * DAY) });
   const view = await mounted('/admin/partner-invitations/deals', worker({
     deals: {
-      active: () => response({ items: ended ? [] : [lio] }),
-      terminated: () => response({ items: ended ? [{ ...lio, status: 'terminated', terminated_at: d1(LIVE) }] : [] }),
+      active: () => response({ items: ended ? [] : [lio], total: ended ? 0 : 1 }),
+      terminated: () => response({ items: ended ? [{ ...lio, status: 'terminated', terminated_at: d1(LIVE) }] : [], total: ended ? 1 : 0 }),
     },
     writes: { terminate: () => { ended = true; return response({ ok: true, members_revoked: 0, partner_tiers_reverted: true, failures: [] }); } },
   }));
@@ -1269,42 +1274,53 @@ test('a record opened from a row read for its address is read again after a writ
   } finally { await view.close(); }
 });
 
-test('a deal before signing never says its address is "not recorded" when the invitations were not read in full (finding 17)', async () => {
-  const proposed = deal(8, { status: 'proposed', invitation_id: 2, user_id: null, partner_email: null, partner_name: null, referral_code: null, activated_at: null, expires_at: null, envelope_id: null });
-  for (const [invitations, title] of [[() => response({ error: 'down' }, 503), 'Could not be read'], [many(CAPS.invitations, (i) => liveInv(1000 + i)), NOT_IN_READ]]) {
-    const view = await mounted('/admin/partner-invitations/deals/8', worker({ invitations, deals: { proposed: [proposed] } }));
+test('a deal before signing is named from D928\'s own invitation, whatever R1 read; "address not recorded" only when the deal has none (findings 17, C2; D951)', async () => {
+  const proposed = deal(8, { status: 'proposed', invitation_id: 77, user_id: null, partner_email: null, partner_name: null, referral_code: null, activated_at: null, expires_at: null, envelope_id: null });
+  const withInvitation = (o = {}) => ({
+    deal: { ...proposed, proposal: null, proposal_unreadable: false, redemptions_total: 0 },
+    invitation: { id: 77, recipient_name: 'Partner 77', recipient_email: 'p77@example.com', invited_by_name: 'Admin A', created_at: d1(LIVE - 3 * DAY), signed_at: null },
+    invitation_missing: false, envelope: null, due_diligence: { match: 'not_activated', case: null, candidates: [] }, obligations: null, history: [], ...o,
+  });
+  for (const invitations of [() => response({ error: 'down' }, 503), many(CAPS.invitations, (i) => liveInv(1000 + i))]) {
+    const view = await mounted('/admin/partner-invitations/deals/8', worker({ invitations, deals: { proposed: [proposed] }, dealReads: { 8: withInvitation() } }));
     try {
-      assert.match(view.textOf('partners-deal'), new RegExp(`${title}Deal #8`));
-      assert.doesNotMatch(view.textOf('partners-deal'), /address not recorded/, 'the address is stored; it was not read here');
+      assert.match(view.textOf('partners-deal'), /Partner 77Deal #8 · p77@example\.com/, 'D928 joins the invitation itself');
+      assert.doesNotMatch(view.textOf('partners-deal'), /address not recorded|Could not be read|Not in this read/);
     } finally { await view.close(); }
   }
-  const complete = await mounted('/admin/partner-invitations/deals/8', worker({ invitations: [liveInv(5)], deals: { proposed: [proposed] } }));
+  const gone = await mounted('/admin/partner-invitations/deals/8', worker({ deals: { proposed: [proposed] }, dealReads: { 8: withInvitation({ invitation: null, invitation_missing: true }) } }));
   try {
-    assert.match(complete.textOf('partners-deal'), /Not recordedDeal #8 · address not recorded/, 'read in full with no invitation for it: then it is not recorded');
-  } finally { await complete.close(); }
+    assert.match(gone.textOf('partners-deal'), /Not recordedDeal #8 · address not recorded/, 'the deal names an invitation no longer stored');
+    assert.match(gone.textOf('partners-deal-invitation'), /Not recorded/);
+  } finally { await gone.close(); }
 });
 
-test('a deal record whose list could not be read offers Try again inside the dialog (finding 18)', async () => {
+test('a deal record whose read could not be read offers Try again inside the dialog, and a cool-off is said as paused (finding 18; D951)', async () => {
   let tries = 0;
-  const view = await mounted('/admin/partner-invitations/deals/41', worker({ deals: { active: [deal(7)], expired: () => { tries += 1; return response({ error: 'down' }, 503); } } }));
+  const view = await mounted('/admin/partner-invitations/deals/41', worker({ deals: { active: [deal(7)] }, dealReads: { 41: () => { tries += 1; return response({ error: 'down' }, 503); } } }));
   try {
-    assert.equal(view.textOf('partners-deal-read-expired-unreadable').trim(), 'The deals in “Term over” could not be read. So this deal could not be looked up. That is not a claim that it does not exist.Try again');
-    assert.doesNotMatch(view.textOf('partners-deal-absent'), /Not in this read/);
+    assert.equal(view.textOf('partners-deal-read-unreadable').trim(), 'This deal could not be read. That is not a claim that it does not exist.Try again');
+    assert.doesNotMatch(view.textOf('partners-deal-absent'), /There is no deal/, 'a failure is never "no such deal"');
     const before = tries;
     await view.press('Try again', 'partners-deal-absent');
-    assert.equal(tries, before + 1, 'Try again reads the lists again');
+    assert.equal(tries, before + 1, 'Try again reads the deal again');
   } finally { await view.close(); }
+  const paused = await mounted('/admin/partner-invitations/deals/41', worker({ dealReads: { 41: () => response({ error: 'recovery_cool_off_active' }, 423) } }));
+  try {
+    assert.match(paused.textOf('partners-deal-read-unreadable'), /^Reading this deal is paused after a recent account recovery\./);
+  } finally { await paused.close(); }
 });
 
-test('after Terminate from the record, the record never says "Not in this read" while the lists answer one by one (finding 19)', async () => {
+test('after Terminate from the record, the record never says there is no such deal while it is read again (finding 19)', async () => {
   let ended = false;
   const lio = deal(7, { partner_name: 'Lio Testwell', expires_at: isoAt(LIVE + 100 * DAY) });
   const later = (ms, body) => new Promise((done) => setTimeout(() => done(response(body)), ms));
+  const body = (d) => ({ deal: { ...d, proposal: null, proposal_unreadable: false, redemptions_total: 0 }, invitation: null, invitation_missing: false, envelope: null,
+    due_diligence: { match: 'none', case: null, candidates: [] }, obligations: [], history: [] });
   const view = await mounted('/admin/partner-invitations/deals/7', worker({
-    deals: {
-      active: () => response({ items: ended ? [] : [lio] }),
-      terminated: () => (ended ? later(300, { items: [{ ...lio, status: 'terminated', terminated_at: d1(LIVE) }] }) : response({ items: [] })),
-    },
+    deals: { active: () => response({ items: ended ? [] : [lio], total: ended ? 0 : 1 }) },
+    // D951: the record is D928's single read, read again after the write.
+    dealReads: { 7: () => (ended ? later(300, body({ ...lio, status: 'terminated', terminated_at: d1(LIVE) })) : response(body(lio))) },
     writes: { terminate: () => { ended = true; return response({ ok: true, members_revoked: 0, partner_tiers_reverted: true, failures: [] }); } },
   }));
   try {
@@ -1312,9 +1328,9 @@ test('after Terminate from the record, the record never says "Not in this read" 
     await view.change('partners-terminate-reason', { value: 'Breach' });
     await view.click('partners-terminate-go');
     await view.click('partners-terminate-go-done');
-    // Active has answered without deal 7; Terminated is still being read again.
+    // The deal is being read again: the record keeps it on screen, never "no such deal".
     assert.ok(!view.has('partners-deal-absent-reason'));
-    assert.doesNotMatch(view.textOf('partners-deal'), /Not in this read/);
+    assert.doesNotMatch(view.textOf('partners-deal'), /There is no deal/);
     await view.wait(350);
     assert.match(view.textOf('partners-deal-state'), /Terminated/);
   } finally { await view.close(); }
@@ -1344,7 +1360,8 @@ test('a 423 cool-off on R9 and R5 is said as paused on Deals, never as unread or
     assert.equal(view.textOf('partners-deals-cases-unreadable'), 'Reading the due-diligence cases is paused after a recent account recovery. It resumes when the 24-hour cool-off ends.Try again');
     assert.match(view.textOf('partners-deals-row-7'), /Paused after a recent account recovery/);
     assert.doesNotMatch(view.textOf('partners-deals-row-7'), /No case on record|Could not be read|Not opened/);
-    assert.equal(view.textOf('partners-deals-contracts-paused'), CONTRACTS_PAUSED);
+    // D951: the Deals list is D926's, with its own total; the tab count still says R5's pause.
+    assert.ok(!view.has('partners-deals-contracts-paused'));
     assert.equal(view.textOf('partners-tab-deals-count'), `1, Every deal, in every state. ${CONTRACTS_PAUSED}`);
   } finally { await view.close(); }
 });
@@ -1364,9 +1381,6 @@ test('a record not in the lists says why: past a cap, or no record has the addre
     ['/admin/partner-invitations/invitations/12', worker({ invitations: [liveInv(1)] }), 'partners-invitation', NO_INVITATION],
     ['/admin/partner-invitations/invitations/12', worker({ invitations: many(CAPS.invitations, (i) => liveInv(1000 + i)) }), 'partners-invitation', MISSING_INVITATION],
     ['/admin/partner-invitations/invitations/%E0', worker(), 'partners-invitation', NO_INVITATION],
-    ['/admin/partner-invitations/deals/12', worker({ deals: { active: [deal(1)] } }), 'partners-deal', NO_DEAL],
-    ['/admin/partner-invitations/deals/12', worker({ deals: { active: many(CAPS.deals, (i) => deal(1000 + i)) } }), 'partners-deal', MISSING_DEAL],
-    ['/admin/partner-invitations/deals/50%', worker(), 'partners-deal', NO_DEAL],
   ];
   for (const [url, handle, id, reason] of cases) {
     const view = await mounted(url, handle);
@@ -1374,6 +1388,20 @@ test('a record not in the lists says why: past a cap, or no record has the addre
       assert.equal(view.textOf(`${id}-absent`), `${NOT_IN_READ}${reason}`, url);
     } finally { await view.close(); }
   }
+  // D951: a deal is read on its own (D928), so one past every cap still opens, and a missing one is the read's 404.
+  for (const [url, handle] of [
+    ['/admin/partner-invitations/deals/12', worker({ deals: { active: [deal(1)] } })],
+    ['/admin/partner-invitations/deals/12', worker({ deals: { active: many(CAPS.deals, (i) => deal(1000 + i)) } })],
+    ['/admin/partner-invitations/deals/50%', worker()],
+  ]) {
+    const view = await mounted(url, handle);
+    try {
+      assert.equal(view.textOf('partners-deal-absent'), 'There is no deal with this address.', url);
+      if (url.endsWith('50%')) assert.ok(!view.requests.some((r) => /\/deals\/50/.test(r.url)), 'an undecodable address is never read');
+    } finally { await view.close(); }
+  }
+  const past = await mounted('/admin/partner-invitations/deals/1205', worker({ deals: { active: [...many(CAPS.deals, (i) => deal(1000 + i)), deal(1205)] } }));
+  try { assert.match(past.textOf('partners-deal'), /Dana 1205/, 'a deal past the old cap opens'); } finally { await past.close(); }
 });
 
 test('Needs you is exact even when the supporting deal list reaches its cap', async () => {
@@ -1472,25 +1500,6 @@ test('a deal\'s partner and invitation are "Not recorded" only when R1 answered 
   // Overview has its own read; a failed read never invents a lapsed count from stale R1.
   const tile = dealTiles(failed()).find((t) => t.key === 'awaiting');
   assert.equal(tile.state, 'unreadable');
-});
-
-test('a deal before signing says the invitations could not be read, never "address not recorded", after R1 could not refresh (C2)', async () => {
-  let r1 = 0;
-  let p = 0;
-  const proposed = deal(8, { status: 'proposed', invitation_id: 77, user_id: null, partner_email: null, partner_name: null, referral_code: null, activated_at: null, expires_at: null, envelope_id: null });
-  const view = await mounted('/admin/partner-invitations/deals/8', worker({
-    invitations: () => { r1 += 1; return r1 === 1 ? response({ items: [liveInv(1)] }) : r1 === 2 ? response({ error: 'down' }, 503) : response({ items: [liveInv(1), liveInv(77)] }); },
-    deals: { proposed: () => { p += 1; return p === 1 ? response({ error: 'down' }, 503) : response({ items: [proposed] }); } },
-  }));
-  try {
-    // R2 `proposed` answers on Try again; R1 fails that time, so it keeps [1] from its first read, which is not 77.
-    await view.press('Try again', 'partners-deal-absent');
-    assert.match(view.textOf('partners-deal'), new RegExp(`${COULD_NOT_READ}Deal #8`));
-    assert.doesNotMatch(view.textOf('partners-deal'), /not recorded/i, 'invitation 77 and its address are stored; they were not read');
-    assert.equal(view.textOf('partners-deal-invitation-read-unreadable').trim(), 'The invitations could not be read. A failed list is not a claim that there are none.Try again');
-    await view.press('Try again', 'partners-deal-invitation');
-    assert.match(view.textOf('partners-deal'), /Partner 77Deal #8 · p77@example\.com/);
-  } finally { await view.close(); }
 });
 
 test('on a phone the row menu closes on a pointerdown outside it, keeps its place while its tab is hidden, and is placed again when the tab shows (C3)', async () => {

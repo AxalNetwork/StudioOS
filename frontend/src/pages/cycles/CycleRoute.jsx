@@ -59,6 +59,8 @@ import { moduleToolLinks } from './founderToolNavigation.js';
 import { NarrativeHome, NarrativeTabBar, NarrativeTabPage } from '../raise/narrative/NarrativeTool';
 import { isNarrativeAdmin, isNarrativeTab, SLUG as NARRATIVE, tabSearch } from '../raise/narrative/narrativeModel';
 import { NarrativeAdminGate } from '../raise/narrative/NarrativeAdmin';
+import { CapTableHomeNav, CapTableTabPage } from '../raise/captable/CapTableTool';
+import { isCapTableTab, SLUG as CAP_TABLE } from '../raise/captable/capTableModel';
 
 
 /** D840 part 3 (#2348): a Grow module's "From Mercury" part, from its read's `parts.from_mercury`. */
@@ -750,7 +752,10 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
   // D906 (#2454): under Investor narrative a record id that is a tab word
   // (`/story`, `/check`, …) is the tool's tab, never a version (versions are numbers).
   const narrativeTab = record && cycle === 'raise' && isNarrativeTab(slug, recordId) ? recordId : null;
-  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !!projectId && !!def,
+  // D1015 (#2432): under Cap table a record id that is a tab word (`/instruments`, …)
+  // is the tool's tab, never a row (rows are `h-<n>`, `e-<n>` and `pool`).
+  const capTableTab = record && cycle === 'raise' && isCapTableTab(slug, recordId) ? recordId : null;
+  const recordState = useCycleRecord({ enabled: record && known && validRecord && !narrativeTab && !capTableTab && !!projectId && !!def,
     cycle, projectId, slug, id: recordId, reload, edit, navigate, back: `/${cycle}/${slug}${q}` });
   useScrollToHash(record ? recordState.status !== 'ready' : moduleStatus !== 'ready');
   // The page re-reads once the lightbox is gone, however it went: ×, Escape and
@@ -938,6 +943,11 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
       <NarrativeTabPage tab={narrativeTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
         fixOn={fillsOn} search={location.search} cards={tabs} action={action} phone={phone} admin={narrativeAdmin} />
     );
+  } else if (capTableTab) {
+    body = (
+      <CapTableTabPage tab={capTableTab} projectId={projectId} projectStatus={projectStatus} onRetryProject={() => setProjectsKey((n) => n + 1)}
+        search={location.search} cards={tabs} action={action} phone={phone} />
+    );
   } else if (record) {
     const recordTitle = recordState.data?.title || moduleName;
     body = <div className="space-y-4" data-testid="cycle-record-page">
@@ -1014,7 +1024,8 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
         tool={fnOf(def.tools, slug)?.(q)}
         tools={moduleToolLinks(cycle, slug, user, q)}
         search={q}
-        subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} /> : undefined}
+        subnav={cycle === 'raise' && slug === NARRATIVE ? <NarrativeTabBar active="home" search={tabSearch(q, searchParams.get('version'))} />
+          : cycle === 'raise' && slug === CAP_TABLE ? <CapTableHomeNav search={q} /> : undefined}
       >
         {fillKind && projectId && (
           <FillProposals key={`${slug}-${fillKind}`} projectId={projectId} kind={fillKind} enabled={fillsOn} ai={ai} workspace={name} onApplied={() => setReload((n) => n + 1)}
@@ -1086,7 +1097,7 @@ export default function CycleRoute({ cycle, lightbox = false, adding = false, re
           onChanged={() => { dirty.current = true; }} />
       )}
       {dialog && !(phone && dialog.page) && dialog.element}
-      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab ? null : recordId ?? null} />
+      <RecordCrumb title={record && recordState.status === 'ready' ? recordState.data?.title : null} type={`${cycle}/${slug}`} id={narrativeTab || capTableTab ? null : recordId ?? null} />
     </RailFrame>
     </RailCrumbsProvider>
   );
