@@ -284,7 +284,7 @@ test('the paperwork strip names the person and the document, and the roster CSV 
   ]);
   assert.deepEqual(gaps.map((p) => p.name), ['Amara Osei', 'Rin Takahashi'], 'an offboarded person is not a live blocker');
   assert.match(CODE, /Both are diligence blockers\./);
-  assert.match(CODE, /<Link to="\/trust" className="underline">Open Trust Center →<\/Link>/);
+  assert.match(CODE, /<Link to="\/trust\/me" className="underline">Open Trust Center →<\/Link>/);
   const csv = rosterCsv([{ name: 'A, B', email: 'a@x.test', person_type: 'founder', equity_shares: 5 }]);
   assert.equal(csv.split('\n')[0], 'name,email,person_type,role_title,start_date,status,access_level,equity_shares,equity_kind,agreement_status,ip_assignment,election_83b');
   assert.equal(csv.split('\n')[1], '"A, B",a@x.test,founder,,,,,5,,,,');

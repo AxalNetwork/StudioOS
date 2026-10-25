@@ -13,9 +13,9 @@ test('Trust Center is present only in the investor sidebar', () => {
   const investor = sidebar.slice(investorStart, advisorStart);
   const otherRoles = sidebar.slice(0, investorStart) + sidebar.slice(advisorStart);
 
-  assert.match(investor, /to:\s*['"]\/trust['"][^}]*label:\s*['"]Trust['"]/);
+  assert.match(investor, /to:\s*['"]\/trust\/me['"][^}]*label:\s*['"]Trust['"]/);
   assert.doesNotMatch(otherRoles, /label:\s*['"]Trust(?: & Identity)?['"]/);
-  assert.doesNotMatch(otherRoles, /to:\s*['"]\/trust['"]/);
+  assert.doesNotMatch(otherRoles, /to:\s*['"]\/trust(?:\/me)?['"]/);
 });
 
 test('Trust Center appears immediately below Account in the user dropdown', () => {
@@ -26,7 +26,7 @@ test('Trust Center appears immediately below Account in the user dropdown', () =
   // matching the wrong one would make this pass on a menu that no longer has
   // the item.
   const accountIndex = app.indexOf('to="/account"');
-  const trustIndex = app.indexOf('to="/trust"');
+  const trustIndex = app.indexOf('to="/trust/me"');
   const helpIndex = app.indexOf('to="/help"');
 
   assert.ok(accountIndex >= 0, 'Account menu item should exist');

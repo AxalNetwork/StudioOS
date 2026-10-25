@@ -90,7 +90,7 @@ test('the bridge draws Trust Center\'s own number and verdict, not a third formu
   assert.match(b, /scoreLine\(outstandingCounts\(required\)\)/);
   assert.match(PAGE, /import \{ verdictFor, outstandingCounts, scoreLine \} from '\.\.\/lib\/trustCenter';/);
   assert.doesNotMatch(b, /reqGates|weightOf|PREV_SCORE|scoreDelta/, 'the canvas\'s refused score model');
-  assert.match(b, /<Link to="\/trust"/, 'the way out is the Trust Center');
+  assert.match(b, /<Link to="\/trust\/me"/, 'the way out is the Trust Center');
   assert.match(b, /Trust Center reports on the data held here\./);
 });
 

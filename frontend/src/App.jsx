@@ -337,6 +337,7 @@ const AdminBestFitPage = lazy(() => import('./pages/admin/AdminBestFitPage'));
 const AdminProfilingTrends = lazy(() => import('./pages/admin/AdminProfilingTrends'));
 const NetworkPage = lazy(() => import('./pages/NetworkPage'));
 const TermsPage = lazy(() => import('./pages/TermsPage'));
+const TrustCenter = lazy(() => import('./pages/site/TrustCenter'));
 const SupportRedeemPage = lazy(() => import('./pages/SupportRedeemPage'));
 const JoinBranchPage = lazy(() => import('./pages/JoinBranchPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
@@ -813,7 +814,7 @@ function UserDropdown({ user, onLogout }) {
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Connectors
           </Link>
-          <Link to="/trust" onClick={() => setOpen(false)}
+          <Link to="/trust/me" onClick={() => setOpen(false)}
             className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors" role="menuitem">
             Trust Center
           </Link>
@@ -3410,7 +3411,14 @@ function AppInner() {
           mentor_disclaimer_v1) — and the Trust Center link in the user dropdown
           carries no role gating, so every advisor could see the link, click it,
           and be bounced off the only page listing what they owe. */}
-      <Route path="/trust" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], investorWorkspace('trust', <TrustCenterPage chromeless={effectiveRole === 'investor'} />))} />
+      {/* D1072 (#2425): the public trust center is /trust and its tabs, for anyone; a member's own part is /trust/me. */}
+      <Route path="/trust" element={<TrustCenter />} />
+      <Route path="/trust/security" element={<TrustCenter />} />
+      <Route path="/trust/data" element={<TrustCenter />} />
+      <Route path="/trust/subprocessors" element={<TrustCenter />} />
+      <Route path="/trust/documents" element={<TrustCenter />} />
+      <Route path="/trust/disclosure" element={<TrustCenter />} />
+      <Route path="/trust/me" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], investorWorkspace('trust', <TrustCenterPage chromeless={effectiveRole === 'investor'} />))} />
       <Route path="/monitoring" element={guard(['admin'], <MonitoringPage />)} />
       <Route path="/funds" element={guard(['admin', 'investor'], effectiveRole === 'investor' ? <InvestorFundLanding fundUnlocked={hasInvestorTier(user, 'institutional')} /> : <FundOpsWorkspace />)} />
       <Route path="/funds/capital-calls" element={<FundCapitalCallsRedirect />} />

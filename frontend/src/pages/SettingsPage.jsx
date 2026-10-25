@@ -105,7 +105,7 @@ function ComplianceBridge() {
       <div className="flex-1 min-w-[200px] text-sm text-gray-700 dark:text-gray-300" data-testid="compliance-line">
         {line}{' '}Trust Center reports on the data held here.
       </div>
-      <Link to="/trust" className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap">
+      <Link to="/trust/me" className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-violet-400 whitespace-nowrap">
         Open Trust Center →
       </Link>
     </div>

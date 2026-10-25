@@ -25,7 +25,7 @@ test('Calendar, Events, and Learning appear in the user dropdown before the Help
   // further down App.jsx as the target of the `/news` and `/articles/mine`
   // redirects, which are routes and not menu entries.
   const menu = app.slice(app.indexOf('function UserDropdown'), app.indexOf('function PortalSwitcher'));
-  const trustIndex = menu.indexOf('to="/trust"');
+  const trustIndex = menu.indexOf('to="/trust/me"');
   const calendarIndex = menu.indexOf('to="/calendar"');
   const eventsIndex = menu.indexOf('to="/my/events"');
   const learningIndex = menu.indexOf('to="/learning"');

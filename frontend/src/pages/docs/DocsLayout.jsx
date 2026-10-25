@@ -444,7 +444,7 @@ function StillStuck({ user, onOpenChat }) {
             <button type="button" onClick={onOpenChat} className={SECONDARY_ACTION}>Message the team</button>
           )}
           <span className="flex flex-col items-center gap-1">
-            <Link to="/trust" className={SECONDARY_ACTION}>What we can see</Link>
+            <Link to="/trust/me" className={SECONDARY_ACTION}>What we can see</Link>
             <span className="font-mono text-[9.5px] text-gray-400">Trust Center</span>
           </span>
         </div>

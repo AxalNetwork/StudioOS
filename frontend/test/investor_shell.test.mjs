@@ -60,7 +60,7 @@ test('investor rows use the approved destinations', () => {
     '/funds',
     '/network',
     '/research',
-    '/trust',
+    '/trust/me',
   ]);
 
   const app = readRoutesSource();

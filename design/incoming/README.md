@@ -109,6 +109,24 @@ strength of a live route would empty the queue of the work it exists to track.
    `Trust Center v2.dc.html` to `backlog/` for a day, next to the `NEW` canvases
    that have no route, and away from the v1 of its own page.
 
+## Landed 2026-10-25 — Account · Trust center (#2425)
+
+The owner's artifacts `2zg26b61pd4Xm2WP4K6kbP` (the board grid) and
+`2KSActnmAyVMcyYt59Dk55` (the page) came from S21's prompt on #2425, each
+decoded by `scripts/read-canvas.mjs` as is:
+- `Trust center · Boards.dc.html` is the board grid (TRU1 to TRU20, with the
+  lettered boards);
+- `Trust center Page.dc.html` is the page.
+
+No value was edited.
+
+**Grade: NEW** for the public part at `/trust`; the member part moves to
+`/trust/me`. S21's integration (D1072) draws the six public tabs from what the
+code shows and the status read; the content store, the editor and Your trust's
+redesign wait for D1072's seven parts, so this canvas stays in the queue until
+they land. The `ROUTE_MAP.md` row says what is drawn today. It replaces
+`design/canvases/integrated/Trust Center v2.dc.html` once part 6 lands.
+
 ## Landed 2026-10-25 — Build · Validate → Build (#2426)
 
 The owner's artifacts `P4pEfmEXmjGcCav3eAtzCY` (the board grid) and

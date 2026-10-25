@@ -45,7 +45,7 @@ canvas behind it still shows up here.
 | Headerless | Fund | `/funds` | Investor LP Canvas, Pages · Funds and fund research, Pages · Investor Fund |
 | Headerless | Network | `/network` | Investor LP Canvas, Pages · Investor Network |
 | Headerless | Research | `/research` | Investor LP Canvas, Pages · Investor Research, Research · Main |
-| Headerless | Trust | `/trust` | — (no canvas; shipped ahead of the design corpus) |
+| Headerless | Trust | `/trust/me` | Trust center (public) |
 
 ## `partner` — 7 destinations in 1 group
 
@@ -116,7 +116,7 @@ canvas behind it still shows up here.
 
 ## Destinations with no canvas
 
-31 of the 66 sidebar rows above are not claimed
+30 of the 66 sidebar rows above are not claimed
 by any row in `ROUTE_MAP.md`. That is expected — the platform predates the
 design corpus and not every shipped surface was redesigned — but the list is
 worth keeping visible, because it is also where a canvas would be *missing*
@@ -125,7 +125,6 @@ rather than merely absent.
 - advisor · Headerless · Spin-Out Lab (`/spinout-lab`)
 - advisor · Headerless · Practice (`/practice`)
 - advisor · Headerless · Cohorts (`/cohorts`)
-- investor · Headerless · Trust (`/trust`)
 - partner · Headerless · Pipeline (`/pipeline`)
 - partner · Headerless · Delivery (`/delivery`)
 - partner · Headerless · Offers (`/offers`)
@@ -154,4 +153,4 @@ rather than merely absent.
 - branch_admin · Branch · Insights (`/branch/insights`)
 - branch_admin · Branch · Licences (`/admin/my-licence`)
 
-**Canvas corpus:** 166. **Workspace assignments:** 235.
+**Canvas corpus:** 167. **Workspace assignments:** 241.

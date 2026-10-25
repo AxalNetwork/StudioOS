@@ -18,7 +18,7 @@ test('investor workspace routes branch on the active role', () => {
   for (const [path, key] of [
     ['/pipeline', 'deals'],
     ['/portfolio/health', 'portfolio'],
-    ['/trust', 'trust'],
+    ['/trust/me', 'trust'],
   ]) {
     // routeBlock + `includes` rather than a hand-escaped constructed regex.
     // Escaping `/` does nothing inside `new RegExp` — the delimiter only

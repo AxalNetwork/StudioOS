@@ -37,7 +37,7 @@ export const ACCOUNT_PHONE_PAGES = {
     sections: ['Yours', 'Suggested for you'],
   },
   trust: {
-    route: '/trust', title: 'Trust Center', sub: 'Your obligations and verification, for your role.',
+    route: '/trust/me', title: 'Trust Center', sub: 'Your obligations and verification, for your role.',
     sections: ['Trust score', 'Obligations'],
   },
   perks: {
