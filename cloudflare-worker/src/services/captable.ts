@@ -247,7 +247,7 @@ function mfnReads(safes: SafeIn[]): MfnRead[] {
       const after = dated ? String(o.issue_date) > String(s.issue_date) : j > i;
       if (!after) return [];
       const cap = Number(o.cap) > 0 ? Number(o.cap) : null;
-      const better = cap != null && (!(Number(s.cap) > 0) || cap < Number(s.cap));
+      const better = cap != null && (Number(s.cap) > 0 ? cap < Number(s.cap) : true);
       return [{ name: o.name, cap, verdict: better ? 'better_cap' as const : 'no_change' as const, ordered_by: dated ? 'date' as const : 'listed' as const }];
     });
     return [{ name: s.name, later }];
@@ -458,8 +458,9 @@ export function simulate(inputs: Inputs): SimulateResult | { errors: string[] } 
   const promised = postMoneyCheck(inputs.safes || []);
   const over100 = promised.over_100 || roundsOut.some((r) => r.post_money_check.over_100);
   const exitAt = (exit: number) => {
-    // D1018: an answer that rests on promises that cannot all be honoured is not given.
-    if (over100) {
+    // D1018: an answer that rests on promises that cannot all be honoured is not given. Before
+    // a round, #2446's pre-round rule decides: SAFEs that take cash back convert nothing.
+    if (over100 && roundsOut.length) {
       warnings.push(`Exit not calculated: post-money caps promise ${promised.pct}% of the company, and these terms cannot all be honoured.`);
       return null;
     }
