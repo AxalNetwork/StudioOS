@@ -371,3 +371,30 @@ export function effectsLine(effects) {
   const list = (Array.isArray(effects) ? effects : []).map((e) => EFFECT_WORDS[e] || words(e));
   return list.length ? `Paused: ${list.join(', ')}.` : 'Paused. Nothing else changes for this account.';
 }
+
+// ---------------------------------------------------------------- D1125: the person's History
+
+const HISTORY_WORDS = {
+  'network.paused': 'Paused in the network',
+  'network.resumed': 'Resumed in the network',
+  'network.directory_hidden': 'Hidden from the advisor directory',
+  'network.directory_shown': 'Shown in the advisor directory',
+  'advisor_cohort.assigned': 'Assigned to a mentor cohort',
+  'advisor_cohort.ended': 'Mentor cohort ended',
+  network_profile_created: 'Deck card added',
+  network_profile_updated: 'Deck card edited',
+  network_profile_shown: 'Shown on the deck',
+  network_profile_hidden: 'Hidden from the deck',
+  network_profile_archived: 'Deck card archived',
+  network_profile_restored: 'Deck card restored',
+  network_profile_photo_uploaded: 'Deck card photo uploaded',
+};
+
+/** One History row (from D1125's audit-log read) in words: what, when (UTC day), who, and why or which cohort. */
+export function historyLine(item) {
+  const what = HISTORY_WORDS[item?.action] || words(String(item?.action || '').replace(/[._]/g, ' '));
+  const when = dayWord(item?.at) || 'Date not recorded';
+  const who = item?.by?.name || 'an admin whose name is not recorded';
+  const extra = item?.reason ? `Reason: ${item.reason}` : item?.cohort_cycle_id != null ? `Cohort ${item.cohort_cycle_id}` : null;
+  return { what, when, who, extra };
+}

@@ -307,6 +307,7 @@ const ReviewQueuePage = lazy(() => import('./pages/hq/ReviewQueuePage'));
 const CreditRulesPage = lazy(() => import('./pages/hq/CreditRulesRegistryPage'));
 const MemberCreditsPage = lazy(() => import('./pages/hq/MemberCreditsPage'));
 const TrustObligationsPage = lazy(() => import('./pages/hq/TrustObligationsPage'));
+const TrustContentPage = lazy(() => import('./pages/hq/TrustContentPage'));
 const HqFundsPage = lazy(() => import('./pages/hq/HqFundsPage'));
 // D714 (#1779) PR 4a — fund administration for the Super Admin and every Admin on HQ.
 const FundAdminConsole = lazy(() => import('./pages/admin/fundAdmin/FundAdminConsole'));
@@ -2815,6 +2816,9 @@ function AppInner() {
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
       {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
       <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/requests" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/defaults" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/studio/:uid" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />
@@ -2974,6 +2978,8 @@ function AppInner() {
       <Route path="/admin/security" element={guard(['admin'], hqOnly(<HqSecurityPage />))} />
       {/* D633 (#1391, Q3) — trust obligations by role, read-only; HQ Security links to it. */}
       <Route path="/admin/security/obligations" element={guard(['admin'], hqOnly(<TrustObligationsPage />))} />
+      {/* D1079 (#2971) — TRU14, the public trust center's content: Super Admin only (hqOnly, and the Worker's requireSuperAdmin). */}
+      <Route path="/admin/security/trust-center" element={guard(['admin'], hqOnly(<TrustContentPage />))} />
       {/* D972 (#2369) — Advisors & Partners under Community, its tabs as
           sub-paths (D936's header). /admin/network-profiles and the Admin
           Console's ?tab=network-profiles forward to the Deck roster tab. */}
@@ -3705,6 +3711,8 @@ function AppInner() {
       {/* D686 §5.1: Call for Capital, the Raise page with its lightbox open; /raise/calls is the history's address. */}
       <Route path="/raise/call" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" lightbox />)} />
       <Route path="/raise/calls" element={guard(labRoles(['admin', 'founder']), <HistoryRedirect to="/raise/capital-relationships" hash="#calls" />)} />
+      {/* D1025 (#2862, CT11): a Cap table proposal's drawer, over the tool; its id is a record proposal's uid or `mercury-<n>`. */}
+      <Route path="/raise/cap-table/proposal/:proposal" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" slug="cap-table" capTableProposal />)} />
       <Route path="/raise/:slug" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" />)} />
       <Route path="/raise/:slug/:id" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" record />)} />
       <Route path="/raise/:slug/new" element={guard(labRoles(['admin', 'founder']), <CycleRoute cycle="raise" adding />)} />

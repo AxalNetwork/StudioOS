@@ -313,7 +313,7 @@ export function PricingBody({ user = null }) {
   // read from their plan status only on their own tab.
   const wantPlan = needsPlanStatus(user, role, tab);
   const planFetch = useCallback(() => (wantPlan ? api.planStatus() : Promise.resolve(null)), [wantPlan]);
-  const [planRead] = useRead(planFetch);
+  const [planRead, retryPlan] = useRead(planFetch);
 
   const pickTab = (key) => {
     const q = new URLSearchParams(location.search);
@@ -416,7 +416,7 @@ export function PricingBody({ user = null }) {
       )}
       {checkout && (
         <CheckoutSheet plan={checkout.plan} spec={specs.find((x) => x.id === checkout.id)} user={user} role={role}
-          held={heldCard(user, role, tab)} interval={billing} onClose={() => setCheckout(null)} />
+          held={heldCard(user, role, tab, planRead)} planRead={wantPlan ? planRead : null} onRetryPlan={retryPlan} interval={billing} onClose={() => setCheckout(null)} />
       )}
     </div>
     </Face.Provider>
