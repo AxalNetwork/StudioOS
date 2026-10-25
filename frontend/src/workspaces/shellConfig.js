@@ -278,8 +278,9 @@ export const SHELLS = {
       // real. That stopped being hypothetical once `/fund/accounting` and
       // `/funds/accounting` were both live and rendered different components.
       //
-      // The zones are the fund OVERVIEW; `/funds/*` already holds the
-      // operations tool (FundOpsWorkspace and its tabs) and keeps it — less
+      // The zones are the fund OVERVIEW; `/funds/*` held the operations tool
+      // (Fund Ops, retired by D1160: an admin's `/funds` now forwards to
+      // `/admin/fund-admin`) and kept it — less
       // its Capital Calls tab, which D371 retired: `/funds/capital-calls` now
       // redirects to the `calls` zone, so that zone's `legacy` is a route
       // App.jsx really does send here, as `legacyRedirects` reports. The
