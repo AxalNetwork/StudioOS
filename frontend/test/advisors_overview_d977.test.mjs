@@ -90,3 +90,21 @@ test('each failed needs queue is named while readable items and known counts sur
   try{assert.match(ui.text(`ap-need-state-${key}`),/Unreadable.*Try again/);assert.match(ui.text('ap-needs'),/other queues unread/);assert.doesNotMatch(ui.text('ap-needs'),/Nothing needs you/);assert.match(ui.text('ap-tile-sessions'),/17/);}finally{await ui.close();}
  }
 });
+
+
+test('phone lists with 4, 5 or 6 items retain a Show all action and can reveal every item', async()=>{
+ for(const n of [4,5,6]) {
+  const d=apOverviewFixture();
+  for(const key of Object.keys(d.needs_you))d.needs_you[key]=key==='settlements'?recorded({...d.settlements.value,rows:[],count:0}):recorded([]);
+  d.needs_you.unattached_partners=recorded(Array.from({length:n},(_,i)=>({ref:`user:${i+100}`,name:`Synthetic partner ${i}`})));
+  const ui=await mount(d);try{
+   assert.ok(ui.node('ap-needs-all'),`a phone cannot reveal ${n} rows`);
+   assert.match(ui.props(ui.node('ap-needs-all')).className,/sm:hidden/,'desktop already shows these rows');
+   const fourth=ui.ids().filter(id=>id.startsWith('ap-need-'))[3];
+   assert.match(ui.props(ui.node(fourth)).className,/hidden sm:flex/);
+   await ui.click('ap-needs-all');
+   assert.ok(ui.text('ap-needs').includes(`Showing ${n} of ${n}`));
+   assert.doesNotMatch(ui.props(ui.node(fourth)).className,/hidden sm:flex/);
+  }finally{await ui.close();}
+ }
+});
