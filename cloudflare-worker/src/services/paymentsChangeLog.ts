@@ -69,6 +69,7 @@ export const EXPORT_REASON_MIN = 10;
 export const EXPORT_REASON_MAX = 500;
 
 export type ChangeLogFilters = {
+  q?: string;
   what?: ChangeKind;
   who?: number;
   product?: string;
@@ -107,6 +108,9 @@ function isDay(v: string): boolean {
 export function parseChangeLogFilters(q: (name: string) => string | undefined): ParsedFilters {
   const no = (error: string, message: string): ParsedFilters => ({ ok: false, refusal: { error, message } });
   const out: ChangeLogFilters = {};
+  const search = String(q('q') ?? '').trim();
+  if (search.length > 200) return no('invalid_q', 'Search is at most 200 characters.');
+  if (search) out.q = search;
   const what = q('what');
   if (what) {
     if (!(CHANGE_KINDS as readonly string[]).includes(what)) return no('invalid_what', `"what" is one of ${CHANGE_KINDS.join(', ')}.`);
@@ -144,7 +148,7 @@ export function actionsFor(what?: ChangeKind): string[] {
  * it, so the SQL is one fixed text whatever is chosen.
  */
 function binds(f: ChangeLogFilters): unknown[] {
-  return [JSON.stringify(actionsFor(f.what)), f.who ?? null, f.product ?? null, f.from ?? null, f.to ?? null];
+  return [JSON.stringify(actionsFor(f.what)), f.who ?? null, f.product ?? null, f.from ?? null, f.to ?? null, f.q ?? null];
 }
 
 type Row = {
@@ -192,8 +196,15 @@ const ROWS_SQL = `SELECT a.id, a.exported_at, a.action, a.admin_user_id, u.name,
                SELECT json_extract(p.value, '$.id') FROM stripe_products s, json_each(s.prices_json) p WHERE s.id = ?3))
      AND (?4 IS NULL OR datetime(a.exported_at) >= datetime(?4))
      AND (?5 IS NULL OR datetime(a.exported_at) < datetime(?5, '+1 day'))
+     AND (?6 IS NULL OR EXISTS (SELECT 1 FROM json_tree(a.filters_json) detail
+               WHERE detail.type = 'text' AND instr(lower(detail.value), lower(?6)) > 0)
+          OR EXISTS (SELECT 1 FROM stripe_products s
+               WHERE instr(lower(s.name), lower(?6)) > 0
+                 AND (s.id = json_extract(a.filters_json, '$.product_id')
+                      OR EXISTS (SELECT 1 FROM json_each(s.prices_json) p
+                           WHERE json_extract(p.value, '$.id') = json_extract(a.filters_json, '$.price_id')))))
    ORDER BY a.id DESC
-   LIMIT ?6 OFFSET ?7`;
+   LIMIT ?7 OFFSET ?8`;
 
 const COUNT_SQL = `SELECT COUNT(*) AS n FROM admin_audit_log a
    WHERE a.action IN (SELECT value FROM json_each(?1))
@@ -202,7 +213,14 @@ const COUNT_SQL = `SELECT COUNT(*) AS n FROM admin_audit_log a
           OR json_extract(a.filters_json, '$.price_id') IN (
                SELECT json_extract(p.value, '$.id') FROM stripe_products s, json_each(s.prices_json) p WHERE s.id = ?3))
      AND (?4 IS NULL OR datetime(a.exported_at) >= datetime(?4))
-     AND (?5 IS NULL OR datetime(a.exported_at) < datetime(?5, '+1 day'))`;
+     AND (?5 IS NULL OR datetime(a.exported_at) < datetime(?5, '+1 day'))
+     AND (?6 IS NULL OR EXISTS (SELECT 1 FROM json_tree(a.filters_json) detail
+               WHERE detail.type = 'text' AND instr(lower(detail.value), lower(?6)) > 0)
+          OR EXISTS (SELECT 1 FROM stripe_products s
+               WHERE instr(lower(s.name), lower(?6)) > 0
+                 AND (s.id = json_extract(a.filters_json, '$.product_id')
+                      OR EXISTS (SELECT 1 FROM json_each(s.prices_json) p
+                           WHERE json_extract(p.value, '$.id') = json_extract(a.filters_json, '$.price_id')))))`;
 
 /** One page of the log, newest first, and how many rows the filters match. Throws when the database does not answer. */
 export async function readChangeLog(
@@ -232,4 +250,17 @@ export function changeLogCsvRows(entries: ChangeLogEntry[]): unknown[][] {
     e.at, e.what, e.action, e.who.id, e.who.name, e.product_id, e.price_id,
     e.details ? JSON.stringify(e.details) : null,
   ]);
+}
+
+/** D1129: current admins and historical payment actors, even if demoted or deleted. */
+export async function readChangeLogAdmins(env: Env): Promise<{ id: number; name: string | null }[]> {
+  const rows = await env.DB.prepare(
+    `SELECT actor.id, u.name
+       FROM (SELECT id FROM users WHERE role = ?1
+             UNION SELECT admin_user_id AS id FROM admin_audit_log
+               WHERE admin_user_id > 0 AND action IN (SELECT value FROM json_each(?2))) actor
+       LEFT JOIN users u ON u.id = actor.id
+       ORDER BY lower(COALESCE(u.name, '')), actor.id`,
+  ).bind('admin', JSON.stringify(actionsFor())).all<{ id: number; name: string | null }>();
+  return rows.results ?? [];
 }
