@@ -359,8 +359,11 @@ coverage repairs in D1131 (#3011). Events is in the account menu, marked
   cancellation; no cancellation here initiates a new charge or refund.
 
 D1033 supplies event tickets and hosted events to the unified calendar. D1131
-starts connected Google/Outlook cleanup in the cancellation request's Worker
-`waitUntil`: cancelling one place removes only its registration's copies;
+persists connected Google/Outlook cleanup in the existing job queue before
+starting at most two immediate copies in the request's Worker `waitUntil`.
+Bounded scan/copy jobs continue and retry independently; delivery rechecks the
+cancelled source so a newly registered place is preserved. Cancelling one place
+removes only its registration's copies;
 host/admin event cancellation removes that event's hosted and ticket copies.
 Other users, events and calendar kinds are untouched. Provider 404/410 is already
 gone; a failed deletion retains its sync mapping for the existing stale-copy

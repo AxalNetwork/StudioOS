@@ -328,8 +328,9 @@ use legacy investor grants through `/shared` instead. The data-room spec in
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
 
 D1131's `_eventCalendar.ts` schedules connected-calendar cleanup after successful
-member, host or admin event cancellations. Provider failures do not undo local
-cancellation; failed mappings remain retryable. `/events/suggested` now includes
+member, host or admin event cancellations. The existing queue durably continues
+bounded immediate work; provider failures do not undo local cancellation, and
+failed mappings remain retryable. `/events/suggested` now includes
 the authenticated caller's actual registration eligibility.
 
 D1135: `company.ts` adds member self-leave and validates create/rename; `projects.ts` counts live ventures, adds owner restore within 30 days and sends email-mode team invitations.

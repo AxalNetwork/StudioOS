@@ -442,3 +442,9 @@ reads do not seed content. Published versions and audit behavior stay in D954's
 store; no migration or canvas sample text is introduced.
 
 D1129 searches decoded audit detail values, never JSON keys, and includes demoted/deleted payment actors in Who alongside current admins.
+
+D1131: `calendar/cancelEvents.ts` persists bounded event-copy cleanup through
+`queue.ts`; `queueWorker.ts` dispatches `event_calendar_cleanup` (the type lives
+in `../models/jobs.ts`). Two copies start immediately; scan jobs dispatch up to
+five copy jobs and one continuation. A copy job rechecks cancellation, scopes
+its provider/user, and retries through the existing queue/dead-letter handling.

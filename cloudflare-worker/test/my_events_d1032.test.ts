@@ -23,6 +23,7 @@ import { format } from 'node:util';
 import { SignJWT } from 'jose';
 import events from '../src/routes/events.ts';
 import adminEvents from '../src/routes/admin_events.ts';
+import { handleJob, processQueueBatch } from '../src/services/queueWorker.ts';
 import { tableFromBaseline } from './_baseline.mjs';
 import eventsPublic from '../src/routes/events_public.ts';
 
@@ -380,7 +381,9 @@ test('GET /api/public/events: format and price filter, the total is exact, and a
 
 function calendarCopies(f: ReturnType<typeof fixture>) {
   const baseline=readFileSync(new URL('../sql/schema_baseline.sql',import.meta.url),'utf8');
-  for(const name of ['calendar_sync_records','google_oauth_tokens','microsoft_oauth_tokens']) f.db.exec(tableFromBaseline(baseline,name));
+  for(const name of ['calendar_sync_records','google_oauth_tokens','microsoft_oauth_tokens','queue_jobs','dead_letter_queue']) f.db.exec(tableFromBaseline(baseline,name));
+  const jobs:any[]=[];
+  Object.assign(f.env,{USE_CF_QUEUE:'true',JOB_QUEUE:{async send(body:any){jobs.push(body);}}});
   Object.assign(f.env,{APP_URL:'https://example.test',GOOGLE_CLIENT_ID:'synthetic-google',GOOGLE_CLIENT_SECRET:'synthetic-secret',MICROSOFT_CLIENT_ID:'synthetic-ms',MICROSOFT_CLIENT_SECRET:'synthetic-secret'});
   for(const provider of ['google','microsoft']) f.db.prepare(`INSERT INTO ${provider}_oauth_tokens(user_id,refresh_token) VALUES (?,?)`).run(3,'synthetic-refresh');
   f.db.prepare('INSERT INTO google_oauth_tokens(user_id,refresh_token) VALUES (?,?)').run(2,'synthetic-refresh');
@@ -390,6 +393,7 @@ function calendarCopies(f: ReturnType<typeof fixture>) {
     (3,'google','event_ticket',21,'ticket-google'),(3,'microsoft','event_ticket',21,'ticket-ms'),
     (2,'google','event_hosted',1,'host-google'),(2,'google','event_ticket',22,'other-seat'),
     (3,'google','event_ticket',23,'other-event'),(3,'google','advisor_booking',21,'other-kind')`);
+  return {jobs,async drain(){let n=0;while(jobs.length){assert.ok(++n<1000);const body=jobs.shift();await handleJob(f.env,{id:0,job_type:body.job_type,payload:JSON.stringify(body.payload)} as any);}}};
 }
 
 test('D1131: cancelling a place deletes only its Google and Outlook copies immediately',async()=>{
@@ -405,12 +409,12 @@ test('D1131: cancelling a place deletes only its Google and Outlook copies immed
 
 test('D1131: host and admin cancellation remove every copy for that event and preserve other events/kinds',async()=>{
   for(const admin of [false,true]){
-    const f=fixture();calendarCopies(f);const original=globalThis.fetch;const calls:string[]=[];
+    const f=fixture();const queue=calendarCopies(f);const original=globalThis.fetch;const calls:string[]=[];
     globalThis.fetch=async(url:any,init:any)=>{if(init?.method==='DELETE'){calls.push(String(url));return new Response(null,{status:404});}return Response.json({access_token:'synthetic-access'});};
     try{
       assert.equal((await f.call('/1/cancel',3,{method:'POST',body:{}})).status,403);assert.equal(calls.length,0);
       const r=await f.call('/1/cancel',admin?1:2,{method:'POST',router:admin?adminEvents:events,body:{note:'Synthetic cancellation'}});
-      assert.equal(r.status,200);assert.equal(calls.length,4);
+      assert.equal(r.status,200);assert.equal(calls.length,2,'immediate provider work is bounded');await queue.drain();assert.equal(calls.length,4);
       assert.deepEqual(f.db.prepare('SELECT external_event_id FROM calendar_sync_records ORDER BY external_event_id').all().map((r:any)=>r.external_event_id),['other-event','other-kind']);
     }finally{globalThis.fetch=original;f.db.close();}
   }
@@ -455,4 +459,65 @@ test('D1131: Explorer suggestions carry actual registration eligibility and the 
   assert.ok(r.body.events.every((e:any)=>e.suggestion_reason==='Popular with new members'));
   const denied=await f.call('/2/register',3,{method:'POST',body:{}});assert.equal(denied.status,403,'a suggestion never widens the register gate');
   f.failOn(/SELECT role FROM users/);assert.ok((await f.call('/suggested',3)).status>=500,'an unreadable eligibility is not a false eligible result');f.db.close();
+});
+
+
+test('D1131: large cancellations drain bounded continuation on CF and D1 queues, despite one retry',async()=>{
+  for(const transport of ['cf','d1']){
+    const f=fixture();const queue=calendarCopies(f);if(transport==='d1')f.env.USE_CF_QUEUE='false';
+    for(let i=100;i<125;i++){f.db.prepare('INSERT INTO users(id,uid,role) VALUES (?,?,?)').run(i,`synthetic-${i}`,'founder');f.reg({id:i,event_id:1,user_id:i});for(const provider of ['google','microsoft']){f.db.prepare(`INSERT INTO ${provider}_oauth_tokens(user_id,refresh_token) VALUES (?,?)`).run(i,'synthetic-refresh');f.db.prepare('INSERT INTO calendar_sync_records(user_id,provider,source_kind,source_id,external_event_id) VALUES (?,?,?,?,?)').run(i,provider,'event_ticket',i,`large-${provider}-${i}`);}}
+    const original=globalThis.fetch;let active=0,peak=0,deletes=0,refused=false;
+    globalThis.fetch=async(url:any,init:any)=>{
+      active++;peak=Math.max(peak,active);await new Promise(resolve=>setTimeout(resolve,1));active--;
+      if(init?.method==='DELETE'){
+        if(deletes===0)assert.ok(transport==='cf'?queue.jobs.length>0:!!f.db.prepare("SELECT 1 FROM queue_jobs WHERE status='pending'").get(),'continuation is durable before provider work');deletes++;if(String(url).endsWith('/large-google-105')&&!refused){refused=true;return new Response(null,{status:503});}return new Response(null,{status:204});
+      }return Response.json({access_token:'synthetic-access'});
+    };
+    try{
+      assert.equal((await f.call('/1/cancel',2,{method:'POST',body:{}})).status,200);assert.equal(deletes,2);assert.ok(peak<=2);
+      if(transport==='cf'){
+        let failures=0,n=0;while(queue.jobs.length){assert.ok(++n<1000);const before=queue.jobs.length;const body=queue.jobs.shift();try{await handleJob(f.env,{id:0,job_type:body.job_type,payload:JSON.stringify(body.payload)} as any);if(body.payload.mapping_id){const done=deletes;await handleJob(f.env,{id:0,job_type:body.job_type,payload:JSON.stringify(body.payload)} as any);assert.equal(deletes,done,'duplicate successful delivery makes no provider call');}}catch(e:any){assert.equal(e.message,'calendar_delete_failed');failures++;queue.jobs.push(body);}assert.ok(queue.jobs.length<=before-1+6,'a scan dispatches at most five copies and one continuation');}assert.equal(failures,1);
+      }else{
+        let failures=0,n=0;while(f.db.prepare("SELECT 1 FROM queue_jobs WHERE status='pending'").get()){assert.ok(++n<100);const r=await processQueueBatch(f.env,10);failures+=r.failed;}assert.equal(failures,1);
+        assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM queue_jobs WHERE status<>'completed'").get()!.n,0);
+      }
+      assert.equal(deletes,55);assert.ok(peak<=2);assert.equal(refused,true);
+      assert.deepEqual(f.db.prepare('SELECT external_event_id FROM calendar_sync_records ORDER BY external_event_id').all().map((r:any)=>r.external_event_id),['other-event','other-kind']);
+    }finally{globalThis.fetch=original;f.db.close();}
+  }
+});
+
+test('D1131: delayed cleanup preserves a newly active seat, and duplicate delivery is harmless',async()=>{
+  const f=fixture();const queue=calendarCopies(f);const original=globalThis.fetch;let deletes=0;
+  globalThis.fetch=async(url:any,init:any)=>{if(init?.method==='DELETE'){deletes++;return new Response(null,{status:503});}return Response.json({access_token:'synthetic-access'});};
+  try{
+    await f.call('/1/registration',3,{method:'DELETE'});assert.equal(deletes,2);f.db.exec("UPDATE event_registrations SET status='confirmed' WHERE id=21");
+    const scan=queue.jobs[0];await queue.drain();assert.equal(deletes,2);await handleJob(f.env,{id:0,job_type:scan.job_type,payload:JSON.stringify(scan.payload)} as any);assert.equal(deletes,2);
+    assert.equal(f.db.prepare("SELECT COUNT(*) AS n FROM calendar_sync_records WHERE source_kind='event_ticket' AND source_id=21").get()!.n,2);
+    for(const payload of [{kind:'event',id:'bad'},{kind:'bad',id:1},{kind:'ticket',id:0},{kind:'ticket',id:21,after:-1},{kind:'ticket',id:21,mapping_id:0}])await assert.rejects(handleJob(f.env,{id:0,job_type:'event_calendar_cleanup',payload:JSON.stringify(payload)} as any),/calendar_cleanup_payload_invalid/);
+  }finally{globalThis.fetch=original;f.db.close();}
+});
+
+test('D1131: an exhausted provider copy reaches the existing D1 dead-letter queue without blocking others',async()=>{
+  const f=fixture();calendarCopies(f);f.env.USE_CF_QUEUE='false';const original=globalThis.fetch;
+  globalThis.fetch=async(url:any,init:any)=>init?.method==='DELETE'?new Response(null,{status:String(url).endsWith('/ticket-google')?503:204}):Response.json({access_token:'synthetic-access'});
+  try{
+    assert.equal((await f.call('/1/cancel',2,{method:'POST',body:{}})).status,200);
+    let n=0;while(f.db.prepare("SELECT 1 FROM queue_jobs WHERE status='pending'").get()){assert.ok(++n<30);await processQueueBatch(f.env,10);}
+    const failed:any=f.db.prepare("SELECT attempts,max_retries,error FROM queue_jobs WHERE status='failed'").get();assert.deepEqual({...failed},{attempts:5,max_retries:5,error:'calendar_delete_failed'});
+    const dead:any=f.db.prepare('SELECT attempts,last_error FROM dead_letter_queue').get();assert.deepEqual({...dead},{attempts:5,last_error:'calendar_delete_failed'});
+    assert.deepEqual(f.db.prepare('SELECT external_event_id FROM calendar_sync_records ORDER BY external_event_id').all().map((r:any)=>r.external_event_id),['other-event','other-kind','ticket-google']);
+  }finally{globalThis.fetch=original;f.db.close();}
+});
+
+test('D1131: one queued mapping deletes only its own provider account',async()=>{
+  const f=fixture();calendarCopies(f);const original=globalThis.fetch;const calls:string[]=[];
+  f.db.exec("UPDATE events SET status='cancelled' WHERE id=1; INSERT INTO calendar_sync_records(user_id,provider,source_kind,source_id,external_event_id) VALUES (3,'google','event_hosted',1,'old-host-google')");
+  const mapping:any=f.db.prepare("SELECT id FROM calendar_sync_records WHERE external_event_id='host-google'").get();
+  globalThis.fetch=async(url:any,init:any)=>{if(init?.method==='DELETE'){calls.push(String(url));return new Response(null,{status:204});}return Response.json({access_token:'synthetic-access'});};
+  try{
+    const job:any={id:0,job_type:'event_calendar_cleanup',payload:JSON.stringify({kind:'event',id:1,mapping_id:mapping.id})};
+    await handleJob(f.env,job);assert.equal(calls.length,1);assert.ok(calls[0].endsWith('/host-google'));assert.ok(f.db.prepare("SELECT 1 FROM calendar_sync_records WHERE external_event_id='old-host-google'").get());
+    await handleJob(f.env,job);assert.equal(calls.length,1);
+  }finally{globalThis.fetch=original;f.db.close();}
 });

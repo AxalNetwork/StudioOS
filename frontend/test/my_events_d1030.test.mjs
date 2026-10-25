@@ -18,7 +18,7 @@ const NOW = Date.parse('2026-11-10T12:00:00Z');
 const at = (iso) => ({ starts_at: iso, ends_at: null, timezone: 'UTC' });
 
 const ATTENDING = [
-  { id: 1, title: 'Pricing Workshop', ...at('2026-11-12T18:00:00Z'), location_kind: 'virtual', location_url: 'https://example.test/join', reg_status: 'confirmed', comp: true, checkin_code: 'K7Q2-9X4M' },
+  { id: 1, title: 'Pricing Workshop', ...at('2026-11-12T18:00:00Z'), location_kind: 'virtual', location_url: 'https://example.test/join', reg_status: 'confirmed', payment_status: 'none', comp: true, checkin_code: 'K7Q2-9X4M' },
   { id: 2, title: 'Operators Social', ...at('2026-11-28T18:00:00Z'), location_kind: 'in_person', location_text: 'Rua Exemplo 10', reg_status: 'waitlisted', reg_waitlist_position: 3, comp: false, checkin_code: null },
   { id: 3, title: 'Climate Roundtable', ...at('2027-01-20T18:00:00Z'), location_kind: 'hybrid', reg_status: 'registered', comp: false, checkin_code: null },
   { id: 4, title: 'Founder Breakfast', ...at('2026-10-01T08:00:00Z'), reg_status: 'attended', comp: false, checkin_code: 'OLD-CODE' },
@@ -247,7 +247,8 @@ test('D1131: Join opens exactly 15 minutes before start and requires the existin
   const start=Date.parse('2026-11-10T12:00:00Z');const ticket={starts_at:'2026-11-10 12:00:00',ends_at:'2026-11-10T13:00:00Z',reg_status:'confirmed',payment_status:'paid',location_url:'https://example.test/join'};
   assert.deepEqual(joinState(ticket,start-900001),{available:false,note:JOIN_NOTE});
   assert.equal(joinState(ticket,start-900000).available,true);assert.equal(joinState(ticket,start+3600000).available,false);
-  assert.equal(joinState({...ticket,payment_status:'pending'},start).available,false);
+  for(const payment_status of ['pending','refunded',null,'unknown']) assert.equal(joinState({...ticket,payment_status},start).available,false);
+  for(const payment_status of ['none','free','paid']) assert.equal(joinState({...ticket,payment_status},start).available,true);
   assert.equal(joinState({...ticket,reg_status:'waitlisted'},start).available,false);
   assert.equal(joinState({...ticket,status:'cancelled'},start).available,false);
   assert.equal(joinState({...ticket,starts_at:null},start).available,false);

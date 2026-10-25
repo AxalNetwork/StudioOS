@@ -146,12 +146,15 @@ export const onAxalSessionUpdated = onAxalSessionCreated;
  */
 export async function onAxalSessionCancelled(
   env: Env, kind: AxalKind, sourceId: number,
+  copy?: { userId: number; provider: 'google' | 'microsoft' },
 ): Promise<void> {
   try {
     const sql = getSQL(env);
     const rows = await sql`
       SELECT user_id, provider, external_event_id FROM calendar_sync_records
       WHERE source_kind = ${kind} AND source_id = ${sourceId}
+        AND (${copy?.userId ?? null} IS NULL OR user_id = ${copy?.userId ?? null})
+        AND (${copy?.provider ?? null} IS NULL OR provider = ${copy?.provider ?? null})
     ` as SyncRow[];
     if (!rows || rows.length === 0) return;
     // Task #52 follow-up — only DELETE the calendar_sync_records row

@@ -227,7 +227,7 @@ export const JOIN_LEAD_MS = 15 * 60 * 1000;
 export function joinState(ticket, now = Date.now()) {
   const start = time(ticket?.starts_at), end = time(ticket?.ends_at);
   if (ticket?.status === 'cancelled' || (end != null && now >= end)) return { available: false, note: 'This event is not open to join.' };
-  if (!['confirmed', 'attended'].includes(ticket?.reg_status) || ticket?.payment_status === 'pending') return { available: false, note: 'Your seat must be confirmed and paid before you can join.' };
+  if (!['confirmed', 'attended'].includes(ticket?.reg_status) || !['none', 'free', 'paid'].includes(ticket?.payment_status)) return { available: false, note: 'Your seat must be confirmed and paid before you can join.' };
   if (start == null) return { available: false, note: 'The start time is not recorded.' };
   if (now < start - JOIN_LEAD_MS) return { available: false, note: JOIN_NOTE };
   if (!ticket?.location_url) return { available: false, note: 'The join link is not recorded.' };

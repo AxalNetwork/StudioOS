@@ -38,3 +38,8 @@ rule-derived seat source await a migration number; no historical source or
 promotion is guessed. See `design/EVENT_SYSTEM.md` §10 for the surface's current
 scope and the parts still pending. Calendar cancellation cleanup is the Worker's
 `cloudflare-worker/src/routes/_eventCalendar.ts` / `cloudflare-worker/src/services/calendar/cancelEvents.ts`, not a client-side provider call.
+
+D1131 cleanup uses the existing CF/D1 job queue: two immediate copies, bounded
+continuation, independent provider retries and a fresh cancellation check on
+delivery. Its queue contract is in `cloudflare-worker/src/services/queueWorker.ts`
+and `cloudflare-worker/src/models/jobs.ts`; no new schema or binding is needed.
