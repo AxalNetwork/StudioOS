@@ -256,18 +256,21 @@ test('CSV uses the authenticated client with range and group; Cost retains all d
   assert.notDeepEqual(called, [{ range: 'prev_month', group: 'option' }]);
   const out = html(h(cost.default, { role: 'founder' }));
   assert.match(out, /Download CSV · all models/);
-  for (const id of ['allowance', 'top-ups', 'days', 'where', 'models', 'rates', 'last-run', 'storage']) {
+  for (const id of ['allowance', 'top-ups', 'days', 'where', 'models', 'rates', 'last-run']) {
     assert.ok(out.includes('usage-card-' + id), id + ' preserved');
   }
+  // D1166 (#2449), STG17: storage has its own page, and Cost says so.
+  assert.ok(!out.includes('usage-card-storage'));
+  assert.ok(out.includes('usage-storage-moved') && out.includes('href="/account/usage/storage"'));
 });
 
 test('the canonical address and navigation offer Overview, Cost, Limits without losing the legacy anchors', async () => {
   const checkNav = (m) => {
-    assert.deepEqual(m.USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'limits']);
+    assert.deepEqual(m.USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'limits', 'storage']);
     assert.equal(m.usagePageFor('/account/usage/cost'), 'cost');
   };
   await killed('../src/pages/account/limitsModel.js', "  { id: 'cost', label: 'Cost', path: '/account/usage/cost' },", '', checkNav);
-  assert.deepEqual(USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'limits']);
+  assert.deepEqual(USAGE_PAGES.map((p) => p.id), ['overview', 'cost', 'limits', 'storage']);
   assert.equal(usagePageFor('/account/usage/cost'), 'cost');
   assert.equal(usagePageFor('/settings/usage/cost'), 'cost');
   assert.equal(accountPathFor({ section: 'usage', usagePage: 'cost', phone: true }), '/account/usage/cost');

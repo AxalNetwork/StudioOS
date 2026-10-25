@@ -1,7 +1,7 @@
 import DealFreePlan from '../components/deals/DealFreePlan';
 import { dealMoney, dealBackLink } from '../components/deals/dealMoney';
 import React, { useEffect, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { reportError } from '../lib/log';
 import { safeReadJSON } from '../lib/storage';
 import { useAuth } from '../hooks/useAuthSync';
@@ -19,6 +19,7 @@ import DealTransfersTab from '../components/deals/DealTransfersTab';
 import DealReferencesTab from '../components/deals/DealReferencesTab';
 import DealSyndicates from '../components/deals/DealSyndicates';
 import MercuryMatch from '../components/MercuryMatch';
+import { NOT_YET, TAB_DEFS, WAITS, dealTabsFor, tabHref, tabOf } from './dealPageModel';
 import {
   ArrowLeft, Download, FileText, Loader2, X, DollarSign, Send, Check,
   Users, Clock, ThumbsUp, ThumbsDown,
@@ -44,32 +45,32 @@ function fmtMoney(n, currency = 'USD') {
 }
 
 /**
- * The deal room's tabs for a role (D630, #1388). The Ops canvas adds three:
- *   - Invitations — admin (`GET /deals/:id/invitations` is `requireAdmin`);
- *   - Transfers — admin and partner, who record them;
- *   - References — admin and investor (D609; founders and partners are refused).
+ * D1148 (#2421): a tab with no per-deal read yet says so where its blocks
+ * would be (`dealPageModel.js` WAITS). Never a zero, never "none".
  */
-export function dealRoomTabs(role) {
-  const tabs = ['Overview', 'Documents', 'Commitments', 'Activity'];
-  if (role === 'admin') tabs.push('Invitations');
-  if (role === 'admin' || role === 'partner') tabs.push('Transfers');
-  if (role === 'admin' || role === 'investor') tabs.push('References');
-  return tabs;
+function WaitCard({ tab }) {
+  return (
+    <section className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900" data-testid={`deal-wait-${tab}`}>
+      <span className="w-fit rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-500 dark:border-gray-600 dark:text-gray-400">{NOT_YET}</span>
+      <p className="m-0 text-sm text-gray-600 dark:text-gray-400">{WAITS[tab]}</p>
+    </section>
+  );
 }
 
 export default function DealRoomPage() {
-  const { dealId } = useParams();
+  // D1148 (#2421): each tab is its own address under /deals/:dealId.
+  const { dealId, tab: tabParam } = useParams();
   const navigate = useNavigate();
   const role = useCurrentRole();
   const { user } = useAuth() || {};
   const back = dealBackLink(role);
   const isInvestor = role === 'investor';
   const isAdmin = role === 'admin';
-  const tabs = dealRoomTabs(role);
+  const tabs = dealTabsFor(role);
+  const tab = tabOf(tabParam, role);
 
   const [deal, setDeal] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState('Overview');
   const [error, setError] = useState('');
   const [commitOpen, setCommitOpen] = useState(false);
   // D752 (#1891): the investor's share sheet, opened from their own row or after a commitment.
@@ -162,32 +163,45 @@ export default function DealRoomPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800 mb-5">
+      <nav aria-label="Deal" className="flex gap-1 overflow-x-auto border-b border-gray-200 dark:border-gray-800 mb-5" data-testid="deal-tabs">
         {tabs.map(t => (
-          <button key={t} onClick={() => setTab(t)}
+          <Link key={t} to={tabHref(deal.id, t)} aria-current={tab === t ? 'page' : undefined} data-testid={`deal-tab-${t}`}
             className={`whitespace-nowrap px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === t ? 'border-violet-600 text-violet-700 dark:text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-800 dark:hover:text-gray-300'}`}>
-            {t}
-          </button>
+            {TAB_DEFS[t].label}
+          </Link>
         ))}
-      </div>
+      </nav>
 
-      {tab === 'Overview' && (
+      {tab === 'overview' && (
         <>
           <OverviewTab deal={deal} />
           <DealSyndicates projectId={deal.project_id} user={user} />
         </>
       )}
-      {tab === 'Documents' && <DocumentsTab dealId={deal.id} />}
-      {tab === 'Commitments' && <CommitmentsTab key={proofKey} dealId={deal.id} currency={deal.currency} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
-      {tab === 'Activity' && <ActivityTab dealId={deal.id} />}
-      {tab === 'Invitations' && tabs.includes('Invitations') && (
+      {['scorecard', 'evidence', 'team', 'market', 'traction', 'terms'].includes(tab) && <WaitCard tab={tab} />}
+      {tab === 'diligence' && (
+        <>
+          <WaitCard tab="diligence" />
+          <DealReferencesTab dealId={deal.id} />
+        </>
+      )}
+      {tab === 'documents' && <DocumentsTab dealId={deal.id} />}
+      {tab === 'commitment' && <CommitmentsTab key={proofKey} dealId={deal.id} currency={deal.currency} proof={isAdmin && !branchOfUser(user)} user={user} onShare={openProof} founderMatch={isDealFounder(role, user, deal)} />}
+      {/* DL14: an investor's Notes tab carries the deal's activity under the notes. */}
+      {tab === 'notes' && (
+        <>
+          <WaitCard tab="notes" />
+          <ActivityTab dealId={deal.id} />
+        </>
+      )}
+      {tab === 'activity' && <ActivityTab dealId={deal.id} />}
+      {tab === 'invitations' && (
         <DealInvitationsTab dealId={deal.id} onInvite={canInvite ? () => setInviteOpen(true) : undefined} />
       )}
-      {tab === 'Transfers' && tabs.includes('Transfers') && <DealTransfersTab dealId={deal.id} currency={deal.currency} canRecord={isAdmin || role === 'partner'} />}
-      {tab === 'References' && tabs.includes('References') && <DealReferencesTab dealId={deal.id} />}
+      {tab === 'transfers' && <DealTransfersTab dealId={deal.id} currency={deal.currency} canRecord={isAdmin || role === 'partner'} />}
 
       {commitOpen && <CommitModal deal={deal} user={user} onClose={() => setCommitOpen(false)} onDone={async (opts) => {
-        setCommitOpen(false); loadDeal(); setTab('Commitments');
+        setCommitOpen(false); loadDeal(); navigate(tabHref(deal.id, 'commitment'));
         if (!opts?.share || !showsProof(user)) return;
         try {
           const read = await mercuryAttestationsApi.targets();

@@ -264,6 +264,8 @@ const ADMIN = [
   own('/admin/accounts/all', key(AD, 'Accounts', 'Users')),
   own('/admin/exploring', key(AD, 'Accounts', 'Exploring members')),
   own('/admin/trash', key(AD, 'Accounts', 'Trash')),
+  // D1004 (#2819, #1874): Persona segments sits under Accounts; the AIRail canvas draws no Admin board for it.
+  off('/admin/persona-segments', key(AD, 'Accounts', 'Persona segments')),
   own('/admin/approvals', key(AD, 'Approvals')),
   alias('/branch/approvals', key(AD, 'Approvals'), 'The branch’s Approvals page.'),
   own('/admin/kyc', key(AD, 'Approvals', 'Identity checks')),
@@ -340,6 +342,7 @@ const SUPER = [
   off('/admin/analytics', key(SA, 'Analytics')),
   own('/admin/licences', key(SA, 'Licences')),
   alias('/admin/licences/programs', key(SA, 'Licences'), 'Program grants, the Licences strip’s second item (D981).'),
+  alias('/admin/licences/programs/history', key(SA, 'Licences'), 'Program grants’ History tab (D1126).'),
   own('/admin/funds', key(SA, 'Funds')),
   alias('/admin/fund-admin', key(SA, 'Funds'), 'HQ’s Fund admin row sits after Funds and has no board yet.'),
   own('/admin/contracts', key(SA, 'Contracts')),

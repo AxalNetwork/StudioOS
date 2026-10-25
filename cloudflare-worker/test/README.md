@@ -96,3 +96,7 @@ migrated SQLite schema; it also records the shared plan policy's admin exemption
 D1091: `google_workspace_connection.test.ts` tests consent, file scope, previews and disconnect using `_google_workspace_fake.mjs`; `fed_ownership.test.ts` holds the shared ledger-owner helper; `google_workspace_feeds.test.ts` pins the empty feed registry, audience and eight read fragments. No real Google host is called.
 
 D1144: `pmf_store_d1144.test.ts` exercises migration 598, signed change-only snapshots, scoped module/history/Re-score, checklist confidence and atomic audit/rollback on SQLite. `pmf_engine.test.ts` keeps the shared pure engine and collector contract.
+
+`deal_context_d1150.test.ts` executes migration 600 and real source tables for
+derived stages, per-user/firm visit markers and private notes, including audit
+rollback, no admin bypass, NDA exclusion and anonymous change metadata.

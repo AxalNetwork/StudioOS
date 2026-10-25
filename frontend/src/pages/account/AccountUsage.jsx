@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { NO_PLAN_LINE } from '../../lib/planAllowance';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../../lib/api';
-import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { usageApi } from '../../lib/api/usage';
+import { aiBudgetApi } from '../../lib/api/aiBudget';
 import { EmptyState, PhoneBar, PhoneRows, Pill, Unrecorded, Unreadable, usePhoneWidth } from '../../ui';
 import { BTN, Chips, INPUT, LoadingRows, PanelCard, useAccountRead } from './AccountCenter';
 import {
@@ -24,8 +24,9 @@ import { ADD_TOKENS_PATH, TOPUP_UNAVAILABLE_RUNS, pastAllowanceLine } from '../.
  * so switching company in the sidebar changes nothing on this page.
  *
  * EACH CARD LOADS ON ITS OWN. The allowance, the top-up option, the spend
- * report, the rate card and the storage read are five reads, and one that
- * fails costs only the cards that draw it. The spend report is one read
+ * report and the rate card are four reads, and one that fails costs only the
+ * cards that draw it. D1166 (#2449): storage moved to its own page,
+ * `/account/usage/storage` (`StoragePage.jsx`), which draws `StorageCard`. The spend report is one read
  * behind four cards (days, where, models, last run); each of those cards also
  * honours the report's own `*_recorded` flag for its figure, so a breakdown
  * the Worker could not read is Unreadable on that card alone.
@@ -449,11 +450,11 @@ export function LastRunCard({ spend, rates }) {
 }
 
 /** U6 — the files this member uploaded, across all their companies. */
-export function StorageCard({ storage, role }) {
+export function StorageCard({ storage, role, title = 'Storage' }) {
   const v = storage.status === 'ready' ? storageView(storage.data) : null;
   return (
     <PanelCard
-      title="Storage"
+      title={title}
       data-testid="usage-card-storage"
       aside={v && !v.empty ? (v.total != null
         ? <span className={`${MONO} text-base text-axal-ink dark:text-gray-100`} data-testid="usage-storage-total">{v.total} <span className="font-sans text-[13px] text-axal-muted dark:text-gray-400">in {v.files} {v.files === 1 ? 'file' : 'files'}</span></span>
@@ -623,8 +624,8 @@ export function storageGroup({ storage }) {
 }
 
 /**
- * A2m — Usage on a phone, given the section's five reads. The board's three
- * sections come first; the cards it does not draw follow as they stack today
+ * A2m — Usage on a phone, given the section's reads. The board's three
+ * sections come first (A2m's Storage stays until D1166's part 5 moves it, STG15); the cards it does not draw follow as they stack today
  * (D700 decision 9). No read takes a company.
  */
 export function UsagePhoneView({ budget, product, topUps, spend, rates, storage, now = new Date(), details = false }) {
@@ -646,22 +647,23 @@ export function UsagePhoneView({ budget, product, topUps, spend, rates, storage,
   );
 }
 
-/** The section: the five reads, and the six cards in the canvas's order. */
-export default function UsageSection({ role, details = false }) {
+/** The section: the four reads, and the six cards in the canvas's order (storage is D1166's page). */
+export default function UsageSection({ details = false }) {
   const budget = useAccountRead(() => aiBudgetApi.mine());
   const product = useAccountRead(() => aiBudgetApi.topUp());
   const spend = useAccountRead(() => api.myAiSpend());
   const rates = useAccountRead(() => aiBudgetApi.rates());
-  const storage = useAccountRead(() => usageApi.storage());
   const topUps = useTopUps();
-  // The canvas's anchors (#days, #where, #models, #last-run, #storage). Each
+  const phone = usePhoneWidth();
+  // A2m still draws Storage on a phone; the desktop cards leave it to /account/usage/storage (D1166).
+  const storage = useAccountRead(() => usageApi.storage(), { enabled: phone });
+  // The canvas's anchors (#days, #where, #models, #last-run). Each
   // card draws its anchor in every state, so the scroll lands while it loads.
   const { hash } = useLocation();
   useEffect(() => {
     const id = hash ? decodeURIComponent(hash.slice(1)) : '';
     if (id) document.getElementById(id)?.scrollIntoView?.({ block: 'start' });
   }, [hash]);
-  const phone = usePhoneWidth();
   if (phone) return <UsagePhoneView budget={budget} product={product} topUps={topUps} spend={spend} rates={rates} storage={storage} details={details} />;
   return (
     <div className="flex flex-col gap-3" data-testid="usage-section">
@@ -675,7 +677,6 @@ export default function UsageSection({ role, details = false }) {
       <WhereCard spend={spend} />
       <ModelsCard spend={spend} rates={rates} />
       <LastRunCard spend={spend} rates={rates} />
-      <StorageCard storage={storage} role={role} />
     </div>
   );
 }

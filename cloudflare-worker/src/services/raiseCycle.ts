@@ -1397,6 +1397,22 @@ export async function receivedDates(env: Env, projectId: number): Promise<Map<nu
   return new Map(rows.map((r) => [Number(r.target_id), String(r.posted_on)]));
 }
 
+/** D1150: an investor's own receiving-side commitment evidence, metadata only.
+ * Same stored-receipt boundary as receivedDates; no connection or bank fields.
+ * The caller passes its verified company scope. Role and ownership are checked
+ * here too, so using this projection cannot become an admin or cross-firm read.
+ */
+export async function receivedCommitment(
+  env: Pick<Env, 'DB'>, actor: { id: number; role: string }, companyId: number | null, commitmentId: number,
+): Promise<{ id: number; at: string } | null> {
+  if (actor.role !== 'investor') return null;
+  return env.DB.prepare(`SELECT m.id, m.confirmed_at AS at FROM mercury_personal_matches m
+    JOIN commitments c ON c.id = m.target_id WHERE m.target_kind = 'deal_commitment'
+    AND m.state = 'confirmed' AND c.id = ? AND c.investor_user_id = ?
+    AND (c.company_id = ? OR c.company_id IS NULL) ORDER BY m.id DESC LIMIT 1`)
+    .bind(commitmentId, actor.id, companyId).first<{ id: number; at: string }>();
+}
+
 async function capitalRecords(ctx: Ctx, rq: RecordQuery): Promise<Records> {
   const funds = await prospectFunds(ctx);
   const received = await receivedDates(ctx.env, ctx.projectId);
