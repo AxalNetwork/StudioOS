@@ -9,7 +9,8 @@ import React, { useEffect, useId, useRef, useState } from 'react';
  * Partner invitations: columns grouped by series (each series hatched in its
  * own colour for the current week), absolute stacked bars whose segments can
  * open a filtered list, and a weekly line with several series, where a dash
- * says which series it is and the current week is only a hollow point. Each chart sizes to its
+ * says which series it is and the current week is only a hollow point. D951
+ * adds term bars on a day axis with a Today line (C5). Each chart sizes to its
  * box, so a phone gets readable text rather than a scaled-down desktop drawing.
  *
  * COLOUR IS #2375's ONE PALETTE: violet, sky, amber, emerald, muted. Only
@@ -113,6 +114,49 @@ export function HBars({ rows, axis = '', onSelect, testIdPrefix = 'insights-bar'
         {Number.isFinite(reference) ? <line x1={LW + bw * reference / max} x2={LW + bw * reference / max} y1={0} y2={H - 16} className="stroke-axal-muted dark:stroke-gray-400" strokeDasharray="3 3" data-testid="chart-reference" /> : null}
         <text x={LW} y={H - 3} className={MUTE}>0</text>
         <text x={LW + bw} y={H - 3} textAnchor="end" className={MUTE}>{axis}</text>
+      </Svg>
+    </div>
+  );
+}
+
+/**
+ * D951 — term bars on a day axis (Partner invitations' C5 "Terms ending"):
+ * one bar per row from `start` to `end`, in days from today, clipped to
+ * `from`…`to`; a line at day 0 is today. A bar whose start lies before the
+ * window opens with a ragged edge (no rounded left end). `tone` is a palette
+ * name; `text` sits after the bar, or before it when the bar reaches the
+ * right edge.
+ */
+export function TermBars({ rows, from = -20, to = 120 }) {
+  const [ref, W] = useBoxWidth();
+  const LW = W < 420 ? 112 : 150;
+  const RW = W < 420 ? 64 : 150;
+  const rh = 26;
+  const H = rows.length * rh + 24;
+  const bw = Math.max(40, W - LW - RW);
+  const x = (d) => LW + (bw * (Math.min(to, Math.max(from, d)) - from)) / (to - from);
+  const ticks = [from, 0, 30, 60, 90, to].filter((t, i, a) => t >= from && t <= to && a.indexOf(t) === i);
+  return (
+    <div ref={ref} className="w-full">
+      <Svg width={W} height={H}>
+        {ticks.map((t) => <line key={t} x1={x(t)} x2={x(t)} y1={0} y2={H - 18} className={GRID} />)}
+        {rows.map((r, i) => {
+          const y = i * rh + 3;
+          const x0 = x(r.start);
+          const x1 = Math.max(x0 + 2, x(r.end));
+          const label = r.label.length > Math.floor((LW - 12) / 6) ? `${r.label.slice(0, Math.floor((LW - 12) / 6) - 1)}…` : r.label;
+          return (
+            <g key={r.key ?? i}>
+              <text x={LW - 8} y={y + 14} textAnchor="end" className={`${INK} font-display text-[11px]`}>{label}</text>
+              <rect x={x0} y={y + 3} width={x1 - x0} height={15} rx={r.startClipped ? 0 : 2} className={FILL[r.tone] || FILL.violet} />
+              <text x={x1 + 6} y={y + 14} className={INK}>{r.text}</text>
+            </g>
+          );
+        })}
+        <line x1={x(0)} x2={x(0)} y1={0} y2={H - 18} strokeWidth="1.5" className="stroke-axal-ink dark:stroke-gray-200" data-testid="chart-today" />
+        <text x={x(0)} y={H - 4} textAnchor="middle" className={INK}>Today</text>
+        <text x={x(from)} y={H - 4} className={MUTE}>{`${from} days`}</text>
+        <text x={x(to)} y={H - 4} textAnchor="end" className={MUTE}>{`+${to} days`}</text>
       </Svg>
     </div>
   );
@@ -573,6 +617,9 @@ export function ChartTable({ chart, caption }) {
   } else if (chart?.type === 'stackbars') {
     head = [chart.head || 'Item', ...chart.parts.map((p) => p.label), 'Total'];
     rows = chart.rows.map((r) => [r.label, ...chart.parts.map((p) => nf(r.parts.find((x) => x.key === p.key)?.value || 0)), r.total ?? nf(r.parts.reduce((t, p) => t + p.value, 0))]);
+  } else if (chart?.type === 'terms') {
+    head = ['Deal', 'Ends', 'Days left'];
+    rows = chart.rows.map((r) => [r.label, r.endsOn || 'not recorded', r.text]);
   } else if (chart?.type === 'hbar' || chart?.type === 'columns' || chart?.type === 'stack') rows = chart.rows.map((r) => [r.label, r.text ?? nf(r.value)]);
   else if (chart?.type === 'line') {
     rows = chart.values.map((v, i) => [
@@ -603,7 +650,8 @@ export function ChartTable({ chart, caption }) {
 /** One chart spec from the model, drawn. */
 export function Chart({ chart, onSelect }) {
   if (!chart) return null;
-  if (chart.type === 'hbar') return <HBars rows={chart.rows} axis={chart.axis} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
+  if (chart.type === 'hbar') return <HBars rows={chart.rows} axis={chart.axis} max={chart.max} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
+  if (chart.type === 'terms') return <TermBars rows={chart.rows} from={chart.from} to={chart.to} />;
   if (chart.type === 'grouped') return <GroupedColumns rows={chart.rows} series={chart.series} height={chart.height} />;
   if (chart.type === 'stackbars') return <StackBars rows={chart.rows} onSelect={chart.clickable ? onSelect : undefined} testIdPrefix={chart.testIdPrefix} />;
   if (chart.type === 'lines') return <WeekLines series={chart.series} labels={chart.labels} height={chart.height} currentIndex={chart.currentIndex} />;
