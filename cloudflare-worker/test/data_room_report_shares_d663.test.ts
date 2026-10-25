@@ -16,6 +16,7 @@ import { tableFromBaseline, stripForeignKeys, addColumnsFrom } from './_baseline
 import { d1Over } from './_d1_sqlite.mjs';
 
 import dataRoom, { reportShareStatus } from '../src/routes/data_room.ts';
+import { withGrantFolders } from './_data_room_scope.mjs';
 
 const BASELINE = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
 const MIG463 = readFileSync(resolve(process.cwd(), 'cloudflare-worker/sql/migrations/463_raise_record_stores.sql'), 'utf8');
@@ -34,6 +35,7 @@ function freshDb() {
   db.exec(MIG401);
   // D691 (#1700) — migration 463's file access columns, which every room read now filters on.
   addColumnsFrom(db, stripForeignKeys(MIG463), 'data_room_files');
+  withGrantFolders(db); // D1103: migration 594
   // The pipeline a committed-only file is opened by.
   db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'raise_prospects')));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');

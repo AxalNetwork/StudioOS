@@ -75,7 +75,7 @@ import { refuse } from '../util/refusal';
 // NDA check and the access log live in ONE place, and the D124 expiry tests
 // read their SQL from there.
 import { activeGrant, ndaActive, logAccess } from './data_room';
-import { tierAdmits, investorCommitted, admittedCounts } from '../services/dataRoomAccess';
+import { tierAdmits, investorCommitted, admittedCounts, grantFolderScope, folderInScope } from '../services/dataRoomAccess';
 import { pageFromPath, railFor, refuseAssistOff } from '../util/railContext';
 
 const research = new Hono<{ Bindings: Env }>();
@@ -4720,7 +4720,7 @@ research.delete('/benchmarks/:uid/constituents/:cuid', async (c) => {
 research.get('/diligence', async (c) => {
   const user = await requireAuth(c);
   const rows = await c.env.DB.prepare(
-    `SELECT g.uid AS grant_uid, g.created_at, g.expires_at, g.granted_by_user_id,
+    `SELECT g.id AS grant_id, g.uid AS grant_uid, g.created_at, g.expires_at, g.granted_by_user_id,
             p.uid AS project_uid, p.name AS project_name, g.project_id,
             (SELECT MAX(l.created_at) FROM data_room_access_log l
               WHERE l.project_id = g.project_id AND l.user_id = ?) AS last_opened_at
@@ -4749,7 +4749,8 @@ research.get('/diligence', async (c) => {
   for (const r of rows.results || []) {
     const pid = Number(r.project_id);
     const nda = ndaByFounder.get(Number(r.granted_by_user_id)) === true;
-    counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda));
+    // D1103 — and only what the grant's folders hold.
+    counted.set(pid, await admittedCounts(c.env, pid, await investorCommitted(c.env, pid, user.id), nda, await grantFolderScope(c.env, Number(r.grant_id))));
   }
 
   const items = (rows.results || []).map((r: any) => {
@@ -4869,12 +4870,14 @@ async function roomMaterial(env: Env, userId: number, grantUid: string): Promise
   if (!room) return [];
   const pid = room.grant.project_id;
   const files = await env.DB.prepare(
-    `SELECT name, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
+    `SELECT name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
        FROM data_room_files WHERE project_id = ? ORDER BY name`
   ).bind(pid).all<any>();
-  // D691 decision 6 — only what the tier and expiry admit is described, or counted.
+  // D691 decision 6 — only what the tier and expiry admit is described, or
+  // counted. D1103 — and only what the grant's folders hold.
   const committed = await investorCommitted(env, pid, userId);
-  const all = (files.results || []).filter((f: any) => tierAdmits(f, committed));
+  const scope = await grantFolderScope(env, room.grant.id);
+  const all = (files.results || []).filter((f: any) => tierAdmits(f, committed, Date.now(), scope));
   const open = all.filter((f: any) => f.visibility === 'open' || room.nda);
   const lines = [
     `Company: ${room.project.name}`,
@@ -4900,10 +4903,12 @@ research.get('/diligence/:grantUid', async (c) => {
     `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
        FROM data_room_files WHERE project_id = ? ORDER BY name`
   ).bind(pid).all<any>();
-  // D691 decision 6 — a file the tier or its expiry hides is neither listed nor counted.
+  // D691 decision 6 — a file the tier or its expiry hides is neither listed nor
+  // counted. D1103 — nor is one outside the grant's folders.
   const roomCommitted = await investorCommitted(c.env, pid, user.id);
+  const roomScope = await grantFolderScope(c.env, room.grant.id);
   const files = {
-    results: (tiered.results || []).filter((f: any) => tierAdmits(f, roomCommitted))
+    results: (tiered.results || []).filter((f: any) => tierAdmits(f, roomCommitted, Date.now(), roomScope))
       .map(({ access_tier, access_expires_at, ...rest }: any) => rest),
   };
   const folders = await c.env.DB.prepare(
@@ -4972,7 +4977,7 @@ research.get('/diligence/:grantUid', async (c) => {
     // A count, never the names — the data room's own rule.
     withheld_behind_nda: withheld,
     last_opened_at: acts.length ? acts[0].created_at : null,
-    folders: (folders.results || []).filter((f: any) => visible(f.visibility))
+    folders: (folders.results || []).filter((f: any) => visible(f.visibility) && folderInScope(f.id, roomScope))
       .map((f: any) => ({ uid: f.uid, name: f.name, visibility: f.visibility })),
     files: openFiles,
     activity: yourActivity,
@@ -4991,13 +4996,14 @@ research.get('/diligence/:grantUid/files/:fileUid', async (c) => {
   const pid = room.grant.project_id;
 
   const found = await c.env.DB.prepare(
-    `SELECT id, uid, name, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
+    `SELECT id, uid, name, folder_id, content_type, size_bytes, visibility, created_at, access_tier, access_expires_at
        FROM data_room_files WHERE uid = ? AND project_id = ?`
   ).bind(c.req.param('fileUid'), pid).first<any>();
   const roomRef = { grant_uid: room.grant.uid, project_name: room.project.name };
   // D691 decision 6 — a file the tier or its expiry hides reads as not in the room.
-  const file = found && tierAdmits(found, await investorCommitted(c.env, pid, user.id))
-    ? (({ access_tier, access_expires_at, ...rest }: any) => rest)(found) : null;
+  // D1103 — and so does a file outside the grant's folders.
+  const file = found && tierAdmits(found, await investorCommitted(c.env, pid, user.id), Date.now(), await grantFolderScope(c.env, room.grant.id))
+    ? (({ access_tier, access_expires_at, folder_id, ...rest }: any) => rest)(found) : null;
   if (!file) {
     return c.json({ error: 'file_not_found', message: 'This document is not in the room. The founder may have removed it.', room: roomRef }, 404);
   }

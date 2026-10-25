@@ -22,7 +22,7 @@
  */
 import type { ActionResult, ModuleSpec, RecordAction, RecordField, RecordContent, RecordContext, RecordFact, Row, SectionSpec, Store } from './types';
 import { activeGrant, ndaActive, removeDataRoomFile, replaceDataRoomFile } from '../../routes/data_room';
-import { ACCESS_TIERS, investorCommitted, tierAdmits } from '../dataRoomAccess';
+import { ACCESS_TIERS, grantFolderScope, investorCommitted, tierAdmits } from '../dataRoomAccess';
 import { SERVED_FUNDS, likeLiteral } from '../researchFundDirectory';
 import { deckReaders, readBySentence } from '../narrative/readers';
 import { RAISE_STAGES } from '../../routes/contacts';
@@ -462,7 +462,7 @@ const pitch = spec('pitch_deck_share_tokens', 'pitch-deck', async (rc, id) => {
  * `activeGrant`, whose investor the file's tier and expiry admit
  * (`tierAdmits`, with `investorCommitted` for a committed-only file), and,
  * for an `nda` file, only once that investor's NDA is live (`ndaActive`),
- * the gate `data_room.ts` applies.
+ * the gate `data_room.ts` applies. D1103 — and whose folders hold the file.
  */
 async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id: number; name: string | null }>> {
   const res = await rc.env.DB.prepare(
@@ -475,7 +475,7 @@ async function admittedInvestors(rc: RecordContext, f: any): Promise<Array<{ id:
     const grant = await activeGrant(rc.env, rc.projectId, investor);
     if (!grant) continue;
     const committed = f.access_tier === 'committed' ? await investorCommitted(rc.env, rc.projectId, investor) : false;
-    if (!tierAdmits(f, committed)) continue;
+    if (!tierAdmits(f, committed, Date.now(), await grantFolderScope(rc.env, grant.id))) continue;
     if (f.visibility === 'nda' && !(await ndaActive(rc.env, grant.granted_by_user_id, investor))) continue;
     out.push({ id: investor, name: g.name });
   }

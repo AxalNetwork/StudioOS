@@ -1,12 +1,12 @@
 /** D891 / #2447: recorded provenance and the actual investor download gates. */
 import type { Env } from '../types';
-import { tierAdmits } from './dataRoomAccess';
+import { grantFolderScope, tierAdmits } from './dataRoomAccess';
 
-/** Count a file only if a currently granted, active account can download it. */
+/** Count a file only if a currently granted, active account can download it. D1103 — inside that grant's folders. */
 export async function readableRoomFiles(env: Env, projectId: number): Promise<any[]> {
   const files = await env.DB.prepare('SELECT * FROM data_room_files WHERE project_id = ?').bind(projectId).all<any>();
   const grants = await env.DB.prepare(
-    `SELECT g.investor_user_id,
+    `SELECT g.id, g.investor_user_id,
        EXISTS (SELECT 1 FROM raise_prospects rp WHERE rp.project_id = g.project_id
          AND rp.stage = 'committed' AND LOWER(rp.email) = LOWER(u.email)) AS committed,
        EXISTS (SELECT 1 FROM pairwise_ndas n JOIN users owner ON owner.id = n.party_a_user_id
@@ -18,8 +18,9 @@ export async function readableRoomFiles(env: Env, projectId: number): Promise<an
        AND (g.expires_at IS NULL OR datetime(g.expires_at) > datetime('now'))`,
   ).bind(projectId).all<any>();
   const now = Date.now();
-  return (files.results || []).filter(f => (grants.results || []).some(g =>
-    tierAdmits(f, !!g.committed, now) && (f.visibility === 'open' || (f.visibility === 'nda' && !!g.nda_signed))));
+  const scoped = await Promise.all((grants.results || []).map(async g => ({ ...g, folders: await grantFolderScope(env, Number(g.id)) })));
+  return (files.results || []).filter(f => scoped.some(g =>
+    tierAdmits(f, !!g.committed, now, g.folders) && (f.visibility === 'open' || (f.visibility === 'nda' && !!g.nda_signed))));
 }
 
 export type BankFact = { id: number; fact_key: string; label: string | null; amount_cents: number | null; burn_cents: number | null; value: number | null; as_of: string };

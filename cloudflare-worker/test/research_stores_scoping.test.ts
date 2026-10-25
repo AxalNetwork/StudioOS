@@ -155,7 +155,8 @@ test('diligence counts withheld files and never names them', () => {
   // D691 decision 6 (#1700) — the counts come from `admittedCounts`, the one
   // predicate every room read shares; /diligence reads no file row itself.
   assert.equal(touching(DILIGENCE, 'data_room_files').length, 0, '/diligence counts through admittedCounts, not its own SELECT');
-  assert.match(DILIGENCE, /admittedCounts\(c\.env, pid, await investorCommitted\(c\.env, pid, user\.id\), nda\)/);
+  // D1103 (#2983) — with the grant's folder scope, so a scoped grant counts only its folders.
+  assert.match(DILIGENCE, /admittedCounts\(c\.env, pid, await investorCommitted\(c\.env, pid, user\.id\), nda, await grantFolderScope\(c\.env, Number\(r\.grant_id\)\)\)/);
   const access = read('cloudflare-worker/src/services/dataRoomAccess.ts');
   const stmt = access.slice(access.indexOf("'SELECT visibility"), access.indexOf("WHERE project_id = ?',") + 21);
   assert.match(stmt, /FROM data_room_files WHERE project_id = \?/);

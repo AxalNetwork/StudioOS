@@ -26,6 +26,7 @@ import { d1Over } from './_d1_sqlite.mjs';
 import research from '../src/routes/research.ts';
 
 import { withGuard } from './_guard_stub.mjs';
+import { withGrantFolders } from './_data_room_scope.mjs';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const MIGRATION_221 = readdirSync(resolve(ROOT, 'cloudflare-worker/sql/migrations')).find((f) => f.startsWith('221_')) as string;
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -54,6 +55,8 @@ function freshDb() {
   }
   // D691 (#1700) — migration 463's file access columns, which every room read now filters on.
   addColumnsFrom(db, stripForeignKeys(MIG463), 'data_room_files');
+  // D1103 (#2983) — migration 594: a grant's folder scope, which every investor read passes.
+  withGrantFolders(db);
   // The pipeline a committed-only file is opened by.
   db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'raise_prospects')));
   // The drafts table as migration 221 declares it, cut from the file itself.

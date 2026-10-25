@@ -23,6 +23,7 @@ import { tableFromBaseline, stripForeignKeys, addColumnsFrom } from './_baseline
 import { d1Over } from './_d1_sqlite.mjs';
 
 import dataRoom from '../src/routes/data_room.ts';
+import { withGrantFolders } from './_data_room_scope.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const BASELINE = readFileSync(resolve(ROOT, 'cloudflare-worker/sql/schema_baseline.sql'), 'utf8');
@@ -53,6 +54,8 @@ function freshDb() {
   }
   // D691 (#1700) — migration 463's file access columns, which every room read now filters on.
   addColumnsFrom(db, stripForeignKeys(MIG463), 'data_room_files');
+  // D1103 (#2983) — migration 594: a grant's folder scope, which every investor read passes.
+  withGrantFolders(db);
   // The pipeline a committed-only file is opened by.
   db.exec(stripForeignKeys(tableFromBaseline(BASELINE, 'raise_prospects')));
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');
