@@ -162,7 +162,8 @@ test('the Super Admin with a fresh step-up adds, lists, relabels, retires and re
   const retire = await call(env, 'POST', `/${uid}/retire`, HOLDER, 'totp-holder', { reason: 'Account closed' });
   assert.equal(retire.status, 200, retire.text);
   assert.equal(retire.body.account.status, 'retired');
-  assert.deepEqual(auditRows(db).map((r) => r.action),
+  // D1184: the GET also writes its Mercury read row; the writes' own rows are these four.
+  assert.deepEqual(auditRows(db).map((r) => r.action).filter((a: string) => a.startsWith('bank_account_')),
     ['bank_account_added', 'bank_account_updated', 'bank_account_revealed', 'bank_account_retired']);
 });
 
