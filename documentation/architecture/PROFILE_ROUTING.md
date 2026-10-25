@@ -13,8 +13,8 @@ Nothing here is typed by hand, so nothing here can disagree with them.
 each canvas and why. This document answers a different question: *who sees
 it, where in their nav, and how do they get there.*
 
-**Corpus:** 169 canonical canvases at `design/canvases/`, listed
-243 times below — a canvas serving two workspaces appears under both.
+**Corpus:** 170 canonical canvases at `design/canvases/`, listed
+244 times below — a canvas serving two workspaces appears under both.
 
 ## Column meanings
 
@@ -35,7 +35,7 @@ it, where in their nav, and how do they get there.*
 | Advisors | `/spinout-lab/advisors` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Apply and Status | `/spinout-lab/apply` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Brand & Landing Page | `/spinout-lab/brand` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/history` · `/raise/cap-table/h-<n>` · `/new` · `/raise/cap-table/proposal/<id>` · `/raise/cap-table/instrument/<uid>` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
+| Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/history` · `/raise/cap-table/h-<n>` · `/new` · `/raise/cap-table/proposal/<id>` · `/raise/cap-table/instrument/<uid>` · `/raise/cap-table/scenarios/<uid>` · `/raise/cap-table/scenarios/compare?ids=` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Cap Table | `/spinout-lab/captable` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Cap Table Pro | `/raise/capital/cap-table` · `/share/captable/:token` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Capital | `/spinout-lab/capital` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
@@ -200,7 +200,7 @@ it, where in their nav, and how do they get there.*
 | Admin page header | `/admin/programs/spinout-lab` | Admin | Full page (proposed) | Sidebar → Admin → Programs | UPGRADE | Low |
 | Advisors & Partners | `/admin?tab=network-profiles` · `/admin/network-profiles` · `/deck` · `/admin/partner-invitations/firm-links` · `/firms` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
 | Approvals (admin) | `/admin/held/approvals` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/history` · `/raise/cap-table/h-<n>` · `/new` · `/raise/cap-table/proposal/<id>` · `/raise/cap-table/instrument/<uid>` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/history` · `/raise/cap-table/h-<n>` · `/new` · `/raise/cap-table/proposal/<id>` · `/raise/cap-table/instrument/<uid>` · `/raise/cap-table/scenarios/<uid>` · `/raise/cap-table/scenarios/compare?ids=` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Contracts · Subsidiary | `/admin/contracts` · `/admin?tab=legal` · `/esign/:token` | Admin | Full page | Sidebar → Admin → Contracts | UPGRADE | High |
 | Events Console | `/admin/events` · `/admin/events/review` · `/admin/events/all` · `/admin/events/:id` · `/admin/events/calendar` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
@@ -226,7 +226,7 @@ it, where in their nav, and how do they get there.*
 | Validate · Record a session | `/validate/record` · `/validate/interviews?new=record` · `/cycles/validate/modules/customer-research` · `/sessions` · `/channels/threads?status=pending` · `/channels/threads/:uid/assign` · `/validate/record/live` · `/sessions/active` · `/validate/session/:id` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 | Validate → Build plan | `/build/plan` · `/build/plan/progress` | — (not routed) | Full page (proposed) | Not reachable yet | NEW | Low |
 
-## Super Admin — 23 canvases
+## Super Admin — 24 canvases
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -249,6 +249,7 @@ it, where in their nav, and how do they get there.*
 | Partner profiles | `/admin?tab=profiles` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Payments | `/admin?tab=payments` · `/pricing/products` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Persona segments | `/admin/persona-segments/new` · `/api/personas/segments/:key/completion` · `/onboarding/persona?follow_up=1` · `/admin?tab=personas` | HQ | Full page | Sidebar → HQ → Content | UPGRADE | High |
+| Product testing | `/admin/platform/product-testing` · `/review` · `/programs` · `/programs/:uid` · `/applicants` · `/testers` | HQ | Full page (proposed) | Sidebar → HQ → Platform | UPGRADE | Low |
 | Program grants | `/admin/licences/programs` · `/admin/licences/programs/requests` · `/admin/licences/programs/history` · `/admin/licences/programs/defaults` · `/admin/licences/programs/studio/:uid` · `/admin/my-licence/programs` | HQ | Full page (proposed) | Sidebar → HQ → Licences | UPGRADE | Low |
 | Spin-Out Lab (admin) | `/participants/:uid` · `/applications/:id` · `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support Security · Super | `/admin/security` · `/admin/hq-support` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
@@ -275,7 +276,7 @@ it, where in their nav, and how do they get there.*
 
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| Account | `/account` · `/account/:section` · `/account/connectors/:key` · `/account/usage/limits` · `/account/usage/cost` · `/account/usage/storage` · `/settings` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Account | `/account` · `/account/:section` · `/account/connectors/:key` · `/account/usage/limits` · `/account/usage/cost` · `/account/usage/storage` · `/settings` · `/account/companies/projects` · `/account/companies/funds` · `/account/companies/engagements` · `/account/companies/invitations` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Auth and Onboarding | `/login` · `/register` · `/onboarding/chat` · `/onboarding/persona` · `/onboarding/founder\|investor\|partner` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Calendar | `/calendar` | — (no nav entry) | Full page | Deep link / in-page action | LIVE (built 2026-09-10) | Medium |
 | Eadwyn Tickets · Eadwyn chat panels (T2, T3, D606) | `/studio` | — (not routed) | Full page (proposed) | Not reachable yet | CURRENT | Low |
@@ -318,7 +319,7 @@ it, where in their nav, and how do they get there.*
 | Canvas | Route | Nav section | Surface | Entry point | Status | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
 | Brand & Landing Page copy | — | — (not routed) | Full page (Spin-Out Lab — frozen) | Not reachable yet | OUT OF SCOPE | High |
-| My events | `/my/events` · `/my/events/hosting` · `/my/events/discover` · `/my/events/past` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| My events | `/my/events` · `/my/events/hosting` · `/my/events/discover` · `/my/events/past` · `/my/events/ticket/:eventId` · `/my/events/hosting/:eventId` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 
 ## Confidence tally
 
@@ -326,7 +327,7 @@ it, where in their nav, and how do they get there.*
 | --- | ---: | --- |
 | High | 115 | Live route, reachable from that workspace’s sidebar. |
 | Medium | 75 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
-| Low | 53 | Not routed. Proposed route only. |
+| Low | 54 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
 and wizards are reached from the surface above them by design; the brief’s

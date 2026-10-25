@@ -38,6 +38,7 @@ import {
 import { logCycleWriteStatement, type BuildModuleSlug } from './cycleActivity';
 import { canReadDecision, ownsVenture, type ProjectRef } from '../routes/_founder_validate_helpers';
 import { decisionById } from './verdict';
+import { itemWordingEdit } from './buildPlanWord';
 
 type Prepared = ReturnType<Env['DB']['prepare']>;
 type Ref = { kind: string; ref: string; label: string; source_label?: string };
@@ -162,7 +163,7 @@ async function landing(env: Env, item: ItemRow, userId: number, p: Record<string
       return { table: 'mvp_features', landed: landed('mvp_features'),
         writer: featureCreateStatements(env, { projectId, userId, title, description: (p.description as string) ?? null,
           impact: String(p.added_value ?? 'Medium'), effort: String(p.effort ?? 'M'), scope: null, painId: num(p.pain_group_id), hypothesisId: num(p.hypothesis_id) }),
-        fields: [['title', title, o.title], ['added_value', p.added_value ?? 'Medium', o.added_value ?? 'Medium'], ['pain_group_id', p.pain_group_id, o.pain_group_id], ['hypothesis_id', p.hypothesis_id, o.hypothesis_id]] };
+        fields: [['title', title, o.title], ['description', p.description, o.description], ['added_value', p.added_value ?? 'Medium', o.added_value ?? 'Medium'], ['pain_group_id', p.pain_group_id, o.pain_group_id], ['hypothesis_id', p.hypothesis_id, o.hypothesis_id]] };
     case 'must-have':
       return { table: 'mvp_features', landed: landed('mvp_features'),
         writer: mustHaveCreateStatements(env, { projectId, userId, title, hypothesisId: num(p.hypothesis_id), status: 'Backlog', owner: null, due: null, links: [] }),
@@ -216,9 +217,12 @@ const HAND_BACK = `UPDATE ai_rail_proposals SET status = 'proposed', decided_pay
   WHERE uid = ? AND status IN ('accepted', 'edited')`;
 const LINK = `INSERT OR IGNORE INTO build_evidence_links (project_id, build_table, build_id, evidence_kind, evidence_ref, label_snapshot, plan_item_uid)
   SELECT i.project_id, i.landed_table, i.landed_id, ?, ?, ?, i.uid FROM build_plan_items i WHERE i.uid = ?`;
-const PROVENANCE = `INSERT INTO fill_provenance (target_table, target_row_id, target_column, fill_class, proposed_value, written_value, edited, citation_json, decided_by, target_row_ref, ai_proposal_id)
-  SELECT i.landed_table, CAST(i.landed_id AS INTEGER), ?, 'sourced', ?, ?, ?, ?, ?, ?, (SELECT id FROM ai_rail_proposals WHERE uid = i.proposal_uid)
+const PROVENANCE = `INSERT INTO fill_provenance (target_table, target_row_id, target_column, fill_class, proposed_value, written_value, edited, citation_json, decided_by, target_row_ref, ai_proposal_id, ai_usage_log_id)
+  SELECT i.landed_table, CAST(i.landed_id AS INTEGER), ?, 'sourced', ?, ?, ?, ?, ?, ?, (SELECT id FROM ai_rail_proposals WHERE uid = i.proposal_uid), ?
   FROM build_plan_items i WHERE i.uid = ?`;
+
+/** D1071: the fields Eadwyn's wording can carry; a kept wording names its run on these only. */
+const WORDED_COLUMNS = new Set(['title', 'objective', 'description']);
 
 const value = (v: unknown) => (v == null ? '' : String(v));
 
@@ -239,7 +243,12 @@ export async function acceptItem(env: Env, user: User, uid: string, edit?: unkno
   const claim = await env.DB.prepare(CLAIM).bind(status, JSON.stringify(payload), item.proposal_uid, item.proposal_uid).run();
   if (!claim.meta?.changes) throw new PlanItemError('decided', 409, 'This item is already decided.');
   const evidence: Ref[] = Array.isArray(parse(item.evidence_json)) ? parse(item.evidence_json) : [];
-  const citation = JSON.stringify({ source_kind: 'module', source_ref: item.source_ref, source_label: item.source_label, prior_value: null, plan_item_uid: item.uid, marker: item.marker });
+  // D1071: a kept wording rides on the saved payload; Accept names its proposal and run.
+  const wording = payload.wording && typeof payload.wording === 'object' ? payload.wording as { uid?: unknown; usage_log_id?: unknown } : null;
+  const wordingRun = wording && Number.isSafeInteger(Number(wording.usage_log_id)) && Number(wording.usage_log_id) > 0 ? Number(wording.usage_log_id) : null;
+  const base = { source_kind: 'module', source_ref: item.source_ref, source_label: item.source_label, prior_value: null, plan_item_uid: item.uid, marker: item.marker };
+  const citation = JSON.stringify(base);
+  const wordedCitation = wording ? JSON.stringify({ ...base, wording: { proposal_uid: String(wording.uid ?? ''), usage_log_id: wordingRun } }) : citation;
   const batch: Prepared[] = [...land.writer];
   if (land.landed) {
     batch.push(land.landed);
@@ -247,7 +256,9 @@ export async function acceptItem(env: Env, user: User, uid: string, edit?: unkno
     for (const [column, written, was] of land.fields) {
       if (written == null || written === '') continue;
       const [before, after] = [value(was), value(written)];
-      batch.push(env.DB.prepare(PROVENANCE).bind(column, before, after, before.trim() !== after.trim() ? 1 : 0, citation, user.id, `build_plan_item:${item.uid}`, item.uid));
+      const worded = Boolean(wording) && WORDED_COLUMNS.has(column);
+      batch.push(env.DB.prepare(PROVENANCE).bind(column, before, after, before.trim() !== after.trim() ? 1 : 0, worded ? wordedCitation : citation, user.id,
+        `build_plan_item:${item.uid}`, worded ? wordingRun : null, item.uid));
     }
   }
   try {
@@ -261,17 +272,28 @@ export async function acceptItem(env: Env, user: User, uid: string, edit?: unkno
   return { uid, status, landed_table: after?.landed_table ?? null, landed_id: after?.landed_id ?? null, payload };
 }
 
-/** Saves the founder's version on a proposed item; it stays proposed until Accept. */
-export async function editItem(env: Env, user: User, uid: string, edit: unknown) {
+/**
+ * Saves the founder's version on a proposed item; it stays proposed until
+ * Accept. D1071: `wording` names an Eadwyn wording on this plan; its words
+ * for the item are the edit (the founder's own `edit` keys over them), and
+ * the saved payload names it so Accept records its run.
+ */
+export async function editItem(env: Env, user: User, uid: string, edit: unknown, wordingUid?: unknown) {
   const item = await loadItem(env, uid);
   if (!item) throw new PlanItemError('not_this_project', 404, 'This plan item does not belong to this venture.');
   assertFounder(item, user);
   assertOpen(item);
   const proposed = parse(item.payload_json) || {};
-  const payload = landedPayload(item.kind, parse(item.decided_payload_json) || proposed, edit);
+  const kept = wordingUid == null ? null : await itemWordingEdit(env, user, uid, wordingUid);
+  if (kept && edit != null && (typeof edit !== 'object' || Array.isArray(edit))) throw new PlanItemError('invalid_edit', 400, 'An edit is an object of the item’s fields.');
+  const payload = landedPayload(item.kind, parse(item.decided_payload_json) || proposed, kept ? { ...kept.edit, ...(edit as object || {}) } : edit);
+  if (kept) payload.wording = { uid: kept.wording.uid, usage_log_id: kept.wording.usage_log_id };
+  // The founder's own words over a kept wording make them the founder's: the run no longer wrote them.
+  else if (edit && typeof edit === 'object' && Object.keys(edit).some((k) => WORDED_COLUMNS.has(k))) delete payload.wording;
   const res = await env.DB.prepare(`UPDATE ai_rail_proposals SET decided_payload_json = ?, updated_at = CURRENT_TIMESTAMP WHERE uid = ? AND status = 'proposed'`)
     .bind(JSON.stringify(payload), item.proposal_uid).run();
   if (!res.meta?.changes) throw new PlanItemError('decided', 409, 'This item is already decided.');
+  if (kept) await kept.decide();
   return { uid, status: 'proposed', payload };
 }
 

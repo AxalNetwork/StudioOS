@@ -131,8 +131,9 @@ test('Axal VC Fund preserves the live LP access implementation', () => {
 });
 
 test('Fund preserves its institutional entitlement and honest locked state', () => {
-  assert.match(app, /effectiveRole === 'investor' \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsWorkspace \/>/);
-  assert.match(app, /path="\/funds\/performance"[^\n]+investorFundWorkspace\(<FundOpsWorkspace \/>/);
+  // D1160: an admin's /funds and /funds/performance forward to Fund admin; an investor's are unchanged.
+  assert.match(app, /effectiveRole === 'investor' \? <InvestorFundLanding fundUnlocked=\{hasInvestorTier\(user, 'institutional'\)\} \/> : <FundOpsRedirect \/>/);
+  assert.match(app, /path="\/funds\/performance"[^\n]+effectiveRole === 'investor' \? investorFundWorkspace\(<FundPerformancePage embedded \/>\) : <FundOpsRedirect \/>/);
 });
 
 test('investor visual system includes source provenance, responsive layout, and dark mode', () => {

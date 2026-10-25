@@ -46,7 +46,7 @@ function Bar({ pct }) {
 }
 
 /** ⋯ for one row: a disclosure of its four actions, each a dialog or a link. */
-function RowMenu({ row, onAction }) {
+function RowMenu({ row, onAction, canOpenWorkspace = true }) {
   const [open, setOpen] = useState(false);
   const pick = (kind) => { setOpen(false); onAction(kind, row); };
   return (
@@ -56,7 +56,7 @@ function RowMenu({ row, onAction }) {
         <span className="absolute right-0 z-10 mt-1 flex min-w-[12rem] flex-col rounded-[10px] border border-axal-hairline bg-white p-1 shadow-lg dark:border-gray-700 dark:bg-gray-900" data-testid={`lab-part-menu-${row.uid}-list`}>
           <button type="button" className="rounded-[7px] px-2.5 py-2 text-left text-[13px] hover:bg-axal-ground dark:hover:bg-gray-800" onClick={() => pick('grace')} data-testid={`lab-part-grace-${row.uid}`}>Give grace</button>
           <button type="button" className="rounded-[7px] px-2.5 py-2 text-left text-[13px] hover:bg-axal-ground dark:hover:bg-gray-800" onClick={() => pick('week')} data-testid={`lab-part-week-${row.uid}`}>Change this week</button>
-          <button type="button" className="rounded-[7px] px-2.5 py-2 text-left text-[13px] hover:bg-axal-ground dark:hover:bg-gray-800" onClick={() => pick('workspace')} data-testid={`lab-part-workspace-${row.uid}`}>Open workspace</button>
+          {canOpenWorkspace && <button type="button" className="rounded-[7px] px-2.5 py-2 text-left text-[13px] hover:bg-axal-ground dark:hover:bg-gray-800" onClick={() => pick('workspace')} data-testid={`lab-part-workspace-${row.uid}`}>Open workspace</button>}
           {row.moderation.muted ? null : (
             <Link to="/admin/spinout-moderation" className="rounded-[7px] px-2.5 py-2 text-[13px] hover:bg-axal-ground dark:hover:bg-gray-800" data-testid={`lab-part-case-${row.uid}`}>Open moderation case</Link>
           )}
@@ -297,11 +297,11 @@ function Drawer({ uid, tick, onClose, onAction, onRetry, now }) {
  * The list (SL7)
  * ------------------------------------------------------------------ */
 
-export default function LabParticipants({ onImpersonate, now = Date.now() }) {
+export default function LabParticipants({ onImpersonate, now = Date.now(), cohort = '' }) {
   const loc = useLocation();
   const navigate = useNavigate();
   const uid = participantOf(loc.pathname);
-  const [f, setF] = useState({ show: 'needs', cohort: '', status: '', week: '', thisWeek: '', incorporated: '', q: '', sort: 'days_left', page: 1 });
+  const [f, setF] = useState({ show: 'needs', cohort, status: '', week: '', thisWeek: '', incorporated: '', q: '', sort: 'days_left', page: 1 });
   const [typed, setTyped] = useState('');
   const [tick, setTick] = useState(0);
   const [dialog, setDialog] = useState(null);
@@ -342,7 +342,7 @@ export default function LabParticipants({ onImpersonate, now = Date.now() }) {
           <input type="search" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Search founder or company" aria-label="Search founder or company"
             className={`${INPUT} min-w-[14rem] flex-1`} data-testid="lab-part-search" />
           <button type="submit" className={actionGhost} data-testid="lab-part-search-go">Search</button>
-          <Select label="Cohort" value={f.cohort} onChange={set('cohort')} options={cohortOptions(timeline)} testId="lab-part-cohort" />
+          {!cohort && <Select label="Cohort" value={f.cohort} onChange={set('cohort')} options={cohortOptions(timeline)} testId="lab-part-cohort" />}
           <Select label="Status" value={f.status} onChange={set('status')} options={STATUS_FILTERS} testId="lab-part-status" />
           <Select label="Week" value={f.week} onChange={set('week')} options={WEEK_FILTERS} testId="lab-part-weekf" />
           <Select label="This week" value={f.thisWeek} onChange={set('thisWeek')} options={THIS_WEEK_FILTERS} testId="lab-part-this-week" />
@@ -380,7 +380,7 @@ export default function LabParticipants({ onImpersonate, now = Date.now() }) {
                           <td className={`${TD} ${MONO}`}>{r.deadline || '—'}</td>
                           <td className={`${TD} text-[12.5px] leading-snug`}>{r.missing ?? 'Not read'}</td>
                           <td className={`${TD} text-[12.5px] ${r.moderation.muted ? 'text-axal-muted dark:text-gray-400' : ''}`}>{r.moderation.text}</td>
-                          <td className={TD}><RowMenu row={r} onAction={onAction} /></td>
+                          <td className={TD}><RowMenu row={r} onAction={onAction} canOpenWorkspace={!cohort || Boolean(onImpersonate)} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -395,7 +395,7 @@ export default function LabParticipants({ onImpersonate, now = Date.now() }) {
                       </span>
                       <span className={SUB}>{[r.name, r.cohort, r.weekDay, r.progress ? r.progress.text : null].filter(Boolean).join(' · ')}</span>
                       {r.deadline ? <span className={`${MONO} text-axal-muted dark:text-gray-400`}>{`Deadline ${r.deadline}`}</span> : null}
-                      <span className="flex justify-end"><RowMenu row={r} onAction={onAction} /></span>
+                      <span className="flex justify-end"><RowMenu row={r} onAction={onAction} canOpenWorkspace={!cohort || Boolean(onImpersonate)} /></span>
                     </li>
                   ))}
                 </ul>

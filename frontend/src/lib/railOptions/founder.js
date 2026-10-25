@@ -118,6 +118,11 @@ export const FOUNDER_OPTIONS = [
   },
 
   // ── Build.
+  // D1071 (#2941): Plan the build's "Word with Eadwyn" — the rules' items worded, kept only by an item's Save.
+  {
+    page: 'Founder · Build', key: 'draft:build/plan', route: '/build/plan', label: 'Word with Eadwyn', kind: 'write', handler: 'draft',
+    at: [['frontend/src/pages/cycles/BuildPlan.jsx', 'buildPlanApi.word(']],
+  },
   {
     page: 'Founder · Build · Product roadmap', key: 'draft:build/roadmap', route: '/build/product-roadmap', label: 'Argue the ordering', kind: 'plan', handler: 'draft',
     at: [[CYCLE, "surface: 'build/roadmap'"]],
@@ -360,7 +365,6 @@ export const FOUNDER_QUIET_PAGES = {
   'Founder · Validate · Market intelligence': 'Its tool link opens Research’s Companies, which owns the competitor analysis.',
   'Founder · Validate · Demand and urgency signals': 'Its records and forms only.',
   'Founder · Validate · Verdict': 'Export summary is a CSV the Worker builds; no model.',
-  'Founder · Build': 'Connect a tool and Create your startup run no model.',
   'Founder · Build · Solution design': 'Its records and forms only.',
   'Founder · Build · Prototype / MVP': 'Its records and forms only.',
   'Founder · Build · Founding team': 'Its tool is the cap table, which runs no model.',
