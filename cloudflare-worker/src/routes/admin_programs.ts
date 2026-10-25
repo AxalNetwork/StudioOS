@@ -11,6 +11,12 @@
  *   PUT  /:key/playbook/sections/:section          edit the draft's section (requireSuperAdmin)
  *   POST /:key/playbook/publish                    the draft becomes the next version (requireSuperAdmin)
  *   GET  /:key/activity?before=&limit=             the program's activity, newest first (requireAdmin)
+ *   PUT  /:key/grantable                           Offer to studios: { grantable, reason } (requireSuperAdminWriteBar, D956)
+ *
+ * D956 (#2789): the catalogue's rows and `/:key` carry `grant`, what this
+ * viewer reads of the program's grant (`services/programGrantStates.ts`), and
+ * `/:key` carries `grantable`, D982's "can be granted" switch. A grant read
+ * that fails is that block unreadable, never a state and never a 5xx.
  *
  * An unknown key is 404 `unknown_program` on every `/:key` route, and so is a
  * program approved for another studio only (D955, migration 561): an admin
@@ -28,7 +34,7 @@
  */
 import { Hono, type Context } from 'hono';
 import type { Env } from '../types';
-import { isSuperAdmin, requireAdmin, requireSuperAdmin } from '../auth';
+import { isSuperAdmin, requireAdmin, requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
 import { refuse } from '../util/refusal';
 import { mapError } from './_t13t14t15_helpers';
 import { ownScope } from '../services/adminInsights';
@@ -39,6 +45,8 @@ import {
 } from '../services/programRegistry';
 import { parseActivityQuery, programActivity } from '../services/programActivity';
 import { newProgram, readerOf } from '../services/programProposals';
+import { grantFieldOf, grantStates, grantViewerOf, offerToStudios } from '../services/programGrantStates';
+import { readDefaults } from '../services/programGrants';
 
 const r = new Hono<{ Bindings: Env }>();
 type C = Context<{ Bindings: Env }>;
@@ -72,7 +80,8 @@ r.get('/', async (c) => {
       return c.json(await branchScopedPrograms(c.env, code, programsParams(c.req.query())));
     }
     const reader = await readerOf(c.env, { id: Number(user.id), superAdmin: isSuperAdmin(user as any) });
-    return c.json(await programCatalogue(c.env, { id: Number(user.id), superAdmin: reader.superAdmin, licenceUid: reader.licenceUid }, weeks));
+    const grants = await grantViewerOf(c.env, { id: Number(user.id), superAdmin: reader.superAdmin });
+    return c.json(await programCatalogue(c.env, { id: Number(user.id), superAdmin: reader.superAdmin, licenceUid: reader.licenceUid, grants }, weeks));
   } catch (e) {
     return answer(c, e);
   }
@@ -132,7 +141,24 @@ r.get('/:key', async (c) => {
   try {
     const user = await requireAdmin(c);
     const reader = await readerOf(c.env, { id: Number(user.id), superAdmin: isSuperAdmin(user as any) });
-    return c.json(await programDetail(c.env, c.req.param('key'), reader.superAdmin, reader));
+    const detail = await programDetail(c.env, c.req.param('key'), reader.superAdmin, reader);
+    const key = (detail.program as { key: string }).key;
+    const viewer = await grantViewerOf(c.env, { id: Number(user.id), superAdmin: reader.superAdmin });
+    const read = await grantStates(c.env, viewer, [key], new Date().toISOString().slice(0, 10));
+    // D982's switch: only the nine carry it, so a program D955 added reads false.
+    const grantable = await readDefaults(c.env).then((d) => d.find((x) => x.program_key === key)?.grantable ?? false, () => null);
+    return c.json({ ...detail, grant: grantFieldOf(read, key), grantable });
+  } catch (e) {
+    return answer(c, e);
+  }
+});
+
+/** D956 — Offer to studios (PG13s, dc:495): D982's "can be granted" switch, with its one rule. */
+r.put('/:key/grantable', async (c) => {
+  try {
+    const user = await requireSuperAdminWriteBar(c);
+    const body = await c.req.json().catch(() => ({}));
+    return c.json(await offerToStudios(c.env, c.req.param('key'), body, actorOf(user)));
   } catch (e) {
     return answer(c, e);
   }
