@@ -62,10 +62,11 @@ test('the growth tier is still where scoring is actually advertised — nothing 
   // TIER_PLANS.growth.features in PaywallModal.jsx is the single source of
   // truth pricing.js/productPages.js both inherit from; this just confirms
   // the fix didn't accidentally remove the TRUE claim along with the false one.
-  // D683 renamed the tier's plan "Validate + Build" and its line "Venture-
-  // readiness scoring runs"; the gate is still `ensureTier(user, 'growth')`.
+  // D683 renamed the tier's plan "Validate + Build"; D1050 holds its lines to
+  // the plan catalogue (Pricing's card), where the line is "Venture-readiness
+  // scoring". The gate is still `ensureTier(user, 'growth')`.
   const PAYWALL = read('../src/components/PaywallModal.jsx');
-  assert.match(PAYWALL, /growth: \{[\s\S]*?'Venture-readiness scoring runs'[\s\S]*?\n  \},/);
+  assert.match(PAYWALL, /growth: \{[\s\S]*?'Venture-readiness scoring'[\s\S]*?\n  \},/);
 });
 
 // --- investor intros are no longer claimed as Pro-exclusive --------------

@@ -72,7 +72,7 @@ export default function HqAccountsPage({ onImpersonate }) {
       coverageNote={team === undefined ? 'Loading…' : team === null ? 'The administrator roster could not be read.' : undefined}
       unavailable={[
         ['A tenant per ordinary account', 'No account but an administrator names a licence (U1), so the directory has no Branch column to read.'],
-        ['Deciding KYC, access or the Lab for a branch account', 'A branch hit shows its KYC, access and Lab state (D260), read-only. Deciding them is the branch admin’s, on its own Admin Console. A suspended branch gives no KYC verdict, grants no limited access and admits no one to the Lab; it can still revoke limited access.'],
+        ['Deciding KYC, access or the Lab for a branch account', 'A branch hit shows its KYC, access and Lab state (D260), read-only. Deciding them is the branch admin’s, on its own admin pages. A suspended branch gives no KYC verdict, grants no limited access and admits no one to the Lab; it can still revoke limited access.'],
         ['Trust on a branch account', 'Trust is computed over HQ’s own accounts and is not a per-branch figure.'],
         ['Telling a branch account HQ supports', 'An HQ-held account is told when a support session opens on it (D248), and both parties to a transfer of the elevation are told (D241). An account on a branch is told when HQ authorises a support session on it (D441): the branch records the authorisation and sends a security notice naming who, the reason, and that the session lasts 30 minutes once it is opened.'],
       ]}
@@ -91,7 +91,7 @@ export default function HqAccountsPage({ onImpersonate }) {
           <p className="mt-1 max-w-2xl text-[12.5px] leading-relaxed text-axal-muted">
             Who holds the elevation, every administrator with their licence and compliance state, what
             only HQ may do and what every admin may, and below them every account on the platform in the
-            same table the Admin Console keeps.
+            same table as All accounts, under Accounts.
             Tenant per ordinary account: <Unrecorded /> — an administrator names the licence they
             hold, but no other account does yet, so the directory has no tenant column to read.
           </p>

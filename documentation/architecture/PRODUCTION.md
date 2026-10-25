@@ -185,6 +185,10 @@ A grant older than a raised session floor is also refused on every tool call (`g
     sends four events for packs: `payment_intent.succeeded` (the credit),
     `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`
     (taking tokens back). Its signing secret is `STRIPE_WEBHOOK_SECRET`.
+    For plans it also sends `invoice.payment_failed` and
+    `invoice.payment_action_required` (D892, D1052: the renewal alerts) and
+    the subscription and invoice events; HQ › Payments › Stripe lists any it
+    is missing.
   - `STRIPE_PRICE_AI_TOPUP` is now an **optional fallback**: the ID
     (`price_…`) of an active, one-time, USD price with a fixed amount, in the
     same Stripe mode as `STRIPE_SECRET_KEY`. Set and not already a pack, it

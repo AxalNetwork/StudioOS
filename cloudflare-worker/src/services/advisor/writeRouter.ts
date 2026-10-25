@@ -23,6 +23,7 @@ import { ensureTaxonomyVersionColumns, getTaxonomyVersion } from '../taxonomyVer
 import { parseArchetypeSex } from '../archetypePresentation.ts';
 import { normalizeFitAnswer } from './banks/fitShared.ts';
 import { upsertUserSettings } from '../userSettings.ts';
+import { recordCapture } from '../partnerProfileReview';
 
 export type WriteStatus = 'saved' | 'skipped' | 'paywalled' | 'failed' | 'noop' | 'needs_evidence' | 'invalid';
 
@@ -524,7 +525,9 @@ async function tierForInvestorThesis(env: Env, user: User): Promise<{ ok: boolea
   // Anything tied to investor_subscription_status='active' or the
   // generic subscription_status='active' is treated as paid here.
   const subs = await loadSubscriptionFields(env, user.id);
-  const active = subs.investor_subscription_status === 'active' || subs.subscription_status === 'active';
+  // D1052 (#2903): past_due, a renewal Stripe is still retrying, keeps the plan.
+  const paid = (s: string | null | undefined) => s === 'active' || s === 'past_due';
+  const active = paid(subs.investor_subscription_status) || paid(subs.subscription_status);
   if (active) return { ok: true };
   return { ok: false, upgrade_link: '/billing/investor-upgrade' };
 }
@@ -1407,6 +1410,8 @@ export async function routeAnswer(
       await env.DB.prepare(
         `UPDATE partner_profiles SET ${pcol} = ?, updated_at = CURRENT_TIMESTAMP WHERE LOWER(email) = LOWER(?)`,
       ).bind(value, profile.email).run();
+      // D991 — the capture joins the profile's history, by source.
+      await recordCapture(env, profile.email, 'eadwyn');
       return {
         status: 'saved',
         saved_to: { table: 'partner_profiles', column: pcol, id: profile.email, page_url: '/studio' },

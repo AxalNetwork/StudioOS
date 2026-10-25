@@ -184,7 +184,10 @@ test('a grant outlives neither the venture nor the account: lost ownership and a
 
 // ── The per-member limit ─────────────────────────────────────────────────────
 
-test(`the member limit counts every connection: ${USER_CALLS_PER_MINUTE} calls a minute across grants, then refused; another member is untouched`, async () => {
+test(`the member limit counts every connection: ${USER_CALLS_PER_MINUTE} calls a minute across grants, then refused; another member is untouched`, async (t) => {
+  // Keep all calls in one rate-limit minute, including on a busy CI runner.
+  const now = Date.now();
+  t.mock.method(Date, 'now', () => now);
   const { env } = fixture();
   const { ran, tools } = recorded();
   const tool = tools.find((t) => !t.company)! as any;

@@ -42,7 +42,7 @@ const MODEL_CALLS = [
   'api.advisor.answer(', 'api.advisor.toolAuto(', 'api.advisor.explainUrl(', 'api.advisor.transcribe(',
   'sessions.create(', 'sessions.open(', 'api.finish(', 'api.process(',
   'api.transcribeInterview(', 'api.transcribe(', 'sessions.summarise(', 'api.summarise(', 'api.structure(', 'api.ask(',
-  'api.deckPositioning(', 'api.deckAutofill(', 'api.deckApplyMethod(', 'newDeckApi.outline(', 'newDeckApi.build(',
+  'api.deckPositioning(', 'api.deckAutofill(', 'api.deckApplyMethod(', 'newDeckApi.outline(', 'newDeckApi.build(', 'deckAssistApi.run(',
   '/api/deck-reviewer/upload', 'deckReviewer.paste(', 'deckReviewer.regenerate(',
   'shareUpdateApi.draftLines(',
   'api.brandAutofillLanding(', 'api.brandLogo(', 'api.brandSuggestPalette(', 'api.brandSuggestTaglines(',

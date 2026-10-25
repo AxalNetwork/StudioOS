@@ -4,27 +4,31 @@ import { api } from '../../../lib/api';
 import { Lightbox, actionDanger, actionGhost } from '../../../ui';
 import useRecordCrumb from '../useRecordCrumb';
 import {
-  AGREEMENT_NOT_READY, ANSWERS_LOGGED, LINK_LAPSED, LIST_CLAIM, MISSING_INVITATION, NOT_IN_READ, NOT_OFFERED, NOT_READ_YET,
-  NO_INVITATION, READING, TERMS_NOT_READ, agreementLine, agreementReady, answersOf, dayOr, dealForInvitation, dealTypeWord,
-  envelopeHref, findInvitation, invitationRow, linkLine, progressRows, proposalOf, signingLink,
+  AGREEMENT_NOT_READY, ANSWERS_LOGGED, LINK_LAPSED, NOT_OFFERED, READING, agreementLine, agreementReady, answersOf, dayOr,
+  dealTypeWord, envelopeHref, findInvitation, invitationRow, isRecordId, linkLine, signingLink,
 } from './partnersDeskModel';
-import { useRead } from './usePartnerDesk';
 import {
-  AMBER, CopyButton, EYE, Fact, LINK, ReadState, SUB, StageCell, Unread,
+  NO_MESSAGE, blockOf, chosenDeal, detailReply, detailState, historyLines, messageOf, offersSeen, refusalLines, sendLine, stepRows,
+} from './invitationsModel';
+import { itemsOf, useRead } from './usePartnerDesk';
+import {
+  AMBER, CopyButton, EYE, Fact, LINK, ReadState, SUB, StageCell,
 } from './parts';
 
 /**
- * D923 (#2370) — one invitation (PI3), at `/admin/partner-invitations/
- * invitations/:id`. On a desktop it is a `Lightbox` over the Invitations tab;
- * on a phone the same `Lightbox` draws a full page with "‹ Invitations"
- * (PI11c). Closing returns to the tab, and focus to the row that opened it.
+ * D950 (#2726) — one invitation (PI3; PI11c on a phone), at
+ * `/admin/partner-invitations/invitations/:id`, on part 4's read (D927 §3):
+ * the row with its message and send columns, the seven step dates, the offers
+ * the invitee saw, the chosen deal, the agreement's refusals and the history,
+ * each block answering alone. On a desktop it is a `Lightbox` over the
+ * Invitations tab; on a phone the same `Lightbox` draws a full page with
+ * "‹ Invitations". Closing returns to the tab, and focus to the row.
  *
- * It is found in R1's loaded rows (or a row this page read for its address);
- * one outside them reads "Not in this read" until part 4's single read, with
- * its reason: R1 stopped at its cap, or no invitation in it has the address.
- * A record whose read could not refresh stays under "Could not refresh". R7
- * gives the envelope; R12, their answers, is read only when the admin asks,
- * because each read is logged.
+ * The read carries no token, so the link to copy comes from the list row: the
+ * one the page has (R1, the tab's page, or a row read for its address), or
+ * the row read for this invitation's address. R7 gives the envelope; R12,
+ * their answers, is read only when the admin asks, because each read is
+ * logged.
  */
 
 const SECTION = 'flex flex-col gap-2 border-t border-axal-hairline pt-3 first:border-t-0 first:pt-0 dark:border-gray-700';
@@ -38,9 +42,24 @@ function Section({ title, children, testId }) {
   );
 }
 
+/** A block of the read that could not be read: the Worker's reason, never "none". */
+function BlockFailed({ reason, what, testId }) {
+  return <p role="alert" className="m-0 text-[13px] text-red-700 dark:text-red-300" data-testid={testId}>{reason || `${what} could not be read. That is not the same as none.`}</p>;
+}
+
 export default function InvitationRecord({ id, reads, now, onClose, actions }) {
+  const [retry, setRetry] = useState(0);
+  const detail = useRead('invitation', `invitation:${id}`, reads.tick + retry, isRecordId(id),
+    () => api.adminPartners.getInvitation(id).then(detailReply));
+  const data = detail.data;
   const found = findInvitation(id, reads.invitations, reads.extra);
-  const inv = found.state === 'ready' ? found.inv : null;
+  const listed = found.state === 'ready' ? found.inv : null;
+  const email = data?.invitation?.recipient_email || null;
+  // The link lives only on a list row: read this address's rows when the page has none for this id.
+  const rowRead = useRead('invitation-row', `row:${id}:${email}`, reads.tick, Boolean(email) && !listed,
+    () => api.adminPartners.listInvitations({ email }).then((r) => itemsOf(r, 'The invitations for this address').find((i) => String(i?.id) === String(id)) || null));
+  const linkRow = listed || rowRead.data || null;
+  const inv = data ? { ...(linkRow || {}), ...data.invitation, link: linkRow?.link ?? null } : null;
   const envelopeId = inv?.envelope_id ?? null;
   const envelope = useRead('envelope', `envelope:${envelopeId}`, reads.tick, envelopeId !== null, () => api.esignDetail(envelopeId));
   const [askAnswers, setAskAnswers] = useState(false);
@@ -51,43 +70,49 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
   useRecordCrumb(inv ? (String(inv.recipient_name || '').trim() || inv.recipient_email) : null, null, null);
 
   if (!inv) {
+    const state = isRecordId(id) ? detailState(detail) : 'missing';
+    const gone = state === 'missing' || Number(detail.error?.status) === 404;
     return (
       <Lightbox label="Invitation" title="Invitation" eyebrow="Invitations" onClose={onClose} width={560} pageBelow="lg" testId="partners-invitation">
         <div className="flex flex-col gap-2 px-5 py-4" data-testid="partners-invitation-absent">
-          {found.state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{READING}</span> : null}
-          {/* A refresh that failed is drawn as failed: its old rows did not hold this invitation. */}
-          {found.state === 'unreadable' ? <ReadState read={{ ...reads.invitations, data: null }} what="The invitations" claim={LIST_CLAIM} onRetry={reads.reload} testId="partners-invitation-read" /> : null}
-          {found.state === 'missing' || found.state === 'none' ? (
+          {state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{READING}</span> : null}
+          {gone ? (
             <>
-              <p className="m-0 text-[14px] font-extrabold text-axal-ink dark:text-gray-100">{NOT_IN_READ}</p>
-              <p className={`m-0 ${SUB}`} data-testid="partners-invitation-absent-reason">{found.state === 'missing' ? MISSING_INVITATION : NO_INVITATION}</p>
+              <p className="m-0 text-[14px] font-extrabold text-axal-ink dark:text-gray-100">There is no such invitation.</p>
+              <p className={`m-0 ${SUB}`} data-testid="partners-invitation-absent-reason">No invitation has this address. It may have been typed or copied wrongly.</p>
             </>
           ) : null}
+          {!gone && (state === 'unreadable' || state === 'paused') ? <ReadState read={{ ...detail, data: null }} what="This invitation" claim="That is not a claim that it does not exist." onRetry={() => setRetry((n) => n + 1)} testId="partners-invitation-read" /> : null}
         </div>
       </Lightbox>
     );
   }
 
-  const row = invitationRow(inv, { proposed: reads.deals.proposed, now });
+  const row = invitationRow(inv, { now, repair: false });
   const { stage } = row;
-  const dealHit = dealForInvitation(inv, reads.deals);
-  const progress = progressRows(inv, stage, dealHit, envelope);
+  const steps = stepRows(data.steps, stage);
   const link = linkLine(inv, stage);
   const signing = stage.step === 6 && envelopeId !== null ? signingLink(envelope, now) : null;
   const ready = agreementReady(reads.template);
-  const proposal = dealHit.state === 'ready' ? proposalOf(dealHit.deal) : null;
+  const chosen = chosenDeal(data.chosen_deal);
+  const seen = offersSeen(data.offers_seen, inv);
+  const refusals = refusalLines(data.agreement_refusals);
+  const history = historyLines(data.history);
+  const send = sendLine(inv);
+  const message = messageOf(inv);
   const answers = answersOf(askAnswers ? profile : null, inv);
   const sentBy = row.invitedBy === 'Not recorded' ? `Sent on ${row.sent} · sender not recorded` : `Sent by ${row.invitedBy} on ${row.sent}`;
   const name = row.named ? row.name : inv.recipient_email;
+  const linkMissing = !row.link && (listed || rowRead.status !== 'loading');
 
   const footer = (
     <div className="flex flex-wrap items-center justify-end gap-2" data-testid="partners-invitation-actions">
       {inv.status === 'signed' && row.dealId !== null ? <Link to={`/admin/partner-invitations/deals/${row.dealId}`} className={actionGhost}>Open deal</Link> : null}
       {!stage.closed ? (
         <>
-          {stage.lapsed || !row.link
-            ? <span className={`text-[12px] font-semibold ${AMBER}`}>{stage.lapsed ? LINK_LAPSED : 'Link not recorded'}</span>
-            : <CopyButton text={row.link} label="Copy link" testId="partners-invitation-copy" />}
+          {stage.lapsed ? <span className={`text-[12px] font-semibold ${AMBER}`}>{LINK_LAPSED}</span> : null}
+          {!stage.lapsed && row.link ? <CopyButton text={row.link} label="Copy link" testId="partners-invitation-copy" /> : null}
+          {!stage.lapsed && !row.link ? <span className={`text-[12px] font-semibold ${AMBER}`} data-testid="partners-invitation-no-link">{linkMissing ? 'The link could not be read here. Resend gives the invitee a fresh one.' : READING}</span> : null}
           <button type="button" className={actionGhost} onClick={() => actions.resend(inv)} data-testid="partners-invitation-resend">Resend</button>
           <button type="button" className={actionDanger} onClick={() => actions.revoke(inv)} data-testid="partners-invitation-revoke">Revoke</button>
         </>
@@ -99,22 +124,24 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
     <Lightbox label={`Invitation for ${name}`} title={row.name} sub={`${row.email} · ${sentBy}`} eyebrow="Invitations" onClose={onClose}
       width={940} pageBelow="lg" testId="partners-invitation" footer={footer}>
       <div className="flex flex-col gap-4 px-5 py-4" data-testid="partners-invitation-body">
-        {/* The read this record came from could not refresh: the record stays, from that read, under the line (D923 §2). */}
-        {found.stale ? <ReadState read={{ status: 'error', data: inv }} what="this invitation" kept="The record below is from the last read." onRetry={reads.reload} testId="partners-invitation-read" /> : null}
+        {/* A refresh that failed keeps the record from the last read, under the line (D923 §2). */}
+        <ReadState read={detail} what="this invitation" kept="The record below is from the last read." onRetry={() => setRetry((n) => n + 1)} testId="partners-invitation-read" />
         <div className="flex flex-wrap items-center gap-3"><StageCell stage={stage} testId="partners-invitation-stage" /></div>
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="flex flex-col gap-4">
             <Section title="Progress" testId="partners-invitation-progress">
               <ol className="m-0 flex list-none flex-col gap-1.5 p-0">
-                {progress.map((p) => (
+                {steps.map((p) => (
                   <li key={p.key} className="flex items-baseline justify-between gap-3 text-[13px]" data-testid={`partners-progress-${p.key}`}>
                     <span className="text-axal-ink dark:text-gray-100">{p.label}</span>
-                    <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{p.unread ? <Unread reason="Each step is stored as an activity row, which no read here returns yet.">{p.value}</Unread> : p.value}</span>
+                    <span className={`font-mono text-[12px] ${p.failed ? 'text-red-700 dark:text-red-300' : 'text-axal-muted dark:text-gray-400'}`}>{p.value}</span>
                   </li>
                 ))}
               </ol>
+              {blockOf(data.steps).state !== 'ready' ? <BlockFailed reason={blockOf(data.steps).reason} what="The step dates" testId="partners-invitation-steps-failed" /> : null}
               <p className={`m-0 text-[12.5px] font-semibold ${link.tone === 'amber' ? AMBER : 'text-axal-ink dark:text-gray-100'}`} data-testid="partners-invitation-link">{link.text}</p>
               {link.warn ? <p className={`m-0 text-[12px] font-semibold ${AMBER}`}>{link.warn}</p> : null}
+              <p className={`m-0 text-[12.5px] ${send.key === 'not_sent' ? `font-semibold ${AMBER}` : 'text-axal-ink dark:text-gray-100'}`} data-testid="partners-invitation-send">{send.line}</p>
               {signing?.state === 'live' ? <p className={`m-0 ${SUB}`} data-testid="partners-invitation-signing">{`Signing link valid until ${signing.day}`}</p> : null}
               {signing?.state === 'expired' ? (
                 <p className={`m-0 flex flex-wrap items-center gap-2 text-[12.5px] font-semibold ${AMBER}`} data-testid="partners-invitation-signing">
@@ -127,16 +154,29 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
 
             <Section title="What we offered" testId="partners-invitation-offered">
               {row.offered.unreadable ? <span className="text-[13px] text-red-700 dark:text-red-300">The types offered could not be read.</span> : (
-                <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                  {row.offered.shown.map((t) => (
-                    <li key={t} className="flex flex-wrap items-baseline justify-between gap-2 text-[13px]">
-                      <span className="font-semibold text-axal-ink dark:text-gray-100">{dealTypeWord(t)}</span>
-                      <Unread reason="Offers are built from the invitee's answers when they open them; part 4 adds a preview.">{TERMS_NOT_READ}</Unread>
+                <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100">
+                  {row.offered.shown.map(dealTypeWord).join(' · ')}
+                  {row.offered.others.length ? <span className={`block ${SUB}`}>{`${row.offered.others.map(dealTypeWord).join(', ')}: ${NOT_OFFERED}`}</span> : null}
+                </p>
+              )}
+              {seen.state === 'unreadable' ? <BlockFailed reason={seen.reason} what="The offers the invitee saw" testId="partners-invitation-offers-failed" /> : null}
+              {seen.state === 'not_shown' ? <p className={`m-0 ${SUB}`} data-testid="partners-invitation-offers-none">{seen.text}</p> : null}
+              {seen.state === 'ready' ? (
+                <ul className="m-0 flex list-none flex-col gap-2 p-0" data-testid="partners-invitation-offers">
+                  {seen.offers.map((o) => (
+                    <li key={o.type || o.label} className="flex flex-col gap-1 rounded-[10px] border border-axal-hairline px-3 py-2 dark:border-gray-700" data-testid={`partners-invitation-offer-${o.type}`}>
+                      <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{o.label}</span>
+                      {o.summary ? <span className={SUB}>{o.summary}</span> : null}
+                      {o.terms.length ? (
+                        <dl className="m-0 grid gap-1.5 sm:grid-cols-2">
+                          {o.terms.map((t) => <Fact key={t.key} label={t.label}>{t.value}</Fact>)}
+                        </dl>
+                      ) : null}
+                      {o.term ? <span className={SUB}>{`Term: ${o.term}`}</span> : null}
                     </li>
                   ))}
-                  {row.offered.others.length ? <li className={SUB}>{`${row.offered.others.map(dealTypeWord).join(', ')}: ${NOT_OFFERED}`}</li> : null}
                 </ul>
-              )}
+              ) : null}
             </Section>
 
             <Section title="Their answers" testId="partners-invitation-answers">
@@ -165,21 +205,26 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
 
           <div className="flex flex-col gap-4">
             <Section title="Chosen offer and agreement" testId="partners-invitation-agreement">
-              {dealHit.state === 'ready' ? (
-                proposal ? (
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{proposal.label}</span>
-                    {proposal.summary ? <span className={SUB}>{proposal.summary}</span> : null}
+              {chosen.state === 'ready' ? (
+                chosen.offer ? (
+                  <div className="flex flex-col gap-0.5" data-testid="partners-invitation-chosen">
+                    <span className="text-[13px] font-bold text-axal-ink dark:text-gray-100">{chosen.offer.label}</span>
+                    {chosen.offer.summary ? <span className={SUB}>{chosen.offer.summary}</span> : null}
+                    <span className={SUB}>{`Deal #${chosen.deal.id} · ${steps.find((s) => s.key === 'offer_chosen')?.value}`}</span>
                   </div>
-                ) : <Unread>Not recorded</Unread>
+                ) : <span className={SUB}>{`Deal #${chosen.deal.id} · its offer was not recorded`}</span>
               ) : null}
-              {dealHit.state === 'none' ? <span className={SUB}>No offer chosen yet.</span> : null}
-              {dealHit.state === 'missing' ? <span className={SUB}>{NOT_IN_READ}</span> : null}
-              {dealHit.state === 'loading' ? <span className="font-mono text-[12px] text-axal-muted dark:text-gray-400">{READING}</span> : null}
-              {dealHit.state === 'unreadable' ? <span className="text-[13px] text-red-700 dark:text-red-300">The deals could not be read.</span> : null}
+              {chosen.state === 'none' ? <span className={SUB} data-testid="partners-invitation-chosen-none">No offer chosen yet.</span> : null}
+              {chosen.state === 'unreadable' ? <BlockFailed reason={chosen.reason} what="The chosen deal" testId="partners-invitation-chosen-failed" /> : null}
               <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="partners-invitation-agreement-state">{`Agreement: ${agreementLine(inv, envelope).text}`}</p>
               {envelopeId !== null ? <a href={envelopeHref(envelopeId)} className={`${LINK} self-start`}>Open the envelope</a> : null}
-              {ready.state === 'not_ready' && envelopeId === null && (stage.step === 5 || dealHit.state === 'ready') && !stage.closed ? (
+              {refusals.state === 'unreadable' ? <BlockFailed reason={refusals.reason} what="The agreement's refusals" testId="partners-invitation-refusals-failed" /> : null}
+              {refusals.state === 'ready' && refusals.lines.length ? (
+                <ul className={`m-0 flex list-none flex-col gap-1 p-0 text-[12.5px] font-semibold ${AMBER}`} data-testid="partners-invitation-refusals">
+                  {refusals.lines.map((l) => <li key={l.key}>{l.text}</li>)}
+                </ul>
+              ) : null}
+              {ready.state === 'not_ready' && envelopeId === null && (stage.step === 5 || chosen.state === 'ready') && !stage.closed ? (
                 <div className="flex flex-col gap-1.5 rounded-[10px] border border-amber-300 bg-amber-50 p-3 text-[13px] font-semibold leading-normal text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="partners-invitation-not-ready">
                   <span>{AGREEMENT_NOT_READY}</span>
                   <Link to="/admin/contracts?tab=templates" className="self-start font-bold underline">Open in Contracts</Link>
@@ -188,14 +233,22 @@ export default function InvitationRecord({ id, reads, now, onClose, actions }) {
             </Section>
 
             <Section title="Your message" testId="partners-invitation-message">
-              <Unread reason="The message is stored with the invitation, but the list read does not return it yet.">{NOT_READ_YET}</Unread>
+              <p className={`m-0 whitespace-pre-wrap text-[13px] leading-normal ${message ? 'text-axal-ink dark:text-gray-100' : 'text-axal-muted dark:text-gray-400'}`} data-testid="partners-invitation-message-text">{message || NO_MESSAGE}</p>
             </Section>
 
             <Section title="History" testId="partners-invitation-history">
-              <p className="m-0 text-[13px] font-semibold text-axal-ink dark:text-gray-100" data-testid="partners-invitation-history-sent">
-                {row.invitedBy === 'Not recorded' ? `Sent · ${dayOr(inv.created_at)} · sender not recorded` : `Sent by ${row.invitedBy} · ${dayOr(inv.created_at)}`}
-              </p>
-              <Unread reason="Resends, opens and each step are stored as audit and activity rows, which no read here returns per invitation yet.">{NOT_READ_YET}</Unread>
+              {history.state === 'unreadable' ? <BlockFailed reason={history.reason} what="The history" testId="partners-invitation-history-failed" /> : null}
+              {history.state === 'ready' && history.lines.length ? (
+                <ol className="m-0 flex list-none flex-col gap-1 p-0" data-testid="partners-invitation-history-lines">
+                  {history.lines.map((l) => <li key={l.key} className="text-[12.5px] text-axal-ink dark:text-gray-100">{l.text}</li>)}
+                </ol>
+              ) : null}
+              {history.state === 'ready' && !history.lines.length ? (
+                <p className="m-0 text-[13px] text-axal-ink dark:text-gray-100" data-testid="partners-invitation-history-sent">
+                  {row.invitedBy === 'Not recorded' ? `Sent · ${dayOr(inv.created_at)} · sender not recorded` : `Sent by ${row.invitedBy} · ${dayOr(inv.created_at)}`}
+                  <span className={`block ${SUB}`}>No admin action on this invitation was recorded in the audit log.</span>
+                </p>
+              ) : null}
             </Section>
           </div>
         </div>
