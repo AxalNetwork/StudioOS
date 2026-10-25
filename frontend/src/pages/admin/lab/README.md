@@ -3,9 +3,9 @@
 D937 (#2374): the Spin-Out Lab's admin page at `/admin/programs/spinout-lab`,
 built to the owner's canvas (SL1–SL21, `design/incoming/Spin-Out Lab Admin Page.dc.html`)
 under the shared admin page header (D936, `../../../ui/AdminPageHeader.jsx`).
-Its tabs are sub-paths: `/applications`, `/cohorts`, `/participants`, `/hosts`,
-`/formation` and `/graduation`; one founder is `/participants/:uid`; the
-founder-journey preview is `/preview`.
+Its tabs are sub-paths: `/applications`, `/cohorts` (and one cohort at
+`/cohorts/YYYY-MM`, D947), `/participants` (one founder at `/participants/:uid`, D949), `/hosts`,
+`/formation` and `/graduation`; the founder-journey preview is `/preview`.
 
 Three old doors forward here before any old console mounts, keeping the query
 and hash and adding `?moved=`:
@@ -16,9 +16,18 @@ and hash and adding `?moved=`:
 
 - `AdminLab.jsx` — the page: the header (crumb, pills, line, facts, scope chip,
   moved notice, tabs with their counts) and the Overview's blocks.
-  Applications and Cohorts are today's console, asked for one section through
-  `AdminSpinoutLab`'s `section` prop; Participants, Hosts, Formation and
+  Applications is today's console, asked for one section
+  through `AdminSpinoutLab`'s `section` prop; Participants, Cohorts, Hosts, Formation and
   Graduation mount the files below.
+- `LabOverviewBlocks.jsx` — Overview's drawn blocks (SL1, D947): the cohort
+  calendar timeline, Applications by cohort, Weeks passed, From application
+  to company and Applications per week, each with Chart ⇄ Table and its
+  Reading…, Unreadable with Try again, and empty states.
+- `LabCohorts.jsx` — Cohorts (D947): SL5's calendar of the next twelve cohorts
+  or the list, and SL6, one cohort at `/cohorts/YYYY-MM`. Grace and outcome
+  overrides there are still today's `AdminCohortTiming` until part 7.
+- `labOverviewModel.js` — pure. Those blocks and pages from D944's overview
+  read (`GET /api/admin/cohort/overview`) and Settings' minimum and places.
 - `LabParticipants.jsx` — Participants (SL7) and one founder (SL8, D949): the
   segments and "Where [cohort] stands" from D946's read, its filters, sort and
   pages asked of the Worker, the table (cards on a phone), the drawer at
@@ -41,7 +50,7 @@ and hash and adding `?moved=`:
 - `labParts.jsx` — what the three tabs draw with: pills, chips, selects, the
   read hook and its state line, tiles, the pager and the in-page dialog.
 - `labModel.js` — pure. The address and tabs, the moved sentences, and the
-  Overview's tiles, cohort table and Needs you from the reads, each `ready`,
+  Overview's tiles and Needs you from the reads, each `ready`,
   `loading` or `unreadable`.
 - `LabRedirect.jsx`, `LabPreviewRedirect.jsx` — the two old paths.
 
