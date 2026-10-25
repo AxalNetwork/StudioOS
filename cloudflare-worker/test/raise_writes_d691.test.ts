@@ -597,6 +597,7 @@ function roomFixture() {
     db.exec(stripForeignKeys(tableFromBaseline(BASELINE, t)));
   }
   addColumnsFrom(db, stripForeignKeys(sqlOf('463_raise_record_stores.sql')), 'data_room_files');
+  addColumnsFrom(db, stripForeignKeys(sqlOf('596_data_room_file_source.sql')), 'data_room_files');
   addColumnsFrom(db, stripForeignKeys(sqlOf('442_raise_cycle_stores.sql')), 'data_room_files');
   withGrantFolders(db); // D1103: migration 594
   const u = db.prepare('INSERT INTO users (id, role, founder_id, name, email) VALUES (?,?,?,?,?)');
