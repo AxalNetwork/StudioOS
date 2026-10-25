@@ -45,7 +45,7 @@ function useRead(load, deps) {
   return [read, useCallback(() => setTick((t) => t + 1), [])];
 }
 
-function Unreadable({ text, onRetry, testId }) {
+function BlockUnreadable({ text, onRetry, testId }) {
   return (
     <div role="alert" className={ALERT} data-testid={testId}>
       <span>{text}</span>
@@ -75,7 +75,7 @@ function DealTypes({ uid, studio }) {
     <section className={`${CARD} flex flex-col gap-2.5 px-[18px] py-4`} data-testid="studio-deal-types">
       <h2 className={H2}>Partner deal types this studio may offer</h2>
       {read.status === 'loading' && !d ? <span className={SUB}>Reading…</span> : null}
-      {read.status === 'error' ? <Unreadable text="Partner deal types could not be read." onRetry={reload} testId="studio-deal-types-unreadable" /> : null}
+      {read.status === 'error' ? <BlockUnreadable text="Partner deal types could not be read." onRetry={reload} testId="studio-deal-types-unreadable" /> : null}
       {d ? (
         <>
           {!d.recorded ? <p className={`m-0 ${SUB}`} data-testid="studio-deal-types-unrecorded">{d.reason || NOT_RECORDED}</p> : null}
@@ -158,7 +158,7 @@ export default function StudioView({ uid, requests, reloadAll }) {
         line={read ? `Licence ${lic.licence_ref || NOT_RECORDED}${lic.renews_on ? ` · renews ${dayWord(lic.renews_on)}` : ''}. The programs this studio may run, and on what terms.` : null}
         data-testid="studio-header"
       />
-      {licence.status === 'error' ? <Unreadable text="This studio’s grants could not be read. That is not the same as none." onRetry={reloadLicence} testId="studio-unreadable" /> : null}
+      {licence.status === 'error' ? <BlockUnreadable text="This studio’s grants could not be read. That is not the same as none." onRetry={reloadLicence} testId="studio-unreadable" /> : null}
       {done ? <p role="status" className="m-0 rounded-[9px] bg-axal-ground px-3 py-2 text-[12.5px] text-axal-ink dark:bg-gray-800 dark:text-gray-100" data-testid="studio-done">{done}</p> : null}
       {frozen ? <p role="alert" className={`m-0 font-semibold ${ERR}`} data-testid="studio-frozen">{frozen}</p> : null}
       {read ? (
@@ -166,7 +166,7 @@ export default function StudioView({ uid, requests, reloadAll }) {
           <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="studio-tiles">
             {tiles.map((t) => <Tile key={t.key} t={t} testId={`studio-tile-${t.key}`} />)}
           </div>
-          {defaults.status === 'error' ? <Unreadable text="The default terms could not be read, so whether a grant is on its own terms is unknown." onRetry={reloadDefaults} testId="studio-defaults-unreadable" /> : null}
+          {defaults.status === 'error' ? <BlockUnreadable text="The default terms could not be read, so whether a grant is on its own terms is unknown." onRetry={reloadDefaults} testId="studio-defaults-unreadable" /> : null}
           {requests.status === 'error' ? <p className={`m-0 ${SUB}`} data-testid="studio-requests-unread">Requests could not be read, so a requested program shows as not granted here until they are.</p> : null}
           <div className="grid grid-cols-12 gap-3.5">
             <section className={`${CARD} col-span-12 flex min-w-0 flex-col gap-3 px-[18px] py-4 xl:col-span-8`} data-testid="studio-programs">
