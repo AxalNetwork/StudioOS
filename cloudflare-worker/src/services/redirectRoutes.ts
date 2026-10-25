@@ -171,6 +171,7 @@ export const REDIRECT_ROUTES: readonly RedirectRoute[] = Object.freeze([
   { path: '/admin/network-profiles' }, // D972 (#2369): the roster is Advisors & Partners › Deck roster
   { path: '/admin/partner-invitations/firm-links' }, // D952 (#2728): Firm links moved to Advisors & Partners › Firms
   ...ADMIN_TAB_REDIRECTS,
+  { path: '/admin', keep: true }, // D938 (#2743): the Admin Console is retired; every ?tab= forwards to its own page (#2375 keeps /admin)
 
 ]);
 

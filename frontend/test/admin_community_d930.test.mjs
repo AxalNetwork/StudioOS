@@ -237,7 +237,7 @@ test('mounted: each block is drawn from its own read, and no roster name reaches
     assert.match(m.of('community-needs'), /Founding Engineer/);
     assert.match(m.of('community-unrecorded-active-members'), /Not recorded/);
     assert.doesNotMatch(m.text(), /Secret Roster Name|Another Hidden Person|Hidden Co/, 'a roster name reached the page');
-    assert.ok(!m.has('community-moved'));
+    assert.ok(!m.has('admin-page-moved'));
     // Every read the page made, by path. The wellbeing reads are not among them.
     // The rail makes its own /api/ai* reads; those are its, not the page's.
     const paths = new Set(m.seen.map((s) => s.split('?')[0]).filter((p) => !/^\/api\/ai(-budget)?\//.test(p) && p !== '/api/client-error'));
@@ -266,7 +266,7 @@ test('mounted CM10b: every read failed — the banner says nothing is a zero, an
   try {
     assert.match(m.of('community-unreadable'), new RegExp(PAGE_UNREADABLE.replace('.', '\\.')));
     assert.ok(!m.has('community-tiles'), 'tiles drawn under a page that could not be read');
-    for (const to of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/advisors-partners', '/admin?tab=wellbeing', '/admin/partner-invitations']) {
+    for (const to of ['/admin/events', '/admin/jobs', '/admin/circles', '/admin/advisors-partners', '/admin/wellbeing', '/admin/partner-invitations']) {
       assert.ok(m.links().includes(to), `the consoles strip lost ${to}`);
     }
   } finally { await m.unmount(); }
@@ -274,7 +274,7 @@ test('mounted CM10b: every read failed — the banner says nothing is a zero, an
 
 test('mounted CM13: the moved notice shows only after the redirect', async () => {
   const m = await mount(`${COMMUNITY_PATH}?moved=${MOVED_KEY}`);
-  try { assert.match(m.of('community-moved'), new RegExp(MOVED_NOTICE.replace('.', '\\.'))); } finally { await m.unmount(); }
+  try { assert.match(m.of('admin-page-moved'), new RegExp(MOVED_NOTICE.replace('.', '\\.'))); } finally { await m.unmount(); }
 });
 
 test('the old address keeps its query and hash and adds the moved key', async () => {
@@ -295,6 +295,15 @@ test('the old address keeps its query and hash and adds the moved key', async ()
 });
 
 // ---------------------------------------------------------------- the source
+
+test('D938: the page draws the shared AdminPageHeader with its title, line and moved notice, and no h1 of its own', () => {
+  const page = read('frontend/src/pages/admin/community/AdminCommunity.jsx');
+  assert.match(page, /import \{[^}]*\bAdminPageHeader\b[^}]*\} from '\.\.\/\.\.\/\.\.\/ui'/);
+  assert.match(page, /<AdminPageHeader\s+title="Community"\s+line=\{PAGE_LINE\}\s+notice=\{\{ text: moved \? MOVED_NOTICE : null, onDismiss: dismissMoved \}\}/);
+  assert.doesNotMatch(page, /<h1/);
+  assert.match(page, /<Link to="\/admin\/wellbeing"/);
+  assert.doesNotMatch(page, /\?tab=wellbeing/);
+});
 
 test('the routes, the row and the reads the page must never make', () => {
   const app = read('frontend/src/App.jsx');

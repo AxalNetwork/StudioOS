@@ -5,7 +5,7 @@ import { adminCircles, adminEvents, adminJobs, adminNetworkProfiles } from '../.
 import { communityApi } from '../../../lib/api/community';
 import { reportError } from '../../../lib/log';
 import {
-  Bar100, Chart, ChartTable, Columns, HBars, Legend, RailFrame, StackBars, WorkerRail,
+  AdminPageHeader, Bar100, Chart, ChartTable, Columns, HBars, Legend, RailFrame, StackBars, WorkerRail,
 } from '../../../ui';
 import { usePhoneWidth } from '../../../ui/phone/usePhoneWidth.js';
 import { glancesFromStudioGlance, loadStudioGlance } from '../adminStudioOverview';
@@ -604,15 +604,12 @@ export default function AdminCommunity() {
     <RailFrame rail={rail} data-testid="admin-community">
       {Box && phone ? <Box onClose={closeBox} /> : (
       <div className="flex flex-col gap-5 pb-24 lg:pb-10" data-testid="admin-community-page">
-        <header className="flex flex-col gap-[7px]">
-          <h1 className="m-0 text-[24px] font-extrabold leading-tight tracking-[-.02em] text-axal-ink dark:text-gray-100">Community</h1>
-          <p className="m-0 text-[13.5px] leading-normal text-axal-muted dark:text-gray-400">{PAGE_LINE}</p>
-          {moved && (
-            <div role="status" className="flex items-center justify-between gap-3 rounded-[10px] border border-axal-lavender-edge bg-axal-lavender px-3 py-2 text-[13px] text-axal-ink dark:border-violet-800 dark:bg-violet-950/40 dark:text-gray-100" data-testid="community-moved">
-              <span>{MOVED_NOTICE}</span>
-              <button type="button" aria-label="Dismiss" className="flex h-8 w-8 items-center justify-center text-[16px] leading-none" onClick={dismissMoved}>×</button>
-            </div>
-          )}
+        <AdminPageHeader
+          title="Community"
+          line={PAGE_LINE}
+          notice={{ text: moved ? MOVED_NOTICE : null, onDismiss: dismissMoved }}
+        />
+        <div className="flex flex-col gap-[7px]" data-testid="community-toolbar">
           {empty && (
             <div className="flex flex-wrap items-center gap-3" data-testid="community-empty">
               <span className="text-[13.5px] text-axal-ink dark:text-gray-100">{EMPTY_LINE}</span>
@@ -642,7 +639,7 @@ export default function AdminCommunity() {
             </span>
           </div>
           <p className="m-0 text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="community-period-line">{`Period figures cover the last ${weeks} weeks, Monday weeks in UTC, this week so far. Deltas compare with the ${weeks} weeks before.`}</p>
-        </header>
+        </div>
 
         {failed && (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-axal-destructive-edge bg-axal-destructive-tint px-3.5 py-3 text-[13px] text-axal-destructive dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" data-testid="community-unreadable">
@@ -696,7 +693,7 @@ export default function AdminCommunity() {
               <Link to="/admin/advisors-partners" className={LINK}>Open advisors &amp; partners</Link>
             </Console>
             <Console testId="community-console-wellbeing" name="Wellbeing" what="Verify experts and keep the library" figure={doors.wellbeing}>
-              <Link to="/admin?tab=wellbeing" className={LINK}>Open wellbeing</Link>
+              <Link to="/admin/wellbeing" className={LINK}>Open wellbeing</Link>
             </Console>
             <Console testId="community-console-partner-invitations" name="Partner invitations" what="Bring operating partners in and keep their deals healthy" figure={{ state: 'unrecorded', text: 'Not recorded · Partner invitations have no pending queue.' }}>
               <Link to="/admin/partner-invitations" className={LINK}>Open partner invitations</Link>

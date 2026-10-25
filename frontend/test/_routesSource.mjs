@@ -62,7 +62,9 @@ export function lazyImports(root = process.cwd()) {
   const rows = [];
   for (const source of [APP_PATH, ...routeModuleFiles(root)]) {
     const src = readFileSync(resolve(root, source), 'utf8');
-    for (const m of src.matchAll(/const (\w+) = lazy\(\(\) => import\('(\.\.?\/[^']+)'\)\)/g)) {
+    // A named export reads `import('…').then((m) => ({ default: m.Name }))`
+    // (D938's console pages): the page is still that file.
+    for (const m of src.matchAll(/const (\w+) = lazy\(\(\) => import\('(\.\.?\/[^']+)'\)(?:\.then\(\((\w+)\) => \(\{ default: \3\.\w+ \}\)\))?\)/g)) {
       const spec = m[2];
       const target = spec.startsWith('../') ? `frontend/src/${spec.slice(3)}` : `frontend/src/${spec.slice(2)}`;
       rows.push({ name: m[1], source, target });

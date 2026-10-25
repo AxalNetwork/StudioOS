@@ -66,7 +66,7 @@ test('the view models: accounts counts, lanes worst first with consoles, insight
   assert.equal(ap.unreadable, 1);
   assert.equal(ap.worst.key, 'kyc', 'the first lane with something pending, as the Worker sorted them');
   assert.match(ap.text, /^1 lane could not be read, so no total · worst: KYC, oldest 4 days$/);
-  assert.equal(ap.lanes.find((l) => l.key === 'kyc').to, '/admin?tab=kyc');
+  assert.equal(ap.lanes.find((l) => l.key === 'kyc').to, '/admin/kyc');
   assert.deepEqual(ap.noQueue, [{ label: 'Circles', reason: PAYLOAD.approvals.no_queue[0].reason, to: '/admin/circles' }]);
   assert.match(hqApprovalsView({ ...PAYLOAD.approvals, pending_total: 0, lanes: [] }).text, /^Nothing is waiting$/);
   assert.match(hqApprovalsView({ ...PAYLOAD.approvals, pending_total: 5 }).text, /^5 pending · worst: KYC/);
@@ -114,7 +114,7 @@ test('the overview cards draw HQ\'s figures, labelled, with each line linking to
   assert.match(t, /Tickets could not be read/);
   assert.match(t, /Active accounts last week: 9 \(week of 2026-09-28\)/);
   const markup = html(h(AdminStudioOverview, { user: null, glance: PAYLOAD }));
-  for (const to of ['/admin?tab=kyc', '/admin/jobs', '/admin/exploring', '/admin/trash', '/admin/lp-applications']) {
+  for (const to of ['/admin/kyc', '/admin/jobs', '/admin/exploring', '/admin/trash', '/admin/lp-applications']) {
     // None of these paths carries an &, so the href is the path as written.
     assert.ok(markup.includes(`href="${to}"`), `${to} is not linked`);
   }

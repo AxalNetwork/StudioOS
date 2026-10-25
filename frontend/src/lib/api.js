@@ -17,6 +17,7 @@ export * from './api/adminLab.js';
 export * from './api/adminLearning.js';
 export * from './api/adminMeetingBots.js';
 export * from './api/adminMercury.js';
+export * from './api/adminPayments.js';
 export * from './api/aiBudget.js';
 export * from './api/assistants.js';
 export * from './api/bankAccounts.js';

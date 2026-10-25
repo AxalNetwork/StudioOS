@@ -227,7 +227,7 @@ test('retention, countries, identity, completeness, dormant, tickets and spend',
   assert.deepEqual(b.countries.chart.rows.map((r) => r.label), ['Canada', 'France']);
   assert.match(b.countries.foot, /^384 accounts stated no country/);
   assert.deepEqual(b.identity.chart.rows.map((r) => r.label), ['Not started', 'Waiting', 'Approved', 'Rejected'], '#2384\'s words; no Other when there is none');
-  assert.equal(b.identity.link.to, '/admin?tab=kyc');
+  assert.equal(b.identity.link.to, '/admin/kyc');
   assert.deepEqual(b.completeness.chart.rows.map((r) => r.label), ['0–25%', '26–50%', '51–75%', '76–100%']);
   assert.match(b.completeness.note, /^10 accounts have no completeness figure/);
   assert.equal(b.dormant.big, '311');
@@ -366,6 +366,19 @@ test('INS3 opens from the URL, with the filters it was opened under, and reads w
 test('the moved notice shows once, from the old address', () => {
   assert.ok(page('/admin/insights?moved=held-insights').includes(MOVED_NOTICE));
   assert.ok(!page('/admin/insights').includes(MOVED_NOTICE));
+});
+
+test('D938: the page draws the shared AdminPageHeader, with its own scope chip, and no h1 of its own', () => {
+  const src = read('frontend/src/pages/admin/insights/AdminInsights.jsx');
+  assert.match(src, /import \{[^}]*\bAdminPageHeader\b[^}]*\} from '\.\.\/\.\.\/\.\.\/ui'/);
+  assert.match(src, /<AdminPageHeader\s+title="Insights"\s+line="The accounts you manage, in figures and charts\."/);
+  assert.match(src, /chip=\{<span[^>]*data-testid="insights-scope-chip">\{scopeChip\(scope\)\}<\/span>\}/);
+  assert.match(src, /notice=\{\{ text: moved \? MOVED_NOTICE : null, onDismiss: \(\) => setParam\('moved', null\) \}\}/);
+  assert.doesNotMatch(src, /<h1/);
+  const m = html('/admin/insights?moved=held-insights');
+  assert.match(m, /data-testid="admin-page-header"/);
+  assert.match(m, /data-testid="admin-page-moved"/);
+  assert.match(m, /data-testid="insights-scope-chip"/);
 });
 
 test('INS10 replaces the page with one card for a plain Admin', () => {

@@ -20,7 +20,7 @@ test('D935: the displayed age basis matches the current Worker queries', () => {
 
 test('D935: the branch expert card names the existing resource library', () => {
   const card = COMMUNITY_CONSOLES.find((c) => c.key === 'wellbeing');
-  assert.equal(card.to, '/admin?tab=wellbeing');
+  assert.equal(card.to, '/admin/wellbeing');
   assert.match(card.what, /Curated resources are managed in the Wellbeing resource library\./);
   assert.doesNotMatch(card.what, /nothing in the admin product calls|have no console/);
 });
