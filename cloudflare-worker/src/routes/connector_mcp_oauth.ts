@@ -331,4 +331,5 @@ export function createMcpOauthRouter(deps: McpOauthDeps = {}) {
   return router;
 }
 
-export default createMcpOauthRouter();
+const mcpOauthRouter = createMcpOauthRouter();
+export default mcpOauthRouter;
