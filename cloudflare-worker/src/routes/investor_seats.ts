@@ -113,7 +113,8 @@ async function primaryCover(env: Env, primaryId: number): Promise<{ ok: true; ti
   if (!primary) return { ok: false, error: 'primary_unavailable' };
   const tier = (primary.investor_tier ?? 'free').toLowerCase();
   const status = (primary.investor_subscription_status ?? 'free').toLowerCase();
-  const lapsed = status === 'cancelled' || status === 'past_due' || status === 'unpaid';
+  // D1052: past_due is Stripe still retrying, and keeps the plan's seats.
+  const lapsed = status === 'cancelled' || status === 'unpaid';
   if (tier !== 'institutional' || lapsed) return { ok: false, error: 'primary_not_institutional' };
   return { ok: true, tier, status };
 }
@@ -286,7 +287,7 @@ seats.post('/accept', async (c) => {
 
   // Mirror primary's tier onto the seat user so paywall checks pass.
   // Fail-CLOSED: if the primary row is missing, or no longer Institutional,
-  // or has lapsed (cancelled/past_due/unpaid), reject the acceptance — a
+  // or has lapsed (cancelled/unpaid; D1052 keeps past_due), reject the acceptance — a
   // stale invite must never grant paid access on its own.
   const cover = await primaryCover(c.env, seat.primary_user_id);
   if (!cover.ok && cover.error === 'primary_unavailable') return c.json({ error: 'primary_unavailable', message: 'The inviting account no longer exists.' }, 410);

@@ -48,9 +48,8 @@ const REQUIRED_EVENTS: string[] = [
   'payment_intent.payment_failed',
   // D892 (#2453): a failed renewal tells the member.
   'invoice.payment_failed',
-  // D1049 (#2900): an invoice that needs the member to confirm the payment
-  // (3-D Secure). Subscribed now so part 4's renewal alerts (D1052, #2903)
-  // receive it from their first deploy; until then the webhook ignores it.
+  // D1049 (#2900) subscribes to bank confirmation requests (3-D Secure);
+  // D1052 (#2903) handles renewal alerts when the member must confirm.
   'invoice.payment_action_required',
   'invoice.finalized',
   'invoice.paid',
