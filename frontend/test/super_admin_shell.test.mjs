@@ -49,7 +49,7 @@ test('every row points at a route that is actually registered', () => {
   );
 });
 
-test('all thirteen rows are present: the canvas\'s eleven in canvas order, with D714\'s Fund admin after Funds and Integration keys after Platform', () => {
+test('all fourteen rows are present: the canvas\'s eleven in canvas order, with D714\'s Fund admin after Funds, Integration keys after Platform and D953\'s Programs after Licences', () => {
   // The canvas order is Home, Licences, Funds, Contracts, Team, Revenue,
   // Content, Platform, Support, Security, Settings. "Security", not
   // "Governance" — decision A4.
@@ -64,8 +64,11 @@ test('all thirteen rows are present: the canvas\'s eleven in canvas order, with 
   // places it elsewhere. The owner's ruling (2026-10-20) gives Integration
   // keys, with GitHub Sync on the same page, a Super Admin row after Platform,
   // whose strip carried both.
-  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings']);
+  // D953 (#2371): the Programs row the canvas draws after Licences
+  // (`Programs Page.dc.html:509`), lit on every program page by its match.
+  assert.deepEqual(rows.map((r) => r.label), ['Home', 'Licences', 'Programs', 'Funds', 'Fund admin', 'Contracts', 'Team', 'Revenue', 'Content', 'Platform', 'Integration keys', 'Support', 'Security', 'Settings']);
   assert.equal(rows.find((r) => r.label === 'Integration keys')?.to, '/admin/integration-keys');
+  assert.deepEqual(rows.find((r) => r.label === 'Programs')?.match, ['/admin/programs'], 'the Programs row stays lit on every program page');
   assert.equal(rows.find((r) => r.label === 'Fund admin')?.to, '/admin/fund-admin');
   assert.equal(rows.find((r) => r.label === 'Revenue')?.to, '/admin/revenue');
   assert.equal(rows.find((r) => r.label === 'Content')?.to, '/admin/content',

@@ -604,7 +604,8 @@ export function ToHqRaisedList({ items, kind = 'all', onKind, retryingId, onRetr
  */
 const LANE_CONSOLE = {
   lp: { to: '/admin/lp-applications', label: 'LP applications console' },
-  referrals: { to: '/admin/refer-earn', label: 'Referral review' },
+  // D953 (#2371): the referral review is Programs › Refer & Earn › Queue.
+  referrals: { to: '/admin/programs/refer-and-earn/queue', label: 'Refer & Earn queue' },
   // The cohort panel is rendered INSIDE the Spin-Out Lab admin page rather
   // than routed on its own — checked, not assumed, because a link to
   // `/admin/cohort` would 404.
@@ -613,8 +614,8 @@ const LANE_CONSOLE = {
   // S16 (D215). Each is the page that already decides that store — checked
   // against App.jsx's routes; KYC and partner profiles are tabs of `/admin`,
   // which honours `?tab=`.
-  kyc: { to: '/admin?tab=kyc', label: 'KYC queue' },
-  partner_profiles: { to: '/admin?tab=profiles', label: 'Partner profiles' },
+  kyc: { to: '/admin/kyc', label: 'KYC queue' },
+  partner_profiles: { to: '/admin/partner-profiles', label: 'Partner profiles' },
   exploring: { to: '/admin/exploring', label: 'Exploring queue' },
   jobs: { to: '/admin/jobs', label: 'Jobs console' },
   events: { to: '/admin/events', label: 'Events console' },

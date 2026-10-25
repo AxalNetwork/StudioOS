@@ -78,6 +78,7 @@ import { ownBotTest, dispatchBotTest, validBotTestId } from '../services/meeting
 import { readMeetingBotOperations, meetingBotPricePolicy } from '../services/meetingBotOperationsRead';
 import type { Env } from '../types';
 import { requireSuperAdmin, requireSuperAdminWriteBar } from '../auth';
+import { readWebhookDeliveries } from '../services/stripeWebhookDeliveries';
 import { DERIVED_UNAVAILABLE } from './licence';
 import { ensureAdminAuditLogTable } from './admin';
 import {
@@ -147,21 +148,8 @@ const SYNC_RECENT_NOTE =
   'A ticket keeps only its latest mirror attempt, so this is the latest attempt per ticket, not '
   + 'a log of failures: a ticket that failed and later synced shows the sync.';
 
-/**
- * The path Stripe delivers to. `billing` is mounted at /api/billing in
- * index.ts and its handler is `/stripe/webhook` in routes/billing.ts; a test
- * reads both files and holds this equal, so a moved route cannot leave P3
- * counting a path nothing is served at.
- */
-export const STRIPE_WEBHOOK_PATH = '/api/billing/stripe/webhook';
-
-/** P3's webhook window. */
-export const WEBHOOK_WINDOW_HOURS = 24;
-
-const WEBHOOK_BASIS =
-  'Read from the request log: the time this Worker took to handle each delivery, not the round '
-  + 'trip Stripe measures. A delivery refused for rate is not logged, and nothing turns a failed '
-  + 'delivery into an incident.';
+// The webhook's path and window, and the reader both pages share (D1011).
+export { STRIPE_WEBHOOK_PATH, WEBHOOK_WINDOW_HOURS } from '../services/stripeWebhookDeliveries';
 
 const STOREFRONT_NOTE =
   'Each deployment reads its own mirror of its own Stripe catalog. A sync on this deployment '
@@ -442,45 +430,8 @@ r.get('/summary', async (c) => {
   const pk = await getPublishableKey(env);
   const publishable = { configured: !!pk, masked: maskPublishableKey(pk), mode: publishableKeyMode(pk) };
   const catalog = await readCatalogMirrorSummary(env);
-  let webhook: unknown;
-  try {
-    // The last delivery rides idx_activity_endpoint and the rowid within it.
-    const last = await env.DB.prepare(
-      `SELECT status_code, latency_ms, created_at FROM activity_logs
-        WHERE endpoint = ? ORDER BY id DESC LIMIT 1`,
-    ).bind(STRIPE_WEBHOOK_PATH).first<{ status_code: number | null; latency_ms: number | null; created_at: string }>();
-    // datetime() on both sides: `created_at` is written by datetime('now').
-    // A row with no recorded status is a delivery, not a refusal: only a
-    // status that was written and is outside 2xx counts as not-2xx.
-    const day = await env.DB.prepare(
-      `SELECT COUNT(*) AS deliveries,
-              COALESCE(SUM(CASE WHEN status_code IS NOT NULL
-                                 AND (status_code < 200 OR status_code >= 300) THEN 1 ELSE 0 END), 0) AS refused
-         FROM activity_logs
-        WHERE endpoint = ?
-          AND datetime(created_at) > datetime('now', ?)`,
-    ).bind(STRIPE_WEBHOOK_PATH, `-${WEBHOOK_WINDOW_HOURS} hours`).first<{ deliveries: number; refused: number }>();
-    webhook = {
-      available: true,
-      window_hours: WEBHOOK_WINDOW_HOURS,
-      last: last
-        ? {
-            status_code: last.status_code == null ? null : Number(last.status_code),
-            latency_ms: last.latency_ms == null ? null : Number(last.latency_ms),
-            at: String(last.created_at),
-          }
-        : null,
-      deliveries: countOf(day?.deliveries, 'webhook delivery count'),
-      not_2xx: countOf(day?.refused, 'webhook non-2xx count'),
-      basis: WEBHOOK_BASIS,
-    };
-  } catch {
-    webhook = {
-      available: false,
-      window_hours: WEBHOOK_WINDOW_HOURS,
-      reason: 'The request log could not be read, so the webhook\'s deliveries are unknown rather than none.',
-    };
-  }
+  // The deliveries block, now one reader shared with Payments' PAY5 (D1011).
+  const webhook = await readWebhookDeliveries(env);
   const paymentsCatalog = {
     publishable,
     catalog,

@@ -201,9 +201,8 @@ test('the routes behind hqOnly, the console mount gone, the doors, and the rail 
   assert.ok(app.includes(`<Route path="/admin/platform/payments" element={guard(['admin'], hqOnly(<Payments />))} />`));
   assert.ok(app.includes(`<Route path="/admin/platform/payments/stripe" element={guard(['admin'], hqOnly(<Payments />))} />`));
   assert.ok(app.includes('<StripLink to="/admin/platform/payments">Payments</StripLink>'));
-  const admin = read('frontend/src/pages/AdminPage.jsx');
+  const admin = read('frontend/src/pages/admin/ConsolePages.jsx');
   assert.ok(!admin.includes('<PaymentsPanel'), 'the console still mounts the tab');
-  assert.match(admin, /\{ value: 'payments',/);
   assert.ok(read('frontend/src/pages/hq/PlatformPage.jsx').includes('<Link to="/admin/platform/payments"'));
   const page = read('frontend/src/pages/admin/payments/Payments.jsx');
   assert.match(page, /export default function Payments\(\) \{\s*return \(\s*<AdminBoardFrame workspace="Payments catalogue"/);

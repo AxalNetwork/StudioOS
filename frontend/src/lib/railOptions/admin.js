@@ -15,8 +15,8 @@
  * the components the board renders, the board's own first. `rail` is the file
  * that mounts the board's `<WorkerRail>`, which may be a parent's, or null with
  * `noRail` saying why the board has none. `host` is the page that draws the
- * frame around a board's files when they are a tab of it (`/admin`'s, in
- * `AdminPage.jsx`). `alias` names the board that owns a shared route (D720
+ * frame around a board's files when they are its body (the Admin Console's
+ * tools, in `ConsolePages.jsx` since D938). `alias` names the board that owns a shared route (D720
  * §11: the board the canvas lists first), whose rail and name this one shows.
  *
  * OPTIONS are the controls that run a model, in #2097's shape (`page`, `key`
@@ -37,18 +37,19 @@ const SPINOUT = 'A Spin-Out Lab page: D317 keeps Eadwyn out of the Lab (workspac
 const FRAME = 'pages/admin/AdminBoardFrame.jsx';
 const HELD = 'pages/admin/HeldZone.jsx';
 const CONTRACTS = 'pages/admin/contracts/ContractsDesk.jsx';
-const ADMIN_PAGE = 'pages/AdminPage.jsx';
+// D938 (#2743): the Admin Console's tools are pages at their own addresses.
+const CONSOLE_PAGES = 'pages/admin/ConsolePages.jsx';
 
 export const ADMIN_BOARDS = [
   { id: 'S1', section: 'Accounts', module: null, route: '/admin/held/accounts', files: ['pages/admin/HeldAccounts.jsx'], rail: HELD },
-  { id: 'S2', section: 'Accounts', module: 'Users', route: '/admin?tab=users', files: ['pages/admin/consoles/UsersConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'S2', section: 'Accounts', module: 'Users', route: '/admin/accounts/all', files: ['pages/admin/consoles/UsersConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S3', section: 'Accounts', module: 'Exploring members', route: '/admin/exploring', files: ['pages/admin/AdminExploring.jsx'], rail: FRAME },
   { id: 'S4', section: 'Accounts', module: 'Trash', route: '/admin/trash', files: ['pages/AdminTrashPage.jsx'], rail: FRAME },
   { id: 'S5', section: 'Approvals', module: null, route: '/admin/held/approvals', files: ['pages/admin/HeldApprovals.jsx'], rail: HELD },
-  { id: 'S6', section: 'Approvals', module: 'Identity checks', route: '/admin?tab=kyc', files: ['pages/admin/consoles/KycConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'S6', section: 'Approvals', module: 'Identity checks', route: '/admin/kyc', files: ['pages/admin/consoles/KycConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S7', section: 'Approvals', module: 'Entity profiles', route: '/admin/partner-profiles', files: ['pages/admin/consoles/PartnerProfilesConsole.jsx'], rail: FRAME, host: 'pages/admin/profiles/PartnerProfiles.jsx' },
   { id: 'S8', section: 'Approvals', module: 'LP applications', route: '/admin/lp-applications', files: ['pages/admin/AdminLpApplications.jsx'], rail: FRAME },
-  { id: 'S9', section: 'Approvals', module: 'Referrals', route: '/admin/refer-earn', files: ['pages/admin/ReferralReview.jsx'], rail: FRAME },
+  { id: 'S9', section: 'Approvals', module: 'Referrals', route: '/admin/programs/refer-and-earn/queue', files: ['pages/admin/programs/ReferAndEarn.jsx'], rail: FRAME },
   { id: 'S10', section: 'Approvals', module: 'Best fit', route: '/admin/best-fit', files: ['pages/admin/AdminBestFitPage.jsx'], rail: FRAME },
   { id: 'S11', section: 'Approvals', module: 'Due diligence', route: '/admin/due-diligence', files: ['pages/AdminDueDiligencePage.jsx', 'pages/AdminDueDiligenceCasePage.jsx'], rail: FRAME },
   { id: 'S12', section: 'Approvals', module: 'Spin-Out applications', route: '/admin/programs/spinout-lab', files: ['pages/admin/lab/AdminLab.jsx', 'pages/admin/AdminSpinoutLab.jsx'], rail: null, noRail: SPINOUT },
@@ -57,19 +58,19 @@ export const ADMIN_BOARDS = [
   { id: 'S15', section: 'Approvals', module: 'Events', route: '/admin/events', files: ['pages/admin/AdminEventsPage.jsx'], rail: FRAME },
   { id: 'S16', section: 'Approvals', module: 'Jobs', route: '/admin/jobs', files: ['pages/admin/AdminJobsPage.jsx'], rail: FRAME },
   { id: 'S17', section: 'Approvals', module: 'Communities', route: '/admin/circles', files: ['pages/admin/AdminCirclesPage.jsx'], rail: FRAME },
-  { id: 'S18', section: 'Approvals', module: 'Advisor cohort access', route: '/admin/advisor-cohorts', files: ['pages/admin/AdvisorCohortAssignments.jsx'], rail: FRAME },
-  { id: 'S19', section: 'Programs', module: null, route: '/admin/held/programs', files: ['pages/admin/HeldPrograms.jsx'], rail: HELD },
+  { id: 'S18', section: 'Approvals', module: 'Advisor cohort access', route: '/admin/programs/mentor-cohorts/people', files: ['pages/admin/programs/MentorCohortAccess.jsx'], rail: FRAME },
+  { id: 'S19', section: 'Programs', module: null, route: '/admin/programs', files: ['pages/admin/programs/ProgramsCatalogue.jsx'], rail: FRAME },
   { id: 'S20', section: 'Programs', module: 'Spin-Out Lab', route: '/admin/programs/spinout-lab', files: ['pages/admin/lab/AdminLab.jsx', 'pages/admin/AdminSpinoutLab.jsx'], rail: null, noRail: SPINOUT, alias: 'S12' },
-  { id: 'S21', section: 'Programs', module: 'Advisor cohorts', route: '/admin/advisor-cohorts', files: ['pages/admin/AdvisorCohortAssignments.jsx'], rail: FRAME, alias: 'S18' },
+  { id: 'S21', section: 'Programs', module: 'Advisor cohorts', route: '/admin/programs/mentor-cohorts/people', files: ['pages/admin/programs/MentorCohortAccess.jsx'], rail: FRAME, alias: 'S18' },
   // S22: Assessment Studio was removed at the owner's request (2026-10-21); its ID stays retired.
   { id: 'S23', section: 'Programs', module: 'Profiling trends', route: '/admin/profiling-trends', files: ['pages/admin/AdminProfilingTrends.jsx'], rail: FRAME },
   { id: 'S24', section: 'Community', module: null, route: '/admin/community', files: ['pages/admin/community/AdminCommunity.jsx', 'pages/admin/community/communityModel.js'], rail: 'pages/admin/community/AdminCommunity.jsx' },
   { id: 'S25', section: 'Community', module: 'Events', route: '/admin/events', files: ['pages/admin/AdminEventsPage.jsx'], rail: FRAME, alias: 'S15' },
   { id: 'S26', section: 'Community', module: 'Jobs', route: '/admin/jobs', files: ['pages/admin/AdminJobsPage.jsx'], rail: FRAME, alias: 'S16' },
   { id: 'S27', section: 'Community', module: 'Communities', route: '/admin/circles', files: ['pages/admin/AdminCirclesPage.jsx'], rail: FRAME, alias: 'S17' },
-  { id: 'S28', section: 'Community', module: 'Wellbeing experts', route: '/admin?tab=wellbeing', files: ['pages/admin/consoles/WellbeingConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'S28', section: 'Community', module: 'Wellbeing experts', route: '/admin/wellbeing', files: ['pages/admin/consoles/WellbeingConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S29', section: 'Community', module: 'Advisors and partners', route: '/admin/advisors-partners', files: ['pages/admin/AdminNetworkProfiles.jsx'], rail: FRAME, host: 'pages/admin/advisors/AdvisorsPartners.jsx' },
-  { id: 'S30', section: 'Community', module: 'Directory', route: '/admin?tab=directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: ADMIN_PAGE },
+  { id: 'S30', section: 'Community', module: 'Directory', route: '/admin/directory', files: ['pages/admin/consoles/DirectoryConsole.jsx'], rail: FRAME, host: CONSOLE_PAGES },
   { id: 'S31', section: 'Community', module: 'Partner invitations', route: '/admin/partner-invitations', files: ['pages/admin/PartnerInvitations.jsx'], rail: FRAME },
   { id: 'S32', section: 'Contracts', module: null, route: '/admin/contracts', files: [CONTRACTS], rail: CONTRACTS },
   { id: 'S33', section: 'Contracts', module: 'Agreements', route: '/admin/contracts', files: ['pages/admin/contracts/AgreementList.jsx', 'pages/admin/contracts/AgreementDetail.jsx'], rail: CONTRACTS },
