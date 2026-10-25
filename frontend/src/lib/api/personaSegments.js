@@ -17,6 +17,10 @@ import { request } from '../api.js';
 //   saveSegmentProfile(key, b)    PATCH /personas/segments/:key { expected_version, reason?, …fields } → { segment, changed }
 // A count from 1 to 4 comes back as { count: null, suppressed: true }; admins are in no count.
 export const personaSegmentsApi = {
+  audienceSegments: () => request('/personas/audience-segments'),
+  answerFollowUp: (persona_id, key, value) => request('/personas/answer', { method: 'POST', body: JSON.stringify({ persona_id, key, value, expected_primary: true }) }),
+  createSegment: (body) => request('/personas/segments', { method: 'POST', body: JSON.stringify(body) }),
+  completion: (key) => request(`/personas/segments/${encodeURIComponent(key)}/completion`),
   read: () => request('/personas/admin/segments'),
   segmentProfiles: () => request('/personas/segments'),
   segmentCoverage: () => request('/personas/segments/coverage'),

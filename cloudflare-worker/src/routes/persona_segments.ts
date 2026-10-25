@@ -13,9 +13,10 @@
  */
 import { Hono } from 'hono';
 import type { Env } from '../types';
+import { questionCompletion } from '../services/segmentMembership';
 import { requireAdmin, requireSuperAdmin } from '../auth';
 import {
-  SegmentInputError, getProfile, historyOf, listProfiles, segmentCoverage, writeProfile,
+  SegmentInputError, createProfile, getProfile, historyOf, listProfiles, segmentCoverage, writeProfile,
 } from '../services/segmentProfiles';
 
 const segments = new Hono<{ Bindings: Env }>();
@@ -39,6 +40,37 @@ segments.get('/coverage', async (c) => {
   try {
     return c.json(await segmentCoverage(c.env));
   } catch (e) { return unreadable(c, 'The segments’ needs and offers', e); }
+});
+
+segments.post('/', async (c) => {
+  const admin = await requireSuperAdmin(c);
+  const body = await c.req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ code: 'invalid_body', detail: 'Send a segment as an object.' }, 400);
+  try {
+    const segment = await createProfile(c.env, body, { id: Number(admin.id) });
+    // The actor and first profile version are already recorded atomically.
+    try {
+      const { logAdminAction } = await import('../services/adminAudit');
+      await logAdminAction(c.env, Number(admin.id), admin.email, 'segment_profile_created', { segment: segment.key });
+    } catch { console.error('[persona-segments] create audit copy failed'); }
+    return c.json({ segment }, 201);
+  } catch (error) {
+    if (error instanceof SegmentInputError) return c.json({ code: error.code, detail: error.sentence }, error.status);
+    console.error('[persona-segments] create failed');
+    return c.json({ code: 'write_failed', detail: 'The segment could not be created. Try again.' }, 503);
+  }
+});
+
+segments.get('/:key/completion', async (c) => {
+  await requireAdmin(c);
+  const key = c.req.param('key');
+  if (!KEY.test(key)) return c.json({ code: 'not_found', detail: 'No segment is recorded with that key.' }, 404);
+  try {
+    const completion = await questionCompletion(c.env, key);
+    return completion ? c.json(completion) : c.json({ code: 'not_found', detail: 'No segment is recorded with that key.' }, 404);
+  } catch {
+    return c.json({ code: 'unreadable', detail: 'Question completion could not be read. Try again.' }, 503);
+  }
 });
 
 segments.get('/:key', async (c) => {

@@ -168,6 +168,7 @@ const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartn
 const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfiles'));
 // D997 (#2378): Persona segments, out of the Admin Console, under Accounts (HQ: Content).
 const PersonaSegments = lazy(() => import('./pages/admin/segments/PersonaSegments'));
+const NewPersonaSegment = lazy(() => import('./pages/admin/segments/NewSegment'));
 // D1008 (#2386): Payments, out of the Admin Console, under Platform, HQ only.
 const Payments = lazy(() => import('./pages/admin/payments/Payments'));
 const ApRedirect = lazy(() => import('./pages/admin/advisors/ApRedirect'));
@@ -2587,7 +2588,7 @@ function AppInner() {
           of the same page would let the gate and the links disagree about
           which one is canonical. */}
       <Route path="/onboarding/licence" element={<Navigate to="/onboarding" replace />} />
-      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor'], <OnboardingPersonaPage />)} />
+      <Route path="/onboarding/persona" element={guard(['admin', 'founder', 'partner', 'investor', 'advisor', 'exploring'], <OnboardingPersonaPage />)} />
       <Route path="/onboarding/founder" element={guard(['admin', 'founder', 'exploring'], <OnboardingFounderPage />)} />
       <Route path="/onboarding/investor" element={guard(['admin', 'investor', 'exploring'], <OnboardingInvestorPage />)} />
       <Route path="/onboarding/partner" element={guard(['admin', 'partner', 'exploring'], <OnboardingPartnerPage />)} />
@@ -2987,6 +2988,7 @@ function AppInner() {
       <Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />
       {/* D997 (#2378): Persona segments, its two tabs as sub-paths; /admin?tab=personas forwards here (LegacyContractsRedirect). */}
       <Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />
+      <Route path="/admin/persona-segments/new" element={guard(['admin'], <NewPersonaSegment />)} />
       <Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />
       <Route path="/admin/network-profiles" element={<ApRedirect />} />
       {/* D937 (#2374) — the Spin-Out Lab under Programs, its tabs as sub-paths

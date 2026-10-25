@@ -369,3 +369,6 @@ published blocks, the change log, the matrix and the subprocessor subscribe, no 
 `trustCenterAdminApi` (HQ › Security › Trust center content: drafts, subprocessors, the
 auditor's reports and Publish with its note, Super Admin) and `securityReportsApi` (Help's
 private Security reports, and HQ's read of them).
+
+D1128 extends `personaSegments.js` with mounted Worker paths for creation,
+completion counts, Events segment choices, and expected-primary follow-up answers.

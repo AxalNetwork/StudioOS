@@ -25,3 +25,14 @@ Admin Console's `?tab=personas` forwards here with `?moved=personas`, in
 - What a member answered at sign-up is shown only as counts, never per person
   (parts 4 and 8); counts under 5 are hidden.
 - Each tab is a literal `HeaderTab`, so the reachability walk finds its door.
+
+## D1128 gaps (#3008)
+
+`NewSegment.jsx` is the HQ creation form at `/admin/persona-segments/new`.
+It reuses SEG6’s name, profile, status and who fields, with confirmation before
+creation; an ordinary Admin sees SEG13’s refusal. The header and Advisors card
+link it. A custom segment starts with no invented questions, needs or offers.
+The existing D997 Overview and its capped legacy list remain until #2819.
+Its profile/sub-account filter is not built yet; that task owns the full filter
+and all its blocks. SEG2’s completion read is available for #2820 through
+`personaSegmentsApi.completion`; its full page remains that task’s.

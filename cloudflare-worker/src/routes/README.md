@@ -326,3 +326,9 @@ calls `logAdminAction`. It grants no subsequent write permission. Admins cannot
 use legacy investor grants through `/shared` instead. The data-room spec in
 `../services/records/raise.ts` uses the same owner-only gate. File uploads default
 to NDA when visibility is omitted; explicit Open remains allowed for the owner.
+
+D1128 (#3008): `persona_segments.ts` adds HQ-only `POST /` creation and the
+admin `GET /:key/completion` count. `personas.ts` exposes authenticated
+`GET /audience-segments` (names/statuses only); `/me` includes the member’s
+missing segment questions. Its existing answer route accepts an expected-primary
+check for follow-up; custom stored segment IDs work in sign-up and retag.

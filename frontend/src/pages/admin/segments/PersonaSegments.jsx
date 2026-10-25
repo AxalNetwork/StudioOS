@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
@@ -108,7 +108,7 @@ function Bar({ label, count, max, tone = 'violet', hollow = false }) {
   );
 }
 
-function Overview({ read, reload }) {
+function Overview({ read, reload, superAdmin }) {
   const users = read.users;
   const t = useMemo(() => tiles(users), [users]);
   const groups = useMemo(() => segmentsByProfile(users), [users]);
@@ -189,6 +189,8 @@ function Overview({ read, reload }) {
       <div className="grid grid-cols-12 gap-3.5">
         <Waiting id="needs" title="Needs and offers" span="lg:col-span-12" reason="No store holds what a segment needs or what answers it: D997 part 3." />
       </div>
+
+      <section className={`${CARD} flex flex-col gap-2 border-dashed p-4`} data-testid="seg-advisor-create"><h2 className={H2}>Advisor segments</h2><p className={SUB}>HQ defines the segments Advisors can join.</p>{superAdmin ? <Link to="/admin/persona-segments/new?profile=advisor" className={`${GHOST} min-h-[44px] self-start`}>New segment</Link> : <p className={SUB}>HQ writes the segment profiles.</p>}</section>
 
       <section className="flex flex-col gap-2" aria-labelledby="seg-h-move" data-testid="seg-move-table">
         <h2 id="seg-h-move" className={H2}>Move a member</h2>
@@ -286,6 +288,7 @@ function PersonaSegmentsPage({ superAdmin }) {
   );
   const actions = (
     <>
+      {superAdmin && <Link to="/admin/persona-segments/new" className={`${BTN} min-h-[44px] bg-axal-violet text-white`}>New segment</Link>}
       <span className="font-mono text-[11.5px] text-axal-muted dark:text-gray-400" data-testid="seg-asof">
         {asOf ? `Updated ${new Date(asOf).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })}` : 'Reading…'}
       </span>
@@ -308,7 +311,7 @@ function PersonaSegmentsPage({ superAdmin }) {
         tabs={tabs}
         data-testid="seg-header"
       />
-      {tab === 'overview' && <Overview read={read} reload={reload} />}
+      {tab === 'overview' && <Overview read={read} reload={reload} superAdmin={superAdmin} />}
       {tab === 'unclassified' && <Unclassified read={read} reload={reload} />}
     </div>
   );

@@ -209,7 +209,7 @@ it, where in their nav, and how do they get there.*
 | Ops Page · Event organiser (E1–E4, D567) | `/events/:id/manage` · `/events/:id/manage/registrations` · `/events/:id/manage/agenda` · `/events/:id/manage/check-in` · `/events/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Partner invitations | `/admin/partner-invitations` · `/admin/partner-invitations/invitations` · `/admin/partner-invitations/invitations/:id` · `/admin/partner-invitations/deals` · `/admin/partner-invitations/deals/:id` · `/admin/partner-invitations/referrals` · `/admin/partners` · `/admin/partner-invitations/firm-links` · `/admin/advisors-partners/firms?moved=firm-links` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
 | Partner profiles | `/admin?tab=profiles` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Persona segments | `/admin?tab=personas` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Persona segments | `/admin/persona-segments/new` · `/api/personas/segments/:key/completion` · `/onboarding/persona?follow_up=1` · `/admin?tab=personas` | Admin | Full page | Sidebar → Admin → Accounts | UPGRADE | High |
 | Pitch Deck Studio | `/raise/pitch/new` · `/raise/pitch/edit` · `/raise/pitch/builder` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Program grants | `/admin/licences/programs` · `/admin/my-licence/programs` | Admin | Full page (proposed) | Sidebar → Admin → Licences | UPGRADE | Low |
 | Reporting to investors | `/portfolio/updates` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
@@ -246,7 +246,7 @@ it, where in their nav, and how do they get there.*
 | Partner invitations | `/admin/partner-invitations` · `/admin/partner-invitations/invitations` · `/admin/partner-invitations/invitations/:id` · `/admin/partner-invitations/deals` · `/admin/partner-invitations/deals/:id` · `/admin/partner-invitations/referrals` · `/admin/partners` · `/admin/partner-invitations/firm-links` · `/admin/advisors-partners/firms?moved=firm-links` | HQ | Full page | Sidebar → HQ → Content | UPGRADE | High |
 | Partner profiles | `/admin?tab=profiles` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Payments | `/admin?tab=payments` · `/pricing/products` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Persona segments | `/admin?tab=personas` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Persona segments | `/admin/persona-segments/new` · `/api/personas/segments/:key/completion` · `/onboarding/persona?follow_up=1` · `/admin?tab=personas` | HQ | Full page | Sidebar → HQ → Content | UPGRADE | High |
 | Program grants | `/admin/licences/programs` · `/admin/my-licence/programs` | HQ | Full page (proposed) | Sidebar → HQ → Licences | UPGRADE | Low |
 | Spin-Out Lab (admin) | `/participants/:uid` · `/applications/:id` · `/admin/spinout-lab` · `/admin/spinout-lab/preview` · `/admin?tab=lab-applications` · `/applications` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Support Security · Super | `/admin/security` · `/admin/hq-support` · `/help` | HQ | Full page | Sidebar → HQ → Security | UPGRADE | High |
@@ -322,8 +322,8 @@ it, where in their nav, and how do they get there.*
 
 | Confidence | Rows | Meaning |
 | --- | ---: | --- |
-| High | 111 | Live route, reachable from that workspace’s sidebar. |
-| Medium | 77 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
+| High | 113 | Live route, reachable from that workspace’s sidebar. |
+| Medium | 75 | Live route, but no sidebar row for that role — reached by deep link or an in-page action. |
 | Low | 53 | Not routed. Proposed route only. |
 
 A Medium row is not a defect. Detail pages (`/deals/:id`), print artefacts
