@@ -275,3 +275,8 @@ D886 B10 (#2588): `admin_platform.ts` mounts Super Admin-only
 `/meeting-bots` count/charge reads and `/meeting-bots/test` dispatch/timing reads.
 Dispatch requires TOTP plus recent step-up and calls B1's service with the
 operator's own consented session; status events supply content-free timings.
+
+D1011 (#2830): `admin_payments.ts` is the Payments page's Super Admin reads,
+mounted at `/api/admin/payments`: the change log over the catalogue's and
+Stripe's audit rows, its CSV export (a recorded reason, failing closed), and the
+webhook's deliveries by hour. `catalog.ts` records a failed sync.
