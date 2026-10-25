@@ -23,7 +23,6 @@ import type { Env } from '../types';
 
 export const OVERVIEW_WEEKS = 12;
 const DAY_MS = 86_400_000;
-const LIVE_SQL = "('open', 'testing')";
 export const PROFILES = ['founder', 'investor', 'advisor', 'partner', 'exploring'] as const;
 
 type Unreadable = { available: false; unreadable: true; reason: string };
@@ -108,7 +107,7 @@ async function applicants(env: Env) {
   const list = rows(await env.DB.prepare(
     `SELECT u.role AS role, COUNT(DISTINCT a.user_id) AS n
        FROM testing_applications a JOIN testing_programmes p ON p.id = a.programme_id JOIN users u ON u.id = a.user_id
-      WHERE p.status IN ${LIVE_SQL} AND a.status <> 'withdrawn' GROUP BY u.role`,
+      WHERE p.status IN ('open', 'testing') AND a.status <> 'withdrawn' GROUP BY u.role`,
   ).all<{ role: string | null; n: number }>());
   return { ...byProfile(list), definition: 'Members with an application on an open program that they have not withdrawn, each once, by their account profile.' };
 }
@@ -119,7 +118,7 @@ async function withdrawn(env: Env) {
     `SELECT p.uid AS uid, p.product_name AS product_name, p.status AS status,
             SUM(CASE WHEN a.status = 'withdrawn' THEN 1 ELSE 0 END) AS n
        FROM testing_programmes p LEFT JOIN testing_applications a ON a.programme_id = p.id
-      WHERE p.status IN ${LIVE_SQL} GROUP BY p.id ORDER BY p.id`,
+      WHERE p.status IN ('open', 'testing') GROUP BY p.id ORDER BY p.id`,
   ).all<{ uid: string; product_name: string; status: string; n: number | null }>());
   const programmes = list.map((r) => ({ uid: r.uid, product_name: r.product_name, status: r.status, withdrawn: Number(r.n) || 0 }));
   return { total: programmes.reduce((t, p) => t + p.withdrawn, 0), programmes };
@@ -144,7 +143,7 @@ async function mailReach(env: Env) {
        FROM testing_programmes p
        LEFT JOIN testing_applications a ON a.programme_id = p.id
        LEFT JOIN users u ON u.id = a.user_id
-      WHERE p.status IN ${LIVE_SQL} GROUP BY p.id ORDER BY p.id`,
+      WHERE p.status IN ('open', 'testing') GROUP BY p.id ORDER BY p.id`,
   ).all<{ uid: string; product_name: string; status: string; picked: number | null; consented: number | null; emails_on: number | null; reachable: number | null }>());
   return {
     programmes: list.map((r) => ({
