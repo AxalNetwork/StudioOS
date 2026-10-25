@@ -3,7 +3,7 @@
  * Every endpoint gates on requireAdmin, and every write is recorded through
  * logAdminAction with the acting admin.
  *
- *   GET  /                          → startups with an 83(b) tracker, each with its
+ *   GET  /?scope=lab|all            → startups with an 83(b) tracker (Lab ventures only for lab, D946), each with its
  *                                     operator, last review and next follow-up; and
  *                                     the active admins an operator is chosen from
  *   PUT  /projects/:id/operator     → { operator_user_id: number | null } — assign or unassign
@@ -17,6 +17,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { requireAdmin } from '../auth';
 import { logAdminAction } from '../services/adminAudit';
+import { LAB_PARTICIPANT_IDS } from '../services/labParticipants';
 import {
   assignOperator,
   projectById,
@@ -31,17 +32,30 @@ const STARTUPS_WITH_TRACKERS =
   + 'FROM projects p JOIN section_83b_trackers t ON t.project_id = p.id '
   + 'GROUP BY p.id ORDER BY p.name';
 
+/**
+ * D946 (#2751) — SL10's "Lab ventures": only startups whose founder is a Lab
+ * participant, by the participants read's own rule (`LAB_PARTICIPANT_IDS`).
+ */
+const LAB_STARTUPS_WITH_TRACKERS =
+  'SELECT p.id AS project_id, p.name AS project_name, COUNT(t.id) AS trackers '
+  + 'FROM projects p JOIN section_83b_trackers t ON t.project_id = p.id '
+  + 'WHERE p.founder_id IN (SELECT lu.founder_id FROM users lu WHERE lu.id IN (' + LAB_PARTICIPANT_IDS + ')) '
+  + 'GROUP BY p.id ORDER BY p.name';
+
 const ACTIVE_ADMINS = "SELECT id, name, email FROM users WHERE role = 'admin' AND is_active = 1 ORDER BY name, id";
 
 r.get('/', async (c) => {
   await requireAdmin(c);
-  const startups = (await c.env.DB.prepare(STARTUPS_WITH_TRACKERS).all<{ project_id: number; project_name: string; trackers: number }>()).results || [];
+  const scope = c.req.query('scope') || 'all';
+  if (scope !== 'all' && scope !== 'lab') return c.json({ error: 'bad_scope', code: 'bad_scope', detail: 'scope is lab or all.' }, 400);
+  const startups = (await c.env.DB.prepare(scope === 'lab' ? LAB_STARTUPS_WITH_TRACKERS : STARTUPS_WITH_TRACKERS)
+    .all<{ project_id: number; project_name: string; trackers: number }>()).results || [];
   const rows = [];
   for (const s of startups) {
     rows.push({ ...s, ...(await readOperatorReview(c.env, Number(s.project_id))) });
   }
   const admins = (await c.env.DB.prepare(ACTIVE_ADMINS).all<{ id: number; name: string | null; email: string }>()).results || [];
-  return c.json({ startups: rows, operators: admins });
+  return c.json({ startups: rows, operators: admins, scope });
 });
 
 r.put('/projects/:id/operator', async (c) => {

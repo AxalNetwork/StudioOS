@@ -256,13 +256,15 @@ test('Reopen refuses a member, an unknown reference, an over-long reason; a susp
   assert.equal(profileOf(db, 'chat@example.test').admin_status, 'pending');
 });
 
-test('a pending status through the verify route is a reopen too, kept in the history', async () => {
+test('the verify route takes no pending (D992): Reopen is the one way back, and nothing is recorded', async () => {
   const { db, env } = fixture();
   await quiet(() => verify(env, 'chat@example.test', { status: 'verified' }));
-  await quiet(() => verify(env, 'chat@example.test', { status: 'pending' }));
+  const r = await quiet(() => verify(env, 'chat@example.test', { status: 'pending' }));
+  assert.equal(r.status, 400);
+  assert.equal(r.body.error, 'invalid_status');
   const row = profileOf(db, 'chat@example.test');
-  assert.deepEqual([row.admin_status, row.reviewed_at, row.reviewed_by], ['pending', null, null]);
-  assert.deepEqual(events(db, row.ref).map((e) => e.kind), ['verified', 'reopened']);
+  assert.deepEqual([row.admin_status, row.reviewed_by], ['verified', ADMIN]);
+  assert.deepEqual(events(db, row.ref).map((e) => e.kind), ['verified']);
 });
 
 // ---------------------------------------------------------------------------

@@ -143,25 +143,6 @@ export async function reopenProfile(env: Env, ref: string, adminUserId: number, 
 export type MemberNotice = { in_app: boolean; email: 'sent' | 'not_sent' | 'by_settings' } | null;
 
 /**
- * The verify route already wrote `pending` over a verdict: clear who, when,
- * the reason and the flag, and keep the reopen in the history. The route
- * checks the status it read before its own write, so this runs only when the
- * profile had a verdict.
- */
-export async function recordReopenAfterVerify(env: Env, ref: string, adminUserId: number): Promise<void> {
-  await env.DB.batch([
-    env.DB.prepare(
-      `UPDATE partner_profiles
-          SET reviewed_at = NULL, reviewed_by = NULL, reject_reason = NULL, changed_after_review_at = NULL
-        WHERE ref = ?`,
-    ).bind(ref),
-    env.DB.prepare(
-      `INSERT INTO partner_profile_events (profile_ref, kind, admin_user_id, created_at) VALUES (?, 'reopened', ?, ?)`,
-    ).bind(ref, adminUserId, nowIso()),
-  ]);
-}
-
-/**
  * The member is told a verdict by email and in their inbox. With an account,
  * through `notify` on both channels, uncategorised so neither quiet hours nor
  * the digest holds it; with none, by email alone, as there is no inbox to

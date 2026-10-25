@@ -279,8 +279,20 @@ const ADMIN = [
   own('/admin/jobs', key(AD, 'Approvals', 'Jobs')),
   own('/admin/circles', key(AD, 'Approvals', 'Communities')),
   own('/admin/advisor-cohorts', key(AD, 'Approvals', 'Advisor cohort access')),
-  own('/admin/held/programs', key(AD, 'Programs')),
+  // D953 (#2371): the catalogue owns Admin · Programs, exactly: the Lab's
+  // sub-path (#2374) has no rail (D317), so the owner does not answer the
+  // pages below it. `/admin/held/programs` only redirects, so it draws no rail.
+  // The two programs whose boards are on the canvas keep those boards' keys,
+  // whose owners stay on the old addresses; the other five take Programs'.
+  exact(own('/admin/programs', key(AD, 'Programs'))),
   alias('/branch/programs', key(AD, 'Programs'), 'The branch’s Programs page.'),
+  alias('/admin/programs/mentor-cohorts', key(AD, 'Approvals', 'Advisor cohort access'), 'Programs › Mentor cohort access is the assignments console’s page and tabs (D953).'),
+  alias('/admin/programs/refer-and-earn', key(AD, 'Approvals', 'Referrals'), 'Programs › Refer & Earn is the referral review’s page and tabs (D953).'),
+  alias('/admin/programs/perks', key(AD, 'Programs'), 'Perks, one program page under Programs (D953).'),
+  alias('/admin/programs/learning', key(AD, 'Programs'), 'Learning, one program page under Programs (D953).'),
+  alias('/admin/programs/referral-partners', key(AD, 'Programs'), 'Referral partners, one program page under Programs (D953).'),
+  alias('/admin/programs/investor-cohorts', key(AD, 'Programs'), 'Investor cohort access, one program page under Programs (D953).'),
+  alias('/admin/programs/ai-native-venture', key(AD, 'Programs'), 'AI-native Venture, one program page under Programs (D953).'),
   own('/admin/programs/spinout-lab', key(AD, 'Programs', 'Spin-Out Lab')),
   own('/admin/profiling-trends', key(AD, 'Programs', 'Profiling trends')),
   own('/admin/community', key(AD, 'Community')),
@@ -391,7 +403,7 @@ export const RAIL_BOARD_ALIASES = [
   { board: key(I, 'Fund', 'Overview'), to: key(I, 'Fund'), why: 'I13 maps to I12: the fund page is its overview (D720 §11).' },
   { board: key(SA, 'Revenue', 'Overview'), to: key(SA, 'Revenue'), why: 'H13 maps to H12: the Revenue page is its overview (D720 §11).' },
   { board: key(AD, 'Approvals', 'Exploring members'), to: key(AD, 'Accounts', 'Exploring members'), why: 'One console, /admin/exploring; Accounts is listed first.' },
-  { board: key(AD, 'Programs', 'Advisor cohorts'), to: key(AD, 'Approvals', 'Advisor cohort access'), why: 'One console, /admin/advisor-cohorts; Approvals is listed first.' },
+  { board: key(AD, 'Programs', 'Advisor cohorts'), to: key(AD, 'Approvals', 'Advisor cohort access'), why: 'One console, Programs › Mentor cohort access › People (D953); Approvals is listed first.' },
   { board: key(AD, 'Community', 'Events'), to: key(AD, 'Approvals', 'Events'), why: 'One console, /admin/events; Approvals is listed first.' },
   { board: key(AD, 'Community', 'Jobs'), to: key(AD, 'Approvals', 'Jobs'), why: 'One console, /admin/jobs; Approvals is listed first.' },
   { board: key(AD, 'Community', 'Communities'), to: key(AD, 'Approvals', 'Communities'), why: 'One console, /admin/circles; Approvals is listed first.' },

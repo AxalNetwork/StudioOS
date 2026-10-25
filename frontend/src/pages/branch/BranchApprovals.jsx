@@ -604,7 +604,8 @@ export function ToHqRaisedList({ items, kind = 'all', onKind, retryingId, onRetr
  */
 const LANE_CONSOLE = {
   lp: { to: '/admin/lp-applications', label: 'LP applications console' },
-  referrals: { to: '/admin/refer-earn', label: 'Referral review' },
+  // D953 (#2371): the referral review is Programs › Refer & Earn › Queue.
+  referrals: { to: '/admin/programs/refer-and-earn/queue', label: 'Refer & Earn queue' },
   // The cohort panel is rendered INSIDE the Spin-Out Lab admin page rather
   // than routed on its own — checked, not assumed, because a link to
   // `/admin/cohort` would 404.

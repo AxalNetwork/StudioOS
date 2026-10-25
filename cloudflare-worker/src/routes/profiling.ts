@@ -13,7 +13,7 @@ import { ensureExploringSchema, upsertSuggestedRole } from '../services/explorin
 import { railFor } from '../util/railContext';
 import { refuse } from '../util/refusal';
 import {
-  type MemberNotice, recordCapture, recordDecision, recordReopenAfterVerify, rejectReasonProblem, tellMember,
+  type MemberNotice, type Verdict, recordCapture, recordDecision, rejectReasonProblem, tellMember,
 } from '../services/partnerProfileReview';
 
 const profiling = new Hono<{ Bindings: Env }>();
@@ -596,7 +596,10 @@ profiling.post('/admin/:email/verify', async (c) => {
   const reqBody = await c.req.json();
   const { agreement_type, admin_notes, status } = reqBody;
 
-  const newStatus = ['verified', 'rejected', 'pending'].includes(status) ? status : 'verified';
+  if (!['verified', 'rejected'].includes(status)) {
+    return c.json({ error: 'invalid_status', message: 'Choose Verified or Rejected. Use Reopen to return a profile to Waiting.' }, 400);
+  }
+  const newStatus = status;
   // D991 — a rejection carries a reason the member reads, checked before
   // anything is written.
   if (newStatus === 'rejected') {
@@ -608,16 +611,32 @@ profiling.post('/admin/:email/verify', async (c) => {
   const rows = await sql`SELECT * FROM partner_profiles WHERE email = ${email}`;
   if (rows.length === 0) { await sql.end(); return c.json({ error: 'Profile not found' }, 404); }
 
+  // D992: preflight the requested send before recording a verdict or audit row.
+  // Keep the shared plan policy (including its admin exemption).
+  const providerRaw = String(reqBody?.provider ?? reqBody?.via_provider ?? 'native').toLowerCase();
+  const viaProvider = providerRaw === 'docusign' ? 'docusign' : 'native';
+  // Match the eSign route's shared plan policy. Admins currently bypass it.
+  if (newStatus === 'verified' && agreement_type && viaProvider === 'docusign') {
+    const { userMeetsTier } = await import('../middleware/requireTier');
+    if (!userMeetsTier(adminUser, 'studio')) {
+      await sql.end();
+      return c.json({ error: 'tier_required', required: 'studio', message: 'DocuSign sends require the Raise + Grow plan.' }, 402);
+    }
+  }
+
+  // Omission preserves a field; an explicit empty string or null clears it.
+  const agreementType = agreement_type === undefined ? rows[0].agreement_type : agreement_type || null;
+  const adminNotes = admin_notes === undefined ? rows[0].admin_notes : admin_notes || null;
+
   await sql`
     UPDATE partner_profiles
     SET admin_status = ${newStatus},
-        agreement_type = ${agreement_type || rows[0].agreement_type || null},
-        admin_notes = ${admin_notes || rows[0].admin_notes || null},
+        agreement_type = ${agreementType ?? null},
+        admin_notes = ${adminNotes ?? null},
         updated_at = CURRENT_TIMESTAMP
     WHERE email = ${email}
   `;
   // D991 — who and when, the reason, the history row and the member's notice.
-  // `pending` here is a reopen: the verdict stays in the history.
   const review = await reviewAfterVerdict(c.env, rows[0], newStatus, adminUser.id, reqBody?.reject_reason);
   // Log on the admin's record AND on the target user's record so the target sees it in their private feed.
   const targetUsers = await sql`SELECT id FROM users WHERE email = ${email}`;
@@ -650,23 +669,6 @@ profiling.post('/admin/:email/verify', async (c) => {
           ? await c.env.DB.prepare(`SELECT id, name, email FROM users WHERE id = ?`).bind(targetUserId).first().catch(() => null)
           : null;
         const recipientName = targetRow?.name || rows[0]?.full_name || rows[0]?.name || '';
-        // Task #2 — admins can opt the verify-flow envelope through
-        // DocuSign by passing `provider:'docusign'` (canonical) or
-        // `via_provider:'docusign'` (legacy alias) on the verify
-        // request body. Defaults to native if absent or invalid.
-        const providerRaw = String(reqBody?.provider ?? reqBody?.via_provider ?? 'native').toLowerCase();
-        const viaProvider = providerRaw === 'docusign' ? 'docusign' : 'native';
-        // Studio-tier gate — DocuSign is a Studio-only provider.
-        // Without this check a downgraded admin who still has an
-        // active DocuSign connection could route envelopes through
-        // it via the verify path, bypassing the gate enforced on
-        // POST /api/legal/esign/send.
-        if (viaProvider === 'docusign') {
-          const { userMeetsTier } = await import('../middleware/requireTier');
-          if (!userMeetsTier(adminUser, 'studio')) {
-            return c.json({ error: 'tier_required', required: 'studio', message: 'DocuSign sends require the Raise + Grow plan.' }, 402);
-          }
-        }
         esignResult = await createAndSendEnvelope(c.env, {
           adminUserId: adminUser.id,
           adminName: adminUser.name || adminUser.email,
@@ -688,7 +690,8 @@ profiling.post('/admin/:email/verify', async (c) => {
   }
 
   return c.json({
-    updated: true, status: newStatus, agreement_type, admin_notes, esign: esignResult, esign_refusal: esignRefusal,
+    updated: true, status: newStatus, agreement_type: agreementType ?? null, admin_notes: adminNotes ?? null,
+    esign: esignResult, esign_refusal: esignRefusal,
     reviewed_at: review.reviewed_at, member_notified: review.member_notified,
   });
 });
@@ -700,21 +703,15 @@ profiling.post('/admin/:email/verify', async (c) => {
  * leaves the verdict standing: the UPDATE has already landed.
  */
 async function reviewAfterVerdict(
-  env: Env, profile: any, status: string, adminUserId: number, rejectReason: unknown,
+  env: Env, profile: any, status: Verdict, adminUserId: number, rejectReason: unknown,
 ): Promise<{ reviewed_at: string | null; member_notified: MemberNotice | undefined }> {
   const ref: string | null = profile?.ref ?? null;
   try {
-    if (status === 'verified' || status === 'rejected') {
-      const reason = status === 'rejected' ? String(rejectReason ?? '').trim() : null;
-      const done = await recordDecision(env, profile.email, status, adminUserId, reason);
-      if (!done) return { reviewed_at: null, member_notified: undefined };
-      const member_notified = await tellMember(env, { email: profile.email, user_id: profile.user_id ?? null, ref: done.ref }, status, reason);
-      return { reviewed_at: done.reviewed_at, member_notified };
-    }
-    // `profile` is the row read before the route's write, so its status is the one Reopen undoes.
-    if (ref && (profile.admin_status === 'verified' || profile.admin_status === 'rejected')) {
-      await recordReopenAfterVerify(env, ref, adminUserId);
-    }
+    const reason = status === 'rejected' ? String(rejectReason ?? '').trim() : null;
+    const done = await recordDecision(env, profile.email, status, adminUserId, reason);
+    if (!done) return { reviewed_at: null, member_notified: undefined };
+    const member_notified = await tellMember(env, { email: profile.email, user_id: profile.user_id ?? null, ref: done.ref }, status, reason);
+    return { reviewed_at: done.reviewed_at, member_notified };
   } catch (e) {
     console.error('[profiling/verify] review not recorded', ref ?? 'no ref', (e as Error)?.message);
   }
