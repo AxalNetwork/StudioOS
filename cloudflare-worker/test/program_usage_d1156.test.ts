@@ -25,7 +25,7 @@ const ddl = (() => {
   return (db.prepare("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END").all() as any[]).map(x => x.sql);
 })();
 const secret = 'synthetic-program-report-secret';
-const jwtSecret = 'synthetic-jwt-secret-at-least-32-characters';
+const jwtSecret = 't'.repeat(64); // synthetic signing seed for this SQLite fixture only
 const at = '2026-10-25T12:00:00.000Z';
 const now = () => new Date(at);
 const figure = (program_key = 'perks', claims: number | null = 3) => ({ program_key, people: 2, cohorts: null, referrals: null, claims, unreadable: 0 });
