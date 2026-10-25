@@ -21,7 +21,12 @@
 //   programmes       GET   /admin/testing/programmes?status=
 //   approve / reject POST  /admin/testing/programmes/:uid/approve|reject { note } (reject needs one)
 //   open / close     POST  /admin/testing/programmes/:uid/open|close
-//   create, edit, applicants, pick, decline: as the partner's, on HQ's own programmes.
+//   create, edit, pick, decline: as the partner's, on HQ's own programmes.
+//   applicants       GET   /admin/testing/programmes/:uid/applicants → { programme, items, can_decide }:
+//                         any programme's (D1197); a partner's is read only, `can_decide: false`
+//   events           GET   /admin/testing/programmes/:uid/events?page=&page_size= → { programme, events: { available, page, total, items } }
+//   applications     GET   /admin/testing/applications?programme=&owner=&status=&role=&consented=&tester=&q=&sort=&page=&page_size=
+//                         → { applications: { available, page, total, sort, items } }; status none leaves withdrawn out, `all` keeps it
 //
 // Every path is written out in full so the drift check (scripts/check-api-drift.mjs)
 // reads each one against the Worker.
@@ -63,6 +68,19 @@ export const adminTestingApi = {
   create: (programme) => request('/admin/testing/programmes', { method: 'POST', body: JSON.stringify(programme) }),
   edit: (uid, changes) => request(`/admin/testing/programmes/${enc(uid)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   applicants: (uid) => request(`/admin/testing/programmes/${enc(uid)}/applicants`),
+  events: (uid, { page = 1, pageSize } = {}) => {
+    const q = new URLSearchParams({ page: String(page) });
+    if (pageSize) q.set('page_size', String(pageSize));
+    return request(`/admin/testing/programmes/${enc(uid)}/events?${q}`);
+  },
+  applications: (filters = {}) => {
+    const q = new URLSearchParams();
+    for (const k of ['programme', 'owner', 'status', 'role', 'consented', 'tester', 'q', 'sort', 'page', 'page_size']) {
+      if (filters[k] != null && filters[k] !== '') q.set(k, String(filters[k]));
+    }
+    const qs = q.toString();
+    return request(`/admin/testing/applications${qs ? `?${qs}` : ''}`);
+  },
   pick: (uid) => request(`/admin/testing/applications/${enc(uid)}/pick`, { method: 'POST' }),
   decline: (uid) => request(`/admin/testing/applications/${enc(uid)}/decline`, { method: 'POST' }),
 };
