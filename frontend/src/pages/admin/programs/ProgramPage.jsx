@@ -11,6 +11,8 @@ import { actionPrimary } from '../../../ui';
 import { useAuth } from '../../../hooks/useAuthSync';
 import { isSuperAdminUser } from '../../../lib/shellRole';
 import AdminBoardFrame from '../AdminBoardFrame';
+import ActivityTab from './ActivityTab';
+import PlaybookEditor, { useProgramDetail } from './PlaybookEditor';
 import ProgramFrame from './ProgramFrame';
 import { LearningTabs, PartnersTabs, PerksTabs } from './ProgramTabs';
 import { LearningOverview, LearningPeople } from './LearningPages';
@@ -18,21 +20,23 @@ import { PerksOverview, PerksQueue } from './PerksPages';
 import { InvitePartner, PartnersOverview } from './ReferralPartners';
 import { HowItRuns, SUB } from './parts';
 import { useLearningReads, usePerksReads } from './useProgramReads';
+import { totalOf } from './programPagesModel';
 import {
-  AI_NATIVE_WAITS, HOW_IT_RUNS, INVESTOR_BANNER, INVESTOR_UNDECIDED, perkQueueFrom, routeFor,
+  AI_NATIVE_WAITS, HOW_IT_RUNS, INVESTOR_BANNER, INVESTOR_UNDECIDED, routeFor,
 } from './programsModel';
 
+// D962 (#2795): How it runs reads part 1's playbook store, and Activity part 1's activity read.
 function Perks({ tab, superAdmin }) {
   const reads = usePerksReads(tab);
-  const q = perkQueueFrom(reads.perkQueue, Date.now());
-  const queue = q.state === 'ready'
-    ? { text: q.atLeast ? `${q.count.toLocaleString('en-US')}+` : q.count.toLocaleString('en-US'), amber: q.count > 0, title: q.atLeast ? 'At least this many in review' : 'Listings in review' }
-    : null;
+  const detail = useProgramDetail('perks', tab === 'how');
+  const n = totalOf(reads.inReview);
+  const queue = n !== null ? { text: n.toLocaleString('en-US'), amber: n > 0, title: 'Listings in review' } : null;
   return (
     <ProgramFrame program="perks" superAdmin={superAdmin} tabs={<PerksTabs queue={queue} />}>
       {tab === 'overview' ? <PerksOverview reads={reads} superAdmin={superAdmin} /> : null}
-      {tab === 'how' ? <HowItRuns sections={HOW_IT_RUNS.perks} superAdmin={superAdmin} testId="programs-perks-how" /> : null}
+      {tab === 'how' ? <PlaybookEditor program="perks" superAdmin={superAdmin} detail={detail} testId="programs-perks-how" /> : null}
       {tab === 'queue' ? <PerksQueue reads={reads} /> : null}
+      {tab === 'activity' ? <ActivityTab program="perks" testId="programs-perks-activity" /> : null}
     </ProgramFrame>
   );
 }
@@ -40,11 +44,13 @@ function Perks({ tab, superAdmin }) {
 function Learning({ tab, superAdmin }) {
   const [programUid, setProgramUid] = useState(null);
   const reads = useLearningReads(tab, programUid);
+  const detail = useProgramDetail('learning', tab === 'how');
   return (
     <ProgramFrame program="learning" superAdmin={superAdmin} tabs={<LearningTabs />}>
       {tab === 'overview' ? <LearningOverview reads={reads} superAdmin={superAdmin} /> : null}
-      {tab === 'how' ? <HowItRuns sections={HOW_IT_RUNS.learning} superAdmin={superAdmin} testId="programs-learning-how" /> : null}
+      {tab === 'how' ? <PlaybookEditor program="learning" superAdmin={superAdmin} detail={detail} testId="programs-learning-how" /> : null}
       {tab === 'people' ? <LearningPeople reads={reads} programUid={programUid} onPick={setProgramUid} /> : null}
+      {tab === 'activity' ? <ActivityTab program="learning" testId="programs-learning-activity" /> : null}
     </ProgramFrame>
   );
 }
