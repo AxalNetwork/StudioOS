@@ -36,7 +36,7 @@ const deckSources = new Hono<{ Bindings: Env }>();
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** The founder's own Mercury connection, `withheld` for anyone else, or null when the founder has none. */
-async function mercuryFor(c: any, user: User, project: { founder_id: number | null; company_id: number | null }): Promise<SourceCtx['mercury']> {
+export async function mercuryFor(c: any, user: User, project: { founder_id: number | null; company_id: number | null }): Promise<SourceCtx['mercury']> {
   const owner = project.founder_id != null && user.founder_id != null && Number(user.founder_id) === Number(project.founder_id);
   if (!owner) return { withheld: true };
   const company = await resolveActiveCompany(c.env, user, c.req.header(ACTIVE_COMPANY_HEADER));

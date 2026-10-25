@@ -41,7 +41,7 @@ export function tabFlags(overview) {
 
 export const HQ_ONLY = 'Fund administration runs on HQ. Axal’s funds and entity accounts are not administered from a branch.';
 export const PAYMENT_INSTRUCTIONS_ADMIN = 'Only the Super Admin can see or change payment instructions.';
-export const PAYMENT_INSTRUCTIONS_LINK = { text: 'Payment instructions', href: '/admin?tab=bank-accounts' };
+export const PAYMENT_INSTRUCTIONS_LINK = { text: 'Payment instructions', href: '/admin/platform/bank-accounts' };
 export const NO_FUND = 'No administered fund is recorded. A fund whose general partner of record is an outside GP is run from its own fund page.';
 export const REJECT_REASON_MIN = 10;
 
