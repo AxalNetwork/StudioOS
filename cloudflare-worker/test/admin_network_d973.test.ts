@@ -18,6 +18,7 @@ function fixture() {
   const db = new DatabaseSync(':memory:', { enableForeignKeyConstraints: false });
   for (const name of ['users', 'super_admins', 'user_sessions', 'advisors', 'network_profiles', 'partners', 'partner_profiles', 'partner_deals', 'advisor_bookings', 'partner_bookings', 'advisor_office_hour_slots', 'partner_office_hour_slots', 'advisor_reviews', 'advisor_cohort_assignments']) db.exec(tableFromBaseline(baseline, name));
   for (const [file, name] of [['313_lab_host_applications.sql', 'lab_host_applications'], ['238_advisor_engagements.sql', 'advisor_engagements'], ['477_mercury_personal.sql', 'partner_deal_settlements']]) db.exec(tableFromBaseline(readFileSync(new URL('../sql/migrations/' + file, import.meta.url), 'utf8'), name));
+  db.exec(readFileSync(new URL('../sql/migrations/552_network_member_states.sql', import.meta.url), 'utf8'));
   const insert = (table: string, value: Record<string, any>) => db.prepare(`INSERT INTO ${table} (${Object.keys(value).join(',')}) VALUES (${Object.keys(value).map(() => '?').join(',')})`).run(...Object.values(value));
   for (const [id, role, name] of [[1, 'admin', 'Admin'], [2, 'advisor', 'Ada'], [3, 'partner', 'Ben'], [4, 'advisor', 'No profile'], [5, 'founder', 'PRIVATE FOUNDER'], [6, 'admin', 'Other admin'], [7, 'admin', 'Super']]) {
     insert('users', { id, role, name, email: `${id}@private.example`, partner_id: id === 3 ? 9 : null, kyc_status: 'approved', last_active_at: '2026-10-25 12:00:00' });
@@ -73,7 +74,7 @@ async function overviewGate(mounted = route) {
   try {
     const { status, body: b } = await get(db, '/overview', 1, {}, mounted);
     assert.equal(status, 200); assert.deepEqual(b.unreadable, []);
-    assert.equal(value(b.counts.people), 12); unknown(b.counts.by_stage);
+    assert.equal(value(b.counts.people), 12); assert.ok(Array.isArray(value(b.counts.by_stage)));
     assert.deepEqual(value(b.counts.by_kind), [{ kind: 'advisor', count: 3 }, { kind: 'operating_partner', count: 1 }, { kind: 'deck_only', count: 8 }]);
     const chart = value(b.sessions); assert.equal(chart.weeks.length, 12); assert.equal(chart.timezone, 'America/New_York');
     assert.deepEqual(chart.weeks.at(-1), { week: '2026-10-26', partial: true, booked: 1, completed: 1, no_show: 1, cancelled: 0 });
@@ -170,7 +171,7 @@ test('healthy empty stores return real zero and empty lists, distinct from unkno
   const { db } = fixture();
   for (const table of ['advisors', 'network_profiles', 'partners', 'partner_profiles', 'partner_deals', 'advisor_bookings', 'partner_bookings', 'advisor_office_hour_slots', 'partner_office_hour_slots', 'advisor_reviews', 'advisor_cohort_assignments', 'lab_host_applications', 'advisor_engagements', 'partner_deal_settlements']) db.exec(`DELETE FROM ${table}`);
   db.exec('DELETE FROM users WHERE id <> 1');
-  const b = (await get(db, '/overview')).body; assert.equal(value(b.counts.people), 0); assert.equal(value(b.deals).total, 0); assert.equal(value(b.settlements).count, 0); assert.ok(value(b.sessions).weeks.every((w: any) => w.booked === 0 && w.completed === 0 && w.no_show === 0)); unknown(b.counts.by_stage);
+  const b = (await get(db, '/overview')).body; assert.equal(value(b.counts.people), 0); assert.equal(value(b.deals).total, 0); assert.equal(value(b.settlements).count, 0); assert.ok(value(b.sessions).weeks.every((w: any) => w.booked === 0 && w.completed === 0 && w.no_show === 0)); assert.ok(Array.isArray(value(b.counts.by_stage)));
   const p = (await get(db, '/people')).body; assert.equal(p.available, true); assert.equal(p.total, 0); assert.deepEqual(p.items, []); assert.equal((await get(db, '/people/user:2')).status, 404); db.close();
 });
 test('failed advisor enrichment never describes a missing individual profile as known', async () => {
@@ -229,5 +230,36 @@ test('D973 opaque drawer refs coexist with D976 numeric standing in the mounted 
     const numeric = await get(db, '/people/2', 1, {}, combined);
     assert.equal(numeric.status, 200); assert.equal(numeric.body.user_id, 2);
     assert.equal((await get(db, '/overview', 1, {}, combined)).status, 200);
+  } finally { db.close(); }
+});
+
+
+test('D977: C1 uses D976 stages without guessing accountless stages; a failed stage read costs only C1', async () => {
+  const { db, insert } = fixture();
+  try {
+    insert('network_member_states', { user_id: 2, paused_at: '2026-10-25 00:00:00', paused_reason: 'Synthetic' });
+    let b = (await get(db, '/overview')).body;
+    const stage = (kind: string, state: string | null) => value(b.counts.by_stage).find((r: any) => r.kind === kind && r.stage === state)?.count ?? 0;
+    assert.equal(stage('advisor', 'paused'), 1);
+    assert.equal(stage('advisor', 'onboarding'), 1);
+    assert.equal(stage('operating_partner', 'active'), 1);
+    assert.equal(stage('deck_only', null), 8);
+    assert.equal(stage('advisor', null), 1);
+    assert.equal(value(b.counts.by_stage).reduce((n: number, r: any) => n + r.count, 0), value(b.counts.people));
+    insert('advisors', { id: 14, uid: 'synthetic-dual-role', user_id: 3, display_name: 'Synthetic profile', email: 'synthetic@example.test' });
+    b = (await get(db, '/overview')).body;
+    assert.equal(stage('advisor', 'active'), 1, 'D976 classifies an account with an advisor profile as an advisor');
+    assert.equal(stage('operating_partner', 'active'), 0);
+    assert.equal(value(b.counts.by_kind).find((r: any) => r.kind === 'advisor').count, 4, 'tile kind agrees with C1');
+    db.exec('UPDATE users SET is_active=0 WHERE id=2');
+    b = (await get(db, '/overview')).body;
+    assert.equal(stage('advisor', 'ended'), 1, 'ended takes precedence over pause');
+    assert.equal(stage('advisor', 'paused'), 0);
+    db.exec('DROP TABLE network_member_states');
+    b = (await get(db, '/overview')).body;
+    failed(b.counts.by_stage);
+    assert.equal(value(b.counts.people), 12);
+    assert.equal(value(b.deals).total, 2);
+    privateFree(b);
   } finally { db.close(); }
 });

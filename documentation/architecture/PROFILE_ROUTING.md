@@ -35,7 +35,7 @@ it, where in their nav, and how do they get there.*
 | Advisors | `/spinout-lab/advisors` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Apply and Status | `/spinout-lab/apply` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Brand & Landing Page | `/spinout-lab/brand` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
-| Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/raise/cap-table/:id` · `/new` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
+| Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/raise/cap-table/h-<n>` · `/new` | Headerless | Full page (proposed) | Sidebar → Headerless → Raise | UPGRADE | Low |
 | Cap Table | `/spinout-lab/captable` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
 | Cap Table Pro | `/raise/capital/cap-table` · `/share/captable/:token` · `/raise/cap-table/variants` · `/raise/cap-table/variants/:variant` | Headerless | Full page | Sidebar → Headerless → Raise | UPGRADE | High |
 | Capital | `/spinout-lab/capital` | Headerless | Full page (Spin-Out Lab — frozen) | Sidebar → Headerless → Spin-Out Lab | OUT OF SCOPE | High |
@@ -191,7 +191,7 @@ it, where in their nav, and how do they get there.*
 | Admin page header | `/admin/programs/spinout-lab` | Admin | Full page (proposed) | Sidebar → Admin → Programs | UPGRADE | Low |
 | Advisors & Partners | `/admin?tab=network-profiles` · `/admin/network-profiles` · `/deck` · `/admin/partner-invitations/firm-links` · `/firms` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
 | Approvals (admin) | `/admin/held/approvals` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
-| Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/raise/cap-table/:id` · `/new` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
+| Cap table | `/raise/cap-table` · `/raise/cap-table/instruments` · `/option-pool` · `/scenarios` · `/raise/cap-table/h-<n>` · `/new` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Checkout | `/pricing` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Contracts · Subsidiary | `/admin/contracts` · `/admin?tab=legal` · `/esign/:token` | Admin | Full page | Sidebar → Admin → Contracts | UPGRADE | High |
 | Events Console | `/admin/events` · `/admin/events/review` · `/admin/events/all` · `/admin/events/:id` · `/admin/events/calendar` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
@@ -199,7 +199,7 @@ it, where in their nav, and how do they get there.*
 | Investor narrative | `/raise/investor-narrative` · `/raise/investor-narrative/story` · `/positioning` · `/check` · `/versions` · `/raise/investor-narrative/:version` · `/new` | — (not routed) | Full page (proposed) | Not reachable yet | UPGRADE | Low |
 | Legal & Capital Engine | `/legal-capital` | — (no nav entry) | Full page | Deep link / in-page action | REMOVED | Medium |
 | Licences | `/admin/my-licence` · `/admin/my-licence/terms` · `/programs` · `/contract` · `/statements` · `/requests` · `/history` | Admin | Full page (proposed) | Sidebar → Admin → Licences | UPGRADE | Low |
-| Ops Page · Event organiser (E1–E4, D567) | `/events/:id/manage` · `/events/:id/manage/registrations` · `/events/:id/manage/agenda` · `/events/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
+| Ops Page · Event organiser (E1–E4, D567) | `/events/:id/manage` · `/events/:id/manage/registrations` · `/events/:id/manage/agenda` · `/events/:id/manage/check-in` · `/events/:id` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Partner invitations | `/admin/partner-invitations` · `/admin/partner-invitations/invitations` · `/admin/partner-invitations/invitations/:id` · `/admin/partner-invitations/deals` · `/admin/partner-invitations/deals/:id` · `/admin/partner-invitations/referrals` · `/admin/partners` · `/admin/partner-invitations/firm-links` · `/admin/advisors-partners/firms?moved=firm-links` | Admin | Full page | Sidebar → Admin → Community | UPGRADE | High |
 | Partner profiles | `/admin?tab=profiles` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |
 | Persona segments | `/admin?tab=personas` | — (no nav entry) | Full page | Deep link / in-page action | UPGRADE | Medium |

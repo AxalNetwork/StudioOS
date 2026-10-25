@@ -6,6 +6,7 @@ import { branchOf } from '../util/branch';
 import { COHORT_TZ, wallClockToUtcMs } from '../services/cohortTiming';
 import { weekStartOf } from '../services/okrWeeks';
 import { deckRosterReach } from '../services/decks/deckRoster';
+import { kindOf, stageOf, type PersonRow } from '../services/networkStanding';
 
 type Row = Record<string, any>;
 type Read<T> = { available: true; recorded: true; value: T } | { available: true; recorded: false; reason: string } | { available: false; reason: string };
@@ -220,11 +221,36 @@ route.get('/overview', async (c) => {
   const now = Date.now(); const s = await snapshot(c.env, c.get('networkAdmin'), now, true); const list = people(s);
   const endings = rows(s.deals).filter(d => stamp(d.expires_at) >= now && stamp(d.expires_at) <= now + 30 * DAY);
   const sessions = weekSeries(s, now); const settlements = dueSettlements(s);
+  const roles = new Map([...rows(s.advisors).map(a => [Number(a.member_id), a.member_role] as const), ...rows(s.accounts).map(u => [Number(u.id), u.role] as const)]);
+  const kindFor = (p: Row) => p.kind === 'deck_only' ? 'deck_only' : kindOf({ role: roles.get(Number(p.user_id)), advisor_id: p.advisor_id }) ?? p.kind;
+  // D977 / D976: use the standing rule, not roster visibility or guessed stages.
+  // This projection is only needed by C1 and fails independently of other blocks.
+  const standingRows = await read(c.env.DB, 'network_stages', `SELECT u.id AS user_id, u.role,
+    u.is_active AS user_active, u.partner_id, a.id AS advisor_id, a.is_active AS advisor_active,
+    p.status AS firm_status, n.paused_at
+    FROM users u LEFT JOIN advisors a ON a.user_id = u.id
+    LEFT JOIN partners p ON p.id = u.partner_id
+    LEFT JOIN network_member_states n ON n.user_id = u.id
+    WHERE (lower(u.role) IN ('advisor','partner') OR a.id IS NOT NULL)
+      AND (lower(u.role) <> 'admin' OR u.id = ? OR ? = 1)`, [c.get('networkAdmin').id, isSuperAdmin(c.get('networkAdmin')) ? 1 : 0]);
+  const byStage = combined([...core(s), standingRows], () => {
+    const states = new Map(rows(standingRows).map(r => [Number(r.user_id), r]));
+    const groups = new Map<string, { kind: string; stage: string | null; count: number }>();
+    for (const person of list) {
+      const row = person.kind === 'deck_only' ? null : states.get(Number(person.user_id));
+      const kind = row ? kindOf(row as PersonRow) ?? person.kind : person.kind;
+      const stage = row ? stageOf(row as PersonRow) : null;
+      const key = `${kind}:${stage}`;
+      const group = groups.get(key) ?? { kind, stage, count: 0 };
+      group.count++; groups.set(key, group);
+    }
+    return [...groups.values()];
+  });
   return c.json({ as_of: new Date(now).toISOString(), scope: s.branch ?? 'hq', timezone: COHORT_TZ,
     counts: {
       people: combined(core(s), () => list.length),
-      by_kind: combined(core(s), () => ['advisor', 'operating_partner', 'deck_only'].map(kind => ({ kind, count: list.filter(p => p.kind === kind).length }))),
-      by_stage: missing(STAGE),
+      by_kind: combined(core(s), () => ['advisor', 'operating_partner', 'deck_only'].map(kind => ({ kind, count: list.filter(p => kindFor(p) === kind).length }))),
+      by_stage: byStage,
       firms: fromRows(s.firms, value => ({ total: value.length, listed: value.filter(f => f.directory_listed).length })),
       lab_hosts: fromRows(s.hosts, value => ({ approved: value.filter(h => h.status === 'approved').length, pending: value.filter(h => h.status === 'pending').length })),
       cohort_assignments: fromRows(s.cohort_assignments, value => value.length),
@@ -245,7 +271,7 @@ route.get('/overview', async (c) => {
       pending_hosts: fromRows(s.hosts, value => value.filter(h => h.status === 'pending').map(h => ({ id: h.id, href: '/admin/programs/spinout-lab/hosts' }))),
       missing_deck_photos: fromRows(s.roster, () => list.filter(p => p.kind === 'deck_only' && take(p.deck)?.reach === 'profile' && !take(p.deck)?.has_photo).map(p => ({ ref: p.ref, name: p.name, href: '/admin/advisors-partners/deck' }))),
       settlements,
-    }, unreadable: unreadableKeys(s),
+    }, unreadable: [...unreadableKeys(s), ...(standingRows.available ? [] : ['network_stages'])],
   });
 });
 
