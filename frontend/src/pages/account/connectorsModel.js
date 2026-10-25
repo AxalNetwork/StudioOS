@@ -174,7 +174,7 @@ export function buildCatalogue({ providers = [], items = [], waitlist = [], firs
       connection: byKey.get(p.key) || null,
       joined: joined.has(p.key),
       locked: !!(p.locked_for_user ?? p.tier_locked),
-      available: p.status !== 'coming_soon' && (p.auth_type === 'none' || p.has_implementation !== false) && !(oauthOff && !p.supports_pat),
+      available: p.status !== 'coming_soon' && p.auth_type !== 'none' && p.has_implementation !== false && !(oauthOff && !p.supports_pat),
     });
   }
   const cards = new Map((Array.isArray(firstPartyCards) ? firstPartyCards : []).filter((c) => c?.key).map((c) => [c.key, c]));
@@ -423,9 +423,11 @@ export function discoverSections(catalogue, chip = 'All', { q = '', suggestions 
   // OAuth app, a registry one whose OAuth client is unset (D751), or one whose
   // status could not be read) stays in Top, with its
   // reason in the corner; only the registry's own coming_soon is "Coming soon".
-  const top = list.filter((p) => p.status !== 'coming_soon');
+  const top = list.filter((p) => p.auth_type !== 'none' && p.status !== 'coming_soon');
+  const browse = list.filter((p) => p.auth_type === 'none');
   const soon = list.filter((p) => p.status === 'coming_soon');
   const out = [{ title: 'Top connectors', cards: top }];
+  if (browse.length) out.push({ title: 'Works without signing in', cards: browse });
   if (soon.length) out.push({ title: 'Coming soon', cards: soon });
   return out;
 }
@@ -748,6 +750,7 @@ export const TOOL_FILTERS = ['All', 'Connected', 'Not connected', 'Failing'];
  * registry one whose OAuth client is unset, D751).
  */
 export function toolState(p) {
+  if (p.auth_type === 'none') return 'browse';
   if (p.connection) return attentionReason(p.connection) ? 'failing' : 'connected';
   if (p.status === 'coming_soon') return 'soon';
   if (!p.available) return 'unavailable';

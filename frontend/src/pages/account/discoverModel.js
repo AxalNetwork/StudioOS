@@ -212,9 +212,11 @@ export function discoverGrid(catalogue, { q = '', where = 'all', type = 'all', s
       if (cards.length) out.push({ id: 'suggested', title: SUGGESTED, cards, count: cards.length });
     }
     const list = pick('all', 'all');
-    const top = list.filter((p) => p.status !== 'coming_soon');
+    const top = list.filter((p) => p.auth_type !== 'none' && p.status !== 'coming_soon');
+    const browse = list.filter((p) => p.auth_type === 'none');
     const soon = list.filter((p) => p.status === 'coming_soon');
     out.push({ id: 'top', title: 'Top connectors', cards: top, count: top.length });
+    if (browse.length) out.push({ id: 'without_sign_in', title: 'Works without signing in', cards: browse, count: browse.length });
     if (soon.length) out.push({ id: 'coming_soon', title: 'Coming soon', cards: soon, count: soon.length });
     return out;
   }
