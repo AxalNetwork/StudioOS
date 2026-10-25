@@ -16,6 +16,11 @@ D973 reads live in `admin_network_reads.ts`, mounted before D976’s
 `admin_network.ts` at `/api/admin/network`. Opaque person refs use the
 read-only drawer; numeric account IDs continue to the standing router.
 
+D979's Firms reads live in `admin_partner_firms.ts`, mounted at
+`/api/admin/partners` before `admin_partners.ts`: `/firms` (search, filters,
+sort and pages with an exact total) and `/firms/:id` (one firm's drawer). Both
+are read only; the tab's writes stay in `admin_partners.ts`.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,
@@ -34,9 +39,11 @@ widened guard on this very sentence, which is the rule working.)
 
 ```
 /api/admin/partner-profiles → admin_partner_profiles.ts (D990: HQ's partner profile list with search, filters, sort and pages, the counts, and one profile by its pp_ reference; Admin, each read logged by reference. D993: agreement readiness, each row's envelope state, and Unbind for a Super Admin with a step-up)
+/api/admin/product-testers → admin_product_testers.ts (D1042: the product tester pool, migration 576: list per status with the member's name, email, role, email verification and identity check, one tester with their programs and history, and approve, decline, pause, resume and remove, each telling the member; Admin)
 /api/admin/partner-settlements → partner_settlements.ts (HQ drafts; Super Admin issue/void, D713)
 /api/partner-settlements → partner_settlements.ts (own non-draft settlements, D713)
 /api/mercury/personal → mercury_personal.ts (a member's own Mercury (founders, partners, and investors on HQ): status, payment matches and raise receipts, read-only, D713, D752; connected only by Sign in with Mercury since D881. Never Axal VC's own accounts: D879, guarded by D883's `check-mercury-member-surfaces.mjs`)
+/api/integrations/mcp → connector_mcp_oauth.ts (D1080: Sign in with <Provider> for every MCP record but Mercury's: start, callback, and the public client ID metadata document; mounted ahead of the integrations router)
 /api/connectors/custom → connectors_custom.ts (D852: a member's own remote MCP servers behind CUSTOM_MCP_ENABLED: configure, sign in, approve read tools one by one, health and revoke; founders on a paid plan)
 /api/mercury/attestations → mercury_attestations.ts (an investor's proof of capital: dated statements from their own Mercury, consented and revocable; read-only, HQ only, D752)
 /api/mercury/investor → mercury_investor.ts (an investor's own Mercury feeding Deals · Pipeline, Commit and Closing and Fund · Calls, Accounting and Reporting: facts written, proposals accepted, Pipeline shown only; read-only, on HQ or in a branch (D884), the caller's own data only, D840 part 4)
@@ -238,6 +245,8 @@ D983 (#2774): `admin_program_requests.ts` mounts `/api/admin/program-grants/requ
 D984 (#2775): `licence_programs.ts` mounts `GET /api/licence/mine/programs` at `/api/licence`, beside `licence_requests.ts`: the nine programs HQ grants the caller's licence, read only, with each grant's terms. On HQ it binds the caller through `licence_admins` and reads the store; an account no licence binds reads `linked: false`, "On HQ-held accounts, HQ runs every program." On a branch it answers, to an admin only, from HQ's dated copy (`branch_licence.program_grants_json`, migration 554) with `as_of`. A D1 error or an unreadable copy is a 503. Since D984, `admin_program_grants.ts`'s grant writes push the licence to its branch and answer `pushed`. See `documentation/architecture/decisions/D984.md`.
 
 D986 (#2776): `admin_partner_deal_types.ts` mounts `/api/admin/partner-deal-types`: which partner deal types each licence may offer, read under `requireSuperAdmin` and set under `requireSuperAdminWriteBar` with a reason (one `program_changed` licence event, action `deal_types_changed`, then a push to the branch). `licence_partner_deal_types.ts` mounts `GET /api/licence/mine/partner-deal-types` ahead of `licence.ts`: the bound Administrator on HQ, or a branch admin reading its copy. The branch's partner invitation write (`admin_partners.ts`) refuses a type the copy does not allow. The store is migration 555 and `../services/partnerDealTypes.ts`. See `documentation/architecture/decisions/D986.md`.
+
+D1075 (#2967): `trust_public.ts` mounts the public trust center's reads under `/api/public` (`GET /trust`, `/trust/changes`, `/trust/matrix`; published blocks only, each part read on its own) and the subprocessor notices' subscribe, confirm and unsubscribe (double opt-in; confirm and unsubscribe CSRF-exempt). `admin_trust_center.ts` mounts `/api/admin/security/trust-center`, ahead of `admin_security.ts`: the store's drafts, subprocessors, auditor's reports and Publish with one change note, read under `requireSuperAdmin` and written under `requireSuperAdminWriteBar`, each write in the admin audit log. `security_reports.ts` mounts Help's Security category at `/api/help/security-reports` (a member's private report, HQ only) and HQ's read at `/api/admin/security/reports` (Super Admin). The store is migration 584 and `../services/trustContent.ts`, `../services/subprocessorNotices.ts` and `../services/securityReports.ts`. See `documentation/architecture/decisions/D1075.md`.
 
 D896 (#2675): `deck_sources.ts` mounts `GET /api/decks/sources` and `POST /api/decks/:id/refresh`, after `deck_share_actions.ts` and before `decks.ts`, so that `decks.ts`'s `GET /:id` cannot answer `/sources`. Both read only, through `projectOwned`; Mercury's slots are read only for the venture's own founder. The adapters are `../services/decks/sources.ts`. See `documentation/architecture/decisions/D896.md`.
 
