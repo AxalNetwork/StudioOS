@@ -122,6 +122,12 @@ test('HQ approvals: when every lane answers, the total is their sum', async () =
   // Declared by migration 287, not the baseline; the lane reads these three columns.
   db.exec('CREATE TABLE spinout_moderation_cases (id INTEGER PRIMARY KEY, status TEXT, resolved_at TEXT, created_at TEXT)');
   db.prepare(`INSERT INTO spinout_moderation_cases (status, resolved_at, created_at) VALUES ('under_review', NULL, ?), ('active', NULL, ?)`).run(ago(30), ago(31));
+  // D1041 (#2889): the stores the canvas's new lanes read, empty here.
+  for (const t of ['company_profiles', 'comarketing_pitches', 'partners', 'experts', 'perks',
+    'referral_strategic_access', 'score_snapshots', 'articles']) db.exec(ddl(t));
+  for (const m of ['220_company_kyb.sql', '313_lab_host_applications.sql']) {
+    db.exec(readFileSync(new URL(`../sql/migrations/${m}`, import.meta.url), 'utf8'));
+  }
   const g: any = await studioGlance({ DB: makeD1(db) } as any, NOW);
   assert.deepEqual(g.approvals.unreadable, []);
   assert.equal(g.approvals.pending_total, 4, 'KYC, partner profile, exploring, one moderation case under review');

@@ -38,7 +38,7 @@
  * zone travels with the deadline, every time.
  */
 import type { Env } from '../types';
-import { laneCounts, slaFor, ageHours, SLA_DUE_SOON_HOURS, SLA_PAST_HOURS } from './approvalSources';
+import { laneCounts, slaFor, ageHours, SLA_DUE_SOON_HOURS, SLA_PAST_HOURS, type LaneCount } from './approvalSources';
 import type { ApprovalLaneKey } from './approvalSources';
 import { COHORT_TZ, cycleWeekWindows, delawareYearMonth } from './cohortTiming';
 
@@ -49,6 +49,11 @@ export type QueuePressureLane = {
   count: number | null;
   oldest_age_hours: number | null;
   sla: 'ok' | 'due_soon' | 'past' | 'unknown';
+  /** D1041 — who a decision tells, and the page that decides the lane. */
+  notifies: string;
+  decided_on: string | null;
+  undecided_reason?: string;
+  sub?: { label: string; count: number | null };
 };
 
 export type ProgrammeClock = {
@@ -359,7 +364,18 @@ export async function agreementsExpiring(env: Env, now: number): Promise<Agreeme
  */
 export async function queuePressure(env: Env, now = Date.now()) {
   const lanes = await laneCounts(env);
-  const queue_pressure: QueuePressureLane[] = lanes.map((l) => {
+  const queue_pressure = pressureOf(lanes, now) as QueuePressureLane[];
+  return { lanes, queue_pressure };
+}
+
+/**
+ * Counted lanes as pressure, worst first. Shared with HQ's lanes (D1041), so
+ * the two read the same age, band and order.
+ */
+export function pressureOf<K extends string>(
+  lanes: (Omit<LaneCount, 'key'> & { key: K })[], now = Date.now(),
+): (Omit<QueuePressureLane, 'key'> & { key: K })[] {
+  const out = lanes.map((l) => {
     const age = l.count === null ? null : ageHours(l.oldest_at, now);
     return {
       key: l.key,
@@ -368,11 +384,15 @@ export async function queuePressure(env: Env, now = Date.now()) {
       oldest_age_hours: age === null ? null : Math.round(age * 10) / 10,
       // An unreadable lane has no band. Calling it `ok` would be the one
       // reading that turns a gap into reassurance.
-      sla: l.count === null ? 'unknown' : slaFor(age),
+      sla: l.count === null ? 'unknown' as const : slaFor(age),
+      notifies: l.notifies,
+      decided_on: l.decided_on,
+      ...(l.undecided_reason ? { undecided_reason: l.undecided_reason } : {}),
+      ...(l.sub ? { sub: l.sub } : {}),
     };
   });
-  queue_pressure.sort(byPressure);
-  return { lanes, queue_pressure };
+  out.sort((a, b) => byPressure(a as QueuePressureLane, b as QueuePressureLane));
+  return out;
 }
 
 export async function branchHome(
