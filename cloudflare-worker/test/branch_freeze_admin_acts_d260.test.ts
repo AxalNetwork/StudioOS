@@ -123,6 +123,8 @@ function freshDb(licence: 'suspended' | 'active' | null): DB {
     `INSERT INTO spinout_applications (id, user_id, company_name, idea, cohort, status)
      VALUES (?, ?, 'Fleur Labs', 'Soil sensors for vineyards', 'Cohort 5', 'pending')`,
   ).run(APP_ID, FOUNDER);
+  db.exec("INSERT INTO cohort_cycles(id,year,month,start_at,end_at) VALUES(1,2035,1,'2035-01-01 05:00:00','2035-02-01 05:00:00')");
+  db.prepare('INSERT INTO cohort_applicants(application_id,user_id,cohort_cycle_id) VALUES(?,?,1)').run(APP_ID,FOUNDER);
   // A TOTP session with a step-up this minute: the KYC verdicts ask for one,
   // and without it a refusal here would be the step-up, not the freeze.
   db.prepare(
@@ -189,7 +191,7 @@ const ACTS: Array<{ name: string; method: string; path: string; body: Record<str
   { name: 'KYC reject', method: 'PATCH', path: `/api/kyc/admin/${FOUNDER}/reject`, body: { reason: 'The document is unreadable; please resubmit' } },
   { name: 'limited-access grant', method: 'PATCH', path: `/api/admin/users/${FOUNDER}/access-level`, body: { level: 'limited' } },
   { name: 'Lab admission', method: 'POST', path: `/api/admin/users/${FOUNDER}/spinout-admit`, body: { cohort: 'Cohort 5' } },
-  { name: 'application decide', method: 'POST', path: `/api/admin/spinout-applications/${APP_ID}/decide`, body: { decision: 'accepted' } },
+  { name: 'application decide', method: 'POST', path: `/api/admin/spinout-applications/${APP_ID}/decide`, body: { decision: 'accepted', reason: 'Synthetic review' } },
 ];
 
 /** Everything any of the five could write, read back whole. */
@@ -228,7 +230,10 @@ test('D260: on an active branch, all five writes go through and land', async () 
     'KYC reject': (db) => assert.equal((db.prepare('SELECT kyc_status FROM users WHERE id = ?').get(FOUNDER) as any).kyc_status, 'rejected'),
     'limited-access grant': (db) => assert.equal((db.prepare('SELECT access_level FROM users WHERE id = ?').get(FOUNDER) as any).access_level, 'limited'),
     'Lab admission': (db) => assert.equal(Number((db.prepare('SELECT spinout_lab_admitted FROM user_spinout_flags WHERE user_id = ?').get(FOUNDER) as any)?.spinout_lab_admitted), 1),
-    'application decide': (db) => assert.equal((db.prepare('SELECT status FROM spinout_applications WHERE id = ?').get(APP_ID) as any).status, 'accepted'),
+    'application decide': (db) => {
+      assert.equal((db.prepare('SELECT status FROM spinout_applications WHERE id = ?').get(APP_ID) as any).status, 'pending');
+      assert.equal((db.prepare('SELECT status FROM cohort_applicants WHERE application_id = ?').get(APP_ID) as any).status, 'approved');
+    },
   };
   for (const act of ACTS) {
     // Each on its own database: approve and reject cannot both land on one row.
@@ -349,11 +354,11 @@ test('D260: the application decide will not admit an applicant who is now an adm
   const db = freshDb('active');
   db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(FOUNDER);
   const before = snapshot(db);
-  const accepted = await req(makeEnv(db, FR_VARS), 'POST', `/api/admin/spinout-applications/${APP_ID}/decide`, { decision: 'accepted' });
+  const accepted = await req(makeEnv(db, FR_VARS), 'POST', `/api/admin/spinout-applications/${APP_ID}/decide`, { decision: 'accepted', reason: 'Synthetic review' });
   assert.equal(accepted.status, 400, `an admin was admitted through the decide: ${accepted.status} ${JSON.stringify(accepted.body)}`);
   assert.equal(snapshot(db), before, 'the refused acceptance still wrote');
 
-  const refused = await req(makeEnv(db, FR_VARS), 'POST', `/api/admin/spinout-applications/${APP_ID}/decide`, { decision: 'refused' });
+  const refused = await req(makeEnv(db, FR_VARS), 'POST', `/api/admin/spinout-applications/${APP_ID}/decide`, { decision: 'refused', reason: 'Synthetic review' });
   assert.equal(refused.status, 200, `refusing the admin's application was blocked: ${refused.status} ${JSON.stringify(refused.body)}`);
   assert.equal((db.prepare('SELECT status FROM spinout_applications WHERE id = ?').get(APP_ID) as any).status, 'refused');
 });

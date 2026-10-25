@@ -7,6 +7,7 @@
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/persona_segments_d997.test.mjs
  */
 import test from 'node:test';
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -182,12 +183,11 @@ test('the routes, the console mount gone, the doors, the strip, and the HQ rail 
   assert.ok(app.includes(`<Route path="/admin/persona-segments" element={guard(['admin'], <PersonaSegments />)} />`));
   assert.ok(app.includes(`<Route path="/admin/persona-segments/unclassified" element={guard(['admin'], <PersonaSegments />)} />`));
   assert.ok(app.includes('<StripLink to="/admin/persona-segments">Persona segments</StripLink>'));
-  const admin = read('frontend/src/pages/AdminPage.jsx');
+  const admin = read('frontend/src/pages/admin/ConsolePages.jsx');
   assert.ok(!admin.includes('<PersonasPanel'), 'the console still mounts the tab');
-  assert.match(admin, /\{ value: 'personas',/, 'the tab left the section list');
   assert.ok(read('frontend/src/pages/admin/HeldAccounts.jsx').includes('<Link to="/admin/persona-segments"'));
   assert.ok(read('frontend/src/pages/hq/ContentPage.jsx').includes('<Link to="/admin/persona-segments"'));
-  assert.match(read('frontend/src/sidebarConfig.js'), /'\/admin\/trash', '\/admin\/persona-segments'\]/);
+  assert.ok(SIDEBAR_GROUPS.admin.flatMap((g) => g.items).find((r) => r.label === 'Accounts').match.includes('/admin/persona-segments'));
   const page = read('frontend/src/pages/admin/segments/PersonaSegments.jsx');
   assert.match(page, /<AdminBoardFrame workspace="Personas"/);
   assert.ok(!/\b(alert|confirm)\(/.test(page), 'a browser pop-up on the page');

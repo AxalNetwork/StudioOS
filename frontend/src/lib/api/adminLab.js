@@ -17,4 +17,14 @@ export const adminLabApi = {
     const { cohort, status, origin, tech_transfer, stage, incorporated, interview, carried_forward, sort, q, limit, offset } = params;
     return request(`/admin/cohort/applications/list${query({ cohort, status, origin, tech_transfer, stage, incorporated, interview, carried_forward, sort, q, limit, offset })}`);
   },
+  /** D946 (#2751): SL7's participants, filtered, sorted and paged by the Worker.
+   * {cohort,status,week,this_week,incorporated,needs,q,sort,limit,offset} -> page, total, standing. */
+  participants: (params = {}) => {
+    const { cohort, status, week, this_week, incorporated, needs, q, sort, limit, offset } = params;
+    return request(`/admin/cohort/participants${query({ cohort, status, week, this_week, incorporated, needs: needs ? 1 : undefined, q, sort, limit, offset })}`);
+  },
+  /** D946: SL8's drawer — one participant's row, weeks, tools, open case and history. */
+  participant: (uid) => request(`/admin/cohort/participants/${encodeURIComponent(uid)}`),
+  /** D946: SL14s, the Super Admin's read of support sessions (every admin's). 403 for an Admin. */
+  supportSessions: () => request('/admin/cohort/impersonation-audit'),
 };

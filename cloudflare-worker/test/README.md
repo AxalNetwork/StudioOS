@@ -84,3 +84,7 @@ per completed write. `decks.autofill.test.ts` also checks AI-only coverage is ze
 `deck_share_null_limit_d895.test.ts` covers migration 549's data, index, foreign-key
 and sequence preservation, nullable fresh/legacy bootstraps, NULL module links,
 finite editor caps, concurrent claims and unchanged expiry/revocation/browser guards.
+
+D992: `partner_profile_verdicts_d992.test.ts` holds profile verdict validation,
+explicit clearing, omission, audit recipients and route refusals to the full
+migrated SQLite schema; it also records the shared plan policy's admin exemption.

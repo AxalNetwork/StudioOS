@@ -5025,6 +5025,56 @@
   },
   {
    "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:outline",
+   "optionLabel": "Regenerate outline",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "deck:build",
+   "optionLabel": "Build deck",
+   "kind": "write",
+   "handler": "draft",
+   "routeTask": "rail_write",
+   "models": [
+    {
+     "id": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+     "role": "Default",
+     "line": "Drafts in your voice, cited"
+    },
+    {
+     "id": "@cf/mistralai/mistral-small-3.1-24b-instruct",
+     "role": "Polished",
+     "line": "Tighter, more formal drafts"
+    },
+    {
+     "id": "@cf/zai-org/glm-4.7-flash",
+     "role": "Faster",
+     "line": "Short drafts and replies"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "review:deck-file",
    "optionLabel": "Drop your deck here or click to browse",
    "kind": "vision",
@@ -5077,6 +5127,31 @@
    "pageKey": "Founder · Raise · Pitch deck",
    "optionKey": "review:deck-again",
    "optionLabel": "Regenerate review",
+   "kind": "reason",
+   "handler": "draft",
+   "routeTask": "rail_reason",
+   "models": [
+    {
+     "id": "@cf/openai/gpt-oss-120b",
+     "role": "Default",
+     "line": "Tests a claim against its evidence"
+    },
+    {
+     "id": "@cf/deepseek-ai/deepseek-v4-pro-0813",
+     "role": "Second view",
+     "line": "Reviews the first answer"
+    },
+    {
+     "id": "@cf/qwen/qwq-32b",
+     "role": "Challenge",
+     "line": "Argues the other side"
+    }
+   ]
+  },
+  {
+   "pageKey": "Founder · Raise · Pitch deck",
+   "optionKey": "review:deck-version",
+   "optionLabel": "Review this version",
    "kind": "reason",
    "handler": "draft",
    "routeTask": "rail_reason",
