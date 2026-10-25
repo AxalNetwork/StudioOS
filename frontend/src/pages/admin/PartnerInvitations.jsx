@@ -25,7 +25,7 @@ import PartnersOverview from './partners/PartnersOverview';
 import PartnersReferrals from './partners/PartnersReferrals';
 import { usePartnerDesk } from './partners/usePartnerDesk';
 import {
-  LINE, MOVED_LINE, TITLE, cameFromOldAddress, fanOut, needsYou, routeFor, tabCounts, tabPath, withoutMoved,
+  LINE, MOVED_LINE, TITLE, cameFromOldAddress, needsYou, routeFor, tabCounts, tabPath, withoutMoved,
 } from './partners/partnersDeskModel';
 
 /**
@@ -132,7 +132,6 @@ function PartnerInvitationsBody() {
   const [dialog, setDialog] = useState(null);
   const [creating, setCreating] = useState(false);
 
-  const fan = fanOut(reads.set, reads.calls);
   const needs = needsYou(reads.overview, { invitations: reads.invitations, deals: reads.deals });
   const counts = tabCounts({ invitations: reads.invitations, deals: reads.deals, contracts: reads.contracts, needs });
   const moved = cameFromOldAddress(loc.search);

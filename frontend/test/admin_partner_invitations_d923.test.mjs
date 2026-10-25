@@ -1009,9 +1009,9 @@ test('Terminate is disabled until a reason is typed; its result and its refusal 
     assert.equal(view.textOf('partners-deal-count'), 'Redemptions: 3', 'the count comes from the row');
     assert.ok(view.has('partners-deal-redeemers-unreadable'), 'a failed R4 reads Unreadable');
     const r4 = () => view.requests.filter((r) => r.url.endsWith('/deals/7/redemptions')).length;
-    assert.equal(r4(), 2, 'once for the record and once for the fan-out');
+    assert.equal(r4(), 1, 'once, for the record: D951 retired the fan-out');
     await view.wait(50);
-    assert.equal(r4(), 2, 'and never again: a failure does not re-read in a loop');
+    assert.equal(r4(), 1, 'and never again: a failure does not re-read in a loop');
     assert.equal(view.textOf('partners-deal-obligations-line'), 'No obligations recorded');
     assert.match(view.textOf('partners-deal-terms'), /Tiers grantedFounder grant: no plan/);
     await view.click('partners-deal-terminate');
