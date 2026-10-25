@@ -83,6 +83,15 @@ export function profileOf(role) {
   return { key: r, label: r.charAt(0).toUpperCase() + r.slice(1), tone: 'muted' };
 }
 
+/**
+ * D1110 (#2990): the group a chart mark opens (INS3), or none. Only a profile the
+ * lightbox can open is one; "No role", "No account" and a role the canvas does
+ * not name stay plain marks, since `groupFromSearch` would not open them.
+ */
+export function groupKeyOf(key) {
+  return Object.values(PROFILE_OF).some((p) => p.key === key) ? key : undefined;
+}
+
 const nf = (n) => Number(n).toLocaleString('en-US');
 const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 const usd = (v) => `$${(Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -311,7 +320,7 @@ function whoBlock(insights) {
   return {
     ...base, ...ready({
       take: top && w.total ? `${top.label} are the largest group, ${pct(top.value, w.total)}% of accounts.` : 'No accounts match these filters.',
-      chart: { type: 'hbar', rows: rows.map((r) => ({ label: r.label, value: r.value, tone: r.tone, group: r.key })), axis: 'accounts', clickable: true },
+      chart: { type: 'hbar', rows: rows.map((r) => ({ label: r.label, value: r.value, tone: r.tone, group: groupKeyOf(r.key) })), axis: 'accounts', clickable: true },
       alt: `Accounts by profile: ${rows.map((r) => `${r.label} ${nf(r.value)}`).join(', ')}. Total ${nf(w.total)}.`,
       badges: [['LPs', lps], ...(testers ? [['Product testers', testers]] : [])],
       foot: `LPs and Product testers sit inside a profile, so they are not added to the total. Total ${nf(w.total)}.`,
@@ -367,11 +376,12 @@ function growthBlock(insights, range) {
           value: w.total,
           toDate: w.to_date,
           text: w.to_date ? `${nf(w.total)} to date` : nf(w.total),
-          parts: stacks.map((st) => ({ tone: st.tone, value: st.roles.reduce((t, r) => t + (Number(w.by_profile?.[r]) || 0), 0) })),
+          parts: stacks.map((st) => ({ tone: st.tone, label: st.label, group: groupKeyOf(st.key), value: st.roles.reduce((t, r) => t + (Number(w.by_profile?.[r]) || 0), 0) })),
         })),
+        clickable: true,
       },
       alt: `New accounts per week, ${dayLabel(weeks[0]?.week)} to ${dayLabel(weeks[weeks.length - 1]?.week)}: ${weeks.map((w) => (w.to_date ? `and ${w.total} to date` : w.total)).join(', ')}.`,
-      legend: [...stacks.map((st) => ({ label: st.label, tone: st.tone })), { label: 'This week, to date', tone: 'hatch' }],
+      legend: [...stacks.map((st) => ({ label: st.label, tone: st.tone, group: groupKeyOf(st.key) })), { label: 'This week, to date', tone: 'hatch' }],
       foot: 'Weeks start Monday, UTC. Y axis: new accounts that week, by profile.',
     }),
   };
@@ -487,6 +497,8 @@ function countriesBlock(insights) {
       chart: rows.length ? { type: 'hbar', rows: [...rows.map((r) => ({ label: r.country, value: r.count })), ...(rest ? [{ label: 'Other countries', value: rest, tone: 'muted' }] : [])], axis: 'accounts' } : null,
       alt: `Accounts by country: ${rows.map((r) => `${r.country} ${nf(r.count)}`).join(', ')}${rest ? `, other countries ${nf(rest)}` : ''}. ${nf(c.not_stated)} stated none.`,
       foot: `${nf(c.not_stated)} accounts stated no country. The country is as written on the profile.`,
+      // D1110 (#2990): the chart keeps twelve; "See all countries" opens every one.
+      more: (c.rows || []).length || c.not_stated ? { label: 'See all countries', testId: 'insights-countries-all' } : null,
     }),
   };
 }
@@ -571,7 +583,10 @@ function spendBlock(insights) {
       take: rows[0] && sp.usd > 0 ? `${rows[0].label} spent the most, ${pct(rows[0].value, sp.usd)}% of this month’s AI cost.` : 'No AI use this month.',
       big: usd(sp.usd),
       bigSub: `over ${nf(sp.calls)} calls`,
-      chart: rows.length ? { type: 'hbar', rows: rows.map((r) => ({ label: r.label, value: Math.round(r.value * 100) / 100, tone: r.tone, text: usd(r.value) })), axis: 'USD' } : null,
+      chart: rows.length ? {
+        type: 'hbar', axis: 'USD', clickable: true, testIdPrefix: 'insights-spend',
+        rows: rows.map((r) => ({ label: r.label, value: Math.round(r.value * 100) / 100, tone: r.tone, text: usd(r.value), group: groupKeyOf(r.key), aria: `Open the ${r.label} group, ${usd(r.value)} of AI spend` })),
+      } : null,
       alt: `AI spend this month by profile: ${rows.map((r) => `${r.label} ${usd(r.value)}`).join(', ')}.`,
     }),
   };
@@ -748,4 +763,19 @@ export function rangeLine(insights, nowMs) {
   const from = d.weeks?.[0];
   const label = rangeLabel(d.range);
   return from ? `${label} · ${dateLabel(from)} to ${dateLabel(new Date(nowMs).toISOString().slice(0, 10))}` : label;
+}
+
+/**
+ * D1110 (#2990): "See all countries" (INS1) — every country the read counted,
+ * largest first, then Not stated; each with its share of the accounts. The
+ * block's chart keeps twelve and folds the rest; this list folds nothing.
+ */
+export function allCountries(insights) {
+  const c = blk(insights, 'countries');
+  if (!c || blockState(insights, c)) return null;
+  const rows = (c.rows || []).map((r) => ({ country: r.country, count: Number(r.count) || 0 }));
+  const total = rows.reduce((t, r) => t + r.count, 0) + (Number(c.not_stated) || 0);
+  const out = rows.map((r) => ({ ...r, share: `${pct(r.count, total)}%` }));
+  if (c.not_stated) out.push({ country: null, count: Number(c.not_stated), share: `${pct(Number(c.not_stated), total)}%` });
+  return { rows: out, total };
 }

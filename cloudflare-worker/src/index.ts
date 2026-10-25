@@ -80,6 +80,7 @@ import partnernet from './routes/partnernet';
 import capital from './routes/capital';
 import tickets from './routes/tickets';
 import deals from './routes/deals';
+import dealContext from './routes/deal_context';
 import users from './routes/users';
 import marketIntel from './routes/market_intel';
 import marketIntelPublic from './routes/market_intel_public';
@@ -164,6 +165,8 @@ import './integrations/providers/stripe';
 import './integrations/providers/github';
 // D713 (#1778) — a founder's or partner's own Mercury, read-only: `connect` only.
 import './integrations/providers/mercury';
+// D1085 (#2950) — a founder's own Notion, read-only, through Notion's MCP server: sign-in only.
+import './integrations/providers/notion';
 import crunchbaseRoutes from './routes/crunchbase';
 import network from './routes/network';
 import referEarn from './routes/refer_earn';
@@ -212,7 +215,7 @@ import googleWorkspaceRoutes from './routes/google_workspace';
 import financialsRoutes from './routes/financials';
 import progressRoutes from './routes/progress';
 import cycleBuildRoutes from './routes/cycle_build';
-import buildPlanRoutes from './routes/build_plan';
+import buildPlanRoutes, { buildEvidenceRoutes } from './routes/build_plan';
 import buildPlanStateRoutes from './routes/build_plan_state';
 import metricsRoutes from './routes/metrics';
 import revenueRoutes from './routes/revenue';
@@ -905,6 +908,7 @@ app.route('/api/advisor', advisorRoutes);
 app.route('/api/partnernet', partnernet);
 app.route('/api/capital', capital);
 app.route('/api/tickets', tickets);
+app.route('/api/deals', dealContext);
 app.route('/api/deals', deals);
 app.route('/api/users', users);
 app.route('/api/market-intel', marketIntel);
@@ -1379,6 +1383,7 @@ app.route('/api/progress', progressRoutes);
 // D1067: pause, resume and "new evidence since" before D1065's plan router.
 app.route('/api/cycles/build/plan', buildPlanStateRoutes);
 app.route('/api/cycles/build/plan', buildPlanRoutes);
+app.route('/api/cycles/build/evidence', buildEvidenceRoutes);
 app.route('/api/cycles/build', cycleBuildRoutes);
 // Task #3 (DF) — `/api/metrics/*` alias of /api/progress/metrics/* + /series.
 app.route('/api/metrics', metricsRoutes);

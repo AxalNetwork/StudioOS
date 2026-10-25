@@ -11,7 +11,7 @@ import {
 import {
   EMPTY_LINE, MOVED_KEY, MOVED_NOTICE, NO_PERMISSION, NO_PERMISSION_FILTER,
   PAGE_UNREADABLE, PROFILE_FILTERS, RANGES, SCOPE_NOTE, SCOPE_TITLE, SOURCE_LINE,
-  activeFilterCount, asOfLabel, buildBlocks, buildGroup, buildKpis, countryOptions, definitionOf,
+  activeFilterCount, allCountries, asOfLabel, buildBlocks, buildGroup, buildKpis, countryOptions, definitionOf,
   EXPORT_FORMATS, EXPORT_LOGGED, EXPORT_NO_GROUP, EXPORT_WHAT, exportBody, exportToast,
   filterCountries, filtersFromSearch, groupFromSearch, isEmptyStudio, pageFailed, rangeLabel, rangeLine,
   readParams, scopeChip, scopeLines, scopeParam, scopeState,
@@ -142,7 +142,7 @@ export function Tile({ k, onRetry }) {
   );
 }
 
-export function Block({ b, onRetry, onCount, onSelect, onPick, phone }) {
+export function Block({ b, onRetry, onCount, onSelect, onPick, onMore, phone }) {
   const [table, setTable] = useState(false);
   const span = phone ? 'col-span-12' : { 4: 'col-span-12 lg:col-span-4', 6: 'col-span-12 lg:col-span-6', 8: 'col-span-12 lg:col-span-8', 12: 'col-span-12' }[b.span] || 'col-span-12';
   const hasChart = b.state === 'ready' && Boolean(b.chart);
@@ -188,7 +188,7 @@ export function Block({ b, onRetry, onCount, onSelect, onPick, phone }) {
           {b.chart2 ? (table
             ? <ChartTable chart={b.chart2} caption={b.alt2} />
             : <div role="img" aria-label={b.alt2}><Chart chart={b.chart2} /></div>) : null}
-          {b.legend?.length ? <Legend items={b.legend} /> : null}
+          {b.legend?.length ? <Legend items={b.legend} onSelect={onSelect} /> : null}
           {b.badges?.length ? (
             <div className="flex flex-col gap-1.5">
               {b.badges.map(([k, t]) => (
@@ -202,6 +202,7 @@ export function Block({ b, onRetry, onCount, onSelect, onPick, phone }) {
         </>
       )}
       {b.link && (b.state === 'ready' || b.state === 'unrecorded') ? <Link to={b.link.to} className={`${LINK} self-start`}>{b.link.label}</Link> : null}
+      {b.more && b.state === 'ready' && onMore ? <button type="button" className={`${LINK} self-start`} onClick={() => onMore(b.key)} data-testid={b.more.testId}>{b.more.label}</button> : null}
     </section>
   );
 }
@@ -296,6 +297,63 @@ function ScopeSelect({ scopes, current, onPick }) {
 }
 
 /**
+ * D1110 (#2990) — "See all countries" (INS1): every country the read counted,
+ * under the page's filters, with a search box. The block's chart keeps twelve
+ * and folds the rest into "Other countries"; this list folds nothing.
+ */
+function CountriesLightbox({ insights, filters, onClose }) {
+  const [q, setQ] = useState('');
+  const all = allCountries(insights);
+  const shown = all ? filterCountries(all.rows, q) : [];
+  return (
+    <Lightbox label="Every country" eyebrow="Where they are" width={560}
+      title={all ? `Every country · ${all.total.toLocaleString('en-US')} accounts` : 'Every country'}
+      onClose={onClose} testId="insights-countries-lightbox">
+      <div className="flex flex-col gap-3 px-1 pb-1">
+        <div className="flex flex-wrap gap-1.5">
+          {[rangeLabel(filters.range), PROFILE_FILTERS.find((p) => p.role && p.role === filters.profile)?.label || 'All profiles', filters.country || 'All countries'].map((c) => (
+            <span key={c} className="rounded-full border border-axal-hairline px-2.5 py-0.5 text-[11.5px] font-semibold text-axal-ink dark:border-gray-700 dark:text-gray-100">{c}</span>
+          ))}
+        </div>
+        {!all ? (
+          <p className={`m-0 ${SUB}`} data-testid="insights-countries-unread">The countries have not been read. Close this and try again once the block answers.</p>
+        ) : (
+          <>
+            <label className="flex flex-col gap-1">
+              <span className="sr-only">Search countries</span>
+              <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search countries" data-testid="insights-countries-search"
+                className="min-h-[36px] rounded-[7px] border border-axal-hairline bg-white px-2.5 text-[13px] text-axal-ink dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" />
+            </label>
+            <table className="w-full border-collapse text-[12.5px]" data-testid="insights-countries-table">
+              <caption className="sr-only">Accounts by country, every country</caption>
+              <thead>
+                <tr className="bg-[#faf9fc] text-left text-[10.5px] font-bold uppercase tracking-[.06em] text-axal-muted dark:bg-gray-800 dark:text-gray-400">
+                  <th scope="col" className="px-3 py-2">Country</th>
+                  <th scope="col" className="px-3 py-2 text-right">Accounts</th>
+                  <th scope="col" className="px-3 py-2 text-right">Share</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((r) => (
+                  <tr key={r.country ?? 'none'} className="border-t border-axal-hairline text-axal-ink dark:border-gray-700 dark:text-gray-100">
+                    <td className="px-3 py-2 font-semibold">{r.country ?? 'Not stated'}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{r.count.toLocaleString('en-US')}</td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums">{r.share}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {all.rows.length > 0 && shown.length === 0 ? <p className={`m-0 ${SUB}`}>No country matches.</p> : null}
+            <p className={`m-0 ${SUB}`}>The country is as written on the profile. Not stated counts the accounts that left it blank.</p>
+          </>
+        )}
+        <button type="button" className={`${GHOST} self-end`} onClick={onClose}>Close</button>
+      </div>
+    </Lightbox>
+  );
+}
+
+/**
  * The export dialog (INS5, #2661). "This group only" can be chosen while a
  * group is open; the file is made and logged by the Worker, so the dialog
  * says so before anything is made.
@@ -378,6 +436,8 @@ export default function AdminInsights() {
   const noperm = scope.kind === 'noperm';
   const { reads, asOf, reload } = useInsightsReads(filters, groupKey, !noperm && scope.kind !== 'pending', scopeParam(scope));
   const [countryQ, setCountryQ] = useState('');
+  // D1110 (#2990): "See all countries" — every country the read counted, in its own lightbox.
+  const [allOpen, setAllOpen] = useState(false);
 
   const setParam = useCallback((key, value) => {
     const next = new URLSearchParams(loc.search);
@@ -498,6 +558,7 @@ export default function AdminInsights() {
                     onRetry={reload}
                     onCount={setCount}
                     onSelect={(key) => setParam('group', key)}
+                    onMore={() => setAllOpen(true)}
                     onPick={setPick} />
                 ))}
               </div>
@@ -530,6 +591,8 @@ export default function AdminInsights() {
           </div>
         </Lightbox>
       )}
+
+      {allOpen && !noperm ? <CountriesLightbox insights={reads.insights} filters={filters} onClose={() => setAllOpen(false)} /> : null}
 
       {group && !noperm && (
         <Lightbox label={`${group.label} group`} eyebrow="Group" width={760}

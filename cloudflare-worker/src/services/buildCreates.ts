@@ -88,3 +88,44 @@ export function roadmapCreateStatements(env: Env, r: {
       readback: { table: 'roadmap_okrs', by: 'max' }, action: 'build_roadmap_item_created', summary: `Item added to ${r.column[0].toUpperCase()}${r.column.slice(1)}` }),
   ];
 }
+
+/**
+ * D1066 (#2936) — the other three rows a plan item lands as. Each is a batch's
+ * statements, INSERT first with `RETURNING id`, and the activity line under
+ * its module, as the three creates above are. `POST /risks` and
+ * `POST /formation-steps` keep their own statements; these carry the same
+ * columns a plan item fills, and a prototype test is Validate's
+ * `addExperiment` row (`hypothesis_experiments`) planned from Build.
+ */
+export function riskCreateStatements(env: Env, r: { projectId: number; userId: number; title: string; severity: 'high' | 'medium' | 'low'; mitigation: string | null }): Prepared[] {
+  return [
+    env.DB.prepare('INSERT INTO venture_risks (project_id, title, severity, owner_user_id, mitigation, created_by, feature_id) VALUES (?, ?, ?, NULL, ?, ?, NULL) RETURNING id')
+      .bind(r.projectId, r.title, r.severity, r.mitigation, r.userId),
+    // A risk tied to no feature logs on the project, as `POST /risks` does.
+    logCycleWriteStatement(env, { projectId: r.projectId, userId: r.userId, cycle: 'build', module: 'solution-design', entityId: 'project',
+      action: 'build_risk_created', summary: `Risk added, ${r.severity} severity` }),
+  ];
+}
+
+export function formationStepCreateStatements(env: Env, s: { projectId: number; userId: number; title: string }): Prepared[] {
+  return [
+    env.DB.prepare("INSERT INTO formation_steps (project_id, title, due_date, state, kind, jurisdiction, for_holder_id, created_by) VALUES (?, ?, NULL, 'todo', NULL, NULL, NULL, ?) RETURNING id")
+      .bind(s.projectId, s.title, s.userId),
+    logCycleWriteStatement(env, { projectId: s.projectId, userId: s.userId, cycle: 'build', module: 'company-creation',
+      readback: { table: 'formation_steps', by: 'max', prefix: 'step-' }, action: 'build_formation_step_created', summary: 'Filing added' }),
+  ];
+}
+
+/**
+ * The INSERT lands only on a live claim of this venture, so it can write no
+ * row; the caller names the row by `uid`, never as the newest experiment.
+ */
+export function experimentCreateStatements(env: Env, x: { projectId: number; userId: number; uid: string; hypothesisId: number; title: string; method: string | null; target: string | null }): Prepared[] {
+  return [
+    env.DB.prepare(`INSERT INTO hypothesis_experiments (uid, project_id, hypothesis_id, title, method, target, created_by)
+      SELECT ?, ?, h.id, ?, ?, ?, ? FROM hypotheses h WHERE h.id = ? AND h.project_id = ? AND h.retired_at IS NULL RETURNING id`)
+      .bind(x.uid, x.projectId, x.title, x.method, x.target, x.userId, x.hypothesisId, x.projectId),
+    logCycleWriteStatement(env, { projectId: x.projectId, userId: x.userId, cycle: 'build', module: 'prototype-mvp', entityId: 'project',
+      action: 'build_prototype_test_created', summary: 'Prototype test planned' }),
+  ];
+}

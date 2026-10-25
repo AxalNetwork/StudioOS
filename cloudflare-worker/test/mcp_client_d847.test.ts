@@ -110,7 +110,8 @@ async function storeRow(env: any, db: any, creds: McpCredentials | Record<string
 
 test('1. records are frozen, write tools need a publishing issue, resources sit on their hosts, Mercury equals D840', async () => {
   assert.ok(Object.isFrozen(MCP_PROVIDERS));
-  assert.deepEqual(Object.keys(MCP_PROVIDERS), ['mercury'], 'Mercury is the first and only provider');
+  // D1085 (#2950): Notion is the second, and the first the generic sign-in (D1080) serves.
+  assert.deepEqual(Object.keys(MCP_PROVIDERS), ['mercury', 'notion'], 'Mercury, then Notion');
   for (const [key, p] of Object.entries(MCP_PROVIDERS)) {
     assert.equal(p.key, key);
     for (const f of ['resources', 'hosts', 'scopes', 'accepted_scopes', 'read_tools', 'write_tools', 'registration', 'headers'] as const) assert.ok(Object.isFrozen(p[f]), `${key}.${f}`);
@@ -150,10 +151,11 @@ test('2. the client\'s callers are named; the client, the records and src/mcp/ n
   const importers = (mod: RegExp) => files.filter((f) => mod.test(f.text)).map((f) => f.path).sort();
   // D852 (#2475): a member's custom servers are the client's second caller.
   // D1080 (#2945): the generic sign-in (its route and its helpers) is the third.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/mercury/mcp.ts']);
+  // D1085 (#2950): Notion's provider (its disconnect and revoke) and its typed reads are the fourth.
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpClient['"]|from\s+['"]\.\/mcpClient['"]|from\s+['"]\.\.\/mcpClient['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
   // #2549: public status reads provider metadata only. The transport importer
   // assertion above still permits only the two actual client callers.
-  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/mercury/mcp.ts']);
+  assert.deepEqual(importers(/from\s+['"][^'"]*integrations\/mcpProviders['"]|from\s+['"]\.\/mcpProviders['"]|from\s+['"]\.\.\/mcpProviders['"]/), ['cloudflare-worker/src/integrations/customMcp.ts', 'cloudflare-worker/src/integrations/mcpClient.ts', 'cloudflare-worker/src/integrations/mcpSignIn.ts', 'cloudflare-worker/src/integrations/providers/notion.ts', 'cloudflare-worker/src/routes/connector_mcp_oauth.ts', 'cloudflare-worker/src/routes/public.ts', 'cloudflare-worker/src/services/mercury/mcp.ts', 'cloudflare-worker/src/services/notion/reads.ts']);
   const client = files.find((f) => f.path.endsWith('integrations/mcpClient.ts'))!.text;
   const records = files.find((f) => f.path.endsWith('integrations/mcpProviders.ts'))!.text;
   assert.doesNotMatch(client, /from\s+['"][^'"]*\/mcp\/|from\s+['"]\.\.\/mcp['"]/, 'the client imports StudioOS\'s own MCP server');

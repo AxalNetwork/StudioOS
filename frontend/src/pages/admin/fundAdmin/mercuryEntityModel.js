@@ -106,7 +106,7 @@ export const ENTITY_FEEDS = 'What it feeds: balances and transactions for reconc
 export const ENTITY_SHEET_AUDIT_FOOT = 'Opening this sheet is recorded in the admin audit log.';
 export const ADMIN_ONLY = 'Only the Super Admin connects, replaces or disconnects an entity\'s Mercury.';
 export const TOKEN_HELP = 'How to create a Read Only token';
-export const OPEN_BANKING = { text: 'Open Banking', href: '/admin/fund-admin?tab=banking' };
+export const OPEN_BANKING = { text: 'Open Banking', href: '/admin/fund-admin/banking' };
 /** A branch admin's sentence: the entity connections are HQ's. */
 export const ENTITY_BRANCH_MANAGED = 'Axal\'s entity accounts are managed from HQ.';
 

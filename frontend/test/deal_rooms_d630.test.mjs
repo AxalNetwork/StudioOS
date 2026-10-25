@@ -33,7 +33,7 @@ import { InvitationsList } from '../src/components/deals/DealInvitationsTab.jsx'
 import { TransfersView } from '../src/components/deals/DealTransfersTab.jsx';
 import { ReferencesView, editableStatuses } from '../src/components/deals/DealReferencesTab.jsx';
 import { SyndicateDrawer } from '../src/components/deals/DealSyndicates.jsx';
-import { dealRoomTabs } from '../src/pages/DealRoomPage.jsx';
+import { dealTabsFor } from '../src/pages/dealPageModel.js';
 import { renderedText } from './_renderedText.mjs';
 import { codeOnly } from './_codeOnly.mjs';
 
@@ -261,11 +261,11 @@ test('sy-close: a syndicate closes only after its confirmation, which says membe
 
 // ── where each screen lives ────────────────────────────────────────────────
 
-test('the deal room adds Invitations (admin), Transfers (admin, partner) and References (admin, investor)', () => {
-  assert.deepEqual(dealRoomTabs('admin'), ['Overview', 'Documents', 'Commitments', 'Activity', 'Invitations', 'Transfers', 'References']);
-  assert.deepEqual(dealRoomTabs('partner'), ['Overview', 'Documents', 'Commitments', 'Activity', 'Transfers']);
-  assert.deepEqual(dealRoomTabs('investor'), ['Overview', 'Documents', 'Commitments', 'Activity', 'References']);
-  assert.deepEqual(dealRoomTabs('founder'), ['Overview', 'Documents', 'Commitments', 'Activity']);
+test('the deal room keeps Invitations (admin), Transfers (admin, partner) and reference calls (admin, investor, on Diligence since D1148)', () => {
+  assert.ok(dealTabsFor('admin').includes('invitations') && dealTabsFor('admin').includes('transfers') && dealTabsFor('admin').includes('diligence'));
+  assert.ok(dealTabsFor('partner').includes('transfers') && !dealTabsFor('partner').includes('invitations') && !dealTabsFor('partner').includes('diligence'));
+  assert.ok(dealTabsFor('investor').includes('diligence') && !dealTabsFor('investor').includes('transfers'));
+  assert.deepEqual(dealTabsFor('founder'), ['overview', 'documents', 'terms', 'commitment', 'activity']);
   const page = codeOnly(read('pages/DealRoomPage.jsx'));
   assert.match(page, /\{isInvestor && <DealRoomMembership dealId=\{deal\.id\} \/>\}/, 'the header carries Join and Leave for an investor');
   assert.match(page, /<DealSyndicates projectId=\{deal\.project_id\} user=\{user\} \/>/);
