@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
-import { api } from '../../../lib/api';
+import { api, programGrantsApi } from '../../../lib/api';
 import { reportError } from '../../../lib/log';
-import { AdminPageHeader } from '../../../ui';
+import { AdminPageHeader, HeaderMenuItem, HeaderTab } from '../../../ui';
 import AdminBoardFrame from '../AdminBoardFrame';
 import {
   LEDGER_PATH, NO_STORE, NOT_RECORDED_GRANT, PROGRAMS, hqCell, programGroups, studioRows, studiosTile,
@@ -53,6 +53,38 @@ function WaitTile({ id, label, reason }) {
   );
 }
 
+/** HQ's tabs (GR1). Requests and Default terms join with D981 part 6 (#2778). Shared with the History page. */
+export function GrantsTabs() {
+  return (
+    <>
+      <HeaderTab to="/admin/licences/programs" data-testid="grants-tab-grid">Grid</HeaderTab>
+      <HeaderTab to="/admin/licences/programs/history" data-testid="grants-tab-history">History</HeaderTab>
+    </>
+  );
+}
+
+/**
+ * D1126: Download CSV, the grid's rows from the grant store (one per studio
+ * and program). A failed download says so on the page, with the Worker's
+ * sentence; it is never silent.
+ */
+export function useCsvDownload(run) {
+  const [state, setState] = useState({ busy: false, error: null });
+  const start = useCallback(() => {
+    setState({ busy: true, error: null });
+    run().then(
+      () => setState({ busy: false, error: null }),
+      (e) => { reportError('program-grants:csv', e); setState({ busy: false, error: e?.message || 'The CSV could not be downloaded. Try again.' }); },
+    );
+  }, [run]);
+  return [start, state];
+}
+
+export function CsvError({ error }) {
+  if (!error) return null;
+  return <p role="alert" className="m-0 text-[13px] text-axal-destructive dark:text-red-300" data-testid="grants-csv-error">The CSV could not be downloaded: {error}</p>;
+}
+
 function ProgramGrantsPage() {
   const [read, setRead] = useState({ status: 'loading', data: null });
   const [asOf, setAsOf] = useState(null);
@@ -67,6 +99,7 @@ function ProgramGrantsPage() {
     return () => { live = false; };
   }, [tick]);
   const reload = useCallback(() => setTick((t) => t + 1), []);
+  const [downloadCsv, csv] = useCsvDownload(programGrantsApi.exportCsv);
 
   const items = read.data?.items;
   const rows = useMemo(() => studioRows(items), [items]);
@@ -90,8 +123,11 @@ function ProgramGrantsPage() {
         pills={[{ label: 'HQ only', tone: 'hq' }]}
         actions={actions}
         line="Which programs each studio may run, and on what terms. Studios ask; HQ decides."
+        tabs={<GrantsTabs />}
+        more={<HeaderMenuItem onSelect={downloadCsv} data-testid="grants-csv">{csv.busy ? 'Downloading…' : 'Download CSV'}</HeaderMenuItem>}
         data-testid="grants-header"
       />
+      <CsvError error={csv.error} />
 
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4" data-testid="grants-tiles">
         <div className={`${CARD} flex flex-col gap-1.5 px-4 py-3.5`} data-testid="grants-tile-studios">

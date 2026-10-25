@@ -11,7 +11,12 @@ The studio's side is the Programs tab of its licence page,
 - `ProgramGrants.jsx` — the page inside `AdminBoardFrame` (its rail): the
   header, the studios tile and three waiting tiles, the grid of studios against
   the nine programs, and the two waiting charts. It reads the licence ledger
-  and nothing else.
+  and nothing else. Its header carries HQ's tabs (Grid, History) and the More
+  menu's Download CSV (D1126).
+- `ProgramGrantsHistory.jsx` — D1126 (#3006): HQ's History tab at
+  `/admin/licences/programs/history`: every licence's program decisions,
+  newest first, with HQ's reason, filtered by program, a page at a time. It
+  reads `GET /api/admin/program-grants/history` and writes nothing.
 
 The programs, their groups and the words each side reads live in
 `../../../lib/programGrants.js`, which both pages and their test share.
@@ -26,4 +31,6 @@ The programs, their groups and the words each side reads live in
 - Nothing here writes. Granting, pausing, ending and the default terms come
   with D981's parts, each behind the Super Admin's step-up and a reason.
 - A tab or sub-address (Requests, Default terms, one studio) is not added
-  before its feature (D953's rule).
+  before its feature (D953's rule). History came with its read (D1126); the
+  other tabs join `GrantsTabs` with D981 part 6 (#2778).
+- A failed CSV download says so on the page with the Worker's sentence.

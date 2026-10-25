@@ -8,6 +8,9 @@
  *   PUT    /defaults/:program                 change a program's defaults          (write bar, reason)
  *   GET    /licences/:uid                     one licence's grants and its program history
  *   GET    /licences/:uid/history[?program=]  that history alone
+ *   GET    /history[?program=&licence=&before=&limit=]  every licence's history, newest first (D1126)
+ *   GET    /export.csv                        the grid as CSV, one row per studio and program (D1126)
+ *   GET    /licences/:uid/export.csv          one studio's rows (D1126)
  *   POST   /licences/:uid/:program            grant                                (write bar, reason)
  *   PATCH  /licences/:uid/:program            change terms                         (write bar, reason)
  *   POST   /licences/:uid/:program/pause      pause                                (write bar, reason)
@@ -45,6 +48,8 @@ import {
   DEFAULT_KEYS, TERM_KEYS, presentGrant, programOf, readDefaults, readGrid, readHistory, readinessRefusal,
   termsDiff, termsOf, validateTerms, type LicenceLite, type Terms,
 } from '../services/programGrants';
+import { exportCsv, readAllHistory } from '../services/programGrantsHistory';
+import { csvResponse, stamp } from '../services/csv';
 
 const r = new Hono<{ Bindings: Env }>();
 
@@ -166,6 +171,42 @@ r.get('/licences/:uid/history', async (c) => {
     const licence = await licenceByUid(c.env, c.req.param('uid'));
     if (!licence) return refuse(c, 404, 'not_found', 'There is no such licence.');
     return c.json({ licence_uid: licence.uid, history: await readHistory(c.env, licence.id, c.req.query('program') || null) });
+  } catch (e) { return mapError(c, e); }
+});
+
+// D1126 (#3006): HQ's History tab and the two CSV exports.
+r.get('/history', async (c) => {
+  try {
+    await requireSuperAdmin(c);
+    const before = Number(c.req.query('before'));
+    const program = c.req.query('program') || null;
+    if (program && !programOf(program)) return refuse(c, 400, 'bad_program', 'There is no such program.');
+    return c.json(await readAllHistory(c.env, {
+      program,
+      licence: c.req.query('licence') || null,
+      before: Number.isSafeInteger(before) && before > 0 ? before : null,
+      limit: Number(c.req.query('limit')) || null,
+    }));
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/export.csv', async (c) => {
+  try {
+    const admin = await requireSuperAdmin(c);
+    const out = await exportCsv(c.env, today());
+    await logAdminAction(c.env, admin.id, admin.email, 'program_grants.exported', { rows: out.rows });
+    return csvResponse(out.body, `program-grants-${stamp()}.csv`, { 'Cache-Control': 'private, no-store', 'X-Export-Rows': String(out.rows) });
+  } catch (e) { return mapError(c, e); }
+});
+
+r.get('/licences/:uid/export.csv', async (c) => {
+  try {
+    const admin = await requireSuperAdmin(c);
+    const licence = await licenceByUid(c.env, c.req.param('uid'));
+    if (!licence) return refuse(c, 404, 'not_found', 'There is no such licence.');
+    const out = await exportCsv(c.env, today(), licence.id);
+    await logAdminAction(c.env, admin.id, admin.email, 'program_grants.exported', { licence_uid: licence.uid, rows: out.rows });
+    return csvResponse(out.body, `program-grants-${licence.licence_ref || licence.uid}-${stamp()}.csv`, { 'Cache-Control': 'private, no-store', 'X-Export-Rows': String(out.rows) });
   } catch (e) { return mapError(c, e); }
 });
 

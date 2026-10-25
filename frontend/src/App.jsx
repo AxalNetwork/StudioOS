@@ -161,6 +161,7 @@ const HeldInsightsRedirect = lazy(() => import('./pages/admin/insights/HeldInsig
 const AdminLpApplications = lazy(() => import('./pages/admin/AdminLpApplications'));
 const AdminLicences = lazy(() => import('./pages/admin/AdminLicences'));
 const ProgramGrants = lazy(() => import('./pages/admin/grants/ProgramGrants'));
+const ProgramGrantsHistory = lazy(() => import('./pages/admin/grants/ProgramGrantsHistory'));
 const AdvisorsPartners = lazy(() => import('./pages/admin/advisors/AdvisorsPartners'));
 // D989 (#2380): Partner profiles, out of the Admin Console, under Approvals.
 const PartnerProfiles = lazy(() => import('./pages/admin/profiles/PartnerProfiles'));
@@ -2801,6 +2802,7 @@ function AppInner() {
       <Route path="/admin/licences" element={guard(['admin'], hqOnly(<AdminLicences />))} />
       {/* D981 (#2376) — Program grants: which programs each licensed studio may run. */}
       <Route path="/admin/licences/programs" element={guard(['admin'], hqOnly(<ProgramGrants />))} />
+      <Route path="/admin/licences/programs/history" element={guard(['admin'], hqOnly(<ProgramGrantsHistory />))} />
       <Route path="/admin/funds" element={guard(['admin'], hqOnly(<HqFundsPage />))} />
       {/* D714 decision 7: guard(['admin']), not hqOnly — that wrapper admits the Super Admin alone. On a branch the console says so and reads nothing. */}
       <Route path="/admin/fund-admin" element={guard(['admin'], <FundAdminConsole />)} />

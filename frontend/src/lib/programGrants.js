@@ -14,6 +14,8 @@
  */
 
 export const GRANTS_PATH = '/admin/licences/programs';
+/** D1126 (#3006): HQ's History tab. */
+export const HISTORY_PATH = '/admin/licences/programs/history';
 export const LEDGER_PATH = '/admin/licences';
 export const MY_PROGRAMS_PATH = '/admin/my-licence/programs';
 
@@ -92,3 +94,33 @@ export function studiosTile(items) {
     sub: `${by('active')} active · ${by('suspended')} suspended · ${by('pending_activation')} pending activation`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// D1126 (#3006) — the History tab's words. HQ's tabs (Grid, History) are
+// literal `HeaderTab`s on each page, so the reachability walk finds them;
+// Requests and Default terms join with D981 part 6 (#2778).
+// ---------------------------------------------------------------------------
+
+
+const word = (v) => (v === null || v === undefined || v === '' ? NOT_RECORDED_GRANT : String(v));
+const termWord = (k) => String(k).replace(/_/g, ' ').replace(/\bbps\b/, 'basis points').replace(/\bcents\b/, '(cents)');
+
+/**
+ * One history row's lines: what happened, on what, and the detail. The
+ * reason is HQ's own sentence and is drawn as it stands. A licence the ledger
+ * no longer holds says so and is never given another studio's name.
+ */
+export function historyLine(e) {
+  const studio = e?.licence
+    ? [e.licence.brand_name || NOT_RECORDED_GRANT, e.licence.licence_ref].filter(Boolean).join(' · ')
+    : 'A licence the ledger no longer holds';
+  const what = e?.program_name ? `${e.action_label}: ${e.program_name}` : (e?.action_label || NOT_RECORDED_GRANT);
+  const details = [];
+  for (const c of Array.isArray(e?.changed) ? e.changed : []) details.push(`${termWord(c.key)}: ${word(c.before)} → ${word(c.after)}`);
+  if (e?.deal_types) {
+    const list = (v) => (Array.isArray(v) ? (v.length ? v.join(', ') : 'none') : NOT_RECORDED_GRANT);
+    details.push(`Partner deal types: ${list(e.deal_types.before)} → ${list(e.deal_types.after)}`);
+  }
+  return { studio, what, details, reason: e?.reason || null, by: e?.by ? `by ${e.by}` : 'by HQ' };
+}
+

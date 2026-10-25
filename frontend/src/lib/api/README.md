@@ -354,3 +354,7 @@ D1000 (#2815): `personaSegments.js` is Persona segments' profile store on
 (members, needs met and gaps, offers by kind, links' reach), and the Super
 Admin's write, which names the version it read. Counts leave admins out and
 come back suppressed from 1 to 4.
+
+D1126 (#3006): `programGrants.js` also reads HQ's History tab (`allHistory`, every
+licence's program decisions a page at a time) and downloads the grid's CSV
+(`exportCsv`, and `exportLicenceCsv` for one studio), all Super Admin.

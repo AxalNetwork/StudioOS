@@ -338,6 +338,7 @@ const SUPER = [
   off('/admin/analytics', key(SA, 'Analytics')),
   own('/admin/licences', key(SA, 'Licences')),
   alias('/admin/licences/programs', key(SA, 'Licences'), 'Program grants, the Licences strip’s second item (D981).'),
+  alias('/admin/licences/programs/history', key(SA, 'Licences'), 'Program grants’ History tab (D1126).'),
   own('/admin/funds', key(SA, 'Funds')),
   alias('/admin/fund-admin', key(SA, 'Funds'), 'HQ’s Fund admin row sits after Funds and has no board yet.'),
   own('/admin/contracts', key(SA, 'Contracts')),
