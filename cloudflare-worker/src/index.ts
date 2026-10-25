@@ -44,11 +44,12 @@ import partners from './routes/partners';
 import adminPartners from './routes/admin_partners';
 import adminPartnersReads from './routes/admin_partners_reads';
 import adminPartnerDealReads from './routes/admin_partner_deal_reads';
-import adminNetwork from './routes/admin_network';
+import adminNetworkReads from './routes/admin_network_reads';
 import adminPublications from './routes/admin_publications';
 // Task #10 (LD) — Admin team roster + public team endpoint.
 import adminTeam from './routes/admin_team';
 import adminNetworkProfiles from './routes/admin_network_profiles';
+import adminNetwork from './routes/admin_network';
 import profileHistoryRoutes from './routes/profile_history';
 import founderProfileRoutes from './routes/founder_profile';
 import adminProfilingRoutes from './routes/admin_profiling';
@@ -869,6 +870,7 @@ app.route('/api/admin/partners', adminPartnersReads);
 app.route('/api/admin/partners', adminPartnerDealReads);
 app.route('/api/admin/partners', adminPartners);
 // D976 (#2762) — the advisor and partner network's pause, directory switch and standing read.
+app.route('/api/admin/network', adminNetworkReads);
 app.route('/api/admin/network', adminNetwork);
 app.route('/api/admin/publications', adminPublications);
 app.route('/api/partner-onboard', partnerOnboarding);

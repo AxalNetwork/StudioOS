@@ -12,6 +12,10 @@ the meantime. Deal-room reads retain their separate partner rule. Legacy legal
 entity listing and other routes with independent role gates are separate
 policies, not grants from the founder-resource guard.
 
+D973 reads live in `admin_network_reads.ts`, mounted before D976’s
+`admin_network.ts` at `/api/admin/network`. Opaque person refs use the
+read-only drawer; numeric account IDs continue to the standing router.
+
 ## Mount map
 
 `index.ts` mounts each router under `/api/<prefix>`. **This is a selected list,

@@ -303,6 +303,10 @@ Administrator's own copy, `minePdfBlob`), both read as Blobs outside the typed
 drift surface. The Administrator's list arrives on `licenceAccountApi.statements()`
 as `fee_invoices`.
 
+D973: `adminNetwork.js` re-exports `network.js`’s single `adminNetworkApi` binding.
+Overview, paged People and opaque drawer refs coexist with numeric standing
+reads and all D976 writes; the barrel exports no competing client objects.
+
 D976 (#2762): `network.js` is the advisor and partner network's admin side on
 `/api/admin/network/people/:userId`: one person's standing (stage, pause,
 directory, ratings, sessions, engagement counts per lane, payout readiness, a
