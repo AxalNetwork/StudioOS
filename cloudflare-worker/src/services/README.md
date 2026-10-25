@@ -193,7 +193,14 @@ list reads as the holder's id. It also holds `addHolder()` and `updateHolder()`
 vesting row, on the same `user_id` and `holder_id`) and returns `h-<id>`;
 Investors · SAFE or note adds a `safes[]` entry and returns its `e-<n>`. Both
 refuse a caller below `studio` with `ensureTier`'s 402, recompute through
-`saveScenario()`, and log nothing themselves.
+`saveScenario()`, and log nothing themselves. Since D1020 a vesting row also
+carries the holder's venture, and `updateHolder()` refuses a Carta
+(`connector_carta`) holder: Carta is the record while connected.
+`capTableRegister.ts` (D1020, #2857) reads the recorded register of one venture
+or of one account: holders, securities, option pools and vesting. Its totals are
+`knownSum`, which is null when any row lacks the figure. It also writes the
+register's CSV and the "As of" PDF snapshot, and the audit row every export
+writes.
 `captable.ts` keeps financing reserves in dilution but excludes unallocated
 option-pool shares from exit payouts (#2446). Pre-round capped SAFEs choose
 purchase amount or cap/basis-based conversion; cash-out SAFEs leave liquidity

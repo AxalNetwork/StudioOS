@@ -442,17 +442,19 @@ test('the member search: an exact id, or a case-insensitive email prefix, at mos
 test('one member: by model and by day, the same totals as their top-members row, balance, allowance, spend limit, pause and cap with history', async (t) => {
   // Mutations checked: the detail summing outside the range, or another member's rows; the history missing an action
   // or another member's line; the balance read as zero when unreadable; the cap or pause left out.
-  // The route reads the clock and these runs are dated from NOW, so the clock is NOW:
-  // on the real one, the 7-day range stopped holding the 2026-10-18 runs on 2026-10-25.
+  // The runs are dated from NOW and the route's 7d range reads the clock, so the clock is NOW, as in test 7:
+  // on the real one, the rows two days before NOW fell outside the range on 2026-10-25.
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const w = world();
   try {
-    w.log({ cost: 0.002, charged: 2500, at: at(H) });
-    w.log({ model: L8, cost: 0.001, charged: 1000, at: at(2 * D) });
-    w.log({ model: L8, cost: 0.004, charged: null, at: at(2 * D) });
-    w.log({ refusal: 'budget_user_month', at: at(2 * D) });
-    w.log({ cost: 9, charged: 9_000_000, at: at(10 * D) });                 // outside 7d
-    w.log({ user: INVESTOR, cost: 1, charged: 1_000_000, at: at(H) });      // another member
+    // The routes read the real clock, so the runs are logged against it (`ago`), not NOW.
+    const hourAgo = ago(H), twoDaysAgo = ago(2 * D);
+    w.log({ cost: 0.002, charged: 2500, at: hourAgo });
+    w.log({ model: L8, cost: 0.001, charged: 1000, at: twoDaysAgo });
+    w.log({ model: L8, cost: 0.004, charged: null, at: twoDaysAgo });
+    w.log({ refusal: 'budget_user_month', at: twoDaysAgo });
+    w.log({ cost: 9, charged: 9_000_000, at: ago(10 * D) });                // outside 7d
+    w.log({ user: INVESTOR, cost: 1, charged: 1_000_000, at: hourAgo });    // another member
     w.f.db.prepare('INSERT INTO ai_topup_accounts(user_id,balance_microusd) VALUES(?,4200000)').run(MEMBER);
     w.f.db.prepare('INSERT INTO member_ai_spend_limits(user_id,monthly_limit_microusd) VALUES(?,30000000)').run(MEMBER);
     await call(w, SUPER, `/api/admin/ai-usage/members/${MEMBER}/cap`, { method: 'PUT', body: { monthly_usd: 10, reason: REASON } });
@@ -471,7 +473,7 @@ test('one member: by model and by day, the same totals as their top-members row,
     assert.deepEqual(d.totals, { runs: 3, refused: 1, cost_microusd: 7_000, charged_microusd: 3_500, margin_microusd: 500, not_recorded: 1, topups_microusd: 0 });
     assert.deepEqual(d.by_model.map((m: any) => [m.model, m.runs, m.cost_microusd, m.charged_microusd, m.not_recorded]),
       [[L70, 1, 2_000, 2_500, 0], [L8, 2, 5_000, 1_000, 1]]);
-    assert.deepEqual(d.by_day.map((x: any) => [x.day, x.runs, x.charged_microusd]), [['2026-10-18', 2, 1_000], [at(H).slice(0, 10), 1, 2_500]].sort());
+    assert.deepEqual(d.by_day.map((x: any) => [x.day, x.runs, x.charged_microusd]), [[twoDaysAgo.slice(0, 10), 2, 1_000], [hourAgo.slice(0, 10), 1, 2_500]].sort());
     assert.deepEqual(d.balance, { state: 'ok', balance_microusd: 4_200_000 });
     assert.equal(d.allowance.state, 'ok');
     assert.equal(d.allowance.monthly_microusd, 10_000_000);
