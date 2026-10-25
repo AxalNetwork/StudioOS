@@ -1553,3 +1553,25 @@ is added. See `services/channels/telegramCapture.ts` and D867.
 - `POST /api/calendar/push/event_ticket/:registration_id` and `/push/event_hosted/:event_id` copy one to the member's connected calendars. Google and Outlook sync carries both kinds, with no attendees, and on each sync removes the copies whose place or event has left (`removed` in the summary).
 - `GET /api/calendar/event-links/:event_id` (`requireAuth`, then `canViewEvent`'s rule as `eventVisibleTo`): `{ event_id, ics, google, outlook, office365, join_link_included }`. 404 for an unknown event, 403 for one the caller cannot see.
 - Not yet: the token feed for "Subscribe to my events" waits on a migration number (D1033 §4).
+
+### D1102 — data-room owner and support access (#2982, part)
+
+`GET /api/data-room/:projectUid` (`data_room.ts`) returns full details only to the
+venture owner. Admins receive `{mode: "summary", read_only: true}` with aggregate
+`files`, `folders`, `coverage` and `grants` blocks, each carrying `available`.
+There are no file/folder names, investor identities or access rows. The existing
+files tool (`/raise/data-room?mode=workspace`, `DataRoomPage.jsx`) displays those
+counts without owner controls; an unavailable block says “Unreadable” and offers
+Try again. Coverage counts recorded checklist tags only.
+
+`POST /api/data-room/:projectUid/support-read` requires an admin and a 1–500
+character reason. It refuses an unresolved founder or failed founder-visible
+audit insert before reading details, calls `logAdminAction`, and returns
+`mode: "support", read_only: true` details for that request. No dedicated support
+client/view is claimed in this part. Founder-side mutations and the data-room
+cycle-record detail/activity/form-options/actions remain owner-only, even after
+a support read. Admin investor grants cannot bypass support auditing via
+`/shared` or its download-token route. Existing investor grants retain their
+normal NDA/tier checks. An omitted upload visibility now means NDA, matching both
+upload forms' defaults. The deck NDA default remains pending explicit-choice
+provenance and a migration number; see D1102.

@@ -123,7 +123,7 @@ function readAsDataUrl(file) {
 function UploadQueue({ projectUid, folders, onDone }) {
   const [queue, setQueue] = useState([]);
   const [folderUid, setFolderUid] = useState('');
-  const [nda, setNda] = useState(false);
+  const [nda, setNda] = useState(true);
   const [running, setRunning] = useState(false);
   const [over, setOver] = useState(false);
   const input = useRef(null);
@@ -460,6 +460,28 @@ function ActivityLog({ events }) {
  * Founder                                                             *
  * ------------------------------------------------------------------ */
 
+// D1102 — the legacy files workspace must not treat an admin's aggregate
+// response as arrays or draw owner actions over a read-only summary.
+function AdminRoomSummary({ room, reload }) {
+  const count = (block, key) => block?.available === true && typeof block[key] === 'number' ? block[key] : 'Unreadable';
+  const covered = count(room.coverage, 'covered_items'), total = count(room.coverage, 'total_items');
+  const coverage = typeof covered === 'number' && typeof total === 'number' ? `${covered} of ${total}` : 'Unreadable';
+  const unreadable = [count(room.files, 'total'), count(room.folders, 'total'), coverage, count(room.grants, 'total')].includes('Unreadable');
+  return (
+    <div className="space-y-4" data-testid="data-room-admin-summary">
+      <Card><h2 className="text-lg font-semibold text-axal-ink dark:text-white">Read-only summary</h2>
+        <p className="mt-2 text-sm text-axal-muted">File names and files belong to the founder.</p>
+        {unreadable && <button type="button" onClick={reload} className="mt-2 text-sm underline text-violet-700 dark:text-violet-300">Try again</button>}</Card>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile k="Files" v={count(room.files, 'total')} sub="Recorded files; no file names are shown." />
+        <StatTile k="Folders" v={count(room.folders, 'total')} sub="Recorded folders; no folder names are shown." />
+        <StatTile k="Checklist coverage" v={coverage} sub="Recorded tags, not a claim that investors can open the files." />
+        <StatTile k="Grants" v={count(room.grants, 'total')} sub="Recorded grants; no investor details are shown." />
+      </div>
+    </div>
+  );
+}
+
 function FounderRoom({ projects, initialProjectUid }) {
   // NOT STATE ANY MORE (#181): the in-body picker was its only setter. The
   // parent remounts this component with `key={initialProjectUid}`, so the room
@@ -492,9 +514,9 @@ function FounderRoom({ projects, initialProjectUid }) {
     finally { setBusy(false); }
   }
 
-  const files = room?.files || [];
-  const folders = room?.folders || [];
-  const grants = room?.grants || [];
+  const files = Array.isArray(room?.files) ? room.files : [];
+  const folders = Array.isArray(room?.folders) ? room.folders : [];
+  const grants = Array.isArray(room?.grants) ? room.grants : [];
   const tree = useMemo(() => folderTree(folders, files), [folders, files]);
   const findNode = (n, uid) => {
     for (const c of n.folders) { if (c.folder.uid === uid) return c; const hit = findNode(c, uid); if (hit) return hit; }
@@ -516,6 +538,8 @@ function FounderRoom({ projects, initialProjectUid }) {
       </Card>
     );
   }
+
+  if (room?.mode === 'summary') return <AdminRoomSummary room={room} reload={load} />;
 
   return (
     <RailFrame
@@ -755,7 +779,9 @@ export default function DataRoomPage({ user }) {
       <header>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Data room</h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          {isFounder
+          {role === 'admin'
+            ? 'Read-only data room counts and coverage.'
+            : isFounder
             ? 'Share diligence documents with named investors. Mark anything sensitive as NDA-only.'
             : 'Documents founders have shared with you.'}
         </p>

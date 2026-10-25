@@ -564,8 +564,8 @@ test('4: only the venture\'s own writer reads a record, and another venture\'s i
   for (const m of MODULES) {
     const id = SECTIONS[m.slug].id;
     for (const who of [40, 41, 50, 20]) assert.equal((await rec(db, m.slug, id, { who })).status, 403, `${m.slug} as ${PEOPLE[who].role} ${who}`);
-    // D914 (#2698): an admin reads the narrative only after giving a reason (below).
-    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await rec(db, m.slug, id, { who })).status, m.slug === 'investor-narrative' && who === ADMIN ? 403 : 200, `${m.slug} as ${who}`);
+    // D914: narrative support needs a reason. D1102: file records are owner-only.
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await rec(db, m.slug, id, { who })).status, (m.slug === 'investor-narrative' && who === ADMIN) || (m.slug === 'data-room' && who !== FOUNDER) ? 403 : 200, `${m.slug} as ${who}`);
   }
   db.exec(`INSERT INTO narrative_read_reasons (project_id, reader_user_id, reader_kind, reason, expires_at) VALUES (${P}, ${ADMIN}, 'admin', 'Portfolio review', datetime('now', '+8 hours'))`);
   assert.equal((await rec(db, 'investor-narrative', SECTIONS['investor-narrative'].id, { who: ADMIN })).status, 200, 'with a reason, the admin reads it');
@@ -575,7 +575,7 @@ test('4: only the venture\'s own writer reads a record, and another venture\'s i
   db.exec(`INSERT INTO spinout_deck_overrides (project_id, field_key, value, version) VALUES (${P_OTHER}, '_version', '', 7)`);
   for (const [slug, id] of [['capital-relationships', 9], ['pitch-deck', 45], ['data-room', 15], ['investor-narrative', 7]] as const) {
     assert.equal((await rec(db, slug, id)).status, 404, `${slug} ${id}`);
-    assert.equal((await rec(db, slug, id, { who: ADMIN })).status, 404, `${slug} ${id}, even as an admin`);
+    assert.equal((await rec(db, slug, id, { who: ADMIN })).status, slug === 'data-room' ? 403 : 404, `${slug} ${id}, even as an admin`);
   }
   // An h- id names a register row: one of venture B's, carried in A's scenario, is still 404.
   db.exec(`INSERT INTO cap_table_holders (id, user_id, project_id, name, shares) VALUES (77, 20, ${P_OTHER}, 'Their founder', 100), (78, ${FOUNDER}, ${P}, 'Mira Okafor', 100)`);
@@ -744,8 +744,8 @@ test('4: form-options and every action take the module\'s write gate, and an id 
       assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, 403, `${m.slug} form-options as ${who}`);
       for (const key of ACTIONS[m.slug]) assert.equal((await act(db, m.slug, id, key, {}, { who })).status, 403, `${m.slug} ${key} as ${who}`);
     }
-    // D895: an admin writes no deck. D914: an admin lists the narrative's versions only with a reason.
-    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, (m.slug === 'pitch-deck' || m.slug === 'investor-narrative') && who === ADMIN ? 403 : 200, `${m.slug} form-options as ${who}`);
+    // D895/D914/D1102: admins have no ordinary deck, narrative or data-room write access.
+    for (const who of [FOUNDER, ADMIN, 60]) assert.equal((await act(db, m.slug, null, '', undefined, { who })).status, (['pitch-deck', 'investor-narrative'].includes(m.slug) && who === ADMIN) || (m.slug === 'data-room' && who !== FOUNDER) ? 403 : 200, `${m.slug} form-options as ${who}`);
   }
   assert.equal(count(db, 'SELECT COUNT(*) AS n FROM activity_logs'), before, 'a refused action writes nothing');
   // Venture B's prospect (9) named in a holder's body, and its version (7) as Based on.

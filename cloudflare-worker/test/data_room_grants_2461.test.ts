@@ -128,17 +128,17 @@ async function call(db: any, userId: number, method: string, path: string, body?
 }
 
 
-test('2461: admin re-grant keeps the founder NDA valid for listing and download', async () => {
+test('D1102: admin re-grant is refused and the existing founder NDA stays valid', async () => {
  const db = freshDb();
  const grant = await call(db,5,'POST','/p-room/grants',{email:'sig@example.com'});
- assert.equal(grant.status,201);
+ assert.equal(grant.status,404);
  assert.equal((await call(db,SIGNED,'POST','/shared/p-room/files/f-nda/download')).status,200);
  const shared = await call(db,SIGNED,'GET','/shared/p-room');
  assert.equal(shared.status,200);
  assert.ok(shared.body.files.some((f:any)=>f.uid==='f-nda'));
  const room = await call(db,FOUNDER,'GET','/p-room');
  const row = room.body.grants.find((g:any)=>g.investor_email==='sig@example.com');
- assert.equal(row.nda_signed,true); assert.equal(row.granted_by_name,'Synthetic admin'); assert.equal(row.granted_by_role,'admin');
+ assert.equal(row.nda_signed,true); assert.equal(row.granted_by_name,'Fran'); assert.equal(row.granted_by_role,'founder');
 });
 test('2461: admin NDA cannot substitute for founder NDA; expiry remains enforced', async () => {
  const db = freshDb();
