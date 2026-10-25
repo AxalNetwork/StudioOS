@@ -1567,3 +1567,14 @@ is added. See `services/channels/telegramCapture.ts` and D867.
 - `POST /api/calendar/push/event_ticket/:registration_id` and `/push/event_hosted/:event_id` copy one to the member's connected calendars. Google and Outlook sync carries both kinds, with no attendees, and on each sync removes the copies whose place or event has left (`removed` in the summary).
 - `GET /api/calendar/event-links/:event_id` (`requireAuth`, then `canViewEvent`'s rule as `eventVisibleTo`): `{ event_id, ics, google, outlook, office365, join_link_included }`. 404 for an unknown event, 403 for one the caller cannot see.
 - Not yet: the token feed for "Subscribe to my events" waits on a migration number (D1033 §4).
+
+### D1113 — legacy Positioning retirement (#2993)
+
+`/raise/pitch/positioning` remains D911's counted forward to
+`/raise/investor-narrative/positioning`, keeping the query/hash and adding its
+moved notice. Its shared redirect inventory entry and beacon are unchanged
+(#2319). `PitchPositioningPage.jsx`, the legacy pitch workspace's Positioning
+tab, `api.deckPositioning` and `POST /api/decks/positioning` are retired. NAR1's
+footer begins “Positioning now lives here.” before its existing deck-read
+state. The narrative's Positioning tab remains the single active tool; the
+legacy builder and Review tab retain their existing behavior.
