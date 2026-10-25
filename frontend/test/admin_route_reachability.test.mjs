@@ -310,9 +310,10 @@ const COMPOSED = new Map([
     'frontend/src/pages/admin/partners/PartnersReferrals.jsx',
     'frontend/src/pages/admin/partners/PartnerDialogs.jsx',
   ]],
-  // D947 (#2752): the Spin-Out Lab's Overview calendar and its Cohorts tab draw
-  // the doors to one cohort's page (`/admin/programs/spinout-lab/cohorts/:ym`).
+  // D947/D949: Overview, Cohorts and Participants hold the doors to one cohort
+  // (`/cohorts/:ym`) and one founder (`/participants/:uid`).
   ['frontend/src/pages/admin/lab/AdminLab.jsx', [
+    'frontend/src/pages/admin/lab/LabParticipants.jsx',
     'frontend/src/pages/admin/lab/LabCohorts.jsx',
     'frontend/src/pages/admin/lab/LabOverviewBlocks.jsx',
   ]],

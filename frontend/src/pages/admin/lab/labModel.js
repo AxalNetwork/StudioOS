@@ -64,7 +64,9 @@ export function tabOf(pathname) {
   // D947: one cohort's page (SL6) is under Cohorts.
   if (/^\/admin\/programs\/spinout-lab\/cohorts\/\d{4}-(0[1-9]|1[0-2])$/.test(p)) return 'cohorts';
   const t = TABS.find((x) => x.path && p === `${LAB_PATH}${x.path}`);
-  return t ? t.key : null;
+  if (t) return t.key;
+  // D949: one founder, /participants/:uid, opens over the Participants tab.
+  return /^\/admin\/programs\/spinout-lab\/participants\/[^/]+$/.test(p) ? 'participants' : null;
 }
 
 /** Where an old address lands: `pathname`, with `?moved=`, keeping the rest of the query and the hash. */

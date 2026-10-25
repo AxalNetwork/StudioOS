@@ -49,6 +49,8 @@ export type QueuePressureLane = {
   count: number | null;
   oldest_age_hours: number | null;
   sla: 'ok' | 'due_soon' | 'past' | 'unknown';
+  /** D1039: the lane's figures beside its count (`ApprovalSource.subSql`); null when unread, absent when none. */
+  sub?: Record<string, number> | null;
 };
 
 export type ProgrammeClock = {
@@ -369,6 +371,7 @@ export async function queuePressure(env: Env, now = Date.now()) {
       // An unreadable lane has no band. Calling it `ok` would be the one
       // reading that turns a gap into reassurance.
       sla: l.count === null ? 'unknown' : slaFor(age),
+      ...(l.sub === undefined ? {} : { sub: l.sub }),
     };
   });
   queue_pressure.sort(byPressure);

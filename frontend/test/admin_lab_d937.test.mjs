@@ -29,7 +29,6 @@ import AdminLab from '../src/pages/admin/lab/AdminLab.jsx';
 import LabRedirect from '../src/pages/admin/lab/LabRedirect.jsx';
 import LabPreviewRedirect from '../src/pages/admin/lab/LabPreviewRedirect.jsx';
 import AdminPageHeader, { HeaderTab } from '../src/ui/AdminPageHeader.jsx';
-import { PARTICIPANTS_EMPTY_UNTRUSTED } from '../src/pages/admin/AdminSpinoutLab.jsx';
 import { NO_RAIL_ROUTES } from '../src/lib/railPages.js';
 import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { legacyContractsTarget } from '../src/pages/admin/LegacyContractsRedirect.jsx';
@@ -229,6 +228,7 @@ function worker(fail = []) {
     if (p === '/api/admin/cohort/review') return down('review') ? json({ detail: 'down' }, 503) : json(REVIEW);
     if (p === '/api/admin/lab-hosts') return down('hosts') ? json({ detail: 'down' }, 503) : json(HOSTS);
     if (p === '/api/spinout-lab/certificates') return down('certificates') ? json({ detail: 'down' }, 503) : json(CERTS);
+    if (p === '/api/admin/cohort/participants') return down('people') ? json({ error: 'lab_participants_unreadable' }, 503) : json({ available: true, items: [], total: 0, standing: { everyone: 22, needs_decision: 7, on_track: 15, at_risk: 3, grace: 2, failed: 2, graduated: 0, not_in_cohort: 0 } });
     if (p === '/api/admin/spinout-participants') return json({ participants: [], catalog: [] });
     if (p === '/api/admin/spinout-applications') return json({ applications: [] });
     return json({});
@@ -251,15 +251,15 @@ async function mount(url, fail) {
 }
 
 test('mounted Overview: each block from its own read, the header\'s counts, and no Guard H read', async (t) => {
-  // The reads are dated from NOW and the page reads the clock: on the real
-  // one, "day 24 of 28" stopped holding on 2026-10-25.
+  // The fixture's cohort windows are dated from NOW and the page reads the clock for "Week 4, day 24", so the
+  // clock is NOW: on the real one the day moved on with the calendar (day 25 on 2026-10-25).
   t.mock.timers.enable({ apis: ['Date'], now: NOW });
   const m = await mount(LAB_PATH);
   try {
     assert.match(m.of('lab-header'), /Programs.*Spin-Out Lab.*Live.*HQ-held/s);
     assert.match(m.of('lab-tab-applications'), /Applications7/);
     assert.match(m.of('lab-tab-hosts'), /Hosts2/);
-    assert.match(m.of('lab-tab-participants'), /Participants—/, 'Guard H: the participants read is never counted');
+    assert.match(m.of('lab-tab-participants'), /Participants22/, 'D949: counted from the participants read, which says when it fails');
     assert.match(m.of('lab-tile-waiting'), /7.*oldest 3 days.*Overdue.*Review/s);
     assert.match(m.of('lab-tile-next'), /Nov 2026.*9 approved of 25 places · minimum 1 met/s);
     assert.match(m.of('lab-tile-lab'), /22.*Week 4, day 24 of 28/s);
@@ -269,7 +269,7 @@ test('mounted Overview: each block from its own read, the header\'s counts, and 
     for (const id of ['by-cohort', 'weeks', 'funnel', 'per-week']) assert.doesNotMatch(m.of(`lab-${id}`), new RegExp(NOT_YET), `${id} is drawn now (D947)`);
     assert.ok(!m.has('admin-page-moved'), 'no notice without ?moved=');
     const paths = [...new Set(m.seen.map((s) => s.split('?')[0]))].sort();
-    assert.deepEqual(paths, ['/api/admin/cohort/applications', '/api/admin/cohort/overview', '/api/admin/cohort/review', '/api/admin/cohort/timeline', '/api/admin/lab-hosts', '/api/admin/studio/glance', '/api/spinout-lab/certificates']);
+    assert.deepEqual(paths, ['/api/admin/cohort/applications', '/api/admin/cohort/overview', '/api/admin/cohort/participants', '/api/admin/cohort/review', '/api/admin/cohort/timeline', '/api/admin/lab-hosts', '/api/admin/studio/glance', '/api/spinout-lab/certificates']);
   } finally { await m.unmount(); }
 });
 
@@ -281,10 +281,11 @@ test('mounted: one read failing costs only its blocks, and every read failing sa
     assert.match(one.of('lab-calendar'), /Oct 2026/, 'the calendar is its own read');
     assert.ok(!one.has('lab-unreadable'));
   } finally { await one.unmount(); }
-  const all = await mount(LAB_PATH, ['glance', 'applications', 'overview', 'timeline', 'review', 'hosts', 'certificates']);
+  const all = await mount(LAB_PATH, ['glance', 'applications', 'overview', 'people', 'timeline', 'review', 'hosts', 'certificates']);
   try {
     assert.match(all.of('lab-unreadable'), /Nothing here is a zero/);
     assert.match(all.of('lab-tab-applications'), /Applications—/);
+    assert.match(all.of('lab-tab-participants'), /Participants—/, 'a failed participants read is a dash, never 0');
     assert.ok(all.has('lab-tab-graduation'), 'the tabs still open their consoles');
   } finally { await all.unmount(); }
 });
@@ -298,12 +299,14 @@ test('mounted: the moved notice shows the sentence for the old address it came f
   try { assert.ok(!odd.has('admin-page-moved'), 'an unknown key shows nothing'); } finally { await odd.unmount(); }
 });
 
-test('mounted Participants: an empty list does not claim an empty Lab (Guard H), and Overview\'s reads are not made', async () => {
+test('mounted Participants (D949): the tab draws D946\'s read, not the console, and makes no Guard H read', async () => {
   const m = await mount(`${LAB_PATH}/participants`);
   try {
-    assert.ok(m.text().includes(PARTICIPANTS_EMPTY_UNTRUSTED));
-    assert.doesNotMatch(m.text(), /No admitted founders yet/);
-    assert.ok(!m.seen.some((s) => s.startsWith('/api/admin/cohort/timeline')), 'a console tab made an Overview read');
+    assert.ok(m.has('lab-participants'), 'the Participants tab is drawn');
+    assert.ok(!m.has('admin-spinout-lab-participants'), 'the old console section is not mounted');
+    assert.doesNotMatch(m.text(), /cannot yet tell an empty Lab from a failed read/, 'Guard H\'s line is gone');
+    assert.ok(!m.seen.some((s) => /spinout-participants|spinout-applications/.test(s)), 'Guard H: the reads that hide failure are not made');
+    assert.ok(!m.seen.some((s) => /cohort\/(applications|review)$/.test(s.split('?')[0])), 'no Overview block is read');
   } finally { await m.unmount(); }
 });
 
