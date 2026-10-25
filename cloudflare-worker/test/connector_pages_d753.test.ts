@@ -287,6 +287,7 @@ const ADDED: Record<string, string | null> = {
   hubspot: '2026-05', calendly: '2026-05', slack: '2026-05', stripe: '2026-05', linkedin: '2026-05',
   carta: '2026-09', docusign: '2026-09', crunchbase: '2026-09',
   github: '2026-10', zoom: '2026-10', google_calendar: '2026-10', microsoft_365: '2026-10', mercury: '2026-10',
+  lovable: null,
   figma: null, salesforce: null, affinity: null,
   // D754 and D756 switch them on; until then nothing connects on production.
   whatsapp: null, telegram: null,
@@ -381,7 +382,8 @@ test('10. sign-in kinds', () => {
   for (const e of ENTRIES) {
     const row = getDescriptor(e.key);
     const kind = e.page.sign_in.kind;
-    if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
+    if (row?.auth_type === 'none') assert.equal(kind, 'none', e.id);
+    else if (CHANNELS.has(e.key)) assert.equal(kind, 'channel', e.id);
     else if (['google_calendar', 'microsoft_365', 'linkedin'].includes(e.key)) assert.equal(kind, 'first_party', e.id);
     // D881 (#2554): a member connects Mercury only by signing in through its MCP server.
     else if (e.key === 'mercury') assert.equal(kind, 'mcp', e.id);

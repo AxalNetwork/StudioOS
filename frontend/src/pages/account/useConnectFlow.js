@@ -78,7 +78,7 @@ export function useConnectFlow(p, { setView, onChanged, onClose, returnTo = null
   const go = (v) => { setMessage(''); setView(v); };
 
   const startOauth = async () => {
-    if (blocked) return;
+    if (blocked || p.auth_type === 'none') return;
     setBusy(true); setMessage('');
     setView('signin');
     try {

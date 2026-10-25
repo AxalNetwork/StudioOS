@@ -373,3 +373,5 @@ private Security reports, and HQ's read of them).
 D1126 (#3006): `programGrants.js` also reads HQ's History tab (`allHistory`, every
 licence's program decisions a page at a time) and downloads the grid's CSV
 (`exportCsv`, and `exportLicenceCsv` for one studio), all Super Admin.
+
+D1135's `companyActions.js` holds self-service company leave and venture restore.
