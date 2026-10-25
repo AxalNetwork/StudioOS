@@ -7,6 +7,7 @@
  *   node --import ./frontend/test/_deck-loader.mjs --test frontend/test/partner_profiles_d989.test.mjs
  */
 import test from 'node:test';
+import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -197,12 +198,11 @@ test('the routes, the redirect, the console mount gone, the lane doors, and the 
   const app = read('frontend/src/App.jsx');
   assert.ok(app.includes(`<Route path="/admin/partner-profiles" element={guard(['admin'], <PartnerProfiles />)} />`));
   assert.ok(app.includes(`<Route path="/admin/partner-profiles/all" element={guard(['admin'], <PartnerProfiles />)} />`));
-  const admin = read('frontend/src/pages/AdminPage.jsx');
+  const admin = read('frontend/src/pages/admin/ConsolePages.jsx');
   assert.ok(!admin.includes('<PartnerProfilesConsole'), 'the console still mounts the tab');
-  assert.match(admin, /\{ value: 'profiles',/, 'the tab left the section list, so ?tab=profiles no longer forwards from the dropdown');
   assert.ok(read('frontend/src/pages/admin/HeldApprovals.jsx').includes('<Link to="/admin/partner-profiles"'));
   assert.match(read('frontend/src/pages/admin/adminStudioOverview.js'), /partner_profiles: '\/admin\/partner-profiles'/);
-  assert.match(read('frontend/src/sidebarConfig.js'), /'\/admin\/spinout-moderation', '\/admin\/partner-profiles'\]/);
+  assert.ok(SIDEBAR_GROUPS.admin.flatMap((g) => g.items).find((r) => r.label === 'Approvals').match.includes('/admin/partner-profiles'));
   const page = read('frontend/src/pages/admin/profiles/PartnerProfiles.jsx');
   assert.match(page, /export default function PartnerProfiles\(\) \{\s*return \(\s*<AdminBoardFrame workspace="Entity profiles"/);
   assert.ok(!/\balert\(/.test(page), 'a browser pop-up on the page');

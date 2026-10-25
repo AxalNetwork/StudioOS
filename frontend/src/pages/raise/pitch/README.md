@@ -16,15 +16,18 @@ and `design/incoming/Pitch Deck Studio · Boards.dc.html` (PD1–PD28).
 | `PitchNotes.jsx` | D905 (#2684), PD21: the Notes tab at `/raise/pitch/notes`: the thread from the venture's admins to its founders (`GET /api/decks/:id/notes`), a card pill on each note, the composer (posting opens a dialog), and the Super Admin's default template by sector and stage. Who may post is the Worker's `viewer`. |
 | `PitchBoundary.jsx` | D905, PD22: what an Advisor, an Operating Partner or an Explorer reads at `/raise/pitch`, inside their own shell. Nothing from a deck is read. |
 | `sourcesModel.js` | D896 (#2675): pure words and derivations of the deck's sources — value wording by unit, chips, grouping and filters, the coverage meter, Missing, the scorecard dialog. |
+| `NewDeck.jsx` | D897 (#2677), PD3–PD6: New deck at `/raise/pitch/new` — audience and round, the sources step (D896's `SourcesStep`), the outline Eadwyn proposes, then the proposal kept card by card. Every write opens a dialog with its cost; `?proposal=<id>` reopens a proposal. |
+| `newDeckModel.js` | D897: pure words and derivations for New deck and PD2's fast path — AI tokens, the prompt's figure check (the Worker's word list), the round line, outline edits, chips, estimates, the dialogs' sentences, and the proposal's cards. |
 | `SourcesBoards.jsx` | D896: `CoverageMeter` (PD11), `SourceChip`, `SourcesLegend` (PD10b), `ScorecardDialog`, `SourcesPanel` (PD10), `SourcesStep` (PD4) and `useDeckSources`, over `GET /api/decks/sources`. Built here, mounted by part 3 (New deck) and part 4 (the editor). |
 | `PitchEditor.jsx` | D898 (#2676), PD1, PD1b, PD8, PD8c and PD24–PD27: the editor at `/raise/pitch/edit`. The rail with stale dots and reorder, the centre card on the brand kit with its blocks on the 12 × 6 grid, speaker notes, the Sources, Design and Notes tabs, Add a block, and Save, which says what it changes before it writes a version. Reads the slide model from the Worker (`GET /api/decks/model`). |
 | `editorModel.js` | Pure: what a save changes, layouts that carry a card's content, placement on the grid, standard sizes, stale cards, "Saved · …", the card's colours. |
 | `PitchWorkspaceMoved.jsx` | The old `/raise/pitch?mode=workspace` address: it opens the editor at `/raise/pitch/edit` with `?moved=pitch-workspace`, the venture and the hash kept. |
 
 The template builder, `../../PitchWorkspacePage.jsx` (with
-`../../PitchDeckPage.jsx`), moved to `/raise/pitch/builder` when the editor
-took `/raise/pitch/edit` (D898). New deck opens it until #2676's last part
-retires it.
+`../../PitchDeckPage.jsx`), stays at `/raise/pitch/builder`; the editor
+uses `/raise/pitch/edit` (D898). New deck (D897) at `/raise/pitch/new`
+and the Decks tab's standard-deck fast path build proposals. Nothing
+they build becomes a version until the founder saves the cards they kept.
 
 ## The rules for adding here
 

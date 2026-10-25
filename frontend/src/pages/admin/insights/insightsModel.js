@@ -492,7 +492,7 @@ function countriesBlock(insights) {
 }
 
 function identityBlock(insights) {
-  const base = { key: 'identity', title: 'Identity checks', span: 4, link: { label: 'Open KYC & KYB', to: '/admin?tab=kyc' } };
+  const base = { key: 'identity', title: 'Identity checks', span: 4, link: { label: 'Open KYC & KYB', to: '/admin/kyc' } };
   const i = blk(insights, 'identity');
   const s = blockState(insights, i);
   if (s) return { ...base, ...s };

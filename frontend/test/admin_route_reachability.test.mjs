@@ -53,6 +53,7 @@ import { SIDEBAR_GROUPS } from '../src/sidebarConfig.js';
 import { codeOnly } from './_codeOnly.mjs';
 import { readRoutesSource, lazyImports, conflictingLazyImports } from './_routesSource.mjs';
 import { adminConsoleSource, ADMIN_CONSOLE_FILES, HQ_KEYS_CONSOLE_FILES } from './_adminConsoles.mjs';
+import { ADMIN_TAB_MOVES } from '../src/pages/admin/LegacyContractsRedirect.jsx';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const read = (rel) => readFileSync(resolve(root, rel), 'utf8');
@@ -87,9 +88,9 @@ function routes(src) {
       body,
       // A `*Redirect` element that is the route's whole body is a redirect too,
       // as `redirect_hits_2301.test.mjs` counts it (D893's HeldInsightsRedirect).
-      // LegacyContractsRedirect is not: it wraps the console it renders.
-      redirect: els[0] === 'Navigate' || (/Redirect$/.test(els[0] || '') && els[0] !== 'LegacyContractsRedirect' && els.length === 1),
-      component: els.find((e) => e !== 'Navigate' && e !== 'LegacyContractsRedirect') ?? null,
+      // Since D938 that includes LegacyContractsRedirect: `/admin` mounts nothing.
+      redirect: els[0] === 'Navigate' || (/Redirect$/.test(els[0] || '') && els.length === 1),
+      component: els.find((e) => e !== 'Navigate') ?? null,
     });
   }
   return out;
@@ -266,18 +267,17 @@ const SECOND_MOUNTS = new Map([
  * file, not in AdminPage.jsx. HQ's Accounts page mounts the Users console
  * alone. Checked against the hosts' own imports below, so it cannot drift.
  */
-const PROFILES_CONSOLE = 'frontend/src/pages/admin/consoles/PartnerProfilesConsole.jsx';
-const PERSONAS_CONSOLE = 'frontend/src/pages/admin/consoles/PersonasConsole.jsx';
-const PAYMENTS_CONSOLE = 'frontend/src/pages/admin/consoles/PaymentsConsole.jsx';
+const CONSOLE_PAGES = 'frontend/src/pages/admin/ConsolePages.jsx';
+// D938 (#2743): the console's shell is retired; ConsolePages composes each
+// console under the shared header at its own address. Legal is no page: its
+// tab has forwarded to Contracts since D647, so nothing mounts it.
+const UNMOUNTED = ['frontend/src/pages/admin/consoles/LegalConsole.jsx'];
+const NATIVE_CONSOLES = ['PartnerProfilesConsole', 'PersonasConsole', 'PaymentsConsole'].map((n) => `frontend/src/pages/admin/consoles/${n}.jsx`);
 const COMPOSED = new Map([
-  ['frontend/src/pages/AdminPage.jsx', ADMIN_CONSOLE_FILES.filter((f) => f !== 'frontend/src/pages/AdminPage.jsx' && !HQ_KEYS_CONSOLE_FILES.includes(f) && f !== PROFILES_CONSOLE && f !== PERSONAS_CONSOLE && f !== PAYMENTS_CONSOLE)],
-  // D989 (#2380): Partner profiles left the console for its own page, which
-  // opens the console's review dialog until its part 6 redraws it.
-  ['frontend/src/pages/admin/profiles/PartnerProfiles.jsx', [PROFILES_CONSOLE]],
-  // D997 (#2378): Persona segments keeps today's re-tag table until its part 8.
-  ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [PERSONAS_CONSOLE]],
-  // D1008 (#2386): Payments opens today's editor on request until its parts 4 to 6.
-  ['frontend/src/pages/admin/payments/Payments.jsx', [PAYMENTS_CONSOLE]],
+  ['frontend/src/pages/admin/profiles/PartnerProfiles.jsx', [NATIVE_CONSOLES[0]]],
+  ['frontend/src/pages/admin/segments/PersonaSegments.jsx', [NATIVE_CONSOLES[1]]],
+  ['frontend/src/pages/admin/payments/Payments.jsx', [NATIVE_CONSOLES[2]]],
+  [CONSOLE_PAGES, ADMIN_CONSOLE_FILES.filter((f) => f !== CONSOLE_PAGES && !HQ_KEYS_CONSOLE_FILES.includes(f) && !UNMOUNTED.includes(f) && !NATIVE_CONSOLES.includes(f))],
   ['frontend/src/pages/hq/AccountsPage.jsx', ['frontend/src/pages/admin/consoles/UsersConsole.jsx']],
   // The owner's ruling (2026-10-20): HQ's Integration keys page, Super Admin only.
   ['frontend/src/pages/hq/IntegrationKeysPage.jsx', HQ_KEYS_CONSOLE_FILES],
@@ -516,7 +516,7 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   // Derived, not hardcoded: a route whose element is <Navigate> is not a surface.
   // But a redirect INTO an orphan is still a dead end, so the target is checked.
   // D953's Programs redirects and D937/D972's Lab/network redirects coexist.
-  assert.deepEqual(REDIRECTS, ['/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/programs', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
+  assert.deepEqual(REDIRECTS, ['/admin', '/admin/refer-earn', '/admin/partners', '/admin/partner-invitations/firm-links', '/admin/held/programs', '/admin/held/community', '/admin/held/insights', '/admin/network-profiles', '/admin/spinout-lab', '/admin/spinout-lab/preview', '/admin/news', '/admin/advisor-cohorts'],
 
     'the set of /admin redirect routes changed; confirm each is still a redirect and not a page');
   // A `*Redirect` component names its target in its own file, not in App.jsx
@@ -540,6 +540,14 @@ test('a redirect-only /admin route is excluded, and its target is reachable', ()
   };
   for (const path of REDIRECTS) {
     const route = BY_PATH.get(path);
+    // D938: `/admin` forwards each old tab to its own page; every one must be reachable.
+    if (route.component === 'LegacyContractsRedirect') {
+      for (const [tab, move] of Object.entries(ADMIN_TAB_MOVES)) {
+        assert.ok(REACHED.has(move.to) || REACHED.has(move.to.split('/').slice(0, -1).join('/')),
+          `/admin?tab=${tab} forwards to ${move.to}, which is itself unreachable`);
+      }
+      continue;
+    }
     let { redirects } = doorsIn(route.body);
     if (!redirects.length && COMPONENT_TARGETS[route.component]) {
       const [target, file, name] = COMPONENT_TARGETS[route.component];
@@ -631,18 +639,13 @@ test('a route exempted as a tab still mounts the same component behind that tab'
   }
 });
 
-test('the ?tab= deep link is honoured and validated', () => {
-  // Without this the exemptions above rest on a URL nothing reads.
-  const adminPage = adminConsoleSource();
-  // NOT AN ALTERNATION. The first draft read
-  //   /get\('tab'\)|searchParams|URLSearchParams/
-  // and a mutation that broke the actual `tab` read escaped, because the two
-  // generic alternatives still matched. An OR across a specific claim and its
-  // vaguer neighbours is satisfied by the neighbours, so it pins neither.
-  assert.match(adminPage, /get\('tab'\)/,
-    'AdminPage no longer reads the `tab` search param, so the deep links the exemptions cite are dead');
-  assert.match(adminPage, /ADMIN_SECTION/,
-    'AdminPage no longer validates the tab against its section list');
+test('every old ?tab= forwards before anything mounts (D938)', () => {
+  // The console that read `?tab=` is retired; the redirect is what reads it now.
+  const redirect = read('frontend/src/pages/admin/LegacyContractsRedirect.jsx');
+  assert.match(redirect, /get\('tab'\)/, 'the redirect no longer reads the `tab` search param');
+  assert.match(redirect, /Object\.hasOwn\(ADMIN_TAB_MOVES, /, 'the redirect no longer validates the tab against its map');
+  assert.equal(BY_PATH.get('/admin').component, 'LegacyContractsRedirect');
+  assert.ok(BY_PATH.get('/admin').redirect, '/admin renders a surface again');
 });
 
 test('the door scanner reads navigation syntax, not paths in prose or api calls', () => {

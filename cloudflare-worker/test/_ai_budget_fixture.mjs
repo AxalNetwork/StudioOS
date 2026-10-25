@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { makeD1 } from './_d1_sqlite.mjs';
 export const AI_BUDGET_REVIEW_MIGRATION=readFileSync(new URL('../sql/migrations/430_ai_budget_review_cost.sql',import.meta.url),'utf8');
 export const AI_CREDITS_MIGRATION=readFileSync(new URL('../sql/migrations/486_ai_credits_token_packs.sql',import.meta.url),'utf8');
-export const AI_PLAN_MIGRATION=readFileSync(new URL('../sql/migrations/505_member_subscription_amounts.sql',import.meta.url),'utf8');
+// D1010: migration 572 adds the price each subscription is charged at, so the plan migration carries both.
+export const AI_PLAN_MIGRATION=readFileSync(new URL('../sql/migrations/505_member_subscription_amounts.sql',import.meta.url),'utf8')
+  +readFileSync(new URL('../sql/migrations/572_member_subscription_price_id.sql',import.meta.url),'utf8');
 export const AI_PACK_OFFERS_MIGRATION=readFileSync(new URL('../sql/migrations/509_token_pack_offers.sql',import.meta.url),'utf8');
 // D788: a member's own monthly spend limit, read by every hold.
 export const AI_SPEND_LIMIT_MIGRATION=readFileSync(new URL('../sql/migrations/508_member_ai_spend_limits.sql',import.meta.url),'utf8');
